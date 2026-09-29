@@ -100,14 +100,24 @@ function Fingerprint({ manager, axisMax }: { manager: ManagerFingerprint; axisMa
            * Measured 2026-09-29, card width vs space for the label:
            *
            *            margin 18   margin 30
-           *   150px      26.0        34.6      <- grid minimum, `minmax(150px, 1fr)` below
+           *   150px      26.0        34.6      <- was the grid minimum; NOT reachable any more
            *   164px      27.9        36.6      <- a 2-up phone layout lands about here
            *   187px      35.8        47.6
            *
-           * At 18 the label needs a 187px card; at 30 it needs 157px, which is under the grid's
-           * own minimum, so it fits at every width this grid can produce. The cost is a smaller
-           * ring — radius 46.1 -> 37.4 at a 164px card — accepted deliberately: a clipped word is
-           * worse than a slightly smaller chart.
+           * At 18 the label needs a 187px card. At 30 the narrowest card that clips NOTHING is
+           * 158px — swept against recharts' own tick anchors rather than derived (150px still
+           * overflowed by 1.0px, 157px by 0.02px, 158px clean). That measurement is why the grid
+           * minimum below is 170px: the margin alone does not finish the job.
+           *
+           * 🛑 THE SENTENCE THAT USED TO SIT HERE WAS WRONG, AND ITS OWN TABLE DISPROVED IT. It
+           * read "at 30 it needs 157px, which is under the grid's own minimum, so it fits at every
+           * width this grid can produce" — wrong twice, because 157 is ABOVE the 150 minimum it
+           * was being compared to, and the table three lines up already showed 34.6px of space
+           * against 35.6px of text. Two numbers in the same comment contradicted each other and
+           * the prose won. Read the table.
+           *
+           * The cost is a smaller ring — radius 46.1 -> 37.4 at a 164px card — accepted
+           * deliberately: a clipped word is worse than a slightly smaller chart.
            *
            * ⚠ This was a PRE-EXISTING clip that the 11px type floor widened, not a new one. At
            * the old 9px the label was 29.1px and already overflowed a 150px card by 3.1px; the
@@ -142,6 +152,19 @@ function Fingerprint({ manager, axisMax }: { manager: ManagerFingerprint; axisMa
   )
 }
 
+/**
+ * 170px, not the original 150px: a card narrower than 158px clips the "Activity" axis label even
+ * with the widened side margins — see the measured sweep in `Fingerprint` above. 170 leaves 12px
+ * of headroom for a longer label or a font change.
+ *
+ * ⚠ `min(170px, 100%)` rather than a bare 170px, because a bare track floor OVERFLOWS THE PAGE
+ * once the container is narrower than it — raising 150 to 170 would have raised that threshold
+ * too, trading a clipped word for a horizontally scrolling page. The clamp retires the question
+ * instead of making it 20px worse, and it is this repo's existing idiom (11 other
+ * `minmax(min(...))` tracks).
+ */
+const FINGERPRINT_GRID = 'repeat(auto-fit, minmax(min(170px, 100%), 1fr))'
+
 export function ManagerFingerprintRadar({ managers, axisMax, ariaLabel }: ManagerFingerprintRadarProps) {
   if (managers.length === 0) return null
   return (
@@ -149,7 +172,7 @@ export function ManagerFingerprintRadar({ managers, axisMax, ariaLabel }: Manage
       role="img"
       aria-label={ariaLabel}
       className="grid gap-3"
-      style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}
+      style={{ gridTemplateColumns: FINGERPRINT_GRID }}
     >
       {managers.map((m) => (
         <Fingerprint key={m.managerName} manager={m} axisMax={axisMax} />
