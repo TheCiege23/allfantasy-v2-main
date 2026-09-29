@@ -6,7 +6,8 @@ import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
-import { evaluateTrade as dynastyTierEvaluation, formatEvaluationForAI, TradeAsset as TierTradeAsset, LeagueSettings, detectIDPFromRosterPositions, detectSFFromRosterPositions } from '@/lib/dynasty-tiers'
+// Roster-slot parsing only. The tier system's EVALUATION is not used here — see the note where it ran.
+import { detectSFFromRosterPositions } from '@/lib/dynasty-tiers'
 import { formatValuesForPrompt, FantasyCalcSettings, getPickValue } from '@/lib/fantasycalc'
 import { getPlayerValuesForNamesDbFirst } from '@/lib/fantasycalc-db'
 import { buildTradeHubIntelBlock, parseTradeIntelBlockMeta } from '@/lib/trade-engine/trade-analyzer-intel'
@@ -1143,32 +1144,6 @@ function buildPickContext(assets: TradeAsset[], numTeams: number) {
     })
 }
 
-function convertToTierAssets(assets: TradeAsset[], numTeams: number): TierTradeAsset[] {
-  return assets.map(asset => {
-    if (asset.type === 'player') {
-      return {
-        name: asset.player.name,
-        position: asset.player.pos,
-        isPick: false,
-      }
-    } else if (asset.type === 'pick') {
-      const year = asset.pick.year
-      const round = asset.pick.round
-      const pickNum = asset.pick.pickNumber
-      const pickSlot = getPickTierByPercentile(pickNum, numTeams)
-      
-      return {
-        name: `${year} Round ${round}${pickNum ? ` (${round}.${String(pickNum).padStart(2, '0')})` : ''}`,
-        isPick: true,
-        pickYear: year,
-        pickRound: round,
-        pickSlot,
-      }
-    }
-    return { name: 'FAAB', isPick: false }
-  })
-}
-
 function buildUserPrompt(args: {
   sport: Sport
   format: 'redraft' | 'dynasty' | 'specialty'
@@ -1198,8 +1173,7 @@ function buildUserPrompt(args: {
     unknownPlayers?: string[]
   }
   tradeDriverData?: TradeDriverData
-  
-  tierEvaluation?: string
+
   playerNews?: Array<{ playerName: string; sentiment: string; news: string[]; buzz: string }>
   tradeGoal?: string | null
   runtimeConstraints?: string
@@ -1214,7 +1188,7 @@ function buildUserPrompt(args: {
   unifiedPlayerContext?: string
   newsValueAdjustments?: NewsValueAdjustment[]
 }) {
-  const { sport, format, leagueType, idpEnabled, league, numTeams, sideA, sideB, otherManagers, assetsA, assetsB, sportsDb, espnStats, fantasyCalcValues, tradeBalance, tradeDriverData, tierEvaluation, playerNews, tradeGoal, runtimeConstraints, historicalContext, managerDnaContext, unifiedPlayerContext, newsValueAdjustments } = args
+  const { sport, format, leagueType, idpEnabled, league, numTeams, sideA, sideB, otherManagers, assetsA, assetsB, sportsDb, espnStats, fantasyCalcValues, tradeBalance, tradeDriverData, playerNews, tradeGoal, runtimeConstraints, historicalContext, managerDnaContext, unifiedPlayerContext, newsValueAdjustments } = args
 
   // Parse league settings for AI
   const rosterPositions = league?.roster_positions || []
@@ -1411,15 +1385,12 @@ The grade and verdict are FIXED by the engine (see TRADE GRADE). Explain them; d
         'USE HISTORICAL VALUES: historicalValueContext (when present) contains what players were actually worth at the time of a historical trade. For past trades, this is CRITICAL - grade the trade based on valueAtTrade (what it looked like THEN), not currentValue. The hindsightVerdict shows how it aged. This enables accurate grading of trades from months/years ago.',
         'USE CALCULATED BALANCE: calculatedTradeBalance contains the pre-calculated value totals for each side based on FantasyCalc data. Use this as your primary value reference. The verdict field gives initial guidance, but you should adjust based on team context and needs.',
         'BESTBALL LEAGUES: When leagueType is "bestball", apply Bestball-specific valuation: (1) Boom/bust players with high ceilings are MORE valuable, (2) Depth and quantity matter more than consolidating into one elite player, (3) Handcuffs and injury insurance matter less, (4) Weekly floor is less important than weekly ceiling, (5) High-variance WRs and RBs who can score 25+ any week are premium assets.',
-        tierEvaluation ? 'TIER EVALUATION (MANDATORY): The deterministic tier system has pre-evaluated this trade. You MUST follow the grade cap and warnings. Do NOT override the tier system verdict.' : '',
         tradeGoal ? `USER TRADE GOAL: The user has specified their goal as "${tradeGoal}". Evaluate the trade in the context of this goal. Does the trade help them achieve it? Be specific about how this trade aligns or conflicts with their stated objective.` : '',
         'CRITICAL - REAL-TIME NEWS: realTimePlayerNews contains LIVE news from X/Twitter (last 7 days). If a player was RELEASED, CUT, INJURED, or had a BREAKOUT PERFORMANCE, this MUST be reflected in your analysis. Real-time news SUPERSEDES static FantasyCalc values. Always mention relevant breaking news in your expertAnalysis and playerBreakdowns.',
         newsValueAdjustments && newsValueAdjustments.length > 0 ? `NEWS VALUE ADJUSTMENTS APPLIED: The trade balance numbers above ALREADY include news-based value adjustments. ${formatNewsAdjustmentsForPrompt(newsValueAdjustments)}` : '',
       ].filter(Boolean),
       
       runtimeConstraints: runtimeConstraints || null,
-      
-      tierEvaluation: tierEvaluation || null,
 
       managerDNA: managerDnaContext || null,
 
@@ -2071,33 +2042,15 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       receiptId: evaluationReceipt.receiptId,
     })
 
-    // Deterministic tier evaluation (Dynasty NFL only)
-    let tierEvaluationStr: string | undefined = undefined
-    if (format === 'dynasty' && sport === 'nfl') {
-      const tierAssetsA = convertToTierAssets(assetsA, numTeams)
-      const tierAssetsB = convertToTierAssets(assetsB, numTeams)
-      
-      const tierRosterPositions = league?.roster_positions || []
-      const isSF = clientLeagueContext?.settings?.qbFormat === 'superflex' || clientLeagueContext?.settings?.qbFormat === '2qb' || detectSFFromRosterPositions(tierRosterPositions)
-      const idpStarterCount = detectIDPFromRosterPositions(tierRosterPositions)
-      const isTEP = clientLeagueContext?.settings?.tep?.enabled ?? (league?.scoring_settings?.bonus_rec_te ? league.scoring_settings.bonus_rec_te > 0 : false)
-      
-      const leagueSettings: LeagueSettings = {
-        isSF,
-        isTEP,
-        idpStarterCount,
-      }
-      
-      // Prompt context only — never a grade. The grade is the one engine's receipt above.
-      const tierEvaluation = dynastyTierEvaluation(
-        tierAssetsA, // What A gives to B
-        tierAssetsB, // What B gives to A
-        leagueSettings,
-        'middle',
-        'middle'
-      )
-      tierEvaluationStr = formatEvaluationForAI(tierEvaluation)
-    }
+    /*
+     * 🛑 NO `lib/dynasty-tiers` EVALUATION IN THE PROMPT (2026-09-29). This block ran the tier system's
+     * own `evaluateTrade` on the deal and handed the model its grade cap and warnings under
+     * "TIER EVALUATION (MANDATORY) … You MUST follow the grade cap … Do NOT override the tier system
+     * verdict" — a second verdict, on a scale the owner has ruled is NOT authoritative (the market path
+     * is), sitting in the same prompt as the receipt the letter comes from. The prose could follow the
+     * tier cap and contradict the letter. The model's only grading input is now the receipt's facts
+     * (`receiptPromptBlock` below: the letter, the label, each asset's league value).
+     */
 
     // Build runtime constraints for trade validation
     const rosterAForConstraints = (finalRosterA || clientRosterA || []).map((p: any) => ({
@@ -2405,7 +2358,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       fantasyCalcValues,
       tradeBalance,
       tradeDriverData,
-      tierEvaluation: tierEvaluationStr,
       playerNews,
       tradeGoal: reqData.tradeGoal,
       runtimeConstraints: constraintsPromptStr,
