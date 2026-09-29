@@ -219,14 +219,23 @@ export const PROBES = {
    * same as everything else. The job was never broken.
    *
    * THE GENERAL RULE: probe a WRITE-TIME column. `createdAt` is only a freshness signal on an
-   * append-only table (`adp_data` and `player_news` below are genuinely append-only, which is why
-   * they keep it). On anything that upserts it measures the wrong event entirely, and it fails in
-   * the direction that wastes the most time — a false alarm on a healthy job.
+   * append-only table (`player_news` below is genuinely append-only, which is why it keeps it). On
+   * anything that upserts it measures the wrong event entirely, and it fails in the direction that
+   * wastes the most time — a false alarm on a healthy job. Append-only is still not enough when a
+   * unique key makes most runs insert nothing: see `adp_data` under adp-refresh below.
    */
   '/api/cron/recompute-allfantasy-adp': { table: 'allfantasy_adp_snapshots', column: 'lastUpdatedAt' },
-  // runAdpImporter writes prisma.adpDataRecord -> adp_data (82k rows). adp_refresh_runs holds 2
-  // rows, newest 118 days old, and is not the job's output.
-  '/api/cron/adp-refresh': { table: 'adp_data', column: 'created_at' },
+  /*
+   * ⚠ HEARTBEAT, NOT `adp_data.created_at`. That table is append-only, but it is unique per
+   * calendar WEEK, so only the first run of each week inserts and every later run writes zero rows
+   * by design. The table probe therefore read a healthy daily job as STALE from the second day
+   * after each week rolled over. Measured 2026-09-29: `providerRowsRead: 3550,
+   * providerRowsWritten: 0`, HTTP 200. The route records this heartbeat as FAILED when it reads
+   * nothing, so a feed outage still surfaces, as DEGRADED.
+   * (adp_refresh_runs is not the answer either: it belongs to runAdpRefreshService, which this
+   * cron does not call.)
+   */
+  '/api/cron/adp-refresh': { heartbeat: 'cron-adp-refresh' },
   '/api/weather/refresh-cron': { table: 'WeatherCache', column: 'fetchedAt' },
   '/api/cron/decision-os-activity-ingest?discover=1': { table: 'decision_os_imported_activity', column: 'updatedAt' },
   '/api/cron/decision-os-snapshot-capture?discover=1': { table: 'intelligence_league_snapshot', column: 'updatedAt' },

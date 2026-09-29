@@ -6,6 +6,7 @@ import {
   getWeatherForEvent,
   MLB_VENUE_COORDS,
 } from '@/lib/weather/weatherService'
+import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { createRunBudget } from '@/lib/cron/runBudget'
 
@@ -50,6 +51,45 @@ function resolveVenueCoords(venue: string | null): { lat: number; lng: number } 
   return null
 }
 
+/*
+ * 🛑 THE 120-GAME CAP USED TO BE APPLIED BEFORE ANY GAME WAS CHECKED FOR A LOCATION.
+ *
+ * The query took the first 120 rows by kickoff across NFL, NCAAF, MLB and SOCCER, and only then
+ * asked which of them it could place. Few NCAAF and soccer venues are in either coordinate table,
+ * so a busy midweek slate can fill the whole window before the next NFL game is reached.
+ * Measured 2026-09-29, the Tuesday after MLB's regular season ended: every run from 01:06Z
+ * answered `{"refreshed":0,"skipped":0,"deferred":0}` with HTTP 200, meaning every row it read
+ * was unplaceable (or it read none), while `WeatherCache` went stale and the freshness alarm fired hourly. The row mix
+ * was not measured (no production read); the counters below are there so the next run says it.
+ * A run that found nothing to place looked exactly like a run with nothing to do.
+ *
+ * So the cap now applies to games the cron CAN place, after duplicates are folded (one game is
+ * stored once per source, and every copy maps to the same coords/day key). The scan is bounded
+ * separately, and hitting that bound is reported rather than silent.
+ */
+export const WEATHER_REFRESH_MAX_GAMES = 120
+export const WEATHER_REFRESH_SCAN_LIMIT = 5_000
+
+/*
+ * NFL only, and only when the row carries NO venue. A named venue that does not resolve is
+ * usually a neutral or international site, and forecasting the home team's stadium for a London
+ * game would write a confident wrong answer. `resolveVenueForTeam` is also what the My Team reader
+ * uses, so this lands on the same coords key by construction (see the note in the loop below).
+ */
+function resolveGameCoords(g: {
+  sport: string
+  venue: string | null
+  homeTeam: string | null
+}): { lat: number; lng: number } | null {
+  const byVenue = resolveVenueCoords(g.venue)
+  if (byVenue) return byVenue
+  if (g.sport === 'NFL' && !g.venue?.trim()) {
+    const byTeam = resolveVenueForTeam({ sport: 'NFL', teamAbbrev: g.homeTeam })
+    if (byTeam.kind === 'coords') return { lat: byTeam.lat, lng: byTeam.lng }
+  }
+  return null
+}
+
 // This branch added its own cron GET here; #284 landed an identical one further down
 // (kept), so both would have exported `GET` from the same module. Git auto-merged this
 // without a conflict because the two sit in different places — the duplicate export only
@@ -75,16 +115,53 @@ export async function POST(request: NextRequest) {
   // declared inside the try is out of scope exactly where the failure path needs it.
   const budget = createRunBudget(WEATHER_REFRESH_BUDGET_MS)
   let deferred = 0
+  let scanned = 0
+  let unresolved = 0
+  const unresolvedBySport: Record<string, number> = {}
+  let duplicates = 0
+  let overCap = 0
+  let scanLimitHit = false
   try {
-    const games = await prisma.sportsGame.findMany({
+    const rows = await prisma.sportsGame.findMany({
       where: {
         startTime: { gte: now, lte: horizon },
         sport: { in: ['NFL', 'NCAAF', 'MLB', 'SOCCER'] },
       },
-      take: 120,
+      select: { sport: true, externalId: true, venue: true, homeTeam: true, startTime: true },
+      take: WEATHER_REFRESH_SCAN_LIMIT,
       orderBy: { startTime: 'asc' },
     })
+    scanned = rows.length
+    scanLimitHit = rows.length >= WEATHER_REFRESH_SCAN_LIMIT
 
+    const games: Array<{
+      sport: string
+      externalId: string
+      startTime: Date
+      coords: { lat: number; lng: number }
+      cacheKey: string
+    }> = []
+    const seenKeys = new Set<string>()
+    for (const r of rows) {
+      if (!r.startTime) continue
+      const coords = resolveGameCoords(r)
+      if (!coords) {
+        unresolved += 1
+        unresolvedBySport[r.sport] = (unresolvedBySport[r.sport] ?? 0) + 1
+        continue
+      }
+      const cacheKey = buildWeatherCoordsCacheKey(coords.lat, coords.lng, r.startTime)
+      if (seenKeys.has(cacheKey)) {
+        duplicates += 1
+        continue
+      }
+      seenKeys.add(cacheKey)
+      if (games.length >= WEATHER_REFRESH_MAX_GAMES) {
+        overCap += 1
+        continue
+      }
+      games.push({ sport: r.sport, externalId: r.externalId, startTime: r.startTime, coords, cacheKey })
+    }
 
     for (const g of games) {
       /*
@@ -97,8 +174,7 @@ export async function POST(request: NextRequest) {
         deferred += 1
         continue
       }
-      const coords = resolveVenueCoords(g.venue)
-      if (!coords || !g.startTime) continue
+      const { coords, cacheKey } = g
 
       const hoursUntil = (g.startTime.getTime() - now.getTime()) / (1000 * 60 * 60)
 
@@ -156,7 +232,6 @@ export async function POST(request: NextRequest) {
        * `MLB_TEAM_BALLPARK`. Two tables, so the keys agree only if the
        * coordinates happen to. Prewarming MLB needs those reconciled first.
        */
-      const cacheKey = buildWeatherCoordsCacheKey(coords.lat, coords.lng, g.startTime)
       const row = await prisma.weatherCache
         .findUnique({ where: { cacheKey } })
         .catch(() => null)
@@ -198,12 +273,15 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error('[weather/refresh-cron]', e)
     return NextResponse.json(
-      { ok: false, error: String(e), refreshed, skipped, deferred },
+      { ok: false, error: String(e), refreshed, skipped, deferred, scanned, unresolved },
       { status: 500 },
     )
   }
 
-  console.info(`[weather/refresh-cron] refreshed ${refreshed} cache entries`)
+  console.info(
+    `[weather/refresh-cron] refreshed ${refreshed} cache entries ` +
+      `(scanned ${scanned}, unresolved ${unresolved}, duplicates ${duplicates}, overCap ${overCap})`,
+  )
   // Deferred work is reported, never silently dropped: a run that refreshed 12 of 120 and one
   // that found only 12 to do are the same number otherwise.
   return NextResponse.json({
@@ -214,6 +292,15 @@ export async function POST(request: NextRequest) {
     skipped,
     deferred,
     budgetExhausted: budget.exhausted(),
+    // How the window was spent before any refresh: rows read, rows with no location, copies of a
+    // game already queued, and placeable games past the cap. `refreshed: 0` with a large
+    // `unresolved` is the 2026-09-29 failure; with `scanned: 0` it is an empty schedule.
+    scanned,
+    unresolved,
+    unresolvedBySport,
+    duplicates,
+    overCap,
+    scanLimitHit,
   })
 }
 

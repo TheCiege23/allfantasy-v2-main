@@ -39,6 +39,44 @@ import { refreshCanonicalDefenderBoardCache } from "@/lib/values/canonicalDefend
 import { PLAYER_VALUATION_SPORTS, syncPlayerValuations } from "@/lib/player-valuation-sync"
 import type { ApiChainSport } from "@/lib/workers/api-config"
 import { redactAndCap } from "@/lib/security/redactSecrets"
+import { recordSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+
+/*
+ * 🛑 THIS JOB SUCCEEDS WITHOUT WRITING A ROW ON MOST DAYS, SO ITS OUTPUT TABLE CANNOT BE ITS PULSE.
+ *
+ * `adp_data` is unique on (sport, format, scoring, playerId, week, season, source), and `week` is
+ * the calendar week of the year. The first run of a week inserts; every later run that week reads
+ * the same feeds and `skipDuplicates` drops all of it. Measured 2026-09-29, the dispatcher's own
+ * log: `providerRowsRead: 3550, providerRowsWritten: 0, week: 40`, HTTP 200. The freshness probe
+ * read `adp_data.created_at`, so from the second day after each week rolled it reported a healthy
+ * job STALE, every hour, until the next Sunday.
+ *
+ * So the probe reads this heartbeat instead. It is recorded as FAILED when the import read nothing
+ * — a feed outage must still alarm, and a heartbeat that goes green on an empty read is the false
+ * clean the freshness monitor exists to remove. Only the scheduled full run records it: a hand run
+ * scoped with `?sport=` is not evidence that every feed still answers.
+ */
+const ADP_REFRESH_JOB = "cron-adp-refresh"
+
+async function recordAdpHeartbeat(
+  sports: string[] | undefined,
+  result: Awaited<ReturnType<typeof runAdpImporter>>,
+  durationMs: number,
+): Promise<boolean> {
+  if (sports) return false
+  await recordSyncJobRun(
+    { jobName: ADP_REFRESH_JOB, trigger: "cron" },
+    {
+      rowsRead: result.providerRowsRead,
+      rowsWritten: result.imported,
+      rowsSkipped: Math.max(0, result.providerRowsRead - result.providerRowsWritten),
+      errors: result.providerRowsRead > 0 ? [] : ["ADP import read 0 provider rows"],
+      metadata: { week: result.week, season: result.season },
+    },
+    durationMs,
+  )
+  return true
+}
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -91,6 +129,7 @@ async function handle(req: NextRequest) {
     : undefined
 
   const startedAt = Date.now()
+  let heartbeat = false
 
   try {
     if (dryRun) {
@@ -105,6 +144,7 @@ async function handle(req: NextRequest) {
     }
 
     const result = await runAdpImporter({ sports })
+    heartbeat = await recordAdpHeartbeat(sports, result, Date.now() - startedAt)
 
     /*
      * PLAYER VALUES RIDE ALONG HERE, AND THIS IS THE ONLY THING THAT SCHEDULES THEM.
@@ -281,6 +321,13 @@ async function handle(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error("[cron/adp-refresh] failed:", message)
+    if (!heartbeat && !sports) {
+      await recordSyncJobRun(
+        { jobName: ADP_REFRESH_JOB, trigger: "cron" },
+        { errors: [message] },
+        Date.now() - startedAt,
+      )
+    }
     return NextResponse.json(
       { ok: false, error: message.slice(0, 240), durationMs: Date.now() - startedAt },
       { status: 500 }
