@@ -14,6 +14,7 @@ import { getCanonicalDefenderValue } from '@/lib/values/canonicalDefenderBoardCa
 import { resolveSportsWeek } from './sportsWeek'
 import { playerGame, unresolvedClubNames, weekKickoffs, type PlayerGame } from './playerGame'
 import { designationOnset } from './designationOnset'
+import { injuryTimelineFromRows, type InjuryTimeline } from './injuryTimeline'
 import { createSwrCache } from './staleWhileRevalidate'
 import { rosterIdCoverage, sampleRosterIds } from './rosterIdCoverage'
 import { isForeignIdSpace, translateRostersByLeague } from './rosterIdSpace'
@@ -123,6 +124,8 @@ export type PlayerDetail = {
   identityResolved: boolean
   bio: { height: string | null; weight: string | null; age: number | null; college: string | null }
   injury: SectionState<{ status: string | null; description: string | null; reportedAt: Date | null }>
+  /** What came before this designation and ESPN's estimated return (injuryTimeline.ts); null when neither is known. */
+  injuryTimeline?: InjuryTimeline | null
   seasonStats: SectionState<Array<{ season: string; stats: Record<string, string> }>>
   leagues: SectionState<LeagueSlot[]>
   /**
@@ -870,7 +873,7 @@ export async function getPlayerDetail(
    */
   const facts = await playerFacts.get(cardFactsKey(refSport, externalId), () => loadPlayerFacts(refSport, externalId))
   if (!facts) return null
-  const { row, identityResolved, injury, seasonStats, projection, snapShare, idpValue, positionRank: rank } = facts
+  const { row, identityResolved, injury, injuryTimeline, seasonStats, projection, snapShare, idpValue, positionRank: rank } = facts
 
 
   const resolvedSlots = identityResolved
@@ -999,6 +1002,7 @@ export async function getPlayerDetail(
     idpValue,
     bio: { height: row.height, weight: row.weight, age: row.age, college: row.college },
     injury,
+    injuryTimeline,
     seasonStats,
     leagues,
     rosterCoverage,
@@ -1165,6 +1169,26 @@ async function loadPlayerFacts(refSport: string | null | undefined, externalId: 
         })
         .catch(() => [] as Array<{ status: string | null; description: string | null; date: Date | null; fetchedAt: Date }>)
   const injuryRow = designationOnset(injuryRows)
+
+  /*
+   * The timeline beside the status (injuryTimeline.ts): the designation before this one and ESPN's
+   * estimated return. A deeper read than the eight rows above — ESPN keeps one row per update, ~4.5 a
+   * player — behind the SAME name-ambiguity guard, so it annotates exactly the rows the card trusts.
+   */
+  const timelineRows =
+    nameIsAmbiguous || !injuryRow
+      ? []
+      : await prisma.sportsInjury
+          .findMany({
+            where: { sport: row.sport, playerName: { equals: row.name, mode: 'insensitive' } },
+            orderBy: { fetchedAt: 'desc' },
+            take: 40,
+            select: { status: true, date: true, fetchedAt: true, source: true, raw: true },
+          })
+          .catch(() => [] as Array<{ status: string | null; date: Date | null; fetchedAt: Date; source: string; raw: unknown }>)
+  const injuryTimeline: InjuryTimeline | null = injuryRow
+    ? injuryTimelineFromRows({ rows: timelineRows, current: { status: injuryRow.status, reportedAt: injuryRow.reportedAt }, now: new Date() })
+    : null
 
   const injury: SectionState<{ status: string | null; description: string | null; reportedAt: Date | null }> =
     injuryRow
@@ -1359,7 +1383,7 @@ async function loadPlayerFacts(refSport: string | null | undefined, externalId: 
       }
 
 
-  return { row, identityResolved, injury, seasonStats, projection, snapShare, idpValue, positionRank: rank }
+  return { row, identityResolved, injury, injuryTimeline, seasonStats, projection, snapShare, idpValue, positionRank: rank }
 }
 
 /**

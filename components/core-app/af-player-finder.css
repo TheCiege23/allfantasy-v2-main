@@ -4266,3 +4266,27 @@
 .af-core .af-pf-live {
   padding: 14px 16px;
 }
+
+/* ── Injury timeline chip (injuryTimeline.ts): beside readiness, every width ────────────────────── */
+.af-core .af-pf-injtl {
+  color: var(--muted);
+  font-weight: 700;
+}
+.af-core .af-pf-injtl[data-trend='up'] {
+  color: var(--good);
+}
+.af-core .af-pf-injtl[data-trend='down'] {
+  color: var(--bad);
+}
+/* A local visually-hidden rule: `.af-sr-only` lives in a stylesheet not every finder mount loads. */
+.af-core .af-pf-injtl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

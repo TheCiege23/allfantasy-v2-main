@@ -47,6 +47,7 @@ import type { LeagueShareView } from '@/lib/core-app/playerSharesLeague'
 import { PlayerSharesBoard } from '@/components/core-app/player-finder/PlayerSharesBoard'
 import { LiveGameBadge } from '@/components/core-app/player-finder/LiveGameBadge'
 import type { LiveGameBadge as LiveGameBadgeData } from '@/lib/core-app/liveGameBadge'
+import { InjuryTimelineChip } from '@/components/core-app/player-finder/InjuryTimelineChip'
 import { LeaguePicker } from '@/components/core-app/player-finder/LeaguePicker'
 import { LeagueCalls } from '@/components/core-app/player-finder/LeagueCalls'
 import { LeagueStrip } from '@/components/core-app/player-finder/LeagueStrip'
@@ -787,6 +788,8 @@ export function PlayerFinder({
                         : ''}
                     </span>
                   ) : null}
+                  {/* Which way the designation is moving, and ESPN's estimated return (injuryTimeline.ts). */}
+                  {ready ? <InjuryTimelineChip timeline={detail.injuryTimeline} /> : null}
                   {/* Not playing this week — beside readiness, since a Ready player on bye still scores nothing. */}
                   {byeMark ? (
                     <span className="af-chip af-num af-pf-ready af-pf-bye" data-tone={byeMark.tone}>
