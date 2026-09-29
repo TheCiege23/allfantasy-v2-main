@@ -115,8 +115,34 @@ export const IDP_SUPPORTED_SPORTS: readonly LeagueSport[] = ['NFL', 'NCAAF']
  *   6. NEW — roster ids: a drafted player holds the pool's Rolling Insights id while game logs are
  *      keyed on PlayerIdentityMap.id; queried directly every starter scored 0 (#1200 bridges it).
  *      Any next sport must check this too.
+ *
+ * NCAAF (2026-09-28), against the same list — a WEEK-keyed sport like NFL, not date-windowed —
+ * and three items the list did not have, each of which would have stranded every NCAAF league:
+ *   1. stats: the scheduled CFBD ingest writes `player_game_stats` (sportType NCAAF, weekOrRound =
+ *      the CFBD week) and the weekly sync reads them (#1468). Production 2026: weeks 1-4 ingested,
+ *      8,600-15,000 rows a week; 20,000 real rows normalized with zero unmapped keys;
+ *   2. schedule: ranked feeds carry it — thesportsdb and api_sports list every week's games and
+ *      show weeks 1-4 all final (production, 2026-09-28); cfbd is unranked and never the slate;
+ *   3. statuses: final/FT -> final; espn's stale `scheduled` rows are dead feeds (>6h) and skipped;
+ *   4. week signal: NCAAF is in WEEK_SIGNAL_SPORTS; the finalizer keys it by `week` (WEEK_KEYED_SPORTS);
+ *   5. roster ids: CFBD-sourced pool ids ARE game-log ids, RI ids bridge via PlayerIdentityMap.cfbdId,
+ *      a bare number never self-matches (ncaafGameLogIdBridge.ts, #1468);
+ *   6. NEW — coverage: CFBD lists only players who recorded a stat, so byes and quiet games read as
+ *      missing and weeks failed the 80% floor (78-87% managed, 27% autopicked). A resolved starter
+ *      whose school had a bye or played an ingested final game scores a real 0 (#1513) -> 100%;
+ *   7. NEW — late start: a league drafted mid-season (NCAAF was at week 5) was scored on weeks before
+ *      its draft, then stuck at week 1 for good. Every sport; it now starts at the next unplayed
+ *      week (#1535);
+ *   8. NEW — playoff window: brackets started at week 13, so finals fell on week 14 (conference
+ *      championships) or 15 (Army-Navy). They now end on week 13 (#1541);
+ *   and the lineup could be filled and saved: no unfillable team-defense starter (#1519), keeper
+ *   and best ball lineups that agree with themselves (#1520, #1524), players lock at kickoff (#1474).
+ * Verified on the test database with all of those merged together (scripts/smoke-ncaaf-season-
+ * capable-testdb.ts): an NCAAF league created and drafted at week 5 starts at week 5; the schedule
+ * and playoff runtimes resolve it; `advance_week` — the roller's path — is refused by the unplayed
+ * week (INCOMPLETE_WEEK), not by the sport. With this line reverted all three said not_nfl_redraft.
  */
-export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL', 'NHL', 'NBA', 'NCAAB']
+export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL', 'NHL', 'NBA', 'NCAAB', 'NCAAF']
 
 /** Whether a league in this sport can run a season to completion today. */
 export function canRunSeasonForSport(sport: string | null | undefined): boolean {
