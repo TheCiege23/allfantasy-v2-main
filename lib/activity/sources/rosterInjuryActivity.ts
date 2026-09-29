@@ -4,10 +4,12 @@ import { computeUserPlayerExposure } from "@/lib/shared-services/game-day/UserPl
 import { resolveInjuryContext } from "@/lib/decision-os/world/injuryEnrichedWorld"
 import { resolvePlayerNamesForSport } from "@/lib/roster/resolvePlayerNames"
 import type { ActivityFeedItem, ActivitySourceContext } from "@/lib/activity/types"
+import type { UserPlayerExposure } from "@/lib/shared-services/game-day/types"
+import { loadEspnToSleeperMap } from "@/lib/core-app/rosterIdSpace"
 
 /**
  * The id-space that joins cleanly here is Sleeper/NFL: `computeUserPlayerExposure` returns raw
- * roster player ids, and `resolveInjuryContext` keys the cached SportsPlayer status on
+ * roster player ids — narrowed to NFL Sleeper ids by `sleeperNflExposures` below — and `resolveInjuryContext` keys the cached SportsPlayer status on
  * externalId/sleeperId. (The raw SportsInjury/InjuryReportRecord tables use an API-Sports id space
  * that does NOT match roster ids — resolveInjuryContext is the seam built to route around that.)
  */
@@ -42,6 +44,42 @@ function formatInjuryStatus(status: string | null): string {
 }
 
 /**
+ * The viewer's exposures as NFL Sleeper ids — the only space the injury context and name reads below
+ * are keyed on.
+ *
+ * 🛑 `computeUserPlayerExposure` READS EVERY LEAGUE THE VIEWER PLAYS IN, AND THEIR IDS ARE NOT ALL
+ * SLEEPER'S. Passed through raw, a native NHL roster's Rolling Insights ids were read as NFL Sleeper
+ * ids — 13 of the 18 on the one reachable production NHL roster ARE NFL Sleeper ids for somebody else
+ * (2026-09-29) — and a Fleaflicker/Fantrax id collides the same way, so the feed could announce a
+ * stranger as injured "on 1 of your rosters". So:
+ *   - Sleeper-space NFL (Sleeper and native NFL leagues): as is.
+ *   - ESPN: translated through `PlayerIdentityMap.espnId`. An id with no Sleeper identity is DROPPED —
+ *     kept, it is a number that may be somebody's Sleeper id. Translated, the same person on a Sleeper
+ *     and an ESPN roster is one player "on 2 of your rosters", not two items.
+ *   - any other platform, or any other sport: dropped. There is no Sleeper id to ask about.
+ */
+async function sleeperNflExposures(exposures: readonly UserPlayerExposure[]): Promise<UserPlayerExposure[]> {
+  const nfl = exposures.filter((e) => e.sport === INJURY_SPORT)
+  const espnIds = nfl.filter((e) => e.idSpace === "espn").map((e) => e.playerId)
+  const espnToSleeper = espnIds.length > 0 ? await loadEspnToSleeperMap(espnIds) : new Map<string, string>()
+
+  const bySleeperId = new Map<string, UserPlayerExposure>()
+  for (const e of nfl) {
+    const sleeperId = e.idSpace === "sleeper" ? e.playerId : e.idSpace === "espn" ? espnToSleeper.get(e.playerId) : undefined
+    if (!sleeperId) continue
+    const held = bySleeperId.get(sleeperId)
+    if (!held) {
+      bySleeperId.set(sleeperId, { ...e, playerId: sleeperId, idSpace: "sleeper" })
+      continue
+    }
+    held.leagueCount += e.leagueCount
+    held.playerName = held.playerName ?? e.playerName
+    held.position = held.position ?? e.position
+  }
+  return [...bySleeperId.values()]
+}
+
+/**
  * Source 3 — injuries hitting the viewer's rosters (the emotional hook). Reads the players the
  * viewer actually rosters across every league (one indexed `roster` query), intersects them with
  * the CACHED injury status (one indexed `sportsPlayer` query, no live provider hit), and emits an
@@ -50,7 +88,8 @@ function formatInjuryStatus(status: string | null): string {
  */
 export async function collectRosterInjuryActivity(ctx: ActivitySourceContext): Promise<ActivityFeedItem[]> {
   try {
-    const { exposures } = await computeUserPlayerExposure({ userId: ctx.userId })
+    const { exposures: allExposures } = await computeUserPlayerExposure({ userId: ctx.userId })
+    const exposures = await sleeperNflExposures(allExposures)
     if (exposures.length === 0) return []
 
     const playerIds = exposures.map((e) => e.playerId).filter(Boolean)

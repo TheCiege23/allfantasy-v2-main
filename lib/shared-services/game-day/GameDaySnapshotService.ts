@@ -14,6 +14,7 @@ import { randomUUID } from 'crypto'
 import { prisma } from '@/lib/prisma'
 import { buildLeagueGameDayContext } from './GameDayContextAssembler'
 import { computeUserPlayerExposure } from './UserPlayerExposureService'
+import { exposureKey } from './exposureKey'
 import { computeLineupAttention } from './LineupAttentionService'
 import { computeGameWindows } from './GameWindowService'
 import { analyzeGameDayDivergence } from './GameDayDivergenceAnalyzer'
@@ -67,14 +68,18 @@ export async function buildGameDaySnapshot(input: BuildGameDaySnapshotInput): Pr
 
   // Enrich exposures with injury status from the assembled league contexts —
   // real data this module already fetched, not a new source.
-  const injuryByPlayerId = new Map<string, string>()
+  // Keyed in each league's own id space: a bare-id join put a Sleeper starter's injury on a native
+  // NHL player (or a Fleaflicker one) who merely shares his number.
+  const injuryByKey = new Map<string, string>()
   for (const league of leagues) {
     if (!league.matchup) continue
     for (const starter of league.matchup.left.starters) {
-      if (starter.injuryStatus) injuryByPlayerId.set(starter.playerId, starter.injuryStatus)
+      if (starter.injuryStatus) {
+        injuryByKey.set(exposureKey(league.platform, league.sport, starter.playerId), starter.injuryStatus)
+      }
     }
   }
-  const enrichedExposures = exposures.map((e) => ({ ...e, injuryStatus: injuryByPlayerId.get(e.playerId) ?? null }))
+  const enrichedExposures = exposures.map((e) => ({ ...e, injuryStatus: injuryByKey.get(e.exposureKey) ?? null }))
 
   const { items: attentionItems, legacyActions } = await computeLineupAttention({ userId: input.userId, leagueContexts: leagues })
 

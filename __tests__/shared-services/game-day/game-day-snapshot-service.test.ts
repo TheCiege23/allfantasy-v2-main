@@ -78,7 +78,7 @@ describe('buildGameDaySnapshot', () => {
     mockRosterFindMany.mockResolvedValue([{ leagueId: 'league-1', platformUserId: 'user-1' }])
     mockBuildLeagueGameDayContext.mockResolvedValue(makeLeagueContext())
     mockComputeUserPlayerExposure.mockResolvedValue({
-      exposures: [{ playerId: 'p1', playerName: 'Player One', position: 'RB', leagueCount: 1, rosterCount: 1, startingCount: 1, benchCount: 0, irTaxiCount: 0, exposurePercent: 1, leaguesRequiringAttention: [], injuryStatus: null, gameWindow: null }],
+      exposures: [{ playerId: 'p1', sport: 'NFL', idSpace: 'sleeper', exposureKey: 'sleeper:NFL:p1', playerName: 'Player One', position: 'RB', leagueCount: 1, rosterCount: 1, startingCount: 1, benchCount: 0, irTaxiCount: 0, exposurePercent: 1, leaguesRequiringAttention: [], injuryStatus: null, gameWindow: null }],
       connectedLeagueCount: 1,
     })
     mockComputeLineupAttention.mockResolvedValue({ items: [], legacyActions: [] })
