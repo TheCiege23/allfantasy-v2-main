@@ -174,9 +174,10 @@ import { buildMyRosterInjuriesContext } from '@/lib/chimmy/tools/myRosterInjurie
 import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/packet'
 import { recordChatWaiverAdvice } from '@/lib/chimmy-advice/chatWaiverAdvice'
 import { recordChatStartSitAdvice } from '@/lib/chimmy-advice/chatStartSitAdvice'
-import type { ChatStartCall } from '@/lib/chimmy/tools/chimmyTools'
+import type { ChatStartCall, ChimmyFaabPlanRun, ChimmyToolRun } from '@/lib/chimmy/tools/chimmyTools'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
 import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
+import { answerKeysFrom, faabCardFromPlan, faabPlanVerdict, tradeTargetVerdict } from '@/lib/chimmy/answerPolishBuild'
 import { resolveCallerTeamId } from '@/lib/chimmy/callerTeam'
 import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/adviceLearning'
 import { trackRecordsFrom } from '@/lib/chimmy-outcomes/learningSnapshot'
@@ -2968,7 +2969,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
         leagueGrounding: tradeTargetGrounding,
         tradeTarget: { status: 'decided', verdict: v.verdict, player: tradeTargetResult.targetName },
         decision: decisionAnswerMeta(createDecisionAnswer({ kind: 'trade', status: 'ready', leagueId: leagueSnapshot?.id ?? null,
-          answer: text, sources: ['league_rosters', 'league_scoring', 'trade_engine'] })),
+          answer: text, sources: ['league_rosters', 'league_scoring', 'trade_engine'],
+          verdict: tradeTargetVerdict(v.verdict, tradeTargetResult.targetName) })),
         dataSources: ['league_rosters', 'league_scoring', 'weekly_projections', 'market_values', 'trade_engine'],
         responseStructure: {
           shortAnswer: `${v.headline}, because ${v.because}.`,
@@ -3033,7 +3035,11 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      * changes nothing: it reaches the chat in `meta.actionCards`, and only the user's tap on it (the
      * confirm route) makes the move.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[] }
+    /*
+     * `faabPlans` / `toolRuns` feed the answer's polish (`lib/chimmy/answerPolish.ts`): the bid card,
+     * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
+     */
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[] }
     const loopArgs = {
       question: message,
       /*
@@ -3172,6 +3178,16 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       if (loopDelivery.delivered && userId && toolContext.startCalls.length > 0) {
         await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText }).catch(() => null)
       }
+      /*
+       * The answer's polish, from the tools' own results. The LAST bid plan is the one the answer was
+       * written from (a trade-letter retry re-runs the tools into the same context). Nothing here
+       * reads `loopText`: the chip and the card say what the plan decided, whatever the prose says.
+       * An undelivered answer gets none — there is no answer for them to sit on.
+       */
+      const lastFaabPlan = loopDelivery.delivered ? toolContext.faabPlans[toolContext.faabPlans.length - 1] ?? null : null
+      const loopFaabCard = lastFaabPlan ? faabCardFromPlan(lastFaabPlan.plan, lastFaabPlan.leagueId) : null
+      const loopVerdict = lastFaabPlan ? faabPlanVerdict(lastFaabPlan.plan) : null
+      const loopAnswerKeys = loopDelivery.delivered ? answerKeysFrom(toolContext.toolRuns) : []
       return NextResponse.json({
         response: loopText,
         result: loopText,
@@ -3226,6 +3242,10 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
            * ten-minute token bound to this user, so a card cannot be edited or replayed.
            */
           ...(toolContext.actionCards.length > 0 ? { actionCards: toolContext.actionCards } : {}),
+          /* Chip, bid card and supersede keys — see `lib/chimmy/answerPolish.ts`. */
+          ...(loopVerdict ? { verdict: loopVerdict } : {}),
+          ...(loopFaabCard ? { faabPlan: loopFaabCard } : {}),
+          ...(loopAnswerKeys.length > 0 ? { answerKeys: loopAnswerKeys } : {}),
           responseStructure: {
             shortAnswer: loop.text.split('\n')[0]?.slice(0, 200) ?? '',
             /*

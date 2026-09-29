@@ -32,7 +32,8 @@ vi.mock('@/lib/trade-intel/marketValueService', async () => {
 })
 
 import { buildFaabBidContext, computeFaabBidPlan } from '@/lib/chimmy/tools/faabBidTool'
-import { executeChimmyTool } from '@/lib/chimmy/tools/chimmyTools'
+import { executeChimmyTool, type ChimmyToolContext } from '@/lib/chimmy/tools/chimmyTools'
+import { faabCardFromPlan, faabPlanVerdict } from '@/lib/chimmy/answerPolishBuild'
 
 const LEAGUE = {
   id: 'L1', name: 'Test League', platform: 'sleeper', platformLeagueId: '999', season: 2026,
@@ -192,5 +193,66 @@ describe('computeFaabBidPlan', () => {
     expect(await computeFaabBidPlan('L1', 'me')).toMatchObject({ status: 'ok', outcome: 'save', upgrades: [] })
     h.values.mockResolvedValue(null)
     expect(await computeFaabBidPlan('L1', 'me')).toEqual({ status: 'refused', line: expect.stringContaining('no player values are loaded') })
+  })
+})
+
+/*
+ * Answer polish (2026-09-28): the chat's bid card and HOLD / BID chip are built from the SAME plan
+ * object the model's text was rendered from — computed once, in the tool, handed to the route through
+ * the tool context. Real allocator, real pool builder; only Prisma and the value fetch are mocked.
+ */
+describe('the bid plan reaches the chat as data', () => {
+  it('hands the route the plan it rendered, once, and records the run for "Newer answer below"', async () => {
+    const ctx: ChimmyToolContext = { leagueId: 'L1', userId: 'me', faabPlans: [], toolRuns: [] }
+    const text = await executeChimmyTool('get_faab_bid_plan', {}, ctx)
+    expect(text).toBe(await buildFaabBidContext('L1', 'me'))
+    expect(ctx.faabPlans).toHaveLength(1)
+    expect(ctx.faabPlans![0]).toMatchObject({ leagueId: 'L1', plan: { status: 'ok', outcome: 'bid' } })
+    expect(ctx.toolRuns).toEqual([{ tool: 'get_faab_bid_plan', leagueId: 'L1' }])
+  })
+
+  it('records nothing when no league is in scope — nothing was computed', async () => {
+    const ctx: ChimmyToolContext = { leagueId: null, userId: 'me', faabPlans: [], toolRuns: [] }
+    await executeChimmyTool('get_faab_bid_plan', {}, ctx)
+    expect(ctx.faabPlans).toEqual([])
+    expect(ctx.toolRuns).toEqual([])
+  })
+
+  it('renders the card from the plan: dollars, shares, the verified Sleeper waiver screen, and BID', async () => {
+    const plan = await computeFaabBidPlan('L1', 'me')
+    const card = faabCardFromPlan(plan, 'L1')
+    expect(card).toMatchObject({ outcome: 'bid', remaining: 400, seasonBudget: 1000, lineupAssumed: true, nonUpgrades: 2, moreCount: 0 })
+    expect(card!.bids.map((b) => [b.name, b.ceiling, b.sharePct])).toEqual([['Free TE', 323, 81], ['Free QB', 77, 19]])
+    expect(card!.waiverLink).toEqual({ href: 'https://sleeper.com/leagues/999/players', label: 'Open waivers on Sleeper' })
+    expect(faabPlanVerdict(plan)).toEqual({ key: 'bid', source: 'faab_plan', detail: null })
+  })
+
+  it('names who is benched when the slots are real, and gives HOLD with an empty card when nobody helps', async () => {
+    h.league.mockResolvedValue({ ...LEAGUE, settings: { ...LEAGUE.settings, roster_positions: ['FLEX', 'FLEX', 'FLEX', 'FLEX', 'SUPER_FLEX', 'BN'] } })
+    const real = faabCardFromPlan(await computeFaabBidPlan('L1', 'me'), 'L1')
+    expect(real!.bids).toEqual([{ name: 'Free QB', position: 'QB', ceiling: 400, sharePct: 100, displacedName: 'My QB' }])
+    expect(real!.lineupAssumed).toBe(false)
+
+    const onlyDowngrades = { ...VALUES, bySleeperId: Object.fromEntries(Object.entries(VALUES.bySleeperId).filter(([id]) => !['fa-te', 'fa-qb'].includes(id))) }
+    h.values.mockResolvedValue(onlyDowngrades)
+    const save = await computeFaabBidPlan('L1', 'me')
+    expect(faabPlanVerdict(save)).toEqual({ key: 'hold', source: 'faab_plan', detail: 'Save your FAAB' })
+    expect(faabCardFromPlan(save, 'L1')).toMatchObject({ outcome: 'save', bids: [], pricedCount: 2 })
+  })
+
+  it('gives an ordinary league a ranked card with no dollars and no chip', async () => {
+    h.league.mockResolvedValue({ ...LEAGUE, leagueType: 'redraft' })
+    const plan = await computeFaabBidPlan('L1', 'me')
+    expect(faabPlanVerdict(plan)).toBeNull()
+    const card = faabCardFromPlan(plan, 'L1')
+    expect(card!.outcome).toBe('rank')
+    expect(card!.bids.every((b) => b.ceiling == null)).toBe(true)
+  })
+
+  it('gives a refusal no card and no chip', async () => {
+    h.values.mockResolvedValue(null)
+    const plan = await computeFaabBidPlan('L1', 'me')
+    expect(faabCardFromPlan(plan, 'L1')).toBeNull()
+    expect(faabPlanVerdict(plan)).toBeNull()
   })
 })

@@ -16,6 +16,8 @@ import { renderTradeTargetVerdict } from './tradeTargetDecision'
 import { buildTradeFinder, readTradeFinderPosition } from './tradeFinderGrounding'
 import type { ReadyChimmyScenario } from './tradeScenarioTypes'
 import type { ChatStartCall } from './tools/chimmyTools'
+import { scenarioVerdict, startSitCall, tradeTargetVerdict } from './answerPolishBuild'
+import { answerKey } from './answerPolish'
 
 const points = (n: number | null) => n == null ? 'not computed' : n.toFixed(1)
 const names = (ps: Array<{ name: string }>) => ps.map(p => p.name).join(', ')
@@ -23,8 +25,9 @@ const names = (ps: Array<{ name: string }>) => ps.map(p => p.name).join(', ')
 /** User-facing evidence, rendered from engine fields. No model may add a verdict or confidence. */
 export function renderDecisionScenario(s: ReadyChimmyScenario): string {
   if (s.kind === 'start_sit') {
-    const pick = s.options.find(p => p.playerId === s.startPlayerId)
-    const header = s.contested && pick ? `Start ${pick.name}.` : s.options.every(p => p.inBestLineup) ? 'Both fit in your best lineup; start both.' : 'Neither fits in your best projected lineup.'
+    // The same call the verdict chip shows (`startSitCall`), so the two cannot disagree.
+    const call = startSitCall(s)
+    const header = call.call === 'start' ? `Start ${call.name}.` : call.call === 'start_both' ? 'Both fit in your best lineup; start both.' : 'Neither fits in your best projected lineup.'
     return [header, `Week ${s.week.week}, ${s.week.season}, under your league's scoring:`,
       ...s.options.map(p => `${p.name}: ${points(p.points)} projected points; lineup total if started: ${points(p.lineupIfStarted)}.`),
       ...(s.unfilledSlots.length ? [`Unfilled slots: ${s.unfilledSlots.join(', ')}. These totals exclude those slots.`] : []),
@@ -146,7 +149,8 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
       if (target) {
         const result = await buildTradeTargetVerdict({ playerName: target.playerName, leagueId: provenLeagueId, userId: args.userId })
         return result.status === 'decided'
-          ? decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer: renderTradeTargetVerdict(result.verdict), sources: ['trade_engine', 'league_rosters', 'league_scoring'] })
+          ? decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer: renderTradeTargetVerdict(result.verdict), sources: ['trade_engine', 'league_rosters', 'league_scoring'],
+            verdict: tradeTargetVerdict(result.verdict.verdict, result.targetName) })
           : gap(result.reason, result.detail, 'Confirm the full player name and sync your league roster before retrying.')
       }
     }
@@ -187,6 +191,7 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
       }
       return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, answer: (imageTrade.question ? 'I read the attached offer and resolved its assets against your league roster.\n' : '') + renderDecisionScenario(scenario),
         ...(startCalls.length ? { startCalls } : {}),
+        verdict: scenarioVerdict(scenario),
         scenario, sources: [...(imageTrade.question ? ['screenshot_vision'] : []), 'league_rosters', 'league_scoring', kind === 'trade' ? 'trade_engine' : 'weekly_projections'] })
     }
     if (kind === 'lineup') {
@@ -195,6 +200,8 @@ async function prepareSingleDecisionAnswer(args: DecisionArgs): Promise<ChimmyDe
       const call = singleSwapCall(result, provenLeagueId)
       return decisionAnswer({ kind, status: 'ready', leagueId: provenLeagueId, sources: ['league_rosters', 'league_scoring', 'weekly_projections'],
         ...(call ? { startCalls: [call] } : {}),
+        // The same engine as the `optimize_my_lineup` tool, so a later lineup answer supersedes this one.
+        answerKeys: [answerKey('optimize_my_lineup', provenLeagueId)],
         answer: [`Best projected lineup for week ${result.week.week}, ${result.week.season}:`,
           ...result.best.slots.map(s => `${s.slot}: ${s.player.name} (${points(s.player.points)} projected points).`),
           `Projected total: ${points(result.best.points)} under your league's scoring.`,

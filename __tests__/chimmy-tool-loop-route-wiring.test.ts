@@ -302,13 +302,36 @@ describe('tool loop system prompt', () => {
    * picks?" is answered from graded calls — and the start/sit calls the loop makes are collected and
    * recorded, so the record grows from chat and not only from the comparison screen.
    */
+  /*
+   * Answer polish (2026-09-28): the chip, the bid card and the supersede keys come from what the
+   * tools computed — the LAST bid plan in the context and the recorded tool runs — and the lines that
+   * build them never read the answer text. The behaviour is pinned in __tests__/chimmy/answer-polish*.
+   */
+  it('hands the chat the answer polish from the tools\' own results, never from the prose', () => {
+    const start = ROUTE.indexOf('const lastFaabPlan')
+    const end = ROUTE.indexOf('const loopAnswerKeys')
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    const polish = ROUTE.slice(start, ROUTE.indexOf('\n', end))
+    expect(polish).toContain('toolContext.faabPlans[toolContext.faabPlans.length - 1]')
+    expect(polish).toContain('faabCardFromPlan(lastFaabPlan.plan, lastFaabPlan.leagueId)')
+    expect(polish).toContain('faabPlanVerdict(lastFaabPlan.plan)')
+    expect(polish).toContain('answerKeysFrom(toolContext.toolRuns)')
+    expect(polish).not.toMatch(/loopText|loop\.text|\.response\b/)
+    const meta = ROUTE.slice(ROUTE.indexOf("source: 'chimmy_tool_loop'"))
+    expect(meta).toMatch(/\.\.\.\(loopVerdict \? \{ verdict: loopVerdict \} : \{\}\)/)
+    expect(meta).toMatch(/\.\.\.\(loopFaabCard \? \{ faabPlan: loopFaabCard \} : \{\}\)/)
+    expect(meta).toMatch(/\.\.\.\(loopAnswerKeys\.length > 0 \? \{ answerKeys: loopAnswerKeys \} : \{\}\)/)
+  })
+
   it('hands the loop its graded track record, and records the start/sit calls the answer made', () => {
     expect(ROUTE).toMatch(
       /styleLine: \[\s*\n\s*personalizationDirectives,\s*\n\s*renderTrackRecordPromptLine\(chimmyTrackRecordFor\(await readAdviceLearningSnapshot\(\), userId \?\? null\)\),/,
     )
     /* `actionCards` (2026-09-25) collects the confirm cards the propose tools build; see below. */
     /* `tradeGrades` (2026-09-27) collects the letters the one trade engine gave, for the answer check. */
-    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\], tradeGrades: \[\] as ChimmyTradeGrade\[\] \}/)
+    /* `faabPlans` / `toolRuns` (2026-09-28) feed the answer polish: bid card, chip, "Newer answer below". */
+    expect(ROUTE).toMatch(/const toolContext = \{ leagueId: leagueSnapshot\?\.id \?\? null, userId: userId \?\? null, startCalls: \[\] as ChatStartCall\[\], actionCards: \[\] as ChimmyActionCard\[\], tradeGrades: \[\] as ChimmyTradeGrade\[\], faabPlans: \[\] as ChimmyFaabPlanRun\[\], toolRuns: \[\] as ChimmyToolRun\[\] \}/)
     const record = idx('await recordChatStartSitAdvice({ userId, calls: toolContext.startCalls, answer: loopText })')
     expect(record).toBeGreaterThan(-1)
     /* Recorded before the answer is returned, against the text the user is about to see. */

@@ -17,6 +17,8 @@ import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { lineupActionEvidence } from '@/lib/chimmy/lineupActionEvidence'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
 import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
+import type { FaabBidPlan } from '@/lib/chimmy/tools/faabBidTool'
+import { SUPERSEDING_TOOLS } from '@/lib/chimmy/answerPolish'
 
 /**
  * READ-ONLY TOOLS THE MODEL MAY CALL FOR ITSELF.
@@ -73,7 +75,25 @@ export type ChimmyToolContext = {
    * the answer states no other (`lib/chimmy/tradeGradeCheck.ts`). Absent = do not collect.
    */
   tradeGrades?: ChimmyTradeGrade[]
+  /**
+   * Every bid plan `get_faab_bid_plan` computed during this answer, AS DATA, so the route can hand
+   * the chat a card and a HOLD / BID chip from the same numbers the model was given — not a second
+   * computation, and never a reading of the model's prose. Absent = do not collect.
+   */
+  faabPlans?: ChimmyFaabPlanRun[]
+  /**
+   * The whole-league tools (`SUPERSEDING_TOOLS`) that ran during this answer, with the league each
+   * ran against — so a later answer that re-ran one for the same league can mark this one "Newer
+   * answer below". Recorded per call because `find_league_by_name` can rebind the league mid-answer.
+   * Absent = do not collect.
+   */
+  toolRuns?: ChimmyToolRun[]
 }
+
+/** One `get_faab_bid_plan` result, with the league it was computed for. */
+export type ChimmyFaabPlanRun = { leagueId: string; plan: FaabBidPlan }
+/** One run of a `SUPERSEDING_TOOLS` tool, with the league it ran against. */
+export type ChimmyToolRun = { tool: string; leagueId: string }
 
 /** More cards than this in one answer is a model looping, not a user deciding. */
 export const MAX_ACTION_CARDS_PER_ANSWER = 3
@@ -659,6 +679,11 @@ export async function executeChimmyTool(
 ): Promise<string> {
   const args = (rawArgs && typeof rawArgs === 'object' ? rawArgs : {}) as Record<string, unknown>
 
+  // Only with a league bound: without one these tools answer NO_LEAGUE and computed nothing.
+  if (ctx.toolRuns && ctx.leagueId && ctx.userId && (SUPERSEDING_TOOLS as readonly string[]).includes(name)) {
+    ctx.toolRuns.push({ tool: name, leagueId: ctx.leagueId })
+  }
+
   try {
     switch (name) {
       case 'get_league_trade_activity': {
@@ -776,8 +801,14 @@ export async function executeChimmyTool(
       case 'get_faab_bid_plan': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         // Lazy: the pricing graph (market values, trade rows) is only loaded when this tool runs.
-        const { buildFaabBidContext } = await import('@/lib/chimmy/tools/faabBidTool')
-        return buildFaabBidContext(ctx.leagueId, ctx.userId)
+        const { computeFaabBidPlan, renderFaabBidText } = await import('@/lib/chimmy/tools/faabBidTool')
+        /*
+         * Computed ONCE: the model gets `renderFaabBidText(plan)` (exactly `buildFaabBidContext`),
+         * and the same `plan` object goes to the chat's bid card and verdict chip.
+         */
+        const plan = await computeFaabBidPlan(ctx.leagueId, ctx.userId)
+        ctx.faabPlans?.push({ leagueId: ctx.leagueId, plan })
+        return renderFaabBidText(plan)
       }
 
       case 'get_my_roster': {
