@@ -22,6 +22,7 @@ import { NotificationCategoryRenderer } from "@/components/notification-settings
 import { LeagueNotificationOverridesCard } from "@/components/notification-settings/LeagueNotificationOverridesCard"
 import type { SettingsProfile } from "./settings-types"
 import { EnableWebPushCard } from "@/components/notifications/EnableWebPushCard"
+import { IosAppPushCard } from "@/components/notifications/IosAppPushCard"
 
 const CHIMMY_SHORTCUTS_DISABLED_KEY = "af_chimmy_shortcuts_disabled"
 
@@ -430,6 +431,7 @@ export function NotificationsSettingsSection({
           {t("settings.notifications.pushTitle")}
         </p>
         <EnableWebPushCard />
+        <IosAppPushCard />
         <p className="text-xs text-[var(--muted)]">{t("settings.notifications.pushHint")}</p>
       </div>
 

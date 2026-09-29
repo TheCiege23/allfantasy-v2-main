@@ -44,6 +44,32 @@ Export compliance is pre-answered: `ITSAppUsesNonExemptEncryption = NO` in
 The app is iPhone-only (`TARGETED_DEVICE_FAMILY = 1`), so only the 6.5" iPhone
 screenshots are required, not iPad ones.
 
+## Push notifications (optional, ~15 min)
+
+The app build and the server are both ready; three switches turn it on. Until
+all three are done, nothing in the app mentions notifications.
+
+1. **App ID.** developer.apple.com → Certificates, Identifiers & Profiles →
+   Identifiers → `ai.allfantasy.app` → tick **Push Notifications** → Save. (No
+   certificate needed; ignore the "Configure" button.)
+2. **APNs key.** Keys → **+** → name it `AllFantasy Push` → tick **Apple Push
+   Notifications service (APNs)** → Continue → Register → **Download** the `.p8`
+   (once only) and note its **Key ID**. Then set these on the Railway service
+   `allfantasy-v2-main` **in one save** (each variable write is a deploy):
+   `APNS_KEY_ID` (the Key ID), `APNS_TEAM_ID` (your 10-character Team ID) and
+   `APNS_PRIVATE_KEY` (the full `.p8` contents, including the BEGIN/END lines).
+   Same rules as the App Store Connect key: never in the repo, a chat or a log.
+3. **Build.** Run **ios-testflight** with **push_notifications** ticked. The
+   workflow exports the signed app first and refuses to upload if the
+   `aps-environment` entitlement did not make it in, so a build that cannot
+   receive notifications never reaches TestFlight.
+
+Where it shows: `/core/notifications`, Settings → Notifications, and the
+import-done screen, each as a "Game-day alerts → Turn on" card. iOS asks for
+permission only when the user taps it. The web code checks that the installed
+binary contains the push plugin (`iosAppPushBridge`), so builds from before this
+change never see the card.
+
 ## What the website does inside the app
 
 The app appends `AllFantasyiOS/1.0` to its User-Agent, and
