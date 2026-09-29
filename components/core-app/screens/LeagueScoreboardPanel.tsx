@@ -56,6 +56,12 @@ function Side({
       </span>
       <span className="af-sb-pts af-num" data-projected={unplayed}>
         {value != null ? value.toFixed(1) : '—'}
+        {/* AllFantasy's own engine, under the provider total, while the week is unplayed. */}
+        {unplayed && team.afProjected != null ? (
+          <span className="af-sb-af" title="AllFantasy engine projection, under this league's scoring">
+            AF {team.afProjected.toFixed(1)}
+          </span>
+        ) : null}
       </span>
       {/*
         Coverage travels with the number it qualifies. A total built from five

@@ -33,6 +33,8 @@ export type MatchupSide = {
   projected: number | null
   /** How many of their starters that total was built from. */
   projectedFrom: number
+  /** AllFantasy's own engine total for the same lineup. Only a pricer supplies it; null otherwise. */
+  afProjected?: number | null
   starterCount: number
 }
 
@@ -65,7 +67,7 @@ const EMPTY_SLOT = '0'
  */
 export type MatchupLineupPricer = (
   lineups: ReadonlyMap<string, readonly string[]>,
-) => Promise<ReadonlyMap<string, { projected: number | null; projectedFrom: number }>>
+) => Promise<ReadonlyMap<string, { projected: number | null; projectedFrom: number; afProjected?: number | null }>>
 
 export async function getNextMatchup(args: {
   /** Internal `League.id` — used for LeagueTeam and Roster lookups. */
@@ -235,8 +237,9 @@ export async function getNextMatchup(args: {
      * beside the total and the withheld edge sentence already say when one is short, and a
      * standard-PPR number summed in is wrong without saying so. See `leagueScoredLineupTotal`.
      */
+    const pricedSide = args.priceLineups ? priced?.get(rosterId) : undefined
     const { projected, projectedFrom } = args.priceLineups
-      ? priced?.get(rosterId) ?? { projected: null, projectedFrom: 0 }
+      ? pricedSide ?? { projected: null, projectedFrom: 0 }
       : leagueScoredLineupTotal(starters, projections, args.scoringSettings)
 
     return {
@@ -246,6 +249,7 @@ export async function getNextMatchup(args: {
       avatarUrl: team?.avatarUrl ?? null,
       projected,
       projectedFrom,
+      afProjected: pricedSide?.afProjected ?? null,
       starterCount: starters.length,
     }
   }

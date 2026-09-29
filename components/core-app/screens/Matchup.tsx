@@ -61,11 +61,14 @@ function TeamCard({
   team,
   points,
   projected,
+  afProjected = null,
   align,
 }: {
   team: MatchupTeam
   points: number | null
   projected: number | null
+  /** AllFantasy's own engine total for this lineup. Shown only before a point is scored. */
+  afProjected?: number | null
   align: 'left' | 'right'
 }) {
   const showing = points ?? projected
@@ -92,6 +95,11 @@ function TeamCard({
         </div>
         {points == null && showing != null ? (
           <span className="af-mu-score-tag af-label">proj</span>
+        ) : null}
+        {points == null && afProjected != null ? (
+          <span className="af-mu-score-af af-num" title="AllFantasy engine projection for this lineup, adjusted to this league's scoring">
+            AF {afProjected.toFixed(1)}
+          </span>
         ) : null}
       </div>
     </div>
@@ -220,6 +228,27 @@ function PlayerHalf({
   )
 }
 
+/**
+ * AllFantasy's own engine, totalled over one side's starters.
+ *
+ * A starter ruled out or on bye is a known 0 (his provider cell already says so); a starter the
+ * engine never wrote is skipped rather than counted as zero. Null when the engine priced nobody,
+ * so a lineup with no AF rows reads `—` instead of a confident 0.0.
+ */
+export function afEngineColumnTotal(slots: MatchupSlot[], key: 'you' | 'opponent'): number | null {
+  let total = 0
+  let rows = 0
+  for (const s of slots) {
+    const cell = s[key]
+    if (!cell || cell.empty) continue
+    if (cell.unavailable) continue
+    if (cell.afEngine == null) continue
+    total += cell.afEngine
+    rows += 1
+  }
+  return rows > 0 ? Math.round(total * 10) / 10 : null
+}
+
 /** Sum of a column, and how many of its cells it was built from. */
 function columnTotal(slots: MatchupSlot[], key: 'you' | 'opponent', live: boolean) {
   let total = 0
@@ -246,6 +275,8 @@ function LineupBoard({ data }: { data: MatchupData }) {
   const slots = data.lineups.data
   const yours = columnTotal(slots, 'you', live)
   const theirs = columnTotal(slots, 'opponent', live)
+  const yoursAf = afEngineColumnTotal(slots, 'you')
+  const theirsAf = afEngineColumnTotal(slots, 'opponent')
   // Before kickoff each cell carries two projections: the provider's (API) and AllFantasy's (AF).
   const heading = live ? 'PTS' : 'API · AF'
 
@@ -303,6 +334,16 @@ function LineupBoard({ data }: { data: MatchupData }) {
             {theirs.total.toFixed(1)}
           </span>
         </div>
+        {/* AllFantasy's own engine, totalled the same way, before kickoff only. */}
+        {!live && (yoursAf != null || theirsAf != null) ? (
+          <div className="af-mu-board-foot af-mu-board-foot--af" role="row">
+            <span className="af-mu-foot-total af-num">{yoursAf == null ? '—' : yoursAf.toFixed(1)}</span>
+            <span className="af-mu-foot-label af-label">AF projected</span>
+            <span className="af-mu-foot-total af-mu-foot-total--right af-num">
+              {theirsAf == null ? '—' : theirsAf.toFixed(1)}
+            </span>
+          </div>
+        ) : null}
       </div>
 
       {/*
@@ -334,6 +375,10 @@ export function Matchup({ data }: MatchupProps) {
     ? { you: data.projectedFinal.data.you, opponent: data.projectedFinal.data.opponent }
     : null
   const compared = scored ?? projected
+  /* The AF engine's totals for the banner, from the same lineups the board below prices. */
+  const afTotals = data.lineups.available
+    ? { you: afEngineColumnTotal(data.lineups.data, 'you'), opponent: afEngineColumnTotal(data.lineups.data, 'opponent') }
+    : null
   const weekState: 'final' | 'live' | 'upcoming' = !data.week.available
     ? 'upcoming'
     : data.week.data.isFinal
@@ -463,6 +508,7 @@ export function Matchup({ data }: MatchupProps) {
               team={data.teams.data.you}
               points={scored?.you ?? null}
               projected={projected?.you ?? null}
+              afProjected={afTotals?.you ?? null}
               align="left"
             />
 
@@ -530,6 +576,7 @@ export function Matchup({ data }: MatchupProps) {
               team={data.teams.data.opponent}
               points={scored?.opponent ?? null}
               projected={projected?.opponent ?? null}
+              afProjected={afTotals?.opponent ?? null}
               align="right"
             />
 

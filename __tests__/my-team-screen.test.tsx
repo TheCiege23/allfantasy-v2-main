@@ -95,6 +95,7 @@ function data(over: Partial<MyTeamData> = {}): MyTeamData {
         season: '2026',
         week: 1,
         afTotal: 131.7,
+        afEngineTotal: 127.3,
         afProjected: 8,
         standardComparable: true,
       },
@@ -286,7 +287,9 @@ describe('My Team — the reported problems', () => {
     const t = text(<MyTeam data={data()} />)
     expect(t).toContain('118.4')
     expect(t).toContain('131.7')
-    expect(t).toContain('Projected · your league')
+    expect(t).toContain('127.3')
+    expect(t).toContain('Projected · API · your league')
+    expect(t).toContain('Projected · AF · your league')
   })
 
   it('explains why the two totals differ, in the league&apos;s own rules', () => {
@@ -698,7 +701,7 @@ describe('My Team — the reported problems', () => {
     expect(portrait?.querySelector('.af-mt-teamlogo')).toBeTruthy()
   })
 
-  it('⚠ groups the two totals in one frame, because they are one comparison', () => {
+  it('⚠ groups the totals in one frame, because they are one comparison', () => {
     /*
      * Four equal bordered rectangles in a row is what "blocky" meant, and it
      * hid the point: the whole reason both numbers are on screen is that they
@@ -707,9 +710,11 @@ describe('My Team — the reported problems', () => {
     const c = render(<MyTeam data={data()} />).container
     const group = c.querySelector('.af-mt-projgroup')
     expect(group).not.toBeNull()
-    expect(group!.querySelectorAll('.af-mt-tile').length).toBe(2)
+    // Provider (API) and AllFantasy (AF) under your league's rules, then standard.
+    expect(group!.querySelectorAll('.af-mt-tile').length).toBe(3)
     // Your league's total leads.
     expect(group!.querySelector('.af-mt-tile')?.className).toContain('af-mt-tile--af')
+    expect(group!.querySelector('.af-mt-tile--engine')?.textContent).toContain('127.3')
     // Record is context, not a projection, and stays outside the frame.
     expect(group!.textContent).not.toContain('Record')
   })
