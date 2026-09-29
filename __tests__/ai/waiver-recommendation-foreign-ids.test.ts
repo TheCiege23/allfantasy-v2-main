@@ -58,8 +58,13 @@ describe('POST /api/ai/waivers/recommend — a foreign league’s roster ids', (
     expect(body.meta.dataGaps).toContain('roster_ids_not_readable_for_platform')
   })
 
-  it('🛑 the same for MFL, Fantrax and Yahoo', async () => {
-    for (const platform of ['mfl', 'fantrax', 'yahoo']) {
+  /*
+   * ESPN too: the recommender reads rosters raw, and ESPN 12483 (Matthew Stafford, on 8 production
+   * ESPN rosters) is Sleeper's 12483 (Jack Bech) — it offered the rostered Stafford as an add. It
+   * cannot translate ESPN ids without editing it, which the decision-engine boundary forbids.
+   */
+  it('🛑 the same for MFL, Fantrax, Yahoo — and ESPN', async () => {
+    for (const platform of ['mfl', 'fantrax', 'yahoo', 'espn']) {
       state.platform = platform
       await call()
     }

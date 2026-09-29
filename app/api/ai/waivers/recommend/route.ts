@@ -5,7 +5,7 @@ import { z } from "zod"
 import { authOptions } from "@/lib/auth"
 import { getUserAfProStatus, AfProRequiredError } from "@/lib/entitlements/afAccess"
 import { generateWaiverRecommendations } from "@/lib/ai/waivers/waiverRecommendationService"
-import { isForeignIdSpace } from "@/lib/core-app/rosterIdSpace"
+import { rosterIdSpaceOf } from "@/lib/core-app/rosterIdSpace"
 import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
@@ -62,11 +62,18 @@ export async function POST(request: Request) {
      * subtracted. Refused here, before it runs, with the reason — the recommender itself is a
      * standing decision-engine-boundary violation (it belongs in lib/decision-os/waiver/), so the
      * gate lives at its callers rather than in it.
+     *
+     * 🛑 ESPN TOO (2026-09-29). ESPN was let through on the claim that its long ids collide with
+     * nothing. They collide: ESPN 12483 is Matthew Stafford — on 8 production ESPN rosters — and
+     * Sleeper 12483 is Jack Bech, so this recommender struck Bech off the wire and offered the
+     * rostered Stafford as an add. The recommender reads rosters raw and cannot translate ESPN ids
+     * without editing it, which the boundary forbids; the Decision OS waiver pool
+     * (lib/decision-os/waiver/pool.ts) does translate them. Refused here until this route moves there.
      */
     const league = await prisma.league
       .findUnique({ where: { id: leagueId }, select: { platform: true } })
       .catch(() => null)
-    if (isForeignIdSpace(league?.platform)) {
+    if (rosterIdSpaceOf(league?.platform) !== "sleeper") {
       return NextResponse.json({
         ok: true,
         insufficientData: true,

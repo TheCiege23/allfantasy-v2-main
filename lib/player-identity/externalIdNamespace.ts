@@ -26,6 +26,8 @@
  * against `externalId` and must be scoped by `source` — use `providerIdWhere`.
  */
 
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+
 /** The id spaces `SportsPlayer` rows are written in. */
 export type IdNamespace =
   | 'sleeper'
@@ -155,6 +157,38 @@ export function nonSleeperExternalIdWhere(ids: readonly string[], sport: string)
     source: { not: 'sleeper' },
     externalId: { in: clean },
   }
+}
+
+/**
+ * A league's player ids (roster, draft pick, queue), split by the id space they are in — so each
+ * half is asked only of the column that speaks it:
+ *
+ *   - `sleeperIds`   → `sleeperIdWhere`, keyed with `indexBySleeperId`
+ *   - `providerIds`  → `nonSleeperExternalIdWhere`, keyed by `externalId`
+ *
+ * Sleeper league: every id is a Sleeper id. Native league: a bare number in NFL is a Sleeper id
+ * (native pools are seeded from Sleeper); everything else is self-describing (`name:…`, `tsdb_…`)
+ * or a provider's number in a sport Sleeper does not cover (a native NHL draft holds Rolling
+ * Insights ids). Any other platform: NEITHER — its ids are its own, and one read as a Sleeper id
+ * or an `externalId` names a stranger. An ESPN roster that came through `sleeperReadableRosters`
+ * is in Sleeper's space already; say so with `translated`.
+ *
+ * Measured on production 2026-09-29: of 6,692 Sleeper-league draft picks, EVERY id is a Sleeper id
+ * and 3,558 of them also match a Rolling Insights / backfill `externalId` row for a DIFFERENT
+ * person — the three-column `OR` this replaces resolved half the board to a stranger.
+ */
+export function leagueIdSpaces(
+  ids: readonly string[],
+  sport: string | null | undefined,
+  platform: string | null | undefined,
+  opts: { translated?: boolean } = {},
+): { sleeperIds: string[]; providerIds: string[] } {
+  const clean = [...new Set(ids.map((id) => String(id ?? '').trim()).filter(Boolean))]
+  const p = String(platform ?? '').trim().toLowerCase()
+  if (p === 'sleeper' || (opts.translated && p === 'espn')) return { sleeperIds: clean, providerIds: [] }
+  if (!isNativePlatform(p)) return { sleeperIds: [], providerIds: [] }
+  const sleeperIds = clean.filter((id) => mayBeSleeperId(id, sport))
+  return { sleeperIds, providerIds: clean.filter((id) => !mayBeSleeperId(id, sport)) }
 }
 
 /**
