@@ -209,6 +209,14 @@ export function resolveViewerLeagueCommissioner(params: {
 export type DashboardLeagueListPayload = {
   leagues: unknown[]
   sleeperUserId: string | null
+  /**
+   * True when a membership query failed and its rows are missing from `leagues`.
+   *
+   * ⚠ A LEAGUE ABSENT FROM A DEGRADED LIST IS "UNKNOWN", NOT "NOT YOURS". The /core page gates
+   * `?league=` on this list, and it used to read a failed query's `[]` as proof that the viewer
+   * does not play the league. It then redirected the viewer out of their own league.
+   */
+  membershipReadFailed?: boolean
 }
 
 /**
@@ -478,6 +486,7 @@ export async function getDashboardLeagueListForUser(
       .catch(() => null),
   ])
 
+  let membershipReadFailed = false
   const [genericLeagues, sleeperLeagues, tournaments, legacyBoardItems] = await Promise.all([
     (prisma as any).league
       .findMany({
@@ -590,6 +599,7 @@ export async function getDashboardLeagueListForUser(
       })
       .catch((err: unknown) => {
         console.error('[League List] generic leagues query failed', err)
+        membershipReadFailed = true
         return []
       }),
     (prisma as any).sleeperLeague
@@ -628,6 +638,7 @@ export async function getDashboardLeagueListForUser(
       })
       .catch((err: unknown) => {
         console.error('[League List] sleeper leagues query failed', err)
+        membershipReadFailed = true
         return []
       }),
     prisma.legacyTournament
@@ -910,5 +921,6 @@ export async function getDashboardLeagueListForUser(
   return {
     leagues: leaguesSorted,
     sleeperUserId: profile?.sleeperUserId ?? null,
+    ...(membershipReadFailed ? { membershipReadFailed: true } : {}),
   }
 }

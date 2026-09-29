@@ -163,3 +163,27 @@ describe('dashboard league list — rosterDetail', () => {
   })
 })
 
+
+/*
+ * 🛑 A FAILED MEMBERSHIP QUERY IS REPORTED, NOT HIDDEN IN AN EMPTY LIST. The /core page gates
+ * `?league=` on this list, and it can tell "not your league" from "could not read" only by this flag.
+ */
+describe('membershipReadFailed', () => {
+  it('is set when the league membership query rejects', async () => {
+    db.answers['league.findMany'] = () => Promise.reject(new Error('pool timeout'))
+    const payload = await getDashboardLeagueListForUser(USER, { rosterDetail: 'count' })
+    expect(payload.membershipReadFailed).toBe(true)
+  })
+
+  it('is set when the Sleeper league query rejects', async () => {
+    db.answers['sleeperLeague.findMany'] = () => Promise.reject(new Error('pool timeout'))
+    const payload = await getDashboardLeagueListForUser(USER, { rosterDetail: 'count' })
+    expect(payload.membershipReadFailed).toBe(true)
+  })
+
+  it('is absent when every membership query succeeds', async () => {
+    const payload = await getDashboardLeagueListForUser(USER, { rosterDetail: 'count' })
+    expect(payload.leagues.length).toBeGreaterThan(0)
+    expect('membershipReadFailed' in payload).toBe(false)
+  })
+})
