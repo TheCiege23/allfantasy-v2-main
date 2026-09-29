@@ -56,6 +56,19 @@ describe('MessageActionsMenu', () => {
     expect(screen.getByText('Block Pat')).not.toBeNull()
   })
 
+  it('is a 44×44 tap target whose negative margin keeps the header row at its old size', () => {
+    // jsdom has no Tailwind, so this pins the classes; the geometry itself was measured on the
+    // live Messages page with the same values inline: 22×22 → 44×44, same centre, row unchanged.
+    useSession.mockReturnValue({ data: { user: { id: 'me' } } })
+    menu('pat')
+    const cls = trigger()!.className.split(/\s+/)
+    expect(cls).toEqual(expect.arrayContaining(['h-11', 'w-11', '-m-[11px]']))
+    fireEvent.click(trigger()!)
+    for (const label of ['Report message', 'Report Pat', 'Block Pat']) {
+      expect(screen.getByText(label).closest('button')!.className.split(/\s+/)).toContain('min-h-11')
+    }
+  })
+
   it('stays when the viewer is not known yet — hiding it would drop report/block for everyone', () => {
     useSession.mockReturnValue({ data: null })
     menu('pat')
