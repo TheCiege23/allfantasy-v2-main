@@ -1170,6 +1170,20 @@
   }
 
   /*
+   * ⚠ AND THE LABEL ITSELF, WHICH THE ROW WRAP ABOVE CANNOT REACH. Wrapping the head moves the
+   * count to its own line, but a label longer than the line still overflowed it, because the label
+   * is `nowrap` too. Measured 2026-09-29 on the App Review account at 390px: /core/trades'
+   * "TOP 3 · RANKED BY DEADLINE · NO TRADES ON FILE IN ANY OF THEM" is 395px in a 366px line,
+   * so the document was 407px wide and the page scrolled sideways. On a phone the label wraps
+   * inside itself instead.
+   */
+  .af-core .af-bd-sec-label {
+    white-space: normal;
+    min-width: 0;
+    line-height: 1.4;
+  }
+
+  /*
    * Same shape one level down, and it only appears once a card has a grade to
    * report. `.af-bd-card-head` is a nowrap row of league + `.af-bd-kv`; on
    * /core/trades the "Latest grade / ungraded: Not graded — one side has no…"
