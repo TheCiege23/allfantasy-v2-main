@@ -2965,6 +2965,60 @@ model FantasyProjection {
   @@map("fantasy_projections")
 }
 
+/// Projected lines for weeks AFTER the current one (2026-09-29).
+///
+/// 🛑 A SEPARATE TABLE ON PURPOSE. `fantasy_projections`' most recently fetched week is read as
+/// "the current week" by every current-week surface (`latestProjectionWeek()`), so a future week
+/// written there would hijack them all. Written only by the future-week phase of
+/// /api/cron/import-projections; read only through lib/projections/futureWeekProjections.ts.
+/// Accessed with raw SQL in lib/projections/futureWeekProjectionStore.ts, gated on a table probe, so
+/// the code is safe before migration 20260929180000_future_week_projections is applied.
+model FutureWeekProjection {
+  id              String   @id @default(cuid())
+  sport           String   @db.VarChar(16)
+  season          String   @db.VarChar(8)
+  week            Int
+  /// Sleeper player id — the same id space `fantasy_projections` rows from Sleeper use.
+  playerId        String   @map("player_id") @db.VarChar(64)
+  scoringPresetId String   @map("scoring_preset_id") @db.VarChar(32)
+  source          String   @db.VarChar(32)
+  /// Sleeper's generic `pts_ppr`. The full component line is in `stats` for league rescoring.
+  projectedPoints Float    @map("projected_points")
+  stats           Json
+  opponent        String?  @db.VarChar(8)
+  /// The current week when this line was fetched — how far ahead it was published.
+  anchorWeek      Int      @map("anchor_week")
+  fetchedAt       DateTime @map("fetched_at") @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([sport, season, week, playerId, scoringPresetId, source], map: "future_week_projections_uniq")
+  @@index([sport, season, week], map: "future_week_projections_week_idx")
+  @@index([playerId], map: "future_week_projections_player_idx")
+  @@map("future_week_projections")
+}
+
+/// What we last learned about each future week, so "not published yet" and "never checked" differ.
+model FutureWeekProjectionCheck {
+  id          String    @id @default(cuid())
+  sport       String    @db.VarChar(16)
+  season      String    @db.VarChar(8)
+  week        Int
+  source      String    @db.VarChar(32)
+  /// Outcome of the last SUCCESSFUL check: 'published' | 'not_published'. Null = never succeeded.
+  status      String?   @db.VarChar(16)
+  rowCount    Int       @default(0) @map("row_count")
+  payloadHash String?   @map("payload_hash") @db.VarChar(64)
+  anchorWeek  Int       @map("anchor_week")
+  checkedAt   DateTime  @map("checked_at") @db.Timestamptz(6)
+  confirmedAt DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  changedAt   DateTime? @map("changed_at") @db.Timestamptz(6)
+  lastError   String?   @map("last_error") @db.VarChar(240)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([sport, season, week, source], map: "future_week_projection_checks_uniq")
+  @@map("future_week_projection_checks")
+}
+
 /// Canonical fantasy stat-line cache. Weekly/stat-period rows stay source-backed and scoring-preset aware.
 model FantasyStatLine {
   id                           String   @id @default(cuid())
