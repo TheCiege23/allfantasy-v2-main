@@ -10,6 +10,7 @@ import { buildDraftChatWireMessage } from '@/lib/draft-room/draft-chat-contract'
 import type { PlatformChatMessage } from '@/types/platform-shared'
 import { parseLeaguePollPayload, type LeaguePollPayload } from '@/lib/league-chat/LeaguePollService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { getBlockedUserIdsForRead } from '@/lib/moderation/BlockUserService'
 
 function normalizedParsePoll(input: {
   body?: string | null
@@ -71,6 +72,20 @@ export async function loadDraftChatWireMessages(leagueId: string, userId: string
       source: 'draft',
     })
   }
+
+  /*
+   * 🛑 BLOCKS WERE NOT APPLIED TO DRAFT CHAT AT ALL (found 2026-09-29). League chat's GET hides
+   * the people the viewer has blocked (app/api/league/chat/route.ts, fixed 2026-09-25); the draft
+   * room reads the same LeagueChatMessage rows through this loader and showed them. Same lookup,
+   * same rule: the viewer's own messages always stay, and author-less rows (pick announcements)
+   * are never filtered. `getBlockedUserIdsForRead` THROWS `BlockListUnavailableError` rather than
+   * returning [] on a failed read, so no caller can mistake "unknown" for "blocks nobody" — each
+   * caller decides what an unfiltered read costs it (the GET answers 503; the live-sync bundle
+   * leaves chat out and keeps the draft itself running).
+   */
+  const blocked = new Set(await getBlockedUserIdsForRead(userId))
+  blocked.delete(userId)
+  if (blocked.size > 0) rows = rows.filter((m) => !m.senderUserId || !blocked.has(m.senderUserId))
 
   const messages = rows.map((m) =>
     buildDraftChatWireMessage(m, {

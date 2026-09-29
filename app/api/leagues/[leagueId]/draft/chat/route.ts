@@ -32,6 +32,7 @@ import {
   sanitizeDraftChatStructuredSendMeta,
 } from '@/lib/draft-room/draft-chat-contract'
 import { loadDraftChatWireMessages } from '@/lib/draft-room/draftRoomChatWireLoad'
+import { BlockListUnavailableError } from '@/lib/moderation/BlockUserService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
@@ -118,14 +119,29 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ leagueId: s
   const before = req.nextUrl.searchParams?.get('before')
   const beforeDate = before ? new Date(before) : undefined
 
-  const { messages, syncActive } = await loadDraftChatWireMessages(leagueId, userId, {
-    limit,
-    before: beforeDate,
-  })
+  /*
+   * Fail closed on the block list, like league chat's GET: a 503 rather than a transcript that
+   * may include people this viewer blocked. The draft client keeps its last good messages on a
+   * non-OK answer, so this costs one missed refresh, never a blank chat.
+   */
+  let loaded: Awaited<ReturnType<typeof loadDraftChatWireMessages>>
+  try {
+    loaded = await loadDraftChatWireMessages(leagueId, userId, {
+      limit,
+      before: beforeDate,
+    })
+  } catch (err) {
+    if (!(err instanceof BlockListUnavailableError)) throw err
+    console.warn('[draft/chat] block list unavailable; refusing to serve an unfiltered read')
+    return NextResponse.json(
+      { error: 'Messages are temporarily unavailable. Try again in a moment.' },
+      { status: 503 },
+    )
+  }
 
   return NextResponse.json({
-    messages,
-    syncActive,
+    messages: loaded.messages,
+    syncActive: loaded.syncActive,
   })
 }
 

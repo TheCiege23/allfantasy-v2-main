@@ -15,6 +15,7 @@ import {
 } from '@/lib/live-draft-engine/postDraftFinalizeArtifacts'
 import { loadDraftQueueForUser } from '@/lib/draft-room/loadDraftQueueForUser'
 import { loadDraftChatWireMessages } from '@/lib/draft-room/draftRoomChatWireLoad'
+import { BlockListUnavailableError } from '@/lib/moderation/BlockUserService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export type DraftLiveSyncWire = {
@@ -89,7 +90,20 @@ export async function buildDraftLiveSyncPayload(
 
   const secondary: Promise<unknown>[] = []
   if (opts.includeQueue) secondary.push(loadDraftQueueForUser(leagueId, userId))
-  if (opts.includeChat) secondary.push(loadDraftChatWireMessages(leagueId, userId, { limit: opts.chatLimit ?? 80 }))
+  /*
+   * ⚠ CHAT MUST NOT TAKE THE DRAFT DOWN WITH IT. The chat loader throws BlockListUnavailableError
+   * rather than serve an unfiltered transcript, and this bundle is one Promise.all — so a failed
+   * block-list read would fail the pick clock, the board and the queue too. On that one error the
+   * chat is left OUT (`null` below → no `messages` key), and the client keeps what it shows.
+   */
+  if (opts.includeChat) {
+    secondary.push(
+      loadDraftChatWireMessages(leagueId, userId, { limit: opts.chatLimit ?? 80 }).catch((err: unknown) => {
+        if (err instanceof BlockListUnavailableError) return null
+        throw err
+      }),
+    )
+  }
 
   const loaded = secondary.length ? await Promise.all(secondary) : []
 
@@ -102,9 +116,11 @@ export async function buildDraftLiveSyncPayload(
     queue = q.queue
   }
   if (opts.includeChat) {
-    const c = loaded[idx++] as { messages: unknown[]; syncActive: boolean }
-    messages = c.messages
-    syncActive = c.syncActive
+    const c = loaded[idx++] as { messages: unknown[]; syncActive: boolean } | null
+    if (c) {
+      messages = c.messages
+      syncActive = c.syncActive
+    }
   }
 
   return {
