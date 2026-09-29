@@ -57,7 +57,7 @@
   border-radius: 8px;
   background: var(--chip);
   color: var(--text2);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   display: grid;
   place-items: center;
@@ -76,7 +76,7 @@
   overflow-wrap: anywhere;
 }
 .af-core .af-chw-sub {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 400;
   color: var(--faint);
 }
@@ -111,7 +111,7 @@
 
 .af-core .af-chw-chip {
   flex: none;
-  font: 800 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   padding: 5px 8px;

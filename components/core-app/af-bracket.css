@@ -40,7 +40,7 @@
 .af-bk-sport[data-soon='true'] { opacity: 0.62; }
 
 .af-bk-soon {
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -87,7 +87,7 @@
 .af-bk-key-fmt {
   display: block;
   margin-top: 1px;
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -124,7 +124,7 @@
 
 .af-bk-side-label {
   margin: 0 0 10px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -137,7 +137,7 @@
   display: block;
   margin-bottom: 6px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--faint);
@@ -168,7 +168,7 @@
   flex: none;
   width: 17px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -200,7 +200,7 @@
   color: var(--faint);
 }
 
-.af-bk-waiting { font-size: 10.5px; color: var(--faint); }
+.af-bk-waiting { font-size: 11px; color: var(--faint); }
 
 .af-bk-slot--waiting { background: transparent; }
 
@@ -217,7 +217,7 @@
 .af-bk-centre-label {
   display: block;
   margin-bottom: 10px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -255,7 +255,7 @@
   border-radius: 6px;
   background: var(--chip);
   color: var(--text2);
-  font-size: 10.5px;
+  font-size: 11px;
   cursor: pointer;
 }
 
@@ -264,7 +264,7 @@
 .af-bk-picker-label {
   display: block;
   margin-bottom: 5px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -344,7 +344,7 @@
 }
 
 .af-bk-vars dt {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;

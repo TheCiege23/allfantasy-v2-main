@@ -47,7 +47,7 @@
 
 .af-d34-count { flex: none; display: flex; flex-direction: column; gap: 6px; }
 .af-d34-count-l {
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.16em;
   color: var(--warn);
 }
@@ -85,7 +85,7 @@
 .af-d34-slot[data-tone='bad'] { color: var(--bad); border-color: var(--bad); background: var(--bad-soft); }
 .af-d34-slot[data-tone='warn'] { color: var(--warn); border-color: var(--warn); background: var(--warn-soft); }
 .af-d34-slot-k {
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.08em;
   opacity: 0.85;
 }
@@ -109,7 +109,7 @@
   margin: 0;
   max-width: 190px;
   text-align: right;
-  font: 400 10.5px/1.45 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  font: 400 11px/1.45 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
   color: var(--faint);
 }
 
@@ -126,7 +126,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font: 700 9.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.13em;
   color: var(--faint);
 }
@@ -142,7 +142,7 @@
 .af-d34-rec-l { font: 400 11px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--muted); flex: 1; }
 .af-d34-health { font: 900 26px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace; color: var(--warn); }
 .af-d34-health-l {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.12em;
   color: var(--faint);
 }
@@ -163,7 +163,7 @@
 }
 .af-d34-feedtime {
   flex: none;
-  font: 700 10.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
@@ -186,7 +186,7 @@
   grid-template-columns: minmax(0, 1fr) 210px 108px 116px;
   gap: 14px;
   padding: 0 16px 6px;
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.13em;
   color: var(--faint);
 }
@@ -240,7 +240,7 @@
   overflow-wrap: anywhere;
 }
 .af-d34-chip {
-  font: 700 8.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.1em;
   padding: 4px 6px;
   border-radius: 5px;
@@ -274,7 +274,7 @@
   color: var(--text);
 }
 .af-d34-mu-vs {
-  font: 400 9.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 400 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   color: var(--faint);
 }
 .af-d34-mu-none { font: 400 11.5px/1.35 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--faint); }
@@ -288,7 +288,7 @@
 .af-d34-proj-l {
   display: block;
   margin-top: 3px;
-  font: 400 9.5px/1.2 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  font: 400 11px/1.2 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
   color: var(--faint);
 }
 /* Withheld, not zeroed — a projection we do not have is not a projection of 0. */
@@ -351,11 +351,11 @@
 .af-d34-avatar { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--accent-line); flex: none; object-fit: cover; }
 .af-d34-briefname {
   flex: 1;
-  font: 700 9.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.13em;
   color: var(--accent);
 }
-.af-d34-brieftime { font: 400 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace; color: var(--faint); }
+.af-d34-brieftime { font: 400 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace; color: var(--faint); }
 .af-d34-briefh {
   margin: 11px 0 0;
   font: 800 16px/1.3 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
@@ -375,7 +375,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 800 10px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  font: 800 11px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
   background: var(--chip);
   color: var(--muted);
 }
@@ -417,7 +417,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 800 9px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  font: 800 11px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
   background: var(--chip);
   color: var(--muted);
 }
@@ -428,14 +428,14 @@
   margin-left: 6px;
   padding: 2px 5px;
   border-radius: 4px;
-  font: 700 7.5px/1.4 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1.4 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.1em;
   background: var(--chip);
   color: var(--faint);
 }
 
 .af-d34-badge {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.1em;
   padding: 4px 7px;
   border-radius: 999px;
@@ -483,7 +483,7 @@
   border-radius: 999px;
   background: var(--bad);
   color: #ffffff;
-  font: 800 10px/19px var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 800 11px/19px var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   text-align: center;
 }
 
@@ -514,18 +514,18 @@
   background: var(--surface);
 }
 .af-d34m-plan {
-  font: 700 9.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.1em;
   color: var(--warn);
 }
 .af-d34m-meter { flex: 1; height: 5px; border-radius: 3px; background: var(--line2); overflow: hidden; min-width: 0; }
 .af-d34m-meter > i { display: block; height: 100%; background: var(--accent); }
 .af-d34m-tok {
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   color: var(--muted);
   white-space: nowrap;
 }
-.af-d34m-top { font: 700 10px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--accent); text-decoration: none; }
+.af-d34m-top { font: 700 11px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--accent); text-decoration: none; }
 
 /* Horizontal league rail replaces the vertical one. */
 .af-d34m-rail { display: flex; gap: 9px; overflow-x: auto; padding-bottom: 3px; }
@@ -564,7 +564,7 @@
   font-variant-numeric: tabular-nums;
 }
 .af-d34m-lockl {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.14em;
   color: var(--warn);
   flex: 1;

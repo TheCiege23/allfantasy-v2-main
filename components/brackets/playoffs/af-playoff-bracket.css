@@ -137,7 +137,7 @@
 
 .af-pb-status {
   text-align: right;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -147,7 +147,7 @@
 .af-pb-status small {
   display: block;
   margin-top: 3px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0;
   text-transform: none;
@@ -263,7 +263,7 @@
 }
 
 .af-pb-seed-league {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
   color: var(--pb-faint);
@@ -282,7 +282,7 @@
 }
 
 .af-pb-seed-n {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--pb-faint);
 }
@@ -300,7 +300,7 @@
 .af-pb-badge--sm {
   width: 22px;
   height: 22px;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .af-pb-badge--champ {
@@ -333,7 +333,7 @@
 }
 
 .af-pb-tile-name {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -348,7 +348,7 @@
 }
 
 .af-pb-tile-meta {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--pb-muted);
   margin-top: 2px;
 }
@@ -391,7 +391,7 @@
 }
 
 .af-pb-col-head {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -442,7 +442,7 @@
 }
 
 .af-pb-team-seed {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--pb-faint);
   width: 10px;
@@ -461,7 +461,7 @@
 /* A seed slot is pickable but is not a club yet — say so rather than let
    "AL1" read as a team nobody recognises. */
 .af-pb-team-slot {
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -471,7 +471,7 @@
 
 .af-pb-team-prob {
   margin-left: auto;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--pb-muted);
   flex: none;
@@ -501,14 +501,14 @@
 }
 
 .af-pb-status-title {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   text-align: center;
   line-height: 1.2;
 }
 
 .af-pb-status-sub {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--pb-faint);
   text-align: center;
   line-height: 1.2;
@@ -517,7 +517,7 @@
 /* Correct/wrong is carried by TEXT, not by colour alone — the badge reads the
    same to a colour-blind user and in a greyscale screenshot. */
 .af-pb-status-result {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1.2;
   text-align: center;
@@ -561,7 +561,7 @@
 }
 
 .af-pb-champ-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -576,7 +576,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--pb-faint);
   padding: 8px;
 }
@@ -584,7 +584,7 @@
 .af-pb-footnote {
   padding: 12px 14px;
   border-top: 1px solid var(--pb-line);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
   color: var(--pb-faint);
 }
@@ -597,7 +597,7 @@
   gap: 8px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--pb-line);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -616,7 +616,7 @@
 }
 
 .af-pb-reason-tag {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   color: var(--pb-faint);
@@ -634,7 +634,7 @@
 
 .af-pb-basis {
   padding: 10px 14px;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.45;
   color: var(--pb-faint);
   border-top: 1px solid var(--pb-line);
@@ -658,7 +658,7 @@
 }
 
 .af-pb-lb-rank {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--pb-faint);
   width: 18px;
@@ -717,7 +717,7 @@
   gap: 10px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--pb-line);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -830,7 +830,7 @@
 }
 
 .af-pb-section-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;

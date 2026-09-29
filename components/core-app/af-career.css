@@ -43,12 +43,12 @@
 .af-cr-crest { flex: none; }
 .af-cr-eyebrow {
   flex: 1;
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.16em;
   color: var(--faint);
 }
 .af-cr-ro {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.1em;
   color: var(--good);
   background: var(--good-soft);
@@ -72,7 +72,7 @@
   justify-content: center;
   border-radius: 16px;
   border: 1px dashed var(--line2);
-  font: 700 10px/1.4 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1.4 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.12em;
   color: var(--faint);
   text-align: center;
@@ -85,7 +85,7 @@
 }
 .af-cr-chips { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; }
 .af-cr-chip {
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.08em;
   padding: 7px 9px;
   border-radius: 6px;
@@ -116,7 +116,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.14em;
   color: var(--faint);
   margin-bottom: 2px;
@@ -134,7 +134,7 @@
   flex: none;
   width: 42px;
   text-align: right;
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   color: var(--faint);
 }
 /* A component pinned at its cap. Saying MAXED beats rendering "467/15". */
@@ -144,7 +144,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.14em;
   color: var(--faint);
 }
@@ -218,7 +218,7 @@
 .af-cr-tabstats { margin-left: auto; display: flex; align-items: center; gap: 18px; }
 .af-cr-tabstat { display: flex; align-items: baseline; gap: 7px; }
 .af-cr-tabstat-l {
-  font: 400 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 400 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.12em;
   color: var(--faint);
 }
@@ -236,7 +236,7 @@
 .af-cr-sectitle {
   flex: 1;
   margin: 0;
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.14em;
   color: var(--faint);
 }
@@ -274,7 +274,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 800 10px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  font: 800 11px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
   background: var(--chip);
   color: var(--muted);
 }
@@ -290,7 +290,7 @@
 }
 .af-cr-ring-detail { margin: 3px 0 0; font: 400 11px/1.4 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--muted); }
 .af-cr-ring-set {
-  font: 700 9px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.1em;
   color: var(--warn);
 }
@@ -307,7 +307,7 @@
   min-width: 0;
 }
 .af-cr-slot-l {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.14em;
   color: var(--faint);
 }
@@ -363,7 +363,7 @@
 .af-cr-count { flex: 1; padding: 15px 16px; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .af-cr-count + .af-cr-count { border-left: 1px solid var(--line); }
 .af-cr-count-l {
-  font: 700 9px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.12em;
   color: var(--faint);
 }
@@ -400,7 +400,7 @@
   border: 1px solid var(--chip-line);
   background: var(--chip);
   color: var(--muted);
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   cursor: help;
   padding: 0;
 }
@@ -493,7 +493,7 @@
   justify-content: center;
   border-radius: 14px;
   border: 1px dashed var(--line2);
-  font: 700 8px/1.4 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1.4 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.1em;
   color: var(--faint);
   text-align: center;
@@ -506,7 +506,7 @@
 }
 .af-crm-chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .af-crm-chip {
-  font: 700 8px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.08em;
   padding: 6px 8px;
   border-radius: 6px;
@@ -531,7 +531,7 @@
 }
 .af-crm-tile--rings { border-color: var(--warn); }
 .af-crm-tile-l {
-  font: 700 8px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.1em;
   color: var(--faint);
 }
@@ -557,12 +557,12 @@
 .af-crm-cardtitle {
   flex: 1;
   margin: 0;
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.12em;
   color: var(--faint);
 }
 .af-crm-titlesflag {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.1em;
   color: var(--warn);
 }
@@ -571,12 +571,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font: 400 10px/1.3 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  font: 400 11px/1.3 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
   color: var(--faint);
 }
 .af-crm-arcfoot > span:first-child { flex: 1; min-width: 0; }
 .af-crm-peak {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.1em;
   color: var(--warn);
 }
@@ -586,9 +586,9 @@
 .af-crm-scoreval { font: 900 24px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace; }
 .af-crm-scoreval--accent { color: var(--accent); }
 .af-crm-scoreval--warn { color: var(--warn); }
-.af-crm-scoreof { font: 500 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace; color: var(--faint); flex: 1; }
+.af-crm-scoreof { font: 500 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace; color: var(--faint); flex: 1; }
 .af-crm-scorelabel {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.1em;
   color: var(--muted);
 }
@@ -609,7 +609,7 @@
 .af-crm-shelf-year {
   flex: none;
   width: 32px;
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   color: var(--warn);
 }
 .af-crm-shelf-name {
@@ -629,7 +629,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 800 9px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  font: 800 11px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
   background: var(--chip);
   color: var(--muted);
 }
@@ -705,7 +705,7 @@
   color: var(--text);
 }
 .af-c13-chip {
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.12em;
   padding: 6px 9px;
   border-radius: 6px;
@@ -727,7 +727,7 @@
 .af-c13-stat { min-width: 76px; }
 .af-c13-stat span {
   display: block;
-  font: 700 9.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--faint);
@@ -763,7 +763,7 @@
   align-items: center;
   gap: 8px;
   margin: 0 0 13px;
-  font: 700 9.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--faint);
@@ -812,7 +812,7 @@
 }
 .af-c13-ldimmeta {
   margin: 6px 0 0;
-  font: 700 9.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
   letter-spacing: 0.12em;
   color: var(--faint);
 }

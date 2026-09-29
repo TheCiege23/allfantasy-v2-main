@@ -244,7 +244,7 @@
 .af-nav-badge {
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-weight: 800;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   padding: 3px 6px;
   border-radius: 6px;
@@ -368,7 +368,7 @@
   white-space: nowrap;
 }
 .af-shell .af-search-ac-meta {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--faint);
@@ -400,13 +400,13 @@
 .af-admin-shortcut:focus-visible { color: var(--accent-ink); background: var(--accent); }
 
 .af-week {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   color: var(--muted);
   text-transform: uppercase;
 }
 .af-sync {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.06em;
 }
 
@@ -435,7 +435,7 @@
   color: var(--text);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-weight: 700;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   cursor: pointer;
@@ -465,7 +465,7 @@
 }
 
 .af-syncnow-msg {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   color: var(--faint);
   white-space: nowrap;
@@ -622,7 +622,7 @@
   border: 1px solid var(--line2);
   background: var(--chip);
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
   cursor: pointer;
@@ -879,7 +879,7 @@
 .af-nav-grouplabel {
   margin: 12px 0 4px;
   padding: 0 12px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1177,7 +1177,7 @@
   }
   .af-core .af-mobile-more-link b {
     color: var(--accent);
-    font: 800 10px/1 var(--font-jetbrains-mono, ui-monospace, monospace);
+    font: 800 11px/1 var(--font-jetbrains-mono, ui-monospace, monospace);
   }
 }
 
@@ -1397,7 +1397,7 @@
   border-radius: 9px;
   color: var(--faint);
   cursor: pointer;
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -1543,7 +1543,7 @@
 }
 
 .af-core .af-rail-score-status {
-  font: 500 10px/1.4 system-ui, sans-serif;
+  font: 500 11px/1.4 system-ui, sans-serif;
   letter-spacing: 0;
   color: var(--faint);
   overflow-wrap: anywhere;
@@ -1607,7 +1607,7 @@
   overflow: hidden;
   background: var(--chip);
   color: var(--faint);
-  font: 800 8px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 800 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
 }
 
 .af-core .af-rail-row-team {
@@ -1686,7 +1686,7 @@
 }
 
 .af-core .af-rail-row-rank-cut {
-  font: 600 10px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 600 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--muted);
 }
 
@@ -1702,7 +1702,7 @@
  */
 .af-core .af-rail-row-rank-basis {
   flex-basis: 100%;
-  font: 500 9px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 500 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.04em;
   color: var(--faint);
 }
@@ -2311,7 +2311,7 @@ html[data-mode='light'] .af-core {
   gap: 4px;
   margin-left: 7px;
   color: var(--good);
-  font: 800 8px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: .08em;
 }
 
@@ -2330,7 +2330,7 @@ html[data-mode='light'] .af-core {
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
-  font: 800 8px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   white-space: nowrap;
 }
 
@@ -2371,7 +2371,7 @@ html[data-mode='light'] .af-core {
   border-radius: 999px;
   background: var(--chip);
   color: var(--text2);
-  font: 700 8px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 700 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   white-space: nowrap;
 }
 
@@ -2398,13 +2398,13 @@ html[data-mode='light'] .af-core {
 
 .af-core .af-rail-foot-copy strong {
   color: var(--text2);
-  font: 800 10px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 800 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
 }
 
 .af-core .af-rail-foot-copy small {
   margin-top: 2px;
   color: var(--faint);
-  font: 600 8px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 600 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
 }
 
 .af-core .af-rail-foot-icon {
@@ -2487,7 +2487,7 @@ html[data-mode='light'] .af-core {
   }
   .af-core .af-nav-heading.af-label {
     padding: 0 8px 4px;
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 0.12em;
   }
   .af-core .af-nav-item {

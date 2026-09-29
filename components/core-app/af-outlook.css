@@ -72,7 +72,7 @@
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -190,7 +190,7 @@
   transform: translate(-50%, -50%);
 }
 .af-olk-range-t {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -435,7 +435,7 @@
 }
 .af-olk-move-unit,
 .af-olk-move-sub {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--muted);
 }
 .af-core .af-olk-move-cta {
@@ -549,7 +549,7 @@
 }
 .af-olk-wins-x {
   flex: 0 0 auto;
-  font-size: 10px;
+  font-size: 11px;
   text-align: center;
   color: var(--faint);
 }
@@ -586,7 +586,7 @@
   vertical-align: baseline;
 }
 .af-olk-table thead th {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.11em;
   text-transform: uppercase;
@@ -698,7 +698,7 @@
   border: 1px solid var(--line);
 }
 .af-olk-dl dt {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -875,7 +875,7 @@
 .af-so-range {
   display: block;
   margin-top: 2px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 .af-so-table th[scope='row'] .af-olk-pill {
@@ -976,7 +976,7 @@
   .af-olk .af-so-table td[data-label]::before {
     content: attr(data-label);
     display: block;
-    font-size: 9px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.1em;
     text-transform: uppercase;
@@ -993,7 +993,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .af-olk-wins-x {
-    font-size: 9px;
+    font-size: 11px;
   }
 }
 

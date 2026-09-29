@@ -148,7 +148,7 @@
   color: var(--muted);
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-weight: 700;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -220,7 +220,7 @@
   padding: 3px 6px;
   border-radius: 10px;
   background: var(--chip-line);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -301,7 +301,7 @@
   border-radius: 5px;
   background: var(--bad-soft);
   color: var(--bad);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 .af-live-clock[data-idle='true'] {
@@ -367,7 +367,7 @@
   white-space: nowrap;
 }
 .af-live-team-record {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 .af-live-team-score {
@@ -408,7 +408,7 @@
 }
 .af-live-wp-label {
   flex: none;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
@@ -562,7 +562,7 @@
   font-size: 11px;
 }
 .af-live-mine-count {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent);
   padding: 3px 7px;
@@ -686,12 +686,12 @@
   font-size: 13px;
 }
 .af-live-mover-line {
-  font-size: 10.5px;
+  font-size: 11px;
   line-height: 1.35;
   color: var(--muted);
 }
 .af-live-mover-leagues {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -736,7 +736,7 @@
   gap: 6px;
 }
 .af-live-play-type {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--faint);
@@ -751,7 +751,7 @@
   color: var(--warn);
 }
 .af-live-play-team {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -801,7 +801,7 @@
 }
 .af-live-next-time {
   flex: none;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -973,7 +973,7 @@
   border-radius: 6px;
   background: var(--chip);
   border: 1px solid var(--chip-line);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
   color: var(--muted);
@@ -1023,7 +1023,7 @@
   padding: 2px 6px;
   border-radius: 5px;
   background: var(--chip);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--faint);
@@ -1037,7 +1037,7 @@
 
 .af-live-broadcast {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--faint);
@@ -1072,7 +1072,7 @@
   font-weight: 600;
 }
 .af-live-linescore thead th {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -1119,7 +1119,7 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -1148,7 +1148,7 @@
   display: grid;
   place-items: center;
   background: color-mix(in srgb, var(--good) 30%, var(--surface2));
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--text2);
 }
@@ -1194,7 +1194,7 @@
   bottom: 3px;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 700;
   color: color-mix(in srgb, var(--text) 55%, transparent);
 }
@@ -1279,7 +1279,7 @@
   white-space: nowrap;
 }
 .af-live-leader-meta {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--faint);
 }
@@ -1520,7 +1520,7 @@
    * still clipped at 390px (measured); 17px cells at 10px type fit with room.
    */
   .af-live-linescore {
-    font-size: 10px;
+    font-size: 11px;
   }
   .af-live-linescore th,
   .af-live-linescore td {
@@ -1574,7 +1574,7 @@
 }
 .af-gv-muted {
   color: var(--faint);
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 .af-gv-head {
@@ -1619,7 +1619,7 @@
   font-size: 12px;
 }
 .af-gv-team-record {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 .af-gv-score {
@@ -1750,7 +1750,7 @@
   font-weight: 600;
 }
 .af-gv-leader-line {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -1828,7 +1828,7 @@
 /* Team colours come from ESPN and are validated as 6-digit hex before use. */
 .af-gv-endzone {
   color: #fff;
-  font-size: 10px;
+  font-size: 11px;
   writing-mode: vertical-rl;
 }
 .af-gv-driveline {
@@ -1911,7 +1911,7 @@
   font-weight: 800;
 }
 .af-gv-pcard-meta {
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--faint);
 }
 .af-gv-pcard-stats {
@@ -1991,7 +1991,7 @@
   align-items: center;
 }
 .af-gv-running small {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -2044,7 +2044,7 @@
   border-left-color: var(--good);
 }
 .af-gv-play-meta {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -2134,7 +2134,7 @@
   font-weight: 600;
 }
 .af-gv-bplay-clock {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -2177,7 +2177,7 @@
   border-top: 1px solid var(--line);
 }
 .af-gv-box-table thead th {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
   border-top: 0;
@@ -2192,7 +2192,7 @@
 }
 .af-gv-box-group th {
   text-align: left;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -2278,7 +2278,7 @@
   border-radius: 4px;
   background: var(--warn-soft);
   color: var(--warn);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
 }
 
@@ -2310,7 +2310,7 @@
 }
 .af-gv-pitch text {
   fill: #0b0f17;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   text-anchor: middle;
   dominant-baseline: central;
@@ -2354,7 +2354,7 @@
   height: 18px;
   border-radius: 50%;
   color: #0b0f17;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
 }
 .af-gv-diamond {

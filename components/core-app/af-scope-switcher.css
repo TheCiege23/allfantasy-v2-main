@@ -44,7 +44,7 @@
 }
 .af-scope-kicker {
   color: var(--muted);
-  font: 700 10px/1 'JetBrains Mono', monospace;
+  font: 700 11px/1 'JetBrains Mono', monospace;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -107,7 +107,7 @@
 .af-scope-group { display: flex; flex-direction: column; gap: 6px; }
 .af-scope-group-title {
   color: var(--muted);
-  font: 700 10px/1 'JetBrains Mono', monospace;
+  font: 700 11px/1 'JetBrains Mono', monospace;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }

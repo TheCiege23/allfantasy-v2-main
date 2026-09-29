@@ -14,7 +14,7 @@
 
 .af-tl-heading {
   margin: 0;
-  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 700 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--faint);
@@ -101,7 +101,7 @@
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
   font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent);
 }
@@ -113,7 +113,7 @@
   border-radius: 999px;
   border: 1px solid var(--line2);
   background: var(--chip);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -160,7 +160,7 @@
 }
 
 .af-tl-alts-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -198,7 +198,7 @@
 
 .af-tl-decision-eyebrow {
   margin: 0 0 5px;
-  font: 700 9.5px/1 'JetBrains Mono', ui-monospace, monospace;
+  font: 700 11px/1 'JetBrains Mono', ui-monospace, monospace;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--warn);

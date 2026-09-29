@@ -101,7 +101,7 @@
 .af-lh-panel-help {
   margin-left: auto;
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -451,7 +451,7 @@
   justify-content: center;
   background: var(--chip);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
 }
 .af-buzz-actor {
@@ -579,7 +579,7 @@
 .af-lh-mright { align-items: flex-end; text-align: right; }
 .af-lh-mlabel {
   color: var(--muted);
-  font: 800 9px/1 'JetBrains Mono', monospace;
+  font: 800 11px/1 'JetBrains Mono', monospace;
   letter-spacing: .14em;
 }
 .af-lh-mteam {
@@ -702,12 +702,12 @@
   /* The margin column lives outside the side grid, so it is added here. */
   margin-right: 90px;
 }
-.af-sb-cols .af-label { text-align: right; font-size: 9.5px; opacity: 0.7; }
+.af-sb-cols .af-label { text-align: right; font-size: 11px; opacity: 0.7; }
 
 /* Home / away. Quiet — it is an anchor for the eye, not a fact about scoring. */
 .af-sb-ha {
   font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
   text-align: center;
@@ -776,7 +776,7 @@
  */
 .af-sb-cov {
   text-align: right;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.2;
   color: var(--faint);
   font-variant-numeric: tabular-nums;
@@ -847,7 +847,7 @@
   font-variant-numeric: tabular-nums;
 }
 .af-pb-move {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -1079,7 +1079,7 @@
   gap: 6px;
 }
 .af-weekpick-label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1499,7 +1499,7 @@
 .af-hub-squad li { display:flex; align-items:center; gap:12px; padding:12px 0; border-top:1px solid var(--line); }
 .af-hub-portrait { display:grid; place-items:center; flex:0 0 44px; height:44px; border-radius:12px; overflow:hidden; background:linear-gradient(140deg,rgba(34,211,238,.18),rgba(139,92,246,.16)); color:var(--accent); font-weight:700; }
 .af-hub-portrait img { width:100%; height:100%; object-fit:cover; }
-.af-hub-logo { display:grid; place-items:center; flex:0 0 28px; height:28px; color:var(--muted); font-size:10px; }
+.af-hub-logo { display:grid; place-items:center; flex:0 0 28px; height:28px; color:var(--muted); font-size:11px; }
 .af-hub-logo img { width:100%; height:100%; object-fit:contain; }
 .af-hub-player { flex:1; min-width:0; }
 .af-hub-player strong { display:block; font-size:14px; overflow-wrap:anywhere; }

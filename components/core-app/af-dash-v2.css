@@ -58,7 +58,7 @@
    header collapses correctly when there is no counter to show. */
 .af-core .af-d2-sec-count {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -84,7 +84,7 @@
   border: 1px solid var(--line2);
   background: var(--chip);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
   display: grid;
@@ -159,7 +159,7 @@
 /* Trailing link to the fuller surface. */
 .af-core .af-d2-sec-link {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -250,7 +250,7 @@
   border: 1px solid var(--chip-line);
   background: var(--chip);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   cursor: pointer;
@@ -283,7 +283,7 @@
   gap: 6px;
   margin-bottom: 8px;
   padding-top: 2px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -345,7 +345,7 @@
   border-radius: 8px;
   background: var(--chip);
   border: 1px solid var(--chip-line);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--text2);
 }
@@ -369,7 +369,7 @@
 }
 
 .af-core .af-d2-row-meta {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--faint);
@@ -385,7 +385,7 @@
   flex: none;
   padding: 3px 7px;
   border-radius: 5px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   background: var(--chip);
@@ -454,7 +454,7 @@
 }
 
 .af-core .af-d2-import-plats {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.12em;
   color: var(--faint);
 }
@@ -474,7 +474,7 @@
   border-radius: 999px;
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--accent);
 }
@@ -492,7 +492,7 @@
 }
 
 .af-core .af-d2-user-level {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--faint);
@@ -609,7 +609,7 @@
 }
 
 .af-core .af-d2-import-cta-plats {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
   color: var(--accent-ink);
@@ -686,13 +686,13 @@
   border-radius: 999px;
   background: var(--accent);
   color: var(--accent-ink);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.04em;
 }
 
 .af-core .af-d2-brief-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -708,7 +708,7 @@
 }
 
 .af-core .af-d2-brief-clock-label {
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -876,7 +876,7 @@
 }
 
 .af-core .af-d2-prio-rank {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--faint);
 }
@@ -884,7 +884,7 @@
 .af-core .af-d2-prio-badge {
   padding: 3px 7px;
   border-radius: 5px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
 }
@@ -923,7 +923,7 @@
 
 .af-core .af-d2-prio-league {
   margin: 0;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--faint);
@@ -982,7 +982,7 @@
   border-radius: 999px;
   background: var(--bad);
   color: #fff;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   display: grid;
   place-items: center;
@@ -1038,7 +1038,7 @@
 }
 
 .af-core .af-d2-chat-status {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.12em;
   color: var(--faint);
 }
@@ -1085,7 +1085,7 @@
 }
 
 .af-core .af-d2-chat-soon {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.12em;
   color: var(--faint);
 }
@@ -1096,14 +1096,14 @@
 .af-core .af-d2-legacy-top { display: flex; align-items: flex-start; gap: 14px; }
 .af-core .af-d2-legacy-id { display: flex; flex-direction: column; gap: 3px; }
 .af-core .af-d2-legacy-tier {
-  font-size: 9px; font-weight: 800; letter-spacing: 0.16em; color: var(--accent);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.16em; color: var(--accent);
 }
 .af-core .af-d2-legacy-level { font-size: 17px; font-weight: 800; color: var(--text); }
-.af-core .af-d2-legacy-xp { font-size: 10px; letter-spacing: 0.06em; color: var(--faint); }
+.af-core .af-d2-legacy-xp { font-size: 11px; letter-spacing: 0.06em; color: var(--faint); }
 .af-core .af-d2-legacy-score { margin-left: auto; text-align: right; }
 .af-core .af-d2-legacy-score-num { font-size: 24px; font-weight: 800; color: var(--accent); }
 .af-core .af-d2-legacy-score-label {
-  display: block; font-size: 9px; letter-spacing: 0.14em; color: var(--faint);
+  display: block; font-size: 11px; letter-spacing: 0.14em; color: var(--faint);
 }
 .af-core .af-d2-legacy-bar {
   height: 6px; border-radius: 999px; background: var(--chip); overflow: hidden;
@@ -1118,7 +1118,7 @@
 }
 .af-core .af-d2-legacy-tile-val { font-size: 16px; font-weight: 800; color: var(--text); }
 .af-core .af-d2-legacy-tile-lab {
-  font-size: 9px; letter-spacing: 0.12em; color: var(--faint);
+  font-size: 11px; letter-spacing: 0.12em; color: var(--faint);
 }
 .af-core .af-d2-legacy-gaps {
   margin: 0; font-size: 11px; line-height: 1.5; color: var(--muted);
@@ -1141,14 +1141,14 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .af-core .af-d2-portfolio-meta {
-  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
 }
 .af-core .af-d2-portfolio-right {
   margin-left: auto; display: flex; align-items: center; gap: 8px;
-  font-size: 10px; color: var(--muted); white-space: nowrap;
+  font-size: 11px; color: var(--muted); white-space: nowrap;
 }
 .af-core .af-d2-portfolio-commish {
-  padding: 2px 6px; border-radius: 5px; font-size: 9px; font-weight: 800;
+  padding: 2px 6px; border-radius: 5px; font-size: 11px; font-weight: 800;
   letter-spacing: 0.1em; background: var(--p-gold-soft, var(--chip)); color: var(--p-gold-fg, var(--muted));
 }
 .af-core .af-d2-portfolio-foot {
@@ -1170,19 +1170,19 @@
 .af-core .af-d2-draft--done { border-top-color: var(--good); }
 .af-core .af-d2-draft-top { display: flex; align-items: center; gap: 6px; }
 .af-core .af-d2-draft-state {
-  padding: 2px 6px; border-radius: 5px; font-size: 9px; font-weight: 800;
+  padding: 2px 6px; border-radius: 5px; font-size: 11px; font-weight: 800;
   letter-spacing: 0.1em; background: var(--chip); color: var(--muted);
 }
 .af-core .af-d2-draft-state--live { background: var(--bad-soft); color: var(--bad); }
 .af-core .af-d2-draft-state--upcoming { background: var(--warn-soft); color: var(--warn); }
 .af-core .af-d2-draft-state--done { background: var(--good-soft); color: var(--good); }
-.af-core .af-d2-draft-slot { margin-left: auto; font-size: 9px; color: var(--faint); }
+.af-core .af-d2-draft-slot { margin-left: auto; font-size: 11px; color: var(--faint); }
 .af-core .af-d2-draft-name {
   margin: 0; font-size: 13px; font-weight: 800; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .af-core .af-d2-draft-meta {
-  margin: 0; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
+  margin: 0; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
 }
 .af-core .af-d2-draft-detail { margin: 0; font-size: 11px; color: var(--muted); }
 .af-core .af-d2-draft-cta {
@@ -1205,7 +1205,7 @@
 .af-core .af-d2-week-row:last-child { border-bottom: 0; }
 .af-core .af-d2-week-mark {
   width: 22px; height: 22px; flex: none; display: grid; place-items: center;
-  border-radius: 6px; font-size: 10px; font-weight: 800;
+  border-radius: 6px; font-size: 11px; font-weight: 800;
 }
 .af-core .af-d2-week-mark.is-win { background: var(--good-soft); color: var(--good); }
 .af-core .af-d2-week-mark.is-loss { background: var(--bad-soft); color: var(--bad); }
@@ -1237,7 +1237,7 @@
   align-items: center;
   gap: 5px;
   margin-top: 2px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   color: var(--muted);
@@ -1274,7 +1274,7 @@
 .af-core .af-d2-exp-mark {
   width: 30px; height: 30px; flex: none; display: grid; place-items: center;
   border-radius: 999px; background: var(--chip); border: 1px solid var(--chip-line);
-  font-size: 10px; font-weight: 800; color: var(--text2);
+  font-size: 11px; font-weight: 800; color: var(--text2);
 }
 .af-core .af-d2-exp-mark[data-tone='bad'] {
   background: var(--bad-soft); border-color: var(--bad); color: var(--bad);
@@ -1295,7 +1295,7 @@
 .af-core .af-d2-exp-pos {
   flex: none;
   padding: 1px 5px; border-radius: 4px;
-  font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
   background: var(--chip); border: 1px solid var(--chip-line); color: var(--muted);
   white-space: nowrap;
 }
@@ -1317,7 +1317,7 @@
 }
 
 .af-core .af-d2-exp-note {
-  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
+  font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .af-core .af-d2-exp-note.is-bad { color: var(--bad); }
@@ -1350,7 +1350,7 @@
 /* When they next play. Accent, because it is the only forward-looking value on
    the row — everything else describes a state that already happened. */
 .af-core .af-d2-exp-next {
-  font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--accent); white-space: nowrap;
 }
 
@@ -1369,15 +1369,15 @@
  */
 .af-core .af-d2-exp-share {
   display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
-  font-size: 10px; color: var(--muted); min-width: 78px; text-align: right; white-space: nowrap;
+  font-size: 11px; color: var(--muted); min-width: 78px; text-align: right; white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .af-core .af-d2-exp-share-count { font-size: 12px; font-weight: 800; }
 .af-core .af-d2-exp-share.is-bad .af-d2-exp-share-count { color: var(--bad); }
 .af-core .af-d2-exp-share.is-warn .af-d2-exp-share-count { color: var(--warn); }
-.af-core .af-d2-exp-share-pct { font-size: 9px; color: var(--faint); }
+.af-core .af-d2-exp-share-pct { font-size: 11px; color: var(--faint); }
 .af-core .af-d2-exp-share-start {
-  font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--muted);
 }
 
@@ -1392,7 +1392,7 @@
 .af-core .af-d2-topbar-when { display: flex; flex-direction: column; }
 .af-core .af-d2-topbar-time { font-size: 15px; font-weight: 800; color: var(--text); }
 .af-core .af-d2-topbar-sub {
-  font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint);
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint);
 }
 .af-core .af-d2-topbar-search {
   flex: 1 1 auto; display: flex; align-items: center; gap: 10px; min-width: 0;
@@ -1405,17 +1405,17 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .af-core .af-d2-topbar-kbd {
-  margin-left: auto; font-size: 9px; letter-spacing: 0.08em; color: var(--faint);
+  margin-left: auto; font-size: 11px; letter-spacing: 0.08em; color: var(--faint);
   padding: 2px 6px; border-radius: 5px; border: 1px solid var(--chip-line); background: var(--chip);
 }
 .af-core .af-d2-topbar-right { display: flex; align-items: center; gap: 8px; flex: none; }
 .af-core .af-d2-topbar-plan {
-  padding: 4px 8px; border-radius: 6px; font-size: 9px; font-weight: 800;
+  padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 800;
   letter-spacing: 0.1em; text-transform: uppercase;
   background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line);
 }
 .af-core .af-d2-topbar-sync {
-  padding: 4px 8px; border-radius: 6px; font-size: 9px; font-weight: 800;
+  padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 800;
   letter-spacing: 0.1em; background: var(--chip); color: var(--muted); border: 1px solid var(--chip-line);
 }
 .af-core .af-d2-topbar-sync.is-never { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
@@ -1464,7 +1464,7 @@
 
 .af-core .af-d2-stat { display: flex; flex-direction: column; }
 .af-core .af-d2-stat-label {
-  margin: 0; font-size: 10px; letter-spacing: 0.12em;
+  margin: 0; font-size: 11px; letter-spacing: 0.12em;
   text-transform: uppercase; color: var(--muted);
 }
 .af-core .af-d2-stat-value {
@@ -1595,7 +1595,7 @@
 .af-core .af-d2-panel-link-count {
   margin-left: auto; padding: 1px 6px; border-radius: 999px;
   background: var(--accent-soft); color: var(--accent);
-  font-size: 9px; font-weight: 800;
+  font-size: 11px; font-weight: 800;
 }
 
 /* ── Portfolio: collapsed by default ─────────────────────────────────── */
@@ -1608,7 +1608,7 @@
 .af-core .af-d2-portfolio-summary::-webkit-details-marker { display: none; }
 .af-core .af-d2-portfolio-summary-text { font-size: 13px; color: var(--text2); }
 .af-core .af-d2-portfolio-summary-hint {
-  margin-left: auto; font-size: 9px; font-weight: 800; letter-spacing: 0.12em;
+  margin-left: auto; font-size: 11px; font-weight: 800; letter-spacing: 0.12em;
   color: var(--accent);
 }
 .af-core .af-d2-portfolio-wrap[open] .af-d2-portfolio-summary-hint::after { content: ' ▲'; }
@@ -1827,7 +1827,7 @@
   width: 26px; height: 26px; flex: none; overflow: hidden;
   display: grid; place-items: center; border-radius: 7px;
   background: var(--chip); border: 1px solid var(--chip-line);
-  font-size: 9px; font-weight: 800; color: var(--text2);
+  font-size: 11px; font-weight: 800; color: var(--text2);
 }
 .af-core .af-d2-draft-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
@@ -1894,7 +1894,7 @@
 .af-core .af-d2-exp-mark img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .af-core .af-d2-exp-leagues { margin: 6px 0 0 38px; }
 .af-core .af-d2-exp-leagues-toggle {
-  cursor: pointer; list-style: none; font-size: 9px; font-weight: 800;
+  cursor: pointer; list-style: none; font-size: 11px; font-weight: 800;
   letter-spacing: 0.12em; color: var(--accent);
 }
 .af-core .af-d2-exp-leagues-toggle::-webkit-details-marker { display: none; }
@@ -1909,7 +1909,7 @@
   width: 22px; height: 22px; flex: none; overflow: hidden;
   display: grid; place-items: center; border-radius: 6px;
   background: var(--chip); border: 1px solid var(--chip-line);
-  font-size: 8px; font-weight: 800; color: var(--text2);
+  font-size: 11px; font-weight: 800; color: var(--text2);
 }
 .af-core .af-d2-exp-league-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .af-core .af-d2-exp-league-name {
@@ -1917,7 +1917,7 @@
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .af-core .af-d2-exp-league-plat {
-  margin-left: auto; font-size: 8px; letter-spacing: 0.12em;
+  margin-left: auto; font-size: 11px; letter-spacing: 0.12em;
   text-transform: uppercase; color: var(--faint);
 }
 
@@ -1937,7 +1937,7 @@
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 .af-core .af-d2-portfolio-facts dt {
-  font-size: 8px; font-weight: 800; letter-spacing: 0.14em; color: var(--faint);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.14em; color: var(--faint);
 }
 .af-core .af-d2-portfolio-facts dd { margin: 3px 0 0; font-size: 12px; color: var(--text2); }
 
@@ -1955,7 +1955,7 @@
   mask: radial-gradient(circle, transparent 60%, #000 61%);
   -webkit-mask: radial-gradient(circle, transparent 60%, #000 61%);
 }
-.af-core .af-d2-legacy-score-label { font-size: 7px; letter-spacing: 0.1em; }
+.af-core .af-d2-legacy-score-label { font-size: 11px; letter-spacing: 0.1em; }
 
 /* ── Mobile parity for everything added after the first mobile pass ──── */
 
@@ -2114,7 +2114,7 @@
 .af-core .af-d2-user-caret {
   margin-left: auto;
   flex: none;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 
@@ -2183,13 +2183,13 @@
 }
 
 .af-core .af-d2-usermenu-handle {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 
 .af-core .af-d2-usermenu-label {
   display: block;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.12em;
   color: var(--faint);
   margin-bottom: 6px;
@@ -2211,7 +2211,7 @@
   border: 0;
   border-radius: 999px;
   padding: 7px 4px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -2267,7 +2267,7 @@
 
 .af-core .af-d2-usermenu-hint {
   margin-left: auto;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   color: var(--faint);
 }
@@ -2421,7 +2421,7 @@
   overflow: hidden;
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--accent);
 }
@@ -2450,7 +2450,7 @@
 }
 
 .af-core .af-d2-ac-meta {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--faint);
@@ -2636,7 +2636,7 @@
   overflow: hidden;
   background: var(--chip);
   border: 1px solid var(--line);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--muted);
 }
@@ -2674,13 +2674,13 @@
 }
 
 .af-core .af-d2-play-team {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   color: var(--faint);
 }
 
 .af-core .af-d2-play-type {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.1em;
   padding: 2px 6px;

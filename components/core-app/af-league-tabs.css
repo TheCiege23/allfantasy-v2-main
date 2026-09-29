@@ -176,7 +176,7 @@
 
 .af-lctx-type label,
 .af-lctx-type small {
-  font: 750 9px/1.2 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  font: 750 11px/1.2 'Archivo', ui-sans-serif, system-ui, sans-serif;
   color: var(--faint);
   letter-spacing: .06em;
   text-transform: uppercase;
@@ -190,7 +190,7 @@
   border-radius: 8px;
   color: var(--text);
   background: var(--chip);
-  font: 800 10px/1.2 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  font: 800 11px/1.2 'Archivo', ui-sans-serif, system-ui, sans-serif;
 }
 
 .af-lctx-type > span {
@@ -226,7 +226,7 @@
   border-radius: 8px;
   color: var(--accent-ink, #0c121b);
   background: var(--accent);
-  font: 800 10px/1.2 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  font: 800 11px/1.2 'Archivo', ui-sans-serif, system-ui, sans-serif;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -247,7 +247,7 @@
   border-radius: 999px;
   color: var(--muted);
   background: var(--chip);
-  font: 750 10px/1.2 'Archivo', ui-sans-serif, system-ui, sans-serif;
+  font: 750 11px/1.2 'Archivo', ui-sans-serif, system-ui, sans-serif;
   letter-spacing: .035em;
 }
 

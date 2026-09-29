@@ -50,7 +50,7 @@
 .af-core .af-mt-intelligence { min-height: 44px; white-space: normal; text-align: left; }
 
 .af-core .af-bd-eyebrow {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.14em;
   color: var(--faint);
   margin: 0;
@@ -86,7 +86,7 @@
 }
 
 .af-core .af-bd-sec-label {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.12em;
   color: var(--faint);
   margin: 0;
@@ -106,7 +106,7 @@
 }
 
 .af-core .af-bd-sec-count {
-  font: 400 10px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 400 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--faint);
   white-space: nowrap;
 }
@@ -314,11 +314,11 @@
   height: 24px;
   border-radius: 7px;
 }
-.af-core .af-bd-rows--compact .af-bd-crest--sm.af-bd-crest--none { font-size: 9px; }
+.af-core .af-bd-rows--compact .af-bd-crest--sm.af-bd-crest--none { font-size: 11px; }
 
 /* A second, quieter sub line — e.g. what decides a standings race. */
 .af-core .af-bd-sub2 {
-  font: 500 10.5px/1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 500 11px/1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -358,7 +358,7 @@
 .af-core .af-bd-val[data-sev='bad'] { color: var(--bad); }
 
 .af-core .af-bd-val-sub {
-  font: 600 10px/1.1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font: 600 11px/1.1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   letter-spacing: 0.02em;
   color: var(--faint);
 }
@@ -393,7 +393,7 @@
 }
 
 .af-core .af-bd-crest--sm.af-bd-crest--none { font-size: 11px; }
-.af-core .af-bd-crest--xs.af-bd-crest--none { font-size: 9px; }
+.af-core .af-bd-crest--xs.af-bd-crest--none { font-size: 11px; }
 
 .af-core .af-bd-crest--none[data-platform='sleeper'] {
   background: var(--p-sleeper-bg);
@@ -435,7 +435,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font: 800 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   color: var(--faint);
 }
 
@@ -461,7 +461,7 @@
 /* ── position tint, used wherever a player row shows one ────────────────── */
 
 .af-core .af-bd-pos {
-  font: 800 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.08em;
   color: var(--muted);
 }
@@ -625,11 +625,11 @@
 .af-core .af-bd-cards--rich .af-bd-card-head .af-bd-name { font-size: 16px; line-height: 1.2; }
 .af-core .af-bd-cards--rich .af-bd-card-head .af-bd-sub { font-size: 11px; }
 .af-core .af-bd-cards--rich .af-bd-card-head .af-bd-plat {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.06em;
 }
 .af-core .af-bd-cards--rich .af-bd-crest--sm { width: 26px; height: 26px; border-radius: 7px; }
-.af-core .af-bd-cards--rich .af-bd-crest--sm.af-bd-crest--none { font-size: 10px; }
+.af-core .af-bd-cards--rich .af-bd-crest--sm.af-bd-crest--none { font-size: 11px; }
 .af-core .af-bd-cards--rich .af-bd-card-head .af-bd-tag {
   font: 800 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.02em;
@@ -743,7 +743,7 @@
 .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-kv { padding: 0 18px; }
 .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-kv:first-child { padding-left: 0; }
 .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-kv + .af-bd-kv { border-left: 1px solid var(--line2); }
-.af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-k { font-size: 9px; letter-spacing: 0.08em; }
+.af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-k { font-size: 11px; letter-spacing: 0.08em; }
 .af-core .af-bd-cards--rich .af-bd-kvrow .af-bd-v {
   font: 800 14px/1.1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--text2);
@@ -773,7 +773,7 @@
 /* Tinted from the token, not `currentColor` — Chromium resolved that mix grey. */
 .af-core .af-bd-pill[data-sev='good'] { color: var(--good); background: color-mix(in srgb, var(--good) 13%, transparent); }
 .af-core .af-bd-pill[data-sev='bad'] { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); }
-.af-core .af-bd-pill-unit { font-size: 9px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.af-core .af-bd-pill-unit { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
 
 .af-core .af-bd-cards--rich .af-bd-swap {
   display: grid;
@@ -858,7 +858,7 @@
 }
 .af-core .af-bd-why-label {
   flex: none;
-  font: 800 9px/1.9 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 800 11px/1.9 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent);
@@ -884,7 +884,7 @@
 }
 
 .af-core .af-bd-side-label {
-  font: 700 9px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.12em;
   color: var(--faint);
   padding-bottom: 6px;
@@ -924,7 +924,7 @@
 }
 
 .af-core .af-bd-k {
-  font: 700 8.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.1em;
   color: var(--faint);
   text-transform: uppercase;
@@ -973,7 +973,7 @@
 }
 
 .af-core .af-bd-pill-n {
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-variant-numeric: tabular-nums;
   color: var(--faint);
 }
@@ -1008,7 +1008,7 @@
 }
 
 .af-core .af-bd-tab-n {
-  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1034,7 +1034,7 @@
 }
 
 .af-core .af-bd-statcard-k {
-  font: 700 8.5px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font: 700 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
   letter-spacing: 0.12em;
   color: var(--faint);
   text-transform: uppercase;
@@ -1252,7 +1252,7 @@
   border: 1px dashed var(--line2);
   border-radius: 7px;
   color: var(--faint);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
 }
 

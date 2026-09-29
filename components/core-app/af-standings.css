@@ -118,7 +118,7 @@
 .af-st-move {
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-weight: 800;
-  font-size: 10.5px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--faint);
 }
@@ -247,7 +247,7 @@
   align-items: center;
   gap: 10px;
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -333,7 +333,7 @@
   text-align: left;
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-weight: 700;
-  font-size: 9.5px;
+  font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--faint);
@@ -476,7 +476,7 @@
   white-space: nowrap;
 }
 .af-st-history-table thead th {
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--faint);
@@ -557,7 +557,7 @@
   padding: 16px;
 }
 .af-st-tile .af-label {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.1em;
 }
 .af-st-tile-row {
@@ -575,7 +575,7 @@
 .af-st-tile-v[data-tone='accent'] { color: var(--accent); }
 .af-st-tile-row .af-st-move,
 .af-st-tile-row .af-stb-move { font-size: 12px; }
-.af-st-tile-s { font-size: 10.5px; }
+.af-st-tile-s { font-size: 11px; }
 
 .af-st-section {
   display: flex;
@@ -584,7 +584,7 @@
 }
 .af-core .af-st-seclabel {
   margin: 0;
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.14em;
   color: var(--faint);
 }
@@ -619,7 +619,7 @@
 }
 .af-st-bar-rank {
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   color: var(--faint);
@@ -643,7 +643,7 @@
   min-width: 0;
   text-align: center;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -671,7 +671,7 @@
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
 }
 .af-st-recent-d { font-size: 11px; }
-.af-st-recent-r { font-size: 10px; }
+.af-st-recent-r { font-size: 11px; }
 
 /* Projection card: a surface with the accent border, and the range as two rows. */
 .af-st-projection {
@@ -693,7 +693,7 @@
 }
 .af-st-projrow[data-tone='good'] { background: var(--good-soft); }
 .af-st-projrow[data-tone='bad'] { background: var(--bad-soft); }
-.af-core .af-st-projrow .af-label { font-size: 9px; }
+.af-core .af-st-projrow .af-label { font-size: 11px; }
 .af-core .af-st-projrow[data-tone='good'] .af-label,
 .af-st-projrow[data-tone='good'] .af-num { color: var(--good); }
 .af-core .af-st-projrow[data-tone='bad'] .af-label,
@@ -712,7 +712,7 @@
 
 /* Board. */
 .af-st-table thead th {
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.1em;
 }
 .af-st-table tbody th,
@@ -738,7 +738,7 @@
   .af-st-bars-plot,
   .af-st-bars-weeks { gap: 3px; }
   .af-st-bar-rank,
-  .af-st-bars-weeks span { font-size: 8px; }
+  .af-st-bars-weeks span { font-size: 11px; }
   .af-st-recent li { grid-template-columns: 40px minmax(0, 1fr) auto; }
   .af-st-recent-r {
     grid-column: 2 / -1;
@@ -908,7 +908,7 @@
   padding: 1px 5px;
   border: 1px dashed currentColor;
   border-radius: 4px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -949,7 +949,7 @@
   padding: 10px 12px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1045,7 +1045,7 @@
   color: var(--text);
 }
 .af-core .af-stb-you {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1076,7 +1076,7 @@
   border-bottom: 0;
   border-top: 2px solid var(--good);
   background: var(--surface);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1136,7 +1136,7 @@
   border-radius: 5px;
   background: var(--chip);
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 10px;
+  font-size: 11px;
   font-style: normal;
   font-weight: 800;
   color: var(--muted);
@@ -1301,7 +1301,7 @@
   font-size: 11px;
   fill: var(--faint);
 }
-.af-stb-quad { font-size: 10px; }
+.af-stb-quad { font-size: 11px; }
 .af-stb-rowlabel { fill: var(--text2); font-family: inherit; font-size: 13px; }
 .af-stb-dumbbell .af-stb-rowvalue { font-size: 12px; }
 .af-stb-rowvalue { fill: var(--text2); }

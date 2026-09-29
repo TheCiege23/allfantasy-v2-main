@@ -427,7 +427,7 @@ export function BracketProView({ tournamentId, leagueId, entryId, nodes, initial
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: '#fb923c' }}>{totalPicks}</div>
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>/ {totalGames}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)' }}>/ {totalGames}</div>
         </div>
       </div>
 

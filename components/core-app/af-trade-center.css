@@ -76,7 +76,7 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  font-size: 10.5px;
+  font-size: 11px;
 }
 
 /* ── Asset legend ────────────────────────────────────────────────────── */
@@ -92,7 +92,7 @@
   background: var(--surface);
 }
 .af-tc-legend-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -117,7 +117,7 @@
   width: 18px;
   height: 18px;
   border-radius: 5px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 900;
   color: #04050c;
 }
@@ -203,12 +203,12 @@
   background: var(--accent-soft);
   border: 1px solid var(--accent-line);
   color: var(--accent);
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
 .af-tc-sends {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -397,7 +397,7 @@
 }
 .af-tc-note-title {
   margin: 0 0 7px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -453,7 +453,7 @@
   border: 1px solid var(--line);
 }
 .af-tc-pair-label {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -906,7 +906,7 @@
 
 .af-tc-value-layers span {
   color: #7f92be;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .08em;
   text-transform: uppercase;
 }
@@ -1035,7 +1035,7 @@
 }
 
 .af-tc-hub-league strong { color: var(--text); font-size: 12px; }
-.af-tc-hub-league small { margin-top: 3px; color: var(--faint); font-size: 10px; text-transform: capitalize; }
+.af-tc-hub-league small { margin-top: 3px; color: var(--faint); font-size: 11px; text-transform: capitalize; }
 .af-tc-hub-league > b { color: var(--accent); }
 
 .af-tc--hub .af-sr-only {
@@ -1093,7 +1093,7 @@
 .af-tc-value-actions > summary b {
   margin-left: auto;
   color: var(--faint);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -1129,7 +1129,7 @@
   background: var(--surface2);
   color: var(--muted);
   cursor: pointer;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -1172,8 +1172,8 @@
 }
 
 .af-tc-timeline-titleline strong { color: var(--text); font-size: 12px; }
-.af-tc-timeline-titleline time { color: var(--faint); font-size: 9px; }
-.af-tc-timeline-status { padding: 2px 6px; border-radius: 999px; background: var(--chip); color: var(--text2); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.af-tc-timeline-titleline time { color: var(--faint); font-size: 11px; }
+.af-tc-timeline-status { padding: 2px 6px; border-radius: 999px; background: var(--chip); color: var(--text2); font-size: 11px; font-weight: 800; text-transform: uppercase; }
 
 .af-tc-timeline-assets {
   display: grid;
@@ -1186,21 +1186,21 @@
 /* Direct children only — the asset list below has spans and <b>s of its own. */
 .af-tc-timeline-assets > div > span,
 .af-tc-timeline-assets > div > b { display: block; }
-.af-tc-timeline-assets > div > span { color: var(--faint); font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
-.af-tc-timeline-assets > div > b { margin-top: 3px; color: var(--text2); font-size: 10px; line-height: 1.35; }
+.af-tc-timeline-assets > div > span { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.af-tc-timeline-assets > div > b { margin-top: 3px; color: var(--text2); font-size: 11px; line-height: 1.35; }
 
 .af-tc-timeline-assetlist { display: grid; gap: 5px; margin: 5px 0 0; padding: 0; list-style: none; }
 .af-tc-timeline-assetlist li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 7px; }
 .af-tc-timeline-assetlist img,
 .af-tc-timeline-glyph { width: 24px; height: 24px; border-radius: 50%; background: var(--chip); object-fit: cover; }
-.af-tc-timeline-glyph { display: grid; place-items: center; color: var(--muted); font-size: 8px; font-weight: 800; }
+.af-tc-timeline-glyph { display: grid; place-items: center; color: var(--muted); font-size: 11px; font-weight: 800; }
 .af-tc-timeline-asset-name { display: grid; min-width: 0; }
 .af-tc-timeline-asset-name b { overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.af-tc-timeline-asset-name small { overflow: hidden; color: var(--faint); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.af-tc-timeline-assetlist em { color: var(--text2); font-size: 10px; font-style: normal; font-weight: 700; }
+.af-tc-timeline-asset-name small { overflow: hidden; color: var(--faint); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.af-tc-timeline-assetlist em { color: var(--text2); font-size: 11px; font-style: normal; font-weight: 700; }
 
 .af-tc-timeline-why { display: grid; gap: 3px; margin: 8px 0 0; padding: 7px 9px; border-radius: 9px; background: var(--surface); list-style: none; }
-.af-tc-timeline-why li { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.af-tc-timeline-why li { color: var(--muted); font-size: 11px; line-height: 1.4; }
 .af-tc-timeline-why li:first-child { color: var(--text2); font-weight: 600; }
 
 .af-tc-timeline-grades {
@@ -1210,9 +1210,9 @@
 }
 
 .af-tc-timeline-grades > div { display: grid; justify-items: center; min-width: 42px; }
-.af-tc-timeline-grades span { color: var(--faint); font-size: 8px; text-transform: uppercase; }
+.af-tc-timeline-grades span { color: var(--faint); font-size: 11px; text-transform: uppercase; }
 .af-tc-timeline-grades strong { color: var(--text); font-size: 20px; line-height: 1.1; }
-.af-tc-timeline-grades small { color: var(--muted); font-size: 8px; }
+.af-tc-timeline-grades small { color: var(--muted); font-size: 11px; }
 .af-tc-timeline-arrow { color: var(--faint); }
 .af-tc-timeline-grades[data-mode='teams'] { align-items: flex-start; gap: 10px; }
 .af-tc-timeline-grades[data-mode='teams'] > div { min-width: 64px; }
@@ -1223,7 +1223,7 @@
 .af-tc-timeline-grades [data-letter='D'] strong { color: #fb923c; }
 .af-tc-timeline-grades [data-letter='F'] strong { color: #fb5b78; }
 .af-tc-timeline-advice,
-.af-tc-timeline-gap { margin: 7px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.af-tc-timeline-gap { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
 .af-tc-timeline-gap { color: var(--warn); }
 .af-tc-timeline-empty { margin: 0; padding: 18px; border: 1px dashed var(--line2); border-radius: 11px; color: var(--faint); text-align: center; font-size: 11px; }
 
@@ -1348,7 +1348,7 @@
   width: 22px;
   height: 22px;
   border-radius: 7px;
-  font-size: 10px;
+  font-size: 11px;
 }
 
 /* ── Offers across your leagues ─────────────────────────────────────── */
@@ -1369,7 +1369,7 @@
   background: var(--line);
 }
 .af-tc-strip-note {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
   white-space: nowrap;
 }
@@ -1427,11 +1427,11 @@
   text-overflow: ellipsis;
 }
 .af-tc-tile-meta {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--faint);
 }
 .af-tc-tile-status {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.02em;
   line-height: 1.3;
@@ -1483,7 +1483,7 @@
   padding: 2px 5px;
   border-radius: 4px;
   font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1661,7 +1661,7 @@
 .af-tc-track-ends {
   display: flex;
   justify-content: space-between;
-  font-size: 9.5px;
+  font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--faint);
 }
@@ -1805,7 +1805,7 @@
   margin-left: 6px;
   padding: 0 5px;
   border-radius: 6px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--warn, #fbbf24);
   background: color-mix(in srgb, var(--warn, #fbbf24) 16%, transparent);
@@ -1987,7 +1987,7 @@
 .af-tc-timeline-lineup {
   margin: 4px 0 0;
   color: var(--text2);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1.4;
 }
@@ -2161,7 +2161,7 @@
     padding: 1px 5px;
     border-radius: 999px;
     background: var(--line);
-    font-size: 10px;
+    font-size: 11px;
     text-align: center;
   }
   .af-tc-stepbar-row {
