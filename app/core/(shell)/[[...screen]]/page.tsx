@@ -70,6 +70,7 @@ import { getPlayerDepth } from '@/lib/core-app/playerDepth'
 import { loadFreeAgentBids } from '@/lib/core-app/freeAgentBids'
 import { loadDepthChartView } from '@/lib/core-app/depthChartBackups'
 import { loadWhoStartsHim } from '@/lib/core-app/whoStartsHimLoader'
+import { loadValueTrend } from '@/lib/core-app/valueTrendLoader'
 import { freeLeagueIds } from '@/lib/core-app/leagueStrip'
 import { loadPlayerShares } from '@/lib/core-app/playerShares'
 import { loadLeagueShareView } from '@/lib/core-app/playerSharesLeague'
@@ -2168,6 +2169,20 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : Promise.resolve(null)
 
   /*
+   * Market value over 30 days, per value book the leagues in scope price on (signed out: the labelled
+   * default chart). The trend is free; the buy-low / sell-high nudge is AF Pro.
+   */
+  const valueTrendRead =
+    activeKey === 'players' && playerDetail
+      ? loadValueTrend({
+          sleeperId: playerDetail.player.sleeperId ?? null,
+          leagueIds: userId && playerDetail.leagues.available ? (selectedLeagueId ? [selectedLeagueId] : finderLeagueIds) : [],
+          yourLeagueIds: playerDetail.leagues.available ? playerDetail.leagues.data.filter((s) => s.isYours).map((s) => s.leagueId) : [],
+          includeNudge: playerDepthOpen,
+        }).catch(() => null)
+      : Promise.resolve(null)
+
+  /*
    * Compare (2026-09-06): a second player held beside the first, the same
    * loader over the same leagues, so the two columns are priced the same way.
    * Only when the first resolved — a `vs` with no `player` is nothing to
@@ -2182,6 +2197,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const freeAgentBids = await freeAgentBidsRead
   const depthChart = await depthChartRead
   const whoStartsHim = await whoStartsHimRead
+  const valueTrend = await valueTrendRead
 
   /*
    * "Recently searched", per account. The write is fire-and-forget by design
@@ -4323,6 +4339,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           freeAgentBids={freeAgentBids}
           depthChart={depthChart}
           whoStartsHim={whoStartsHim}
+          valueTrend={valueTrend}
           leagueView={playerLeagueView}
           recent={recentPlayerSearches}
           tradeVisual={playerTradeVisual}

@@ -240,6 +240,35 @@ describe('Player Finder — core view', () => {
     expect(screen.getByRole('link', { name: 'Claim Kincaid in Sleeper' })).toHaveAttribute('href', 'https://sleeper.com/leagues/9/players')
   })
 
+  it('shows his market value over 30 days, signed in or not', () => {
+    const valueTrend = {
+      nudge: null,
+      nudgeLocked: false,
+      books: [
+        {
+          book: { source: 'FANTASYCALC' as const, format: 'DYNASTY' as const, qbFormat: 'SUPERFLEX' as const },
+          label: 'dynasty · superflex',
+          points: [
+            { day: '2026-09-20', value: 5000 },
+            { day: '2026-09-21', value: 5100 },
+            { day: '2026-09-28', value: 5600 },
+          ],
+          value: 5600,
+          lastDay: '2026-09-28',
+          change7: { pct: 0.098, from: 5100, fromDay: '2026-09-21' },
+          change30: null,
+          moverShare: 0.5,
+          leagues: 0,
+          yours: 0,
+        },
+      ],
+    }
+    renderCore({ signedIn: false, valueTrend })
+    expect(screen.getByRole('heading', { name: 'Market value, last 30 days' })).toBeInTheDocument()
+    expect(screen.getByText('7 days: +10%')).toBeInTheDocument()
+    expect(screen.getByText('default chart — no league in view')).toBeInTheDocument()
+  })
+
   it('shows "Next man up" with the backup linked on the finder and the league scope kept', () => {
     renderCore({
       signedIn: true,
