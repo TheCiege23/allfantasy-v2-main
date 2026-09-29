@@ -40,6 +40,7 @@ import {
   Matchup, Trades, Waivers, DraftHq, DraftBoard,
 } from '@/components/core-app/screens/LazyScreens'
 import { getDevyCoreData, leagueDevyNav, looksLikeDevyFormat, NO_DEVY_NAV } from '@/lib/core-app/devy'
+import { loadDevyLeagueTab } from '@/lib/core-app/devyLeagueTab'
 import type { TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
 import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
@@ -2691,6 +2692,17 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   /*
+   * The per-league Devy tab — only for a selected league that HAS devy slots (the `empty` state reads
+   * nothing). DB-first: DevyRights, DevyPlayer, DraftSession/DraftPick and SportsNews, each section with
+   * its own writer and its own honest empty reason (see lib/core-app/devyLeagueTab.ts). Never throws;
+   * a null here renders empty slots and the component's generic reasons.
+   */
+  const devyLeague =
+    activeKey === 'devy-league' && selectedLeagueId && userId && devySlotCount > 0
+      ? await loadDevyLeagueTab({ leagueId: selectedLeagueId, userId, devySlotCount }).catch(() => null)
+      : null
+
+  /*
    * 38a·2 — the live slate.
    *
    * ⚠ NULL USER IS A SUPPORTED INPUT AND MUST STAY ONE. `getLivePageData` takes
@@ -4145,9 +4157,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
            * screen draws as dashed slots. A league with NO slots is the `empty` state,
            * and its copy is commissioner-gated because only a commissioner can act on it.
            *
-           * The remaining sections are unwired on purpose — free agents, the devy draft
-           * board and per-league trade values each need league-scoped queries that do not
-           * exist yet. They render their own empty copy rather than fabricated rows.
+           * Every section is filled by `loadDevyLeagueTab` from a table something writes, and
+           * each one that has nothing to show carries the loader's one-line reason. A failed
+           * load falls back to empty slots and the component's generic copy — never to rows.
            */
           <DevyLeagueTab
             viewState={devySlotCount > 0 ? 'populated' : 'empty'}
@@ -4156,13 +4168,17 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                account-wide total and would show the CTA to a manager who commissions
                some OTHER league. */
             isCommissioner={Boolean(playedLeagues.find((l) => l.id === selectedLeagueId)?.isCommissioner)}
-            slots={Array.from({ length: devySlotCount }, (_, i) => ({ id: `slot-${i}`, player: null }))}
-            freeAgents={[]}
-            draftRoundLabel="Round 1"
-            draftCountdown={null}
-            draftBoard={[]}
-            news={[]}
-            tradeValues={[]}
+            slots={devyLeague?.slots ?? Array.from({ length: devySlotCount }, (_, i) => ({ id: `slot-${i}`, player: null }))}
+            freeAgents={devyLeague?.freeAgents ?? []}
+            draftRoundLabel={devyLeague?.draftRoundLabel ?? 'Best available'}
+            draftCountdown={devyLeague?.draftCountdown ?? null}
+            draftBoard={devyLeague?.draftBoard ?? []}
+            draftProspects={devyLeague?.draftProspects ?? []}
+            draftBoardNote={devyLeague?.draftBoardNote ?? null}
+            news={devyLeague?.news ?? []}
+            tradeValues={devyLeague?.tradeValues ?? []}
+            tradeValueNote={devyLeague?.tradeValueNote ?? null}
+            emptyReasons={devyLeague?.emptyReasons ?? {}}
             settingsHref={`/core/commissioner?league=${encodeURIComponent(selectedLeagueId)}`}
           />
         ) : (
