@@ -3230,3 +3230,16 @@ html[data-ios-app] a[href^='/api/subscription/billing-portal'] {
 /* ↑ The last selector: "Manage billing" (the Settings hub and the Billing tab)
    is an <a> straight to an API that IOS_APP_PURCHASE_API_PREFIXES refuses in
    the app, so a subscriber who tapped it got a raw 403 body. */
+
+/*
+ * The other half: copy that exists ONLY in the app, for a spot where hiding
+ * the web wording would leave a hole. The pair is used as
+ *   <span data-hide-in-ios-app>Upgrade to see the rest.</span>
+ *   <span data-only-in-ios-app>This isn't included with your account.</span>
+ * so the web keeps its call to action and the app says what is true there
+ * without pointing at a purchase (3.1.3). No flash either way: the flag is on
+ * <html> before first paint, so the website never shows the app line.
+ */
+html:not([data-ios-app]) [data-only-in-ios-app] {
+  display: none !important;
+}

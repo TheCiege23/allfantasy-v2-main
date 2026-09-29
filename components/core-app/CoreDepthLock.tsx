@@ -32,18 +32,34 @@ function LockIcon() {
   )
 }
 
+/*
+ * ⚠ TWO WORDINGS, ONE PER PLATFORM (globals.css: data-hide-in-ios-app / data-only-in-ios-app).
+ * On the web the lock names the plan and invites an upgrade. Inside the iOS app nothing is sold
+ * (App Store 3.1.1), and "Upgrade to see the rest" beside a hidden button is still a call to buy
+ * somewhere else — steering, which 3.1.3 forbids. So the app says only what is true there: this
+ * part is not included with the account. An account that already has the plan never sees a lock.
+ */
 export function CoreDepthLock({ access, what }: { access: CoreDepthAccess; what?: string }) {
   const subject = what ?? access.label
+  const verb = subject.endsWith('s') ? 'are' : 'is'
   return (
     <section className="af-core-lock" data-testid={`core-lock-${access.depth}`} aria-label={`${subject} — ${access.planName}`}>
       <p className="af-core-lock-head">
         <LockIcon />
-        {subject} {subject.endsWith('s') ? 'are' : 'is'} part of {access.planName}
+        <span data-hide-in-ios-app>
+          {subject} {verb} part of {access.planName}
+        </span>
+        <span data-only-in-ios-app>
+          {subject} {verb} not included with your account
+        </span>
       </p>
       <p className="af-core-lock-body">
-        Your leagues, scores and the basics stay free. Upgrade to see the rest.
+        <span data-hide-in-ios-app>Your leagues, scores and the basics stay free. Upgrade to see the rest.</span>
+        <span data-only-in-ios-app>Your leagues, scores and the basics are all here.</span>
       </p>
-      <a className="af-core-lock-cta" href={access.upgradePath}>
+      {/* The /upgrade href is hidden in the app by the link rule already; marked too, in case the
+          plan's path ever stops starting with /upgrade. */}
+      <a className="af-core-lock-cta" href={access.upgradePath} data-hide-in-ios-app>
         See {access.planName}
       </a>
     </section>
@@ -54,7 +70,9 @@ export function FreeUntilNote({ access }: { access: CoreDepthAccess }) {
   if (!access.preLaunchFree) return null
   const day = formatPaywallDay(access.startsAt)
   return (
-    <span className="af-core-free-until" data-testid={`core-free-until-${access.depth}`}>
+    // Hidden in the iOS app: "then AF Pro" announces a plan the app cannot sell (3.1.3) — the
+    // same reason the Oct 15 launch card (LaunchOfferStrip) is hidden there.
+    <span className="af-core-free-until" data-testid={`core-free-until-${access.depth}`} data-hide-in-ios-app>
       Free until {day} — then {access.planName}
     </span>
   )
