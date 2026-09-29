@@ -21,6 +21,11 @@ on:
         description: "Version shown on the App Store (must match the version in App Store Connect)"
         required: true
         default: "1.0"
+      push_notifications:
+        description: "Ship the push-notification entitlement. Needs Push Notifications enabled on the App ID ai.allfantasy.app first, or the export fails."
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -111,33 +116,66 @@ jobs:
             MARKETING_VERSION="$MARKETING_VERSION" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}"
 
+      # An UNSIGNED archive carries no entitlements (they live in the code
+      # signature), and export takes its entitlements from the archived app, so
+      # without this step aps-environment silently never reaches the store build
+      # and push registration fails on every device. Ad-hoc signing the archived
+      # app with App.entitlements puts them where export reads them; export then
+      # replaces the ad-hoc signature with the distribution one.
+      - name: Embed push entitlement in the archive
+        if: ${{ inputs.push_notifications }}
+        run: |
+          app="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+          if [ -d "$app/Frameworks" ]; then
+            for fw in "$app"/Frameworks/*; do codesign --force --sign - "$fw"; done
+          fi
+          codesign --force --sign - --entitlements ios/App/App/App.entitlements "$app"
+          codesign -d --entitlements - "$app" 2>/dev/null | grep -q aps-environment \
+            || { echo "::error::aps-environment is not in the archived app after signing"; exit 1; }
+
       - name: Export and upload to App Store Connect
         env:
           TEAM: ${{ secrets.APPLE_TEAM_ID }}
           KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          PUSH: ${{ inputs.push_notifications }}
         run: |
-          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          run_export() {
+            cat > "$RUNNER_TEMP/ExportOptions-$1.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>upload</string>
+            <key>destination</key><string>$1</string>
             <key>teamID</key><string>${TEAM}</string>
             <key>signingStyle</key><string>automatic</string>
             <key>manageAppVersionAndBuildNumber</key><false/>
           </dict>
           </plist>
           PLIST
-          xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -exportPath "$RUNNER_TEMP/export" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
-            -authenticationKeyID "$KEY_ID" \
-            -authenticationKeyIssuerID "$ISSUER"
+            xcodebuild -exportArchive \
+              -archivePath "$RUNNER_TEMP/App.xcarchive" \
+              -exportOptionsPlist "$RUNNER_TEMP/ExportOptions-$1.plist" \
+              -exportPath "$RUNNER_TEMP/export-$1" \
+              -allowProvisioningUpdates \
+              -authenticationKeyPath "$RUNNER_TEMP/AuthKey.p8" \
+              -authenticationKeyID "$KEY_ID" \
+              -authenticationKeyIssuerID "$ISSUER"
+          }
+          # Export to a local IPA first and read the SIGNED build's
+          # entitlements, so a build that dropped the push entitlement never
+          # reaches TestFlight. Then export again straight to App Store Connect.
+          run_export export
+          mkdir -p "$RUNNER_TEMP/ipa"
+          unzip -q "$RUNNER_TEMP/export-export/App.ipa" -d "$RUNNER_TEMP/ipa"
+          echo "Entitlements of the signed build:"
+          codesign -d --entitlements - "$RUNNER_TEMP/ipa/Payload/App.app" 2>/dev/null | tee "$RUNNER_TEMP/entitlements.txt"
+          if [ "$PUSH" = "true" ] && ! grep -q aps-environment "$RUNNER_TEMP/entitlements.txt"; then
+            echo "::error::push_notifications was requested but the signed build has no aps-environment entitlement. Enable Push Notifications on the App ID ai.allfantasy.app and re-run."
+            exit 1
+          fi
+          run_export upload
           echo "Uploaded build ${GITHUB_RUN_NUMBER}. It appears in App Store Connect after processing (~10-30 min)."
 
       - name: Remove API key

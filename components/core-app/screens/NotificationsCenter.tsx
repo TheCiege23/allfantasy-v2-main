@@ -9,6 +9,7 @@ import type {
   NotificationsCenterData,
 } from '@/lib/core-app/notificationsCenter'
 import { EnableWebPushCard } from '@/components/notifications/EnableWebPushCard'
+import { IosAppPushCard } from '@/components/notifications/IosAppPushCard'
 import { InstallButton } from '@/components/pwa/PWAActions'
 import { NotificationRowMute } from '@/components/core-app/screens/NotificationRowMute'
 import '@/components/core-app/af-notifications.css'
@@ -285,6 +286,8 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
           <InstallButton hideWhenInstalled />
         </div>
       </div>
+      {/* The app's own alerts card; renders nothing outside the iOS app. */}
+      <IosAppPushCard className="af-nt-push" />
 
       {/* Live counts, straight off the loader. */}
       <div className="af-nt-filters" role="tablist" aria-label="Filter notifications">
