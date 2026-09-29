@@ -9,10 +9,10 @@ import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
 import { getComprehensiveLearningContext } from '@/lib/comprehensive-trade-learning'
 import { getPreAnalysisStatus } from '@/lib/trade-pre-analysis'
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
-import { runTradeEngine, runAssistOrchestrator } from '@/lib/trade-engine'
 import { applyOtbTagsToAssetsByRosterId } from '@/lib/trade-engine/otb-persistence'
 import { writeSnapshot } from '@/lib/trade-engine/snapshot-store'
-import { getCalibratedWeights } from '@/lib/trade-engine/accept-calibration'
+import { createLegacyPackageGrader } from '@/lib/legacy/legacyOneGrade'
+import { gradeLegacyTradeSuggestions, type LegacyPackageGrade } from '@/lib/legacy/legacyPackageGrade'
 import { autoLogDecision } from '@/lib/decision-log'
 import { computeConfidenceRisk, getHistoricalHitRate } from '@/lib/analytics/confidence-risk-engine'
 import { buildLeagueDecisionContext, leagueContextToIntelligence } from '@/lib/trade-engine/league-context-assembler'
@@ -114,7 +114,13 @@ type TradeSuggestion = {
     youReceive: string[]
     whyTheyAccept: string
     whyYouWin: string
-    tradeGrade: string
+    /**
+     * THE trade grade's letter for the user's side (null when withheld) — never the model's. Kept
+     * under this name because the feedback route and the legacy chat snapshot read it.
+     */
+    tradeGrade: string | null
+    /** THE trade grade in full, or why it was withheld. */
+    oneGrade?: LegacyPackageGrade
     detailedReasoning?: string
     riskFlags?: string[]
     playerAnalysis?: Array<{
@@ -603,8 +609,14 @@ ${recentTrades}`
       console.error('Failed to fetch pre-analysis cache:', e)
     }
 
-    // 6e) Run deterministic trade engine via unified LeagueDecisionContext
-    let deterministicTrades: ReturnType<typeof runTradeEngine> | null = null
+    /*
+     * 6e) The unified LeagueDecisionContext — read for the SleeperImportCache below (downstream tools
+     * such as the OTB packages read `assetsByRosterId` and the manager profiles from it).
+     *
+     * 🛑 NO PRIVATE TRADE ENGINE HERE ANY MORE (2026-09-29). This block also ran `runTradeEngine` and
+     * handed its candidates' fairness scores and acceptance labels to a GPT "targeting notes" prompt
+     * whose answer nothing ever read. The packages this tool shows are graded by THE trade grade below.
+     */
     let assetsByRosterId: any = null
     let managerProfiles: any = null
     let unifiedLeagueCtx: any = null
@@ -621,125 +633,8 @@ ${recentTrades}`
       }
 
       await applyOtbTagsToAssetsByRosterId({ leagueId, assetsByRosterId })
-
-      const calWeights = await getCalibratedWeights()
-      deterministicTrades = runTradeEngine(userRoster.rosterId, unifiedIntelligence, undefined, calWeights)
-      console.log(`[TradeEngine] Generated ${deterministicTrades.validTrades.length} deterministic trade candidates (unified context: ${unifiedLeagueCtx.contextId})`)
-
-      deterministicTrades = await runAssistOrchestrator(deterministicTrades, {
-        userRosterId: userRoster.rosterId,
-        grok: {
-          leagueMeta: {
-            leagueName,
-            format: leagueSettings.type === 2 ? 'dynasty' : 'redraft',
-            superflex: isSF,
-            tep: isTEP,
-            idp: rosterPositions.some((p: string) => ['DL', 'LB', 'DB', 'IDP'].includes(String(p).toUpperCase())),
-          },
-        },
-      })
-      console.log(`[AssistOrchestrator] AI enrichment complete`)
     } catch (e) {
-      console.error('Failed to run trade engine:', e)
-    }
-
-    // Optional AI "target ranking notes"
-    if (deterministicTrades && deterministicTrades.validTrades.length > 0) {
-      try {
-        const aiPrompt = `You are an assistant reviewing PRE-VALIDATED fantasy football trade candidates.
-You may NOT change players, values, or fairness scores.
-
-Your job is to:
-1. Rank which managers are best to target
-2. Explain risk and timing for each trade
-3. Suggest messaging tone for approaching each manager
-
-League Context:
-- Scoring: ${scoringType}
-- Superflex: ${isSF ? 'Yes' : 'No'}
-- TEP: ${isTEP ? 'Yes (bonus: ' + tepBonus + ')' : 'No'}
-- Teams: ${numTeams}
-
-Pre-Validated Trade Candidates (DO NOT MODIFY VALUES):
-${JSON.stringify(deterministicTrades.validTrades.slice(0, 8).map(t => ({
-  targetRosterId: t.toRosterId,
-  fairnessScore: t.fairnessScore,
-  label: t.acceptanceLabel,
-  give: t.give.map(a => ({ name: a.name, pos: a.pos, value: a.value })),
-  receive: t.receive.map(a => ({ name: a.name, pos: a.pos, value: a.value })),
-})), null, 2)}
-
-Respond in JSON format:
-{
-  "rankedTargets": [
-    {
-      "targetRosterId": number,
-      "priority": 1-8,
-      "reasoning": "Why this manager is a good target",
-      "timing": "Best time to approach",
-      "messagingTone": "How to pitch the trade",
-      "riskLevel": "Low/Medium/High"
-    }
-  ],
-  "overallStrategy": "Brief summary of best approach"
-}`
-
-        const aiNotesPayload = {
-          feature: 'legacy-trade-league-analyze-targeting-notes',
-          leagueId,
-          userId: sleeperUsername,
-          sport,
-          scoringType,
-          isSF,
-          isTEP,
-          numTeams,
-          topCandidates: deterministicTrades.validTrades.slice(0, 8).map((t) => ({
-            targetRosterId: t.toRosterId,
-            fairnessScore: t.fairnessScore,
-            acceptanceLabel: t.acceptanceLabel,
-            give: t.give.map((a) => ({ id: a.id || a.name, pos: a.pos, value: a.value })),
-            receive: t.receive.map((a) => ({ id: a.id || a.name, pos: a.pos, value: a.value })),
-          })),
-          promptVersion: 'v1',
-        }
-
-        const aiNotesResult = await getOrCreateAiResult({
-          feature: 'legacy-trade-league-analyze-targeting-notes',
-          scopeType: 'league',
-          scopeId: leagueId,
-          provider: 'openai',
-          model: 'gpt-4o',
-          payload: aiNotesPayload,
-          ttlSeconds: 2 * 60 * 60,
-          onCacheMiss: async () => {
-            const openai = getOpenAIRouteClient()
-            const aiResponse = await openai.chat.completions.create({
-              model: 'gpt-4o',
-              messages: [{ role: 'user', content: aiPrompt }],
-              temperature: 0.3,
-            })
-
-            const content = aiResponse.choices[0]?.message?.content || '{}'
-            return {
-              resultText: content,
-              resultJson: { content },
-              tokenPrompt: aiResponse.usage?.prompt_tokens ?? null,
-              tokenOutput: aiResponse.usage?.completion_tokens ?? null,
-            }
-          },
-        })
-
-        if (aiNotesResult.cacheHit) {
-          console.log(`[legacy-trade/league-analyze] AI cache hit { leagueId: '${leagueId}', type: 'targeting-notes' }`)
-        } else {
-          console.log(`[legacy-trade/league-analyze] AI cache miss { leagueId: '${leagueId}', type: 'targeting-notes', modelCallMs: ${aiNotesResult.modelDurationMs ?? -1} }`)
-          console.log(`[legacy-trade/league-analyze] saved AiResult { id: '${aiNotesResult.row.id}', resultKey: '${aiNotesResult.row.resultKey}' }`)
-        }
-
-        console.log('[AI Layer] Generated targeting notes')
-      } catch (e) {
-        console.error('Failed to get AI notes:', e)
-      }
+      console.error('Failed to build league decision context:', e)
     }
 
     // 7) Call AI to analyze league and suggest trades
@@ -788,7 +683,8 @@ Respond in JSON format:
         preferencesPrompt,
         tradeHistoryContext,
         preAnalysisContext,
-        promptVersion: 'v1',
+        // v2: the model no longer returns a letter (the one grade does) — never serve a v1 answer.
+        promptVersion: 'v2-one-grade',
       }
 
       const aiSuggestionsResult = await getOrCreateAiResult({
@@ -830,14 +726,15 @@ Each object must have:
       "youGive": ["Player A", "2026 2nd"],
       "youReceive": ["Player B", "2026 1st"],
       "whyTheyAccept": "How this fixes THEIR roster problem",
-      "whyYouWin": "The edge you're getting",
-      "tradeGrade": "A/B/C",
-      "detailedReasoning": "Full explanation of value analysis",
+      "whyYouWin": "What this does for the USER's roster — fit, depth, timeline",
+      "detailedReasoning": "Full explanation of the roster fit",
       "riskFlags": ["Any concerns"]
     }
   ],
   "overallFit": "High/Medium/Low"
 }
+
+Do NOT grade the trades, give them a letter, or score their fairness. AllFantasy's trade engine grades every package on the league's own values, and that grade is the only one the user sees.
 
 Return JSON array of TradeSuggestion objects. Skip managers with no trade fit. Find the 2-5 BEST opportunities.`,
                 },
@@ -905,6 +802,21 @@ Return JSON array of TradeSuggestion objects. Skip managers with no trade fit. F
       console.error('[TradeLeagueAnalyze] OpenAI API failure:', e)
       aiDegraded = true
       parseWarning = `AI analysis unavailable: ${e instanceof Error ? e.message : 'Service error'}. Returning basic league context.`
+    }
+
+    /*
+     * 8) THE trade grade on every suggested package (2026-09-29) — the model proposes, the one grader
+     * grades. See `gradeLegacyTradeSuggestions`. The user's side sends `youGive`. Only a signed-in
+     * user's own league is graded (the grader proves membership); a guest session's suggestions carry
+     * the withheld reason instead of a letter.
+     */
+    if (tradeSuggestions.length > 0) {
+      const gradeOf = await createLegacyPackageGrader({
+        suppliedLeagueId: leagueId,
+        userId: gate.identity.source === 'session' ? gate.identity.actorId : null,
+        viewerSide: false,
+      })
+      await gradeLegacyTradeSuggestions(tradeSuggestions, gradeOf)
     }
 
     // Track tool usage
