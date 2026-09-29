@@ -364,7 +364,16 @@ export function diffStandings(
     const tied = now.ties - was.ties
     /* A record that went DOWN is a season rollover or a re-import, not a result. */
     if (won < 0 || lost < 0 || tied < 0) continue
-    const rankMoved = now.rank != null && was.rank != null && now.rank !== was.rank
+    /*
+     * 🛑 A RANK TAKEN BEFORE ANY GAME IS NOT A STANDING. Before week 1 a league's stored rank is the
+     * importer's row order, so every team is "#1" through "#N" by roster id. On the App Review
+     * account (2026-09-29) this card said "went 0–1, now 0–1, down to #10 (was #1)" — a fall from a
+     * position that was never earned. A previous rank counts only when the snapshot had games on
+     * record; without one the result still shows, the move does not.
+     */
+    const wasRanked = was.rank != null && was.wins + was.losses + was.ties > 0
+    const previousRank = wasRanked ? was.rank : null
+    const rankMoved = now.rank != null && previousRank != null && now.rank !== previousRank
     if (won === 0 && lost === 0 && tied === 0 && !rankMoved) continue
     out.push({
       leagueId,
@@ -376,7 +385,7 @@ export function diffStandings(
       lost,
       tied,
       rank: now.rank,
-      previousRank: was.rank,
+      previousRank,
     })
   }
   return out

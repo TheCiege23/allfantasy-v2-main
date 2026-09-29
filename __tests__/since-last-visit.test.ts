@@ -261,6 +261,24 @@ describe('diffStandings', () => {
     const s = { L1: { rank: 2, wins: 1, losses: 1, ties: 0 } }
     expect(diffStandings(snap({ standings: s }), snap({ standings: s }), names)).toEqual([])
   })
+
+  /*
+   * Before week 1 a stored rank is the importer's row order. The App Review account's card read
+   * "went 0–1, now 0–1, down to #10 (was #1)" (2026-09-29) — a fall from a place never earned.
+   */
+  it('reports the first result without a rank move from a pre-season rank', () => {
+    const baseline = snap({ standings: { L1: { rank: 1, wins: 0, losses: 0, ties: 0 } } })
+    const current = snap({ standings: { L1: { rank: 10, wins: 0, losses: 1, ties: 0 } } })
+    expect(diffStandings(baseline, current, names)).toEqual([
+      { leagueId: 'L1', leagueName: 'Dynasty Gridiron', wins: 0, losses: 1, ties: 0, won: 0, lost: 1, tied: 0, rank: 10, previousRank: null },
+    ])
+  })
+
+  it('says nothing when only a pre-season rank reshuffled', () => {
+    const baseline = snap({ standings: { L1: { rank: 1, wins: 0, losses: 0, ties: 0 } } })
+    const current = snap({ standings: { L1: { rank: 4, wins: 0, losses: 0, ties: 0 } } })
+    expect(diffStandings(baseline, current, names)).toEqual([])
+  })
 })
 
 describe('groupAlerts', () => {
