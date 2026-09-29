@@ -74,6 +74,7 @@ import { loadValueTrend } from '@/lib/core-app/valueTrendLoader'
 import { loadMatchupOutlook } from '@/lib/core-app/matchupOutlookLoader'
 import { freeLeagueIds } from '@/lib/core-app/leagueStrip'
 import { loadPlayerShares } from '@/lib/core-app/playerShares'
+import { loadLiveGameBadge } from '@/lib/core-app/liveGameBadgeLoader'
 import { loadLeagueShareView } from '@/lib/core-app/playerSharesLeague'
 import { resolveLeagueScope } from '@/lib/core-app/finderLeaguePicks'
 import { getFinderLeaguePicks } from '@/lib/core-app/finderLeaguePicksStore'
@@ -2184,6 +2185,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : Promise.resolve(null)
 
   /*
+   * The live game badge: his club's game live or just finished, and his points in the leagues where he is
+   * yours, exactly as each platform scored them. Nothing before kickoff — the lock clock owns that.
+   */
+  const playerLiveGameRead =
+    activeKey === 'players' && playerDetail
+      ? loadLiveGameBadge({
+          sport: playerDetail.player.sport,
+          team: playerDetail.player.team,
+          sleeperId: playerDetail.player.sleeperId ?? null,
+          leagues: playerDetail.leagues.available
+            ? playerDetail.leagues.data.filter((s) => s.isYours).map((s) => ({ leagueId: s.leagueId, leagueName: s.leagueName }))
+            : [],
+        }).catch(() => null)
+      : Promise.resolve(null)
+
+  /*
    * Compare (2026-09-06): a second player held beside the first, the same
    * loader over the same leagues, so the two columns are priced the same way.
    * Only when the first resolved — a `vs` with no `player` is nothing to
@@ -2196,6 +2213,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
   const playerDepth = await playerDepthRead
   const freeAgentBids = await freeAgentBidsRead
+  const playerLiveGame = await playerLiveGameRead
   const depthChart = await depthChartRead
   const whoStartsHim = await whoStartsHimRead
   const valueTrend = await valueTrendRead
@@ -4351,6 +4369,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           pickLeagues={playedLeagues.map((l) => ({ id: l.id, name: String(l.name ?? 'League'), platform: (l as { platform?: string | null }).platform ?? null }))}
           savedPicks={finderScope.picked ? finderLeagueIds : null}
           freeAgentBids={freeAgentBids}
+          liveGame={playerLiveGame}
           depthChart={depthChart}
           whoStartsHim={whoStartsHim}
           valueTrend={valueTrend}

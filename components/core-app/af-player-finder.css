@@ -4154,3 +4154,100 @@
     grid-template-columns: 64px minmax(40px, 1fr) auto;
   }
 }
+
+/* ── Live game badge (liveGameBadge.ts): live or final, and his points in your leagues ────────── */
+.af-core .af-pf-live {
+  margin-top: 12px;
+}
+.af-core .af-pf-live[data-state='live'] {
+  border-color: var(--bad);
+}
+.af-core .af-pf-live-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 14px;
+}
+.af-core .af-pf-live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.af-core .af-pf-live[data-state='live'] .af-pf-live-tag {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-core .af-pf-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--bad);
+  animation: af-pf-live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes af-pf-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-pf-live-dot {
+    animation: none;
+  }
+}
+.af-core .af-pf-live-score {
+  color: var(--text);
+  font-weight: 800;
+}
+.af-core .af-pf-live-week {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-live-list {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-live-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 0 12px;
+}
+.af-core .af-pf-live-league {
+  color: var(--text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-core .af-pf-live-pts {
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 800;
+}
+.af-core .af-pf-live-meta {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+.af-core .af-pf-live-none {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
