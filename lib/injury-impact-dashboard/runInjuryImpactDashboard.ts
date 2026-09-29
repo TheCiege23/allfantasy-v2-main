@@ -8,7 +8,19 @@ import { openaiChatText } from '@/lib/openai-client'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
-import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import {
+  isForeignIdSpace,
+  loadEspnToSleeperMap,
+  rosterIdSpaceOf,
+  sleeperReadablePlayerData,
+} from '@/lib/core-app/rosterIdSpace'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import {
+  indexBySleeperId,
+  mayBeSleeperId,
+  nonSleeperExternalIdWhere,
+  sleeperIdWhere,
+} from '@/lib/player-identity/externalIdNamespace'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/intelligence'
 import { enrichChimmyWithPlayerSportsNorm } from '@/lib/sports-data-normalization'
@@ -214,6 +226,8 @@ export async function runInjuryImpactDashboard(input: InjuryImpactDashboardInput
   let rosterIds: string[] = []
   /** A league was picked, but its roster ids are the provider's own — see `isForeignIdSpace`. */
   let rosterIdsUnreadable = false
+  /** A native league's ids: Sleeper ids in NFL, otherwise self-describing or provider ids. */
+  let rosterIdsNative = false
   const starterSet = new Set<string>()
 
   if (input.leagueId?.trim()) {
@@ -293,13 +307,42 @@ export async function runInjuryImpactDashboard(input: InjuryImpactDashboardInput
       rosterIdsUnreadable = true
       dataGaps.push(`${FOREIGN_IDS_UNREADABLE} — roster-aware injury flags are unavailable.`)
     }
+    /*
+     * ⚠ AN ESPN ROSTER HOLDS ESPN IDS, AND `sleeperReadablePlayerData` PASSES THEM THROUGH. Read as
+     * Sleeper ids they matched nobody, so an ESPN manager's own injured players were never "on your
+     * roster". They are translated through `PlayerIdentityMap.espnId` here; an id with no Sleeper
+     * identity is DROPPED, not kept — kept, it is a number that may be somebody's Sleeper id.
+     * Production 2026-09-29: 271 ESPN roster ids, 188 translatable, 83 not (none colliding today).
+     */
+    const espnToSleeper =
+      rosterIdSpaceOf(league.platform) === 'espn'
+        ? await loadEspnToSleeperMap(picked.flatMap((r) => [...getRosterPlayerIds(r.playerData), ...getStarterIds(r.playerData)]))
+        : null
+    const unmappedEspn = new Set<string>()
+    const asSleeperSpace = (id: string): string | null => {
+      if (!espnToSleeper) return id
+      const sid = espnToSleeper.get(id) ?? null
+      if (!sid) unmappedEspn.add(id)
+      return sid
+    }
     for (const r of picked) {
       const playerData = sleeperReadablePlayerData(league.platform, r.playerData)
-      const ids = getRosterPlayerIds(playerData)
-      rosterIds.push(...ids)
-      for (const sid of getStarterIds(playerData)) starterSet.add(sid)
+      for (const id of getRosterPlayerIds(playerData)) {
+        const sid = asSleeperSpace(id)
+        if (sid) rosterIds.push(sid)
+      }
+      for (const id of getStarterIds(playerData)) {
+        const sid = asSleeperSpace(id)
+        if (sid) starterSet.add(sid)
+      }
     }
     rosterIds = [...new Set(rosterIds)]
+    if (unmappedEspn.size > 0) {
+      dataGaps.push(
+        `${unmappedEspn.size} ESPN roster player${unmappedEspn.size === 1 ? ' has' : 's have'} no linked identity yet — their injuries cannot be matched to your roster.`,
+      )
+    }
+    rosterIdsNative = isNativePlatform(league.platform)
 
     if (input.sportFilter !== 'ALL' && input.sportFilter.toUpperCase() !== String(league.sport).toUpperCase()) {
       dataGaps.push('Sport filter does not match league sport — injury rows are still filtered by the sport filter for cross-checks.')
@@ -336,23 +379,37 @@ export async function runInjuryImpactDashboard(input: InjuryImpactDashboardInput
   ])
 
   const rosterSet = new Set(rosterIds)
-  const sportsPlayers = await prisma.sportsPlayer.findMany({
-    where: {
-      sport: sportWhere,
-      OR: [{ sleeperId: { in: rosterIds } }, { externalId: { in: rosterIds } }],
-    },
-    select: { sleeperId: true, externalId: true, name: true, sport: true },
-  })
+  /*
+   * 🛑 BY SLEEPER ID, NEVER A BARE ID AGAINST `externalId`. This was `OR: [sleeperId IN ids,
+   * externalId IN ids]`, and `externalId` holds Rolling Insights' and the backfill's own numbers
+   * for different people: Sleeper 9228 (Bryce Young) also matched RI 9228, Michael Tarquin (OT).
+   * `rosterIdByName` then mapped "michael tarquin" → 9228, so HIS injury report was flagged as on
+   * your roster — and as a starter if Young started. Only a native league's non-Sleeper ids
+   * (`name:` backfill, `tsdb_`, a native NHL roster's Rolling Insights numbers) go to `externalId`.
+   */
+  const sleeperRosterIds = rosterIdsNative ? rosterIds.filter((id) => mayBeSleeperId(id, leagueSport)) : rosterIds
+  const otherRosterIds = rosterIdsNative ? rosterIds.filter((id) => !sleeperRosterIds.includes(id)) : []
+  const [bySleeperId, byProviderId] = await Promise.all([
+    sleeperRosterIds.length > 0
+      ? prisma.sportsPlayer.findMany({
+          where: { ...sleeperIdWhere(sleeperRosterIds), sport: sportWhere },
+          select: { sleeperId: true, source: true, name: true },
+        })
+      : [],
+    otherRosterIds.length > 0 && leagueSport
+      ? prisma.sportsPlayer.findMany({
+          where: { ...nonSleeperExternalIdWhere(otherRosterIds, leagueSport), sport: sportWhere },
+          select: { externalId: true, name: true },
+        })
+      : [],
+  ])
   const nameByRosterId = new Map<string, string>()
-  for (const sp of sportsPlayers) {
-    if (sp.sleeperId) nameByRosterId.set(sp.sleeperId, sp.name)
-    if (sp.externalId) nameByRosterId.set(sp.externalId, sp.name)
-  }
+  for (const [sleeperId, sp] of indexBySleeperId(bySleeperId)) nameByRosterId.set(sleeperId, sp.name)
+  for (const sp of byProviderId) if (!nameByRosterId.has(sp.externalId)) nameByRosterId.set(sp.externalId, sp.name)
 
   const rosterIdByName = new Map<string, string>()
-  for (const sp of sportsPlayers) {
-    const rid = sp.sleeperId ?? sp.externalId
-    if (rid && !rosterIdByName.has(sp.name.toLowerCase())) rosterIdByName.set(sp.name.toLowerCase(), rid)
+  for (const [rid, name] of nameByRosterId) {
+    if (!rosterIdByName.has(name.toLowerCase())) rosterIdByName.set(name.toLowerCase(), rid)
   }
 
   // Port facts re-shaped to the InjuryReportRecord contract the row builders
