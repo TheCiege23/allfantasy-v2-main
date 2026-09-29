@@ -638,4 +638,22 @@ describe('AF Legacy — the page prints the one grade, never a verdict, fairness
     expect(COUNTER_PRIVATE.test('<span className="ml-2">Fairness: {c.fairnessScore}</span>')).toBe(true)
     expect(COUNTER_PRIVATE.test('{simResult.verdict.toUpperCase()}')).toBe(true)
   })
+
+  /*
+   * The market path is authoritative and `lib/dynasty-tiers` is not (owner's ruling). The analyzer fed a
+   * tier-system evaluation into its prompt as "MANDATORY … do NOT override the tier system verdict".
+   */
+  const TIER_VERDICT = /dynastyTierEvaluation\(|formatEvaluationForAI\(|TIER EVALUATION|tierEvaluation\b/
+
+  it('the legacy analyzer hands the model no dynasty-tiers verdict — only the receipt', () => {
+    const src = code('server/api-route-modules/legacy/trade/analyze/route.ts')
+    expect(TIER_VERDICT.test(src)).toBe(false)
+    expect(src).toMatch(/const canonicalGradeDirective = receiptPromptBlock\(evaluationReceipt\)/)
+  })
+
+  it('positive control: the tier shape matches the code it replaced', () => {
+    expect(TIER_VERDICT.test('      tierEvaluationStr = formatEvaluationForAI(tierEvaluation)')).toBe(true)
+    expect(TIER_VERDICT.test("tierEvaluation ? 'TIER EVALUATION (MANDATORY): The deterministic tier system'")).toBe(true)
+    expect(TIER_VERDICT.test('import { detectSFFromRosterPositions } from \'@/lib/dynasty-tiers\'')).toBe(false)
+  })
 })
