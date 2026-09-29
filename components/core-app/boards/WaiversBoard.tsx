@@ -12,6 +12,7 @@ import {
   SectionHead,
   StatPair,
   platformKey,
+  NoLeaguesYet,
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
 
@@ -237,6 +238,16 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
   const { withheld } = data
   const excluded =
     withheld.noRoster + withheld.idSpace + withheld.noScoring + withheld.noCandidate
+
+  /* No leagues on this account yet: say so and offer a way forward (BoardKit NoLeaguesYet). */
+  if (totalLeagues === 0) {
+    return (
+      <div className="af-bd">
+        <BoardHead eyebrow="Core · Waivers" title="Waivers" blurb="The single best available player on each of your wires, ranked by how many points the add actually gains you over the player you would drop." />
+        <NoLeaguesYet what="Once one is, this board finds the best available player on each of your wires and ranks the adds by the points they gain you." />
+      </div>
+    )
+  }
 
   return (
     <div className="af-bd">

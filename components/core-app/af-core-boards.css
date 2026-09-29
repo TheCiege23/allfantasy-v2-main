@@ -1340,3 +1340,36 @@
     row-gap: 6px;
   }
 }
+
+/*
+ * A board for an account with no leagues yet (BoardKit NoLeaguesYet, 2026-09-29): one sentence and
+ * three ways forward. A TOP-LEVEL block on purpose, appended after the @container block above: a
+ * rule inserted inside a query silently moves into it.
+ */
+.af-core .af-bd-noleagues {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-core .af-bd-noleagues-lead {
+  margin: 0;
+  font: 400 13px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+.af-core .af-bd-noleagues-lead strong {
+  color: var(--text2);
+  font-weight: 700;
+}
+.af-core .af-bd-noleagues-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* 44px: Apple's minimum tap target; .af-btn alone is 36px. */
+.af-core .af-bd-noleagues-actions .af-btn {
+  min-height: 44px;
+}

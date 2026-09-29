@@ -435,7 +435,7 @@ function cardsFromData(props: Dashboard3AData & Dashboard3AChrome): Dashboard3AS
         weekLabel={props.weekLabel ?? null}
       />
     ),
-    chimmy: <Dash3AChimmy openCount={props.issues.length} />,
+    chimmy: <Dash3AChimmy openCount={props.issues.length} leagueCount={connectedLeagueCount(summary)} />,
     career: <Dash3ACareer career={props.career} />,
     rivals: <Dash3ARivals rivals={props.rivals ?? null} />,
     portfolioChart: (
@@ -878,7 +878,25 @@ export function Dash3AMatchups({
   )
 }
 
-export function Dash3AChimmy({ openCount }: { openCount: number }) {
+/**
+ * 🛑 ZERO LEAGUES IS NOT "CLEAN" (2026-09-29). With no league connected, `openCount` is 0 because
+ * nothing was read, and this card said "you're clean across every league" — a false all-clear on
+ * the first screen a new user sees. `leagueCount` 0 says so instead; null (unknown) keeps the
+ * old behaviour.
+ */
+/**
+ * 0 only when the account has nothing connected: no current league AND no past season imported.
+ * `dash34` returns `totalLeagues: 0` whenever no league has a unified record, even for an account
+ * holding past seasons (`legacyCount`) — that account is not "no leagues connected".
+ */
+export function connectedLeagueCount(
+  d: { totalLeagues?: number | null; legacyCount?: number | null } | null | undefined,
+): number | null {
+  if (!d || d.totalLeagues == null) return null
+  return d.totalLeagues + Math.max(0, d.legacyCount ?? 0)
+}
+
+export function Dash3AChimmy({ openCount, leagueCount = null }: { openCount: number; leagueCount?: number | null }) {
   return (
             <section className="af3a-card af3a-chimmy">
               <header className="af3a-chimmy-head">
@@ -888,7 +906,12 @@ export function Dash3AChimmy({ openCount }: { openCount: number }) {
                   <span>Your day, in one line</span>
                 </div>
               </header>
-              {openCount === 0 ? (
+              {leagueCount === 0 ? (
+                <h3>
+                  No leagues connected yet. <Link href="/import">Connect one</Link> and I&rsquo;ll tell
+                  you what needs you first.
+                </h3>
+              ) : openCount === 0 ? (
                 <h3>Nothing needs you right now — you&rsquo;re clean across every league.</h3>
               ) : (
                 <h3>

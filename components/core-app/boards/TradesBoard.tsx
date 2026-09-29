@@ -15,6 +15,7 @@ import {
   SectionHead,
   StatPair,
   platformKey,
+  NoLeaguesYet,
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
 
@@ -39,6 +40,8 @@ export type TradesBoardProps = {
   data: TradesBoardData
   /** Where the footer's "View all" goes — the full picker. */
   allHref: string
+  /** Leagues on this account. 0 shows the no-leagues next steps instead of an empty board. */
+  totalLeagues?: number
 }
 
 const GRADE_SEV: Record<string, 'good' | 'warn' | 'bad'> = {
@@ -330,7 +333,7 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
   )
 }
 
-export function TradesBoard({ data, allHref }: TradesBoardProps) {
+export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
   const live = data.windows.filter((w) => w.weeksLeft != null && w.weeksLeft >= 0).length
   const anyDeadline = data.windows.some((w) => w.deadlineWeek != null || w.noDeadline)
   /*
@@ -341,6 +344,16 @@ export function TradesBoard({ data, allHref }: TradesBoardProps) {
     heading promising trades.
   */
   const anyTrades = data.windows.some((w) => w.tradesOnFile > 0)
+
+  /* No leagues on this account yet: say so and offer a way forward (BoardKit NoLeaguesYet). */
+  if (totalLeagues === 0) {
+    return (
+      <div className="af-bd">
+        <BoardHead eyebrow="Core · Trades" title="Trades" blurb="Your trade windows, soonest to close first — with the most recent real trade in each league and how it graded." />
+        <NoLeaguesYet what="Once one is, this board ranks your leagues' trade windows, soonest to close first, with each league's latest trade and how it graded." />
+      </div>
+    )
+  }
 
   return (
     <div className="af-bd">

@@ -4094,7 +4094,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : tradesLoadFailed ? (
           <ScreenLoadError screen="Trade Center" retryHref={retryHref} />
         ) : !showAllLeagues && tradesBoard ? (
-          <TradesBoard data={tradesBoard} allHref="/core/trades?all=1" />
+          <TradesBoard data={tradesBoard} allHref="/core/trades?all=1" totalLeagues={playedLeagues.length} />
         ) : (
           <PickALeague
             tabKey="trades"
