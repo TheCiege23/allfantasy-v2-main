@@ -164,3 +164,6 @@ certificates/
 # The key has been rotated. A lint report is regenerable build output and must
 # never be tracked.
 lint-report.json
+
+# Firebase app configuration from the owner's PWABuilder ZIP (keep local)
+ios-pwabuilder/src/AllFantasy/GoogleService-Info.plist

@@ -558,6 +558,46 @@ export class TokenSpendService {
     })
   }
 
+  /** Reconcile an Apple refund once, without removing tokens already spent. */
+  async reverseApplePackagePurchase(transactionId: string): Promise<void> {
+    const purchaseKey = `apple_iap:${transactionId}`
+    const reversalKey = `apple_iap_refund:${transactionId}`
+    await (prisma as any).$transaction(async (tx: any) => {
+      const existing = await tx.tokenLedger.findUnique({ where: { idempotencyKey: reversalKey } })
+      if (existing) return
+      const purchase = await tx.tokenLedger.findUnique({ where: { idempotencyKey: purchaseKey } })
+      if (!purchase || purchase.sourceType !== "apple_iap" || purchase.entryType !== TOKEN_ENTRY_TYPES.PURCHASE) {
+        return
+      }
+      const rows = await tx.$queryRaw(Prisma.sql`
+        SELECT "balance" FROM "user_token_balances"
+        WHERE "id" = ${purchase.userTokenBalanceId} FOR UPDATE`)
+      const balanceBefore = Number(rows?.[0]?.balance ?? 0)
+      const reversed = Math.min(Math.max(0, balanceBefore), Number(purchase.tokenDelta))
+      const balanceAfter = balanceBefore - reversed
+      await tx.userTokenBalance.update({
+        where: { id: purchase.userTokenBalanceId },
+        data: { balance: { decrement: reversed } },
+      })
+      await tx.tokenLedger.create({
+        data: {
+          userId: purchase.userId,
+          userTokenBalanceId: purchase.userTokenBalanceId,
+          entryType: TOKEN_ENTRY_TYPES.ADJUSTMENT,
+          tokenDelta: -reversed,
+          balanceBefore,
+          balanceAfter,
+          tokenPackageSku: purchase.tokenPackageSku,
+          sourceType: "apple_iap_refund",
+          sourceId: transactionId,
+          idempotencyKey: reversalKey,
+          description: "App Store token pack refund",
+          metadata: { originalTokenAmount: purchase.tokenDelta, alreadySpent: purchase.tokenDelta - reversed },
+        },
+      })
+    })
+  }
+
   /**
    * Grant monthly subscription credits for a billing cycle.
    *
