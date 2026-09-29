@@ -376,14 +376,26 @@ export async function finalizeRedraftWeek(
 
   const matchups = await prisma.redraftMatchup.findMany({
     where: { seasonId: season.id, week: params.week },
-    select: { id: true, status: true },
+    select: { id: true, status: true, awayRosterId: true },
   })
   const matchupsConsidered = matchups.length
-  if (matchupsConsidered > 0 && matchups.every((m) => m.status === 'final')) {
+  /*
+   * ⚠ A BYE NEVER GOES FINAL. It has no opponent, so `updateMatchupScores` returns before writing
+   * it and its status stays 'scheduled' for good. Counting it kept a finished week "not final"
+   * forever: the sweep re-sealed it every tick while it sat in the lookback, and reported each
+   * re-seal as a week finalized. `advance_week` already judges a week on its non-bye matchups
+   * ("All non-bye matchups must be finalized"); this agrees with it.
+   *
+   * Only an explicit null is a bye. Anything else counts as a real matchup, because the costly
+   * mistake runs one way: misreading a bye re-seals a finished week, misreading a real matchup as
+   * a bye would skip sealing a week that is not done.
+   */
+  const contested = matchups.filter((m) => m.awayRosterId !== null)
+  if (matchupsConsidered > 0 && contested.every((m) => m.status === 'final')) {
     return emptyResult(base, null, {
       alreadyFinal: true,
-      matchupsConsidered,
-      matchupsFinal: matchupsConsidered,
+      matchupsConsidered: contested.length,
+      matchupsFinal: contested.length,
     })
   }
 
@@ -679,6 +691,8 @@ export async function finalizeCompletedWeeksForSeason(
       seasonId: params.seasonId,
       week: { gte: earliest, lte: params.throughWeek },
       status: { not: 'final' },
+      // A bye never goes final (see `finalizeRedraftWeek`), so it must not hold its week open.
+      awayRosterId: { not: null },
     },
     select: { week: true },
   })
