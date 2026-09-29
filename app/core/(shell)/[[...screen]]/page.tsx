@@ -71,6 +71,7 @@ import { loadFreeAgentBids } from '@/lib/core-app/freeAgentBids'
 import { loadDepthChartView } from '@/lib/core-app/depthChartBackups'
 import { loadWhoStartsHim } from '@/lib/core-app/whoStartsHimLoader'
 import { loadValueTrend } from '@/lib/core-app/valueTrendLoader'
+import { loadMatchupOutlook } from '@/lib/core-app/matchupOutlookLoader'
 import { freeLeagueIds } from '@/lib/core-app/leagueStrip'
 import { loadPlayerShares } from '@/lib/core-app/playerShares'
 import { loadLeagueShareView } from '@/lib/core-app/playerSharesLeague'
@@ -2198,6 +2199,19 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const depthChart = await depthChartRead
   const whoStartsHim = await whoStartsHimRead
   const valueTrend = await valueTrendRead
+  /*
+   * Matchup ranks for his upcoming weeks: needs the weeks the depth read just returned, so it runs
+   * after it — the per-season defense table behind it is one cached aggregate shared by every card.
+   */
+  const matchupOutlook =
+    playerDetail && playerDepth?.upcoming.available
+      ? await loadMatchupOutlook({
+          sport: playerDetail.player.sport,
+          position: playerDetail.player.position,
+          season: playerDepth.upcoming.data.season,
+          weeks: playerDepth.upcoming.data.weeks,
+        }).catch(() => null)
+      : null
 
   /*
    * "Recently searched", per account. The write is fire-and-forget by design
@@ -4340,6 +4354,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           depthChart={depthChart}
           whoStartsHim={whoStartsHim}
           valueTrend={valueTrend}
+          matchupOutlook={matchupOutlook}
           leagueView={playerLeagueView}
           recent={recentPlayerSearches}
           tradeVisual={playerTradeVisual}
