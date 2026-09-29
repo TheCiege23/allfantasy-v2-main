@@ -30,11 +30,16 @@
  * included on purpose (`sm:text-[10px]` contains `text-[10px]`): a phone override left below the
  * floor while its base moved is the exact case a "looks done" sweep misses.
  *
+ * INLINE FONT SIZES ARE NOW COVERED TOO, by the third block, against a per-file exemption map.
+ *
+ * ⚠ THE EARLIER VERSION OF THIS HEADER SAID "19 remain" AND THAT WAS AN UNDERCOUNT — the real
+ * figure was 56. The regex behind it required `[,}]` immediately after the number, so it saw
+ * `fontSize: 10,` but missed the JSX attribute form `fontSize="9"` and every
+ * `font: "700 10px/1 …"` shorthand. A count is a claim; that one was measured with a matcher too
+ * narrow to support it. The matcher below takes both forms, and rejects `fontSize: '2rem'` — the
+ * first attempt matched the leading `2` of `2rem` and reported pages/500.tsx as a violation.
+ *
  * 🛑 WHAT THIS GUARD STILL DOES **NOT** COVER, stated so a green run is not over-read:
- *   - Inline `fontSize` props in TSX (19 remain). The ones that render as ordinary DOM text were
- *     raised with this sweep; the rest are deliberately exempt, see below. They are not guarded
- *     because the exempt set is the majority of what is left, and an allowlist of surfaces this
- *     file has not individually measured would assert more than has been checked.
  *   - `public/railway-styles.css`. Served but DELIBERATELY UNREFERENCED — its
  *     `<link href="/railway-styles.css">` was removed from app/layout.tsx and
  *     root-language-provider-layout.test.tsx asserts it stays removed, so its sizes never render.
@@ -169,5 +174,84 @@ describe(`no Tailwind arbitrary text class is below ${FLOOR_PX}px`, () => {
       }
     }
     expect(offenders, `below the ${FLOOR_PX}px floor (${offenders.length}):\n${offenders.slice(0, 40).join('\n')}`).toEqual([])
+  })
+})
+
+/**
+ * Inline `fontSize: 10` / `fontSize="9"` and the size token of an inline `font:` shorthand.
+ *
+ * ⚠ `(?![a-zA-Z])` IS LOAD-BEARING: without it this matches the `2` of `fontSize: '2rem'` and
+ * reports pages/500.tsx — a 32px heading — as below an 11px floor.
+ */
+const INLINE = [
+  /fontSize[=:]\s*\{?\s*["']?(\d+(?:\.\d+)?)(?:px)?["']?\s*\}?(?![a-zA-Z])/g,
+  /font:\s*["'][^"']*?(\d+(?:\.\d+)?)px\b/g,
+]
+
+const inlineSizesIn = (src: string) => INLINE.flatMap((p) => [...src.matchAll(p)].map((m) => parseFloat(m[1])))
+
+/**
+ * Files allowed to declare below the floor, with the count measured 2026-09-29 and the reason.
+ * The COUNT is pinned, not just the file: a new sub-11px size added to an already-exempt file
+ * fails, which an allowlist keyed on filename alone would wave through.
+ *
+ * Every entry was opened and classified individually — the exemptions are about px not being
+ * device px on that surface, never about the text being unimportant:
+ *
+ *   SCALED SVG (viewBox, so px is a user unit). `preserveAspectRatio="none"` on several means the
+ *   scaling is not even uniform, so "raising" the number distorts the glyph rather than enlarging it.
+ *   A USER-ZOOMABLE CANVAS. The bracket views paint at zoom 0.55 by default (pinch 0.3-3.0).
+ *   A SATORI POSTER. ShareCard is 620x780, dual-rendered to a PNG export.
+ *   THE "AF" CREST GLYPH, an aria-hidden decorative mark inside a 24-unit box, repeated per screen.
+ */
+const INLINE_EXEMPT: Record<string, { n: number; why: string }> = {
+  'app/af-legacy/page.tsx': { n: 21, why: 'SVG chart labels, viewBox + preserveAspectRatio="none", w-full h-full' },
+  'components/bracket/BracketProView.tsx': { n: 2, why: 'user-zoomable canvas, transform: scale()' },
+  'components/bracket/BracketTreeView.tsx': { n: 7, why: 'user-zoomable canvas, default zoom 0.55; one styles no text at all' },
+  'components/career/ShareCard.tsx': { n: 1, why: '620x780 satori poster, exported as a PNG' },
+  'components/core-app/career/CareerProgressChart.tsx': { n: 1, why: 'SVG axis label, viewBox 0 0 700 196, preserveAspectRatio="none"' },
+  'components/dynasty/DynastyProjectionPanel.tsx': { n: 2, why: 'SVG axis labels inside a viewBox' },
+  'components/ConfidenceRiskBadge.tsx': { n: 1, why: 'AF crest glyph, viewBox 0 0 24 24' },
+  'components/ai-confidence/ConfidenceBadge.tsx': { n: 1, why: 'AF crest glyph, viewBox 0 0 24 24' },
+  'components/mobile/UniversalAIBadge.tsx': { n: 1, why: 'AF crest glyph, viewBox 0 0 24 24' },
+  'components/core-app/screens/AuthV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
+  'components/core-app/screens/Career.tsx': { n: 2, why: 'AF crest glyph, aria-hidden SVG' },
+  'components/core-app/screens/ImportV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
+  'components/core-app/screens/LandingV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
+  'components/core-app/screens/PricingV4.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
+  'components/core-app/screens/RecoveryChrome.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
+  'app/import/[platform]/page.tsx': { n: 1, why: 'AF crest glyph in an SVG <text>' },
+}
+
+describe(`no inline font size is below ${FLOOR_PX}px outside the measured exemptions`, () => {
+  it('the matcher takes both forms, and is not fooled by rem', () => {
+    expect(inlineSizesIn('<b style={{ fontSize: 10 }} />')).toEqual([10])
+    expect(inlineSizesIn('<text fontSize="9" />')).toEqual([9])
+    expect(inlineSizesIn(`<b style={{ font: "700 10px/1 X" }} />`)).toEqual([10])
+    expect(inlineSizesIn(`<h1 style={{ fontSize: '2rem' }} />`)).toEqual([])
+    expect(inlineSizesIn('<b style={{ fontSize: 11 }} />')).toEqual([11])
+  })
+
+  it('finds them across the real sources', () => {
+    const total = SOURCES.reduce((n, f) => n + inlineSizesIn(readFileSync(join(process.cwd(), f), 'utf8')).length, 0)
+    expect(total).toBeGreaterThan(200)
+  })
+
+  it('every exempt file still exists and still declares one — a stale exemption hides a regression', () => {
+    for (const f of Object.keys(INLINE_EXEMPT)) {
+      const found = inlineSizesIn(readFileSync(join(process.cwd(), f), 'utf8')).filter((s) => s < FLOOR_PX).length
+      expect(found, `${f} is exempt for ${INLINE_EXEMPT[f].n} but declares ${found}`).toBe(INLINE_EXEMPT[f].n)
+    }
+  })
+
+  it('no unexempt file declares below the floor', () => {
+    const offenders: string[] = []
+    for (const f of SOURCES) {
+      if (INLINE_EXEMPT[f]) continue
+      for (const size of inlineSizesIn(readFileSync(join(process.cwd(), f), 'utf8'))) {
+        if (size < FLOOR_PX) offenders.push(`${f}: ${size}px`)
+      }
+    }
+    expect(offenders, `below the ${FLOOR_PX}px floor and not exempt:\n${offenders.join('\n')}`).toEqual([])
   })
 })

@@ -271,7 +271,7 @@ export default function Admin29aPreviewPage() {
         <p
           style={{
             margin: '0 0 6px',
-            font: "700 10px/1 var(--af-cc-mono)",
+            font: "700 11px/1 var(--af-cc-mono)",
             letterSpacing: '0.14em',
             textTransform: 'uppercase',
             color: 'var(--warn)',

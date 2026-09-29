@@ -135,7 +135,7 @@ export function WaiverIntel({ leagueId, surface = 'deck' }: { leagueId: string; 
                     <div className="bdx-row" key={i}>
                       <span className="x" style={{ textAlign: 'left', flex: 1, fontSize: 12 }}>
                         {b.playerName}
-                        <span style={{ color: 'var(--bdx-ink-ghost)', fontSize: 10.5 }}>
+                        <span style={{ color: 'var(--bdx-ink-ghost)', fontSize: 11 }}>
                           {' '}{b.position ?? ''} · {b.season} wk {b.week}
                         </span>
                       </span>

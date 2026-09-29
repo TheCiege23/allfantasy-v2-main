@@ -391,8 +391,8 @@ export function HistoryTab({ league }: HistoryTabProps) {
           <div className="h-56 rounded-2xl border border-white/[0.06] bg-[#0c0c1e]/80 p-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} />
-                <YAxis domain={[0, 100]} tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 10 }} />
+                <XAxis dataKey="name" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} />
+                <YAxis domain={[0, 100]} tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null
