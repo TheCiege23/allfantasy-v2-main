@@ -1,46 +1,23 @@
-import type { Metadata } from 'next'
-import { redirect } from 'next/navigation'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/auth'
-import { prisma } from '@/lib/prisma'
-import { buildSeoMeta } from '@/lib/seo'
-import { MatchupSimulatorClient } from './MatchupSimulatorClient'
+import { permanentRedirect } from 'next/navigation'
+import { matchupSimulatorRedirectTarget } from '@/lib/matchup-simulator/coreMatchupRedirect'
 
+/**
+ * /matchup-simulator → /core/matchup, permanently (308).
+ *
+ * Owner decision 2026-09-29. The page this replaces asked an LLM (`/api/sim-matchup`, now deleted)
+ * for a win percentage without handing it the rosters — a number with nothing under it. /core
+ * Matchup is the one matchup surface and reads the real league. A page stub rather than a
+ * next.config redirect so the league hand-off (see the helper) survives. Auth is /core's job now.
+ */
 export const dynamic = 'force-dynamic'
 
-export const metadata: Metadata = buildSeoMeta({
-  title: 'Matchup Simulator – AllFantasy',
-  description: 'Simulate your fantasy matchup with AI-powered projections, injury adjustments, and win probability.',
-})
+type SearchParams = Record<string, string | string[] | undefined>
 
 export default async function MatchupSimulatorPage({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>> | Record<string, string | string[] | undefined>
+  searchParams?: Promise<SearchParams> | SearchParams
 }) {
   const sp = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
-
-  if (!session?.user?.id) {
-    redirect('/login?callbackUrl=/matchup-simulator')
-  }
-
-  const leagueIdParam = typeof sp.leagueId === 'string' ? sp.leagueId : undefined
-  const sportParam = typeof sp.sport === 'string' ? sp.sport : 'NFL'
-
-  const leagues = await prisma.league.findMany({
-    where: { userId: session.user.id },
-    select: { id: true, name: true, sport: true },
-    orderBy: { updatedAt: 'desc' },
-    take: 20,
-  }).catch(() => [])
-
-  return (
-    <MatchupSimulatorClient
-      userId={session.user.id}
-      leagues={leagues.map((l) => ({ id: l.id, name: l.name ?? 'League', sport: String(l.sport) }))}
-      initialLeagueId={leagueIdParam}
-      initialSport={sportParam}
-    />
-  )
+  permanentRedirect(matchupSimulatorRedirectTarget(sp))
 }
