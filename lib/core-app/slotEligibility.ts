@@ -116,6 +116,27 @@ export function canFillSlot(slot: string, position: string | null): boolean {
   return accepts.includes(p)
 }
 
+/** Every position some fantasy slot accepts — QB through IDP. An offensive lineman is not in it. */
+const STARTABLE_ANYWHERE = new Set(Object.values(SLOT_ACCEPTS).flat())
+
+/**
+ * Could this player start in this league at all?
+ *
+ * ⚠ WRITTEN FOR THE WAIVERS BOARD, WHICH NAMED AN OFFENSIVE TACKLE. It picked "the highest
+ * league-scored projection nobody rosters" with no position check, and on 2026-09-29 Chimmy's
+ * Tuesday waiver digest told the App Review account to "add Michael Tarquin (OT, Carolina
+ * Panthers)" at +12.4 projected points. No league starts an OT, whatever a projection row says.
+ *
+ * With the league's slots known, the player must fit one of them (a K in a league with no K slot
+ * is not an add either). Without them, he must at least be a position some fantasy slot accepts —
+ * the table above, so a new slot type widens both answers at once.
+ */
+export function isStartableIn(slots: string[] | null, position: string | null): boolean {
+  if (slots && slots.length > 0) return slots.some((slot) => canFillSlot(slot, position))
+  const p = normalizePosition(position)
+  return p != null && STARTABLE_ANYWHERE.has(p)
+}
+
 /**
  * Fallback when the exact slot is unknown: could ANY slot this league runs hold
  * BOTH of them?

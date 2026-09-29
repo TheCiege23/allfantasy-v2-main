@@ -10,6 +10,7 @@ import { myRosterCandidates } from './myRoster'
 import { countRealLeagues, keepBestPerRealLeague } from './realLeague'
 import { sleeperReadablePlayerData } from './rosterIdSpace'
 import { ruledOutByFact } from './injuryStatus'
+import { isStartableIn, startingSlots } from './slotEligibility'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
@@ -466,12 +467,19 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
       return res ? res.points : null
     }
 
-    /* Best available: highest league-scored projection nobody in the league holds. */
+    /*
+     * Best available: highest league-scored projection nobody in the league holds — among players
+     * this league could actually START. Without that check the board named an offensive tackle
+     * (see isStartableIn).
+     */
+    const slots = startingSlots(l.settings)
     let bestId: string | null = null
     let bestPts = -Infinity
     for (const p of pool) {
       if (takenIds.has(p.playerId)) continue
-      if (!metaById.has(p.playerId)) continue
+      const meta = metaById.get(p.playerId)
+      if (!meta) continue
+      if (!isStartableIn(slots, meta.position)) continue
       if (ruledOut.has(p.playerId)) continue
       const pts = scoreOf(p)
       if (pts == null) continue
