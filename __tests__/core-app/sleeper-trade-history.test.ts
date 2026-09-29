@@ -121,6 +121,16 @@ describe('Sleeper trades shown in the app', () => {
     t.sides[0]!.picksIn = [{ ...pick, resolved: { name: 'Drafted Rookie' } } as never, pick]
     expect(toTradeRecord(t, null, null).players[0].pickDrafted).toEqual(['Drafted Rookie', null])
   })
+  it('lists FAAB a side received after its picks, with no drafted player beside it', () => {
+    const t = trade()
+    t.sides[0]!.picksIn = [pick]
+    t.sides[0]!.faabIn = 35
+    const side = toTradeRecord(t, null, null).players[0]
+    expect(side.picks?.at(-1)).toBe('$35 FAAB')
+    expect(side.pickDrafted).toEqual([null, null])
+    // A side with no FAAB (or an old payload without the field) lists only its picks, as before.
+    expect(toTradeRecord(trade(), null, null).players[1].picks?.some((p) => p.includes('FAAB'))).toBe(false)
+  })
   it('uses the notified trade cache without requiring imported transaction facts', async () => {
     mocks.grades.mockResolvedValue(payload([trade()]))
     const result = await getSleeperTradeHistory('league', null)

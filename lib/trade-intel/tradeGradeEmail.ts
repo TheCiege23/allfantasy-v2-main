@@ -154,6 +154,10 @@ function pickDetail(pick: TradePickAsset): string {
   return 'Draft pick'
 }
 
+function faabName(amount: number): string {
+  return `$${Math.round(amount).toLocaleString('en-US')} FAAB`
+}
+
 type Line = { name: string; detail: string | null; value: number | null }
 
 /** One side's received assets, in the order the grader priced them (players, then picks). */
@@ -161,6 +165,8 @@ function receivedLines(side: TradeSideGrade, values: ReadonlyArray<number | null
   const lines: Line[] = [
     ...side.playersIn.map((p) => ({ name: p.name, detail: p.position, value: null as number | null })),
     ...side.picksIn.map((p) => ({ name: pickName(p), detail: pickDetail(p), value: null as number | null })),
+    // Last, matching `completedTradeInputs`, which prices FAAB after players and picks.
+    ...(side.faabIn != null && side.faabIn > 0 ? [{ name: faabName(side.faabIn), detail: 'FAAB', value: null as number | null }] : []),
   ]
   // Index-aligned only when the counts agree; a mismatch prints names without values, never shifted ones.
   if (values && values.length === lines.length) lines.forEach((l, i) => (l.value = values[i] ?? null))
@@ -385,6 +391,7 @@ function dealNames(trade: GradedTrade): string {
       if (!names.includes(n)) names.push(n)
     }
   }
+  for (const side of trade.sides) if (side.faabIn != null && side.faabIn > 0) names.push(faabName(side.faabIn))
   if (names.length === 0) return ''
   const shown = names.slice(0, 4)
   const extra = names.length - shown.length

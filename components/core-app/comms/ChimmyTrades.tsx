@@ -213,10 +213,10 @@ export function ChimmyTrades({ leagueId, onAsk }: { leagueId: string; onAsk: (qu
             <strong>{t.season} · Week {t.week}</strong>
             {t.sides.map(s => <div key={s.rosterId}>
               <p><b>{s.teamName || s.managerName}{s.ownerId && s.ownerId === history?.viewerSleeperUserId ? ' (You)' : ''}</b> · League grade unavailable right now</p>
-              <p>Received: {[...s.playersIn.map(p => p.name), ...s.picksIn.map(p => p.label)].join(', ') || 'No recorded assets'}</p>
+              <p>Received: {[...s.playersIn.map(p => p.name), ...s.picksIn.map(p => p.label), ...(s.faabIn ? [`$${s.faabIn} FAAB`] : [])].join(', ') || 'No recorded assets'}</p>
               <p>{hasSignal ? `Realized so far: net ${s.cumulativeNet.toFixed(1)} fantasy points while assets were held.` : 'No realized scoring yet.'}</p>
             </div>)}
-            <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain completed trade ${t.id} (${t.season}, week ${t.week}): ${t.sides.map(s => `${s.teamName || s.managerName} received ${[...s.playersIn.map(p => p.name), ...s.picksIn.map(p => p.label)].join(', ')}`).join('; ')}. How does it affect my team in this league?`)}>Ask Chimmy</button>
+            <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain completed trade ${t.id} (${t.season}, week ${t.week}): ${t.sides.map(s => `${s.teamName || s.managerName} received ${[...s.playersIn.map(p => p.name), ...s.picksIn.map(p => p.label), ...(s.faabIn ? [`$${s.faabIn} FAAB`] : [])].join(', ')}`).join('; ')}. How does it affect my team in this league?`)}>Ask Chimmy</button>
           </article>
         })}
         {history?.ledger?.notes.map(note => <p key={note}>{note}</p>)}
