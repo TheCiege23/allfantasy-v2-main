@@ -5,6 +5,8 @@ import { getFirstStatedKickoff } from './seasonPhase'
 import { isScored, resolveCurrentWeekFrom, resolveStatedWeek } from './currentWeek'
 import { realManagerName } from './managerName'
 import { leagueWeekProgress } from './leagueWeekProgress'
+import { leagueWeekFromSettings } from './seasonTimeline'
+import { loadFinishedNflWeeks } from './finishedNflWeeks'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueArtUrl, managerArtUrl } from './leagueArt'
 import { MIN_WEEKS_FOR_PROJECTION } from './weekBoardRules'
@@ -601,7 +603,17 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
    * slate to protect, and resolving from history is what keeps a league whose only scoring is
    * imported from vanishing entirely.
    */
-  const progressByLeague = new Map(periodMetadata.map((l) => [l.platformLeagueId, leagueWeekProgress(l)]))
+  /*
+   * A fully played NFL week is final before Sleeper moves its marker (Wednesday) — otherwise the
+   * Tuesday board said "−40.8 so far" for games already lost. See leagueWeekProgress.
+   */
+  const finishedNfl = await loadFinishedNflWeeks(
+    periodMetadata.flatMap((l) => {
+      const week = leagueWeekFromSettings(l.settings)
+      return String(l.sport ?? '').toUpperCase() === 'NFL' && l.season != null && week != null ? [{ season: l.season, week }] : []
+    }),
+  )
+  const progressByLeague = new Map(periodMetadata.map((l) => [l.platformLeagueId, leagueWeekProgress(l, finishedNfl)]))
   const resolved = resolveCurrentWeekFrom(rows.length > 0 ? rows : priorRows)
   const stated = resolveStatedWeek(periodMetadata.filter((league) => {
     const progress = progressByLeague.get(league.platformLeagueId)

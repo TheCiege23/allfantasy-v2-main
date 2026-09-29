@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeek } from './currentWeek'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueWeekFromSettings } from './seasonTimeline'
+import { finishedWeekKey, loadFinishedNflWeeks } from './finishedNflWeeks'
 
 /**
  * Your week, across every league — read from WeeklyMatchup.
@@ -106,6 +107,17 @@ export async function getWeekAll(
     copies.push(meta)
     metadataByLeague.set(meta.platformLeagueId, copies)
   }
+  /*
+   * The schedule's answer for the weeks these NFL leagues are ON — see leagueWeekProgress for why
+   * the league's own marker is not enough on the Tuesday after a week. One read for the account.
+   */
+  const isNfl = (meta: (typeof metadata)[number]) => String(meta.sport ?? '').toUpperCase() === 'NFL'
+  const finishedNfl = await loadFinishedNflWeeks(
+    metadata.flatMap((meta) => {
+      const period = leagueWeekFromSettings(meta.settings)
+      return isNfl(meta) && meta.season != null && period != null ? [{ season: meta.season, week: period }] : []
+    }),
+  )
   const completedFor = (platformId: string, season: number, week: number): boolean => {
     const copies = metadataByLeague.get(platformId) ?? []
     const sameSeason = copies.filter((meta) => meta.season === season)
@@ -115,7 +127,9 @@ export async function getWeekAll(
       return sameSeason.every((meta) => {
         if (String(meta.status).toLowerCase() === 'complete') return true
         const period = leagueWeekFromSettings(meta.settings)
-        return period != null && week < period
+        if (period == null) return false
+        if (week < period) return true
+        return week === period && isNfl(meta) && finishedNfl.has(finishedWeekKey(season, week))
       })
     }
     if (copies.some((meta) => meta.season != null && meta.season > season)) return true

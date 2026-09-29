@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   weeklyFindMany: vi.fn(),
   teamFindMany: vi.fn(),
   factFindMany: vi.fn(async () => []),
+  metadata: vi.fn(async (): Promise<unknown[]> => []),
+  gamesFindMany: vi.fn(async (): Promise<unknown[]> => []),
 }))
 
 vi.mock('server-only', () => ({}))
@@ -35,8 +37,10 @@ vi.mock('@/lib/prisma', () => ({
     weeklyMatchup: { findMany: mocks.weeklyFindMany },
     leagueTeam: { findMany: mocks.teamFindMany },
     matchupFact: { findMany: mocks.factFindMany },
+    sportsGame: { findMany: mocks.gamesFindMany },
   },
 }))
+vi.mock('@/lib/core-app/leagueWeekMetadata', () => ({ readLeagueWeekMetadata: mocks.metadata }))
 vi.mock('@/lib/core-app/seasonPhase', () => ({ getFirstStatedKickoff: vi.fn(async () => null) }))
 
 import { getWeekBoard } from '@/lib/core-app/weekBoard'
@@ -53,6 +57,8 @@ beforeEach(() => {
   matchupRows.length = 0
   mocks.weeklyFindMany.mockReset()
   mocks.teamFindMany.mockReset()
+  mocks.metadata.mockReset().mockResolvedValue([])
+  mocks.gamesFindMany.mockReset().mockResolvedValue([])
   mocks.weeklyFindMany.mockImplementation(async (args: { where: { leagueId: { in: string[] } }; select: Row }) =>
     matchupRows
       .filter((r) => args.where.leagueId.in.includes(r.leagueId as string))
@@ -91,5 +97,40 @@ describe('getWeekBoard — this week has points', () => {
     const card = [...board.coinFlips, ...board.leaning, ...board.unprojected].find((m) => m.leagueId === 'L1')
     expect(card?.week).toBe(3)
     expect(card?.live).toBeNull()
+  })
+})
+
+/*
+ * 🛑 THE TUESDAY AFTER A WEEK. Sleeper keeps the league on week 3 until Wednesday, and the board
+ * read "final" only from that marker — so on 2026-09-29, every week-3 game final, Your Week said
+ * "−40.8 so far" for a game already lost. The NFL schedule is now the second witness.
+ */
+describe('getWeekBoard — a fully played week the platform has not rolled yet', () => {
+  const game = (status: string) => ({
+    season: 2026, week: 3, homeTeam: 'CHI', awayTeam: 'PHI', status, seasonType: 'regular',
+    startTime: new Date('2026-09-29T00:15:00Z'), fetchedAt: new Date('2026-09-29T14:00:00Z'),
+  })
+  const card = async () => {
+    const board = await getWeekBoard('u1', LEAGUES)
+    return [...board.coinFlips, ...board.leaning, ...board.unprojected].find((m) => m.leagueId === 'L1')
+  }
+
+  beforeEach(() => {
+    matchupRows.push(
+      mrow(1, '1', 110, 100), mrow(1, '2', 100, 110),
+      mrow(2, '1', 115, 90), mrow(2, '2', 90, 115),
+      mrow(3, '1', 98.2, 138.9), mrow(3, '2', 138.9, 98.2),
+    )
+    mocks.metadata.mockResolvedValue([{ id: 'L1', platformLeagueId: 'P1', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: 3 } }])
+  })
+
+  it('every week-3 game final: the card is a final result, not "so far"', async () => {
+    mocks.gamesFindMany.mockResolvedValue([game('final')])
+    expect((await card())?.live).toMatchObject({ final: true })
+  })
+
+  it('a week-3 game still to play: the card stays live', async () => {
+    mocks.gamesFindMany.mockResolvedValue([game('final'), { ...game('scheduled'), homeTeam: 'BUF', awayTeam: 'MIA' }])
+    expect((await card())?.live).toMatchObject({ final: false })
   })
 })

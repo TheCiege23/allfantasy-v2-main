@@ -7,6 +7,8 @@ export type LeagueWeekMetadata = {
   platformLeagueId: string | null
   season: number | null
   status: string | null
+  /** The league's sport — the schedule's "week is played" fact is NFL-only (see leagueWeekProgress). */
+  sport: string | null
   settings: { leg?: string | null }
 }
 
@@ -15,7 +17,7 @@ export async function readLeagueWeekMetadata(ids: string[], idSpace: 'internal' 
   if (!ids.length) return []
   try {
     const rows = await prisma.$queryRaw<LeagueWeekMetadata[]>(Prisma.sql`
-      SELECT id, "platformLeagueId", season, status,
+      SELECT id, "platformLeagueId", season, status, sport::text AS sport,
         jsonb_build_object('leg', COALESCE(
           settings->>'current_week', settings->>'currentWeek', settings->>'leg',
           settings#>>'{sleeper,leg}', settings#>>'{sleeper,current_week}', settings#>>'{sleeper,currentWeek}',
