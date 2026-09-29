@@ -128,6 +128,36 @@ export function indexBySleeperId<T extends { sleeperId?: string | null; source?:
 }
 
 /**
+ * Can this id be a Sleeper id? Only in NFL — the one sport whose `SportsPlayer` rows carry Sleeper
+ * ids (13,838 NFL rows; ZERO in NBA, MLB, NHL, NCAAB, NCAAF and SOCCER, measured 2026-09-29) — and
+ * only as a bare number. `name:Josh Allen:QB:BUF` (backfill) and `tsdb_34415964` (TheSportsDB)
+ * describe their own space, so they can never be mistaken for one.
+ */
+export function mayBeSleeperId(id: string, sport: string | null | undefined): boolean {
+  return String(sport ?? '').trim().toUpperCase() === 'NFL' && /^\d+$/.test(String(id ?? '').trim())
+}
+
+/**
+ * Look ids up against `externalId` when they CANNOT be Sleeper ids — a native league's
+ * self-describing ids, or a provider's numbers in a sport Sleeper does not cover (a native NHL
+ * roster holds Rolling Insights ids, and `externalId` is the only place they are named).
+ *
+ * Any id that `mayBeSleeperId` is DROPPED rather than matched: in NFL a bare number reaching
+ * `externalId` finds Rolling Insights' or the backfill's player of that number, who is someone else
+ * (Sleeper 9228 is Bryce Young; RI 9228 is an offensive tackle). Those go through `sleeperIdWhere`.
+ * Sleeper's own rows are excluded too — their `externalId` is `sleeper:<id>`, never a bare token.
+ */
+export function nonSleeperExternalIdWhere(ids: readonly string[], sport: string) {
+  const s = sport.toUpperCase()
+  const clean = [...new Set(ids.map((id) => String(id ?? '').trim()).filter((id) => id && !mayBeSleeperId(id, s)))]
+  return {
+    sport: s,
+    source: { not: 'sleeper' },
+    externalId: { in: clean },
+  }
+}
+
+/**
  * Look players up by a PROVIDER's own id, scoped to that provider.
  *
  * The `source` argument is required rather than optional on purpose: an unscoped `externalId`

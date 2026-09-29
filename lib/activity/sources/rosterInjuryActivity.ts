@@ -61,7 +61,7 @@ export async function collectRosterInjuryActivity(ctx: ActivitySourceContext): P
     // Fill in any names the exposure couldn't resolve, so we never show a raw player id.
     const missingNameIds = exposures.filter((e) => !e.playerName).map((e) => e.playerId)
     const fallbackNames = missingNameIds.length
-      ? await resolvePlayerNamesForSport(missingNameIds, INJURY_SPORT)
+      ? await resolvePlayerNamesForSport(missingNameIds, INJURY_SPORT, "sleeper")
       : new Map<string, string>()
 
     const items: ActivityFeedItem[] = []

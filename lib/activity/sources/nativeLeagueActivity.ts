@@ -64,7 +64,8 @@ async function resolvePlayerNames(
   const merged = new Map<string, string>()
   await Promise.all(
     Array.from(idsBySport.entries()).map(async ([sport, ids]) => {
-      const names = await resolvePlayerNamesForSport(Array.from(ids), sport)
+      // Every league here passed `isNativeLeague`, so the ids are in the native space for this sport.
+      const names = await resolvePlayerNamesForSport(Array.from(ids), sport, "native")
       for (const [id, name] of names) merged.set(id, name)
     }),
   )
