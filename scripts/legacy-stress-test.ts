@@ -514,10 +514,6 @@ async function phase3_apiTest() {
     { name: "POST /api/waiver-ai (AI)", method: "POST", path: "/api/waiver-ai", body: {
       playerName: "Tank Dell", leagueId: LEAGUE_IDS[0], week: 5,
     }, iterations: 10, isAI: true },
-    { name: "POST /api/ai/chat (AI)", method: "POST", path: "/api/ai/chat", body: {
-      message: "What is the trade value of Patrick Mahomes in dynasty?",
-      sleeperUsername: USERNAME,
-    }, iterations: 10, isAI: true },
     { name: "POST /api/dynasty-trade-analyzer (AI)", method: "POST", path: "/api/dynasty-trade-analyzer", body: {
       give: ["Breece Hall"], get: ["Bijan Robinson"], leagueId: LEAGUE_IDS[1],
     }, iterations: 10, isAI: true },

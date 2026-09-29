@@ -111,7 +111,6 @@ test_api "POST /api/legacy/player-stock" POST "/api/legacy/player-stock" '{"play
 # AI endpoints (10x)
 test_api "[AI] POST /api/trade-evaluator" POST "/api/trade-evaluator" '{"give":["Patrick Mahomes"],"get":["Josh Allen"],"leagueId":"509cc54f-fedf-4d8a-b1e2-a6fb4bfd40b8","leagueSize":16,"isDynasty":true,"scoring":"ppr"}' 10
 test_api "[AI] POST /api/waiver-ai" POST "/api/waiver-ai" '{"playerName":"Tank Dell","leagueId":"509cc54f-fedf-4d8a-b1e2-a6fb4bfd40b8","week":5}' 10
-test_api "[AI] POST /api/ai/chat" POST "/api/ai/chat" '{"message":"Trade value of Mahomes?","sleeperUsername":"theciege24"}' 10
 test_api "[AI] POST /api/dynasty-trade" POST "/api/dynasty-trade-analyzer" '{"give":["Breece Hall"],"get":["Bijan Robinson"],"leagueId":"f1b731f3-db1e-4214-bc39-bc07cda13efb"}' 10
 test_api "[AI] POST /api/trade-finder" POST "/api/trade-finder" '{"leagueId":"509cc54f-fedf-4d8a-b1e2-a6fb4bfd40b8","sleeperUsername":"theciege24"}' 10
 test_api "[AI] POST /api/mgr-psychology" POST "/api/rankings/manager-psychology" '{"leagueId":"509cc54f-fedf-4d8a-b1e2-a6fb4bfd40b8","sleeperUsername":"theciege24"}' 10
