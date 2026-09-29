@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
+import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 import {
   FAVORITES_COOKIE,
   HOME_SCOPE_PARAM,
@@ -53,7 +54,14 @@ export function ScopeResetLink({ children, className }: { children: ReactNode; c
   )
 }
 
-export type ScopeSwitcherLeague = { id: string; name: string; platform: string; sport: string }
+export type ScopeSwitcherLeague = {
+  id: string
+  name: string
+  platform: string
+  sport: string
+  /** The viewer commissions it — draws the blue C (CommissionerBadge). */
+  isCommissioner?: boolean
+}
 
 type Props = {
   leagues: ScopeSwitcherLeague[]
@@ -280,7 +288,10 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                         aria-current={league.id === selectedLeagueId ? 'true' : undefined}
                         onClick={() => setOpen(false)}
                       >
-                        <span className="af-scope-league-name">{labelOf(league)}</span>
+                        <span className="af-scope-league-name">
+                          {labelOf(league)}
+                          {league.isCommissioner ? <CommissionerBadge /> : null}
+                        </span>
                         <span className="af-scope-league-meta">
                           {league.sport} · {platformLabel(league.platform)}
                         </span>

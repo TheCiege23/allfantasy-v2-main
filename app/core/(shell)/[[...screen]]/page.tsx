@@ -795,6 +795,8 @@ export default async function AfCorePage({
     name: l.name,
     platform: String(l.platform ?? 'manual').toLowerCase(),
     syncPaused: pausedSyncLeagueIds?.has(l.id) ?? false,
+    // The same flag the More menu's "Commissioner N" counts — see CommissionerBadge.
+    isCommissioner: Boolean(l.isCommissioner),
     mark: PLATFORM_MARK[String(l.platform ?? '').toLowerCase()] ?? l.name.charAt(0).toUpperCase(),
     /*
      * ⚠ THE LOADER ALREADY SELECTS avatarUrl AND logoUrl — this mapping used to
@@ -1357,6 +1359,7 @@ export default async function AfCorePage({
     name: l.name,
     platform: platformOf(l),
     sport: sportOf(l),
+    isCommissioner: Boolean(l.isCommissioner),
   }))
   /*
    * The switcher's button names the selected league with the SAME label its own list shows —

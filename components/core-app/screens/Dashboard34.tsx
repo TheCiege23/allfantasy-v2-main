@@ -49,6 +49,8 @@ export type Dash34League = {
   /** Your handle IN THAT LEAGUE — per-league identity, not the AF account name. */
   usernameInLeague?: string | null
   chips?: Dash34StateChip[]
+  /** The viewer commissions it — the same test as the "YOU COMMISH" chip; draws the blue C. */
+  isCommissioner?: boolean
   /** Null until live scoring exists for this league. */
   score?: { you: number; opponent: number; opponentName: string } | null
   /** Kickoff/opponent line shown when there is no live score yet. */

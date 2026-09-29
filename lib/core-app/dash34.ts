@@ -1283,6 +1283,7 @@ export async function getDash34Data(
        */
       usernameInLeague: identityOf(team),
       chips,
+      isCommissioner: commish,
       // No `LeagueTeam` row on production carries a result, so there is no score
       // to show and no projection to show it against.
       score: null,
