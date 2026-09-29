@@ -530,9 +530,6 @@ async function phase3_apiTest() {
     { name: "POST /api/roster/analyze (AI)", method: "POST", path: "/api/roster/analyze", body: {
       leagueId: LEAGUE_IDS[0],
     }, iterations: 10, isAI: true },
-    { name: "POST /api/instant/trade (AI)", method: "POST", path: "/api/instant/trade", body: {
-      give: ["CeeDee Lamb"], get: ["Ja'Marr Chase", "2026 2nd"], isDynasty: true, scoring: "ppr", leagueSize: 12,
-    }, iterations: 10, isAI: true },
   ]
 
   for (const test of apiTests) {

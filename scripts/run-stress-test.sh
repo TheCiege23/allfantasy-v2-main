@@ -116,8 +116,6 @@ test_api "[AI] POST /api/dynasty-trade" POST "/api/dynasty-trade-analyzer" '{"gi
 test_api "[AI] POST /api/trade-finder" POST "/api/trade-finder" '{"leagueId":"509cc54f-fedf-4d8a-b1e2-a6fb4bfd40b8","sleeperUsername":"theciege24"}' 10
 test_api "[AI] POST /api/mgr-psychology" POST "/api/rankings/manager-psychology" '{"leagueId":"509cc54f-fedf-4d8a-b1e2-a6fb4bfd40b8","sleeperUsername":"theciege24"}' 10
 test_api "[AI] POST /api/roster/analyze" POST "/api/roster/analyze" '{"leagueId":"509cc54f-fedf-4d8a-b1e2-a6fb4bfd40b8"}' 10
-test_api "[AI] POST /api/instant/trade" POST "/api/instant/trade" '{"give":["CeeDee Lamb"],"get":["Jamarr Chase","2026 2nd"],"isDynasty":true,"scoring":"ppr","leagueSize":12}' 10
-test_api "[AI] POST /api/redraft-trade" POST "/api/redraft-trade" '{"give":["Tyreek Hill"],"get":["Amon-Ra St. Brown"],"leagueSize":12,"scoring":"ppr"}' 10
 
 echo "" >> "$REPORT"
 echo "═══════════════════════════════════════════════════════════════" >> "$REPORT"

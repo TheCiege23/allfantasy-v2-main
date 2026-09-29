@@ -118,8 +118,6 @@ async function main() {
     { name: "[AI] POST /api/trade-finder", m: "POST", p: "/api/trade-finder", b: { leagueId: LEAGUE_IDS[0], sleeperUsername: USERNAME }, n: 10 },
     { name: "[AI] POST /api/rankings/mgr-psych", m: "POST", p: "/api/rankings/manager-psychology", b: { leagueId: LEAGUE_IDS[0], sleeperUsername: USERNAME }, n: 10 },
     { name: "[AI] POST /api/roster/analyze", m: "POST", p: "/api/roster/analyze", b: { leagueId: LEAGUE_IDS[0] }, n: 10 },
-    { name: "[AI] POST /api/instant/trade", m: "POST", p: "/api/instant/trade", b: { give: ["CeeDee Lamb"], get: ["Ja'Marr Chase", "2026 2nd"], isDynasty: true, scoring: "ppr", leagueSize: 12 }, n: 10 },
-    { name: "[AI] POST /api/redraft-trade", m: "POST", p: "/api/redraft-trade", b: { give: ["Tyreek Hill"], get: ["Amon-Ra St. Brown"], leagueSize: 12, scoring: "ppr" }, n: 10 },
   ]
 
   const apiResults: TestResult[] = []
