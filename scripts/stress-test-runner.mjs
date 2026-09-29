@@ -96,8 +96,6 @@ async function main() {
     ["[AI] trade-finder", "POST", "/api/trade-finder", { leagueId: LID1, sleeperUsername: "theciege24" }, 10],
     ["[AI] mgr-psychology", "POST", "/api/rankings/manager-psychology", { leagueId: LID1, sleeperUsername: "theciege24" }, 10],
     ["[AI] roster/analyze", "POST", "/api/roster/analyze", { leagueId: LID1 }, 10],
-    ["[AI] instant/trade", "POST", "/api/instant/trade", { give: ["CeeDee Lamb"], get: ["Ja'Marr Chase", "2026 2nd"], isDynasty: true, scoring: "ppr", leagueSize: 12 }, 10],
-    ["[AI] redraft-trade", "POST", "/api/redraft-trade", { give: ["Tyreek Hill"], get: ["Amon-Ra St. Brown"], leagueSize: 12, scoring: "ppr" }, 10],
   ]
 
   const apiResults = []

@@ -23,8 +23,8 @@
  * HERE INSTEAD OF WRITTEN IN A COMMENT AT EACH SITE. An IDP value is computed against a
  * specific league's starting slots and scoring; applying one league's board to another is worse
  * than the flat constant, because it is wrong AND confident. Callers that genuinely have no
- * league — `/api/instant/trade` parses a trade out of free text, `lib/trade-alternatives.ts`
- * receives a `UserTrade` that carries no league id — must keep passing nothing, and get `{}`
+ * league — `lib/trade-alternatives.ts` receives a `UserTrade` that carries no league id — must
+ * keep passing nothing, and get `{}`
  * from here if they ask anyway.
  *
  * ⚠ FORMAT IS DERIVED HERE, NOT AT THE CALL SITE, AND THAT IS THE SECOND HALF OF THE POINT.

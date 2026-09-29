@@ -2,7 +2,9 @@
  * Trade route inventory ratchet — AF_TRADE_UNIFICATION_BRIEF Phase 0.
  *
  * The no-auth raw engine route app/api/engine/trade/analyze was deleted and
- * replaced by the authenticated app/api/trades/analyze. This test keeps the
+ * replaced by the authenticated app/api/trades/analyze (itself removed as
+ * dead code on 2026-09-29: nothing called it or its /api/app analyze-ai
+ * proxies). This test keeps the
  * deleted route from coming back and prevents NEW routes from growing under
  * app/api/engine/trade/.
  *
@@ -46,7 +48,7 @@ describe("trade route inventory (Phase 0 ratchet)", () => {
     expect(
       analyzeRoutes,
       "app/api/engine/trade/analyze was deleted in Phase 0 (no session, no rate limit). " +
-        "Use app/api/trades/analyze (session + assertLeagueMember + rate limit) instead.",
+        "Reach the trade engine through an authenticated surface instead.",
     ).toEqual([])
   })
 
@@ -80,11 +82,4 @@ describe("trade route inventory (Phase 0 ratchet)", () => {
     }
   })
 
-  it("the authenticated replacement route exists", () => {
-    expect(
-      existsSync(resolve(process.cwd(), "app/api/trades/analyze/route.ts")),
-      "app/api/trades/analyze/route.ts is the authenticated replacement target for the " +
-        "/api/app trade analyze-ai proxies — it must exist.",
-    ).toBe(true)
-  })
 })

@@ -104,8 +104,6 @@ async function main() {
     { name: "POST /api/trade-finder [AI]", method: "POST", path: "/api/trade-finder", body: { leagueId: LEAGUE_IDS[0], sleeperUsername: USERNAME }, iterations: 10, isAI: true },
     { name: "POST /api/rankings/manager-psych [AI]", method: "POST", path: "/api/rankings/manager-psychology", body: { leagueId: LEAGUE_IDS[0], sleeperUsername: USERNAME }, iterations: 10, isAI: true },
     { name: "POST /api/roster/analyze [AI]", method: "POST", path: "/api/roster/analyze", body: { leagueId: LEAGUE_IDS[0] }, iterations: 10, isAI: true },
-    { name: "POST /api/instant/trade [AI]", method: "POST", path: "/api/instant/trade", body: { give: ["CeeDee Lamb"], get: ["Ja'Marr Chase", "2026 2nd"], isDynasty: true, scoring: "ppr", leagueSize: 12 }, iterations: 10, isAI: true },
-    { name: "POST /api/redraft-trade [AI]", method: "POST", path: "/api/redraft-trade", body: { give: ["Tyreek Hill"], get: ["Amon-Ra St. Brown"], leagueSize: 12, scoring: "ppr" }, iterations: 10, isAI: true },
     { name: "POST /api/legacy/player-profile", method: "POST", path: "/api/legacy/player-profile", body: { playerName: "Patrick Mahomes" }, iterations: TOTAL },
     { name: "POST /api/legacy/player-stock", method: "POST", path: "/api/legacy/player-stock", body: { playerName: "Patrick Mahomes" }, iterations: TOTAL },
   ]

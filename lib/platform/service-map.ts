@@ -143,7 +143,7 @@ const webappServices: PlatformServiceDefinition[] = [
     name: 'Trade Service',
     product: 'webapp',
     responsibility: 'Trade proposals and evaluation flows.',
-    endpoints: ['/api/trade/propose', '/api/trade-evaluator', '/api/trades/analyze'],
+    endpoints: ['/api/trade/propose', '/api/trade-evaluator'],
   },
   {
     key: 'webapp-draft',

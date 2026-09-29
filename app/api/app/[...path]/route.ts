@@ -240,13 +240,6 @@ export async function POST(req: NextRequest, { params }: { params: { path: strin
     })
   }
 
-  if (leagueId && section === 'trades' && path[path.length - 1] === 'analyze-ai') {
-    return proxyToExisting(req, {
-      targetPath: '/api/trades/analyze',
-      query: { leagueId },
-    })
-  }
-
   if (leagueId && section === 'trades' && path[path.length - 1] === 'reopen-ai') {
     return proxyToExisting(req, {
       targetPath: '/api/legacy/trade-alternatives',
