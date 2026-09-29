@@ -21,8 +21,10 @@ beforeEach(() => {
 })
 
 describe('the tag', () => {
-  it('accepts only the four known values — the URL is typeable, so anything else is dropped', () => {
-    for (const v of ['lineup_check', 'lineup_check_email', 'waiver_check', 'waiver_check_email']) expect(readProactiveFrom(v)).toBe(v)
+  it('accepts only the known values — the URL is typeable, so anything else is dropped', () => {
+    for (const v of ['lineup_check', 'lineup_check_email', 'waiver_check', 'waiver_check_email', 'chop_release', 'chop_release_email']) {
+      expect(readProactiveFrom(v)).toBe(v)
+    }
     for (const v of ['LINEUP_CHECK', 'lineup_check ', 'x', '', null, undefined, 3, ['lineup_check']]) expect(readProactiveFrom(v)).toBeNull()
   })
 
@@ -31,6 +33,8 @@ describe('the tag', () => {
     expect(describeProactiveFrom('lineup_check_email')).toEqual({ alert: 'lineup_check', channel: 'email' })
     expect(describeProactiveFrom('waiver_check')).toEqual({ alert: 'waiver_check', channel: 'app' })
     expect(describeProactiveFrom('waiver_check_email')).toEqual({ alert: 'waiver_check', channel: 'email' })
+    expect(describeProactiveFrom('chop_release')).toEqual({ alert: 'chop_release', channel: 'app' })
+    expect(describeProactiveFrom('chop_release_email')).toEqual({ alert: 'chop_release', channel: 'email' })
   })
 
   it('builds a link that survives any prompt text', () => {

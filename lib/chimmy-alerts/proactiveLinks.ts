@@ -16,6 +16,9 @@ export const PROACTIVE_FROM = [
   'lineup_check_email',
   'waiver_check',
   'waiver_check_email',
+  /** The guillotine chop-release alert (chopRelease.ts). */
+  'chop_release',
+  'chop_release_email',
 ] as const
 
 export type ProactiveFrom = (typeof PROACTIVE_FROM)[number]
@@ -27,9 +30,12 @@ export function readProactiveFrom(value: unknown): ProactiveFrom | null {
 }
 
 /** Which check a tag belongs to, and through which channel it was opened. */
-export function describeProactiveFrom(from: ProactiveFrom): { alert: 'lineup_check' | 'waiver_check'; channel: 'email' | 'app' } {
+export function describeProactiveFrom(from: ProactiveFrom): {
+  alert: 'lineup_check' | 'waiver_check' | 'chop_release'
+  channel: 'email' | 'app'
+} {
   return {
-    alert: from.startsWith('waiver') ? 'waiver_check' : 'lineup_check',
+    alert: from.startsWith('waiver') ? 'waiver_check' : from.startsWith('chop_release') ? 'chop_release' : 'lineup_check',
     channel: from.endsWith('_email') ? 'email' : 'app',
   }
 }

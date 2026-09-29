@@ -35,6 +35,11 @@
  * `waiverCheck`, and record `cron-chimmy-lineup-check` / `cron-chimmy-waiver-check` rows only on a
  * run that actually ran for users, so a quiet day writes nothing.
  *
+ * A THIRD, SHIPPED OFF: THE GUILLOTINE CHOP-RELEASE ALERT (lib/chimmy-alerts/chopRelease.ts). When a
+ * guillotine league's chopped roster hits waivers, each surviving member gets their own FAAB bid plan
+ * for it. It does nothing — not one read — unless the service carries CHOP_RELEASE_ALERTS_ENABLED=1.
+ * It reports under `chopRelease` and records `cron-chimmy-chop-release` only on a run that found a chop.
+ *
  * Query params:
  *   dryRun=1     evaluate and report without sending (both jobs)
  *   limit=N      cap users processed this run (default 200)
@@ -43,6 +48,7 @@
  *   lineupCheck=off     skip the lineup check this run
  *   waiverCheck=force   run the waiver check outside its window (the weekly claim still holds)
  *   waiverCheck=off     skip the waiver check this run
+ *   chopRelease=off     skip the chop-release alert this run (it is also off unless the flag is set)
  *
  * FAILS LOUDLY on a systemic error (no push configured, sweep threw). It does NOT fail when
  * zero alerts are found — on a Tuesday in the off-season that is the correct outcome, and a
@@ -65,6 +71,8 @@ import { decidePushForUser } from '@/lib/notifications/pushGate'
 import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runLineupCheck, type LineupCheckRun } from '@/lib/chimmy-alerts/runLineupCheck'
 import { runWaiverCheck, type WaiverCheckRun } from '@/lib/chimmy-alerts/runWaiverCheck'
+import type { ChopReleaseRun } from '@/lib/chimmy-alerts/runChopReleaseCheck'
+import { chopReleaseEnabled } from '@/lib/chimmy-alerts/chopRelease'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
 import { buildFanOutLeagues } from '@/lib/chimmy-alerts/injuryFanOut'
 import { fanOutCopy, groupAlertsByPlayer } from '@/lib/chimmy-alerts/injuryFanOutCopy'
@@ -94,6 +102,7 @@ const JOB = 'cron-alert-sweep'
 /** Recorded only when a weekly check actually ran for users — see the header. */
 const LINEUP_CHECK_JOB = 'cron-chimmy-lineup-check'
 const WAIVER_CHECK_JOB = 'cron-chimmy-waiver-check'
+const CHOP_RELEASE_JOB = 'cron-chimmy-chop-release'
 
 /**
  * A weekly check's share of a run. The injured-starter sweep goes first and is the reason this
@@ -111,6 +120,7 @@ const SWEEP_CEILING_MS = 240_000
 type PhaseRefusal = { ran: false; reason: 'disabled' | 'error'; error?: string }
 type LineupCheckReport = LineupCheckRun | PhaseRefusal
 type WaiverCheckReport = WaiverCheckRun | PhaseRefusal
+type ChopReleaseReport = ChopReleaseRun | PhaseRefusal
 
 type PhaseArgs = {
   mode: string
@@ -179,6 +189,30 @@ function waiverCheckPhase(args: PhaseArgs): Promise<WaiverCheckReport> {
       metadata: { week: r.week, firstKickoff: r.firstKickoff, users: r.users, picks: r.picks, outcomes: r.outcomes },
     },
   }))
+}
+
+/**
+ * 🛑 THE FLAG IS READ HERE, BEFORE THE RUNNER IS EVEN LOADED — and again inside it. Off, the sweep
+ * never imports the plan code or touches a guillotine league. `chopReleaseEnabled` is pure.
+ */
+async function chopReleasePhase(args: PhaseArgs): Promise<ChopReleaseReport> {
+  if (!chopReleaseEnabled()) return { ran: false, reason: 'disabled' }
+  return weeklyCheckPhase(
+    'chop-release alert',
+    args,
+    async (opts) => (await import('@/lib/chimmy-alerts/runChopReleaseCheck')).runChopReleaseCheck(opts),
+    (r) => ({
+      jobName: CHOP_RELEASE_JOB,
+      outcome: {
+        rowsRead: r.leagues,
+        rowsWritten: r.outcomes.sent ?? 0,
+        rowsSkipped: r.noWeek,
+        errors: r.errors.map((e) => `${e.userId}@${e.leagueId}: ${e.error}`),
+        status: r.errors.length > 0 ? 'partial' : 'success',
+        metadata: { chops: r.chops, outcomes: r.outcomes, budgetStopped: r.budgetStopped, seeded: r.seeded, resets: r.resets },
+      },
+    }),
+  )
 }
 
 /**
@@ -588,6 +622,12 @@ async function handle(req: NextRequest) {
       singleUser,
       sweepStartedAt: startedAt,
     })
+    const chopRelease = await chopReleasePhase({
+      mode: (url.searchParams.get('chopRelease') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
 
     return {
       // Zero alerts is a legitimate outcome (off-season, healthy rosters) and must not fail.
@@ -611,6 +651,8 @@ async function handle(req: NextRequest) {
       lineupCheck,
       /** Chimmy's Tuesday waiver check — the same shape, the same rules. */
       waiverCheck,
+      /** The guillotine chop-release alert — `{ ran: false, reason: 'disabled' }` until the flag is set. */
+      chopRelease,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     }
