@@ -70,9 +70,7 @@ import { computeCompositeProfile } from "@/lib/legacy/overview-scoring"
 import type { LeagueRecord } from "@/lib/legacy/overview-scoring"
 import DecisionGuardianModal from "@/components/DecisionGuardianModal"
 import type { GuardianEvaluationData } from "@/components/DecisionGuardianModal"
-import AcceptanceMeter from "@/components/AcceptanceMeter"
 import { useAI } from "@/hooks/useAI"
-import type { AcceptanceModelData } from "@/components/AcceptanceMeter"
 import BottomTabBar from "@/components/mobile/BottomTabBar"
 import type { MainTab } from "@/components/mobile/BottomTabBar"
 import SubTabNav from "@/components/mobile/SubTabNav"
@@ -1108,8 +1106,6 @@ function AFLegacyContent() {
     setProposalDesiredAssets([])
     setProposalResults([])
     setProposalError('')
-    setProposalDesiredTotal(0)
-    setProposalBestAcceptIdx(null)
     setRecentlyAddedIds([])
   }, [reportCardLeague])
 
@@ -1163,9 +1159,6 @@ function AFLegacyContent() {
   const [proposalLoading, setProposalLoading] = useState(false)
   const [proposalError, setProposalError] = useState('')
   const [proposalResults, setProposalResults] = useState<any[]>([])
-  const [proposalDesiredTotal, setProposalDesiredTotal] = useState(0)
-  const [proposalBestAcceptIdx, setProposalBestAcceptIdx] = useState<number | null>(null)
-  const [optimizeForAcceptance, setOptimizeForAcceptance] = useState(false)
   
   const [finderError, setFinderError] = useState('')
   const [finderWarning, setFinderWarning] = useState('')
@@ -1779,7 +1772,6 @@ function AFLegacyContent() {
     setProposalLoading(true)
     setProposalError('')
     setProposalResults([])
-    setProposalDesiredTotal(0)
     try {
       const league = leagues.find(l => l.league_id === activeTradeLeagueId)
       const isSF = league?.scoring?.toLowerCase().includes('superflex') || league?.scoring?.toLowerCase().includes('sf') || false
@@ -1814,8 +1806,6 @@ function AFLegacyContent() {
         return
       }
       setProposalResults(data.proposals || [])
-      setProposalDesiredTotal(data.desiredTotal || 0)
-      setProposalBestAcceptIdx(data.bestAcceptanceIndex ?? null)
       trackToolUse('trade_proposal_generator', { targetTeam: targetTeamData.displayName, assetsCount: proposalDesiredAssets.length })
     } catch {
       setProposalError('Network error - please try again')
@@ -11973,45 +11963,24 @@ function AFLegacyContent() {
                                   {proposalResults.length} options
                                 </span>
                               </div>
-                              <label className="flex items-center gap-2 cursor-pointer select-none">
-                                <span className="text-[11px] text-white/60">Optimize for Acceptance</span>
-                                <div className="relative">
-                                  <input
-                                    type="checkbox"
-                                    className="sr-only"
-                                    checked={optimizeForAcceptance}
-                                    onChange={() => setOptimizeForAcceptance(v => !v)}
-                                  />
-                                  <div className={`w-8 h-4 rounded-full transition ${optimizeForAcceptance ? 'bg-purple-500' : 'bg-white/20'}`} />
-                                  <div className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${optimizeForAcceptance ? 'translate-x-4' : ''}`} />
-                                </div>
-                              </label>
                             </div>
 
-                            {(optimizeForAcceptance && proposalBestAcceptIdx !== null
-                              ? [proposalResults[proposalBestAcceptIdx], ...proposalResults.filter((_: any, i: number) => i !== proposalBestAcceptIdx)]
-                              : proposalResults
-                            ).map((proposal: any, idx: number) => {
+                            {proposalResults.map((proposal: any, idx: number) => {
                               if (!proposal) return null
-                              const isBestAcceptance = optimizeForAcceptance && idx === 0 && proposalBestAcceptIdx !== null
-                              const labelColor = proposal.label === 'Slight Edge' ? 'emerald' :
-                                proposal.label === 'Fair & Balanced' ? 'cyan' : 'amber'
-                              const borderClass = isBestAcceptance ? 'border-purple-500/40 ring-1 ring-purple-500/20' : `border-${labelColor}-500/30`
-                              const bgGrad = proposal.label === 'Slight Edge' ? 'from-emerald-500/10 to-emerald-500/5' :
-                                proposal.label === 'Fair & Balanced' ? 'from-cyan-500/10 to-cyan-500/5' :
+                              // The label says how the package was BUILT; the grade below says whether it is a good deal.
+                              const labelColor = proposal.label === 'Lighter offer' ? 'emerald' :
+                                proposal.label === 'Matched offer' ? 'cyan' : 'amber'
+                              const borderClass = `border-${labelColor}-500/30`
+                              const bgGrad = proposal.label === 'Lighter offer' ? 'from-emerald-500/10 to-emerald-500/5' :
+                                proposal.label === 'Matched offer' ? 'from-cyan-500/10 to-cyan-500/5' :
                                 'from-amber-500/10 to-amber-500/5'
-                              const labelBg = proposal.label === 'Slight Edge' ? 'bg-emerald-500/30 text-emerald-200' :
-                                proposal.label === 'Fair & Balanced' ? 'bg-cyan-500/30 text-cyan-200' :
+                              const labelBg = proposal.label === 'Lighter offer' ? 'bg-emerald-500/30 text-emerald-200' :
+                                proposal.label === 'Matched offer' ? 'bg-cyan-500/30 text-cyan-200' :
                                 'bg-amber-500/30 text-amber-200'
-                              const labelIcon = proposal.label === 'Slight Edge' ? '📊' :
-                                proposal.label === 'Fair & Balanced' ? '🤝' : '🎁'
+                              const labelIcon = proposal.label === 'Lighter offer' ? '📊' :
+                                proposal.label === 'Matched offer' ? '🤝' : '🎁'
                               return (
                                 <div key={`${proposal.label}-${idx}`} className={`rounded-xl bg-gradient-to-br ${bgGrad} border ${borderClass} overflow-hidden`}>
-                                  {isBestAcceptance && (
-                                    <div className="px-4 py-1.5 bg-purple-500/15 border-b border-purple-500/20 flex items-center gap-2">
-                                      <span className="text-[11px] font-bold uppercase tracking-wider text-purple-300">Best Acceptance Chance</span>
-                                    </div>
-                                  )}
                                   <div className="p-3 sm:p-4 border-b border-white/5 flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-1.5 sm:gap-2">
                                       <span className="text-base sm:text-lg flex-shrink-0">{labelIcon}</span>
@@ -12019,12 +11988,9 @@ function AFLegacyContent() {
                                         {proposal.label}
                                       </span>
                                     </div>
-                                    <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs flex-shrink-0">
-                                      <span className="text-white/50"><span className="text-white font-semibold">{proposal.fairnessScore}</span></span>
-                                      {proposal.acceptanceModel && (
-                                        <AcceptanceMeter data={proposal.acceptanceModel as AcceptanceModelData} compact />
-                                      )}
-                                    </div>
+                                  </div>
+                                  <div className="px-3 sm:px-4 pt-3">
+                                    <LegacyOneGrade grade={proposal.grade} />
                                   </div>
 
                                   <div className="p-4">
@@ -12044,11 +12010,9 @@ function AFLegacyContent() {
                                               }`}>{a.type === 'pick' ? 'PICK' : a.pos || '?'}</span>
                                               {a.type !== 'pick' && <MiniPlayerImg sleeperId={a.id} name={a.name} size={18} />}
                                               <span className="text-white/80 flex-1 min-w-0 truncate">{a.name}</span>
-                                              <span className="text-white/30 font-mono text-[11px] flex-shrink-0">{a.value?.toLocaleString()}</span>
                                             </div>
                                           ))}
                                         </div>
-                                        <div className="text-right text-[11px] text-rose-400/50 font-mono mt-1">Total: {proposal.myTotal?.toLocaleString()}</div>
                                       </div>
                                       <div>
                                         <div className="text-[11px] uppercase tracking-wider text-emerald-400/60 mb-1.5 font-semibold">You Get</div>
@@ -12065,11 +12029,9 @@ function AFLegacyContent() {
                                               }`}>{a.type === 'pick' ? 'PICK' : a.pos || '?'}</span>
                                               {a.type !== 'pick' && <MiniPlayerImg sleeperId={a.id} name={a.name} size={18} />}
                                               <span className="text-white/80 flex-1 min-w-0 truncate">{a.name}</span>
-                                              <span className="text-white/30 font-mono text-[11px]">{a.value?.toLocaleString()}</span>
                                             </div>
                                           ))}
                                         </div>
-                                        <div className="text-right text-[11px] text-emerald-400/50 font-mono mt-1">Total: {proposal.theirTotal?.toLocaleString()}</div>
                                       </div>
                                     </div>
 
@@ -12091,20 +12053,6 @@ function AFLegacyContent() {
                                             <p className="text-xs text-white/60 italic">&quot;{proposal.tradePitch}&quot;</p>
                                           </div>
                                         )}
-                                        {proposal.fairnessNote && (
-                                          <div className="mt-1 pt-2 border-t border-white/5">
-                                            <p className="text-[11px] text-amber-400/70 italic">{proposal.fairnessNote}</p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {proposal.acceptanceModel && (
-                                      <div className="mt-3">
-                                        <AcceptanceMeter
-                                          data={proposal.acceptanceModel as AcceptanceModelData}
-                                          showOptimizations={true}
-                                        />
                                       </div>
                                     )}
                                   </div>
