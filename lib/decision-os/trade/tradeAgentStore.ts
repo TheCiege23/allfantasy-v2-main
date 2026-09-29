@@ -54,6 +54,54 @@ export async function leaguesDoneTonight(runDate: string): Promise<Set<string>> 
   return new Set(rows.map((r) => r.leagueId))
 }
 
+/*
+ * ── Leagues fully visited tonight ─────────────────────────────────────────────────────────────────
+ *
+ * 🛑 A LEAGUE WITH NO QUALIFYING DEAL USED TO BE RE-GRADED EVERY HOUR. `leaguesDoneTonight` counts only
+ * leagues that SAVED a suggestion, so on the first night (2026-09-29) every pass after the first full one
+ * re-graded ~290 leagues — ~3,000 grades and 3–4 minutes of worker CPU an hour, for 3–11 new ideas. One
+ * heavy job on the worker's single core stalls every other route on it, so that load is not free.
+ *
+ * So a league the pass visits COMPLETELY is recorded here and skipped for the rest of the night (Guap,
+ * 2026-09-29: "mark leagues done after one full visit"). A visit the budget interrupted, or that threw,
+ * is not recorded, and the league is retried next hour.
+ *
+ * Kept in `SportsDataCache` rather than a new table: one row per night, expiring after two days, which
+ * the hourly reaper purges on its own. Losing it — an unreadable row, a failed write, a race between two
+ * passes — only means a league is graded again, which is today's behaviour. It can never hide a league
+ * that was not visited.
+ */
+const VISITED_TTL_MS = 2 * 24 * 60 * 60 * 1000
+
+export const visitedCacheKey = (runDate: string) => `trade-agent:visited:${runDate}`
+
+/** Leagues this night's passes have already visited in full. Empty when unreadable. */
+export async function leaguesVisitedTonight(runDate: string): Promise<Set<string>> {
+  const row = await prisma.sportsDataCache
+    .findUnique({ where: { cacheKey: visitedCacheKey(runDate) }, select: { data: true } })
+    .catch(() => null)
+  const ids = (row?.data as { leagueIds?: unknown } | null)?.leagueIds
+  return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [])
+}
+
+/** Add leagues to tonight's visited list. Never throws: a lost write only costs a re-grade. */
+export async function markLeaguesVisited(runDate: string, leagueIds: readonly string[], now: Date = new Date()): Promise<boolean> {
+  if (leagueIds.length === 0) return true
+  try {
+    const merged = [...new Set([...(await leaguesVisitedTonight(runDate)), ...leagueIds])]
+    const data = { leagueIds: merged } as unknown as Prisma.InputJsonValue
+    const expiresAt = new Date(now.getTime() + VISITED_TTL_MS)
+    await prisma.sportsDataCache.upsert({
+      where: { cacheKey: visitedCacheKey(runDate) },
+      create: { cacheKey: visitedCacheKey(runDate), data, expiresAt },
+      update: { data, expiresAt },
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 /**
  * Replace one manager's suggestions in one league with tonight's — including with none. A night that
  * found nothing clears yesterday's list, because yesterday's deals were built on rosters that may have

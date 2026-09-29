@@ -4,7 +4,7 @@ import { createRunBudget, rotateForFairness } from '@/lib/cron/runBudget'
 import { recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runTradeAgentForLeague, tradeAgentLeagueIds } from './tradeAgent'
 import { inAgentWindow, runDateOf } from './tradeAgentRules'
-import { leaguesDoneTonight, tradeAgentTableReady } from './tradeAgentStore'
+import { leaguesDoneTonight, leaguesVisitedTonight, markLeaguesVisited, tradeAgentTableReady } from './tradeAgentStore'
 
 /**
  * One budgeted pass of the nightly trade agent over the leagues not yet done tonight.
@@ -14,7 +14,9 @@ import { leaguesDoneTonight, tradeAgentTableReady } from './tradeAgentStore'
  * hourly housekeeping job (`/api/cron/reap-sync-runs`) calls this AFTER recording its own heartbeat,
  * so a slow or failing pass can never delay or fail the reap. Outside 03:00–10:59 UTC it returns at
  * once; inside, the hourly fire gives about eight passes a night, and each skips a league that already
- * has tonight's suggestions and rotates which league leads, so the passes cover the list between them.
+ * has tonight's suggestions OR that an earlier pass visited in full, and rotates which league leads, so
+ * the passes cover the list between them and then stop grading it. A league whose visit the budget cut
+ * short, or that threw, is not marked and is retried next hour (see `markLeaguesVisited`).
  *
  * Does nothing until `20260928000000_trade_agent_suggestions` is applied (`tradeAgentTableReady`).
  */
@@ -30,7 +32,11 @@ export type TradeAgentPassResult =
       runDate: string
       eligible: number
       alreadyDone: number
+      /** Leagues an earlier pass visited in full tonight, skipped without a suggestion. */
+      alreadyVisited: number
       visited: number
+      /** Leagues this pass completed and recorded as visited. */
+      marked: number
       failed: number
       managers: number
       graded: number
@@ -47,9 +53,9 @@ export async function runTradeAgentPass(opts: { now?: Date; budgetMs: number; fo
   const startedAt = Date.now()
   const budget = createRunBudget(opts.budgetMs)
   const runDate = runDateOf(now)
-  const [all, done] = await Promise.all([tradeAgentLeagueIds(), leaguesDoneTonight(runDate)])
+  const [all, done, seen] = await Promise.all([tradeAgentLeagueIds(), leaguesDoneTonight(runDate), leaguesVisitedTonight(runDate)])
   const queue = rotateForFairness(
-    all.filter((id) => !done.has(id)),
+    all.filter((id) => !done.has(id) && !seen.has(id)),
     ROTATION_PERIOD_MS,
     () => now.getTime(),
   )
@@ -60,6 +66,7 @@ export async function runTradeAgentPass(opts: { now?: Date; budgetMs: number; fo
   let graded = 0
   let saved = 0
   const errors: string[] = []
+  const completed: string[] = []
   for (const leagueId of queue) {
     if (budget.exhausted()) break
     visited += 1
@@ -68,12 +75,16 @@ export async function runTradeAgentPass(opts: { now?: Date; budgetMs: number; fo
       managers += r.managers
       graded += r.graded
       saved += r.saved
+      // Complete visits only: a league the budget interrupted is graded again next hour.
+      if (!r.partial) completed.push(leagueId)
     } catch (error) {
       failed += 1
       if (errors.length < 5) errors.push(`${leagueId}: ${error instanceof Error ? error.message.slice(0, 120) : 'failed'}`)
     }
   }
   const stoppedEarly = visited < queue.length
+  const markedOk = await markLeaguesVisited(runDate, completed, now)
+  const marked = markedOk ? completed.length : 0
 
   await recordSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
@@ -82,10 +93,24 @@ export async function runTradeAgentPass(opts: { now?: Date; budgetMs: number; fo
       rowsWritten: saved,
       errors,
       ...(stoppedEarly || failed > 0 ? { status: 'partial' as const } : {}),
-      metadata: { runDate, eligible: all.length, alreadyDone: done.size, managers, graded },
+      ...(markedOk ? {} : { warnings: ['could not record visited leagues — they will be graded again next pass'] }),
+      metadata: { runDate, eligible: all.length, alreadyDone: done.size, alreadyVisited: seen.size, marked, managers, graded },
     },
     Date.now() - startedAt,
   ).catch(() => {})
 
-  return { ran: true, runDate, eligible: all.length, alreadyDone: done.size, visited, failed, managers, graded, saved, stoppedEarly }
+  return {
+    ran: true,
+    runDate,
+    eligible: all.length,
+    alreadyDone: done.size,
+    alreadyVisited: seen.size,
+    visited,
+    marked,
+    failed,
+    managers,
+    graded,
+    saved,
+    stoppedEarly,
+  }
 }
