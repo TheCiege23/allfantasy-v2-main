@@ -528,6 +528,8 @@ const LEGACY_SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string
   { file: 'server/api-route-modules/legacy/trade/league-analyze/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy league trade finder (league-analyze)' },
   { file: 'server/api-route-modules/legacy/trade/proposal-generator/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy proposal generator' },
   { file: 'server/api-route-modules/legacy/trade/goal-proposals/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy goal proposals' },
+  { file: 'server/api-route-modules/legacy/trade/analyze/route.ts', entry: /await gradeLegacyCounters\(/, what: 'the AF Legacy analyzer’s counter suggestions' },
+  { file: 'app/api/engine/trade/simulate-counter/route.ts', entry: /evaluateTrade\(\s*\{\s*surface:/, what: 'the AF Legacy counter “Apply & Simulate”' },
 ]
 
 describe.each(LEGACY_SURFACES)('AF Legacy — $what', ({ file, entry }) => {
@@ -618,5 +620,22 @@ describe('AF Legacy — the page prints the one grade, never a verdict, fairness
     expect(PROPOSAL_PRIVATE.test('{proposal.topDrivers.slice(0, 3).map((d: any, dIdx: number) => (')).toBe(true)
     expect(PROPOSAL_PRIVATE.test('Total: {proposal.giveTotal?.toLocaleString()}')).toBe(true)
     expect(/Fair deal for both|values line up well|keeps things fair/.test('in return. Fair deal for both of us.`,')).toBe(true)
+  })
+
+  const COUNTER_PRIVATE = /\b(?:c|simResult)\.(?:acceptProb|fairnessScore|fairness|acceptance|verdict)\b|Est\. Accept|animatedAccept/
+
+  it('counters: the analyzer sends graded counters, never the second engine’s whole analysis', () => {
+    const src = code('server/api-route-modules/legacy/trade/analyze/route.ts')
+    expect(src).not.toMatch(/\{\s*engineAnalysis,\s*engineRequest/)
+    expect(src).toMatch(/engineAnalysis: engineClientView/)
+    expect(code('app/api/engine/trade/simulate-counter/route.ts')).not.toMatch(/runTradeAnalysis\(/)
+    expect(COUNTER_PRIVATE.test(code('components/TradeCounterSuggestions.tsx'))).toBe(false)
+  })
+
+  it('positive controls: the counter shapes match the code they replaced', () => {
+    expect(/\{\s*engineAnalysis,\s*engineRequest/.test('...(engineAnalysis ? { engineAnalysis, engineRequest: engineReqSaved } : {}),')).toBe(true)
+    expect(COUNTER_PRIVATE.test('<>Est. Accept: {(c.acceptProb * 100).toFixed(0)}%</>')).toBe(true)
+    expect(COUNTER_PRIVATE.test('<span className="ml-2">Fairness: {c.fairnessScore}</span>')).toBe(true)
+    expect(COUNTER_PRIVATE.test('{simResult.verdict.toUpperCase()}')).toBe(true)
   })
 })
