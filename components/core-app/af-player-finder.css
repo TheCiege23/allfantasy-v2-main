@@ -4294,7 +4294,12 @@
 /*
  * ── Sticky action bar (StickyActionBar.tsx): phones only — the league card's next move, pinned
  * above the tab bar. It leaves the right-hand lane clear for the floating chat button (56px at
- * right 14px, `--af-fab-bottom`), and sits one step under the tab bar in z-order.
+ * right 14px), and sits one step under the tab bar in z-order.
+ *
+ * ⚠ ANCHORED TO `--af-fab-bottom`, the token af-core.css names for any fixed corner control (tab bar
+ * height + safe area + 12px), so the bar shares the chat button's baseline and cannot drift from the
+ * tab bar. A first version used its own `--af-tabbar-height + 8px` and, measured at 375px, overlapped
+ * the tab bar by 3px.
  */
 .af-core .af-pf-stickybar {
   display: none;
@@ -4304,7 +4309,7 @@
     position: fixed;
     left: 12px;
     right: 80px;
-    bottom: calc(var(--af-tabbar-height, calc(56px + env(safe-area-inset-bottom, 0px))) + 8px);
+    bottom: var(--af-fab-bottom, calc(56px + env(safe-area-inset-bottom, 0px) + 12px));
     z-index: 39;
     display: flex;
     align-items: center;
