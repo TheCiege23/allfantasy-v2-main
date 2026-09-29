@@ -91,7 +91,6 @@ async function main() {
     ["POST /api/legacy/player-stock", "POST", "/api/legacy/player-stock", { playerName: "Patrick Mahomes" }, TOTAL],
     ["[AI] trade-evaluator", "POST", "/api/trade-evaluator", { give: ["Patrick Mahomes"], get: ["Josh Allen"], leagueId: LID1, leagueSize: 16, isDynasty: true, scoring: "ppr" }, 10],
     ["[AI] waiver-ai", "POST", "/api/waiver-ai", { playerName: "Tank Dell", leagueId: LID1, week: 5 }, 10],
-    ["[AI] ai/chat", "POST", "/api/ai/chat", { message: "Trade value of Mahomes?", sleeperUsername: "theciege24" }, 10],
     ["[AI] dynasty-trade", "POST", "/api/dynasty-trade-analyzer", { give: ["Breece Hall"], get: ["Bijan Robinson"], leagueId: LID2 }, 10],
     ["[AI] trade-finder", "POST", "/api/trade-finder", { leagueId: LID1, sleeperUsername: "theciege24" }, 10],
     ["[AI] mgr-psychology", "POST", "/api/rankings/manager-psychology", { leagueId: LID1, sleeperUsername: "theciege24" }, 10],

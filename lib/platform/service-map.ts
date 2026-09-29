@@ -60,7 +60,7 @@ const sharedServices: PlatformServiceDefinition[] = [
     name: 'AI Orchestrator Service',
     product: 'shared',
     responsibility: 'OpenAI/Grok/DeepSeek routing and final response assembly.',
-    endpoints: ['/api/ai/chat', '/api/legacy/ai/run', '/api/chimmy', '/api/chat/chimmy'],
+    endpoints: ['/api/legacy/ai/run', '/api/chimmy', '/api/chat/chimmy'],
   },
   {
     key: 'rankings-values',
