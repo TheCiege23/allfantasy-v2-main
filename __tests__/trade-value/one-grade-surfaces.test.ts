@@ -526,6 +526,7 @@ const LEGACY_SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string
   { file: 'lib/legacy/legacyOneGrade.ts', entry: /gradeDeal\(/, what: 'the AF Legacy door to the one grader' },
   { file: 'server/api-route-modules/legacy/trade/quick-evaluate/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy Trade Hub live preview (quick evaluate)' },
   { file: 'server/api-route-modules/legacy/trade/league-analyze/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy league trade finder (league-analyze)' },
+  { file: 'server/api-route-modules/legacy/trade/proposal-generator/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy proposal generator' },
 ]
 
 describe.each(LEGACY_SURFACES)('AF Legacy — $what', ({ file, entry }) => {
@@ -574,5 +575,28 @@ describe('AF Legacy — the page prints the one grade, never a verdict, fairness
   it('positive controls: the finder shapes match the code they replaced', () => {
     expect(/runTradeEngine\(/.test('deterministicTrades = runTradeEngine(userRoster.rosterId, unifiedIntelligence, undefined, calWeights)')).toBe(true)
     expect(/"tradeGrade":\s*"A\/B\/C"/.test('      "tradeGrade": "A/B/C",')).toBe(true)
+  })
+
+  const PROPOSAL_PRIVATE = /proposal\.(?:fairnessScore|acceptanceModel|fairnessNote|myTotal|theirTotal|acceptProb|acceptLabel|giveTotal|receiveTotal|counterPath|sweeteners|topDrivers)\b|<AcceptanceMeter\b/
+
+  it('the proposal generator scores nothing itself: no fairness /100, no acceptance model, no verdict labels', () => {
+    const src = code('server/api-route-modules/legacy/trade/proposal-generator/route.ts')
+    expect(src).not.toMatch(/computeTradeAcceptance\(|fairnessScore|bestAcceptanceIndex/)
+    expect(src).not.toMatch(/'Slight Edge'|'Fair & Balanced'|'Overpay'/)
+    expect(src).toMatch(/grade: grades\[i\]!/)
+  })
+
+  it('the page’s proposal cards print the grade and none of the generator’s own numbers', () => {
+    const page = code('app/af-legacy/page.tsx')
+    expect(page).toMatch(/<LegacyOneGrade grade=\{proposal\.grade\} \/>/)
+    expect(page).not.toMatch(/optimizeForAcceptance|Best Acceptance Chance/)
+  })
+
+  it('positive controls: the proposal shapes match the code they replaced', () => {
+    expect(/computeTradeAcceptance\(|fairnessScore|bestAcceptanceIndex/.test('const acceptance = computeTradeAcceptance(acceptanceInput);')).toBe(true)
+    expect(PROPOSAL_PRIVATE.test('<span className="text-white font-semibold">{proposal.fairnessScore}</span>')).toBe(true)
+    expect(PROPOSAL_PRIVATE.test('<AcceptanceMeter data={proposal.acceptanceModel as AcceptanceModelData} compact />')).toBe(true)
+    expect(PROPOSAL_PRIVATE.test('{proposal.acceptProb}%')).toBe(true)
+    expect(PROPOSAL_PRIVATE.test('<LegacyOneGrade grade={proposal.grade} />')).toBe(false)
   })
 })
