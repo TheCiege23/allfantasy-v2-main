@@ -205,7 +205,7 @@ async function buildRosterPlayerLookup(
   const [league, rosters] = await Promise.all([
     prisma.league.findUnique({
       where: { id: leagueId },
-      select: { sport: true },
+      select: { sport: true, platform: true },
     }),
     prisma.roster.findMany({
       where: { leagueId, id: { in: uniqueRosterIds } },
@@ -214,7 +214,7 @@ async function buildRosterPlayerLookup(
   ])
 
   const playerIds = dedupePlayerIds(rosters.flatMap((roster) => getRosterPlayerIdsForLookup(roster.playerData)))
-  const playerNameMap = await resolvePlayerNamesForSport(playerIds, league?.sport ?? 'NFL')
+  const playerNameMap = await resolvePlayerNamesForSport(playerIds, league?.sport ?? 'NFL', league?.platform)
   const rosterPlayerLookup: Record<string, Record<string, string>> = {}
 
   for (const roster of rosters) {

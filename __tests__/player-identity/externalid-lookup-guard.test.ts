@@ -37,7 +37,6 @@ const UNAUDITED = new Set<string>([
   'lib/player-data/getPlayerDataForSurface.ts', // has a name-agreement guard (the 211-photo fix)
   'lib/player-identity/findSportsPlayerByLeagueId.ts',
   'lib/provider-trades/scanPendingYahooTrades.ts',
-  'lib/roster/resolvePlayerNames.ts',
   'lib/scoring/best-ball-engine.ts',
   'lib/shared-services/league-hub/replacementOptions.ts',
   'lib/sport-teams/PlayerTeamMapper.ts',
