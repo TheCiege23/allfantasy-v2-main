@@ -11678,17 +11678,12 @@ function AFLegacyContent() {
                                               {proposal.tierLabel}
                                             </span>
                                           </div>
-                                          <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-[11px] flex-shrink-0">
-                                            <span className="text-white/50"><span className="text-white font-semibold">{proposal.fairnessScore}</span></span>
-                                            <span className={`font-semibold ${
-                                              proposal.acceptProb >= 60 ? 'text-emerald-400' :
-                                              proposal.acceptProb >= 35 ? 'text-amber-400' :
-                                              'text-rose-400'
-                                            }`}>{proposal.acceptProb}%</span>
-                                          </div>
                                         </div>
 
                                         <div className="p-3">
+                                          <div className="mb-3">
+                                            <LegacyOneGrade grade={proposal.grade} />
+                                          </div>
                                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                                             <div>
                                               <div className="text-[11px] uppercase tracking-wider text-rose-400/60 mb-1.5 font-semibold">You Send</div>
@@ -11705,11 +11700,9 @@ function AFLegacyContent() {
                                                     }`}>{a.type === 'PICK' ? 'PICK' : a.pos || '?'}</span>
                                                     {a.type !== 'PICK' && <MiniPlayerImg sleeperId={a.id} name={a.name} size={18} />}
                                                     <span className="text-white/80 flex-1 truncate">{a.name}</span>
-                                                    <span className="text-white/30 font-mono text-[11px]">{a.value?.toLocaleString()}</span>
                                                   </div>
                                                 ))}
                                               </div>
-                                              <div className="text-right text-[11px] text-rose-400/50 font-mono mt-1">Total: {proposal.giveTotal?.toLocaleString()}</div>
                                             </div>
                                             <div>
                                               <div className="text-[11px] uppercase tracking-wider text-emerald-400/60 mb-1.5 font-semibold">You Get</div>
@@ -11726,28 +11719,11 @@ function AFLegacyContent() {
                                                     }`}>{a.type === 'PICK' ? 'PICK' : a.pos || '?'}</span>
                                                     {a.type !== 'PICK' && <MiniPlayerImg sleeperId={a.id} name={a.name} size={18} />}
                                                     <span className="text-white/80 flex-1 truncate">{a.name}</span>
-                                                    <span className="text-white/30 font-mono text-[11px]">{a.value?.toLocaleString()}</span>
                                                   </div>
                                                 ))}
                                               </div>
-                                              <div className="text-right text-[11px] text-emerald-400/50 font-mono mt-1">Total: {proposal.receiveTotal?.toLocaleString()}</div>
                                             </div>
                                           </div>
-
-                                          {proposal.topDrivers?.length > 0 && (
-                                            <div className="rounded-lg bg-black/30 border border-white/10 p-2.5 mb-3">
-                                              <div className="text-[11px] text-white/40 font-semibold uppercase mb-1.5">Key Drivers</div>
-                                              <div className="flex flex-wrap gap-1.5">
-                                                {proposal.topDrivers.slice(0, 3).map((d: any, dIdx: number) => (
-                                                  <span key={dIdx} className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] ${
-                                                    d.direction === 'for' ? 'bg-emerald-500/15 text-emerald-300/80' : 'bg-rose-500/15 text-rose-300/80'
-                                                  }`}>
-                                                    <span>{d.emoji}</span> {d.name}
-                                                  </span>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          )}
 
                                           {proposal.dmCopy && (
                                             <div className="rounded-lg bg-black/30 border border-white/10 p-3 space-y-2">
@@ -11760,29 +11736,6 @@ function AFLegacyContent() {
                                                   <p className="text-[11px] text-white/50 italic">&quot;{proposal.dmCopy.fallback}&quot;</p>
                                                 </div>
                                               )}
-                                            </div>
-                                          )}
-
-                                          {proposal.sweeteners?.length > 0 && (
-                                            <div className="mt-2 flex flex-wrap gap-1.5">
-                                              <span className="text-[11px] text-white/40">Sweeteners:</span>
-                                              {proposal.sweeteners.map((s: any, sIdx: number) => (
-                                                <span key={sIdx} className="px-2 py-0.5 text-[11px] rounded-full bg-amber-500/10 text-amber-300/70 border border-amber-500/15">
-                                                  {s.suggestion} (+{s.expectedDelta}%)
-                                                </span>
-                                              ))}
-                                            </div>
-                                          )}
-
-                                          {proposal.counterPath?.adjustments?.length > 0 && (
-                                            <div className="mt-2 rounded-lg bg-cyan-500/5 border border-cyan-500/15 p-2.5">
-                                              <div className="text-[11px] text-cyan-400/70 font-semibold uppercase mb-1">Counter Path</div>
-                                              <p className="text-[11px] text-white/50 mb-1">{proposal.counterPath.description}</p>
-                                              {proposal.counterPath.adjustments.map((adj: any, aIdx: number) => (
-                                                <div key={aIdx} className="text-[11px] text-white/40 ml-2">
-                                                  &bull; {adj.description} ({adj.expectedDelta > 0 ? '+' : ''}{adj.expectedDelta}%)
-                                                </div>
-                                              ))}
                                             </div>
                                           )}
                                         </div>
