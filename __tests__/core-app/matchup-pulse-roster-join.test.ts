@@ -24,6 +24,7 @@ const db = vi.hoisted(() => ({
   teams: [] as Array<Record<string, unknown>>,
   rosters: [] as Array<Record<string, unknown>>,
   rosterWhere: [] as Array<Record<string, unknown>>,
+  games: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -51,7 +52,8 @@ vi.mock('@/lib/prisma', () => ({
         return db.rosters.filter((r) => !keys || keys.includes(String(r.platformUserId)))
       }),
     },
-    sportsGame: { findMany: vi.fn(async () => []) },
+    /* Only the finished-week read filters by (season, week) pairs; every other schedule read gets none. */
+    sportsGame: { findMany: vi.fn(async (args?: { where?: { OR?: unknown } }) => (args?.where?.OR ? db.games : [])) },
   },
 }))
 
@@ -85,6 +87,7 @@ const LEAGUE = {
 beforeEach(() => {
   vi.clearAllMocks()
   db.rosterWhere = []
+  db.games = []
   db.claimed = [{ externalId: '1', platformUserId: 'me-sleeper', league: LEAGUE }]
   db.weekRows = [
     { leagueId: PLID, seasonYear: 2026, week: 2, rosterId: '1', matchupId: 5, pointsFor: 0, pointsAgainst: 0 },
@@ -186,5 +189,47 @@ describe('getMatchupPulse opponent label', () => {
   it('a real name is kept as the label', async () => {
     const row = (await getMatchupPulse(USER, NOW)).leading[0]
     expect(row).toMatchObject({ opponentName: 'Theirs', opponentLabel: 'Theirs' })
+  })
+})
+
+/*
+ * The Tuesday after a week: every NFL game final, the platform still on that week. The row is a
+ * result (`final`), so the board says won/lost — App Review account, 2026-09-29, read "0 leading ·
+ * 3 trailing" about three finished games.
+ */
+describe('getMatchupPulse finished week', () => {
+  const tuesday = () => {
+    db.claimed = [{ externalId: '1', platformUserId: 'me-sleeper', league: { ...LEAGUE, settings: { ...LEAGUE.settings, leg: 2 } } }]
+    db.weekRows[0].pointsFor = 90
+    db.weekRows[0].pointsAgainst = 130
+    db.weekRows[1].pointsFor = 130
+    db.weekRows[1].pointsAgainst = 90
+  }
+  const game = (status: string) => ({
+    season: 2026, week: 2, homeTeam: 'CHI', awayTeam: 'PHI', status, seasonType: 'regular',
+    startTime: new Date('2026-09-15T00:15:00Z'), fetchedAt: new Date('2026-09-16T12:00:00Z'),
+  })
+
+  it('every game of the week final: the row is final and the board is all results', async () => {
+    tuesday()
+    db.games = [game('final')]
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.trailing[0]).toMatchObject({ basis: 'scored', margin: -40, final: true })
+    expect(pulse.allFinal).toBe(true)
+  })
+
+  it('a game still to play: the row stays live', async () => {
+    tuesday()
+    db.games = [game('final'), { ...game('scheduled'), homeTeam: 'BUF', awayTeam: 'MIA' }]
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.trailing[0]).toMatchObject({ basis: 'scored', final: false })
+    expect(pulse.allFinal).toBe(false)
+  })
+
+  it('a projected row is never final', async () => {
+    db.games = [game('final')]
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.leading[0]).toMatchObject({ basis: 'projected', final: false })
+    expect(pulse.allFinal).toBe(false)
   })
 })

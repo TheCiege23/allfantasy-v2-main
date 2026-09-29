@@ -14,6 +14,8 @@ import { latestProjectionWeek, lookupProjections } from './playerProjections'
 import { sleeperReadablePlayerData } from './rosterIdSpace'
 import { leagueWeekFromSettings } from './seasonTimeline'
 import { realManagerName, rosterLabel } from './managerName'
+import { leagueWeekProgress } from './leagueWeekProgress'
+import { loadFinishedNflWeeks } from './finishedNflWeeks'
 
 /**
  * Matchup pulse — the cross-league landing at `/core/matchup`.
@@ -102,6 +104,13 @@ export type PulseRow = {
   season: number
   week: number
   /**
+   * The week is over: a scored row whose league-week `leagueWeekProgress` calls final — including
+   * the Tuesday after a week, when every NFL game in it is final but the platform has not moved on
+   * (`loadFinishedNflWeeks`). The margin is then a RESULT, and the board says won/lost, not
+   * leading/trailing. Always false for a projected row.
+   */
+  final: boolean
+  /**
    * Starters whose real-world game has not kicked off.
    *
    * ⚠ NULL IS NOT ZERO. Null means we could not place this league's starters
@@ -137,6 +146,8 @@ export type MatchupPulse = {
   ranked: number
   /** What the ranked rows are measured in. Null when nothing ranked. */
   basis: PulseBasis | 'mixed' | null
+  /** Every ranked row is `final` — the whole board is results. False when nothing ranked. */
+  allFinal: boolean
   /** Why the rest are absent. Stated on the screen, never silently dropped. */
   notRanked: {
     /** No `WeeklyMatchup` rows at all — the league has never been synced for a schedule. */
@@ -252,6 +263,7 @@ const EMPTY_PULSE: MatchupPulse = {
   considered: 0,
   ranked: 0,
   basis: null,
+  allFinal: false,
   notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0, notStarted: 0 },
 }
 
@@ -628,6 +640,28 @@ export async function getMatchupPulse(
     return { total, from, of: ids.length, yetToPlay, placed }
   }
 
+  /*
+   * Which league-weeks are over. A week is final once the league has moved past it — or, for NFL,
+   * once every regular-season game in it is final, which is Tuesday rather than Wednesday. One read
+   * for the whole board. See leagueWeekProgress.
+   */
+  const leagueById = new Map(mine.map((t) => [t.league!.id, t.league!]))
+  const finishedNfl = await loadFinishedNflWeeks(
+    pending.flatMap((p) => {
+      const lg = leagueById.get(p.leagueId)
+      const leg = leagueWeekFromSettings(lg?.settings)
+      return String(p.sport ?? '').toUpperCase() === 'NFL' && leg != null ? [{ season: p.season, week: leg }] : []
+    }),
+  )
+  const isFinalWeek = (p: Pending): boolean => {
+    const lg = leagueById.get(p.leagueId)
+    if (!lg) return false
+    return leagueWeekProgress(
+      { settings: lg.settings, season: lg.season != null ? Number(lg.season) : null, status: lg.status, sport: lg.sport },
+      finishedNfl,
+    ).isFinal(p.season, p.week)
+  }
+
   const ranked: PulseRow[] = []
 
   for (const p of pending) {
@@ -697,6 +731,7 @@ export async function getMatchupPulse(
       basis,
       season: p.season,
       week: p.week,
+      final: basis === 'scored' && isFinalWeek(p),
       startersLeft,
       coverage,
       href: `/core/matchup?league=${encodeURIComponent(p.leagueId)}`,
@@ -744,6 +779,7 @@ export async function getMatchupPulse(
     considered: claimed.length,
     ranked: ranked.length,
     basis: bases.size === 0 ? null : bases.size > 1 ? 'mixed' : [...bases][0],
+    allFinal: deduped.length > 0 && deduped.every((r) => r.final),
     notRanked: { ...notRanked, unidentifiedRoster, notStarted },
   }
 }

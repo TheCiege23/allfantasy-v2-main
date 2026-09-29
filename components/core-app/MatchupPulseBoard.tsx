@@ -112,7 +112,7 @@ function metaOf(row: PulseRow): string {
   return parts.join(' · ')
 }
 
-function Row({ row, tone }: { row: PulseRow; tone: 'good' | 'bad' }) {
+function Row({ row, tone, tagFinal }: { row: PulseRow; tone: 'good' | 'bad'; tagFinal: boolean }) {
   const abs = Math.abs(row.margin).toFixed(1)
   return (
     <li>
@@ -130,6 +130,12 @@ function Row({ row, tone }: { row: PulseRow; tone: 'good' | 'bad' }) {
           rows in front of you is a projection.
         */}
         {row.basis === 'projected' ? <span className="af-mp-tag">PROJ</span> : null}
+        {/*
+          FINAL on a MIXED board only: a week that is over sits beside leagues still being played,
+          and "leading" would claim a game that can still turn. When every row is final the whole
+          board says won/lost instead, and a tag on each row would repeat it.
+        */}
+        {tagFinal && row.final ? <span className="af-mp-tag" data-kind="final">FINAL</span> : null}
         <span className="af-mp-diff af-num" data-tone={tone}>
           {tone === 'good' ? '+' : '−'}
           {abs}
@@ -195,7 +201,7 @@ function gapNote(pulse: MatchupPulse): string | null {
  */
 function anyInPlay(pulse: MatchupPulse): boolean {
   return [...pulse.leading, ...pulse.trailing].some(
-    (r) => r.basis === 'scored' && (r.startersLeft == null || r.startersLeft > 0),
+    (r) => r.basis === 'scored' && !r.final && (r.startersLeft == null || r.startersLeft > 0),
   )
 }
 
@@ -208,6 +214,14 @@ export function MatchupPulseBoard({
   totalLeagues,
 }: MatchupPulseBoardProps) {
   const note = basisNote(pulse)
+  /*
+   * 🛑 A FINISHED WEEK IS A RESULT, NOT A STANDING. On the Tuesday after week 3 (App Review account,
+   * 2026-09-29) this board said "0 leading · 3 trailing" and "You are not ahead in any league right
+   * now" about three games that had all ended. When every ranked row is final the board says
+   * won/lost; a mixed board keeps leading/trailing and tags the finished rows FINAL.
+   */
+  const done = pulse.allFinal === true
+  const [aheadWord, behindWord] = done ? ['won', 'lost'] : ['leading', 'trailing']
   const gap = gapNote(pulse)
   const inPlay = anyInPlay(pulse)
 
@@ -234,7 +248,7 @@ export function MatchupPulseBoard({
           </h2>
           <span className="af-mp-rule" aria-hidden />
           <span className="af-mp-count">
-            {pulse.leadingTotal ?? pulse.leading.length} leading · {pulse.trailingTotal ?? pulse.trailing.length} trailing
+            {pulse.leadingTotal ?? pulse.leading.length} {aheadWord} · {pulse.trailingTotal ?? pulse.trailing.length} {behindWord}
           </span>
           {/*
             Only when there is something to keep current. On a board with nothing
@@ -260,31 +274,31 @@ export function MatchupPulseBoard({
           >
             <div className="af-mp-col">
               <h3 className="af-label af-mp-col-head" data-tone="good">
-                Leading · top 5
+                {done ? 'Won' : 'Leading'} · top 5
               </h3>
               {pulse.leading.length > 0 ? (
                 <ul className="af-mp-rows">
                   {pulse.leading.map((r) => (
-                    <Row key={r.leagueId} row={r} tone="good" />
+                    <Row key={r.leagueId} row={r} tone="good" tagFinal={!done} />
                   ))}
                 </ul>
               ) : (
-                <p className="af-mp-quiet">You are not ahead in any league right now.</p>
+                <p className="af-mp-quiet">{done ? 'You did not win a league this week.' : 'You are not ahead in any league right now.'}</p>
               )}
             </div>
 
             <div className="af-mp-col">
               <h3 className="af-label af-mp-col-head" data-tone="bad">
-                Trailing · bottom 5
+                {done ? 'Lost' : 'Trailing'} · bottom 5
               </h3>
               {pulse.trailing.length > 0 ? (
                 <ul className="af-mp-rows">
                   {pulse.trailing.map((r) => (
-                    <Row key={r.leagueId} row={r} tone="bad" />
+                    <Row key={r.leagueId} row={r} tone="bad" tagFinal={!done} />
                   ))}
                 </ul>
               ) : (
-                <p className="af-mp-quiet">You are not behind in any league right now.</p>
+                <p className="af-mp-quiet">{done ? 'You did not lose a league this week.' : 'You are not behind in any league right now.'}</p>
               )}
             </div>
           </div>

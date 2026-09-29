@@ -55,6 +55,7 @@ function row(over: Partial<PulseRow> = {}): PulseRow {
     basis: 'scored',
     season: 2026,
     week: 2,
+    final: false,
     startersLeft: 6,
     coverage: null,
     href: '/core/matchup?league=l1',
@@ -69,6 +70,7 @@ function pulse(over: Partial<MatchupPulse> = {}): MatchupPulse {
     considered: 1,
     ranked: 1,
     basis: 'scored',
+    allFinal: false,
     notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0 },
     ...over,
   }
@@ -531,5 +533,62 @@ describe('MatchupPulseBoard header counts', () => {
       />,
     )
     expect(container.querySelector('.af-mp-count')?.textContent).toBe('32 leading · 21 trailing')
+  })
+})
+
+/*
+ * 🛑 A FINISHED WEEK IS A RESULT, NOT A STANDING. On the Tuesday after week 3 (App Review account,
+ * 2026-09-29) this board said "0 leading · 3 trailing" and "You are not ahead in any league right
+ * now" about three games that had all ended.
+ */
+describe('MatchupPulseBoard — a finished week', () => {
+  it('says won / lost when every ranked row is final', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          allFinal: true,
+          leading: [],
+          trailing: [row({ leagueId: 'l2', margin: -40.8, final: true })],
+          leadingTotal: 0,
+          trailingTotal: 1,
+        })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('0 won · 1 lost')
+    expect(text).toContain('Lost · bottom 5')
+    expect(text).toContain('You did not win a league this week.')
+    expect(text).not.toMatch(/leading|trailing|right now/i)
+    // The whole board already says it; no per-row FINAL tag to repeat it.
+    expect(container.querySelector('[data-kind="final"]')).toBeNull()
+  })
+
+  it('keeps leading / trailing on a mixed board, and tags the finished rows FINAL', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          allFinal: false,
+          leading: [row({ leagueId: 'a', final: true }), row({ leagueId: 'b', final: false })],
+        })}
+      />,
+    )
+    expect(container.textContent ?? '').toContain('leading')
+    expect(container.querySelectorAll('[data-kind="final"]')).toHaveLength(1)
+  })
+
+  it('is NOT live once the week is final, even where starters could not be placed', () => {
+    // startersLeft null alone reads as "still in play" (see the refresh gate above); final settles it.
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({ allFinal: true, leading: [row({ basis: 'scored', startersLeft: null, final: true })] })}
+      />,
+    )
+    expect(container.querySelector('.af-mp-live')?.getAttribute('data-inplay')).toBe('false')
   })
 })
