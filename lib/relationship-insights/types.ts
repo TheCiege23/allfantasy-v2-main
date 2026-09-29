@@ -10,6 +10,21 @@ export interface BehaviorDramaManagerContext {
   behaviorHeat: number
 }
 
+/**
+ * What a relationship response may say about a manager's behaviour (Milestone 32):
+ * which drama involves them. Never the profile, its labels or its scores.
+ */
+export interface PublicBehaviorDramaContext {
+  managerId: string
+  dramaEvents: DramaEventView[]
+}
+
+/** Profile coverage only — that a profile exists for this manager, never what it says. */
+export interface PublicProfileCoverage {
+  id: string
+  managerId: string
+}
+
 export interface UnifiedStorylineRecord {
   id: string
   headline: string
@@ -33,8 +48,8 @@ export interface UnifiedRelationshipInsights {
   season: number | null
   relationshipProfile: LeagueRelationshipProfile
   rivalries: RivalryRecordView[]
-  profiles: ManagerPsychProfileView[]
+  profiles: PublicProfileCoverage[]
   drama: DramaEventView[]
-  behaviorDramaContext: BehaviorDramaManagerContext[]
+  behaviorDramaContext: PublicBehaviorDramaContext[]
   storylines: UnifiedStorylineRecord[]
 }

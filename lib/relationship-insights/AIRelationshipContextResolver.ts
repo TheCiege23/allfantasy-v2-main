@@ -57,11 +57,10 @@ export async function buildAIRelationshipContext(
       rivalryTier: r.rivalryTier,
       rivalryScore: r.rivalryScore,
     })),
+    // Facts only: no profile labels, trait scores or behaviour heat reach the prompt (Milestone 32).
     behavior: insights.behaviorDramaContext.slice(0, 10).map((b) => ({
       managerId: b.managerId,
-      behaviorHeat: b.behaviorHeat,
-      labels: b.profile?.profileLabels ?? [],
-      activityScore: b.profile?.activityScore ?? null,
+      dramaEventCount: b.dramaEvents.length,
     })),
     drama: insights.drama.slice(0, 12).map((d) => ({
       id: d.id,

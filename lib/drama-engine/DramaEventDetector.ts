@@ -9,6 +9,7 @@ import { listRivalries } from '@/lib/rivalry-engine/RivalryQueryService'
 import { listProfilesByLeague } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 import { getDramaCentralTeams } from '@/lib/league-intelligence-graph/GraphQueryService'
 import { getDramaCadenceConfig, normalizeSportForDrama } from './SportDramaResolver'
+import { LEGACY_REBUILD_SUMMARY } from './publicNarrative'
 
 export interface DramaCandidate {
   dramaType: DramaType
@@ -434,16 +435,23 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
       const playoffNow = latestPlayoffProbByTeam.get(p.managerId) ?? 0
       const playoffPrev = previousPlayoffProbByTeam.get(p.managerId) ?? playoffNow
       const swing = playoffNow - playoffPrev
-      return { profile: p, swing }
+      const measured =
+        latestPlayoffProbByTeam.has(p.managerId) && previousPlayoffProbByTeam.has(p.managerId)
+      return { profile: p, swing, playoffNow, playoffPrev, measured }
     })
     .sort((a, b) => b.swing - a.swing)
     .slice(0, 2)
   for (const rc of rebuildCandidates) {
     if (rc.swing < 0.05 && rc.profile.activityScore < 55) continue
+    // Labels pick the candidate but never reach the prose (Milestone 32): the
+    // summary states only the measured playoff-odds movement.
+    const pct = (v: number) => `${Math.round(v * 100)}%`
     pushCandidate({
       dramaType: 'REBUILD_PROGRESS',
       headline: `Rebuild watch: ${rc.profile.managerId} is gaining traction`,
-      summary: `Behavior profile (${rc.profile.profileLabels.join(', ')}) now aligns with upward competitive signals.`,
+      summary: rc.measured
+        ? `Playoff odds moved from ${pct(rc.playoffPrev)} to ${pct(rc.playoffNow)} since the previous simulation.`
+        : LEGACY_REBUILD_SUMMARY,
       relatedManagerIds: toManagerIds([rc.profile.managerId]),
       relatedTeamIds: toManagerIds([rc.profile.managerId]),
       signal: {
