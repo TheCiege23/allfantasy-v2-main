@@ -36,8 +36,8 @@ export function SimulationResultCard({
       <div className="h-48">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 8 }}>
-            <XAxis type="number" tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 10 }} domain={[0, 100]} />
-            <YAxis type="category" dataKey="name" width={72} tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 10 }} />
+            <XAxis type="number" tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 11 }} domain={[0, 100]} />
+            <YAxis type="category" dataKey="name" width={72} tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 11 }} />
             <Tooltip
               contentStyle={{ background: '#111118', border: '1px solid rgba(255,255,255,0.12)' }}
               formatter={(value, name) => {

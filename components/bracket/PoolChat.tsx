@@ -580,7 +580,7 @@ export function PoolChat({
                             title={data.users.join(", ")}
                           >
                             <span>{emoji}</span>
-                            <span style={{ color: iReacted ? "#fb923c" : "rgba(255,255,255,0.4)", fontWeight: 600, fontSize: 10 }}>{data.count}</span>
+                            <span style={{ color: iReacted ? "#fb923c" : "rgba(255,255,255,0.4)", fontWeight: 600, fontSize: 11 }}>{data.count}</span>
                           </button>
                         )
                       })}

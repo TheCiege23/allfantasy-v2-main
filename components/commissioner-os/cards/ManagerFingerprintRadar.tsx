@@ -88,7 +88,7 @@ function Fingerprint({ manager, axisMax }: { manager: ManagerFingerprint; axisMa
         <ResponsiveContainer width="100%" height="100%">
           <RadarChart data={data} margin={{ top: 8, right: 18, bottom: 4, left: 18 }} outerRadius="72%">
             <PolarGrid stroke="var(--border)" />
-            <PolarAngleAxis dataKey="axis" tick={{ fill: 'var(--muted2)', fontSize: 9 }} />
+            <PolarAngleAxis dataKey="axis" tick={{ fill: 'var(--muted2)', fontSize: 11 }} />
             {/* Ticks hidden but the domain pinned: the ring IS 100, stated once in the panel note. */}
             <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
             <Tooltip
