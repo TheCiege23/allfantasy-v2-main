@@ -189,10 +189,14 @@ describe('league grounding packet — viewer roster', () => {
     const defense = roster.starters.find((p) => p.playerId.startsWith('name:'))
     expect(defense).toMatchObject({ playerName: 'Baltimore Defense', position: 'DEF', team: 'BAL' })
 
-    // Only the ids that actually need a name are looked up, and by both id spellings.
+    // Only the ids that actually need a name are looked up — by `sleeperId`, and by Sleeper's own
+    // `sleeper:<id>` spelling of `externalId`. NEVER a bare id against `externalId`: that column
+    // holds Rolling Insights' own numbers too, and RI 9228 is an offensive tackle while Sleeper 9228
+    // is Bryce Young (externalIdNamespace.ts). This assertion used to pin the bare form.
     const where = sportsPlayerCalls[0]?.where
     expect(where.OR[0].sleeperId.in.sort()).toEqual(['4034', '6794', '99999'])
-    expect(where.OR[1].externalId.in.sort()).toEqual(['4034', '6794', '99999'])
+    expect(where.OR[1].externalId.in.sort()).toEqual(['sleeper:4034', 'sleeper:6794', 'sleeper:99999'])
+    expect(JSON.stringify(where)).not.toMatch(/"externalId":\{"in":\[[^\]]*"\d+"/)
   })
 
   it('still reads the legacy array-of-objects shape', async () => {

@@ -23,6 +23,7 @@ import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
 import { rosterPlayerIds } from "@/lib/core-app/myRoster"
 import { sleeperReadablePlayerData } from "@/lib/core-app/rosterIdSpace"
 import { isBestBallSettings } from "@/lib/core-app/lineupMode"
+import { sleeperIdWhere } from "@/lib/player-identity/externalIdNamespace"
 
 // ─── League grounding sub-types ───────────────────────────────────────────────
 
@@ -571,10 +572,18 @@ async function resolveRosterPlayerNames(
 
   if (lookups.length === 0) return out
 
+  /*
+   * 🛑 BY SLEEPER ID ONLY (`sleeperIdWhere`), never a bare id against `externalId`. These are
+   * Sleeper ids, and Rolling Insights writes its own numbers into `externalId` across every sport:
+   * Sleeper 9228 is Bryce Young; RI 9228 is Michael Tarquin (OT) and two college linemen. The old
+   * `OR externalId` read matched all of them with no sport filter, so the roster Chimmy was handed
+   * could name a quarterback as a lineman — and the impostors counted against `take`, crowding real
+   * rows out of a large roster. See externalIdNamespace.ts for the measurement.
+   */
   const rows = await prisma.sportsPlayer
     .findMany({
-      where: { OR: [{ sleeperId: { in: lookups } }, { externalId: { in: lookups } }] },
-      select: { name: true, position: true, team: true, sleeperId: true, externalId: true },
+      where: sleeperIdWhere(lookups),
+      select: { name: true, position: true, team: true, sleeperId: true, source: true },
       take: 400,
     })
     .catch(() => [] as Array<{
@@ -582,28 +591,30 @@ async function resolveRosterPlayerNames(
       position: string | null
       team: string | null
       sleeperId: string | null
-      externalId: string | null
+      source: string | null
     }>)
 
   const wanted = new Set(lookups)
+  const fromSleeper = new Set<string>()
   for (const row of rows) {
     const name = String(row.name ?? "").trim()
-    if (!name) continue
-    for (const key of [row.sleeperId, row.externalId]) {
-      const id = String(key ?? "").trim()
-      // One person can have a row per source; the first named row wins rather than the last.
-      if (!id || !wanted.has(id) || out.has(id)) continue
-      out.set(id, {
-        playerId: id,
-        playerName: name,
-        position: String(row.position ?? "").trim(),
-        team: row.team ? String(row.team) : null,
-        injuryStatus: null,
-        adp: null,
-        projectedPoints: null,
-        isStarter: false,
-      })
-    }
+    const id = String(row.sleeperId ?? "").trim()
+    if (!name || !id || !wanted.has(id)) continue
+    // One person can have a row per source. Sleeper's own row wins (its fields are fantasy-shaped);
+    // otherwise the first named row.
+    const isSleeper = row.source === "sleeper"
+    if (out.has(id) && (fromSleeper.has(id) || !isSleeper)) continue
+    out.set(id, {
+      playerId: id,
+      playerName: name,
+      position: String(row.position ?? "").trim(),
+      team: row.team ? String(row.team) : null,
+      injuryStatus: null,
+      adp: null,
+      projectedPoints: null,
+      isStarter: false,
+    })
+    if (isSleeper) fromSleeper.add(id)
   }
 
   return out
