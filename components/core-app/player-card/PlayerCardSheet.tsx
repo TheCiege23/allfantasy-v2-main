@@ -95,9 +95,18 @@ function ScheduleRows({ weeks }: { weeks: PlayerCardWeek[] }) {
             <span className="af-pc-row-k">
               WK{w.week} · {w.bye ? 'BYE' : `${w.home ? 'vs' : '@'} ${w.opponent}`}
             </span>
-            <span className={`af-pc-row-v${value.muted ? ' af-pc-faint' : ' af-num'}`} title={value.title}>
-              {value.text}
-            </span>
+            {/* The week AllFantasy's engine published: both projections, labelled. */}
+            {w.afProjection != null ? (
+              <span className="af-pc-row-v af-num" title="API: provider (Sleeper) projection · AF: AllFantasy engine projection">
+                <span className="af-pc-proj-src">API</span> {w.projection != null ? w.projection.toFixed(1) : '—'}
+                {' · '}
+                <span className="af-pc-proj-src af-pc-proj-src--af">AF</span> {w.afProjection.toFixed(1)}
+              </span>
+            ) : (
+              <span className={`af-pc-row-v${value.muted ? ' af-pc-faint' : ' af-num'}`} title={value.title}>
+                {value.text}
+              </span>
+            )}
           </div>
         )
       })}
@@ -754,6 +763,11 @@ export default function PlayerCardSheet({
                       that looks broken.
                     */}
                     <p className="af-pc-basis">{scheduleProjectionNote(data.schedule.data)}</p>
+                    {data.schedule.data.weeks.some((w) => w.afProjection != null) ? (
+                      <p className="af-pc-basis">
+                        API is the provider (Sleeper) projection; AF is AllFantasy&rsquo;s own engine. Both are PPR.
+                      </p>
+                    ) : null}
                   </>
                 ) : (
                   <Absent reason={data.schedule.reason} />

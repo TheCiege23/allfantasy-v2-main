@@ -463,15 +463,22 @@ function Projections({ player }: { player: LineupPlayer }) {
       */}
       <span
         className="af-mt-proj af-mt-proj--af af-num"
-        title="Scored under YOUR league's rules — the number that applies to you"
+        title={`Provider (Sleeper) projection scored under YOUR league's rules${
+          player.projectedPoints != null ? ` · standard PPR ${player.projectedPoints.toFixed(1)}` : ''
+        }`}
       >
         {fmt(player.afProjectedPoints)}
       </span>
+      {/*
+        AllFantasy's own engine, beside the provider's number — the second opinion. It took the
+        generic-PPR column's place: that figure is scored for a league nobody is in, and it is
+        still in the first cell's title for anyone comparing against the raw feed.
+      */}
       <span
-        className="af-mt-proj af-mt-proj--ppr af-num"
-        title="Standard PPR from the feed — a generic baseline, not your league"
+        className="af-mt-proj af-mt-proj--engine af-num"
+        title="AllFantasy's own projection engine, adjusted to your league's scoring"
       >
-        {fmt(player.projectedPoints)}
+        {fmt(player.afEngineProjectedPoints ?? null)}
       </span>
       {/*
         OWN and START are the app's own market, read from every roster we hold.
@@ -496,15 +503,15 @@ function Projections({ player }: { player: LineupPlayer }) {
 
 /** What AF PTS is, in one sentence a manager can act on. */
 const AF_PTS_EXPLAINER =
-  'AF PTS is this week’s projection re-scored under YOUR league’s settings — ' +
+  'API is the provider’s (Sleeper) projection re-scored under YOUR league’s settings — ' +
   'your reception value, TE premium, passing-TD value and IDP scoring. ' +
-  'PTS is the vendor’s standard PPR number, which is scored for a league nobody is in.'
+  'AF is AllFantasy’s own projection engine, adjusted to the same settings.'
 
 function ProjHeader() {
   return (
     <div className="af-mt-projhead">
       <span className="af-label af-mt-projhead--af" title={AF_PTS_EXPLAINER}>
-        AF PTS
+        API
         {/*
           The question mark is the point: two numbers sitting side by side with
           no explanation reads as a bug, not a feature.
@@ -513,8 +520,8 @@ function ProjHeader() {
           ?
         </span>
       </span>
-      <span className="af-label" title="Standard PPR from the feed — a generic baseline, not your league">
-        PPR
+      <span className="af-label af-mt-projhead--engine" title="AllFantasy's own projection engine, adjusted to your league's scoring">
+        AF
       </span>
       <span className="af-label" title="Share of AllFantasy leagues rostering this player">
         OWN

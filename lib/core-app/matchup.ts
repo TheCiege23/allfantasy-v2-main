@@ -164,6 +164,8 @@ export type MatchupPlayerCell = {
   imageUrl: string | null
   /** Priced under THIS league's own scoring. Null means unpriced, never zero. */
   projected: number | null
+  /** AllFantasy's own engine projection, adjusted to this league's scoring. Display only. */
+  afEngine?: number | null
   /** Points as the SOURCE PLATFORM scored them. Null when none is ingested. */
   actual: number | null
   /** The platform recorded an unfilled starting slot. A hole, not a player. */
@@ -663,7 +665,7 @@ export async function getMatchupData(
       }
 
   const cellFor = (
-    entry: { playerId: string; projected: number | null; unavailable?: Unavailable | null } | undefined,
+    entry: { playerId: string; projected: number | null; unavailable?: Unavailable | null; afEngine?: number | null } | undefined,
   ): MatchupPlayerCell | null => {
     if (!entry) return null
     if (entry.playerId === EMPTY_SLOT) {
@@ -699,6 +701,7 @@ export async function getMatchupData(
         sport,
         imageUrl: null,
         projected: entry.projected,
+        afEngine: entry.afEngine ?? null,
         actual: actualBy.get(entry.playerId) ?? null,
         empty: false,
         unavailable: entry.unavailable ?? null,
@@ -727,6 +730,7 @@ export async function getMatchupData(
       // Already vetted by `asHeadshotUrl` when the identity was composed.
       imageUrl: identity?.imageUrl ?? null,
       projected: entry.projected,
+      afEngine: entry.afEngine ?? null,
       actual: actualBy.get(entry.playerId) ?? null,
       empty: false,
       unavailable: entry.unavailable ?? null,

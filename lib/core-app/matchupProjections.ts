@@ -5,6 +5,7 @@ import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
 import { isRuledOut } from './injuryStatus'
 import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { getByeWeeks } from './byeWeeks'
+import { afEngineForLeague, lookupAfEngineProjections } from './playerProjections'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import {
   computeLeagueProjectedPoints,
@@ -52,7 +53,13 @@ export type SideProjection = {
    * `unavailable` says WHY a starter is a priced 0 — ruled out, or his club is off this week — so
    * the board can print the reason beside the number instead of a bare 0.0.
    */
-  lineup: Array<{ playerId: string; projected: number | null; unavailable?: Unavailable | null }>
+  lineup: Array<{
+    playerId: string
+    projected: number | null
+    unavailable?: Unavailable | null
+    /** AllFantasy's own engine for the same starter, carried into this league's rules. Display only. */
+    afEngine?: number | null
+  }>
 }
 
 /**
@@ -197,9 +204,20 @@ export async function loadSideProjections(args: {
     // consumers can rescore under league settings (see app/api/cron/
     // import-projections). The generic `projectedPoints` total is deliberately
     // not read here — a PPR number is not this league's number.
-    select: { playerId: true, stats: true },
+    select: { playerId: true, stats: true, projectedPoints: true },
   })
   const byPlayer = new Map(projections.map((p) => [p.playerId, p]))
+  /* AllFantasy's own engine, same week — the second number beside the provider's on the board.
+     Never feeds the totals or the win probability, which stay on the provider line they were
+     built for. A failed read leaves the AF cells blank and nothing else. */
+  const afEngineRows = await lookupAfEngineProjections(lookupIds, { season: String(season), week }).catch(
+    (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
+  )
+  /* Spread, not a key set to null: a starter the engine never wrote carries no `afEngine` at all. */
+  const engineFor = (id: string, generic: number | null, league: number | null): { afEngine?: number } => {
+    const v = afEngineForLeague(afEngineRows.get(lookupOf(id) ?? '')?.projectedPoints, generic, league)
+    return v == null ? {} : { afEngine: v }
+  }
 
   /*
    * 🛑 A STARTER RULED OUT IS A 0, NOT HIS PROJECTION. This file read no injury data at all, so
@@ -261,7 +279,7 @@ export async function loadSideProjections(args: {
         : undefined
       if (!proj) {
         unprojected++
-        lineup.push({ playerId: id, projected: null })
+        lineup.push({ playerId: id, projected: null, ...(isResolvableId(id) ? engineFor(id, null, null) : {}) })
         continue
       }
       /*
@@ -277,7 +295,7 @@ export async function loadSideProjections(args: {
         : null
       if (!scored) {
         unprojected++
-        lineup.push({ playerId: id, projected: null })
+        lineup.push({ playerId: id, projected: null, ...engineFor(id, null, null) })
         continue
       }
       starters.push({
@@ -286,7 +304,11 @@ export async function loadSideProjections(args: {
         actualPoints: 0,
         isFinal: false,
       })
-      lineup.push({ playerId: id, projected: scored.points })
+      lineup.push({
+        playerId: id,
+        projected: scored.points,
+        ...engineFor(id, Number(proj.projectedPoints), scored.points),
+      })
       projectedRemaining += scored.points
     }
     return {

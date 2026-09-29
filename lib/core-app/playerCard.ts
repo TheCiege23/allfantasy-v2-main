@@ -11,7 +11,7 @@ import { readInjurySyncFreshness } from '@/lib/injuries/injurySyncState'
 import { buildNextGameMap, type FixtureRow } from './nextGameMap'
 import { getRosteredMarket } from './rosteredMarket'
 import { isForeignIdSpace, sleeperReadableRosters } from './rosterIdSpace'
-import { latestProjectionWeek, lookupProjections } from './playerProjections'
+import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { playoffStartWeek } from './seasonTimeline'
 import { MIN_PLAUSIBLE_SLATE } from './byeWeeks'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
@@ -132,6 +132,11 @@ export type PlayerCardWeek = {
   futureStatus?: 'published' | 'no_line' | 'not_published' | 'unchecked'
   /** ISO — when the later-week number, or the "not published" answer, was last confirmed. */
   projectionAsOf?: string | null
+  /**
+   * AllFantasy's own engine projection for the same week, beside the provider's `projection`.
+   * Same rule: only set for a week the engine actually wrote. Generic PPR, like `projection`.
+   */
+  afProjection?: number | null
 }
 
 /** The schedule section's payload. */
@@ -610,7 +615,9 @@ export async function loadSchedule(
    * Later-week projections for this player (2026-09-29). Optional, and `null` reproduces the earlier
    * behaviour exactly: only `projectedWeek` carries a number and no row gains a field.
    */
-  future: ScheduleFutureWeeks | null = null
+  future: ScheduleFutureWeeks | null = null,
+  /** AllFantasy's own engine for `projectedWeek` only, beside the provider's `projection`. */
+  afProjection: number | null = null
 ): Promise<{ schedule: SectionState<PlayerCardSchedule>; byeWeek: number | null }> {
   const club = normalizeTeamAbbrev(team)
   if (!club) {
@@ -655,6 +662,8 @@ export async function loadSchedule(
         home: found.home,
         bye: false,
         projection: projectedWeek === w ? projection : null,
+        // Only when the engine wrote one, so a row built without it keeps its earlier shape.
+        ...(projectedWeek === w && afProjection != null ? { afProjection } : {}),
       }
       if (future && projectedWeek != null) {
         if (w === projectedWeek) {
@@ -1591,7 +1600,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     : UNIVERSAL_BOOK
 
   // prettier-ignore
-  const [market, ownershipBoard, projections, news, blurbs, injury, injuryFeedRow, trades, league, future] = await Promise.all([
+  const [market, ownershipBoard, projections, news, blurbs, injury, injuryFeedRow, trades, league, future, afEngine] = await Promise.all([
     loadMarket(player.sleeperId, player.position, book),
     getRosteredMarket({ sport: 'NFL', dynastyOnly: null }).catch(() => null),
     player.sleeperId && projWeek
@@ -1637,6 +1646,11 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
           sport: player.sport,
         }).catch(() => null)
       : Promise.resolve(null),
+    /* AllFantasy's own engine, same week as the provider row above. College is left out: its
+       `projections` entry already IS the AF engine's season figure (ncaafProjections.ts). */
+    player.sleeperId && projWeek && String(player.sport ?? '').toUpperCase() !== 'NCAAF'
+      ? lookupAfEngineProjections([player.sleeperId], projWeek).catch(() => new Map())
+      : Promise.resolve(new Map()),
   ])
 
   const own = ownershipBoard && player.sleeperId ? ownershipBoard.byPlayerId.get(player.sleeperId) : undefined
@@ -1674,6 +1688,7 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
       : unavailable('No recent item mentions this player.')
 
   const projected = player.sleeperId ? (projections.get(player.sleeperId)?.projectedPoints ?? null) : null
+  const afProjected = player.sleeperId ? (afEngine.get(player.sleeperId)?.projectedPoints ?? null) : null
 
   const futureForCard: ScheduleFutureWeeks | null =
     future && future.available && player.sleeperId
@@ -1687,7 +1702,8 @@ export async function getPlayerCard(req: PlayerCardRequest): Promise<PlayerCardD
     projWeek ? projWeek.week : null,
     projected,
     SCHEDULE_WEEKS,
-    futureForCard
+    futureForCard,
+    afProjected
   )
 
   const comps =

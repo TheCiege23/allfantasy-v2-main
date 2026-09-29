@@ -206,6 +206,15 @@ function PlayerHalf({
           </span>
         ) : null}
         {value == null ? '—' : value.toFixed(1)}
+        {/*
+          AllFantasy's own engine, under the provider's number, before kickoff only — once
+          points are live the board is about what happened, not about either projection.
+        */}
+        {!live && cell.afEngine != null ? (
+          <span className="af-mu-half-af" title="AllFantasy engine projection, adjusted to this league's scoring">
+            AF {cell.afEngine.toFixed(1)}
+          </span>
+        ) : null}
       </div>
     </div>
   )
@@ -237,7 +246,8 @@ function LineupBoard({ data }: { data: MatchupData }) {
   const slots = data.lineups.data
   const yours = columnTotal(slots, 'you', live)
   const theirs = columnTotal(slots, 'opponent', live)
-  const heading = live ? 'PTS' : 'PROJ'
+  // Before kickoff each cell carries two projections: the provider's (API) and AllFantasy's (AF).
+  const heading = live ? 'PTS' : 'API · AF'
 
   return (
     <>

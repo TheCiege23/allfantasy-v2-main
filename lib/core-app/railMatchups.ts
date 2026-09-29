@@ -3,7 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeekFrom } from './currentWeek'
 import { managerArtUrl } from './leagueArt'
-import { latestProjectionWeek, lookupProjections } from './playerProjections'
+import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
 import { isRuledOut } from './injuryStatus'
 import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
@@ -111,6 +111,16 @@ export type RailSideProjection = {
    * turn it into a confident 0.00.
    */
   afProjected: number | null
+  /**
+   * The AF ENGINE's total for the same starters — AllFantasy's own projection, not the provider's —
+   * carried into this league's rules by `afEngineForLeague`. Null when no starter has an AF row.
+   *
+   * ⚠ DESPITE THE NAME, `afProjected` ABOVE IS THE PROVIDER LINE RE-SCORED. That name predates the
+   * engine's weekly output reaching /core; this field is the one that is actually AllFantasy's.
+   */
+  afEngine?: number | null
+  /** Starters the AF engine priced, of `starterCount`. */
+  afEngineFrom?: number
   /** Starters we could price, of starters in the lineup. Never hidden. */
   pricedFrom: number
   starterCount: number
@@ -594,6 +604,25 @@ export async function getRailMatchups(
     }
   }
 
+  /*
+   * 🛑 ONE SLEEPER LEAGUE IS SEVERAL AF LEAGUE ROWS, AND THE RAIL ASKS BY THE ROW IT DREW.
+   * `teamByKey` is keyed on the PLATFORM league, so when three importers each wrote their own
+   * `leagues` row for the same Sleeper league, `you.leagueId` is whichever of the three was read
+   * last — and the rail, which looks each card up by its own `l.id`, found nothing for the other
+   * two. With a live score overlaid the card still drew `0.0`, so the only visible symptom was
+   * `PROJ —` on every duplicated league. Measured 2026-09-29 on `🪓 Guillotine League 26`: three
+   * AF rows, one Sleeper id, projections present for all ten starters in both feeds.
+   *
+   * Every row the caller asked about now gets the fixture of the Sleeper league it belongs to.
+   */
+  const fixtureLeagueByPlatformId = new Map(fixtures.map((f) => [f.row.leagueId, f.you.leagueId]))
+  for (const league of leagues) {
+    if (!league.platformLeagueId || byLeague[league.id]) continue
+    const source = fixtureLeagueByPlatformId.get(league.platformLeagueId)
+    const entry = source ? byLeague[source] : undefined
+    if (entry) byLeague[league.id] = { ...entry, leagueId: league.id }
+  }
+
   return {
     byLeague,
     season: latest.seasonYear,
@@ -766,6 +795,11 @@ export async function loadRailProjections(args: {
     if (feed.size === 0) return NO_PROJECTIONS
     projectionWeek = fallback
   }
+  /* The AF engine's week is the week the provider numbers came from, so the two columns never
+     describe different weeks. A failed read leaves the provider columns exactly as they were. */
+  const afEngineRows = await lookupAfEngineProjections(wanted, projectionWeek).catch(
+    (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
+  )
 
   // A current injury cannot be applied to a fallback projection from another week.
   // All roster ids share one identity read and one availability read per sport.
@@ -822,16 +856,33 @@ export async function loadRailProjections(args: {
     let af = 0
     let vendorFrom = 0
     let afFrom = 0
+    let engine = 0
+    let engineFrom = 0
+    /* Starters the engine actually wrote a row for. Known absences add a priced zero to
+       `engineFrom`, but a side whose only "AF" figures are those zeros has no AF projection at
+       all — it must render `—`, not a confident 0.0. */
+    let engineRows = 0
     for (const id of side.starters) {
       if (!isPriceableId(id)) continue
       if (unavailableBySport.get(sportByLeague.get(side.dbLeagueId) ?? 'NFL')?.has(id)) {
         // Known absence is a priced zero, even when that player has no feed projection.
         vendorFrom += 1
         if (hasScoringRules(scoring)) afFrom += 1
+        engineFrom += 1
         continue
       }
       const p = feed.get(id)
-      if (!p) continue
+      const engineRow = afEngineRows.get(id)
+      if (!p) {
+        // No provider row, so no ratio to carry the AF number into this league: it stands as PPR.
+        const raw = afEngineForLeague(engineRow?.projectedPoints, null, null)
+        if (raw != null) {
+          engine += raw
+          engineFrom += 1
+          engineRows += 1
+        }
+        continue
+      }
       if (Number.isFinite(p.projectedPoints)) {
         vendor += p.projectedPoints
         vendorFrom += 1
@@ -846,6 +897,12 @@ export async function loadRailProjections(args: {
         af += league.points
         afFrom += 1
       }
+      const engineHere = afEngineForLeague(engineRow?.projectedPoints, p.projectedPoints, league?.points ?? null)
+      if (engineHere != null) {
+        engine += engineHere
+        engineFrom += 1
+        engineRows += 1
+      }
     }
 
     const entry = byLeague.get(side.dbLeagueId) ?? {
@@ -855,6 +912,8 @@ export async function loadRailProjections(args: {
     entry.sides.set(side.externalId, {
       projected: vendorFrom > 0 ? Math.round(vendor * 100) / 100 : null,
       afProjected: afFrom > 0 ? Math.round(af * 100) / 100 : null,
+      afEngine: engineRows > 0 ? Math.round(engine * 100) / 100 : null,
+      afEngineFrom: engineFrom,
       /*
        * The VENDOR count, because it is the one that gates whether a number is
        * shown at all. The AF count can be lower in an IDP league — the defenders
