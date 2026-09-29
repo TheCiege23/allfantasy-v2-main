@@ -1031,6 +1031,25 @@ describe('Player Finder — the deeper card (Phase 1)', () => {
     expect(screen.queryByRole('columnheader', { name: 'Value' })).toBeNull()
   })
 
+  it('marks each upcoming week with its matchup rank when the page passes one', () => {
+    const upcoming = {
+      available: true as const,
+      data: { season: 2026, weeks: [{ week: 8, opponent: 'MIA', home: true, bye: false, projection: null }, { week: 9, opponent: null, home: false, bye: true, projection: null }] },
+    }
+    const matchupOutlook = {
+      position: 'TE',
+      season: 2026,
+      leagueAverage: 14,
+      minGames: 3,
+      reads: { 8: { week: 8, opponent: 'MIA', tier: 'soft' as const, rank: 2, of: 32, allowedPerGame: 24.1, games: 3 } },
+    }
+    renderCore({ depth: { ...DEPTH, upcoming }, matchupOutlook })
+    const region = screen.getByRole('region', { name: 'Next game' })
+    expect(region).toHaveTextContent('Soft #2')
+    expect(region).toHaveTextContent('2nd-softest vs TEs')
+    expect(region).toHaveTextContent('among 32 defenses')
+  })
+
   it('renders exactly as before with no depth', () => {
     renderCore()
     expect(screen.queryByRole('region', { name: 'Next game' })).toBeNull()

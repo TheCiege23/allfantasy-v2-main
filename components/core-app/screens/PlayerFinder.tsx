@@ -56,6 +56,7 @@ import { WhoStartsHim } from '@/components/core-app/player-finder/WhoStartsHim'
 import type { WhoStartsHim as WhoStartsHimData } from '@/lib/core-app/whoStartsHim'
 import { ValueTrend } from '@/components/core-app/player-finder/ValueTrend'
 import type { ValueTrend as ValueTrendData } from '@/lib/core-app/valueTrend'
+import type { MatchupOutlook } from '@/lib/core-app/matchupOutlook'
 import { buildLeagueStrip } from '@/lib/core-app/leagueStrip'
 import { leagueCall } from '@/lib/core-app/leagueCall'
 import { PlayerSeasonCard } from '@/components/core-app/player-finder/PlayerSeasonCard'
@@ -196,6 +197,8 @@ export type PlayerFinderProps = {
   whoStartsHim?: WhoStartsHimData | null
   /** His market value over 30 days per book your leagues use; the nudge is AF Pro (valueTrendLoader.ts). */
   valueTrend?: ValueTrendData | null
+  /** Where each upcoming opponent ranks for points allowed to his position (matchupOutlookLoader.ts). */
+  matchupOutlook?: MatchupOutlook | null
   /**
    * The server's clock, ISO. The trade window's "pitch now / not now" is read
    * against it so the sentence hydrates to what was rendered.
@@ -393,6 +396,7 @@ export function PlayerFinder({
   depthChart = null,
   whoStartsHim = null,
   valueTrend = null,
+  matchupOutlook = null,
   nowIso = new Date().toISOString(),
   signedIn = true,
 }: PlayerFinderProps) {
@@ -1007,7 +1011,7 @@ export function PlayerFinder({
             </section>
 
             {/* ── Next game + news (Phase 1): every width — the late news IS the game-day story ── */}
-            {depth ? <PlayerNextGames next={depth.nextGame} upcoming={depth.upcoming} /> : null}
+            {depth ? <PlayerNextGames next={depth.nextGame} upcoming={depth.upcoming} matchups={matchupOutlook} /> : null}
             {depth ? <PlayerNews state={depth.news} nowIso={nowIso} /> : null}
 
             {/* ── Every platform, every league ──────────────────────── */}
