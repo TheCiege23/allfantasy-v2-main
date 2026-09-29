@@ -280,7 +280,8 @@ function whyTheseLetters(views: SideView[]): { reason: string; scale: string } |
   if (views.length !== 2) return null
   const [a, b] = views as [SideView, SideView]
   if (!a.letter || !b.letter || a.pct == null || a.total == null || b.total == null) return null
-  const name = (v: SideView) => (v.isViewer ? 'You' : v.side.managerName)
+  // "You" only opens a sentence; mid-sentence it is "you" — "Hibboisthebest got an A and you an F".
+  const name = (v: SideView, opensSentence = false) => (v.isViewer ? (opensSentence ? 'You' : 'you') : v.side.managerName)
   const even = PROJECTED_EVEN_BAND
   const strong = PROJECTED_STRONG_BAND
   const scale = `The scale: a gap under ${even}% is a C for both sides · ${even}–${strong - 1}% is a B and a D · ${strong}% or more is an A and an F.`
@@ -302,7 +303,7 @@ function whyTheseLetters(views: SideView[]): { reason: string; scale: string } |
       ? `A gap of ${strong}% or more is an A for the side that gained and an F for the side that gave.`
       : `A gap of ${even}–${strong - 1}% is a B for the side that gained and a D for the side that gave; ${strong}% or more would be an A and an F.`
   const reason =
-    `${name(up)} got ${article(up.letter!)} ${up.letter} and ${name(down)} ${article(down.letter!)} ${down.letter}: ` +
+    `${name(up, true)} got ${article(up.letter!)} ${up.letter} and ${name(down)} ${article(down.letter!)} ${down.letter}: ` +
     `${name(up)} received ${fmtValue(up.total!)} in this league’s values for ${fmtValue(down.total!)}, ${pct}% more. ${band}`
   return { reason, scale }
 }
