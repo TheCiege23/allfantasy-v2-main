@@ -4079,3 +4079,78 @@
   font-size: 11px;
   line-height: 1.45;
 }
+
+/* ── Where your starters come from (teamSplit.ts) — inside Your shares, all-leagues mode ──────── */
+.af-core .af-pf-split {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.af-core .af-pf-split-sub {
+  margin: 2px 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-split-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-split-row {
+  display: grid;
+  grid-template-columns: 72px minmax(60px, 1fr) auto;
+  align-items: center;
+  gap: 2px 10px;
+}
+.af-core .af-pf-split-team {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+}
+.af-core .af-pf-split-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--chip);
+  overflow: hidden;
+}
+.af-core .af-pf-split-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.af-core .af-pf-split-num {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.af-core .af-pf-split-who {
+  grid-column: 2 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+.af-core .af-pf-split-rest {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-split-bye {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--warn);
+  border-radius: 12px;
+  background: var(--warn-soft);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
+@media (max-width: 560px) {
+  .af-core .af-pf-split-row {
+    grid-template-columns: 64px minmax(40px, 1fr) auto;
+  }
+}
