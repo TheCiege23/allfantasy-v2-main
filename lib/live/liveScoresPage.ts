@@ -12,7 +12,7 @@ import { estimateWinProbability, type WinProbability } from '@/lib/live/winProba
 import { liveTeamAbbreviation } from '@/lib/live/teamAbbreviation'
 import { composePlayerIdentities } from '@/lib/core-app/playerIdentityCompose'
 import { myRosterCandidates, rosterPlayerIds } from '@/lib/core-app/myRoster'
-import { sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { sleeperReadablePlayerDataOf } from '@/lib/core-app/rosterIdSpace'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
@@ -404,7 +404,8 @@ async function loadRosteredPlayers(
       const roster = team.externalId ? resolved.get(team.externalId) : pool.find((r) => myRosterCandidates(team, userId).includes(r.platformUserId))
       if (!roster) { incomplete = true; continue }
       // A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id: that roster ties in nobody.
-      const readable = sleeperReadablePlayerData(league.platform, roster.playerData)
+      // An ESPN one is translated (raw, ESPN 12483 Stafford is Sleeper's 12483 Jack Bech).
+      const readable = await sleeperReadablePlayerDataOf(league.platform, roster.playerData)
       for (const id of rosterPlayerIds(readable)) owned.add(id)
       const data = readable as { starters?: unknown } | null
       for (const id of rosterPlayerIds({ starters: data?.starters })) started.add(id)

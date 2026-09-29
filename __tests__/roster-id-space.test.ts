@@ -13,6 +13,8 @@ import {
   collectRosterIds,
   loadEspnToSleeperMap,
   rosterIdSpaceOf,
+  sleeperReadablePlayerDataOf,
+  sleeperReadableRosters,
   translatePlayerData,
   translateRostersByLeague,
   translateRostersToSleeperIds,
@@ -40,10 +42,14 @@ describe('rosterIdSpaceOf', () => {
 })
 
 describe('translatePlayerData', () => {
-  it('rewrites every roster array through the map, keeps an unlinked id as it is, and leaves other keys alone', () => {
-    const pd = { players: ['4430737', 2577417, '99999'], starters: ['4430737'], reserve: [], taxi: null, import: { proTeamId: '1' } }
+  /*
+   * This pinned "keeps an unlinked id as it is", on the theory that it fails every Sleeper-id match
+   * honestly. ESPN 12483 (Matthew Stafford) IS Sleeper's 12483 (Jack Bech): a kept id is a HIT.
+   */
+  it('rewrites every roster array through the map, DROPS an unlinked id, and leaves other keys alone', () => {
+    const pd = { players: ['4430737', 2577417, '12483'], starters: ['4430737'], reserve: [], taxi: null, import: { proTeamId: '1' } }
     expect(translatePlayerData(pd, MAP)).toEqual({
-      players: ['9509', '3294', '99999'],
+      players: ['9509', '3294'],
       starters: ['9509'],
       reserve: [],
       taxi: null,
@@ -51,9 +57,19 @@ describe('translatePlayerData', () => {
     })
   })
 
-  it('returns the input untouched for an empty map', () => {
-    const pd = { players: ['1'] }
-    expect(translatePlayerData(pd, new Map())).toBe(pd)
+  it('translates lineup_sections entries too — objects keep their other fields, unlinked entries drop', () => {
+    const pd = {
+      lineup_sections: { starters: [{ id: '4430737', position: 'RB' }, { id: '12483', position: 'QB' }], bench: ['2577417'], note: 'kept' },
+      ir: ['12483'],
+    }
+    expect(translatePlayerData(pd, MAP)).toEqual({
+      lineup_sections: { starters: [{ id: '9509', position: 'RB' }], bench: ['3294'], note: 'kept' },
+      ir: [],
+    })
+  })
+
+  it('with an empty map every roster id drops — no id is a Sleeper id until the map says whose', () => {
+    expect(translatePlayerData({ players: ['12483'], settings: { x: 1 } }, new Map())).toEqual({ players: [], settings: { x: 1 } })
   })
 })
 
@@ -91,8 +107,9 @@ describe('translateRostersToSleeperIds', () => {
     expect(out.idSpace).toBe('espn')
     expect(out.total).toBe(3)
     expect(out.translated).toBe(2)
+    // 99999 has no identity row: counted in `total`, dropped from the roster (it used to be kept).
     expect(out.rosters.map((r) => r.playerData)).toEqual([
-      { players: ['9509', '99999'], starters: ['9509'] },
+      { players: ['9509'], starters: ['9509'] },
       { players: ['3294'] },
     ])
   })
@@ -133,5 +150,56 @@ describe('translateRostersByLeague', () => {
     expect(out.map((r) => r.playerData.players)).toEqual([['9509'], ['4430737'], ['3294'], ['2577417']])
     expect(mockIdentityFindMany).toHaveBeenCalledTimes(1)
     expect(mockIdentityFindMany.mock.calls[0][0].where.espnId.in.sort()).toEqual(['2577417', '4430737'])
+  })
+})
+
+/*
+ * THE one way to read rosters as Sleeper ids. ESPN 12483 is Matthew Stafford (Sleeper 421) and Sleeper
+ * 12483 is Jack Bech — on 8 production ESPN rosters, 2026-09-29 — so an ESPN id is a Sleeper id only
+ * once the identity map says whose, and one it cannot place drops rather than colliding.
+ */
+describe('sleeperReadableRosters', () => {
+  const STAFFORD_ROSTER = { players: ['2577417', '12483'], starters: ['12483'], lineup_sections: { starters: [{ id: '12483' }] } }
+
+  it('translates ESPN, drops the unplaceable id, strips a foreign platform, and leaves Sleeper/native as the same object', async () => {
+    const sleeper = { leagueId: 'S', playerData: { players: ['12483'] } }
+    const native = { leagueId: 'N', playerData: { players: ['12483'] } }
+    const out = await sleeperReadableRosters(
+      [
+        sleeper,
+        native,
+        { leagueId: 'E', playerData: STAFFORD_ROSTER },
+        { leagueId: 'F', playerData: { players: ['12483'], starters: ['12483'] } },
+      ],
+      (r) => ({ S: 'sleeper', N: 'manual', E: 'espn', F: 'fleaflicker' })[r.leagueId],
+    )
+    expect(out[0]).toBe(sleeper)
+    expect(out[1]).toBe(native)
+    // 2577417 → Dak's 3294; 12483 has no identity row here, so it is gone — never read as Jack Bech.
+    expect(out[2]!.playerData).toEqual({ players: ['3294'], starters: [], lineup_sections: { starters: [] } })
+    expect(out[3]!.playerData).toEqual({ players: [], starters: [] })
+  })
+
+  it('asks the identity map ONCE for every ESPN roster passed, and not at all without one', async () => {
+    await sleeperReadableRosters(
+      [{ playerData: { players: ['4430737'] } }, { playerData: { players: ['2577417'] } }],
+      'espn',
+    )
+    expect(mockIdentityFindMany).toHaveBeenCalledTimes(1)
+    mockIdentityFindMany.mockClear()
+    await sleeperReadableRosters([{ playerData: { players: ['12483'] } }], 'sleeper')
+    await sleeperReadableRosters([{ playerData: { players: ['12483'] } }], 'fleaflicker')
+    expect(mockIdentityFindMany).not.toHaveBeenCalled()
+  })
+
+  it('an array-shaped playerData from ESPN comes back empty rather than guessed at', async () => {
+    const out = await sleeperReadableRosters([{ playerData: ['12483'] as unknown }], 'espn')
+    expect(out[0]!.playerData).toEqual([])
+  })
+
+  it('sleeperReadablePlayerDataOf is the one-roster form of the same rule', async () => {
+    expect(await sleeperReadablePlayerDataOf('espn', { players: ['4430737', '12483'] })).toEqual({ players: ['9509'] })
+    const pd = { players: ['12483'] }
+    expect(await sleeperReadablePlayerDataOf('sleeper', pd)).toBe(pd)
   })
 })

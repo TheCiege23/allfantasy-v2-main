@@ -11,7 +11,7 @@ import { resolveSportsWeek, type SportsWeek } from './sportsWeek'
 import { lineupDeadlines } from './lineupDeadlines'
 import { injuryNameKey, injuryNameVariants } from './injuryNames'
 import { isBestBallSettings } from './lineupMode'
-import { isForeignIdSpace, sleeperReadablePlayerData } from './rosterIdSpace'
+import { sleeperReadablePlayerDataOf, rosterIdSpaceOf } from './rosterIdSpace'
 
 /**
  * My team pulse — the cross-league landing at `/core/my-team`.
@@ -394,11 +394,13 @@ export async function getMyTeamPulse(
 
     const pd = roster.playerData && typeof roster.playerData === 'object' ? roster.playerData as Record<string, unknown> : {}
     if (pd.eliminated === true || l.guillotineMode && Array.isArray(pd.players) && pd.players.length === 0) { notChecked.inactive++; continue }
-    /* A Fleaflicker/MFL/Fantrax/Yahoo starter id collides with a real Sleeper id; that lineup is unread. */
-    const { ids, empty } = startersOf(sleeperReadablePlayerData(l.platform, roster.playerData))
+    /* In Sleeper ids: an ESPN lineup translated, a Fleaflicker/MFL/Fantrax/Yahoo one unread — its
+       starter ids (and an untranslatable ESPN one: 12483 is Stafford there, Jack Bech in Sleeper's
+       space) collide with real Sleeper ids. The raw roster above still decides guillotine status. */
+    const { ids, empty } = startersOf(await sleeperReadablePlayerDataOf(l.platform, roster.playerData))
     if (ids.length === 0 && empty === 0) {
       /* Stripped, not absent: "no starting lineup on file" would be false for a foreign league. */
-      if (isForeignIdSpace(l.platform)) notChecked.idsUnreadable++
+      if (rosterIdSpaceOf(l.platform) !== 'sleeper') notChecked.idsUnreadable++
       else notChecked.noLineup++
       continue
     }

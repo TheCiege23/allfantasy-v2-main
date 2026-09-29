@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { asIds, isResolvableId, rosterCandidates } from './dash3aPanels'
-import { sleeperReadablePlayerData } from './rosterIdSpace'
+import { sleeperReadableRosters } from './rosterIdSpace'
 import { listPlayerFollows } from '@/lib/follows/playerFollows'
 import { handoffFor } from './platformLinks'
 import type { RecentTrade } from './recentTrades'
@@ -519,16 +519,20 @@ async function snapshotInjuries(
   }
   for (const id of twoTeams) teamIdByLeague.delete(id)
 
+  // In Sleeper ids: an ESPN roster translated, any other foreign one emptied (see rosterIdSpace.ts).
   const rosters =
     teams.length > 0
-      ? await prisma.roster
-          .findMany({
-            where: {
-              OR: teams.map((t) => ({ leagueId: t.leagueId, platformUserId: { in: rosterCandidates(t, userId) } })),
-            },
-            select: { leagueId: true, playerData: true, league: { select: { platform: true } } },
-          })
-          .catch(() => [])
+      ? await sleeperReadableRosters(
+          await prisma.roster
+            .findMany({
+              where: {
+                OR: teams.map((t) => ({ leagueId: t.leagueId, platformUserId: { in: rosterCandidates(t, userId) } })),
+              },
+              select: { leagueId: true, playerData: true, league: { select: { platform: true } } },
+            })
+            .catch(() => []),
+          (r) => r.league?.platform,
+        )
       : []
 
   const leaguesByPlayer = new Map<string, Set<string>>()
@@ -538,8 +542,7 @@ async function snapshotInjuries(
   for (const r of rosters) {
     if (seenLeague.has(r.leagueId)) continue
     seenLeague.add(r.leagueId)
-    /* A Fleaflicker/MFL/Fantrax/Yahoo id collides with a real Sleeper id: that roster names nobody. */
-    const pd = (sleeperReadablePlayerData(r.league?.platform, r.playerData) ?? {}) as Record<string, unknown>
+    const pd = (r.playerData ?? {}) as Record<string, unknown>
     for (const id of [...asIds(pd.players), ...asIds(pd.starters), ...asIds(pd.reserve), ...asIds(pd.taxi)]) {
       if (!isResolvableId(id)) continue
       const set = leaguesByPlayer.get(id) ?? new Set<string>()

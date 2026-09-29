@@ -21,7 +21,7 @@ import type { FantasyFreshnessReport } from "@/lib/fantasy-data/fantasyFreshness
 import type { FantasyProviderHealthReport } from "@/lib/fantasy-data/providerHealth"
 import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
 import { rosterPlayerIds } from "@/lib/core-app/myRoster"
-import { sleeperReadablePlayerData } from "@/lib/core-app/rosterIdSpace"
+import { sleeperReadablePlayerDataOf, rosterIdSpaceOf } from "@/lib/core-app/rosterIdSpace"
 import { isBestBallSettings } from "@/lib/core-app/lineupMode"
 import { sleeperIdWhere } from "@/lib/player-identity/externalIdNamespace"
 
@@ -687,7 +687,12 @@ async function loadViewerRoster(
      * this table has held: id sections, `lineup_sections`, bare strings, and objects. The old
      * array-of-objects path is kept because those entries carry names of their own.
      */
-    const playerData = roster.playerData as unknown
+    // An ESPN roster is read in Sleeper ids (translated; an id with no identity dropped, since ESPN
+    // 12483 Stafford IS Sleeper's 12483 Jack Bech). Any other foreign roster keeps its raw ids for
+    // display, and `lookupable` below keeps them out of every Sleeper-id lookup.
+    const platform = roster.league?.platform
+    const readable = await sleeperReadablePlayerDataOf(platform, roster.playerData)
+    const playerData = (rosterIdSpaceOf(platform) === "espn" ? readable : roster.playerData) as unknown
     const allPlayers: LeagueGroundingRosterPlayer[] = []
     if (Array.isArray(playerData)) {
       for (const p of playerData) {
@@ -700,7 +705,7 @@ async function loadViewerRoster(
     const idsNeedingNames = rosterPlayerIds(playerData).filter((id) => !named.has(id))
     // A Fleaflicker/MFL/Fantrax/Yahoo id collides with real Sleeper ids, so it is never looked up as
     // one: it stays on the roster, honestly unidentified, rather than named as a stranger.
-    const lookupable = new Set(rosterPlayerIds(sleeperReadablePlayerData(roster.league?.platform, playerData)))
+    const lookupable = new Set(rosterPlayerIds(readable))
     if (idsNeedingNames.length > 0) {
       const identities = await resolveRosterPlayerNames(idsNeedingNames.filter((id) => lookupable.has(id)))
       for (const id of idsNeedingNames) allPlayers.push(identities.get(id) ?? unnamedRosterPlayer(id))

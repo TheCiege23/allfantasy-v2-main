@@ -1,7 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
-import { isForeignIdSpace, sleeperReadablePlayerData } from '@/lib/core-app/rosterIdSpace'
+import { isForeignIdSpace, sleeperReadableRosters, sleeperReadablePlayerDataOf } from '@/lib/core-app/rosterIdSpace'
 import { idpPositionGroup, isIdpPosition, shortIdpPosition } from '@/lib/core-app/scoringNotes'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { loadSnapShares, type SnapShareOutcome } from '@/lib/core-app/snapShare'
@@ -249,8 +249,9 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
   const rosteredIds = rosterPlayerIds(mine.playerData)
   if (rosteredIds.length === 0) return EMPTY('no_roster')
   // A Fleaflicker/MFL/Fantrax/Yahoo roster id collides with real Sleeper ids, so it is never looked
-  // up (or priced) as one; it is counted as unresolvable below instead of naming a stranger.
-  const myIds = rosterPlayerIds(sleeperReadablePlayerData(league.platform, mine.playerData))
+  // up (or priced) as one; it is counted as unresolvable below instead of naming a stranger. An ESPN
+  // id is translated first — raw, ESPN 12483 (Stafford) is Sleeper's 12483 (Jack Bech).
+  const myIds = rosterPlayerIds(await sleeperReadablePlayerDataOf(league.platform, mine.playerData))
 
   /*
    * ⚠ REPLACEMENT LEVEL IS A PROPERTY OF THE LEAGUE, NOT OF YOUR TEAM. VORP asks what a
@@ -261,13 +262,16 @@ export async function loadDefenseHub(args: LoadDefenseHubArgs): Promise<DefenseH
    *
    * So the whole league is priced, and only the caller's players are rendered.
    */
-  const leagueRosters = await args.prisma.roster
-    .findMany({ where: { leagueId: league.id }, select: { playerData: true } })
-    .catch(() => [] as Array<{ playerData: unknown }>)
+  const leagueRosters = await sleeperReadableRosters(
+    await args.prisma.roster
+      .findMany({ where: { leagueId: league.id }, select: { playerData: true } })
+      .catch(() => [] as Array<{ playerData: unknown }>),
+    league.platform,
+  )
 
   const leagueIds = new Set<string>()
   for (const r of leagueRosters) {
-    for (const id of rosterPlayerIds(sleeperReadablePlayerData(league.platform, r.playerData))) leagueIds.add(id)
+    for (const id of rosterPlayerIds(r.playerData)) leagueIds.add(id)
   }
   for (const id of myIds) leagueIds.add(id)
 

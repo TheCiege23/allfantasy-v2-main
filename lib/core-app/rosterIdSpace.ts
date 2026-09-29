@@ -17,12 +17,13 @@ import { prisma } from '@/lib/prisma'
  * did not exist because `SportsPlayer` had no `source = 'espn'` rows — the wrong
  * table. See [[an-absence-is-only-as-good-as-where-you-looked]].
  *
- * WHAT THIS DOES: given a platform and its rosters, rewrite the roster arrays
- * (`players`, `starters`, `reserve`, `taxi`) through `espnId → sleeperId`. An id
- * with no mapping is KEPT AS IS — it then fails every Sleeper-id match honestly
- * and counts against the vocabulary guard, exactly as before. Sleeper and manual
- * leagues (AllFantasy's own id space IS Sleeper's) pass through untouched with no
- * query.
+ * WHAT THIS DOES: given a platform and its rosters, rewrite the roster ids (arrays
+ * and `lineup_sections`) through `espnId → sleeperId`. An id with no mapping is
+ * DROPPED (2026-09-29) — it used to be kept on the theory that it "fails every
+ * Sleeper-id match honestly", and ESPN 12483 (Matthew Stafford) is Sleeper's 12483
+ * (Jack Bech): a hit, not a miss. See `sleeperReadablePlayerData`. Sleeper and
+ * manual leagues (AllFantasy's own id space IS Sleeper's) pass through untouched
+ * with no query. `sleeperReadableRosters` is the one entry point for readers.
  *
  * 🛑 EVERY OTHER PLATFORM IS STRIPPED, NOT PASSED THROUGH (2026-09-27). This header
  * used to say a Yahoo/Fleaflicker/MFL/Fantrax roster "passes through untouched and
@@ -89,14 +90,24 @@ export function stripForeignIds(playerData: unknown): Record<string, unknown> {
 }
 
 /**
- * A roster's `playerData` as a Sleeper-id reader may see it: a foreign league's ids stripped, any
- * other league's returned as is (same object, no copy). For readers that already hold the league's
- * platform and read `playerData` directly rather than through a translator. It composes the rule
- * above; it is not a second copy of it. An array-shaped `playerData` (the IDP parsers' form) from a
- * foreign league becomes `[]`.
+ * A roster's `playerData` as a Sleeper-id reader may see it WITHOUT A READ: a Sleeper or native
+ * league's returned as is (same object, no copy), every other league's ids stripped. An array-shaped
+ * `playerData` (the IDP parsers' form) from such a league becomes `[]`.
+ *
+ * 🛑 ESPN IS STRIPPED HERE TOO, AND THAT IS THE FIX, NOT A LOSS (2026-09-29). This used to pass an
+ * ESPN roster through untouched on the claim that "an ESPN id is long and collides with nothing". It
+ * does collide: 17 ESPN ids in `PlayerIdentityMap` equal a DIFFERENT player's Sleeper id, and one of
+ * them was on production rosters that day — ESPN 12483 is Matthew Stafford, on 8 ESPN leagues'
+ * rosters, and Sleeper 12483 is Jack Bech. Every reader of this function named, priced, injured and
+ * valued Jack Bech for Stafford, and — Stafford's real id never appearing — offered Stafford himself
+ * as a free agent. The ESPN ids that collide with nothing matched nothing either, so the surfaces
+ * were already empty for ESPN; stripping keeps them empty and makes them never wrong.
+ *
+ * To READ an ESPN roster, translate it: `sleeperReadableRosters` below, which is async because
+ * translation is one indexed read.
  */
 export function sleeperReadablePlayerData(platform: string | null | undefined, playerData: unknown): unknown {
-  if (!isForeignIdSpace(platform)) return playerData
+  if (rosterIdSpaceOf(platform) === 'sleeper') return playerData
   return Array.isArray(playerData) ? [] : stripForeignIds(playerData)
 }
 
@@ -118,23 +129,75 @@ export function collectRosterIds(playerDatas: readonly unknown[]): string[] {
   return [...seen]
 }
 
+/** The id a `lineup_sections` entry carries: the entry itself when it is an id, else its `id`. */
+function sectionEntryId(entry: unknown): string {
+  if (typeof entry === 'string' || typeof entry === 'number') return String(entry)
+  if (entry && typeof entry === 'object') return String((entry as { id?: unknown }).id ?? '')
+  return ''
+}
+
 /**
- * The same object with each roster array mapped through `map`. Ids without a
- * mapping are kept; keys that are not roster arrays are untouched; an empty map
- * returns the input object itself.
+ * Every distinct id an ESPN roster can carry — the roster arrays, `ir`/`devy`/`bench`, and every
+ * `lineup_sections` entry — so the map is asked about each id `translatePlayerData` will rewrite.
+ */
+function collectTranslatableIds(playerDatas: readonly unknown[]): string[] {
+  const seen = new Set<string>()
+  for (const raw of playerDatas) {
+    const pd = (raw ?? {}) as Record<string, unknown>
+    for (const key of STRIPPED_ARRAY_KEYS) {
+      const arr = pd[key]
+      if (Array.isArray(arr)) for (const x of arr) if (x != null && String(x)) seen.add(String(x))
+    }
+    for (const sectionsKey of ['lineup_sections', 'lineupSections']) {
+      const sections = pd[sectionsKey]
+      if (!sections || typeof sections !== 'object' || Array.isArray(sections)) continue
+      for (const v of Object.values(sections as Record<string, unknown>)) {
+        if (Array.isArray(v)) for (const e of v) { const id = sectionEntryId(e); if (id) seen.add(id) }
+      }
+    }
+  }
+  return [...seen]
+}
+
+/**
+ * An ESPN roster rewritten into Sleeper ids through `map` (ESPN id → Sleeper id): every roster array
+ * (`players`/`starters`/`reserve`/`taxi`/`ir`/`devy`/`bench`) and every `lineup_sections` entry.
+ * Keys that are not roster-id-bearing are untouched; a `null` hole stays a hole.
+ *
+ * 🛑 AN ID WITH NO MAPPING IS DROPPED, NOT KEPT. It was kept on the theory that it "fails every
+ * Sleeper-id match honestly". It does not: ESPN 12483 (Matthew Stafford, unmapped or not) IS
+ * Sleeper's 12483, Jack Bech, and a kept id is a hit, not a miss — every guard downstream only
+ * examines a miss. An ESPN id is only a Sleeper id once the identity map says whose.
+ * (`gameDayTriageLoader`, `playerShares` and `playerSharesLeague` already dropped them this way.)
  */
 export function translatePlayerData(playerData: unknown, map: ReadonlyMap<string, string>): Record<string, unknown> {
   const pd = (playerData ?? {}) as Record<string, unknown>
-  if (map.size === 0) return pd
   const out: Record<string, unknown> = { ...pd }
-  for (const key of ROSTER_KEYS) {
+  for (const key of STRIPPED_ARRAY_KEYS) {
     const arr = pd[key]
     if (!Array.isArray(arr)) continue
-    out[key] = arr.map((x) => {
-      if (x == null) return x
-      const id = String(x)
-      return map.get(id) ?? x
+    out[key] = arr.flatMap((x) => {
+      if (x == null) return [x]
+      const sid = map.get(String(x))
+      return sid ? [sid] : []
     })
+  }
+  for (const sectionsKey of ['lineup_sections', 'lineupSections']) {
+    const sections = pd[sectionsKey]
+    if (!sections || typeof sections !== 'object' || Array.isArray(sections)) continue
+    out[sectionsKey] = Object.fromEntries(
+      Object.entries(sections as Record<string, unknown>).map(([k, v]) => {
+        if (!Array.isArray(v)) return [k, v]
+        return [
+          k,
+          v.flatMap((e) => {
+            const sid = map.get(sectionEntryId(e))
+            if (!sid) return []
+            return [e && typeof e === 'object' ? { ...(e as Record<string, unknown>), id: sid } : sid]
+          }),
+        ]
+      }),
+    )
   }
   return out
 }
@@ -182,7 +245,8 @@ export async function translateRostersToSleeperIds<T extends { playerData: unkno
   }
   if (idSpace !== 'espn' || rosters.length === 0) return { rosters: [...rosters], idSpace, total: 0, translated: 0 }
   const ids = collectRosterIds(rosters.map((r) => r.playerData))
-  const map = await loadEspnToSleeperMap(ids)
+  // Asked about every id `translatePlayerData` rewrites (sections too), or an unasked id is dropped.
+  const map = await loadEspnToSleeperMap(collectTranslatableIds(rosters.map((r) => r.playerData)))
   let translated = 0
   for (const id of ids) if (map.has(id)) translated += 1
   return {
@@ -194,24 +258,49 @@ export async function translateRostersToSleeperIds<T extends { playerData: unkno
 }
 
 /**
- * Rosters spanning many leagues, translated per league platform with ONE read for
- * every ESPN id across them, and every foreign-id roster stripped (see the header).
+ * 🛑 THE ONE WAY TO READ ROSTERS AS SLEEPER IDS. Every roster comes back in Sleeper's id space or
+ * with no ids at all:
+ *
+ *   - Sleeper and native leagues    as is (same object, no copy, no read)
+ *   - ESPN                          translated through `PlayerIdentityMap.espnId → sleeperId`, ids
+ *                                   with no mapping DROPPED (see `translatePlayerData`)
+ *   - every other platform          stripped (see the header and `stripForeignIds`)
+ *
+ * ONE indexed read covers every ESPN roster passed, whatever the mix of leagues. `platform` is the
+ * league's platform when every roster is from one league, or a function giving each roster's.
+ *
+ * Use this, not `sleeperReadablePlayerData`, wherever the caller can await: that one cannot read the
+ * identity map, so it must strip ESPN, and an ESPN manager then sees an empty surface.
+ * ⚠ And never pass this function's output back through `sleeperReadablePlayerData` — it would strip
+ * the translated ESPN roster it was just handed.
+ */
+export async function sleeperReadableRosters<T extends { playerData: unknown }>(
+  rosters: readonly T[],
+  platform: string | null | undefined | ((roster: T) => string | null | undefined),
+): Promise<T[]> {
+  const platformOf = typeof platform === 'function' ? platform : () => platform
+  const spaceOf = rosters.map((r) => rosterIdSpaceOf(platformOf(r)))
+  const espnIds = collectTranslatableIds(rosters.filter((_, i) => spaceOf[i] === 'espn').map((r) => r.playerData))
+  const map = espnIds.length > 0 ? await loadEspnToSleeperMap(espnIds) : new Map<string, string>()
+  return rosters.map((r, i) => {
+    if (spaceOf[i] === 'sleeper') return r
+    if (Array.isArray(r.playerData)) return { ...r, playerData: [] }
+    return { ...r, playerData: spaceOf[i] === 'espn' ? translatePlayerData(r.playerData, map) : stripForeignIds(r.playerData) }
+  })
+}
+
+/** One roster's `playerData`, through `sleeperReadableRosters`. For a loop, pass the rosters at once. */
+export async function sleeperReadablePlayerDataOf(platform: string | null | undefined, playerData: unknown): Promise<unknown> {
+  return (await sleeperReadableRosters([{ playerData }], platform))[0]!.playerData
+}
+
+/**
+ * Rosters spanning many leagues, by league — `sleeperReadableRosters` keyed on `leagueId`.
  * Rosters of leagues absent from `platformByLeague` are treated as Sleeper-id rosters.
  */
 export async function translateRostersByLeague<T extends { leagueId: string; playerData: unknown }>(
   rosters: readonly T[],
   platformByLeague: ReadonlyMap<string, string | null | undefined>,
 ): Promise<T[]> {
-  const stripped = rosters.map((r) =>
-    isForeignIdSpace(platformByLeague.get(r.leagueId)) ? { ...r, playerData: stripForeignIds(r.playerData) } : r,
-  )
-  const espn = stripped.filter((r) => rosterIdSpaceOf(platformByLeague.get(r.leagueId)) === 'espn')
-  if (espn.length === 0) return stripped
-  const map = await loadEspnToSleeperMap(collectRosterIds(espn.map((r) => r.playerData)))
-  if (map.size === 0) return stripped
-  return stripped.map((r) =>
-    rosterIdSpaceOf(platformByLeague.get(r.leagueId)) === 'espn'
-      ? { ...r, playerData: translatePlayerData(r.playerData, map) }
-      : r,
-  )
+  return sleeperReadableRosters(rosters, (r) => platformByLeague.get(r.leagueId))
 }

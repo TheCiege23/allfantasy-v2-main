@@ -3,7 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 import { detectQbFormat } from './slotEligibility'
-import { sleeperReadablePlayerData } from './rosterIdSpace'
+import { sleeperReadableRosters } from './rosterIdSpace'
 import { BASELINE_SCORING, buildValueLedger } from '@/lib/trade-intel/valueLedger'
 
 /**
@@ -97,20 +97,24 @@ export async function getRosterGrade(args: {
   const { leagueId, myPlatformUserIds, isDynasty, starters } = args
   if (myPlatformUserIds.length === 0) return null
 
-  const rosters = await prisma.roster
-    .findMany({
-      where: { leagueId },
-      select: { platformUserId: true, playerData: true, league: { select: { platform: true } } },
-    })
-    .catch(() => [])
+  // In Sleeper ids: ESPN translated, any other foreign platform emptied — a foreign id priced as a
+  // Sleeper id grades a stranger (ESPN 12483 is Stafford; Sleeper 12483 is Jack Bech).
+  const rosters = await sleeperReadableRosters(
+    await prisma.roster
+      .findMany({
+        where: { leagueId },
+        select: { platformUserId: true, playerData: true, league: { select: { platform: true } } },
+      })
+      .catch(() => []),
+    (r) => r.league?.platform,
+  )
 
   // Two teams is not a league to be ranked within.
   if (rosters.length < 3) return null
 
   const byTeam = new Map<string, string[]>()
   for (const r of rosters) {
-    // A foreign league's ids collide with real Sleeper ids; priced as such they grade strangers.
-    const pd = (sleeperReadablePlayerData(r.league?.platform, r.playerData) ?? {}) as Record<string, unknown>
+    const pd = (r.playerData ?? {}) as Record<string, unknown>
     /*
      * The whole roster, not the starting lineup. A grade that counted only
      * starters would rank a team with an elite bench identically to one with

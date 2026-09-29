@@ -67,10 +67,16 @@ describe('stripForeignIds', () => {
 })
 
 describe('sleeperReadablePlayerData', () => {
-  it('strips a foreign roster, returns any other league’s playerData as the same object', () => {
+  /*
+   * This pinned ESPN as passed through "as the same object". That was the bug: ESPN 12483 is Matthew
+   * Stafford and Sleeper 12483 is Jack Bech (2026-09-29, on 8 production ESPN rosters). Without a read
+   * this function cannot translate, so it strips ESPN; `sleeperReadableRosters` translates it.
+   */
+  it('strips a foreign or ESPN roster; returns a Sleeper or native league’s playerData as the same object', () => {
     expect(sleeperReadablePlayerData('fleaflicker', FLEA_PD)).toEqual(stripForeignIds(FLEA_PD))
+    expect(sleeperReadablePlayerData('espn', FLEA_PD)).toEqual(stripForeignIds(FLEA_PD))
     expect(sleeperReadablePlayerData('mfl', ['6038', '4034'])).toEqual([])
-    for (const p of ['sleeper', 'manual', '', null, 'espn']) expect(sleeperReadablePlayerData(p, FLEA_PD)).toBe(FLEA_PD)
+    for (const p of ['sleeper', 'manual', '', null]) expect(sleeperReadablePlayerData(p, FLEA_PD)).toBe(FLEA_PD)
   })
 })
 
@@ -110,8 +116,11 @@ describe('sleeperLookupId', () => {
     expect(sleeperLookupId('fleaflicker', 'fl-9', crosswalk)).toBe('9')
     expect(sleeperLookupId('fleaflicker', '4034', crosswalk)).toBeNull()
   })
-  it('a Sleeper league’s roster id IS its Sleeper id; an unmatched ESPN id keeps the old fallback', () => {
+  /* This pinned "an unmatched ESPN id keeps the old fallback" — ESPN 12483 (Stafford) fell back to Sleeper's Jack Bech. */
+  it('a Sleeper league’s roster id IS its Sleeper id; an unmatched ESPN id resolves to nothing', () => {
     expect(sleeperLookupId('sleeper', '4034', crosswalk)).toBe('4034')
-    expect(sleeperLookupId('espn', '3139477', crosswalk)).toBe('3139477')
+    expect(sleeperLookupId('manual', '4034', crosswalk)).toBe('4034')
+    expect(sleeperLookupId('espn', '12483', crosswalk)).toBeNull()
+    expect(sleeperLookupId('espn', '12483', new Map([['12483', '421']]))).toBe('421')
   })
 })
