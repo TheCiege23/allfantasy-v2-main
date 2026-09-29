@@ -39,7 +39,7 @@ export function WhoStartsHim({
                 <div className="af-pf-ws-head">
                   <span className="af-pf-ws-league">{l.leagueName}</span>
                   {l.state === 'ranked' ? (
-                    <span className="af-pf-ws-count">
+                    <span className={`af-pf-ws-count${l.teams.length === 0 ? ' is-none' : ''}`}>
                       {l.teams.length === 0
                         ? `no team would start him over what they have`
                         : `would start for ${l.teams.length} of ${l.otherTeams} ${l.otherTeams === 1 ? 'team' : 'teams'}`}

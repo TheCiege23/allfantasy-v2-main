@@ -3868,6 +3868,11 @@
   font-size: 13px;
   font-weight: 700;
 }
+/* Nobody would start him is a real answer, not good news: muted, not accent. */
+.af-core .af-pf-ws-count.is-none {
+  color: var(--muted);
+  font-weight: 600;
+}
 .af-core .af-pf-ws-note {
   color: var(--muted);
   font-size: 12px;
