@@ -548,7 +548,7 @@ export function TradeValueModal({
       type="button"
       onClick={() => analyze()}
       disabled={loading || !canRunTrade}
-      className="rounded-lg border border-purple-400/30 bg-purple-500/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-purple-200 transition hover:bg-purple-500/25 disabled:opacity-40"
+      className="rounded-lg border border-purple-400/30 bg-purple-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-purple-200 transition hover:bg-purple-500/25 disabled:opacity-40"
     >
       {loading ? <Loader2 className="inline h-3 w-3 animate-spin" /> : 'Run analysis'}
     </button>
@@ -566,7 +566,7 @@ export function TradeValueModal({
       headerBadge={
         <span className="flex flex-wrap items-center gap-1">
           <span
-            className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+            className={`rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
               (result?.analysisMode as string) === 'global' || isGlobalLeague
                 ? 'border-amber-500/35 bg-amber-500/10 text-amber-100'
                 : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
@@ -574,7 +574,7 @@ export function TradeValueModal({
           >
             {(result?.analysisMode as string) === 'global' || isGlobalLeague ? 'Global' : 'League'}
           </span>
-          <span className="at-api-pill at-api-pill--live text-[9px] font-semibold uppercase tracking-wide">
+          <span className="at-api-pill at-api-pill--live text-[11px] font-semibold uppercase tracking-wide">
             Live data
           </span>
           {(() => {
@@ -590,13 +590,13 @@ export function TradeValueModal({
               | undefined
             if (!sf) {
               return (
-                <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#8b9dc8]">
+                <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#8b9dc8]">
                   FantasyCalc · DB
                 </span>
               )
             }
             const chipBase =
-              'rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide'
+              'rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide'
             const green = 'bg-emerald-500/15 text-emerald-200'
             const dim = 'bg-white/5 text-white/35'
             const amber = 'bg-amber-500/12 text-amber-100/90'
@@ -668,7 +668,7 @@ export function TradeValueModal({
         <p className="mb-2 text-[11px] leading-snug text-sky-200/90">{summaryLineRes}</p>
       ) : null}
       {timeCtx?.userLocalTime ? (
-        <p className="mb-3 text-[10px] text-[#5c6480]">
+        <p className="mb-3 text-[11px] text-[#5c6480]">
           Local {timeCtx.userLocalTime} ({timeCtx.userTimezone ?? '—'})
           {timeCtx.timezoneMismatch ? <span className="text-amber-200/90"> · device TZ ≠ account TZ</span> : null}
         </p>
@@ -726,7 +726,7 @@ export function TradeValueModal({
         {formatModes.map((m) => (
           <span
             key={m}
-            className={`rounded-[6px] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${
+            className={`rounded-[6px] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
               activeFormat === m ? 'bg-[#242838] text-[#e8eaf6] ring-1 ring-[#5b8ef0]/40' : 'text-[#5c6480]'
             }`}
           >
@@ -786,11 +786,11 @@ export function TradeValueModal({
             </select>
           </label>
         </div>
-        <p className="text-[10px] text-[#5c6480]">Scoring / format: {formatLine}</p>
+        <p className="text-[11px] text-[#5c6480]">Scoring / format: {formatLine}</p>
       </div>
 
       {/* Analysis tabs */}
-      <div className="mb-3 flex gap-1 overflow-x-auto rounded-[10px] border border-[#2e3347] bg-[#161b22] p-1 text-[10px] font-bold">
+      <div className="mb-3 flex gap-1 overflow-x-auto rounded-[10px] border border-[#2e3347] bg-[#161b22] p-1 text-[11px] font-bold">
         {(
           [
             ['raw', 'Raw value'],
@@ -839,7 +839,7 @@ export function TradeValueModal({
           }}
         />
         <div className="hidden h-full min-h-[100px] flex-col items-center justify-center sm:flex">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[#2e3347] bg-[#161b22] text-[10px] font-black tracking-tight text-[#5c6480]">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[#2e3347] bg-[#161b22] text-[11px] font-black tracking-tight text-[#5c6480]">
             VS
           </div>
         </div>
@@ -894,7 +894,7 @@ export function TradeValueModal({
           </p>
         </div>
         {fairnessScore != null ? <div className="relative mt-4">
-          <div className="mb-1 flex justify-between text-[9px] font-bold uppercase tracking-wide text-[#5c6480]">
+          <div className="mb-1 flex justify-between text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
             <span>LOPSIDED</span>
             <span className="text-[#9ba3bf]">EVEN</span>
             <span>LOPSIDED</span>
@@ -919,12 +919,12 @@ export function TradeValueModal({
           </p>
         ) : null}
         {rosterSummary?.lineupSimulation ? (
-          <p className="mt-2 text-[10px] text-[#5c6480]">
+          <p className="mt-2 text-[11px] text-[#5c6480]">
             Lineup context: {rosterSummary.yourRosterPlayers ?? 0} your roster players priced,{' '}
             {rosterSummary.theirRosterPlayers ?? 0} opponent.
           </p>
         ) : result && effectiveLeagueId ? (
-          <p className="mt-2 text-[10px] text-[#5c6480]">No synced roster — value-only (no lineup simulation).</p>
+          <p className="mt-2 text-[11px] text-[#5c6480]">No synced roster — value-only (no lineup simulation).</p>
         ) : null}
       </div>
 
@@ -945,7 +945,7 @@ export function TradeValueModal({
               Trade Value AI engine
             </p>
             {!proposalUnavailable && typeof tradeIntelligence.confidenceScore === 'number' ? (
-              <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold tabular-nums text-sky-100/90">
+              <span className="rounded-md border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[11px] font-bold tabular-nums text-sky-100/90">
                 Confidence {tradeIntelligence.confidenceScore}%
               </span>
             ) : null}
@@ -963,7 +963,7 @@ export function TradeValueModal({
               className="mt-3 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.05] px-3 py-2"
               data-testid="trade-value-projection-impact"
             >
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-cyan-200/80">
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-cyan-200/80">
                 League-scored weekly projection stack
               </p>
               <p className="text-[11px] leading-snug text-[#a8c4d8]">
@@ -977,7 +977,7 @@ export function TradeValueModal({
           ) : null}
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="rounded-lg border border-white/[0.08] bg-[#0a1228]/80 px-3 py-2">
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">Asset production lean</p>
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-[#5c6480]">Asset production lean</p>
               <p className="text-[14px] font-bold text-[#e8eaf6]">
                 {tradeIntelligence.whoWinsNow === 'you'
                   ? 'You (proj-first when available)'
@@ -987,7 +987,7 @@ export function TradeValueModal({
               </p>
             </div>
             <div className="rounded-lg border border-white/[0.08] bg-[#0a1228]/80 px-3 py-2">
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">League value lean</p>
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-[#5c6480]">League value lean</p>
               <p className="text-[14px] font-bold text-[#e8eaf6]">
                 {proposalUnavailable ? 'Unavailable' : tradeIntelligence.whoWinsLongTerm === 'you'
                   ? 'You (framework lean)'
@@ -999,17 +999,17 @@ export function TradeValueModal({
           </div>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             <div className="rounded-lg border border-emerald-500/15 bg-emerald-500/[0.06] px-3 py-2">
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-emerald-200/70">Contender read</p>
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-emerald-200/70">Contender read</p>
               <p className="text-[12px] leading-snug text-[#c8e6d8]">{proposalUnavailable ? 'Proposal value is unavailable; review complete projections and eligibility.' : tradeIntelligence.contenderRecommendation}</p>
             </div>
             <div className="rounded-lg border border-violet-500/15 bg-violet-500/[0.06] px-3 py-2">
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-violet-200/70">Rebuilder read</p>
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-violet-200/70">Rebuilder read</p>
               <p className="text-[12px] leading-snug text-[#d8cff5]">{proposalUnavailable ? 'The shared evaluator withheld the complete proposal grade.' : tradeIntelligence.rebuilderRecommendation}</p>
             </div>
           </div>
           {tradeIntelligence.tradeWarnings && tradeIntelligence.tradeWarnings.length > 0 ? (
             <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2">
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-amber-200/80">Warnings</p>
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-amber-200/80">Warnings</p>
               <ul className="list-inside list-disc space-y-1 text-[11px] text-amber-50/90">
                 {tradeIntelligence.tradeWarnings.map((w, i) => (
                   <li key={i}>{w}</li>
@@ -1019,7 +1019,7 @@ export function TradeValueModal({
           ) : null}
           {!proposalUnavailable && tradeIntelligence.rebalanceSuggestions && tradeIntelligence.rebalanceSuggestions.length > 0 ? (
             <div className="mt-3 rounded-lg border border-[#a78bfa]/25 bg-[#a78bfa]/[0.06] px-3 py-2">
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#c4b5fd]">Rebalance ideas</p>
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-[#c4b5fd]">Rebalance ideas</p>
               <ul className="list-inside list-disc space-y-1 text-[11px] text-[#e8e0ff]">
                 {tradeIntelligence.rebalanceSuggestions.map((w, i) => (
                   <li key={i}>{w}</li>
@@ -1029,7 +1029,7 @@ export function TradeValueModal({
           ) : null}
           {tradeIntelligence.alternateTargets && tradeIntelligence.alternateTargets.length > 0 ? (
             <div className="mt-3 rounded-lg border border-white/[0.08] bg-[#0a1228]/80 px-3 py-2">
-              <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">
+              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-[#5c6480]">
                 Alternate counter targets (their roster)
               </p>
               <ul className="list-none space-y-1 text-[11px] text-[#9eb0d0]">
@@ -1047,7 +1047,7 @@ export function TradeValueModal({
           ) : null}
           {tradeIntelligence.syncedDataHighlights && tradeIntelligence.syncedDataHighlights.length > 0 ? (
             <div className="mt-3 rounded-lg border border-sky-500/15 bg-[#0a1228]/90 px-3 py-2">
-              <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-sky-200/75">
+              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-sky-200/75">
                 Synced league data
               </p>
               <ul className="list-inside list-disc space-y-1 text-[11px] text-[#a8b8d8]">
@@ -1150,7 +1150,7 @@ export function TradeValueModal({
 
           {evaluation?.bullets?.length ? (
             <div className="rounded-xl border border-purple-500/10 bg-purple-500/[0.03] px-4 py-3">
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-purple-300/70">
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-purple-300/70">
                 Explanation
               </p>
               <ul className="list-inside list-disc space-y-1 text-[12px] text-white/70">
@@ -1183,7 +1183,7 @@ export function TradeValueModal({
           */}
           {Array.isArray(result?.formatNotes) && (result.formatNotes as string[]).length > 0 ? (
             <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.07] px-3 py-2 text-[11px] text-amber-50/90">
-              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-amber-200/80">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[11px] text-amber-200/80">
                 League format
               </div>
               {(result.formatNotes as string[]).map((n) => (
@@ -1202,7 +1202,7 @@ export function TradeValueModal({
           */}
           {Array.isArray(result?.scaleNotes) && (result.scaleNotes as string[]).length > 0 ? (
             <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] px-3 py-2 text-[11px] text-cyan-100/90">
-              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-cyan-200/80">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[11px] text-cyan-200/80">
                 League and roster shape
               </div>
               {(result.scaleNotes as string[]).map((n) => (
@@ -1220,7 +1220,7 @@ export function TradeValueModal({
           */}
           {Array.isArray(result?.postureNotes) && (result.postureNotes as string[]).length > 0 ? (
             <div className="rounded-xl border border-[#5c6480]/30 bg-white/[0.03] px-3 py-2 text-[11px] text-[#c8cde0]">
-              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-[#8b93ad]">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[11px] text-[#8b93ad]">
                 Where each side stands
               </div>
               {(result.postureNotes as string[]).map((n) => (
@@ -1237,7 +1237,7 @@ export function TradeValueModal({
           */}
           {Array.isArray(result?.pickNotes) && (result.pickNotes as string[]).length > 0 ? (
             <div className="rounded-xl border border-orange-500/20 bg-orange-500/[0.06] px-3 py-2 text-[11px] text-orange-100/90">
-              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-orange-200/80">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[11px] text-orange-200/80">
                 What these picks really are
               </div>
               {(result.pickNotes as string[]).map((n) => (
@@ -1256,7 +1256,7 @@ export function TradeValueModal({
           */}
           {Array.isArray(result?.leverageNotes) && (result.leverageNotes as string[]).length > 0 ? (
             <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] px-3 py-2 text-[11px] text-violet-100/90">
-              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-violet-200/80">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[11px] text-violet-200/80">
                 Your leverage
               </div>
               {(result.leverageNotes as string[]).map((n) => (
@@ -1276,7 +1276,7 @@ export function TradeValueModal({
           */}
           {Array.isArray(result?.needNotes) && (result.needNotes as string[]).length > 0 ? (
             <div className="rounded-xl border border-[#00d4aa]/20 bg-[#00d4aa]/[0.06] px-3 py-2 text-[11px] text-[#c9f5ec]">
-              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-[#00d4aa]/80">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[11px] text-[#00d4aa]/80">
                 Worth to your roster
               </div>
               {(result.needNotes as string[]).map((n) => (
@@ -1287,7 +1287,7 @@ export function TradeValueModal({
 
           {Array.isArray(result?.byeNotes) && (result.byeNotes as string[]).length > 0 ? (
             <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-3 py-2 text-[11px] text-sky-100/90">
-              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-sky-200/80">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[11px] text-sky-200/80">
                 Bye weeks
               </div>
               {(result.byeNotes as string[]).map((n) => (
@@ -1319,7 +1319,7 @@ export function TradeValueModal({
           </div>
           <div>
             <p className="text-[13px] font-semibold text-[#a78bfa]">Ask Chimmy</p>
-            <p className="text-[9px] text-[#5c6480]">OpenAI · DeepSeek · Grok · Anthropic</p>
+            <p className="text-[11px] text-[#5c6480]">OpenAI · DeepSeek · Grok · Anthropic</p>
           </div>
         </div>
         <div className="mb-2 flex flex-wrap gap-1.5">
@@ -1327,7 +1327,7 @@ export function TradeValueModal({
             <Link
               key={q}
               href={getChimmyChatHrefWithPrompt(q, chimmyPayload ?? { source: 'trade_value_modal_quick' })}
-              className="rounded-[6px] border border-[#3d4460] bg-[#242838] px-2 py-1 text-[10px] text-[#9ba3bf] no-underline hover:border-[#5c6480] hover:text-[#e8eaf6]"
+              className="rounded-[6px] border border-[#3d4460] bg-[#242838] px-2 py-1 text-[11px] text-[#9ba3bf] no-underline hover:border-[#5c6480] hover:text-[#e8eaf6]"
             >
               {q}
             </Link>
@@ -1366,7 +1366,7 @@ export function TradeValueModal({
             {detail.injuryStatus ? (
               <p className="mt-2 text-[12px] text-amber-200/90">Injury: {String(detail.injuryStatus)}</p>
             ) : null}
-            <p className="mt-2 text-[10px] text-white/35">Source: {String(detail.dataSource)} · Updated {String(detail.lastUpdated)}</p>
+            <p className="mt-2 text-[11px] text-white/35">Source: {String(detail.dataSource)} · Updated {String(detail.lastUpdated)}</p>
             <LinkChimmy detail={detail} />
           </div>
         </div>
@@ -1428,7 +1428,7 @@ function PlayerBreakdown({
   return (
     <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div>
-        <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-[#5c6480]">You give</p>
+        <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-[#5c6480]">You give</p>
         <div className="space-y-1.5">
           {players.give.map((p, i) => (
             <button
@@ -1439,7 +1439,7 @@ function PlayerBreakdown({
             >
               <span className="min-w-0 truncate">
                 {p.name}{' '}
-                <span className="text-[10px] text-[#5c6480]">
+                <span className="text-[11px] text-[#5c6480]">
                   {p.position} {p.team}
                 </span>
               </span>
@@ -1451,7 +1451,7 @@ function PlayerBreakdown({
         </div>
       </div>
       <div>
-        <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-[#5c6480]">You get</p>
+        <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-[#5c6480]">You get</p>
         <div className="space-y-1.5">
           {players.get.map((p, i) => (
             <button
@@ -1462,7 +1462,7 @@ function PlayerBreakdown({
             >
               <span className="min-w-0 truncate">
                 {p.name}{' '}
-                <span className="text-[10px] text-[#5c6480]">
+                <span className="text-[11px] text-[#5c6480]">
                   {p.position} {p.team}
                 </span>
               </span>
@@ -1499,9 +1499,9 @@ function MiniCard({
 }) {
   return (
     <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-2">
-      <p className="text-[8px] font-bold uppercase tracking-widest text-white/30">{title}</p>
+      <p className="text-[11px] font-bold uppercase tracking-widest text-white/30">{title}</p>
       {lineOnly || line ? (
-        <p className="mt-1 line-clamp-3 text-[10px] text-white/55">{line}</p>
+        <p className="mt-1 line-clamp-3 text-[11px] text-white/55">{line}</p>
       ) : (
         <p className="mt-1 text-[16px] font-black tabular-nums text-white/85">{value}</p>
       )}
@@ -1512,7 +1512,7 @@ function MiniCard({
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
-      <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-white/30">{title}</p>
+      <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-white/30">{title}</p>
       {children}
     </div>
   )
@@ -1568,15 +1568,15 @@ function TradeColumn({
 
   return (
     <div className={`rounded-[12px] border border-[#2e3347] bg-[#161b22] p-2.5 ${accentCls}`}>
-      <p className="mb-2 text-[9px] font-bold uppercase tracking-widest text-[#5c6480]">{label}</p>
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-[#5c6480]">{label}</p>
 
       {/* Roster picker. Present only when a league is selected and that team has a synced roster —
           a global (sport-only) trade has no roster to show, and saying so beats an empty box. */}
       {rosterLoading ? (
-        <p className="mb-2 text-[10px] text-[#5c6480]">Loading roster…</p>
+        <p className="mb-2 text-[11px] text-[#5c6480]">Loading roster…</p>
       ) : rosterPlayers && rosterPlayers.length > 0 ? (
         <details className="mb-2 rounded-[10px] border border-[#2e3347]/90 bg-[#0b0e14]">
-          <summary className="cursor-pointer list-none px-2 py-1.5 text-[10px] font-semibold text-white/60 hover:text-white/80">
+          <summary className="cursor-pointer list-none px-2 py-1.5 text-[11px] font-semibold text-white/60 hover:text-white/80">
             {rosterLabel ?? 'Roster'} · {rosterPlayers.length} players
             {rosterMeta && rosterMeta.unresolved > 0 ? (
               /* Named rather than hidden: a roster of 22 rendering 20 rows with no explanation is
@@ -1603,14 +1603,14 @@ function TradeColumn({
                   </span>
                 </span>
                 {rp.injuryStatus ? (
-                  <span className="ml-auto shrink-0 text-[9px] uppercase text-[#d98b7c]">{rp.injuryStatus}</span>
+                  <span className="ml-auto shrink-0 text-[11px] uppercase text-[#d98b7c]">{rp.injuryStatus}</span>
                 ) : null}
               </button>
             ))}
           </div>
         </details>
       ) : rosterMeta && !rosterMeta.synced ? (
-        <p className="mb-2 text-[10px] text-[#5c6480]">No synced roster for this team — search by name below.</p>
+        <p className="mb-2 text-[11px] text-[#5c6480]">No synced roster for this team — search by name below.</p>
       ) : null}
 
       <div className="space-y-2">
@@ -1626,7 +1626,7 @@ function TradeColumn({
                   if (k === 'pick') updateRow(i, { key: row.key, kind: 'pick', year: new Date().getFullYear() + 1, round: 2 })
                   if (k === 'faab') updateRow(i, { key: row.key, kind: 'faab', amount: 10 })
                 }}
-                className="rounded bg-transparent text-[10px] font-bold text-white/50"
+                className="rounded bg-transparent text-[11px] font-bold text-white/50"
               >
                 <option value="player">Player</option>
                 <option value="pick">Pick</option>
@@ -1698,7 +1698,7 @@ function TradeColumn({
             {rows.length > 1 ? (
               <button
                 type="button"
-                className="mt-1 text-[9px] font-bold uppercase text-white/35 hover:text-white/60"
+                className="mt-1 text-[11px] font-bold uppercase text-white/35 hover:text-white/60"
                 onClick={() => onChange((prev) => prev.filter((_, j) => j !== i))}
               >
                 Remove
@@ -1710,21 +1710,21 @@ function TradeColumn({
       <div className="mt-2 flex gap-2">
         <button
           type="button"
-          className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-white/40 hover:text-white/70"
+          className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-white/40 hover:text-white/70"
           onClick={() => onChange((prev) => [...prev, emptyPlayerRow()])}
         >
           <Plus className="h-3 w-3" /> Add
         </button>
         <button
           type="button"
-          className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-white/40 hover:text-white/70"
+          className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-white/40 hover:text-white/70"
           onClick={() => onChange((prev) => [...prev, { key: newKey(), kind: 'pick', year: new Date().getFullYear() + 1, round: 2 }])}
         >
           <ArrowUp className="h-3 w-3" /> Pick
         </button>
         <button
           type="button"
-          className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-white/40 hover:text-white/70"
+          className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-white/40 hover:text-white/70"
           onClick={() => onChange((prev) => [...prev, { key: newKey(), kind: 'faab', amount: 10 }])}
         >
           <Minus className="h-3 w-3" /> FAAB

@@ -73,7 +73,7 @@ function statusClass(status: ReadinessStatus) {
 
 function StatusPill({ label, status }: { label: string; status: ReadinessStatus }) {
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${statusClass(status)}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${statusClass(status)}`}>
       {status === "ready" ? <Check className="h-3 w-3" aria-hidden /> : status === "blocked" ? <X className="h-3 w-3" aria-hidden /> : null}
       {label}
     </span>
@@ -98,7 +98,7 @@ function ReadinessMetric({
 }) {
   return (
     <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-      <div className="text-[10px] font-bold uppercase tracking-wide text-white/35">{label}</div>
+      <div className="text-[11px] font-bold uppercase tracking-wide text-white/35">{label}</div>
       <div className="mt-1 flex items-center justify-between gap-2">
         <span className="text-xs font-black text-white">{value}</span>
         <StatusPill label={status === "ready" ? "Ready" : status === "pending" ? "Pending" : status === "blocked" ? "Blocked" : "Warning"} status={status} />
@@ -202,7 +202,7 @@ export default function WorldCupReadinessPanel({ challengeId, seasonYear = 2026 
 
           <div className="grid gap-2 md:grid-cols-3">
             <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">Teams / Groups</p>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">Teams / Groups</p>
               <p className="mt-1 text-xs font-black text-white">
                 {readiness.data.groupsComplete ? "A-L complete" : "Missing groups listed below"}
               </p>
@@ -213,7 +213,7 @@ export default function WorldCupReadinessPanel({ challengeId, seasonYear = 2026 
               ) : null}
             </div>
             <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">Standings State</p>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">Standings State</p>
               <p className="mt-1 text-xs font-black text-white">
                 {readiness.data.standingsState === "pre_tournament"
                   ? "Pre-tournament"
@@ -226,7 +226,7 @@ export default function WorldCupReadinessPanel({ challengeId, seasonYear = 2026 
               <p className="mt-1 text-[11px] text-white/45">0-played / 0-point rows are expected before kickoff.</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">Overall Readiness</p>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">Overall Readiness</p>
               <p className="mt-1 text-xs font-black text-white">
                 Group Stage: {readiness.data.groupStageReady ? "Ready" : "Blocked"}
               </p>
@@ -287,7 +287,7 @@ export default function WorldCupReadinessPanel({ challengeId, seasonYear = 2026 
           ) : null}
 
           {checkedAt ? (
-            <p className="text-[10px] text-white/35">Last checked {new Date(checkedAt).toLocaleString()}</p>
+            <p className="text-[11px] text-white/35">Last checked {new Date(checkedAt).toLocaleString()}</p>
           ) : null}
         </div>
       ) : (

@@ -23,7 +23,7 @@ function TeamChip({ name, logo }: { name: string; logo?: string | null }) {
           className="h-4 w-4 rounded-full bg-white object-contain"
         />
       ) : (
-        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/10 text-[8px] font-black text-white/50">
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-black text-white/50">
           {name.slice(0, 2).toUpperCase()}
         </span>
       )}
@@ -48,9 +48,9 @@ function MatchChip({ match }: { match: WorldCupMatchView }) {
         </span>
       )}
       {isFinal && (
-        <span className="text-white/85 font-bold text-[10px]">FT</span>
+        <span className="text-white/85 font-bold text-[11px]">FT</span>
       )}
-      {isSimulated && <span className="text-white/70 font-bold text-[10px]">SIM</span>}
+      {isSimulated && <span className="text-white/70 font-bold text-[11px]">SIM</span>}
       <TeamChip name={match.homeTeamName || "TBD"} logo={match.homeTeamLogo} />
       <span className={`tabular-nums font-black ${isLive ? "text-white" : "text-white/50"}`}>
         {score}
@@ -96,17 +96,17 @@ export default function WorldCupLiveScoreTicker({ matches }: { matches: WorldCup
   return (
     <div className="flex items-center gap-2 overflow-x-auto border-b border-white/10 bg-black/40 px-3 py-2 scrollbar-none">
       {showLiveDot && (
-        <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/70">
+        <span className="shrink-0 text-[11px] font-bold uppercase tracking-widest text-white/70">
           Live
         </span>
       )}
       {!showLiveDot && upcoming.length > 0 && (
-        <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-white/30">
+        <span className="shrink-0 text-[11px] font-bold uppercase tracking-widest text-white/30">
           Next
         </span>
       )}
       {hasMounted && !showLiveDot && upcoming.length > 0 && (
-        <span className="shrink-0 text-[10px] text-white/40">
+        <span className="shrink-0 text-[11px] text-white/40">
           {formatWorldCupKickoffShort(upcoming[0]?.startsAt)}
         </span>
       )}

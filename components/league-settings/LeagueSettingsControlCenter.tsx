@@ -135,7 +135,7 @@ export function LeagueSettingsControlCenter({
             type="button"
             onClick={() => setTab(t.id)}
             data-testid={`league-settings-hub-tab-${t.id}`}
-            className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition ${
+            className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${
               tab === t.id ? 'bg-cyan-500/15 text-cyan-200' : 'text-white/45 hover:text-white/75'
             }`}
           >

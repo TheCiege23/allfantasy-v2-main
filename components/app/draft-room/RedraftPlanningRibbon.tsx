@@ -60,27 +60,27 @@ export function RedraftPlanningRibbon({
       </div>
 
       {backToBackSoon && !userOnClock && !preDraft ? (
-        <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/35 bg-amber-500/12 px-2 py-0.5 text-[10px] font-semibold text-amber-100">
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/35 bg-amber-500/12 px-2 py-0.5 text-[11px] font-semibold text-amber-100">
           <ArrowRightLeft className="h-3 w-3" aria-hidden />
           Back-to-back picks coming — plan both slots
         </span>
       ) : null}
 
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 border-l border-white/10 pl-3">
-        <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">
+        <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">
           <Users className="h-3 w-3" aria-hidden />
           Next up
         </span>
         <ol className="flex flex-wrap gap-2">
           {onDeck.length === 0 ? (
-            <li className="text-[10px] text-white/38">Draft finishing…</li>
+            <li className="text-[11px] text-white/38">Draft finishing…</li>
           ) : (
             onDeck.slice(0, 4).map((u, i) => (
               <li
                 key={`${u.slot}-${i}`}
                 className="flex items-center gap-1 rounded-md border border-white/10 bg-black/25 px-2 py-0.5"
               >
-                <span className="font-mono text-[10px] text-cyan-200/80">T{u.slot}</span>
+                <span className="font-mono text-[11px] text-cyan-200/80">T{u.slot}</span>
                 <span className="max-w-[120px] truncate text-[11px] text-white/80">{u.displayName}</span>
               </li>
             ))
@@ -88,7 +88,7 @@ export function RedraftPlanningRibbon({
         </ol>
       </div>
 
-      <p className="text-[10px] text-white/42 sm:pl-2">
+      <p className="text-[11px] text-white/42 sm:pl-2">
         Snake: pick order reverses each round
         {thirdRoundReversal ? ' · 3rd-round reversal on' : ''}.
       </p>

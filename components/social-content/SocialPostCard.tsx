@@ -71,7 +71,7 @@ export function SocialPostCard({
         className="px-6 py-3 flex flex-col gap-1"
         style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}
       >
-        <p className="text-[10px] text-slate-500 leading-tight">
+        <p className="text-[11px] text-slate-500 leading-tight">
           {hashtags.join(' ')}
         </p>
         <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>

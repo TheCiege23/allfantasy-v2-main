@@ -116,7 +116,7 @@ export function ZombieCommissionerModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[var(--zombie-border)] bg-[var(--zombie-panel)] px-5 py-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--zombie-crimson)]">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--zombie-crimson)]">
               Commissioner Settings
             </p>
             <p className="text-[13px] font-semibold text-[var(--zombie-text-full)]">

@@ -23,7 +23,7 @@ export function DeadlinesCard({ leagueId }: { leagueId: string }) {
 
   return (
     <div className="flex-1 rounded-xl border border-white/10 bg-[#0a1228] p-3 text-[12px] text-white/85" data-testid="bb-deadlines-card">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-white/40">@chimmy deadlines</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">@chimmy deadlines</p>
       <ul className="mt-1 list-inside list-disc space-y-0.5">
         {lines.map((l) => (
           <li key={l}>{l}</li>

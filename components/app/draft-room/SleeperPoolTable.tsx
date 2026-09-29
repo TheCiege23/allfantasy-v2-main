@@ -101,7 +101,7 @@ function PositionChip({ pos }: { pos: string | null }) {
                 : 'border-white/18 bg-white/[0.07] text-white/75'
   return (
     <span
-      className={`inline-flex shrink-0 items-center justify-center rounded border px-1 py-px text-[8px] font-bold uppercase leading-none ${tone}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded border px-1 py-px text-[11px] font-bold uppercase leading-none ${tone}`}
       title={pos ?? undefined}
     >
       {p}
@@ -268,19 +268,19 @@ function SleeperRow(props: SleeperRowProps) {
                   {p.name}
                 </span>
                 {drafted ? (
-                  <span className="flex-shrink-0 rounded border border-white/15 bg-white/[0.05] px-1 py-px text-[9px] text-white/60">
+                  <span className="flex-shrink-0 rounded border border-white/15 bg-white/[0.05] px-1 py-px text-[11px] text-white/60">
                     Drafted
                   </span>
                 ) : null}
               </div>
               <div className="flex min-w-0 items-center gap-1">
                 <PositionChip pos={p.position} />
-                {p.team ? <span className="truncate text-[10px] text-white/38">{p.team}</span> : null}
+                {p.team ? <span className="truncate text-[11px] text-white/38">{p.team}</span> : null}
               </div>
               {showAi ? (
                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1">
                   <span
-                    className={`inline-flex items-center gap-1 rounded border px-1 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em] ${badgeTone}`}
+                    className={`inline-flex items-center gap-1 rounded border px-1 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ${badgeTone}`}
                     title={aiOverlaySignal?.reason ?? aiOverlaySignal?.strategyNote ?? undefined}
                     data-testid={`${testIdBase}-ai-badge`}
                   >
@@ -289,7 +289,7 @@ function SleeperRow(props: SleeperRowProps) {
                   </span>
                   {aiOverlaySignal?.scarcityLevel ? (
                     <span
-                      className="inline-flex items-center gap-1 rounded border border-violet-300/35 bg-violet-500/12 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em] text-violet-100"
+                      className="inline-flex items-center gap-1 rounded border border-violet-300/35 bg-violet-500/12 px-1 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-violet-100"
                       title="Positional scarcity warning"
                       data-testid={`${testIdBase}-ai-scarcity`}
                     >
@@ -299,7 +299,7 @@ function SleeperRow(props: SleeperRowProps) {
                   ) : null}
                   {aiOverlaySignal?.tierDropAlert ? (
                     <span
-                      className="inline-flex items-center gap-1 rounded border border-amber-300/35 bg-amber-500/12 px-1 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em] text-amber-100"
+                      className="inline-flex items-center gap-1 rounded border border-amber-300/35 bg-amber-500/12 px-1 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-100"
                       title="Tier-drop alert"
                       data-testid={`${testIdBase}-ai-tier-drop`}
                     >
@@ -309,7 +309,7 @@ function SleeperRow(props: SleeperRowProps) {
                   ) : null}
                   {aiOverlaySignal?.boomBust ? (
                     <span
-                      className={`inline-flex items-center gap-1 rounded border px-1 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em] ${
+                      className={`inline-flex items-center gap-1 rounded border px-1 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] ${
                         aiOverlaySignal.boomBust === 'boom'
                           ? 'border-rose-300/35 bg-rose-500/12 text-rose-100'
                           : 'border-slate-300/35 bg-slate-500/12 text-slate-100'
@@ -323,7 +323,7 @@ function SleeperRow(props: SleeperRowProps) {
                   ) : null}
                   {confidencePct != null ? (
                     <span
-                      className="inline-flex items-center gap-1 rounded border border-cyan-300/35 bg-cyan-500/10 px-1 py-0.5 text-[8px] font-semibold text-cyan-100"
+                      className="inline-flex items-center gap-1 rounded border border-cyan-300/35 bg-cyan-500/10 px-1 py-0.5 text-[11px] font-semibold text-cyan-100"
                       title={`AI confidence ${confidencePct}%`}
                       data-testid={`${testIdBase}-ai-confidence`}
                     >
@@ -360,7 +360,7 @@ function SleeperRow(props: SleeperRowProps) {
                   aria-hidden
                   data-testid={`${testIdBase}-adp-delta`}
                   title={`vs AI ADP: ${delta > 0 ? 'undervalued' : 'overvalued'} by ${Math.abs(delta)} spots`}
-                  className={`text-[8px] font-medium tabular-nums leading-none ${
+                  className={`text-[11px] font-medium tabular-nums leading-none ${
                     delta > 0 ? 'text-emerald-300/85' : 'text-rose-300/70'
                   }`}
                 >
@@ -399,7 +399,7 @@ function SleeperRow(props: SleeperRowProps) {
                 <span
                   data-testid={`${testIdBase}-ai-adp-projected`}
                   aria-label="projected from other league sizes"
-                  className="text-[10px] leading-none text-sky-300/70"
+                  className="text-[11px] leading-none text-sky-300/70"
                 >
                   ~
                 </span>
@@ -472,7 +472,7 @@ function SleeperRow(props: SleeperRowProps) {
                   onNominateRequest()
                 }}
                 data-testid={`${testIdBase}-nominate`}
-                className="draft-live-action-btn inline-flex h-[22px] items-center rounded-md border border-amber-400/45 bg-amber-500/15 px-2 text-[9px] font-semibold text-amber-100 hover:brightness-110"
+                className="draft-live-action-btn inline-flex h-[22px] items-center rounded-md border border-amber-400/45 bg-amber-500/15 px-2 text-[11px] font-semibold text-amber-100 hover:brightness-110"
               >
                 Nominate
               </button>
@@ -487,7 +487,7 @@ function SleeperRow(props: SleeperRowProps) {
                 }}
                 title={drafted ? 'Player already drafted' : !canDraft ? 'Not your turn' : 'Draft this player'}
                 data-testid={`${testIdBase}-draft`}
-                className={`draft-live-action-btn inline-flex h-[22px] items-center rounded-md border px-2 text-[9px] font-semibold transition ${
+                className={`draft-live-action-btn inline-flex h-[22px] items-center rounded-md border px-2 text-[11px] font-semibold transition ${
                   drafted
                     ? 'cursor-not-allowed border-white/8 bg-white/[0.04] text-white/30'
                     : !canDraft
@@ -613,7 +613,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
       <div
         role="row"
         data-testid="sleeper-pool-table-header"
-        className="sticky top-0 z-10 flex items-center border-b border-white/[0.04] bg-[linear-gradient(180deg,#111c33_0%,#0d1628_100%)] text-[8px] font-semibold uppercase tracking-[0.12em] text-[#9fb0d6] shadow-[inset_0_-1px_0_rgba(255,255,255,0.03)]"
+        className="sticky top-0 z-10 flex items-center border-b border-white/[0.04] bg-[linear-gradient(180deg,#111c33_0%,#0d1628_100%)] text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9fb0d6] shadow-[inset_0_-1px_0_rgba(255,255,255,0.03)]"
         style={{ height: SLEEPER_POOL_TABLE_HEADER_HEIGHT, minWidth }}
       >
         {layout.columns.map((col) => {
@@ -646,7 +646,7 @@ export function SleeperPoolTable(props: SleeperPoolTableProps) {
                 >
                   <span>{col.label}</span>
                   {indicator ? (
-                    <span aria-hidden className="text-[8px] leading-none text-cyan-300/85">
+                    <span aria-hidden className="text-[11px] leading-none text-cyan-300/85">
                       {indicator}
                     </span>
                   ) : null}

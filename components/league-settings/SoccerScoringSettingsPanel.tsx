@@ -260,7 +260,7 @@ export function SoccerScoringSettingsPanel({
 
       {/* Preset selector */}
       <div className="space-y-2">
-        <label className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+        <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
           Scoring Preset
         </label>
         <div className="flex flex-wrap gap-2">
@@ -330,7 +330,7 @@ export function SoccerScoringSettingsPanel({
           const isPremiumGroup = groupLabel === 'Advanced Analytics'
           return (
             <div key={groupLabel}>
-              <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-white/20">
+              <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-white/20">
                 {groupLabel}
               </p>
               <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-0.5">
@@ -345,7 +345,7 @@ export function SoccerScoringSettingsPanel({
                       key={cat.id}
                       type="button"
                       onClick={() => setActiveTab(cat.id)}
-                      className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide transition ${colorClass}`}
+                      className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${colorClass}`}
                     >
                       {cat.label}
                       {isPremiumGroup && !isPremium && (
@@ -377,7 +377,7 @@ export function SoccerScoringSettingsPanel({
                 <button
                   type="button"
                   onClick={() => setGateOpen(true)}
-                  className="mt-1.5 rounded-md bg-cyan-600/60 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-cyan-600/80"
+                  className="mt-1.5 rounded-md bg-cyan-600/60 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-cyan-600/80"
                 >
                   Upgrade
                 </button>
@@ -387,11 +387,11 @@ export function SoccerScoringSettingsPanel({
 
           {/* Category stat count */}
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/30">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-white/30">
               {activeCategory.label} ({activeCategory.rows.length} stats)
             </span>
             {isCommissioner && activeCategory.id !== 'advanced' && (
-              <span className="text-[10px] text-white/25">
+              <span className="text-[11px] text-white/25">
                 Click value to edit
               </span>
             )}
@@ -421,7 +421,7 @@ export function SoccerScoringSettingsPanel({
                     )}
                   </div>
                   {row.helper && (
-                    <p className="mt-0.5 text-[10px] text-white/30">
+                    <p className="mt-0.5 text-[11px] text-white/30">
                       {row.helper}
                     </p>
                   )}

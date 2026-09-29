@@ -62,7 +62,7 @@ function DigitBlock({ value, label, color }: { value: string; label: string; col
   return (
     <div className="flex flex-col items-center">
       <span className={`text-2xl font-black leading-none tabular-nums sm:text-3xl ${color}`}>{value}</span>
-      <span className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-white/30">{label}</span>
+      <span className="mt-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white/30">{label}</span>
     </div>
   )
 }
@@ -249,7 +249,7 @@ export default function WorldCupPoolCountdownBanner({
 
         {/* ── Left: label + digit clock + match info ── */}
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-white/45">
             {urgencyLabel}
           </p>
 
@@ -278,7 +278,7 @@ export default function WorldCupPoolCountdownBanner({
             {timeLine && <span className="ml-1 font-normal">· {timeLine}</span>}
           </p>
           {state === "countdown" && (
-            <p className="mt-0.5 text-[10px] text-white/30">
+            <p className="mt-0.5 text-[11px] text-white/30">
               {t("wc.countdown.banner.locksNote")}
             </p>
           )}

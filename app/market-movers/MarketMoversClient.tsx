@@ -184,7 +184,7 @@ export function MarketMoversClient() {
                 }`}
               >
                 {s.icon} {s.label}
-                <span className="ml-1 rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[9px] text-white/30">{s.data.length}</span>
+                <span className="ml-1 rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[11px] text-white/30">{s.data.length}</span>
               </button>
             )
           })}
@@ -205,7 +205,7 @@ export function MarketMoversClient() {
         ) : (
           <div className="space-y-1.5">
             {/* Column headers */}
-            <div className="flex items-center gap-3 px-3 py-1 text-[9px] font-bold uppercase tracking-wide text-white/20">
+            <div className="flex items-center gap-3 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white/20">
               <span className="w-8 text-center">#</span>
               <span className="flex-1">Player</span>
               <span className="w-16 text-right">Value</span>

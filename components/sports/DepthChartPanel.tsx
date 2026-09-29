@@ -82,7 +82,7 @@ export function DepthChartPanel({ sport, team }: { sport: string; team?: string 
                           : 'bg-white/[0.04] text-white/50'
                       }`}
                     >
-                      {j === 0 && <span className="mr-1 text-[9px] text-cyan-400">★</span>}
+                      {j === 0 && <span className="mr-1 text-[11px] text-cyan-400">★</span>}
                       {p}
                     </span>
                   ))}

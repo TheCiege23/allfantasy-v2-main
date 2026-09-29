@@ -38,7 +38,7 @@ export function RankMovementChip({ movement }: { movement: RankMovement | null |
 
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${cls}`}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${cls}`}
     >
       {label}
     </span>
@@ -76,7 +76,7 @@ export function RankPrestigeEmblem({
           {emoji}
         </span>
         <span
-          className="mt-0.5 text-[9px] font-black uppercase tracking-[0.2em] text-white/50"
+          className="mt-0.5 text-[11px] font-black uppercase tracking-[0.2em] text-white/50"
           style={{ color: theme.accent }}
         >
           Lv {level}
@@ -136,19 +136,19 @@ export function AIGradeRing({
           <span className={`font-black leading-none text-white ${compact ? 'text-lg' : 'text-xl sm:text-2xl'}`}>
             {grade}
           </span>
-          <span className="mt-0.5 text-[8px] font-bold uppercase tracking-widest text-white/35">Grade</span>
+          <span className="mt-0.5 text-[11px] font-bold uppercase tracking-widest text-white/35">Grade</span>
         </div>
       </div>
       {score != null ? (
         <div className="text-center">
           <p className="text-sm font-bold tabular-nums text-white/90">
             {score}
-            <span className="text-[10px] font-semibold text-white/35">/100</span>
+            <span className="text-[11px] font-semibold text-white/35">/100</span>
           </p>
-          <p className="max-w-[9rem] text-[10px] font-medium leading-tight text-white/50">{descriptor}</p>
+          <p className="max-w-[9rem] text-[11px] font-medium leading-tight text-white/50">{descriptor}</p>
         </div>
       ) : null}
-      <div className="flex items-center gap-1 rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[9px] font-semibold text-violet-200/90">
+      <div className="flex items-center gap-1 rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[11px] font-semibold text-violet-200/90">
         <Sparkles className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
         Chimmy Grade
       </div>
@@ -208,7 +208,7 @@ export function XpProgressPremium({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-white/40">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/40">
         <span>
           {nextLevelName ? (
             <>
@@ -222,7 +222,7 @@ export function XpProgressPremium({
         <span className="tabular-nums">{(xpTotal ?? 0).toLocaleString()} total XP</span>
       </div>
 
-      {helperText ? <p className="text-[10px] leading-relaxed text-white/35">{helperText}</p> : null}
+      {helperText ? <p className="text-[11px] leading-relaxed text-white/35">{helperText}</p> : null}
     </div>
   )
 }
@@ -244,10 +244,10 @@ export function RankingStatMiniCard({
         <span className="shrink-0 opacity-80" aria-hidden>
           {icon}
         </span>
-        <span className="truncate text-[9px] font-bold uppercase tracking-wider">{label}</span>
+        <span className="truncate text-[11px] font-bold uppercase tracking-wider">{label}</span>
       </div>
       <p className="truncate text-base font-black tabular-nums text-white/95 sm:text-lg">{value}</p>
-      {sub ? <p className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-white/38">{sub}</p> : null}
+      {sub ? <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-white/38">{sub}</p> : null}
     </div>
   )
 }
@@ -256,7 +256,7 @@ export function RankInsightBanner({ text }: { text: string }) {
   if (!text?.trim()) return null
   return (
     <div className="flex gap-2 rounded-xl border border-cyan-500/15 bg-cyan-500/[0.06] px-3 py-2.5">
-      <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-cyan-400/90">Chimmy</span>
+      <span className="shrink-0 text-[11px] font-black uppercase tracking-widest text-cyan-400/90">Chimmy</span>
       <p className="text-[12px] leading-relaxed text-white/70">{text}</p>
     </div>
   )

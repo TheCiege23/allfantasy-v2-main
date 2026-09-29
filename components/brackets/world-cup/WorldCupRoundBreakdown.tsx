@@ -45,7 +45,7 @@ export default function WorldCupRoundBreakdown({
               <span className="text-white/40">
                 {t("wc.roundBreakdown.ptsAbbrev", { n: row.pointsPerCorrect })}
               </span>
-              <span className="ml-1 text-[10px] font-normal text-white/30">
+              <span className="ml-1 text-[11px] font-normal text-white/30">
                 {t("wc.roundBreakdown.perWin")}
               </span>
             </span>
@@ -55,7 +55,7 @@ export default function WorldCupRoundBreakdown({
       {bonus > 0 && (
         <div
           data-testid="wc-round-champion-bonus"
-          className="mt-2 rounded-lg border border-amber-400/20 bg-amber-500/10 px-2.5 py-2 text-[10px] text-white/75"
+          className="mt-2 rounded-lg border border-amber-400/20 bg-amber-500/10 px-2.5 py-2 text-[11px] text-white/75"
         >
           {t("wc.roundBreakdown.championBonus", { bonus })}
         </div>

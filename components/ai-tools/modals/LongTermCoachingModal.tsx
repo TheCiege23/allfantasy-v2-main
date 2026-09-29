@@ -222,26 +222,26 @@ export function LongTermCoachingModal({
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-xl border border-white/[0.08] bg-[#070d18] p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Classification</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Classification</p>
                 <p className="mt-1 text-sm font-bold capitalize text-white">{fmt?.cls}</p>
                 <p className="text-[11px] text-white/55">Direction: {fmt?.dir}</p>
               </div>
               <div className="rounded-xl border border-white/[0.08] bg-[#070d18] p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Short-term index</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Short-term index</p>
                 <p className="mt-1 text-lg font-bold text-emerald-200/95">
                   {data.signals.shortTermStrengthIndex.toFixed(0)}
                 </p>
                 <p className="text-[11px] text-white/55">Starter projections (normalized)</p>
               </div>
               <div className="rounded-xl border border-white/[0.08] bg-[#070d18] p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Long-term assets</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Long-term assets</p>
                 <p className="mt-1 text-lg font-bold text-sky-200/95">{data.signals.longTermAssetIndex.toFixed(0)}</p>
                 <p className="text-[11px] text-white/55">
                   Dynasty DB coverage {(data.signals.dynastyValueCoverageRatio * 100).toFixed(0)}%
                 </p>
               </div>
               <div className="rounded-xl border border-white/[0.08] bg-[#070d18] p-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">Pick capital</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">Pick capital</p>
                 <p className="mt-1 text-lg font-bold text-violet-200/95">{data.signals.pickCapitalScore.toFixed(0)}</p>
                 <p className="text-[11px] text-white/55">From synced future picks</p>
               </div>
@@ -257,7 +257,7 @@ export function LongTermCoachingModal({
                   <div key={y.labelYear} className="rounded-lg border border-white/[0.06] bg-[#040915] p-3">
                     <p className="text-[11px] font-bold text-white">{y.labelYear}</p>
                     <p className="mt-1 text-lg font-semibold text-white/90">{y.projectedTeamStrengthIndex.toFixed(0)}</p>
-                    <p className="text-[10px] uppercase text-white/45">{y.contentionBand} · {y.confidence} conf.</p>
+                    <p className="text-[11px] uppercase text-white/45">{y.contentionBand} · {y.confidence} conf.</p>
                     <ul className="mt-2 list-disc pl-4 text-[11px] text-white/60">
                       {y.notes.map((n, i) => (
                         <li key={i}>{n}</li>

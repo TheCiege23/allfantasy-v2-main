@@ -64,11 +64,11 @@ function TraitRadar({ scores }: { scores: Record<string, number> }) {
         const color = score >= 70 ? 'bg-red-500' : score >= 45 ? 'bg-amber-500' : 'bg-emerald-500'
         return (
           <div key={key} className="flex items-center gap-2">
-            <span className="text-[10px] text-zinc-500 w-16 text-right">{label}</span>
+            <span className="text-[11px] text-zinc-500 w-16 text-right">{label}</span>
             <div className="flex-1 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
               <div className={`h-full rounded-full ${color}`} style={{ width: `${score}%` }} />
             </div>
-            <span className="text-[10px] text-zinc-400 w-6 text-right">{score}</span>
+            <span className="text-[11px] text-zinc-400 w-6 text-right">{score}</span>
           </div>
         )
       })}
@@ -91,7 +91,7 @@ function TipCard({ tip }: { tip: NegotiationTip }) {
 
   return (
     <div className="text-xs text-zinc-400 flex gap-2">
-      <span className={`text-[10px] uppercase font-medium ${catColors[tip.category] ?? 'text-zinc-500'} whitespace-nowrap`}>
+      <span className={`text-[11px] uppercase font-medium ${catColors[tip.category] ?? 'text-zinc-500'} whitespace-nowrap`}>
         {tip.category.replace('_', ' ')}
       </span>
       <span>{tip.tip}</span>
@@ -108,28 +108,28 @@ function ExploitSection({ exploits, cautions }: { exploits: ExploitNote[]; cauti
     <div className="grid grid-cols-2 gap-2">
       {/* Exploits */}
       <div className="bg-emerald-500/5 border border-emerald-500/15 rounded-lg p-2">
-        <h4 className="text-[10px] text-emerald-500 uppercase font-medium mb-1">Exploitable Patterns</h4>
+        <h4 className="text-[11px] text-emerald-500 uppercase font-medium mb-1">Exploitable Patterns</h4>
         {exploits.length > 0 ? (
           <div className="space-y-1">
             {exploits.map((e, i) => (
-              <div key={i} className="text-[10px] text-zinc-400">
+              <div key={i} className="text-[11px] text-zinc-400">
                 <span className="text-emerald-400 mr-1">{e.reliability}%</span>
                 {e.description}
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-[10px] text-zinc-500">No clear exploitable patterns detected.</p>
+          <p className="text-[11px] text-zinc-500">No clear exploitable patterns detected.</p>
         )}
       </div>
 
       {/* Cautions */}
       <div className="bg-red-500/5 border border-red-500/15 rounded-lg p-2">
-        <h4 className="text-[10px] text-red-500 uppercase font-medium mb-1">Caution Notes</h4>
+        <h4 className="text-[11px] text-red-500 uppercase font-medium mb-1">Caution Notes</h4>
         {cautions.length > 0 ? (
           <div className="space-y-1">
             {cautions.map((c, i) => (
-              <div key={i} className="text-[10px] text-zinc-400">
+              <div key={i} className="text-[11px] text-zinc-400">
                 <span className={`mr-1 ${c.severity === 'high' ? 'text-red-400' : 'text-amber-400'}`}>
                   {c.severity === 'high' ? '⚠️' : 'ℹ️'}
                 </span>
@@ -138,7 +138,7 @@ function ExploitSection({ exploits, cautions }: { exploits: ExploitNote[]; cauti
             ))}
           </div>
         ) : (
-          <p className="text-[10px] text-zinc-500">No significant caution flags.</p>
+          <p className="text-[11px] text-zinc-500">No significant caution flags.</p>
         )}
       </div>
     </div>
@@ -173,7 +173,7 @@ export default function ManagerPsychCard({
               <span className={`text-xs font-medium px-2 py-0.5 rounded border ${archetypeColor(p.archetype)}`}>
                 {archetypeEmoji(p.archetype)} {p.archetype}
               </span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${confidenceColor(p.confidenceLevel)}`}>
+              <span className={`text-[11px] px-1.5 py-0.5 rounded border ${confidenceColor(p.confidenceLevel)}`}>
                 {p.confidenceLevel} conf ({p.sampleSize} trades)
               </span>
             </div>
@@ -183,7 +183,7 @@ export default function ManagerPsychCard({
 
         {/* Quick approach summary */}
         <div className="mt-2 bg-zinc-800/50 rounded-lg px-2.5 py-1.5">
-          <span className="text-[10px] text-zinc-500 uppercase">Best Approach</span>
+          <span className="text-[11px] text-zinc-500 uppercase">Best Approach</span>
           <p className="text-xs text-zinc-300">{p.bestApproachSummary}</p>
         </div>
 
@@ -191,24 +191,24 @@ export default function ManagerPsychCard({
         <div className="flex gap-3 mt-2">
           {p.likelyToValue.length > 0 && (
             <div className="flex items-center gap-1 flex-wrap">
-              <span className="text-[10px] text-zinc-500">Values:</span>
+              <span className="text-[11px] text-zinc-500">Values:</span>
               {p.likelyToValue.map(v => (
-                <span key={v} className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{v}</span>
+                <span key={v} className="text-[11px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{v}</span>
               ))}
             </div>
           )}
           {p.likelyToUndervalue.length > 0 && (
             <div className="flex items-center gap-1 flex-wrap">
-              <span className="text-[10px] text-zinc-500">Undervalues:</span>
+              <span className="text-[11px] text-zinc-500">Undervalues:</span>
               {p.likelyToUndervalue.map(v => (
-                <span key={v} className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">{v}</span>
+                <span key={v} className="text-[11px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">{v}</span>
               ))}
             </div>
           )}
         </div>
 
         {!compact && (
-          <span className="text-[10px] text-zinc-600 mt-1 block">{expanded ? '▲ Collapse' : '▼ Full profile'}</span>
+          <span className="text-[11px] text-zinc-600 mt-1 block">{expanded ? '▲ Collapse' : '▼ Full profile'}</span>
         )}
       </button>
 
@@ -217,7 +217,7 @@ export default function ManagerPsychCard({
         <div className="px-4 pb-4 pt-0 border-t border-zinc-800 space-y-3">
           {/* Trait Radar */}
           <div className="pt-2">
-            <h4 className="text-[10px] text-zinc-500 uppercase font-medium mb-1">Trait Profile</h4>
+            <h4 className="text-[11px] text-zinc-500 uppercase font-medium mb-1">Trait Profile</h4>
             <TraitRadar scores={p.traitRadar as unknown as Record<string, number>} />
           </div>
 
@@ -233,14 +233,14 @@ export default function ManagerPsychCard({
             ].map(({ label, score }) => (
               <div key={label} className="text-center">
                 <div className={`text-sm font-bold ${scoreColor(score)}`}>{score}</div>
-                <div className="text-[9px] text-zinc-500 uppercase">{label}</div>
+                <div className="text-[11px] text-zinc-500 uppercase">{label}</div>
               </div>
             ))}
           </div>
 
           {/* Negotiation Tips */}
           <div>
-            <h4 className="text-[10px] text-zinc-500 uppercase font-medium mb-1">Negotiation Tips</h4>
+            <h4 className="text-[11px] text-zinc-500 uppercase font-medium mb-1">Negotiation Tips</h4>
             <div className="space-y-1.5">
               {p.negotiationTips.map((tip, i) => <TipCard key={i} tip={tip} />)}
             </div>
@@ -252,8 +252,8 @@ export default function ManagerPsychCard({
           {/* Common Mistakes */}
           {p.commonMistakes.length > 0 && (
             <div>
-              <h4 className="text-[10px] text-zinc-500 uppercase font-medium mb-1">Common Mistakes</h4>
-              <ul className="text-[10px] text-zinc-400 space-y-0.5">
+              <h4 className="text-[11px] text-zinc-500 uppercase font-medium mb-1">Common Mistakes</h4>
+              <ul className="text-[11px] text-zinc-400 space-y-0.5">
                 {p.commonMistakes.map((m, i) => <li key={i}>• {m}</li>)}
               </ul>
             </div>

@@ -246,22 +246,22 @@ export function TrendingPlayersModal({
         wide
         headerBadge={
           <span className="flex flex-wrap items-center gap-1">
-            <span className="at-api-pill at-api-pill--live text-[9px] font-semibold uppercase tracking-wide">
+            <span className="at-api-pill at-api-pill--live text-[11px] font-semibold uppercase tracking-wide">
               Live data
             </span>
             {data?.degraded ? (
-              <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold text-amber-100/90">
+              <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-100/90">
                 Partial
               </span>
             ) : (
-              <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[9px] font-semibold text-[#8b9dc8]">
+              <span className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-semibold text-[#8b9dc8]">
                 Ready
               </span>
             )}
             {(() => {
               const sf = data?.sourceFlags
               if (!sf) return null
-              const chipBase = 'rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide'
+              const chipBase = 'rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide'
               const green = 'bg-emerald-500/15 text-emerald-200'
               const dim = 'bg-white/5 text-white/35'
               const amber = 'bg-amber-500/12 text-amber-100/90'
@@ -294,7 +294,7 @@ export function TrendingPlayersModal({
             type="button"
             onClick={() => load()}
             disabled={loading}
-            className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-100/90 disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-100/90 disabled:opacity-40"
           >
             {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
             Refresh
@@ -430,17 +430,17 @@ export function TrendingPlayersModal({
         {data ? (
           <div className="mb-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
             <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] px-3 py-2">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-200/70">Risers</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-200/70">Risers</p>
               <p className="text-[22px] font-black tabular-nums text-emerald-300">{data.summary.riserCount}</p>
-              <p className="text-[10px] text-[#5c6480]">Trending up</p>
+              <p className="text-[11px] text-[#5c6480]">Trending up</p>
             </div>
             <div className="rounded-xl border border-red-500/20 bg-red-500/[0.05] px-3 py-2">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-red-200/70">Fallers</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-red-200/70">Fallers</p>
               <p className="text-[22px] font-black tabular-nums text-red-300">{data.summary.fallerCount}</p>
-              <p className="text-[10px] text-[#5c6480]">Trending down</p>
+              <p className="text-[11px] text-[#5c6480]">Trending down</p>
             </div>
             <div className="rounded-xl border border-cyan-500/15 bg-cyan-500/[0.04] px-3 py-2">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-cyan-200/70">Biggest mover</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-200/70">Biggest mover</p>
               <p className="truncate text-[12px] font-bold text-cyan-100/90">
                 {data.summary.biggestGainer?.name ?? '—'}
               </p>
@@ -449,7 +449,7 @@ export function TrendingPlayersModal({
               </p>
             </div>
             <div className="rounded-xl border border-rose-500/15 bg-rose-500/[0.04] px-3 py-2">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-rose-200/70">Biggest faller</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-rose-200/70">Biggest faller</p>
               <p className="truncate text-[12px] font-bold text-rose-100/90">
                 {data.summary.biggestFaller?.name ?? '—'}
               </p>
@@ -484,7 +484,7 @@ export function TrendingPlayersModal({
 
         {data?.aiNarrative ? (
           <div className="mt-4 rounded-xl border border-amber-500/15 bg-amber-500/[0.04] px-4 py-3">
-            <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-amber-200/75">AI read</p>
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-amber-200/75">AI read</p>
             <p className="text-[12px] leading-relaxed text-[#c8d4f0]">{data.aiNarrative}</p>
           </div>
         ) : null}
@@ -496,7 +496,7 @@ export function TrendingPlayersModal({
         ) : null}
 
         {data?.fetchedAt ? (
-          <p className="mt-2 text-[10px] text-[#5c6480]">Updated {new Date(data.fetchedAt).toLocaleString()}</p>
+          <p className="mt-2 text-[11px] text-[#5c6480]">Updated {new Date(data.fetchedAt).toLocaleString()}</p>
         ) : null}
 
         {/* Chimmy */}
@@ -507,7 +507,7 @@ export function TrendingPlayersModal({
             </div>
             <div>
               <p className="text-[13px] font-semibold text-amber-100/90">Ask Chimmy</p>
-              <p className="text-[9px] text-[#5c6480]">Uses structured trend payload only</p>
+              <p className="text-[11px] text-[#5c6480]">Uses structured trend payload only</p>
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -515,7 +515,7 @@ export function TrendingPlayersModal({
               <Link
                 key={q}
                 href={getChimmyChatHrefWithPrompt(q, data?.chimmyPayload ?? { source: 'trending_players' })}
-                className="rounded-[6px] border border-[#3d4460] bg-[#242838] px-2 py-1 text-[10px] text-[#9ba3bf] no-underline hover:border-[#5c6480] hover:text-[#e8eaf6]"
+                className="rounded-[6px] border border-[#3d4460] bg-[#242838] px-2 py-1 text-[11px] text-[#9ba3bf] no-underline hover:border-[#5c6480] hover:text-[#e8eaf6]"
               >
                 {q}
               </Link>
@@ -550,7 +550,7 @@ export function TrendingPlayersModal({
                   <p className="text-[11px] text-white/45">
                     {detail.position} · {detail.team}
                     {sportFilter === 'ALL' || String(detail.sport) !== sportFilter ? (
-                      <span className="ml-1 rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-200/80">
+                      <span className="ml-1 rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-bold uppercase text-amber-200/80">
                         {detail.sport}
                       </span>
                     ) : null}
@@ -569,7 +569,7 @@ export function TrendingPlayersModal({
               <p className="mt-2 text-[12px] text-amber-200/90">Injury: {detail.injuryStatus}</p>
             ) : null}
             {detail.isRookie ? (
-              <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-sky-200/80">Rookie / prospect</p>
+              <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-sky-200/80">Rookie / prospect</p>
             ) : null}
             {detail.actionRecommendation ? (
               <p className="mt-2 text-[11px] text-cyan-100/90">
@@ -578,7 +578,7 @@ export function TrendingPlayersModal({
               </p>
             ) : null}
             {detail.leagueRelevance ? (
-              <p className="mt-1 text-[10px] leading-snug text-[#7a849e]">
+              <p className="mt-1 text-[11px] leading-snug text-[#7a849e]">
                 {RELEVANCE_LABEL[detail.leagueRelevance] ?? detail.leagueRelevance}
               </p>
             ) : null}
@@ -606,7 +606,7 @@ export function TrendingPlayersModal({
             </div>
             {detail.structuredWhy?.length ? (
               <div className="mt-3 rounded-lg border border-white/[0.06] bg-[#0b1020]/80 px-3 py-2">
-                <p className="mb-1 text-[9px] font-bold uppercase tracking-wider text-[#5c6480]">Why (structured)</p>
+                <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-[#5c6480]">Why (structured)</p>
                 <ul className="list-inside list-disc space-y-1 text-[11px] leading-relaxed text-white/75">
                   {detail.structuredWhy.map((line, i) => (
                     <li key={`${i}-${line.slice(0, 32)}`}>{line}</li>
@@ -619,14 +619,14 @@ export function TrendingPlayersModal({
               {detail.chips.map((c) => (
                 <span
                   key={c}
-                  className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-100/80"
+                  className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-100/80"
                 >
                   {c}
                 </span>
               ))}
             </div>
-            <p className="mt-2 text-[10px] text-white/35">Sources: {detail.sources.join(' · ')}</p>
-            <p className="mt-1 text-[10px] text-white/35">{detail.dataFreshness}</p>
+            <p className="mt-2 text-[11px] text-white/35">Sources: {detail.sources.join(' · ')}</p>
+            <p className="mt-1 text-[11px] text-white/35">{detail.dataFreshness}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Link
                 href={getChimmyChatHrefWithPrompt(
@@ -726,9 +726,9 @@ function TrendColumn({
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className={`flex items-center gap-1.5 ${text}`}>
           {icon}
-          <p className="text-[10px] font-bold uppercase tracking-widest">{title}</p>
+          <p className="text-[11px] font-bold uppercase tracking-widest">{title}</p>
         </div>
-        <span className="rounded-md bg-white/[0.04] px-2 py-0.5 text-[9px] font-bold text-white/40">{players.length}</span>
+        <span className="rounded-md bg-white/[0.04] px-2 py-0.5 text-[11px] font-bold text-white/40">{players.length}</span>
       </div>
       <div className="space-y-2">
         {players.map((p) => (
@@ -739,7 +739,7 @@ function TrendColumn({
             className="w-full rounded-lg border border-white/[0.06] bg-[#0b1020]/80 p-2.5 text-left transition hover:border-amber-500/25"
           >
             <div className="flex items-start gap-2">
-              <span className="mt-0.5 w-5 text-[10px] font-black tabular-nums text-white/30">{p.rank}</span>
+              <span className="mt-0.5 w-5 text-[11px] font-black tabular-nums text-white/30">{p.rank}</span>
               {p.headshotUrl ? (
                 <Image
                   src={p.headshotUrl}
@@ -750,7 +750,7 @@ function TrendColumn({
                   unoptimized
                 />
               ) : (
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#161b22] text-[10px] font-bold text-white/40">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-[#161b22] text-[11px] font-bold text-white/40">
                   {p.name.slice(0, 2).toUpperCase()}
                 </div>
               )}
@@ -763,10 +763,10 @@ function TrendColumn({
                     <ArrowDownRight className="h-3.5 w-3.5 shrink-0 text-red-400/90" />
                   )}
                 </div>
-                <p className="truncate text-[10px] text-white/40">
+                <p className="truncate text-[11px] text-white/40">
                   {p.position} · {p.team}
                   {sportFilter === 'ALL' ? (
-                    <span className="ml-1 rounded bg-white/[0.06] px-1 text-[8px] font-bold uppercase text-amber-200/70">
+                    <span className="ml-1 rounded bg-white/[0.06] px-1 text-[11px] font-bold uppercase text-amber-200/70">
                       {p.sport}
                     </span>
                   ) : null}
@@ -778,25 +778,25 @@ function TrendColumn({
                     {p.trendDelta > 0 ? '+' : ''}
                     {p.trendDelta}
                   </span>
-                  <span className="text-[9px] text-white/35">· {p.confidence}% conf</span>
+                  <span className="text-[11px] text-white/35">· {p.confidence}% conf</span>
                   {p.projectedFantasyPoints != null && Number.isFinite(p.projectedFantasyPoints) ? (
-                    <span className="text-[9px] text-cyan-200/70">· ~{p.projectedFantasyPoints} proj</span>
+                    <span className="text-[11px] text-cyan-200/70">· ~{p.projectedFantasyPoints} proj</span>
                   ) : null}
                   {p.rosteredPct != null ? (
-                    <span className="text-[9px] text-white/35">· {p.rosteredPct}% rost</span>
+                    <span className="text-[11px] text-white/35">· {p.rosteredPct}% rost</span>
                   ) : null}
                   {p.actionRecommendation ? (
-                    <span className="text-[8px] font-bold uppercase tracking-wide text-cyan-200/75">
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-cyan-200/75">
                       · {ACTION_LABEL[p.actionRecommendation] ?? p.actionRecommendation}
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-1 line-clamp-2 text-[10px] leading-snug text-white/45">{p.snippet}</p>
+                <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-white/45">{p.snippet}</p>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {p.chips.slice(0, 2).map((c) => (
                     <span
                       key={c}
-                      className="rounded bg-white/[0.05] px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-amber-200/70"
+                      className="rounded bg-white/[0.05] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-200/70"
                     >
                       {c}
                     </span>

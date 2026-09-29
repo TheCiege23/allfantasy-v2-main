@@ -280,7 +280,7 @@ export function LiveScoresClient({ initial }: { initial: LivePageData }) {
           <ConnectionNotice state={connection} />
           <LockAlertBanner alerts={data.lockAlerts} now={now} />
           <p
-            className="live-mono text-[10px] font-bold uppercase tracking-widest"
+            className="live-mono text-[11px] font-bold uppercase tracking-widest"
             style={{ color: 'var(--muted2)' }}
           >
             {data.sport} · {scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}
@@ -577,7 +577,7 @@ export function LockAlertBanner({
       aria-live="polite"
     >
       <h2
-        className="live-mono mb-2 text-[10px] font-bold uppercase tracking-widest"
+        className="live-mono mb-2 text-[11px] font-bold uppercase tracking-widest"
         style={{ color: 'var(--warn)' }}
       >
         {closing.length === 1

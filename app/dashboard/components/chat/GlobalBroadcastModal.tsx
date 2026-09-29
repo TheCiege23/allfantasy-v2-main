@@ -261,7 +261,7 @@ export function GlobalBroadcastModal({ isOpen, onClose, commissionerLeagues, onS
                       onChange={(e) => setSelected((s) => ({ ...s, [l.id]: e.target.checked }))}
                     />
                     <span className="min-w-0 flex-1 truncate text-xs text-white/85">{l.name}</span>
-                    <span className="text-[10px] text-white/35">{l.teamCount} teams</span>
+                    <span className="text-[11px] text-white/35">{l.teamCount} teams</span>
                   </label>
                 ))
               )}

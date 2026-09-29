@@ -290,7 +290,7 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
               <p className="text-[12px] font-semibold text-[#ffd7e5]/90">Active declaration session</p>
               <p className="text-[11px] text-white/45">
                 Status: <span className="text-white/75">{ctx.session.status}</span> · Session{' '}
-                <code className="rounded bg-black/30 px-1 text-[10px] text-white/60">{ctx.session.id}</code>
+                <code className="rounded bg-black/30 px-1 text-[11px] text-white/60">{ctx.session.id}</code>
               </p>
               <p className="mt-1 text-[11px] text-white/55">
                 Deadline: {new Date(ctx.session.deadline).toLocaleString()}
@@ -366,12 +366,12 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
                     <td className="py-2 pr-2 align-top">
                       <span className="font-medium text-white">{r.teamName}</span>
                       {r.ownerLabel ? (
-                        <span className="block text-[10px] text-white/40">{r.ownerLabel}</span>
+                        <span className="block text-[11px] text-white/40">{r.ownerLabel}</span>
                       ) : null}
                     </td>
                     <td className="py-2 pr-2 align-top">
                       {r.playerName}
-                      <span className="block text-[10px] text-white/40">{r.position}</span>
+                      <span className="block text-[11px] text-white/40">{r.position}</span>
                     </td>
                     <td className="py-2 pr-2 align-top text-white/70">
                       {r.costLabel ?? (r.costRound != null ? `Round ${r.costRound}` : '—')}

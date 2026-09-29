@@ -1029,7 +1029,7 @@ export default function ChimmyChatShell({
           </div>
           <div className="min-w-0">
             <h2 className="font-semibold text-white truncate">Chimmy</h2>
-            <p className="text-[10px] sm:text-xs text-white/50 truncate">
+            <p className="text-[11px] sm:text-xs text-white/50 truncate">
               Calm, evidence-based fantasy assistant
             </p>
           </div>
@@ -1101,7 +1101,7 @@ export default function ChimmyChatShell({
           onChange={handleAssistantModeChange}
         />
         <label className="flex flex-col gap-1 min-w-[120px] flex-1 sm:flex-none">
-          <span className="text-[10px] uppercase tracking-wide text-white/45">Sport</span>
+          <span className="text-[11px] uppercase tracking-wide text-white/45">Sport</span>
           <select
             data-testid="chimmy-scope-sport"
             className="rounded-lg border border-white/15 bg-[#040915] px-2 py-1.5 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
@@ -1124,7 +1124,7 @@ export default function ChimmyChatShell({
           </select>
         </label>
         <label className="flex flex-col gap-1 min-w-[160px] flex-[2] sm:flex-none sm:min-w-[220px]">
-          <span className="text-[10px] uppercase tracking-wide text-white/45">League</span>
+          <span className="text-[11px] uppercase tracking-wide text-white/45">League</span>
           <select
             data-testid="chimmy-scope-league"
             className="max-w-full rounded-lg border border-white/15 bg-[#040915] px-2 py-1.5 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
@@ -1306,7 +1306,7 @@ export default function ChimmyChatShell({
           </button>
         </div>
 
-        <div className="flex items-center justify-between text-[10px] text-white/40 flex-wrap gap-2">
+        <div className="flex items-center justify-between text-[11px] text-white/40 flex-wrap gap-2">
           <div className="flex items-center gap-3">
             {startSitDecisionHref ? (
               <Link

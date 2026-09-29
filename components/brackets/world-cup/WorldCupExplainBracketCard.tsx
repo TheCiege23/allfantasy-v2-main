@@ -88,7 +88,7 @@ export default function WorldCupExplainBracketCard({
             <Sparkles className="h-4 w-4 text-white/85" aria-hidden />
           </div>
           <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
               {t("wc.explain.eyebrow")}
             </p>
             <h3 className="text-base font-black text-white sm:text-lg">
@@ -104,8 +104,8 @@ export default function WorldCupExplainBracketCard({
             data-testid="world-cup-explain-bracket-tier"
             className={
               hasBracketBrainAi
-                ? "shrink-0 rounded-full border border-cyan-300/30 bg-cyan-300/[0.08] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/90"
-                : "shrink-0 rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/65"
+                ? "shrink-0 rounded-full border border-cyan-300/30 bg-cyan-300/[0.08] px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/90"
+                : "shrink-0 rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/65"
             }
           >
             {hasBracketBrainAi ? t("wc.explain.tierPro") : t("wc.explain.tierLocked")}
@@ -156,7 +156,7 @@ export default function WorldCupExplainBracketCard({
                 : t("wc.explain.selectFirst")}
           </button>
           {!loading && entryId && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-white/40 sm:ml-1">
+            <span className="inline-flex items-center gap-1 text-[11px] text-white/40 sm:ml-1">
               <Coins className="h-3 w-3" />
               Uses AI tokens
             </span>
@@ -208,7 +208,7 @@ export default function WorldCupExplainBracketCard({
             {!result.generative ? (
               <span
                 data-testid="world-cup-explain-bracket-fallback-badge"
-                className="rounded-full border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-white/80"
+                className="rounded-full border border-amber-300/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold text-white/80"
               >
                 {t("wc.explain.fallbackBadge")}
               </span>
@@ -217,7 +217,7 @@ export default function WorldCupExplainBracketCard({
         </div>
       ) : null}
 
-      <p className="mt-3 text-[10px] text-white/40">
+      <p className="mt-3 text-[11px] text-white/40">
         {t("wc.explain.privacyNote")}
       </p>
     </section>

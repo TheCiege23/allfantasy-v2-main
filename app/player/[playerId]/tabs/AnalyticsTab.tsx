@@ -62,14 +62,14 @@ export function AnalyticsTab({ player }: { player: PlayerIdentity }) {
     <div className="space-y-4">
       {data.aiInsights && (
         <div className="rounded-xl border border-purple-500/15 bg-purple-500/5 p-4">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-purple-300/50">AI Insights</p>
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-purple-300/50">AI Insights</p>
           <p className="text-[13px] leading-relaxed text-white/70">{data.aiInsights}</p>
         </div>
       )}
 
       {data.matchupPrediction && (
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/30">Matchup Prediction</p>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/30">Matchup Prediction</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <MiniStat label="Exp. Pts" value={data.matchupPrediction.expectedPoints?.toFixed(1) ?? '—'} />
             <MiniStat label="Pts/Game" value={data.matchupPrediction.expectedPointsPerGame?.toFixed(1) ?? '—'} />
@@ -81,7 +81,7 @@ export function AnalyticsTab({ player }: { player: PlayerIdentity }) {
 
       {data.metaTrends && (
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/30">Meta Trends</p>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/30">Meta Trends</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <MiniStat label="Trend Score" value={data.metaTrends.trendScore?.toFixed(0) ?? '—'} />
             <MiniStat label="Add Rate" value={data.metaTrends.addRate != null ? `${(data.metaTrends.addRate * 100).toFixed(1)}%` : '—'} />
@@ -93,7 +93,7 @@ export function AnalyticsTab({ player }: { player: PlayerIdentity }) {
 
       {data.careerProjection && (
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/30">Career Projection</p>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/30">Career Projection</p>
           <div className="grid grid-cols-3 gap-3">
             <BarStat label="Breakout" pct={data.careerProjection.breakoutProbability ?? 0} color="emerald" />
             <BarStat label="Decline" pct={data.careerProjection.declineProbability ?? 0} color="red" />
@@ -108,7 +108,7 @@ export function AnalyticsTab({ player }: { player: PlayerIdentity }) {
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[9px] uppercase text-white/30">{label}</p>
+      <p className="text-[11px] uppercase text-white/30">{label}</p>
       <p className="text-[14px] font-bold text-white/80">{value}</p>
     </div>
   )
@@ -118,7 +118,7 @@ function BarStat({ label, pct, color }: { label: string; pct: number; color: str
   const bg = color === 'emerald' ? 'bg-emerald-500' : color === 'red' ? 'bg-red-500' : 'bg-amber-500'
   return (
     <div>
-      <div className="flex items-center justify-between text-[9px]">
+      <div className="flex items-center justify-between text-[11px]">
         <span className="uppercase text-white/30">{label}</span>
         <span className="font-bold text-white/50">{Math.round(pct * 100)}%</span>
       </div>

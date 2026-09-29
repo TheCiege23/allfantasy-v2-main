@@ -93,7 +93,7 @@ export default function ProjectionsPreviewPage() {
         </p>
       </header>
 
-      <div className="mb-2 flex items-center gap-2 px-1 text-[9px] font-bold uppercase tracking-wide text-white/20">
+      <div className="mb-2 flex items-center gap-2 px-1 text-[11px] font-bold uppercase tracking-wide text-white/20">
         <span className="flex-1">Player <span className="normal-case text-white/25">2025 season</span></span>
         <span className="w-16 text-right">Per game</span>
         <span className="w-20 text-right">Rest of season</span>
@@ -104,7 +104,7 @@ export default function ProjectionsPreviewPage() {
         ))}
       </ul>
 
-      <p className="text-[10px] text-white/35">
+      <p className="text-[11px] text-white/35">
         Row 4 has no rest-of-season computed and shows a dash. Row 5 is a real zero. Those are
         different claims and the whole point of this phase is that they no longer look the same.
       </p>

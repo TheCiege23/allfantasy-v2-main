@@ -210,19 +210,19 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
         <>
           <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-              <p className="text-[10px] text-white/50">Rivalries</p>
+              <p className="text-[11px] text-white/50">Rivalries</p>
               <p className="text-sm text-white/90">{payload.rivalries.length}</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-              <p className="text-[10px] text-white/50">Behavior profiles</p>
+              <p className="text-[11px] text-white/50">Behavior profiles</p>
               <p className="text-sm text-white/90">{payload.profiles.length}</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-              <p className="text-[10px] text-white/50">Drama events</p>
+              <p className="text-[11px] text-white/50">Drama events</p>
               <p className="text-sm text-white/90">{payload.drama.length}</p>
             </div>
             <div className="rounded-lg border border-white/10 bg-black/20 p-2">
-              <p className="text-[10px] text-white/50">Unified storylines</p>
+              <p className="text-[11px] text-white/50">Unified storylines</p>
               <p className="text-sm text-white/90">{payload.storylines.length}</p>
             </div>
           </div>
@@ -237,25 +237,25 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
               <article key={row.id} className="rounded-lg border border-white/10 bg-black/20 p-2.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-xs text-white/90">{row.headline}</p>
-                  <span className="ml-auto text-[10px] text-cyan-200">
+                  <span className="ml-auto text-[11px] text-cyan-200">
                     Score {Math.round(row.storylineScore)}
                   </span>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5">
                   {row.rivalryTier && (
-                    <span className="rounded border border-purple-500/25 bg-purple-500/10 px-1.5 py-0.5 text-[10px] text-purple-200">
+                    <span className="rounded border border-purple-500/25 bg-purple-500/10 px-1.5 py-0.5 text-[11px] text-purple-200">
                       {row.rivalryTier}
                     </span>
                   )}
                   {row.dramaType && (
-                    <span className="rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200">
+                    <span className="rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-200">
                       {row.dramaType}
                     </span>
                   )}
                   {row.reasons.slice(0, 2).map((reason) => (
                     <span
                       key={`${row.id}-${reason}`}
-                      className="rounded border border-white/15 bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-white/60"
+                      className="rounded border border-white/15 bg-white/[0.03] px-1.5 py-0.5 text-[11px] text-white/60"
                     >
                       {reason}
                     </span>
@@ -273,7 +273,7 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
                       }${
                         seasonFilter ? `season=${encodeURIComponent(seasonFilter)}` : ''
                       }`}
-                      className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] text-white/75 hover:bg-white/10"
+                      className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] text-white/75 hover:bg-white/10"
                     >
                       Rivalry context
                     </Link>
@@ -283,7 +283,7 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
                       href={`/app/league/${encodeURIComponent(leagueId)}/drama/${encodeURIComponent(
                         row.dramaEventId
                       )}`}
-                      className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] text-white/75 hover:bg-white/10"
+                      className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] text-white/75 hover:bg-white/10"
                     >
                       Drama context
                     </Link>
@@ -297,21 +297,21 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
                       )}&managerBId=${encodeURIComponent(row.managerBId)}${
                         sportFilter !== 'ALL' ? `&sport=${encodeURIComponent(sportFilter)}` : ''
                       }`}
-                      className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] text-white/75 hover:bg-white/10"
+                      className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] text-white/75 hover:bg-white/10"
                     >
                       Behavior context
                     </Link>
                   )}
                   <Link
                     href={`/league/${encodeURIComponent(leagueId)}?tab=Trades`}
-                    className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[10px] text-white/75 hover:bg-white/10"
+                    className="rounded border border-white/20 bg-white/5 px-2 py-0.5 text-[11px] text-white/75 hover:bg-white/10"
                   >
                     Trade context
                   </Link>
                   <button
                     type="button"
                     onClick={() => void explain(row)}
-                    className="ml-auto inline-flex items-center gap-1 rounded border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-200 hover:bg-cyan-500/20"
+                    className="ml-auto inline-flex items-center gap-1 rounded border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-500/20"
                   >
                     <BrainCircuit className="h-3 w-3" />
                     {explainLoadingId === row.id

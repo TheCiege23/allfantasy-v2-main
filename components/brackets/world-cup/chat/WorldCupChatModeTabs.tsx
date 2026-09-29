@@ -70,7 +70,7 @@ export function WorldCupChatModeTabs({
             data-testid={`wc-chat-tab-${tabMode}`}
             onClick={() => onModeChange(tabMode)}
             className={[
-              "relative inline-flex min-h-8 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-[10px] font-black transition touch-manipulation sm:px-3 sm:text-[11px]",
+              "relative inline-flex min-h-8 min-w-0 items-center justify-center gap-1.5 rounded-full px-2 text-[11px] font-black transition touch-manipulation sm:px-3 sm:text-[11px]",
               isActive
                 ? tabMode === "ai"
                   ? "bg-gradient-to-r from-cyan-300 to-violet-400 text-slate-950 shadow-[0_0_16px_rgba(34,211,238,0.3)]"
@@ -87,7 +87,7 @@ export function WorldCupChatModeTabs({
             {showPoolBadge ? (
               <span
                 aria-label={`${poolUnread} unread`}
-                className="absolute right-1 top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-400 px-0.5 text-[8px] font-black text-slate-950"
+                className="absolute right-1 top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-400 px-0.5 text-[11px] font-black text-slate-950"
               >
                 {poolUnread > 9 ? "9+" : poolUnread}
               </span>

@@ -80,7 +80,7 @@ export default function LeagueFeed({
           <h1 className="text-2xl font-black tracking-[-0.02em] text-white">Feed</h1>
           <span className="text-sm text-white/50">{leagueName}</span>
         </div>
-        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/40">
+        <span className="font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-white/40">
           Newest first
         </span>
       </div>

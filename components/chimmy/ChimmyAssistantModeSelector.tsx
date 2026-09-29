@@ -55,7 +55,7 @@ export default function ChimmyAssistantModeSelector({
       className="flex flex-col gap-1.5"
       data-testid="chimmy-assistant-mode-wrap"
     >
-      <span className="text-[10px] uppercase tracking-wide text-white/45">Assistant mode</span>
+      <span className="text-[11px] uppercase tracking-wide text-white/45">Assistant mode</span>
       <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 lg:grid-cols-5">
         {CHIMMY_ASSISTANT_MODE_VALUES.map((mode) => {
           const cfg = MODE_CONFIG[mode]
@@ -75,8 +75,8 @@ export default function ChimmyAssistantModeSelector({
               ].join(' ')}
             >
               <Icon className="h-3.5 w-3.5 shrink-0" />
-              <span className="text-[10px] font-semibold leading-tight">{cfg.label}</span>
-              <span className="text-[9px] leading-tight opacity-70">{cfg.description}</span>
+              <span className="text-[11px] font-semibold leading-tight">{cfg.label}</span>
+              <span className="text-[11px] leading-tight opacity-70">{cfg.description}</span>
             </button>
           )
         })}

@@ -28,8 +28,8 @@ function PlayerScoreRows({ title, players }: { title: string; players: LiveTeam[
   return (
     <div className="min-w-0">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">{title}</p>
-        <p className="text-[10px] text-white/35">{players.length}</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/45">{title}</p>
+        <p className="text-[11px] text-white/35">{players.length}</p>
       </div>
       <div className="space-y-1.5">
         {players.length ? (
@@ -40,7 +40,7 @@ function PlayerScoreRows({ title, players }: { title: string; players: LiveTeam[
             >
               <div className="min-w-0">
                 <p className="truncate text-[11px] font-semibold text-white/80">{player.playerName}</p>
-                <p className="text-[10px] text-white/35">
+                <p className="text-[11px] text-white/35">
                   {player.position}
                   {player.team ? ` - ${player.team}` : ''} - {player.hasStats ? (player.isFinalized ? 'final' : 'live') : 'waiting'}
                 </p>
@@ -119,7 +119,7 @@ export function MatchupView({
       >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">Week matchup</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">Week matchup</p>
             <p className="text-[11px] text-white/40">
               {liveMatchup
                 ? `Week ${liveMatchup.week} - ${liveMatchup.status.replace(/_/g, ' ')}`
@@ -128,7 +128,7 @@ export function MatchupView({
                   : 'No matchup scheduled for this week.'}
             </p>
           </div>
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold text-white/55">
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-semibold text-white/55">
             {sport}
           </span>
         </div>
@@ -140,7 +140,7 @@ export function MatchupView({
           </div>
           <div className="flex flex-col items-center justify-center text-white/35">
             <span className="text-xs uppercase">vs</span>
-            <span className="text-[10px]">{liveMatchup ? 'live scoring' : 'cached scoring'}</span>
+            <span className="text-[11px]">{liveMatchup ? 'live scoring' : 'cached scoring'}</span>
           </div>
           <div className="text-center">
             <p className="truncate text-[11px] text-white/50">{opponentName}</p>
@@ -159,15 +159,15 @@ export function MatchupView({
           <div className="mt-4 space-y-3 border-t border-white/[0.08] pt-3">
             <div className="grid gap-2 sm:grid-cols-3">
               <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-white/35">Starter total</p>
+                <p className="text-[11px] uppercase tracking-[0.15em] text-white/35">Starter total</p>
                 <p className="mt-1 text-lg font-bold text-white">{selectedLiveTeam?.starterTotal.toFixed(2) ?? selectedScore.toFixed(2)}</p>
               </div>
               <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-white/35">Bench points</p>
+                <p className="text-[11px] uppercase tracking-[0.15em] text-white/35">Bench points</p>
                 <p className="mt-1 text-lg font-bold text-white">{(selectedLiveTeam?.benchTotal ?? 0).toFixed(2)}</p>
               </div>
               <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
-                <p className="text-[10px] uppercase tracking-[0.15em] text-white/35">Result</p>
+                <p className="text-[11px] uppercase tracking-[0.15em] text-white/35">Result</p>
                 <p className="mt-1 truncate text-[12px] font-semibold text-white/75">
                   {liveMatchup.complete
                     ? liveMatchup.tied
@@ -210,7 +210,7 @@ export function MatchupView({
 
       {showAfHint ? (
         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-white/35">
-          <span className="bg-gradient-to-r from-[#ff3d81] to-violet-400 bg-clip-text text-[10px] font-bold text-transparent">
+          <span className="bg-gradient-to-r from-[#ff3d81] to-violet-400 bg-clip-text text-[11px] font-bold text-transparent">
             AF
           </span>
           <span>Weather-sensitive scoring surfaces use cached data before any AI analysis.</span>

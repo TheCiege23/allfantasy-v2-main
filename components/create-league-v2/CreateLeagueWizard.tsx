@@ -233,7 +233,7 @@ export function CreateLeagueWizard(props: WizardProps) {
                   )}
                   data-testid={`g30-step-${step}`}
                 >
-                  <span className="block text-[10px] opacity-70">{index + 1}</span>
+                  <span className="block text-[11px] opacity-70">{index + 1}</span>
                   <span className="block truncate">{t(`createLeague.g30.steps.${step}`)}</span>
                 </button>
               )

@@ -330,7 +330,7 @@ export default function HomeChatDock() {
               AllFantasy Chat
             </p>
             <p
-              className="text-[10px]"
+              className="text-[11px]"
               style={{ color: "var(--muted2)" }}
             >
               League talk, private DMs, and AI coaching in one dock.
@@ -385,7 +385,7 @@ export default function HomeChatDock() {
       {/* League meta strip */}
       {activeTab === "league" && (
         <div
-          className="mx-3 mb-1 rounded-xl border px-2.5 py-1.5 text-[10px]"
+          className="mx-3 mb-1 rounded-xl border px-2.5 py-1.5 text-[11px]"
           style={{
             borderColor: "var(--border)",
             background: "color-mix(in srgb, var(--panel2) 92%, transparent)",
@@ -417,7 +417,7 @@ export default function HomeChatDock() {
       {/* DM controls strip */}
       {activeTab === "dm" && (
         <div
-          className="mx-3 mb-1 flex items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 text-[10px]"
+          className="mx-3 mb-1 flex items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 text-[11px]"
           style={{
             borderColor: "var(--border)",
             background: "color-mix(in srgb, var(--panel2) 92%, transparent)",
@@ -461,7 +461,7 @@ export default function HomeChatDock() {
                     setThreadActionError("Unable to update mute preference.")
                   }
                 }}
-                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]"
+                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
                 style={{
                   borderColor: "var(--border)",
                   background: mutedThreads.has(activeThreadId)
@@ -478,7 +478,7 @@ export default function HomeChatDock() {
             <button
               type="button"
               onClick={() => setAllowDMs((v) => !v)}
-              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]"
+              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
               style={{
                 borderColor: "var(--border)",
                 background: allowDMs
@@ -496,7 +496,7 @@ export default function HomeChatDock() {
       )}
 
       {/* Block list toggle */}
-      <div className="mx-3 mb-1 flex items-center justify-between gap-2 text-[10px]">
+      <div className="mx-3 mb-1 flex items-center justify-between gap-2 text-[11px]">
         <button
           type="button"
           onClick={() => setShowBlocked((v) => !v)}
@@ -531,7 +531,7 @@ export default function HomeChatDock() {
         )}
       </div>
       {blockedVisibilityNotice && (
-        <p className="mx-3 mb-1 text-[10px]" style={{ color: "var(--muted2)" }}>
+        <p className="mx-3 mb-1 text-[11px]" style={{ color: "var(--muted2)" }}>
           {blockedVisibilityNotice}
         </p>
       )}
@@ -539,14 +539,14 @@ export default function HomeChatDock() {
       {/* Block list panel */}
       {showBlocked && (
         <div
-          className="mx-3 mb-1 max-h-20 overflow-y-auto rounded-xl border px-2.5 py-1.5 text-[10px]"
+          className="mx-3 mb-1 max-h-20 overflow-y-auto rounded-xl border px-2.5 py-1.5 text-[11px]"
           style={{
             borderColor: "var(--border)",
             background: "color-mix(in srgb, var(--panel2) 94%, transparent)",
             color: "var(--muted2)",
           }}
         >
-          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold">
+          <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold">
             <Users className="h-3 w-3" />
             <span>Blocked users</span>
           </div>
@@ -581,7 +581,7 @@ export default function HomeChatDock() {
                         setThreadActionError("Unable to unblock user.")
                       }
                     }}
-                    className="text-[10px] underline"
+                    className="text-[11px] underline"
                     style={{ color: "var(--accent-emerald-strong)" }}
                   >
                     Unblock
@@ -683,7 +683,7 @@ export default function HomeChatDock() {
 
       {/* Composer */}
       <div className="border-t px-2 pb-2 pt-1 sm:px-3 sm:pb-3 sm:pt-1.5" style={{ borderColor: "var(--border)" }}>
-        <div className="mb-1 flex items-center gap-1.5 text-[10px]" style={{ color: "var(--muted2)" }}>
+        <div className="mb-1 flex items-center gap-1.5 text-[11px]" style={{ color: "var(--muted2)" }}>
           <span>GIFs, images, video, memes, polls, reactions, @mentions supported.</span>
         </div>
         <div className="flex items-end gap-1.5">
@@ -1046,7 +1046,7 @@ function ChatMessageRow({
     <article className="group rounded-xl px-2 py-1.5 transition-colors hover:bg-black/5">
       <div className="flex items-start gap-2">
         <div
-          className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/90 text-[10px] font-semibold"
+          className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/90 text-[11px] font-semibold"
           style={{ color: "#020617" }}
         >
           {msg.senderName
@@ -1062,7 +1062,7 @@ function ChatMessageRow({
               <span className="text-[11px] font-semibold" style={{ color: "var(--text)" }}>
                 {msg.senderName}
               </span>
-              <span className="ml-1 text-[10px]" style={{ color: "var(--muted2)" }}>
+              <span className="ml-1 text-[11px]" style={{ color: "var(--muted2)" }}>
                 {formatInTimezone(msg.createdAt, { hour: "numeric", minute: "2-digit" })}
               </span>
             </div>
@@ -1087,7 +1087,7 @@ function ChatMessageRow({
           {msg.metadata &&
             Array.isArray((msg.metadata as any).attachments) &&
             (msg.metadata as any).attachments.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1.5 text-[10px]">
+            <div className="mt-1 flex flex-wrap gap-1.5 text-[11px]">
               {(msg.metadata as any).attachments.map((a: any) => (
                 <span
                   key={a.url}
@@ -1107,7 +1107,7 @@ function ChatMessageRow({
             </div>
           )}
           {msg.metadata && (msg.metadata as any).systemMeta && (
-            <p className="mt-0.5 text-[10px]" style={{ color: "var(--muted2)" }}>
+            <p className="mt-0.5 text-[11px]" style={{ color: "var(--muted2)" }}>
               {(msg.metadata as any).systemMeta}
             </p>
           )}
@@ -1119,7 +1119,7 @@ function ChatMessageRow({
                 <button
                   key={r.emoji}
                   type="button"
-                  className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px]"
+                  className="inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[11px]"
                   style={{
                     borderColor: r.reactedByMe
                       ? "color-mix(in srgb, var(--accent-cyan) 50%, var(--border))"
@@ -1138,7 +1138,7 @@ function ChatMessageRow({
               ))}
               <button
                 type="button"
-                className="inline-flex items-center justify-center rounded-full border px-1.5 py-0.5 text-[10px]"
+                className="inline-flex items-center justify-center rounded-full border px-1.5 py-0.5 text-[11px]"
                 style={{ borderColor: "var(--border)", color: "var(--muted2)" }}
               >
                 +

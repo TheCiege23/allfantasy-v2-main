@@ -113,7 +113,7 @@ export function TokenSpendPreflightModal({
             {/* WassupFred coupon hint */}
             <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-amber-300/20 bg-amber-300/[0.06] px-2.5 py-2">
               <Tag className="h-3 w-3 shrink-0 text-amber-300" />
-              <p className="text-[10px] text-white/60">
+              <p className="text-[11px] text-white/60">
                 Use code{" "}
                 <span className="font-black text-amber-200">WassupFred</span>
                 {" "}for 20% off your first pack

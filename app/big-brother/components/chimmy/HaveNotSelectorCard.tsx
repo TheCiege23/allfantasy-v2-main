@@ -125,7 +125,7 @@ export function HaveNotSelectorCard({
             }`}
           >
             <span
-              className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border text-[10px] ${
+              className={`inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border text-[11px] ${
                 selected.has(id) ? 'border-rose-400 bg-rose-500' : 'border-white/20'
               }`}
             >

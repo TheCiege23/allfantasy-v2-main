@@ -374,7 +374,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
 
       {isCommissioner && templates.length > 0 && (
         <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Template</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Template</p>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <select
               value={selectedTemplateKey}
@@ -404,9 +404,9 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
 
       {isCommissioner && (
         <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Import Mapping</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Import Mapping</p>
           <div className="flex flex-col gap-2">
-            <label className="text-[10px] text-white/50" htmlFor="roster-import-source">Source platform</label>
+            <label className="text-[11px] text-white/50" htmlFor="roster-import-source">Source platform</label>
             <select
               id="roster-import-source"
               value={importSourcePlatform}
@@ -421,7 +421,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
               <option value="sleeper">Sleeper</option>
             </select>
 
-            <label className="text-[10px] text-white/50" htmlFor="roster-import-json">Imported slot JSON</label>
+            <label className="text-[11px] text-white/50" htmlFor="roster-import-json">Imported slot JSON</label>
             <textarea
               id="roster-import-json"
               value={importPayloadText}

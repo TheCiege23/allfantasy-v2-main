@@ -22,8 +22,8 @@ export function ManagerHeader({ slots }: Props) {
               m.bg,
             )}
           >
-            <span className={cn('max-w-full truncate text-[10px] font-semibold leading-tight', m.text)}>{s.label}</span>
-            {s.isCpu ? <span className="mt-0.5 text-[8px] font-medium uppercase tracking-wide text-white/45">CPU</span> : null}
+            <span className={cn('max-w-full truncate text-[11px] font-semibold leading-tight', m.text)}>{s.label}</span>
+            {s.isCpu ? <span className="mt-0.5 text-[11px] font-medium uppercase tracking-wide text-white/45">CPU</span> : null}
           </div>
         )
       })}

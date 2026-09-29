@@ -60,7 +60,7 @@ export function FranchisePlanCard({
       </div>
       <p className="mt-4 text-[13px] leading-relaxed text-white/75">{explanation}</p>
       <div className="mt-5">
-        <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
+        <div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-white/40">
           <ListOrdered className="h-3.5 w-3.5" aria-hidden />
           Priority actions
         </div>

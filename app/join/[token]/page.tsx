@@ -298,7 +298,7 @@ export default function JoinLeagueInvitePage() {
                           </div>
                         </div>
                         {isSelected ? (
-                          <div className="rounded-full border border-teal-400/40 bg-teal-400/15 px-2 py-1 text-[10px] font-black uppercase tracking-[0.24em] text-teal-100">
+                          <div className="rounded-full border border-teal-400/40 bg-teal-400/15 px-2 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-teal-100">
                             Selected
                           </div>
                         ) : null}

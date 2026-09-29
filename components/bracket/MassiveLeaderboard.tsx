@@ -73,7 +73,7 @@ export function MassiveLeaderboard({
           {t("bracket.leaderboard.title")}
         </h3>
         {loading && (
-          <span className="text-[10px] text-white/55">
+          <span className="text-[11px] text-white/55">
             {t("bracket.leaderboard.loading")}
           </span>
         )}
@@ -109,7 +109,7 @@ export function MassiveLeaderboard({
                   <div className="w-6 text-right font-semibold text-white/85">
                     {row.rank}
                   </div>
-                  <div className="w-10 text-[10px] text-white/60">
+                  <div className="w-10 text-[11px] text-white/60">
                     {deltaLabel}
                   </div>
                   <div className="flex items-center gap-2 min-w-0">
@@ -125,7 +125,7 @@ export function MassiveLeaderboard({
                         {row.username || t("bracket.leaderboard.unknownUser")}
                       </div>
                       {row.leagueName && (
-                        <div className="truncate text-[10px] text-white/45">
+                        <div className="truncate text-[11px] text-white/45">
                           {row.leagueName}
                         </div>
                       )}
@@ -137,7 +137,7 @@ export function MassiveLeaderboard({
                     {row.score}
                   </div>
                   {typeof row.healthScore === "number" && (
-                    <div className="flex items-center justify-end gap-1 text-[10px]">
+                    <div className="flex items-center justify-end gap-1 text-[11px]">
                       <span
                         className="inline-flex h-2 w-2 rounded-full"
                         style={{

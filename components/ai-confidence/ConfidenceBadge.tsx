@@ -91,8 +91,8 @@ export default function ConfidenceBadge({
   const Icon = config.icon
 
   const sizeClasses = {
-    sm: { pill: 'px-2 py-0.5 gap-1', icon: 'w-3 h-3', text: 'text-[10px]', micro: 'text-[9px]' },
-    md: { pill: 'px-3 py-1.5 gap-1.5', icon: 'w-3.5 h-3.5', text: 'text-xs', micro: 'text-[10px]' },
+    sm: { pill: 'px-2 py-0.5 gap-1', icon: 'w-3 h-3', text: 'text-[11px]', micro: 'text-[11px]' },
+    md: { pill: 'px-3 py-1.5 gap-1.5', icon: 'w-3.5 h-3.5', text: 'text-xs', micro: 'text-[11px]' },
     lg: { pill: 'px-3.5 py-2 gap-2', icon: 'w-4 h-4', text: 'text-sm', micro: 'text-xs' },
   }[size]
 

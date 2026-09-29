@@ -167,7 +167,7 @@ export function VoiceRecorder({ leagueId, onComplete, onCancel }: VoiceRecorderP
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-60" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
         </span>
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-rose-300">Recording</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-rose-300">Recording</span>
         <span className="font-mono text-[11px] text-white/80">
           {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
         </span>
@@ -185,14 +185,14 @@ export function VoiceRecorder({ leagueId, onComplete, onCancel }: VoiceRecorderP
         <button
           type="button"
           onClick={stop}
-          className="rounded-lg bg-rose-500/20 px-2 py-1 text-[10px] font-semibold text-rose-200"
+          className="rounded-lg bg-rose-500/20 px-2 py-1 text-[11px] font-semibold text-rose-200"
         >
           ■ Stop
         </button>
         <button
           type="button"
           onClick={cancel}
-          className="rounded-lg px-2 py-1 text-[10px] text-white/50 hover:bg-white/[0.06] hover:text-white"
+          className="rounded-lg px-2 py-1 text-[11px] text-white/50 hover:bg-white/[0.06] hover:text-white"
         >
           × Cancel
         </button>

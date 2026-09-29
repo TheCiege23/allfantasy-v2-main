@@ -65,7 +65,7 @@ function SheetContent({ data }: { data: TrustData }) {
                   {source.available ? (
                     <Check className="w-3 h-3 ml-auto opacity-60" />
                   ) : (
-                    <span className="text-[9px] ml-auto opacity-50">Not available</span>
+                    <span className="text-[11px] ml-auto opacity-50">Not available</span>
                   )}
                 </div>
               )

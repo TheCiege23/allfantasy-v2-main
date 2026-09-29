@@ -257,13 +257,13 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                 {team.avatarUrl ? (
                   <img src={team.avatarUrl} alt="" className="h-7 w-7 rounded-full border border-white/10 object-cover" />
                 ) : (
-                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-[9px] font-bold text-white/30">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/30">
                     {(team.teamName ?? '?')[0]}
                   </div>
                 )}
                 <div className="min-w-0">
                   <p className="truncate text-[11px] font-semibold text-white">{team.ownerName || team.teamName}</p>
-                  <p className="text-[10px] text-white/30">{team.wins}-{team.losses}</p>
+                  <p className="text-[11px] text-white/30">{team.wins}-{team.losses}</p>
                 </div>
               </button>
             ))}
@@ -283,7 +283,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                   <div className="flex gap-0.5">
                     {Array.from({ length: 17 }, (_, i) => i + 1).map((w) => (
                       <button key={w} type="button" onClick={() => setSelectedWeek(w)}
-                        className={`h-6 w-6 rounded text-[10px] font-medium ${
+                        className={`h-6 w-6 rounded text-[11px] font-medium ${
                           selectedWeek === w ? 'bg-white/20 text-white' : 'text-white/40 hover:bg-white/10'
                         }`}>{w}</button>
                     ))}
@@ -303,7 +303,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                   <div>
                     <div className="mb-1 flex items-center justify-between">
                       <span className="text-[11px] font-bold uppercase text-white/40">Starters</span>
-                      <div className="flex gap-8 text-[10px] font-semibold text-white/30">
+                      <div className="flex gap-8 text-[11px] font-semibold text-white/30">
                         <span>OWN %</span>
                         <span>START %</span>
                       </div>
@@ -425,7 +425,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-white">{team.teamName}</p>
                   <p className="text-[11px] text-white/40">{team.ownerName}</p>
-                  <p className={`text-[10px] ${team.isCommissioner ? 'text-amber-300' : 'text-white/30'}`}>
+                  <p className={`text-[11px] ${team.isCommissioner ? 'text-amber-300' : 'text-white/30'}`}>
                     {team.isCommissioner ? 'Commissioner' : 'Member'}
                   </p>
                 </div>
@@ -591,7 +591,7 @@ function PlayerRow({ player }: { player: RosterPlayer }) {
   return (
     <div className="flex items-center gap-2 rounded-lg px-1 py-1.5 hover:bg-white/[0.03]">
       {/* Position badge */}
-      <span className={`flex h-6 w-8 items-center justify-center rounded text-[9px] font-bold text-white ${
+      <span className={`flex h-6 w-8 items-center justify-center rounded text-[11px] font-bold text-white ${
         posColors[player.position] ?? 'bg-white/20'
       }`}>
         {player.position}

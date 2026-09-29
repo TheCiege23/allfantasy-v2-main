@@ -279,7 +279,7 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
       {canManage && draft.status === 'pre_draft' && (
         <div className="grid gap-2 rounded-xl border border-white/10 bg-black/30 p-3 sm:grid-cols-5" data-testid="mock-draft-settings-panel">
           <label className="space-y-1">
-            <span className="text-[10px] text-white/60">Timer</span>
+            <span className="text-[11px] text-white/60">Timer</span>
             <input
               value={settingsForm.timerSeconds}
               onChange={(e) => setSettingsForm((prev) => ({ ...prev, timerSeconds: Number(e.target.value) || 0 }))}
@@ -287,7 +287,7 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
             />
           </label>
           <label className="space-y-1">
-            <span className="text-[10px] text-white/60">Rounds</span>
+            <span className="text-[11px] text-white/60">Rounds</span>
             <input
               value={settingsForm.rounds}
               onChange={(e) => setSettingsForm((prev) => ({ ...prev, rounds: Number(e.target.value) || 1 }))}
@@ -295,7 +295,7 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
             />
           </label>
           <label className="space-y-1">
-            <span className="text-[10px] text-white/60">Pool</span>
+            <span className="text-[11px] text-white/60">Pool</span>
             <select
               value={settingsForm.poolType}
               onChange={(e) => setSettingsForm((prev) => ({ ...prev, poolType: e.target.value }))}
@@ -307,7 +307,7 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
             </select>
           </label>
           <label className="space-y-1">
-            <span className="text-[10px] text-white/60">Room</span>
+            <span className="text-[11px] text-white/60">Room</span>
             <select
               value={settingsForm.roomMode}
               onChange={(e) => setSettingsForm((prev) => ({ ...prev, roomMode: e.target.value }))}
@@ -399,7 +399,7 @@ export function MockDraftSessionBoard({ draftId, canManage = false }: MockDraftS
               })
               return (
                 <li key={`${pick.overall}-${pick.playerName}`} data-testid={`mock-draft-session-pick-${index}`}>
-                  <p className="mb-1 text-[10px] text-white/60">#{pick.overall} · {pick.manager}</p>
+                  <p className="mb-1 text-[11px] text-white/60">#{pick.overall} · {pick.manager}</p>
                   <DraftPlayerCard
                     display={display}
                     name={pick.playerName}

@@ -150,13 +150,13 @@ export function AICoachingPage({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl font-bold tracking-tight text-white md:text-2xl">{userTeam?.teamName ?? 'Your team'}</h1>
-                <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/55">
+                <span className="rounded-full border border-white/10 bg-white/[0.05] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white/55">
                   {resolvedSport}
                 </span>
                 {plan?.formatBadges?.map((b) => (
                   <span
                     key={b}
-                    className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-100/90"
+                    className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90"
                   >
                     {b}
                   </span>
@@ -185,7 +185,7 @@ export function AICoachingPage({
                       </span>
                     ) : null}
                     {aiModel ? (
-                      <span className="text-[10px] text-white/35">Model: {aiModel}</span>
+                      <span className="text-[11px] text-white/35">Model: {aiModel}</span>
                     ) : null}
                   </div>
                 </>
@@ -194,10 +194,10 @@ export function AICoachingPage({
           </div>
 
           <div className="rounded-xl border border-white/[0.07] bg-black/30 p-4 backdrop-blur-sm">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/35">Controls</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/35">Controls</p>
             <div className="mt-3 space-y-3">
               <div>
-                <p className="text-[10px] font-semibold uppercase text-white/40">Timeline</p>
+                <p className="text-[11px] font-semibold uppercase text-white/40">Timeline</p>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {TIMELINES.map((y) => (
                     <button
@@ -217,7 +217,7 @@ export function AICoachingPage({
                 </div>
               </div>
               <div>
-                <p className="text-[10px] font-semibold uppercase text-white/40">Strategy lens</p>
+                <p className="text-[11px] font-semibold uppercase text-white/40">Strategy lens</p>
                 <select
                   value={strategyLens}
                   onChange={(e) => setStrategyLens(e.target.value as StrategyLens)}
@@ -247,7 +247,7 @@ export function AICoachingPage({
       {/* Mobile sticky quick controls */}
       {plan ? (
         <div className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.07] bg-[#060a14]/95 p-2 backdrop-blur-md lg:hidden">
-          <span className={cn('rounded-full border px-2 py-1 text-[10px] font-bold uppercase', modeHeroClass(plan.mode))}>
+          <span className={cn('rounded-full border px-2 py-1 text-[11px] font-bold uppercase', modeHeroClass(plan.mode))}>
             {modeLabel(plan.mode)}
           </span>
           <div className="flex flex-wrap gap-1">
@@ -257,7 +257,7 @@ export function AICoachingPage({
                 type="button"
                 onClick={() => setTimelineYears(y)}
                 className={cn(
-                  'rounded-md border px-2 py-1 text-[10px] font-semibold',
+                  'rounded-md border px-2 py-1 text-[11px] font-semibold',
                   timelineYears === y ? 'border-amber-400/50 bg-amber-500/15 text-amber-100' : 'border-white/10 text-white/50',
                 )}
               >

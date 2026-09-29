@@ -179,7 +179,7 @@ function toneClass(tone: Tone): string {
   return 'bg-red-400/10 text-red-300 ring-red-400/20'
 }
 function Chip({ label, tone }: { label: string; tone: Tone }) {
-  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${toneClass(tone)}`}>{label}</span>
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${toneClass(tone)}`}>{label}</span>
 }
 /** Render a chip only when the value maps to a tone (null tone → nothing). */
 function OptionalChip({ label, tone }: { label: string; tone: Tone | null }) {
@@ -458,7 +458,7 @@ export function ManagerIntelligenceHub({ leagueId }: { leagueId: string }) {
       <header className="space-y-2">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-black tracking-tight text-white">Manager Intelligence</h2>
-          <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-medium text-white/55 ring-1 ring-white/10">
+          <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-[11px] font-medium text-white/55 ring-1 ring-white/10">
             Observations, not advice
           </span>
         </div>

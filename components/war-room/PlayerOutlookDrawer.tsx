@@ -20,7 +20,7 @@ export function PlayerOutlookDrawer({ open, onClose, leagueId, sport }: PlayerOu
     >
       <div className="h-full w-full max-w-md border-l border-white/10 bg-[#0a1228] p-4 shadow-xl">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Player outlook</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Player outlook</p>
           <button
             type="button"
             onClick={onClose}

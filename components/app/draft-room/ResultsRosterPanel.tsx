@@ -132,7 +132,7 @@ export function ResultsRosterPanel({
               {focusedTeam?.displayName ?? '—'}
             </span>
             {focusedTeam?.isCurrentUser ? (
-              <span className="rounded border border-cyan-400/40 bg-cyan-500/15 px-1 text-[8px] font-bold uppercase tracking-wider text-cyan-100">
+              <span className="rounded border border-cyan-400/40 bg-cyan-500/15 px-1 text-[11px] font-bold uppercase tracking-wider text-cyan-100">
                 YOU
               </span>
             ) : null}
@@ -170,7 +170,7 @@ export function ResultsRosterPanel({
                     )}
                     <span className="truncate">{t.displayName}</span>
                     {t.isCurrentUser ? (
-                      <span className="ml-auto rounded border border-cyan-400/40 bg-cyan-500/15 px-1 text-[8px] font-bold uppercase tracking-wider text-cyan-100">
+                      <span className="ml-auto rounded border border-cyan-400/40 bg-cyan-500/15 px-1 text-[11px] font-bold uppercase tracking-wider text-cyan-100">
                         YOU
                       </span>
                     ) : null}
@@ -208,7 +208,7 @@ function SlotGroup({ heading, entries, testIdBase }: SlotGroupProps) {
   if (!entries.length) return null
   return (
     <div className="border-b border-white/8 last:border-b-0" data-testid={testIdBase}>
-      <div className="sticky top-0 bg-[#0a1228] px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/45">
+      <div className="sticky top-0 bg-[#0a1228] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
         {heading}
       </div>
       <ul>
@@ -220,7 +220,7 @@ function SlotGroup({ heading, entries, testIdBase }: SlotGroupProps) {
             data-slot-position={entry.slot.position}
             className="flex items-center gap-2 border-b border-white/5 px-3 py-1.5 text-[11px] last:border-b-0"
           >
-            <span className="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-white/55">
+            <span className="w-12 shrink-0 text-[11px] font-semibold uppercase tracking-wider text-white/55">
               {entry.slot.label}
             </span>
             {entry.pick ? (
@@ -228,7 +228,7 @@ function SlotGroup({ heading, entries, testIdBase }: SlotGroupProps) {
                 <span className="truncate text-[12px] text-white/95">
                   {entry.pick.playerName}
                 </span>
-                <span className="shrink-0 text-[10px] text-white/45">
+                <span className="shrink-0 text-[11px] text-white/45">
                   {entry.pick.position}
                   {entry.pick.team ? ` · ${entry.pick.team}` : ''}
                 </span>

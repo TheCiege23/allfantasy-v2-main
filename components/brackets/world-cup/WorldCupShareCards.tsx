@@ -130,13 +130,13 @@ export default function WorldCupShareCard(props: Props) {
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/50">{t("wc.share.eyebrow")}</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/50">{t("wc.share.eyebrow")}</p>
           <h3 className="mt-1 text-base font-black text-white">{tShareTitle(props.kind)}</h3>
           <p className="mt-1 text-xs leading-5 text-white/50">
             {t("wc.share.description")}
           </p>
         </div>
-        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white/45">
+        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[11px] font-black uppercase tracking-wide text-white/45">
           {t("wc.share.publicSafe")}
         </span>
       </div>

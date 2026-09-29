@@ -46,10 +46,10 @@ export function C2CPicksClient({ leagueId, rosterId }: { leagueId: string; roste
   return (
     <div className="mx-auto max-w-3xl px-4 pb-12 pt-4">
       <div className="scrollbar-none mb-4 flex gap-2 overflow-x-auto">
-        <span className="rounded-full border border-violet-500/35 bg-violet-500/15 px-3 py-1 text-[10px] font-bold uppercase text-violet-100">
+        <span className="rounded-full border border-violet-500/35 bg-violet-500/15 px-3 py-1 text-[11px] font-bold uppercase text-violet-100">
           Campus
         </span>
-        <span className="rounded-full border border-blue-500/35 bg-blue-500/15 px-3 py-1 text-[10px] font-bold uppercase text-blue-100">
+        <span className="rounded-full border border-blue-500/35 bg-blue-500/15 px-3 py-1 text-[11px] font-bold uppercase text-blue-100">
           Canton
         </span>
       </div>

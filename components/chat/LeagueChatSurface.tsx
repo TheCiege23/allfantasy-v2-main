@@ -150,7 +150,7 @@ export default function LeagueChatSurface({
       <header className="mb-4 flex flex-wrap items-center gap-3">
         <h2 className="text-xl font-black text-white">League chat</h2>
         <span className="relative inline-flex items-center gap-1.5">
-          <span className="rounded-md border border-[#ff3d81]/30 bg-[#ff3d81]/10 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-[#ffb8d1]">
+          <span className="rounded-md border border-[#ff3d81]/30 bg-[#ff3d81]/10 px-2 py-1 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-[#ffb8d1]">
             AF-hosted
           </span>
           <button
@@ -158,7 +158,7 @@ export default function LeagueChatSurface({
             onClick={() => setShowHostedHelp((v) => !v)}
             aria-expanded={showHostedHelp}
             aria-label="What AF-hosted means"
-            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/15 bg-white/5 text-[9px] font-bold text-white/50"
+            className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/15 bg-white/5 text-[11px] font-bold text-white/50"
           >
             ?
           </button>

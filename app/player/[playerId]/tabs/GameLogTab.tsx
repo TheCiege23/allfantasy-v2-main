@@ -83,7 +83,7 @@ export function GameLogTab({ player }: { player: PlayerIdentity }) {
 function LogStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="py-0.5">
-      <span className="text-[9px] uppercase text-white/30">{label}: </span>
+      <span className="text-[11px] uppercase text-white/30">{label}: </span>
       <span className="text-[12px] font-semibold text-white/70">{value}</span>
     </div>
   )

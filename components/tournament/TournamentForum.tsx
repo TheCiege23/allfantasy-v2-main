@@ -86,11 +86,11 @@ export function TournamentForum({ tournamentId }: TournamentForumProps) {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-white">{a.title}</span>
                       {a.roundNumber != null && (
-                        <span className="text-[10px] text-white/30">Round {a.roundNumber}</span>
+                        <span className="text-[11px] text-white/30">Round {a.roundNumber}</span>
                       )}
                     </div>
                     <div className="mt-0.5 text-xs text-white/50">{a.body}</div>
-                    <div className="mt-1 text-[10px] text-white/25">{new Date(a.createdAt).toLocaleDateString()}</div>
+                    <div className="mt-1 text-[11px] text-white/25">{new Date(a.createdAt).toLocaleDateString()}</div>
                   </div>
                 </div>
               </div>

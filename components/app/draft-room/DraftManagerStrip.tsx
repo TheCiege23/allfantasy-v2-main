@@ -66,10 +66,10 @@ export function DraftManagerStrip({
     <div className="border-b border-white/8 bg-[#060b14] px-2 pb-1 pt-0.5 sm:px-3 sm:pb-1.5 sm:pt-1">
       {orderSourceLabel ? (
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/38">
+          <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/38">
             Draft order
           </span>
-          <span className="rounded-full border border-amber-400/25 bg-amber-500/12 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-200/90">
+          <span className="rounded-full border border-amber-400/25 bg-amber-500/12 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-200/90">
             {orderSourceLabel}
           </span>
         </div>
@@ -145,22 +145,22 @@ export function DraftManagerStrip({
               </div>
 
               <div className="w-[62px] sm:w-[70px]">
-                <p className={`truncate text-[10px] font-semibold leading-tight sm:text-[11px] ${isActive ? 'text-white' : 'text-[#9fb7ff]'}`}>
+                <p className={`truncate text-[11px] font-semibold leading-tight sm:text-[11px] ${isActive ? 'text-white' : 'text-[#9fb7ff]'}`}>
                   {displayHandle}
                 </p>
 
                 {showNewOwnerInRed && manager.tradedPickMeta?.newOwnerName ? (
-                  <p className="truncate text-[9px] text-red-300 sm:text-[10px]" title={`Now: ${manager.tradedPickMeta.newOwnerName}`}>
+                  <p className="truncate text-[11px] text-red-300 sm:text-[11px]" title={`Now: ${manager.tradedPickMeta.newOwnerName}`}>
                     Now {manager.tradedPickMeta.newOwnerName}
                   </p>
                 ) : manager.teamName &&
                   normalizeManagerKey(manager.teamName) !== normalizeManagerKey(displayHandle) ? (
-                  <p className="truncate text-[9px] text-white/32 sm:text-[10px]">{manager.teamName}</p>
+                  <p className="truncate text-[11px] text-white/32 sm:text-[11px]">{manager.teamName}</p>
                 ) : null}
 
                 {!manager.teamName &&
                 normalizeManagerKey(displayHandle) !== normalizeManagerKey(`Team ${manager.slot}`) ? (
-                  <p className="truncate text-[9px] text-white/32 sm:text-[10px]">Team {manager.slot}</p>
+                  <p className="truncate text-[11px] text-white/32 sm:text-[11px]">Team {manager.slot}</p>
                 ) : null}
 
                 {showClaim ? (
@@ -170,7 +170,7 @@ export function DraftManagerStrip({
                     disabled={claiming}
                     data-testid={`draft-manager-claim-${manager.slot}`}
                     aria-label={t('draftRoom.managerStrip.aria.claim')}
-                    className="mt-1 w-full rounded border border-cyan-400/35 bg-cyan-500/14 px-1 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-cyan-100 transition hover:bg-cyan-500/22 disabled:opacity-50"
+                    className="mt-1 w-full rounded border border-cyan-400/35 bg-cyan-500/14 px-1 py-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-cyan-100 transition hover:bg-cyan-500/22 disabled:opacity-50"
                   >
                     {claiming ? t('draftRoom.managerStrip.claiming') : t('draftRoom.managerStrip.claim')}
                   </button>

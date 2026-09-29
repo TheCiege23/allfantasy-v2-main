@@ -10,5 +10,5 @@ const ROLE_CONFIG = {
 export function ManagerRoleBadge({ role }: { role: string }) {
   const cfg = ROLE_CONFIG[role as Role]
   if (!cfg) return null
-  return <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full border ${cfg.cls}`}>{cfg.label}</span>
+  return <span className={`text-[11px] font-black px-1.5 py-0.5 rounded-full border ${cfg.cls}`}>{cfg.label}</span>
 }

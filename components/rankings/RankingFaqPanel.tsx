@@ -40,7 +40,7 @@ export function RankingFaqPanel({ currentLevel }: RankingFaqPanelProps) {
         <details className={detailClass}>
           <summary className="flex items-center justify-between gap-2 text-[13px] font-semibold text-cyan-100/95">
             How does AllFantasy rank XP work?
-            <span className="text-[10px] font-normal text-white/35 group-open:rotate-180">▼</span>
+            <span className="text-[11px] font-normal text-white/35 group-open:rotate-180">▼</span>
           </summary>
           <p className="mt-2 text-xs leading-relaxed text-white/55">
             Your <strong className="text-white/80">rank level (1–25)</strong> comes from{' '}
@@ -53,7 +53,7 @@ export function RankingFaqPanel({ currentLevel }: RankingFaqPanelProps) {
         <details className={detailClass}>
           <summary className="flex items-center justify-between gap-2 text-[13px] font-semibold text-cyan-100/95">
             What is each win, playoff, or title worth?
-            <span className="text-[10px] font-normal text-white/35 group-open:rotate-180">▼</span>
+            <span className="text-[11px] font-normal text-white/35 group-open:rotate-180">▼</span>
           </summary>
           <ul className="mt-2 list-inside list-disc space-y-1.5 text-xs leading-relaxed text-white/55">
             <li>
@@ -85,7 +85,7 @@ export function RankingFaqPanel({ currentLevel }: RankingFaqPanelProps) {
         <details className={detailClass}>
           <summary className="flex items-center justify-between gap-2 text-[13px] font-semibold text-cyan-100/95">
             How do I level up?
-            <span className="text-[10px] font-normal text-white/35 group-open:rotate-180">▼</span>
+            <span className="text-[11px] font-normal text-white/35 group-open:rotate-180">▼</span>
           </summary>
           <p className="mt-2 text-xs leading-relaxed text-white/55">
             Earn more total XP to cross the next threshold on the ladder. Import additional seasons or providers, win more
@@ -98,11 +98,11 @@ export function RankingFaqPanel({ currentLevel }: RankingFaqPanelProps) {
         <details className={detailClass} open>
           <summary className="flex items-center justify-between gap-2 text-[13px] font-semibold text-cyan-100/95">
             All 25 levels (min XP to reach)
-            <span className="text-[10px] font-normal text-white/35 group-open:rotate-180">▼</span>
+            <span className="text-[11px] font-normal text-white/35 group-open:rotate-180">▼</span>
           </summary>
           <div className="mt-3 max-h-[min(50vh,320px)] overflow-auto rounded-lg border border-white/8">
             <table className="w-full min-w-[260px] border-collapse text-left text-[11px]">
-              <thead className="sticky top-0 bg-[#0d1528] text-[10px] font-semibold uppercase tracking-wide text-white/40">
+              <thead className="sticky top-0 bg-[#0d1528] text-[11px] font-semibold uppercase tracking-wide text-white/40">
                 <tr>
                   <th className="px-2 py-2">Lvl</th>
                   <th className="px-2 py-2">Name</th>
@@ -127,7 +127,7 @@ export function RankingFaqPanel({ currentLevel }: RankingFaqPanelProps) {
                       <td className="px-2 py-1.5 text-white/70">
                         {row.name}
                         {isYou ? (
-                          <span className="ml-1.5 rounded bg-cyan-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase text-cyan-200">
+                          <span className="ml-1.5 rounded bg-cyan-500/25 px-1.5 py-0.5 text-[11px] font-bold uppercase text-cyan-200">
                             You
                           </span>
                         ) : null}
@@ -139,7 +139,7 @@ export function RankingFaqPanel({ currentLevel }: RankingFaqPanelProps) {
               </tbody>
             </table>
           </div>
-          <p className="mt-2 text-[10px] leading-relaxed text-white/35">
+          <p className="mt-2 text-[11px] leading-relaxed text-white/35">
             Level 25 (Dynasty) is reached at {RANK_LEVELS[24].minXp.toLocaleString()} XP. Beyond that, XP still accrues;
             progress within the top band is shown on your card.
           </p>

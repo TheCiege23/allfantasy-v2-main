@@ -68,7 +68,7 @@ function AssetRow({ a }: { a: AssetValueSnapshot }) {
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-[12px] font-medium text-white">
           {assetLabel(a)}
-          {a.position ? <span className="ml-1 text-[10px] text-white/40">{a.position}</span> : null}
+          {a.position ? <span className="ml-1 text-[11px] text-white/40">{a.position}</span> : null}
         </span>
         {/*
           * The base value. Rendered even when zero, because hiding it would leave the side total
@@ -83,28 +83,28 @@ function AssetRow({ a }: { a: AssetValueSnapshot }) {
       </div>
 
       {info ? (
-        <p className="mt-0.5 text-[10px] text-white/45" data-testid="tv-asset-basis">
+        <p className="mt-0.5 text-[11px] text-white/45" data-testid="tv-asset-basis">
           <span className="text-white/60">{info.short}</span> · {info.long}
         </p>
       ) : a.kind === 'draft_pick' ? (
-        <p className="mt-0.5 text-[10px] text-white/45">
+        <p className="mt-0.5 text-[11px] text-white/45">
           Priced from where the pick actually falls in your league, not from its round number.
         </p>
       ) : a.kind === 'faab' ? (
-        <p className="mt-0.5 text-[10px] text-white/45">Priced from the amount itself.</p>
+        <p className="mt-0.5 text-[11px] text-white/45">Priced from the amount itself.</p>
       ) : (
         /*
          * ⚠ ABSENT IS NOT A BASIS. A snapshot written before `valuationBasis` existed carries no
          * label, and inventing one from `sources` here would be the second implementation of the
          * engine's precedence — the thing `valueBasisFor` exists to prevent.
          */
-        <p className="mt-0.5 text-[10px] text-white/35">Basis not recorded for this snapshot.</p>
+        <p className="mt-0.5 text-[11px] text-white/35">Basis not recorded for this snapshot.</p>
       )}
 
       {/* ── The format's opinion, as its own number ──────────────────────────────────── */}
       {fit ? (
         <div className="mt-1.5 flex items-baseline justify-between gap-2 rounded border border-sky-400/20 bg-sky-400/5 px-1.5 py-1">
-          <p className="text-[10px] text-sky-200/80" data-testid="tv-asset-fit-reason">
+          <p className="text-[11px] text-sky-200/80" data-testid="tv-asset-fit-reason">
             <span className="font-semibold">{a.formatFit?.label ?? 'Format'}</span> · {fit.reason}
           </p>
           <span className="shrink-0 text-[12px] font-bold tabular-nums text-sky-200" data-testid="tv-asset-fit">
@@ -117,7 +117,7 @@ function AssetRow({ a }: { a: AssetValueSnapshot }) {
 
       {legality && !legality.ok ? (
         <p
-          className="mt-1 rounded border border-amber-400/25 bg-amber-400/5 px-1.5 py-1 text-[10px] text-amber-200/85"
+          className="mt-1 rounded border border-amber-400/25 bg-amber-400/5 px-1.5 py-1 text-[11px] text-amber-200/85"
           data-testid="tv-asset-legality"
         >
           ⚠ {legality.reason ?? 'This asset cannot be traded right now.'}
@@ -153,7 +153,7 @@ export function TradeValueBreakdown({
               </span>
             </div>
             {side.assets.length === 0 ? (
-              <p className="rounded border border-white/10 bg-black/20 p-2 text-[10px] text-white/40">
+              <p className="rounded border border-white/10 bg-black/20 p-2 text-[11px] text-white/40">
                 Nothing on this side.
               </p>
             ) : (
@@ -175,7 +175,7 @@ export function TradeValueBreakdown({
         */}
       {unpricedCount > 0 ? (
         <p
-          className="rounded border border-amber-400/25 bg-amber-400/5 px-2 py-1.5 text-[10px] text-amber-200/85"
+          className="rounded border border-amber-400/25 bg-amber-400/5 px-2 py-1.5 text-[11px] text-amber-200/85"
           data-testid="tv-unpriced-note"
         >
           ⚠ {unpricedCount} player{unpricedCount === 1 ? '' : 's'} in this trade could not be priced, so the

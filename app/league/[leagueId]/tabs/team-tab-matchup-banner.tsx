@@ -57,7 +57,7 @@ export function TeamTabMatchupBanner({ leagueId }: { leagueId: string }) {
       )}
       data-testid="team-tab-matchup-banner"
     >
-      <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#ff9ec0]/80">
+      <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#ff9ec0]/80">
         Week {data.week}
       </span>
       <span className="text-[11px] text-white/50">vs.</span>
@@ -67,7 +67,7 @@ export function TeamTabMatchupBanner({ leagueId }: { leagueId: string }) {
       <span className="shrink-0 text-[11px] text-white/55">
         ~{userPts} – ~{themPts}
       </span>
-      <span className="shrink-0 text-[10px] text-[#ff3d81]/70">›</span>
+      <span className="shrink-0 text-[11px] text-[#ff3d81]/70">›</span>
     </Link>
   )
 }

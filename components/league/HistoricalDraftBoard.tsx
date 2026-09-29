@@ -114,7 +114,7 @@ export function HistoricalDraftBoard({ leagueId, season }: HistoricalDraftBoardP
                     {p ? (
                       <div className="flex flex-col">
                         <span className="text-white/80">#{p.pickNumber}</span>
-                        <span className="truncate text-[10px] text-white/45">{p.playerId}</span>
+                        <span className="truncate text-[11px] text-white/45">{p.playerId}</span>
                       </div>
                     ) : (
                       <span className="text-white/20">—</span>

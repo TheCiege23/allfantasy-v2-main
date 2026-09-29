@@ -121,12 +121,12 @@ export function AuctionSpotlightPanel({
                   </span>
                 )}
               </p>
-              <p className="text-[10px] text-white/55" data-testid="auction-highest-bidder">
+              <p className="text-[11px] text-white/55" data-testid="auction-highest-bidder">
                 Highest bidder: {state.currentBidderRosterId
                   ? (auction.nominationOrder.find((e) => e.rosterId === state.currentBidderRosterId)?.displayName ?? '—')
                   : 'No bids yet'}
               </p>
-              <p className="text-[10px] text-white/50">
+              <p className="text-[11px] text-white/50">
                 Min next bid: ${minNextBid}
               </p>
               <div className="flex flex-wrap items-center gap-2 mt-1">
@@ -182,7 +182,7 @@ export function AuctionSpotlightPanel({
                 : `Waiting for ${currentNominator?.displayName ?? 'nominator'} to nominate.`}
             </p>
             {timerStatus === 'running' && timerRemainingSeconds != null && (
-              <p className="mt-1 text-[10px] text-white/50" data-testid="auction-nomination-timer">
+              <p className="mt-1 text-[11px] text-white/50" data-testid="auction-nomination-timer">
                 Nomination window: {timerRemainingSeconds}s
               </p>
             )}
@@ -195,7 +195,7 @@ export function AuctionSpotlightPanel({
         {auction.nominationOrder.map((entry) => (
           <div
             key={entry.rosterId}
-            className={`rounded-lg border px-2 py-1 text-[10px] ${
+            className={`rounded-lg border px-2 py-1 text-[11px] ${
               entry.rosterId === currentUserRosterId
                 ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200'
                 : 'border-white/10 bg-white/5 text-white/70'

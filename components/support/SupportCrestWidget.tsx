@@ -124,7 +124,7 @@ export function SupportCrestWidget() {
           />
           <span
             aria-hidden
-            className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-violet-500 text-[10px] font-black leading-none text-white ring-2 ring-[#0a0a1f]"
+            className="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-cyan-400 to-violet-500 text-[11px] font-black leading-none text-white ring-2 ring-[#0a0a1f]"
           >
             S
           </span>

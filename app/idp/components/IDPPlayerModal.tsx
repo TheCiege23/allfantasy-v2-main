@@ -400,12 +400,12 @@ export function IDPPlayerModal({
             )}
             <div className="flex flex-wrap gap-1.5">
               {isExpiring ? (
-                <span className="rounded-full border border-[color:var(--cap-amber)]/40 bg-[color:var(--cap-amber)]/10 px-2 py-0.5 text-[10px] font-semibold text-amber-100">
+                <span className="rounded-full border border-[color:var(--cap-amber)]/40 bg-[color:var(--cap-amber)]/10 px-2 py-0.5 text-[11px] font-semibold text-amber-100">
                   Expiring Contract
                 </span>
               ) : null}
               {isTagged ? (
-                <span className="rounded-full border border-amber-400/45 bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-50">
+                <span className="rounded-full border border-amber-400/45 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-50">
                   Franchise Tagged
                 </span>
               ) : null}
@@ -435,9 +435,9 @@ export function IDPPlayerModal({
                       {Math.round(aiEval.overallGrade)}
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-white/45">Overall</p>
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">Overall</p>
                       <p className={`text-2xl font-bold ${overallTone}`}>{aiEval.overallGrade.toFixed(1)}/100</p>
-                      <span className="mt-1 inline-block rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-bold text-white/90">
+                      <span className="mt-1 inline-block rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[11px] font-bold text-white/90">
                         {aiEval.verdict.replace(/_/g, ' ')}
                       </span>
                     </div>
@@ -456,7 +456,7 @@ export function IDPPlayerModal({
                       ['Trend', aiEval.trendScore],
                     ].map(([label, val]) => (
                       <div key={String(label)} className="rounded-md border border-white/[0.06] bg-black/25 px-2 py-1.5">
-                        <p className="text-[9px] text-white/40">{label}</p>
+                        <p className="text-[11px] text-white/40">{label}</p>
                         <p className="font-mono font-semibold text-white/90">{typeof val === 'number' ? val.toFixed(0) : val}</p>
                       </div>
                     ))}
@@ -467,7 +467,7 @@ export function IDPPlayerModal({
                     ))}
                   </ul>
                   <p className="text-[11px] text-amber-200/85">Risk: {aiEval.mainRisk}</p>
-                  <p className="text-[10px] text-white/45">
+                  <p className="text-[11px] text-white/45">
                     Confidence: <span className="font-semibold text-white/70">{aiEval.confidence}</span>
                   </p>
                 </div>

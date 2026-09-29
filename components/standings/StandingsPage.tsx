@@ -151,7 +151,7 @@ export default function StandingsPage({
             data-testid="standings-filter"
             className="w-56 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-white placeholder:text-white/35 focus:border-cyan-400/60 focus:outline-none focus:ring-[3px] focus:ring-cyan-400/15"
           />
-          <span className="rounded-lg border border-white/10 px-2.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.12em] text-white/45">
+          <span className="rounded-lg border border-white/10 px-2.5 py-1.5 font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-white/45">
             Read-only
           </span>
         </div>
@@ -184,7 +184,7 @@ export default function StandingsPage({
             >
               {t.label}
               {!t.enabled ? (
-                <span className="ml-1.5 font-mono text-[9px] uppercase tracking-[0.1em] text-white/25">
+                <span className="ml-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-white/25">
                   soon
                 </span>
               ) : null}
@@ -192,7 +192,7 @@ export default function StandingsPage({
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 font-mono text-[10px] uppercase tracking-[0.1em] text-white/45">
+        <div className="flex flex-wrap items-center gap-4 font-mono text-[11px] uppercase tracking-[0.1em] text-white/45">
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-cyan-400" /> you
           </span>
@@ -237,7 +237,7 @@ export default function StandingsPage({
         {/* Right column */}
         <aside className="space-y-4">
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <h2 className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">
+            <h2 className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">
               Season
             </h2>
             <div className="mt-3 flex items-center gap-2">
@@ -276,7 +276,7 @@ export default function StandingsPage({
            * weekly results); everything else mirrors the source.
            */}
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <h2 className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">
+            <h2 className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">
               Standings source
             </h2>
             <p className="mt-2 text-xs leading-relaxed text-white/60">

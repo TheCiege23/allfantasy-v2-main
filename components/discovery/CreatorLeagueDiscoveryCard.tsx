@@ -80,13 +80,13 @@ export function CreatorLeagueDiscoveryCard({ league }: CreatorLeagueDiscoveryCar
         {/* League badges */}
         <div className="flex flex-wrap gap-1.5">
           <span
-            className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+            className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
             style={{ background: "var(--panel2)", color: "var(--text)" }}
           >
             {league.sport}
           </span>
           <span
-            className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+            className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
             style={{
               background: "rgba(168, 85, 247, 0.15)",
               color: "rgb(216, 180, 254)",
@@ -96,7 +96,7 @@ export function CreatorLeagueDiscoveryCard({ league }: CreatorLeagueDiscoveryCar
           </span>
           {league.isPaid ? (
             <span
-              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               title={paidBoundaryDisclosure}
               style={{ background: "rgba(234, 179, 8, 0.15)", color: "rgb(250, 204, 21)" }}
             >
@@ -104,7 +104,7 @@ export function CreatorLeagueDiscoveryCard({ league }: CreatorLeagueDiscoveryCar
             </span>
           ) : (
             <span
-              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               style={{ background: "rgba(34, 197, 94, 0.12)", color: "rgb(74, 222, 128)" }}
             >
               Free
@@ -112,7 +112,7 @@ export function CreatorLeagueDiscoveryCard({ league }: CreatorLeagueDiscoveryCar
           )}
           {fillingFast && (
             <span
-              className="inline-flex items-center gap-0.5 rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+              className="inline-flex items-center gap-0.5 rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               style={{ background: "rgba(34, 211, 238, 0.12)", color: "rgb(34, 211, 238)" }}
             >
               <Zap className="h-3 w-3" />
@@ -121,7 +121,7 @@ export function CreatorLeagueDiscoveryCard({ league }: CreatorLeagueDiscoveryCar
           )}
           {showNew && (
             <span
-              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+              className="inline-flex items-center rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               style={{ background: "rgba(251, 146, 60, 0.15)", color: "rgb(251, 146, 60)" }}
             >
               New
@@ -129,7 +129,7 @@ export function CreatorLeagueDiscoveryCard({ league }: CreatorLeagueDiscoveryCar
           )}
           {hasAI && (
             <span
-              className="inline-flex items-center gap-0.5 rounded-md px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium"
+              className="inline-flex items-center gap-0.5 rounded-md px-1.5 sm:px-2 py-0.5 text-[11px] sm:text-xs font-medium"
               style={{ background: "rgba(167, 139, 250, 0.15)", color: "rgb(196, 181, 253)" }}
             >
               <Sparkles className="h-3 w-3" />
@@ -148,7 +148,7 @@ export function CreatorLeagueDiscoveryCard({ league }: CreatorLeagueDiscoveryCar
             {league.aiFeatures.slice(0, 2).map((feature) => (
               <span
                 key={`${league.id}-${feature}`}
-                className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium"
+                className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium"
                 style={{ borderColor: "rgba(167, 139, 250, 0.35)", color: "rgb(221, 214, 254)" }}
               >
                 {feature}

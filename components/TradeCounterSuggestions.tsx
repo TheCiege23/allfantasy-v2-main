@@ -170,7 +170,7 @@ export default function TradeCounterSuggestions({
               Title Odds
             </div>
             {championshipEquity.confidence && (
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
                 championshipEquity.confidence === 'HIGH' ? 'bg-emerald-500/20 text-emerald-300' :
                 championshipEquity.confidence === 'MODERATE' ? 'bg-amber-500/20 text-amber-300' :
                 'bg-white/10 text-white/50'

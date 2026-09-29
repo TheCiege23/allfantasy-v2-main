@@ -161,7 +161,7 @@ export function SimulationPanel({
               <span className="text-cyan-200/90">{(trade.riskChange[tradeFocusTeamId] ?? 0).toFixed(2)}</span>
             </div>
           </div>
-          <p className="mt-2 text-[10px] text-white/40">
+          <p className="mt-2 text-[11px] text-white/40">
             Estimates from a simulation seeded with placeholder projections — listed trade assets only, synthetic bench padding.
             Directional insight, not real playoff or title odds.
           </p>
@@ -179,12 +179,12 @@ export function SimulationPanel({
                   </span>{' '}
                   over {trade.leagueGrounded.weeks.length} priced week{trade.leagueGrounded.weeks.length === 1 ? '' : 's'} of your actual remaining schedule
                 </div>
-                <p className="mt-1 text-[10px] text-white/40">
+                <p className="mt-1 text-[11px] text-white/40">
                   {trade.leagueGrounded.scopeNote} {trade.leagueGrounded.limitation}
                 </p>
               </div>
             ) : (
-              <p className="mt-2 text-[10px] text-white/40">
+              <p className="mt-2 text-[11px] text-white/40">
                 Real-schedule engine unavailable: {trade.leagueGrounded.reason}
               </p>
             )

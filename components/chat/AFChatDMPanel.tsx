@@ -37,7 +37,7 @@ export default function AFChatDMPanel({ userId }: AFChatDMPanelProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-af-chat-user-id={userId}>
-      <p className="flex-shrink-0 px-3 pt-2.5 text-[10px] font-semibold uppercase tracking-widest text-white/30">AF Chat</p>
+      <p className="flex-shrink-0 px-3 pt-2.5 text-[11px] font-semibold uppercase tracking-widest text-white/30">AF Chat</p>
       <div className="flex flex-shrink-0 justify-center gap-0 border-b border-white/[0.07] px-0.5">
         {AF_SUB_TABS.map((tab) => {
           const isActive = afTab === tab.id

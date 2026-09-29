@@ -261,7 +261,7 @@ function ProgressBar({
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-[10px] text-white/40">
+      <div className="flex items-center justify-between text-[11px] text-white/40">
         <span>
           {t("wc.guided.progressRound", {
             label: WORLD_CUP_ROUND_LABELS[round],
@@ -780,7 +780,7 @@ export default function WorldCupGuidedMatchupPicker({
       <header className="af-world-cup-header sticky top-0 z-10 shrink-0 border-b px-3 py-2.5 backdrop-blur sm:px-4 sm:py-3">
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[10px] font-bold uppercase tracking-widest text-white/35">
+            <p className="truncate text-[11px] font-bold uppercase tracking-widest text-white/35">
               {entryName}
             </p>
             <h1 className="truncate text-sm font-black text-white sm:text-base">
@@ -905,7 +905,7 @@ export default function WorldCupGuidedMatchupPicker({
             </div>
 
             <div
-              className="order-1 text-center text-[10px] leading-snug text-white/35 sm:order-2 sm:flex-1 sm:px-2"
+              className="order-1 text-center text-[11px] leading-snug text-white/35 sm:order-2 sm:flex-1 sm:px-2"
               data-testid="world-cup-guided-footer-context"
             >
               {t("wc.guided.matchNumber", { number: currentMatch.matchNumber })}

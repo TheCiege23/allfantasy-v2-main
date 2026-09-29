@@ -148,7 +148,7 @@ export function NbaScheduleCalendar({ leagueId, season, startWeek = 1, endWeek =
                     <span className="font-medium text-white/90">{event.label}</span>
                     <span className="ml-2 text-white/40">{event.date}</span>
                     {event.description && (
-                      <p className="mt-0.5 text-[10px] text-white/50">{event.description}</p>
+                      <p className="mt-0.5 text-[11px] text-white/50">{event.description}</p>
                     )}
                   </div>
                 </div>

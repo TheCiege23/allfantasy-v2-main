@@ -143,7 +143,7 @@ export default function PlayerProfileCard({ player, onClose, sport = 'NFL' }: Pl
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-xl sm:text-2xl font-bold text-white truncate">{name}</h3>
                 {statusBadge && (
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
                     statusBadge === 'IR' || statusBadge === 'Out'
                       ? 'bg-red-500/30 text-red-300'
                       : statusBadge === 'Doubtful' || statusBadge === 'Questionable'
@@ -167,31 +167,31 @@ export default function PlayerProfileCard({ player, onClose, sport = 'NFL' }: Pl
               <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5">
                 {player.age != null && (
                   <div>
-                    <span className="text-[10px] uppercase text-white/40 block leading-tight">Age</span>
+                    <span className="text-[11px] uppercase text-white/40 block leading-tight">Age</span>
                     <span className="text-sm font-bold text-white">{player.age}</span>
                   </div>
                 )}
                 {player.height && (
                   <div>
-                    <span className="text-[10px] uppercase text-white/40 block leading-tight">Height</span>
+                    <span className="text-[11px] uppercase text-white/40 block leading-tight">Height</span>
                     <span className="text-sm font-bold text-white">{player.height}</span>
                   </div>
                 )}
                 {player.weight && (
                   <div>
-                    <span className="text-[10px] uppercase text-white/40 block leading-tight">Weight</span>
+                    <span className="text-[11px] uppercase text-white/40 block leading-tight">Weight</span>
                     <span className="text-sm font-bold text-white">{player.weight} lbs</span>
                   </div>
                 )}
                 {player.experience != null && (
                   <div>
-                    <span className="text-[10px] uppercase text-white/40 block leading-tight">Exp</span>
+                    <span className="text-[11px] uppercase text-white/40 block leading-tight">Exp</span>
                     <span className="text-sm font-bold text-white">{player.experience}</span>
                   </div>
                 )}
                 {player.college && (
                   <div>
-                    <span className="text-[10px] uppercase text-white/40 block leading-tight">College</span>
+                    <span className="text-[11px] uppercase text-white/40 block leading-tight">College</span>
                     <span className="text-sm font-bold text-white">{player.college}</span>
                   </div>
                 )}
@@ -201,7 +201,7 @@ export default function PlayerProfileCard({ player, onClose, sport = 'NFL' }: Pl
 
           {player.depthChartOrder != null && (
             <div className="mt-3 flex items-center gap-2">
-              <span className="text-[10px] uppercase text-white/40">Depth Chart</span>
+              <span className="text-[11px] uppercase text-white/40">Depth Chart</span>
               <span className={`text-xs font-semibold px-2 py-0.5 rounded ${
                 player.depthChartOrder === 1
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
@@ -249,13 +249,13 @@ export default function PlayerProfileCard({ player, onClose, sport = 'NFL' }: Pl
                 <div className="text-lg font-bold text-cyan-400">
                   {ownership.percentage}%
                 </div>
-                <div className="text-[10px] text-white/40 uppercase mt-0.5">Ownership</div>
+                <div className="text-[11px] text-white/40 uppercase mt-0.5">Ownership</div>
               </div>
               <div className="bg-black/30 rounded-xl p-3 text-center border border-white/5">
                 <div className="text-lg font-bold text-white">
                   {ownership.count}/{ownership.total}
                 </div>
-                <div className="text-[10px] text-white/40 uppercase mt-0.5">Leagues</div>
+                <div className="text-[11px] text-white/40 uppercase mt-0.5">Leagues</div>
               </div>
               <div className="bg-black/30 rounded-xl p-3 text-center border border-white/5">
                 <div className={`text-lg font-bold ${
@@ -267,7 +267,7 @@ export default function PlayerProfileCard({ player, onClose, sport = 'NFL' }: Pl
                 }`}>
                   {player.searchRank != null ? `#${player.searchRank}` : '—'}
                 </div>
-                <div className="text-[10px] text-white/40 uppercase mt-0.5">Rank</div>
+                <div className="text-[11px] text-white/40 uppercase mt-0.5">Rank</div>
               </div>
             </div>
 
@@ -298,7 +298,7 @@ export default function PlayerProfileCard({ player, onClose, sport = 'NFL' }: Pl
                 </div>
                 <p className="text-xs text-white/60">{player.stock.reason}</p>
                 {player.stock.recentActivity && (player.stock.recentActivity.tradesIn > 0 || player.stock.recentActivity.tradesOut > 0) && (
-                  <div className="flex gap-3 mt-2 text-[10px]">
+                  <div className="flex gap-3 mt-2 text-[11px]">
                     {player.stock.recentActivity.tradesIn > 0 && (
                       <span className="text-green-400">+{player.stock.recentActivity.tradesIn} acquired (30d)</span>
                     )}
@@ -346,13 +346,13 @@ export default function PlayerProfileCard({ player, onClose, sport = 'NFL' }: Pl
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-white truncate">{league.leagueName}</div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-[10px] text-white/40">{league.season}</span>
+                      <span className="text-[11px] text-white/40">{league.season}</span>
                       {league.leagueType && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded">{league.leagueType}</span>
+                        <span className="text-[11px] px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded">{league.leagueType}</span>
                       )}
                     </div>
                   </div>
-                  <span className={`text-[10px] font-bold px-2 py-1 rounded ${
+                  <span className={`text-[11px] font-bold px-2 py-1 rounded ${
                     league.rosterStatus === 'starter'
                       ? 'bg-green-500/20 text-green-300'
                       : league.rosterStatus === 'taxi'

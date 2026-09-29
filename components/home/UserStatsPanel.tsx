@@ -83,7 +83,7 @@ export default function UserStatsPanel(props: UserStatsPanelProps) {
                 <span style={{ color: "var(--text)" }}>{initial || "A"}</span>
               )}
               <span
-                className="absolute -bottom-1 -right-1 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow"
+                className="absolute -bottom-1 -right-1 rounded-full px-2 py-0.5 text-[11px] font-semibold shadow"
                 style={{
                   background: tierColor,
                   color: "var(--on-accent-bg)",
@@ -152,7 +152,7 @@ export default function UserStatsPanel(props: UserStatsPanelProps) {
 
           {expanded && (
             <div className="mt-3 space-y-2 text-[11px] sm:text-xs">
-              <div className="flex justify-between text-[10px]" style={{ color: "var(--muted2)" }}>
+              <div className="flex justify-between text-[11px]" style={{ color: "var(--muted2)" }}>
                 <span>Year</span>
                 <span>Wins / Losses / Titles</span>
               </div>
@@ -202,7 +202,7 @@ export default function UserStatsPanel(props: UserStatsPanelProps) {
 function StatItem({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-xl px-3 py-2" style={{ background: "color-mix(in srgb, var(--panel2) 88%, transparent)" }}>
-      <div className="text-[10px] uppercase tracking-[0.16em]" style={{ color: "var(--muted2)" }}>
+      <div className="text-[11px] uppercase tracking-[0.16em]" style={{ color: "var(--muted2)" }}>
         {label}
       </div>
       <div className="mt-1 text-sm font-semibold" style={{ color: "var(--text)" }}>

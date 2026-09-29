@@ -182,7 +182,7 @@ function CandidateRow({
         : null
   return (
     <div className="mt-1.5">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-white/40">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-white/40">
         {label}
         {hint && <span className="ml-1.5 normal-case tracking-normal text-cyan-200/60">({hint})</span>}
       </div>
@@ -278,7 +278,7 @@ function ReplacementPanel({
   return (
     <div key={playerId}>
       {reps.projectionWeek != null && (
-        <div className="mt-2 text-[10px] text-white/35">Week {reps.projectionWeek} projections</div>
+        <div className="mt-2 text-[11px] text-white/35">Week {reps.projectionWeek} projections</div>
       )}
       <CandidateRow label="Best on your bench" options={reps.benchOptions ?? []} claimTarget={reps.lineupTarget} />
       <CandidateRow label="Best available" options={reps.freeAgentOptions ?? []} claimTarget={reps.claimTarget} />
@@ -437,7 +437,7 @@ export default function PlayerCommandCenterClient() {
                         {item.professionalTeam ? ` · ${item.professionalTeam}` : ""}
                       </span>
                       {item.injury && INJURY_STYLES[item.injury.status] && (
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${INJURY_STYLES[item.injury.status]}`}>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase ${INJURY_STYLES[item.injury.status]}`}>
                           {item.injury.status.replace(/_/g, " ")}
                         </span>
                       )}
@@ -460,7 +460,7 @@ export default function PlayerCommandCenterClient() {
                         {item.urgency.urgentLeagueCount} need{item.urgency.urgentLeagueCount === 1 ? "s" : ""} action
                       </span>
                     )}
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${URGENCY_STYLES[item.urgency.overall]}`}>
+                    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase ${URGENCY_STYLES[item.urgency.overall]}`}>
                       {item.urgency.overall}
                     </span>
                   </div>
@@ -476,11 +476,11 @@ export default function PlayerCommandCenterClient() {
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-semibold text-white/90">{a.leagueName}</span>
-                              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase text-white/50">{a.provider}</span>
+                              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] uppercase text-white/50">{a.provider}</span>
                               <span className="text-[11px] uppercase tracking-wide text-cyan-200/80">{a.rosterStatus}</span>
                             </div>
                             {u && u.level !== "none" && (
-                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${URGENCY_STYLES[u.level]}`}>
+                              <span className={`rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase ${URGENCY_STYLES[u.level]}`}>
                                 {u.level}
                               </span>
                             )}
@@ -510,7 +510,7 @@ export default function PlayerCommandCenterClient() {
                             />
                           )}
                           {a.syncFreshness.state === "stale" && (
-                            <div className="mt-1 text-[10px] text-amber-300/60">League data may be stale — refresh before acting.</div>
+                            <div className="mt-1 text-[11px] text-amber-300/60">League data may be stale — refresh before acting.</div>
                           )}
                         </div>
                       )

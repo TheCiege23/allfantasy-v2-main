@@ -72,7 +72,7 @@ export function PlayerStatCard({ playerId, sport, onClose }: PlayerStatCardProps
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p id="af-player-stat-title" className="text-[10px] uppercase tracking-wider text-white/40">
+            <p id="af-player-stat-title" className="text-[11px] uppercase tracking-wider text-white/40">
               Player
             </p>
             <p className="mt-1 text-lg font-semibold text-white/90">{name}</p>

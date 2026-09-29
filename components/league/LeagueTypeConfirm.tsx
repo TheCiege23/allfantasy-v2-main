@@ -191,7 +191,7 @@ export function LeagueTypeConfirm({
         </h3>
         <span
           className={cn(
-            'rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em]',
+            'rounded-full border px-2 py-0.5 text-[11px] font-black uppercase tracking-[0.12em]',
             confirmed
               ? 'border-[#56d98a]/40 text-[#56d98a]'
               : 'border-[#3fd0e8]/40 text-[#3fd0e8]',

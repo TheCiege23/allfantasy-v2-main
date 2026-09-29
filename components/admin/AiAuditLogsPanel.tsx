@@ -68,7 +68,7 @@ function ResultBadge({ result }: { result: string | null }) {
     result === "warned"  ? ShieldAlert :
     result === "clean"   ? ShieldCheck : null
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-px text-[10px] font-black uppercase tracking-wide ${colors}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-px text-[11px] font-black uppercase tracking-wide ${colors}`}>
       {Icon ? <Icon className="h-2.5 w-2.5" aria-hidden /> : null}
       {result}
     </span>
@@ -255,7 +255,7 @@ export function AiAuditLogsPanel() {
         <div className="overflow-x-auto rounded-xl border border-white/10">
           <table className="min-w-full text-xs" data-testid="ai-audit-table">
             <thead>
-              <tr className="border-b border-white/8 text-[10px] font-black uppercase tracking-[0.14em] text-white/40">
+              <tr className="border-b border-white/8 text-[11px] font-black uppercase tracking-[0.14em] text-white/40">
                 <th className="px-3 py-2 text-left whitespace-nowrap">Time</th>
                 <th className="px-3 py-2 text-left whitespace-nowrap">Sport</th>
                 <th className="px-3 py-2 text-left whitespace-nowrap">Feature</th>

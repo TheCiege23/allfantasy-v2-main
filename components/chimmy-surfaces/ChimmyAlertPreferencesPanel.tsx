@@ -130,7 +130,7 @@ export default function ChimmyAlertPreferencesPanel({
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-white">Chimmy Alert Settings</h3>
-        {saving && <span className="text-[10px] text-cyan-400/70">Saving…</span>}
+        {saving && <span className="text-[11px] text-cyan-400/70">Saving…</span>}
       </div>
 
       {/* Alert Volume */}
@@ -238,7 +238,7 @@ export default function ChimmyAlertPreferencesPanel({
           })}
         </div>
         {mutedClasses.length > 0 && (
-          <p className="text-[10px] text-white/35">
+          <p className="text-[11px] text-white/35">
             {mutedClasses.length} categor{mutedClasses.length === 1 ? 'y' : 'ies'} muted
           </p>
         )}

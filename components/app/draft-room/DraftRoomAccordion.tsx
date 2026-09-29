@@ -111,7 +111,7 @@ export function DraftRoomAccordion({
           {!open && collapsedSubtitle ? (
             <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-white/50">{collapsedSubtitle}</p>
           ) : null}
-          {open && summary ? <p className="mt-0.5 text-[10px] text-white/40">{summary}</p> : null}
+          {open && summary ? <p className="mt-0.5 text-[11px] text-white/40">{summary}</p> : null}
         </div>
       </button>
       {open ? (

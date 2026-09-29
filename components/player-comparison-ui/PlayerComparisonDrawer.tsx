@@ -112,7 +112,7 @@ export function PlayerComparisonDrawer({ open, onClose, initialPayload }: Player
       >
         <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 py-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-wide text-white/45">Player compare</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-white/45">Player compare</p>
             <p className="text-sm font-semibold text-white">Side-by-side edge</p>
           </div>
           <button
@@ -128,7 +128,7 @@ export function PlayerComparisonDrawer({ open, onClose, initialPayload }: Player
         <div className="shrink-0 space-y-2 border-b border-white/5 px-4 py-3">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <label className="block">
-              <span className="text-[10px] text-white/45">Player A</span>
+              <span className="text-[11px] text-white/45">Player A</span>
               <input
                 value={playerA}
                 onChange={(e) => setPlayerA(e.target.value)}
@@ -138,7 +138,7 @@ export function PlayerComparisonDrawer({ open, onClose, initialPayload }: Player
               />
             </label>
             <label className="block">
-              <span className="text-[10px] text-white/45">Player B</span>
+              <span className="text-[11px] text-white/45">Player B</span>
               <input
                 value={playerB}
                 onChange={(e) => setPlayerB(e.target.value)}

@@ -168,7 +168,7 @@ export default function BroadcastModal({
         </div>
 
         {/* Send to */}
-        <h3 className="mt-6 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">
+        <h3 className="mt-6 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">
           Send to
         </h3>
         <div className="mt-2 space-y-2">
@@ -189,7 +189,7 @@ export default function BroadcastModal({
         </div>
 
         {/* Announcement */}
-        <h3 className="mt-6 font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">
+        <h3 className="mt-6 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-white/45">
           Announcement
         </h3>
         <textarea

@@ -127,7 +127,7 @@ export function MessageModerationMenu({
             aria-labelledby={titleId}
             className="absolute right-0 top-7 z-50 w-64 rounded-xl border border-white/15 bg-[#0d1117] p-1.5 text-white shadow-2xl"
           >
-            <p id={titleId} className="px-3 pb-1 pt-1.5 text-[10px] font-semibold uppercase tracking-wide text-white/45">
+            <p id={titleId} className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/45">
               {step === 'report' ? 'Why report this?' : step === 'block' ? `Block ${name}?` : 'Message'}
             </p>
             {step === 'menu' ? (

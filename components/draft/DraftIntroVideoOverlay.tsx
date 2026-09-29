@@ -65,7 +65,7 @@ export function DraftIntroVideoOverlay({
           className="aspect-video w-full rounded-xl border border-white/15 bg-black shadow-2xl"
           data-testid="draft-intro-video"
         />
-        <p className="pt-2 text-center text-[10px] text-white/45">
+        <p className="pt-2 text-center text-[11px] text-white/45">
           This intro plays once per draft room session.
         </p>
       </div>

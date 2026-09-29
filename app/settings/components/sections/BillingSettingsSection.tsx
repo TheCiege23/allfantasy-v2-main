@@ -44,7 +44,7 @@ export function BillingSettingsSection() {
 
           <span
             className={[
-              "rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+              "rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide",
               status === "active"
                 ? "border-green-500/30 bg-green-500/10 text-green-300"
                 : status === "grace"

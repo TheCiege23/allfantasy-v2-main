@@ -111,13 +111,13 @@ export function LiveModeView({ games, standings, currentUserId, playByPlaySuppor
           </div>
           <span className="text-sm font-bold text-white">LIVE MODE</span>
           {liveGames.length > 0 && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
+            <span className="text-[11px] px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444' }}>
               {liveGames.length} LIVE
             </span>
           )}
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: scoringMode === 'momentum' ? 'rgba(251,146,60,0.12)' : scoringMode === 'accuracy_boldness' ? 'rgba(99,102,241,0.12)' : scoringMode === 'streak_survival' ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.05)', color: scoringMode === 'momentum' ? '#fb923c' : scoringMode === 'accuracy_boldness' ? '#818cf8' : scoringMode === 'streak_survival' ? '#22c55e' : 'rgba(255,255,255,0.4)' }}>
+          <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: scoringMode === 'momentum' ? 'rgba(251,146,60,0.12)' : scoringMode === 'accuracy_boldness' ? 'rgba(99,102,241,0.12)' : scoringMode === 'streak_survival' ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.05)', color: scoringMode === 'momentum' ? '#fb923c' : scoringMode === 'accuracy_boldness' ? '#818cf8' : scoringMode === 'streak_survival' ? '#22c55e' : 'rgba(255,255,255,0.4)' }}>
             {scoringMode === 'momentum' ? 'Momentum' : scoringMode === 'accuracy_boldness' ? 'Accuracy+Bold' : scoringMode === 'streak_survival' ? 'Streak' : 'Standard'}
           </span>
         </div>
@@ -162,7 +162,7 @@ export function LiveModeView({ games, standings, currentUserId, playByPlaySuppor
           <AlertTriangle className="h-4 w-4 flex-shrink-0" style={{ color: '#eab308' }} />
           <div>
             <div className="text-[11px] font-semibold" style={{ color: '#eab308' }}>Play-by-play unavailable</div>
-            <div className="text-[10px]" style={{ color: 'rgba(234,179,8,0.6)' }}>Current data provider does not support play-by-play. Showing score-only updates.</div>
+            <div className="text-[11px]" style={{ color: 'rgba(234,179,8,0.6)' }}>Current data provider does not support play-by-play. Showing score-only updates.</div>
           </div>
         </div>
       )}
@@ -178,7 +178,7 @@ export function LiveModeView({ games, standings, currentUserId, playByPlaySuppor
               <Trophy className="h-3.5 w-3.5" style={{ color: '#fb923c' }} />
               <span className="text-[11px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>LIVE LEADERBOARD</span>
             </div>
-            <span className="text-[9px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{standings.length} entries</span>
+            <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.2)' }}>{standings.length} entries</span>
           </div>
           {standings.map((s, i) => {
             const isMe = s.userId === currentUserId
@@ -205,22 +205,22 @@ export function LiveModeView({ games, standings, currentUserId, playByPlaySuppor
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-semibold text-white truncate">
                       {s.displayName || s.entryName}
-                      {isMe && <span className="text-[9px] ml-1" style={{ color: '#fb923c' }}>(You)</span>}
+                      {isMe && <span className="text-[11px] ml-1" style={{ color: '#fb923c' }}>(You)</span>}
                     </div>
                     {isEdge && !isExpanded && (totalUpset > 0 || totalLeverage > 0 || hasInsured) && (
                       <div className="flex gap-2 mt-0.5">
                         {totalUpset > 0 && (
-                          <span className="text-[9px] tabular-nums" style={{ color: '#a78bfa' }}>
+                          <span className="text-[11px] tabular-nums" style={{ color: '#a78bfa' }}>
                             <Zap className="inline h-2.5 w-2.5 mr-0.5" />+{Math.round(totalUpset * 10) / 10}
                           </span>
                         )}
                         {totalLeverage > 0 && (
-                          <span className="text-[9px] tabular-nums" style={{ color: '#fbbf24' }}>
+                          <span className="text-[11px] tabular-nums" style={{ color: '#fbbf24' }}>
                             +{Math.round(totalLeverage * 10) / 10}
                           </span>
                         )}
                         {hasInsured && (
-                          <span className="text-[9px]" style={{ color: '#34d399' }}>
+                          <span className="text-[11px]" style={{ color: '#34d399' }}>
                             <Shield className="inline h-2.5 w-2.5" />
                           </span>
                         )}
@@ -230,7 +230,7 @@ export function LiveModeView({ games, standings, currentUserId, playByPlaySuppor
                   <div className="text-right flex items-center gap-1.5">
                     <div>
                       <div className="text-xs font-bold tabular-nums" style={{ color: '#fb923c' }}>{s.totalPoints}</div>
-                      <div className="text-[9px]" style={{ color: 'rgba(255,255,255,0.25)' }}>{s.correctPicks}/{s.totalPicks}</div>
+                      <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>{s.correctPicks}/{s.totalPicks}</div>
                     </div>
                     {isExpanded
                       ? <ChevronUp className="w-3 h-3 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.2)' }} />
@@ -244,7 +244,7 @@ export function LiveModeView({ games, standings, currentUserId, playByPlaySuppor
                     <div className="ml-8 mt-1.5">
                       <div className="grid gap-0" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
                         {ROUND_LABELS.map((rl) => (
-                          <div key={`h-${rl.round}`} className="text-center text-[8px] font-bold" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                          <div key={`h-${rl.round}`} className="text-center text-[11px] font-bold" style={{ color: 'rgba(255,255,255,0.25)' }}>
                             {rl.label}
                           </div>
                         ))}
@@ -256,7 +256,7 @@ export function LiveModeView({ games, standings, currentUserId, playByPlaySuppor
                               <div className="text-[11px] font-bold tabular-nums" style={{ color: rPts > 0 ? '#fb923c' : 'rgba(255,255,255,0.1)' }}>
                                 {rPts > 0 ? rPts : '-'}
                               </div>
-                              <div className="text-[8px] tabular-nums" style={{ color: rCorr > 0 ? 'rgba(34,197,94,0.6)' : 'rgba(255,255,255,0.1)' }}>
+                              <div className="text-[11px] tabular-nums" style={{ color: rCorr > 0 ? 'rgba(34,197,94,0.6)' : 'rgba(255,255,255,0.1)' }}>
                                 {rCorr > 0 ? `${rCorr}W` : '-'}
                               </div>
                             </div>
@@ -267,17 +267,17 @@ export function LiveModeView({ games, standings, currentUserId, playByPlaySuppor
                       {isEdge && (totalUpset > 0 || totalLeverage > 0 || hasInsured) && (
                         <div className="flex flex-wrap gap-2 mt-1.5 pt-1.5" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                           {totalUpset > 0 && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(167,139,250,0.1)', color: '#a78bfa' }}>
+                            <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(167,139,250,0.1)', color: '#a78bfa' }}>
                               <Zap className="inline h-2.5 w-2.5 mr-0.5" />+{Math.round(totalUpset * 10) / 10} upset
                             </span>
                           )}
                           {totalLeverage > 0 && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24' }}>
+                            <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(251,191,36,0.1)', color: '#fbbf24' }}>
                               +{Math.round(totalLeverage * 10) / 10} leverage
                             </span>
                           )}
                           {hasInsured && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(52,211,153,0.1)', color: '#34d399' }}>
+                            <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(52,211,153,0.1)', color: '#34d399' }}>
                               <Shield className="inline h-2.5 w-2.5 mr-0.5" />{insuredPts > 0 ? `+${insuredPts} insured` : 'Insured'}
                             </span>
                           )}
@@ -285,7 +285,7 @@ export function LiveModeView({ games, standings, currentUserId, playByPlaySuppor
                       )}
 
                       {s.championPick && (
-                        <div className="flex items-center gap-1 mt-1.5 text-[9px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                        <div className="flex items-center gap-1 mt-1.5 text-[11px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
                           <Trophy className="h-2.5 w-2.5" style={{ color: '#fbbf24' }} />
                           Champion: {s.championPick}
                         </div>
@@ -345,7 +345,7 @@ function LiveGameTile({
           <motion.div
             initial={{ scale: 0, rotate: -20 }}
             animate={{ scale: 1, rotate: 0 }}
-            className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase"
+            className="px-1.5 py-0.5 rounded text-[11px] font-black uppercase"
             style={{ background: 'rgba(251,146,60,0.2)', color: '#fb923c' }}
           >
             UPSET
@@ -371,7 +371,7 @@ function LiveGameTile({
       </div>
 
       <div className="flex items-center justify-between pt-1" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-        <span className="text-[10px] font-semibold" style={{
+        <span className="text-[11px] font-semibold" style={{
           color: isLive ? '#ef4444' : isFinal ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.3)',
         }}>
           {isLive ? (
@@ -396,7 +396,7 @@ function TeamRow({ name, seed, score, isWinner, isLive }: {
   return (
     <div className="flex items-center gap-2">
       {seed != null && (
-        <span className="text-[10px] font-bold w-4 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
+        <span className="text-[11px] font-bold w-4 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
           {seed}
         </span>
       )}
@@ -426,7 +426,7 @@ function PlayByPlayFeed({ games }: { games: Game[] }) {
       <div className="px-3 py-2 flex items-center gap-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
         <Activity className="h-3.5 w-3.5" style={{ color: '#22c55e' }} />
         <span className="text-[11px] font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>PLAY-BY-PLAY</span>
-        <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>LIVE</span>
+        <span className="text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e' }}>LIVE</span>
       </div>
       <div className="max-h-48 overflow-y-auto p-3 space-y-2">
         {games.map(g => (
@@ -443,7 +443,7 @@ function PlayByPlayFeed({ games }: { games: Game[] }) {
           </div>
         ))}
         {games.length === 0 && (
-          <p className="text-center text-[10px]" style={{ color: 'rgba(255,255,255,0.2)' }}>Waiting for plays...</p>
+          <p className="text-center text-[11px]" style={{ color: 'rgba(255,255,255,0.2)' }}>Waiting for plays...</p>
         )}
       </div>
     </div>

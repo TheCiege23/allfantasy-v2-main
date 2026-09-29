@@ -232,7 +232,7 @@ export function LeagueSettingsPreviewPanel({
                       <div className="font-medium">
                         {rule.statKey.replace(/_/g, ' ')}
                       </div>
-                      <div className="text-[10px] text-white/45">{rule.statKey}</div>
+                      <div className="text-[11px] text-white/45">{rule.statKey}</div>
                     </td>
                     <td className="px-2 py-1.5 text-right">{rule.pointsValue}</td>
                     <td className="px-2 py-1.5 text-right">{rule.multiplier}</td>

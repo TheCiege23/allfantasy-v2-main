@@ -60,12 +60,24 @@ describe('DraftRightDockTabs — active tab gradient underline (Commit 23)', () 
 // ---------------------------------------------------------------------------
 
 describe('DraftRightDockTabs — compact tab header (Commit 23)', () => {
+  /**
+   * ⚠ THIS ASSERTION USED TO READ `/py-1 text-\[8px\] font-semibold/`, and the type-floor sweep
+   * broke it — which it should not have, because this test is about the PADDING. Coupling a
+   * padding invariant to whatever font size happens to sit next to it in the class list is what
+   * turned an unrelated change into a failure here. It now asserts only its own subject.
+   */
   it('tab button has py-1 (no taller vertical padding)', () => {
-    expect(dockSrc).toMatch(/py-1 text-\[8px\] font-semibold/)
+    expect(dockSrc).toMatch(/py-1 text-\[\d+(?:\.\d+)?px\] font-semibold/)
   })
 
-  it('tab button font size is text-[8px] uppercase (Sleeper-style density)', () => {
-    expect(dockSrc).toMatch(/text-\[8px\] font-semibold uppercase tracking-\[0\.14em\]/)
+  /**
+   * 🛑 THE 8px HERE WAS DELIBERATE — "Sleeper-style density" — AND IT IS SUPERSEDED, not broken.
+   * 11px is this app's type floor (mobile-gui P1 audit; see __tests__/core-app/type-floor.test.ts
+   * for the live measurements). A tab label a user has to read does not get an exemption for
+   * density, so this now pins the floor. Do not "restore" the 8px to make a diff smaller.
+   */
+  it('tab button font size respects the 11px floor, uppercase (was 8px for density)', () => {
+    expect(dockSrc).toMatch(/text-\[11px\] font-semibold uppercase tracking-\[0\.14em\]/)
   })
 })
 

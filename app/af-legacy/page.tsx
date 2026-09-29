@@ -588,7 +588,7 @@ function LeagueHistoryAccordion({
                               }`}>
                                 {typeName}
                               </span>
-                              <span className="text-[10px] text-white/50">({typeLeagues.length})</span>
+                              <span className="text-[11px] text-white/50">({typeLeagues.length})</span>
                             </div>
                             <span className={`text-white/40 text-xs transition-transform ${isTypeOpen ? 'rotate-180' : ''}`}>▼</span>
                           </button>
@@ -609,14 +609,14 @@ function LeagueHistoryAccordion({
                                         {league.avatar ? (
                                           <img src={league.avatar} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
                                         ) : (
-                                          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">
+                                          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
                                             {(league.name || '?')[0].toUpperCase()}
                                           </div>
                                         )}
                                         <span className="text-sm text-white truncate">{league.name}</span>
                                         {league.is_champion && <span title="Champion">🏆</span>}
                                         {league.made_playoffs && !league.is_champion && (
-                                          <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 text-[10px] border border-blue-400/30">
+                                          <span className="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 text-[11px] border border-blue-400/30">
                                             Playoffs
                                           </span>
                                         )}
@@ -645,7 +645,7 @@ function LeagueHistoryAccordion({
                                                 <>
                                                   {offStarters.length > 0 && (
                                                     <div>
-                                                      <div className="text-[10px] uppercase tracking-wide text-emerald-300/70 mb-1">Starters</div>
+                                                      <div className="text-[11px] uppercase tracking-wide text-emerald-300/70 mb-1">Starters</div>
                                                       <div className="flex flex-wrap gap-1">
                                                         {offStarters.map((p, i) => (
                                                           <span key={i} className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-400/20 text-[11px] text-emerald-200">
@@ -657,7 +657,7 @@ function LeagueHistoryAccordion({
                                                   )}
                                                   {idpStarters.length > 0 && (
                                                     <div>
-                                                      <div className="text-[10px] uppercase tracking-wide text-blue-300/70 mb-1">IDP</div>
+                                                      <div className="text-[11px] uppercase tracking-wide text-blue-300/70 mb-1">IDP</div>
                                                       <div className="flex flex-wrap gap-1">
                                                         {idpStarters.map((p, i) => (
                                                           <span key={i} className="px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-400/20 text-[11px] text-blue-200">
@@ -672,7 +672,7 @@ function LeagueHistoryAccordion({
                                             })()}
                                             {roster.bench.length > 0 && (
                                               <div>
-                                                <div className="text-[10px] uppercase tracking-wide text-white/50 mb-1">Bench</div>
+                                                <div className="text-[11px] uppercase tracking-wide text-white/50 mb-1">Bench</div>
                                                 <div className="flex flex-wrap gap-1">
                                                   {roster.bench.map((p, i) => (
                                                     <span key={i} className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[11px] text-white/70">
@@ -684,7 +684,7 @@ function LeagueHistoryAccordion({
                                             )}
                                             {roster.reserve.length > 0 && (
                                               <div>
-                                                <div className="text-[10px] uppercase tracking-wide text-red-300/70 mb-1">IR</div>
+                                                <div className="text-[11px] uppercase tracking-wide text-red-300/70 mb-1">IR</div>
                                                 <div className="flex flex-wrap gap-1">
                                                   {roster.reserve.map((p, i) => (
                                                     <span key={i} className="px-1.5 py-0.5 rounded bg-red-500/10 border border-red-400/20 text-[11px] text-red-200">
@@ -696,7 +696,7 @@ function LeagueHistoryAccordion({
                                             )}
                                             {roster.taxi.length > 0 && (
                                               <div>
-                                                <div className="text-[10px] uppercase tracking-wide text-yellow-300/70 mb-1">Taxi Squad</div>
+                                                <div className="text-[11px] uppercase tracking-wide text-yellow-300/70 mb-1">Taxi Squad</div>
                                                 <div className="flex flex-wrap gap-1">
                                                   {roster.taxi.map((p, i) => (
                                                     <span key={i} className="px-1.5 py-0.5 rounded bg-yellow-500/10 border border-yellow-400/20 text-[11px] text-yellow-200">
@@ -719,13 +719,13 @@ function LeagueHistoryAccordion({
                                               if (sortedSeasons.length === 0) return null
                                               return (
                                                 <div>
-                                                  <div className="text-[10px] uppercase tracking-wide text-purple-300/70 mb-1">Draft Capital</div>
+                                                  <div className="text-[11px] uppercase tracking-wide text-purple-300/70 mb-1">Draft Capital</div>
                                                   <div className="space-y-1">
                                                     {sortedSeasons.map(season => {
                                                       const picks = picksBySeason[season]!.sort((a, b) => a.round - b.round || (a.draftSlot || 99) - (b.draftSlot || 99))
                                                       return (
                                                         <div key={season} className="flex flex-wrap items-center gap-1">
-                                                          <span className="text-[10px] text-purple-200/60 w-10">{season}:</span>
+                                                          <span className="text-[11px] text-purple-200/60 w-10">{season}:</span>
                                                           {picks.map((pick, i) => (
                                                             <span key={i} className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-400/20 text-[11px] text-purple-200">
                                                               {pick.draftSlot ? `${pick.round}.${String(pick.draftSlot).padStart(2, '0')}` : `Rd ${pick.round}`}
@@ -783,7 +783,7 @@ function CooldownPill(props: { label?: string; ms: number; tone?: 'cyan' | 'purp
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] leading-none ${toneClass}`}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] leading-none ${toneClass}`}
       title={`${label}: ${formatCooldown(ms)}`}
     >
       <span className="opacity-70">⏳</span>
@@ -816,7 +816,7 @@ function ToolStatCard({ label, value, icon, accent, subValue }: { label: string;
     )}>
       <div className="flex items-center gap-1.5 sm:gap-2">
         {icon && <span className="text-base sm:text-lg flex-shrink-0">{icon}</span>}
-        <div className="text-[10px] sm:text-[11px] uppercase tracking-wide text-white/50 truncate">{label}</div>
+        <div className="text-[11px] sm:text-[11px] uppercase tracking-wide text-white/50 truncate">{label}</div>
       </div>
       <div className={cx(
         'mt-1.5 sm:mt-2 text-lg sm:text-xl md:text-2xl font-extrabold leading-none',
@@ -824,7 +824,7 @@ function ToolStatCard({ label, value, icon, accent, subValue }: { label: string;
       )}>
         {value}
       </div>
-      {subValue && <div className="mt-1 text-[10px] sm:text-xs text-white/40">{subValue}</div>}
+      {subValue && <div className="mt-1 text-[11px] sm:text-xs text-white/40">{subValue}</div>}
     </div>
   )
 }
@@ -1408,7 +1408,7 @@ function AFLegacyContent() {
           {selected?.avatar ? (
             <img src={selected.avatar} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
           ) : selected ? (
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
               {(selected.name || '?')[0].toUpperCase()}
             </div>
           ) : null}
@@ -1438,7 +1438,7 @@ function AFLegacyContent() {
                 <>
                   {groups.current.length > 0 && (
                     <>
-                      <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-emerald-400/70 font-semibold bg-slate-900 sticky top-0">Current Season</div>
+                      <div className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-emerald-400/70 font-semibold bg-slate-900 sticky top-0">Current Season</div>
                       {groups.current.map(lg => (
                         <button
                           key={lg.league_id}
@@ -1448,7 +1448,7 @@ function AFLegacyContent() {
                           {lg.avatar ? (
                             <img src={lg.avatar} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
                           ) : (
-                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">
+                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
                               {(lg.name || '?')[0].toUpperCase()}
                             </div>
                           )}
@@ -1460,7 +1460,7 @@ function AFLegacyContent() {
                   )}
                   {groups.older.length > 0 && (
                     <>
-                      <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-amber-400/60 font-semibold bg-slate-900 sticky top-0">Previous Seasons</div>
+                      <div className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-amber-400/60 font-semibold bg-slate-900 sticky top-0">Previous Seasons</div>
                       {groups.older.map(lg => (
                         <button
                           key={lg.league_id}
@@ -1470,7 +1470,7 @@ function AFLegacyContent() {
                           {lg.avatar ? (
                             <img src={lg.avatar} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
                           ) : (
-                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-slate-500 to-slate-600 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">
+                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-slate-500 to-slate-600 flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
                               {(lg.name || '?')[0].toUpperCase()}
                             </div>
                           )}
@@ -1482,7 +1482,7 @@ function AFLegacyContent() {
                   )}
                   {groups.inactive.length > 0 && (
                     <>
-                      <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-white/30 font-semibold bg-slate-900 sticky top-0">Inactive (2+ years)</div>
+                      <div className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-white/30 font-semibold bg-slate-900 sticky top-0">Inactive (2+ years)</div>
                       {groups.inactive.map(lg => (
                         <div
                           key={lg.league_id}
@@ -1491,7 +1491,7 @@ function AFLegacyContent() {
                           {lg.avatar ? (
                             <img src={lg.avatar} alt="" className="w-5 h-5 rounded-full object-cover flex-shrink-0 opacity-40" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
                           ) : (
-                            <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[8px] font-bold text-white/30 flex-shrink-0">
+                            <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[11px] font-bold text-white/30 flex-shrink-0">
                               {(lg.name || '?')[0].toUpperCase()}
                             </div>
                           )}
@@ -5064,7 +5064,7 @@ function AFLegacyContent() {
                                           {league.sport} • {league.season} • {league.numTeams} teams
                                         </div>
                                       </div>
-                                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                                      <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
                                         league.isFinished ? 'bg-gray-500/30 text-gray-300' : 'bg-green-500/30 text-green-300'
                                       }`}>
                                         {league.isFinished ? 'Complete' : 'Active'}
@@ -5203,7 +5203,7 @@ function AFLegacyContent() {
                                   ))}
                                 </select>
                               </div>
-                              <p className="text-[10px] text-white/40 mt-2">
+                              <p className="text-[11px] text-white/40 mt-2">
                                 Historical MFL import is not live yet. Right now this connection supports account auth and league listing only.
                               </p>
                             </div>
@@ -5427,7 +5427,7 @@ function AFLegacyContent() {
                             placeholder="e.g. dynastydaddy"
                             className="w-full px-4 py-3 rounded-2xl bg-black/30 border border-white/10 text-white placeholder-white/25 focus:outline-none focus:border-green-400/60 focus:ring-2 focus:ring-green-400/20 transition"
                           />
-                          <p className="text-[10px] text-white/40 mt-1">Found under User Information in your Fantrax profile</p>
+                          <p className="text-[11px] text-white/40 mt-1">Found under User Information in your Fantrax profile</p>
                         </div>
                         
                         <div>
@@ -5441,7 +5441,7 @@ function AFLegacyContent() {
                             placeholder="e.g. Peach Bowl C2C"
                             className="w-full px-4 py-3 rounded-2xl bg-black/30 border border-white/10 text-white placeholder-white/25 focus:outline-none focus:border-green-400/60 focus:ring-2 focus:ring-green-400/20 transition"
                           />
-                          <p className="text-[10px] text-white/40 mt-1">Override auto-detected league name from CSV</p>
+                          <p className="text-[11px] text-white/40 mt-1">Override auto-detected league name from CSV</p>
                         </div>
                         
                         <div className="flex items-center gap-3">
@@ -5454,7 +5454,7 @@ function AFLegacyContent() {
                             />
                             <span className="text-sm text-white/70">Devy League</span>
                           </label>
-                          <span className="text-[10px] text-white/40">(College players before NFL draft)</span>
+                          <span className="text-[11px] text-white/40">(College players before NFL draft)</span>
                         </div>
                         
                         <div>
@@ -5592,7 +5592,7 @@ function AFLegacyContent() {
                                       {league.name}
                                       {league.isChampion && <span className="text-xl">🏆</span>}
                                       {league.isDevy && (
-                                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-400/30 rounded text-[10px] font-semibold uppercase">
+                                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-400 border border-purple-400/30 rounded text-[11px] font-semibold uppercase">
                                           Devy
                                         </span>
                                       )}
@@ -5617,31 +5617,31 @@ function AFLegacyContent() {
                                 <div className="grid grid-cols-3 gap-3 text-center">
                                   <div className="bg-black/20 rounded-lg p-2">
                                     <div className="text-lg font-bold text-white">{league.record}</div>
-                                    <div className="text-[10px] text-white/40 uppercase">Record</div>
+                                    <div className="text-[11px] text-white/40 uppercase">Record</div>
                                   </div>
                                   <div className="bg-black/20 rounded-lg p-2">
                                     <div className="text-lg font-bold text-cyan-400">{league.pointsFor ? league.pointsFor.toFixed(1) : '—'}</div>
-                                    <div className="text-[10px] text-white/40 uppercase">Points For</div>
+                                    <div className="text-[11px] text-white/40 uppercase">Points For</div>
                                   </div>
                                   <div className="bg-black/20 rounded-lg p-2">
                                     <div className="text-lg font-bold text-white/70">#{league.rank || '—'}</div>
-                                    <div className="text-[10px] text-white/40 uppercase">Rank</div>
+                                    <div className="text-[11px] text-white/40 uppercase">Rank</div>
                                   </div>
                                 </div>
                                 
                                 {league.roster && Array.isArray(league.roster) && league.roster.length > 0 && (
                                   <div className="mt-3 pt-3 border-t border-white/10">
-                                    <div className="text-[10px] text-white/40 uppercase mb-2">
+                                    <div className="text-[11px] text-white/40 uppercase mb-2">
                                       Roster ({league.roster.length} players)
                                     </div>
                                     <div className="flex flex-wrap gap-1">
                                       {league.roster.slice(0, 8).map((player: any, pidx: number) => (
-                                        <span key={pidx} className="px-1.5 py-0.5 bg-white/5 rounded text-[10px] text-white/60">
+                                        <span key={pidx} className="px-1.5 py-0.5 bg-white/5 rounded text-[11px] text-white/60">
                                           <PlayerBadge name={player.name || ''} sleeperId={player.id || player.playerId} position={player.position} team={player.team} size="sm" showTeamLogo={false} />
                                         </span>
                                       ))}
                                       {league.roster.length > 8 && (
-                                        <span className="px-2 py-0.5 bg-white/5 rounded text-[10px] text-white/40">
+                                        <span className="px-2 py-0.5 bg-white/5 rounded text-[11px] text-white/40">
                                           +{league.roster.length - 8} more
                                         </span>
                                       )}
@@ -5651,27 +5651,27 @@ function AFLegacyContent() {
                                 
                                 {league.transactions && (
                                   <div className="mt-3 pt-3 border-t border-white/10">
-                                    <div className="text-[10px] text-white/40 uppercase mb-2">
+                                    <div className="text-[11px] text-white/40 uppercase mb-2">
                                       Transaction History
                                     </div>
                                     <div className="flex flex-wrap gap-2">
                                       {league.transactions.claims?.length > 0 && (
-                                        <span className="px-2 py-1 bg-green-500/10 border border-green-400/20 rounded text-[10px] text-green-400">
+                                        <span className="px-2 py-1 bg-green-500/10 border border-green-400/20 rounded text-[11px] text-green-400">
                                           {league.transactions.claims.length} Claims
                                         </span>
                                       )}
                                       {league.transactions.drops?.length > 0 && (
-                                        <span className="px-2 py-1 bg-red-500/10 border border-red-400/20 rounded text-[10px] text-red-400">
+                                        <span className="px-2 py-1 bg-red-500/10 border border-red-400/20 rounded text-[11px] text-red-400">
                                           {league.transactions.drops.length} Drops
                                         </span>
                                       )}
                                       {league.transactions.trades?.length > 0 && (
-                                        <span className="px-2 py-1 bg-cyan-500/10 border border-cyan-400/20 rounded text-[10px] text-cyan-400">
+                                        <span className="px-2 py-1 bg-cyan-500/10 border border-cyan-400/20 rounded text-[11px] text-cyan-400">
                                           {league.transactions.trades.length} Trades
                                         </span>
                                       )}
                                       {league.transactions.userTransactions?.length > 0 && (
-                                        <span className="px-2 py-1 bg-purple-500/10 border border-purple-400/20 rounded text-[10px] text-purple-400">
+                                        <span className="px-2 py-1 bg-purple-500/10 border border-purple-400/20 rounded text-[11px] text-purple-400">
                                           {league.transactions.userTransactions.length} Your Transactions
                                         </span>
                                       )}
@@ -5755,7 +5755,7 @@ function AFLegacyContent() {
                             placeholder="e.g. 1467252495 or paste ESPN league URL"
                             className="w-full px-4 py-3 rounded-2xl bg-black/30 border border-white/10 text-white placeholder-white/25 focus:outline-none focus:border-red-400/60 focus:ring-2 focus:ring-red-400/20 transition"
                           />
-                          <p className="text-[10px] text-white/40 mt-1">Paste your full ESPN league URL or just the numeric ID</p>
+                          <p className="text-[11px] text-white/40 mt-1">Paste your full ESPN league URL or just the numeric ID</p>
                         </div>
 
                         <div>
@@ -5782,7 +5782,7 @@ function AFLegacyContent() {
                               className="w-full px-4 py-3 rounded-2xl bg-black/30 border border-white/10 text-white placeholder-white/25 focus:outline-none focus:border-red-400/60 focus:ring-2 focus:ring-red-400/20 transition"
                             />
                           )}
-                          <p className="text-[10px] text-white/40 mt-1">Exactly as it appears on your ESPN team page</p>
+                          <p className="text-[11px] text-white/40 mt-1">Exactly as it appears on your ESPN team page</p>
                         </div>
 
                         <button
@@ -5905,14 +5905,14 @@ function AFLegacyContent() {
                                     <span className="text-white/90 flex items-center gap-1.5"><MiniPlayerImg sleeperId={p.id} name={p.name} size={18} />{p.name}</span>
                                     <span className="flex items-center gap-2">
                                       <span className="text-white/40">{p.nflTeam}</span>
-                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                      <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${
                                         p.position === 'QB' ? 'bg-red-500/20 text-red-300' :
                                         p.position === 'RB' ? 'bg-cyan-500/20 text-cyan-300' :
                                         p.position === 'WR' ? 'bg-green-500/20 text-green-300' :
                                         p.position === 'TE' ? 'bg-amber-500/20 text-amber-300' :
                                         'bg-white/10 text-white/50'
                                       }`}>{p.position}</span>
-                                      <span className={`text-[10px] ${p.slot === 'Starter' ? 'text-green-400' : 'text-white/30'}`}>{p.slot}</span>
+                                      <span className={`text-[11px] ${p.slot === 'Starter' ? 'text-green-400' : 'text-white/30'}`}>{p.slot}</span>
                                     </span>
                                   </div>
                                 ))}
@@ -5935,21 +5935,21 @@ function AFLegacyContent() {
 
                     {/* What happens next - 3 step row */}
                     <div className="mt-6 pt-5 border-t border-white/10">
-                      <div className="text-[10px] uppercase tracking-widest text-white/40 text-center mb-3">What happens next</div>
+                      <div className="text-[11px] uppercase tracking-widest text-white/40 text-center mb-3">What happens next</div>
                       <div className="flex items-center justify-between">
                         <div className="flex flex-col items-center text-center flex-1">
                           <div className="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-400/30 flex items-center justify-center text-cyan-300 text-sm font-bold mb-1">1</div>
-                          <span className="text-[10px] text-white/60">Connect</span>
+                          <span className="text-[11px] text-white/60">Connect</span>
                         </div>
                         <div className="flex-1 h-px bg-gradient-to-r from-cyan-400/30 to-purple-400/30" />
                         <div className="flex flex-col items-center text-center flex-1">
                           <div className="w-8 h-8 rounded-full bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-purple-300 text-sm font-bold mb-1">2</div>
-                          <span className="text-[10px] text-white/60">Import</span>
+                          <span className="text-[11px] text-white/60">Import</span>
                         </div>
                         <div className="flex-1 h-px bg-gradient-to-r from-purple-400/30 to-emerald-400/30" />
                         <div className="flex flex-col items-center text-center flex-1">
                           <div className="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-300 text-sm font-bold mb-1">3</div>
-                          <span className="text-[10px] text-white/60">Chimmy Report</span>
+                          <span className="text-[11px] text-white/60">Chimmy Report</span>
                         </div>
                       </div>
                     </div>
@@ -5979,7 +5979,7 @@ function AFLegacyContent() {
                     <div className="mb-3 p-4 rounded-xl bg-gradient-to-br from-cyan-500/10 to-purple-500/10 border border-cyan-400/20">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-semibold text-white">Chimmy Report Card</span>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-500/30 text-purple-300">Chimmy Generated</span>
+                        <span className="px-1.5 py-0.5 rounded text-[11px] bg-purple-500/30 text-purple-300">Chimmy Generated</span>
                       </div>
                       <div className="grid grid-cols-3 gap-2 text-center">
                         <div className="p-2 rounded-lg bg-black/20">
@@ -6001,7 +6001,7 @@ function AFLegacyContent() {
                     <div className="mb-3 p-4 rounded-xl bg-black/20 border border-white/10">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-semibold text-white">Chimmy Insight</span>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-emerald-500/30 text-emerald-300 flex items-center gap-1">
+                        <span className="px-1.5 py-0.5 rounded text-[11px] bg-emerald-500/30 text-emerald-300 flex items-center gap-1">
                           <span className="w-1 h-1 rounded-full bg-emerald-400" />
                           High confidence
                         </span>
@@ -6015,7 +6015,7 @@ function AFLegacyContent() {
                     <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-green-500/5 border border-emerald-400/20">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-semibold text-white">Chimmy Trade Verdict</span>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-500/30 text-purple-300">Chimmy Generated</span>
+                        <span className="px-1.5 py-0.5 rounded text-[11px] bg-purple-500/30 text-purple-300">Chimmy Generated</span>
                       </div>
                       <div className="text-lg font-black text-emerald-400 mb-2">SMASH ACCEPT</div>
                       <ul className="text-[11px] text-white/60 space-y-1">
@@ -6036,7 +6036,7 @@ function AFLegacyContent() {
                         <Info className="w-3 h-3" />
                         Chimmy is learning — built to get smarter from real user feedback.
                       </p>
-                      <p className="text-[10px] text-white/30 italic pl-4">
+                      <p className="text-[11px] text-white/30 italic pl-4">
                         Not perfect (yet). Always verify critical decisions.
                       </p>
                     </div>
@@ -6109,7 +6109,7 @@ function AFLegacyContent() {
                   <div className="rounded-[2.5rem] border-4 border-gray-800 bg-[#1a1d26] shadow-2xl overflow-hidden">
                     {/* Status Bar */}
                     <div className="flex items-center justify-between px-6 py-2 bg-[#0f1117]">
-                      <span className="text-[10px] text-white/60">9:41</span>
+                      <span className="text-[11px] text-white/60">9:41</span>
                       <div className="flex items-center gap-1">
                         <div className="w-4 h-2 border border-white/40 rounded-sm">
                           <div className="w-3/4 h-full bg-green-400 rounded-sm"></div>
@@ -6124,10 +6124,10 @@ function AFLegacyContent() {
                         <div>
                           <div className="font-bold text-white text-sm">Your Dynasty League</div>
                           <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="px-1.5 py-0.5 rounded text-[8px] font-semibold bg-blue-500/20 text-blue-400">NFL</span>
-                            <span className="px-1.5 py-0.5 rounded text-[8px] font-semibold bg-purple-500/20 text-purple-400">Dynasty</span>
-                            <span className="px-1.5 py-0.5 rounded text-[8px] font-semibold bg-cyan-500/20 text-cyan-400">12 Teams</span>
-                            <span className="px-1.5 py-0.5 rounded text-[8px] font-semibold bg-green-500/20 text-green-400">SF</span>
+                            <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-blue-500/20 text-blue-400">NFL</span>
+                            <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-purple-500/20 text-purple-400">Dynasty</span>
+                            <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-cyan-500/20 text-cyan-400">12 Teams</span>
+                            <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-green-500/20 text-green-400">SF</span>
                           </div>
                         </div>
                       </div>
@@ -6135,10 +6135,10 @@ function AFLegacyContent() {
                     
                     {/* Tab Navigation */}
                     <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto border-b border-white/5">
-                      <button onClick={() => setPreviewScreen(0)} className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold whitespace-nowrap transition ${previewScreen === 0 ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-white/50 hover:text-white/70'}`}>🏈 ROSTER</button>
-                      <button onClick={() => setPreviewScreen(1)} className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold whitespace-nowrap transition ${previewScreen === 1 ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-white/50 hover:text-white/70'}`}>👥 LEAGUE</button>
-                      <button onClick={() => setPreviewScreen(2)} className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold whitespace-nowrap transition ${previewScreen === 2 ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-white/50 hover:text-white/70'}`}>📋 WAIVERS</button>
-                      <button onClick={() => setPreviewScreen(3)} className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold whitespace-nowrap transition ${previewScreen === 3 ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-white/50 hover:text-white/70'}`}>🔄 TRADES</button>
+                      <button onClick={() => setPreviewScreen(0)} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition ${previewScreen === 0 ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-white/50 hover:text-white/70'}`}>🏈 ROSTER</button>
+                      <button onClick={() => setPreviewScreen(1)} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition ${previewScreen === 1 ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-white/50 hover:text-white/70'}`}>👥 LEAGUE</button>
+                      <button onClick={() => setPreviewScreen(2)} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition ${previewScreen === 2 ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-white/50 hover:text-white/70'}`}>📋 WAIVERS</button>
+                      <button onClick={() => setPreviewScreen(3)} className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold whitespace-nowrap transition ${previewScreen === 3 ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'text-white/50 hover:text-white/70'}`}>🔄 TRADES</button>
                     </div>
                     
                     {/* Screen Content */}
@@ -6151,21 +6151,21 @@ function AFLegacyContent() {
                               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500"></div>
                               <div>
                                 <div className="text-xs font-bold text-white">Your Team</div>
-                                <div className="text-[10px] text-white/40">3-1 Record</div>
+                                <div className="text-[11px] text-white/40">3-1 Record</div>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <div className="text-center px-2 py-1 rounded bg-white/5">
-                                <div className="text-[8px] text-white/40">WAIVER</div>
-                                <div className="text-[10px] font-bold text-cyan-400">#3</div>
+                                <div className="text-[11px] text-white/40">WAIVER</div>
+                                <div className="text-[11px] font-bold text-cyan-400">#3</div>
                               </div>
                               <div className="text-center px-2 py-1 rounded bg-white/5">
-                                <div className="text-[8px] text-white/40">TRADE</div>
-                                <div className="text-[10px] font-bold text-green-400">2</div>
+                                <div className="text-[11px] text-white/40">TRADE</div>
+                                <div className="text-[11px] font-bold text-green-400">2</div>
                               </div>
                             </div>
                           </div>
-                          <div className="text-[9px] font-semibold text-white/40 mb-1 flex justify-between px-1">
+                          <div className="text-[11px] font-semibold text-white/40 mb-1 flex justify-between px-1">
                             <span>STARTERS</span>
                             <div className="flex gap-4"><span>OWN %</span><span>REC</span></div>
                           </div>
@@ -6180,11 +6180,11 @@ function AFLegacyContent() {
                             ].map((p, i) => (
                               <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-white/5">
                                 <div className="flex items-center gap-2">
-                                  <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${p.pos === 'QB' ? 'bg-red-500/20 text-red-400' : p.pos === 'RB' ? 'bg-green-500/20 text-green-400' : p.pos === 'WR' ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>{p.pos}</span>
+                                  <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${p.pos === 'QB' ? 'bg-red-500/20 text-red-400' : p.pos === 'RB' ? 'bg-green-500/20 text-green-400' : p.pos === 'WR' ? 'bg-blue-500/20 text-blue-400' : 'bg-orange-500/20 text-orange-400'}`}>{p.pos}</span>
                                   <MiniPlayerImg name={p.name} size={18} />
-                                  <div><div className="text-[10px] font-semibold text-white">{p.name}</div><div className="text-[8px] text-white/40">{p.team}</div></div>
+                                  <div><div className="text-[11px] font-semibold text-white">{p.name}</div><div className="text-[11px] text-white/40">{p.team}</div></div>
                                 </div>
-                                <div className="flex items-center gap-4"><span className="text-[10px] text-white/60">{p.own}</span><span className="text-[10px]">{p.ai}</span></div>
+                                <div className="flex items-center gap-4"><span className="text-[11px] text-white/60">{p.own}</span><span className="text-[11px]">{p.ai}</span></div>
                               </div>
                             ))}
                           </div>
@@ -6207,13 +6207,13 @@ function AFLegacyContent() {
                             ].map((t, i) => (
                               <div key={i} className={`flex items-center justify-between py-1.5 px-2 rounded-lg ${t.isYou ? 'bg-cyan-500/20 border border-cyan-500/30' : 'bg-white/5'}`}>
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-bold text-white/60 w-4">{t.rank}</span>
+                                  <span className="text-[11px] font-bold text-white/60 w-4">{t.rank}</span>
                                   <div className="w-5 h-5 rounded-full bg-gradient-to-br from-gray-600 to-gray-700"></div>
-                                  <div className="text-[10px] font-semibold text-white truncate max-w-[100px]">{t.name}</div>
+                                  <div className="text-[11px] font-semibold text-white truncate max-w-[100px]">{t.name}</div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                  <div className="text-right"><div className="text-[10px] font-bold text-white">{t.record}</div><div className="text-[8px] text-white/40">PF {t.pf}</div></div>
-                                  <div className="text-[8px] text-cyan-400 w-16 text-right">{t.waiver}</div>
+                                  <div className="text-right"><div className="text-[11px] font-bold text-white">{t.record}</div><div className="text-[11px] text-white/40">PF {t.pf}</div></div>
+                                  <div className="text-[11px] text-cyan-400 w-16 text-right">{t.waiver}</div>
                                 </div>
                               </div>
                             ))}
@@ -6227,11 +6227,11 @@ function AFLegacyContent() {
                           <div className="flex items-center gap-2 mb-3">
                             <div className="flex gap-1">
                               {['ALL', 'QB', 'RB', 'WR', 'TE'].map((pos, i) => (
-                                <button key={pos} className={`px-2 py-1 rounded text-[8px] font-semibold ${i === 0 ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-white/50'}`}>{pos}</button>
+                                <button key={pos} className={`px-2 py-1 rounded text-[11px] font-semibold ${i === 0 ? 'bg-cyan-500/20 text-cyan-400' : 'bg-white/5 text-white/50'}`}>{pos}</button>
                               ))}
                             </div>
                           </div>
-                          <div className="text-[9px] font-semibold text-white/40 mb-1 flex justify-between px-1">
+                          <div className="text-[11px] font-semibold text-white/40 mb-1 flex justify-between px-1">
                             <span>PLAYER</span>
                             <div className="flex gap-3"><span>PROJ</span><span>REC</span></div>
                           </div>
@@ -6246,13 +6246,13 @@ function AFLegacyContent() {
                             ].map((p, i) => (
                               <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded-lg bg-white/5">
                                 <div className="flex items-center gap-2">
-                                  <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${p.pos === 'WR' ? 'bg-blue-500/20 text-blue-400' : p.pos === 'TE' ? 'bg-orange-500/20 text-orange-400' : 'bg-green-500/20 text-green-400'}`}>{p.pos}</span>
+                                  <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${p.pos === 'WR' ? 'bg-blue-500/20 text-blue-400' : p.pos === 'TE' ? 'bg-orange-500/20 text-orange-400' : 'bg-green-500/20 text-green-400'}`}>{p.pos}</span>
                                   <MiniPlayerImg name={p.name} size={18} />
-                                  <div><div className="text-[10px] font-semibold text-white">{p.name}</div><div className="text-[8px] text-white/40">{p.team}</div></div>
+                                  <div><div className="text-[11px] font-semibold text-white">{p.name}</div><div className="text-[11px] text-white/40">{p.team}</div></div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                  <span className="text-[10px] text-white/60">{p.proj}</span>
-                                  <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded ${p.color === 'green' ? 'bg-green-500/20 text-green-400' : p.color === 'yellow' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>{p.rec}</span>
+                                  <span className="text-[11px] text-white/60">{p.proj}</span>
+                                  <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${p.color === 'green' ? 'bg-green-500/20 text-green-400' : p.color === 'yellow' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>{p.rec}</span>
                                 </div>
                               </div>
                             ))}
@@ -6265,46 +6265,46 @@ function AFLegacyContent() {
                         <>
                           <div className="flex items-center justify-between mb-3">
                             <div className="text-xs font-bold text-white">Active Trades</div>
-                            <button className="px-2 py-1 rounded-lg text-[9px] font-semibold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">+ TRADE</button>
+                            <button className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">+ TRADE</button>
                           </div>
                           <div className="space-y-2">
                             <div className="p-2 rounded-lg bg-white/5 border border-white/10">
                               <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-1"><span className="text-[8px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400">OUTGOING</span><span className="text-[9px] text-white/60">2 days ago</span></div>
-                                <span className="text-[8px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">PENDING</span>
+                                <div className="flex items-center gap-1"><span className="text-[11px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-400">OUTGOING</span><span className="text-[11px] text-white/60">2 days ago</span></div>
+                                <span className="text-[11px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">PENDING</span>
                               </div>
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-1">
                                   <div className="w-6 h-6 rounded-full bg-gray-700"></div>
-                                  <div><div className="text-[9px] font-semibold text-white">T. Allgeier</div><div className="text-[7px] text-white/40">RB</div></div>
-                                  <span className="text-[8px] bg-purple-500/20 text-purple-400 px-1 rounded">1st 2026</span>
+                                  <div><div className="text-[11px] font-semibold text-white">T. Allgeier</div><div className="text-[11px] text-white/40">RB</div></div>
+                                  <span className="text-[11px] bg-purple-500/20 text-purple-400 px-1 rounded">1st 2026</span>
                                 </div>
                                 <span className="text-white/40">=</span>
                                 <div className="flex items-center gap-1">
                                   <div className="w-6 h-6 rounded-full bg-gray-700"></div>
-                                  <div><div className="text-[9px] font-semibold text-white">B. Young</div><div className="text-[7px] text-white/40">QB</div></div>
+                                  <div><div className="text-[11px] font-semibold text-white">B. Young</div><div className="text-[11px] text-white/40">QB</div></div>
                                 </div>
                               </div>
                               <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between">
-                                <span className="text-[8px] text-white/40">Chimmy Analysis:</span>
-                                <span className="text-[8px] font-bold text-green-400">Fair Trade 🟢</span>
+                                <span className="text-[11px] text-white/40">Chimmy Analysis:</span>
+                                <span className="text-[11px] font-bold text-green-400">Fair Trade 🟢</span>
                               </div>
                             </div>
                             <div className="p-2 rounded-lg bg-white/5 border border-white/10">
                               <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-1"><span className="text-[8px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400">INCOMING</span><span className="text-[9px] text-white/60">3 days ago</span></div>
-                                <span className="text-[8px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">ACCEPTED</span>
+                                <div className="flex items-center gap-1"><span className="text-[11px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400">INCOMING</span><span className="text-[11px] text-white/60">3 days ago</span></div>
+                                <span className="text-[11px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">ACCEPTED</span>
                               </div>
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-1">
                                   <div className="w-6 h-6 rounded-full bg-gray-700"></div>
-                                  <div><div className="text-[9px] font-semibold text-white">J. Dart</div><div className="text-[7px] text-white/40">QB</div></div>
+                                  <div><div className="text-[11px] font-semibold text-white">J. Dart</div><div className="text-[11px] text-white/40">QB</div></div>
                                 </div>
                                 <span className="text-white/40">=</span>
                                 <div className="flex items-center gap-1">
                                   <div className="w-6 h-6 rounded-full bg-gray-700"></div>
-                                  <div><div className="text-[9px] font-semibold text-white">T. Allgeier</div><div className="text-[7px] text-white/40">RB</div></div>
-                                  <span className="text-[8px] bg-purple-500/20 text-purple-400 px-1 rounded">1st</span>
+                                  <div><div className="text-[11px] font-semibold text-white">T. Allgeier</div><div className="text-[11px] text-white/40">RB</div></div>
+                                  <span className="text-[11px] bg-purple-500/20 text-purple-400 px-1 rounded">1st</span>
                                 </div>
                               </div>
                             </div>
@@ -6318,7 +6318,7 @@ function AFLegacyContent() {
                       <div className="flex items-center gap-2">
                         <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-full bg-white/5 border border-white/10">
                           <span className="text-white/30 text-xs">💬</span>
-                          <span className="text-[10px] text-white/40">Ask Chimmy about your roster...</span>
+                          <span className="text-[11px] text-white/40">Ask Chimmy about your roster...</span>
                         </div>
                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-purple-500 flex items-center justify-center">
                           <span className="text-white text-xs">→</span>
@@ -6380,7 +6380,7 @@ function AFLegacyContent() {
                         }`}
                       >
                         <span className="text-lg sm:text-xl">{screen.icon}</span>
-                        <span className={`text-[9px] sm:text-[10px] font-semibold mt-1 ${previewScreen === screen.id ? 'text-cyan-400' : 'text-white/60'}`}>{screen.label}</span>
+                        <span className={`text-[11px] sm:text-[11px] font-semibold mt-1 ${previewScreen === screen.id ? 'text-cyan-400' : 'text-white/60'}`}>{screen.label}</span>
                       </button>
                       {i < 3 && (
                         <div className="mx-1 sm:mx-2 text-white/30 text-lg">→</div>
@@ -6393,7 +6393,7 @@ function AFLegacyContent() {
                 <div className="flex items-center justify-center gap-2 mt-4">
                   <div className="text-white/40 text-sm">↓</div>
                   <div className="px-3 py-1.5 rounded-full bg-gradient-to-r from-cyan-500/20 to-purple-500/20 border border-cyan-500/30">
-                    <span className="text-[10px] text-cyan-400 font-semibold">💬 Chimmy Chat Available on Every Screen</span>
+                    <span className="text-[11px] text-cyan-400 font-semibold">💬 Chimmy Chat Available on Every Screen</span>
                   </div>
                   <div className="text-white/40 text-sm">↓</div>
                 </div>
@@ -6694,7 +6694,7 @@ function AFLegacyContent() {
 
                             <div className="flex items-center gap-2 mt-1">
                               <p className="text-sm text-white/50 truncate">@{profile?.sleeper_username ?? username}</p>
-                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-400/20 text-[10px] text-emerald-300 flex items-center gap-1">
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-400/20 text-[11px] text-emerald-300 flex items-center gap-1">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                                 High confidence
                               </span>
@@ -6725,7 +6725,7 @@ function AFLegacyContent() {
                                 {stats.record}
                               </div>
 
-                              <div className="mt-1 flex justify-center gap-2 text-[10px] text-white/50">
+                              <div className="mt-1 flex justify-center gap-2 text-[11px] text-white/50">
                                 <span>W</span>
                                 <span>–</span>
                                 <span>L</span>
@@ -6765,7 +6765,7 @@ function AFLegacyContent() {
                     <span className="text-sm">😴</span>
                     <span>Sleeper</span>
                     {(leagues.length > 0 || username) && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-cyan-500/30 text-[10px]">{leagues.length}</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-cyan-500/30 text-[11px]">{leagues.length}</span>
                     )}
                   </div>
                   
@@ -6779,7 +6779,7 @@ function AFLegacyContent() {
                     <span className="text-sm">🏈</span>
                     <span>Yahoo</span>
                     {yahooConnected && yahooLeagues.length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-purple-500/30 text-[10px]">{yahooLeagues.length}</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-purple-500/30 text-[11px]">{yahooLeagues.length}</span>
                     )}
                   </div>
                   
@@ -6793,7 +6793,7 @@ function AFLegacyContent() {
                     <span className="text-sm">🏆</span>
                     <span>MFL</span>
                     {mflConnected && mflLeagues.length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-amber-500/30 text-[10px]">{mflLeagues.length}</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-amber-500/30 text-[11px]">{mflLeagues.length}</span>
                     )}
                   </div>
                   
@@ -6807,7 +6807,7 @@ function AFLegacyContent() {
                     <span className="text-sm">📊</span>
                     <span>Fantrax</span>
                     {fantraxLeagues.length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/30 text-[10px]">{fantraxLeagues.length}</span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-emerald-500/30 text-[11px]">{fantraxLeagues.length}</span>
                     )}
                   </div>
 
@@ -6824,7 +6824,7 @@ function AFLegacyContent() {
                       <span className="text-sm">🔗</span>
                       <span>{cp.name}</span>
                       {cp.leagueCount > 0 && (
-                        <span className="px-1.5 py-0.5 rounded-full bg-rose-500/30 text-[10px]">{cp.leagueCount}</span>
+                        <span className="px-1.5 py-0.5 rounded-full bg-rose-500/30 text-[11px]">{cp.leagueCount}</span>
                       )}
                       <button
                         onClick={() => {
@@ -6832,7 +6832,7 @@ function AFLegacyContent() {
                           setCustomPlatforms(updated)
                           localStorage.setItem('af_custom_platforms', JSON.stringify(updated))
                         }}
-                        className="opacity-0 group-hover:opacity-100 ml-0.5 w-4 h-4 rounded-full bg-white/10 hover:bg-red-500/30 flex items-center justify-center text-white/50 hover:text-red-300 transition-all text-[10px]"
+                        className="opacity-0 group-hover:opacity-100 ml-0.5 w-4 h-4 rounded-full bg-white/10 hover:bg-red-500/30 flex items-center justify-center text-white/50 hover:text-red-300 transition-all text-[11px]"
                         title="Remove"
                       >
                         ×
@@ -7015,7 +7015,7 @@ function AFLegacyContent() {
                               </span>
                               {tab.badge && (
                                 <span className={cx(
-                                  'px-1.5 py-0.5 rounded text-[9px] font-medium uppercase tracking-wide hidden sm:inline border',
+                                  'px-1.5 py-0.5 rounded text-[11px] font-medium uppercase tracking-wide hidden sm:inline border',
                                   tab.badge === 'Chimmy' ? 'bg-purple-500/20 text-purple-300/80 border-purple-500/20' :
                                   'bg-white/5 text-white/40 border-white/10'
                                 )}>{tab.badge}</span>
@@ -7082,7 +7082,7 @@ function AFLegacyContent() {
                                   ...(moreMenuPosition.right > 0 ? { right: `${moreMenuPosition.right}px` } : {}),
                                 }}
                               >
-                                <div className="text-[9px] uppercase tracking-[0.15em] text-white/30 px-3 py-2 mb-2 border-b border-white/10">More Tools</div>
+                                <div className="text-[11px] uppercase tracking-[0.15em] text-white/30 px-3 py-2 mb-2 border-b border-white/10">More Tools</div>
                                 <div className="space-y-1">
                                   <a
                                     href="/brackets"
@@ -7092,7 +7092,7 @@ function AFLegacyContent() {
                                       <span className="text-sm">🏀</span>
                                     </div>
                                     <span className="text-sm font-medium flex-1">Brackets</span>
-                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-medium uppercase border bg-amber-500/15 text-amber-300/70 border-amber-500/20">New</span>
+                                    <span className="px-1.5 py-0.5 rounded text-[11px] font-medium uppercase border bg-amber-500/15 text-amber-300/70 border-amber-500/20">New</span>
                                   </a>
                                   {moreTabs.map((tab) => {
                                     const isActive = activeTab === tab.id
@@ -7118,7 +7118,7 @@ function AFLegacyContent() {
                                         <span className={cx('text-sm flex-1', isActive ? 'font-semibold text-white' : 'font-medium')}>{tab.label}</span>
                                         {tab.badge && (
                                           <span className={cx(
-                                            'px-1.5 py-0.5 rounded text-[8px] font-medium uppercase border',
+                                            'px-1.5 py-0.5 rounded text-[11px] font-medium uppercase border',
                                             tab.badge === 'Chimmy' ? 'bg-purple-500/15 text-purple-300/70 border-purple-500/20' :
                                             tab.badge === 'Beta' ? 'bg-amber-500/15 text-amber-300/70 border-amber-500/20' :
                                             'bg-white/5 text-white/40 border-white/10'
@@ -7184,7 +7184,7 @@ function AFLegacyContent() {
                           <div className="rounded-2xl bg-black/30 border border-cyan-500/20 p-4 sm:p-5">
                             <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
                               <h4 className="text-sm font-bold text-cyan-300">Chimmy System Sync</h4>
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] border ${
+                              <span className={`px-2 py-0.5 rounded-full text-[11px] border ${
                                 rankingsData?.rankingSource === 'live'
                                   ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300'
                                   : rankingsData?.rankingSource === 'snapshot'
@@ -7286,12 +7286,12 @@ function AFLegacyContent() {
                                       <span>ⓘ</span> Scoring
                                     </button>
                                     {rankRemaining != null && (
-                                      <span className="px-2 py-0.5 rounded-full bg-black/30 border border-white/10 text-[10px] text-white/60">
+                                      <span className="px-2 py-0.5 rounded-full bg-black/30 border border-white/10 text-[11px] text-white/60">
                                         Refresh: {rankRemaining}
                                       </span>
                                     )}
                                     {aiCoachRemaining != null && (
-                                      <span className="px-2 py-0.5 rounded-full bg-black/30 border border-white/10 text-[10px] text-white/60">
+                                      <span className="px-2 py-0.5 rounded-full bg-black/30 border border-white/10 text-[11px] text-white/60">
                                         Coach: {aiCoachRemaining}
                                       </span>
                                     )}
@@ -7437,7 +7437,7 @@ function AFLegacyContent() {
                                         </span>
                                       </div>
 
-                                      <div className="mt-1 text-[10px] text-white/45 text-right">
+                                      <div className="mt-1 text-[11px] text-white/45 text-right">
                                         {next.currentFloor.toLocaleString()} → {next.nextCeil.toLocaleString()}
                                       </div>
                                     </div>
@@ -7716,7 +7716,7 @@ function AFLegacyContent() {
                               <div className="mt-2 h-2 rounded-full bg-black/40 overflow-hidden">
                                 <div className="h-2 rounded-full bg-gradient-to-r from-cyan-500 to-cyan-300" style={{ width: `${Math.max(0, Math.min(100, Number(aiReport.consistency_score ?? 0)))}%` }} />
                               </div>
-                              <p className="mt-2 text-[10px] text-cyan-300/60 leading-tight">How steady your performance is across seasons. Higher = less variance.</p>
+                              <p className="mt-2 text-[11px] text-cyan-300/60 leading-tight">How steady your performance is across seasons. Higher = less variance.</p>
                             </div>
                             <div className="rounded-2xl bg-gradient-to-br from-purple-500/20 to-purple-500/5 border border-purple-400/30 p-4 text-center">
                               <div className="text-xs uppercase tracking-wider text-purple-300/70 mb-1">Chimmy Rating</div>
@@ -7724,7 +7724,7 @@ function AFLegacyContent() {
                               <div className="mt-2 h-2 rounded-full bg-black/40 overflow-hidden">
                                 <div className="h-2 rounded-full bg-gradient-to-r from-purple-500 to-purple-300" style={{ width: `${Math.max(0, Math.min(100, Number(aiReport.rating ?? 0)))}%` }} />
                               </div>
-                              <p className="mt-2 text-[10px] text-purple-300/60 leading-tight">Overall career grade based on wins, playoffs, and championships.</p>
+                              <p className="mt-2 text-[11px] text-purple-300/60 leading-tight">Overall career grade based on wins, playoffs, and championships.</p>
                             </div>
                             <div className="rounded-2xl bg-gradient-to-br from-amber-500/10 to-orange-500/5 border border-amber-400/20 p-4 flex flex-col justify-center">
                               <div className="text-xs uppercase tracking-wider text-amber-300/70 mb-1">Window Status</div>
@@ -7742,7 +7742,7 @@ function AFLegacyContent() {
                                     {(aiReport as any).window_status === 'DIRECTION_NEEDED' && 'Pick a lane — push in or pivot out!'}
                                   </p>
                                   {(aiReport as any).offseason_label && (
-                                    <div className={`mt-2 inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                    <div className={`mt-2 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${
                                       (aiReport as any).offseason_label === 'Best 2025 Outlook' ? 'bg-green-500/30 text-green-300' :
                                       (aiReport as any).offseason_label === 'Most Fragile Contender' ? 'bg-yellow-500/30 text-yellow-300' :
                                       (aiReport as any).offseason_label === 'Best Rebuild Foundation' ? 'bg-blue-500/30 text-blue-300' :
@@ -7768,7 +7768,7 @@ function AFLegacyContent() {
                                 </>
                               )}
                               {aiAnalysisRemaining != null && (
-                                <div className="mt-2 text-[10px] text-white/50">Runs left: <span className="text-white font-bold">{aiAnalysisRemaining}</span></div>
+                                <div className="mt-2 text-[11px] text-white/50">Runs left: <span className="text-white font-bold">{aiAnalysisRemaining}</span></div>
                               )}
                             </div>
                           </div>
@@ -7789,27 +7789,27 @@ function AFLegacyContent() {
                                 <div>
                                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                     <div className="rounded-xl bg-black/30 p-3 text-center">
-                                      <div className="text-[10px] uppercase text-white/50 mb-1">Roster Value</div>
+                                      <div className="text-[11px] uppercase text-white/50 mb-1">Roster Value</div>
                                       <div className="text-xl font-bold text-white">{(aiReport as any).power_index_breakdown.roster_value}</div>
-                                      <div className="text-[10px] text-indigo-300/60">40% weight</div>
+                                      <div className="text-[11px] text-indigo-300/60">40% weight</div>
                                     </div>
                                     <div className="rounded-xl bg-black/30 p-3 text-center">
-                                      <div className="text-[10px] uppercase text-white/50 mb-1">Positional</div>
+                                      <div className="text-[11px] uppercase text-white/50 mb-1">Positional</div>
                                       <div className="text-xl font-bold text-white">{(aiReport as any).power_index_breakdown.positional_scarcity}</div>
-                                      <div className="text-[10px] text-indigo-300/60">25% weight</div>
+                                      <div className="text-[11px] text-indigo-300/60">25% weight</div>
                                     </div>
                                     <div className="rounded-xl bg-black/30 p-3 text-center">
-                                      <div className="text-[10px] uppercase text-white/50 mb-1">Age Curve</div>
+                                      <div className="text-[11px] uppercase text-white/50 mb-1">Age Curve</div>
                                       <div className="text-xl font-bold text-white">{(aiReport as any).power_index_breakdown.age_curve}</div>
-                                      <div className="text-[10px] text-indigo-300/60">20% weight</div>
+                                      <div className="text-[11px] text-indigo-300/60">20% weight</div>
                                     </div>
                                     <div className="rounded-xl bg-black/30 p-3 text-center">
-                                      <div className="text-[10px] uppercase text-white/50 mb-1">Pick Capital</div>
+                                      <div className="text-[11px] uppercase text-white/50 mb-1">Pick Capital</div>
                                       <div className="text-xl font-bold text-white">{(aiReport as any).power_index_breakdown.pick_capital}</div>
-                                      <div className="text-[10px] text-indigo-300/60">15% weight</div>
+                                      <div className="text-[11px] text-indigo-300/60">15% weight</div>
                                     </div>
                                   </div>
-                                  <div className="text-[10px] text-center text-white/40 mt-2">Weights show how much each category contributes to your total score</div>
+                                  <div className="text-[11px] text-center text-white/40 mt-2">Weights show how much each category contributes to your total score</div>
                                 </div>
                               )}
                             </div>
@@ -7820,7 +7820,7 @@ function AFLegacyContent() {
                               <div className="flex items-center gap-2 mb-3">
                                 <div className="w-8 h-8 rounded-lg bg-emerald-500/30 flex items-center justify-center text-base">💪</div>
                                 <div className="text-base font-bold text-emerald-200">Strengths</div>
-                                <span className="ml-auto px-2 py-0.5 rounded-full bg-emerald-500/30 border border-emerald-400/40 text-[10px] text-emerald-200 font-medium">Top 3</span>
+                                <span className="ml-auto px-2 py-0.5 rounded-full bg-emerald-500/30 border border-emerald-400/40 text-[11px] text-emerald-200 font-medium">Top 3</span>
                               </div>
                               <ul className="space-y-2">
                                 {aiReport.insights.strengths?.slice(0, 3).map((s, i) => (
@@ -7835,7 +7835,7 @@ function AFLegacyContent() {
                               <div className="flex items-center gap-2 mb-3">
                                 <div className="w-8 h-8 rounded-lg bg-rose-500/30 flex items-center justify-center text-base">🎯</div>
                                 <div className="text-base font-bold text-rose-200">Areas to Improve</div>
-                                <span className="ml-auto px-2 py-0.5 rounded-full bg-rose-500/30 border border-rose-400/40 text-[10px] text-rose-200 font-medium">Top 3</span>
+                                <span className="ml-auto px-2 py-0.5 rounded-full bg-rose-500/30 border border-rose-400/40 text-[11px] text-rose-200 font-medium">Top 3</span>
                               </div>
                               <ul className="space-y-2">
                                 {aiReport.insights.weaknesses?.slice(0, 3).map((w, i) => (
@@ -8110,7 +8110,7 @@ function AFLegacyContent() {
                               <div className="flex items-center gap-2 mb-3">
                                 <span className="text-base">📰</span>
                                 <span className="text-xs font-semibold text-amber-300 uppercase tracking-wider">Breaking News Impact</span>
-                                <span className="text-[10px] text-white/30 ml-auto">Values adjusted in real-time</span>
+                                <span className="text-[11px] text-white/30 ml-auto">Values adjusted in real-time</span>
                               </div>
                               <div className="space-y-2">
                                 {inlineTradeResult.newsAdjustments.map((adj: any, i: number) => (
@@ -8131,7 +8131,7 @@ function AFLegacyContent() {
                                     <div className="flex-1 min-w-0">
                                       <div className="flex items-center gap-2 flex-wrap">
                                         <span className="font-bold text-white text-sm">{adj.playerName}</span>
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase ${
                                           adj.severity === 'critical' ? 'bg-rose-500/30 text-rose-300' :
                                           adj.severity === 'significant' ? 'bg-orange-500/30 text-orange-300' :
                                           adj.sentiment === 'bullish' ? 'bg-emerald-500/30 text-emerald-300' :
@@ -8140,14 +8140,14 @@ function AFLegacyContent() {
                                           {adj.sentiment}
                                         </span>
                                         {adj.originalValue != null && adj.adjustedValue != null && (
-                                          <span className="text-[10px] text-white/40 ml-auto">
+                                          <span className="text-[11px] text-white/40 ml-auto">
                                             {adj.originalValue} → <span className={adj.multiplier < 1 ? 'text-rose-400' : 'text-emerald-400'}>{adj.adjustedValue}</span>
                                           </span>
                                         )}
                                       </div>
                                       <div className="text-xs text-white/50 mt-1">{adj.reason}</div>
                                       {adj.headlines?.[0] && (
-                                        <div className="text-[10px] text-white/30 mt-1 italic truncate">&ldquo;{adj.headlines[0]}&rdquo;</div>
+                                        <div className="text-[11px] text-white/30 mt-1 italic truncate">&ldquo;{adj.headlines[0]}&rdquo;</div>
                                       )}
                                     </div>
                                   </div>
@@ -8176,10 +8176,10 @@ function AFLegacyContent() {
                                   const d = Number(b.rawDelta) || 0
                                   return (
                                   <div key={b.key || b.label} className="rounded-lg bg-black/30 border border-white/5 px-3 py-2">
-                                    <div className="text-[10px] text-white/40 uppercase tracking-wider">{b.label || '—'}</div>
+                                    <div className="text-[11px] text-white/40 uppercase tracking-wider">{b.label || '—'}</div>
                                     <div className="flex items-baseline gap-1 mt-0.5">
                                       <span className="text-lg font-bold text-white">{b.score ?? '—'}</span>
-                                      <span className={`text-[10px] font-medium ${d > 0 ? 'text-emerald-400' : d < 0 ? 'text-rose-400' : 'text-white/30'}`}>
+                                      <span className={`text-[11px] font-medium ${d > 0 ? 'text-emerald-400' : d < 0 ? 'text-rose-400' : 'text-white/30'}`}>
                                         {d > 0 ? '+' : ''}{(d * 100).toFixed(0)}%
                                       </span>
                                     </div>
@@ -8218,7 +8218,7 @@ function AFLegacyContent() {
                                         {trustData.riskChips.map((chip) => (
                                           <span
                                             key={chip.tag}
-                                            className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-medium border bg-white/5 border-white/10 text-white/50 cursor-help"
+                                            className="inline-flex items-center px-2 py-0.5 rounded-lg text-[11px] font-medium border bg-white/5 border-white/10 text-white/50 cursor-help"
                                             title={chip.tooltip}
                                           >
                                             {chip.label}
@@ -8361,7 +8361,7 @@ function AFLegacyContent() {
                                   className="h-full bg-gradient-to-r from-purple-400 to-purple-500 transition-all flex-1"
                                 />
                               </div>
-                              <div className="flex justify-between mt-1 text-[10px] text-white/40">
+                              <div className="flex justify-between mt-1 text-[11px] text-white/40">
                                 <span>You Get</span>
                                 <span>You Give</span>
                               </div>
@@ -8649,7 +8649,7 @@ function AFLegacyContent() {
                                       <div className="animate-float-card bg-gradient-to-b from-white/[0.08] to-white/[0.02] backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl shadow-black/50 px-10 sm:px-16 py-10 sm:py-12 flex flex-col items-center">
                                       {/* Header */}
                                       <div className="text-center mb-8">
-                                        <div className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-rose-400/90 font-semibold mb-2">Dynasty Trade Report</div>
+                                        <div className="text-[11px] sm:text-xs uppercase tracking-[0.3em] text-rose-400/90 font-semibold mb-2">Dynasty Trade Report</div>
                                         <div className="text-xl sm:text-2xl font-bold text-white">{profile?.sleeper_username || username}</div>
                                         <div className="text-sm text-white/50 mt-1">{leagues.find(l => l.league_id === reportCardLeague)?.name || 'Your League'}</div>
                                       </div>
@@ -8783,7 +8783,7 @@ function AFLegacyContent() {
                                               <span className="text-white/70">{dq.goalAlignment}%</span>
                                             </div>
                                           </div>
-                                          <div className="mt-3 text-[10px] text-white/40 leading-relaxed">{dq.reasoning}</div>
+                                          <div className="mt-3 text-[11px] text-white/40 leading-relaxed">{dq.reasoning}</div>
                                         </div>
                                       )
                                     })()}
@@ -8885,7 +8885,7 @@ function AFLegacyContent() {
                                       <div className="text-xs text-white/50 text-center px-4">
                                         {tradeAnalytics.reportCard.aiCounterProjection.message}
                                       </div>
-                                      <div className="text-[10px] text-white/30 text-center">
+                                      <div className="text-[11px] text-white/30 text-center">
                                         Based on {tradeAnalytics.reportCard.aiCounterProjection.tradesWithCounters} of {tradeAnalytics.reportCard.aiCounterProjection.totalTrades} trades with Chimmy&apos;s counters
                                       </div>
                                     </div>
@@ -9005,7 +9005,7 @@ function AFLegacyContent() {
                                       </div>
 
                                       {/* Win Definitions Note */}
-                                      <div className="text-[10px] text-white/30 text-center px-4">
+                                      <div className="text-[11px] text-white/30 text-center px-4">
                                         {statsTab === 'atTime' && `Win = net delta > +300 at time of trade · Loss = net delta < -300`}
                                         {statsTab === 'hindsight' && `Win = current net delta > +300 · Loss = current net delta < -300`}
                                         {statsTab === 'lineupImpact' && `Win = est. PPG gain > +0.5 · Loss = est. PPG loss < -0.5`}
@@ -9030,7 +9030,7 @@ function AFLegacyContent() {
                                           <div className={`text-4xl font-black ${avgPerTrade >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                             {avgPerTrade >= 0 ? '+' : ''}{isLineup ? avgPerTrade.toFixed(1) : avgPerTrade.toLocaleString()}{unit}
                                           </div>
-                                          <div className="mt-2 text-[10px] text-white/40">per transaction</div>
+                                          <div className="mt-2 text-[11px] text-white/40">per transaction</div>
                                         </div>
                                       </div>
                                     </div>
@@ -9124,9 +9124,9 @@ function AFLegacyContent() {
                                         <>
                                           <div className="relative rounded-xl bg-slate-800/50 border border-slate-700/40 p-4 mb-4">
                                             {/* Y-axis labels */}
-                                            <div className="absolute left-2 top-4 text-[10px] text-white/40">{Math.round(range / 1000)}k</div>
-                                            <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-white/40">0</div>
-                                            <div className="absolute left-2 bottom-4 text-[10px] text-white/40">-{Math.round(range / 1000)}k</div>
+                                            <div className="absolute left-2 top-4 text-[11px] text-white/40">{Math.round(range / 1000)}k</div>
+                                            <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[11px] text-white/40">0</div>
+                                            <div className="absolute left-2 bottom-4 text-[11px] text-white/40">-{Math.round(range / 1000)}k</div>
                                             
                                             {/* Chart */}
                                             <div className="ml-8">
@@ -9155,7 +9155,7 @@ function AFLegacyContent() {
                                             </div>
                                             
                                             {/* X-axis dates */}
-                                            <div className="ml-8 flex justify-between text-[9px] text-white/40 mt-1">
+                                            <div className="ml-8 flex justify-between text-[11px] text-white/40 mt-1">
                                               {chartData.filter((_, i) => i === 0 || i === Math.floor(chartData.length / 2) || i === chartData.length - 1).map((d, i) => (
                                                 <span key={i}>{d.date}</span>
                                               ))}
@@ -9318,7 +9318,7 @@ function AFLegacyContent() {
                                                     <div className={`text-lg font-bold ${partner.netValue >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                       {partner.netValue >= 0 ? '+' : ''}{partner.netValue.toLocaleString()}
                                                     </div>
-                                                    <div className="text-[10px] text-white/40">net value</div>
+                                                    <div className="text-[11px] text-white/40">net value</div>
                                                   </div>
                                                   
                                                   {/* Grade Badge */}
@@ -9494,12 +9494,12 @@ function AFLegacyContent() {
                                                 <div>
                                                   <div className="flex items-center gap-2">
                                                     <span className="font-bold text-white text-lg">{recentAdd.playerName}</span>
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700 text-white/70">{recentAdd.position}</span>
+                                                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-700 text-white/70">{recentAdd.position}</span>
                                                   </div>
                                                   <div className="text-xs text-white/50">
                                                     Picked up {formatInTimezone(recentAdd.timestamp, { month: 'short', day: 'numeric', year: 'numeric' })}
                                                   </div>
-                                                  <div className="text-[10px] text-white/40 mt-1">Your highest-value waiver pickup</div>
+                                                  <div className="text-[11px] text-white/40 mt-1">Your highest-value waiver pickup</div>
                                                 </div>
                                               </div>
                                             </div>
@@ -9519,12 +9519,12 @@ function AFLegacyContent() {
                                                 <div>
                                                   <div className="flex items-center gap-2">
                                                     <span className="font-bold text-white text-lg">{recentDrop.playerName}</span>
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-700 text-white/70">{recentDrop.position}</span>
+                                                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-700 text-white/70">{recentDrop.position}</span>
                                                   </div>
                                                   <div className="text-xs text-white/50">
                                                     Dropped {formatInTimezone(recentDrop.timestamp, { month: 'short', day: 'numeric', year: 'numeric' })}
                                                   </div>
-                                                  <div className="text-[10px] text-white/40 mt-1">Your most valuable drop no longer on your roster</div>
+                                                  <div className="text-[11px] text-white/40 mt-1">Your most valuable drop no longer on your roster</div>
                                                 </div>
                                               </div>
                                             </div>
@@ -9538,7 +9538,7 @@ function AFLegacyContent() {
                                               <span className="text-2xl">🏆</span>
                                               <div>
                                                 <span className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-300 uppercase tracking-wider">League Waiver Wire MVP</span>
-                                                <p className="text-[10px] text-white/40 mt-0.5">Most sought-after player on your league's waiver wire</p>
+                                                <p className="text-[11px] text-white/40 mt-0.5">Most sought-after player on your league's waiver wire</p>
                                               </div>
                                             </div>
                                             
@@ -9549,9 +9549,9 @@ function AFLegacyContent() {
                                               <div>
                                                 <div className="flex items-center gap-2">
                                                   <span className="font-bold text-white text-xl">{waiverMVP.playerName}</span>
-                                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/30 text-amber-300">{waiverMVP.position}</span>
+                                                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/30 text-amber-300">{waiverMVP.position}</span>
                                                   {waiverMVP.team && waiverMVP.team !== 'FA' && (
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-700/70 text-white/60">{waiverMVP.team}</span>
+                                                    <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-slate-700/70 text-white/60">{waiverMVP.team}</span>
                                                   )}
                                                 </div>
                                                 <div className="text-sm text-white/60 mt-1">
@@ -9626,8 +9626,8 @@ function AFLegacyContent() {
                                         {tradeAnalytics.tradingPartners.bestMark.styleMatch && (
                                           <div className="mt-3 pt-3 border-t border-emerald-500/20">
                                             <div className="flex items-center gap-2 mb-2">
-                                              <span className="text-[10px] uppercase tracking-wider text-emerald-300/60 font-semibold">Style Match</span>
-                                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                              <span className="text-[11px] uppercase tracking-wider text-emerald-300/60 font-semibold">Style Match</span>
+                                              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
                                                 tradeAnalytics.tradingPartners.bestMark.styleMatch.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' :
                                                 tradeAnalytics.tradingPartners.bestMark.styleMatch.score >= 40 ? 'bg-amber-500/20 text-amber-300' :
                                                 'bg-slate-600/30 text-white/50'
@@ -9635,7 +9635,7 @@ function AFLegacyContent() {
                                             </div>
                                             <div className="flex flex-wrap gap-1">
                                               {tradeAnalytics.tradingPartners.bestMark.styleMatch.drivers?.map((d: string, i: number) => (
-                                                <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300/80 border border-emerald-500/20">{d}</span>
+                                                <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-300/80 border border-emerald-500/20">{d}</span>
                                               ))}
                                             </div>
                                           </div>
@@ -9659,8 +9659,8 @@ function AFLegacyContent() {
                                         {tradeAnalytics.tradingPartners.nemesis.styleMatch && (
                                           <div className="mt-3 pt-3 border-t border-rose-500/20">
                                             <div className="flex items-center gap-2 mb-2">
-                                              <span className="text-[10px] uppercase tracking-wider text-rose-300/60 font-semibold">Style Match</span>
-                                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                              <span className="text-[11px] uppercase tracking-wider text-rose-300/60 font-semibold">Style Match</span>
+                                              <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
                                                 tradeAnalytics.tradingPartners.nemesis.styleMatch.score >= 70 ? 'bg-emerald-500/20 text-emerald-300' :
                                                 tradeAnalytics.tradingPartners.nemesis.styleMatch.score >= 40 ? 'bg-amber-500/20 text-amber-300' :
                                                 'bg-slate-600/30 text-white/50'
@@ -9668,7 +9668,7 @@ function AFLegacyContent() {
                                             </div>
                                             <div className="flex flex-wrap gap-1">
                                               {tradeAnalytics.tradingPartners.nemesis.styleMatch.drivers?.map((d: string, i: number) => (
-                                                <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300/80 border border-rose-500/20">{d}</span>
+                                                <span key={i} className="text-[11px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300/80 border border-rose-500/20">{d}</span>
                                               ))}
                                             </div>
                                           </div>
@@ -9715,7 +9715,7 @@ function AFLegacyContent() {
                                             <div className={`font-bold ${partner.netValue >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                               {partner.netValue >= 0 ? '+' : ''}{partner.netValue?.toLocaleString()}
                                             </div>
-                                            <div className="text-[10px] text-white/40">
+                                            <div className="text-[11px] text-white/40">
                                               avg {partner.avgPerTrade >= 0 ? '+' : ''}{partner.avgPerTrade?.toLocaleString()}/trade
                                             </div>
                                           </div>
@@ -9741,7 +9741,7 @@ function AFLegacyContent() {
                                               {/* Manager Profile Drivers */}
                                               {partner.styleMatch.drivers?.length > 0 && (
                                                 <div>
-                                                  <div className="text-[10px] uppercase tracking-wider text-white/40 font-semibold mb-1.5">Manager Profile</div>
+                                                  <div className="text-[11px] uppercase tracking-wider text-white/40 font-semibold mb-1.5">Manager Profile</div>
                                                   <div className="flex flex-wrap gap-1.5">
                                                     {partner.styleMatch.drivers.map((d: string, i: number) => (
                                                       <span key={i} className="text-[11px] px-2.5 py-1 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/25">{d}</span>
@@ -9753,7 +9753,7 @@ function AFLegacyContent() {
                                               {/* Scouting Report */}
                                               {partner.styleMatch.insights?.length > 0 && (
                                                 <div>
-                                                  <div className="text-[10px] uppercase tracking-wider text-white/40 font-semibold mb-1.5">Scouting Report</div>
+                                                  <div className="text-[11px] uppercase tracking-wider text-white/40 font-semibold mb-1.5">Scouting Report</div>
                                                   <div className="space-y-1">
                                                     {partner.styleMatch.insights.map((insight: string, i: number) => (
                                                       <div key={i} className="text-xs text-white/60 flex items-start gap-2">
@@ -9768,7 +9768,7 @@ function AFLegacyContent() {
                                               {/* Suggested Deal Shapes */}
                                               {partner.styleMatch.dealShapes?.length > 0 && (
                                                 <div>
-                                                  <div className="text-[10px] uppercase tracking-wider text-white/40 font-semibold mb-1.5">Suggested Approaches</div>
+                                                  <div className="text-[11px] uppercase tracking-wider text-white/40 font-semibold mb-1.5">Suggested Approaches</div>
                                                   <div className="space-y-1.5">
                                                     {partner.styleMatch.dealShapes.map((deal: string, i: number) => (
                                                       <div key={i} className="text-xs p-2.5 rounded-lg bg-slate-800/60 border border-purple-500/15 text-white/70 flex items-start gap-2">
@@ -9871,19 +9871,19 @@ function AFLegacyContent() {
                                       <div className="text-3xl mb-2">🧠</div>
                                       <h4 className="text-lg font-bold text-blue-300">Best Negotiator</h4>
                                       <p className="text-[11px] text-white/40 mb-4">Highest win rate at lowest overpay</p>
-                                      <div className="text-[10px] text-blue-300/50 uppercase tracking-wider mb-0.5">Your best target</div>
+                                      <div className="text-[11px] text-blue-300/50 uppercase tracking-wider mb-0.5">Your best target</div>
                                       <div className="text-xl font-bold text-white truncate mb-3">{awards.bestNegotiator.name}</div>
                                       <div className="grid grid-cols-2 gap-2 mb-3">
                                         <div className="p-2 rounded-lg bg-blue-500/10">
-                                          <div className="text-[10px] text-blue-300/60 uppercase">Win Rate</div>
+                                          <div className="text-[11px] text-blue-300/60 uppercase">Win Rate</div>
                                           <div className="text-lg font-bold text-blue-300">{awards.bestNegotiator.winRate}%</div>
                                         </div>
                                         <div className="p-2 rounded-lg bg-blue-500/10">
-                                          <div className="text-[10px] text-blue-300/60 uppercase">Avg Overpay</div>
+                                          <div className="text-[11px] text-blue-300/60 uppercase">Avg Overpay</div>
                                           <div className="text-lg font-bold text-blue-300">{awards.bestNegotiator.avgOverpay === 0 ? 'None' : awards.bestNegotiator.avgOverpay}</div>
                                         </div>
                                       </div>
-                                      <div className="text-[10px] text-white/30 border-t border-blue-500/15 pt-2">{awards.bestNegotiator.method}</div>
+                                      <div className="text-[11px] text-white/30 border-t border-blue-500/15 pt-2">{awards.bestNegotiator.method}</div>
                                     </div>
                                   );
                                 }
@@ -9898,15 +9898,15 @@ function AFLegacyContent() {
                                       <div className="text-xl font-bold text-white truncate mb-3">{awards.marketSniper.name}</div>
                                       <div className="grid grid-cols-2 gap-2 mb-3">
                                         <div className="p-2 rounded-lg bg-emerald-500/10">
-                                          <div className="text-[10px] text-emerald-300/60 uppercase">Avg Market Gain</div>
+                                          <div className="text-[11px] text-emerald-300/60 uppercase">Avg Market Gain</div>
                                           <div className="text-lg font-bold text-emerald-300">{awards.marketSniper.avgShift >= 0 ? '+' : ''}{awards.marketSniper.avgShift}</div>
                                         </div>
                                         <div className="p-2 rounded-lg bg-emerald-500/10">
-                                          <div className="text-[10px] text-emerald-300/60 uppercase">Best Single</div>
+                                          <div className="text-[11px] text-emerald-300/60 uppercase">Best Single</div>
                                           <div className="text-lg font-bold text-emerald-300">{awards.marketSniper.bestShift >= 0 ? '+' : ''}{awards.marketSniper.bestShift}</div>
                                         </div>
                                       </div>
-                                      <div className="text-[10px] text-white/30 border-t border-emerald-500/15 pt-2">{awards.marketSniper.method}</div>
+                                      <div className="text-[11px] text-white/30 border-t border-emerald-500/15 pt-2">{awards.marketSniper.method}</div>
                                     </div>
                                   );
                                 }
@@ -9921,15 +9921,15 @@ function AFLegacyContent() {
                                       <div className="text-xl font-bold text-white truncate mb-3">{awards.starterBuilder.name}</div>
                                       <div className="grid grid-cols-2 gap-2 mb-3">
                                         <div className="p-2 rounded-lg bg-amber-500/10">
-                                          <div className="text-[10px] text-amber-300/60 uppercase">Net PPG</div>
+                                          <div className="text-[11px] text-amber-300/60 uppercase">Net PPG</div>
                                           <div className="text-lg font-bold text-amber-300">{awards.starterBuilder.netPPG >= 0 ? '+' : ''}{awards.starterBuilder.netPPG}</div>
                                         </div>
                                         <div className="p-2 rounded-lg bg-amber-500/10">
-                                          <div className="text-[10px] text-amber-300/60 uppercase">Per Trade</div>
+                                          <div className="text-[11px] text-amber-300/60 uppercase">Per Trade</div>
                                           <div className="text-lg font-bold text-amber-300">{awards.starterBuilder.ppgPerTrade >= 0 ? '+' : ''}{awards.starterBuilder.ppgPerTrade}</div>
                                         </div>
                                       </div>
-                                      <div className="text-[10px] text-white/30 border-t border-amber-500/15 pt-2">{awards.starterBuilder.method}</div>
+                                      <div className="text-[11px] text-white/30 border-t border-amber-500/15 pt-2">{awards.starterBuilder.method}</div>
                                     </div>
                                   );
                                 }
@@ -9944,15 +9944,15 @@ function AFLegacyContent() {
                                       <div className="text-xl font-bold text-white truncate mb-3">{awards.riskKing.name}</div>
                                       <div className="grid grid-cols-2 gap-2 mb-3">
                                         <div className="p-2 rounded-lg bg-red-500/10">
-                                          <div className="text-[10px] text-red-300/60 uppercase">Volatility</div>
+                                          <div className="text-[11px] text-red-300/60 uppercase">Volatility</div>
                                           <div className="text-lg font-bold text-red-300">{awards.riskKing.volatility?.toLocaleString()}</div>
                                         </div>
                                         <div className="p-2 rounded-lg bg-red-500/10">
-                                          <div className="text-[10px] text-red-300/60 uppercase">Net Profit</div>
+                                          <div className="text-[11px] text-red-300/60 uppercase">Net Profit</div>
                                           <div className="text-lg font-bold text-emerald-400">+{awards.riskKing.netProfit?.toLocaleString()}</div>
                                         </div>
                                       </div>
-                                      <div className="text-[10px] text-white/30 border-t border-red-500/15 pt-2">{awards.riskKing.method}</div>
+                                      <div className="text-[11px] text-white/30 border-t border-red-500/15 pt-2">{awards.riskKing.method}</div>
                                     </div>
                                   );
                                 }
@@ -9967,15 +9967,15 @@ function AFLegacyContent() {
                                       <div className="text-xl font-bold text-white truncate mb-3">{awards.theFleecer.name}</div>
                                       <div className="grid grid-cols-2 gap-2 mb-3">
                                         <div className="p-2 rounded-lg bg-purple-500/10">
-                                          <div className="text-[10px] text-purple-300/60 uppercase">Avg Delta</div>
+                                          <div className="text-[11px] text-purple-300/60 uppercase">Avg Delta</div>
                                           <div className="text-lg font-bold text-purple-300">{awards.theFleecer.avgFairnessDelta >= 0 ? '+' : ''}{awards.theFleecer.avgFairnessDelta?.toLocaleString()}</div>
                                         </div>
                                         <div className="p-2 rounded-lg bg-purple-500/10">
-                                          <div className="text-[10px] text-purple-300/60 uppercase">High-Conf Trades</div>
+                                          <div className="text-[11px] text-purple-300/60 uppercase">High-Conf Trades</div>
                                           <div className="text-lg font-bold text-purple-300">{awards.theFleecer.highConfCount}</div>
                                         </div>
                                       </div>
-                                      <div className="text-[10px] text-white/30 border-t border-purple-500/15 pt-2">{awards.theFleecer.method}</div>
+                                      <div className="text-[11px] text-white/30 border-t border-purple-500/15 pt-2">{awards.theFleecer.method}</div>
                                     </div>
                                   );
                                 }
@@ -10033,7 +10033,7 @@ function AFLegacyContent() {
 
                                   {/* Sort Toggles */}
                                   <div className="flex flex-wrap justify-center gap-1.5 mb-5">
-                                    <span className="text-[10px] text-white/30 uppercase tracking-wider self-center mr-1">Sort:</span>
+                                    <span className="text-[11px] text-white/30 uppercase tracking-wider self-center mr-1">Sort:</span>
                                     {([
                                       ['recent', 'Recent'],
                                       ['impactful', 'Most Impactful'],
@@ -10117,7 +10117,7 @@ function AFLegacyContent() {
                                             <div className={`font-bold ${trade.netValue >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                               {trade.netValue >= 0 ? '+' : ''}{trade.netValue?.toLocaleString()}
                                             </div>
-                                            <div className="text-[10px] text-white/40">net value</div>
+                                            <div className="text-[11px] text-white/40">net value</div>
                                           </div>
                                           <div className="text-white/30 group-open:rotate-180 transition-transform flex-shrink-0">▼</div>
                                         </summary>
@@ -10127,20 +10127,20 @@ function AFLegacyContent() {
                                           {/* Trade Breakdown — Players & Picks Exchanged */}
                                           <div className="grid grid-cols-2 gap-3">
                                             <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
-                                              <div className="text-[10px] text-emerald-400 uppercase tracking-wider font-semibold mb-2">You Received</div>
+                                              <div className="text-[11px] text-emerald-400 uppercase tracking-wider font-semibold mb-2">You Received</div>
                                               <div className="space-y-1.5">
                                                 {(trade.receivedPlayers || []).map((p: any, pi: number) => (
                                                   <div key={pi} className="flex items-center gap-2">
                                                     <MiniPlayerImg sleeperId={p.id || p.sleeperId || p.playerId} name={p.name} size={20} />
                                                     <div className="min-w-0">
                                                       <div className="text-xs font-medium text-white truncate">{p.name}</div>
-                                                      {p.position && <div className="text-[9px] text-white/40">{p.position}</div>}
+                                                      {p.position && <div className="text-[11px] text-white/40">{p.position}</div>}
                                                     </div>
                                                   </div>
                                                 ))}
                                                 {(trade.receivedPicks || []).map((pk: any, pi: number) => (
                                                   <div key={`pk-${pi}`} className="flex items-center gap-2">
-                                                    <div className="w-5 h-5 rounded bg-emerald-500/20 flex items-center justify-center text-[9px] text-emerald-400 font-bold flex-shrink-0">R{pk.round}</div>
+                                                    <div className="w-5 h-5 rounded bg-emerald-500/20 flex items-center justify-center text-[11px] text-emerald-400 font-bold flex-shrink-0">R{pk.round}</div>
                                                     <div className="text-xs text-white/70">{pk.label}</div>
                                                   </div>
                                                 ))}
@@ -10150,20 +10150,20 @@ function AFLegacyContent() {
                                               </div>
                                             </div>
                                             <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/15">
-                                              <div className="text-[10px] text-rose-400 uppercase tracking-wider font-semibold mb-2">You Gave</div>
+                                              <div className="text-[11px] text-rose-400 uppercase tracking-wider font-semibold mb-2">You Gave</div>
                                               <div className="space-y-1.5">
                                                 {(trade.gavePlayers || []).map((p: any, pi: number) => (
                                                   <div key={pi} className="flex items-center gap-2">
                                                     <MiniPlayerImg sleeperId={p.id || p.sleeperId || p.playerId} name={p.name} size={20} />
                                                     <div className="min-w-0">
                                                       <div className="text-xs font-medium text-white truncate">{p.name}</div>
-                                                      {p.position && <div className="text-[9px] text-white/40">{p.position}</div>}
+                                                      {p.position && <div className="text-[11px] text-white/40">{p.position}</div>}
                                                     </div>
                                                   </div>
                                                 ))}
                                                 {(trade.gavePicks || []).map((pk: any, pi: number) => (
                                                   <div key={`pk-${pi}`} className="flex items-center gap-2">
-                                                    <div className="w-5 h-5 rounded bg-rose-500/20 flex items-center justify-center text-[9px] text-rose-400 font-bold flex-shrink-0">R{pk.round}</div>
+                                                    <div className="w-5 h-5 rounded bg-rose-500/20 flex items-center justify-center text-[11px] text-rose-400 font-bold flex-shrink-0">R{pk.round}</div>
                                                     <div className="text-xs text-white/70">{pk.label}</div>
                                                   </div>
                                                 ))}
@@ -10178,7 +10178,7 @@ function AFLegacyContent() {
                                           <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-3">
                                               <div className="text-center">
-                                                <div className="text-[10px] text-white/40 uppercase">At Time</div>
+                                                <div className="text-[11px] text-white/40 uppercase">At Time</div>
                                                 <div className={`text-lg font-bold ${
                                                   ['A+', 'A', 'A-', 'B+'].includes(trade.atTimeGrade) ? 'text-emerald-400' :
                                                   ['D', 'D-', 'F'].includes(trade.atTimeGrade) ? 'text-rose-400' : 'text-amber-400'
@@ -10186,7 +10186,7 @@ function AFLegacyContent() {
                                               </div>
                                               <div className="text-white/30">→</div>
                                               <div className="text-center">
-                                                <div className="text-[10px] text-white/40 uppercase">Now</div>
+                                                <div className="text-[11px] text-white/40 uppercase">Now</div>
                                                 <div className={`text-lg font-bold ${
                                                   ['A+', 'A', 'A-', 'B+'].includes(trade.hindsightGrade) ? 'text-emerald-400' :
                                                   ['D', 'D-', 'F'].includes(trade.hindsightGrade) ? 'text-rose-400' : 'text-amber-400'
@@ -10201,25 +10201,25 @@ function AFLegacyContent() {
                                           {/* Metric Summary */}
                                           <div className="grid grid-cols-4 gap-2">
                                             <div className="p-2 rounded-lg bg-slate-800/60 text-center">
-                                              <div className="text-[9px] text-white/40 uppercase">At-Time</div>
+                                              <div className="text-[11px] text-white/40 uppercase">At-Time</div>
                                               <div className={`text-sm font-bold ${trade.atTimeDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                 {trade.atTimeDelta >= 0 ? '+' : ''}{trade.atTimeDelta?.toLocaleString()}
                                               </div>
                                             </div>
                                             <div className="p-2 rounded-lg bg-slate-800/60 text-center">
-                                              <div className="text-[9px] text-white/40 uppercase">Hindsight</div>
+                                              <div className="text-[11px] text-white/40 uppercase">Hindsight</div>
                                               <div className={`text-sm font-bold ${trade.hindsightDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                 {trade.hindsightDelta >= 0 ? '+' : ''}{trade.hindsightDelta?.toLocaleString()}
                                               </div>
                                             </div>
                                             <div className="p-2 rounded-lg bg-slate-800/60 text-center">
-                                              <div className="text-[9px] text-white/40 uppercase">Mkt Shift</div>
+                                              <div className="text-[11px] text-white/40 uppercase">Mkt Shift</div>
                                               <div className={`text-sm font-bold ${trade.marketShift >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                 {trade.marketShift >= 0 ? '+' : ''}{trade.marketShift?.toLocaleString()}
                                               </div>
                                             </div>
                                             <div className="p-2 rounded-lg bg-slate-800/60 text-center">
-                                              <div className="text-[9px] text-white/40 uppercase">Confidence</div>
+                                              <div className="text-[11px] text-white/40 uppercase">Confidence</div>
                                               <div className="text-sm font-bold text-purple-300">{trade.confidence}%</div>
                                             </div>
                                           </div>
@@ -10228,8 +10228,8 @@ function AFLegacyContent() {
                                           {trade.drivers?.received?.length > 0 && (
                                             <div>
                                               <div className="flex items-center justify-between mb-2">
-                                                <div className="text-[10px] text-emerald-400/70 uppercase tracking-wider font-semibold">You Received</div>
-                                                <div className="text-[10px] text-white/30">Total: {trade.drivers.receivedTotal?.toLocaleString()}</div>
+                                                <div className="text-[11px] text-emerald-400/70 uppercase tracking-wider font-semibold">You Received</div>
+                                                <div className="text-[11px] text-white/30">Total: {trade.drivers.receivedTotal?.toLocaleString()}</div>
                                               </div>
                                               <div className="space-y-1">
                                                 {trade.drivers.received.map((asset: any, ai: number) => (
@@ -10238,11 +10238,11 @@ function AFLegacyContent() {
                                                     <div className="flex-1 min-w-0">
                                                       <div className="flex items-center gap-1.5">
                                                         <span className="text-xs font-medium text-white truncate">{asset.name}</span>
-                                                        {asset.position && <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/50 text-white/50">{asset.position}</span>}
-                                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/30 text-white/30">{asset.source}</span>
+                                                        {asset.position && <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-700/50 text-white/50">{asset.position}</span>}
+                                                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-700/30 text-white/30">{asset.source}</span>
                                                       </div>
                                                     </div>
-                                                    <div className="flex items-center gap-3 text-[10px] flex-shrink-0">
+                                                    <div className="flex items-center gap-3 text-[11px] flex-shrink-0">
                                                       <div className="text-center">
                                                         <div className="text-white/30">MKT</div>
                                                         <div className="text-white/70 font-mono">{asset.market}</div>
@@ -10270,8 +10270,8 @@ function AFLegacyContent() {
                                           {trade.drivers?.gave?.length > 0 && (
                                             <div>
                                               <div className="flex items-center justify-between mb-2">
-                                                <div className="text-[10px] text-rose-400/70 uppercase tracking-wider font-semibold">You Gave</div>
-                                                <div className="text-[10px] text-white/30">Total: {trade.drivers.gaveTotal?.toLocaleString()}</div>
+                                                <div className="text-[11px] text-rose-400/70 uppercase tracking-wider font-semibold">You Gave</div>
+                                                <div className="text-[11px] text-white/30">Total: {trade.drivers.gaveTotal?.toLocaleString()}</div>
                                               </div>
                                               <div className="space-y-1">
                                                 {trade.drivers.gave.map((asset: any, ai: number) => (
@@ -10280,11 +10280,11 @@ function AFLegacyContent() {
                                                     <div className="flex-1 min-w-0">
                                                       <div className="flex items-center gap-1.5">
                                                         <span className="text-xs font-medium text-white truncate">{asset.name}</span>
-                                                        {asset.position && <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/50 text-white/50">{asset.position}</span>}
-                                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/30 text-white/30">{asset.source}</span>
+                                                        {asset.position && <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-700/50 text-white/50">{asset.position}</span>}
+                                                        <span className="text-[11px] px-1.5 py-0.5 rounded bg-slate-700/30 text-white/30">{asset.source}</span>
                                                       </div>
                                                     </div>
-                                                    <div className="flex items-center gap-3 text-[10px] flex-shrink-0">
+                                                    <div className="flex items-center gap-3 text-[11px] flex-shrink-0">
                                                       <div className="text-center">
                                                         <div className="text-white/30">MKT</div>
                                                         <div className="text-white/70 font-mono">{asset.market}</div>
@@ -10898,7 +10898,7 @@ function AFLegacyContent() {
                                 {tradeHubLivePreview && (
                                   <div className="flex items-center gap-3">
                                     <div className="text-right">
-                                      <div className="text-[9px] text-white/40 uppercase tracking-wider">Accept Rate</div>
+                                      <div className="text-[11px] text-white/40 uppercase tracking-wider">Accept Rate</div>
                                       <div className={`text-2xl font-black ${
                                         tradeHubLivePreview.acceptProbability >= 60 ? 'text-emerald-400' :
                                         tradeHubLivePreview.acceptProbability >= 40 ? 'text-amber-400' :
@@ -10930,7 +10930,7 @@ function AFLegacyContent() {
                                   {/* Quick Stats Row */}
                                   <div className="grid grid-cols-4 gap-2">
                                     <div className="p-2 rounded-lg bg-slate-800/60 text-center">
-                                      <div className="text-[9px] text-white/40 uppercase">Verdict</div>
+                                      <div className="text-[11px] text-white/40 uppercase">Verdict</div>
                                       <div className={`text-xs font-bold mt-0.5 ${
                                         tradeHubLivePreview.verdict === 'FAIR' ? 'text-emerald-400' :
                                         tradeHubLivePreview.verdict === 'GOOD' || tradeHubLivePreview.lean === 'LEAN_ACCEPT' ? 'text-cyan-400' :
@@ -10938,26 +10938,26 @@ function AFLegacyContent() {
                                       }`}>{tradeHubLivePreview.verdict}</div>
                                     </div>
                                     <div className="p-2 rounded-lg bg-slate-800/60 text-center">
-                                      <div className="text-[9px] text-white/40 uppercase">Fairness</div>
+                                      <div className="text-[11px] text-white/40 uppercase">Fairness</div>
                                       <div className={`text-xs font-bold mt-0.5 ${tradeHubLivePreview.fairnessDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {tradeHubLivePreview.fairnessDelta >= 0 ? '+' : ''}{tradeHubLivePreview.fairnessDelta}
                                       </div>
                                     </div>
                                     <div className="p-2 rounded-lg bg-slate-800/60 text-center">
-                                      <div className="text-[9px] text-white/40 uppercase">Market</div>
+                                      <div className="text-[11px] text-white/40 uppercase">Market</div>
                                       <div className={`text-xs font-bold mt-0.5 ${tradeHubLivePreview.marketDeltaPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                         {tradeHubLivePreview.marketDeltaPct >= 0 ? '+' : ''}{tradeHubLivePreview.marketDeltaPct}%
                                       </div>
                                     </div>
                                     <div className="p-2 rounded-lg bg-slate-800/60 text-center">
-                                      <div className="text-[9px] text-white/40 uppercase">Confidence</div>
+                                      <div className="text-[11px] text-white/40 uppercase">Confidence</div>
                                       <div className="text-xs font-bold mt-0.5 text-purple-300">{tradeHubLivePreview.confidence}%</div>
                                     </div>
                                   </div>
 
                                   {/* 4-Factor Score Bar */}
                                   <div className="space-y-1.5">
-                                    <div className="text-[10px] text-white/40 uppercase tracking-wider">4-Factor Breakdown</div>
+                                    <div className="text-[11px] text-white/40 uppercase tracking-wider">4-Factor Breakdown</div>
                                     {[
                                       { label: 'Lineup Impact', value: tradeHubLivePreview.scores?.lineupImpact, weight: '40%', color: '#3b82f6' },
                                       { label: 'VORP', value: tradeHubLivePreview.scores?.vorp, weight: '25%', color: '#a855f7' },
@@ -10965,12 +10965,12 @@ function AFLegacyContent() {
                                       { label: 'Behavior', value: tradeHubLivePreview.scores?.behavior, weight: '15%', color: '#f59e0b' },
                                     ].map(f => (
                                       <div key={f.label} className="flex items-center gap-2">
-                                        <div className="w-20 text-[10px] text-white/50 truncate">{f.label}</div>
+                                        <div className="w-20 text-[11px] text-white/50 truncate">{f.label}</div>
                                         <div className="flex-1 h-2 rounded-full bg-slate-800 overflow-hidden">
                                           <div className="h-full rounded-full transition-all duration-500" style={{ width: `${f.value}%`, backgroundColor: f.color }} />
                                         </div>
-                                        <div className="w-10 text-[10px] text-white/50 text-right">{f.value}</div>
-                                        <div className="w-8 text-[9px] text-white/30 text-right">{f.weight}</div>
+                                        <div className="w-10 text-[11px] text-white/50 text-right">{f.value}</div>
+                                        <div className="w-8 text-[11px] text-white/30 text-right">{f.weight}</div>
                                       </div>
                                     ))}
                                   </div>
@@ -10978,7 +10978,7 @@ function AFLegacyContent() {
                                   {/* NEWS IMPACT ALERTS */}
                                   {tradeHubLivePreview.newsAlerts?.length > 0 && (
                                     <div className="space-y-1.5">
-                                      <div className="text-[10px] text-white/40 uppercase tracking-wider flex items-center gap-1.5">
+                                      <div className="text-[11px] text-white/40 uppercase tracking-wider flex items-center gap-1.5">
                                         <span className="text-amber-400">NEWS IMPACT</span>
                                         <span className="text-white/30">— Values adjusted</span>
                                       </div>
@@ -11000,7 +11000,7 @@ function AFLegacyContent() {
                                           <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-1.5">
                                               <span className="font-semibold text-white">{alert.playerName}</span>
-                                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
+                                              <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase ${
                                                 alert.severity === 'critical' ? 'bg-rose-500/30 text-rose-300' :
                                                 alert.severity === 'significant' ? 'bg-orange-500/30 text-orange-300' :
                                                 alert.sentiment === 'bullish' ? 'bg-emerald-500/30 text-emerald-300' :
@@ -11011,7 +11011,7 @@ function AFLegacyContent() {
                                             </div>
                                             <div className="text-white/50 mt-0.5 leading-snug">{alert.reason}</div>
                                             {alert.headlines?.[0] && (
-                                              <div className="text-white/30 text-[10px] mt-1 italic truncate">{alert.headlines[0]}</div>
+                                              <div className="text-white/30 text-[11px] mt-1 italic truncate">{alert.headlines[0]}</div>
                                             )}
                                           </div>
                                         </div>
@@ -11027,7 +11027,7 @@ function AFLegacyContent() {
                                         className="flex items-center gap-2 w-full text-left"
                                       >
                                         <span className="text-sm">🗺️</span>
-                                        <span className="text-[10px] text-white/40 uppercase tracking-wider flex-1">Slot Delta Map — Your Starting Lineup</span>
+                                        <span className="text-[11px] text-white/40 uppercase tracking-wider flex-1">Slot Delta Map — Your Starting Lineup</span>
                                         <span className={`text-xs font-bold ${
                                           tradeHubLivePreview.lineupDelta?.deltaYou >= 0 ? 'text-emerald-400' : 'text-rose-400'
                                         }`}>
@@ -11043,7 +11043,7 @@ function AFLegacyContent() {
                                               d.delta < -0.1 ? 'bg-rose-500/10 border border-rose-500/15' :
                                               'bg-slate-800/40 border border-slate-700/20'
                                             }`}>
-                                              <div className="w-16 text-[10px] font-mono text-white/50">{d.slot}</div>
+                                              <div className="w-16 text-[11px] font-mono text-white/50">{d.slot}</div>
                                               <div className="flex-1 flex items-center gap-1 min-w-0">
                                                 <span className="text-white/40 truncate text-[11px]">{d.beforePlayer || '—'}</span>
                                                 {d.beforePlayer !== d.afterPlayer && (
@@ -11072,8 +11072,8 @@ function AFLegacyContent() {
                                     <div>
                                       <div className="flex items-center gap-2 mb-2">
                                         <span className="text-sm">🎯</span>
-                                        <span className="text-[10px] text-white/40 uppercase tracking-wider">Opponent Bias Meter</span>
-                                        <span className="text-[9px] text-white/25">({tradeHubLivePreview.opponentTendency.sampleSize} trades)</span>
+                                        <span className="text-[11px] text-white/40 uppercase tracking-wider">Opponent Bias Meter</span>
+                                        <span className="text-[11px] text-white/25">({tradeHubLivePreview.opponentTendency.sampleSize} trades)</span>
                                       </div>
                                       <div className="grid grid-cols-2 gap-2">
                                         {/* Position Biases */}
@@ -11082,7 +11082,7 @@ function AFLegacyContent() {
                                           .sort(([, a], [, b]) => Math.abs(b) - Math.abs(a))
                                           .map(([pos, bias]) => (
                                             <div key={pos} className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/50">
-                                              <span className="text-[10px] font-bold w-8 text-white/60">{pos}</span>
+                                              <span className="text-[11px] font-bold w-8 text-white/60">{pos}</span>
                                               <div className="flex-1 h-1.5 rounded-full bg-slate-700 relative overflow-hidden">
                                                 <div
                                                   className="absolute inset-y-0 rounded-full"
@@ -11094,15 +11094,15 @@ function AFLegacyContent() {
                                                 />
                                                 <div className="absolute inset-y-0 left-1/2 w-px bg-white/20" />
                                               </div>
-                                              <span className={`text-[10px] font-mono w-8 text-right ${bias > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                              <span className={`text-[11px] font-mono w-8 text-right ${bias > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                                                 {bias > 0 ? '+' : ''}{(bias * 100).toFixed(0)}
                                               </span>
                                             </div>
                                           ))}
                                         {/* Other traits */}
                                         <div className="p-2 rounded-lg bg-slate-800/50 flex items-center justify-between">
-                                          <span className="text-[10px] text-white/50">Overpay</span>
-                                          <span className={`text-[10px] font-bold ${
+                                          <span className="text-[11px] text-white/50">Overpay</span>
+                                          <span className={`text-[11px] font-bold ${
                                             tradeHubLivePreview.opponentTendency.overpayThreshold < -0.3 ? 'text-emerald-400' : 'text-amber-400'
                                           }`}>
                                             {tradeHubLivePreview.opponentTendency.overpayThreshold < -0.5 ? 'High' :
@@ -11110,8 +11110,8 @@ function AFLegacyContent() {
                                           </span>
                                         </div>
                                         <div className="p-2 rounded-lg bg-slate-800/50 flex items-center justify-between">
-                                          <span className="text-[10px] text-white/50">Risk</span>
-                                          <span className={`text-[10px] font-bold ${
+                                          <span className="text-[11px] text-white/50">Risk</span>
+                                          <span className={`text-[11px] font-bold ${
                                             tradeHubLivePreview.opponentTendency.riskTolerance > 0.3 ? 'text-emerald-400' : 'text-amber-400'
                                           }`}>
                                             {tradeHubLivePreview.opponentTendency.riskTolerance > 0.3 ? 'High' :
@@ -11127,7 +11127,7 @@ function AFLegacyContent() {
                                     <div>
                                       <div className="flex items-center gap-2 mb-2">
                                         <span className="text-sm">🍬</span>
-                                        <span className="text-[10px] text-white/40 uppercase tracking-wider">Sweetener Suggestions</span>
+                                        <span className="text-[11px] text-white/40 uppercase tracking-wider">Sweetener Suggestions</span>
                                       </div>
                                       <div className="space-y-1.5">
                                         {tradeHubLivePreview.sweeteners.map((s: any, i: number) => (
@@ -11142,15 +11142,15 @@ function AFLegacyContent() {
                                           >
                                             <div className="flex-1 min-w-0">
                                               <div className="text-xs text-white font-medium truncate">{s.asset?.name || '?'}</div>
-                                              <div className="text-[10px] text-white/40">{s.asset?.pos}</div>
+                                              <div className="text-[11px] text-white/40">{s.asset?.pos}</div>
                                             </div>
                                             <div className="flex items-center gap-3 flex-shrink-0">
                                               <div className="text-center">
-                                                <div className="text-[9px] text-white/30">Accept</div>
+                                                <div className="text-[11px] text-white/30">Accept</div>
                                                 <div className="text-xs font-bold text-emerald-400">+{Math.round(s.acceptDelta * 100)}%</div>
                                               </div>
                                               <div className="text-center">
-                                                <div className="text-[9px] text-white/30">Fairness</div>
+                                                <div className="text-[11px] text-white/30">Fairness</div>
                                                 <div className={`text-xs font-bold ${s.fairnessImpact <= -5 ? 'text-rose-400' : 'text-amber-400'}`}>
                                                   {s.fairnessImpact >= 0 ? '+' : ''}{s.fairnessImpact}
                                                 </div>
@@ -11166,10 +11166,10 @@ function AFLegacyContent() {
                                   {/* Accept Drivers */}
                                   {tradeHubLivePreview.acceptDrivers?.length > 0 && (
                                     <div>
-                                      <div className="text-[10px] text-white/40 uppercase tracking-wider mb-1.5">Accept Signals</div>
+                                      <div className="text-[11px] text-white/40 uppercase tracking-wider mb-1.5">Accept Signals</div>
                                       <div className="flex flex-wrap gap-1.5">
                                         {tradeHubLivePreview.acceptDrivers.slice(0, 6).map((d: any, i: number) => (
-                                          <div key={i} className={`px-2 py-1 rounded-full text-[10px] border ${
+                                          <div key={i} className={`px-2 py-1 rounded-full text-[11px] border ${
                                             d.direction === 'UP' ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10' :
                                             d.direction === 'DOWN' ? 'border-rose-500/30 text-rose-300 bg-rose-500/10' :
                                             'border-slate-600/30 text-white/40 bg-slate-800/30'
@@ -11185,7 +11185,7 @@ function AFLegacyContent() {
                                   {tradeHubLivePreview.riskFlags?.length > 0 && (
                                     <div className="flex flex-wrap gap-1.5">
                                       {tradeHubLivePreview.riskFlags.map((flag: string, i: number) => (
-                                        <div key={i} className="px-2 py-1 rounded-full text-[10px] border border-amber-500/30 text-amber-300 bg-amber-500/10">
+                                        <div key={i} className="px-2 py-1 rounded-full text-[11px] border border-amber-500/30 text-amber-300 bg-amber-500/10">
                                           ⚠️ {flag}
                                         </div>
                                       ))}
@@ -11291,7 +11291,7 @@ function AFLegacyContent() {
                               {/* Quick Stats Row */}
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                                 <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-center">
-                                  <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Verdict</div>
+                                  <div className="text-[11px] uppercase tracking-wider text-white/40 mb-1">Verdict</div>
                                   <div className={`text-lg font-bold ${
                                     inlineTradeResult.verdict?.toLowerCase().includes('fair') ? 'text-emerald-400' :
                                     inlineTradeResult.verdict?.toLowerCase().includes('favors a') || inlineTradeResult.verdict?.toLowerCase().includes('accept') ? 'text-cyan-400' :
@@ -11306,7 +11306,7 @@ function AFLegacyContent() {
                                   </div>
                                 </div>
                                 <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-center">
-                                  <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Grade</div>
+                                  <div className="text-[11px] uppercase tracking-wider text-white/40 mb-1">Grade</div>
                                   <div className={`text-2xl font-black ${
                                     inlineTradeResult.grade?.startsWith('A') ? 'text-emerald-400' :
                                     inlineTradeResult.grade?.startsWith('B') ? 'text-cyan-400' :
@@ -11317,14 +11317,14 @@ function AFLegacyContent() {
                                   </div>
                                 </div>
                                 <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-center">
-                                  <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Fairness</div>
+                                  <div className="text-[11px] uppercase tracking-wider text-white/40 mb-1">Fairness</div>
                                   <div className="text-lg font-bold text-white">
                                     {inlineTradeResult.fairnessScore ?? inlineTradeResult.balanceScore ?? '—'}
                                     {(inlineTradeResult.fairnessScore || inlineTradeResult.balanceScore) && <span className="text-sm text-white/50">/100</span>}
                                   </div>
                                 </div>
                                 <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-center">
-                                  <div className="text-[10px] uppercase tracking-wider text-white/40 mb-1">Confidence</div>
+                                  <div className="text-[11px] uppercase tracking-wider text-white/40 mb-1">Confidence</div>
                                   <div className={`text-lg font-bold ${
                                     (inlineTradeResult.confidence === 'high' || (typeof inlineTradeResult.confidence === 'number' && inlineTradeResult.confidence >= 80)) 
                                       ? 'text-emerald-400' : 'text-amber-400'
@@ -11340,7 +11340,7 @@ function AFLegacyContent() {
                                   <span className="text-amber-300 text-xs font-bold">!</span>
                                   <div>
                                     <span className="text-xs font-semibold text-amber-200">{inlineTradeResult.offseasonContext.offseasonBadge}</span>
-                                    <span className="text-[10px] text-amber-200/50 ml-2">{inlineTradeResult.offseasonContext.offseasonNote}</span>
+                                    <span className="text-[11px] text-amber-200/50 ml-2">{inlineTradeResult.offseasonContext.offseasonNote}</span>
                                   </div>
                                 </div>
                               )}
@@ -11353,9 +11353,9 @@ function AFLegacyContent() {
                                       const d = Number(b.rawDelta) || 0
                                       return (
                                       <div key={b.key || b.label} className="text-center">
-                                        <div className="text-[9px] text-white/40 uppercase truncate">{b.label || '—'}</div>
+                                        <div className="text-[11px] text-white/40 uppercase truncate">{b.label || '—'}</div>
                                         <div className="text-base font-bold text-white">{b.score ?? '—'}</div>
-                                        <div className={`text-[9px] ${d > 0 ? 'text-emerald-400' : d < 0 ? 'text-rose-400' : 'text-white/30'}`}>
+                                        <div className={`text-[11px] ${d > 0 ? 'text-emerald-400' : d < 0 ? 'text-rose-400' : 'text-white/30'}`}>
                                           {d > 0 ? '+' : ''}{(d * 100).toFixed(0)}%
                                         </div>
                                       </div>
@@ -11511,7 +11511,7 @@ function AFLegacyContent() {
                           <div className="mt-6 space-y-4">
                             <div className="flex items-center gap-2 mb-4">
                               <span className="text-sm font-semibold text-white">💡 Trade Proposals</span>
-                              <span className="px-2 py-0.5 text-[10px] rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
+                              <span className="px-2 py-0.5 text-[11px] rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
                                 {tradeIdeasResults.length} found
                               </span>
                             </div>
@@ -11523,7 +11523,7 @@ function AFLegacyContent() {
                                     <span className="text-lg sm:text-xl flex-shrink-0 mt-0.5">{idea.icon || '💡'}</span>
                                     <div className="min-w-0">
                                       <h5 className="font-semibold text-white text-xs sm:text-sm leading-tight">{idea.title}</h5>
-                                      <p className="text-[10px] sm:text-xs text-white/50 truncate">
+                                      <p className="text-[11px] sm:text-xs text-white/50 truncate">
                                         Send to: <span className="text-cyan-400">{idea.targetManager}</span>
                                         {idea.targetRecord && <span className="text-white/40"> ({idea.targetRecord})</span>}
                                         {idea.targetTradeCount > 0 && <span className="text-white/30 hidden sm:inline"> • {idea.targetTradeCount} trades</span>}
@@ -11538,7 +11538,7 @@ function AFLegacyContent() {
                                     }`}>
                                       {idea.acceptanceProbability}%
                                     </div>
-                                    <div className="text-[9px] sm:text-[10px] text-white/40 uppercase tracking-wider">Accept Rate</div>
+                                    <div className="text-[11px] sm:text-[11px] text-white/40 uppercase tracking-wider">Accept Rate</div>
                                   </div>
                                 </div>
                                 
@@ -11547,11 +11547,11 @@ function AFLegacyContent() {
                                   {/* You Send */}
                                   <div className="space-y-1.5 sm:space-y-2">
                                     <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-rose-400 uppercase tracking-wider font-semibold">
+                                      <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-rose-400 uppercase tracking-wider font-semibold">
                                         <span>📤</span> You Send
                                       </div>
                                       {idea.totalSendValue > 0 && (
-                                        <span className="text-[10px] text-rose-400/70 font-mono">
+                                        <span className="text-[11px] text-rose-400/70 font-mono">
                                           Total: {idea.totalSendValue.toLocaleString()}
                                         </span>
                                       )}
@@ -11561,20 +11561,20 @@ function AFLegacyContent() {
                                         <div key={pIdx} className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-lg bg-rose-500/10 border border-rose-500/20">
                                           <PlayerBadge name={player.name} sleeperId={player.id} position={player.position} team={player.team} size="sm" className="flex-1 min-w-0" />
                                           {player.value > 0 && (
-                                            <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono flex-shrink-0">{player.value.toLocaleString()}</span>
+                                            <span className="text-[11px] sm:text-[11px] px-1 sm:px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 font-mono flex-shrink-0">{player.value.toLocaleString()}</span>
                                           )}
                                         </div>
                                       ))}
                                       {idea.picksSend?.map((pick: any, pIdx: number) => (
                                         <div key={`pick-s-${pIdx}`} className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-lg bg-rose-500/10 border border-rose-500/20">
-                                          <span className="px-1 py-0.5 text-[9px] sm:text-[10px] rounded bg-amber-500/30 text-amber-300 font-semibold flex-shrink-0">PICK</span>
+                                          <span className="px-1 py-0.5 text-[11px] sm:text-[11px] rounded bg-amber-500/30 text-amber-300 font-semibold flex-shrink-0">PICK</span>
                                           <span className="text-xs sm:text-sm text-white font-medium flex-1 min-w-0 truncate">{pick.season} {pick.slot ? `${pick.round}.${String(pick.slot).padStart(2, '0')}` : `Round ${pick.round}`}</span>
-                                          <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono flex-shrink-0">{pick.value?.toLocaleString()}</span>
+                                          <span className="text-[11px] sm:text-[11px] px-1 sm:px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono flex-shrink-0">{pick.value?.toLocaleString()}</span>
                                         </div>
                                       ))}
                                       {idea.faabSend > 0 && (
                                         <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-lg bg-rose-500/10 border border-rose-500/20">
-                                          <span className="px-1 py-0.5 text-[9px] sm:text-[10px] rounded bg-green-500/30 text-green-300 font-semibold flex-shrink-0">FAAB</span>
+                                          <span className="px-1 py-0.5 text-[11px] sm:text-[11px] rounded bg-green-500/30 text-green-300 font-semibold flex-shrink-0">FAAB</span>
                                           <span className="text-xs sm:text-sm text-white font-medium flex-1">${idea.faabSend}</span>
                                         </div>
                                       )}
@@ -11584,11 +11584,11 @@ function AFLegacyContent() {
                                   {/* You Receive */}
                                   <div className="space-y-1.5 sm:space-y-2">
                                     <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-emerald-400 uppercase tracking-wider font-semibold">
+                                      <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-emerald-400 uppercase tracking-wider font-semibold">
                                         <span>📥</span> You Receive
                                       </div>
                                       {idea.totalReceiveValue > 0 && (
-                                        <span className="text-[10px] text-emerald-400/70 font-mono">
+                                        <span className="text-[11px] text-emerald-400/70 font-mono">
                                           Total: {idea.totalReceiveValue.toLocaleString()}
                                         </span>
                                       )}
@@ -11598,20 +11598,20 @@ function AFLegacyContent() {
                                         <div key={pIdx} className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                                           <PlayerBadge name={player.name} sleeperId={player.id} position={player.position} team={player.team} size="sm" className="flex-1 min-w-0" />
                                           {player.value > 0 && (
-                                            <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono flex-shrink-0">{player.value.toLocaleString()}</span>
+                                            <span className="text-[11px] sm:text-[11px] px-1 sm:px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono flex-shrink-0">{player.value.toLocaleString()}</span>
                                           )}
                                         </div>
                                       ))}
                                       {idea.picksReceive?.map((pick: any, pIdx: number) => (
                                         <div key={`pick-r-${pIdx}`} className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                                          <span className="px-1 py-0.5 text-[9px] sm:text-[10px] rounded bg-amber-500/30 text-amber-300 font-semibold flex-shrink-0">PICK</span>
+                                          <span className="px-1 py-0.5 text-[11px] sm:text-[11px] rounded bg-amber-500/30 text-amber-300 font-semibold flex-shrink-0">PICK</span>
                                           <span className="text-xs sm:text-sm text-white font-medium flex-1 min-w-0 truncate">{pick.season} {pick.slot ? `${pick.round}.${String(pick.slot).padStart(2, '0')}` : `Round ${pick.round}`}</span>
-                                          <span className="text-[9px] sm:text-[10px] px-1 sm:px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono flex-shrink-0">{pick.value?.toLocaleString()}</span>
+                                          <span className="text-[11px] sm:text-[11px] px-1 sm:px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono flex-shrink-0">{pick.value?.toLocaleString()}</span>
                                         </div>
                                       ))}
                                       {idea.faabReceive > 0 && (
                                         <div className="flex items-center gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                                          <span className="px-1 py-0.5 text-[9px] sm:text-[10px] rounded bg-green-500/30 text-green-300 font-semibold flex-shrink-0">FAAB</span>
+                                          <span className="px-1 py-0.5 text-[11px] sm:text-[11px] rounded bg-green-500/30 text-green-300 font-semibold flex-shrink-0">FAAB</span>
                                           <span className="text-xs sm:text-sm text-white font-medium flex-1">${idea.faabReceive}</span>
                                         </div>
                                       )}
@@ -11622,7 +11622,7 @@ function AFLegacyContent() {
                                 {/* Value Summary Bar */}
                                 {(idea.totalSendValue > 0 || idea.totalReceiveValue > 0) && (
                                   <div className="px-3 sm:px-4 pb-2">
-                                    <div className="flex items-center justify-around text-[9px] sm:text-[10px] p-2 rounded-lg bg-white/5 border border-white/10 gap-2">
+                                    <div className="flex items-center justify-around text-[11px] sm:text-[11px] p-2 rounded-lg bg-white/5 border border-white/10 gap-2">
                                       <div className="flex items-center gap-1">
                                         <span className="text-white/50">Diff:</span>
                                         <span className={idea.valueDiff >= 0 ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>
@@ -11644,14 +11644,14 @@ function AFLegacyContent() {
                                 <div className="p-3 sm:p-4 pt-0 space-y-2 sm:space-y-3">
                                   {idea.whyForYou && (
                                     <div className="p-2.5 sm:p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/20">
-                                      <div className="text-[9px] sm:text-[10px] text-cyan-400 uppercase tracking-wider font-semibold mb-1">Why You Should Make This Trade</div>
+                                      <div className="text-[11px] sm:text-[11px] text-cyan-400 uppercase tracking-wider font-semibold mb-1">Why You Should Make This Trade</div>
                                       <p className="text-[11px] sm:text-xs text-white/70 leading-relaxed">{idea.whyForYou}</p>
                                     </div>
                                   )}
                                   
                                   {idea.whyTheyAccept && (
                                     <div className="p-2.5 sm:p-3 rounded-lg bg-purple-500/5 border border-purple-500/20">
-                                      <div className="text-[9px] sm:text-[10px] text-purple-400 uppercase tracking-wider font-semibold mb-1">Why They Would Accept</div>
+                                      <div className="text-[11px] sm:text-[11px] text-purple-400 uppercase tracking-wider font-semibold mb-1">Why They Would Accept</div>
                                       <p className="text-[11px] sm:text-xs text-white/70 leading-relaxed">{idea.whyTheyAccept}</p>
                                     </div>
                                   )}
@@ -11667,7 +11667,7 @@ function AFLegacyContent() {
                                 {/* Urgency Badge */}
                                 {idea.urgency === 'high' && (
                                   <div className="px-4 pb-3">
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 text-[11px] rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">
                                       🔥 High Priority - Act Fast
                                     </span>
                                   </div>
@@ -11687,12 +11687,12 @@ function AFLegacyContent() {
                                     <span className="text-lg sm:text-xl flex-shrink-0">{opp.icon}</span>
                                     <div className="min-w-0">
                                       <h4 className="text-xs sm:text-sm font-bold text-white leading-tight">{opp.title}</h4>
-                                      {opp.targetManager && <span className="text-[10px] text-white/40 truncate block">Target: {opp.targetManager}</span>}
+                                      {opp.targetManager && <span className="text-[11px] text-white/40 truncate block">Target: {opp.targetManager}</span>}
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-1 flex-shrink-0">
-                                    {opp.actionable && <span className="px-1 py-0.5 rounded text-[8px] sm:text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/20">GO</span>}
-                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${opp.confidence >= 60 ? 'bg-emerald-500/20 text-emerald-300' : opp.confidence >= 40 ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-500/20 text-slate-300'}`}>{opp.confidence}%</span>
+                                    {opp.actionable && <span className="px-1 py-0.5 rounded text-[11px] sm:text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/20">GO</span>}
+                                    <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${opp.confidence >= 60 ? 'bg-emerald-500/20 text-emerald-300' : opp.confidence >= 40 ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-500/20 text-slate-300'}`}>{opp.confidence}%</span>
                                   </div>
                                 </div>
                                 <p className="text-xs text-white/50">{opp.description}</p>
@@ -11700,7 +11700,7 @@ function AFLegacyContent() {
                                   <div className="space-y-1">
                                     {opp.relevantPlayers.map((player: any, pIdx: number) => (
                                       <div key={pIdx} className="flex items-center gap-2 p-1.5 rounded-lg bg-black/20 border border-white/5">
-                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
+                                        <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${
                                           player.position === 'QB' ? 'bg-red-500/20 text-red-300' :
                                           player.position === 'RB' ? 'bg-blue-500/20 text-blue-300' :
                                           player.position === 'WR' ? 'bg-green-500/20 text-green-300' :
@@ -11709,10 +11709,10 @@ function AFLegacyContent() {
                                         }`}>{player.position}</span>
                                         <MiniPlayerImg sleeperId={player.id} name={player.name} size={18} />
                                         <span className="text-xs text-white font-medium flex-1 truncate">{player.name}</span>
-                                        {player.value > 0 && <span className="text-[10px] text-white/30 font-mono">{player.value.toLocaleString()}</span>}
+                                        {player.value > 0 && <span className="text-[11px] text-white/30 font-mono">{player.value.toLocaleString()}</span>}
                                       </div>
                                     ))}
-                                    <p className="text-[10px] text-white/30 italic mt-1">{opp.relevantPlayers[0]?.reason}</p>
+                                    <p className="text-[11px] text-white/30 italic mt-1">{opp.relevantPlayers[0]?.reason}</p>
                                   </div>
                                 )}
                               </div>
@@ -11803,11 +11803,11 @@ function AFLegacyContent() {
                             <div className="flex items-center justify-between flex-wrap gap-2">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-semibold text-white">{goalProposalResult.goalDescription}</span>
-                                <span className="px-2 py-0.5 text-[10px] rounded-full bg-violet-500/20 text-violet-300 border border-violet-400/30">
+                                <span className="px-2 py-0.5 text-[11px] rounded-full bg-violet-500/20 text-violet-300 border border-violet-400/30">
                                   {goalProposalResult.partners.length} partners found
                                 </span>
                               </div>
-                              <span className="text-[10px] text-white/40">
+                              <span className="text-[11px] text-white/40">
                                 {goalProposalResult.stats?.proposalsBuilt || 0} proposals built
                               </span>
                             </div>
@@ -11827,7 +11827,7 @@ function AFLegacyContent() {
                                       <div className="min-w-0">
                                         <div className="text-sm font-semibold text-white truncate">{partner.displayName}</div>
                                         <div className="flex flex-wrap gap-1 mt-1">
-                                          <span className={`px-1.5 py-0.5 text-[9px] rounded font-medium ${
+                                          <span className={`px-1.5 py-0.5 text-[11px] rounded font-medium ${
                                             partner.contenderTier === 'contender' ? 'bg-emerald-500/20 text-emerald-300' :
                                             partner.contenderTier === 'rebuild' ? 'bg-amber-500/20 text-amber-300' :
                                             'bg-white/10 text-white/50'
@@ -11835,7 +11835,7 @@ function AFLegacyContent() {
                                             {partner.contenderTier === 'contender' ? 'Contender' : partner.contenderTier === 'rebuild' ? 'Rebuilding' : 'Middle'}
                                           </span>
                                           {partner.record && (
-                                            <span className="px-1.5 py-0.5 text-[9px] rounded bg-white/10 text-white/50">
+                                            <span className="px-1.5 py-0.5 text-[11px] rounded bg-white/10 text-white/50">
                                               {partner.record.wins}-{partner.record.losses}
                                             </span>
                                           )}
@@ -11843,7 +11843,7 @@ function AFLegacyContent() {
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
-                                      <span className="px-2 py-1 text-[10px] rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/20">
+                                      <span className="px-2 py-1 text-[11px] rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/20">
                                         {partner.proposals?.length || 0} proposals
                                       </span>
                                       <span className={`text-white/40 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>&#9660;</span>
@@ -11853,7 +11853,7 @@ function AFLegacyContent() {
                                   {isExpanded && partner.matchReasons?.length > 0 && (
                                     <div className="px-4 pb-2 flex flex-wrap gap-1">
                                       {partner.matchReasons.map((r: string, rIdx: number) => (
-                                        <span key={rIdx} className="px-2 py-0.5 text-[10px] rounded-full bg-violet-500/10 text-violet-300/80 border border-violet-500/15">
+                                        <span key={rIdx} className="px-2 py-0.5 text-[11px] rounded-full bg-violet-500/10 text-violet-300/80 border border-violet-500/15">
                                           {r}
                                         </span>
                                       ))}
@@ -11877,11 +11877,11 @@ function AFLegacyContent() {
                                         <div className="p-2.5 sm:p-3 border-b border-white/5 flex items-center justify-between gap-2">
                                           <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                                             <span className="text-sm sm:text-base flex-shrink-0">{tierIcon}</span>
-                                            <span className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${tierBadge} truncate`}>
+                                            <span className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[11px] sm:text-[11px] font-bold uppercase tracking-wider ${tierBadge} truncate`}>
                                               {proposal.tierLabel}
                                             </span>
                                           </div>
-                                          <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-[11px] flex-shrink-0">
+                                          <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-[11px] flex-shrink-0">
                                             <span className="text-white/50"><span className="text-white font-semibold">{proposal.fairnessScore}</span></span>
                                             <span className={`font-semibold ${
                                               proposal.acceptProb >= 60 ? 'text-emerald-400' :
@@ -11894,11 +11894,11 @@ function AFLegacyContent() {
                                         <div className="p-3">
                                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                                             <div>
-                                              <div className="text-[10px] uppercase tracking-wider text-rose-400/60 mb-1.5 font-semibold">You Send</div>
+                                              <div className="text-[11px] uppercase tracking-wider text-rose-400/60 mb-1.5 font-semibold">You Send</div>
                                               <div className="space-y-1">
                                                 {proposal.give?.map((a: any, aIdx: number) => (
                                                   <div key={aIdx} className="flex items-center gap-1.5 p-1.5 rounded-lg bg-rose-500/10 border border-rose-500/15 text-xs">
-                                                    <span className={`px-1 py-0.5 text-[9px] rounded font-semibold ${
+                                                    <span className={`px-1 py-0.5 text-[11px] rounded font-semibold ${
                                                       a.type === 'PICK' ? 'bg-amber-500/30 text-amber-300' :
                                                       a.pos === 'QB' ? 'bg-red-500/30 text-red-300' :
                                                       a.pos === 'RB' ? 'bg-cyan-500/30 text-cyan-300' :
@@ -11908,18 +11908,18 @@ function AFLegacyContent() {
                                                     }`}>{a.type === 'PICK' ? 'PICK' : a.pos || '?'}</span>
                                                     {a.type !== 'PICK' && <MiniPlayerImg sleeperId={a.id} name={a.name} size={18} />}
                                                     <span className="text-white/80 flex-1 truncate">{a.name}</span>
-                                                    <span className="text-white/30 font-mono text-[10px]">{a.value?.toLocaleString()}</span>
+                                                    <span className="text-white/30 font-mono text-[11px]">{a.value?.toLocaleString()}</span>
                                                   </div>
                                                 ))}
                                               </div>
-                                              <div className="text-right text-[10px] text-rose-400/50 font-mono mt-1">Total: {proposal.giveTotal?.toLocaleString()}</div>
+                                              <div className="text-right text-[11px] text-rose-400/50 font-mono mt-1">Total: {proposal.giveTotal?.toLocaleString()}</div>
                                             </div>
                                             <div>
-                                              <div className="text-[10px] uppercase tracking-wider text-emerald-400/60 mb-1.5 font-semibold">You Get</div>
+                                              <div className="text-[11px] uppercase tracking-wider text-emerald-400/60 mb-1.5 font-semibold">You Get</div>
                                               <div className="space-y-1">
                                                 {proposal.receive?.map((a: any, aIdx: number) => (
                                                   <div key={aIdx} className="flex items-center gap-1.5 p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/15 text-xs">
-                                                    <span className={`px-1 py-0.5 text-[9px] rounded font-semibold ${
+                                                    <span className={`px-1 py-0.5 text-[11px] rounded font-semibold ${
                                                       a.type === 'PICK' ? 'bg-amber-500/30 text-amber-300' :
                                                       a.pos === 'QB' ? 'bg-red-500/30 text-red-300' :
                                                       a.pos === 'RB' ? 'bg-cyan-500/30 text-cyan-300' :
@@ -11929,20 +11929,20 @@ function AFLegacyContent() {
                                                     }`}>{a.type === 'PICK' ? 'PICK' : a.pos || '?'}</span>
                                                     {a.type !== 'PICK' && <MiniPlayerImg sleeperId={a.id} name={a.name} size={18} />}
                                                     <span className="text-white/80 flex-1 truncate">{a.name}</span>
-                                                    <span className="text-white/30 font-mono text-[10px]">{a.value?.toLocaleString()}</span>
+                                                    <span className="text-white/30 font-mono text-[11px]">{a.value?.toLocaleString()}</span>
                                                   </div>
                                                 ))}
                                               </div>
-                                              <div className="text-right text-[10px] text-emerald-400/50 font-mono mt-1">Total: {proposal.receiveTotal?.toLocaleString()}</div>
+                                              <div className="text-right text-[11px] text-emerald-400/50 font-mono mt-1">Total: {proposal.receiveTotal?.toLocaleString()}</div>
                                             </div>
                                           </div>
 
                                           {proposal.topDrivers?.length > 0 && (
                                             <div className="rounded-lg bg-black/30 border border-white/10 p-2.5 mb-3">
-                                              <div className="text-[10px] text-white/40 font-semibold uppercase mb-1.5">Key Drivers</div>
+                                              <div className="text-[11px] text-white/40 font-semibold uppercase mb-1.5">Key Drivers</div>
                                               <div className="flex flex-wrap gap-1.5">
                                                 {proposal.topDrivers.slice(0, 3).map((d: any, dIdx: number) => (
-                                                  <span key={dIdx} className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] ${
+                                                  <span key={dIdx} className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] ${
                                                     d.direction === 'for' ? 'bg-emerald-500/15 text-emerald-300/80' : 'bg-rose-500/15 text-rose-300/80'
                                                   }`}>
                                                     <span>{d.emoji}</span> {d.name}
@@ -11954,12 +11954,12 @@ function AFLegacyContent() {
 
                                           {proposal.dmCopy && (
                                             <div className="rounded-lg bg-black/30 border border-white/10 p-3 space-y-2">
-                                              <div className="text-[10px] text-violet-400/70 font-semibold uppercase mb-0.5">Message to Send</div>
+                                              <div className="text-[11px] text-violet-400/70 font-semibold uppercase mb-0.5">Message to Send</div>
                                               <p className="text-xs text-white/70 italic">&quot;{proposal.dmCopy.opener}&quot;</p>
                                               <p className="text-[11px] text-white/50">{proposal.dmCopy.rationale}</p>
                                               {proposal.dmCopy.fallback && (
                                                 <div className="mt-1 pt-1 border-t border-white/5">
-                                                  <div className="text-[10px] text-amber-400/60 font-semibold">If They Hesitate</div>
+                                                  <div className="text-[11px] text-amber-400/60 font-semibold">If They Hesitate</div>
                                                   <p className="text-[11px] text-white/50 italic">&quot;{proposal.dmCopy.fallback}&quot;</p>
                                                 </div>
                                               )}
@@ -11968,9 +11968,9 @@ function AFLegacyContent() {
 
                                           {proposal.sweeteners?.length > 0 && (
                                             <div className="mt-2 flex flex-wrap gap-1.5">
-                                              <span className="text-[10px] text-white/40">Sweeteners:</span>
+                                              <span className="text-[11px] text-white/40">Sweeteners:</span>
                                               {proposal.sweeteners.map((s: any, sIdx: number) => (
-                                                <span key={sIdx} className="px-2 py-0.5 text-[10px] rounded-full bg-amber-500/10 text-amber-300/70 border border-amber-500/15">
+                                                <span key={sIdx} className="px-2 py-0.5 text-[11px] rounded-full bg-amber-500/10 text-amber-300/70 border border-amber-500/15">
                                                   {s.suggestion} (+{s.expectedDelta}%)
                                                 </span>
                                               ))}
@@ -11979,10 +11979,10 @@ function AFLegacyContent() {
 
                                           {proposal.counterPath?.adjustments?.length > 0 && (
                                             <div className="mt-2 rounded-lg bg-cyan-500/5 border border-cyan-500/15 p-2.5">
-                                              <div className="text-[10px] text-cyan-400/70 font-semibold uppercase mb-1">Counter Path</div>
+                                              <div className="text-[11px] text-cyan-400/70 font-semibold uppercase mb-1">Counter Path</div>
                                               <p className="text-[11px] text-white/50 mb-1">{proposal.counterPath.description}</p>
                                               {proposal.counterPath.adjustments.map((adj: any, aIdx: number) => (
-                                                <div key={aIdx} className="text-[10px] text-white/40 ml-2">
+                                                <div key={aIdx} className="text-[11px] text-white/40 ml-2">
                                                   &bull; {adj.description} ({adj.expectedDelta > 0 ? '+' : ''}{adj.expectedDelta}%)
                                                 </div>
                                               ))}
@@ -12064,7 +12064,7 @@ function AFLegacyContent() {
                               </div>
 
                               <div className="space-y-2">
-                                <div className="text-[10px] uppercase tracking-wider text-white/40 font-semibold">Players</div>
+                                <div className="text-[11px] uppercase tracking-wider text-white/40 font-semibold">Players</div>
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-[240px] overflow-y-auto pr-1">
                                   {target.players?.map((p: any) => {
                                     const isSelected = proposalDesiredAssets.some((a: any) => a.type === 'player' && a.name === p.name)
@@ -12088,7 +12088,7 @@ function AFLegacyContent() {
 
                               {target.draftPicks?.length > 0 && (
                                 <div className="space-y-2">
-                                  <div className="text-[10px] uppercase tracking-wider text-white/40 font-semibold">Draft Picks</div>
+                                  <div className="text-[11px] uppercase tracking-wider text-white/40 font-semibold">Draft Picks</div>
                                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                                     {target.draftPicks?.map((pk: any, idx: number) => {
                                       const pickSlotLabel = pk.slot ? `${pk.round}.${String(pk.slot).padStart(2, '0')}` : `Rd ${pk.round}`
@@ -12104,7 +12104,7 @@ function AFLegacyContent() {
                                               : 'bg-white/5 border border-white/10 text-white/80 hover:bg-white/10 hover:border-white/20'
                                           }`}
                                         >
-                                          <span className="px-1 py-0.5 text-[9px] rounded bg-amber-500/30 text-amber-300 font-semibold">PICK</span>
+                                          <span className="px-1 py-0.5 text-[11px] rounded bg-amber-500/30 text-amber-300 font-semibold">PICK</span>
                                           <span className="truncate flex-1">{pickName}</span>
                                           {isSelected && <span className="text-amber-400 text-xs flex-shrink-0">✓</span>}
                                         </button>
@@ -12116,7 +12116,7 @@ function AFLegacyContent() {
 
                               {proposalDesiredAssets.length > 0 && (
                                 <div className="rounded-xl bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/20 p-3">
-                                  <div className="text-[10px] uppercase tracking-wider text-emerald-400/70 mb-2 font-semibold">You Want</div>
+                                  <div className="text-[11px] uppercase tracking-wider text-emerald-400/70 mb-2 font-semibold">You Want</div>
                                   <div className="flex flex-wrap gap-1.5">
                                     {proposalDesiredAssets.map((a, idx) => (
                                       <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
@@ -12162,7 +12162,7 @@ function AFLegacyContent() {
                             <div className="flex items-center justify-between flex-wrap gap-2">
                               <div className="flex items-center gap-2">
                                 <span className="text-sm font-semibold text-white">Chimmy Trade Proposals</span>
-                                <span className="px-2 py-0.5 text-[10px] rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                                <span className="px-2 py-0.5 text-[11px] rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
                                   {proposalResults.length} options
                                 </span>
                               </div>
@@ -12202,17 +12202,17 @@ function AFLegacyContent() {
                                 <div key={`${proposal.label}-${idx}`} className={`rounded-xl bg-gradient-to-br ${bgGrad} border ${borderClass} overflow-hidden`}>
                                   {isBestAcceptance && (
                                     <div className="px-4 py-1.5 bg-purple-500/15 border-b border-purple-500/20 flex items-center gap-2">
-                                      <span className="text-[10px] font-bold uppercase tracking-wider text-purple-300">Best Acceptance Chance</span>
+                                      <span className="text-[11px] font-bold uppercase tracking-wider text-purple-300">Best Acceptance Chance</span>
                                     </div>
                                   )}
                                   <div className="p-3 sm:p-4 border-b border-white/5 flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-1.5 sm:gap-2">
                                       <span className="text-base sm:text-lg flex-shrink-0">{labelIcon}</span>
-                                      <span className={`px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[10px] sm:text-xs font-bold ${labelBg}`}>
+                                      <span className={`px-2 py-0.5 sm:px-3 sm:py-1 rounded-full text-[11px] sm:text-xs font-bold ${labelBg}`}>
                                         {proposal.label}
                                       </span>
                                     </div>
-                                    <div className="flex items-center gap-2 sm:gap-3 text-[10px] sm:text-xs flex-shrink-0">
+                                    <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs flex-shrink-0">
                                       <span className="text-white/50"><span className="text-white font-semibold">{proposal.fairnessScore}</span></span>
                                       {proposal.acceptanceModel && (
                                         <AcceptanceMeter data={proposal.acceptanceModel as AcceptanceModelData} compact />
@@ -12223,11 +12223,11 @@ function AFLegacyContent() {
                                   <div className="p-4">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                                       <div>
-                                        <div className="text-[10px] uppercase tracking-wider text-rose-400/60 mb-1.5 font-semibold">You Send</div>
+                                        <div className="text-[11px] uppercase tracking-wider text-rose-400/60 mb-1.5 font-semibold">You Send</div>
                                         <div className="space-y-1">
                                           {proposal.myOffer?.map((a: any, aIdx: number) => (
                                             <div key={aIdx} className="flex items-center gap-1.5 p-1.5 rounded-lg bg-rose-500/10 border border-rose-500/15 text-xs">
-                                              <span className={`px-1 py-0.5 text-[9px] rounded font-semibold ${
+                                              <span className={`px-1 py-0.5 text-[11px] rounded font-semibold ${
                                                 a.type === 'pick' ? 'bg-amber-500/30 text-amber-300' :
                                                 a.pos === 'QB' ? 'bg-red-500/30 text-red-300' :
                                                 a.pos === 'RB' ? 'bg-cyan-500/30 text-cyan-300' :
@@ -12237,18 +12237,18 @@ function AFLegacyContent() {
                                               }`}>{a.type === 'pick' ? 'PICK' : a.pos || '?'}</span>
                                               {a.type !== 'pick' && <MiniPlayerImg sleeperId={a.id} name={a.name} size={18} />}
                                               <span className="text-white/80 flex-1 min-w-0 truncate">{a.name}</span>
-                                              <span className="text-white/30 font-mono text-[10px] flex-shrink-0">{a.value?.toLocaleString()}</span>
+                                              <span className="text-white/30 font-mono text-[11px] flex-shrink-0">{a.value?.toLocaleString()}</span>
                                             </div>
                                           ))}
                                         </div>
-                                        <div className="text-right text-[10px] text-rose-400/50 font-mono mt-1">Total: {proposal.myTotal?.toLocaleString()}</div>
+                                        <div className="text-right text-[11px] text-rose-400/50 font-mono mt-1">Total: {proposal.myTotal?.toLocaleString()}</div>
                                       </div>
                                       <div>
-                                        <div className="text-[10px] uppercase tracking-wider text-emerald-400/60 mb-1.5 font-semibold">You Get</div>
+                                        <div className="text-[11px] uppercase tracking-wider text-emerald-400/60 mb-1.5 font-semibold">You Get</div>
                                         <div className="space-y-1">
                                           {proposal.theirOffer?.map((a: any, aIdx: number) => (
                                             <div key={aIdx} className="flex items-center gap-1.5 p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/15 text-xs">
-                                              <span className={`px-1 py-0.5 text-[9px] rounded font-semibold flex-shrink-0 ${
+                                              <span className={`px-1 py-0.5 text-[11px] rounded font-semibold flex-shrink-0 ${
                                                 a.type === 'pick' ? 'bg-amber-500/30 text-amber-300' :
                                                 a.pos === 'QB' ? 'bg-red-500/30 text-red-300' :
                                                 a.pos === 'RB' ? 'bg-cyan-500/30 text-cyan-300' :
@@ -12258,11 +12258,11 @@ function AFLegacyContent() {
                                               }`}>{a.type === 'pick' ? 'PICK' : a.pos || '?'}</span>
                                               {a.type !== 'pick' && <MiniPlayerImg sleeperId={a.id} name={a.name} size={18} />}
                                               <span className="text-white/80 flex-1 min-w-0 truncate">{a.name}</span>
-                                              <span className="text-white/30 font-mono text-[10px]">{a.value?.toLocaleString()}</span>
+                                              <span className="text-white/30 font-mono text-[11px]">{a.value?.toLocaleString()}</span>
                                             </div>
                                           ))}
                                         </div>
-                                        <div className="text-right text-[10px] text-emerald-400/50 font-mono mt-1">Total: {proposal.theirTotal?.toLocaleString()}</div>
+                                        <div className="text-right text-[11px] text-emerald-400/50 font-mono mt-1">Total: {proposal.theirTotal?.toLocaleString()}</div>
                                       </div>
                                     </div>
 
@@ -12270,23 +12270,23 @@ function AFLegacyContent() {
                                       <div className="rounded-lg bg-black/30 border border-white/10 p-3 space-y-2">
                                         {proposal.yourAdvantage && (
                                           <div>
-                                            <div className="text-[10px] text-emerald-400/70 font-semibold uppercase mb-0.5">Your Advantage</div>
+                                            <div className="text-[11px] text-emerald-400/70 font-semibold uppercase mb-0.5">Your Advantage</div>
                                             <p className="text-xs text-white/70">{proposal.yourAdvantage}</p>
                                           </div>
                                         )}
                                         <div>
-                                          <div className="text-[10px] text-cyan-400/70 font-semibold uppercase mb-0.5">Why They&apos;d Accept</div>
+                                          <div className="text-[11px] text-cyan-400/70 font-semibold uppercase mb-0.5">Why They&apos;d Accept</div>
                                           <p className="text-xs text-white/70">{proposal.theirPitch}</p>
                                         </div>
                                         {proposal.tradePitch && (
                                           <div>
-                                            <div className="text-[10px] text-purple-400/70 font-semibold uppercase mb-0.5">Trade Pitch</div>
+                                            <div className="text-[11px] text-purple-400/70 font-semibold uppercase mb-0.5">Trade Pitch</div>
                                             <p className="text-xs text-white/60 italic">&quot;{proposal.tradePitch}&quot;</p>
                                           </div>
                                         )}
                                         {proposal.fairnessNote && (
                                           <div className="mt-1 pt-2 border-t border-white/5">
-                                            <p className="text-[10px] text-amber-400/70 italic">{proposal.fairnessNote}</p>
+                                            <p className="text-[11px] text-amber-400/70 italic">{proposal.fairnessNote}</p>
                                           </div>
                                         )}
                                       </div>
@@ -12877,7 +12877,7 @@ function AFLegacyContent() {
                                 }}
                                 className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-cyan-500/10 transition text-left"
                               >
-                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
                                   p.position === 'QB' ? 'bg-red-500/30 text-red-300' :
                                   p.position === 'RB' ? 'bg-green-500/30 text-green-300' :
                                   p.position === 'WR' ? 'bg-blue-500/30 text-blue-300' :
@@ -12990,7 +12990,7 @@ function AFLegacyContent() {
                                   <div className="flex items-center gap-2">
                                     <div className="text-right">
                                       <div className="text-cyan-400 font-bold text-sm sm:text-base">{player.ownership.percentage}%</div>
-                                      <div className="text-white/40 text-[10px]">ownership</div>
+                                      <div className="text-white/40 text-[11px]">ownership</div>
                                     </div>
                                     <div className="w-12 h-2 bg-black/50 rounded-full overflow-hidden">
                                       <div 
@@ -13128,7 +13128,7 @@ function AFLegacyContent() {
                           {(waiverAnalysis.weakest_slots || []).length > 1 && (
                             <div className="flex flex-wrap gap-2 mt-3">
                               {waiverAnalysis.weakest_slots.slice(1, 3).map((s: any, i: number) => (
-                                <span key={i} className="px-2.5 py-1 rounded-lg bg-black/20 border border-white/10 text-[10px] text-white/60">
+                                <span key={i} className="px-2.5 py-1 rounded-lg bg-black/20 border border-white/10 text-[11px] text-white/60">
                                   {s.slot.replace(/_/g, ' ')} ({s.position}, +{s.gap_ppg} PPG)
                                 </span>
                               ))}
@@ -13162,8 +13162,8 @@ function AFLegacyContent() {
                             }`}>
                               {waiverAnalysis.team_goal === 'win-now' ? 'WIN NOW' : waiverAnalysis.team_goal === 'rebuild' ? 'REBUILD' : 'BALANCED'}
                             </span>
-                            {waiverAnalysis.league_context?.is_superflex && <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-bold border border-cyan-400/30">SF</span>}
-                            {waiverAnalysis.league_context?.is_tep && <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] font-bold border border-purple-400/30">TEP</span>}
+                            {waiverAnalysis.league_context?.is_superflex && <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[11px] font-bold border border-cyan-400/30">SF</span>}
+                            {waiverAnalysis.league_context?.is_tep && <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[11px] font-bold border border-purple-400/30">TEP</span>}
                           </div>
                         </div>
                         {waiverAnalysis.summary && <p className="text-sm text-white/70 mt-2">{waiverAnalysis.summary}</p>}
@@ -13189,11 +13189,11 @@ function AFLegacyContent() {
                             <div className="flex-1 min-w-0">
                               <div className="text-lg font-bold text-white">{waiverAnalysis.one_move.player_name}</div>
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <span className="text-[10px] text-white/50 px-1.5 py-0.5 rounded bg-white/10">{waiverAnalysis.one_move.position}</span>
-                                {waiverAnalysis.one_move.team && <span className="text-[10px] text-white/40">{waiverAnalysis.one_move.team}</span>}
-                                <span className="text-[10px] font-bold text-emerald-300">Score: {waiverAnalysis.one_move.composite_score}/100</span>
+                                <span className="text-[11px] text-white/50 px-1.5 py-0.5 rounded bg-white/10">{waiverAnalysis.one_move.position}</span>
+                                {waiverAnalysis.one_move.team && <span className="text-[11px] text-white/40">{waiverAnalysis.one_move.team}</span>}
+                                <span className="text-[11px] font-bold text-emerald-300">Score: {waiverAnalysis.one_move.composite_score}/100</span>
                                 {waiverAnalysis.one_move.faab_bid != null && (
-                                  <span className="text-[10px] text-cyan-300 font-mono">FAAB: ${waiverAnalysis.one_move.faab_bid}</span>
+                                  <span className="text-[11px] text-cyan-300 font-mono">FAAB: ${waiverAnalysis.one_move.faab_bid}</span>
                                 )}
                               </div>
                               {waiverAnalysis.one_move.reasoning && (
@@ -13203,7 +13203,7 @@ function AFLegacyContent() {
                                 <div className="mt-2 flex items-center gap-2 text-xs">
                                   <span className="text-rose-400">Drop:</span>
                                   <span className="text-white/70">{waiverAnalysis.one_move.drop_candidate.name}</span>
-                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                  <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
                                     waiverAnalysis.one_move.drop_candidate.riskLabel === 'High' ? 'bg-rose-500/20 text-rose-300' :
                                     waiverAnalysis.one_move.drop_candidate.riskLabel === 'Moderate' ? 'bg-amber-500/20 text-amber-300' :
                                     'bg-white/10 text-white/50'
@@ -13265,13 +13265,13 @@ function AFLegacyContent() {
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className="text-sm font-semibold text-white truncate">{s.player_name}</span>
-                                      <span className="text-[10px] text-white/50 px-1.5 py-0.5 rounded bg-white/10">{s.position}</span>
-                                      {s.team && <span className="text-[10px] text-white/40">{s.team}</span>}
+                                      <span className="text-[11px] text-white/50 px-1.5 py-0.5 rounded bg-white/10">{s.position}</span>
+                                      {s.team && <span className="text-[11px] text-white/40">{s.team}</span>}
                                     </div>
                                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${tierBg}`}>{s.tier}</span>
-                                      <span className="text-[10px] text-white/40">Score: {s.composite_score}/100</span>
-                                      {s.faab_bid != null && <span className="text-[10px] text-cyan-300 font-mono">FAAB: ${s.faab_bid}</span>}
+                                      <span className={`px-2 py-0.5 text-[11px] font-bold rounded-full border ${tierBg}`}>{s.tier}</span>
+                                      <span className="text-[11px] text-white/40">Score: {s.composite_score}/100</span>
+                                      {s.faab_bid != null && <span className="text-[11px] text-cyan-300 font-mono">FAAB: ${s.faab_bid}</span>}
                                     </div>
                                   </div>
 
@@ -13298,13 +13298,13 @@ function AFLegacyContent() {
                                           return (
                                             <div key={dim.key} className="rounded-lg bg-black/30 border border-white/10 p-2.5">
                                               <div className="flex items-center justify-between mb-1">
-                                                <span className="text-[10px] text-white/60 font-medium">{dim.label}</span>
-                                                <span className="text-[10px] text-white/80 font-bold">{val}</span>
+                                                <span className="text-[11px] text-white/60 font-medium">{dim.label}</span>
+                                                <span className="text-[11px] text-white/80 font-bold">{val}</span>
                                               </div>
                                               <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
                                                 <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${val}%` }} />
                                               </div>
-                                              <div className="text-[9px] text-white/30 mt-0.5">{dim.desc}</div>
+                                              <div className="text-[11px] text-white/30 mt-0.5">{dim.desc}</div>
                                             </div>
                                           )
                                                           })}
@@ -13313,12 +13313,12 @@ function AFLegacyContent() {
 
                                     {drivers.length > 0 && (
                                       <div className="space-y-1">
-                                        <div className="text-[10px] text-white/40 font-semibold uppercase">Top Drivers</div>
+                                        <div className="text-[11px] text-white/40 font-semibold uppercase">Top Drivers</div>
                                         <div className="flex flex-wrap gap-1.5">
                                           {drivers.slice(0, 3).map((d: any) => (
                                             <div
                                               key={d.id}
-                                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] border ${
+                                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] border ${
                                                 d.direction === 'positive' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' :
                                                 d.direction === 'negative' ? 'bg-rose-500/10 border-rose-500/20 text-rose-300' :
                                                 'bg-white/5 border-white/10 text-white/60'
@@ -13335,7 +13335,7 @@ function AFLegacyContent() {
 
                                     {s.reasoning && (
                                       <div className="rounded-lg bg-black/30 border border-white/10 p-3">
-                                        <div className="text-[10px] text-white/40 font-semibold uppercase mb-1">Analysis</div>
+                                        <div className="text-[11px] text-white/40 font-semibold uppercase mb-1">Analysis</div>
                                         <p className="text-xs text-white/70 leading-relaxed">{s.reasoning}</p>
                                       </div>
                                     )}
@@ -13346,7 +13346,7 @@ function AFLegacyContent() {
                                           <span className="text-rose-400 text-xs font-semibold">Drop:</span>
                                           <span className="text-xs text-white/70">{s.drop_candidate}</span>
                                           {s.drop_risk_label && (
-                                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                            <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold ${
                                               s.drop_risk_label === 'High' ? 'bg-rose-500/20 text-rose-300' :
                                               s.drop_risk_label === 'Moderate' || s.drop_risk_label === 'Low-Moderate' ? 'bg-amber-500/20 text-amber-300' :
                                               'bg-white/10 text-white/50'
@@ -13355,7 +13355,7 @@ function AFLegacyContent() {
                                             </span>
                                           )}
                                         </div>
-                                        {s.drop_reasoning && <p className="text-[10px] text-white/40 mt-1">{s.drop_reasoning}</p>}
+                                        {s.drop_reasoning && <p className="text-[11px] text-white/40 mt-1">{s.drop_reasoning}</p>}
                                       </div>
                                     )}
                                   </div>
@@ -13376,7 +13376,7 @@ function AFLegacyContent() {
                                 <div className={`text-lg font-bold ${d.depth_rating >= 60 ? 'text-emerald-300' : d.depth_rating >= 40 ? 'text-cyan-300' : 'text-amber-300'}`}>
                                   {d.count}
                                 </div>
-                                <div className="text-[9px] text-white/30">vs {d.league_median} median</div>
+                                <div className="text-[11px] text-white/30">vs {d.league_median} median</div>
                               </div>
                             ))}
                           </div>
@@ -13607,19 +13607,19 @@ function AFLegacyContent() {
                             {/* Dynasty Daddy Style Top Stat Cards */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                               <div className="p-4 rounded-xl bg-gradient-to-b from-slate-800/80 to-slate-900/80 border border-slate-700/50 text-center">
-                                <div className="text-[10px] sm:text-xs text-slate-400 uppercase tracking-wider mb-1">Roster Value</div>
+                                <div className="text-[11px] sm:text-xs text-slate-400 uppercase tracking-wider mb-1">Roster Value</div>
                                 <div className="text-2xl sm:text-3xl font-bold text-white">#{rankingsData.rosterValueRank}</div>
                               </div>
                               <div className="p-4 rounded-xl bg-gradient-to-b from-slate-800/80 to-slate-900/80 border border-slate-700/50 text-center">
-                                <div className="text-[10px] sm:text-xs text-slate-400 uppercase tracking-wider mb-1">Points For</div>
+                                <div className="text-[11px] sm:text-xs text-slate-400 uppercase tracking-wider mb-1">Points For</div>
                                 <div className="text-2xl sm:text-3xl font-bold text-white">#{rankingsData.pointsForRank}</div>
                               </div>
                               <div className="p-4 rounded-xl bg-gradient-to-b from-slate-800/80 to-slate-900/80 border border-slate-700/50 text-center">
-                                <div className="text-[10px] sm:text-xs text-slate-400 uppercase tracking-wider mb-1">Win Rate</div>
+                                <div className="text-[11px] sm:text-xs text-slate-400 uppercase tracking-wider mb-1">Win Rate</div>
                                 <div className="text-2xl sm:text-3xl font-bold text-white">#{rankingsData.winRateRank}</div>
                               </div>
                               <div className="p-4 rounded-xl bg-gradient-to-b from-cyan-900/50 to-cyan-950/50 border border-cyan-700/40 text-center">
-                                <div className="text-[10px] sm:text-xs text-cyan-400 uppercase tracking-wider mb-1">Future Outlook</div>
+                                <div className="text-[11px] sm:text-xs text-cyan-400 uppercase tracking-wider mb-1">Future Outlook</div>
                                 <div className="text-2xl sm:text-3xl font-bold text-cyan-300">#{rankingsData.futureOutlookRank}</div>
                               </div>
                             </div>
@@ -13628,7 +13628,7 @@ function AFLegacyContent() {
                             <div className="rounded-xl bg-slate-900/80 border border-slate-700/50 p-4">
                               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
                                 <h4 className="text-base sm:text-lg font-bold text-white">Roster Value by Position</h4>
-                                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] sm:text-xs text-slate-300">
+                                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] sm:text-xs text-slate-300">
                                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-violet-500"></span>QB</span>
                                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-sky-500"></span>RB</span>
                                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>WR</span>
@@ -13667,7 +13667,7 @@ function AFLegacyContent() {
                                       {/* League avg vertical line */}
                                       <div className="absolute top-0 bottom-0 z-10 pointer-events-none" style={{ left: `${avgPctOfMax}%` }}>
                                         <div className="h-full border-l-2 border-dashed border-slate-500/40"></div>
-                                        <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] text-slate-500 whitespace-nowrap">AVG</div>
+                                        <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[11px] text-slate-500 whitespace-nowrap">AVG</div>
                                       </div>
                                       {sortedTeams.map((team: any, idx: number) => {
                                         const totalValue = team.total
@@ -13694,7 +13694,7 @@ function AFLegacyContent() {
                                         return (
                                           <div key={team.userId} className="group">
                                             <div className="flex items-center gap-2 sm:gap-3">
-                                              <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-md flex items-center justify-center text-[10px] sm:text-xs font-bold flex-shrink-0 ${rankColor}`}>
+                                              <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-md flex items-center justify-center text-[11px] sm:text-xs font-bold flex-shrink-0 ${rankColor}`}>
                                                 {rank}
                                               </div>
                                               <div className={`w-20 sm:w-28 text-xs sm:text-sm font-medium truncate flex-shrink-0 ${team.isUser ? 'text-yellow-400' : 'text-slate-200'}`} title={team.teamName}>
@@ -13705,26 +13705,26 @@ function AFLegacyContent() {
                                                   onClick={() => setRankingsExpandedTeam(rankingsExpandedTeam === team.userId ? null : team.userId)}
                                                 >
                                                   {qbPct > 0 && <div className={`${posColors.qb.bg} h-full relative flex items-center justify-center transition-all`} style={{ width: `${qbPct}%` }}>
-                                                    {qbPct > 10 && <span className="text-[8px] sm:text-[9px] font-bold text-white/90">{Math.round(qbPct)}%</span>}
+                                                    {qbPct > 10 && <span className="text-[11px] sm:text-[11px] font-bold text-white/90">{Math.round(qbPct)}%</span>}
                                                   </div>}
                                                   {rbPct > 0 && <div className={`${posColors.rb.bg} h-full relative flex items-center justify-center transition-all`} style={{ width: `${rbPct}%` }}>
-                                                    {rbPct > 10 && <span className="text-[8px] sm:text-[9px] font-bold text-white/90">{Math.round(rbPct)}%</span>}
+                                                    {rbPct > 10 && <span className="text-[11px] sm:text-[11px] font-bold text-white/90">{Math.round(rbPct)}%</span>}
                                                   </div>}
                                                   {wrPct > 0 && <div className={`${posColors.wr.bg} h-full relative flex items-center justify-center transition-all`} style={{ width: `${wrPct}%` }}>
-                                                    {wrPct > 10 && <span className="text-[8px] sm:text-[9px] font-bold text-white/90">{Math.round(wrPct)}%</span>}
+                                                    {wrPct > 10 && <span className="text-[11px] sm:text-[11px] font-bold text-white/90">{Math.round(wrPct)}%</span>}
                                                   </div>}
                                                   {tePct > 0 && <div className={`${posColors.te.bg} h-full relative flex items-center justify-center transition-all`} style={{ width: `${tePct}%` }}>
-                                                    {tePct > 10 && <span className="text-[8px] sm:text-[9px] font-bold text-white/90">{Math.round(tePct)}%</span>}
+                                                    {tePct > 10 && <span className="text-[11px] sm:text-[11px] font-bold text-white/90">{Math.round(tePct)}%</span>}
                                                   </div>}
                                                   {pickPct > 0 && <div className={`${posColors.picks.bg} h-full relative flex items-center justify-center transition-all`} style={{ width: `${pickPct}%` }}>
-                                                    {pickPct > 10 && <span className="text-[8px] sm:text-[9px] font-bold text-white/90">{Math.round(pickPct)}%</span>}
+                                                    {pickPct > 10 && <span className="text-[11px] sm:text-[11px] font-bold text-white/90">{Math.round(pickPct)}%</span>}
                                                   </div>}
                                                   {team.isUser && <div className="absolute inset-0 ring-2 ring-yellow-400/60 rounded-md pointer-events-none"></div>}
                                                 </div>
                                               </div>
                                               <div className="flex items-center gap-2 flex-shrink-0 w-24 sm:w-32 justify-end">
-                                                <span className="text-[10px] sm:text-xs font-semibold text-white tabular-nums">{(totalValue / 1000).toFixed(1)}k</span>
-                                                <span className={`text-[9px] sm:text-[10px] font-medium tabular-nums w-10 text-right ${vsAvg >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                <span className="text-[11px] sm:text-xs font-semibold text-white tabular-nums">{(totalValue / 1000).toFixed(1)}k</span>
+                                                <span className={`text-[11px] sm:text-[11px] font-medium tabular-nums w-10 text-right ${vsAvg >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                                   {vsAvg >= 0 ? '+' : ''}{vsAvgPct}%
                                                 </span>
                                               </div>
@@ -13741,9 +13741,9 @@ function AFLegacyContent() {
                                                     { label: 'Picks', val: pickVal, pct: pickPct, color: posColors.picks },
                                                   ].map(pos => (
                                                     <div key={pos.label} className="text-center">
-                                                      <div className={`text-[10px] font-bold ${pos.color.text}`}>{pos.label}</div>
+                                                      <div className={`text-[11px] font-bold ${pos.color.text}`}>{pos.label}</div>
                                                       <div className="text-white font-semibold text-sm">{(pos.val / 1000).toFixed(1)}k</div>
-                                                      <div className="text-slate-400 text-[10px]">{Math.round(pos.pct)}%</div>
+                                                      <div className="text-slate-400 text-[11px]">{Math.round(pos.pct)}%</div>
                                                     </div>
                                                   ))}
                                                 </div>
@@ -13755,7 +13755,7 @@ function AFLegacyContent() {
                                                 </div>
                                                 <button
                                                   onClick={() => navigateToChat(`Tell me about ${team.displayName || team.username}'s team in my league. They have ${(totalValue / 1000).toFixed(1)}k total value (${vsAvg >= 0 ? '+' : ''}${vsAvg.toLocaleString()} vs avg). What trade opportunities do I have with them?`, rankingsSelectedLeague)}
-                                                  className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-1 rounded-md bg-cyan-500/10 border border-cyan-400/20 text-cyan-300 text-[10px] font-medium hover:bg-cyan-500/20 transition"
+                                                  className="mt-2 w-full flex items-center justify-center gap-1.5 px-2 py-1 rounded-md bg-cyan-500/10 border border-cyan-400/20 text-cyan-300 text-[11px] font-medium hover:bg-cyan-500/20 transition"
                                                 >
                                                   💬 Ask Chimmy about this team
                                                 </button>
@@ -13887,7 +13887,7 @@ function AFLegacyContent() {
                                                 {team.ownerAvatar ? (
                                                   <img src={team.ownerAvatar} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
                                                 ) : (
-                                                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                                                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0">
                                                     {(team.teamName || '?')[0].toUpperCase()}
                                                   </div>
                                                 )}
@@ -13937,7 +13937,7 @@ function AFLegacyContent() {
                                                     </div>
                                                     {team.players?.qb?.slice(0, 5).map((p: any, i: number) => (
                                                       <div key={i} className="flex items-center gap-2 text-xs">
-                                                        <span className={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold ${i === 0 ? 'bg-rose-500/50 text-rose-200' : 'bg-slate-700/50 text-slate-400'}`}>
+                                                        <span className={`w-4 h-4 flex items-center justify-center rounded text-[11px] font-bold ${i === 0 ? 'bg-rose-500/50 text-rose-200' : 'bg-slate-700/50 text-slate-400'}`}>
                                                           {i === 0 ? '★' : ''}
                                                         </span>
                                                         <PlayerBadge name={p.name} sleeperId={p.id || p.playerId} position={p.position || 'QB'} team={p.team} size="sm" showTeamLogo={false} showPosition={false} />
@@ -13952,7 +13952,7 @@ function AFLegacyContent() {
                                                     </div>
                                                     {team.players?.rb?.slice(0, 6).map((p: any, i: number) => (
                                                       <div key={i} className="flex items-center gap-2 text-xs">
-                                                        <span className={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold ${i < 2 ? 'bg-emerald-500/50 text-emerald-200' : 'bg-slate-700/50 text-slate-400'}`}>
+                                                        <span className={`w-4 h-4 flex items-center justify-center rounded text-[11px] font-bold ${i < 2 ? 'bg-emerald-500/50 text-emerald-200' : 'bg-slate-700/50 text-slate-400'}`}>
                                                           {i < 2 ? '★' : ''}
                                                         </span>
                                                         <PlayerBadge name={p.name} sleeperId={p.id || p.playerId} position={p.position || 'RB'} team={p.team} size="sm" showTeamLogo={false} showPosition={false} />
@@ -13967,7 +13967,7 @@ function AFLegacyContent() {
                                                     </div>
                                                     {team.players?.wr?.slice(0, 8).map((p: any, i: number) => (
                                                       <div key={i} className="flex items-center gap-2 text-xs">
-                                                        <span className={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold ${i < 3 ? 'bg-sky-500/50 text-sky-200' : 'bg-slate-700/50 text-slate-400'}`}>
+                                                        <span className={`w-4 h-4 flex items-center justify-center rounded text-[11px] font-bold ${i < 3 ? 'bg-sky-500/50 text-sky-200' : 'bg-slate-700/50 text-slate-400'}`}>
                                                           {i < 3 ? '★' : ''}
                                                         </span>
                                                         <PlayerBadge name={p.name} sleeperId={p.id || p.playerId} position={p.position || 'WR'} team={p.team} size="sm" showTeamLogo={false} showPosition={false} />
@@ -13982,7 +13982,7 @@ function AFLegacyContent() {
                                                     </div>
                                                     {team.players?.te?.slice(0, 4).map((p: any, i: number) => (
                                                       <div key={i} className="flex items-center gap-2 text-xs">
-                                                        <span className={`w-4 h-4 flex items-center justify-center rounded text-[10px] font-bold ${i === 0 ? 'bg-amber-500/50 text-amber-200' : 'bg-slate-700/50 text-slate-400'}`}>
+                                                        <span className={`w-4 h-4 flex items-center justify-center rounded text-[11px] font-bold ${i === 0 ? 'bg-amber-500/50 text-amber-200' : 'bg-slate-700/50 text-slate-400'}`}>
                                                           {i === 0 ? '★' : ''}
                                                         </span>
                                                         <PlayerBadge name={p.name} sleeperId={p.id || p.playerId} position={p.position || 'TE'} team={p.team} size="sm" showTeamLogo={false} showPosition={false} />
@@ -14079,34 +14079,34 @@ function AFLegacyContent() {
                                           </div>
                                           <div className="text-right">
                                             <div className="text-white font-medium text-sm">{team.wins}-{team.losses}</div>
-                                            <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-semibold ${getTierStyle(team.tier)}`}>
+                                            <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[11px] font-semibold ${getTierStyle(team.tier)}`}>
                                               {team.tier}
                                             </span>
                                           </div>
                                         </div>
                                         <div className="grid grid-cols-6 gap-1">
                                           <div className={`rounded py-1.5 text-center ${getRankColor(team.overallRank, rankingsData.totalTeams)}`}>
-                                            <div className="text-[9px] opacity-80 font-medium">TEAM</div>
+                                            <div className="text-[11px] opacity-80 font-medium">TEAM</div>
                                             <div className="font-bold text-xs">{team.overallRank}</div>
                                           </div>
                                           <div className={`rounded py-1.5 text-center ${getRankColor(team.qbRank, rankingsData.totalTeams)}`}>
-                                            <div className="text-[9px] opacity-80 font-medium">QB</div>
+                                            <div className="text-[11px] opacity-80 font-medium">QB</div>
                                             <div className="font-bold text-xs">{team.qbRank}</div>
                                           </div>
                                           <div className={`rounded py-1.5 text-center ${getRankColor(team.rbRank, rankingsData.totalTeams)}`}>
-                                            <div className="text-[9px] opacity-80 font-medium">RB</div>
+                                            <div className="text-[11px] opacity-80 font-medium">RB</div>
                                             <div className="font-bold text-xs">{team.rbRank}</div>
                                           </div>
                                           <div className={`rounded py-1.5 text-center ${getRankColor(team.wrRank, rankingsData.totalTeams)}`}>
-                                            <div className="text-[9px] opacity-80 font-medium">WR</div>
+                                            <div className="text-[11px] opacity-80 font-medium">WR</div>
                                             <div className="font-bold text-xs">{team.wrRank}</div>
                                           </div>
                                           <div className={`rounded py-1.5 text-center ${getRankColor(team.teRank, rankingsData.totalTeams)}`}>
-                                            <div className="text-[9px] opacity-80 font-medium">TE</div>
+                                            <div className="text-[11px] opacity-80 font-medium">TE</div>
                                             <div className="font-bold text-xs">{team.teRank}</div>
                                           </div>
                                           <div className={`rounded py-1.5 text-center ${getRankColor(team.pickRank, rankingsData.totalTeams)}`}>
-                                            <div className="text-[9px] opacity-80 font-medium">Pick</div>
+                                            <div className="text-[11px] opacity-80 font-medium">Pick</div>
                                             <div className="font-bold text-xs">{team.pickRank}</div>
                                           </div>
                                         </div>
@@ -14162,7 +14162,7 @@ function AFLegacyContent() {
                                               <div className="text-xs font-bold text-yellow-400 mb-1">Picks (Rank: {team.pickRank})</div>
                                               <div className="flex flex-wrap gap-1">
                                                 {team.players?.picks?.map((pick: any, i: number) => (
-                                                  <span key={i} className="px-1.5 py-0.5 rounded bg-yellow-600/30 text-yellow-300 text-[10px]">
+                                                  <span key={i} className="px-1.5 py-0.5 rounded bg-yellow-600/30 text-yellow-300 text-[11px]">
                                                     {pick.name}
                                                   </span>
                                                 ))}
@@ -14315,10 +14315,10 @@ function AFLegacyContent() {
                                   <div className="flex flex-wrap gap-2">
                                     {devyBoardData && (
                                       <>
-                                        <span className="px-2.5 py-1 rounded-lg bg-slate-700/60 text-[10px] font-medium text-slate-300">
+                                        <span className="px-2.5 py-1 rounded-lg bg-slate-700/60 text-[11px] font-medium text-slate-300">
                                           Updated: {formatTimeInTimezone(devyBoardData.updatedAt)}
                                         </span>
-                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium ${
+                                        <span className={`px-2.5 py-1 rounded-lg text-[11px] font-medium ${
                                           devyBoardData.confidence === 'High' ? 'bg-emerald-500/20 text-emerald-300' :
                                           devyBoardData.confidence === 'Learning' ? 'bg-yellow-500/20 text-yellow-300' :
                                           'bg-blue-500/20 text-blue-300'
@@ -14326,7 +14326,7 @@ function AFLegacyContent() {
                                           Confidence: {devyBoardData.confidence}
                                         </span>
                                         {devyBoardData.dataSource && (
-                                          <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium ${
+                                          <span className={`px-2.5 py-1 rounded-lg text-[11px] font-medium ${
                                             devyBoardData.dataSource === 'database' ? 'bg-cyan-500/20 text-cyan-300' :
                                             devyBoardData.dataSource === 'hybrid' ? 'bg-violet-500/20 text-violet-300' :
                                             'bg-slate-600/50 text-slate-300'
@@ -14335,13 +14335,13 @@ function AFLegacyContent() {
                                           </span>
                                         )}
                                         {devyBoardData.totalClassifiedPlayers && (
-                                          <span className="px-2.5 py-1 rounded-lg bg-slate-700/60 text-[10px] font-medium text-slate-300">
+                                          <span className="px-2.5 py-1 rounded-lg bg-slate-700/60 text-[11px] font-medium text-slate-300">
                                             {devyBoardData.totalClassifiedPlayers} Players Classified
                                           </span>
                                         )}
                                       </>
                                     )}
-                                    <span className="px-2.5 py-1 rounded-lg bg-slate-700/60 text-[10px] font-medium text-slate-400">Read-only</span>
+                                    <span className="px-2.5 py-1 rounded-lg bg-slate-700/60 text-[11px] font-medium text-slate-400">Read-only</span>
                                   </div>
                                 </div>
                               </div>
@@ -14419,7 +14419,7 @@ function AFLegacyContent() {
                                                 <div className="text-xs text-white/50">{player.position} • {player.school}</div>
                                               </div>
                                               <div className="flex flex-col items-end gap-1">
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
                                                   player.tier === 'Tier 1' ? 'bg-amber-500/30 text-amber-200' :
                                                   player.tier === 'Tier 2' ? 'bg-slate-600/50 text-slate-200' :
                                                   'bg-purple-500/30 text-purple-200'
@@ -14427,7 +14427,7 @@ function AFLegacyContent() {
                                                   {player.tier}
                                                 </span>
                                                 {player.badge && (
-                                                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+                                                  <span className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${
                                                     player.badge === 'NCAA' ? 'bg-blue-500/20 text-blue-300' :
                                                     player.badge === 'Graduated' ? 'bg-emerald-500/20 text-emerald-300' :
                                                     'bg-orange-500/20 text-orange-300'
@@ -14440,7 +14440,7 @@ function AFLegacyContent() {
                                             
                                             {/* Draft Value Meter */}
                                             <div className="mb-2">
-                                              <div className="flex items-center justify-between text-[10px] mb-1">
+                                              <div className="flex items-center justify-between text-[11px] mb-1">
                                                 <span className="text-white/50">Draft Value</span>
                                                 <span className="font-bold text-indigo-300">{player.draftValue}</span>
                                               </div>
@@ -14453,7 +14453,7 @@ function AFLegacyContent() {
                                             </div>
 
                                             {/* Availability */}
-                                            <div className="flex items-center justify-between text-[10px] mb-2">
+                                            <div className="flex items-center justify-between text-[11px] mb-2">
                                               <span className="text-white/50">Availability at pick</span>
                                               <span className={`font-medium ${player.availabilityPct >= 60 ? 'text-emerald-400' : player.availabilityPct >= 30 ? 'text-yellow-400' : 'text-rose-400'}`}>
                                                 {player.availabilityPct}%
@@ -14463,7 +14463,7 @@ function AFLegacyContent() {
                                             {/* Why Bullets */}
                                             <div className="space-y-1 mb-2">
                                               {player.whyBullets?.slice(0, 2).map((bullet: string, bIdx: number) => (
-                                                <div key={bIdx} className="flex items-start gap-1.5 text-[10px] text-white/60">
+                                                <div key={bIdx} className="flex items-start gap-1.5 text-[11px] text-white/60">
                                                   <span className="text-indigo-400 mt-0.5">•</span>
                                                   <span>{bullet}</span>
                                                 </div>
@@ -14472,7 +14472,7 @@ function AFLegacyContent() {
 
                                             {/* Need Match Tag */}
                                             <div className="flex items-center gap-2">
-                                              <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                                              <span className={`px-2 py-0.5 rounded text-[11px] font-medium ${
                                                 player.needMatch === 'Strong' ? 'bg-emerald-500/20 text-emerald-300' :
                                                 player.needMatch === 'Medium' ? 'bg-yellow-500/20 text-yellow-300' :
                                                 'bg-slate-600/50 text-slate-300'
@@ -14498,11 +14498,11 @@ function AFLegacyContent() {
                                                 <div className="flex items-center gap-1.5">
                                                   <MiniPlayerImg sleeperId={player.id} name={player.name} size={18} />
                                                   <span className="font-medium text-white/80 text-sm">{player.name}</span>
-                                                  <span className="text-[10px] text-white/40 ml-1.5">{player.position}</span>
+                                                  <span className="text-[11px] text-white/40 ml-1.5">{player.position}</span>
                                                 </div>
-                                                <span className="text-[10px] text-indigo-300 font-medium">{player.draftValue}</span>
+                                                <span className="text-[11px] text-indigo-300 font-medium">{player.draftValue}</span>
                                               </div>
-                                              <div className="text-[10px] text-white/50">{player.whyBullets?.[0]}</div>
+                                              <div className="text-[11px] text-white/50">{player.whyBullets?.[0]}</div>
                                             </div>
                                           ))}
                                         </div>
@@ -14518,11 +14518,11 @@ function AFLegacyContent() {
                                             <div key={idx} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/40 border border-slate-700/30">
                                               <MiniPlayerImg sleeperId={p.id} name={p.name} size={18} />
                                               <span className="text-xs text-white/70">{p.name}</span>
-                                              <span className="text-[10px] text-rose-400 font-medium">{p.pct}%</span>
+                                              <span className="text-[11px] text-rose-400 font-medium">{p.pct}%</span>
                                             </div>
                                           ))}
                                         </div>
-                                        <p className="text-[10px] text-white/30 mt-1.5">Projected picks ahead (based on team needs + value). If insufficient data, projection is learning.</p>
+                                        <p className="text-[11px] text-white/30 mt-1.5">Projected picks ahead (based on team needs + value). If insufficient data, projection is learning.</p>
                                       </div>
                                     )}
 
@@ -14554,12 +14554,12 @@ function AFLegacyContent() {
                                         disabled
                                         className="px-4 py-2 rounded-lg bg-slate-700/30 border border-slate-600/30 text-slate-400 text-sm font-medium cursor-not-allowed"
                                       >
-                                        💾 Save to Notes <span className="text-[10px] ml-1">(Coming soon)</span>
+                                        💾 Save to Notes <span className="text-[11px] ml-1">(Coming soon)</span>
                                       </button>
                                     </div>
 
                                     {/* Disclaimer */}
-                                    <p className="text-[10px] text-white/30 text-center pt-2">
+                                    <p className="text-[11px] text-white/30 text-center pt-2">
                                       Chimmy is learning — not perfect yet. Always verify major decisions. Draft values are AllFantasy estimates, not licensed ADP.
                                     </p>
                                   </div>
@@ -14729,7 +14729,7 @@ function AFLegacyContent() {
                                                       <div className={`font-medium text-sm ${team.isUser ? 'text-yellow-300' : 'text-white'}`}>
                                                         {team.teamName}
                                                       </div>
-                                                      <div className="text-[10px] text-slate-500 lg:hidden mt-0.5">{team.statusReason}</div>
+                                                      <div className="text-[11px] text-slate-500 lg:hidden mt-0.5">{team.statusReason}</div>
                                                     </div>
                                                   </div>
                                                 </td>
@@ -14841,7 +14841,7 @@ function AFLegacyContent() {
                                           style={{ left: `${chartTooltip.x}px`, top: `${chartTooltip.y - 60}px`, transform: 'translateX(-50%)' }}
                                         >
                                           <div className="text-xs font-bold text-white">{chartTooltip.name}</div>
-                                          <div className="text-[10px] text-slate-300">Week {chartTooltip.week} — Rating: {chartTooltip.rating}</div>
+                                          <div className="text-[11px] text-slate-300">Week {chartTooltip.week} — Rating: {chartTooltip.rating}</div>
                                         </div>
                                       )}
                                       <svg viewBox="0 0 800 300" className="w-full h-full" preserveAspectRatio="none">
@@ -15088,9 +15088,9 @@ function AFLegacyContent() {
                                               style={{ left: `${warTooltip.x}px`, top: `${warTooltip.y - 65}px`, transform: 'translateX(-50%)' }}
                                             >
                                               <div className="text-xs font-bold text-white">{warTooltip.playerName}</div>
-                                              <div className="text-[10px] text-slate-300">{warTooltip.position} #{warTooltip.rank} — WAR: {warTooltip.war.toFixed(2)}</div>
+                                              <div className="text-[11px] text-slate-300">{warTooltip.position} #{warTooltip.rank} — WAR: {warTooltip.war.toFixed(2)}</div>
                                               {warTooltip.managerName && (
-                                                <div className="text-[10px] text-cyan-300 mt-0.5">Manager: {warTooltip.managerName}</div>
+                                                <div className="text-[11px] text-cyan-300 mt-0.5">Manager: {warTooltip.managerName}</div>
                                               )}
                                             </div>
                                           )}
@@ -15184,9 +15184,9 @@ function AFLegacyContent() {
                                               style={{ left: `${scatterTooltip.x}px`, top: `${scatterTooltip.y - 70}px`, transform: 'translateX(-50%)' }}
                                             >
                                               <div className="text-xs font-bold text-white">{scatterTooltip.playerName}</div>
-                                              <div className="text-[10px] text-slate-300">{scatterTooltip.position} — WAR: {scatterTooltip.war.toFixed(2)} · Value: {scatterTooltip.marketValue.toLocaleString()}</div>
+                                              <div className="text-[11px] text-slate-300">{scatterTooltip.position} — WAR: {scatterTooltip.war.toFixed(2)} · Value: {scatterTooltip.marketValue.toLocaleString()}</div>
                                               {scatterTooltip.managerName && (
-                                                <div className="text-[10px] text-cyan-300 mt-0.5">Manager: {scatterTooltip.managerName}</div>
+                                                <div className="text-[11px] text-cyan-300 mt-0.5">Manager: {scatterTooltip.managerName}</div>
                                               )}
                                             </div>
                                           )}
@@ -15622,7 +15622,7 @@ function AFLegacyContent() {
                                   <div key={type} className={`rounded-lg p-2 text-center ${
                                     data.grade === 'N/A' ? 'bg-gray-800/30 opacity-50' : 'bg-black/30'
                                   }`}>
-                                    <div className="text-[10px] uppercase text-white/50">{type}</div>
+                                    <div className="text-[11px] uppercase text-white/50">{type}</div>
                                     <div className={`text-lg font-bold ${
                                       data.grade === 'N/A' ? 'text-gray-500' :
                                       data.grade?.startsWith('A') ? 'text-green-300' :
@@ -15630,7 +15630,7 @@ function AFLegacyContent() {
                                       data.grade?.startsWith('C') ? 'text-yellow-300' :
                                       'text-red-300'
                                     }`}>{data.grade || '—'}</div>
-                                    <div className="text-[10px] text-white/40">
+                                    <div className="text-[11px] text-white/40">
                                       {data.grade === 'N/A' ? 'No leagues' : `${data.record || '0-0'} (${data.leagues_played || 0} lg)`}
                                     </div>
                                   </div>
@@ -15682,9 +15682,9 @@ function AFLegacyContent() {
                                   <div className="flex items-center justify-between mb-2">
                                     <span className="text-xs font-bold uppercase text-white/60">{format}</span>
                                     {notComparable ? (
-                                      <span className="text-[10px] text-gray-500 bg-gray-700/30 px-2 py-0.5 rounded">Not comparable</span>
+                                      <span className="text-[11px] text-gray-500 bg-gray-700/30 px-2 py-0.5 rounded">Not comparable</span>
                                     ) : (
-                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
                                         winner === 'A' ? 'bg-cyan-500/20 text-cyan-300' :
                                         winner === 'B' ? 'bg-purple-500/20 text-purple-300' :
                                         'bg-gray-500/20 text-gray-300'
@@ -15695,22 +15695,22 @@ function AFLegacyContent() {
                                   </div>
                                   <div className="grid grid-cols-2 gap-2">
                                     <div className={`text-center p-2 rounded ${winner === 'A' && !notComparable ? 'bg-cyan-500/10 border border-cyan-500/20' : 'bg-black/20'}`}>
-                                      <div className="text-[10px] text-white/40 truncate">{nameA}</div>
+                                      <div className="text-[11px] text-white/40 truncate">{nameA}</div>
                                       {aLeagues > 0 ? (
                                         <>
                                           <div className="text-sm font-bold text-white">{snapA.wins}-{snapA.losses}{snapA.ties > 0 ? `-${snapA.ties}` : ''}</div>
-                                          <div className="text-[10px] text-white/40">{aLeagues} lg · {snapA.championships || 0} 🏆</div>
+                                          <div className="text-[11px] text-white/40">{aLeagues} lg · {snapA.championships || 0} 🏆</div>
                                         </>
                                       ) : (
                                         <div className="text-xs text-gray-500">No leagues</div>
                                       )}
                                     </div>
                                     <div className={`text-center p-2 rounded ${winner === 'B' && !notComparable ? 'bg-purple-500/10 border border-purple-500/20' : 'bg-black/20'}`}>
-                                      <div className="text-[10px] text-white/40 truncate">{nameB}</div>
+                                      <div className="text-[11px] text-white/40 truncate">{nameB}</div>
                                       {bLeagues > 0 ? (
                                         <>
                                           <div className="text-sm font-bold text-white">{snapB.wins}-{snapB.losses}{snapB.ties > 0 ? `-${snapB.ties}` : ''}</div>
-                                          <div className="text-[10px] text-white/40">{bLeagues} lg · {snapB.championships || 0} 🏆</div>
+                                          <div className="text-[11px] text-white/40">{bLeagues} lg · {snapB.championships || 0} 🏆</div>
                                         </>
                                       ) : (
                                         <div className="text-xs text-gray-500">No leagues</div>
@@ -15968,7 +15968,7 @@ function AFLegacyContent() {
                       </button>
                     </div>
                     
-                    <p className="mt-3 text-[10px] sm:text-xs text-gray-500 text-center">
+                    <p className="mt-3 text-[11px] sm:text-xs text-gray-500 text-center">
                       Sports and fantasy sports questions only. Drop, paste, or upload screenshots for instant analysis.
                     </p>
                   </div>
@@ -16002,7 +16002,7 @@ function AFLegacyContent() {
                         >
                           <div className="text-2xl mb-1">🏆</div>
                           <div className="text-sm font-semibold text-white">My Legacy</div>
-                          <div className="text-[10px] text-gray-400">Career stats & tier</div>
+                          <div className="text-[11px] text-gray-400">Career stats & tier</div>
                         </button>
                         <button
                           onClick={() => { setShareType('trade'); setShareText(''); setShareTradeAnalysis(null); setShareTradeSideA(''); setShareTradeSideB(''); setShareTradeError(''); setSharePlayerResult(null); setSharePlayerError(''); }}
@@ -16014,7 +16014,7 @@ function AFLegacyContent() {
                         >
                           <div className="text-2xl mb-1">🔄</div>
                           <div className="text-sm font-semibold text-white">Trade Vote</div>
-                          <div className="text-[10px] text-gray-400">Get community input</div>
+                          <div className="text-[11px] text-gray-400">Get community input</div>
                         </button>
                         <button
                           onClick={() => { setShareType('rankings'); setShareText(''); setShareTradeAnalysis(null); setShareTradeError(''); setShareTradeSideA(''); setShareTradeSideB(''); setSharePlayerResult(null); setSharePlayerError(''); setSharePlayerSearch(''); }}
@@ -16026,11 +16026,11 @@ function AFLegacyContent() {
                           } ${rankingsDynastyLeagues.length === 0 ? 'opacity-50' : ''}`}
                         >
                           {rankingsDynastyLeagues.length === 0 && (
-                            <div className="absolute -top-1 -right-1 bg-gray-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full">?</div>
+                            <div className="absolute -top-1 -right-1 bg-gray-500 text-white text-[11px] font-bold px-1.5 py-0.5 rounded-full">?</div>
                           )}
                           <div className="text-2xl mb-1">📊</div>
                           <div className="text-sm font-semibold text-white">League Rank</div>
-                          <div className="text-[10px] text-gray-400">{rankingsDynastyLeagues.length > 0 ? 'Show your standing' : 'Check Rankings tab first'}</div>
+                          <div className="text-[11px] text-gray-400">{rankingsDynastyLeagues.length > 0 ? 'Show your standing' : 'Check Rankings tab first'}</div>
                         </button>
                         <button
                           onClick={() => { setShareType('exposure'); setShareText(''); setSharePlayerResult(null); setSharePlayerSearch(''); setSharePlayerError(''); setShareTradeAnalysis(null); setShareTradeError(''); }}
@@ -16042,7 +16042,7 @@ function AFLegacyContent() {
                         >
                           <div className="text-2xl mb-1">📈</div>
                           <div className="text-sm font-semibold text-white">Player Stock</div>
-                          <div className="text-[10px] text-gray-400">Share buy/sell signal</div>
+                          <div className="text-[11px] text-gray-400">Share buy/sell signal</div>
                         </button>
                       </div>
                     </div>
@@ -16183,7 +16183,7 @@ function AFLegacyContent() {
                             }`}
                           >
                             <div className="text-xs font-semibold">{platform.label}</div>
-                            <div className="text-[10px] text-gray-400">{platform.hint}</div>
+                            <div className="text-[11px] text-gray-400">{platform.hint}</div>
                           </button>
                         ))}
                       </div>
@@ -16571,7 +16571,7 @@ function AFLegacyContent() {
                               {/* Screen - Taller with scrollable content */}
                               <div className="bg-[#0a0a12] rounded-[2rem] overflow-hidden relative h-[520px]">
                                 {/* Status bar */}
-                                <div className="flex items-center justify-between px-4 py-1.5 text-[9px] text-white/60 bg-black/50">
+                                <div className="flex items-center justify-between px-4 py-1.5 text-[11px] text-white/60 bg-black/50">
                                   <span>9:41</span>
                                   <div className="flex items-center gap-1">
                                     <span>📶</span>
@@ -16592,10 +16592,10 @@ function AFLegacyContent() {
                                         <div className="flex-1 min-w-0">
                                           <h4 className="text-sm font-bold text-white truncate">{transferPreview.league.name}</h4>
                                           <div className="flex flex-wrap gap-1 mt-0.5">
-                                            <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-cyan-500/30 text-cyan-300">{transferPreview.league.sport}</span>
-                                            <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-purple-500/30 text-purple-300">{transferPreview.league.type}</span>
-                                            <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-emerald-500/30 text-emerald-300">{transferPreview.league.teamCount} Teams</span>
-                                            <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-amber-500/30 text-amber-300">{transferPreview.league.season}</span>
+                                            <span className="px-1.5 py-0.5 text-[11px] font-semibold rounded bg-cyan-500/30 text-cyan-300">{transferPreview.league.sport}</span>
+                                            <span className="px-1.5 py-0.5 text-[11px] font-semibold rounded bg-purple-500/30 text-purple-300">{transferPreview.league.type}</span>
+                                            <span className="px-1.5 py-0.5 text-[11px] font-semibold rounded bg-emerald-500/30 text-emerald-300">{transferPreview.league.teamCount} Teams</span>
+                                            <span className="px-1.5 py-0.5 text-[11px] font-semibold rounded bg-amber-500/30 text-amber-300">{transferPreview.league.season}</span>
                                           </div>
                                         </div>
                                       </div>
@@ -16611,7 +16611,7 @@ function AFLegacyContent() {
                                           <div key={i} className="p-2 rounded-lg bg-white/5 border border-white/10 text-center">
                                             <span className="text-sm">{stat.icon}</span>
                                             <div className="text-base font-bold text-white">{stat.value}</div>
-                                            <div className="text-[7px] text-white/50">{stat.label}</div>
+                                            <div className="text-[11px] text-white/50">{stat.label}</div>
                                           </div>
                                         ))}
                                       </div>
@@ -16619,8 +16619,8 @@ function AFLegacyContent() {
                                       {/* League Members */}
                                       <div className="mb-3">
                                         <div className="flex items-center gap-1 mb-2">
-                                          <span className="text-[10px]">👥</span>
-                                          <span className="text-[10px] font-semibold text-white">LEAGUE MEMBERS</span>
+                                          <span className="text-[11px]">👥</span>
+                                          <span className="text-[11px] font-semibold text-white">LEAGUE MEMBERS</span>
                                         </div>
                                         <div className="grid grid-cols-2 gap-1.5">
                                           {(transferPreview.managers || []).map((m: any, i: number) => (
@@ -16628,12 +16628,12 @@ function AFLegacyContent() {
                                               {m.avatar ? (
                                                 <img src={m.avatar} alt={m.displayName} className="w-6 h-6 rounded-full object-cover" onError={(e) => { e.currentTarget.style.display='none'; e.currentTarget.nextElementSibling && ((e.currentTarget.nextElementSibling as HTMLElement).style.display='flex') }} />
                                               ) : null}
-                                              <div className={`w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-[10px] font-bold text-white ${m.avatar ? 'hidden' : ''}`}>
+                                              <div className={`w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-[11px] font-bold text-white ${m.avatar ? 'hidden' : ''}`}>
                                                 {(m.displayName || '?').charAt(0).toUpperCase()}
                                               </div>
                                               <div className="min-w-0">
-                                                <div className="text-[9px] font-semibold text-white truncate">{m.displayName}</div>
-                                                <div className="text-[8px] text-white/50">{m.wins}-{m.losses}{m.ties ? `-${m.ties}` : ''}</div>
+                                                <div className="text-[11px] font-semibold text-white truncate">{m.displayName}</div>
+                                                <div className="text-[11px] text-white/50">{m.wins}-{m.losses}{m.ties ? `-${m.ties}` : ''}</div>
                                               </div>
                                             </div>
                                           ))}
@@ -16643,13 +16643,13 @@ function AFLegacyContent() {
                                       {/* AI Tools Teaser */}
                                       <div className="p-2 rounded-lg bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-400/20">
                                         <div className="flex items-center gap-1 mb-1">
-                                          <span className="text-[10px]">🤖</span>
-                                          <span className="text-[9px] font-semibold text-cyan-300">AF CHIMMY TOOLS AVAILABLE</span>
+                                          <span className="text-[11px]">🤖</span>
+                                          <span className="text-[11px] font-semibold text-cyan-300">AF CHIMMY TOOLS AVAILABLE</span>
                                         </div>
                                         <div className="flex flex-wrap gap-1">
-                                          <span className="px-1.5 py-0.5 text-[7px] rounded bg-cyan-500/20 text-cyan-300">Trade Analyzer</span>
-                                          <span className="px-1.5 py-0.5 text-[7px] rounded bg-purple-500/20 text-purple-300">Waiver AI</span>
-                                          <span className="px-1.5 py-0.5 text-[7px] rounded bg-emerald-500/20 text-emerald-300">Trade Finder</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-cyan-500/20 text-cyan-300">Trade Analyzer</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-purple-500/20 text-purple-300">Waiver AI</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-emerald-500/20 text-emerald-300">Trade Finder</span>
                                         </div>
                                       </div>
                                     </div>
@@ -16661,7 +16661,7 @@ function AFLegacyContent() {
                                       {/* Tab Bar */}
                                       <div className="flex gap-1 mb-3 overflow-x-auto pb-1">
                                         {['DRAFT', 'TEAM', 'LEAGUE', 'PLAYERS', 'TRADES', 'SCORES'].map((tab, i) => (
-                                          <span key={tab} className={`px-2 py-1 text-[8px] font-semibold rounded-full whitespace-nowrap ${i === 2 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60'}`}>
+                                          <span key={tab} className={`px-2 py-1 text-[11px] font-semibold rounded-full whitespace-nowrap ${i === 2 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60'}`}>
                                             {tab}
                                           </span>
                                         ))}
@@ -16673,20 +16673,20 @@ function AFLegacyContent() {
                                           {[...(transferPreview.managers || [])].sort((a: any, b: any) => b.wins - a.wins || parseFloat(b.pointsFor) - parseFloat(a.pointsFor)).map((m: any, idx: number) => (
                                             <div key={m.rosterId || idx} className="flex items-center justify-between p-1.5 rounded-lg bg-white/5 hover:bg-white/10">
                                               <div className="flex items-center gap-2">
-                                                <span className="w-4 text-center text-[9px] font-bold text-cyan-400">{idx + 1}</span>
+                                                <span className="w-4 text-center text-[11px] font-bold text-cyan-400">{idx + 1}</span>
                                                 {m.avatar ? (
                                                   <img src={m.avatar} alt={m.displayName} className="w-5 h-5 rounded-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; e.currentTarget.nextElementSibling && ((e.currentTarget.nextElementSibling as HTMLElement).style.display='flex') }} />
                                                 ) : null}
-                                                <div className={`w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-[8px] font-bold text-white ${m.avatar ? 'hidden' : ''}`}>
+                                                <div className={`w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-[11px] font-bold text-white ${m.avatar ? 'hidden' : ''}`}>
                                                   {(m.displayName || '?').charAt(0).toUpperCase()}
                                                 </div>
                                                 <div>
-                                                  <div className="text-[9px] font-semibold text-white truncate max-w-[100px]">{m.displayName}</div>
-                                                  <div className="text-[7px] text-white/40">PF {m.pointsFor}</div>
+                                                  <div className="text-[11px] font-semibold text-white truncate max-w-[100px]">{m.displayName}</div>
+                                                  <div className="text-[11px] text-white/40">PF {m.pointsFor}</div>
                                                 </div>
                                               </div>
                                               <div className="text-right">
-                                                <div className="text-[10px] font-bold text-white">{m.wins}-{m.losses}{m.ties ? `-${m.ties}` : ''}</div>
+                                                <div className="text-[11px] font-bold text-white">{m.wins}-{m.losses}{m.ties ? `-${m.ties}` : ''}</div>
                                               </div>
                                             </div>
                                           ))}
@@ -16696,8 +16696,8 @@ function AFLegacyContent() {
                                       {/* AI Tool Indicator */}
                                       <div className="p-2 rounded-lg bg-gradient-to-r from-purple-500/10 to-cyan-500/10 border border-purple-400/20">
                                         <div className="flex items-center gap-1">
-                                          <span className="text-[10px]">📊</span>
-                                          <span className="text-[8px] text-purple-300">Chimmy Rankings available</span>
+                                          <span className="text-[11px]">📊</span>
+                                          <span className="text-[11px] text-purple-300">Chimmy Rankings available</span>
                                         </div>
                                       </div>
                                     </div>
@@ -16709,7 +16709,7 @@ function AFLegacyContent() {
                                       {/* Tab Bar */}
                                       <div className="flex gap-1 mb-3 overflow-x-auto pb-1">
                                         {['DRAFT', 'TEAM', 'LEAGUE', 'PLAYERS', 'TRADES', 'SCORES'].map((tab, i) => (
-                                          <span key={tab} className={`px-2 py-1 text-[8px] font-semibold rounded-full whitespace-nowrap ${i === 0 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60'}`}>
+                                          <span key={tab} className={`px-2 py-1 text-[11px] font-semibold rounded-full whitespace-nowrap ${i === 0 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60'}`}>
                                             {tab}
                                           </span>
                                         ))}
@@ -16719,20 +16719,20 @@ function AFLegacyContent() {
                                       <div className="p-3 rounded-xl bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-400/20 mb-3">
                                         <div className="flex items-center justify-between mb-2">
                                           <h5 className="text-xs font-bold text-white">Draftboard</h5>
-                                          <span className="text-[8px] text-white/50">🌐</span>
+                                          <span className="text-[11px] text-white/50">🌐</span>
                                         </div>
-                                        <p className="text-[9px] text-white/60 mb-2">Draft time has not yet set</p>
+                                        <p className="text-[11px] text-white/60 mb-2">Draft time has not yet set</p>
                                         <div className="flex gap-4 justify-center mb-3">
                                           {['DAYS', 'HRS', 'MINS', 'SECS'].map((unit) => (
                                             <div key={unit} className="text-center">
                                               <div className="text-lg font-bold text-white">--</div>
-                                              <div className="text-[7px] text-white/40">{unit}</div>
+                                              <div className="text-[11px] text-white/40">{unit}</div>
                                             </div>
                                           ))}
                                         </div>
                                         <div className="flex gap-2">
-                                          <button className="flex-1 py-1.5 rounded-lg bg-purple-500/30 text-[9px] font-semibold text-purple-300">MOCK DRAFTS</button>
-                                          <button className="flex-1 py-1.5 rounded-lg bg-emerald-500 text-[9px] font-semibold text-white">DRAFTROOM</button>
+                                          <button className="flex-1 py-1.5 rounded-lg bg-purple-500/30 text-[11px] font-semibold text-purple-300">MOCK DRAFTS</button>
+                                          <button className="flex-1 py-1.5 rounded-lg bg-emerald-500 text-[11px] font-semibold text-white">DRAFTROOM</button>
                                         </div>
                                       </div>
                                       
@@ -16747,16 +16747,16 @@ function AFLegacyContent() {
                                             return 0
                                           }).map((m: any, idx: number) => (
                                             <div key={m.rosterId || idx} className="flex items-center gap-2 p-1.5 rounded-lg bg-white/5">
-                                              <span className="w-4 text-center text-[10px] font-bold text-cyan-400">{m.draftSlot || '—'}</span>
+                                              <span className="w-4 text-center text-[11px] font-bold text-cyan-400">{m.draftSlot || '—'}</span>
                                               {m.avatar ? (
                                                 <img src={m.avatar} alt={m.displayName} className="w-5 h-5 rounded-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; e.currentTarget.nextElementSibling && ((e.currentTarget.nextElementSibling as HTMLElement).style.display='flex') }} />
                                               ) : null}
-                                              <div className={`w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-[9px] font-bold text-white ${m.avatar ? 'hidden' : ''}`}>
+                                              <div className={`w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-[11px] font-bold text-white ${m.avatar ? 'hidden' : ''}`}>
                                                 {(m.displayName || '?').charAt(0).toUpperCase()}
                                               </div>
-                                              <span className="text-[9px] text-white truncate flex-1">{m.displayName}</span>
+                                              <span className="text-[11px] text-white truncate flex-1">{m.displayName}</span>
                                               {!m.draftSlot && (
-                                                <span className="text-[7px] text-white/30 italic">No draft position</span>
+                                                <span className="text-[11px] text-white/30 italic">No draft position</span>
                                               )}
                                             </div>
                                           ))}
@@ -16770,7 +16770,7 @@ function AFLegacyContent() {
                                           <div className="space-y-1">
                                             {transferPreview.recentDraft.map((pick: any, idx: number) => (
                                               <div key={idx} className="flex items-center gap-2 p-1.5 rounded-lg bg-white/5">
-                                                <span className="text-[8px] text-white/40 w-8">R{pick.round}P{pick.pick}</span>
+                                                <span className="text-[11px] text-white/40 w-8">R{pick.round}P{pick.pick}</span>
                                                 <img
                                                   src={headshotUrl(pick.playerId)}
                                                   alt={pick.playerName}
@@ -16778,8 +16778,8 @@ function AFLegacyContent() {
                                                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display='none' }}
                                                 />
                                                 <div className="min-w-0">
-                                                  <div className="text-[9px] font-semibold text-white truncate">{pick.playerName}</div>
-                                                  <div className="text-[7px] text-white/40">{pick.position} · {pick.team}</div>
+                                                  <div className="text-[11px] font-semibold text-white truncate">{pick.playerName}</div>
+                                                  <div className="text-[11px] text-white/40">{pick.position} · {pick.team}</div>
                                                 </div>
                                               </div>
                                             ))}
@@ -16795,7 +16795,7 @@ function AFLegacyContent() {
                                       {/* Tab Bar */}
                                       <div className="flex gap-1 mb-3 overflow-x-auto pb-1">
                                         {['DRAFT', 'TEAM', 'LEAGUE', 'PLAYERS', 'TRADES', 'SCORES'].map((tab, i) => (
-                                          <span key={tab} className={`px-2 py-1 text-[8px] font-semibold rounded-full whitespace-nowrap ${i === 1 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60'}`}>
+                                          <span key={tab} className={`px-2 py-1 text-[11px] font-semibold rounded-full whitespace-nowrap ${i === 1 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60'}`}>
                                             {tab}
                                           </span>
                                         ))}
@@ -16810,16 +16810,16 @@ function AFLegacyContent() {
                                           {(transferPreview.managers?.[0]?.displayName || '?').charAt(0).toUpperCase()}
                                         </div>
                                         <div>
-                                          <div className="text-[10px] font-bold text-white">{transferPreview.managers?.[0]?.displayName || 'Team'}</div>
-                                          <div className="text-[8px] text-white/50">{transferPreview.managers?.[0]?.wins || 0}-{transferPreview.managers?.[0]?.losses || 0} · {transferPreview.managers?.[0]?.rosterSize || 0} players</div>
+                                          <div className="text-[11px] font-bold text-white">{transferPreview.managers?.[0]?.displayName || 'Team'}</div>
+                                          <div className="text-[11px] text-white/50">{transferPreview.managers?.[0]?.wins || 0}-{transferPreview.managers?.[0]?.losses || 0} · {transferPreview.managers?.[0]?.rosterSize || 0} players</div>
                                         </div>
                                       </div>
                                       
                                       {/* Starters Section */}
                                       <div className="mb-3">
                                         <div className="flex items-center gap-1 mb-2">
-                                          <span className="text-[10px]">⚡</span>
-                                          <span className="text-[10px] font-semibold text-emerald-300">STARTERS</span>
+                                          <span className="text-[11px]">⚡</span>
+                                          <span className="text-[11px] font-semibold text-emerald-300">STARTERS</span>
                                         </div>
                                         <div className="space-y-1">
                                           {(() => {
@@ -16832,7 +16832,7 @@ function AFLegacyContent() {
                                               const isEmptySlot = !playerId || playerId === '0'
                                               return (
                                                 <div key={idx} className="flex items-center gap-2 p-1.5 rounded-lg bg-white/5">
-                                                  <span className={`w-10 text-[8px] font-bold px-1 py-0.5 rounded text-center ${
+                                                  <span className={`w-10 text-[11px] font-bold px-1 py-0.5 rounded text-center ${
                                                     pos === 'QB' ? 'bg-red-500/30 text-red-300' :
                                                     pos === 'RB' ? 'bg-emerald-500/30 text-emerald-300' :
                                                     pos === 'WR' ? 'bg-blue-500/30 text-blue-300' :
@@ -16851,16 +16851,16 @@ function AFLegacyContent() {
                                                   )}
                                                   <div className="flex-1 min-w-0">
                                                     {isEmptySlot ? (
-                                                      <div className="text-[8px] text-white/30 italic">Empty</div>
+                                                      <div className="text-[11px] text-white/30 italic">Empty</div>
                                                     ) : player ? (
                                                       <>
-                                                        <div className="text-[9px] font-semibold text-white truncate">{player.name}</div>
-                                                        <div className="text-[7px] text-white/40">{player.position} · {player.team}</div>
+                                                        <div className="text-[11px] font-semibold text-white truncate">{player.name}</div>
+                                                        <div className="text-[11px] text-white/40">{player.position} · {player.team}</div>
                                                       </>
                                                     ) : (
                                                       <>
-                                                        <div className="text-[9px] font-semibold text-white truncate">Player #{playerId}</div>
-                                                        <div className="text-[7px] text-white/40">—</div>
+                                                        <div className="text-[11px] font-semibold text-white truncate">Player #{playerId}</div>
+                                                        <div className="text-[11px] text-white/40">—</div>
                                                       </>
                                                     )}
                                                   </div>
@@ -16882,8 +16882,8 @@ function AFLegacyContent() {
                                       {/* Bench Section */}
                                       <div className="mb-3">
                                         <div className="flex items-center gap-1 mb-2">
-                                          <span className="text-[10px]">🪑</span>
-                                          <span className="text-[10px] font-semibold text-white/60">BENCH</span>
+                                          <span className="text-[11px]">🪑</span>
+                                          <span className="text-[11px] font-semibold text-white/60">BENCH</span>
                                         </div>
                                         <div className="space-y-1">
                                           {(() => {
@@ -16897,7 +16897,7 @@ function AFLegacyContent() {
                                               const player = transferPreview.playerMap?.[playerId]
                                               return (
                                                 <div key={idx} className="flex items-center gap-2 p-1 rounded-lg bg-white/5">
-                                                  <span className={`w-10 text-[8px] font-bold px-1 py-0.5 rounded text-center ${
+                                                  <span className={`w-10 text-[11px] font-bold px-1 py-0.5 rounded text-center ${
                                                     player?.position === 'QB' ? 'bg-red-500/20 text-red-300/60' :
                                                     player?.position === 'RB' ? 'bg-emerald-500/20 text-emerald-300/60' :
                                                     player?.position === 'WR' ? 'bg-blue-500/20 text-blue-300/60' :
@@ -16913,11 +16913,11 @@ function AFLegacyContent() {
                                                   <div className="flex-1 min-w-0">
                                                     {player ? (
                                                       <>
-                                                        <div className="text-[8px] font-semibold text-white/70 truncate">{player.name}</div>
-                                                        <div className="text-[7px] text-white/30">{player.position} · {player.team}</div>
+                                                        <div className="text-[11px] font-semibold text-white/70 truncate">{player.name}</div>
+                                                        <div className="text-[11px] text-white/30">{player.position} · {player.team}</div>
                                                       </>
                                                     ) : (
-                                                      <div className="text-[8px] text-white/40 truncate">Player #{playerId}</div>
+                                                      <div className="text-[11px] text-white/40 truncate">Player #{playerId}</div>
                                                     )}
                                                   </div>
                                                 </div>
@@ -16934,16 +16934,16 @@ function AFLegacyContent() {
                                         return (
                                           <div className="mb-3">
                                             <div className="flex items-center gap-1 mb-2">
-                                              <span className="text-[10px]">🏥</span>
-                                              <span className="text-[10px] font-semibold text-red-400/80">IR</span>
-                                              <span className="text-[8px] text-white/30 ml-1">({irIds.length})</span>
+                                              <span className="text-[11px]">🏥</span>
+                                              <span className="text-[11px] font-semibold text-red-400/80">IR</span>
+                                              <span className="text-[11px] text-white/30 ml-1">({irIds.length})</span>
                                             </div>
                                             <div className="space-y-1">
                                               {irIds.map((playerId: string, idx: number) => {
                                                 const player = transferPreview.playerMap?.[playerId]
                                                 return (
                                                   <div key={idx} className="flex items-center gap-2 p-1 rounded-lg bg-red-500/5 border border-red-500/10">
-                                                    <span className="w-10 text-[8px] font-bold px-1 py-0.5 rounded text-center bg-red-500/20 text-red-300/60">IR</span>
+                                                    <span className="w-10 text-[11px] font-bold px-1 py-0.5 rounded text-center bg-red-500/20 text-red-300/60">IR</span>
                                                     <img
                                                       src={headshotUrl(playerId)}
                                                       alt=""
@@ -16953,11 +16953,11 @@ function AFLegacyContent() {
                                                     <div className="flex-1 min-w-0">
                                                       {player ? (
                                                         <>
-                                                          <div className="text-[8px] font-semibold text-white/50 truncate">{player.name}</div>
-                                                          <div className="text-[7px] text-red-300/40">{player.position} · {player.team}</div>
+                                                          <div className="text-[11px] font-semibold text-white/50 truncate">{player.name}</div>
+                                                          <div className="text-[11px] text-red-300/40">{player.position} · {player.team}</div>
                                                         </>
                                                       ) : (
-                                                        <div className="text-[8px] text-white/40 truncate">Player #{playerId}</div>
+                                                        <div className="text-[11px] text-white/40 truncate">Player #{playerId}</div>
                                                       )}
                                                     </div>
                                                   </div>
@@ -16975,16 +16975,16 @@ function AFLegacyContent() {
                                         return (
                                           <div className="mb-3">
                                             <div className="flex items-center gap-1 mb-2">
-                                              <span className="text-[10px]">🚕</span>
-                                              <span className="text-[10px] font-semibold text-amber-400/80">TAXI</span>
-                                              <span className="text-[8px] text-white/30 ml-1">({taxiIds.length})</span>
+                                              <span className="text-[11px]">🚕</span>
+                                              <span className="text-[11px] font-semibold text-amber-400/80">TAXI</span>
+                                              <span className="text-[11px] text-white/30 ml-1">({taxiIds.length})</span>
                                             </div>
                                             <div className="space-y-1">
                                               {taxiIds.map((playerId: string, idx: number) => {
                                                 const player = transferPreview.playerMap?.[playerId]
                                                 return (
                                                   <div key={idx} className="flex items-center gap-2 p-1 rounded-lg bg-amber-500/5 border border-amber-500/10">
-                                                    <span className="w-10 text-[8px] font-bold px-1 py-0.5 rounded text-center bg-amber-500/20 text-amber-300/60">TAXI</span>
+                                                    <span className="w-10 text-[11px] font-bold px-1 py-0.5 rounded text-center bg-amber-500/20 text-amber-300/60">TAXI</span>
                                                     <img
                                                       src={headshotUrl(playerId)}
                                                       alt=""
@@ -16994,11 +16994,11 @@ function AFLegacyContent() {
                                                     <div className="flex-1 min-w-0">
                                                       {player ? (
                                                         <>
-                                                          <div className="text-[8px] font-semibold text-white/60 truncate">{player.name}</div>
-                                                          <div className="text-[7px] text-amber-300/40">{player.position} · {player.team}</div>
+                                                          <div className="text-[11px] font-semibold text-white/60 truncate">{player.name}</div>
+                                                          <div className="text-[11px] text-amber-300/40">{player.position} · {player.team}</div>
                                                         </>
                                                       ) : (
-                                                        <div className="text-[8px] text-white/40 truncate">Player #{playerId}</div>
+                                                        <div className="text-[11px] text-white/40 truncate">Player #{playerId}</div>
                                                       )}
                                                     </div>
                                                   </div>
@@ -17012,12 +17012,12 @@ function AFLegacyContent() {
                                       {/* Roster Info */}
                                       <div className="p-2 rounded-lg bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-400/20">
                                         <div className="flex items-center justify-between">
-                                          <span className="text-[9px] text-white/60">Roster Size</span>
-                                          <span className="text-[9px] text-white font-semibold">{transferPreview.managers?.[0]?.rosterSize || 0} players</span>
+                                          <span className="text-[11px] text-white/60">Roster Size</span>
+                                          <span className="text-[11px] text-white font-semibold">{transferPreview.managers?.[0]?.rosterSize || 0} players</span>
                                         </div>
                                         <div className="flex items-center justify-between mt-1">
-                                          <span className="text-[9px] text-white/60">Starter Slots</span>
-                                          <span className="text-[9px] text-white font-semibold">{(transferPreview.rosterPositions || []).filter((p: string) => p !== 'BN' && p !== 'IR' && p !== 'TAXI').length}</span>
+                                          <span className="text-[11px] text-white/60">Starter Slots</span>
+                                          <span className="text-[11px] text-white font-semibold">{(transferPreview.rosterPositions || []).filter((p: string) => p !== 'BN' && p !== 'IR' && p !== 'TAXI').length}</span>
                                         </div>
                                       </div>
                                     </div>
@@ -17029,7 +17029,7 @@ function AFLegacyContent() {
                                       {/* Tab Bar */}
                                       <div className="flex gap-1 mb-3 overflow-x-auto pb-1">
                                         {['DRAFT', 'TEAM', 'LEAGUE', 'PLAYERS', 'TRADES', 'SCORES'].map((tab, i) => (
-                                          <span key={tab} className={`px-2 py-1 text-[8px] font-semibold rounded-full whitespace-nowrap ${i === 4 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60'}`}>
+                                          <span key={tab} className={`px-2 py-1 text-[11px] font-semibold rounded-full whitespace-nowrap ${i === 4 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60'}`}>
                                             {i === 4 && <span className="mr-0.5">🔴</span>}{tab}
                                           </span>
                                         ))}
@@ -17038,9 +17038,9 @@ function AFLegacyContent() {
                                       <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-1">
                                           <span className="text-xs font-bold text-white">Recent Trades</span>
-                                          <span className="w-4 h-4 rounded-full bg-red-500 text-[8px] text-white flex items-center justify-center">{transferPreview.recentTrades?.length || 0}</span>
+                                          <span className="w-4 h-4 rounded-full bg-red-500 text-[11px] text-white flex items-center justify-center">{transferPreview.recentTrades?.length || 0}</span>
                                         </div>
-                                        <button className="px-3 py-1 rounded-full bg-emerald-500 text-[9px] font-semibold text-white">TRADE</button>
+                                        <button className="px-3 py-1 rounded-full bg-emerald-500 text-[11px] font-semibold text-white">TRADE</button>
                                       </div>
                                       
                                       {/* Trade Cards */}
@@ -17051,9 +17051,9 @@ function AFLegacyContent() {
                                               <div className="flex items-center justify-between mb-2">
                                                 <div className="flex items-center gap-1">
                                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                                  <span className="text-[8px] text-emerald-400">COMPLETED</span>
+                                                  <span className="text-[11px] text-emerald-400">COMPLETED</span>
                                                 </div>
-                                                <span className="text-[7px] text-white/40">{trade.teamsInvolved} teams</span>
+                                                <span className="text-[11px] text-white/40">{trade.teamsInvolved} teams</span>
                                               </div>
                                               {trade.sides && trade.sides.length >= 2 ? (
                                                 <div className="space-y-2">
@@ -17063,10 +17063,10 @@ function AFLegacyContent() {
                                                         {side.avatar ? (
                                                           <img src={side.avatar} alt="" className="w-4 h-4 rounded-full object-cover bg-white/10" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display='none' }} />
                                                         ) : (
-                                                          <div className="w-4 h-4 rounded-full bg-white/10 flex items-center justify-center text-[7px] text-white/40">{(side.username || '?')[0]}</div>
+                                                          <div className="w-4 h-4 rounded-full bg-white/10 flex items-center justify-center text-[11px] text-white/40">{(side.username || '?')[0]}</div>
                                                         )}
-                                                        <span className="text-[8px] font-semibold text-white/80 truncate">{side.username}</span>
-                                                        <span className="text-[7px] text-white/30">receives</span>
+                                                        <span className="text-[11px] font-semibold text-white/80 truncate">{side.username}</span>
+                                                        <span className="text-[11px] text-white/30">receives</span>
                                                       </div>
                                                       <div className="ml-5 space-y-0.5">
                                                         {side.receives?.players?.map((p: any, pIdx: number) => (
@@ -17075,18 +17075,18 @@ function AFLegacyContent() {
                                                           </div>
                                                         ))}
                                                         {side.receives?.picks > 0 && (
-                                                          <div className="text-[7px] text-amber-400 bg-amber-500/10 px-1 py-0.5 rounded inline-block">
+                                                          <div className="text-[11px] text-amber-400 bg-amber-500/10 px-1 py-0.5 rounded inline-block">
                                                             +{side.receives.picks} draft pick{side.receives.picks !== 1 ? 's' : ''}
                                                           </div>
                                                         )}
                                                         {(!side.receives?.players?.length && !side.receives?.picks) && (
-                                                          <span className="text-[7px] text-white/30 italic">No assets</span>
+                                                          <span className="text-[11px] text-white/30 italic">No assets</span>
                                                         )}
                                                       </div>
                                                       {sIdx < trade.sides.length - 1 && (
                                                         <div className="flex items-center justify-center my-1">
                                                           <div className="w-12 border-t border-white/10"></div>
-                                                          <span className="text-[8px] text-white/30 mx-1">⇄</span>
+                                                          <span className="text-[11px] text-white/30 mx-1">⇄</span>
                                                           <div className="w-12 border-t border-white/10"></div>
                                                         </div>
                                                       )}
@@ -17097,16 +17097,16 @@ function AFLegacyContent() {
                                                 <div className="flex items-center justify-center gap-3">
                                                   <div className="text-center">
                                                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center mx-auto mb-0.5">
-                                                      <span className="text-[9px]">🏈</span>
+                                                      <span className="text-[11px]">🏈</span>
                                                     </div>
-                                                    <div className="text-[7px] text-white">{trade.playersAdded} player{trade.playersAdded !== 1 ? 's' : ''}</div>
+                                                    <div className="text-[11px] text-white">{trade.playersAdded} player{trade.playersAdded !== 1 ? 's' : ''}</div>
                                                   </div>
                                                   <span className="text-white/40">⇄</span>
                                                   <div className="text-center">
                                                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center mx-auto mb-0.5">
-                                                      <span className="text-[9px]">🏈</span>
+                                                      <span className="text-[11px]">🏈</span>
                                                     </div>
-                                                    <div className="text-[7px] text-white">{trade.playersDropped} player{trade.playersDropped !== 1 ? 's' : ''}</div>
+                                                    <div className="text-[11px] text-white">{trade.playersDropped} player{trade.playersDropped !== 1 ? 's' : ''}</div>
                                                   </div>
                                                 </div>
                                               )}
@@ -17114,7 +17114,7 @@ function AFLegacyContent() {
                                           ))
                                         ) : (
                                           <div className="p-3 rounded-lg bg-white/5 border border-white/10 text-center">
-                                            <span className="text-[9px] text-white/40">No recent trades</span>
+                                            <span className="text-[11px] text-white/40">No recent trades</span>
                                           </div>
                                         )}
                                       </div>
@@ -17122,13 +17122,13 @@ function AFLegacyContent() {
                                       {/* AI Tool Indicator */}
                                       <div className="p-2 rounded-lg bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-400/20">
                                         <div className="flex items-center gap-1 mb-1">
-                                          <span className="text-[10px]">🤖</span>
-                                          <span className="text-[8px] font-semibold text-cyan-300">AF CHIMMY TRADE TOOLS</span>
+                                          <span className="text-[11px]">🤖</span>
+                                          <span className="text-[11px] font-semibold text-cyan-300">AF CHIMMY TRADE TOOLS</span>
                                         </div>
                                         <div className="flex flex-wrap gap-1">
-                                          <span className="px-1.5 py-0.5 text-[7px] rounded bg-cyan-500/20 text-cyan-300">Trade Analyzer</span>
-                                          <span className="px-1.5 py-0.5 text-[7px] rounded bg-purple-500/20 text-purple-300">Trade Finder</span>
-                                          <span className="px-1.5 py-0.5 text-[7px] rounded bg-amber-500/20 text-amber-300">Chimmy GM</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-cyan-500/20 text-cyan-300">Trade Analyzer</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-purple-500/20 text-purple-300">Trade Finder</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-amber-500/20 text-amber-300">Chimmy GM</span>
                                         </div>
                                       </div>
                                     </div>
@@ -17152,16 +17152,16 @@ function AFLegacyContent() {
                                           { label: 'Draft Pick Trading', value: 'Yes' },
                                         ].map((setting, i) => (
                                           <div key={i} className="flex items-center justify-between py-1.5 border-b border-white/5">
-                                            <span className="text-[9px] text-white/60">{setting.label}</span>
-                                            <span className="text-[9px] text-white font-medium">{setting.value}</span>
+                                            <span className="text-[11px] text-white/60">{setting.label}</span>
+                                            <span className="text-[11px] text-white font-medium">{setting.value}</span>
                                           </div>
                                         ))}
                                       </div>
                                       
                                       {/* Scoring */}
                                       <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-400/20 mb-3">
-                                        <h6 className="text-[10px] font-bold text-white mb-1">Scoring</h6>
-                                        <p className="text-[8px] text-cyan-300 mb-2">Non-standard settings highlighted</p>
+                                        <h6 className="text-[11px] font-bold text-white mb-1">Scoring</h6>
+                                        <p className="text-[11px] text-cyan-300 mb-2">Non-standard settings highlighted</p>
                                         
                                         {(() => {
                                           const ss = transferPreview.league?.scoringSettings || {} as Record<string, number>
@@ -17230,15 +17230,15 @@ function AFLegacyContent() {
                                                 if (visibleItems.length === 0) return null
                                                 return (
                                                   <div key={cat.title}>
-                                                    <div className="text-[9px] font-semibold text-white mt-2 mb-0.5">{cat.title}</div>
+                                                    <div className="text-[11px] font-semibold text-white mt-2 mb-0.5">{cat.title}</div>
                                                     {visibleItems.map((item, i) => {
                                                       const val = ss[item.key] ?? 0
                                                       const hl = isHL(item.key, val)
                                                       const display = item.format === 'perYd' ? perYd(val) : fmt(val)
                                                       return (
                                                         <div key={i} className={`flex justify-between py-1 px-1.5 rounded ${hl ? 'bg-amber-500/20' : ''}`}>
-                                                          <span className={`text-[8px] ${hl ? 'text-amber-300' : 'text-white/60'}`}>{item.label}</span>
-                                                          <span className={`text-[8px] ${hl ? 'text-amber-300 font-semibold' : 'text-cyan-300'}`}>{display}</span>
+                                                          <span className={`text-[11px] ${hl ? 'text-amber-300' : 'text-white/60'}`}>{item.label}</span>
+                                                          <span className={`text-[11px] ${hl ? 'text-amber-300 font-semibold' : 'text-cyan-300'}`}>{display}</span>
                                                         </div>
                                                       )
                                                     })}
@@ -17259,7 +17259,7 @@ function AFLegacyContent() {
                                         <span className="text-lg">🤖</span>
                                         <h5 className="text-xs font-bold text-white">AF Chimmy Tools</h5>
                                       </div>
-                                      <p className="text-[9px] text-white/60 mb-3">Powerful Chimmy-powered tools available for your league</p>
+                                      <p className="text-[11px] text-white/60 mb-3">Powerful Chimmy-powered tools available for your league</p>
 
                                       <div className="space-y-2">
                                         {[
@@ -17274,8 +17274,8 @@ function AFLegacyContent() {
                                             <div className="flex items-center gap-2">
                                               <span className="text-lg">{tool.icon}</span>
                                               <div>
-                                                <div className="text-[10px] font-semibold text-white">{tool.name}</div>
-                                                <div className="text-[8px] text-white/50">{tool.desc}</div>
+                                                <div className="text-[11px] font-semibold text-white">{tool.name}</div>
+                                                <div className="text-[11px] text-white/50">{tool.desc}</div>
                                               </div>
                                             </div>
                                           </div>
@@ -17285,10 +17285,10 @@ function AFLegacyContent() {
                                       {/* Exclusive Features */}
                                       <div className="mt-3 p-2 rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-400/30">
                                         <div className="flex items-center gap-1 mb-1">
-                                          <span className="text-[10px]">✨</span>
-                                          <span className="text-[9px] font-semibold text-amber-300">AF EXCLUSIVE</span>
+                                          <span className="text-[11px]">✨</span>
+                                          <span className="text-[11px] font-semibold text-amber-300">AF EXCLUSIVE</span>
                                         </div>
-                                        <div className="text-[8px] text-white/60">
+                                        <div className="text-[11px] text-white/60">
                                           All Chimmy tools learn from your trading history and league patterns for personalized recommendations.
                                         </div>
                                       </div>
@@ -17317,7 +17317,7 @@ function AFLegacyContent() {
                             <button
                               key={screen}
                               onClick={() => setPhoneScreenIndex(idx)}
-                              className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition capitalize ${
+                              className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition capitalize ${
                                 phoneScreenIndex === idx
                                   ? 'bg-cyan-500 text-white'
                                   : 'bg-white/10 text-white/50 hover:bg-white/20'
@@ -17376,7 +17376,7 @@ function AFLegacyContent() {
                               {/* Screen - Taller with scrollable content */}
                               <div className="bg-[#0a0a12] rounded-[2rem] overflow-hidden relative h-[520px]">
                                 {/* Status bar */}
-                                <div className="flex items-center justify-between px-4 py-1.5 text-[9px] text-white/60 bg-black/50">
+                                <div className="flex items-center justify-between px-4 py-1.5 text-[11px] text-white/60 bg-black/50">
                                   <span>9:41</span>
                                   <div className="flex items-center gap-1">
                                     <span>📶</span>
@@ -17394,10 +17394,10 @@ function AFLegacyContent() {
                                         <div className="flex-1 min-w-0">
                                           <h4 className="text-sm font-bold text-white truncate">Your Fantasy League</h4>
                                           <div className="flex flex-wrap gap-1 mt-0.5">
-                                            <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-cyan-500/30 text-cyan-300">NFL</span>
-                                            <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-purple-500/30 text-purple-300">Dynasty</span>
-                                            <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-emerald-500/30 text-emerald-300">12 Teams</span>
-                                            <span className="px-1.5 py-0.5 text-[8px] font-semibold rounded bg-amber-500/30 text-amber-300">Full PPR</span>
+                                            <span className="px-1.5 py-0.5 text-[11px] font-semibold rounded bg-cyan-500/30 text-cyan-300">NFL</span>
+                                            <span className="px-1.5 py-0.5 text-[11px] font-semibold rounded bg-purple-500/30 text-purple-300">Dynasty</span>
+                                            <span className="px-1.5 py-0.5 text-[11px] font-semibold rounded bg-emerald-500/30 text-emerald-300">12 Teams</span>
+                                            <span className="px-1.5 py-0.5 text-[11px] font-semibold rounded bg-amber-500/30 text-amber-300">Full PPR</span>
                                           </div>
                                         </div>
                                       </div>
@@ -17411,14 +17411,14 @@ function AFLegacyContent() {
                                           <div key={i} className="p-2 rounded-lg bg-white/5 border border-white/10 text-center">
                                             <span className="text-sm">{stat.icon}</span>
                                             <div className="text-base font-bold text-white">{stat.value}</div>
-                                            <div className="text-[7px] text-white/50">{stat.label}</div>
+                                            <div className="text-[11px] text-white/50">{stat.label}</div>
                                           </div>
                                         ))}
                                       </div>
                                       <div className="mb-3">
                                         <div className="flex items-center gap-1 mb-2">
-                                          <span className="text-[10px]">👥</span>
-                                          <span className="text-[10px] font-semibold text-white">LEAGUE MEMBERS</span>
+                                          <span className="text-[11px]">👥</span>
+                                          <span className="text-[11px] font-semibold text-white">LEAGUE MEMBERS</span>
                                         </div>
                                         <div className="grid grid-cols-2 gap-1.5">
                                           {Array.from({ length: 12 }, (_, i) => ({
@@ -17427,10 +17427,10 @@ function AFLegacyContent() {
                                             initial: `M${i + 1}`,
                                           })).map((m, i) => (
                                             <div key={i} className="flex items-center gap-1.5 p-1.5 rounded-lg bg-white/5">
-                                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-[8px] font-bold text-white">{m.initial}</div>
+                                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-[11px] font-bold text-white">{m.initial}</div>
                                               <div className="min-w-0">
-                                                <div className="text-[9px] font-semibold text-white truncate">{m.name}</div>
-                                                <div className="text-[8px] text-white/50">{m.record}</div>
+                                                <div className="text-[11px] font-semibold text-white truncate">{m.name}</div>
+                                                <div className="text-[11px] text-white/50">{m.record}</div>
                                               </div>
                                             </div>
                                           ))}
@@ -17438,13 +17438,13 @@ function AFLegacyContent() {
                                       </div>
                                       <div className="p-2 rounded-lg bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-400/20">
                                         <div className="flex items-center gap-1 mb-1">
-                                          <span className="text-[10px]">🤖</span>
-                                          <span className="text-[9px] font-semibold text-cyan-300">AF CHIMMY TOOLS AVAILABLE</span>
+                                          <span className="text-[11px]">🤖</span>
+                                          <span className="text-[11px] font-semibold text-cyan-300">AF CHIMMY TOOLS AVAILABLE</span>
                                         </div>
                                         <div className="flex flex-wrap gap-1">
-                                          <span className="px-1.5 py-0.5 text-[7px] rounded bg-cyan-500/20 text-cyan-300">Trade Analyzer</span>
-                                          <span className="px-1.5 py-0.5 text-[7px] rounded bg-purple-500/20 text-purple-300">Waiver AI</span>
-                                          <span className="px-1.5 py-0.5 text-[7px] rounded bg-emerald-500/20 text-emerald-300">Trade Finder</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-cyan-500/20 text-cyan-300">Trade Analyzer</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-purple-500/20 text-purple-300">Waiver AI</span>
+                                          <span className="px-1.5 py-0.5 text-[11px] rounded bg-emerald-500/20 text-emerald-300">Trade Finder</span>
                                         </div>
                                       </div>
                                     </div>
@@ -17453,7 +17453,7 @@ function AFLegacyContent() {
                                     <div className="px-3 pb-4">
                                       <div className="flex gap-1 mb-3 overflow-x-auto pb-1">
                                         {['DRAFT', 'TEAM', 'LEAGUE', 'PLAYERS', 'TRADES', 'SCORES'].map((tab, i) => (
-                                          <span key={tab} className={`px-2 py-1 text-[8px] font-semibold rounded-full whitespace-nowrap ${i === 2 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60'}`}>{tab}</span>
+                                          <span key={tab} className={`px-2 py-1 text-[11px] font-semibold rounded-full whitespace-nowrap ${i === 2 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-white/60'}`}>{tab}</span>
                                         ))}
                                       </div>
                                       <h5 className="text-xs font-bold text-white mb-2">Standings</h5>
@@ -17474,11 +17474,11 @@ function AFLegacyContent() {
                                         ].map((team) => (
                                           <div key={team.rank} className="flex items-center justify-between p-1.5 rounded-lg bg-white/5">
                                             <div className="flex items-center gap-2">
-                                              <span className="w-4 text-center text-[9px] font-bold text-cyan-400">{team.rank}</span>
-                                              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-[8px] font-bold text-white">{team.rank}</div>
-                                              <div className="text-[9px] font-semibold text-white truncate max-w-[100px]">{team.name}</div>
+                                              <span className="w-4 text-center text-[11px] font-bold text-cyan-400">{team.rank}</span>
+                                              <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-[11px] font-bold text-white">{team.rank}</div>
+                                              <div className="text-[11px] font-semibold text-white truncate max-w-[100px]">{team.name}</div>
                                             </div>
-                                            <div className="text-[10px] font-bold text-white">{team.record}</div>
+                                            <div className="text-[11px] font-bold text-white">{team.record}</div>
                                           </div>
                                         ))}
                                       </div>
@@ -17489,7 +17489,7 @@ function AFLegacyContent() {
                                       <div className="text-center">
                                         <div className="text-4xl mb-2">{['📋', '🏈', '🔄', '⚙️', '🤖'][phoneScreenIndex - 2]}</div>
                                         <div className="text-sm font-semibold text-white mb-1">{['Draft', 'Team', 'Trades', 'Settings', 'Chimmy Tools'][phoneScreenIndex - 2]} Screen</div>
-                                        <div className="text-[10px] text-white/50">Select a league to see full preview</div>
+                                        <div className="text-[11px] text-white/50">Select a league to see full preview</div>
                                       </div>
                                     </div>
                                   )}
@@ -17514,7 +17514,7 @@ function AFLegacyContent() {
                             <button
                               key={screen}
                               onClick={() => setPhoneScreenIndex(idx)}
-                              className={`px-3 py-1.5 rounded-lg text-[10px] font-semibold transition capitalize ${
+                              className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition capitalize ${
                                 phoneScreenIndex === idx
                                   ? 'bg-cyan-500 text-white'
                                   : 'bg-white/10 text-white/50 hover:bg-white/20'
@@ -17538,9 +17538,9 @@ function AFLegacyContent() {
                             <div className="flex-1">
                               <h4 className="text-base font-bold text-white">{transferPreview.league.name}</h4>
                               <div className="flex gap-2 mt-1 flex-wrap">
-                                <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-cyan-500/20 text-cyan-300">{transferPreview.league.sport}</span>
-                                <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-purple-500/20 text-purple-300">{transferPreview.league.teamCount} Teams</span>
-                                <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300">{transferPreview.league.season}</span>
+                                <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-cyan-500/20 text-cyan-300">{transferPreview.league.sport}</span>
+                                <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-purple-500/20 text-purple-300">{transferPreview.league.teamCount} Teams</span>
+                                <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-500/20 text-emerald-300">{transferPreview.league.season}</span>
                               </div>
                             </div>
                             <span className="px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs font-semibold">Ready</span>
@@ -17556,7 +17556,7 @@ function AFLegacyContent() {
                             <div key={i} className="text-center">
                               <div className="text-lg">{stat.icon}</div>
                               <div className="text-lg font-bold text-white">{stat.value}</div>
-                              <div className="text-[10px] text-white/50">{stat.label}</div>
+                              <div className="text-[11px] text-white/50">{stat.label}</div>
                             </div>
                           ))}
                         </div>
@@ -17588,7 +17588,7 @@ function AFLegacyContent() {
                         </button>
                       ))}
                       <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-white/20">
-                        <span className="text-[10px] text-amber-400 font-semibold uppercase tracking-wider">AF Super Commissioner</span>
+                        <span className="text-[11px] text-amber-400 font-semibold uppercase tracking-wider">AF Super Commissioner</span>
                       </div>
                       {[7, 9].map((count) => (
                         <button
@@ -17642,7 +17642,7 @@ function AFLegacyContent() {
                             <div>
                               <h5 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
                                 Peach Bowl C2C
-                                <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-gradient-to-r from-purple-500/30 to-cyan-500/30 text-purple-300 border border-purple-400/30">
+                                <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-gradient-to-r from-purple-500/30 to-cyan-500/30 text-purple-300 border border-purple-400/30">
                                   C2C
                                 </span>
                               </h5>
@@ -17662,15 +17662,15 @@ function AFLegacyContent() {
                           <div className="sm:ml-auto flex items-center gap-4">
                             <div className="text-center">
                               <div className="text-lg font-bold text-purple-400">12</div>
-                              <div className="text-[10px] text-gray-400">Teams</div>
+                              <div className="text-[11px] text-gray-400">Teams</div>
                             </div>
                             <div className="text-center">
                               <div className="text-lg font-bold text-cyan-400">Dynasty</div>
-                              <div className="text-[10px] text-gray-400">Format</div>
+                              <div className="text-[11px] text-gray-400">Format</div>
                             </div>
                             <div className="text-center">
                               <div className="text-lg font-bold text-emerald-400">SF</div>
-                              <div className="text-[10px] text-gray-400">Superflex</div>
+                              <div className="text-[11px] text-gray-400">Superflex</div>
                             </div>
                           </div>
                         </div>
@@ -17682,7 +17682,7 @@ function AFLegacyContent() {
                           <h6 className="text-sm font-semibold text-white flex items-center gap-2">
                             <span className="text-base">👤</span> Your Roster
                           </h6>
-                          <span className="text-[10px] text-gray-400">Scroll to see all →</span>
+                          <span className="text-[11px] text-gray-400">Scroll to see all →</span>
                         </div>
                         
                         {/* Scrollable Container */}
@@ -17693,7 +17693,7 @@ function AFLegacyContent() {
                             <div className="flex items-center gap-2 mb-3">
                               <span className="text-base">🏈</span>
                               <span className="text-xs font-semibold text-cyan-400 uppercase tracking-wide">NFL Starters</span>
-                              <span className="ml-auto text-[10px] text-cyan-300/70 bg-cyan-500/20 px-2 py-0.5 rounded-full">10 spots</span>
+                              <span className="ml-auto text-[11px] text-cyan-300/70 bg-cyan-500/20 px-2 py-0.5 rounded-full">10 spots</span>
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                               {[
@@ -17710,20 +17710,20 @@ function AFLegacyContent() {
                               ].map((player, idx) => (
                                 <div key={idx} className="p-2 rounded-lg bg-black/40 border border-white/10 hover:border-cyan-400/40 transition group">
                                   <div className="flex items-center justify-between mb-1">
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
                                       player.pos === 'QB' || player.pos === 'SF' ? 'bg-red-500/30 text-red-300' :
                                       player.pos === 'RB' || player.pos === 'FLEX' ? 'bg-green-500/30 text-green-300' :
                                       player.pos === 'WR' ? 'bg-blue-500/30 text-blue-300' :
                                       player.pos === 'TE' ? 'bg-orange-500/30 text-orange-300' :
                                       'bg-gray-500/30 text-gray-300'
                                     }`}>{player.pos}</span>
-                                    <span className="text-[9px] text-gray-500">{player.team}</span>
+                                    <span className="text-[11px] text-gray-500">{player.team}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5">
                                     <MiniPlayerImg name={player.name} size={16} />
                                     <div className="text-xs font-semibold text-white truncate group-hover:text-cyan-300 transition">{player.name}</div>
                                   </div>
-                                  <div className="text-[10px] text-emerald-400 mt-0.5">FC: {player.value.toLocaleString()}</div>
+                                  <div className="text-[11px] text-emerald-400 mt-0.5">FC: {player.value.toLocaleString()}</div>
                                 </div>
                               ))}
                             </div>
@@ -17734,7 +17734,7 @@ function AFLegacyContent() {
                             <div className="flex items-center gap-2 mb-3">
                               <span className="text-base">📋</span>
                               <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide">NFL Bench</span>
-                              <span className="ml-auto text-[10px] text-gray-400 bg-white/10 px-2 py-0.5 rounded-full">15 spots</span>
+                              <span className="ml-auto text-[11px] text-gray-400 bg-white/10 px-2 py-0.5 rounded-full">15 spots</span>
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                               {[
@@ -17749,19 +17749,19 @@ function AFLegacyContent() {
                               ].map((player, idx) => (
                                 <div key={idx} className="p-2 rounded-lg bg-black/30 border border-white/5 hover:border-white/20 transition">
                                   <div className="flex items-center justify-between mb-1">
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
                                       player.pos === 'QB' ? 'bg-red-500/20 text-red-300/80' :
                                       player.pos === 'RB' ? 'bg-green-500/20 text-green-300/80' :
                                       player.pos === 'WR' ? 'bg-blue-500/20 text-blue-300/80' :
                                       'bg-orange-500/20 text-orange-300/80'
                                     }`}>{player.pos}</span>
-                                    <span className="text-[9px] text-gray-500">{player.team}</span>
+                                    <span className="text-[11px] text-gray-500">{player.team}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5">
                                     <MiniPlayerImg name={player.name} size={16} />
                                     <div className="text-xs font-medium text-white/80 truncate">{player.name}</div>
                                   </div>
-                                  <div className="text-[10px] text-emerald-400/70 mt-0.5">FC: {player.value.toLocaleString()}</div>
+                                  <div className="text-[11px] text-emerald-400/70 mt-0.5">FC: {player.value.toLocaleString()}</div>
                                 </div>
                               ))}
                             </div>
@@ -17772,9 +17772,9 @@ function AFLegacyContent() {
                             <div className="flex items-center gap-2 mb-3">
                               <span className="text-base">🚕</span>
                               <span className="text-xs font-semibold text-yellow-400 uppercase tracking-wide">Taxi Squad</span>
-                              <span className="ml-auto text-[10px] text-yellow-300/70 bg-yellow-500/20 px-2 py-0.5 rounded-full">5 spots</span>
+                              <span className="ml-auto text-[11px] text-yellow-300/70 bg-yellow-500/20 px-2 py-0.5 rounded-full">5 spots</span>
                             </div>
-                            <p className="text-[10px] text-gray-400 mb-3">Rookie NFL players (1st-2nd year) developing on your practice squad</p>
+                            <p className="text-[11px] text-gray-400 mb-3">Rookie NFL players (1st-2nd year) developing on your practice squad</p>
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
                               {[
                                 { pos: 'QB', name: 'Caleb Williams', team: 'CHI', value: 7200, rookie: '2024' },
@@ -17785,21 +17785,21 @@ function AFLegacyContent() {
                               ].map((player, idx) => (
                                 <div key={idx} className="p-2 rounded-lg bg-black/40 border border-yellow-400/20 hover:border-yellow-400/40 transition group">
                                   <div className="flex items-center justify-between mb-1">
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
                                       player.pos === 'QB' ? 'bg-red-500/30 text-red-300' :
                                       player.pos === 'RB' ? 'bg-green-500/30 text-green-300' :
                                       player.pos === 'WR' ? 'bg-blue-500/30 text-blue-300' :
                                       'bg-orange-500/30 text-orange-300'
                                     }`}>{player.pos}</span>
-                                    <span className="text-[9px] text-yellow-400/70 bg-yellow-500/20 px-1 rounded">{player.rookie}</span>
+                                    <span className="text-[11px] text-yellow-400/70 bg-yellow-500/20 px-1 rounded">{player.rookie}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5">
                                     <MiniPlayerImg name={player.name} size={16} />
                                     <div className="text-xs font-semibold text-white truncate group-hover:text-yellow-300 transition">{player.name}</div>
                                   </div>
                                   <div className="flex items-center justify-between mt-0.5">
-                                    <span className="text-[9px] text-gray-500">{player.team}</span>
-                                    <span className="text-[10px] text-emerald-400">FC: {player.value.toLocaleString()}</span>
+                                    <span className="text-[11px] text-gray-500">{player.team}</span>
+                                    <span className="text-[11px] text-emerald-400">FC: {player.value.toLocaleString()}</span>
                                   </div>
                                 </div>
                               ))}
@@ -17813,14 +17813,14 @@ function AFLegacyContent() {
                               <span className="text-xs font-semibold text-purple-400 uppercase tracking-wide">Devy Roster (CFB)</span>
                               <span className="ml-auto flex items-center gap-2">
                                 {c2cDevyLoading && (
-                                  <span className="text-[9px] text-cyan-300 animate-pulse">Loading from CFBD...</span>
+                                  <span className="text-[11px] text-cyan-300 animate-pulse">Loading from CFBD...</span>
                                 )}
-                                <span className="text-[10px] text-purple-300/70 bg-purple-500/20 px-2 py-0.5 rounded-full">
+                                <span className="text-[11px] text-purple-300/70 bg-purple-500/20 px-2 py-0.5 rounded-full">
                                   {c2cDevyLeague?.name || 'From Cream Bowl'}
                                 </span>
                               </span>
                             </div>
-                            <p className="text-[10px] text-gray-400 mb-3">
+                            <p className="text-[11px] text-gray-400 mb-3">
                               {c2cDevyRoster.length > 0 
                                 ? `${c2cDevyRoster.length} CFB players with devy values from CollegeFootballData.com` 
                                 : 'College football players linked from your Fantrax devy league'}
@@ -17844,28 +17844,28 @@ function AFLegacyContent() {
                               ]).map((player, idx) => (
                                 <div key={idx} className="p-2.5 rounded-lg bg-gradient-to-br from-purple-900/30 to-black/40 border border-purple-400/20 hover:border-purple-400/40 transition group">
                                   <div className="flex items-center justify-between mb-1.5">
-                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
                                       player.pos === 'QB' ? 'bg-red-500/30 text-red-300' :
                                       player.pos === 'RB' ? 'bg-green-500/30 text-green-300' :
                                       player.pos === 'WR' ? 'bg-blue-500/30 text-blue-300' :
                                       'bg-orange-500/30 text-orange-300'
                                     }`}>{player.pos}</span>
-                                    <span className="text-[9px] text-purple-300/70 bg-purple-500/20 px-1.5 rounded">{player.class}</span>
+                                    <span className="text-[11px] text-purple-300/70 bg-purple-500/20 px-1.5 rounded">{player.class}</span>
                                   </div>
                                   <div className="flex items-center gap-1.5">
                                     <MiniPlayerImg name={player.name} size={16} />
                                     <div className="text-xs font-semibold text-white truncate group-hover:text-purple-300 transition">{player.name}</div>
                                   </div>
-                                  <div className="text-[10px] text-gray-400 truncate mt-0.5">📍 {player.school}</div>
+                                  <div className="text-[11px] text-gray-400 truncate mt-0.5">📍 {player.school}</div>
                                   <div className="flex items-center justify-between mt-1 pt-1 border-t border-white/5">
-                                    <span className="text-[9px] text-gray-500">Devy Value</span>
-                                    <span className="text-[10px] text-emerald-400 font-medium">{player.value.toLocaleString()}</span>
+                                    <span className="text-[11px] text-gray-500">Devy Value</span>
+                                    <span className="text-[11px] text-emerald-400 font-medium">{player.value.toLocaleString()}</span>
                                   </div>
                                 </div>
                               ))}
                             </div>
                             {c2cDevyRoster.length === 0 && !c2cDevyLoading && fantraxUsername && (
-                              <p className="text-[10px] text-center text-purple-300/50 mt-3 italic">
+                              <p className="text-[11px] text-center text-purple-300/50 mt-3 italic">
                                 Import a devy league from Fantrax to see your real roster with CFBD valuations
                               </p>
                             )}
@@ -17919,7 +17919,7 @@ function AFLegacyContent() {
                           <div className="flex items-center gap-2 text-xs">
                             <span className="text-gray-400">Total Roster Value:</span>
                             <span className="text-lg font-bold text-emerald-400">142,850</span>
-                            <span className="text-[10px] text-gray-500">FC</span>
+                            <span className="text-[11px] text-gray-500">FC</span>
                           </div>
                         </div>
                       </div>

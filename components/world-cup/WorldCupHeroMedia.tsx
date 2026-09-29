@@ -149,7 +149,7 @@ export function WorldCupHeroMedia({
           {badges.map(({ label, color }) => (
             <span
               key={label}
-              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide backdrop-blur-sm ${BADGE_CLASSES[color]}`}
+              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wide backdrop-blur-sm ${BADGE_CLASSES[color]}`}
             >
               {label}
             </span>

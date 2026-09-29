@@ -417,7 +417,7 @@ export default function DynastyTradeForm() {
               <div className="ml-2 p-2 rounded bg-gray-900/80 border border-gray-700/50 text-xs space-y-1">
                 <div className="flex items-center gap-3">
                   <span className="font-semibold text-white">{playerValues[asset.id].value}/100</span>
-                  <Badge variant="outline" className={`text-[10px] py-0 ${
+                  <Badge variant="outline" className={`text-[11px] py-0 ${
                     playerValues[asset.id].tier === 'Elite' ? 'border-yellow-500/40 text-yellow-300' :
                     playerValues[asset.id].tier === 'Star' ? 'border-cyan-500/40 text-cyan-300' :
                     playerValues[asset.id].tier === 'Starter' ? 'border-green-500/40 text-green-300' :
@@ -758,7 +758,7 @@ export default function DynastyTradeForm() {
                 <CardTitle className="flex items-center gap-3 text-xl">
                   <Shield className="h-5 w-5 text-emerald-400" />
                   Trade Verdict
-                  <span className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">
+                  <span className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">
                     Data-Driven
                   </span>
                 </CardTitle>
@@ -768,7 +768,7 @@ export default function DynastyTradeForm() {
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <div className="text-center flex-1 min-w-[120px]">
                       <div className="text-lg font-bold text-white">{detVerdict.winnerLabel}</div>
-                      <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Winner</div>
+                      <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Winner</div>
                     </div>
                     <div className="w-px h-12 bg-gray-700 hidden sm:block" />
                     <div className="text-center flex-1 min-w-[100px]">
@@ -779,7 +779,7 @@ export default function DynastyTradeForm() {
                       }`}>
                         {detVerdict.confidence}%
                       </div>
-                      <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Confidence</div>
+                      <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Confidence</div>
                     </div>
                     <div className="w-px h-12 bg-gray-700 hidden sm:block" />
                     <div className="text-center flex-1 min-w-[80px]">
@@ -792,7 +792,7 @@ export default function DynastyTradeForm() {
                          detVerdict.vetoRisk === 'Low' ? 'LOW' :
                          detVerdict.vetoRisk === 'High' ? 'HIGH' : 'MED'}
                       </div>
-                      <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Veto Risk</div>
+                      <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Veto Risk</div>
                     </div>
                   </div>
                 </div>
@@ -801,7 +801,7 @@ export default function DynastyTradeForm() {
                   <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3 text-center">
                     <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Net Delta</div>
                     <div className="text-lg font-bold font-mono text-white">{detVerdict.netValueDelta.toLocaleString()}</div>
-                    <div className="text-[10px] text-gray-500">{detVerdict.netValueDeltaPct}% gap</div>
+                    <div className="text-[11px] text-gray-500">{detVerdict.netValueDeltaPct}% gap</div>
                   </div>
                   <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3 text-center">
                     <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Accept %</div>
@@ -810,17 +810,17 @@ export default function DynastyTradeForm() {
                       detVerdict.acceptanceProbability >= 50 ? 'text-cyan-400' :
                       'text-amber-400'
                     }`}>{detVerdict.acceptanceProbability}%</div>
-                    <div className="text-[10px] text-gray-500">{detVerdict.acceptanceLikelihood}</div>
+                    <div className="text-[11px] text-gray-500">{detVerdict.acceptanceLikelihood}</div>
                   </div>
                   <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3 text-center">
                     <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{teamAName}</div>
                     <div className="text-lg font-bold font-mono text-white">{detVerdict.sideATotalValue.toLocaleString()}</div>
-                    <div className="text-[10px] text-gray-500">Total Value</div>
+                    <div className="text-[11px] text-gray-500">Total Value</div>
                   </div>
                   <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3 text-center">
                     <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{teamBName}</div>
                     <div className="text-lg font-bold font-mono text-white">{detVerdict.sideBTotalValue.toLocaleString()}</div>
-                    <div className="text-[10px] text-gray-500">Total Value</div>
+                    <div className="text-[11px] text-gray-500">Total Value</div>
                   </div>
                 </div>
 
@@ -829,7 +829,7 @@ export default function DynastyTradeForm() {
                     <div className="flex items-center gap-2 mb-3">
                       <TrendingUp className="h-4 w-4 text-emerald-400" />
                       <span className="text-sm font-semibold text-emerald-400">Key Drivers</span>
-                      <span className="text-[9px] text-gray-500 uppercase tracking-wider ml-auto">Deterministic</span>
+                      <span className="text-[11px] text-gray-500 uppercase tracking-wider ml-auto">Deterministic</span>
                     </div>
                     <div className="space-y-2">
                       {detVerdict.keyDrivers.map((d, i) => (
@@ -856,7 +856,7 @@ export default function DynastyTradeForm() {
               <CardTitle className="flex items-center gap-3 text-xl">
                 <Shield className="h-5 w-5 text-purple-400" />
                 Value Details
-                <span className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider bg-purple-950/40 text-purple-400 border border-purple-500/20">
+                <span className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium uppercase tracking-wider bg-purple-950/40 text-purple-400 border border-purple-500/20">
                   AI-Enhanced
                 </span>
               </CardTitle>
@@ -866,7 +866,7 @@ export default function DynastyTradeForm() {
                 <div className="flex items-center justify-between flex-wrap gap-4">
                   <div className="text-center flex-1 min-w-[120px]">
                     <div className="text-lg font-bold text-white">{sections.valueVerdict.edge}</div>
-                    <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Edge</div>
+                    <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Edge</div>
                   </div>
                   <div className="w-px h-12 bg-gray-700 hidden sm:block" />
                   <div className="text-center flex-1 min-w-[100px]">
@@ -877,7 +877,7 @@ export default function DynastyTradeForm() {
                     }`}>
                       {sections.valueVerdict.confidence}%
                     </div>
-                    <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Confidence</div>
+                    <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Confidence</div>
                   </div>
                   <div className="w-px h-12 bg-gray-700 hidden sm:block" />
                   <div className="text-center flex-1 min-w-[80px]">
@@ -890,7 +890,7 @@ export default function DynastyTradeForm() {
                        sections.valueVerdict.vetoRisk === 'Low' ? 'LOW' :
                        sections.valueVerdict.vetoRisk === 'High' ? 'HIGH' : 'MED'}
                     </div>
-                    <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Veto Risk</div>
+                    <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Veto Risk</div>
                   </div>
                 </div>
               </div>
@@ -912,7 +912,7 @@ export default function DynastyTradeForm() {
                   <div className="flex items-center gap-2 mb-3">
                     <TrendingUp className="h-4 w-4 text-cyan-400" />
                     <span className="text-sm font-semibold text-cyan-400">AI Analysis</span>
-                    <span className="text-[9px] text-gray-500 uppercase tracking-wider ml-auto">AI-Generated</span>
+                    <span className="text-[11px] text-gray-500 uppercase tracking-wider ml-auto">AI-Generated</span>
                   </div>
                   <ul className="space-y-2">
                     {sections.valueVerdict.reasons.map((r, i) => (
@@ -955,7 +955,7 @@ export default function DynastyTradeForm() {
                         </div>
                         <div className="flex flex-wrap gap-2 mb-2">
                           {modelCodes.map((code: string, i: number) => (
-                            <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono bg-red-900/40 text-red-300 border border-red-800/50">
+                            <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-mono bg-red-900/40 text-red-300 border border-red-800/50">
                               {code.replace(/_/g, ' ')}
                             </span>
                           ))}
@@ -1018,14 +1018,14 @@ export default function DynastyTradeForm() {
                     }`}>
                       {sections.viabilityVerdict.acceptanceLikelihood}
                     </div>
-                    <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Acceptance</div>
+                    <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Acceptance</div>
                   </div>
                   <div className="w-px h-12 bg-gray-700 hidden sm:block" />
                   <div className="text-center flex-1 min-w-[100px]">
                     <div className="text-3xl font-bold font-mono text-white">
                       {sections.viabilityVerdict.partnerFit.fitScore}
                     </div>
-                    <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Partner Fit</div>
+                    <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Partner Fit</div>
                   </div>
                 </div>
               </div>
@@ -1074,7 +1074,7 @@ export default function DynastyTradeForm() {
                       </li>
                     ))}
                   </ul>
-                  <p className="text-[10px] text-gray-500 mt-2">{sections.viabilityVerdict.leagueActivity}</p>
+                  <p className="text-[11px] text-gray-500 mt-2">{sections.viabilityVerdict.leagueActivity}</p>
                 </div>
               )}
             </CardContent>
@@ -1182,7 +1182,7 @@ export default function DynastyTradeForm() {
                   result.confidence >= 80 ? 'text-green-400' :
                   result.confidence >= 60 ? 'text-cyan-400' : 'text-amber-400'
                 }`}>{result.confidence}%</div>
-                <div className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Confidence</div>
+                <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Confidence</div>
               </div>
             </div>
             {result.factors.length > 0 && (

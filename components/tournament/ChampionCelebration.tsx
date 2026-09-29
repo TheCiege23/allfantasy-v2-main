@@ -74,19 +74,19 @@ export function ChampionCelebration({
           {record && (
             <div>
               <p className="text-[18px] font-bold text-white">{record}</p>
-              <p className="text-[10px] uppercase tracking-wide text-white/40">Record</p>
+              <p className="text-[11px] uppercase tracking-wide text-white/40">Record</p>
             </div>
           )}
           {pointsFor != null && (
             <div>
               <p className="text-[18px] font-bold text-white">{pointsFor.toFixed(1)}</p>
-              <p className="text-[10px] uppercase tracking-wide text-white/40">Points for</p>
+              <p className="text-[11px] uppercase tracking-wide text-white/40">Points for</p>
             </div>
           )}
           {totalRounds != null && (
             <div>
               <p className="text-[18px] font-bold text-white">{totalRounds}</p>
-              <p className="text-[10px] uppercase tracking-wide text-white/40">Rounds</p>
+              <p className="text-[11px] uppercase tracking-wide text-white/40">Rounds</p>
             </div>
           )}
         </div>

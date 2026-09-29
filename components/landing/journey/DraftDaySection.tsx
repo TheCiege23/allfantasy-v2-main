@@ -37,14 +37,14 @@ export function DraftDaySection({ copy }: { copy: LandingCopy['journey']['draftD
           {/* On the clock */}
           <div className="rounded-xl border p-4" style={{ borderColor: 'color-mix(in srgb, var(--accent-amber) 30%, var(--border))', background: 'color-mix(in srgb, var(--accent-amber) 6%, transparent)' }}>
             <div className="mb-3 flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent-amber-strong)' }}>{copy.onTheClock}</span>
-              <span className="landing-clock-pulse rounded-full px-2 py-0.5 text-[9px] font-bold" style={{ background: 'color-mix(in srgb, var(--accent-amber) 18%, transparent)', color: 'var(--accent-amber-strong)' }}>
+              <span className="text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent-amber-strong)' }}>{copy.onTheClock}</span>
+              <span className="landing-clock-pulse rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: 'color-mix(in srgb, var(--accent-amber) 18%, transparent)', color: 'var(--accent-amber-strong)' }}>
                 {copy.clockLabel}
               </span>
             </div>
             {onTheClockPick ? (
               <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold" style={{ background: 'color-mix(in srgb, var(--accent-amber) 20%, transparent)', color: 'var(--accent-amber-strong)' }}>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: 'color-mix(in srgb, var(--accent-amber) 20%, transparent)', color: 'var(--accent-amber-strong)' }}>
                   {onTheClockPick.position}
                 </span>
                 <div className="min-w-0">
@@ -57,10 +57,10 @@ export function DraftDaySection({ copy }: { copy: LandingCopy['journey']['draftD
 
           {/* Next up */}
           <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'color-mix(in srgb, var(--panel2) 70%, transparent)' }}>
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--muted)' }}>{copy.nextUp}</p>
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--muted)' }}>{copy.nextUp}</p>
             {nextUpPick ? (
               <div className="flex items-center gap-2.5 opacity-80">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold" style={{ background: 'color-mix(in srgb, var(--border) 140%, transparent)', color: POSITION_COLORS[nextUpPick.position] ?? 'var(--muted)' }}>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: 'color-mix(in srgb, var(--border) 140%, transparent)', color: POSITION_COLORS[nextUpPick.position] ?? 'var(--muted)' }}>
                   {nextUpPick.position}
                 </span>
                 <div className="min-w-0">
@@ -73,15 +73,15 @@ export function DraftDaySection({ copy }: { copy: LandingCopy['journey']['draftD
 
           {/* Recent picks */}
           <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'color-mix(in srgb, var(--panel2) 70%, transparent)' }}>
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--muted)' }}>{copy.recentPicks}</p>
+            <p className="mb-3 text-[11px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--muted)' }}>{copy.recentPicks}</p>
             <div className="space-y-2">
               {recentPicks.map((pick, i) => (
                 <div key={pick.name} className="landing-draft-slide-in flex items-center gap-2" style={{ animationDelay: `${i * 150}ms` }}>
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold" style={{ background: 'color-mix(in srgb, var(--border) 140%, transparent)', color: POSITION_COLORS[pick.position] ?? 'var(--muted)' }}>
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: 'color-mix(in srgb, var(--border) 140%, transparent)', color: POSITION_COLORS[pick.position] ?? 'var(--muted)' }}>
                     {pick.position}
                   </span>
                   <span className="truncate text-xs font-medium" style={{ color: 'var(--text)' }}>{pick.name}</span>
-                  <span className="text-[10px]" style={{ color: 'var(--muted2)' }}>{pick.team}</span>
+                  <span className="text-[11px]" style={{ color: 'var(--muted2)' }}>{pick.team}</span>
                 </div>
               ))}
             </div>

@@ -233,11 +233,11 @@ export function LeagueDraftBoard({ leagueId, entries, onAddToQueue, config }: Le
             <table className="min-w-full border-separate border-spacing-0 text-[11px] text-white/80">
               <thead className="sticky top-0 z-10 bg-black/80 backdrop-blur">
                 <tr>
-                  <th className="sticky left-0 z-20 bg-black/90 px-2 py-1 text-left text-[10px] font-semibold text-white/60">
+                  <th className="sticky left-0 z-20 bg-black/90 px-2 py-1 text-left text-[11px] font-semibold text-white/60">
                     Round
                   </th>
                   {teams.map((name, idx) => (
-                    <th key={idx} className="min-w-[110px] border-b border-l border-white/10 px-2 py-1 text-left text-[10px] font-semibold text-white/70">
+                    <th key={idx} className="min-w-[110px] border-b border-l border-white/10 px-2 py-1 text-left text-[11px] font-semibold text-white/70">
                       {name}
                     </th>
                   ))}
@@ -265,13 +265,13 @@ export function LeagueDraftBoard({ leagueId, entries, onAddToQueue, config }: Le
                               <p className="truncate text-[11px] font-semibold text-white">
                                 {pick.playerName}
                               </p>
-                              <p className="text-[10px] text-white/60">
+                              <p className="text-[11px] text-white/60">
                                 {pick.position} · {pick.team || 'FA'}
                               </p>
-                              <p className="text-[9px] text-white/40">Pick {overall}</p>
+                              <p className="text-[11px] text-white/40">Pick {overall}</p>
                             </div>
                           ) : (
-                            <p className="text-[9px] text-white/25">Pick {overall}</p>
+                            <p className="text-[11px] text-white/25">Pick {overall}</p>
                           )}
                         </td>
                       )
@@ -294,7 +294,7 @@ export function LeagueDraftBoard({ leagueId, entries, onAddToQueue, config }: Le
                 </div>
                 <div className="leading-tight">
                   <p className="text-sm font-semibold text-white">Available players</p>
-                  <p className="text-[10px] text-white/65">
+                  <p className="text-[11px] text-white/65">
                     Tap to draft or add to queue. Sorted by ADP.
                   </p>
                 </div>
@@ -302,7 +302,7 @@ export function LeagueDraftBoard({ leagueId, entries, onAddToQueue, config }: Le
             </header>
             <div className="max-h-[220px] space-y-1.5 overflow-auto rounded-xl border border-white/10 bg-black/40 px-1 py-1.5">
               {availablePlayers.length === 0 ? (
-                <p className="px-2 py-3 text-[10px] text-white/55">
+                <p className="px-2 py-3 text-[11px] text-white/55">
                   All ADP players have been drafted. Use the commissioner controls below to reset the board if needed.
                 </p>
               ) : (
@@ -318,10 +318,10 @@ export function LeagueDraftBoard({ leagueId, entries, onAddToQueue, config }: Le
                         <p className="truncate font-medium text-white">
                           {rank}. {p.name}
                         </p>
-                        <p className="text-[10px] text-white/60">
+                        <p className="text-[11px] text-white/60">
                           {p.position} · {p.team || 'FA'}{' '}
                           {typeof p.adp === 'number' && (
-                            <span className="ml-1 text-[9px] text-white/45">ADP {p.adp.toFixed(1)}</span>
+                            <span className="ml-1 text-[11px] text-white/45">ADP {p.adp.toFixed(1)}</span>
                           )}
                         </p>
                       </div>
@@ -337,14 +337,14 @@ export function LeagueDraftBoard({ leagueId, entries, onAddToQueue, config }: Le
                               rank,
                             })
                           }
-                          className="rounded-full border border-white/25 px-2 py-0.5 text-[10px] text-white/80 hover:bg-white/10"
+                          className="rounded-full border border-white/25 px-2 py-0.5 text-[11px] text-white/80 hover:bg-white/10"
                         >
                           Queue
                         </button>
                         <button
                           type="button"
                           onClick={() => handleDraftPlayer(p)}
-                          className="inline-flex items-center gap-1 rounded-full bg-cyan-500/20 px-2.5 py-0.5 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-500/35"
+                          className="inline-flex items-center gap-1 rounded-full bg-cyan-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/35"
                         >
                           Draft
                           <ArrowRight className="h-3 w-3" />
@@ -361,7 +361,7 @@ export function LeagueDraftBoard({ leagueId, entries, onAddToQueue, config }: Le
           <section className="space-y-2 rounded-2xl border border-white/12 bg-black/35 p-3 text-xs text-white/80">
             <header className="flex items-center justify-between gap-2">
               <p className="text-sm font-semibold text-white">Recent picks</p>
-              <span className="text-[10px] text-white/60">
+              <span className="text-[11px] text-white/60">
                 Showing last 8 picks
               </span>
             </header>
@@ -375,17 +375,17 @@ export function LeagueDraftBoard({ leagueId, entries, onAddToQueue, config }: Le
                     <p className="truncate font-medium text-white">
                       {p.playerName}
                     </p>
-                    <p className="text-[10px] text-white/60">
+                    <p className="text-[11px] text-white/60">
                       {p.position} · {p.team || 'FA'} · {p.teamName}
                     </p>
                   </div>
-                  <p className="text-[10px] text-white/50">
+                  <p className="text-[11px] text-white/50">
                     R{p.round} · P{p.overall}
                   </p>
                 </li>
               ))}
               {picks.length === 0 && (
-                <li className="rounded-lg border border-dashed border-white/15 bg-black/40 px-2.5 py-2 text-[10px] text-white/55">
+                <li className="rounded-lg border border-dashed border-white/15 bg-black/40 px-2.5 py-2 text-[11px] text-white/55">
                   No picks have been made yet. Once players are drafted, they will appear here.
                 </li>
               )}
@@ -401,7 +401,7 @@ export function LeagueDraftBoard({ leagueId, entries, onAddToQueue, config }: Le
                 </div>
                 <div className="leading-tight">
                   <p className="text-sm font-semibold text-white">Draft room tools</p>
-                  <p className="text-[10px] text-white/65">
+                  <p className="text-[11px] text-white/65">
                     Share your draft link and control the room.
                   </p>
                 </div>
@@ -412,17 +412,17 @@ export function LeagueDraftBoard({ leagueId, entries, onAddToQueue, config }: Le
                 <input
                   value={inviteLink}
                   readOnly
-                  className="w-full rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-[10px] text-white/70"
+                  className="w-full rounded-lg border border-white/20 bg-black/40 px-2 py-1 text-[11px] text-white/70"
                 />
                 <button
                   type="button"
                   onClick={handleCopyInvite}
-                  className="rounded-lg border border-cyan-400/60 px-2 py-1 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-500/20"
+                  className="rounded-lg border border-cyan-400/60 px-2 py-1 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/20"
                 >
                   Copy
                 </button>
               </div>
-              <div className="flex flex-wrap items-center gap-2 text-[10px] text-white/70">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/70">
                 <button
                   type="button"
                   onClick={handleUndoLastPick}
@@ -439,7 +439,7 @@ export function LeagueDraftBoard({ leagueId, entries, onAddToQueue, config }: Le
                 >
                   Reset board
                 </button>
-                <span className="ml-auto text-[9px] text-white/45">
+                <span className="ml-auto text-[11px] text-white/45">
                   Commissioner tools are local only in this preview. League‑attached live drafts can reuse this shell.
                 </span>
               </div>

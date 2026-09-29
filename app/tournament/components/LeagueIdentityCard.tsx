@@ -52,7 +52,7 @@ export function LeagueIdentityCard({
         <div className="flex flex-wrap items-center gap-2">
           {conference ? (
             <span
-              className="rounded-full border px-2 py-0.5 text-[10px] font-semibold"
+              className="rounded-full border px-2 py-0.5 text-[11px] font-semibold"
               style={{
                 borderColor: `${conference.colorHex ?? '#fff'}44`,
                 background: `${conference.colorHex ?? '#333'}22`,
@@ -61,15 +61,15 @@ export function LeagueIdentityCard({
               {conference.name}
             </span>
           ) : null}
-          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/70">{roundLabel}</span>
-          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-[var(--tournament-text-mid)]">
+          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-white/70">{roundLabel}</span>
+          <span className="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-[var(--tournament-text-mid)]">
             {currentCount}/{teamSlots} teams
           </span>
         </div>
-        <p className="text-[10px] uppercase tracking-wide text-[var(--tournament-text-dim)]">
+        <p className="text-[11px] uppercase tracking-wide text-[var(--tournament-text-dim)]">
           Status: <span className="text-white/80">{status}</span>
         </p>
-        <p className="font-mono text-[9px] text-[var(--tournament-text-dim)]">ID: {leagueId.slice(0, 8)}…</p>
+        <p className="font-mono text-[11px] text-[var(--tournament-text-dim)]">ID: {leagueId.slice(0, 8)}…</p>
       </div>
     </div>
   )

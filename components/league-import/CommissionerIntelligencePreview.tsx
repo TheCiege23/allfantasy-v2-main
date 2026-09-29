@@ -739,7 +739,7 @@ export function CommissionerIntelligencePreview({
               <ol className="mt-3 space-y-2.5">
                 {recommendationSet.items.map((rec, i) => (
                   <li key={rec.recommendationId} className="flex items-start gap-3">
-                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[10px] font-bold text-cyan-300">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-500/20 text-[11px] font-bold text-cyan-300">
                       {i + 1}
                     </span>
                     <span className="text-[13px] leading-5 text-white/75">{rec.title}</span>

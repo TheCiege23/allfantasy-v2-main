@@ -38,7 +38,7 @@ export function DraftHelperIntelligence({
     <div className="space-y-2 p-2">
       {showAiOverlays && recommendationOverlay ? (
         <div className="rounded border border-cyan-400/20 bg-cyan-500/10 p-2 text-xs">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100/90">Recommendation overlay</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-cyan-100/90">Recommendation overlay</p>
           <div className="mt-1 flex flex-wrap items-center gap-1">
             {recommendationOverlay.label ? (
               <span className="rounded border border-cyan-300/35 bg-cyan-500/14 px-1.5 py-0.5 text-cyan-100">
@@ -99,7 +99,7 @@ export function DraftHelperIntelligence({
             {headlines.map((headline, idx) => (
               <div key={idx} className="rounded border border-white/12 bg-[#0c1630]/80 p-2 text-xs">
                 <p className="text-slate-200 line-clamp-2">{headline.title}</p>
-                {headline.playerName && <p className="text-slate-500 text-[10px] mt-1">{headline.playerName}</p>}
+                {headline.playerName && <p className="text-slate-500 text-[11px] mt-1">{headline.playerName}</p>}
               </div>
             ))}
           </div>
@@ -114,8 +114,8 @@ export function DraftHelperIntelligence({
             {injuries.map((injury, idx) => (
               <div key={idx} className="rounded border border-rose-400/25 bg-rose-500/10 p-2 text-xs">
                 <p className="text-red-300 font-medium">{injury.playerName}</p>
-                {injury.status && <p className="text-red-200 text-[10px]">{injury.status}</p>}
-                {injury.note && <p className="text-slate-400 text-[10px] mt-0.5">{injury.note}</p>}
+                {injury.status && <p className="text-red-200 text-[11px]">{injury.status}</p>}
+                {injury.note && <p className="text-slate-400 text-[11px] mt-0.5">{injury.note}</p>}
               </div>
             ))}
           </div>

@@ -48,26 +48,26 @@ export default function WaiverResultsFeed({
         >
           <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400/90" />
           <span>
-            <span className="mr-1.5 rounded bg-emerald-500/15 px-1 text-[10px] font-medium uppercase tracking-wide text-emerald-200/90">
+            <span className="mr-1.5 rounded bg-emerald-500/15 px-1 text-[11px] font-medium uppercase tracking-wide text-emerald-200/90">
               {t.outcomeLabel ?? "Awarded"}
             </span>
             {t.isDefensiveAdd && (
-              <span className="mr-1 rounded bg-amber-500/20 px-1 text-[10px] text-amber-300">Defensive add</span>
+              <span className="mr-1 rounded bg-amber-500/20 px-1 text-[11px] text-amber-300">Defensive add</span>
             )}
             Add <span className="font-medium text-white">{t.addPlayerId}</span>
             {t.addPlayerPosition ? (
-              <span className="ml-1 text-[10px] uppercase text-white/45">{t.addPlayerPosition}</span>
+              <span className="ml-1 text-[11px] uppercase text-white/45">{t.addPlayerPosition}</span>
             ) : null}
           </span>
           {t.dropPlayerId && (
             <span className="text-white/60">
               {" · "}
               {t.isDefensiveDrop && (
-                <span className="mr-1 rounded bg-amber-500/20 px-1 text-[10px] text-amber-300">Defensive drop</span>
+                <span className="mr-1 rounded bg-amber-500/20 px-1 text-[11px] text-amber-300">Defensive drop</span>
               )}
               Drop <span className="text-white/80">{t.dropPlayerId}</span>
               {t.dropPlayerPosition ? (
-                <span className="ml-1 text-[10px] uppercase text-white/45">{t.dropPlayerPosition}</span>
+                <span className="ml-1 text-[11px] uppercase text-white/45">{t.dropPlayerPosition}</span>
               ) : null}
             </span>
           )}

@@ -257,22 +257,22 @@ export function PowerRankingsModal({
   const headerBadge =
     data?.ok && data.analysisScope === 'league' ? (
       <div className="flex flex-wrap items-center gap-1">
-        <span className="rounded border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-violet-200">
+        <span className="rounded border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-violet-200">
           {data.engine === 'sleeper_v2' ? 'Sleeper engine' : 'DB standings'}
         </span>
         {data.degraded ? (
-          <span className="rounded border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-200">
+          <span className="rounded border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-200">
             Partial data
           </span>
         ) : (
-          <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-200">
+          <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-200">
             Live
           </span>
         )}
         {(() => {
           const sf = data.sourceFlags
           if (!sf) return null
-          const chipBase = 'rounded-full px-2 py-0.5 text-[8px] font-bold uppercase tracking-wide'
+          const chipBase = 'rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide'
           const green = 'bg-emerald-500/15 text-emerald-200'
           const dim = 'bg-white/5 text-white/35'
           const amber = 'bg-amber-500/12 text-amber-100/90'
@@ -346,7 +346,7 @@ export function PowerRankingsModal({
           {/* Control bar */}
           <div className="rounded-xl border border-white/[0.08] bg-[#0a0f18] p-3 space-y-2">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              <label className="block text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
                 Sport
                 <select
                   value={sportFilter}
@@ -361,7 +361,7 @@ export function PowerRankingsModal({
                   ))}
                 </select>
               </label>
-              <label className="block text-[10px] font-bold uppercase tracking-wide text-[#5c6480] sm:col-span-2">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5c6480] sm:col-span-2">
                 League
                 <select
                   value={leagueId}
@@ -393,7 +393,7 @@ export function PowerRankingsModal({
             </div>
 
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <label className="block text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
                 Ranking mode
                 <select
                   value={rankingMode}
@@ -407,7 +407,7 @@ export function PowerRankingsModal({
                   ))}
                 </select>
               </label>
-              <label className="block text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
                 Team context
                 <select
                   value={teamContext}
@@ -421,7 +421,7 @@ export function PowerRankingsModal({
                   ))}
                 </select>
               </label>
-              <label className="block text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
                 Week (optional)
                 <input
                   value={week}
@@ -433,7 +433,7 @@ export function PowerRankingsModal({
             </div>
 
             {teamContext === 'specific_team' ? (
-              <label className="block text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">
+              <label className="block text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
                 Team
                 <select
                   value={specificTeamExternalId}
@@ -452,7 +452,7 @@ export function PowerRankingsModal({
             ) : null}
 
             <details className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1.5">
-              <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-wide text-[#7a8199]">
+              <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-wide text-[#7a8199]">
                 Intelligence toggles
               </summary>
               <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -482,7 +482,7 @@ export function PowerRankingsModal({
             </details>
 
             {data?.computedAt ? (
-              <p className="text-[10px] text-[#5c6480]">
+              <p className="text-[11px] text-[#5c6480]">
                 Updated {new Date(data.computedAt).toLocaleString()}
                 {data.week != null ? ` · Week ${data.week}` : ''}
                 {data.season ? ` · ${data.season}` : ''}
@@ -491,11 +491,11 @@ export function PowerRankingsModal({
 
             {leagueId.trim() && snapshotHistory.length > 0 ? (
               <details className="mt-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2 py-1.5">
-                <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-wide text-[#7a8199]">
+                <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-wide text-[#7a8199]">
                   Saved snapshots ({rankingMode}) · {snapshotHistory.length}
                 </summary>
                 <ul
-                  className="mt-2 max-h-28 space-y-1 overflow-y-auto text-[10px] text-[#8b93ab] [scrollbar-width:thin]"
+                  className="mt-2 max-h-28 space-y-1 overflow-y-auto text-[11px] text-[#8b93ab] [scrollbar-width:thin]"
                   data-testid="power-rankings-snapshot-history"
                 >
                   {snapshotHistory.map((s) => (
@@ -510,7 +510,7 @@ export function PowerRankingsModal({
 
           {data?.ok && data.analysisScope === 'league' && myRow ? (
             <div className="rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.07] to-purple-500/[0.03] px-3 py-3">
-              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-violet-300/80">Your team</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-violet-300/80">Your team</p>
               <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
                 <div>
                   <p className="text-[24px] font-black tabular-nums text-white/95">#{myRow.rank}</p>
@@ -532,7 +532,7 @@ export function PowerRankingsModal({
                 key={t.id}
                 type="button"
                 onClick={() => setViewTab(t.id)}
-                className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide transition ${
+                className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${
                   viewTab === t.id
                     ? 'bg-violet-500/20 text-violet-100 border border-violet-500/35'
                     : 'border border-transparent text-[#7a8199] hover:bg-white/[0.04]'
@@ -559,7 +559,7 @@ export function PowerRankingsModal({
 
           {data?.dataGaps && data.dataGaps.length > 0 ? (
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2">
-              <p className="text-[9px] font-bold uppercase tracking-wide text-amber-200/90">Data notes</p>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-amber-200/90">Data notes</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[11px] text-amber-100/85">
                 {data.dataGaps.map((g) => (
                   <li key={g}>{g}</li>
@@ -624,13 +624,13 @@ function ViewBody({
                 ) : null}
                 <p className="truncate text-[12px] font-bold text-white/90">{t.teamName}</p>
                 {t.isCurrentUser ? (
-                  <span className="rounded bg-violet-500/20 px-1 text-[8px] font-bold uppercase text-violet-100">
+                  <span className="rounded bg-violet-500/20 px-1 text-[11px] font-bold uppercase text-violet-100">
                     You
                   </span>
                 ) : null}
                 <MomentumPill label={t.momentumLabel} />
               </div>
-              <p className="truncate text-[10px] text-white/45">
+              <p className="truncate text-[11px] text-white/45">
                 {recordLabel(t)} · PF {t.pointsFor.toFixed(1)} · {t.tierLabel}
               </p>
             </div>
@@ -655,7 +655,7 @@ function ViewBody({
           >
             <div>
               <p className="text-[12px] font-semibold text-white/85">{t.teamName}</p>
-              <p className="text-[10px] text-white/45">{t.momentumLabel} · recent {t.recentPerformanceScore.toFixed(0)}</p>
+              <p className="text-[11px] text-white/45">{t.momentumLabel} · recent {t.recentPerformanceScore.toFixed(0)}</p>
             </div>
             <DeltaBadge delta={t.rankDelta} />
           </div>
@@ -675,7 +675,7 @@ function ViewBody({
       <div className="space-y-3">
         {[...byTier.entries()].map(([tier, list]) => (
           <div key={tier}>
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-violet-300/80">{tier}</p>
+            <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-violet-300/80">{tier}</p>
             <div className="space-y-1">
               {list.map((t) => (
                 <button
@@ -729,9 +729,9 @@ function ViewBody({
               Contender signal: {t.contenderSignal}
             </p>
             {t.contenderFactors?.rationale ? (
-              <p className="mt-0.5 text-[10px] text-white/55">{t.contenderFactors.rationale}</p>
+              <p className="mt-0.5 text-[11px] text-white/55">{t.contenderFactors.rationale}</p>
             ) : null}
-            <p className="mt-1 text-[10px] text-amber-200/80">
+            <p className="mt-1 text-[11px] text-amber-200/80">
               Not sportsbook odds — derived from power components in your league settings.
             </p>
           </div>
@@ -771,7 +771,7 @@ function ViewBody({
                 style={{ width: `${Math.min(100, t.rosterStrengthScore)}%` }}
               />
             </div>
-            <p className="mt-1 text-[10px] text-white/45">
+            <p className="mt-1 text-[11px] text-white/45">
               Roster {t.rosterStrengthScore.toFixed(1)} · Proj {t.projectionStrengthScore.toFixed(1)}
             </p>
           </button>
@@ -795,7 +795,7 @@ function ViewBody({
           tool.
         </p>
       )}
-      <p className="mt-2 text-[10px] text-[#5c6480]">
+      <p className="mt-2 text-[11px] text-[#5c6480]">
         Narrative is generated only from structured standings and engine outputs — never from invented stats.
       </p>
     </div>
@@ -811,7 +811,7 @@ function MomentumPill({ label }: { label: EnrichedTeamRow['momentumLabel'] }) {
     fading: 'bg-red-500/10 text-red-200 border-red-500/25',
   }
   return (
-    <span className={`rounded border px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide ${map[label]}`}>
+    <span className={`rounded border px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${map[label]}`}>
       {label}
     </span>
   )
@@ -843,7 +843,7 @@ function RankSparkline({ ranks }: { ranks: number[] }) {
           points={pts}
         />
       </svg>
-      <p className="max-w-[12rem] text-[10px] leading-snug text-[#5c6480]">
+      <p className="max-w-[12rem] text-[11px] leading-snug text-[#5c6480]">
         Rank from saved snapshots (lower is better). Uses real stored standings only.
       </p>
     </div>
@@ -860,7 +860,7 @@ function DeltaBadge({ delta }: { delta: number | null }) {
         : 'text-white/40'
   const Icon = d.tone === 'up' ? TrendingUp : d.tone === 'down' ? TrendingDown : Minus
   return (
-    <div className={`inline-flex items-center gap-0.5 text-[10px] font-bold tabular-nums ${cls}`}>
+    <div className={`inline-flex items-center gap-0.5 text-[11px] font-bold tabular-nums ${cls}`}>
       <Icon className="h-3 w-3" />
       {d.text}
     </div>
@@ -929,7 +929,7 @@ function TeamDetailDrawer({
               </span>
             ) : null}
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-wide text-[#5c6480]">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-[#5c6480]">
                 #{team.rank} {leagueName ? `· ${leagueName}` : ''}
               </p>
               <p className="truncate text-[16px] font-bold text-white/95">{team.teamName}</p>
@@ -948,30 +948,30 @@ function TeamDetailDrawer({
 
         <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5">
-            <p className="text-[9px] uppercase text-[#5c6480]">Record</p>
+            <p className="text-[11px] uppercase text-[#5c6480]">Record</p>
             <p className="font-semibold text-white/90">{recordLabel(team)}</p>
           </div>
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5">
-            <p className="text-[9px] uppercase text-[#5c6480]">Movement</p>
+            <p className="text-[11px] uppercase text-[#5c6480]">Movement</p>
             <p className={`font-semibold ${d.tone === 'up' ? 'text-emerald-300' : d.tone === 'down' ? 'text-red-300' : 'text-white/50'}`}>
               {d.text}
               {team.prevRank != null ? ` (was #${team.prevRank})` : ''}
             </p>
           </div>
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5">
-            <p className="text-[9px] uppercase text-[#5c6480]">Points for / against</p>
+            <p className="text-[11px] uppercase text-[#5c6480]">Points for / against</p>
             <p className="font-semibold text-white/90">
               {team.pointsFor.toFixed(1)} / {team.pointsAgainst.toFixed(1)}
             </p>
           </div>
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5">
-            <p className="text-[9px] uppercase text-[#5c6480]">SOS (scale)</p>
+            <p className="text-[11px] uppercase text-[#5c6480]">SOS (scale)</p>
             <p className="font-semibold text-sky-200/90">{(team.strengthOfSchedule * 100).toFixed(1)}%</p>
           </div>
         </div>
 
         <div className="mt-3 space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-violet-300/80">Signals</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-violet-300/80">Signals</p>
           <div className="space-y-1 text-[11px] text-white/65">
             <p>Power {team.powerScore.toFixed(1)} · Momentum {team.momentumLabel} · {team.tierLabel}</p>
             <p>{team.snippet}</p>
@@ -979,19 +979,19 @@ function TeamDetailDrawer({
         </div>
 
         {trailLoading ? (
-          <p className="mt-3 text-[10px] text-[#5c6480]">Loading rank history from snapshots…</p>
+          <p className="mt-3 text-[11px] text-[#5c6480]">Loading rank history from snapshots…</p>
         ) : trail && trail.length >= 2 ? (
           <div className="mt-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2">
-            <p className="text-[9px] font-bold uppercase tracking-wide text-[#7a8199]">Rank history (snapshots)</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-[#7a8199]">Rank history (snapshots)</p>
             <RankSparkline ranks={trail} />
             <p className="mt-1 font-mono text-[11px] tabular-nums text-white/55">
               {trail.map((n) => `#${n}`).join(' → ')}
             </p>
           </div>
         ) : trail && trail.length === 1 ? (
-          <p className="mt-3 text-[10px] text-[#5c6480]">One saved snapshot for this team — more points appear as rankings are stored over time.</p>
+          <p className="mt-3 text-[11px] text-[#5c6480]">One saved snapshot for this team — more points appear as rankings are stored over time.</p>
         ) : trail && trail.length === 0 && leagueId.trim() && team.externalId ? (
-          <p className="mt-3 text-[10px] text-[#5c6480]">
+          <p className="mt-3 text-[11px] text-[#5c6480]">
             No snapshot trail for this team yet in this mode — run power rankings after standings sync to build history.
           </p>
         ) : null}
@@ -1007,7 +1007,7 @@ function TeamDetailDrawer({
             <Sparkles className="h-3.5 w-3.5" />
             Ask Chimmy (team)
           </Link>
-          <span className="inline-flex items-center gap-1 text-[10px] text-[#5c6480]">
+          <span className="inline-flex items-center gap-1 text-[11px] text-[#5c6480]">
             <ExternalLink className="h-3 w-3" />
             Start/Sit &amp; waivers live in AI Tools grid
           </span>

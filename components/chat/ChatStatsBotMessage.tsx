@@ -22,7 +22,7 @@ export default function ChatStatsBotMessage({ update, compact }: Props) {
         <span className="font-semibold" style={{ color: "var(--text)" }}>
           Chat Stats Bot
         </span>
-        <span className="text-[10px]">{update.weekLabel}</span>
+        <span className="text-[11px]">{update.weekLabel}</span>
       </div>
       {compact ? (
         <p className="mt-1 text-[11px]" style={{ color: "var(--muted2)" }}>

@@ -114,7 +114,7 @@ export function FirstRoundPickAnimation({
         >
           {/* Header strip */}
           <div className="bg-gradient-to-r from-cyan-500/10 via-transparent to-purple-500/10 px-6 py-3">
-            <p className="text-center text-[10px] font-bold uppercase tracking-[0.3em] text-cyan-200/80">
+            <p className="text-center text-[11px] font-bold uppercase tracking-[0.3em] text-cyan-200/80">
               Round {pick.round} · Pick {pick.pick}
             </p>
           </div>
@@ -170,7 +170,7 @@ export function FirstRoundPickAnimation({
             {/* Grade + Headline */}
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-white/40">Pick Analysis</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">Pick Analysis</p>
                 <p className="mt-1 text-[15px] font-bold text-white">{pick.analysis.headline}</p>
               </div>
               <div
@@ -191,22 +191,22 @@ export function FirstRoundPickAnimation({
             {/* ADP diff badge */}
             <div className="mt-3 flex flex-wrap gap-2">
               {isSteal && (
-                <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-[10px] font-bold text-emerald-300">
+                <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-[11px] font-bold text-emerald-300">
                   STEAL · {Math.abs(pick.analysis.adpDiff)} picks below ADP
                 </span>
               )}
               {isValue && !isSteal && (
-                <span className="rounded-full bg-sky-500/15 px-3 py-1 text-[10px] font-bold text-sky-300">
+                <span className="rounded-full bg-sky-500/15 px-3 py-1 text-[11px] font-bold text-sky-300">
                   VALUE · {Math.abs(pick.analysis.adpDiff)} below ADP
                 </span>
               )}
               {isReach && (
-                <span className="rounded-full bg-amber-500/15 px-3 py-1 text-[10px] font-bold text-amber-300">
+                <span className="rounded-full bg-amber-500/15 px-3 py-1 text-[11px] font-bold text-amber-300">
                   REACH · {pick.analysis.adpDiff} above ADP
                 </span>
               )}
               {!isReach && !isValue && (
-                <span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold text-white/50">
+                <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold text-white/50">
                   ON VALUE · ADP match
                 </span>
               )}
@@ -217,7 +217,7 @@ export function FirstRoundPickAnimation({
               <div className="mt-3 flex gap-3">
                 {pick.analysis.keyStats.slice(0, 3).map((stat, i) => (
                   <div key={i} className="rounded-lg bg-white/5 px-3 py-1.5 text-center">
-                    <p className="text-[10px] text-white/40">{stat.label}</p>
+                    <p className="text-[11px] text-white/40">{stat.label}</p>
                     <p className="text-[13px] font-bold text-white">{stat.value}</p>
                   </div>
                 ))}

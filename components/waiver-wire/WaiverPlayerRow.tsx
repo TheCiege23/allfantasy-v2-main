@@ -71,7 +71,7 @@ function TeamLogoBadge({ logo, team, sport }: { logo: string; team: string; spor
   const label = team && team !== "FA" ? team.slice(0, 3).toUpperCase() : String(sport ?? "AF").slice(0, 3).toUpperCase()
   return (
     <div
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] text-[9px] font-black text-white/65"
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.06] text-[11px] font-black text-white/65"
       data-testid={`waiver-player-team-logo-fallback-${team || "FA"}`}
       title={team && team !== "FA" ? `${team} badge` : "Team logo unavailable"}
     >
@@ -83,7 +83,7 @@ function TeamLogoBadge({ logo, team, sport }: { logo: string; team: string; spor
 function Metric({ label, value, testId }: { label: string; value: string; testId?: string }) {
   return (
     <div className="rounded-lg border border-white/10 bg-white/[0.035] px-2 py-1" data-testid={testId}>
-      <div className="text-[9px] font-semibold uppercase tracking-wide text-white/40">{label}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-white/40">{label}</div>
       <div className="mt-0.5 text-xs font-semibold text-white/90">{value}</div>
     </div>
   )
@@ -96,7 +96,7 @@ function SourcePill({ label, tone = "neutral" }: { label: string; tone?: "neutra
       : tone === "good"
         ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
         : "border-white/10 bg-white/[0.04] text-white/60"
-  return <span className={`rounded-full border px-1.5 py-0.5 text-[10px] ${cls}`}>{label}</span>
+  return <span className={`rounded-full border px-1.5 py-0.5 text-[11px] ${cls}`}>{label}</span>
 }
 
 export default function WaiverPlayerRow({
@@ -152,7 +152,7 @@ export default function WaiverPlayerRow({
             className="ring-1 ring-white/10"
           />
           <span
-            className="absolute -bottom-1 -right-1 rounded-full border border-black/70 px-1.5 py-0.5 text-[9px] font-black text-black"
+            className="absolute -bottom-1 -right-1 rounded-full border border-black/70 px-1.5 py-0.5 text-[11px] font-black text-black"
             style={{ backgroundColor: posColor }}
             data-testid={`waiver-player-position-chip-${player.id}`}
           >
@@ -168,7 +168,7 @@ export default function WaiverPlayerRow({
               {team}
             </span>
             {player.injuryStatus ? (
-              <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-100">
+              <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-100">
                 {player.injuryStatus}
               </span>
             ) : null}

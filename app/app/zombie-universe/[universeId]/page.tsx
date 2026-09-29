@@ -145,11 +145,11 @@ export default function ZombieUniverseHomePage() {
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-rose-500/25 bg-rose-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.24em] text-rose-100">
+              <span className="rounded-full border border-rose-500/25 bg-rose-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-rose-100">
                 Universe War Room
               </span>
               {data?.universe?.status ? (
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/70">
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/70">
                   {data.universe.status}
                 </span>
               ) : null}
@@ -198,20 +198,20 @@ export default function ZombieUniverseHomePage() {
               <div key={level.id} className={`rounded-3xl border bg-gradient-to-r p-4 ${levelTone(level.rankOrder ?? 1)}`}>
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/45">Tier {level.rankOrder ?? 0}</p>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/45">Tier {level.rankOrder ?? 0}</p>
                     <h3 className="mt-1 text-xl font-black text-white">{level.name}</h3>
                   </div>
                   <div className="grid grid-cols-3 gap-2 sm:min-w-[320px]">
                     <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">Leagues</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Leagues</p>
                       <p className="mt-2 text-lg font-black text-white">{level.leagueCount}</p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">Alive</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Alive</p>
                       <p className="mt-2 text-lg font-black text-emerald-200">{level.survivors}</p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-white/45">Horde</p>
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">Horde</p>
                       <p className="mt-2 text-lg font-black text-rose-100">{level.zombies}</p>
                     </div>
                   </div>
@@ -236,7 +236,7 @@ export default function ZombieUniverseHomePage() {
                   <div key={`${row.rosterId}-${index}`} className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-[10px] uppercase tracking-[0.18em] text-white/35">Rank {index + 1}</p>
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-white/35">Rank {index + 1}</p>
                         <p className="truncate text-sm font-semibold text-white">{row.displayName ?? row.rosterId}</p>
                         <p className="mt-1 text-xs text-white/55">{row.leagueName ?? 'Universe team'}</p>
                       </div>

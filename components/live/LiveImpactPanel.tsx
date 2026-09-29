@@ -33,7 +33,7 @@ export function LiveImpactPanel({
         style={{ background: 'var(--live-accent-soft)', border: '1px solid var(--live-accent-line)' }}
       >
         <h2
-          className="live-mono mb-3 text-[10px] font-bold uppercase tracking-widest"
+          className="live-mono mb-3 text-[11px] font-bold uppercase tracking-widest"
           style={{ color: 'var(--muted)' }}
         >
           Your live impact
@@ -68,7 +68,7 @@ export function LiveImpactPanel({
           {impact.biggestMover ? (
             <>
               <h3
-                className="live-mono mb-3 text-[10px] font-bold uppercase tracking-widest"
+                className="live-mono mb-3 text-[11px] font-bold uppercase tracking-widest"
                 style={{ color: 'var(--muted)' }}
               >
                 Biggest mover
@@ -99,7 +99,7 @@ export function LiveImpactPanel({
           {impact.upNext.length > 0 ? (
             <>
               <h3
-                className="live-mono mb-3 mt-5 text-[10px] font-bold uppercase tracking-widest"
+                className="live-mono mb-3 mt-5 text-[11px] font-bold uppercase tracking-widest"
                 style={{ color: 'var(--muted)' }}
               >
                 Up next for you

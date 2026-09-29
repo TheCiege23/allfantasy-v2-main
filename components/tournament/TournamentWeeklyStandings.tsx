@@ -107,7 +107,7 @@ export function TournamentWeeklyStandings({ tournamentId, week }: TournamentWeek
                   {isCutline && (
                     <tr key={`cutline-${i}`}>
                       <td colSpan={9} className="py-1">
-                        <div className="flex items-center gap-2 text-[10px] text-amber-400/60">
+                        <div className="flex items-center gap-2 text-[11px] text-amber-400/60">
                           <div className="flex-1 border-t border-amber-400/30" />
                           <AlertTriangle className="h-3 w-3" />
                           <span>CUTLINE</span>
@@ -120,7 +120,7 @@ export function TournamentWeeklyStandings({ tournamentId, week }: TournamentWeek
                     <td className="px-2 py-1.5 text-white/40 font-bold">{row.globalRank}</td>
                     <td className="px-2 py-1.5">
                       <div className="text-white/80 font-medium">{row.displayName}</div>
-                      <div className="text-[10px] text-white/30 sm:hidden">{row.leagueName}</div>
+                      <div className="text-[11px] text-white/30 sm:hidden">{row.leagueName}</div>
                     </td>
                     <td className="px-2 py-1.5 text-white/50 hidden sm:table-cell">{row.leagueName}</td>
                     <td className="px-2 py-1.5 text-white/40 hidden md:table-cell">{row.conference}</td>
@@ -133,7 +133,7 @@ export function TournamentWeeklyStandings({ tournamentId, week }: TournamentWeek
                     <td className="px-2 py-1.5 text-white/60">{row.record}</td>
                     <td className="px-2 py-1.5 text-right text-white/40 hidden sm:table-cell">{row.pointsFor.toFixed(1)}</td>
                     <td className="px-2 py-1.5 text-center">
-                      <span className={`inline-block rounded-full px-1.5 py-0.5 text-[9px] font-bold ${statusStyle.color} ${statusStyle.bg}`}>
+                      <span className={`inline-block rounded-full px-1.5 py-0.5 text-[11px] font-bold ${statusStyle.color} ${statusStyle.bg}`}>
                         {statusStyle.label}
                       </span>
                     </td>

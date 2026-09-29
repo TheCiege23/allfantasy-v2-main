@@ -139,7 +139,7 @@ export function LeagueChat({ leagueId, currentUserId }: { leagueId: string; curr
                 >
                   {msg.message}
                 </div>
-                <div className={`text-[10px] mt-0.5 ${isOwn ? "text-right" : ""} text-white/25`}>
+                <div className={`text-[11px] mt-0.5 ${isOwn ? "text-right" : ""} text-white/25`}>
                   {formatTime(msg.createdAt)}
                 </div>
               </div>

@@ -114,7 +114,7 @@ export function DevyLeagueSettingsHub({ ctx }: { ctx: SubPanelContext }) {
         />
         <div className="relative flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200/80">Devy command center</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/80">Devy command center</p>
             <h3 className="mt-1 text-lg font-bold text-white">Multi-year prospect development</h3>
             <p className="mt-1 max-w-xl text-[12px] leading-relaxed text-white/55">
               This league is built for long-term pipelines: active pros, taxi stashes, devy prospects, and tradable

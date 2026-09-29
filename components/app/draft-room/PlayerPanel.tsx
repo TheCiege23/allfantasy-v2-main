@@ -887,7 +887,7 @@ function PlayerPanelInner({
                     if (leagueId) sendProductAnalyticsBeacon(DRAFT_ROOM.FILTER_POSITION, { leagueId, value: opt.value })
                     setPositionFilter(opt.value)
                   }}
-                  className={`inline-flex h-[22px] shrink-0 items-center gap-1 rounded-full border px-2 text-[9px] font-semibold uppercase tracking-[0.12em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${
+                  className={`inline-flex h-[22px] shrink-0 items-center gap-1 rounded-full border px-2 text-[11px] font-semibold uppercase tracking-[0.12em] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${
                     isActive
                       ? 'border-cyan-400/55 bg-[#20d6d2]/20 text-cyan-50 shadow-[0_0_10px_rgba(32,214,210,0.24)]'
                       : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:border-white/20 hover:text-white/90'
@@ -895,7 +895,7 @@ function PlayerPanelInner({
                 >
                   <span>{opt.label}</span>
                   <span
-                    className={`text-[8px] font-medium tabular-nums ${
+                    className={`text-[11px] font-medium tabular-nums ${
                       isActive ? 'text-cyan-100/85' : 'text-white/45'
                     }`}
                   >
@@ -992,17 +992,17 @@ function PlayerPanelInner({
           )}
         </div>
         {isCollegeRound && (
-          <div className="border-b border-violet-400/20 bg-violet-500/10 px-2 py-1 text-[10px] text-violet-100">
+          <div className="border-b border-violet-400/20 bg-violet-500/10 px-2 py-1 text-[11px] text-violet-100">
             College round (C2C) — select a college-eligible player.
           </div>
         )}
         {isProRound && (
-          <div className="border-b border-cyan-400/20 bg-cyan-500/8 px-2 py-1 text-[10px] text-cyan-100">
+          <div className="border-b border-cyan-400/20 bg-cyan-500/8 px-2 py-1 text-[11px] text-cyan-100">
             Pro round (C2C) — select an NFL player.
           </div>
         )}
         {isDevyRound && (
-          <div className="border-b border-amber-400/20 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-100">
+          <div className="border-b border-amber-400/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-100">
             Devy round — select a college/devy-eligible player.
           </div>
         )}
@@ -1015,12 +1015,12 @@ function PlayerPanelInner({
               and the "My roster / Pool" view-toggle remain in this row because they
               don't belong on the table header. */}
           {useAiAdp && (
-            <span className="rounded border border-cyan-300/25 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] text-cyan-100" title="Player order uses AI ADP">
+            <span className="rounded border border-cyan-300/25 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] text-cyan-100" title="Player order uses AI ADP">
               AI ADP
             </span>
           )}
           {onUseAiAdpChange && (
-            <label className="min-h-[32px] flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-[10px] text-white/70 hover:bg-white/5 touch-manipulation transition">
+            <label className="min-h-[32px] flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-[11px] text-white/70 hover:bg-white/5 touch-manipulation transition">
               <input
                 type="checkbox"
                 checked={useAiAdp}
@@ -1038,7 +1038,7 @@ function PlayerPanelInner({
           )}
           {aiAdpUnavailable && (
             <span
-              className="text-[10px] text-amber-400/90"
+              className="text-[11px] text-amber-400/90"
               data-testid="draft-ai-adp-unavailable-banner"
               title={formatAiAdpUnavailableBanner(aiAdpUnavailableMessage) ?? AI_ADP_NOT_READY_COPY}
             >
@@ -1046,12 +1046,12 @@ function PlayerPanelInner({
             </span>
           )}
           {useAiAdp && aiAdpStaleWarning && !aiAdpUnavailable && (
-            <span className="text-[10px] text-amber-300/90" title="AI ADP is stale and will refresh after the daily job">
+            <span className="text-[11px] text-amber-300/90" title="AI ADP is stale and will refresh after the daily job">
               Stale snapshot
             </span>
           )}
           {useAiAdp && aiAdpLowSampleWarning && !aiAdpUnavailable && (
-            <span className="text-[10px] text-amber-400/90" title="Some ADP values based on few drafts">
+            <span className="text-[11px] text-amber-400/90" title="Some ADP values based on few drafts">
               Low sample
             </span>
           )}
@@ -1064,7 +1064,7 @@ function PlayerPanelInner({
                 else setShowAiOverlaysLocal(next)
               }}
               data-testid="draft-toggle-ai-overlays"
-              className={`min-h-[30px] rounded-lg border px-2 py-1 text-[10px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${
+              className={`min-h-[30px] rounded-lg border px-2 py-1 text-[11px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${
                 aiOverlaysEnabled
                   ? 'border-cyan-300/40 bg-cyan-500/14 text-cyan-100'
                   : 'border-white/10 bg-black/20 text-white/65 hover:bg-white/10'
@@ -1078,14 +1078,14 @@ function PlayerPanelInner({
             type="button"
             onClick={() => setShowRosterView((v) => !v)}
             data-testid="draft-toggle-roster-view"
-            className="ml-auto min-h-[30px] flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] text-white/70 hover:bg-white/10 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 transition"
+            className="ml-auto min-h-[30px] flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] text-white/70 hover:bg-white/10 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 transition"
           >
             <User className="h-3.5 w-3.5" />
             {showRosterView ? 'Pool' : 'My roster'}
           </button>
         </div>
         <div
-          className={`flex flex-wrap items-center justify-between gap-1 border-b px-2 py-1 text-[10px] ${rs ? 'border-cyan-500/10 bg-[#0b1428]/95 text-white/60' : 'border-white/[0.06] bg-[#0b1428]/95 text-white/55'}`}
+          className={`flex flex-wrap items-center justify-between gap-1 border-b px-2 py-1 text-[11px] ${rs ? 'border-cyan-500/10 bg-[#0b1428]/95 text-white/60' : 'border-white/[0.06] bg-[#0b1428]/95 text-white/55'}`}
         >
           <span className={rs ? 'tabular-nums' : undefined}>
             <span className="font-semibold text-white/85">{filtered.length}</span> shown
@@ -1096,7 +1096,7 @@ function PlayerPanelInner({
               type="button"
               data-testid="draft-filter-watchlist-only"
               onClick={() => setWatchlistOnly((v) => !v)}
-              className={`rounded-full border px-2 py-0.5 text-[9px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${watchlistOnly ? 'border-cyan-300/45 bg-[#20d6d2]/18 text-cyan-100' : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:bg-white/10'}`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${watchlistOnly ? 'border-cyan-300/45 bg-[#20d6d2]/18 text-cyan-100' : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:bg-white/10'}`}
             >
               Watchlist
             </button>
@@ -1104,7 +1104,7 @@ function PlayerPanelInner({
               type="button"
               data-testid="draft-filter-hide-drafted"
               onClick={() => setHideDrafted((v) => !v)}
-              className={`rounded-full border px-2 py-0.5 text-[9px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${hideDrafted ? 'border-cyan-300/45 bg-[#20d6d2]/18 text-cyan-100' : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:bg-white/10'}`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${hideDrafted ? 'border-cyan-300/45 bg-[#20d6d2]/18 text-cyan-100' : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:bg-white/10'}`}
             >
               Hide drafted
             </button>
@@ -1117,7 +1117,7 @@ function PlayerPanelInner({
               data-testid="draft-filter-rookies-only"
               onClick={toggleRookiesOnly}
               aria-pressed={rookiesOnly}
-              className={`rounded-full border px-2 py-0.5 text-[9px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 ${rookiesOnly ? 'border-violet-300/40 bg-violet-500/14 text-violet-100' : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:bg-white/10'}`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 ${rookiesOnly ? 'border-violet-300/40 bg-violet-500/14 text-violet-100' : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:bg-white/10'}`}
             >
               Rookies only
             </button>
@@ -1129,7 +1129,7 @@ function PlayerPanelInner({
               data-testid="draft-filter-vets-only"
               onClick={toggleVetsOnly}
               aria-pressed={vetsOnly}
-              className={`rounded-full border px-2 py-0.5 text-[9px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${vetsOnly ? 'border-cyan-300/45 bg-[#20d6d2]/18 text-cyan-100' : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:bg-white/10'}`}
+              className={`rounded-full border px-2 py-0.5 text-[11px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${vetsOnly ? 'border-cyan-300/45 bg-[#20d6d2]/18 text-cyan-100' : 'border-white/[0.06] bg-[#101a30] text-[#94a3b8] hover:bg-white/10'}`}
             >
               Vets only
             </button>
@@ -1138,7 +1138,7 @@ function PlayerPanelInner({
             type="button"
             data-testid="draft-clear-filters"
             onClick={clearAllFilters}
-            className="rounded-full border border-white/[0.06] bg-[#101a30] px-2 py-0.5 text-[9px] text-[#94a3b8] transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
+            className="rounded-full border border-white/[0.06] bg-[#101a30] px-2 py-0.5 text-[11px] text-[#94a3b8] transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40"
           >
             Clear filters
           </button>
@@ -1155,7 +1155,7 @@ function PlayerPanelInner({
           <button
             type="button"
             onClick={() => setCompareAnchor(null)}
-            className="shrink-0 rounded border border-amber-400/35 bg-black/20 px-2 py-1 text-[10px] text-amber-50 hover:bg-black/35 transition"
+            className="shrink-0 rounded border border-amber-400/35 bg-black/20 px-2 py-1 text-[11px] text-amber-50 hover:bg-black/35 transition"
           >
             <X className="h-3 w-3" />
           </button>
@@ -1286,7 +1286,7 @@ function PlayerPanelInner({
         ) : showRosterView ? (
           <ul className="space-y-1">
             {currentRoster.length === 0 ? (
-              <li className="text-[10px] text-white/50">{t('draftRoom.playerPanel.noPicksYet')}</li>
+              <li className="text-[11px] text-white/50">{t('draftRoom.playerPanel.noPicksYet')}</li>
             ) : (
               currentRoster.map((p, i) => (
                 <li

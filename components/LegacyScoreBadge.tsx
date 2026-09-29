@@ -72,7 +72,7 @@ export function LegacyScoreBadge({
   if (!data) {
     return (
       <span
-        className={`inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-white/45 ${className}`}
+        className={`inline-flex items-center gap-1 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[11px] font-medium text-white/45 ${className}`}
         title={error ? `Legacy unavailable: ${error}` : "Legacy score not generated yet"}
       >
         No legacy
@@ -94,7 +94,7 @@ export function LegacyScoreBadge({
 
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium ${colorClass} ${className}`}
+      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium ${colorClass} ${className}`}
       title={`Legacy score: ${score.toFixed(0)}/100`}
     >
       Legacy {showScore ? score.toFixed(0) : ""}

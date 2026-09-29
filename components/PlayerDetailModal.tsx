@@ -266,31 +266,31 @@ export default function PlayerDetailModal({
                   <div className="flex gap-4 mt-3 flex-wrap">
                     {bio.age && (
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase">Age</div>
+                        <div className="text-[11px] text-white/40 uppercase">Age</div>
                         <div className="text-sm font-bold text-white">{bio.age}</div>
                       </div>
                     )}
                     {bio.height && (
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase">Height</div>
+                        <div className="text-[11px] text-white/40 uppercase">Height</div>
                         <div className="text-sm font-bold text-white">{bio.height}</div>
                       </div>
                     )}
                     {bio.weight && (
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase">Weight</div>
+                        <div className="text-[11px] text-white/40 uppercase">Weight</div>
                         <div className="text-sm font-bold text-white">{bio.weight} lbs</div>
                       </div>
                     )}
                     {bio.yearsExp != null && (
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase">Exp</div>
+                        <div className="text-[11px] text-white/40 uppercase">Exp</div>
                         <div className="text-sm font-bold text-white">{bio.yearsExp}</div>
                       </div>
                     )}
                     {bio.college && (
                       <div>
-                        <div className="text-[10px] text-white/40 uppercase">College</div>
+                        <div className="text-[11px] text-white/40 uppercase">College</div>
                         <div className="text-sm font-bold text-white">{bio.college}</div>
                       </div>
                     )}
@@ -329,7 +329,7 @@ export default function PlayerDetailModal({
                       <div className="flex items-start justify-between gap-2">
                         <h4 className="text-sm font-semibold text-white/90 leading-snug">{article.title}</h4>
                         {article.publishedAt && (
-                          <span className="text-[10px] text-white/40 whitespace-nowrap flex-shrink-0">
+                          <span className="text-[11px] text-white/40 whitespace-nowrap flex-shrink-0">
                             {formatInTimezone(article.publishedAt, { month: 'short', day: 'numeric', year: 'numeric' })}
                           </span>
                         )}
@@ -339,10 +339,10 @@ export default function PlayerDetailModal({
                       )}
                       <div className="mt-2 flex items-center gap-2">
                         {article.source && (
-                          <span className="text-[10px] text-cyan-300/70">via {article.source}</span>
+                          <span className="text-[11px] text-cyan-300/70">via {article.source}</span>
                         )}
                         {article.url && (
-                          <a href={article.url} target="_blank" rel="noreferrer" className="text-[10px] text-cyan-400 hover:text-cyan-300 underline">
+                          <a href={article.url} target="_blank" rel="noreferrer" className="text-[11px] text-cyan-400 hover:text-cyan-300 underline">
                             Read more
                           </a>
                         )}

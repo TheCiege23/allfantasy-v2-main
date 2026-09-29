@@ -23,13 +23,18 @@
  * One additional ellipsis on /core/career at phone width is the entire measured cost. Nothing
  * overflowed its container or the page at either width.
  *
- * 🛑 WHAT THIS GUARD DOES **NOT** COVER, stated so a green run is not read as "the app has an
- * 11px floor" — it does not, yet:
- *   - Tailwind arbitrary sizes. `text-[10px]` alone appears 3,839 times, plus 989 `text-[9px]`,
- *     266 `text-[8px]` and 49 `text-[7px]` across 777 files. That is the DOMINANT surface and
- *     it is a separate change; extend this guard to cover it once that lands.
+ * TAILWIND ARBITRARY SIZES WERE THE DOMINANT SURFACE AND ARE NOW COVERED TOO — 5,178 occurrences
+ * across 777 files, from {10px: 3847, 9px: 989, 8px: 266, 7px: 49, 10.5px: 20, 8.5px: 4,
+ * 7.5px: 2, 9.5px: 1}. They dwarfed the 805 stylesheet declarations, so a CSS-only guard would
+ * have gone green over an app that still rendered 7px text in 777 files. Responsive variants are
+ * included on purpose (`sm:text-[10px]` contains `text-[10px]`): a phone override left below the
+ * floor while its base moved is the exact case a "looks done" sweep misses.
+ *
+ * 🛑 WHAT THIS GUARD STILL DOES **NOT** COVER, stated so a green run is not over-read:
  *   - Inline `fontSize` props in TSX (19 remain). The ones that render as ordinary DOM text were
- *     raised with this sweep; the rest are deliberately exempt, see below.
+ *     raised with this sweep; the rest are deliberately exempt, see below. They are not guarded
+ *     because the exempt set is the majority of what is left, and an allowlist of surfaces this
+ *     file has not individually measured would assert more than has been checked.
  *   - `public/railway-styles.css`. Served but DELIBERATELY UNREFERENCED — its
  *     `<link href="/railway-styles.css">` was removed from app/layout.tsx and
  *     root-language-provider-layout.test.tsx asserts it stays removed, so its sizes never render.
@@ -118,5 +123,51 @@ describe(`no stylesheet declares text below ${FLOOR_PX}px`, () => {
       }
     }
     expect(offenders, `below the ${FLOOR_PX}px floor:\n${offenders.join('\n')}`).toEqual([])
+  })
+})
+
+/** Tracked .ts/.tsx under the roots that render UI. */
+const SOURCES = execFileSync('git', ['ls-files', '*.ts', '*.tsx'], { cwd: process.cwd(), encoding: 'utf8' })
+  .split('\n')
+  .map((l) => l.trim())
+  .filter((f) => f.startsWith('components/') || f.startsWith('app/') || f.startsWith('lib/'))
+
+/**
+ * The size token of a Tailwind arbitrary text utility. Any variant prefix (`sm:`, `md:`, `hover:`)
+ * is left outside the match on purpose, so `sm:text-[10px]` is caught by the same rule as its base.
+ * The number is PARSED rather than pattern-listed: an enumerated `(7|8|9|10)` silently misses 10.5,
+ * and would miss a 6px somebody adds next year.
+ */
+const TW_CLASS = /text-\[(\d+(?:\.\d+)?)px\]/g
+
+const twSizesIn = (src: string) => [...src.matchAll(TW_CLASS)].map((m) => parseFloat(m[1]))
+
+describe(`no Tailwind arbitrary text class is below ${FLOOR_PX}px`, () => {
+  it('reads a real, non-trivial set of sources', () => {
+    expect(SOURCES.length).toBeGreaterThan(1000)
+  })
+
+  it('the matcher finds sizes, variants included — and flags one below the floor', () => {
+    // Positive control, including the variant case that a naive matcher anchored to a class
+    // boundary would miss.
+    expect(twSizesIn('<b className="text-[9px]" />')).toEqual([9])
+    expect(twSizesIn('<b className="sm:text-[8px] md:text-[10.5px]" />')).toEqual([8, 10.5])
+    expect(twSizesIn('<b className="text-[11px] text-sm" />')).toEqual([11])
+  })
+
+  it('finds these classes across the real sources', () => {
+    // A matcher that silently matched nothing would also report zero violations.
+    const total = SOURCES.reduce((n, f) => n + twSizesIn(readFileSync(join(process.cwd(), f), 'utf8')).length, 0)
+    expect(total).toBeGreaterThan(3000)
+  })
+
+  it('uses nothing below the floor', () => {
+    const offenders: string[] = []
+    for (const f of SOURCES) {
+      for (const size of twSizesIn(readFileSync(join(process.cwd(), f), 'utf8'))) {
+        if (size < FLOOR_PX) offenders.push(`${f}: text-[${size}px]`)
+      }
+    }
+    expect(offenders, `below the ${FLOOR_PX}px floor (${offenders.length}):\n${offenders.slice(0, 40).join('\n')}`).toEqual([])
   })
 })

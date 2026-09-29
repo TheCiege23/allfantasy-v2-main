@@ -108,7 +108,7 @@ export function VisitorAnalyticsPanel() {
         </div>
         <div className="flex items-center gap-3">
           {data ? (
-            <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-white/50">
+            <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
               {SOURCE_LABEL[data.seriesSource] ?? data.seriesSource}
             </span>
           ) : null}
@@ -129,26 +129,26 @@ export function VisitorAnalyticsPanel() {
       {/* Headline cards for the selected window */}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100/70">
+          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-100/70">
             <MousePointerClick className="h-3.5 w-3.5" aria-hidden /> Total visits · {selected?.label ?? window}
           </div>
           <div className="mt-2 text-2xl font-black text-white">{selected ? fmt(selected.totalVisits) : "—"}</div>
           <div className="mt-1 text-xs text-white/45">Non-unique — every hit counts</div>
         </div>
         <div className="rounded-2xl border border-emerald-300/20 bg-emerald-300/[0.06] p-4">
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-emerald-100/70">
+          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-100/70">
             <Users className="h-3.5 w-3.5" aria-hidden /> Unique visitors · {selected?.label ?? window}
           </div>
           <div className="mt-2 text-2xl font-black text-white">{selected ? fmt(selected.uniqueVisitors) : "—"}</div>
           <div className="mt-1 text-xs text-white/45">Distinct IPs (or sessions in estimate mode)</div>
         </div>
         <div className="rounded-2xl border border-amber-300/20 bg-amber-300/[0.06] p-4">
-          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-100/70">New visitors</div>
+          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-amber-100/70">New visitors</div>
           <div className="mt-2 text-2xl font-black text-white">{selected ? fmt(selected.newVisitors) : "—"}</div>
           <div className="mt-1 text-xs text-white/45">First seen inside this window</div>
         </div>
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-          <div className="text-[10px] font-black uppercase tracking-[0.16em] text-white/50">All-time</div>
+          <div className="text-[11px] font-black uppercase tracking-[0.16em] text-white/50">All-time</div>
           <div className="mt-2 text-2xl font-black text-white">{data ? fmt(data.allTimeUniqueVisitors) : "—"}</div>
           <div className="mt-1 text-xs text-white/45">{data ? `${fmt(data.allTimeVisits)} total visits` : "unique IPs"}</div>
         </div>
@@ -188,7 +188,7 @@ export function VisitorAnalyticsPanel() {
       <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/25 p-4">
         <h3 className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-amber-100/75">All windows at a glance</h3>
         <table className="w-full min-w-[620px] text-left text-sm">
-          <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+          <thead className="text-[11px] uppercase tracking-[0.16em] text-white/42">
             <tr>
               <th className="py-2 pr-3">Window</th>
               <th className="py-2 pr-3">Total visits</th>

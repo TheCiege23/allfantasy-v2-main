@@ -58,7 +58,7 @@ export function AfRankingsTierLadder({ currentLevel }: { currentLevel: number })
     <section className="rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#0c1224]/90 to-[#070a14] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-6">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">Tier track</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">Tier track</p>
           <h2 className="mt-1 text-lg font-black text-white sm:text-xl">Where you sit on the ladder</h2>
         </div>
         <p className="text-[11px] text-white/45">
@@ -91,7 +91,7 @@ export function AfRankingsTierLadder({ currentLevel }: { currentLevel: number })
               }
             >
               {active ? (
-                <span className="absolute -top-2 left-3 rounded-full border border-cyan-400/40 bg-cyan-500/20 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-cyan-100">
+                <span className="absolute -top-2 left-3 rounded-full border border-cyan-400/40 bg-cyan-500/20 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-cyan-100">
                   You
                 </span>
               ) : null}
@@ -99,7 +99,7 @@ export function AfRankingsTierLadder({ currentLevel }: { currentLevel: number })
                 {getLevelIcon(step.group)}
               </div>
               <p className="text-[11px] font-bold text-white/90">{step.label}</p>
-              <p className="text-[10px] text-white/40">{step.range}</p>
+              <p className="text-[11px] text-white/40">{step.range}</p>
             </div>
           )
         })}
@@ -118,7 +118,7 @@ export function AfRankingsXpBreakdown({ id }: { id?: string }) {
   ]
   return (
     <section id={id} className="rounded-3xl border border-white/[0.08] bg-[#0a0f1c] p-5 sm:p-6">
-      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">XP breakdown</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/40">XP breakdown</p>
       <h2 className="mt-1 text-lg font-black text-white sm:text-xl">What fuels your rank</h2>
       <p className="mt-2 max-w-2xl text-sm text-white/50">
         Earn XP through wins, titles, playoff appearances, activity, and league success. Imports pull in historical seasons so
@@ -175,7 +175,7 @@ export function AfRankingsAiPanel({ rank }: { rank: PlayerRankLite }) {
       <p className="mt-3 text-sm leading-relaxed text-white/70">{rank.aiInsight}</p>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/90">Strengths</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-300/90">Strengths</p>
           <ul className="mt-2 space-y-1.5 text-[13px] text-white/75">
             {strengths.length ? (
               strengths.map((s) => (
@@ -190,7 +190,7 @@ export function AfRankingsAiPanel({ rank }: { rank: PlayerRankLite }) {
           </ul>
         </div>
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-amber-200/90">Focus next</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-200/90">Focus next</p>
           <ul className="mt-2 space-y-1.5 text-[13px] text-white/75">
             {gaps.length ? (
               gaps.map((s) => (
@@ -218,7 +218,7 @@ export function AfRankingsPerformanceSummary({ rank }: { rank: PlayerRankLite })
 
   return (
     <section className="rounded-3xl border border-white/[0.08] bg-[#0a0f1c] p-5 sm:p-6">
-      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">Performance</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/40">Performance</p>
       <h2 className="mt-1 text-lg font-black text-white sm:text-xl">Career snapshot</h2>
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
@@ -252,7 +252,7 @@ export function AfRankingsPerformanceSummary({ rank }: { rank: PlayerRankLite })
           >
             <div className="flex items-center gap-2 text-white/40">
               {c.icon}
-              <span className="text-[10px] font-bold uppercase tracking-wide">{c.label}</span>
+              <span className="text-[11px] font-bold uppercase tracking-wide">{c.label}</span>
             </div>
             <p className="mt-2 text-lg font-black text-white/95">{c.value}</p>
           </div>
@@ -272,10 +272,10 @@ export function AfRankingsHistoryPlaceholder() {
     <section className="rounded-3xl border border-white/[0.08] bg-[#0a0f1c] p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/35">Momentum & history</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/35">Momentum & history</p>
           <h2 className="mt-1 text-lg font-black text-white">Rank trend</h2>
         </div>
-        <span className="shrink-0 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-300">
+        <span className="shrink-0 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-300">
           Unlocks with history
         </span>
       </div>
@@ -308,10 +308,10 @@ export function AfRankingsLeaderboardPlaceholder() {
     <section className="rounded-3xl border border-white/[0.08] bg-[#0a0f1c] p-5 sm:p-6">
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">Leaderboard</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/40">Leaderboard</p>
           <h2 className="mt-1 text-lg font-black text-white sm:text-xl">Global ranks</h2>
         </div>
-        <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-semibold text-white/35">
+        <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-white/35">
           Coming soon
         </span>
       </div>
@@ -354,7 +354,7 @@ export function RankSnapshotCardPremium({ payload }: { payload: RankLevelApiPayl
       <div className="relative flex flex-col items-center gap-4 sm:flex-row sm:items-start">
         <RankPrestigeEmblem theme={theme} level={payload.level} emoji={emoji} />
         <div className="text-center sm:text-left">
-          <p className="text-[10px] font-bold uppercase tracking-[0.25em]" style={{ color: theme.accent }}>
+          <p className="text-[11px] font-bold uppercase tracking-[0.25em]" style={{ color: theme.accent }}>
             {payload.tier}
           </p>
           <p className="mt-1 text-4xl font-black tabular-nums text-white sm:text-5xl">{payload.level}</p>
@@ -398,7 +398,7 @@ export function AfRankingsHeroPremium({ rank, username }: { rank: PlayerRankLite
           <div className="flex flex-1 flex-col items-center gap-6 sm:flex-row sm:items-start">
             <RankPrestigeEmblem theme={theme} level={rank.careerLevel} emoji={emoji} />
             <div className="max-w-xl text-center sm:text-left">
-              <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-white/45">Your AllFantasy rank</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-white/45">Your AllFantasy rank</p>
               <h1 className="mt-2 text-3xl font-black leading-tight text-white sm:text-4xl">
                 {rank.careerTierName}
                 <span className="ml-2 text-lg font-bold text-white/40 sm:text-xl">@{username}</span>

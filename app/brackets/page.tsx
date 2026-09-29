@@ -234,7 +234,7 @@ export default async function BracketsHomePage() {
         className="relative z-10 mx-auto flex max-w-4xl flex-col items-center px-4 pb-12 pt-10 text-center sm:px-6 sm:pt-16 sm:pb-20"
       >
         {/* Top registration badge */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-500/[0.08] px-3.5 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300 sm:text-xs">
+        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-500/[0.08] px-3.5 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-300 sm:text-xs">
           <span className="relative inline-flex h-1.5 w-1.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-300" />
@@ -332,7 +332,7 @@ export default async function BracketsHomePage() {
             {FAN_COUNTRY_CODES.map((code) => (
               <span
                 key={code}
-                className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white/75 sm:text-[10px]"
+                className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-white/75 sm:text-[11px]"
               >
                 {code}
               </span>
@@ -359,7 +359,7 @@ export default async function BracketsHomePage() {
             />
 
             {/* eyebrow badge */}
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-500/[0.08] px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-300">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-500/[0.08] px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-300">
               <span className="relative inline-flex h-1.5 w-1.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-300" />
@@ -514,8 +514,8 @@ export default async function BracketsHomePage() {
                     <span
                       className={
                         isLive
-                          ? "inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-300/35 bg-emerald-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-200"
-                          : "inline-flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/[0.05] px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-white/55"
+                          ? "inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-300/35 bg-emerald-400/10 px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-200"
+                          : "inline-flex shrink-0 items-center gap-1 rounded-full border border-white/15 bg-white/[0.05] px-2 py-0.5 text-[11px] font-black uppercase tracking-wider text-white/55"
                       }
                     >
                       {isLive && <Radio className="h-2.5 w-2.5 animate-pulse" />}

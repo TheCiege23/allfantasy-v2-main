@@ -170,7 +170,7 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
 
       {/* Search bar — matches Sleeper screenshot exactly */}
       <div className="space-y-2">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">
           {t('coowner.searchLabel')}
         </p>
         <div className="relative">
@@ -233,12 +233,12 @@ export function CoOwnerSettingsPanel({ leagueId }: Props) {
                         {member.ownerName || member.teamName}
                       </span>
                       {isMain && (
-                        <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-300">
+                        <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-amber-300">
                           {t('coowner.commissioner')}
                         </span>
                       )}
                       {isCo && !isMain && (
-                        <span className="shrink-0 rounded bg-cyan-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-cyan-300">
+                        <span className="shrink-0 rounded bg-cyan-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-cyan-300">
                           {t('coowner.coOwner')}
                         </span>
                       )}

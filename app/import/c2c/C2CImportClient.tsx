@@ -267,7 +267,7 @@ export function C2CImportClient() {
     <div className="min-h-screen bg-[#040915] px-4 py-8 text-white">
       <div className="mx-auto max-w-4xl space-y-6">
         <header>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-sky-200/80">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-sky-200/80">
             C2C Import · Multi-source
           </p>
           <h1 className="mt-1 text-2xl font-black">Import a Campus to Canton league</h1>
@@ -315,7 +315,7 @@ export function C2CImportClient() {
                 ['Unmatched college', preview.summary.unmatchedCollege],
               ].map(([label, value]) => (
                 <div key={String(label)} className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-white/50">{label}</p>
+                  <p className="text-[11px] uppercase tracking-[0.14em] text-white/50">{label}</p>
                   <p className="mt-1 text-xl font-black">{value}</p>
                 </div>
               ))}

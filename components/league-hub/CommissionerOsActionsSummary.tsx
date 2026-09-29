@@ -234,7 +234,7 @@ function CommissionerOsBody({
         {domainEntries.map(([domain, status]) => (
           <span
             key={domain}
-            className={`rounded-full border px-2 py-0.5 text-[10px] ${
+            className={`rounded-full border px-2 py-0.5 text-[11px] ${
               status === 'ok' ? 'border-white/10 bg-white/5 text-white/60' : 'border-white/10 bg-white/[0.03] text-white/30'
             }`}
             title={status}
@@ -312,7 +312,7 @@ function CopyReadyCard({
               key={c.channel}
               type="button"
               onClick={() => setChannelIndex(i)}
-              className={`rounded-full border px-2 py-0.5 text-[10px] ${
+              className={`rounded-full border px-2 py-0.5 text-[11px] ${
                 i === channelIndex
                   ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300'
                   : 'border-white/10 bg-white/5 text-white/50'
@@ -323,7 +323,7 @@ function CopyReadyCard({
           ))}
         </div>
       ) : (
-        <p className="mt-2 text-[10px] uppercase tracking-wide text-white/30">
+        <p className="mt-2 text-[11px] uppercase tracking-wide text-white/30">
           {CHANNEL_LABEL[active.channel] ?? active.channel}
         </p>
       )}
@@ -339,7 +339,7 @@ function CopyReadyCard({
       />
 
       <div className="mt-1.5 flex items-center justify-between">
-        <span className={`text-[10px] ${overLimit ? 'text-red-300' : 'text-white/30'}`}>
+        <span className={`text-[11px] ${overLimit ? 'text-red-300' : 'text-white/30'}`}>
           {draft.length}
           {active.characterLimit !== null ? ` / ${active.characterLimit}` : ''}
         </span>

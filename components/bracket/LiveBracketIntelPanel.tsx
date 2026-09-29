@@ -71,7 +71,7 @@ export function LiveBracketIntelPanel({ entryId }: Props) {
           {t("bracket.live.title")}
         </h3>
         {loading && (
-          <span className="text-[10px] text-white/55">
+          <span className="text-[11px] text-white/55">
             {t("bracket.live.loading")}
           </span>
         )}
@@ -111,7 +111,7 @@ export function LiveBracketIntelPanel({ entryId }: Props) {
       )}
       {intel?.upsetAlerts && intel.upsetAlerts.length > 0 && (
         <div className="pt-2 border-t border-white/10 space-y-1.5 text-[11px] text-white/80">
-          <div className="text-[10px] font-semibold text-amber-300">
+          <div className="text-[11px] font-semibold text-amber-300">
             {t("bracket.live.upset.title")}
           </div>
           <ul className="list-disc pl-4 space-y-0.5">

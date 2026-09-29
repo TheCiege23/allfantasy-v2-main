@@ -74,7 +74,7 @@ export function VisitorGlobePanel() {
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       {/* Globe */}
       <div className="relative rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_50%_40%,rgba(34,211,238,0.10),transparent_60%)] bg-black/30 p-2">
-        <div className="pointer-events-none absolute left-3 top-3 z-10 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100/60">
+        <div className="pointer-events-none absolute left-3 top-3 z-10 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-100/60">
           {points.length} located visitors
         </div>
         <ComposableMap

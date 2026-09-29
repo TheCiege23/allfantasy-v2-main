@@ -456,7 +456,7 @@ export function CommissionerSettingsModal({
             <div className="space-y-8 px-6 py-6">
               {showKeeperSessionStrip ? (
                 <section className="space-y-3">
-                  <h3 className="text-[10px] font-bold uppercase tracking-wider text-white/40">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-white/40">
                     {keeperSectionTitle}
                   </h3>
                   <KeeperCommissionerDashboard leagueId={leagueId} />
@@ -464,7 +464,7 @@ export function CommissionerSettingsModal({
               ) : null}
               <section className={showKeeperSessionStrip ? 'border-t border-white/[0.08] pt-6' : ''}>
                 {showKeeperSessionStrip ? (
-                  <h3 className="mb-3 text-[10px] font-bold uppercase tracking-wider text-white/40">
+                  <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-white/40">
                     Commissioner tools
                   </h3>
                 ) : null}

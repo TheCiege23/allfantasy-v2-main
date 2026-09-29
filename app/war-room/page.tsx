@@ -294,7 +294,7 @@ export default function WarRoomPage() {
                   <div className="mb-3 flex items-center justify-between gap-2">
                     <span className="text-[15px] font-black text-white">{sport}</span>
                     <span
-                      className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${
+                      className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${
                         isActive
                           ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'
                           : 'border-white/10 bg-white/[0.04] text-white/35'

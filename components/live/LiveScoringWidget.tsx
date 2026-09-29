@@ -141,14 +141,14 @@ export default function LiveScoringWidget({ leagueId }: { leagueId?: string }) {
           </span>
           <div className="leading-tight">
             <p className="text-[11px] font-semibold">Live Matchup</p>
-            <p className="text-[10px] text-cyan-100/80">
+            <p className="text-[11px] text-cyan-100/80">
               Live scoring and matchup projections.
             </p>
           </div>
         </div>
         <Link
           href={linkHref}
-          className="rounded-full border border-cyan-400/40 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-100 hover:bg-cyan-500/20"
+          className="rounded-full border border-cyan-400/40 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-medium text-cyan-100 hover:bg-cyan-500/20"
         >
           Open league
         </Link>
@@ -161,7 +161,7 @@ export default function LiveScoringWidget({ leagueId }: { leagueId?: string }) {
               <p className="truncate text-[11px] font-semibold text-white">
                 {matchup?.homeTeam || "Home team"}
               </p>
-              <p className="text-[10px] text-white/60">{matchup?.awayTeam || "Away team"}</p>
+              <p className="text-[11px] text-white/60">{matchup?.awayTeam || "Away team"}</p>
             </div>
             <div className="text-right">
               <p className="text-[11px] font-semibold text-white">
@@ -169,13 +169,13 @@ export default function LiveScoringWidget({ leagueId }: { leagueId?: string }) {
                 <span className="text-white/50">–</span>{" "}
                 {matchup ? matchup.awayScore.toFixed(1) : "-"}
               </p>
-              <p className="text-[10px] text-cyan-100/80">
+              <p className="text-[11px] text-cyan-100/80">
                 {matchup ? matchup.homeProj.toFixed(1) : "-"} –{" "}
                 {matchup ? matchup.awayProj.toFixed(1) : "-"} proj
               </p>
             </div>
           </div>
-          <p className="mt-1 text-[10px] text-white/55">
+          <p className="mt-1 text-[11px] text-white/55">
             {matchup?.status || "No live games"}
           </p>
         </div>
@@ -184,7 +184,7 @@ export default function LiveScoringWidget({ leagueId }: { leagueId?: string }) {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1">
               <TrendingUp className="h-3.5 w-3.5 text-emerald-300" />
-              <span className="text-[10px] text-white/70">Win probability</span>
+              <span className="text-[11px] text-white/70">Win probability</span>
             </div>
             <span className="text-[11px] font-semibold text-emerald-300">
               {matchup ? (matchup.winProbHome * 100).toFixed(0) : "–"}% you
@@ -202,7 +202,7 @@ export default function LiveScoringWidget({ leagueId }: { leagueId?: string }) {
               }}
             />
           </div>
-          <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-white/55">
+          <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-white/55">
             <span>
               Remaining players: {matchup?.remainingHome ?? 0} vs {matchup?.remainingAway ?? 0}
             </span>

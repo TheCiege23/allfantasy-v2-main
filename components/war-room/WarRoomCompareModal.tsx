@@ -61,7 +61,7 @@ export function WarRoomCompareModal({ open, onClose, leagueId, sport, draftSessi
       <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#0a1228] p-4 shadow-xl">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">Compare</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Compare</p>
             <h2 className="text-sm font-semibold text-white">Player A vs B</h2>
             <p className="mt-1 text-[11px] text-white/50">
               POST <code className="text-cyan-200/80">/api/war-room/compare</code> · {sport}
@@ -77,7 +77,7 @@ export function WarRoomCompareModal({ open, onClose, leagueId, sport, draftSessi
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <label className="text-[10px] text-white/50">
+          <label className="text-[11px] text-white/50">
             Player A
             <input
               value={aName}
@@ -85,7 +85,7 @@ export function WarRoomCompareModal({ open, onClose, leagueId, sport, draftSessi
               className="mt-0.5 w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-white"
             />
           </label>
-          <label className="text-[10px] text-white/50">
+          <label className="text-[11px] text-white/50">
             Player B
             <input
               value={bName}
@@ -93,7 +93,7 @@ export function WarRoomCompareModal({ open, onClose, leagueId, sport, draftSessi
               className="mt-0.5 w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-white"
             />
           </label>
-          <label className="text-[10px] text-white/50">
+          <label className="text-[11px] text-white/50">
             A pos / ADP
             <div className="mt-0.5 flex gap-1">
               <input
@@ -109,7 +109,7 @@ export function WarRoomCompareModal({ open, onClose, leagueId, sport, draftSessi
               />
             </div>
           </label>
-          <label className="text-[10px] text-white/50">
+          <label className="text-[11px] text-white/50">
             B pos / ADP
             <div className="mt-0.5 flex gap-1">
               <input
@@ -139,7 +139,7 @@ export function WarRoomCompareModal({ open, onClose, leagueId, sport, draftSessi
 
         {err && <p className="mt-2 text-[11px] text-amber-200/90">{err}</p>}
         {structuredResult && (
-          <pre className="mt-2 max-h-40 overflow-auto rounded border border-white/10 bg-black/40 p-2 text-[10px] text-white/70">
+          <pre className="mt-2 max-h-40 overflow-auto rounded border border-white/10 bg-black/40 p-2 text-[11px] text-white/70">
             {JSON.stringify(structuredResult, null, 2)}
           </pre>
         )}

@@ -448,16 +448,16 @@ export default function CareerTab({ leagueId, isCommissioner = false }: LeagueTa
             <h3 className="text-sm font-semibold text-white/80 mb-2">Your prestige</h3>
             <div className="flex flex-wrap gap-2 mb-2">
               {careerProfile.gmEconomy?.tierLabel && (
-                <span className="rounded border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] text-cyan-200">GM {careerProfile.gmEconomy.tierLabel}</span>
+                <span className="rounded border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[11px] text-cyan-200">GM {careerProfile.gmEconomy.tierLabel}</span>
               )}
               {careerProfile.xp?.currentTier && (
                 <XPTierBadge tier={careerProfile.xp.currentTier} />
               )}
               {careerProfile.reputation?.tier && (
-                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-200">{careerProfile.reputation.tier}</span>
+                <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-200">{careerProfile.reputation.tier}</span>
               )}
               {careerProfile.legacy && (
-                <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-200">Legacy {careerProfile.legacy.overallLegacyScore.toFixed(0)}</span>
+                <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] text-emerald-200">Legacy {careerProfile.legacy.overallLegacyScore.toFixed(0)}</span>
               )}
               {careerProfile.hallOfFameEntryCount > 0 && (
                 <span className="text-xs text-zinc-400">HoF: {careerProfile.hallOfFameEntryCount}</span>
@@ -996,7 +996,7 @@ function GMCareerCard({
           <span className="font-medium text-white">{profile.managerId}</span>
           {profile.tierLabel && (
             <span
-              className={`inline-flex rounded border px-1.5 py-0.5 text-[10px] font-medium ${tierColor}`}
+              className={`inline-flex rounded border px-1.5 py-0.5 text-[11px] font-medium ${tierColor}`}
             >
               {profile.tierLabel}
             </span>

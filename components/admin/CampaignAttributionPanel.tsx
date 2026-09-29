@@ -73,7 +73,7 @@ function MetricCard({ metric }: { metric: Metric }) {
     <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
       <div className="flex items-start justify-between gap-2">
         <div className="text-[11px] uppercase tracking-[0.14em] text-cyan-100/45">{metric.label}</div>
-        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${style.chip}`}>
+        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-black uppercase ${style.chip}`}>
           {style.label}
         </span>
       </div>
@@ -81,7 +81,7 @@ function MetricCard({ metric }: { metric: Metric }) {
         {showsNumber ? metric.value!.toLocaleString() : "—"}
       </div>
       <div className="mt-1 text-[11px] leading-4 text-white/45">{metric.note ?? metric.definition}</div>
-      <div className="mt-1 font-mono text-[10px] text-white/30">{metric.source}</div>
+      <div className="mt-1 font-mono text-[11px] text-white/30">{metric.source}</div>
     </div>
   )
 }
@@ -182,15 +182,15 @@ export function CampaignAttributionPanel() {
 
         {report && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-[10px] text-white/50">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-[11px] text-white/50">
               env: {report.environment}
             </span>
             <span
-              className={`rounded-full border px-2 py-1 text-[10px] font-black uppercase ${FRESHNESS_STYLES[report.freshness]}`}
+              className={`rounded-full border px-2 py-1 text-[11px] font-black uppercase ${FRESHNESS_STYLES[report.freshness]}`}
             >
               {report.freshness.replace("_", " ")}
             </span>
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-[10px] text-white/50">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 font-mono text-[11px] text-white/50">
               n={report.sampleSize.toLocaleString()}
             </span>
           </div>
@@ -245,11 +245,11 @@ export function CampaignAttributionPanel() {
                 Campaigns
                 {/* Stated explicitly: mixing first- and latest-touch totals would double-count
                     a visitor who arrived through two campaigns. */}
-                <span className="ml-2 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[9px] font-black tracking-normal text-white/50">
+                <span className="ml-2 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-black tracking-normal text-white/50">
                   grouped by {report.attributionGrouping.replace("_", "-")}
                 </span>
               </div>
-              <div className="font-mono text-[10px] text-white/35">
+              <div className="font-mono text-[11px] text-white/35">
                 {formatEt(report.window.fromIso)} → {formatEt(report.window.toIso)} ET
               </div>
             </div>
@@ -263,7 +263,7 @@ export function CampaignAttributionPanel() {
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full min-w-[900px] text-left text-xs">
                   <caption className="sr-only">Campaign attribution by platform, campaign and creative</caption>
-                  <thead className="text-[10px] uppercase tracking-[0.16em] text-white/42">
+                  <thead className="text-[11px] uppercase tracking-[0.16em] text-white/42">
                     <tr>
                       <th scope="col" className="py-2 pr-3">Platform</th>
                       <th scope="col" className="py-2 pr-3">Campaign</th>
@@ -310,7 +310,7 @@ export function CampaignAttributionPanel() {
             )}
           </div>
 
-          <div className="font-mono text-[10px] text-white/30">
+          <div className="font-mono text-[11px] text-white/30">
             Source: first-party AnalyticsEvent · calculated {formatEt(report.calculatedAtIso)} ET · last event{" "}
             {formatEt(report.lastEventAtIso)} ET · GA4/Pixel estimates are not included
           </div>

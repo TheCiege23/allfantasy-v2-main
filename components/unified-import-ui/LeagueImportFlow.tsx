@@ -187,12 +187,12 @@ export function LeagueImportFlow({
     if (status === 'importing')
       return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#ffb8d1]"><Loader2 className="h-3 w-3 animate-spin" />importing…</span>
     if (status === 'done')
-      return <span className="rounded-full bg-emerald-500/[0.15] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300">imported ✓</span>
+      return <span className="rounded-full bg-emerald-500/[0.15] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-300">imported ✓</span>
     if (status === 'exists')
-      return <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/55">already imported</span>
+      return <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/55">already imported</span>
     if (status === 'needs-attestation')
-      return <span className="rounded-full bg-amber-500/[0.15] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-200">needs commissioner confirmation</span>
-    return <span className="rounded-full bg-red-500/[0.15] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-300">failed</span>
+      return <span className="rounded-full bg-amber-500/[0.15] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-200">needs commissioner confirmation</span>
+    return <span className="rounded-full bg-red-500/[0.15] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-red-300">failed</span>
   }
 
   const previewSectionRef = useRef<HTMLDivElement>(null)
@@ -543,7 +543,7 @@ export function LeagueImportFlow({
                   {label}
                   {id === 'sleeper' ? (
                     <span
-                      className="absolute -top-1.5 right-2 rounded-full border border-emerald-500/40 bg-emerald-500/[0.14] px-1.5 py-0 text-[8px] font-black uppercase tracking-wider text-emerald-300"
+                      className="absolute -top-1.5 right-2 rounded-full border border-emerald-500/40 bg-emerald-500/[0.14] px-1.5 py-0 text-[11px] font-black uppercase tracking-wider text-emerald-300"
                       aria-label="Recommended provider"
                     >
                       Recommended
@@ -572,7 +572,7 @@ export function LeagueImportFlow({
                           : 'Use a provider account identifier to find an NFL league, then preview the canonical import before you commit it.'}
                       </p>
                     </div>
-                    <span className="rounded-full border border-[#ff3d81]/25 bg-black/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#ffb8d1]/85">
+                    <span className="rounded-full border border-[#ff3d81]/25 bg-black/20 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#ffb8d1]/85">
                       {getImportProviderLabel(activeImportProvider)}
                     </span>
                   </div>
@@ -902,7 +902,7 @@ export function LeagueImportFlow({
                       {provider}
                     </span>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] ${
                         support.status === 'verified'
                           ? 'bg-emerald-400/20 text-emerald-200'
                           : 'bg-amber-400/20 text-amber-200'

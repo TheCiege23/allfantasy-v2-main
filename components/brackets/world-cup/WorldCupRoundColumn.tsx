@@ -74,7 +74,7 @@ export default function WorldCupRoundColumn({
         "sticky top-0 z-20 w-full rounded-xl border border-cyan-300/15 bg-slate-950/80 shadow-[0_12px_30px_-24px_rgba(34,211,238,0.7)] backdrop-blur",
         compactBoard ? "px-2 py-1.5" : "px-3 py-2",
       ].join(" ")}>
-        <h2 className={`${compactBoard ? "text-[10px] tracking-[0.16em]" : "text-xs tracking-[0.2em]"} font-black uppercase text-white/70`}>
+        <h2 className={`${compactBoard ? "text-[11px] tracking-[0.16em]" : "text-xs tracking-[0.2em]"} font-black uppercase text-white/70`}>
           {label}
         </h2>
       </div>

@@ -553,7 +553,7 @@ export default function OrphanTeamsClient({ leagueId }: { leagueId?: string }) {
                       <p className="mt-0.5 text-xs text-white/55">{card.leagueName}</p>
                     </div>
                     {statusBadge ? (
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge.className}`}>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusBadge.className}`}>
                         {statusBadge.label}
                       </span>
                     ) : null}
@@ -586,7 +586,7 @@ export default function OrphanTeamsClient({ leagueId }: { leagueId?: string }) {
                     ) : (
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         {card.draftPicksOwned.map((pick) => (
-                          <span key={`${card.id}-${pick}`} className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/80">
+                          <span key={`${card.id}-${pick}`} className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] text-white/80">
                             {pick}
                           </span>
                         ))}

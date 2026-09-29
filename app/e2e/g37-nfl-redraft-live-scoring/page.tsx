@@ -168,10 +168,10 @@ export default function G37NflRedraftLiveScoringHarness() {
         >
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200/70">Standings after scoring</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/70">Standings after scoring</p>
               <p className="text-[11px] text-white/45">Week {state.week} results are resolved from starter totals only.</p>
             </div>
-            <span className="rounded-full border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 text-[10px] font-semibold text-emerald-100">
+            <span className="rounded-full border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 text-[11px] font-semibold text-emerald-100">
               {state.coverage.finalizedMatchups} final
             </span>
           </div>
@@ -191,7 +191,7 @@ export default function G37NflRedraftLiveScoringHarness() {
           data-testid="redraft-scoring-audit"
           className="rounded-2xl border border-white/[0.08] bg-[#0a1220] p-4 text-white"
         >
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200/70">Commissioner scoring audit</p>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/70">Commissioner scoring audit</p>
           <p className="mt-1 text-[12px] text-white/60">
             Correction version {state.coverage.correctionVersion} is visible, and bench points remain separated from matchup totals.
           </p>

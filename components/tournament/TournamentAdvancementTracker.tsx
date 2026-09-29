@@ -134,13 +134,13 @@ export function TournamentAdvancementTracker({ tournamentId, userId }: Tournamen
                 const isLast = i === tracker.path.length - 1
                 return (
                   <div key={i} className="flex items-center gap-1">
-                    <div className={`rounded-lg border px-2.5 py-1.5 text-[10px] whitespace-nowrap ${
+                    <div className={`rounded-lg border px-2.5 py-1.5 text-[11px] whitespace-nowrap ${
                       step.result === 'advanced' ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200' :
                       step.result === 'eliminated' ? 'border-red-400/30 bg-red-400/10 text-red-200' :
                       'border-cyan-400/30 bg-cyan-400/10 text-cyan-200'
                     }`}>
                       <div className="font-bold">R{step.round}</div>
-                      <div className="text-[9px] text-white/40">{step.leagueName}</div>
+                      <div className="text-[11px] text-white/40">{step.leagueName}</div>
                     </div>
                     {!isLast && <ArrowRight className="h-3 w-3 text-white/20 flex-shrink-0" />}
                   </div>
@@ -149,7 +149,7 @@ export function TournamentAdvancementTracker({ tournamentId, userId }: Tournamen
               {tracker.status !== 'eliminated' && (
                 <>
                   <ArrowRight className="h-3 w-3 text-white/20 flex-shrink-0" />
-                  <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-1.5 text-[10px] text-amber-200">
+                  <div className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-2.5 py-1.5 text-[11px] text-amber-200">
                     <Trophy className="h-3 w-3 inline mr-0.5" />Championship
                   </div>
                 </>

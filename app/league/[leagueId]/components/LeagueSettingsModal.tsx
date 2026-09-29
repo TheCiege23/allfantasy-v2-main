@@ -178,18 +178,18 @@ function ImportedLeagueSummary({
   return (
     <div className="mx-auto max-w-md space-y-4 py-2" data-testid="imported-league-settings-summary">
       <div className="rounded-xl border border-[#262c6a] bg-[#12163e]/70 p-4">
-        <p className="text-[10px] font-black uppercase italic tracking-wide text-[#ff8a3d]">How this league runs</p>
+        <p className="text-[11px] font-black uppercase italic tracking-wide text-[#ff8a3d]">How this league runs</p>
         <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
           {rows.map(([label, value]) => (
             <div key={label}>
-              <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">{label}</p>
+              <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">{label}</p>
               <p className="mt-0.5 text-[13px] font-semibold capitalize text-white/90">{value}</p>
             </div>
           ))}
         </div>
         {rosterPositions.length > 0 ? (
           <div className="mt-4">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">Roster construction</p>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">Roster construction</p>
             <p className="mt-1 text-[12px] leading-relaxed text-white/70">{rosterPositions.join(', ')}</p>
           </div>
         ) : null}

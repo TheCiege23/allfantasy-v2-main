@@ -204,7 +204,7 @@ export default function ChimmyPreferencesCard() {
                   <span className="mb-1 flex items-center justify-between gap-2 text-xs font-medium" style={{ color: 'var(--muted2)' }}>
                     {setting.label}
                     <span
-                      className="rounded-full border px-2 py-0.5 text-[10px]"
+                      className="rounded-full border px-2 py-0.5 text-[11px]"
                       style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
                       data-testid={`chimmy-pref-source-${setting.key}`}
                       data-source={source}

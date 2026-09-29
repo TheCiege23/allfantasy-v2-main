@@ -139,7 +139,7 @@ export default function LeagueChatPanel({
             <p className="truncate text-sm font-semibold" style={{ color: "var(--text)" }}>
               {leagueName}
             </p>
-            <p className="text-[10px]" style={{ color: "var(--muted2)" }}>
+            <p className="text-[11px]" style={{ color: "var(--muted2)" }}>
               {tribeSource ? "Tribe chat · Messages · Chimmy" : "League chat · Messages · Chimmy"}
             </p>
           </div>

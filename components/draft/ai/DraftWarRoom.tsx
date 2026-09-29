@@ -201,9 +201,9 @@ export function DraftWarRoom({
           <Brain className="h-4 w-4 text-cyan-300" />
           <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-100/90">AF Legacy</span>
           {data?.fallback ? (
-            <span className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[9px] text-white/55">Rules + AI</span>
+            <span className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[11px] text-white/55">Rules + AI</span>
           ) : (
-            <span className="rounded border border-emerald-400/25 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] text-emerald-100/90">Live</span>
+            <span className="rounded border border-emerald-400/25 bg-emerald-500/10 px-1.5 py-0.5 text-[11px] text-emerald-100/90">Live</span>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -247,7 +247,7 @@ export function DraftWarRoom({
             <>
               {/* Best pick */}
               <div className="rounded-xl border border-orange-400/25 bg-gradient-to-br from-orange-500/10 to-transparent p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-200/90">
+                <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-200/90">
                   <Flame className="h-3.5 w-3.5" />
                   Best pick
                 </div>
@@ -274,16 +274,16 @@ export function DraftWarRoom({
                       {data.bestPick.adp != null ? ` · ADP ${data.bestPick.adp}` : ''}
                     </p>
                     <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-cyan-400/30 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-medium text-cyan-100">
+                      <span className="rounded-full border border-cyan-400/30 bg-cyan-500/15 px-2 py-0.5 text-[11px] font-medium text-cyan-100">
                         {data.confidence}% match
                       </span>
                       {currentPick != null && data.bestPick.adp != null && Math.abs(data.bestPick.adp - currentPick) > 15 ? (
-                        <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300">
+                        <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-medium text-emerald-300">
                           Value Drop
                         </span>
                       ) : null}
                       {data.teamNeedSummary ? (
-                        <span className="truncate text-[10px] text-white/45">{data.teamNeedSummary}</span>
+                        <span className="truncate text-[11px] text-white/45">{data.teamNeedSummary}</span>
                       ) : null}
                     </div>
                   </div>
@@ -292,7 +292,7 @@ export function DraftWarRoom({
 
               {/* Why */}
               <div className="rounded-xl border border-white/[0.08] bg-[#0a1220]/90 p-3">
-                <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/50">
+                <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50">
                   <ListChecks className="h-3.5 w-3.5 text-violet-300" />
                   Why this pick
                 </div>
@@ -309,14 +309,14 @@ export function DraftWarRoom({
               {/* Strategy + risk */}
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="rounded-xl border border-violet-400/20 bg-violet-500/8 p-2.5">
-                  <div className="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.16em] text-violet-200/85">
+                  <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-200/85">
                     <Sparkles className="h-3 w-3" />
                     Strategy tip
                   </div>
                   <p className="text-[11px] leading-snug text-white/82">{data.strategyTip}</p>
                 </div>
                 <div className={`rounded-xl border p-2.5 ${riskStyles(data.risk)}`}>
-                  <div className="mb-1 flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.16em]">
+                  <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em]">
                     <ShieldAlert className="h-3 w-3" />
                     Risk · {data.risk}
                   </div>
@@ -327,7 +327,7 @@ export function DraftWarRoom({
               {/* Alternatives */}
               {data.alternatives.length > 0 && (
                 <div className="rounded-xl border border-white/[0.07] bg-black/20 p-2.5">
-                  <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">
+                  <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
                     <BarChart3 className="h-3.5 w-3.5 text-sky-300" />
                     Alternatives
                   </div>
@@ -364,7 +364,7 @@ export function DraftWarRoom({
                       )
                     })}
                   </ul>
-                  <p className="mt-1.5 text-[9px] text-white/40">
+                  <p className="mt-1.5 text-[11px] text-white/40">
                     Tap alternatives to set Player A, then Player B — then Run AI compare, or use the dropdowns below.
                   </p>
                 </div>
@@ -409,7 +409,7 @@ export function DraftWarRoom({
 
               {/* Compare players */}
               <div className="rounded-xl border border-white/10 bg-[#070d18]/95 p-3">
-                <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/50">
+                <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/50">
                   <GitCompare className="h-3.5 w-3.5 text-amber-300" />
                   Compare players
                 </div>
@@ -421,7 +421,7 @@ export function DraftWarRoom({
                       : [data.bestPick]
                     return (
                       <div key={side}>
-                        <p className="mb-1 text-[10px] text-white/45">Player {side}</p>
+                        <p className="mb-1 text-[11px] text-white/45">Player {side}</p>
                         <div className="max-h-32 overflow-y-auto space-y-1 pr-0.5">
                           {players.map((p) => {
                             const isActive = selected?.name === p.name
@@ -445,7 +445,7 @@ export function DraftWarRoom({
                                 }`}
                               >
                                 <span className="truncate font-medium">{p.name}</span>
-                                <span className="shrink-0 text-[10px] text-white/40">{p.position}</span>
+                                <span className="shrink-0 text-[11px] text-white/40">{p.position}</span>
                               </button>
                             )
                           })}
@@ -464,7 +464,7 @@ export function DraftWarRoom({
                 </button>
 
                 {compareResult.status === 'ready' && compareA && compareB && (
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
                     {[compareA, compareB].map((pl, idx) => {
                       const side = idx === 0 ? 'A' : 'B'
                       const win = winnerPlayer?.name === pl.name
@@ -490,11 +490,11 @@ export function DraftWarRoom({
                         {compareResult.winner === 'A' ? compareA.name : compareB.name} ({compareResult.winner}) —{' '}
                         {compareResult.confidence}% confidence
                         {compareResult.fallback ? (
-                          <span className="ml-2 text-[9px] text-white/45">(fallback tier)</span>
+                          <span className="ml-2 text-[11px] text-white/45">(fallback tier)</span>
                         ) : null}
                       </p>
                       <p className="mt-1 text-white/70">{compareResult.advice}</p>
-                      <dl className="mt-2 grid grid-cols-2 gap-1 text-[10px] text-white/60">
+                      <dl className="mt-2 grid grid-cols-2 gap-1 text-[11px] text-white/60">
                         <dt className="text-white/40">Projection</dt>
                         <dd>{compareResult.breakdown.projection}</dd>
                         <dt className="text-white/40">Matchup</dt>
@@ -504,7 +504,7 @@ export function DraftWarRoom({
                         <dt className="text-white/40">Risk</dt>
                         <dd>{compareResult.breakdown.risk}</dd>
                       </dl>
-                      <p className="mt-2 text-[10px] text-cyan-200/85">
+                      <p className="mt-2 text-[11px] text-cyan-200/85">
                         If you need upside → lean the winner’s ceiling game. If you need floor → take the safer weekly projection.
                       </p>
                     </div>

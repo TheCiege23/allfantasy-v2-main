@@ -349,7 +349,7 @@ export function TournamentSettingsModalEditable({
                     </dd>
                   </div>
                 </dl>
-                <p className="mt-2 text-[10px] text-[var(--tournament-text-dim)]">
+                <p className="mt-2 text-[11px] text-[var(--tournament-text-dim)]">
                   Sport and structure cannot be changed mid-tournament — they would orphan in-flight rounds.
                 </p>
               </Section>

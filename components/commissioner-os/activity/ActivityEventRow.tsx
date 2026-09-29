@@ -38,7 +38,7 @@ export function ActivityEventRow({ event, isLast }: ActivityEventRowProps) {
       <div className="flex-1 space-y-1 pt-0">
         <div className="flex flex-wrap items-center gap-2">
           <span
-            className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+            className="rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
             style={{ background: severityStyle.bg, color: severityStyle.text, border: `1px solid ${severityStyle.border}` }}
           >
             {ACTIVITY_SEVERITY_LABELS[event.severity]}

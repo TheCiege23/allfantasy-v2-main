@@ -47,7 +47,7 @@ export default function SignupProgressIndicator({ currentStepIndex }: SignupProg
               {currentStepIndex > step.id ? "✓" : step.id}
             </div>
             <span
-              className="absolute top-10 w-16 text-center text-[9px] font-semibold uppercase leading-tight tracking-[0.06em] sm:w-20 sm:text-[10px] sm:tracking-[0.1em]"
+              className="absolute top-10 w-16 text-center text-[11px] font-semibold uppercase leading-tight tracking-[0.06em] sm:w-20 sm:text-[11px] sm:tracking-[0.1em]"
               style={{ color: currentStepIndex >= step.id ? "var(--muted)" : "var(--muted2)" }}
             >
               {t(step.labelKey)}

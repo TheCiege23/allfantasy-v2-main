@@ -262,7 +262,7 @@ export default function WorldCupAdLandingPage() {
                 />
               </div>
               <div className="text-left">
-                <p className="text-[10px] font-black uppercase tracking-[0.20em] text-cyan-300/70">AllFantasy.AI</p>
+                <p className="text-[11px] font-black uppercase tracking-[0.20em] text-cyan-300/70">AllFantasy.AI</p>
                 <p className="text-sm font-black text-white/80">2026 World Cup Pools</p>
               </div>
             </div>
@@ -362,7 +362,7 @@ export default function WorldCupAdLandingPage() {
               <div className="rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.20em] text-cyan-200">Live pool preview</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.20em] text-cyan-200">Live pool preview</p>
                     <h2 className="mt-1.5 text-xl font-black text-white">Family World Cup Pool</h2>
                   </div>
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-300 text-2xl text-slate-950 shadow-[0_0_30px_rgba(252,211,77,0.35)]">
@@ -407,7 +407,7 @@ export default function WorldCupAdLandingPage() {
                 </div>
 
                 {/* Stats */}
-                <div className="mt-3 flex items-center gap-4 text-[10px] text-white/40">
+                <div className="mt-3 flex items-center gap-4 text-[11px] text-white/40">
                   <span>8 players</span>
                   <span>·</span>
                   <span>48 group picks</span>
@@ -558,7 +558,7 @@ export default function WorldCupAdLandingPage() {
                 <Icon className="h-5 w-5" aria-hidden />
               </div>
               <div>
-                <div className="mb-1 text-[10px] font-black uppercase tracking-widest text-white/30">Step {step}</div>
+                <div className="mb-1 text-[11px] font-black uppercase tracking-widest text-white/30">Step {step}</div>
                 <h3 className="text-sm font-black text-white">{title}</h3>
                 <p className="mt-1.5 text-xs leading-5 text-white/55">{body}</p>
               </div>
@@ -571,7 +571,7 @@ export default function WorldCupAdLandingPage() {
       <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
           <div className="mb-6 text-center">
-            <div className="mx-auto mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-1 text-[10px] font-black uppercase tracking-widest text-cyan-300">
+            <div className="mx-auto mb-2 inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/[0.07] px-3 py-1 text-[11px] font-black uppercase tracking-widest text-cyan-300">
               Social proof
             </div>
             <h2 className="text-xl font-black text-white sm:text-2xl">
@@ -593,7 +593,7 @@ export default function WorldCupAdLandingPage() {
                     </div>
                     <div>
                       <p className="text-xs font-black text-white">{label}</p>
-                      <p className="text-[10px] text-white/45">{sub}</p>
+                      <p className="text-[11px] text-white/45">{sub}</p>
                     </div>
                   </div>
                   {i < viralFlowSteps.length - 1 && (
@@ -631,7 +631,7 @@ export default function WorldCupAdLandingPage() {
               <Bot className="h-8 w-8 text-cyan-300" />
             </div>
             <div className="flex-1">
-              <div className="mb-1 text-[10px] font-black uppercase tracking-[0.20em] text-cyan-300">Chimmy AI</div>
+              <div className="mb-1 text-[11px] font-black uppercase tracking-[0.20em] text-cyan-300">Chimmy AI</div>
               <h2 className="text-xl font-black text-white sm:text-2xl">Your AI World Cup co-pilot</h2>
               <p className="mt-2 text-sm leading-6 text-white/60">
                 Ask Chimmy who wins each group, which upsets to pick, how to build your bracket, or who has the best path through the knockout stage. AI help is optional and available when you&apos;re ready to upgrade.
@@ -645,7 +645,7 @@ export default function WorldCupAdLandingPage() {
               </div>
             </div>
             <div className="shrink-0">
-              <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-white/35">AI available with</p>
+              <p className="mb-2 text-[11px] font-black uppercase tracking-widest text-white/35">AI available with</p>
               <Link
                 href={proHref}
                 onClick={() => {
@@ -656,7 +656,7 @@ export default function WorldCupAdLandingPage() {
               >
                 AF Pro — $9.99/mo
               </Link>
-              <p className="mt-1.5 text-center text-[10px] text-amber-300/60 font-bold">
+              <p className="mt-1.5 text-center text-[11px] text-amber-300/60 font-bold">
                 Use code WassupFred — 20% off first purchase
               </p>
             </div>
@@ -690,7 +690,7 @@ export default function WorldCupAdLandingPage() {
                       <div className="text-xs text-white/50">{price}</div>
                     </div>
                   </div>
-                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${badge}`}>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-bold ${badge}`}>
                     {bestFor}
                   </span>
                 </div>
@@ -708,7 +708,7 @@ export default function WorldCupAdLandingPage() {
                     {cta}
                   </Link>
                   {accent !== "cyan" && (
-                    <p className="mt-1.5 text-center text-[10px] text-white/35">
+                    <p className="mt-1.5 text-center text-[11px] text-white/35">
                       Use <span className="font-bold text-amber-300/70">WassupFred</span> for 20% off first purchase
                     </p>
                   )}

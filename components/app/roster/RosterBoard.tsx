@@ -164,7 +164,7 @@ export default function RosterBoard({ leagueId }: RosterBoardProps) {
             </div>
             <div className="leading-tight">
               <p className="text-[13px] font-semibold text-white/95">Roster</p>
-              <p className="hidden text-[10px] text-white/65 sm:block">
+              <p className="hidden text-[11px] text-white/65 sm:block">
                 Sleeper-style lineup flow: tap player, then tap swap target.
               </p>
             </div>
@@ -173,13 +173,13 @@ export default function RosterBoard({ leagueId }: RosterBoardProps) {
             type="button"
             onClick={optimizeLineup}
             disabled={!canEditLineup}
-            className="inline-flex items-center gap-1 rounded-full border border-cyan-300/35 bg-cyan-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center gap-1 rounded-full border border-cyan-300/35 bg-cyan-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Activity className="h-3 w-3" />
             <span>Optimize lineup</span>
           </button>
         </div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px]">
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
           {saving && <span className="text-white/70">Saving…</span>}
           {!saving && !saveError && lastSavedAt && (
             <span className="text-white/65">
@@ -197,7 +197,7 @@ export default function RosterBoard({ leagueId }: RosterBoardProps) {
       <LineupLockBanner lineupLock={lineupLock} canEditLineup={canEditLineup} />
 
       {activeSwap && (
-        <div className="rounded-xl border border-sky-300/30 bg-[#0b1630]/95 px-2.5 py-2 text-[10px] sm:text-[11px] text-sky-100">
+        <div className="rounded-xl border border-sky-300/30 bg-[#0b1630]/95 px-2.5 py-2 text-[11px] sm:text-[11px] text-sky-100">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <ArrowRightLeft className="h-3.5 w-3.5" />
@@ -208,7 +208,7 @@ export default function RosterBoard({ leagueId }: RosterBoardProps) {
             <button
               type="button"
               onClick={() => setActiveSwap(null)}
-                className="rounded border border-sky-200/30 px-2 py-0.5 text-[10px] hover:bg-sky-300/10"
+                className="rounded border border-sky-200/30 px-2 py-0.5 text-[11px] hover:bg-sky-300/10"
             >
               Cancel
             </button>
@@ -220,7 +220,7 @@ export default function RosterBoard({ leagueId }: RosterBoardProps) {
         <div className="rounded-2xl border border-white/10 bg-[#070d1d]/95 p-2 space-y-1.5">
           <div className="flex items-center justify-between gap-2">
             <p className="text-[11px] font-semibold text-white/82">Add from player pool</p>
-            <span className="text-[10px] text-white/45">
+            <span className="text-[11px] text-white/45">
               {poolLoading ? "Loading…" : `${availablePlayers.length} available`}
             </span>
           </div>
@@ -230,13 +230,13 @@ export default function RosterBoard({ leagueId }: RosterBoardProps) {
               onChange={(e) => setPoolSearch(e.target.value)}
               placeholder="Search free agents"
               aria-label="Search available players"
-              className="flex-1 min-w-[160px] rounded-xl border border-white/12 bg-[#030814]/90 px-2 py-1.5 text-[10px] sm:text-[11px] text-white/95 placeholder:text-white/35"
+              className="flex-1 min-w-[160px] rounded-xl border border-white/12 bg-[#030814]/90 px-2 py-1.5 text-[11px] sm:text-[11px] text-white/95 placeholder:text-white/35"
             />
             <select
               aria-label="Choose roster section for add"
               value={resolvedPoolSlot}
               onChange={(e) => setPoolSlot(e.target.value as RosterSectionKey)}
-              className="rounded-xl border border-white/12 bg-[#030814]/90 px-2 py-1.5 text-[10px] sm:text-[11px] text-white/90"
+              className="rounded-xl border border-white/12 bg-[#030814]/90 px-2 py-1.5 text-[11px] sm:text-[11px] text-white/90"
             >
               {addTargetSections.map((section) => (
                 <option key={section.key} value={section.key}>
@@ -250,7 +250,7 @@ export default function RosterBoard({ leagueId }: RosterBoardProps) {
               aria-label="Available player list"
               value={poolPlayerId}
               onChange={(e) => setPoolPlayerId(e.target.value)}
-              className="flex-1 min-w-[220px] rounded-xl border border-white/12 bg-[#030814]/90 px-2 py-1.5 text-[10px] sm:text-[11px] text-white/90"
+              className="flex-1 min-w-[220px] rounded-xl border border-white/12 bg-[#030814]/90 px-2 py-1.5 text-[11px] sm:text-[11px] text-white/90"
             >
               <option value="">Select player</option>
               {filteredPool.map((p) => (
@@ -268,7 +268,7 @@ export default function RosterBoard({ leagueId }: RosterBoardProps) {
                 addPlayerFromPool(poolPlayerId, resolvedPoolSlot)
                 setPoolPlayerId("")
               }}
-              className="rounded-xl border border-white/20 bg-white/5 px-2.5 py-1.5 text-[10px] sm:text-[11px] text-white/85 hover:bg-white/10 disabled:opacity-50"
+              className="rounded-xl border border-white/20 bg-white/5 px-2.5 py-1.5 text-[11px] sm:text-[11px] text-white/85 hover:bg-white/10 disabled:opacity-50"
             >
               Add player
             </button>
@@ -315,7 +315,7 @@ export default function RosterBoard({ leagueId }: RosterBoardProps) {
               <button
                 type="button"
                 onClick={() => setSelectedPlayer(null)}
-                className="rounded border border-white/20 px-2 py-1 text-[10px] text-white/75 hover:bg-white/10"
+                className="rounded border border-white/20 px-2 py-1 text-[11px] text-white/75 hover:bg-white/10"
               >
                 Close
               </button>
@@ -408,10 +408,10 @@ function RosterSection({
         if (drag) onDropSection(slot)
       }}
     >
-      <div className="mb-1 flex items-center justify-between gap-2 text-[10px] sm:text-[11px] text-white/70">
+      <div className="mb-1 flex items-center justify-between gap-2 text-[11px] sm:text-[11px] text-white/70">
         <div className="flex items-center gap-2">
           <span className="font-semibold uppercase tracking-[0.08em] text-white/78">{label}</span>
-          <span className="rounded-full border border-white/12 px-1.5 py-0.5 text-[10px] text-white/50">
+          <span className="rounded-full border border-white/12 px-1.5 py-0.5 text-[11px] text-white/50">
             {players.length}
             {typeof sectionLimit === "number" && sectionLimit > 0 ? ` / ${sectionLimit}` : ""}
           </span>
@@ -424,7 +424,7 @@ function RosterSection({
               const moved = onMovePlayer(activeSwap.playerId, slot)
               if (moved) onSwapCancel()
             }}
-            className="rounded-full border border-sky-300/35 bg-sky-500/10 px-2 py-0.5 text-[10px] text-sky-100 hover:bg-sky-500/20"
+            className="rounded-full border border-sky-300/35 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-100 hover:bg-sky-500/20"
           >
             Move here
           </button>
@@ -432,7 +432,7 @@ function RosterSection({
       </div>
       <div className="space-y-1">
         {isEmpty ? (
-          <div className="rounded-xl border border-dashed border-white/15 px-2 py-3 text-center text-[10px] text-white/35">
+          <div className="rounded-xl border border-dashed border-white/15 px-2 py-3 text-center text-[11px] text-white/35">
             Drag players here to assign to {label.toLowerCase()}.
           </div>
         ) : (
@@ -546,7 +546,7 @@ function PlayerCard({
             unoptimized
           />
         ) : (
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#111a31] text-[9px] font-semibold text-white/90">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#111a31] text-[11px] font-semibold text-white/90">
             {player.position}
           </div>
         )}
@@ -561,23 +561,23 @@ function PlayerCard({
                 loading="lazy"
               />
             ) : null}
-            <p className="truncate text-[10px] sm:text-[11px] font-semibold text-white/95">{player.name}</p>
-            <span className="shrink-0 rounded bg-white/[0.06] px-1 py-0 text-[8px] font-semibold text-white/55">
+            <p className="truncate text-[11px] sm:text-[11px] font-semibold text-white/95">{player.name}</p>
+            <span className="shrink-0 rounded bg-white/[0.06] px-1 py-0 text-[11px] font-semibold text-white/55">
               {player.position}
             </span>
-            <span className="text-[9px] text-[#7f8aa6]">{player.team}</span>
+            <span className="text-[11px] text-[#7f8aa6]">{player.team}</span>
           </div>
-          <p className="truncate text-[9px] sm:text-[10px] text-[#6b7696]">
+          <p className="truncate text-[11px] sm:text-[11px] text-[#6b7696]">
             {player.opponent} • {player.gameTime}
           </p>
         </div>
       </div>
       <div className="flex flex-col items-end gap-0 text-right">
-        <div className="flex items-center gap-1 text-[9px] sm:text-[10px]">
+        <div className="flex items-center gap-1 text-[11px] sm:text-[11px]">
           <span className="text-white/40">P</span>
           <span className="font-semibold text-white/90">{player.projection.toFixed(1)}</span>
         </div>
-        <div className="hidden sm:flex items-center gap-1 text-[10px]">
+        <div className="hidden sm:flex items-center gap-1 text-[11px]">
           <span className="text-white/40">A</span>
           <span className="font-semibold text-white/75">
             {player.actual != null ? player.actual.toFixed(1) : "-"}
@@ -592,7 +592,7 @@ function PlayerCard({
             onInspect()
           }}
           data-testid={`roster-player-details-${player.id}`}
-          className="rounded border border-white/12 bg-black/20 px-1 py-0.5 text-[8px] sm:text-[9px] text-white/75 hover:bg-white/10"
+          className="rounded border border-white/12 bg-black/20 px-1 py-0.5 text-[11px] sm:text-[11px] text-white/75 hover:bg-white/10"
           aria-label={`Open details for ${player.name}`}
         >
           <Info className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
@@ -601,7 +601,7 @@ function PlayerCard({
           className={`inline-flex h-4 w-4 items-center justify-center rounded-full ${statusColor}`}
           title={player.status.toUpperCase()}
         >
-          <span className="text-[8px] font-bold text-black">
+          <span className="text-[11px] font-bold text-black">
             {player.status === "healthy" ? "H" : player.status.toUpperCase()}
           </span>
         </span>
@@ -613,7 +613,7 @@ function PlayerCard({
               onMove("bench")
             }}
             data-testid={`roster-move-bench-${player.id}`}
-            className="rounded border border-white/12 bg-black/20 px-1 py-0.5 text-[8px] sm:text-[9px] text-white/70 hover:bg-white/10"
+            className="rounded border border-white/12 bg-black/20 px-1 py-0.5 text-[11px] sm:text-[11px] text-white/70 hover:bg-white/10"
           >
             Bench
           </button>
@@ -626,7 +626,7 @@ function PlayerCard({
               onMove("ir")
             }}
             data-testid={`roster-move-ir-${player.id}`}
-            className="rounded border border-white/12 bg-black/20 px-1 py-0.5 text-[8px] sm:text-[9px] text-white/70 hover:bg-white/10"
+            className="rounded border border-white/12 bg-black/20 px-1 py-0.5 text-[11px] sm:text-[11px] text-white/70 hover:bg-white/10"
           >
             IR
           </button>
@@ -638,7 +638,7 @@ function PlayerCard({
             onDropSelf()
           }}
           data-testid={`roster-drop-${player.id}`}
-          className="inline-flex items-center justify-center rounded-full border border-white/12 bg-black/20 px-1 py-0.5 text-[8px] sm:text-[9px] text-white/70 hover:bg-white/10"
+          className="inline-flex items-center justify-center rounded-full border border-white/12 bg-black/20 px-1 py-0.5 text-[11px] sm:text-[11px] text-white/70 hover:bg-white/10"
         >
           <ChevronsDown className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
         </button>

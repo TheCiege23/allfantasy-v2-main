@@ -43,7 +43,7 @@ function ConfidencePill({ confidence }: { confidence: number }) {
   const label = pct >= 80 ? "High confidence" : pct >= 55 ? "Moderate confidence" : "Lower confidence"
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black ${colorClass}`}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-black ${colorClass}`}
       aria-label={`${label}: ${pct}%`}
     >
       {pct}% confident
@@ -75,7 +75,7 @@ function Section({
         : "text-slate-100/85"
   return (
     <div>
-      <p className={`mb-0.5 text-[10px] font-black uppercase tracking-wider ${labelColor}`}>
+      <p className={`mb-0.5 text-[11px] font-black uppercase tracking-wider ${labelColor}`}>
         {label}
       </p>
       <p className={`text-sm leading-relaxed ${textColor}`}>{text}</p>
@@ -103,7 +103,7 @@ export function TeachingAnswerCard({
     >
       {/* Quick Answer — primary section, always shown */}
       <div>
-        <p className="mb-0.5 text-[10px] font-black uppercase tracking-wider text-cyan-300/75">
+        <p className="mb-0.5 text-[11px] font-black uppercase tracking-wider text-cyan-300/75">
           Quick Answer
         </p>
         <p
@@ -134,9 +134,9 @@ export function TeachingAnswerCard({
         <ConfidencePill confidence={answer.confidence} />
 
         {dataUsedLabel ? (
-          <span className="text-[10px] text-white/35">{dataUsedLabel}</span>
+          <span className="text-[11px] text-white/35">{dataUsedLabel}</span>
         ) : answer.dataUsed.length > 0 ? (
-          <span className="text-[10px] text-white/35">
+          <span className="text-[11px] text-white/35">
             Based on: {answer.dataUsed.join(", ")}
           </span>
         ) : null}

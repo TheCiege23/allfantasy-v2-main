@@ -29,7 +29,7 @@ export default function PinnedSection({
         background: "color-mix(in srgb, var(--accent-cyan-strong) 6%, var(--panel))",
       }}
     >
-      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
         <Pin className="h-3 w-3" />
         Pinned
       </div>
@@ -60,7 +60,7 @@ export default function PinnedSection({
                 <button
                   type="button"
                   onClick={() => onUnpin(m.id)}
-                  className="shrink-0 text-[10px] font-medium"
+                  className="shrink-0 text-[11px] font-medium"
                   style={{ color: "var(--muted2)" }}
                 >
                   Unpin

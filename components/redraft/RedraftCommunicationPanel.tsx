@@ -152,7 +152,7 @@ export function RedraftCommunicationPanel({ leagueId, isCommissioner, onOpenChat
             <h3 className="text-base font-black text-white">League communication</h3>
             {unreadCount > 0 ? (
               <span
-                className="rounded-full border border-[#ff9ec0]/40 bg-[#ff3d81]/15 px-2 py-0.5 text-[10px] font-bold text-[#ffd7e5]"
+                className="rounded-full border border-[#ff9ec0]/40 bg-[#ff3d81]/15 px-2 py-0.5 text-[11px] font-bold text-[#ffd7e5]"
                 data-testid="g42-unread-badge"
               >
                 {unreadCount} unread
@@ -208,7 +208,7 @@ export function RedraftCommunicationPanel({ leagueId, isCommissioner, onOpenChat
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-xs font-bold text-white/85">{notification.title}</p>
-                      <span className="shrink-0 text-[10px] text-white/30">{timeAgo(notification.createdAt)}</span>
+                      <span className="shrink-0 text-[11px] text-white/30">{timeAgo(notification.createdAt)}</span>
                     </div>
                     {notification.body ? (
                       <p className="mt-1 text-[11px] leading-4 text-white/45">{clip(notification.body)}</p>
@@ -240,7 +240,7 @@ export function RedraftCommunicationPanel({ leagueId, isCommissioner, onOpenChat
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-xs font-bold text-[#ffd7e5]">{message.senderName || 'AllFantasy'}</p>
-                      <span className="shrink-0 text-[10px] text-white/30">{timeAgo(message.createdAt)}</span>
+                      <span className="shrink-0 text-[11px] text-white/30">{timeAgo(message.createdAt)}</span>
                     </div>
                     <p className="mt-1 text-[11px] leading-4 text-white/55">{clip(message.body)}</p>
                   </li>
@@ -249,7 +249,7 @@ export function RedraftCommunicationPanel({ leagueId, isCommissioner, onOpenChat
                   <li key={item.id} className="rounded-xl border border-white/[0.06] bg-black/20 px-3 py-2">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-xs font-bold text-white/80">{item.title || item.message}</p>
-                      <span className="shrink-0 text-[10px] text-white/30">{timeAgo(item.createdAt)}</span>
+                      <span className="shrink-0 text-[11px] text-white/30">{timeAgo(item.createdAt)}</span>
                     </div>
                     <p className="mt-1 text-[11px] leading-4 text-white/45">{clip(item.message)}</p>
                   </li>

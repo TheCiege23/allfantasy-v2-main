@@ -52,7 +52,7 @@ export function MarketValuePanel({ leagueId }: { leagueId: string }) {
             <>
               <div className="space-y-1">
                 {values.slice(0, 10).map((v) => (
-                  <div key={v.playerId} className="flex items-center justify-between gap-2 text-[10px] text-white/70">
+                  <div key={v.playerId} className="flex items-center justify-between gap-2 text-[11px] text-white/70">
                     <span className="truncate">{v.playerName ?? v.playerId}{v.position ? ` · ${v.position}` : ''}</span>
                     <span>
                       <span className="text-white/50">{v.baseValue}→</span>
@@ -65,7 +65,7 @@ export function MarketValuePanel({ leagueId }: { leagueId: string }) {
                   </div>
                 ))}
               </div>
-              <p className="text-[9px] text-white/35" data-testid="market-value-disclaimer">
+              <p className="text-[11px] text-white/35" data-testid="market-value-disclaimer">
                 AllFantasy market value is separate from provider, ADP, projection, and historical snapshot values.
               </p>
             </>

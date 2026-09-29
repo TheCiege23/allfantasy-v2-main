@@ -336,12 +336,12 @@ export function TeamSettingsPanel({ leagueId, canEdit }: { leagueId: string; can
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-[12px] font-medium text-white/35">{team.position}.</span>
                         {team.isCommissioner ? (
-                          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-200">
+                          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-amber-200">
                             Commissioner
                           </span>
                         ) : null}
                         {team.isCoCommissioner ? (
-                          <span className="rounded bg-[#ff3d81]/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-[#ffb8d1]">
+                          <span className="rounded bg-[#ff3d81]/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-[#ffb8d1]">
                             Co-comm
                           </span>
                         ) : null}
@@ -352,7 +352,7 @@ export function TeamSettingsPanel({ leagueId, canEdit }: { leagueId: string; can
 
                       {/* Name field */}
                       <label className="block">
-                        <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-white/40">
                           Team name
                         </span>
                         <input
@@ -373,7 +373,7 @@ export function TeamSettingsPanel({ leagueId, canEdit }: { leagueId: string; can
 
                       {/* Logo field */}
                       <label className="block">
-                        <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                        <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-white/40">
                           Logo URL
                         </span>
                         <input
@@ -414,7 +414,7 @@ export function TeamSettingsPanel({ leagueId, canEdit }: { leagueId: string; can
                               {addPickerOpen === team.teamId ? (
                                 <div className="absolute left-0 top-full z-30 mt-1 w-60 rounded-lg border border-white/15 bg-[#0d1526] py-1 shadow-xl">
                                   <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
-                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                                    <span className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
                                       Select owner
                                     </span>
                                     <button type="button" onClick={() => setAddPickerOpen(null)}>
@@ -430,7 +430,7 @@ export function TeamSettingsPanel({ leagueId, canEdit }: { leagueId: string; can
                                           onClick={() => handleAssign(team.rosterId, user.id)}
                                           className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-white/70 transition hover:bg-white/[0.06] hover:text-white"
                                         >
-                                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[9px] font-bold text-white/40">
+                                          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/40">
                                             {(user.displayName ?? user.username ?? '?')[0]?.toUpperCase()}
                                           </div>
                                           <span>{user.displayName ?? user.username ?? user.id}</span>

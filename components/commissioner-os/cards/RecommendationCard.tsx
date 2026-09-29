@@ -82,7 +82,7 @@ export function RecommendationCard({
           <div className="flex items-center gap-2">
             {status && (
               <span
-                className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                className="rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
                 style={{ background: 'var(--panel2)', color: 'var(--muted)', border: '1px solid var(--border)' }}
               >
                 {STATUS_LABELS[status]}

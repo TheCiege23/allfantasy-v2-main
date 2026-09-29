@@ -47,7 +47,7 @@ export function StandingsRow({
     >
       <td className="w-9 py-2.5 pl-2 font-mono text-[13px] font-bold text-white">{rank}</td>
       <td className="w-9 py-2.5">
-        <div className="h-7 w-7 rounded-full bg-white/10 text-center text-[10px] leading-7 text-white/60">
+        <div className="h-7 w-7 rounded-full bg-white/10 text-center text-[11px] leading-7 text-white/60">
           {row.participant.displayName.slice(0, 1)}
         </div>
       </td>
@@ -56,7 +56,7 @@ export function StandingsRow({
       </td>
       <td className="hidden py-2.5 sm:table-cell">
         <span
-          className={`inline-block rounded-full border px-2 py-0.5 text-[9px] font-bold ${statusStyles[st] ?? statusStyles.competing}`}
+          className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-bold ${statusStyles[st] ?? statusStyles.competing}`}
         >
           {chip}
         </span>
@@ -75,7 +75,7 @@ export function StandingsRow({
       {!hidePf ? (
         <td className="w-[72px] py-2.5 text-right font-semibold text-white">{weekPf.toFixed(1)}</td>
       ) : null}
-      <td className="hidden w-12 py-2.5 text-right text-[10px] text-[var(--tournament-text-dim)] lg:table-cell">
+      <td className="hidden w-12 py-2.5 text-right text-[11px] text-[var(--tournament-text-dim)] lg:table-cell">
         {row.conferenceRank ?? '—'}
       </td>
     </tr>

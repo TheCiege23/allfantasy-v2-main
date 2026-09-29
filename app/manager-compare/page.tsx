@@ -766,15 +766,15 @@ function ManagerSummaryCard({
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
-                    <div className="text-[10px] uppercase tracking-[0.2em] text-white/35">Leagues</div>
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-white/35">Leagues</div>
                     <div className="mt-1 text-sm font-semibold text-white">{grade.leagues_played}</div>
                   </div>
                   <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
-                    <div className="text-[10px] uppercase tracking-[0.2em] text-white/35">Championships</div>
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-white/35">Championships</div>
                     <div className="mt-1 text-sm font-semibold text-white">{renderTrophies(grade.championships)}</div>
                   </div>
                   <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
-                    <div className="text-[10px] uppercase tracking-[0.2em] text-white/35">Sample Note</div>
+                    <div className="text-[11px] uppercase tracking-[0.2em] text-white/35">Sample Note</div>
                     <div className="mt-1 text-sm font-semibold text-white">{grade.note || 'No note provided'}</div>
                   </div>
                 </div>
@@ -1061,15 +1061,15 @@ function TradeStyleTabContent({
                 <>
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-xl border border-white/8 bg-[#07071a] p-3">
-                      <div className="text-[10px] uppercase tracking-[0.2em] text-white/35">Overall</div>
+                      <div className="text-[11px] uppercase tracking-[0.2em] text-white/35">Overall</div>
                       <div className="mt-1 text-xl font-black text-white">{item.profile.tradeLikelihood.overall}</div>
                     </div>
                     <div className="rounded-xl border border-white/8 bg-[#07071a] p-3">
-                      <div className="text-[10px] uppercase tracking-[0.2em] text-white/35">Willingness</div>
+                      <div className="text-[11px] uppercase tracking-[0.2em] text-white/35">Willingness</div>
                       <div className="mt-1 text-xl font-black text-white">{item.profile.tradeLikelihood.willingness}</div>
                     </div>
                     <div className="rounded-xl border border-white/8 bg-[#07071a] p-3">
-                      <div className="text-[10px] uppercase tracking-[0.2em] text-white/35">Needs Align</div>
+                      <div className="text-[11px] uppercase tracking-[0.2em] text-white/35">Needs Align</div>
                       <div className="mt-1 text-xl font-black text-white">{item.profile.tradeLikelihood.needsAlignment}</div>
                     </div>
                   </div>

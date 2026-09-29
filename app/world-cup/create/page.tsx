@@ -260,7 +260,7 @@ function PreviewAndSave({ draft, onBack }: PreviewProps) {
 
       {/* Fake invite link preview */}
       <div className="rounded-2xl border border-dashed border-white/20 bg-white/[0.04] p-4">
-        <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-white/35">Your invite link (preview)</p>
+        <p className="mb-2 text-[11px] font-black uppercase tracking-widest text-white/35">Your invite link (preview)</p>
         <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2.5">
           <Share2 className="h-4 w-4 shrink-0 text-white/30" />
           <span className="flex-1 select-none truncate text-xs font-mono text-white/30">
@@ -401,17 +401,17 @@ export default function WorldCupGuestCreatePage() {
             />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-300/70">2026 FIFA World Cup</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-300/70">2026 FIFA World Cup</p>
             <p className="text-sm font-black text-white">World Cup Pool Setup</p>
           </div>
           {/* Visual steps indicator */}
           <div className="hidden shrink-0 items-center gap-1 sm:flex">
             {["Setup", "Invite", "Picks"].map((label, i) => (
               <div key={label} className="flex items-center gap-1">
-                <span className="rounded-full border border-white/15 bg-white/[0.05] px-2 py-0.5 text-[10px] font-bold text-white/50">
+                <span className="rounded-full border border-white/15 bg-white/[0.05] px-2 py-0.5 text-[11px] font-bold text-white/50">
                   {label}
                 </span>
-                {i < 2 && <span className="text-white/20 text-[10px]">›</span>}
+                {i < 2 && <span className="text-white/20 text-[11px]">›</span>}
               </div>
             ))}
           </div>

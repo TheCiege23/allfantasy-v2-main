@@ -74,7 +74,7 @@ function ScoreRing({ score, label }: { score: number; label: string }) {
       <div className={`w-9 h-9 rounded-full border-2 border-current flex items-center justify-center text-xs font-bold ${color}`}>
         {score}
       </div>
-      <span className="text-[9px] text-zinc-500 uppercase tracking-wide">{label}</span>
+      <span className="text-[11px] text-zinc-500 uppercase tracking-wide">{label}</span>
     </div>
   )
 }
@@ -91,7 +91,7 @@ function AlertBar({ alerts }: { alerts: DraftAlert[] }) {
     <div className="space-y-1">
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+        className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
       >
         {collapsed ? '▶' : '▼'} {alerts.length} Alert{alerts.length > 1 ? 's' : ''}
       </button>
@@ -129,17 +129,17 @@ function RecommendationCard({
         <div className="flex items-center justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              {isTop && <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 px-1.5 py-0.5 rounded">#1</span>}
+              {isTop && <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/15 px-1.5 py-0.5 rounded">#1</span>}
               <span className="text-sm font-semibold text-white truncate">{rec.playerName}</span>
               <span className="text-xs text-zinc-500">{rec.position}</span>
             </div>
             <div className="flex items-center gap-1.5 mt-1">
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${pickTypeColor(rec.pickType)}`}>
+              <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded border ${pickTypeColor(rec.pickType)}`}>
                 {rec.pickType}
               </span>
-              {rec.isValue && <span className="text-[10px] text-emerald-400">VALUE</span>}
-              {rec.isReach && <span className="text-[10px] text-amber-400">REACH</span>}
-              {rec.stackNote && <span className="text-[10px] text-purple-400">STACK</span>}
+              {rec.isValue && <span className="text-[11px] text-emerald-400">VALUE</span>}
+              {rec.isReach && <span className="text-[11px] text-amber-400">REACH</span>}
+              {rec.stackNote && <span className="text-[11px] text-purple-400">STACK</span>}
             </div>
           </div>
           <ScoreRing score={rec.overallScore} label="Score" />
@@ -163,7 +163,7 @@ function RecommendationCard({
 
           {/* Why this pick */}
           <div>
-            <span className="text-[10px] text-zinc-500 uppercase">Why this pick</span>
+            <span className="text-[11px] text-zinc-500 uppercase">Why this pick</span>
             <ul className="text-xs text-zinc-400 mt-0.5 space-y-0.5">
               {rec.reasoning.map((r, i) => <li key={i}>• {r}</li>)}
             </ul>
@@ -181,7 +181,7 @@ function RecommendationCard({
           {rec.riskFlags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {rec.riskFlags.map(flag => (
-                <span key={flag} className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
+                <span key={flag} className="text-[11px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
                   {flag.replace(/_/g, ' ')}
                 </span>
               ))}
@@ -191,7 +191,7 @@ function RecommendationCard({
           {/* Avoid notes */}
           {rec.avoidNotes.length > 0 && (
             <div>
-              <span className="text-[10px] text-red-500 uppercase">Caution</span>
+              <span className="text-[11px] text-red-500 uppercase">Caution</span>
               {rec.avoidNotes.map((n, i) => (
                 <p key={i} className="text-xs text-red-400">⚠ {n}</p>
               ))}
@@ -234,7 +234,7 @@ export default function DraftAISidePanel({
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-white">AI Pick Assistant</h3>
-        <span className="text-[10px] text-zinc-500">{result.confidencePct}% confident</span>
+        <span className="text-[11px] text-zinc-500">{result.confidencePct}% confident</span>
       </div>
 
       {/* Alerts */}
@@ -253,7 +253,7 @@ export default function DraftAISidePanel({
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap transition-colors ${
+            className={`text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap transition-colors ${
               filter === f
                 ? 'bg-white text-black font-medium'
                 : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
@@ -279,7 +279,7 @@ export default function DraftAISidePanel({
       </div>
 
       {/* Board Analysis Summary */}
-      <div className="text-[10px] text-zinc-600 flex justify-between">
+      <div className="text-[11px] text-zinc-600 flex justify-between">
         <span>{result.boardAnalysis.totalAvailable} players available</span>
         <span>{result.boardAnalysis.picksMade} picks made</span>
       </div>

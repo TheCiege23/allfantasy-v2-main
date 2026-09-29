@@ -44,7 +44,7 @@ export function RosterSectionRenderer({
 
     return (
       <div key={cat}>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/30">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/30">
           {CATEGORY_LABELS[cat] ?? cat}
         </p>
         <div className="space-y-1">

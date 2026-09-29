@@ -454,11 +454,11 @@ export function DraftTopBar({
           <span data-testid="draft-topbar-timer-value">{timerDisplay}</span>
           <span className="sr-only" data-testid="draft-topbar-clock-time">{timerDisplay}</span>
           {isPausedCommissioner ? (
-            <span className="rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-50">
+            <span className="rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-50">
               Resume
             </span>
           ) : draftStatus === 'paused' ? (
-            <span className="rounded border border-white/15 bg-white/[0.08] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/75">
+            <span className="rounded border border-white/15 bg-white/[0.08] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/75">
               Paused
             </span>
           ) : null}
@@ -604,7 +604,7 @@ export function DraftTopBar({
                 </h1>
                 {onlineCount != null && onlineCount > 0 && (
                   <span
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/12 px-2 py-0.5 text-[10px] font-semibold text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.15)]"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/12 px-2 py-0.5 text-[11px] font-semibold text-emerald-100 shadow-[0_0_12px_rgba(16,185,129,0.15)]"
                     title={`${onlineCount} manager${onlineCount === 1 ? '' : 's'} online`}
                     data-testid="draft-topbar-online-count"
                   >
@@ -621,7 +621,7 @@ export function DraftTopBar({
                   inline meta line below (`{teamCount} Teams · {rounds} Rounds ·
                   {sport} · {draftTypeLabel}`). Removing them de-clutters the
                   draft-room header without losing any information. */}
-          <div className="mt-0 flex flex-wrap items-center gap-x-1 gap-y-0 text-[9px] text-[#97a8d7]">
+          <div className="mt-0 flex flex-wrap items-center gap-x-1 gap-y-0 text-[11px] text-[#97a8d7]">
                 <span>{timerSummary}</span>
                 <span className="text-white/24">·</span>
                 <span>{teamCount} Teams</span>
@@ -648,7 +648,7 @@ export function DraftTopBar({
                     <span
                       data-testid="draft-topbar-third-round-reversal-badge"
                       title="Third Round Reversal: rounds 2 and 3 go in the same direction."
-                      className="inline-flex items-center rounded-md border border-cyan-300/35 bg-cyan-500/14 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-100"
+                      className="inline-flex items-center rounded-md border border-cyan-300/35 bg-cyan-500/14 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.12em] text-cyan-100"
                     >
                       3RR On
                     </span>
@@ -669,23 +669,23 @@ export function DraftTopBar({
                 {copyFeedback === 'copied' ? <span className="text-cyan-300">Copied</span> : null}
               </div>
               <div
-                className="mt-2 grid grid-cols-2 gap-1.5 rounded-lg border border-white/10 bg-black/20 p-2 text-[10px] text-white/75 md:hidden"
+                className="mt-2 grid grid-cols-2 gap-1.5 rounded-lg border border-white/10 bg-black/20 p-2 text-[11px] text-white/75 md:hidden"
                 data-testid="draft-topbar-mobile-compact"
               >
                 <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
-                  <span className="block text-[9px] uppercase tracking-[0.14em] text-white/45">Format</span>
+                  <span className="block text-[11px] uppercase tracking-[0.14em] text-white/45">Format</span>
                   <span className="block font-semibold text-cyan-100">{draftFormatLabel}</span>
                 </div>
                 <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
-                  <span className="block text-[9px] uppercase tracking-[0.14em] text-white/45">Status</span>
+                  <span className="block text-[11px] uppercase tracking-[0.14em] text-white/45">Status</span>
                   <span className="block font-semibold text-white">{statusLabel}</span>
                 </div>
                 <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
-                  <span className="block text-[9px] uppercase tracking-[0.14em] text-white/45">Current</span>
+                  <span className="block text-[11px] uppercase tracking-[0.14em] text-white/45">Current</span>
                   <span className="block font-semibold text-white">{pickLabel ?? '—'}</span>
                 </div>
                 <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
-                  <span className="block text-[9px] uppercase tracking-[0.14em] text-white/45">Clock</span>
+                  <span className="block text-[11px] uppercase tracking-[0.14em] text-white/45">Clock</span>
                   <span className="block font-semibold text-cyan-100" data-testid="draft-topbar-mobile-timer-value">
                     {timerDisplay}
                   </span>
@@ -770,7 +770,7 @@ export function DraftTopBar({
                   /* Test hook for the orphan CPU/AI label. Only set while an orphan roster is
                      on the clock, because this span otherwise renders "You're on the clock". */
                   data-testid={isOrphanOnClock ? 'draft-topbar-orphan-mode-label' : undefined}
-                  className={`shrink-0 text-[9px] font-semibold uppercase tracking-wide ${
+                  className={`shrink-0 text-[11px] font-semibold uppercase tracking-wide ${
                     isCurrentUserOnClock ? 'text-amber-100' : 'text-violet-200/75'
                   }`}
                 >
@@ -784,12 +784,12 @@ export function DraftTopBar({
             ) : null}
             {showAiOverlays && aiRecommendationOverlay ? (
               <div
-                className="inline-flex max-w-full items-center gap-1 rounded-lg border border-cyan-300/35 bg-cyan-500/12 px-2 py-1 text-[10px] text-cyan-100"
+                className="inline-flex max-w-full items-center gap-1 rounded-lg border border-cyan-300/35 bg-cyan-500/12 px-2 py-1 text-[11px] text-cyan-100"
                 data-testid="draft-topbar-ai-overlay"
                 title={aiRecommendationOverlay.note ?? 'AI recommendation overlay'}
               >
                 {aiRecommendationOverlay.label ? (
-                  <span className="rounded border border-cyan-300/35 bg-cyan-500/20 px-1 py-0.5 font-semibold uppercase tracking-[0.1em] text-[9px]">
+                  <span className="rounded border border-cyan-300/35 bg-cyan-500/20 px-1 py-0.5 font-semibold uppercase tracking-[0.1em] text-[11px]">
                     {aiRecommendationOverlay.label}
                   </span>
                 ) : null}
@@ -833,7 +833,7 @@ export function DraftTopBar({
               onClick={draftStatus === 'paused' ? onResume : onPause}
               disabled={commissionerLoading || !commissionerPauseControlsEnabled}
               data-testid={draftStatus === 'paused' ? 'draft-topbar-resume-pill' : 'draft-topbar-pause-pill'}
-              className={`inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] transition duration-150 ${
+              className={`inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition duration-150 ${
                 draftStatus === 'paused'
                   ? 'border-emerald-400/40 bg-emerald-500/14 text-emerald-100 hover:bg-emerald-500/20'
                   : 'border-amber-400/40 bg-amber-500/12 text-amber-100 hover:bg-amber-500/20'
@@ -848,7 +848,7 @@ export function DraftTopBar({
             type="button"
             onClick={onToggleAutoPick}
             disabled={!onToggleAutoPick}
-            className={`inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-[10px] font-semibold uppercase tracking-[0.12em] transition duration-150 cursor-pointer ${
+            className={`inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition duration-150 cursor-pointer ${
               autoPickEnabled
                 ? 'border-emerald-400/40 bg-emerald-500/14 text-emerald-100 shadow-[0_0_16px_rgba(16,185,129,0.12)] hover:bg-emerald-500/20'
                 : 'border-white/14 bg-white/6 text-white/62 hover:border-white/25 hover:bg-white/10'
@@ -1171,7 +1171,7 @@ export function DraftTopBar({
 
           {isReconnecting ? (
             <span
-              className={`self-center whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+              className={`self-center whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${
                 rs
                   ? 'border-amber-400/35 bg-amber-500/15 text-amber-100 shadow-[0_0_20px_rgba(251,191,36,0.25)]'
                   : 'text-amber-300'

@@ -63,7 +63,7 @@ export function CoreAssetsPanel({
                     ;(e.currentTarget as HTMLImageElement).style.display = 'none'
                   }} />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center text-[10px] font-bold text-white/40">
+                  <div className="flex h-full w-full items-center justify-center text-[11px] font-bold text-white/40">
                     {a.position}
                   </div>
                 )}
@@ -73,7 +73,7 @@ export function CoreAssetsPanel({
                   <p className="truncate text-[13px] font-semibold text-white">{a.name}</p>
                   <span
                     className={cn(
-                      'rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+                      'rounded-full border px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide',
                       TAG[a.tag],
                     )}
                   >

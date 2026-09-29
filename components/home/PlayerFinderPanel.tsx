@@ -258,13 +258,13 @@ export default function PlayerFinderPanel({ open = false, onClose }: PlayerFinde
                           >
                             {p.name}
                           </div>
-                          <div className="mt-0.5 text-[10px]" style={{ color: "var(--muted2)" }}>
+                          <div className="mt-0.5 text-[11px]" style={{ color: "var(--muted2)" }}>
                             {p.team} • {p.position} • {p.leagueName}
                           </div>
                         </div>
                         <StatusPill status={p.status} />
                       </div>
-                      <div className="mt-1 flex flex-wrap gap-2 text-[10px]">
+                      <div className="mt-1 flex flex-wrap gap-2 text-[11px]">
                         <Link
                           href={`/league/${encodeURIComponent(p.leagueId)}`}
                           className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 transition-colors"
@@ -319,7 +319,7 @@ function StatusPill({ status }: { status: PlayerStatus }) {
 
   return (
     <span
-      className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold"
+      className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold"
       style={{ background: bg, color }}
     >
       {STATUS_LABEL[status]}

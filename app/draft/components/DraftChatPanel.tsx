@@ -65,13 +65,13 @@ export function DraftChatPanel({ sessionId, mode, viewerId = null }: Props) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-white/[0.08] bg-[#0d1117]">
       <div className="border-b border-white/[0.06] px-2 py-1.5">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Draft chat</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Draft chat</p>
       </div>
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2 text-[11px]">
         {visible.map((m) => (
           <div
             key={m.id}
-            className={m.type === 'system' ? 'text-center text-[10px] text-cyan-300/80' : 'flex items-start gap-1 text-white/80'}
+            className={m.type === 'system' ? 'text-center text-[11px] text-cyan-300/80' : 'flex items-start gap-1 text-white/80'}
           >
             <span className={m.type === 'system' ? undefined : 'min-w-0 flex-1'}>
               {m.type !== 'system' ? <span className="font-semibold text-white/60">{m.authorDisplayName}: </span> : null}

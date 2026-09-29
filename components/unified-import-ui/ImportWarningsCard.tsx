@@ -163,7 +163,7 @@ export function ImportWarningsCard({ leagueId, onSummary }: ImportWarningsCardPr
         <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/70">
           Import warnings <span className="ml-1 text-white/40">({rows.length})</span>
         </p>
-        <p className="text-[10px] text-white/40">
+        <p className="text-[11px] text-white/40">
           {rows[0]?.run?.provider ? `via ${rows[0].run.provider}` : ''}
         </p>
       </div>
@@ -178,8 +178,8 @@ export function ImportWarningsCard({ leagueId, onSummary }: ImportWarningsCardPr
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className={`text-[10px] font-black uppercase tracking-wider ${s.text}`}>{s.label}</span>
-                  <code className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-white/60">
+                  <span className={`text-[11px] font-black uppercase tracking-wider ${s.text}`}>{s.label}</span>
+                  <code className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[11px] text-white/60">
                     {w.code}
                   </code>
                 </div>

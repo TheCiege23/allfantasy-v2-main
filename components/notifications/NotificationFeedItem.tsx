@@ -71,7 +71,7 @@ export function NotificationFeedItem({ notification }: { notification: Notificat
           <p className={`text-[12px] font-semibold ${isUnread ? 'text-white/90' : 'text-white/60'}`}>
             {n.title}
           </p>
-          <span className="shrink-0 text-[9px] text-white/25">{timeAgo(n.createdAt)}</span>
+          <span className="shrink-0 text-[11px] text-white/25">{timeAgo(n.createdAt)}</span>
         </div>
         {n.body && (
           <p className="mt-0.5 text-[11px] text-white/40 line-clamp-2">{n.body}</p>

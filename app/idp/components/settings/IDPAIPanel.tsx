@@ -240,7 +240,7 @@ export function IDPAIPanel({
           ) : null}
         </div>
         {out ? (
-          <pre className="max-h-48 overflow-auto rounded-lg border border-white/[0.06] bg-black/40 p-2 text-[10px] text-white/75">
+          <pre className="max-h-48 overflow-auto rounded-lg border border-white/[0.06] bg-black/40 p-2 text-[11px] text-white/75">
             {out}
           </pre>
         ) : null}

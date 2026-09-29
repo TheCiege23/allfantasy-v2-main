@@ -149,7 +149,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                 onRefresh()
               }}
               disabled={loading}
-              className="rounded border border-cyan-400/25 px-2 py-0.5 text-[10px] font-semibold text-cyan-100 hover:bg-cyan-500/15 disabled:opacity-50"
+              className="rounded border border-cyan-400/25 px-2 py-0.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/15 disabled:opacity-50"
             >
               Refresh
             </button>
@@ -169,7 +169,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
               {t('draftRoom.helper.aiExplainLabel')}
               {!aiAssistantEnabled && !aiAvailabilityLoading ? ` ${t('draftRoom.helper.aiExplainDisabled')}` : ''}
             </label>
-            <p className="text-[10px] text-white/55" data-testid="draft-helper-execution-mode">
+            <p className="text-[11px] text-white/55" data-testid="draft-helper-execution-mode">
               {executionMode === 'ai_explained'
                 ? t('draftRoom.helper.execution.aiExplained')
                 : t('draftRoom.helper.execution.deterministic')}
@@ -207,19 +207,19 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100/90">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-100/90">
                         {userOnTheClock ? 'On the clock — copilot pick' : 'Copilot pick'}
                       </p>
                       <p className="mt-1 font-semibold text-cyan-50">
                         {recommendation.player.name}
-                        <span className="ml-1 text-[10px] font-normal text-white/75">
+                        <span className="ml-1 text-[11px] font-normal text-white/75">
                           {recommendation.player.position}
                           {recommendation.player.team ? ` · ${recommendation.player.team}` : ''}
                           {recommendation.player.adp != null ? ` · ADP ${recommendation.player.adp}` : ''}
                         </span>
                       </p>
                       <p className="mt-1 text-[11px] leading-snug text-white/88">{recommendation.reason}</p>
-                      <p className="mt-1 text-[10px] text-white/55">
+                      <p className="mt-1 text-[11px] text-white/55">
                         {t('draftRoom.helper.confidence')} {recommendation.confidence}%
                         {picksUntilUser != null && picksUntilUser > 0 ? ` · ~${picksUntilUser} to you` : ''}
                       </p>
@@ -231,7 +231,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                           e.stopPropagation()
                           onPlayerClick?.(recommendation.player)
                         }}
-                        className="rounded-lg border border-white/15 bg-black/25 px-2.5 py-1.5 text-[10px] font-semibold text-white/90 hover:bg-white/10"
+                        className="rounded-lg border border-white/15 bg-black/25 px-2.5 py-1.5 text-[11px] font-semibold text-white/90 hover:bg-white/10"
                       >
                         View player
                       </button>
@@ -242,7 +242,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                           if (resolvedRecommendedPlayer && onQueueRecommendedPlayer) onQueueRecommendedPlayer()
                         }}
                         disabled={!resolvedRecommendedPlayer || !onQueueRecommendedPlayer}
-                        className="rounded-lg border border-violet-400/35 bg-violet-500/15 px-2.5 py-1.5 text-[10px] font-semibold text-violet-100 hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-45"
+                        className="rounded-lg border border-violet-400/35 bg-violet-500/15 px-2.5 py-1.5 text-[11px] font-semibold text-violet-100 hover:bg-violet-500/25 disabled:cursor-not-allowed disabled:opacity-45"
                       >
                         Add to queue
                       </button>
@@ -253,39 +253,39 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                           if (canCommitRecommendedPick && onDraftRecommendedPlayer) onDraftRecommendedPlayer()
                         }}
                         disabled={!canCommitRecommendedPick || !onDraftRecommendedPlayer}
-                        className="rounded-lg border border-cyan-400/45 bg-cyan-500/25 px-2.5 py-1.5 text-[10px] font-bold text-cyan-50 hover:bg-cyan-500/35 disabled:cursor-not-allowed disabled:opacity-45"
+                        className="rounded-lg border border-cyan-400/45 bg-cyan-500/25 px-2.5 py-1.5 text-[11px] font-bold text-cyan-50 hover:bg-cyan-500/35 disabled:cursor-not-allowed disabled:opacity-45"
                       >
                         Draft now
                       </button>
                     </div>
                   </div>
                 </div>
-                {explanation && <p className="text-[10px] text-white/80">{explanation}</p>}
+                {explanation && <p className="text-[11px] text-white/80">{explanation}</p>}
                 {(reachWarning || valueWarning || scarcityInsight || stackInsight || correlationInsight || formatInsight || byeNote) && (
                   <div className="space-y-1">
                     {reachWarning && (
-                      <p className="flex items-start gap-1 text-[10px] text-amber-300">
+                      <p className="flex items-start gap-1 text-[11px] text-amber-300">
                         <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                         {reachWarning}
                       </p>
                     )}
                     {valueWarning && (
-                      <p className="flex items-start gap-1 text-[10px] text-emerald-300">
+                      <p className="flex items-start gap-1 text-[11px] text-emerald-300">
                         <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
                         {valueWarning}
                       </p>
                     )}
-                    {scarcityInsight && <p className="text-[10px] text-cyan-300/90">{scarcityInsight}</p>}
-                    {stackInsight && <p className="text-[10px] text-violet-200/90">{stackInsight}</p>}
-                    {correlationInsight && <p className="text-[10px] text-indigo-200/90">{correlationInsight}</p>}
-                    {formatInsight && <p className="text-[10px] text-sky-200/90">{formatInsight}</p>}
-                    {byeNote && <p className="text-[10px] text-amber-300/90">{byeNote}</p>}
+                    {scarcityInsight && <p className="text-[11px] text-cyan-300/90">{scarcityInsight}</p>}
+                    {stackInsight && <p className="text-[11px] text-violet-200/90">{stackInsight}</p>}
+                    {correlationInsight && <p className="text-[11px] text-indigo-200/90">{correlationInsight}</p>}
+                    {formatInsight && <p className="text-[11px] text-sky-200/90">{formatInsight}</p>}
+                    {byeNote && <p className="text-[11px] text-amber-300/90">{byeNote}</p>}
                   </div>
                 )}
                 {evidence.length > 0 && (
                   <div>
-                    <p className="text-[9px] font-medium uppercase tracking-wider text-white/50">{t('draftRoom.helper.evidence')}</p>
-                    <ul className="list-inside list-disc text-[10px] text-white/70">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-white/50">{t('draftRoom.helper.evidence')}</p>
+                    <ul className="list-inside list-disc text-[11px] text-white/70">
                       {evidence.slice(0, 4).map((item, i) => (
                         <li key={`e-${i}`}>{item}</li>
                       ))}
@@ -294,8 +294,8 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                 )}
                 {caveats.length > 0 && (
                   <div>
-                    <p className="text-[9px] font-medium uppercase tracking-wider text-white/50">Caveats</p>
-                    <ul className="list-inside list-disc text-[10px] text-white/60">
+                    <p className="text-[11px] font-medium uppercase tracking-wider text-white/50">Caveats</p>
+                    <ul className="list-inside list-disc text-[11px] text-white/60">
                       {caveats.map((c, i) => (
                         <li key={i}>{c}</li>
                       ))}
@@ -303,19 +303,19 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                   </div>
                 )}
                 {uncertainty && (
-                  <p className="text-[10px] text-amber-200/90" data-testid="draft-helper-uncertainty">
+                  <p className="text-[11px] text-amber-200/90" data-testid="draft-helper-uncertainty">
                     {uncertainty}
                   </p>
                 )}
                 {alternatives.length > 0 && (
                   <div>
-                    <p className="mb-1 text-[9px] font-medium uppercase tracking-wider text-white/50">{t('draftRoom.helper.alternatives')}</p>
+                    <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-white/50">{t('draftRoom.helper.alternatives')}</p>
                     <ul className="space-y-1">
                       {alternatives.slice(0, 5).map((alt, i) => (
                         <li
                           key={i}
                           data-testid={`draft-helper-alternative-${i}`}
-                          className="rounded border border-white/12 bg-[linear-gradient(120deg,rgba(15,23,42,0.85),rgba(8,16,32,0.92))] px-2 py-1.5 text-[10px] text-white/82"
+                          className="rounded border border-white/12 bg-[linear-gradient(120deg,rgba(15,23,42,0.85),rgba(8,16,32,0.92))] px-2 py-1.5 text-[11px] text-white/82"
                         >
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <button
@@ -332,7 +332,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                               <button
                                 type="button"
                                 onClick={() => onQueueAlternativePlayer(alt.player)}
-                                className="shrink-0 rounded border border-white/14 bg-black/30 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-cyan-100/90 hover:bg-white/10"
+                                className="shrink-0 rounded border border-white/14 bg-black/30 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90 hover:bg-white/10"
                               >
                                 Queue
                               </button>
@@ -416,45 +416,45 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
           >
             <div className="rounded-xl border border-white/10 bg-[#081224] p-3" data-testid="draft-helper-ai-sports-context">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200/90">Feeds & tools</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/90">Feeds & tools</p>
                 {sportsFeed?.updatedAt ? (
-                  <span className="text-[9px] text-white/45">
+                  <span className="text-[11px] text-white/45">
                     Updated {new Date(sportsFeed.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                   </span>
                 ) : null}
               </div>
               {aiFeatureStatus && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  <span className={`rounded border px-1.5 py-0.5 text-[9px] ${aiFeatureStatus.chimmyReady ? 'border-cyan-300/35 bg-cyan-500/10 text-cyan-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
+                  <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.chimmyReady ? 'border-cyan-300/35 bg-cyan-500/10 text-cyan-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
                     Chimmy {aiFeatureStatus.chimmyReady ? 'ready' : 'offline'}
                   </span>
-                  <span className={`rounded border px-1.5 py-0.5 text-[9px] ${aiFeatureStatus.liveBrainReady ? 'border-violet-300/35 bg-violet-500/10 text-violet-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
+                  <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.liveBrainReady ? 'border-violet-300/35 bg-violet-500/10 text-violet-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
                     Live Brain {aiFeatureStatus.liveBrainReady ? 'live' : 'standby'}
                   </span>
-                  <span className={`rounded border px-1.5 py-0.5 text-[9px] ${aiFeatureStatus.aiAdpEnabled ? 'border-emerald-300/35 bg-emerald-500/10 text-emerald-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
+                  <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.aiAdpEnabled ? 'border-emerald-300/35 bg-emerald-500/10 text-emerald-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
                     AI ADP {aiFeatureStatus.aiAdpEnabled ? 'on' : 'off'}
                   </span>
-                  <span className={`rounded border px-1.5 py-0.5 text-[9px] ${aiFeatureStatus.queueReorderEnabled ? 'border-amber-300/35 bg-amber-500/10 text-amber-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
+                  <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.queueReorderEnabled ? 'border-amber-300/35 bg-amber-500/10 text-amber-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
                     Queue AI {aiFeatureStatus.queueReorderEnabled ? 'on' : 'off'}
                   </span>
-                  <span className={`rounded border px-1.5 py-0.5 text-[9px] ${aiFeatureStatus.draftExplanationEnabled ? 'border-sky-300/35 bg-sky-500/10 text-sky-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
+                  <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.draftExplanationEnabled ? 'border-sky-300/35 bg-sky-500/10 text-sky-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
                     Explain {aiFeatureStatus.draftExplanationEnabled ? 'on' : 'off'}
                   </span>
-                  <span className={`rounded border px-1.5 py-0.5 text-[9px] ${aiFeatureStatus.orphanAiEnabled ? 'border-fuchsia-300/35 bg-fuchsia-500/10 text-fuchsia-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
+                  <span className={`rounded border px-1.5 py-0.5 text-[11px] ${aiFeatureStatus.orphanAiEnabled ? 'border-fuchsia-300/35 bg-fuchsia-500/10 text-fuchsia-100' : 'border-white/15 bg-black/25 text-white/60'}`}>
                     Orphan AI {aiFeatureStatus.orphanAiEnabled ? 'armed' : 'off'}
                   </span>
                   {aiFeatureStatus.commissionerAiManagersCount > 0 ? (
-                    <span className="rounded border border-rose-300/35 bg-rose-500/10 px-1.5 py-0.5 text-[9px] text-rose-100">
+                    <span className="rounded border border-rose-300/35 bg-rose-500/10 px-1.5 py-0.5 text-[11px] text-rose-100">
                       Commissioner AI {aiFeatureStatus.commissionerAiManagersCount}
                     </span>
                   ) : null}
                 </div>
               )}
               {sportsFeed?.available ? (
-                <div className="mt-3 space-y-2 text-[10px] text-white/72">
+                <div className="mt-3 space-y-2 text-[11px] text-white/72">
                   {sportsFeed.headlines.length > 0 ? (
                     <div>
-                      <p className="mb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-white/45">News</p>
+                      <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-white/45">News</p>
                       <div className="space-y-1">
                         {sportsFeed.headlines.slice(0, 2).map((item) => (
                           <p key={item.id} className="rounded border border-white/8 bg-black/20 px-2 py-1">
@@ -467,7 +467,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                   ) : null}
                   {sportsFeed.injuries.length > 0 ? (
                     <div>
-                      <p className="mb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-white/45">Injuries</p>
+                      <p className="mb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-white/45">Injuries</p>
                       <div className="space-y-1">
                         {sportsFeed.injuries.slice(0, 2).map((item) => (
                           <p key={`${item.playerName}-${item.team ?? 'na'}`} className="rounded border border-white/8 bg-black/20 px-2 py-1">
@@ -480,7 +480,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                   ) : null}
                 </div>
               ) : (
-                <p className="mt-2 text-[10px] text-white/50">
+                <p className="mt-2 text-[11px] text-white/50">
                   Sports feed is standing by. Draft AI still works from the live room context even while feed rows are sparse.
                 </p>
               )}

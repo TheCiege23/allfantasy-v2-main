@@ -59,7 +59,7 @@ function CurrentPickMeta({ session }: { session: DraftSessionSnapshot }) {
       first?.displayName?.trim() ? first.displayName : first ? `Slot ${first.slot}` : '—'
     return (
       <div className={currentPickMetaShell} data-testid="draft-live-current-pick-meta">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200/70">Round and pick</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-200/70">Round and pick</p>
         <p className="mt-1.5 text-[13px] font-medium leading-snug text-white/90">
           Round <span className="font-bold text-cyan-100">1</span>
           <span className="text-white/35"> · </span>
@@ -71,7 +71,7 @@ function CurrentPickMeta({ session }: { session: DraftSessionSnapshot }) {
         <p className="mt-1 text-[11px] text-white/60">
           First up: <span className="font-medium text-white/85">{firstLabel}</span>
         </p>
-        <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">Waiting to start</p>
+        <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">Waiting to start</p>
       </div>
     )
   }
@@ -80,9 +80,9 @@ function CurrentPickMeta({ session }: { session: DraftSessionSnapshot }) {
   if (!cp) {
     return (
       <div className={currentPickMetaShell} data-testid="draft-live-current-pick-meta">
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200/70">Round and pick</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-200/70">Round and pick</p>
         <p className="mt-3 text-[12px] font-medium text-white/55">Syncing round and pick…</p>
-        <p className="mt-1 text-[10px] text-white/40">Same layout when the board reconnects.</p>
+        <p className="mt-1 text-[11px] text-white/40">Same layout when the board reconnects.</p>
       </div>
     )
   }
@@ -90,7 +90,7 @@ function CurrentPickMeta({ session }: { session: DraftSessionSnapshot }) {
   const pir = pickIndexInRound(cp.overall, teamCount)
   return (
     <div className={currentPickMetaShell} data-testid="draft-live-current-pick-meta">
-      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200/70">Round and pick</p>
+      <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-200/70">Round and pick</p>
       <p className="mt-1.5 text-[13px] font-medium leading-snug text-white/90">
         Round <span className="font-bold text-cyan-100">{cp.round}</span>
         <span className="text-white/35"> · </span>

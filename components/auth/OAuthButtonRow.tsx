@@ -84,7 +84,7 @@ export default function OAuthButtonRow({ callbackUrl }: OAuthButtonRowProps) {
               </span>
               {!enabled && !isLoading && (
                 <span
-                  className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                  className="rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
                   style={{ background: "color-mix(in srgb, var(--muted2) 18%, transparent)", color: "var(--muted2)" }}
                 >
                   {t("signup.oauth.comingSoon")}
@@ -120,7 +120,7 @@ export default function OAuthButtonRow({ callbackUrl }: OAuthButtonRowProps) {
         <span>{loadingProvider === "apple" ? t("signup.oauth.opening") : t("signup.oauth.apple")}</span>
         {!isSocialProviderEnabled("apple") && (
           <span
-            className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+            className="rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
             style={{ background: "color-mix(in srgb, var(--muted2) 18%, transparent)", color: "var(--muted2)" }}
           >
             {t("signup.oauth.comingSoon")}

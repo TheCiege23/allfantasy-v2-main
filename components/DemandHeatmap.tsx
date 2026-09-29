@@ -173,7 +173,7 @@ export default function DemandHeatmap({ leagueId, week, compact = false }: Deman
                   const b = tagBadge(cell.tag)
                   if (!b) return null
                   return (
-                    <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded border ${b.cls}`}>
+                    <span className={`px-1.5 py-0.5 text-[11px] font-semibold rounded border ${b.cls}`}>
                       {b.text}
                     </span>
                   )
@@ -189,14 +189,14 @@ export default function DemandHeatmap({ leagueId, week, compact = false }: Deman
                     {trendArrow(cell.trend)}
                   </span>
                   {cell.trend !== 0 && (
-                    <span className={`text-[10px] font-medium ${trendColor(cell.trend)}`}>
+                    <span className={`text-[11px] font-medium ${trendColor(cell.trend)}`}>
                       {cell.trend > 0 ? '+' : ''}{cell.trend}
                     </span>
                   )}
                 </div>
               </div>
 
-              <div className="mt-1 text-[10px] text-gray-500">
+              <div className="mt-1 text-[11px] text-gray-500">
                 {cell.posSample} pos / {cell.leagueSample} league
               </div>
             </button>
@@ -218,7 +218,7 @@ export default function DemandHeatmap({ leagueId, week, compact = false }: Deman
 
           <div className="px-4 py-4 space-y-4">
             <div>
-              <div className="text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-2">Evidence</div>
+              <div className="text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-2">Evidence</div>
               <div className="space-y-1">
                 {activeCell.evidence.map((e, i) => (
                   <div key={i} className="flex items-center justify-between text-sm bg-gray-800/40 rounded px-3 py-1.5">
@@ -231,13 +231,13 @@ export default function DemandHeatmap({ leagueId, week, compact = false }: Deman
 
             {activeCell.topTargets.length > 0 && (
               <div>
-                <div className="text-[10px] font-semibold text-white/40 uppercase tracking-wider mb-2">Top proposal targets</div>
+                <div className="text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-2">Top proposal targets</div>
                 <div className="space-y-1.5">
                   {activeCell.topTargets.map((t, i) => (
                     <div key={i} className="flex items-center justify-between bg-gray-800/40 rounded-lg px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-white font-medium">{t.name}</span>
-                        <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded border ${
+                        <span className={`px-1.5 py-0.5 text-[11px] font-semibold rounded border ${
                           t.label === 'Overpayer'
                             ? 'bg-red-500/15 text-red-400 border-red-500/20'
                             : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'

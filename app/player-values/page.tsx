@@ -53,7 +53,7 @@ const pct = (n: number) => `${Math.round(n * 100)}%`
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-2.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#5d648a]">
+    <div className="mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#5d648a]">
       {children}
     </div>
   )
@@ -70,7 +70,7 @@ export default function PlayerValuesPage() {
     <div className="min-h-screen bg-[#06070f] px-5 pb-24 pt-10 text-[#eef0fa] md:px-10">
       <div className="mx-auto max-w-[860px]">
         <header className="mb-9">
-          <div className="font-mono text-[10px] font-bold uppercase tracking-[0.14em] text-[#5d648a]">
+          <div className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#5d648a]">
             AllFantasy · measured {EVIDENCE_MEASURED_ON}
           </div>
           <h1 className="mt-2 text-[28px] font-black leading-[1.15] tracking-[-0.03em] md:text-[34px]">
@@ -95,7 +95,7 @@ export default function PlayerValuesPage() {
               </p>
 
               <div className="mt-4">
-                <div className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-[#5d648a]">
+                <div className="font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[#5d648a]">
                   Does this year&apos;s kicker rank predict next year&apos;s?
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -107,7 +107,7 @@ export default function PlayerValuesPage() {
                       <div className="font-mono text-[13px] font-black text-[#fbbf24]">
                         {rho(p.rho)}
                       </div>
-                      <div className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.08em] text-[#5d648a]">
+                      <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.08em] text-[#5d648a]">
                         {p.label}
                       </div>
                     </div>
@@ -122,13 +122,13 @@ export default function PlayerValuesPage() {
               </div>
 
               <div className="mt-5">
-                <div className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-[#5d648a]">
+                <div className="font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[#5d648a]">
                   And the position is flat — share of K1&apos;s points per game
                 </div>
                 <div className="mt-2 overflow-x-auto">
                   <table className="w-full min-w-[420px] text-left">
                     <thead>
-                      <tr className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-[#5d648a]">
+                      <tr className="font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[#5d648a]">
                         {KICKER_FLATNESS.map((f) => (
                           <th key={f.rank} className="py-1.5 pr-3">
                             K{f.rank}
@@ -182,7 +182,7 @@ export default function PlayerValuesPage() {
                     <div className="font-mono text-[13px] font-black text-[#34d399]">
                       {c.spearman.toFixed(3)}
                     </div>
-                    <div className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.08em] text-[#5d648a]">
+                    <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.08em] text-[#5d648a]">
                       {c.position} · n={c.n}
                     </div>
                   </div>
@@ -219,7 +219,7 @@ export default function PlayerValuesPage() {
                     <div className="font-mono text-[13px] font-black text-[#fbbf24]">
                       {d.spearman.toFixed(3)}
                     </div>
-                    <div className="mt-0.5 font-mono text-[8px] uppercase tracking-[0.08em] text-[#5d648a]">
+                    <div className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.08em] text-[#5d648a]">
                       {d.position} · n={d.n}
                     </div>
                   </div>

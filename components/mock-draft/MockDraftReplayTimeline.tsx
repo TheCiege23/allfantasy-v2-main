@@ -234,7 +234,7 @@ export function MockDraftReplayTimeline({ draftId }: { draftId: string }) {
           <p className="mb-1 text-[11px] font-medium text-white/90">Current pick</p>
           {currentPick ? (
             <div className="space-y-1">
-              <p className="text-[10px] text-white/60">#{currentPick.overall} · {currentPick.manager}</p>
+              <p className="text-[11px] text-white/60">#{currentPick.overall} · {currentPick.manager}</p>
               <DraftPlayerCard
                 display={buildDraftPlayerDisplayModel({
                   playerName: currentPick.playerName,
@@ -260,7 +260,7 @@ export function MockDraftReplayTimeline({ draftId }: { draftId: string }) {
           <p className="mb-1 text-[11px] font-medium text-white/90">Next up</p>
           {nextPick ? (
             <div className="space-y-1">
-              <p className="text-[10px] text-white/60">#{nextPick.overall} · {nextPick.manager}</p>
+              <p className="text-[11px] text-white/60">#{nextPick.overall} · {nextPick.manager}</p>
               <DraftPlayerCard
                 display={buildDraftPlayerDisplayModel({
                   playerName: nextPick.playerName,
@@ -296,7 +296,7 @@ export function MockDraftReplayTimeline({ draftId }: { draftId: string }) {
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {picks.map((pick) => (
                   <div key={`${pick.overall}-${pick.playerName}`} className="rounded-lg border border-white/10 bg-black/35 p-2">
-                    <p className="mb-1 text-[10px] text-white/60">#{pick.overall} · {pick.manager}</p>
+                    <p className="mb-1 text-[11px] text-white/60">#{pick.overall} · {pick.manager}</p>
                     <DraftPlayerCard
                       display={buildDraftPlayerDisplayModel({
                         playerName: pick.playerName,

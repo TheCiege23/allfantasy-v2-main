@@ -34,7 +34,7 @@ export default function ConfidenceMeter({
   const dims = { sm: 56, md: 80, lg: 100 }[size]
   const strokeWidth = { sm: 4, md: 5, lg: 6 }[size]
   const fontSize = { sm: 'text-sm', md: 'text-lg', lg: 'text-2xl' }[size]
-  const labelSize = { sm: 'text-[8px]', md: 'text-[10px]', lg: 'text-xs' }[size]
+  const labelSize = { sm: 'text-[11px]', md: 'text-[11px]', lg: 'text-xs' }[size]
 
   const radius = (dims - strokeWidth * 2) / 2
   const circumference = 2 * Math.PI * radius

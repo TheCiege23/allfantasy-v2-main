@@ -174,7 +174,7 @@ export function CommissionerAuditLogList(props: CommissionerAuditLogListProps) {
             >
               <div className="flex items-start justify-between gap-2">
                 <span className="font-semibold text-amber-100/95">{title}</span>
-                <span className="shrink-0 text-[10px] text-white/50">{formatWhen(row.createdAt)}</span>
+                <span className="shrink-0 text-[11px] text-white/50">{formatWhen(row.createdAt)}</span>
               </div>
               {detail ? <p className="mt-0.5 text-white/70">{detail}</p> : null}
               {row.reason ? (
@@ -182,7 +182,7 @@ export function CommissionerAuditLogList(props: CommissionerAuditLogListProps) {
                   “{row.reason}”
                 </p>
               ) : null}
-              <p className="mt-0.5 text-[10px] text-white/35">by {row.actorUserId.slice(0, 8)}…</p>
+              <p className="mt-0.5 text-[11px] text-white/35">by {row.actorUserId.slice(0, 8)}…</p>
             </li>
           )
         })}
@@ -204,14 +204,14 @@ export function CommissionerAuditLogList(props: CommissionerAuditLogListProps) {
           onClick={() => void loadFirstPage()}
           disabled={loading}
           data-testid="commish-audit-refresh"
-          className="rounded border border-white/15 px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-white/65 hover:bg-white/10 disabled:opacity-50"
+          className="rounded border border-white/15 px-2 py-1 text-[11px] uppercase tracking-[0.12em] text-white/65 hover:bg-white/10 disabled:opacity-50"
         >
           {loading ? 'Refreshing…' : 'Refresh'}
         </button>
       </header>
 
       <div className="flex items-center gap-2">
-        <label className="text-[10px] uppercase tracking-[0.12em] text-white/55">Filter:</label>
+        <label className="text-[11px] uppercase tracking-[0.12em] text-white/55">Filter:</label>
         <select
           data-testid="commish-audit-filter"
           value={actionFilter}

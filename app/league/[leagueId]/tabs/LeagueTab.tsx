@@ -209,7 +209,7 @@ function LeagueRulesSummaryCard({
             key={rule.label}
             className="flex flex-col gap-1 bg-surface px-4 py-3"
           >
-            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-muted">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-muted">
               {rule.icon}
               {rule.label}
             </div>
@@ -456,7 +456,7 @@ function LeagueActivityFeed({ leagueId }: { leagueId: string }) {
                   <p className="truncate text-[12px] font-semibold text-primary">{row.title}</p>
                   <p className="mt-0.5 text-[11px] text-muted">{row.subtitle}</p>
                 </div>
-                <span className="shrink-0 text-[10px] text-muted">{row.timestamp || 'Now'}</span>
+                <span className="shrink-0 text-[11px] text-muted">{row.timestamp || 'Now'}</span>
               </div>
             </li>
           ))}
@@ -488,7 +488,7 @@ function LeagueMembersPreview({
     >
       <div className="flex items-center justify-between border-b border-subtle px-4 py-3 sm:px-5">
         <h2 className="text-[14px] font-bold text-primary sm:text-[15px]">League Members</h2>
-        <span className="rounded-full border border-subtle bg-surface-muted px-2 py-0.5 text-[10px] font-semibold text-secondary">
+        <span className="rounded-full border border-subtle bg-surface-muted px-2 py-0.5 text-[11px] font-semibold text-secondary">
           {league.isPaid ? 'Paid' : 'Free'}
         </span>
       </div>
@@ -510,7 +510,7 @@ function LeagueMembersPreview({
                     {src ? (
                       <img src={src} alt="" className="h-full w-full object-cover" />
                     ) : (
-                      <span className="flex h-full w-full items-center justify-center text-[10px] font-bold text-secondary">
+                      <span className="flex h-full w-full items-center justify-center text-[11px] font-bold text-secondary">
                         {teamInitials(team)}
                       </span>
                     )}
@@ -519,7 +519,7 @@ function LeagueMembersPreview({
                     <div className="flex flex-wrap items-center gap-1.5">
                       <p className="truncate text-[12px] font-semibold text-primary">{team.teamName || 'Team'}</p>
                       {isCommissioner ? (
-                        <span className="rounded border border-amber-400/35 bg-amber-500/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700">
+                        <span className="rounded border border-amber-400/35 bg-amber-500/12 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-700">
                           Commish
                         </span>
                       ) : null}
@@ -528,7 +528,7 @@ function LeagueMembersPreview({
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="text-[11px] font-semibold text-primary">{hasRecord ? record : '-'}</p>
-                    <p className="text-[10px] text-muted">PF {team.pointsFor > 0 ? team.pointsFor.toFixed(1) : '-'}</p>
+                    <p className="text-[11px] text-muted">PF {team.pointsFor > 0 ? team.pointsFor.toFixed(1) : '-'}</p>
                   </div>
                 </div>
               </li>
@@ -855,7 +855,7 @@ export function LeagueTab({
           <div className="pb-2">
             {scoring.sections.map((section) => (
               <div key={section.title} className="px-0 pb-1">
-                <p className="px-4 pt-3 text-[10px] font-bold uppercase tracking-wider text-muted sm:px-5">
+                <p className="px-4 pt-3 text-[11px] font-bold uppercase tracking-wider text-muted sm:px-5">
                   {section.title}
                 </p>
                 <div className="mt-1 space-y-0.5">

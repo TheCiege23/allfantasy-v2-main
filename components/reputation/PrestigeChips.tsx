@@ -76,7 +76,7 @@ function PrestigeChip({
     <span
       data-testid={testId}
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider",
         className
       )}
       style={{ background: bg, color, border: `1px solid ${border}` }}

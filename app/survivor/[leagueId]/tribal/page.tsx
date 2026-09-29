@@ -81,7 +81,7 @@ export default function SurvivorTribalPage() {
                 {p.displayName.slice(0, 1)}
               </div>
               <p className="mt-2 truncate text-[12px] font-semibold text-white">{p.displayName}</p>
-              <p className="mt-1 text-[10px] uppercase tracking-wide text-white/40">
+              <p className="mt-1 text-[11px] uppercase tracking-wide text-white/40">
                 {p.hasImmunityThisWeek ? 'Immune' : status === 'voting_open' ? 'Voting' : '—'}
               </p>
             </div>
@@ -117,7 +117,7 @@ export default function SurvivorTribalPage() {
           >
             Preview scroll reveal (UI demo)
           </button>
-          <p className="text-center text-[10px] text-white/30">
+          <p className="text-center text-[11px] text-white/30">
             Live reveal sequences consume data from the tribal engine when available.
           </p>
         </div>

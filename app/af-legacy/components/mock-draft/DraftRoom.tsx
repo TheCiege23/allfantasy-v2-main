@@ -530,7 +530,7 @@ export default function DraftRoom(props: DraftRoomProps) {
         </div>
         <div className="min-w-0">
           <h1 className="text-sm font-bold text-white truncate">{leagueName}</h1>
-          <div className="flex items-center gap-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          <div className="flex items-center gap-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.45)' }}>
             <span>{secondsPerPick}s/pick</span>
             <span>•</span>
             <span>{teamCount} teams</span>
@@ -550,7 +550,7 @@ export default function DraftRoom(props: DraftRoomProps) {
             <span className="text-sm font-bold" style={{ color: timeRemaining <= 10 ? '#ef4444' : '#0ea5e9' }}>
               {timeRemaining}s
             </span>
-            <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.5)' }}>
               {isUserTurn ? 'YOUR PICK' : currentPickInfo.managerName}
             </span>
           </div>
@@ -618,7 +618,7 @@ export default function DraftRoom(props: DraftRoomProps) {
               </div>
 
               <label className="block">
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Format</span>
+                <span className="text-[11px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Format</span>
                 <select
                   value={draftFormat}
                   onChange={e => onDraftFormatChange(e.target.value as any)}
@@ -633,7 +633,7 @@ export default function DraftRoom(props: DraftRoomProps) {
               </label>
 
               <label className="block">
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Rounds</span>
+                <span className="text-[11px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Rounds</span>
                 <select
                   value={draftRounds}
                   onChange={e => onDraftRoundsChange(Number(e.target.value))}
@@ -648,7 +648,7 @@ export default function DraftRoom(props: DraftRoomProps) {
               </label>
 
               <label className="block">
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Seconds per Pick</span>
+                <span className="text-[11px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Seconds per Pick</span>
                 <select
                   value={secondsPerPick}
                   onChange={e => onSecondsPerPickChange(Number(e.target.value))}
@@ -662,7 +662,7 @@ export default function DraftRoom(props: DraftRoomProps) {
               </label>
 
               <label className="block">
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Player Pool</span>
+                <span className="text-[11px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Player Pool</span>
                 <select
                   value={draftType}
                   onChange={e => onDraftTypeChange(e.target.value as any)}
@@ -677,7 +677,7 @@ export default function DraftRoom(props: DraftRoomProps) {
               </label>
 
               <label className="block">
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>League Type</span>
+                <span className="text-[11px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>League Type</span>
                 <select
                   value={leagueType}
                   onChange={e => onLeagueTypeChange?.(e.target.value as any)}
@@ -706,11 +706,11 @@ export default function DraftRoom(props: DraftRoomProps) {
               </label>
 
               <div className="space-y-2">
-                <span className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Draft Order</span>
+                <span className="text-[11px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Draft Order</span>
                 <div className="flex gap-1">
                   {(['randomize', 'manual'] as const).map(mode => (
                     <button type="button" key={mode} onClick={() => { onDraftOrderModeChange?.(mode); if (mode === 'randomize') onRandomizeOrder() }}
-                      className="flex-1 px-2 py-1.5 rounded-lg text-[10px] font-medium transition"
+                      className="flex-1 px-2 py-1.5 rounded-lg text-[11px] font-medium transition"
                       style={{ background: draftOrderMode === mode ? 'rgba(14,165,233,0.2)' : 'rgba(255,255,255,0.04)',
                                color: draftOrderMode === mode ? '#0ea5e9' : 'rgba(255,255,255,0.5)',
                                border: draftOrderMode === mode ? '1px solid rgba(14,165,233,0.3)' : '1px solid transparent' }}
@@ -723,9 +723,9 @@ export default function DraftRoom(props: DraftRoomProps) {
                 {draftOrderMode === 'manual' && !isDraftStarted && (
                   <div className="space-y-1 max-h-48 overflow-auto">
                     {sortedManagers.map((mgr, idx) => (
-                      <div key={mgr.id} className="flex items-center gap-2 px-2 py-1 rounded-lg text-[10px]" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                      <div key={mgr.id} className="flex items-center gap-2 px-2 py-1 rounded-lg text-[11px]" style={{ background: 'rgba(255,255,255,0.03)' }}>
                         <select value={mgr.draftSlot ?? idx + 1} onChange={e => onManualOrderChange?.(mgr.id, Number(e.target.value))}
-                          className="w-10 text-center rounded px-1 py-0.5 text-[10px] text-white" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                          className="w-10 text-center rounded px-1 py-0.5 text-[11px] text-white" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}>
                           {Array.from({ length: managers.length }, (_, i) => <option key={i+1} value={i+1}>{i+1}</option>)}
                         </select>
                         <span className="text-white truncate flex-1">{mgr.displayName}</span>
@@ -737,7 +737,7 @@ export default function DraftRoom(props: DraftRoomProps) {
 
               {onSleeperImport && !isDraftStarted && (
                 <div className="space-y-2 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-                  <span className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Import from Sleeper</span>
+                  <span className="text-[11px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>Import from Sleeper</span>
                   <div className="flex gap-1.5">
                     <input
                       type="text"
@@ -759,7 +759,7 @@ export default function DraftRoom(props: DraftRoomProps) {
                         }
                       }}
                       disabled={sleeperImportLoading || !sleeperImportId.trim()}
-                      className="px-3 py-1.5 rounded-lg text-[10px] font-bold transition"
+                      className="px-3 py-1.5 rounded-lg text-[11px] font-bold transition"
                       style={{
                         background: sleeperImportLoading ? 'rgba(255,255,255,0.05)' : 'rgba(14,165,233,0.2)',
                         color: sleeperImportLoading ? 'rgba(255,255,255,0.3)' : '#0ea5e9',
@@ -770,14 +770,14 @@ export default function DraftRoom(props: DraftRoomProps) {
                     </button>
                   </div>
                   {sleeperImportResult && (
-                    <div className="text-[10px] px-2 py-1 rounded" style={{
+                    <div className="text-[11px] px-2 py-1 rounded" style={{
                       background: sleeperImportResult.success ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
                       color: sleeperImportResult.success ? '#10b981' : '#ef4444',
                     }}>
                       {sleeperImportResult.message}
                     </div>
                   )}
-                  <p className="text-[9px] leading-snug" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  <p className="text-[11px] leading-snug" style={{ color: 'rgba(255,255,255,0.3)' }}>
                     Imports team names, rosters, draft order, and traded picks from your Sleeper league.
                   </p>
                 </div>
@@ -833,7 +833,7 @@ export default function DraftRoom(props: DraftRoomProps) {
                       }}
                     >
                       <div className="w-8 shrink-0 text-center">
-                        <span className="text-[10px] font-bold" style={{ color: isCurrent ? '#0ea5e9' : 'rgba(255,255,255,0.3)' }}>
+                        <span className="text-[11px] font-bold" style={{ color: isCurrent ? '#0ea5e9' : 'rgba(255,255,255,0.3)' }}>
                           {pickLabel}
                         </span>
                       </div>
@@ -842,7 +842,7 @@ export default function DraftRoom(props: DraftRoomProps) {
                           <img src={mgr.avatar} alt="" className="w-7 h-7 rounded-full" />
                         ) : (
                           <div
-                            className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold"
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold"
                             style={{
                               background: isCurrent ? 'rgba(14,165,233,0.3)' : 'rgba(255,255,255,0.1)',
                               color: isCurrent ? '#0ea5e9' : 'rgba(255,255,255,0.5)',
@@ -858,12 +858,12 @@ export default function DraftRoom(props: DraftRoomProps) {
                             {mgr?.displayName || `Team ${actualCol + 1}`}
                           </span>
                           {isCurrent && (
-                            <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'rgba(14,165,233,0.2)', color: '#0ea5e9' }}>
+                            <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full shrink-0" style={{ background: 'rgba(14,165,233,0.2)', color: '#0ea5e9' }}>
                               OTC
                             </span>
                           )}
                           {tp && (
-                            <span className="text-[8px] shrink-0" style={{ color: '#f59e0b' }}>via {tp.newOwner || '?'}</span>
+                            <span className="text-[11px] shrink-0" style={{ color: '#f59e0b' }}>via {tp.newOwner || '?'}</span>
                           )}
                         </div>
                         {pick ? (
@@ -876,7 +876,7 @@ export default function DraftRoom(props: DraftRoomProps) {
                       </div>
                       {pick && (
                         <span
-                          className="text-[10px] font-bold px-2 py-0.5 rounded shrink-0"
+                          className="text-[11px] font-bold px-2 py-0.5 rounded shrink-0"
                           style={{ background: POS_BG[pick.position], color: POS_TEXT[pick.position] }}
                         >
                           {pick.position}
@@ -914,15 +914,15 @@ export default function DraftRoom(props: DraftRoomProps) {
                   {mgr.avatar ? (
                     <img src={mgr.avatar} alt="" className="w-6 h-6 rounded-full" />
                   ) : (
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold" style={{ background: isOTC ? 'rgba(14,165,233,0.3)' : 'rgba(255,255,255,0.1)', color: isOTC ? '#0ea5e9' : 'rgba(255,255,255,0.5)' }}>
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ background: isOTC ? 'rgba(14,165,233,0.3)' : 'rgba(255,255,255,0.1)', color: isOTC ? '#0ea5e9' : 'rgba(255,255,255,0.5)' }}>
                       {mgr.displayName.charAt(0).toUpperCase()}
                     </div>
                   )}
-                  <span className="text-[9px] font-medium truncate w-full" style={{ color: isOTC ? '#0ea5e9' : 'rgba(255,255,255,0.6)' }}>
+                  <span className="text-[11px] font-medium truncate w-full" style={{ color: isOTC ? '#0ea5e9' : 'rgba(255,255,255,0.6)' }}>
                     {mgr.displayName}
                   </span>
                   {isOTC && (
-                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(14,165,233,0.2)', color: '#0ea5e9' }}>
+                    <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: 'rgba(14,165,233,0.2)', color: '#0ea5e9' }}>
                       OTC
                     </span>
                   )}
@@ -936,7 +936,7 @@ export default function DraftRoom(props: DraftRoomProps) {
             return (
               <React.Fragment key={round}>
                 <div
-                  className="sticky left-0 z-10 flex items-center justify-center text-[10px] font-bold border-b"
+                  className="sticky left-0 z-10 flex items-center justify-center text-[11px] font-bold border-b"
                   style={{ background: '#1a1d26', color: 'rgba(255,255,255,0.35)', borderColor: 'rgba(255,255,255,0.06)' }}
                 >
                   R{round}
@@ -971,7 +971,7 @@ export default function DraftRoom(props: DraftRoomProps) {
                       }}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                        <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
                           {pickLabel}
                           {(() => {
                             const colMgr = sortedManagers[actualCol]
@@ -980,22 +980,22 @@ export default function DraftRoom(props: DraftRoomProps) {
                               t.previousOwner === colMgr?.displayName
                             ))
                             return tp ? (
-                              <span className="text-[7px] block" style={{ color: '#f59e0b' }}>
+                              <span className="text-[11px] block" style={{ color: '#f59e0b' }}>
                                 via {tp.newOwner || '?'}
                               </span>
                             ) : null
                           })()}
                         </span>
                         {pick && (
-                          <span className="text-[8px] font-semibold px-1 rounded" style={{ background: POS_BG[pick.position], color: POS_TEXT[pick.position] }}>
+                          <span className="text-[11px] font-semibold px-1 rounded" style={{ background: POS_BG[pick.position], color: POS_TEXT[pick.position] }}>
                             {pick.position}
                           </span>
                         )}
                       </div>
                       {pick ? (
-                        <span className="text-[10px] font-medium text-white truncate mt-0.5">{pick.playerName}</span>
+                        <span className="text-[11px] font-medium text-white truncate mt-0.5">{pick.playerName}</span>
                       ) : isCurrent ? (
-                        <span className="text-[9px] font-medium mt-0.5" style={{ color: '#0ea5e9' }}>
+                        <span className="text-[11px] font-medium mt-0.5" style={{ color: '#0ea5e9' }}>
                           On the clock...
                         </span>
                       ) : null}
@@ -1041,7 +1041,7 @@ export default function DraftRoom(props: DraftRoomProps) {
               <button
                 key={pos}
                 onClick={() => setPosFilter(pos)}
-                className="px-2 py-1 rounded-md text-[10px] font-medium transition"
+                className="px-2 py-1 rounded-md text-[11px] font-medium transition"
                 style={{
                   background: isActive ? 'rgba(14,165,233,0.2)' : 'rgba(255,255,255,0.04)',
                   color: isActive ? '#0ea5e9' : 'rgba(255,255,255,0.5)',
@@ -1055,7 +1055,7 @@ export default function DraftRoom(props: DraftRoomProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5 text-[10px] cursor-pointer" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          <label className="flex items-center gap-1.5 text-[11px] cursor-pointer" style={{ color: 'rgba(255,255,255,0.45)' }}>
             <input
               type="checkbox"
               checked={showDrafted}
@@ -1064,7 +1064,7 @@ export default function DraftRoom(props: DraftRoomProps) {
             />
             SHOW DRAFTED
           </label>
-          <label className="flex items-center gap-1.5 text-[10px] cursor-pointer" style={{ color: 'rgba(255,255,255,0.45)' }}>
+          <label className="flex items-center gap-1.5 text-[11px] cursor-pointer" style={{ color: 'rgba(255,255,255,0.45)' }}>
             <input
               type="checkbox"
               checked={rookiesOnly}
@@ -1085,9 +1085,9 @@ export default function DraftRoom(props: DraftRoomProps) {
           <table className="w-full text-xs">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                <th className="text-left px-2 py-1.5 text-[9px] font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>RK</th>
-                <th className="text-left px-2 py-1.5 text-[9px] font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>PLAYER</th>
-                <th className="text-right px-2 py-1.5 text-[9px] font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>ADP</th>
+                <th className="text-left px-2 py-1.5 text-[11px] font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>RK</th>
+                <th className="text-left px-2 py-1.5 text-[11px] font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>PLAYER</th>
+                <th className="text-right px-2 py-1.5 text-[11px] font-semibold" style={{ color: 'rgba(255,255,255,0.3)' }}>ADP</th>
               </tr>
             </thead>
             <tbody>
@@ -1121,12 +1121,12 @@ export default function DraftRoom(props: DraftRoomProps) {
                         />
                         <div className="min-w-0">
                           <div className="font-medium text-white truncate group-hover:text-cyan-300 transition">{player.name}</div>
-                          <div className="text-[9px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                          <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>
                             {player.position} • {player.team || '—'}
                           </div>
                         </div>
                         {isQueued && (
-                          <span className="text-[8px] px-1 rounded" style={{ background: 'rgba(14,165,233,0.15)', color: '#0ea5e9' }}>Q</span>
+                          <span className="text-[11px] px-1 rounded" style={{ background: 'rgba(14,165,233,0.15)', color: '#0ea5e9' }}>Q</span>
                         )}
                       </div>
                     </td>
@@ -1152,7 +1152,7 @@ export default function DraftRoom(props: DraftRoomProps) {
             <button
               key={mode}
               onClick={() => onAiAutoPickModeChange?.(mode)}
-              className="px-1.5 py-0.5 rounded text-[9px] font-medium transition"
+              className="px-1.5 py-0.5 rounded text-[11px] font-medium transition"
               style={{
                 background: aiAutoPickMode === mode ? (mode === 'off' ? 'rgba(255,255,255,0.1)' : 'rgba(14,165,233,0.2)') : 'rgba(255,255,255,0.04)',
                 color: aiAutoPickMode === mode ? (mode === 'off' ? 'rgba(255,255,255,0.7)' : '#0ea5e9') : 'rgba(255,255,255,0.35)',
@@ -1164,7 +1164,7 @@ export default function DraftRoom(props: DraftRoomProps) {
           ))}
           <button
             onClick={() => onAiAutoQueueChange?.(!aiAutoQueue)}
-            className="px-1.5 py-0.5 rounded text-[9px] font-medium transition ml-1"
+            className="px-1.5 py-0.5 rounded text-[11px] font-medium transition ml-1"
             style={{
               background: aiAutoQueue ? 'rgba(168,85,247,0.2)' : 'rgba(255,255,255,0.04)',
               color: aiAutoQueue ? '#a855f7' : 'rgba(255,255,255,0.35)',
@@ -1180,7 +1180,7 @@ export default function DraftRoom(props: DraftRoomProps) {
         {queue.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 gap-2">
             <ListOrdered className="w-8 h-8" style={{ color: 'rgba(255,255,255,0.1)' }} />
-            <p className="text-[10px] text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>
+            <p className="text-[11px] text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>
               Right-click a player to add to queue
             </p>
           </div>
@@ -1197,15 +1197,15 @@ export default function DraftRoom(props: DraftRoomProps) {
                 style={{ background: POS_DOT[item.position] || 'rgba(255,255,255,0.3)' }}
               />
               <div className="flex-1 min-w-0">
-                <span className="text-[10px] font-medium text-white truncate block">{item.name}</span>
-                <span className="text-[8px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{item.position} • {item.team || '—'}</span>
+                <span className="text-[11px] font-medium text-white truncate block">{item.name}</span>
+                <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{item.position} • {item.team || '—'}</span>
               </div>
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
                 {idx > 0 && (
-                  <button onClick={() => moveQueueItem(idx, idx - 1)} className="text-[9px] px-1 rounded" style={{ color: 'rgba(255,255,255,0.4)' }}>↑</button>
+                  <button onClick={() => moveQueueItem(idx, idx - 1)} className="text-[11px] px-1 rounded" style={{ color: 'rgba(255,255,255,0.4)' }}>↑</button>
                 )}
                 {idx < queue.length - 1 && (
-                  <button onClick={() => moveQueueItem(idx, idx + 1)} className="text-[9px] px-1 rounded" style={{ color: 'rgba(255,255,255,0.4)' }}>↓</button>
+                  <button onClick={() => moveQueueItem(idx, idx + 1)} className="text-[11px] px-1 rounded" style={{ color: 'rgba(255,255,255,0.4)' }}>↓</button>
                 )}
                 <button onClick={() => removeFromQueue(idx)}>
                   <X className="w-3 h-3" style={{ color: 'rgba(255,255,255,0.3)' }} />
@@ -1223,13 +1223,13 @@ export default function DraftRoom(props: DraftRoomProps) {
       <div className="flex-1 overflow-auto">
         <div className="px-3 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <span className="text-xs font-bold text-white">RESULTS</span>
-          <span className="ml-2 text-[10px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{myPicks.length}/{slots.length} filled</span>
+          <span className="ml-2 text-[11px]" style={{ color: 'rgba(255,255,255,0.35)' }}>{myPicks.length}/{slots.length} filled</span>
         </div>
         {isRookieDraft && importedRosters?.[username] && (
           <div className="px-2 py-1" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
             <button
               onClick={() => setShowCurrentRoster(!showCurrentRoster)}
-              className="flex items-center gap-1 text-[10px] font-bold w-full py-1"
+              className="flex items-center gap-1 text-[11px] font-bold w-full py-1"
               style={{ color: 'rgba(255,255,255,0.5)' }}
             >
               <ChevronDown className={`w-3 h-3 transition ${showCurrentRoster ? '' : '-rotate-90'}`} />
@@ -1238,8 +1238,8 @@ export default function DraftRoom(props: DraftRoomProps) {
             {showCurrentRoster && (
               <div className="space-y-0.5 mt-1">
                 {importedRosters[username].map((p, i) => (
-                  <div key={i} className="flex items-center gap-2 px-2 py-1 rounded text-[10px]" style={{ background: 'rgba(255,255,255,0.02)' }}>
-                    <span className="font-bold w-7 text-center py-0.5 rounded text-[8px]" style={{ background: POS_BG[p.position], color: POS_TEXT[p.position] }}>{p.position}</span>
+                  <div key={i} className="flex items-center gap-2 px-2 py-1 rounded text-[11px]" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                    <span className="font-bold w-7 text-center py-0.5 rounded text-[11px]" style={{ background: POS_BG[p.position], color: POS_TEXT[p.position] }}>{p.position}</span>
                     <span className="text-white truncate flex-1">{p.name}</span>
                     <span style={{ color: 'rgba(255,255,255,0.3)' }}>{p.team}</span>
                   </div>
@@ -1256,7 +1256,7 @@ export default function DraftRoom(props: DraftRoomProps) {
               style={{ background: item.player ? 'rgba(255,255,255,0.03)' : 'transparent' }}
             >
               <span
-                className="text-[9px] font-bold w-8 text-center py-0.5 rounded"
+                className="text-[11px] font-bold w-8 text-center py-0.5 rounded"
                 style={{ background: POS_BG[item.slot] || 'rgba(255,255,255,0.05)', color: POS_TEXT[item.slot] || 'rgba(255,255,255,0.5)' }}
               >
                 {item.slot}
@@ -1268,12 +1268,12 @@ export default function DraftRoom(props: DraftRoomProps) {
                     style={{ background: POS_DOT[item.player.position] || 'rgba(255,255,255,0.3)' }}
                   />
                   <span className="text-[11px] font-medium text-white truncate">{item.player.playerName}</span>
-                  <span className="text-[9px] ml-auto" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  <span className="text-[11px] ml-auto" style={{ color: 'rgba(255,255,255,0.3)' }}>
                     {formatPickLabel(item.player.overall)}
                   </span>
                 </div>
               ) : (
-                <span className="text-[10px] italic" style={{ color: 'rgba(255,255,255,0.2)' }}>Empty</span>
+                <span className="text-[11px] italic" style={{ color: 'rgba(255,255,255,0.2)' }}>Empty</span>
               )}
             </div>
           ))}
@@ -1287,7 +1287,7 @@ export default function DraftRoom(props: DraftRoomProps) {
         </div>
         <div className="flex-1 overflow-auto px-3 py-2 space-y-1.5">
           {chatMessages.length === 0 ? (
-            <p className="text-[10px] text-center py-4" style={{ color: 'rgba(255,255,255,0.2)' }}>No messages yet</p>
+            <p className="text-[11px] text-center py-4" style={{ color: 'rgba(255,255,255,0.2)' }}>No messages yet</p>
           ) : (
             chatMessages.map((msg, i) => {
               if (msg.tradeProposal) {
@@ -1296,8 +1296,8 @@ export default function DraftRoom(props: DraftRoomProps) {
                 const status = currentTp?.status || tp.status
                 return (
                   <div key={i} className="rounded-lg p-2 space-y-1.5" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                    <div className="text-[10px] font-bold" style={{ color: '#f59e0b' }}>📦 Trade Proposal from {tp.from}</div>
-                    <div className="flex gap-2 text-[9px]">
+                    <div className="text-[11px] font-bold" style={{ color: '#f59e0b' }}>📦 Trade Proposal from {tp.from}</div>
+                    <div className="flex gap-2 text-[11px]">
                       <div className="flex-1">
                         <div style={{ color: 'rgba(255,255,255,0.4)' }}>You give:</div>
                         {tp.receive.map((p, j) => <div key={j} className="text-white">{p}</div>)}
@@ -1320,7 +1320,7 @@ export default function DraftRoom(props: DraftRoomProps) {
                               setTradeProposals(prev => prev.map(t => t.id === tp.id ? { ...t, status: 'accepted' } : t))
                             }
                           }}
-                          className="flex-1 px-2 py-1 rounded text-[9px] font-medium"
+                          className="flex-1 px-2 py-1 rounded text-[11px] font-medium"
                           style={{ background: 'rgba(16,185,129,0.2)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}
                         >
                           Accept
@@ -1330,14 +1330,14 @@ export default function DraftRoom(props: DraftRoomProps) {
                             setTradeProposals(prev => prev.map(t => t.id === tp.id ? { ...t, status: 'declined' } : t))
                             setChatMessages(prev => [...prev, { from: '🤖 Trade Bot', text: 'Trade declined.' }])
                           }}
-                          className="flex-1 px-2 py-1 rounded text-[9px] font-medium"
+                          className="flex-1 px-2 py-1 rounded text-[11px] font-medium"
                           style={{ background: 'rgba(239,68,68,0.2)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.3)' }}
                         >
                           Decline
                         </button>
                       </div>
                     ) : (
-                      <div className="text-[9px] font-medium" style={{ color: status === 'accepted' ? '#10b981' : '#ef4444' }}>
+                      <div className="text-[11px] font-medium" style={{ color: status === 'accepted' ? '#10b981' : '#ef4444' }}>
                         {status === 'accepted' ? '✅ Accepted' : '❌ Declined'}
                         {currentTp?.reasoning && <span className="ml-1" style={{ color: 'rgba(255,255,255,0.5)' }}>— {currentTp.reasoning}</span>}
                       </div>
@@ -1347,7 +1347,7 @@ export default function DraftRoom(props: DraftRoomProps) {
               }
 
               return (
-                <div key={i} className="text-[10px] rounded px-1.5 py-0.5" style={{ background: msg.isPrivate ? 'rgba(168,85,247,0.08)' : 'transparent' }}>
+                <div key={i} className="text-[11px] rounded px-1.5 py-0.5" style={{ background: msg.isPrivate ? 'rgba(168,85,247,0.08)' : 'transparent' }}>
                   {msg.isPrivate && <Lock className="w-2.5 h-2.5 inline mr-0.5" style={{ color: '#a855f7' }} />}
                   <span className="font-medium" style={{ color: msg.isPrivate ? '#a855f7' : '#0ea5e9' }}>{msg.from}: </span>
                   <span style={{ color: 'rgba(255,255,255,0.7)' }}>{msg.text}</span>
@@ -1363,12 +1363,12 @@ export default function DraftRoom(props: DraftRoomProps) {
             onChange={e => setChatInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') sendChat() }}
             placeholder="Type a message..."
-            className="flex-1 px-2.5 py-1.5 rounded-lg text-[10px] text-white placeholder:text-white/20"
+            className="flex-1 px-2.5 py-1.5 rounded-lg text-[11px] text-white placeholder:text-white/20"
             style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
           />
           <button
             onClick={sendChat}
-            className="px-2.5 py-1.5 rounded-lg text-[10px] font-medium"
+            className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium"
             style={{ background: 'rgba(14,165,233,0.15)', color: '#0ea5e9' }}
           >
             Send
@@ -1397,7 +1397,7 @@ export default function DraftRoom(props: DraftRoomProps) {
                 setChatMessages(prev => [...prev, ...msgs])
               }
             }}
-            className="px-2.5 py-1.5 rounded-lg text-[10px] font-medium"
+            className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium"
             style={{ background: 'rgba(168,85,247,0.15)', color: '#a855f7' }}
             disabled={!isDraftStarted || draftComplete}
           >
@@ -1423,7 +1423,7 @@ export default function DraftRoom(props: DraftRoomProps) {
           style={{ color: mobileTab === tab.id ? '#0ea5e9' : 'rgba(255,255,255,0.35)' }}
         >
           {tab.icon}
-          <span className="text-[9px] font-medium">{tab.label}</span>
+          <span className="text-[11px] font-medium">{tab.label}</span>
         </button>
       ))}
     </div>

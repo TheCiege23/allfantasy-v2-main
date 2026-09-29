@@ -125,7 +125,7 @@ export function NotificationPanelView({
             type="button"
             onClick={() => markAllAsRead()}
             data-testid="notification-mark-all-read"
-            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors hover:bg-black/5"
+            className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition-colors hover:bg-black/5"
             style={{ color: "var(--accent-cyan-strong)" }}
           >
             <CheckCheck className="h-3.5 w-3.5" />
@@ -170,7 +170,7 @@ export function NotificationPanelView({
               return (
                 <div key={key} className="border-b last:border-b-0" style={{ borderColor: "var(--border)" }}>
                   <div
-                    className="sticky top-0 z-10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider"
+                    className="sticky top-0 z-10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider"
                     style={{ background: "var(--panel)", color: "var(--muted)" }}
                   >
                     {label}
@@ -201,11 +201,11 @@ export function NotificationPanelView({
                                 {n.title}
                               </p>
                               {n.body && (
-                                <p className="mt-0.5 line-clamp-2 text-[10px]" style={{ color: "var(--muted2)" }}>
+                                <p className="mt-0.5 line-clamp-2 text-[11px]" style={{ color: "var(--muted2)" }}>
                                   {n.body}
                                 </p>
                               )}
-                              <p className="mt-1 text-[10px]" style={{ color: "var(--muted)" }}>
+                              <p className="mt-1 text-[11px]" style={{ color: "var(--muted)" }}>
                                 {formatTime(n.createdAt)}
                               </p>
                               <div className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -226,7 +226,7 @@ export function NotificationPanelView({
                                       markAsRead(n.id)
                                     }}
                                     data-testid={`notification-dismiss-${safeId}`}
-                                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium"
                                     style={{ color: "var(--accent-cyan-strong)" }}
                                   >
                                     <Check className="h-3 w-3" />
@@ -234,7 +234,7 @@ export function NotificationPanelView({
                                   </button>
                                 )}
                                 {dest ? (
-                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium" style={{ color: "var(--accent-cyan-strong)" }}>
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium" style={{ color: "var(--accent-cyan-strong)" }}>
                                     {dest.label === "Open chat" && <MessageSquare className="h-3 w-3" />}
                                     {dest.label}
                                   </span>

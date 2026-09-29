@@ -63,7 +63,7 @@ export function VoteSubmissionCard({
                   {t.name.slice(0, 1)}
                 </span>
                 <span className="flex-1">{t.name}</span>
-                {t.immune ? <span className="text-[10px] text-white/40">Immune</span> : null}
+                {t.immune ? <span className="text-[11px] text-white/40">Immune</span> : null}
               </button>
             </li>
           ))}

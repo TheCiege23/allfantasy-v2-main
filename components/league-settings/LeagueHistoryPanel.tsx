@@ -156,7 +156,7 @@ export function LeagueHistoryPanel({ leagueId }: Props) {
                     {season.season}
                   </span>
                   {isActive && (
-                    <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-300">
+                    <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-emerald-300">
                       {t('history.active')}
                     </span>
                   )}
@@ -201,7 +201,7 @@ export function LeagueHistoryPanel({ leagueId }: Props) {
 
       {/* Footer info */}
       <div className="border-t border-white/[0.06] pt-3">
-        <p className="text-[10px] leading-relaxed text-white/25">
+        <p className="text-[11px] leading-relaxed text-white/25">
           {t('history.footer')}
         </p>
       </div>

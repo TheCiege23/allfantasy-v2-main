@@ -64,7 +64,7 @@ function ScoreRange({ label, range, color }: {
 
   return (
     <div className="space-y-0.5">
-      <div className="flex justify-between text-[10px] text-zinc-500">
+      <div className="flex justify-between text-[11px] text-zinc-500">
         <span>{label}</span>
         <span>{range.p10} — {range.p90}</span>
       </div>
@@ -81,7 +81,7 @@ function ScoreRange({ label, range, color }: {
         />
         {/* Median label */}
         <span
-          className="absolute top-0.5 text-[9px] text-white font-bold"
+          className="absolute top-0.5 text-[11px] text-white font-bold"
           style={{ left: `${medianPos + 2}%` }}
         >
           {range.p50}
@@ -101,25 +101,25 @@ function SwingPlayerCard({ player }: { player: SwingPlayer }) {
       <div className="flex items-center justify-between">
         <div>
           <span className="text-xs font-medium text-white">{player.name}</span>
-          <span className="text-[10px] text-zinc-500 ml-1">{player.position} ({player.team === 'A' ? 'You' : 'Opp'})</span>
+          <span className="text-[11px] text-zinc-500 ml-1">{player.position} ({player.team === 'A' ? 'You' : 'Opp'})</span>
         </div>
         <div className="flex items-center gap-1.5">
           {player.boomProbability >= 0.2 && (
-            <span className="text-[9px] px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="text-[11px] px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               Boom {Math.round(player.boomProbability * 100)}%
             </span>
           )}
           {player.bustProbability >= 0.25 && (
-            <span className="text-[9px] px-1 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
+            <span className="text-[11px] px-1 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
               Bust {Math.round(player.bustProbability * 100)}%
             </span>
           )}
-          <span className={`text-[10px] font-bold ${player.leverageScore >= 60 ? 'text-red-400' : 'text-zinc-400'}`}>
+          <span className={`text-[11px] font-bold ${player.leverageScore >= 60 ? 'text-red-400' : 'text-zinc-400'}`}>
             {player.leverageScore}
           </span>
         </div>
       </div>
-      <p className="text-[10px] text-zinc-500 mt-0.5">{player.impactDescription}</p>
+      <p className="text-[11px] text-zinc-500 mt-0.5">{player.impactDescription}</p>
     </div>
   )
 }
@@ -136,7 +136,7 @@ function ConditionList({ title, items, icon }: {
   if (items.length === 0) return null
   return (
     <div>
-      <h4 className="text-[10px] text-zinc-500 uppercase font-medium mb-1">{icon} {title}</h4>
+      <h4 className="text-[11px] text-zinc-500 uppercase font-medium mb-1">{icon} {title}</h4>
       <div className="space-y-1">
         {items.map((item, i) => (
           <div key={i} className="text-xs text-zinc-400 flex justify-between gap-2">
@@ -198,11 +198,11 @@ export default function MatchupSimPanel({
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-white">Matchup Simulator</h3>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-zinc-500">{result.simulationCount.toLocaleString()} sims | {result.confidencePct}% conf</span>
+          <span className="text-[11px] text-zinc-500">{result.simulationCount.toLocaleString()} sims | {result.confidencePct}% conf</span>
           {onRerun && (
             <button
               onClick={onRerun}
-              className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 hover:bg-zinc-700 transition-colors border border-zinc-700"
+              className="text-[11px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 hover:bg-zinc-700 transition-colors border border-zinc-700"
             >
               Re-run
             </button>
@@ -228,7 +228,7 @@ export default function MatchupSimPanel({
 
       {/* Volatility badge */}
       <div className="flex gap-1.5">
-        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${
+        <span className={`text-[11px] px-1.5 py-0.5 rounded border ${
           result.volatilityTag === 'high' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
           result.volatilityTag === 'medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
           'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
@@ -236,7 +236,7 @@ export default function MatchupSimPanel({
           {result.volatilityTag} volatility
         </span>
         {result.xFactors.slice(0, 2).map((xf, i) => (
-          <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+          <span key={i} className="text-[11px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
             {xf.slice(0, 50)}
           </span>
         ))}
@@ -245,7 +245,7 @@ export default function MatchupSimPanel({
       {/* Swing Players */}
       {result.keySwingPlayers.length > 0 && (
         <div>
-          <h4 className="text-[10px] text-zinc-500 uppercase font-medium mb-1">Key Swing Players</h4>
+          <h4 className="text-[11px] text-zinc-500 uppercase font-medium mb-1">Key Swing Players</h4>
           <div className="space-y-1">
             {result.keySwingPlayers.slice(0, 4).map((sp) => (
               <SwingPlayerCard key={sp.name} player={sp} />
@@ -257,7 +257,7 @@ export default function MatchupSimPanel({
       {/* Expand toggle */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors py-1"
+        className="w-full text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors py-1"
       >
         {expanded ? '▲ Show less' : '▼ How you win / danger zones / scenarios'}
       </button>
@@ -278,7 +278,7 @@ export default function MatchupSimPanel({
           {/* Scenarios */}
           {result.scenarioResults.length > 0 && (
             <div>
-              <h4 className="text-[10px] text-zinc-500 uppercase font-medium mb-1.5">Scenario Analysis</h4>
+              <h4 className="text-[11px] text-zinc-500 uppercase font-medium mb-1.5">Scenario Analysis</h4>
               <div className="space-y-1">
                 {result.scenarioResults.map((sc) => (
                   <ScenarioBar key={sc.mode} scenario={sc} />
@@ -290,7 +290,7 @@ export default function MatchupSimPanel({
           {/* Risk notes */}
           {result.riskNotes.length > 0 && (
             <div>
-              <h4 className="text-[10px] text-zinc-500 uppercase font-medium mb-1">Risk Notes</h4>
+              <h4 className="text-[11px] text-zinc-500 uppercase font-medium mb-1">Risk Notes</h4>
               {result.riskNotes.map((note, i) => (
                 <p key={i} className="text-xs text-zinc-400">• {note}</p>
               ))}
@@ -300,7 +300,7 @@ export default function MatchupSimPanel({
           {/* Remaining swing players */}
           {result.keySwingPlayers.length > 4 && (
             <div>
-              <h4 className="text-[10px] text-zinc-500 uppercase font-medium mb-1">More Leverage Players</h4>
+              <h4 className="text-[11px] text-zinc-500 uppercase font-medium mb-1">More Leverage Players</h4>
               <div className="space-y-1">
                 {result.keySwingPlayers.slice(4).map((sp) => (
                   <SwingPlayerCard key={sp.name} player={sp} />

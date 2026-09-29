@@ -76,11 +76,11 @@ export function DraftRightPanel({
             }`}
           >
             <span className="flex items-center justify-center gap-1">
-              {t.icon && <span className="text-[10px]">{t.icon}</span>}
+              {t.icon && <span className="text-[11px]">{t.icon}</span>}
               {t.label}
               {/* AI alert badge */}
               {t.key === 'ai' && aiAlertCount > 0 && (
-                <span className="absolute -top-0.5 right-1 min-w-[14px] h-[14px] flex items-center justify-center rounded-full bg-red-500 text-[8px] font-bold text-white px-0.5">
+                <span className="absolute -top-0.5 right-1 min-w-[14px] h-[14px] flex items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white px-0.5">
                   {aiAlertCount > 9 ? '9+' : aiAlertCount}
                 </span>
               )}
@@ -113,11 +113,11 @@ function DefaultAIPanel() {
       <div className="p-3 border-b border-white/[0.06]">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-white">Draft AI Assistant</span>
-          <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#00d4aa]/15 text-[#00d4aa] border border-[#00d4aa]/25 font-medium">
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#00d4aa]/15 text-[#00d4aa] border border-[#00d4aa]/25 font-medium">
             LIVE
           </span>
         </div>
-        <p className="text-[10px] text-white/40 mt-0.5">Real-time picks, ADP, alerts & strategy</p>
+        <p className="text-[11px] text-white/40 mt-0.5">Real-time picks, ADP, alerts & strategy</p>
       </div>
 
       {/* AI Feature Sections */}
@@ -220,7 +220,7 @@ function AIFeatureCard({
         <span className="text-sm">{icon}</span>
         <span className="text-xs font-semibold text-white">{title}</span>
         <span
-          className="text-[9px] px-1.5 py-0.5 rounded font-medium ml-auto"
+          className="text-[11px] px-1.5 py-0.5 rounded font-medium ml-auto"
           style={{
             backgroundColor: `${accentColor}15`,
             color: accentColor,
@@ -231,7 +231,7 @@ function AIFeatureCard({
           {badge}
         </span>
       </div>
-      <p className="text-[10px] text-white/40 leading-relaxed">{description}</p>
+      <p className="text-[11px] text-white/40 leading-relaxed">{description}</p>
     </div>
   )
 }
@@ -262,7 +262,7 @@ function DefaultSearchPanel() {
           {['All', 'QB', 'RB', 'WR', 'TE', 'K', 'DEF', 'IDP'].map((pos) => (
             <button
               key={pos}
-              className="text-[10px] px-2 py-0.5 rounded-full bg-white/[0.05] text-white/50 hover:bg-white/[0.10] hover:text-white/70 transition-colors whitespace-nowrap"
+              className="text-[11px] px-2 py-0.5 rounded-full bg-white/[0.05] text-white/50 hover:bg-white/[0.10] hover:text-white/70 transition-colors whitespace-nowrap"
             >
               {pos}
             </button>
@@ -274,7 +274,7 @@ function DefaultSearchPanel() {
         {query.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-white/30 text-xs">Type a player name to search</p>
-            <p className="text-white/20 text-[10px] mt-1">Or use position filters above</p>
+            <p className="text-white/20 text-[11px] mt-1">Or use position filters above</p>
           </div>
         ) : (
           <div className="text-center py-8">

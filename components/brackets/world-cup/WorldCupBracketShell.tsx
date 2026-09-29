@@ -247,7 +247,7 @@ function WorldCupEntryVideoOverlay({
       <div className="relative flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-cyan-200/20 bg-[#02050b] shadow-[0_0_90px_-28px_rgba(34,211,238,0.95)]">
         <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-black/35 px-3 py-2 sm:px-4 sm:py-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-100/70">AllFantasy World Cup</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-amber-100/70">AllFantasy World Cup</p>
             <h2 className="truncate text-sm font-black text-white sm:text-base">Path to Greatness</h2>
           </div>
           <button
@@ -2417,7 +2417,7 @@ export default function WorldCupBracketShell({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-black text-white">Ask Chimmy for a Pool Intro</p>
-                <p className="mt-0.5 text-[10px] text-white/50">AI-written intro to share with your players — free to try</p>
+                <p className="mt-0.5 text-[11px] text-white/50">AI-written intro to share with your players — free to try</p>
               </div>
               <Sparkles className="h-4 w-4 shrink-0 text-cyan-300/50" />
             </button>
@@ -2433,7 +2433,7 @@ export default function WorldCupBracketShell({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-black text-white">Unlock Commissioner Tools</p>
-                <p className="mt-0.5 text-[10px] text-white/50">Custom scoring, bigger pools, invite tools — $14.99/mo</p>
+                <p className="mt-0.5 text-[11px] text-white/50">Custom scoring, bigger pools, invite tools — $14.99/mo</p>
               </div>
               <Zap className="h-4 w-4 shrink-0 text-violet-300/50" />
             </Link>
@@ -2448,7 +2448,7 @@ export default function WorldCupBracketShell({
               Build my bracket
             </button>
 
-            <p className="mt-2 text-center text-[10px] text-white/30">
+            <p className="mt-2 text-center text-[11px] text-white/30">
               Use code{" "}
               <span className="font-bold text-amber-300/60">WassupFred</span>
               {" "}for 20% off your first AI upgrade
@@ -2523,7 +2523,7 @@ export default function WorldCupBracketShell({
                   {showBoard ? selectedEntry!.name : view.challenge.name}
                 </h1>
                 {!showBoard && (view.isOwner || view.isAdmin) && (
-                  <span className="shrink-0 rounded-full border border-amber-300/40 bg-gradient-to-r from-amber-400/20 to-amber-300/[0.08] px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-white/80 shadow-[0_0_14px_-3px_rgba(251,191,36,0.45)]">
+                  <span className="shrink-0 rounded-full border border-amber-300/40 bg-gradient-to-r from-amber-400/20 to-amber-300/[0.08] px-2 py-0.5 text-[11px] font-black uppercase tracking-[0.14em] text-white/80 shadow-[0_0_14px_-3px_rgba(251,191,36,0.45)]">
                     {view.isAdmin && !view.isOwner ? "Admin" : "Commissioner"}
                   </span>
                 )}
@@ -2544,7 +2544,7 @@ export default function WorldCupBracketShell({
                 ) : null}
               </div>
             )}
-            <p className={`text-[10px] sm:text-[11px] ${saveState === "locked" || saveState === "error" ? "text-white/70" : "text-white/45"}`}>
+            <p className={`text-[11px] sm:text-[11px] ${saveState === "locked" || saveState === "error" ? "text-white/70" : "text-white/45"}`}>
               {showBoard ? (
                 <>
                   <span className="block truncate text-white/55">{view.challenge.name}</span>
@@ -2559,7 +2559,7 @@ export default function WorldCupBracketShell({
             {hasMounted && lockCountdownLabel ? (
               <p
                 data-testid="world-cup-lock-countdown"
-                className="mt-1 inline-flex max-w-full items-center rounded-md bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold text-white/80"
+                className="mt-1 inline-flex max-w-full items-center rounded-md bg-amber-400/10 px-2 py-0.5 text-[11px] font-bold text-white/80"
               >
                 {lockCountdownLabel}
               </p>
@@ -2643,7 +2643,7 @@ export default function WorldCupBracketShell({
               type="button"
               onClick={() => switchTab(id)}
               aria-current={tab === id ? "page" : undefined}
-              className={`group inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-[10px] font-black uppercase tracking-[0.08em] transition duration-150 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-950 sm:px-3.5 sm:text-[11px] ${
+              className={`group inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-[11px] font-black uppercase tracking-[0.08em] transition duration-150 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/60 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-950 sm:px-3.5 sm:text-[11px] ${
                 tab === id
                   ? "border-amber-200/55 bg-gradient-to-r from-amber-300 via-cyan-200 to-cyan-300 text-slate-950 shadow-[0_0_24px_-10px_rgba(251,191,36,0.95)]"
                   : "border-white/10 bg-white/[0.045] text-white/62 hover:border-cyan-300/25 hover:bg-cyan-300/[0.08] hover:text-white"
@@ -2674,7 +2674,7 @@ export default function WorldCupBracketShell({
           <div className="mode-readable relative flex max-h-[calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1rem)] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl border border-cyan-300/20 bg-[#05070b] shadow-[0_0_70px_-24px_rgba(34,211,238,0.85)] sm:rounded-3xl">
             <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-cyan-300/15 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.18),transparent_34%),linear-gradient(180deg,rgba(8,13,24,0.98),rgba(5,7,11,0.96))] px-4 py-3">
               <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-100/55">
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-100/55">
                   {view.challenge.name}
                 </p>
                 <h2 className="truncate text-base font-black text-white">{t("wc.tab.invite")}</h2>
@@ -2709,7 +2709,7 @@ export default function WorldCupBracketShell({
           className="sticky top-0 z-40 border-b border-cyan-300/12 bg-[#04060acc]/95 px-1.5 py-1.5 shadow-[0_14px_42px_-34px_rgba(34,211,238,0.75)] backdrop-blur-xl sm:px-2"
         >
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] sm:justify-center sm:pb-0 touch-pan-x [&::-webkit-scrollbar]:hidden">
-            <span className="hidden shrink-0 px-2 text-[9px] font-black uppercase tracking-[0.2em] text-cyan-100/40 sm:inline">
+            <span className="hidden shrink-0 px-2 text-[11px] font-black uppercase tracking-[0.2em] text-cyan-100/40 sm:inline">
               {t("wc.subnav.quickJump")}
             </span>
             <JumpButton label={t("wc.subnav.start")} onClick={() => scrollToAnchor("world-cup-top")} />
@@ -2833,7 +2833,7 @@ export default function WorldCupBracketShell({
           )}
 
           {process.env.NODE_ENV === "development" && (view.isOwner || view.isAdmin) && (
-            <div className="mx-4 mb-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[10px] text-white/55">
+            <div className="mx-4 mb-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-[11px] text-white/55">
               Debug counts: total matches {view.matches.length} · pickable matches {pickableMatches.length} · unresolved matches {Math.max(unresolvedMatchesCount, 0)}
             </div>
           )}
@@ -2974,7 +2974,7 @@ export default function WorldCupBracketShell({
                           {label}
                         </span>
                         {hint && (
-                          <span className="ml-1 text-[10px] text-white/30">— {hint}</span>
+                          <span className="ml-1 text-[11px] text-white/30">— {hint}</span>
                         )}
                       </div>
                     </div>
@@ -3137,7 +3137,7 @@ export default function WorldCupBracketShell({
                       {simulationResult.dryRun ? "Dry run" : "Writes enabled"}
                     </span>
                   </div>
-                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-black/35 p-2 text-[10px] leading-relaxed text-white/70">
+                  <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-black/35 p-2 text-[11px] leading-relaxed text-white/70">
                     {JSON.stringify(simulationResult.summary, null, 2)}
                   </pre>
                   {simulationResult.warnings.length > 0 && (
@@ -3333,22 +3333,22 @@ export default function WorldCupBracketShell({
 
                 {/* Eyebrow + badges */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">
+                  <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white/50">
                     {t("wc.pool.eyebrow")}
                   </span>
                   {view.challenge.visibility === "private" ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold text-white/55">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[11px] font-bold text-white/55">
                       <Lock className="h-2.5 w-2.5" aria-hidden />
                       {t("wc.pool.privateBadge")}
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300/20 bg-cyan-300/[0.06] px-2 py-0.5 text-[10px] font-bold text-white/60">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300/20 bg-cyan-300/[0.06] px-2 py-0.5 text-[11px] font-bold text-white/60">
                       <Globe2 className="h-2.5 w-2.5" aria-hidden />
                       {t("wc.pool.publicBadge")}
                     </span>
                   )}
                   {(view.isOwner || view.isAdmin) && (
-                    <span className="rounded-full border border-amber-300/40 bg-amber-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-white/80">
+                    <span className="rounded-full border border-amber-300/40 bg-amber-400/10 px-2 py-0.5 text-[11px] font-black uppercase tracking-[0.12em] text-white/80">
                       {view.isAdmin && !view.isOwner ? "Admin" : "Commissioner"}
                     </span>
                   )}
@@ -3433,7 +3433,7 @@ export default function WorldCupBracketShell({
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-amber-300">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-2 py-0.5 text-[11px] font-black uppercase tracking-widest text-amber-300">
                             ● LIVE
                           </span>
                           <p className="text-sm font-black text-white">
@@ -3499,7 +3499,7 @@ export default function WorldCupBracketShell({
                   className="mx-auto max-w-5xl px-2 sm:px-0"
                 >
                   <div className={`rounded-2xl border p-4 sm:p-5 ${accentClasses}`}>
-                    <p className="mb-3 text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
+                    <p className="mb-3 text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
                       {t("wc.pool.next.title")}
                     </p>
                     <div className="flex items-start gap-3">
@@ -3574,13 +3574,13 @@ export default function WorldCupBracketShell({
                     {/* Progress strip */}
                     {entries.length > 0 && (
                       <div className="mt-4 flex items-center gap-1.5 border-t border-white/[0.07] pt-4">
-                        <span className="mr-1 shrink-0 text-[10px] font-black uppercase tracking-wider text-white/30">
+                        <span className="mr-1 shrink-0 text-[11px] font-black uppercase tracking-wider text-white/30">
                           {t("wc.pool.progress.title")}
                         </span>
                         {progressSteps.map((step, idx) => (
                           <div key={step.label} className="flex min-w-0 items-center">
                             {idx > 0 && <div className={`mx-1 h-px w-4 shrink-0 ${step.done ? "bg-cyan-300/40" : "bg-white/10"}`} />}
-                            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${step.done ? "bg-cyan-300/15 text-white/85" : "bg-white/[0.04] text-white/30"}`}>
+                            <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${step.done ? "bg-cyan-300/15 text-white/85" : "bg-white/[0.04] text-white/30"}`}>
                               {step.done
                                 ? <CheckCircle2 className="h-2.5 w-2.5 shrink-0" aria-hidden />
                                 : <div className="h-2.5 w-2.5 shrink-0 rounded-full border border-white/20" aria-hidden />}
@@ -4134,24 +4134,24 @@ export default function WorldCupBracketShell({
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">
+                        <span className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40">
                           {view.challenge.name}
                         </span>
                         {completionReview ? (
                           completionReview.isLocked ? (
-                            <span className="rounded-full border border-rose-300/30 bg-rose-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/70">
+                            <span className="rounded-full border border-rose-300/30 bg-rose-400/10 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/70">
                               {t("wc.review.statusLocked")}
                             </span>
                           ) : completionReview.fullEntryComplete && completionReview.submittedAt ? (
-                            <span className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/70">
+                            <span className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/70">
                               {t("wc.review.statusFinalized")}
                             </span>
                           ) : completionReview.fullEntryComplete ? (
-                            <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/70">
+                            <span className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/70">
                               {t("wc.review.statusReady")}
                             </span>
                           ) : (
-                            <span className="rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/70">
+                            <span className="rounded-full border border-amber-300/30 bg-amber-400/10 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/70">
                               {t("wc.review.statusIncomplete")}
                             </span>
                           )
@@ -4233,7 +4233,7 @@ export default function WorldCupBracketShell({
                             <Sparkles className="h-4 w-4 text-white/85" aria-hidden />
                           </div>
                           <div className="min-w-0">
-                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
+                            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
                               {t("wc.aiReport.eyebrow")}
                             </p>
                             <h3 className="text-base font-black text-white sm:text-lg">
@@ -4248,8 +4248,8 @@ export default function WorldCupBracketShell({
                           data-testid="world-cup-review-ai-report-tier"
                           className={
                             aiInsightsUnlocked
-                              ? "shrink-0 rounded-full border border-cyan-300/30 bg-cyan-300/[0.08] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/90"
-                              : "shrink-0 rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/65"
+                              ? "shrink-0 rounded-full border border-cyan-300/30 bg-cyan-300/[0.08] px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/90"
+                              : "shrink-0 rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/65"
                           }
                         >
                           {aiInsightsUnlocked ? t("wc.aiReport.tierActive") : t("wc.aiReport.tierPreview")}
@@ -4368,7 +4368,7 @@ export default function WorldCupBracketShell({
                       <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                           <p className="text-sm font-black text-white">{t("wc.review.savedGroupTitle")}</p>
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-white/35">
+                          <span className="text-[11px] font-bold uppercase tracking-wide text-white/35">
                             {t("wc.review.savedGroupNote")}
                           </span>
                         </div>
@@ -4386,7 +4386,7 @@ export default function WorldCupBracketShell({
                                 <div key={group.id} data-testid={`world-cup-review-group-${group.groupKey}`} className="rounded-lg border border-white/10 bg-white/[0.035] p-2">
                                   <div className="mb-2 flex items-center justify-between gap-2">
                                     <p className="text-xs font-black text-white">{group.displayName}</p>
-                                    <span className="text-[10px] text-white/35">{t("wc.review.groupPicksSaved", { n: groupPicks.length })}</span>
+                                    <span className="text-[11px] text-white/35">{t("wc.review.groupPicksSaved", { n: groupPicks.length })}</span>
                                   </div>
                                   <div className="space-y-1.5">
                                     {groupPicks.length > 0 ? groupPicks.map((pick) => {
@@ -4396,7 +4396,7 @@ export default function WorldCupBracketShell({
                                           <span className="min-w-0 truncate text-white/75">
                                             #{pick.predictedRank} {teamNameFromGroupStageReview(reviewGroupStageView, pick.teamId)}
                                           </span>
-                                          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black ${worldCupReviewStatusClass(result.status)}`}>
+                                          <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-black ${worldCupReviewStatusClass(result.status)}`}>
                                             {result.label}
                                           </span>
                                         </div>
@@ -4425,7 +4425,7 @@ export default function WorldCupBracketShell({
                                   <span key={pick.id} data-result-state={result.status} className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-bold ${worldCupReviewStatusClass(result.status)}`}>
                                     {/* Team name intentionally NOT translated — Phase 5 brief. */}
                                     {teamNameFromGroupStageReview(reviewGroupStageView, pick.teamId)}
-                                    <span className="text-[10px] opacity-80">{result.label}</span>
+                                    <span className="text-[11px] opacity-80">{result.label}</span>
                                   </span>
                                 )
                               })
@@ -4451,7 +4451,7 @@ export default function WorldCupBracketShell({
                                     {/* pick.selectedTeamName intentionally NOT translated — Phase 5 brief. */}
                                     {match ? t("wc.review.knockoutPickPrefix", { number: match.matchNumber }) : ""}{pick.selectedTeamName}
                                   </span>
-                                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black ${worldCupReviewStatusClass(result.status)}`}>
+                                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-black ${worldCupReviewStatusClass(result.status)}`}>
                                     {result.label}
                                   </span>
                                 </div>
@@ -4590,7 +4590,7 @@ export default function WorldCupBracketShell({
                   <ClipboardList className="h-4 w-4 text-white/80" aria-hidden />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/40">
                     {t("wc.rules.hero.eyebrow")}
                   </p>
                   <h2 className="text-lg font-black text-white">{t("wc.rules.hero.title")}</h2>
@@ -4736,7 +4736,7 @@ export default function WorldCupBracketShell({
             type="button"
             onClick={() => switchTab(id)}
             aria-current={tab === id ? "page" : undefined}
-            className={`relative flex min-h-[56px] min-w-[60px] flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-2 text-[10px] font-bold transition-colors touch-manipulation focus-visible:outline-none focus-visible:bg-white/[0.05] ${
+            className={`relative flex min-h-[56px] min-w-[60px] flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-2 text-[11px] font-bold transition-colors touch-manipulation focus-visible:outline-none focus-visible:bg-white/[0.05] ${
               tab === id ? "text-white" : "text-white/50 hover:text-white/75"
             }`}
           >
@@ -4812,7 +4812,7 @@ function JumpButton({ label, onClick, disabled }: { label: string; onClick: () =
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="min-h-9 whitespace-nowrap rounded-full border border-cyan-300/15 bg-white/[0.045] px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.08em] text-white/68 transition hover:border-cyan-300/35 hover:bg-cyan-300/[0.08] hover:text-white touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/55 disabled:cursor-not-allowed disabled:opacity-40"
+      className="min-h-9 whitespace-nowrap rounded-full border border-cyan-300/15 bg-white/[0.045] px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.08em] text-white/68 transition hover:border-cyan-300/35 hover:bg-cyan-300/[0.08] hover:text-white touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/55 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {label}
     </button>
@@ -4830,7 +4830,7 @@ function PoolStatCard({
 }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-3 backdrop-blur transition-colors hover:border-white/15 hover:bg-white/[0.06]">
-      <div className="text-[10px] font-black uppercase tracking-widest text-white/45">{label}</div>
+      <div className="text-[11px] font-black uppercase tracking-widest text-white/45">{label}</div>
       <div
         className={`mt-1 text-xl font-black tabular-nums ${
           tone === "ready" ? "text-white/85" : tone === "warn" ? "text-white/75" : "text-white"
@@ -4926,7 +4926,7 @@ function WorldCupFinalizedSuccessBlock({
           <Check className="h-4 w-4 text-white/85" aria-hidden />
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/50">
+          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/50">
             {t("wc.finalize.eyebrow")}
           </p>
           <h3 className="text-base font-black text-white sm:text-lg">
@@ -4994,7 +4994,7 @@ function WorldCupFinalizedSuccessBlock({
         </div>
       </details>
 
-      <p className="mt-3 text-[10px] text-white/30">{t("wc.finalize.trustNote")}</p>
+      <p className="mt-3 text-[11px] text-white/30">{t("wc.finalize.trustNote")}</p>
     </div>
   )
 }
@@ -5024,7 +5024,7 @@ function ReviewAiConfidenceCard({
           {t("wc.confidence.title")}
         </span>
         {hideTierChip ? null : (
-          <span className="rounded-full border border-cyan-200/25 px-2 py-0.5 text-[10px] uppercase tracking-wide">
+          <span className="rounded-full border border-cyan-200/25 px-2 py-0.5 text-[11px] uppercase tracking-wide">
             {unlocked ? t("wc.confidence.tierOpen") : t("wc.confidence.tierLocked")}
           </span>
         )}
@@ -5089,14 +5089,14 @@ function WorldCupBracketGradeCard({
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-wide text-white/60">{t("wc.grade.eyebrow")}</p>
+          <p className="text-[11px] font-black uppercase tracking-wide text-white/60">{t("wc.grade.eyebrow")}</p>
           <div className="mt-1 flex items-baseline gap-3">
             <span className="text-3xl font-black text-white">{grade.grade}</span>
             <span className="font-bold text-white/70">{t("wc.grade.completionLabel", { percent: grade.completionPercent })}</span>
           </div>
         </div>
         {hideTierChip ? null : (
-          <span className="rounded-full border border-cyan-200/25 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white/90">
+          <span className="rounded-full border border-cyan-200/25 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-white/90">
             {unlocked ? t("wc.grade.tierProDetail") : t("wc.grade.tierBasic")}
           </span>
         )}
@@ -5149,7 +5149,7 @@ function WorldCupPathToWinCard({
           </p>
         </div>
         {hideTierChip ? null : (
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${unlocked ? "border-cyan-200/25 text-white/90" : "border-purple-300/25 text-purple-100"}`}>
+          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-black uppercase tracking-wide ${unlocked ? "border-cyan-200/25 text-white/90" : "border-purple-300/25 text-purple-100"}`}>
             {unlocked ? t("wc.path.tierActive") : t("wc.path.tierLocked")}
           </span>
         )}
@@ -5229,7 +5229,7 @@ function AiSimulationLockPanel({ isCommissioner }: { isCommissioner: boolean }) 
         <Lock className="h-7 w-7" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-white/90 backdrop-blur-[2px]">
+        <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-widest text-white/90 backdrop-blur-[2px]">
           {t("wc.aiLock.badge")}
         </div>
         <h4 className="mt-3 text-lg font-black text-white/90 drop-shadow-sm">{t("wc.aiLock.title")}</h4>
@@ -5274,7 +5274,7 @@ function PremiumFeatureCard({
         <p className="text-xs font-black text-white">{title}</p>
         <span
           className={[
-            "shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide",
+            "shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-black uppercase tracking-wide",
             unlocked
               ? "border-cyan-300/30 bg-cyan-300/10 text-white/90"
               : tier === "AF Commissioner"
@@ -5334,7 +5334,7 @@ function WorldCupPremiumAccessPanel({
         <div>
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-xs font-black text-white/80">{t("wc.premium.commissionerSection")}</p>
-            <span className="rounded-full border border-amber-300/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/80">
+            <span className="rounded-full border border-amber-300/25 bg-amber-400/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/80">
               {entitlementSummary.labels.commissioner}
             </span>
           </div>
@@ -5369,7 +5369,7 @@ function WorldCupPremiumAccessPanel({
         <div>
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-xs font-black text-white/90">{t("wc.premium.aiSection")}</p>
-            <span className="rounded-full border border-purple-300/25 bg-purple-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/90">
+            <span className="rounded-full border border-purple-300/25 bg-purple-400/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/90">
               {entitlementSummary.labels.ai}
             </span>
           </div>
@@ -6001,7 +6001,7 @@ function WorldCupCommunityFoundationPanel({
         ) : null}
       </span>
       <span className="leading-tight">
-        <span className="block text-[10px] uppercase tracking-[0.16em] text-slate-800/70">Chimmy</span>
+        <span className="block text-[11px] uppercase tracking-[0.16em] text-slate-800/70">Chimmy</span>
         <span className="block">Pool Chat</span>
       </span>
     </button>
@@ -6084,7 +6084,7 @@ function WorldCupCommunityFoundationPanel({
             </p>
           </div>
           <div className="flex shrink-0 flex-col items-stretch gap-1.5 sm:items-end">
-            <span className="hidden self-start rounded-full border border-cyan-300/25 bg-cyan-300/[0.08] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-50/75 sm:self-auto md:inline-flex">
+            <span className="hidden self-start rounded-full border border-cyan-300/25 bg-cyan-300/[0.08] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-cyan-50/75 sm:self-auto md:inline-flex">
               {tChat("wc.chat.hero.badge")}
             </span>
             <WorldCupChatModeTabs
@@ -6104,7 +6104,7 @@ function WorldCupCommunityFoundationPanel({
             <button
               type="button"
               onClick={() => setChatDrawerOpen((open) => !open)}
-              className="self-start rounded-full border border-cyan-300/18 bg-cyan-300/[0.06] px-3 py-1 text-[10px] font-black uppercase tracking-wide text-cyan-50/68 transition hover:border-cyan-300/35 hover:text-white sm:self-auto"
+              className="self-start rounded-full border border-cyan-300/18 bg-cyan-300/[0.06] px-3 py-1 text-[11px] font-black uppercase tracking-wide text-cyan-50/68 transition hover:border-cyan-300/35 hover:text-white sm:self-auto"
             >
               {chatDrawerOpen ? tChat("wc.chat.collapse") : tChat("wc.chat.open")}
             </button>
@@ -6122,7 +6122,7 @@ function WorldCupCommunityFoundationPanel({
           style={{ backgroundColor: "rgba(2, 6, 23, 0.78)", color: "#f8fafc" }}
         >
           <div className="mb-1.5 flex shrink-0 items-center justify-between gap-2">
-            <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-300/70">
+            <p className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300/70">
               {chatMode === "ai" ? <Bot className="h-3.5 w-3.5 text-cyan-200" aria-hidden /> : chatMode === "dm" ? <Users className="h-3.5 w-3.5 text-white/55" aria-hidden /> : <MessageSquare className="h-3.5 w-3.5 text-white/55" aria-hidden />}
               {chatMode === "ai" ? tChat("wc.chat.drawer.aiTitle") : chatMode === "dm" ? tChat("wc.chat.drawer.dmTitle") : tChat("wc.chat.drawer.poolTitle")}
             </p>
@@ -6130,7 +6130,7 @@ function WorldCupCommunityFoundationPanel({
               type="button"
               onClick={() => void loadChat()}
               disabled={isChatLoading}
-              className="rounded-xl border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[10px] font-bold text-slate-200/72 transition hover:border-cyan-300/25 hover:bg-cyan-300/[0.08] disabled:opacity-40"
+              className="rounded-xl border border-white/10 bg-white/[0.05] px-2.5 py-1 text-[11px] font-bold text-slate-200/72 transition hover:border-cyan-300/25 hover:bg-cyan-300/[0.08] disabled:opacity-40"
             >
               {isChatLoading ? "…" : tChat("wc.chat.refresh")}
             </button>
@@ -6140,12 +6140,12 @@ function WorldCupCommunityFoundationPanel({
               <div className="grid min-h-0 gap-2 sm:grid-cols-[minmax(12rem,16rem)_1fr]">
                 <div className="min-h-0 rounded-xl border border-white/10 bg-black/25 p-2">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Private Chats</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.16em] text-white/45">Private Chats</p>
                     <button
                       type="button"
                       onClick={() => void loadDmMembersAndThreads()}
                       disabled={isDmLoading}
-                      className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-bold text-white/55 disabled:opacity-40"
+                      className="rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-bold text-white/55 disabled:opacity-40"
                     >
                       {isDmLoading ? "..." : "Refresh"}
                     </button>
@@ -6164,7 +6164,7 @@ function WorldCupCommunityFoundationPanel({
                         ].join(" ")}
                       >
                         <span className="block truncate font-black">{thread.title || "Private chat"}</span>
-                        <span className="mt-0.5 block text-[10px] text-white/35">
+                        <span className="mt-0.5 block text-[11px] text-white/35">
                           {thread.memberCount} member{thread.memberCount === 1 ? "" : "s"}
                           {thread.unreadCount ? ` · ${thread.unreadCount} unread` : ""}
                         </span>
@@ -6176,7 +6176,7 @@ function WorldCupCommunityFoundationPanel({
                     )}
                   </div>
                   <div className="mt-3 border-t border-white/10 pt-3">
-                    <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-white/45">Pool Members</p>
+                    <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-white/45">Pool Members</p>
                     <div className="max-h-32 space-y-1 overflow-y-auto pr-1 sm:max-h-44">
                       {dmMembers.filter((member) => !member.isCurrentUser).map((member) => {
                         const selected = selectedDmMemberIds.includes(member.userId)
@@ -6200,7 +6200,7 @@ function WorldCupCommunityFoundationPanel({
                           >
                             <span className="min-w-0">
                               <span className="block truncate font-black">{member.displayName}</span>
-                              {member.username ? <span className="block truncate text-[10px] text-white/35">@{member.username}</span> : null}
+                              {member.username ? <span className="block truncate text-[11px] text-white/35">@{member.username}</span> : null}
                             </span>
                             {selected ? <Check className="h-3.5 w-3.5 shrink-0 text-amber-200" aria-hidden /> : null}
                           </button>
@@ -6229,7 +6229,7 @@ function WorldCupCommunityFoundationPanel({
                       {activeDmThread?.title || "Choose a private chat"}
                     </p>
                     {activeDmThread ? (
-                      <span className="shrink-0 rounded-full border border-cyan-300/20 bg-cyan-300/[0.08] px-2 py-1 text-[10px] font-bold text-cyan-100/75">
+                      <span className="shrink-0 rounded-full border border-cyan-300/20 bg-cyan-300/[0.08] px-2 py-1 text-[11px] font-bold text-cyan-100/75">
                         {activeDmThread.memberCount} members
                       </span>
                     ) : null}
@@ -6245,7 +6245,7 @@ function WorldCupCommunityFoundationPanel({
                         <div key={message.id} className="rounded-xl border border-white/10 bg-white/[0.055] px-3.5 py-2.5 text-sm">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-black text-slate-50">{message.senderName}</span>
-                            <span className="text-[10px] text-slate-300/58">
+                            <span className="text-[11px] text-slate-300/58">
                               {new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                             </span>
                           </div>
@@ -6385,11 +6385,11 @@ function WorldCupCommunityFoundationPanel({
                 className="mt-2 rounded-2xl border border-cyan-300/18 bg-slate-950/95 p-2 shadow-[0_18px_50px_-32px_rgba(34,211,238,0.85)]"
               >
                 <div className="mb-1 flex items-center justify-between gap-2 px-1">
-                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100/70">
+                  <p className="text-[11px] font-black uppercase tracking-[0.16em] text-cyan-100/70">
                     {tChat("wc.chat.mention.title")}
                   </p>
                   {isMentionLoading ? (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white/45">
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-white/45">
                       <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
                       {tChat("wc.chat.mention.loading")}
                     </span>
@@ -6412,7 +6412,7 @@ function WorldCupCommunityFoundationPanel({
                       >
                         <span className="min-w-0">
                           <span className="block truncate text-xs font-black">{suggestion.label}</span>
-                          <span className="mt-0.5 block truncate text-[10px] text-white/45">{suggestion.helper}</span>
+                          <span className="mt-0.5 block truncate text-[11px] text-white/45">{suggestion.helper}</span>
                         </span>
                         {suggestion.isBroadcast ? <Bell className="h-3.5 w-3.5 shrink-0" aria-hidden /> : <AtSign className="h-3.5 w-3.5 shrink-0" aria-hidden />}
                       </button>
@@ -6424,7 +6424,7 @@ function WorldCupCommunityFoundationPanel({
                   </p>
                 ) : null}
                 {!canBroadcastAll ? (
-                  <p className="mt-2 px-1 text-[10px] leading-4 text-white/35">
+                  <p className="mt-2 px-1 text-[11px] leading-4 text-white/35">
                     {tChat("wc.chat.mention.allManagerOnly")}
                   </p>
                 ) : null}
@@ -6499,7 +6499,7 @@ function WorldCupCommunityFoundationPanel({
               </div>
               {sanitizeWorldCupChatMessage(chatBody).trim() ? (
                 <div className="mt-2 rounded-xl border border-white/10 bg-black/20 p-3 text-xs">
-                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-white/35">Formatting Preview</p>
+                  <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-white/35">Formatting Preview</p>
                   <WorldCupChatRichTextSegments segments={richPreviewSegments} className="whitespace-pre-wrap break-words leading-5 text-white/65" />
                 </div>
               ) : null}
@@ -6526,11 +6526,11 @@ function WorldCupCommunityFoundationPanel({
           {selectedGif ? (
             <div className="mt-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-white/60">Selected GIF</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-white/60">Selected GIF</p>
                 <button
                   type="button"
                   onClick={() => setSelectedGif(null)}
-                  className="rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-bold text-white/50"
+                  className="rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-[11px] font-bold text-white/50"
                 >
                   Remove
                 </button>
@@ -6541,11 +6541,11 @@ function WorldCupCommunityFoundationPanel({
           {selectedImage ? (
             <div className="mt-2 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-white/60">Selected Image</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-white/60">Selected Image</p>
                 <button
                   type="button"
                   onClick={() => setSelectedImage(null)}
-                  className="rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-bold text-white/50"
+                  className="rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-[11px] font-bold text-white/50"
                 >
                   Remove
                 </button>
@@ -6627,7 +6627,7 @@ function WorldCupCommunityFoundationPanel({
                     {chatAiGate.message}
                   </p>
                   {chatAiGate.used != null && chatAiGate.limit != null && (
-                    <p className="mt-1 text-[10px] font-bold text-white/40">
+                    <p className="mt-1 text-[11px] font-bold text-white/40">
                       {chatAiGate.used} / {chatAiGate.limit} used today · Resets at midnight UTC
                     </p>
                   )}
@@ -6760,7 +6760,7 @@ function WorldCupGifPreview({
         alt={gif.title || "Selected GIF"}
         className="max-h-40 w-full object-cover"
       />
-      <p className="flex items-center justify-between gap-2 px-2 py-1 text-[10px] text-white/35">
+      <p className="flex items-center justify-between gap-2 px-2 py-1 text-[11px] text-white/35">
         <span className="truncate">{gif.title || "GIF"}</span>
         <span className="uppercase">{gif.provider}</span>
       </p>
@@ -6782,7 +6782,7 @@ function WorldCupImagePreview({
         alt="Uploaded World Cup chat image"
         className="max-h-48 w-full object-cover"
       />
-      <p className="flex items-center justify-between gap-2 px-2 py-1 text-[10px] text-white/35">
+      <p className="flex items-center justify-between gap-2 px-2 py-1 text-[11px] text-white/35">
         <span className="truncate">Cloudinary image</span>
         <span>{image.format.toUpperCase()} · {Math.round(image.bytes / 1024)}KB</span>
       </p>
@@ -6864,7 +6864,7 @@ function WorldCupPollMessage({
                 />
                 <span className="relative flex items-center justify-between gap-2 px-3 py-2">
                   <span className="font-bold text-white/75">{option.label}</span>
-                  <span className="text-[10px] font-black text-white/65">
+                  <span className="text-[11px] font-black text-white/65">
                     {option.votes} vote{option.votes === 1 ? "" : "s"} · {option.percentage}%
                   </span>
                 </span>
@@ -6873,7 +6873,7 @@ function WorldCupPollMessage({
           )
         })}
       </div>
-      <p className="mt-2 text-[10px] font-bold uppercase tracking-wide text-white/35">
+      <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-white/35">
         {poll.totalVotes} total vote{poll.totalVotes === 1 ? "" : "s"}
         {poll.currentUserVote ? " · Your vote is counted" : ""}
         {poll.closed ? " · Closed" : ""}
@@ -7098,7 +7098,7 @@ function WorldCupGifSearchPanel({
               ].join(" ")}
             >
               <img src={gif.previewUrl} alt={gif.title || "GIF result"} className="h-24 w-full object-cover" />
-              <span className="block truncate px-2 py-1 text-[10px] text-white/45">
+              <span className="block truncate px-2 py-1 text-[11px] text-white/45">
                 {gif.title || gif.provider}
               </span>
             </button>

@@ -35,7 +35,7 @@ export function ShadowLeagueBanner({ platform, className }: ShadowLeagueBannerPr
         .filter(Boolean)
         .join(' ')}
     >
-      <span className="rounded border border-sky-500/40 bg-sky-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-300">
+      <span className="rounded border border-sky-500/40 bg-sky-500/15 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-sky-300">
         Shadow League
       </span>
       <span className="text-[11px] text-sky-100/85">

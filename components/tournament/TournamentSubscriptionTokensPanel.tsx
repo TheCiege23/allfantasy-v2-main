@@ -35,7 +35,7 @@ export function TournamentSubscriptionTokensPanel({
                     : 'border-white/[0.08] bg-black/20 hover:border-white/[0.12]'
                 }`}
               >
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">{p.shortLabel}</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/40">{p.shortLabel}</p>
                 <p className="mt-2 text-lg font-bold text-white">{p.label}</p>
                 <p className="mt-2 text-xs leading-relaxed text-white/50">{p.description}</p>
                 <ul className="mt-3 space-y-1.5 text-[11px] text-white/55">

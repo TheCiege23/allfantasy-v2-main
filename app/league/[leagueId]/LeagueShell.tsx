@@ -1551,7 +1551,7 @@ export function LeagueShell({
               <span className="h-1 w-10 shrink-0 rounded-full bg-white/20" aria-hidden />
             </div>
             <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.08em] text-white/30">{t('dashboard.shell.chat')}</p>
+              <p className="text-[11px] uppercase tracking-[0.08em] text-white/30">{t('dashboard.shell.chat')}</p>
               <button
                 type="button"
                 onClick={() => setMobileLeftOpen(false)}
@@ -1597,7 +1597,7 @@ export function LeagueShell({
               <span className="h-1 w-10 shrink-0 rounded-full bg-white/20" aria-hidden />
             </div>
             <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.08em] text-white/30">{t('dashboard.right.myLeagues')}</p>
+              <p className="text-[11px] uppercase tracking-[0.08em] text-white/30">{t('dashboard.right.myLeagues')}</p>
               <button
                 type="button"
                 onClick={() => setMobileRightOpen(false)}
@@ -1925,7 +1925,7 @@ function LeagueTabRouter({
               </p>
             </div>
             <div className="rounded-2xl border border-[#ff3d81]/30 bg-gradient-to-br from-[#ff3d81]/[0.12] via-[#ff3d81]/[0.06] to-transparent px-4 py-3 text-right shadow-[0_0_20px_rgba(255,61,129,0.08)]">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">League fill</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">League fill</p>
               <p className="mt-1 text-lg font-bold text-white">
                 {joinedTeams}/{teamCount}
               </p>
@@ -1934,15 +1934,15 @@ function LeagueTabRouter({
 
           <div className="relative mt-5 grid gap-3 md:grid-cols-3">
             <div className="rounded-2xl border border-white/[0.07] bg-white/[0.04] p-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">Draft date</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Draft date</p>
               <p className="mt-1 text-sm font-semibold text-white">{draftDateLabel}</p>
             </div>
             <div className="rounded-2xl border border-white/[0.07] bg-white/[0.04] p-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">Draft type</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Draft type</p>
               <p className="mt-1 text-sm font-semibold text-white">{formatDraftTypeLabel(draftType)}</p>
             </div>
             <div className="rounded-2xl border border-white/[0.07] bg-white/[0.04] p-4">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">Rounds / timer</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/45">Rounds / timer</p>
               <p className="mt-1 text-sm font-semibold text-white">
                 {rounds} rounds / {timerSeconds}s
               </p>
@@ -2511,7 +2511,7 @@ function LeagueHeader({
             </h1>
             {isCommissioner ? (
               <span
-                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-400/35 bg-amber-400/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-200/90"
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-400/35 bg-amber-400/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-200/90"
                 data-testid="league-header-commissioner-badge"
                 title="You are a commissioner of this league"
               >
@@ -2526,7 +2526,7 @@ function LeagueHeader({
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <span
               className={cn(
-                'inline-flex min-h-6 items-center rounded-full border px-2 text-[9px] font-black uppercase tracking-[0.14em]',
+                'inline-flex min-h-6 items-center rounded-full border px-2 text-[11px] font-black uppercase tracking-[0.14em]',
                 headerSportLabel === 'NCAAF'
                   ? 'border-amber-300/30 bg-amber-500/10 text-amber-100'
                   : 'border-[#ff9ec0]/30 bg-[#ff3d81]/10 text-[#ffd7e5]',
@@ -2535,10 +2535,10 @@ function LeagueHeader({
             >
               {headerSportLabel}
             </span>
-            <span className="inline-flex min-h-6 items-center rounded-full border border-white/10 bg-white/[0.04] px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-white/65">
+            <span className="inline-flex min-h-6 items-center rounded-full border border-white/10 bg-white/[0.04] px-2 text-[11px] font-bold uppercase tracking-[0.12em] text-white/65">
               {headerSeasonLabel}
             </span>
-            <span className="inline-flex min-h-6 items-center rounded-full border border-emerald-300/20 bg-emerald-500/[0.08] px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-emerald-100/85">
+            <span className="inline-flex min-h-6 items-center rounded-full border border-emerald-300/20 bg-emerald-500/[0.08] px-2 text-[11px] font-bold uppercase tracking-[0.12em] text-emerald-100/85">
               {headerStatusLabel}
             </span>
             {idpLeagueActive ? (
@@ -2552,7 +2552,7 @@ function LeagueHeader({
                   </span>
                 ) : null}
                 <span
-                  className="flex h-6 flex-shrink-0 items-stretch overflow-hidden rounded-full border border-white/[0.12] text-[9px] font-bold uppercase tracking-wide"
+                  className="flex h-6 flex-shrink-0 items-stretch overflow-hidden rounded-full border border-white/[0.12] text-[11px] font-bold uppercase tracking-wide"
                   data-testid="c2c-sport-pair-pill"
                   title={c2cSportPairShort(c2cConfig.sportPair).label}
                 >
@@ -2565,7 +2565,7 @@ function LeagueHeader({
                   </span>
                 </span>
                 <span
-                  className="flex-shrink-0 rounded-full border border-white/[0.1] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/90"
+                  className="flex-shrink-0 rounded-full border border-white/[0.1] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/90"
                   style={{
                     background: 'linear-gradient(90deg, rgba(124,58,237,0.35), rgba(37,99,235,0.35))',
                   }}
@@ -2584,7 +2584,7 @@ function LeagueHeader({
                   * Created by TheCiege
                 </span>
                 <span
-                  className="flex-shrink-0 rounded-full border border-white/[0.1] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/90"
+                  className="flex-shrink-0 rounded-full border border-white/[0.1] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/90"
                   style={{
                     background: 'linear-gradient(90deg, rgba(124,58,237,0.35), rgba(37,99,235,0.35))',
                   }}
@@ -2602,7 +2602,7 @@ function LeagueHeader({
                   key={m}
                   type="button"
                   onClick={() => onIdpViewModeChange(m)}
-                  className={`flex-1 rounded-md px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide ${
+                  className={`flex-1 rounded-md px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide ${
                     idpViewMode === m
                       ? m === 'offense'
                         ? 'bg-[color:var(--idp-offense)]/25 text-blue-100'
@@ -2629,7 +2629,7 @@ function LeagueHeader({
           <div className="flex w-full flex-col items-end gap-1">
             {c2cLeagueActive && c2cConfig ? (
               <span
-                className="whitespace-nowrap rounded-full border border-violet-500/35 bg-violet-500/10 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-violet-100"
+                className="whitespace-nowrap rounded-full border border-violet-500/35 bg-violet-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-violet-100"
                 data-testid="c2c-score-mode-chip"
               >
                 {c2cScoreModeChip(c2cConfig)}
@@ -2638,7 +2638,7 @@ function LeagueHeader({
             {idpCapEnabled && capSummary && capRosterId ? (
               <Link
                 href={`/idp/cap/${leagueId}?rosterId=${encodeURIComponent(capRosterId)}`}
-                className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[10px] font-bold tracking-wide transition hover:brightness-110 ${capPillClass}`}
+                className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold tracking-wide transition hover:brightness-110 ${capPillClass}`}
                 data-testid="idp-cap-header-pill"
               >
                 CAP: ${capSummary.availableCap.toFixed(1)}M
@@ -2646,7 +2646,7 @@ function LeagueHeader({
             ) : null}
             {devyLeagueActive ? (
               <div
-                className="flex max-w-[200px] flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[9px] font-semibold text-white/70 sm:max-w-none sm:text-[10px]"
+                className="flex max-w-[200px] flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[11px] font-semibold text-white/70 sm:max-w-none sm:text-[11px]"
                 data-testid="devy-bucket-stats"
               >
                 <span className="inline-flex items-center gap-1">
@@ -3029,7 +3029,7 @@ function LeagueHeader({
                         data-testid={`league-tab-${tab.id}`}
                         onClick={() => onTabChange(tab.id)}
                         className={cn(
-                          'touch-manipulation flex snap-start min-h-[38px] min-w-0 shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide transition-colors sm:text-[10.5px]',
+                          'touch-manipulation flex snap-start min-h-[38px] min-w-0 shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wide transition-colors sm:text-[11px]',
                           isActive
                             ? 'bg-white/[0.07] text-[#ff9d5c]'
                             : 'text-[#7b83c4] hover:bg-white/[0.04] hover:text-white',
@@ -3047,7 +3047,7 @@ function LeagueHeader({
                         {showRosterBadge ? (
                           <span
                             className={cn(
-                              'ml-0.5 min-w-[1.125rem] rounded-full px-1 text-center text-[9px] font-extrabold tabular-nums ring-1',
+                              'ml-0.5 min-w-[1.125rem] rounded-full px-1 text-center text-[11px] font-extrabold tabular-nums ring-1',
                               'bg-amber-500 text-[#050814] ring-amber-700/40',
                             )}
                             aria-label={`${rosterIssueCount} roster issues`}

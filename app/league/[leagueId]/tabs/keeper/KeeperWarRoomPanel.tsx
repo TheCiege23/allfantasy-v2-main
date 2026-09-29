@@ -160,7 +160,7 @@ export function KeeperWarRoomPanel({ leagueId }: { leagueId: string }) {
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-violet-300" />
         <h2 className="text-sm font-bold text-white">AF Legacy — Keeper</h2>
-        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
+        <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[11px] font-semibold text-violet-200">
           {context.sport} · {context.scoring.scoringPreset}
         </span>
       </div>
@@ -168,7 +168,7 @@ export function KeeperWarRoomPanel({ leagueId }: { leagueId: string }) {
       {/* Keeper rules + deadline + data status */}
       <div className="grid gap-2 rounded-lg border border-white/[0.06] bg-[#07071a] p-3 sm:grid-cols-3" data-testid="keeper-war-room-rules-card">
         <div>
-          <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-white/40">
+          <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-white/40">
             <ClipboardList className="h-3 w-3" /> Keeper rules
           </p>
           <p className="text-[11px] text-white/70">
@@ -178,14 +178,14 @@ export function KeeperWarRoomPanel({ leagueId }: { leagueId: string }) {
           </p>
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Deadline / phase</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Deadline / phase</p>
           <p className="text-[11px] text-white/70">
             {k.selectionDeadline ? new Date(k.selectionDeadline).toLocaleDateString() : k.keeperPhaseActive ? 'Keeper phase open' : 'No deadline set'}
             {seasonActive ? ' · season active' : ''}
           </p>
         </div>
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Data</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">Data</p>
           <p className="text-[11px] text-white/60">
             ADP {context.availability.playerValues === 'available' ? '✓' : '—'} · costs{' '}
             {context.availability.keeperCosts === 'available' ? '✓' : '—'} · elig{' '}
@@ -228,13 +228,13 @@ export function KeeperWarRoomPanel({ leagueId }: { leagueId: string }) {
           <p className="text-[11px] font-bold uppercase tracking-wide text-white/40">Roster needs after keepers</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <div>
-              <p className="text-[10px] font-semibold text-rose-300/80">DRAFT TARGETS</p>
+              <p className="text-[11px] font-semibold text-rose-300/80">DRAFT TARGETS</p>
               {needs.needs.length ? needs.needs.map((n) => (
                 <p key={n.position} className="text-[11px] text-white/70">{n.position} <span className="text-white/40">({n.severity})</span></p>
               )) : <p className="text-[11px] text-white/40">All starting needs covered by keepers</p>}
             </div>
             <div>
-              <p className="text-[10px] font-semibold text-emerald-300/80">COVERED BY KEEPERS</p>
+              <p className="text-[11px] font-semibold text-emerald-300/80">COVERED BY KEEPERS</p>
               {needs.strengths.length ? needs.strengths.slice(0, 4).map((s) => (
                 <p key={s} className="text-[11px] text-white/60">{s}</p>
               )) : <p className="text-[11px] text-white/40">—</p>}

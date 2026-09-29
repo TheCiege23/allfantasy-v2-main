@@ -232,7 +232,7 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
               </option>
             ))}
           </select>
-          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-white/40">
+          <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-white/40">
             ▾
           </span>
         </label>
@@ -252,7 +252,7 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
 
       <div className="border-b border-white/[0.06] px-4 pb-3 md:px-5">
         <div className="rounded-xl border border-white/[0.08] bg-[#0a1228]/40 p-3">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/45">Start A vs B</p>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/45">Start A vs B</p>
           <StartVsComparisonLauncher
             leagueId={league.id}
             sport={resolved}
@@ -350,11 +350,11 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
                           data-testid={`scores-game-${g.gameId}`}
                         >
                           <div className="mb-2 flex items-center justify-between gap-2">
-                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${toneClass}`}>
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${toneClass}`}>
                               {status.label}
                             </span>
                             {g.broadcast ? (
-                              <span className="truncate text-[10px] text-white/40">{g.broadcast}</span>
+                              <span className="truncate text-[11px] text-white/40">{g.broadcast}</span>
                             ) : null}
                           </div>
                           <div className="space-y-1.5">
@@ -378,7 +378,7 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
                             </div>
                           </div>
                           {g.venue ? (
-                            <p className="mt-2 text-[10px] text-white/35">{g.venue}</p>
+                            <p className="mt-2 text-[11px] text-white/35">{g.venue}</p>
                           ) : null}
                         </li>
                       )
@@ -386,7 +386,7 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
                   </ul>
                 )}
                 {scoresPayload?.source ? (
-                  <p className="mt-3 px-1 text-center text-[10px] text-white/30">
+                  <p className="mt-3 px-1 text-center text-[11px] text-white/30">
                     Source: {scoresPayload.source.replace(/_/g, ' ')} · {scoresPayload.scores.length} games
                   </p>
                 ) : null}

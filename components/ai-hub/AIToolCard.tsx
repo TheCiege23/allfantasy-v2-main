@@ -48,7 +48,7 @@ export default function AIToolCard({
           <span className="text-sm font-semibold text-white group-hover:text-cyan-200">{title}</span>
           {badge && (
             <span
-              className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+              className={`rounded-full border px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide ${
                 badge === 'Pro'
                   ? 'border-violet-500/40 bg-violet-500/15 text-violet-300'
                   : 'border-white/15 bg-white/[0.06] text-white/45'
@@ -58,12 +58,12 @@ export default function AIToolCard({
             </span>
           )}
           {sport && (
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-semibold text-white/35">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[11px] font-semibold text-white/35">
               {sport}
             </span>
           )}
           {status && status !== 'Active' && (
-            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400/70">
+            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-amber-400/70">
               {status}
             </span>
           )}

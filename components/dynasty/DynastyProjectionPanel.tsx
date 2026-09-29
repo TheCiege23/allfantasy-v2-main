@@ -299,7 +299,7 @@ export function DynastyProjectionPanel({
             <span className="text-white/45">{weatherLegendOpen ? '−' : '+'}</span>
           </button>
           {weatherLegendOpen ? (
-            <p className="border-t border-white/[0.06] px-3 pb-2 pt-1 text-[10px] text-white/50">
+            <p className="border-t border-white/[0.06] px-3 pb-2 pt-1 text-[11px] text-white/50">
               Dynasty scores here are long-term strength — for game-week weather adjustments, use the AF crest next to
               projected points on Team and Players tabs.
             </p>
@@ -351,7 +351,7 @@ export function DynastyProjectionPanel({
                     Future outlook: {teamNames[selected.teamId] ?? selected.teamId}
                   </h4>
                   <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] ${
+                    className={`rounded-full px-2 py-0.5 text-[11px] ${
                       directionLabel(selected) === 'Contending'
                         ? 'bg-emerald-500/20 text-emerald-300'
                         : directionLabel(selected) === 'Rebuilding'

@@ -76,7 +76,7 @@ export function LeagueTypeSelector({ value, onChange }: LeagueTypeSelectorProps)
                 title={LEAGUE_TYPE_TOOLTIPS[id]}
               >
                 {LEAGUE_TYPE_BADGES[id] && (
-                  <span className={`absolute left-2 top-2 z-[4] rounded-md px-1.5 py-0.5 text-[10px] font-black tracking-[0.08em] ${
+                  <span className={`absolute left-2 top-2 z-[4] rounded-md px-1.5 py-0.5 text-[11px] font-black tracking-[0.08em] ${
                     LEAGUE_TYPE_BADGES[id] === 'FLAGSHIP'
                       ? 'bg-amber-400 text-[#1a0800]'
                       : LEAGUE_TYPE_BADGES[id] === 'NEW'
@@ -100,7 +100,7 @@ export function LeagueTypeSelector({ value, onChange }: LeagueTypeSelectorProps)
                     {LEAGUE_TYPE_LABELS[id]}
                   </p>
                   {LEAGUE_TYPE_TOOLTIPS[id] && (
-                    <p className="mt-0.5 text-[10px] leading-tight text-white/70 line-clamp-2 drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]">
+                    <p className="mt-0.5 text-[11px] leading-tight text-white/70 line-clamp-2 drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)]">
                       {LEAGUE_TYPE_TOOLTIPS[id]}
                     </p>
                   )}

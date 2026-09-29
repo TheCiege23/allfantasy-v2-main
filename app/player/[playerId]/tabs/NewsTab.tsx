@@ -53,7 +53,7 @@ export function NewsTab({ player }: { player: PlayerIdentity }) {
       {news.map((n, i) => (
         <div key={i} className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3">
           <p className="text-[13px] font-medium text-white/80">{n.title}</p>
-          <div className="mt-1 flex items-center gap-2 text-[10px] text-white/30">
+          <div className="mt-1 flex items-center gap-2 text-[11px] text-white/30">
             <span>{n.source}</span>
             <span>·</span>
             <span>{new Date(n.publishedAt).toLocaleDateString()}</span>

@@ -65,10 +65,10 @@ export default function ChimmyAlertFeedItem({
         <div className="min-w-0 flex-1">
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <p className="truncate text-sm font-semibold text-white">{alert.title}</p>
-            {isUnread && <span className="rounded-full bg-cyan-400 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-950">Unread</span>}
+            {isUnread && <span className="rounded-full bg-cyan-400 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-slate-950">Unread</span>}
           </div>
           <p className="text-xs text-white/72">{alert.message}</p>
-          <div className="mt-2 flex items-center gap-1 text-[10px] text-white/45">
+          <div className="mt-2 flex items-center gap-1 text-[11px] text-white/45">
             <Clock3 className="h-3 w-3" />
             <span>{createdAt}</span>
           </div>
@@ -85,7 +85,7 @@ export default function ChimmyAlertFeedItem({
               <button
                 type="button"
                 onClick={handleMarkRead}
-                className="rounded-md border border-white/20 bg-white/5 px-2 py-1 text-[10px] text-white/70 hover:bg-white/10"
+                className="rounded-md border border-white/20 bg-white/5 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
               >
                 Mark read
               </button>

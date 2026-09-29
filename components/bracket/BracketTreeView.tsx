@@ -759,7 +759,7 @@ export function BracketTreeView({
   function renderGenericBoard() {
     return (
       <div className="rounded-xl border border-white/10 bg-[#0a1228]/85 p-3" data-testid="bracket-generic-board">
-        <div className="mb-2 text-[10px] uppercase tracking-[0.12em]" style={{ color: "rgba(148,163,184,0.9)" }}>
+        <div className="mb-2 text-[11px] uppercase tracking-[0.12em]" style={{ color: "rgba(148,163,184,0.9)" }}>
           Playoff Challenge Board
         </div>
         <div className="overflow-x-auto" data-testid="bracket-mobile-navigation">
@@ -776,7 +776,7 @@ export function BracketTreeView({
                     <span className="text-xs font-semibold" style={{ color: "rgba(226,232,240,0.92)" }}>
                       {getAdaptiveRoundLabel(round, maxRound)}
                     </span>
-                    <span className="text-[10px]" style={{ color: "rgba(148,163,184,0.85)" }}>
+                    <span className="text-[11px]" style={{ color: "rgba(148,163,184,0.85)" }}>
                       {getAdaptiveRoundShortLabel(round, maxRound)}
                     </span>
                   </div>
@@ -833,7 +833,7 @@ export function BracketTreeView({
                             </span>
                             {nw?.title ? (
                               <div
-                                className="mt-1 text-[9px] leading-snug text-slate-500 line-clamp-2 border-t border-white/5 pt-1"
+                                className="mt-1 text-[11px] leading-snug text-slate-500 line-clamp-2 border-t border-white/5 pt-1"
                                 title={nw.title}
                               >
                                 {nw.title}
@@ -858,7 +858,7 @@ export function BracketTreeView({
                           tabIndex={0}
                           data-testid={`bracket-game-cell-${node.id}`}
                         >
-                          <div className="mb-1 flex items-center justify-between text-[10px]" style={{ color: "rgba(148,163,184,0.8)" }}>
+                          <div className="mb-1 flex items-center justify-between text-[11px]" style={{ color: "rgba(148,163,184,0.8)" }}>
                             <span>{node.slot}</span>
                             {locked ? <span data-testid={`bracket-lock-state-${node.id}`}>Locked</span> : <span>Open</span>}
                           </div>
@@ -1000,7 +1000,7 @@ export function BracketTreeView({
     return (
       <div className="rounded-xl overflow-hidden" style={{ background: '#161b22', border: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="p-3 text-center">
-          <div className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>My Bracket</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.3)' }}>My Bracket</div>
           <div className="mt-2 flex items-center justify-center gap-3">
             <span className="text-2xl font-black" style={{ color: '#fb923c' }}>{totalPicks}</span>
             <span className="text-sm" style={{ color: 'rgba(255,255,255,0.2)' }}>/</span>
@@ -1035,14 +1035,14 @@ export function BracketTreeView({
             <span className="text-xs font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>{totalGames}</span>
           </div>
           {sleeperTeams.size > 0 && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.2)' }}>
+            <span className="flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7', border: '1px solid rgba(168,85,247,0.2)' }}>
               <Sparkles className="w-3 h-3" />
               {sleeperTeams.size} Sleeper{sleeperTeams.size > 1 ? 's' : ''}
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <div className="hidden sm:flex items-center text-[10px] px-2 py-1 rounded-full" style={{
+          <div className="hidden sm:flex items-center text-[11px] px-2 py-1 rounded-full" style={{
             background: isSaving ? 'rgba(251,146,60,0.08)' : 'rgba(15,23,42,0.8)',
             border: isSaving ? '1px solid rgba(251,146,60,0.4)' : '1px solid rgba(148,163,184,0.5)',
             color: isSaving ? '#fb923c' : 'rgba(148,163,184,0.9)',
@@ -1103,12 +1103,12 @@ export function BracketTreeView({
             Picked by {championInsights.pct}% of this pool
           </span>
           {championInsights.pct < 20 && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px]" style={{ background: "rgba(168,85,247,0.15)", color: "#c4b5fd" }}>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px]" style={{ background: "rgba(168,85,247,0.15)", color: "#c4b5fd" }}>
               Contrarian edge
             </span>
           )}
           {championInsights.pct > 50 && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px]" style={{ background: "rgba(234,179,8,0.14)", color: "#facc15" }}>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px]" style={{ background: "rgba(234,179,8,0.14)", color: "#facc15" }}>
               Popular chalk
             </span>
           )}
@@ -1137,38 +1137,38 @@ export function BracketTreeView({
       {classicRegionalBoard ? (
       <div data-testid="bracket-classic-board">
         <div className="flex items-center gap-2 mb-2 justify-between flex-wrap">
-          <div className="flex items-center gap-1 text-[10px]" style={{ color: 'rgba(148,163,184,0.9)' }}>
+          <div className="flex items-center gap-1 text-[11px]" style={{ color: 'rgba(148,163,184,0.9)' }}>
             <span>View:</span>
             <button
               onClick={() => focusArea("all")}
-              className="px-2 py-0.5 rounded-full border text-[10px]"
+              className="px-2 py-0.5 rounded-full border text-[11px]"
               style={{ borderColor: 'rgba(148,163,184,0.5)', background: 'rgba(15,23,42,0.9)', color: 'rgba(226,232,240,0.9)' }}
             >
               Full
             </button>
             <button
               onClick={() => focusArea("early")}
-              className="px-2 py-0.5 rounded-full border text-[10px]"
+              className="px-2 py-0.5 rounded-full border text-[11px]"
               style={{ borderColor: 'rgba(148,163,184,0.35)', background: 'rgba(15,23,42,0.7)', color: 'rgba(148,163,184,0.95)' }}
             >
               Rounds 1–2
             </button>
             <button
               onClick={() => focusArea("mid")}
-              className="px-2 py-0.5 rounded-full border text-[10px]"
+              className="px-2 py-0.5 rounded-full border text-[11px]"
               style={{ borderColor: 'rgba(148,163,184,0.35)', background: 'rgba(15,23,42,0.7)', color: 'rgba(148,163,184,0.95)' }}
             >
               Sweet 16 / Elite 8
             </button>
             <button
               onClick={() => focusArea("final")}
-              className="px-2 py-0.5 rounded-full border text-[10px]"
+              className="px-2 py-0.5 rounded-full border text-[11px]"
               style={{ borderColor: 'rgba(148,163,184,0.35)', background: 'rgba(15,23,42,0.7)', color: 'rgba(148,163,184,0.95)' }}
             >
               Final Four / Champ
             </button>
           </div>
-          <span className="text-[10px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
+          <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.25)' }}>
             {Math.round(zoom * 100)}%
           </span>
           <button onClick={() => setZoom(z => Math.max(0.3, z - 0.15))} className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -1180,8 +1180,8 @@ export function BracketTreeView({
           <button onClick={resetView} className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <Maximize2 className="w-3.5 h-3.5" style={{ color: 'rgba(255,255,255,0.4)' }} />
           </button>
-          <span className="hidden sm:inline text-[9px] ml-2" style={{ color: 'rgba(255,255,255,0.15)' }}>Scroll to pan | Ctrl+scroll to zoom | Double-click matchup for details</span>
-          <span className="sm:hidden text-[9px] ml-2" style={{ color: 'rgba(255,255,255,0.15)' }}>Pinch to zoom | Drag to pan</span>
+          <span className="hidden sm:inline text-[11px] ml-2" style={{ color: 'rgba(255,255,255,0.15)' }}>Scroll to pan | Ctrl+scroll to zoom | Double-click matchup for details</span>
+          <span className="sm:hidden text-[11px] ml-2" style={{ color: 'rgba(255,255,255,0.15)' }}>Pinch to zoom | Drag to pan</span>
         </div>
         <div
           ref={canvasContainerRef}

@@ -1247,10 +1247,10 @@ export default function MockDraftSleeperRoomClient({
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <span className="rounded-full border border-indigo-400/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.22em] text-indigo-200">
+                      <span className="rounded-full border border-indigo-400/20 bg-indigo-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.22em] text-indigo-200">
                         Sleeper
                       </span>
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/50">
                         {league.sport}
                       </span>
                     </div>
@@ -1619,10 +1619,10 @@ export default function MockDraftSleeperRoomClient({
               queuePlayers.map((player, index) => (
                 <div key={player.id} className="rounded-xl border border-orange-400/20 bg-orange-500/10 p-2 text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-black text-orange-200">
+                    <span className="rounded-full bg-orange-500/20 px-1.5 py-0.5 text-[11px] font-black text-orange-200">
                       #{index + 1}
                     </span>
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${positionLabelColor(player.position)}`}>
+                    <span className={`rounded px-1.5 py-0.5 text-[11px] font-black ${positionLabelColor(player.position)}`}>
                       {player.position}
                     </span>
                     <span className="truncate font-semibold text-white">{player.name}</span>
@@ -1639,7 +1639,7 @@ export default function MockDraftSleeperRoomClient({
                           return next
                         })
                       }
-                      className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-white/55 hover:text-white"
+                      className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/55 hover:text-white"
                     >
                       Up
                     </button>
@@ -1654,14 +1654,14 @@ export default function MockDraftSleeperRoomClient({
                           return next
                         })
                       }
-                      className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-white/55 hover:text-white"
+                      className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-white/55 hover:text-white"
                     >
                       Down
                     </button>
                     <button
                       type="button"
                       onClick={() => setQueue((current) => current.filter((id) => id !== player.id))}
-                      className="rounded-lg border border-white/10 px-2 py-1 text-[10px] text-red-300/75 hover:text-red-200"
+                      className="rounded-lg border border-white/10 px-2 py-1 text-[11px] text-red-300/75 hover:text-red-200"
                     >
                       Remove
                     </button>
@@ -1679,7 +1679,7 @@ export default function MockDraftSleeperRoomClient({
                 key={option}
                 type="button"
                 onClick={() => setFilter(option)}
-                className={`rounded-lg px-2 py-1 text-[10px] font-black ${
+                className={`rounded-lg px-2 py-1 text-[11px] font-black ${
                   filter === option ? 'bg-cyan-500 text-black' : 'bg-white/8 text-white/50'
                 }`}
                 data-testid={`mock-draft-filter-${option}`}
@@ -1730,24 +1730,24 @@ export default function MockDraftSleeperRoomClient({
                 data-testid={`mock-draft-player-row-${player.id}`}
               >
                 <div className="w-4 text-xs text-white/25">{index + 1}</div>
-                <div className={`w-8 rounded px-1 py-0.5 text-center text-[10px] font-black ${positionLabelColor(player.position)}`}>
+                <div className={`w-8 rounded px-1 py-0.5 text-center text-[11px] font-black ${positionLabelColor(player.position)}`}>
                   {player.position}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs font-semibold text-white/85">{player.name}</div>
-                  <div className="text-[10px] text-white/30">
+                  <div className="text-[11px] text-white/30">
                     {player.team || 'FA'} · {player.posRank}
                   </div>
                 </div>
                 {queued ? (
-                  <span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-[9px] font-black text-orange-200">
+                  <span className="rounded-full bg-orange-500/20 px-2 py-0.5 text-[11px] font-black text-orange-200">
                     QUEUED
                   </span>
                 ) : null}
                 {player.injuryStatus ? (
-                  <span className="text-[9px] font-black text-red-300">{player.injuryStatus}</span>
+                  <span className="text-[11px] font-black text-red-300">{player.injuryStatus}</span>
                 ) : null}
-                <div className="text-[10px] font-mono text-white/40">{player.adp.toFixed(1)}</div>
+                <div className="text-[11px] font-mono text-white/40">{player.adp.toFixed(1)}</div>
               </button>
             )
           })}
@@ -1758,22 +1758,22 @@ export default function MockDraftSleeperRoomClient({
     const rosterAndChatPanel = (
       <div className="flex h-full flex-col bg-[#0c0c1e]">
         <div className="border-b border-white/8 p-3">
-          <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/35">
+          <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/35">
             {onTheClockTeam?.isUser ? 'Your Roster' : `${onTheClockTeam?.managerName ?? 'Current Team'} Roster`}
           </div>
           <div className="mt-3 space-y-1">
             {getRosterSlots(draftState.settings).map((slot, index) => (
               <div key={`${slot}-${index}`} className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-2 py-1.5">
-                <span className={`w-12 rounded px-1 py-0.5 text-center text-[9px] font-black ${positionLabelColor(slot)}`}>
+                <span className={`w-12 rounded px-1 py-0.5 text-center text-[11px] font-black ${positionLabelColor(slot)}`}>
                   {slot}
                 </span>
                 {currentRosterSlots[index] ? (
                   <>
-                    <span className="min-w-0 flex-1 truncate text-[10px] text-white/75">{currentRosterSlots[index]?.playerName}</span>
-                    <span className="text-[9px] text-white/30">{currentRosterSlots[index]?.team}</span>
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-white/75">{currentRosterSlots[index]?.playerName}</span>
+                    <span className="text-[11px] text-white/30">{currentRosterSlots[index]?.team}</span>
                   </>
                 ) : (
-                  <span className="text-[10px] italic text-white/20">Empty</span>
+                  <span className="text-[11px] italic text-white/20">Empty</span>
                 )}
               </div>
             ))}
@@ -1781,12 +1781,12 @@ export default function MockDraftSleeperRoomClient({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col p-3">
-          <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/35">Chat</div>
+          <div className="text-[11px] font-bold uppercase tracking-[0.24em] text-white/35">Chat</div>
           <div className="mt-3 flex-1 space-y-2 overflow-y-auto">
             {draftState.chatMessages.map((message, index) => (
               <div
                 key={`${message.role}-${index}`}
-                className={`rounded-lg px-2 py-1.5 text-[10px] ${
+                className={`rounded-lg px-2 py-1.5 text-[11px] ${
                   message.role === 'ai'
                     ? 'bg-cyan-500/10 text-cyan-100'
                     : 'bg-white/5 text-white/65'
@@ -1922,11 +1922,11 @@ export default function MockDraftSleeperRoomClient({
                         )}
                       </div>
                       <div className="flex items-center justify-center gap-1">
-                        <div className="truncate text-[10px] font-bold text-white/70">{team.managerName}</div>
+                        <div className="truncate text-[11px] font-bold text-white/70">{team.managerName}</div>
                         <ManagerRoleBadge role={team.isOrphan ? 'orphan' : team.role ?? 'member'} />
                       </div>
-                      {team.isUser ? <div className="text-[9px] text-cyan-400">YOU</div> : null}
-                      {team.slotPredicted ? <div className="text-[9px] text-amber-300">(predicted)</div> : null}
+                      {team.isUser ? <div className="text-[11px] text-cyan-400">YOU</div> : null}
+                      {team.slotPredicted ? <div className="text-[11px] text-amber-300">(predicted)</div> : null}
                     </div>
                   ))}
                 </div>
@@ -1955,20 +1955,20 @@ export default function MockDraftSleeperRoomClient({
                                   : ''
                             } ${isUserTurn && !pick ? 'hover:bg-white/[0.04]' : ''}`}
                           >
-                            <div className="mb-1 text-[9px] text-white/20">
+                            <div className="mb-1 text-[11px] text-white/20">
                               {round}.{String(pickIndex + 1).padStart(2, '0')}
                             </div>
                             {pick ? (
                               <div>
-                                <div className={`mb-0.5 inline-flex rounded px-1 py-0.5 text-[9px] font-black ${positionLabelColor(pick.position)}`}>
+                                <div className={`mb-0.5 inline-flex rounded px-1 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
                                   {pick.position}
                                 </div>
-                                <div className="truncate text-[10px] font-semibold leading-tight text-white/85">
+                                <div className="truncate text-[11px] font-semibold leading-tight text-white/85">
                                   {pick.playerName}
                                 </div>
-                                <div className="truncate text-[9px] text-white/30">{pick.team || 'FA'}</div>
+                                <div className="truncate text-[11px] text-white/30">{pick.team || 'FA'}</div>
                                 {pick.aiReason && !pick.isUser ? (
-                                  <div className="mt-0.5 line-clamp-1 text-[8px] italic leading-tight text-cyan-300/70">
+                                  <div className="mt-0.5 line-clamp-1 text-[11px] italic leading-tight text-cyan-300/70">
                                     {pick.aiReason}
                                   </div>
                                 ) : null}
@@ -2006,10 +2006,10 @@ export default function MockDraftSleeperRoomClient({
                     {draftState.teams.map((team) => (
                       <div key={team.slot} className="border-r border-white/6 p-2 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <div className="truncate text-[10px] font-bold text-white/70">{team.managerName}</div>
+                          <div className="truncate text-[11px] font-bold text-white/70">{team.managerName}</div>
                           <ManagerRoleBadge role={team.isOrphan ? 'orphan' : team.role ?? 'member'} />
                         </div>
-                        {team.isUser ? <div className="text-[9px] text-cyan-400">YOU</div> : null}
+                        {team.isUser ? <div className="text-[11px] text-cyan-400">YOU</div> : null}
                       </div>
                     ))}
                   </div>
@@ -2027,15 +2027,15 @@ export default function MockDraftSleeperRoomClient({
                           const pick = draftState.picks.find((entry) => entry.overall === overallPick)
                           return (
                             <div key={`${team.slot}-${overallPick}`} className="min-h-[52px] border-r border-white/6 p-1.5">
-                              <div className="mb-1 text-[9px] text-white/20">
+                              <div className="mb-1 text-[11px] text-white/20">
                                 {round}.{String(pickIndex + 1).padStart(2, '0')}
                               </div>
                               {pick ? (
                                 <>
-                                  <div className={`inline-flex rounded px-1 py-0.5 text-[9px] font-black ${positionLabelColor(pick.position)}`}>
+                                  <div className={`inline-flex rounded px-1 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
                                     {pick.position}
                                   </div>
-                                  <div className="truncate text-[10px] font-semibold text-white/85">{pick.playerName}</div>
+                                  <div className="truncate text-[11px] font-semibold text-white/85">{pick.playerName}</div>
                                 </>
                               ) : null}
                             </div>
@@ -2200,9 +2200,9 @@ export default function MockDraftSleeperRoomClient({
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {myTeam.picks.map((pick) => (
                   <div key={pick.overall} className="rounded-2xl border border-white/8 bg-white/[0.03] p-3">
-                    <div className="mb-2 text-[10px] text-white/35">#{pick.overall}</div>
+                    <div className="mb-2 text-[11px] text-white/35">#{pick.overall}</div>
                     <div className="flex items-center gap-2">
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-black ${positionLabelColor(pick.position)}`}>
+                      <span className={`rounded px-1.5 py-0.5 text-[11px] font-black ${positionLabelColor(pick.position)}`}>
                         {pick.position}
                       </span>
                       <span className="truncate text-sm font-semibold text-white">{pick.playerName}</span>

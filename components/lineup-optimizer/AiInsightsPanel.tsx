@@ -124,7 +124,7 @@ export function AiInsightsPanel({
                 <span className="font-medium text-emerald-200">{c.startPlayer}</span>
                 <span className="text-white/35">vs</span>
                 <span className="font-medium text-white/70">{c.sitPlayer}</span>
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase text-white/55">
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] uppercase text-white/55">
                   {c.edgeType}
                 </span>
                 <span className="text-cyan-200/90">{Math.round(c.confidence)}% conf</span>

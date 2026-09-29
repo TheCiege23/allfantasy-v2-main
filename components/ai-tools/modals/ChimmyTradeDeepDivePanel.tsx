@@ -22,7 +22,7 @@ function Section({ title, items }: { title: string; items: string[] }) {
   if (items.length === 0) return null
   return (
     <div className="mt-3">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-white/40">{title}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wider text-white/40">{title}</div>
       <ul className="mt-1 space-y-1">
         {items.map((item, i) => (
           <li key={`${title}-${i}`} className="text-[12px] leading-snug text-white/70">

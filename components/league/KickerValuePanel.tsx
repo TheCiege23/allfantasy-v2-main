@@ -53,7 +53,7 @@ export function KickerValuePanel({ leagueId }: { leagueId: string }) {
       className="rounded-[13px] border border-white/[0.07] bg-[#0d1020] p-[13px]"
       data-testid="kicker-value-panel"
     >
-      <div className="mb-2.5 font-mono text-[9px] font-bold uppercase tracking-[0.14em] text-[#5d648a]">
+      <div className="mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#5d648a]">
         Kicker value
       </div>
 
@@ -61,7 +61,7 @@ export function KickerValuePanel({ leagueId }: { leagueId: string }) {
         <div className="font-mono text-[17px] font-black text-[#eef0fa]">
           {data.value.toLocaleString()}
         </div>
-        <div className="font-mono text-[9px] font-bold uppercase tracking-[0.1em] text-[#5d648a]">
+        <div className="font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-[#5d648a]">
           any kicker · replacement about K{data.replacementRank}
         </div>
       </div>

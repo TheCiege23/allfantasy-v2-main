@@ -31,12 +31,12 @@ function EvidenceChips({ evidence }: { evidence: RivalryEvidence[] }) {
         <span
           key={i}
           className={cx(
-            'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border text-[8px] font-medium',
+            'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md border text-[11px] font-medium',
             EVIDENCE_CHIP_COLORS[e.type] || 'bg-white/5 text-white/40 border-white/10'
           )}
           title={e.detail}
         >
-          <span className="text-[7px]">{EVIDENCE_ICONS[e.type] || '\u{1F4CC}'}</span>
+          <span className="text-[11px]">{EVIDENCE_ICONS[e.type] || '\u{1F4CC}'}</span>
           {e.label}
         </span>
       ))}
@@ -71,7 +71,7 @@ function ScoreBadge({ score, label, color }: { score: number; label: string; col
         <div className={cx('text-base font-black tabular-nums', color || autoColor)}>{score}</div>
         {score >= 70 && <div className={cx('absolute inset-0 rounded-full blur-md opacity-30', score >= 70 ? 'bg-red-500' : '')} />}
       </div>
-      <div className="text-[7px] text-white/25 uppercase tracking-wider font-semibold">{label}</div>
+      <div className="text-[11px] text-white/25 uppercase tracking-wider font-semibold">{label}</div>
     </div>
   )
 }
@@ -79,7 +79,7 @@ function ScoreBadge({ score, label, color }: { score: number; label: string; col
 function NeonVs() {
   return (
     <div className="flex flex-col items-center px-3 py-1">
-      <div className="text-[10px] font-black bg-gradient-to-b from-red-500 to-orange-500 bg-clip-text text-transparent uppercase tracking-wider animate-rival-pulse">VS</div>
+      <div className="text-[11px] font-black bg-gradient-to-b from-red-500 to-orange-500 bg-clip-text text-transparent uppercase tracking-wider animate-rival-pulse">VS</div>
       <div className="w-px h-3 bg-gradient-to-b from-red-500/40 to-transparent mt-0.5" />
     </div>
   )
@@ -92,14 +92,14 @@ function VsBlock({ pair, compact }: { pair: RivalryPair; compact?: boolean }) {
         <Avatar src={pair.team1.avatar} name={pair.team1.displayName} size={compact ? 28 : 36} />
         <div className="min-w-0">
           <div className={cx('font-bold text-white truncate', compact ? 'text-xs' : 'text-sm')}>{pair.team1.displayName}</div>
-          <div className="text-[10px] text-white/35 tabular-nums">{pair.team1.wins}-{pair.team1.losses}</div>
+          <div className="text-[11px] text-white/35 tabular-nums">{pair.team1.wins}-{pair.team1.losses}</div>
         </div>
       </div>
       <NeonVs />
       <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
         <div className="min-w-0 text-right">
           <div className={cx('font-bold text-white truncate', compact ? 'text-xs' : 'text-sm')}>{pair.team2.displayName}</div>
-          <div className="text-[10px] text-white/35 tabular-nums">{pair.team2.wins}-{pair.team2.losses}</div>
+          <div className="text-[11px] text-white/35 tabular-nums">{pair.team2.wins}-{pair.team2.losses}</div>
         </div>
         <Avatar src={pair.team2.avatar} name={pair.team2.displayName} size={compact ? 28 : 36} />
       </div>
@@ -130,11 +130,11 @@ function RivalryOfTheWeekCard({ pair, narrative }: { pair: RivalryPair; narrativ
         <VsBlock pair={pair} />
 
         <div className="flex items-center justify-center gap-3">
-          <span className="text-[9px] text-white/20 tabular-nums">H2H: {pair.h2hRecord.wins1}-{pair.h2hRecord.wins2}</span>
+          <span className="text-[11px] text-white/20 tabular-nums">H2H: {pair.h2hRecord.wins1}-{pair.h2hRecord.wins2}</span>
           {pair.tradeFriction > 0 && (
             <>
               <span className="w-0.5 h-0.5 rounded-full bg-white/15" />
-              <span className="text-[9px] text-white/20 tabular-nums">{pair.tradeFriction} trade{pair.tradeFriction > 1 ? 's' : ''} between</span>
+              <span className="text-[11px] text-white/20 tabular-nums">{pair.tradeFriction} trade{pair.tradeFriction > 1 ? 's' : ''} between</span>
             </>
           )}
         </div>
@@ -156,7 +156,7 @@ function RivalryOfTheWeekCard({ pair, narrative }: { pair: RivalryPair; narrativ
 
           {pair.lastMatchup && (
             <div className="rounded-xl glass-card p-3">
-              <div className="text-[8px] text-white/25 uppercase tracking-wider font-semibold mb-1.5">Last Meeting (Week {pair.lastMatchup.week})</div>
+              <div className="text-[11px] text-white/25 uppercase tracking-wider font-semibold mb-1.5">Last Meeting (Week {pair.lastMatchup.week})</div>
               <div className="flex items-center justify-between text-xs">
                 <span className={cx('font-bold tabular-nums', pair.lastMatchup.winner === pair.team1.rosterId ? 'text-emerald-400' : 'text-white/40')}>
                   {pair.lastMatchup.pts1.toFixed(1)} pts
@@ -170,7 +170,7 @@ function RivalryOfTheWeekCard({ pair, narrative }: { pair: RivalryPair; narrativ
           )}
 
           {pair.streakHolder && (
-            <div className="text-[10px] text-amber-400/50 text-center flex items-center justify-center gap-1.5">
+            <div className="text-[11px] text-amber-400/50 text-center flex items-center justify-center gap-1.5">
               <span className="animate-rival-pulse">{'\u{1F525}'}</span>
               {pair.streakHolder.rosterId === pair.team1.rosterId ? pair.team1.displayName : pair.team2.displayName} on a {pair.streakHolder.streak}-game win streak
             </div>
@@ -198,12 +198,12 @@ function RevengeGameCard({ pair, narrative }: { pair: RivalryPair; narrative?: s
           <Avatar src={loser.avatar} name={loser.displayName} size={36} />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-bold text-white truncate">{loser.displayName}</div>
-            <div className="text-[10px] text-red-400/60 font-medium">seeking revenge vs {winner.displayName}</div>
+            <div className="text-[11px] text-red-400/60 font-medium">seeking revenge vs {winner.displayName}</div>
           </div>
         </div>
 
         {pair.lastMatchup && (
-          <div className="rounded-xl glass-card p-2.5 text-[10px]">
+          <div className="rounded-xl glass-card p-2.5 text-[11px]">
             <span className="text-white/25 font-medium">Lost Week {pair.lastMatchup.week}: </span>
             <span className="text-red-400/70 font-bold tabular-nums">
               {pair.lastMatchup.winner === pair.team1.rosterId ? pair.lastMatchup.pts2.toFixed(1) : pair.lastMatchup.pts1.toFixed(1)}
@@ -216,7 +216,7 @@ function RevengeGameCard({ pair, narrative }: { pair: RivalryPair; narrative?: s
         )}
 
         {pair.streakHolder && pair.streakHolder.rosterId !== loser.rosterId && (
-          <div className="text-[10px] text-red-400/40 text-center font-medium">
+          <div className="text-[11px] text-red-400/40 text-center font-medium">
             {winner.displayName} has won {pair.streakHolder.streak} straight meetings
           </div>
         )}
@@ -246,7 +246,7 @@ function TradeTensionCard({ data, narrative }: { data: NonNullable<RivalryWeekDa
             <span className="text-lg">{'\u{1F4CA}'}</span>
             <span className="text-xs font-black text-purple-400/90 uppercase tracking-wider">Trade Tension</span>
           </div>
-          <span className={cx('text-[9px] font-black px-2.5 py-1 rounded-full border',
+          <span className={cx('text-[11px] font-black px-2.5 py-1 rounded-full border',
             tensionScore >= 70 ? 'bg-red-500/10 text-red-400 border-red-500/20'
             : tensionScore >= 40 ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
             : 'bg-blue-500/10 text-blue-400 border-blue-500/20'
@@ -254,7 +254,7 @@ function TradeTensionCard({ data, narrative }: { data: NonNullable<RivalryWeekDa
         </div>
 
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-[10px]">
+          <div className="flex items-center justify-between text-[11px]">
             <span className="text-white/30 font-medium">Tension Level</span>
             <span className="text-white/60 font-black tabular-nums animate-score-glow">{tensionScore}/100</span>
           </div>
@@ -268,11 +268,11 @@ function TradeTensionCard({ data, narrative }: { data: NonNullable<RivalryWeekDa
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-xl glass-card p-2.5 text-center">
             <div className="text-base font-black text-purple-400 tabular-nums animate-score-glow">{tradeCount}</div>
-            <div className="text-[7px] text-white/20 uppercase tracking-wider font-semibold">Trades Between</div>
+            <div className="text-[11px] text-white/20 uppercase tracking-wider font-semibold">Trades Between</div>
           </div>
           <div className="rounded-xl glass-card p-2.5 text-center">
             <div className="text-base font-black text-purple-400 tabular-nums">{pair.h2hRecord.wins1 + pair.h2hRecord.wins2}</div>
-            <div className="text-[7px] text-white/20 uppercase tracking-wider font-semibold">H2H Meetings</div>
+            <div className="text-[11px] text-white/20 uppercase tracking-wider font-semibold">H2H Meetings</div>
           </div>
         </div>
 
@@ -302,7 +302,7 @@ export default function RivalryWeekCards({ data, narratives }: { data: RivalryWe
           <span className="animate-rival-pulse">{'\u{1F3C6}'}</span>
           <span>Rivalry <span className="bg-gradient-to-r from-amber-400 to-red-400 bg-clip-text text-transparent">Week Mode</span></span>
         </h3>
-        <p className="text-[10px] text-white/30 font-medium">AI-generated weekly narrative cards from your league data</p>
+        <p className="text-[11px] text-white/30 font-medium">AI-generated weekly narrative cards from your league data</p>
       </div>
 
       <div className="grid gap-4">
@@ -322,7 +322,7 @@ export default function RivalryWeekCards({ data, narratives }: { data: RivalryWe
 
       {data.topRivalries.length > 1 && (
         <div className="rounded-xl glass-card p-3 space-y-2 animate-slide-up" style={{ animationDelay: '200ms' }}>
-          <div className="text-[9px] font-bold text-white/25 uppercase tracking-widest">Top Rivalries Ranked</div>
+          <div className="text-[11px] font-bold text-white/25 uppercase tracking-widest">Top Rivalries Ranked</div>
           {data.topRivalries.map((r, i) => (
             <div key={`${r.team1.rosterId}-${r.team2.rosterId}`} className="flex items-center gap-3 py-1.5">
               <span className={cx('text-xs font-black w-5 text-center tabular-nums',
@@ -331,15 +331,15 @@ export default function RivalryWeekCards({ data, narratives }: { data: RivalryWe
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <Avatar src={r.team1.avatar} name={r.team1.displayName} size={20} />
-                  <span className="text-[10px] text-white/45 truncate font-medium">{r.team1.displayName}</span>
-                  <span className="text-[7px] text-white/15 font-bold">VS</span>
-                  <span className="text-[10px] text-white/45 truncate font-medium">{r.team2.displayName}</span>
+                  <span className="text-[11px] text-white/45 truncate font-medium">{r.team1.displayName}</span>
+                  <span className="text-[11px] text-white/15 font-bold">VS</span>
+                  <span className="text-[11px] text-white/45 truncate font-medium">{r.team2.displayName}</span>
                   <Avatar src={r.team2.avatar} name={r.team2.displayName} size={20} />
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[9px] text-white/20 tabular-nums">{r.h2hRecord.wins1}-{r.h2hRecord.wins2}</span>
-                <span className={cx('text-[10px] font-black tabular-nums px-2 py-0.5 rounded-full',
+                <span className="text-[11px] text-white/20 tabular-nums">{r.h2hRecord.wins1}-{r.h2hRecord.wins2}</span>
+                <span className={cx('text-[11px] font-black tabular-nums px-2 py-0.5 rounded-full',
                   i === 0 ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-white/[0.03] text-white/30'
                 )}>{r.totalScore}</span>
               </div>

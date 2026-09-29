@@ -534,7 +534,7 @@ export default function TradeFinderClient({ initialLeagues, sleeperUserId }: { i
                             {trade.whyThisExists?.length > 0 && (
                               <div className="flex flex-wrap gap-1.5 mt-1.5">
                                 {trade.whyThisExists.map((tag: string, ti: number) => (
-                                  <span key={ti} className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950/50 text-cyan-400/80 border border-cyan-800/30">{tag}</span>
+                                  <span key={ti} className="text-[11px] px-1.5 py-0.5 rounded bg-cyan-950/50 text-cyan-400/80 border border-cyan-800/30">{tag}</span>
                                 ))}
                               </div>
                             )}
@@ -551,7 +551,7 @@ export default function TradeFinderClient({ initialLeagues, sleeperUserId }: { i
                                 { label: 'Roster Fit', value: trade.scoreBreakdown.rosterFit },
                               ].map(({ label, value }) => (
                                 <div key={label} className="flex items-center justify-between">
-                                  <span className="text-[10px] text-gray-500">{label}</span>
+                                  <span className="text-[11px] text-gray-500">{label}</span>
                                   <div className="flex items-center gap-1.5">
                                     <div className="w-12 h-1.5 rounded-full bg-gray-800 overflow-hidden">
                                       <div
@@ -559,7 +559,7 @@ export default function TradeFinderClient({ initialLeagues, sleeperUserId }: { i
                                         style={{ width: `${Math.min(100, value)}%` }}
                                       />
                                     </div>
-                                    <span className="text-[10px] text-gray-400 w-5 text-right">{value}</span>
+                                    <span className="text-[11px] text-gray-400 w-5 text-right">{value}</span>
                                   </div>
                                 </div>
                               ))}

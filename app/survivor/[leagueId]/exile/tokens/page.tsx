@@ -57,7 +57,7 @@ export default function SurvivorExileTokensPage() {
                 <span className={`font-mono text-[11px] ${e.tone}`}>{e.icon}</span>
                 <div>
                   <p className="text-white/80">{e.label}</p>
-                  <p className="text-[10px] text-white/35">Week {e.week}</p>
+                  <p className="text-[11px] text-white/35">Week {e.week}</p>
                 </div>
               </li>
             ))}

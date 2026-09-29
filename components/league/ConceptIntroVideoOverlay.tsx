@@ -95,7 +95,7 @@ export function ConceptIntroVideoOverlay({
             data-testid="concept-intro-video"
           />
         )}
-        <p className="pt-2 text-center text-[10px] text-white/45">
+        <p className="pt-2 text-center text-[11px] text-white/45">
           This intro plays once. Skip or replay it from League Home.
         </p>
       </div>

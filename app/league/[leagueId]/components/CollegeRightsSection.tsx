@@ -16,8 +16,8 @@ export function CollegeRightsSection({ rights }: { rights: CollegeRightsViewMode
       data-testid="team-tab-college-rights-section"
     >
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-wide text-secondary">{rights.heading}</p>
-        <span className="rounded-full border border-subtle px-2 py-0.5 text-[10px] text-muted">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-secondary">{rights.heading}</p>
+        <span className="rounded-full border border-subtle px-2 py-0.5 text-[11px] text-muted">
           {rights.scoringNote}
         </span>
         <div className="h-px flex-1 bg-subtle" />
@@ -41,7 +41,7 @@ export function CollegeRightsSection({ rights }: { rights: CollegeRightsViewMode
                 <p className="italic text-muted">College player record unavailable</p>
               )}
             </div>
-            <span className="shrink-0 rounded-full border border-subtle px-2 py-0.5 text-[10px] text-secondary">
+            <span className="shrink-0 rounded-full border border-subtle px-2 py-0.5 text-[11px] text-secondary">
               {entry.stateLabel}
             </span>
           </li>

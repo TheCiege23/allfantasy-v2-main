@@ -1244,7 +1244,7 @@ export default function WaiverWirePage({
                   key={`dropped-${t.id}`}
                   className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-white/90"
                 >
-                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-amber-400/60 text-[10px] text-amber-300">
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-amber-400/60 text-[11px] text-amber-300">
                     -
                   </span>
                   <span>Drop {t.dropPlayerId}</span>
@@ -1315,7 +1315,7 @@ export default function WaiverWirePage({
                         className="flex flex-col gap-1 rounded-lg border border-red-500/30 bg-red-500/5 px-3 py-2 text-white/90 sm:flex-row sm:items-start sm:justify-between"
                       >
                         <div className="flex min-w-0 items-start gap-2">
-                          <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-red-400/60 text-[10px] leading-none text-red-300">
+                          <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-red-400/60 text-[11px] leading-none text-red-300">
                             !
                           </span>
                           <div className="min-w-0">
@@ -1328,7 +1328,7 @@ export default function WaiverWirePage({
                               <div className="mt-1 text-[11px] text-white/50">{c.resultMessage}</div>
                             )}
                             {oc && (
-                              <span className="mt-1 inline-block rounded bg-white/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-white/45">
+                              <span className="mt-1 inline-block rounded bg-white/10 px-1.5 py-0.5 text-[11px] uppercase tracking-wide text-white/45">
                                 {oc.replace(/_/g, " ")}
                               </span>
                             )}

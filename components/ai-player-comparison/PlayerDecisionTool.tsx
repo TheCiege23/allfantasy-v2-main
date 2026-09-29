@@ -119,7 +119,7 @@ export function PlayerDecisionTool() {
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6">
       <header className="space-y-2">
-        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
+        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-cyan-200">
           <Sparkles className="h-3.5 w-3.5" aria-hidden />
           AI Start A vs B
         </div>
@@ -274,7 +274,7 @@ export function PlayerDecisionTool() {
                 : 'border-emerald-400/35 bg-emerald-500/10'
             )}
           >
-            <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/50">Verdict</p>
+            <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-white/50">Verdict</p>
             <p className="mt-1 text-lg font-semibold text-white">{data.verdict}</p>
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <span className="rounded-full border border-white/15 bg-black/25 px-3 py-1 text-xs text-white/80">
@@ -303,7 +303,7 @@ export function PlayerDecisionTool() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-white/45">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-white/45">
                       {i === 0 ? 'Player A' : 'Player B'}
                     </p>
                     <p className="text-lg font-semibold text-white">{p.name}</p>
@@ -312,7 +312,7 @@ export function PlayerDecisionTool() {
                     </p>
                   </div>
                   {data.recommendedPlayer === p.name && (
-                    <span className="rounded-md border border-cyan-400/40 bg-black/30 px-2 py-0.5 text-[10px] font-semibold uppercase text-cyan-200">
+                    <span className="rounded-md border border-cyan-400/40 bg-black/30 px-2 py-0.5 text-[11px] font-semibold uppercase text-cyan-200">
                       Lean
                     </span>
                   )}
@@ -422,7 +422,7 @@ export function PlayerDecisionTool() {
                   </ul>
                 </>
               )}
-              <p className="mt-3 text-[10px] text-white/40">Sources: {data.dataSources.join(', ')}</p>
+              <p className="mt-3 text-[11px] text-white/40">Sources: {data.dataSources.join(', ')}</p>
             </div>
           )}
         </section>

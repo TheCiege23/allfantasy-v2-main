@@ -575,7 +575,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               data-testid={`players-tab-toggle-${key}`}
             >
               <span
-                className={`flex h-3.5 w-3.5 items-center justify-center rounded border text-[9px] ${
+                className={`flex h-3.5 w-3.5 items-center justify-center rounded border text-[11px] ${
                   on ? 'border-[#ff3d81] bg-[#ff3d81] text-black' : 'border-white/25'
                 }`}
               >
@@ -594,7 +594,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             <SlidersHorizontal className="h-4 w-4" />
           </button>
         </div>
-        <p className="text-[10px] text-white/35">
+        <p className="text-[11px] text-white/35">
           Showing top <span className="text-white/55">100</span> by projected points for this filter.{' '}
           {freeAgents ? 'Free agents are not on any roster in this league (when available).' : null}{' '}
           {normalizedPlayerSurfaceEnabled
@@ -607,7 +607,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
         </p>
 
         <div className="rounded-xl border border-white/[0.08] bg-[#0a1228]/40 p-3">
-          <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/45">Start A vs B</p>
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/45">Start A vs B</p>
           <StartVsComparisonLauncher
             leagueId={league.id}
             sport={resolvedSport}
@@ -632,7 +632,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto px-5 pb-6">
         <div className="min-w-[960px]">
           <div className="sticky top-0 z-[1] border-b border-white/[0.07] bg-[#07071a]">
-            <div className="flex py-1 text-[9px] font-semibold uppercase tracking-wide text-white/35">
+            <div className="flex py-1 text-[11px] font-semibold uppercase tracking-wide text-white/35">
               <div className="w-8 shrink-0" />
               <div className="w-[200px] shrink-0">Player</div>
               <div className="w-14 shrink-0 text-right text-[#ff9ec0]/90">PTS</div>
@@ -640,7 +640,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               <div className="w-[160px] shrink-0 text-center">Receiving</div>
               <div className="min-w-0 flex-1 text-center">Passing</div>
             </div>
-            <div className="flex border-t border-white/[0.04] py-1.5 text-[8px] font-semibold uppercase tracking-wide text-white/25">
+            <div className="flex border-t border-white/[0.04] py-1.5 text-[11px] font-semibold uppercase tracking-wide text-white/25">
               <div className="w-8 shrink-0" />
               <div className="w-[200px] shrink-0" />
               <div className="w-14 shrink-0 text-right">Fantasy</div>
@@ -711,7 +711,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                     <button
                       type="button"
                       onClick={() => toggleWatchPlayer(p.id)}
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] transition ${
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] transition ${
                         wlIds.has(p.id)
                           ? 'border-[#ff3d81]/50 bg-[#ff3d81]/20 text-[#ffb8d1]'
                           : 'border-white/20 text-white/60 hover:border-[#ff3d81]/40'
@@ -751,8 +751,8 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                             />
                           ) : null}
                         </p>
-                        <p className="flex flex-wrap items-center gap-1 text-[10px] text-white/40">
-                          <span className="rounded border border-white/15 bg-white/5 px-1 text-[9px] font-semibold text-white/60">
+                        <p className="flex flex-wrap items-center gap-1 text-[11px] text-white/40">
+                          <span className="rounded border border-white/15 bg-white/5 px-1 text-[11px] font-semibold text-white/60">
                             {badgePosition(p)}
                           </span>
                           {p.team && p.team !== 'FA' ? (
@@ -817,7 +817,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   )
 }
 
-const dash = 'text-[10px] text-white/40 tabular-nums'
+const dash = 'text-[11px] text-white/40 tabular-nums'
 
 function RushStatRow({ stats }: { stats: RollingInsightsTableStats | null }) {
   const s = stats

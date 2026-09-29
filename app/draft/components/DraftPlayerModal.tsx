@@ -129,7 +129,7 @@ export function DraftPlayerModal({ open, playerId, sport, onClose }: Props) {
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-[10px] text-white/30">—</div>
+                <div className="flex h-full w-full items-center justify-center text-[11px] text-white/30">—</div>
               )}
             </div>
             <div className="min-w-0">
@@ -138,7 +138,7 @@ export function DraftPlayerModal({ open, playerId, sport, onClose }: Props) {
                 <p className="text-[12px] text-white/55">
                   {p.position ?? '—'} · {p.team ?? 'FA'}
                   {p.injuryStatus ? (
-                    <span className="ml-2 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-200">
+                    <span className="ml-2 rounded-full bg-rose-500/15 px-2 py-0.5 text-[11px] font-bold uppercase text-rose-200">
                       {p.injuryStatus}
                     </span>
                   ) : null}
@@ -158,7 +158,7 @@ export function DraftPlayerModal({ open, playerId, sport, onClose }: Props) {
 
         <div className="grid gap-4 p-5 md:grid-cols-[1fr_1fr]">
           <section>
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-white/45">Profile</h3>
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-white/45">Profile</h3>
             {loading ? (
               <p className="mt-2 text-[11px] text-white/40">Loading profile…</p>
             ) : error ? (
@@ -181,7 +181,7 @@ export function DraftPlayerModal({ open, playerId, sport, onClose }: Props) {
           </section>
 
           <section>
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-white/45">Latest news</h3>
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-white/45">Latest news</h3>
             {loading ? (
               <p className="mt-2 text-[11px] text-white/40">Loading news…</p>
             ) : data?.news.length ? (
@@ -189,18 +189,18 @@ export function DraftPlayerModal({ open, playerId, sport, onClose }: Props) {
                 {data.news.map((n) => (
                   <li key={n.id} className="rounded-lg border border-white/[0.07] bg-black/25 px-2.5 py-2">
                     <p className="text-[11px] font-semibold text-white">{n.title}</p>
-                    <p className="text-[9px] uppercase tracking-wider text-white/40">
+                    <p className="text-[11px] uppercase tracking-wider text-white/40">
                       {formatDate(n.publishedAt)} · {n.source}
                     </p>
                     {n.content ? (
-                      <p className="mt-1 line-clamp-3 text-[10px] leading-snug text-white/65">{n.content}</p>
+                      <p className="mt-1 line-clamp-3 text-[11px] leading-snug text-white/65">{n.content}</p>
                     ) : null}
                     {n.sourceUrl ? (
                       <a
                         href={n.sourceUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="mt-1 inline-block text-[10px] text-cyan-300/85 hover:text-cyan-200"
+                        className="mt-1 inline-block text-[11px] text-cyan-300/85 hover:text-cyan-200"
                       >
                         Read source →
                       </a>
@@ -214,7 +214,7 @@ export function DraftPlayerModal({ open, playerId, sport, onClose }: Props) {
           </section>
 
           <section className="md:col-span-2">
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-white/45">Injury history</h3>
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-white/45">Injury history</h3>
             {data?.injuries.length ? (
               <ul className="mt-2 space-y-1.5">
                 {data.injuries.map((i, idx) => (
@@ -225,7 +225,7 @@ export function DraftPlayerModal({ open, playerId, sport, onClose }: Props) {
                     <span className="font-semibold text-white">{i.status ?? '—'}</span>
                     <span className="text-white/55">{i.type ?? ''}</span>
                     {i.description ? <span className="text-white/45">— {i.description}</span> : null}
-                    <span className="ml-auto text-[10px] text-white/35">{formatDate(i.date)} · {i.source}</span>
+                    <span className="ml-auto text-[11px] text-white/35">{formatDate(i.date)} · {i.source}</span>
                   </li>
                 ))}
               </ul>
@@ -235,7 +235,7 @@ export function DraftPlayerModal({ open, playerId, sport, onClose }: Props) {
           </section>
 
           {data?.sources ? (
-            <p className="md:col-span-2 text-center text-[9px] text-white/25">
+            <p className="md:col-span-2 text-center text-[11px] text-white/25">
               Sources: profile {data.sources.profile ?? '—'} · news {data.sources.news ?? '—'} · injuries{' '}
               {data.sources.injuries ?? '—'}
             </p>
@@ -249,7 +249,7 @@ export function DraftPlayerModal({ open, playerId, sport, onClose }: Props) {
 function Cell({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <dt className="text-[9px] uppercase tracking-wider text-white/40">{label}</dt>
+      <dt className="text-[11px] uppercase tracking-wider text-white/40">{label}</dt>
       <dd className="text-[12px] font-semibold text-white">{value}</dd>
     </div>
   )

@@ -20,7 +20,7 @@ export function DraftBoard({
 
   return (
     <div className="overflow-x-auto rounded-2xl border border-white/[0.08] bg-[#040915]/95" data-testid="draft-board-grid">
-      <table className="w-full min-w-[640px] border-collapse text-[10px]">
+      <table className="w-full min-w-[640px] border-collapse text-[11px]">
         <thead>
           <tr className="border-b border-white/[0.08] text-white/45">
             <th className="sticky left-0 bg-[#040915] px-2 py-2 text-left font-semibold">Rnd</th>
@@ -42,7 +42,7 @@ export function DraftBoard({
                   const pick = byRoundSlot.get(`${round}:${slot}`)
                   return (
                     <td key={slot} className="px-1 py-1 align-top">
-                      <div className="min-h-[36px] rounded-lg border border-white/[0.06] bg-white/[0.03] px-1 py-1 text-[9px] leading-tight text-white/85">
+                      <div className="min-h-[36px] rounded-lg border border-white/[0.06] bg-white/[0.03] px-1 py-1 text-[11px] leading-tight text-white/85">
                         {pick ? (
                           <>
                             <div className="truncate font-semibold">{pick.playerName}</div>

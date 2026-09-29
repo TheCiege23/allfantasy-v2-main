@@ -252,7 +252,7 @@ export default function RankingsClient({ leagues, isSignedIn }: RankingsClientPr
                       initial={{ width: 0 }}
                       animate={{ width: `${pct}%` }}
                       transition={{ delay: 0.3 + i * 0.08, duration: 0.6, ease: 'easeOut' }}
-                      className="h-full flex items-center justify-center text-[10px] sm:text-xs font-mono text-white/90 relative group cursor-default transition-all hover:brightness-125"
+                      className="h-full flex items-center justify-center text-[11px] sm:text-xs font-mono text-white/90 relative group cursor-default transition-all hover:brightness-125"
                       style={{ background: barColors[i % barColors.length] }}
                       title={`${team.teamName} — ${team.pointsFor.toFixed(1)} pts (${pct.toFixed(1)}%)`}
                     >
@@ -263,7 +263,7 @@ export default function RankingsClient({ leagues, isSignedIn }: RankingsClientPr
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 sm:mt-4">
                 {displayTeams.slice(0, 8).map((team, i) => (
-                  <div key={team.id} className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-white/50">
+                  <div key={team.id} className="flex items-center gap-1.5 text-[11px] sm:text-[11px] text-white/50">
                     <span
                       className="w-2.5 h-2.5 rounded-sm"
                       style={{ background: barColors[i % barColors.length].replace('linear-gradient(90deg, ', '').split(',')[0] }}
@@ -335,7 +335,7 @@ export default function RankingsClient({ leagues, isSignedIn }: RankingsClientPr
                               <div className="flex items-center gap-2">
                                 <span className="font-medium">{team.teamName}</span>
                                 <span className={cn(
-                                  'text-[8px] px-1.5 py-0.5 rounded-full shrink-0 hidden sm:inline-block',
+                                  'text-[11px] px-1.5 py-0.5 rounded-full shrink-0 hidden sm:inline-block',
                                   score !== null && score > 90 ? 'tier-contender' :
                                   score !== null && score > 80 ? 'tier-frisky' :
                                   score !== null && score > 65 ? 'tier-midpack' :
@@ -434,7 +434,7 @@ export default function RankingsClient({ leagues, isSignedIn }: RankingsClientPr
                     <span>{team.teamName}</span>
                     <div className="flex items-center gap-2">
                       <Badge className={cn(
-                        'border-transparent px-3 py-1 text-[10px]',
+                        'border-transparent px-3 py-1 text-[11px]',
                         (team.aiPowerScore ?? 0) > 90 ? 'tier-contender' :
                         (team.aiPowerScore ?? 0) > 80 ? 'tier-frisky' :
                         (team.aiPowerScore ?? 0) > 65 ? 'tier-midpack' :
@@ -685,28 +685,28 @@ export default function RankingsClient({ leagues, isSignedIn }: RankingsClientPr
               <div className="text-3xl sm:text-4xl font-bold text-amber-400">
                 {displayTeams.filter(t => (t.aiPowerScore ?? 0) > 90).length}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider mt-1">Contenders</div>
+              <div className="text-[11px] sm:text-xs text-gray-400 uppercase tracking-wider mt-1">Contenders</div>
             </div>
             <div className="w-px bg-gray-800" />
             <div>
               <div className="text-3xl sm:text-4xl font-bold text-orange-400">
                 {displayTeams.filter(t => { const s = t.aiPowerScore ?? 0; return s > 80 && s <= 90; }).length}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider mt-1">Frisky</div>
+              <div className="text-[11px] sm:text-xs text-gray-400 uppercase tracking-wider mt-1">Frisky</div>
             </div>
             <div className="w-px bg-gray-800" />
             <div>
               <div className="text-3xl sm:text-4xl font-bold text-sky-400">
                 {displayTeams.filter(t => { const s = t.aiPowerScore ?? 0; return s > 65 && s <= 80; }).length}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider mt-1">Mid-Pack</div>
+              <div className="text-[11px] sm:text-xs text-gray-400 uppercase tracking-wider mt-1">Mid-Pack</div>
             </div>
             <div className="w-px bg-gray-800" />
             <div>
               <div className="text-3xl sm:text-4xl font-bold text-red-400">
                 {displayTeams.filter(t => (t.aiPowerScore ?? 0) <= 65).length}
               </div>
-              <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider mt-1">Rebuilding</div>
+              <div className="text-[11px] sm:text-xs text-gray-400 uppercase tracking-wider mt-1">Rebuilding</div>
             </div>
           </motion.div>
         )}

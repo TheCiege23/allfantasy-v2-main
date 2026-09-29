@@ -80,7 +80,7 @@ export function HeadToHeadCard({ leagueId, entryId }: Props) {
       </div>
       <div className="grid grid-cols-2 gap-3 text-[11px] text-white/80">
         <div>
-          <div className="text-[10px] text-white/60">{t("bracket.social.h2h.you")}</div>
+          <div className="text-[11px] text-white/60">{t("bracket.social.h2h.you")}</div>
           <div className="font-semibold text-white">
             {entryA.name || t("bracket.social.h2h.you")}
           </div>
@@ -100,7 +100,7 @@ export function HeadToHeadCard({ leagueId, entryId }: Props) {
           </div>
         </div>
         <div>
-          <div className="text-[10px] text-white/60">
+          <div className="text-[11px] text-white/60">
             {t("bracket.social.h2h.leader")}
           </div>
           <div className="font-semibold text-white">

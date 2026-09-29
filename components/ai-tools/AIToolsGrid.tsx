@@ -637,46 +637,46 @@ export function AIToolsGrid({
       <div className="flex flex-wrap items-center gap-2">
         {resolvedLeague ? (
           <span
-            className="inline-flex max-w-full items-center truncate rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-100/95"
+            className="inline-flex max-w-full items-center truncate rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-semibold text-cyan-100/95"
             title={resolvedLeague.name}
           >
             {tInterpolate('dashboard.aiTools.contextLeagueMode', { name: resolvedLeague.name })}
           </span>
         ) : (
-          <span className="inline-flex rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-medium text-white/55">
+          <span className="inline-flex rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-medium text-white/55">
             {t('dashboard.aiTools.contextGlobalMode')}
           </span>
         )}
         <span
-          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-[#0a1220] px-2 py-1 text-[10px] text-white/65"
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-[#0a1220] px-2 py-1 text-[11px] text-white/65"
           title={t('dashboard.aiTools.chipSportsHint')}
         >
           <span className={`inline-block h-1.5 w-1.5 rounded-full ${chipTone(sportsConn)}`} aria-hidden />
           {t('dashboard.aiTools.chipSports')}
         </span>
         <span
-          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-[#0a1220] px-2 py-1 text-[10px] text-white/65"
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-[#0a1220] px-2 py-1 text-[11px] text-white/65"
           title={t('dashboard.aiTools.chipNewsHint')}
         >
           <span className={`inline-block h-1.5 w-1.5 rounded-full ${chipTone(newsConn)}`} aria-hidden />
           {t('dashboard.aiTools.chipNews')}
         </span>
         <span
-          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-[#0a1220] px-2 py-1 text-[10px] text-white/65"
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-[#0a1220] px-2 py-1 text-[11px] text-white/65"
           title={t('dashboard.aiTools.chipAiHint')}
         >
           <span className={`inline-block h-1.5 w-1.5 rounded-full ${chipTone(aiConn)}`} aria-hidden />
           {t('dashboard.aiTools.chipAi')}
         </span>
         <span
-          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-[#0a1220] px-2 py-1 text-[10px] text-white/65"
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-[#0a1220] px-2 py-1 text-[11px] text-white/65"
           title={t('dashboard.aiTools.chipRollingHint')}
         >
           <span className={`inline-block h-1.5 w-1.5 rounded-full ${chipTone(rollingConn)}`} aria-hidden />
           {t('dashboard.aiTools.chipRolling')}
         </span>
         <span
-          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-[#0a1220] px-2 py-1 text-[10px] text-white/65"
+          className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.07] bg-[#0a1220] px-2 py-1 text-[11px] text-white/65"
           title={t('dashboard.aiTools.chipClearSportsHint')}
         >
           <span className={`inline-block h-1.5 w-1.5 rounded-full ${chipTone(clearConn)}`} aria-hidden />

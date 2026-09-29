@@ -148,30 +148,30 @@ export function MatchupPrepMiniCard({
             <p className="text-[11px] text-[#7a8199]">
               <span className="text-white/80">vs {data.oppTeamName ?? 'Opponent'}</span>
               {data.degraded ? (
-                <span className="ml-1.5 rounded border border-amber-500/30 px-1 text-[9px] font-bold uppercase text-amber-200/90">
+                <span className="ml-1.5 rounded border border-amber-500/30 px-1 text-[11px] font-bold uppercase text-amber-200/90">
                   Partial
                 </span>
               ) : (
-                <span className="ml-1.5 rounded border border-emerald-500/25 px-1 text-[9px] font-bold uppercase text-emerald-200/85">
+                <span className="ml-1.5 rounded border border-emerald-500/25 px-1 text-[11px] font-bold uppercase text-emerald-200/85">
                   Live
                 </span>
               )}
             </p>
             <div className="mt-2 flex flex-wrap items-end justify-between gap-2">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-sky-300/80">Proj. edge</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-sky-300/80">Proj. edge</p>
                 <p className="text-[26px] font-black tabular-nums leading-none text-white/95">
                   {edge != null ? `${edge > 0 ? '+' : ''}${edge.toFixed(1)}` : '—'}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-[10px] uppercase text-[#5c6480]">Win chance</p>
+                <p className="text-[11px] uppercase text-[#5c6480]">Win chance</p>
                 <p className="text-[22px] font-black tabular-nums text-emerald-200/90">
                   {win != null ? `${win}%` : '—'}
                 </p>
               </div>
             </div>
-            <p className="mt-2 text-[10px] text-[#5c6480]">Updated {new Date(data.computedAt).toLocaleString()}</p>
+            <p className="mt-2 text-[11px] text-[#5c6480]">Updated {new Date(data.computedAt).toLocaleString()}</p>
           </>
         ) : (
           <p className="text-[12px] text-[#8b93ab]">Select a league above.</p>

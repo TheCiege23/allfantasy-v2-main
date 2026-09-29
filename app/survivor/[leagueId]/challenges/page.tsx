@@ -58,15 +58,15 @@ export default function SurvivorChallengesPage() {
         className="survivor-panel border-l-4 border-[var(--survivor-torch)] p-4 md:p-6"
         style={{ borderLeftColor: 'var(--survivor-torch)' }}
       >
-        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-torch)]">Active challenge</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--survivor-torch)]">Active challenge</p>
         {ch ? (
           <>
             <h1 className="mt-2 text-xl font-bold text-white md:text-2xl">{ch.title ?? 'Island challenge'}</h1>
             <div className="mt-2 flex flex-wrap gap-2">
-              <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white/70">
+              <span className="rounded-full bg-white/10 px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-white/70">
                 {(ch.scope ?? 'tribe').replace(/_/g, ' ')}
               </span>
-              <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${stateChip.cls}`}>
+              <span className={`rounded-full px-2 py-1 text-[11px] font-bold uppercase ${stateChip.cls}`}>
                 {stateChip.label}
               </span>
             </div>

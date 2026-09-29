@@ -142,7 +142,7 @@ function TeamLogoOrFallback({
   return (
     <span
       data-testid={`${testIdBase}-fallback`}
-      className={`inline-flex items-center justify-center rounded border border-white/15 bg-[#141e35] text-[9px] font-bold text-white/90 flex-shrink-0 shadow-sm ${className}`}
+      className={`inline-flex items-center justify-center rounded border border-white/15 bg-[#141e35] text-[11px] font-bold text-white/90 flex-shrink-0 shadow-sm ${className}`}
       style={{ width: size, height: size }}
     >
       {teamAbbr ? teamAbbr.slice(0, 3).toUpperCase() : '—'}
@@ -324,24 +324,24 @@ function DraftPlayerCardInner({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="truncate text-[15px] font-bold tracking-tight text-white/98">{displayName}</p>
-              <span className="rounded-md border border-cyan-300/30 bg-cyan-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-cyan-100">
+              <span className="rounded-md border border-cyan-300/30 bg-cyan-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-cyan-100">
                 {position}
               </span>
-              <span className="rounded-md border border-white/18 bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-white/90">
+              <span className="rounded-md border border-white/18 bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/90">
                 {teamAbbr ?? 'FA'}
               </span>
               {showRookieBadge ? (
-                <span className="rounded-md border border-lime-300/40 bg-lime-500/18 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-lime-100">
+                <span className="rounded-md border border-lime-300/40 bg-lime-500/18 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-lime-100">
                   Rookie
                 </span>
               ) : null}
               {devyLabel && (
-                <span className="rounded bg-violet-500/25 px-1.5 py-0.5 text-[10px] font-medium text-violet-200" title="Devy / college">
+                <span className="rounded bg-violet-500/25 px-1.5 py-0.5 text-[11px] font-medium text-violet-200" title="Devy / college">
                   {devyLabel}
                 </span>
               )}
               {showPromoted && (
-                <span className="rounded bg-emerald-500/25 px-1.5 py-0.5 text-[10px] font-medium text-emerald-200" title="Promoted to NFL">
+                <span className="rounded bg-emerald-500/25 px-1.5 py-0.5 text-[11px] font-medium text-emerald-200" title="Promoted to NFL">
                   Promoted
                 </span>
               )}
@@ -350,7 +350,7 @@ function DraftPlayerCardInner({
               {[adpMetricLabel, formatAdpDisplay(normalized.adp), 'Bye', formatBye(normalized.byeWeek)].join(' · ')}
             </p>
             {injuryStatus ? (
-              <span className="mt-1 inline-flex max-w-full truncate rounded-md border border-rose-400/35 bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-rose-100">
+              <span className="mt-1 inline-flex max-w-full truncate rounded-md border border-rose-400/35 bg-rose-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-rose-100">
                 {injuryStatus}
               </span>
             ) : null}
@@ -422,68 +422,68 @@ function DraftPlayerCardInner({
             {displayName}
           </p>
           {rs && (
-            <span className="shrink-0 rounded-md border border-white/15 bg-black/35 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-100/90">
+            <span className="shrink-0 rounded-md border border-white/15 bg-black/35 px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-cyan-100/90">
               {position}
             </span>
           )}
           {!rs ? (
-            <span className="shrink-0 rounded-md border border-cyan-300/30 bg-cyan-500/12 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-cyan-100/90">
+            <span className="shrink-0 rounded-md border border-cyan-300/30 bg-cyan-500/12 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-cyan-100/90">
               {position}
             </span>
           ) : null}
-          <span className="shrink-0 rounded-md border border-white/16 bg-white/[0.06] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-white/88">
+          <span className="shrink-0 rounded-md border border-white/16 bg-white/[0.06] px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/88">
             {teamAbbr ?? 'FA'}
           </span>
           {showRookieBadge ? (
-            <span className="shrink-0 rounded-md border border-lime-300/35 bg-lime-500/18 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-lime-100">
+            <span className="shrink-0 rounded-md border border-lime-300/35 bg-lime-500/18 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-lime-100">
               Rookie
             </span>
           ) : null}
           {isQueued && (
             <span
-              className="shrink-0 rounded-full border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-100"
+              className="shrink-0 rounded-full border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-100"
               title="On your queue"
             >
               Queued
             </span>
           )}
           {showProBadge && (
-            <span className="rounded bg-gradient-to-r from-cyan-500/40 to-cyan-400/25 px-1 py-0.5 text-[9px] font-medium text-cyan-100 shrink-0 border border-cyan-400/40 shadow-sm shadow-cyan-500/15" title="Pro / NFL">
+            <span className="rounded bg-gradient-to-r from-cyan-500/40 to-cyan-400/25 px-1 py-0.5 text-[11px] font-medium text-cyan-100 shrink-0 border border-cyan-400/40 shadow-sm shadow-cyan-500/15" title="Pro / NFL">
               Pro
             </span>
           )}
           {showCollegeBadge && devyLabel && (
-            <span className="rounded bg-violet-500/25 px-1 py-0.5 text-[9px] font-medium text-violet-200 shrink-0" title="College / devy">
+            <span className="rounded bg-violet-500/25 px-1 py-0.5 text-[11px] font-medium text-violet-200 shrink-0" title="College / devy">
               {devyLabel}
             </span>
           )}
           {resolvedDraftGrade && (
-            <span className="rounded bg-amber-500/20 px-1 py-0.5 text-[9px] font-medium text-amber-100 shrink-0" title="Draft grade">
+            <span className="rounded bg-amber-500/20 px-1 py-0.5 text-[11px] font-medium text-amber-100 shrink-0" title="Draft grade">
               {resolvedDraftGrade}
             </span>
           )}
           {showPromoted && (
-            <span className="rounded bg-emerald-500/25 px-1 py-0.5 text-[9px] font-medium text-emerald-200 shrink-0" title="Promoted to NFL">
+            <span className="rounded bg-emerald-500/25 px-1 py-0.5 text-[11px] font-medium text-emerald-200 shrink-0" title="Promoted to NFL">
               Promoted
             </span>
           )}
           {aiWarRoomBadge === 'ai_pick' && (
-            <span className="rounded bg-emerald-500/30 px-1 py-0.5 text-[9px] font-semibold text-emerald-100 shrink-0" title="AI recommendation">
+            <span className="rounded bg-emerald-500/30 px-1 py-0.5 text-[11px] font-semibold text-emerald-100 shrink-0" title="AI recommendation">
               AI Pick
             </span>
           )}
           {aiWarRoomBadge === 'value' && (
-            <span className="rounded bg-amber-500/28 px-1 py-0.5 text-[9px] font-semibold text-amber-100 shrink-0" title="Strong value">
+            <span className="rounded bg-amber-500/28 px-1 py-0.5 text-[11px] font-semibold text-amber-100 shrink-0" title="Strong value">
               Great Value
             </span>
           )}
           {aiWarRoomBadge === 'risky' && (
-            <span className="rounded bg-rose-500/30 px-1 py-0.5 text-[9px] font-semibold text-rose-100 shrink-0" title="Elevated risk">
+            <span className="rounded bg-rose-500/30 px-1 py-0.5 text-[11px] font-semibold text-rose-100 shrink-0" title="Elevated risk">
               Risky
             </span>
           )}
         </div>
-        <p className={`${rs ? 'text-[11px] text-white/75' : 'text-[10px] text-cyan-100/75'}`}>
+        <p className={`${rs ? 'text-[11px] text-white/75' : 'text-[11px] text-cyan-100/75'}`}>
           <span className="font-medium text-white/88">{teamAbbr ?? '—'}</span>
           {!rs ? ` · ${position}` : ''}
           {resolvedClassYearLabel ? ` · ${resolvedClassYearLabel}` : ''}
@@ -492,7 +492,7 @@ function DraftPlayerCardInner({
         {injuryStatus ? (
           <span
             data-testid={testId ? `${testId}-injury-status` : 'draft-player-injury-status'}
-            className={`mt-0.5 inline-block max-w-full truncate rounded border px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+            className={`mt-0.5 inline-block max-w-full truncate rounded border px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
               rs ? 'border-rose-400/35 bg-rose-500/15 text-rose-100' : 'border-rose-400/25 bg-rose-500/10 text-rose-100/90'
             }`}
           >
@@ -501,7 +501,7 @@ function DraftPlayerCardInner({
         ) : null}
         <p
           data-testid={testId ? `${testId}-stats-summary` : 'draft-player-stats-summary'}
-          className={`truncate ${rs ? 'mt-1 text-[10px] text-emerald-100/80' : 'text-[10px] text-cyan-100/55'}`}
+          className={`truncate ${rs ? 'mt-1 text-[11px] text-emerald-100/80' : 'text-[11px] text-cyan-100/55'}`}
           title={statLine}
         >
           {statLine}
@@ -510,7 +510,7 @@ function DraftPlayerCardInner({
         display?.stats?.secondaryStatLabel != null &&
         display.stats.secondaryStatValue != null ? (
           <p
-            className="text-[10px] text-emerald-200/75 truncate"
+            className="text-[11px] text-emerald-200/75 truncate"
             title={`${display.stats.secondaryStatLabel} ${display.stats.secondaryStatValue}`}
           >
             {display.stats.secondaryStatLabel} {display.stats.secondaryStatValue}
@@ -524,10 +524,10 @@ function DraftPlayerCardInner({
         onKeyDown={(event) => event.stopPropagation()}
       >
         <div
-          className={`text-right text-[10px] tabular-nums font-semibold ${rs ? 'rounded-lg border border-white/10 bg-black/25 px-1.5 py-1 text-cyan-50' : 'text-cyan-100'}`}
+          className={`text-right text-[11px] tabular-nums font-semibold ${rs ? 'rounded-lg border border-white/10 bg-black/25 px-1.5 py-1 text-cyan-50' : 'text-cyan-100'}`}
         >
           <div>
-            <span className={rs ? 'text-[9px] font-medium text-white/45' : ''}>{adpMetricLabel}</span>{' '}
+            <span className={rs ? 'text-[11px] font-medium text-white/45' : ''}>{adpMetricLabel}</span>{' '}
             <span
               className="text-cyan-300"
               data-testid={testId ? `${testId}-adp` : 'draft-player-adp'}
@@ -550,7 +550,7 @@ function DraftPlayerCardInner({
       </div>
       {showNflKickerSplits && nflDraftProjectionSplits?.kicking ? (
         <div className="border-t border-white/[0.06] pt-1.5 pl-2 sm:pl-[52px]">
-          <p className="text-[10px] tabular-nums text-emerald-100/75">
+          <p className="text-[11px] tabular-nums text-emerald-100/75">
             FG {formatNflStatCell(nflDraftProjectionSplits.kicking.fg)} · XP{' '}
             {formatNflStatCell(nflDraftProjectionSplits.kicking.xpt)}
           </p>

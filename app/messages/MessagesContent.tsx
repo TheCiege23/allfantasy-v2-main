@@ -903,7 +903,7 @@ export default function MessagesContent() {
                   Blocked users {blockedUsers.length > 0 ? `(${blockedUsers.length})` : ""}
                 </button>
                 {blockedVisibilityNotice && (
-                  <p className="text-[10px]" style={{ color: "var(--muted)" }}>
+                  <p className="text-[11px]" style={{ color: "var(--muted)" }}>
                     {blockedVisibilityNotice}
                   </p>
                 )}
@@ -949,20 +949,20 @@ export default function MessagesContent() {
                             <span className="truncate">{getConversationDisplayTitle(t)}</span>
                             {((t.context || {}) as Record<string, unknown>).verifiedBadge === true && (
                               <span
-                                className="shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] uppercase tracking-wide"
+                                className="shrink-0 rounded-full border px-1.5 py-0.5 text-[11px] uppercase tracking-wide"
                                 style={{ borderColor: "var(--border)", color: "var(--accent-cyan-strong)" }}
                               >
                                 Verified
                               </span>
                             )}
                           </p>
-                          <p className="truncate text-[10px]" style={{ color: "var(--muted)" }}>
+                          <p className="truncate text-[11px]" style={{ color: "var(--muted)" }}>
                             {getConversationPreview(t)}
                           </p>
                         </div>
                         {hasUnread(t) && (
                           <span
-                            className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                            className="shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium"
                             style={{ background: "var(--accent-cyan-strong)", color: "var(--on-accent-bg)" }}
                           >
                             {getUnreadBadgeLabel(getUnreadCount(t))}
@@ -993,14 +993,14 @@ export default function MessagesContent() {
                     </span>
                     {selectedThreadContext.verifiedBadge === true && (
                       <span
-                        className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide"
+                        className="rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-wide"
                         style={{ borderColor: "var(--border)", color: "var(--accent-cyan-strong)" }}
                       >
                         Verified
                       </span>
                     )}
                     {selectedThreadArchived && (
-                      <span className="text-[10px]" style={{ color: "var(--muted)" }}>
+                      <span className="text-[11px]" style={{ color: "var(--muted)" }}>
                         Archived
                       </span>
                     )}
@@ -1198,7 +1198,7 @@ export default function MessagesContent() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
                                   <span className="font-medium text-xs">{m.senderName}</span>
-                                  <span className="text-[10px] mode-muted">
+                                  <span className="text-[11px] mode-muted">
                                     {formatInTimezone(m.createdAt, { hour: "numeric", minute: "2-digit" })}
                                   </span>
                                   <div className="ml-auto">
@@ -1398,7 +1398,7 @@ export default function MessagesContent() {
                         className="absolute bottom-full left-3 right-12 mb-1 rounded-xl border shadow-lg z-10 max-h-48 overflow-y-auto"
                         style={{ background: "var(--panel)", borderColor: "var(--border)" }}
                       >
-                        <p className="px-2 py-1 text-[10px] uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+                        <p className="px-2 py-1 text-[11px] uppercase tracking-wider" style={{ color: "var(--muted)" }}>
                           Mention
                         </p>
                         {mentionSuggestions.map((m, i) => {

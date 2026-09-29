@@ -94,17 +94,17 @@ function BracketScoreCard({
       <div className="flex-1 min-w-0">
         <div className="text-sm font-semibold text-white truncate">{name}</div>
         {row.entryName !== name && (
-          <div className="text-[10px] text-white/30 truncate">{row.entryName}</div>
+          <div className="text-[11px] text-white/30 truncate">{row.entryName}</div>
         )}
       </div>
 
       <div className="flex items-center gap-0 flex-shrink-0">
         {ROUND_HEADERS.map((rh) => (
           <div key={rh.round} className="w-7 text-center">
-            <div className="text-[9px] font-bold text-white/30 tabular-nums">
+            <div className="text-[11px] font-bold text-white/30 tabular-nums">
               {rh.icon ? "" : ROUND_MAX[rh.round]}
             </div>
-            <div className={`text-[10px] font-bold tabular-nums ${(roundCorrect[rh.round] ?? 0) > 0 ? "text-white" : "text-white/15"}`}>
+            <div className={`text-[11px] font-bold tabular-nums ${(roundCorrect[rh.round] ?? 0) > 0 ? "text-white" : "text-white/15"}`}>
               {roundCorrect[rh.round] ?? 0}
             </div>
           </div>

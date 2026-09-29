@@ -52,7 +52,7 @@ export default function PlayerBadge({
   const teamLogo = resolveTeamLogo(media, team)
 
   const sizeMap = {
-    sm: { img: 24, text: 'text-xs', gap: 'gap-1.5', pill: 'text-[10px] px-1 py-0' },
+    sm: { img: 24, text: 'text-xs', gap: 'gap-1.5', pill: 'text-[11px] px-1 py-0' },
     md: { img: 32, text: 'text-sm', gap: 'gap-2', pill: 'text-[11px] px-1.5 py-0.5' },
     lg: { img: 40, text: 'text-base', gap: 'gap-2.5', pill: 'text-xs px-2 py-0.5' },
   }
@@ -145,11 +145,11 @@ export function PlayerBadgeInline({ name, sleeperId, position, team, media }: Pl
       ) : null}
       <span className="text-white">{name}</span>
       {position && (
-        <span className={`text-[10px] px-1 rounded border font-medium ${POS_COLORS[(position || '').toUpperCase()] || 'bg-white/10 text-white/50 border-white/20'}`}>
+        <span className={`text-[11px] px-1 rounded border font-medium ${POS_COLORS[(position || '').toUpperCase()] || 'bg-white/10 text-white/50 border-white/20'}`}>
           {position}
         </span>
       )}
-      {team && <span className="text-white/40 text-[10px]">{team}</span>}
+      {team && <span className="text-white/40 text-[11px]">{team}</span>}
     </span>
   )
 }

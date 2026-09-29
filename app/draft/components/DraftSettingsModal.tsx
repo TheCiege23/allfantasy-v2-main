@@ -119,10 +119,10 @@ export function DraftSettingsModal({ open, onClose, roomId, inviteCode, onStart 
           </label>
           {inviteUrl ? (
             <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-3">
-              <p className="text-[10px] text-white/45">{t('draftRoom.settingsModal.inviteLink')}</p>
+              <p className="text-[11px] text-white/45">{t('draftRoom.settingsModal.inviteLink')}</p>
               <p className="break-all text-[11px] text-cyan-300/90">{inviteUrl}</p>
               {inviteCode ? (
-                <p className="mt-1 text-[10px] text-white/40">
+                <p className="mt-1 text-[11px] text-white/40">
                   {t('draftRoom.settingsModal.code')} {inviteCode}
                 </p>
               ) : null}

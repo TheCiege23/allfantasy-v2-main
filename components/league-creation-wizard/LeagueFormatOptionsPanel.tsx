@@ -395,7 +395,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
                     data-testid={`wizard-zombie-tier-${tier}`}
                   >
                     <div className="text-[11px] font-bold text-[#d4fcca]">{meta.title}</div>
-                    <p className="mt-1 text-[10px] text-white/45 leading-snug">{meta.description}</p>
+                    <p className="mt-1 text-[11px] text-white/45 leading-snug">{meta.description}</p>
                   </button>
                 )
               })}
@@ -420,7 +420,7 @@ export function LeagueFormatOptionsPanel({ sport, leagueType, value, onChange }:
               </SelectContent>
             </Select>
           </div>
-          <p className="text-[10px] text-white/40">
+          <p className="text-[11px] text-white/40">
             Draft format on the previous step is limited to <span className="text-white/60">Snake</span>. Long pick windows
             are controlled with draft timers — there is no separate &quot;slow draft&quot; type.
           </p>

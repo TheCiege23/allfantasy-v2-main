@@ -50,7 +50,7 @@ function TierRing({ tier, label }: { tier: number; label: string }) {
       <div className={`w-10 h-10 rounded-full border-2 border-current flex items-center justify-center text-xs font-bold ${tierColor(tier)}`}>
         {tier}
       </div>
-      <span className="text-[10px] text-zinc-500 uppercase tracking-wide">{label}</span>
+      <span className="text-[11px] text-zinc-500 uppercase tracking-wide">{label}</span>
     </div>
   )
 }
@@ -59,7 +59,7 @@ function ScoreBar({ score, label, maxLabel }: { score: number; label: string; ma
   const color = score >= 70 ? 'bg-emerald-500' : score >= 45 ? 'bg-amber-500' : 'bg-red-500'
   return (
     <div className="space-y-0.5">
-      <div className="flex justify-between text-[10px]">
+      <div className="flex justify-between text-[11px]">
         <span className="text-zinc-500">{label}</span>
         <span className="text-zinc-400">{score}/100 {maxLabel ?? ''}</span>
       </div>
@@ -115,15 +115,15 @@ export default function PlayerOutlookCard({
                 {o.trend.toUpperCase()} {o.trendStrength > 0 ? `(${o.trendStrength})` : ''}
               </span>
               {/* Format fit */}
-              <span className="text-[10px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
+              <span className="text-[11px] text-zinc-500 bg-zinc-800 px-1.5 py-0.5 rounded">
                 {o.bestFormatFit}
               </span>
               {/* Risk */}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded ${riskColors(o.riskLevel)}`}>
+              <span className={`text-[11px] px-1.5 py-0.5 rounded ${riskColors(o.riskLevel)}`}>
                 {o.riskLevel} risk
               </span>
               {/* Confidence */}
-              <span className="text-[10px] text-zinc-500">
+              <span className="text-[11px] text-zinc-500">
                 {o.confidencePct}% conf
               </span>
             </div>
@@ -144,7 +144,7 @@ export default function PlayerOutlookCard({
         {o.tags.length > 0 && (
           <div className="flex gap-1 mt-1.5 flex-wrap">
             {o.tags.slice(0, 5).map(tag => (
-              <span key={tag} className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
+              <span key={tag} className="text-[11px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700">
                 {tag.replace(/_/g, ' ')}
               </span>
             ))}
@@ -153,7 +153,7 @@ export default function PlayerOutlookCard({
 
         {/* Expand indicator */}
         {!compact && (
-          <span className="text-[10px] text-zinc-600 mt-1 block">
+          <span className="text-[11px] text-zinc-600 mt-1 block">
             {expanded ? '▲ Collapse' : '▼ Expand details'}
           </span>
         )}
@@ -177,7 +177,7 @@ export default function PlayerOutlookCard({
             ].map(({ tier, label }) => (
               <div key={label} className={`rounded-lg p-2 border ${tierBg(tier)}`}>
                 <div className={`text-lg font-bold ${tierColor(tier)}`}>{tier}</div>
-                <div className="text-[10px] text-zinc-500">{label}: {TIER_LABELS[tier]}</div>
+                <div className="text-[11px] text-zinc-500">{label}: {TIER_LABELS[tier]}</div>
               </div>
             ))}
           </div>
@@ -185,11 +185,11 @@ export default function PlayerOutlookCard({
           {/* Bullish / Bearish */}
           <div className="grid grid-cols-2 gap-2">
             <div className="bg-emerald-500/5 border border-emerald-500/15 rounded-lg p-2">
-              <span className="text-[10px] text-emerald-500 uppercase font-medium block mb-0.5">Bullish</span>
+              <span className="text-[11px] text-emerald-500 uppercase font-medium block mb-0.5">Bullish</span>
               <p className="text-xs text-zinc-400">{o.bullishCase}</p>
             </div>
             <div className="bg-red-500/5 border border-red-500/15 rounded-lg p-2">
-              <span className="text-[10px] text-red-500 uppercase font-medium block mb-0.5">Bearish</span>
+              <span className="text-[11px] text-red-500 uppercase font-medium block mb-0.5">Bearish</span>
               <p className="text-xs text-zinc-400">{o.bearishCase}</p>
             </div>
           </div>
@@ -197,14 +197,14 @@ export default function PlayerOutlookCard({
           {/* AI Narrative */}
           {showNarrative && o.narrative && (
             <div className="bg-zinc-800/50 rounded-lg p-3">
-              <span className="text-[10px] text-zinc-500 uppercase block mb-1">AI Analysis</span>
+              <span className="text-[11px] text-zinc-500 uppercase block mb-1">AI Analysis</span>
               <p className="text-sm text-zinc-300 leading-relaxed">{o.narrative}</p>
             </div>
           )}
 
           {/* Trend summary */}
           <div>
-            <span className="text-[10px] text-zinc-500 uppercase block mb-0.5">Recent Trend</span>
+            <span className="text-[11px] text-zinc-500 uppercase block mb-0.5">Recent Trend</span>
             <p className="text-xs text-zinc-400">{o.recentTrendSummary}</p>
           </div>
 
@@ -212,7 +212,7 @@ export default function PlayerOutlookCard({
           {o.riskFlags.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {o.riskFlags.map(flag => (
-                <span key={flag} className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
+                <span key={flag} className="text-[11px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">
                   {flag.replace(/_/g, ' ')}
                 </span>
               ))}
@@ -228,7 +228,7 @@ export default function PlayerOutlookCard({
           </div>
 
           {/* Sources + freshness */}
-          <div className="flex justify-between text-[10px] text-zinc-600">
+          <div className="flex justify-between text-[11px] text-zinc-600">
             <span>Sources: {o.sourcesUsed.join(', ')}</span>
             <span>{o.fromCache ? `Cached (${o.cacheAge}s ago)` : 'Fresh'}</span>
           </div>

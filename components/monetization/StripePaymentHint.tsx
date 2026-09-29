@@ -5,7 +5,7 @@
  */
 export function StripePaymentHint({ className = "" }: { className?: string }) {
   return (
-    <p className={`text-[10px] leading-relaxed text-white/45 ${className}`}>
+    <p className={`text-[11px] leading-relaxed text-white/45 ${className}`}>
       <span className="font-semibold text-white/60">Secure checkout with Stripe.</span> You’ll finish payment on
       Stripe’s hosted page.{" "}
       <a

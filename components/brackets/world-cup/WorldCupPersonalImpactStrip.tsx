@@ -111,12 +111,12 @@ export default function WorldCupPersonalImpactStrip({
           >
             <div className="min-w-0">
               <p className="truncate text-xs font-bold text-white/90">{stake.label}</p>
-              <p className="mt-0.5 text-[10px] text-white/50">
+              <p className="mt-0.5 text-[11px] text-white/50">
                 Root for{" "}
                 <span className="font-semibold text-white/75">{stake.rootFor}</span>
               </p>
             </div>
-            <span className="shrink-0 rounded-full border border-amber-300/30 bg-amber-400/[0.08] px-2 py-0.5 text-[10px] font-black text-amber-200/90">
+            <span className="shrink-0 rounded-full border border-amber-300/30 bg-amber-400/[0.08] px-2 py-0.5 text-[11px] font-black text-amber-200/90">
               {stake.pointsAtStake} pts at stake
             </span>
           </li>

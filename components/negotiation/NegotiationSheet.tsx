@@ -425,7 +425,7 @@ function TabButton({ active, onClick, label, count }: { active: boolean; onClick
     >
       <span>{label}</span>
       {typeof count === 'number' && count > 0 && (
-        <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+        <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${
           active ? 'bg-zinc-200 text-zinc-700' : 'bg-white/10 text-white/40'
         }`}>
           {count}

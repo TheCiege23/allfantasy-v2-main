@@ -137,7 +137,7 @@ export function LeagueDramaWidget({
           <select
             value={sport}
             onChange={(e) => setSport(e.target.value)}
-            className="rounded border border-white/20 bg-black/40 px-1.5 py-0.5 text-[10px] text-white"
+            className="rounded border border-white/20 bg-black/40 px-1.5 py-0.5 text-[11px] text-white"
             aria-label="Drama widget sport filter"
           >
             {DRAMA_SPORTS.map((s) => (
@@ -147,7 +147,7 @@ export function LeagueDramaWidget({
           <select
             value={season ?? ''}
             onChange={(e) => setSeason(e.target.value ? parseInt(e.target.value, 10) : null)}
-            className="rounded border border-white/20 bg-black/40 px-1.5 py-0.5 text-[10px] text-white"
+            className="rounded border border-white/20 bg-black/40 px-1.5 py-0.5 text-[11px] text-white"
             aria-label="Drama widget season filter"
           >
             <option value="">All</option>
@@ -158,7 +158,7 @@ export function LeagueDramaWidget({
           <select
             value={dramaTypeFilter}
             onChange={(e) => setDramaTypeFilter(e.target.value)}
-            className="rounded border border-white/20 bg-black/40 px-1.5 py-0.5 text-[10px] text-white"
+            className="rounded border border-white/20 bg-black/40 px-1.5 py-0.5 text-[11px] text-white"
             aria-label="Drama widget type filter"
           >
             <option value="ALL">All types</option>
@@ -171,7 +171,7 @@ export function LeagueDramaWidget({
             type="button"
             onClick={runEngine}
             disabled={running}
-            className="rounded border border-amber-500/30 px-2 py-1 text-[10px] text-amber-200 hover:bg-amber-500/15 disabled:opacity-50"
+            className="rounded border border-amber-500/30 px-2 py-1 text-[11px] text-amber-200 hover:bg-amber-500/15 disabled:opacity-50"
           >
             {running ? 'Running…' : 'Refresh'}
           </button>
@@ -179,13 +179,13 @@ export function LeagueDramaWidget({
             type="button"
             onClick={load}
             disabled={loading}
-            className="rounded border border-white/20 px-2 py-1 text-[10px] text-white/70 hover:bg-white/10"
+            className="rounded border border-white/20 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
           >
             Reload
           </button>
           <Link
             href={`/app/league/${encodeURIComponent(leagueId)}/drama`}
-            className="rounded border border-white/20 px-2 py-1 text-[10px] text-white/70 hover:bg-white/10"
+            className="rounded border border-white/20 px-2 py-1 text-[11px] text-white/70 hover:bg-white/10"
           >
             Timeline
           </Link>
@@ -201,17 +201,17 @@ export function LeagueDramaWidget({
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-white/90 truncate">{e.headline}</p>
-                {e.summary && <p className="text-[10px] text-white/50 mt-0.5 line-clamp-2">{e.summary}</p>}
+                {e.summary && <p className="text-[11px] text-white/50 mt-0.5 line-clamp-2">{e.summary}</p>}
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200">{e.dramaType}</span>
-                  <span className="text-[9px] text-white/40">Score: {e.dramaScore.toFixed(0)}</span>
+                  <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200">{e.dramaType}</span>
+                  <span className="text-[11px] text-white/40">Score: {e.dramaScore.toFixed(0)}</span>
                 </div>
               </div>
               <div className="shrink-0 flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => tellStory(e.id)}
-                  className="flex items-center gap-0.5 rounded border border-cyan-500/25 px-1.5 py-0.5 text-[9px] text-cyan-200 hover:bg-cyan-500/15"
+                  className="flex items-center gap-0.5 rounded border border-cyan-500/25 px-1.5 py-0.5 text-[11px] text-cyan-200 hover:bg-cyan-500/15"
                   title="Tell me the story"
                 >
                   <BookOpen className="h-3 w-3" />
@@ -219,7 +219,7 @@ export function LeagueDramaWidget({
                 </button>
                 <Link
                   href={`/app/league/${leagueId}/drama/${e.id}`}
-                  className="flex items-center gap-0.5 rounded border border-white/20 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/10"
+                  className="flex items-center gap-0.5 rounded border border-white/20 px-1.5 py-0.5 text-[11px] text-white/70 hover:bg-white/10"
                   title="View storyline"
                 >
                   <ExternalLink className="h-3 w-3" />
@@ -228,7 +228,7 @@ export function LeagueDramaWidget({
                 {e.dramaType === 'TRADE_FALLOUT' && (
                   <Link
                     href={`/league/${encodeURIComponent(leagueId)}?tab=Trades`}
-                    className="rounded border border-purple-500/25 px-1.5 py-0.5 text-[9px] text-purple-200 hover:bg-purple-500/10"
+                    className="rounded border border-purple-500/25 px-1.5 py-0.5 text-[11px] text-purple-200 hover:bg-purple-500/10"
                   >
                     Trade context
                   </Link>
@@ -236,10 +236,10 @@ export function LeagueDramaWidget({
               </div>
             </div>
             {storyEventId === e.id && storyLoading === e.id && (
-              <p className="mt-2 text-[10px] text-white/50 border-t border-white/10 pt-2">Loading story…</p>
+              <p className="mt-2 text-[11px] text-white/50 border-t border-white/10 pt-2">Loading story…</p>
             )}
             {storyEventId === e.id && storyNarrative && !storyLoading && (
-              <p className="mt-2 text-[10px] text-white/70 border-t border-white/10 pt-2">{storyNarrative}</p>
+              <p className="mt-2 text-[11px] text-white/70 border-t border-white/10 pt-2">{storyNarrative}</p>
             )}
           </li>
         ))}

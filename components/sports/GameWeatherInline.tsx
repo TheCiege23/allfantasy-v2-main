@@ -15,14 +15,14 @@ function weatherIcon(w: GameWeather) {
 export function GameWeatherInline({ weather }: { weather: GameWeather }) {
   if (weather.isDome) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-lg bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">
+      <span className="inline-flex items-center gap-1 rounded-lg bg-cyan-500/10 px-2 py-0.5 text-[11px] font-semibold text-cyan-300">
         <Home className="h-3 w-3" /> Dome
       </span>
     )
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/60">
+    <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/60">
       {weatherIcon(weather)}
       {weather.temp != null && <span>{Math.round(weather.temp)}°F</span>}
       {(weather.wind ?? 0) > 5 && <span className="text-white/40">{Math.round(weather.wind!)}mph</span>}

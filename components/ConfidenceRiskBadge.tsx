@@ -98,14 +98,14 @@ export default function ConfidenceRiskBadge({
     return (
       <div className="inline-flex items-center gap-1.5">
         <div
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${confColor.bg} ${confColor.border} border text-[10px] font-semibold ${confColor.text} cursor-help`}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${confColor.bg} ${confColor.border} border text-[11px] font-semibold ${confColor.text} cursor-help`}
           title={data.explanation}
         >
           <AFCrest className="h-2.5 w-2.5" />
           {data.confidence}
         </div>
         <div
-          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full ${volColor.bg} ${volColor.border} border text-[9px] font-medium ${volColor.text}`}
+          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full ${volColor.bg} ${volColor.border} border text-[11px] font-medium ${volColor.text}`}
         >
           {data.volatility === "High" ? <TrendingUp className="h-2.5 w-2.5" /> : data.volatility === "Low" ? <TrendingDown className="h-2.5 w-2.5" /> : null}
           {data.volatility}
@@ -115,8 +115,8 @@ export default function ConfidenceRiskBadge({
   }
 
   const sizeClasses = {
-    sm: { wrapper: "text-xs", score: "text-sm", pill: "px-2 py-0.5 text-[10px]", tag: "px-1.5 py-0.5 text-[9px]" },
-    md: { wrapper: "text-sm", score: "text-base", pill: "px-2.5 py-1 text-xs", tag: "px-2 py-0.5 text-[10px]" },
+    sm: { wrapper: "text-xs", score: "text-sm", pill: "px-2 py-0.5 text-[11px]", tag: "px-1.5 py-0.5 text-[11px]" },
+    md: { wrapper: "text-sm", score: "text-base", pill: "px-2.5 py-1 text-xs", tag: "px-2 py-0.5 text-[11px]" },
     lg: { wrapper: "text-base", score: "text-lg", pill: "px-3 py-1 text-sm", tag: "px-2 py-0.5 text-xs" },
   }[size]
 

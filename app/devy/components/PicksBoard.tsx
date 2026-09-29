@@ -75,7 +75,7 @@ export function PicksBoard({
                     onMouseLeave={() => setHover(null)}
                   >
                     {cell ? (
-                      <span className="text-[10px] text-white/70" title={hover === cell.id ? cell.id : undefined}>
+                      <span className="text-[11px] text-white/70" title={hover === cell.id ? cell.id : undefined}>
                         {cell.isUsed ? '✓' : '○'}
                       </span>
                     ) : (
@@ -88,7 +88,7 @@ export function PicksBoard({
           ))}
         </tbody>
       </table>
-      <p className="mt-2 text-[10px] text-white/40">Hover a cell for pick id. Empty = traded away.</p>
+      <p className="mt-2 text-[11px] text-white/40">Hover a cell for pick id. Empty = traded away.</p>
     </div>
   )
 }

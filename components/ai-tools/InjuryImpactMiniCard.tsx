@@ -156,31 +156,31 @@ export function InjuryImpactMiniCard({
             <p className="text-[11px] text-[#7a8199]">
               <span className="text-white/80">{data.leagueName || 'League'}</span>
               {data.degraded ? (
-                <span className="ml-1.5 rounded border border-amber-500/30 px-1 text-[9px] font-bold uppercase text-amber-200/90">
+                <span className="ml-1.5 rounded border border-amber-500/30 px-1 text-[11px] font-bold uppercase text-amber-200/90">
                   Partial
                 </span>
               ) : (
-                <span className="ml-1.5 rounded border border-emerald-500/25 px-1 text-[9px] font-bold uppercase text-emerald-200/85">
+                <span className="ml-1.5 rounded border border-emerald-500/25 px-1 text-[11px] font-bold uppercase text-emerald-200/85">
                   Live
                 </span>
               )}
             </p>
             <div className="mt-2 flex flex-wrap items-end justify-between gap-2">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-red-300/80">Availability risk</p>
+                <p className="text-[11px] font-bold uppercase tracking-wide text-red-300/80">Availability risk</p>
                 <p className="text-[26px] font-black tabular-nums leading-none text-white/95">
                   {riskPct != null ? `${riskPct}` : '—'}
                   <span className="text-[14px] font-bold text-white/50">/100</span>
                 </p>
               </div>
               <div className="max-w-[200px] text-right">
-                <p className="text-[10px] uppercase text-[#5c6480]">This week</p>
+                <p className="text-[11px] uppercase text-[#5c6480]">This week</p>
                 <p className="text-[12px] font-semibold leading-snug text-cyan-100/90">
                   {formatInjuryAvailabilitySummary(data.summaryCounts)}
                 </p>
               </div>
             </div>
-            <p className="mt-2 text-[10px] text-[#5c6480]">
+            <p className="mt-2 text-[11px] text-[#5c6480]">
               Updated {new Date(data.computedAt).toLocaleString()}
             </p>
           </>

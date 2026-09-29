@@ -129,7 +129,7 @@ function GifWithAttribution({
         href="https://giphy.com"
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-0.5 block text-right text-[8px] text-white/25 transition-colors hover:text-white/50"
+        className="mt-0.5 block text-right text-[11px] text-white/25 transition-colors hover:text-white/50"
       >
         GIPHY
       </a>
@@ -629,7 +629,7 @@ export function LeagueChatInPanel({
                       C
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="mb-0.5 text-[10px] font-semibold text-violet-200/90">🔒 Chimmy (private)</p>
+                      <p className="mb-0.5 text-[11px] font-semibold text-violet-200/90">🔒 Chimmy (private)</p>
                       <div className="max-w-[92%] whitespace-pre-wrap rounded-2xl rounded-tl-sm border border-violet-500/15 bg-violet-500/5 px-3 py-2 text-[13px] text-white/90">
                         {message.text}
                       </div>
@@ -657,7 +657,7 @@ export function LeagueChatInPanel({
                           ✦ {displayName}
                         </span>
                         {chimmyMomentLabel ? (
-                          <span className="ml-1.5 shrink-0 text-[10px] uppercase tracking-wide text-white/40">
+                          <span className="ml-1.5 shrink-0 text-[11px] uppercase tracking-wide text-white/40">
                             {chimmyMomentLabel}
                           </span>
                         ) : null}
@@ -708,16 +708,16 @@ export function LeagueChatInPanel({
                         }`}
                       >
                         {isCommissionerAnnouncement ? (
-                          <p className="mb-1 text-[10px] font-semibold text-amber-200/90">📣 Commissioner</p>
+                          <p className="mb-1 text-[11px] font-semibold text-amber-200/90">📣 Commissioner</p>
                         ) : null}
                         {isGlobalBroadcast ? (
-                          <p className="mb-1 text-[10px] font-semibold text-cyan-300/90">📡 Global Broadcast</p>
+                          <p className="mb-1 text-[11px] font-semibold text-cyan-300/90">📡 Global Broadcast</p>
                         ) : null}
                         {isAtAllSubtype ? (
-                          <p className="mb-1 text-[10px] font-semibold text-amber-200/80">📢 @all</p>
+                          <p className="mb-1 text-[11px] font-semibold text-amber-200/80">📢 @all</p>
                         ) : null}
                         {isPrivateToViewer ? (
-                          <p className="mb-1 text-[10px] text-violet-200/85">🔒 Only visible to you</p>
+                          <p className="mb-1 text-[11px] text-violet-200/85">🔒 Only visible to you</p>
                         ) : null}
                         {gifDisplay ? <GifWithAttribution gif={gifDisplay} /> : null}
                         {message.text ? <p className="leading-relaxed">{message.text}</p> : null}
@@ -769,16 +769,16 @@ export function LeagueChatInPanel({
                       }`}
                     >
                       {isCommissionerAnnouncement ? (
-                        <p className="mb-1 text-[10px] font-semibold text-amber-200/90">📣 Commissioner</p>
+                        <p className="mb-1 text-[11px] font-semibold text-amber-200/90">📣 Commissioner</p>
                       ) : null}
                       {isGlobalBroadcast ? (
-                        <p className="mb-1 text-[10px] font-semibold text-cyan-300/90">📡 Global Broadcast</p>
+                        <p className="mb-1 text-[11px] font-semibold text-cyan-300/90">📡 Global Broadcast</p>
                       ) : null}
                       {isAtAllSubtype ? (
-                        <p className="mb-1 text-[10px] font-semibold text-amber-200/80">📢 @all</p>
+                        <p className="mb-1 text-[11px] font-semibold text-amber-200/80">📢 @all</p>
                       ) : null}
                       {isPrivateToViewer ? (
-                        <p className="mb-1 text-[10px] text-violet-200/85">🔒 Only visible to you</p>
+                        <p className="mb-1 text-[11px] text-violet-200/85">🔒 Only visible to you</p>
                       ) : null}
                       {gifDisplay ? <GifWithAttribution gif={gifDisplay} /> : null}
                       {message.text ? <p className="leading-relaxed">{message.text}</p> : null}
