@@ -57,5 +57,14 @@ export async function releaseDeletedAccountLinks(tx: Prisma.TransactionClient, u
   const identities = await tx.platformIdentity.deleteMany({ where: { userId } })
   const teams = await tx.leagueTeam.updateMany({ where: { claimedByUserId: userId }, data: { claimedByUserId: null } })
   await tx.appUser.update({ where: { id: userId }, data: { legacyUserId: null } })
-  return { profiles: profile.count, platformIdentities: identities.count, teamsReleased: teams.count }
+  // Browser push subscriptions AND the iOS app's device tokens (same table): a deleted
+  // account must stop notifying the phone it was on. The row cascade only fires on a
+  // hard delete, and deletion here anonymizes the user row instead.
+  const pushDevices = await tx.webPushSubscription.deleteMany({ where: { userId } })
+  return {
+    profiles: profile.count,
+    platformIdentities: identities.count,
+    teamsReleased: teams.count,
+    pushDevices: pushDevices.count,
+  }
 }
