@@ -5,7 +5,8 @@
  *  - One SportsDataCache entry per sport: key = `player-valuations:{sport}`
  *  - Valuation is computed from Rolling Insights raw stats + injuries + ADP
  *  - Output is a normalized 0–10 000 value scale (matches FantasyCalc convention)
- *  - All consumers (AI, UI) read only from DB; the sync script populates the cache
+ *  - All consumers (AI, UI) read only from DB; `lib/player-valuation-sync.ts` populates the cache,
+ *    daily from `/api/cron/adp-refresh` and on demand via `npm run sync:player-valuations`
  */
 
 import { prisma } from '@/lib/prisma'
