@@ -263,6 +263,12 @@ function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) 
       <div className="af-mt-mu-pts af-num">
         {side.projected != null ? side.projected.toFixed(1) : '—'}
       </div>
+      {/* AllFantasy's own engine for the same lineup, beside the provider total. */}
+      {side.afProjected != null ? (
+        <div className="af-mt-mu-af af-num" title="AllFantasy engine projection, adjusted to this league's scoring">
+          AF {side.afProjected.toFixed(1)}
+        </div>
+      ) : null}
       {/*
         Coverage sits with the number, not in a footnote. A total built from
         five of nine starters always reads LOW, and a manager comparing two
@@ -886,7 +892,17 @@ export function MyTeam({ data }: MyTeamProps) {
                   <div className="af-mt-tile-value af-num">
                     {proj?.afTotal != null ? proj.afTotal.toFixed(1) : '—'}
                   </div>
-                  <div className="af-label">{bestBall ? 'Listed starters · your league' : 'Projected · your league'}</div>
+                  <div className="af-label">{bestBall ? 'Listed starters · API · your league' : 'Projected · API · your league'}</div>
+                </div>
+                {/*
+                  AllFantasy's own engine over the same starters — the second projection, at
+                  the same weight as the provider's so neither reads as the footnote.
+                */}
+                <div className="af-mt-tile af-mt-tile--proj af-mt-tile--af af-mt-tile--engine">
+                  <div className="af-mt-tile-value af-num">
+                    {proj?.afEngineTotal != null ? proj.afEngineTotal.toFixed(1) : '—'}
+                  </div>
+                  <div className="af-label">{bestBall ? 'Listed starters · AF · your league' : 'Projected · AF · your league'}</div>
                 </div>
               {/*
                 ⚠ WITHHELD WHEN IT IS NOT COMPARABLE. In an IDP league the

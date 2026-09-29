@@ -646,6 +646,10 @@
   color: var(--accent);
   font-size: 24px;
 }
+/* AllFantasy's own engine: same size as the provider total, its own colour. */
+.af-mt-tile--engine .af-mt-tile-value {
+  color: var(--text);
+}
 /* Standard is the comparison, and reads as one. */
 .af-mt-projgroup > .af-mt-tile--proj:not(.af-mt-tile--af) .af-mt-tile-value {
   font-size: 16px;
@@ -783,6 +787,13 @@
 .af-mt-mu-body > .af-mt-mu-side:last-child .af-mt-mu-pts {
   margin-left: 0;
   margin-right: auto;
+}
+/* AllFantasy's own engine total, under the provider's. */
+.af-mt-mu-af {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+  white-space: nowrap;
 }
 /* Quiet: it qualifies the number, it is not a warning about the opponent. */
 .af-mt-mu-cov {

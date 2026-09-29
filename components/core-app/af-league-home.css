@@ -769,6 +769,14 @@
   color: var(--muted);
   font-weight: 600;
 }
+/* AllFantasy's own engine total, under the provider's projected total. */
+.af-sb-af {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
 
 /*
  * Coverage keeps its own column so it can be present or absent without moving

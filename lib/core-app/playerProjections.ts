@@ -436,6 +436,38 @@ export function leagueScoredLineupTotal(
 }
 
 /**
+ * One lineup's AF-ENGINE total under this league's rules — the AllFantasy counterpart of
+ * `leagueScoredLineupTotal` above, over the same starters and the same provider rows.
+ *
+ * Each starter is `afEngineForLeague(engine, provider generic, provider league-scored)`: scaled
+ * by the provider line where one prices him, the engine's PPR number where none does. A starter
+ * the engine never wrote is skipped and not counted; null when the engine priced nobody.
+ */
+export function afEngineLineupTotal(
+  starterIds: readonly string[],
+  providers: ReadonlyMap<string, PlayerProjection>,
+  engine: ReadonlyMap<string, AfEngineProjection>,
+  scoringSettings: Record<string, unknown> | null,
+): { projected: number | null; projectedFrom: number } {
+  let total = 0
+  let from = 0
+  for (const id of starterIds) {
+    const row = engine.get(id)
+    if (!row) continue
+    const provider = providers.get(id)
+    const league =
+      scoringSettings && provider?.componentStats
+        ? computeLeagueProjectedPoints(provider.componentStats, scoringSettings)
+        : null
+    const v = afEngineForLeague(row.projectedPoints, provider?.projectedPoints ?? null, league?.points ?? null)
+    if (v == null) continue
+    total += v
+    from += 1
+  }
+  return { projected: from > 0 ? Math.round(total * 100) / 100 : null, projectedFrom: from }
+}
+
+/**
  * One lineup's league-scored total, summed from players the screen has ALREADY priced.
  *
  * 🛑 THE ONE SUM BEHIND BOTH OF MY TEAM'S "YOUR PROJECTED SCORE" NUMBERS. The header tile

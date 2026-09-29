@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { hasScoringRules } from '@/lib/projections/leagueScoring'
-import { leagueProjectionGap, leagueScoredLineupTotal, lookupProjections } from './playerProjections'
+import { afEngineLineupTotal, leagueProjectionGap, leagueScoredLineupTotal, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { buildRosterIdMap } from './rosterIdMatch'
 import { sleeperReadableRosters } from './rosterIdSpace'
 
@@ -36,6 +36,8 @@ export type ScoreboardTeam = {
   projected: number | null
   /** Starters the projection was built from, of how many. */
   projectedFrom: number
+  /** AllFantasy's own engine total for the same lineup, under this league's rules. Null when none priced. */
+  afProjected?: number | null
   starterCount: number
   /** True for the viewer's own team, so the row can be marked. */
   isYou: boolean
@@ -254,6 +256,12 @@ export async function getLeagueScoreboard(args: {
         scoringSettings: args.scoringSettings,
       }).catch(() => new Map())
     : new Map()
+  /* AllFantasy's own engine for the same starters and week — the second total on every row. */
+  const afEngine = everyStarter.length
+    ? await lookupAfEngineProjections(everyStarter, args.projectionWeek).catch(
+        (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
+      )
+    : new Map()
 
   function build(rosterId: string, points: number | null): ScoreboardTeam {
     const t = teamBy.get(String(rosterId))
@@ -265,6 +273,7 @@ export async function getLeagueScoreboard(args: {
     const { projected, projectedFrom } = anyScored
       ? { projected: null, projectedFrom: 0 }
       : leagueScoredLineupTotal(starters, projections, args.scoringSettings)
+    const afProjected = anyScored ? null : afEngineLineupTotal(starters, projections, afEngine, args.scoringSettings).projected
 
     return {
       rosterId,
@@ -274,6 +283,7 @@ export async function getLeagueScoreboard(args: {
       points,
       projected,
       projectedFrom,
+      afProjected,
       starterCount: starters.length,
       isYou: args.yourRosterId != null && rosterId === args.yourRosterId,
     }

@@ -324,6 +324,14 @@ export type MyTeamData = {
     /** How many starters the league-scored total was built from. */
     afProjected: number
     /**
+     * The same starters totalled from AllFantasy's OWN engine (`afEngineProjectedPoints`), beside
+     * the provider total above. Null when the engine priced none of them. Optional so a producer
+     * that predates the engine column still type-checks.
+     */
+    afEngineTotal?: number | null
+    /** How many starters the AF-engine total was built from. */
+    afEngineProjected?: number
+    /**
      * Whether the standard total is worth showing at all.
      *
      * ⚠ IN AN IDP LEAGUE IT IS NOT. The generic line does not score defenders,
@@ -1347,6 +1355,12 @@ export async function getMyTeamData(
     projectedIds,
     (id) => resolved.get(id)?.afProjectedPoints,
   )
+  /* AllFantasy's own engine over the same starters, after the same bye pass — the second total.
+     Counted on its own, like the provider total: the engine covers different players. */
+  const { projected: afEngineTotal, projectedFrom: afEngineProjected } = sumLeagueScoredStarters(
+    projectedIds,
+    (id) => resolved.get(id)?.afEngineProjectedPoints,
+  )
 
   const grade = await getRosterGrade({
     leagueId,
@@ -1386,7 +1400,12 @@ export async function getMyTeamData(
         : new Map<string, LineupPlayer>()
     if (extra.size > 0) await zeroByeWeekPlayers(extra, sport, sportsWeek)
     const pointsOf = (id: string) => (resolved.get(id) ?? extra.get(id))?.afProjectedPoints
-    return new Map([...lineups].map(([rosterId, ids]) => [rosterId, sumLeagueScoredStarters(ids, pointsOf)]))
+    // AllFantasy's own engine over the same lineups, through the same per-player numbers.
+    const enginePointsOf = (id: string) => (resolved.get(id) ?? extra.get(id))?.afEngineProjectedPoints
+    return new Map([...lineups].map(([rosterId, ids]) => [
+      rosterId,
+      { ...sumLeagueScoredStarters(ids, pointsOf), afProjected: sumLeagueScoredStarters(ids, enginePointsOf).projected },
+    ]))
   }
 
   const matchup = leagueWeek
@@ -1450,6 +1469,8 @@ export async function getMyTeamData(
               // Already rounded, and null when no starter could be priced.
               afTotal,
               afProjected,
+              afEngineTotal,
+              afEngineProjected,
               // Comparable only when both totals were built from the same
               // players. IDP suppression is what breaks that.
               standardComparable: !hasIdpScoring(scoringSettings),

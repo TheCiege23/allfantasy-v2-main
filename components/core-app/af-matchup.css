@@ -519,6 +519,19 @@
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
+/* AllFantasy's own engine total, under the banner's projected score and the board's footer. */
+.af-mu-score-af {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+.af-mu-board-foot--af .af-mu-foot-total {
+  color: var(--accent);
+  font-size: 13px;
+}
+
 /* AllFantasy's own engine, under the provider's projection. */
 .af-mu-half-af {
   display: block;
