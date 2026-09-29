@@ -7,6 +7,7 @@ import webpush from "web-push"
 import { prisma } from "@/lib/prisma"
 import { getBaseUrl } from "@/lib/get-base-url"
 import type { PushSubscriptionInput, PushPayload, SendPushResult } from "./types"
+import { IOS_ENDPOINT_PREFIX, isIosEndpoint, isValidDeviceToken, sendApns } from "./apns"
 
 let vapidConfigured = false
 
@@ -137,16 +138,42 @@ export async function sendPushToUser(
   userId: string,
   payload: PushPayload
 ): Promise<SendPushResult[]> {
-  const subs = await getPushSubscriptions(userId)
-  if (subs.length === 0) return []
+  const all = await getPushSubscriptions(userId)
+  if (all.length === 0) return []
+
+  /*
+   * iPhones (endpoint `apns:<token>`, registered by the iOS app) go to Apple's push service;
+   * browsers go through web-push. Each half depends only on ITS OWN keys — this used to return
+   * "VAPID not configured" for every row, which would have silenced iPhones whenever VAPID was
+   * unset, and handed an APNs token to web-push otherwise.
+   */
+  const results: SendPushResult[] = []
+  const ios = all.filter((s) => isIosEndpoint(s.endpoint))
+  const subs = all.filter((s) => !isIosEndpoint(s.endpoint))
+
+  if (ios.length > 0) {
+    const sent = await sendApns(
+      ios.map((s) => s.endpoint.slice(IOS_ENDPOINT_PREFIX.length)),
+      payload,
+    )
+    for (let i = 0; i < ios.length; i += 1) {
+      const r = sent[i]
+      results.push(r.ok ? { ok: true, subscriptionId: ios[i].id } : { ok: false, error: r.error, subscriptionId: ios[i].id })
+      if (!r.ok && r.expired) {
+        await (prisma as any).webPushSubscription
+          .deleteMany({ where: { endpoint: ios[i].endpoint } })
+          .catch(() => undefined)
+      }
+    }
+  }
+  if (subs.length === 0) return results
 
   try {
     ensureVapid()
   } catch {
-    return subs.map(() => ({ ok: false, error: "VAPID not configured" }))
+    return [...results, ...subs.map(() => ({ ok: false, error: "VAPID not configured" }))]
   }
 
-  const results: SendPushResult[] = []
   for (const sub of subs) {
     const result = await sendToSubscription(sub, payload)
     results.push({ ...result, subscriptionId: sub.id })
@@ -161,4 +188,45 @@ export async function sendPushToUser(
     }
   }
   return results
+}
+
+/*
+ * ── The iOS app's device tokens ──────────────────────────────────────────────
+ * Stored in web_push_subscriptions beside browser subscriptions: endpoint `apns:<token>`,
+ * p256dh/auth empty (APNs has no per-subscription keys), and userAgent `ios-app sid:<sid>` —
+ * the login's session id (lib/auth/sessionRevocation), so SIGNING OUT removes exactly that
+ * phone and a signed-out phone stops getting someone's notifications.
+ */
+
+const iosAgent = (sid: string | null) => (sid ? `ios-app sid:${sid}` : "ios-app")
+
+/** Register (or re-point) an iPhone. A token already held by another user moves to this one. */
+export async function saveIosDevice(userId: string, token: string, sid: string | null): Promise<boolean> {
+  if (!isValidDeviceToken(token)) return false
+  const endpoint = `${IOS_ENDPOINT_PREFIX}${token.toLowerCase()}`
+  try {
+    await (prisma as any).webPushSubscription.upsert({
+      where: { endpoint },
+      update: { userId, userAgent: iosAgent(sid) },
+      create: { userId, endpoint, p256dh: "", auth: "", userAgent: iosAgent(sid) },
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Unregister one iPhone for this user (the app turned notifications off). */
+export async function removeIosDevice(userId: string, token: string): Promise<boolean> {
+  if (!isValidDeviceToken(token)) return false
+  return removePushSubscription(userId, `${IOS_ENDPOINT_PREFIX}${token.toLowerCase()}`)
+}
+
+/** Sign-out: the phone that held this session stops receiving this user's notifications. */
+export async function removeIosDevicesForSession(sid: string): Promise<number> {
+  if (!sid) return 0
+  const res = await (prisma as any).webPushSubscription
+    .deleteMany({ where: { endpoint: { startsWith: IOS_ENDPOINT_PREFIX }, userAgent: iosAgent(sid) } })
+    .catch(() => ({ count: 0 }))
+  return res.count
 }

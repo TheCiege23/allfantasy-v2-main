@@ -146,7 +146,7 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
   },
   { name: 'oauth', why: 'authentication endpoint, not a data feed', test: /^(accounts\.spotify\.com|api\.login\.yahoo\.com|oauth2\.googleapis\.com|oauth\.reddit\.com|connect\.facebook\.net|js\.stripe\.com|appleid\.apple\.com)$/i },
   { name: 'ai-provider', why: 'covered by the AI spend guard, a different boundary', test: /^(api\.openai\.com|api\.anthropic\.com|api\.x\.ai|api\.deepseek\.com|google\.serper\.dev|generativelanguage\.googleapis\.com|api\.groq\.com|openrouter\.ai)$/i },
-  { name: 'platform-infra', why: 'email, analytics, media generation, translation, search and publishing', test: /^(api\.resend\.com|www\.googletagmanager\.com|api\.elevenlabs\.io|api\.heygen\.com|api-free\.deepl\.com|translation\.googleapis\.com|api\.spotify\.com|api\.deezer\.com|itunes\.apple\.com|api\.cloudinary\.com|www\.googleapis\.com)$/i },
+  { name: 'platform-infra', why: 'email, push delivery, analytics, media generation, translation, search and publishing', test: /^(api\.resend\.com|api\.push\.apple\.com|api\.sandbox\.push\.apple\.com|www\.googletagmanager\.com|api\.elevenlabs\.io|api\.heygen\.com|api-free\.deepl\.com|translation\.googleapis\.com|api\.spotify\.com|api\.deezer\.com|itunes\.apple\.com|api\.cloudinary\.com|www\.googleapis\.com)$/i },
   /*
    * PostHog's asset CDN. app/api/ph-assets proxies the browser SDK's lazy-loaded
    * extensions and remote config from it for /ingest/static and /ingest/array (an

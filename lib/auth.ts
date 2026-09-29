@@ -830,6 +830,13 @@ export const authOptions: NextAuthOptions = {
       try {
         const token = (message as { token?: Record<string, unknown> | null }).token ?? null;
         await revokeSessionForSignOut(token);
+        // The iPhone that held this login stops receiving its notifications. Imported lazily:
+        // the push sender pulls in web-push, which nothing else in auth needs.
+        const sid = typeof token?.sid === "string" ? token.sid : null;
+        if (sid) {
+          const { removeIosDevicesForSession } = await import("@/lib/push-notifications/push-service");
+          await removeIosDevicesForSession(sid);
+        }
       } catch (error) {
         console.error("[auth] signOut revocation failed (cookie still cleared):", error);
       }

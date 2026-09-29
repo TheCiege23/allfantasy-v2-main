@@ -12,6 +12,7 @@ const {
   profileUpdateMany,
   identityDeleteMany,
   teamUpdateMany,
+  pushDeleteMany,
 } = vi.hoisted(() => ({
   getServerSessionMock: vi.fn(),
   authAccountDeleteMany: vi.fn(),
@@ -21,6 +22,7 @@ const {
   profileUpdateMany: vi.fn(),
   identityDeleteMany: vi.fn(),
   teamUpdateMany: vi.fn(),
+  pushDeleteMany: vi.fn(),
 }))
 
 vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
@@ -36,6 +38,7 @@ vi.mock("@/lib/prisma", () => ({
         userProfile: { updateMany: profileUpdateMany },
         platformIdentity: { deleteMany: identityDeleteMany },
         leagueTeam: { updateMany: teamUpdateMany },
+        webPushSubscription: { deleteMany: pushDeleteMany },
       }),
   },
 }))
@@ -60,6 +63,7 @@ describe("POST /api/user/delete", () => {
     profileUpdateMany.mockResolvedValue({ count: 1 })
     identityDeleteMany.mockResolvedValue({ count: 2 })
     teamUpdateMany.mockResolvedValue({ count: 3 })
+    pushDeleteMany.mockResolvedValue({ count: 2 })
   })
 
   /*
@@ -82,6 +86,8 @@ describe("POST /api/user/delete", () => {
     }
     expect(identityDeleteMany).toHaveBeenCalledWith({ where: { userId: "u1" } })
     expect(teamUpdateMany).toHaveBeenCalledWith({ where: { claimedByUserId: "u1" }, data: { claimedByUserId: null } })
+    // Browser push AND the iOS app's device tokens: a deleted account stops notifying its phone.
+    expect(pushDeleteMany).toHaveBeenCalledWith({ where: { userId: "u1" } })
     // The anonymising update stays first; the Legacy release follows it.
     expect(appUserUpdate.mock.calls[0][0].data.passwordHash).toBeNull()
     expect(appUserUpdate).toHaveBeenCalledWith({ where: { id: "u1" }, data: { legacyUserId: null } })

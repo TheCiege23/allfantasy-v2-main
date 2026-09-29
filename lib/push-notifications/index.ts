@@ -9,6 +9,9 @@ export {
   removePushSubscription,
   getPushSubscriptions,
   sendPushToUser,
+  saveIosDevice,
+  removeIosDevice,
+  removeIosDevicesForSession,
 } from "./push-service"
 
 /* The category list lives in ./categories so the settings screen can import it without the sender. */
