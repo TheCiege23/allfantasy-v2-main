@@ -48,6 +48,30 @@ function iosAppPurchaseRefusal(request: NextRequest, pathname: string): NextResp
 }
 
 /**
+ * The iOS app opens at /core (ios-app/capacitor.config.json). Signed out, /core
+ * sends people to /login — right for a web deep link, wrong for someone opening
+ * the app: the owner's call (2026-09-29) is that they land on the landing page,
+ * which has its own Sign in and Create account. Bare /core only, so a deep link
+ * like /core/trades still goes through /login?callbackUrl= and comes back.
+ *
+ * ⚠ "Signed in" is the DASHBOARD's predicate — a non-empty token.id — not
+ * token.sub. next-auth always sets sub; only the jwt callback sets id, and a
+ * looser test here is exactly how "/" once bounced visitors to /login forever.
+ */
+async function iosAppSignedOutLanding(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+  if (pathname !== "/core") return null
+  if (!isIosAppUserAgent(request.headers.get("user-agent"))) return null
+  const secret = resolveAuthSecret()
+  if (!secret) return null
+  const token = await getToken({ req: request, secret })
+  const id = typeof token?.id === "string" ? token.id.trim() : ""
+  if (id) return null
+  const landing = new URL("/", request.url)
+  landing.search = ""
+  return NextResponse.redirect(landing, 307)
+}
+
+/**
  * Once a visitor is authenticated, the no-login trial cookie (`af_guest_session`)
  * has served its purpose: its `LegacyUser` is claimed on sign-in (AF_GATE0 §3.5),
  * and the dashboard reads it only when there is NO authenticated user. Clear it on
@@ -956,6 +980,8 @@ async function routeMiddleware(request: NextRequest) {
 
   const iosRefusal = iosAppPurchaseRefusal(request, pathname)
   if (iosRefusal) return applyApiSecurityHeaders(pathname, iosRefusal)
+  const iosLanding = await iosAppSignedOutLanding(request, pathname)
+  if (iosLanding) return iosLanding
 
   // ── Hard early-exit for all API routes ───────────────────────────────────
   // UI redirect logic (username gate, geo redirect, /choose-username, etc.)
