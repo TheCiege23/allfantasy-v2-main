@@ -68,9 +68,26 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
 
 - **Demo account** under App Review Information: an email/password account (not
   a social login, which is hidden in the app) with 1–2 imported leagues.
-- **App Privacy**: "Data Used to Track You", Yes (Meta Pixel and Conversions
-  API). Re-measure before each submission; see the Play runbook's data-safety
-  notes.
+- **App Privacy**: "Data Used to Track You", **No**. Measure it before each
+  submission; do not copy last time's answer:
+
+  ```
+  node scripts/probe-ios-app-trackers.cjs
+  ```
+
+  It loads the public pages as the app and as plain iPhone Safari (the control,
+  which must show trackers or the run is blind) and exits 1 if the app contacts
+  any ad or tracking host. The answer is No because none of the tracking runs in
+  the app: the Meta Pixel, GTM, gtag, TikTok and Reddit loaders, the Conversions
+  API (`lib/meta-capi`) and the Facebook SDK all check the app's User-Agent
+  marker (`lib/platform/iosApp`).
+
+  ⚠ This line used to say **Yes (Meta Pixel and Conversions API)** — the
+  opposite of what the app does. Declaring tracking obliges the app to show
+  Apple's App Tracking Transparency prompt (5.1.2), and this app has none, so the
+  wrong answer was itself grounds for rejection. PostHog and Sentry still collect
+  first-party analytics and diagnostics: declare those under the data the app
+  collects, not under tracking. See the Play runbook's data-safety notes.
 - **Release**: "Manually release this version".
 
 ## Known remaining risk

@@ -3220,6 +3220,10 @@ html[data-ios-app] a[href='/support'],
 html[data-ios-app] a[href^='/support?'],
 html[data-ios-app] a[href^='/support/'],
 html[data-ios-app] a[href*='allfantasy.ai/upgrade'],
-html[data-ios-app] a[href*='allfantasy.ai/pricing'] {
+html[data-ios-app] a[href*='allfantasy.ai/pricing'],
+html[data-ios-app] a[href^='/api/subscription/billing-portal'] {
   display: none !important;
 }
+/* ↑ The last selector: "Manage billing" (the Settings hub and the Billing tab)
+   is an <a> straight to an API that IOS_APP_PURCHASE_API_PREFIXES refuses in
+   the app, so a subscriber who tapped it got a raw 403 body. */
