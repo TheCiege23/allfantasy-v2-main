@@ -27,6 +27,7 @@ import {
   isIosAppPurchasePage,
   isIosAppUserAgent,
 } from "@/lib/platform/iosApp"
+import { isSessionRevoked } from "@/lib/auth/sessionRevocation"
 
 /**
  * Inside the iOS app nothing is for sale (App Store guideline 3.1.1 — see
@@ -65,7 +66,8 @@ async function iosAppSignedOutLanding(request: NextRequest, pathname: string): P
   if (!secret) return null
   const token = await getToken({ req: request, secret })
   const id = typeof token?.id === "string" ? token.id.trim() : ""
-  if (id) return null
+  // A session that was signed out (but whose cookie the device kept) counts as signed out.
+  if (id && !(await isSessionRevoked(token))) return null
   const landing = new URL("/", request.url)
   landing.search = ""
   return NextResponse.redirect(landing, 307)
