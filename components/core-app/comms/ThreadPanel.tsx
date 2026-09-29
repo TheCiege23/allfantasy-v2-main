@@ -15,6 +15,7 @@ import { useSession } from 'next-auth/react'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import { ChatMessageList, type ChatListMessage } from './ChatMessageList'
 import { ChatSearch } from './ChatSearch'
+import { chatFailure } from './chatFailure'
 import { useTypingSignal } from './useTypingSignal'
 import { PeoplePicker } from './PeoplePicker'
 
@@ -64,12 +65,8 @@ export type PlatformThread = {
   context?: ThreadRowContext | null
 }
 
-/** A thrown Error the sheets can show as it is: the server's words when it gave any. */
-async function failure(res: Response, prefix: string, fallback: string): Promise<Error> {
-  const data = (await res.json().catch(() => ({}))) as { error?: unknown }
-  const said = typeof data.error === 'string' && data.error.trim() ? data.error.trim() : null
-  return new Error(said ? `${prefix}: ${said.replace(/\.$/, '')}.` : fallback)
-}
+/** A thrown Error the sheets can show as it is — shared with league chat (./chatFailure). */
+const failure = chatFailure
 
 type PlatformMessage = {
   id: string

@@ -745,9 +745,13 @@ export function ChatMessageList({
            * Report and Block are for somebody ELSE's message, and only one with a person behind it:
            * a system row has no author to report or block. The sheet stays open on a failure (the
            * promise rejects) and only closes once the server said yes.
+           *
+           * 🛑 NEVER ON A CHIMMY POST, EVEN IF AN AUTHOR ID LEAKED ONTO IT. Chimmy's rows are stored
+           * under the league owner (a required FK), so "Block" there would block the commissioner.
+           * League chat strips the id (asChimmyWhenMarked); this is the second lock on that door.
            */
           onReport={
-            onReport && menuMessage.authorId && menuMessage.authorId !== viewerId
+            onReport && menuMessage.authorId && menuMessage.authorId !== viewerId && !isChimmyAuthored(menuMessage.metadata)
               ? async (reason) => {
                   await onReport(menuMessage, reason)
                   setMenuFor(null)
@@ -756,7 +760,7 @@ export function ChatMessageList({
               : undefined
           }
           onBlock={
-            onBlock && menuMessage.authorId && menuMessage.authorId !== viewerId
+            onBlock && menuMessage.authorId && menuMessage.authorId !== viewerId && !isChimmyAuthored(menuMessage.metadata)
               ? async () => {
                   const name = menuMessage.authorName
                   await onBlock(menuMessage)

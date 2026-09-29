@@ -98,6 +98,17 @@ describe('Chimmy in the league conversation', () => {
     expect(within(sheet).getByText('Reply')).toBeTruthy()
   })
 
+  it('🛑 offers no Report or Block even when the owner’s id leaked onto the row — Block would block the commissioner', () => {
+    const onReport = vi.fn(async () => undefined)
+    const onBlock = vi.fn(async () => undefined)
+    // Viewed by an ordinary member: for the commissioner it would be hidden anyway as "mine".
+    const { container } = renderList([chimmyAwards({ authorId: 'commish' })], { onReport, onBlock, viewerId: 'member-2' })
+    fireEvent.keyDown(within(row(container, 'awards')).getByRole('article'), { key: 'Enter' })
+    const sheet = screen.getByRole('dialog')
+    expect(within(sheet).queryByText(/Report message/)).toBeNull()
+    expect(within(sheet).queryByText(/Block/)).toBeNull()
+  })
+
   it('offers no Report or Block — there is no person to report', () => {
     const onReport = vi.fn(async () => undefined)
     const onBlock = vi.fn(async () => undefined)

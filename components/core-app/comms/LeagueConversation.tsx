@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Search } from 'lucide-react'
 import { ChatMessageList, type ChatListMessage } from './ChatMessageList'
 import { ChatSearch } from './ChatSearch'
+import { chatFailure } from './chatFailure'
+import type { ReportReason } from '@/lib/moderation/shared'
 import { useTypingSignal } from './useTypingSignal'
 import RichMessage, { hasRichContent } from './RichMessage'
 import { PresenceStrip, type PresentViewer } from './PresenceStrip'
@@ -539,6 +541,45 @@ export function LeagueConversation({
     [room, load],
   )
 
+  /*
+   * ── Report and Block (App Store guideline 1.2) ────────────────────────────────────
+   * The same routes DMs use. A report is recorded against this league's room
+   * (`league:<id>`) — ReportSubmissionService checks the reporter can read the league and
+   * the message is really in it. Block is per person, not per room, and league chat's GET
+   * already drops blocked senders, so the reload agrees with the local filter below.
+   * Chimmy's posts reach here with no author (asChimmyWhenMarked), so neither action is
+   * offered on them — blocking one would block the commissioner it is stored under.
+   * Both THROW on a non-OK answer so the sheet stays open and says why.
+   */
+  const reportMessage = useCallback(
+    async (m: ChatListMessage, reason: ReportReason) => {
+      const res = await fetch('/api/shared/chat/report/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: m.id, threadId: room, reason }),
+      })
+      if (!res.ok) throw await chatFailure(res, 'Report not sent', 'Report not sent. Try again in a moment.')
+    },
+    [room],
+  )
+
+  const blockAuthor = useCallback(
+    async (m: ChatListMessage) => {
+      const blockedUserId = m.authorId
+      if (!blockedUserId) throw new Error('There is nobody to block on that message.')
+      const res = await fetch('/api/shared/chat/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blockedUserId }),
+      })
+      if (!res.ok) throw await chatFailure(res, 'Not blocked', 'Not blocked. Try again in a moment.')
+      setMessages((prev) => prev.filter((x) => x.authorId !== blockedUserId))
+      setReplyTo((r) => (r && r.authorId === blockedUserId ? null : r))
+      void load(true)
+    },
+    [load],
+  )
+
   /* Names for "who reacted": everybody who has spoken on screen, plus who is here now. */
   const nameForUserId = useCallback(
     (id: string): string | null =>
@@ -787,6 +828,8 @@ export function LeagueConversation({
           pinBusy={pinBusy}
           onEdit={editMessage}
           onDelete={deleteMessage}
+          onReport={reportMessage}
+          onBlock={blockAuthor}
           nameForUserId={nameForUserId}
           focusRequest={focusRequest}
           tagFor={(m) =>
