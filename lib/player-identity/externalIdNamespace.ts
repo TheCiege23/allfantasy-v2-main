@@ -84,6 +84,50 @@ export function sleeperIdWhere(sleeperIds: readonly string[], sport?: string) {
 }
 
 /**
+ * Look players up by OUR row id or a Sleeper id — the two spellings a native league's player ids
+ * come in (its pools are seeded from Sleeper; some paths store `SportsPlayer.id`).
+ *
+ * ⚠ STILL NEVER A BARE ID AGAINST `externalId`. The old spelling of this — `id IN ids OR externalId
+ * IN ids` — could reach a Sleeper-id'd player ONLY through a Rolling Insights row for somebody else,
+ * because Sleeper's own rows store `sleeper:<id>` there (2026-09-29: 422 of the top 900 week-4
+ * projections had such an impostor). A caller must key its results with `playerRowKeys`, not by
+ * `externalId`, or the impostor comes back in through the map.
+ */
+export function ourIdOrSleeperIdWhere(ids: readonly string[], sport?: string) {
+  const clean = [...new Set(ids.map((id) => String(id ?? '').trim()).filter(Boolean))]
+  const bySleeper = sleeperIdWhere(clean)
+  return {
+    ...(sport ? { sport: sport.toUpperCase() } : {}),
+    OR: [{ id: { in: clean } }, ...bySleeper.OR],
+  }
+}
+
+/**
+ * The ids a `SportsPlayer` row may be looked up BY, in the Sleeper/our-row space: its own `id` and
+ * its `sleeperId`. Never its `externalId` — for a Rolling Insights, CFBD, API-Football or backfill
+ * row that is the provider's own number, which collides with Sleeper's for a different person.
+ */
+export function playerRowKeys(row: { id?: string | null; sleeperId?: string | null }): string[] {
+  return [row.id, row.sleeperId].map((k) => String(k ?? '').trim()).filter(Boolean)
+}
+
+/**
+ * Rows from a `sleeperIdWhere` read, keyed by Sleeper id. Several rows can carry one Sleeper id
+ * (Sleeper's own plus the RI / TheSportsDB rows the crosswalk stamped) — one person, but Sleeper's
+ * row holds the fantasy-shaped fields (`QB`, `CAR`), so it wins; otherwise the first row found.
+ */
+export function indexBySleeperId<T extends { sleeperId?: string | null; source?: string | null }>(rows: readonly T[]): Map<string, T> {
+  const out = new Map<string, T>()
+  for (const row of rows) {
+    const key = String(row.sleeperId ?? '').trim()
+    if (!key) continue
+    const held = out.get(key)
+    if (!held || (row.source === 'sleeper' && held.source !== 'sleeper')) out.set(key, row)
+  }
+  return out
+}
+
+/**
  * Look players up by a PROVIDER's own id, scoped to that provider.
  *
  * The `source` argument is required rather than optional on purpose: an unscoped `externalId`

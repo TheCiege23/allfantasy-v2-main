@@ -3,6 +3,7 @@ import 'server-only'
 
 import type { LeagueLifecycleState, LeagueSport, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { indexBySleeperId, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { getLeagueRole } from '@/lib/league/permissions'
 import { getAllowedActions } from '@/server/services/leagueLifecycleService'
@@ -452,17 +453,16 @@ async function resolvePlayerIndex(
       logOptionalLeagueDataWarning('player identity index', error)
       return []
     }),
+    /*
+     * 🛑 Sleeper-space ids (this read is skipped for a foreign league), so by Sleeper id only — never
+     * a bare id against `externalId`, where Rolling Insights keeps its own numbers for different
+     * people (RI 9228 is an offensive tackle; Sleeper 9228 is Bryce Young). externalIdNamespace.ts.
+     */
     foreign ? [] : prisma.sportsPlayer.findMany({
-      where: {
-        sport: sport.toUpperCase(),
-        OR: [
-          { externalId: { in: uniqueIds } },
-          { sleeperId: { in: uniqueIds } },
-        ],
-      },
+      where: sleeperIdWhere(uniqueIds, sport),
       orderBy: { fetchedAt: 'desc' },
       select: {
-        externalId: true,
+        source: true,
         sleeperId: true,
         name: true,
         position: true,
@@ -525,22 +525,20 @@ async function resolvePlayerIndex(
     }
   }
 
-  for (const row of sportsPlayers) {
-    const keys = [row.externalId, row.sleeperId].filter((value): value is string => Boolean(value))
-    for (const key of keys) {
-      const existing = index.get(key)
-      index.set(key, {
-        id: key,
-        name: row.name || existing?.name || fallbackPlayerName(key),
-        position: row.position || existing?.position || 'FLEX',
-        team: row.team || existing?.team || null,
-        adp: existing?.adp ?? null,
-        injuryStatus: existing?.injuryStatus ?? null,
-        stats: existing?.stats ?? {},
-        headshotUrl: toImageUrl(row.imageUrl) || existing?.headshotUrl || null,
-        teamLogoUrl: existing?.teamLogoUrl || null,
-      })
-    }
+  // Keyed by Sleeper id alone (Sleeper's own row wins a shared id) — never by `externalId`.
+  for (const [key, row] of indexBySleeperId(sportsPlayers)) {
+    const existing = index.get(key)
+    index.set(key, {
+      id: key,
+      name: row.name || existing?.name || fallbackPlayerName(key),
+      position: row.position || existing?.position || 'FLEX',
+      team: row.team || existing?.team || null,
+      adp: existing?.adp ?? null,
+      injuryStatus: existing?.injuryStatus ?? null,
+      stats: existing?.stats ?? {},
+      headshotUrl: toImageUrl(row.imageUrl) || existing?.headshotUrl || null,
+      teamLogoUrl: existing?.teamLogoUrl || null,
+    })
   }
 
   for (const row of sportsRecords) {

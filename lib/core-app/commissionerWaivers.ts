@@ -1,5 +1,6 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { ourIdOrSleeperIdWhere, playerRowKeys } from '@/lib/player-identity/externalIdNamespace'
 import { computeNextWaiverRunAtUtc } from '@/lib/waiver-wire/next-waiver-run'
 import { formatWaiverOutcomeLabel, outcomeCodeFromMetadata } from '@/lib/waiver-wire/waiver-outcome-labels'
 
@@ -248,15 +249,23 @@ export async function getCommissionerWaiverOversight(input: {
     const playerIds = [...new Set(lastRun.results.map((r) => r.addPlayerId))]
     const players = playerIds.length
       ? await prisma.sportsPlayer.findMany({
-          where: { OR: [{ id: { in: playerIds } }, { externalId: { in: playerIds } }] },
-          select: { id: true, externalId: true, name: true, position: true },
+          /*
+           * 🛑 A native league's player ids are Sleeper ids (its pools are seeded from Sleeper) or
+           * our own row ids. This read was `id IN ids OR externalId IN ids`: a Sleeper id could only
+           * ever match a Rolling Insights row for SOMEBODY ELSE there, because Sleeper's own rows
+           * store `sleeper:<id>`. See externalIdNamespace.ts.
+           */
+          where: ourIdOrSleeperIdWhere(playerIds),
+          select: { id: true, sleeperId: true, source: true, name: true, position: true },
         })
       : []
     const playerName = new Map<string, string>()
     for (const p of players) {
       const label = p.position ? `${p.name} (${p.position})` : p.name
-      playerName.set(p.id, label)
-      if (!playerName.has(p.externalId)) playerName.set(p.externalId, label)
+      for (const key of playerRowKeys(p)) {
+        // Sleeper's own row wins a shared Sleeper id; otherwise the first row found.
+        if (!playerName.has(key) || p.source === 'sleeper') playerName.set(key, label)
+      }
     }
 
     runOut = {

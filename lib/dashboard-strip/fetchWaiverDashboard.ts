@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { indexBySleeperId, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { getTrendingPlayers } from '@/lib/sleeper-client'
 import { getLeagueRosters } from '@/lib/api-cache/SleeperCacheLayer'
@@ -147,14 +148,18 @@ export async function fetchWaiverDashboard(userId: string): Promise<WaiverDashbo
         continue
       }
 
+      /*
+       * 🛑 SLEEPER IDS, LOOKED UP BY SLEEPER ID. Both lists here are Sleeper's (its trending feed and
+       * the Sleeper roster). They were read with `externalId IN ids` ALONE — and Sleeper's own rows
+       * store `sleeper:<id>` there, so the only rows that could ever match were Rolling Insights
+       * rows for other people sharing the number (RI 9228 is an offensive tackle; Sleeper 9228 is
+       * Bryce Young). Every name on this strip was an impostor or "Player N". externalIdNamespace.ts.
+       */
       const rows = await prisma.sportsPlayer.findMany({
-        where: {
-          sport: prismaSport,
-          externalId: { in: topPickIds.slice(0, 25) },
-        },
-        select: { externalId: true, name: true, position: true, team: true },
+        where: sleeperIdWhere(topPickIds.slice(0, 25), prismaSport),
+        select: { sleeperId: true, source: true, name: true, position: true, team: true },
       })
-      const byExt = new Map(rows.map((r) => [r.externalId, r]))
+      const byExt = indexBySleeperId(rows)
 
       const pickups: WaiverPickup[] = []
       for (const tid of topPickIds.slice(0, 3)) {
@@ -170,13 +175,10 @@ export async function fetchWaiverDashboard(userId: string): Promise<WaiverDashbo
       }
 
       const rosterRows = await prisma.sportsPlayer.findMany({
-        where: {
-          sport: prismaSport,
-          externalId: { in: rosterIds.slice(0, 80) },
-        },
-        select: { externalId: true, name: true, position: true, team: true },
+        where: sleeperIdWhere(rosterIds.slice(0, 80), prismaSport),
+        select: { sleeperId: true, source: true, name: true, position: true, team: true },
       })
-      const rosterById = new Map(rosterRows.map((r) => [r.externalId, r]))
+      const rosterById = indexBySleeperId(rosterRows)
 
       const benchIds = rosterIds.filter((id) => !starterSet.has(id))
       const drops: WaiverDrop[] = []
