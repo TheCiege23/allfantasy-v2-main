@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { useSession } from "next-auth/react"
 import { MoreHorizontal, Flag, UserX, UserCheck } from "lucide-react"
 
 type MessageActionsMenuProps = {
@@ -39,6 +40,12 @@ export default function MessageActionsMenu({
     document.addEventListener("click", close)
     return () => document.removeEventListener("click", close)
   }, [open])
+
+  // Nothing here applies to your own message — it offered "Report <you>" and "Block <you>".
+  // Read from the session, not a prop, so every caller (Messages, the home chat dock) is
+  // covered; defensive like PostHogUserIdentifier. Same rule as MessageModerationMenu.
+  const viewerId = (useSession()?.data?.user as { id?: string } | undefined)?.id ?? null
+  if (senderUserId && viewerId && senderUserId === viewerId) return null
 
   return (
     <div className={`relative ${className}`} ref={ref}>

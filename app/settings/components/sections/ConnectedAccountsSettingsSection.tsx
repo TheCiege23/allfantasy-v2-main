@@ -286,7 +286,18 @@ export function ConnectedAccountsSettingsSection({
           {statusMessage}
         </div>
       )}
-      <div className="space-y-3 rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
+      {/*
+        Not in the iOS app (lib/platform/iosApp): the login screen hides Google/Facebook/X sign-in
+        there because Sign in with Apple is not live (App Store 4.8), and this panel offered the same
+        providers as sign-in methods — several of them "Not configured", a dead end for a reviewer.
+        Discord and fantasy-platform linking below are not sign-in and stay.
+      */}
+      <div
+        className="space-y-3 rounded-xl border p-4"
+        style={{ borderColor: "var(--border)", background: "var(--panel2)" }}
+        data-hide-in-ios-app
+        data-testid="settings-signin-providers"
+      >
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium" style={{ color: "var(--muted2)" }}>{t("settings.connected.signInProviders")}</p>
           <button
