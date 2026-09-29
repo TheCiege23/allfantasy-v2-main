@@ -97,3 +97,26 @@ describe('when no AI provider answers', () => {
     expect(h.reportProviderFailure).not.toHaveBeenCalled()
   })
 })
+
+/*
+ * 🛑 THE OUTAGE REPLY NAMES WHAT IT HAD, NEVER A VALUE (2026-09-29). It used to print the
+ * deterministic payload as raw `key: value` pairs ("week: 7; flexCandidates: 2") — internal field
+ * names and unlabelled numbers presented as guidance.
+ */
+describe('the outage reply itself', () => {
+  function answerText(out: unknown): string {
+    const o = out as { data?: { primaryAnswer?: string }; primaryAnswer?: string; response?: { primaryAnswer?: string } }
+    const text = o.data?.primaryAnswer ?? o.response?.primaryAnswer ?? o.primaryAnswer
+    if (typeof text !== 'string') throw new Error('no primaryAnswer on the result: ' + JSON.stringify(out).slice(0, 300))
+    return text
+  }
+
+  it('prints no payload value and no raw field name, only readable names of what it had', async () => {
+    const text = answerText(await runUnifiedOrchestration(request()))
+    expect(text).toContain("Chimmy's AI models are unavailable right now")
+    expect(text).toContain('Deterministic guidance from NFL context')
+    expect(text).toContain('AI explanation is temporarily unavailable')
+    expect(text).toContain('flex candidates')
+    expect(text).not.toMatch(/week: 7|flexCandidates|: 2(?![0-9])/)
+  })
+})

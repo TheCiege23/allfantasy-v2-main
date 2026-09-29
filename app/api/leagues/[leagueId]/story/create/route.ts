@@ -10,6 +10,7 @@ import { assertLeagueMember } from "@/lib/league-access"
 import { createLeagueStory, getStoryVariant, storyToMediaShape } from "@/lib/league-story-creator"
 import { normalizeToSupportedSport } from "@/lib/sport-scope"
 import { requireFeatureEntitlement } from "@/lib/subscription/entitlement-middleware"
+import { refundStorylineSpend } from "@/lib/tokens/storylineSpendRefund"
 import type { StoryStyle, StoryType } from "@/lib/league-story-creator/types"
 
 const STORY_TYPES: StoryType[] = [
@@ -48,22 +49,13 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const gate = await requireFeatureEntitlement({
-      userId: session.user.id,
-      userEmail: session.user.email,
-      featureId: "storyline_creation",
-      allowTokenFallback: true,
-      confirmTokenSpend: true,
-      tokenRuleCode: "ai_storyline_creation",
-      tokenSourceType: "league_story_create",
-      tokenSourceId: `${leagueId}:${Date.now()}`,
-      tokenDescription: "League story creation",
-      tokenMetadata: {
-        leagueId,
-      },
-    })
-    if (!gate.ok) return gate.response
-
+    /*
+     * 🛑 THE REQUEST IS CHECKED BEFORE ANYTHING IS CHARGED (2026-09-29). The gate used to run first
+     * with `confirmTokenSpend: true` hardcoded: a click spent tokens with no question asked, and an
+     * invalid storyType was charged and then refused. Now a bad request costs nothing, tokens are
+     * spent only when the client says the person confirmed the cost (`lib/tokens/clientTokenConfirm.ts`),
+     * and a story that fails after the charge is refunded.
+     */
     const body = await req.json().catch(() => ({}))
     const storyType = body.storyType as string
     if (!storyType || !STORY_TYPES.includes(storyType as StoryType)) {
@@ -71,6 +63,28 @@ export async function POST(
         { error: "Invalid or missing storyType. Use one of: " + STORY_TYPES.join(", ") },
         { status: 400 }
       )
+    }
+
+    const gate = await requireFeatureEntitlement({
+      userId: session.user.id,
+      userEmail: session.user.email,
+      featureId: "storyline_creation",
+      allowTokenFallback: true,
+      confirmTokenSpend: body.confirmTokenSpend === true,
+      tokenRuleCode: "ai_storyline_creation",
+      tokenSourceType: "league_story_create",
+      tokenSourceId: `${leagueId}:${Date.now()}`,
+      tokenDescription: "League story creation",
+      tokenMetadata: {
+        leagueId,
+        storyType,
+      },
+    })
+    if (!gate.ok) return gate.response
+    const userId = session.user.id
+    const spend = gate.tokenSpend
+    const refundIfCharged = async () => {
+      if (spend) await refundStorylineSpend({ userId, ledgerId: spend.id, surface: "league_story_create" })
     }
 
     const sport = normalizeToSupportedSport(body.sport ?? access.leagueSport ?? "NFL")
@@ -85,9 +99,13 @@ export async function POST(
       season,
       storyType: storyType as StoryType,
       style,
+    }).catch(async (e: unknown) => {
+      await refundIfCharged()
+      throw e
     })
 
     if (!result.ok) {
+      await refundIfCharged()
       return NextResponse.json(
         { error: result.error ?? "Failed to create story" },
         { status: 500 }

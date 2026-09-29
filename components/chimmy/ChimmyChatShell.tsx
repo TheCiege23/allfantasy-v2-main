@@ -550,7 +550,7 @@ export default function ChimmyChatShell({
 
   const handleVoiceToggle = useCallback(() => {
     if (ttsUnavailable) {
-      toast.warning('Voice unavailable — check ElevenLabs API key in settings')
+      toast.warning("Voice unavailable right now.")
       return
     }
     const nextEnabled = !voiceConfig.enabled
@@ -563,7 +563,7 @@ export default function ChimmyChatShell({
   const handlePlayVoice = useCallback(
     async (text: string, messageId: string) => {
       if (ttsUnavailable) {
-        const message = 'Voice unavailable — check ElevenLabs API key in settings.'
+        const message = "Voice unavailable right now."
         setInlineError(message)
         toast.error(message)
         return

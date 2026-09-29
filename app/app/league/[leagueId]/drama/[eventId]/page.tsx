@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, BookOpen } from 'lucide-react'
+import { postWithTokenConfirm, responseErrorMessage } from '@/lib/tokens/clientTokenConfirm'
 
 interface DramaEventDetail {
   id: string
@@ -49,13 +50,17 @@ export default function DramaEventDetailPage() {
     if (!leagueId || !eventId) return
     setNarrative(null)
     setNarrativeLoading(true)
-    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId }),
-    })
-      .then((r) => r.json())
-      .then((data) => setNarrative(data?.narrative ?? 'No story available.'))
+    // Asks before any token is spent; a decline spends nothing and shows nothing.
+    postWithTokenConfirm(`/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`, { eventId })
+      .then(async ({ response, declined }) => {
+        if (declined) return
+        if (!response.ok) {
+          setNarrative(await responseErrorMessage(response, 'Could not load story.'))
+          return
+        }
+        const data = await response.json().catch(() => ({}))
+        setNarrative(data?.narrative ?? 'No story available.')
+      })
       .catch(() => setNarrative('Could not load story.'))
       .finally(() => setNarrativeLoading(false))
   }

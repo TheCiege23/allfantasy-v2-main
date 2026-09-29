@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import { Zap, BookOpen, ExternalLink } from 'lucide-react'
+import { postWithTokenConfirm } from '@/lib/tokens/clientTokenConfirm'
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
 
 interface DramaEventItem {
@@ -90,12 +91,10 @@ export function LeagueDramaWidget({
     setStoryEventId(eventId)
     setStoryNarrative(null)
     setStoryLoading(eventId)
-    fetch(`/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId }),
-    })
-      .then(async (r) => {
+    // Asks before any token is spent; a decline spends nothing and closes the story.
+    postWithTokenConfirm(`/api/leagues/${encodeURIComponent(leagueId)}/drama/tell-story`, { eventId })
+      .then(async ({ response: r, declined }) => {
+        if (declined) return { declined: true as const }
         const data = await r.json().catch(() => ({}))
         if (!r.ok) {
           throw new Error(
@@ -109,6 +108,11 @@ export function LeagueDramaWidget({
         return data
       })
       .then((data) => {
+        if (data?.declined) {
+          setStoryEventId(null)
+          setStoryLoading(null)
+          return
+        }
         setStoryNarrative(data?.narrative ?? 'No story available.')
         setStoryLoading(null)
       })
