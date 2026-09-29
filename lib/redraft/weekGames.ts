@@ -57,6 +57,46 @@ export type WeekGameRow = {
   week: number | null
   homeTeam: string | null
   awayTeam: string | null
+  seasonType?: string | null
+}
+
+/**
+ * How far before a week's earliest labelled regular-season game an UNLABELLED row may start and still
+ * be taken as that week's game. A regular week spans at most about six days (Wednesday to Monday);
+ * a preseason game that carries the same week number is about a month earlier (NFL 2026: preseason
+ * week 3 was Aug 21-24, regular week 3 Sep 24-29).
+ */
+const UNLABELLED_ROW_LEAD_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Drop unlabelled rows that belong to a different part of the season than the week's labelled games.
+ *
+ * 🛑 A STALE FEED WON A SEALED WEEK ON ROWS THAT WERE NOT IN IT. `NULL` joins the regular slate by
+ * design (rows predating the column are overwhelmingly regular season), but `espn_live` — written
+ * only while a human has /live open — stores EVERY row unlabelled, preseason included, and the
+ * preseason reuses week numbers. Measured on production 2026-09-29: for NFL week 3 it held 32 rows
+ * (16 preseason + 16 regular) while each fresh feed held its 16 regular rows. Coverage-before-rank
+ * in `pickFreshestSourceRows` then disqualified every fresh feed (16 < 0.8 × 32) and handed the week
+ * to `espn_live`, whose Monday game was three hours stale and still `in_progress` — so a week whose
+ * games were all final refused `games_not_final` until that feed aged out six hours later. The same
+ * read decides the lineup lock.
+ *
+ * The anchor comes from the rows themselves: the earliest game any feed LABELS regular this week.
+ * An unlabelled row more than `UNLABELLED_ROW_LEAD_MS` before it is another part of the season. With
+ * no labelled row at all there is nothing to measure against, and every row is kept, as before.
+ */
+export function dropUnlabelledRowsFromAnotherPhase<T extends { seasonType?: string | null; startTime: Date | null }>(
+  rows: T[],
+): T[] {
+  let anchor: number | null = null
+  for (const row of rows) {
+    if (row.seasonType !== 'regular' || !row.startTime) continue
+    const t = row.startTime.getTime()
+    if (anchor == null || t < anchor) anchor = t
+  }
+  if (anchor == null) return rows
+  const earliestAllowed = anchor - UNLABELLED_ROW_LEAD_MS
+  return rows.filter((row) => row.seasonType != null || !row.startTime || row.startTime.getTime() >= earliestAllowed)
 }
 
 export async function readWeekGames(
@@ -123,6 +163,7 @@ export async function readWeekGames(
       week: true,
       homeTeam: true,
       awayTeam: true,
+      seasonType: true,
     },
   })) as WeekGameRow[]
 
@@ -134,12 +175,16 @@ export async function readWeekGames(
    * which that module documents as the original whole-call behaviour, and is exactly right for
    * a caller that did not group by week in the first place.
    */
+  // A date-windowed read cannot pick up another phase's games by week number, so only a week-keyed
+  // regular read needs the phase check (a postseason read selects its own label and no NULLs).
   const inWindow = windowed
     ? rawRows.filter((row) => {
         const day = easternCalendarDay(row.startTime)
         return day != null && day >= windowed.start && day < windowed.end
       })
-    : rawRows
+    : args.seasonType === 'regular'
+      ? dropUnlabelledRowsFromAnotherPhase(rawRows)
+      : rawRows
   const selectable: WeekGameRow[] = windowed ? inWindow.map((row) => ({ ...row, week: null })) : inWindow
   return pickFreshestSourceRows(selectable, (args.now ?? new Date()).getTime())
 }
