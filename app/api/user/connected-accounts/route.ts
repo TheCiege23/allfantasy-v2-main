@@ -1,3 +1,4 @@
+import { hasAppleSignInCredentials } from "@/lib/auth/appleSignInEnv"
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
@@ -26,7 +27,7 @@ function isProviderConfigured(providerId: SignInProviderId): boolean {
     case "spotify":
       return !!(process.env.SPOTIFY_CLIENT_ID && process.env.SPOTIFY_CLIENT_SECRET)
     case "apple":
-      return !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET)
+      return hasAppleSignInCredentials()
     case "facebook":
       // Temporarily disabled — Facebook login is under review. Env vars are preserved.
       // Re-enable by restoring: return !!(process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET)

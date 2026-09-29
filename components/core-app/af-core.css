@@ -978,3 +978,23 @@ html[data-mode='af'] .af-core {
     font-size: 16px;
   }
 }
+
+/*
+ * ── No keyboard shortcut hint on a touch screen ─────────────────────────────
+ *
+ * `.af-search-kbd` prints "⌘K" inside the shell search box. On a phone there is
+ * no ⌘ key, so it is a hint for a shortcut nobody can press — and in the iOS app
+ * it reads as a desktop page that was shrunk rather than built for the device.
+ *
+ * Keyed on the POINTER, not the width: an iPad with a keyboard can press ⌘K and
+ * keeps the hint, a narrow desktop window keeps it too.
+ *
+ * ⚠ Appended as its own top-level block at the end of the file, per this file's
+ * convention: dropping it inside an existing @media would close that query early
+ * and reparent every rule below it.
+ */
+@media (hover: none) and (pointer: coarse) {
+  .af-core .af-search-kbd {
+    display: none;
+  }
+}

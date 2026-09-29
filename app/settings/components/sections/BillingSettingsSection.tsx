@@ -90,7 +90,10 @@ export function BillingSettingsSection() {
       <div data-testid="settings-billing-tokens">
         <TokenBalanceWidget />
         <div className="mt-2 flex items-center justify-between gap-2">
-          <p className="text-[11px]" style={{ color: "var(--muted2)" }}>
+          {/* Hidden in the iOS app: the /tokens link inside it is hidden there (3.1.1),
+              which left "tokens can be purchased in ." — a sentence about buying,
+              with its link cut out. */}
+          <p className="text-[11px]" style={{ color: "var(--muted2)" }} data-hide-in-ios-app="">
             {t("settings.billing.tokensCanBePurchasedIn")}{" "}
             <Link href="/tokens" className="underline hover:text-white/80">
               {t("settings.billing.tokenCenterLabel")}

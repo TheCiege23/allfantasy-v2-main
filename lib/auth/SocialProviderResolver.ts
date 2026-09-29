@@ -1,3 +1,4 @@
+import { hasAppleSignInCredentials } from "@/lib/auth/appleSignInEnv"
 export type SocialProvider =
   | 'google'
   | 'spotify'
@@ -55,13 +56,13 @@ export function isSocialProviderEnabled(provider: SocialProvider): boolean {
   }
   if (provider === 'apple') {
     // Same shape as google/spotify/facebook — lib/auth.ts only registers
-    // AppleProvider when APPLE_CLIENT_ID+APPLE_CLIENT_SECRET are both set,
-    // so this must check real credential presence too, not only the public
+    // AppleProvider when lib/auth/appleSignInEnv says it is configured (a .p8
+    // signing key, or a pasted JWT), so this must check real credential presence too, not only the public
     // flag, or the resolver can say "enabled" while lib/auth.ts never
     // actually registered the provider (and signIn('apple') then errors).
     return (
       process.env.NEXT_PUBLIC_ENABLE_APPLE_AUTH === 'true' ||
-      !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET)
+      hasAppleSignInCredentials()
     )
   }
   if (provider === 'facebook') {

@@ -68,24 +68,50 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
 
 - **Demo account** under App Review Information: an email/password account (not
   a social login, which is hidden in the app) with 1–2 imported leagues.
-- **App Privacy**: "Data Used to Track You", Yes — the Meta Pixel and Conversions
-  API, Google Tag Manager and Google Ads conversion tracking, **and the TikTok and
-  Reddit pixels GTM loads**. Re-measure before each submission; see the Play
-  runbook's data-safety notes for the measured host list.
-  - 🛑 TikTok and Reddit are NOT in this repo — they live in the GTM container, so
-    `grep` cannot find them and the privacy policy under-disclosed both for weeks.
-    Measure the LIVE site with `performance.getEntriesByType('resource')`; an
-    in-app-browser network panel showed only same-origin requests and none of the
-    ad hosts, which reads exactly like "nothing fires".
-- **What was verified in production on 2026-09-28, and what was not.** Verified by
-  effect: `/upgrade` answers **307 → `/ios-app/plans`** for a UA carrying
-  `AllFantasyiOS` and **200** for a desktop UA, so the purchase-page gate is live.
-  NOT verified: hiding the social sign-in buttons and dropping GTM inside the app
-  are done CLIENT-side off the `data-ios-app` flag, so a `curl` with the iOS UA
-  returns byte-identical HTML and proves nothing either way. Confirm both on a real
-  TestFlight build before submitting — the web login page does show Google, Spotify
-  and Discord (Apple reads "SOON"), which is exactly the 4.8 shape review would
-  reject if the in-app hiding ever silently stopped working.
+- **App Privacy**: "Data Used to Track You", **No**. Measure it before each
+  submission; do not copy last time's answer:
+
+  ```
+  node scripts/probe-ios-app-trackers.cjs
+  ```
+
+  It loads the public pages as the app and as plain iPhone Safari (the control,
+  which must show trackers or the run is blind) and exits 1 if the app contacts
+  any ad or tracking host. The answer is No because none of the tracking runs in
+  the app: the Meta Pixel, GTM, gtag, TikTok and Reddit loaders, the Conversions
+  API (`lib/meta-capi`) and the Facebook SDK all check the app's User-Agent
+  marker (`lib/platform/iosApp`).
+
+  ⚠ This line used to say **Yes (Meta Pixel and Conversions API)** — the
+  opposite of what the app does. Declaring tracking obliges the app to show
+  Apple's App Tracking Transparency prompt (5.1.2), and this app has none, so the
+  wrong answer was itself grounds for rejection. PostHog and Sentry still collect
+  first-party analytics and diagnostics: declare those under the data the app
+  collects, not under tracking. See the Play runbook's data-safety notes.
+
+  🛑 **AND "No" HERE IS NOT "no trackers exist" — THE WEB SITE RUNS FIVE.** Measured
+  2026-09-28 on `https://www.allfantasy.ai/` with a normal desktop UA, the hosts
+  contacted on first load are `connect.facebook.net`, `www.googletagmanager.com`,
+  `analytics.tiktok.com` (+ `analytics-ipv6.tiktokw.us`), `www.redditstatic.com` /
+  `pixel-config.reddit.com` / `alb.reddit.com`, `ad.doubleclick.net`, plus
+  `static.cloudflareinsights.com` and `sentry.io`. That list is what `/privacy` and
+  Play's data-safety form have to match; this App Privacy answer is about the APP,
+  and the two are different questions with different correct answers. TikTok and
+  Reddit are NOT in this repo — they load from inside the GTM container — so `grep`
+  cannot find them, which is how the privacy policy under-disclosed both for weeks.
+  ⚠ Measure with `performance.getEntriesByType('resource')`: an in-app-browser
+  network panel reported only same-origin requests and none of the ad hosts, which
+  reads exactly like "nothing fires".
+- **What is verified in production, and what still needs a build.** Verified by
+  effect 2026-09-28: `/upgrade` answers **307 → `/ios-app/plans`** for a UA carrying
+  `AllFantasyiOS` and **200** for a desktop UA, so the 3.1.1 purchase-page gate is
+  live server-side. The tracker half is covered by `probe-ios-app-trackers.cjs`
+  above. What neither covers is **hiding the social sign-in buttons**: that is done
+  CLIENT-side off the `data-ios-app` flag, so a `curl` with the iOS UA returns
+  byte-identical HTML and proves nothing either way. Confirm it on a real TestFlight
+  build — the web login page does show Google, Spotify and Discord (Apple reads
+  "SOON"), which is exactly the 4.8 shape review would reject if the in-app hiding
+  ever silently stopped working.
 - **Release**: "Manually release this version".
 
 ## Known remaining risk

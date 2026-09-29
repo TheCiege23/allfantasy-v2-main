@@ -3,6 +3,8 @@ import { PHASE_PRODUCTION_BUILD } from "next/constants";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import AppleProvider from "next-auth/providers/apple";
+import { appleFormPostCookies, resolveAppleClientSecret } from "@/lib/auth/appleClientSecret";
+import { hasAppleSignInCredentials } from "@/lib/auth/appleSignInEnv";
 import SpotifyProvider from "next-auth/providers/spotify";
 import { SPOTIFY_SCOPES } from "@/lib/spotify/scopes";
 import FacebookProvider from "next-auth/providers/facebook";
@@ -300,7 +302,12 @@ if (isDevAuthBypassEnabled()) {
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 const appleClientId = process.env.APPLE_CLIENT_ID;
-const appleClientSecret = process.env.APPLE_CLIENT_SECRET;
+// lib/auth/appleSignInEnv: the .p8 signing key (preferred) or a pasted JWT.
+const appleConfigured = hasAppleSignInCredentials();
+// Mirrors NextAuth's own useSecureCookies default (https base URL), plus
+// production, where the site is always https even if NEXTAUTH_URL is unset.
+const useSecureAuthCookies =
+  (process.env.NEXTAUTH_URL ?? "").startsWith("https://") || process.env.NODE_ENV === "production";
 
 if (googleClientId && googleClientSecret) {
   providers.push(
@@ -313,11 +320,17 @@ if (googleClientId && googleClientSecret) {
   );
 }
 
-if (appleClientId && appleClientSecret) {
+if (appleClientId && appleConfigured) {
   providers.push(
     AppleProvider({
       clientId: appleClientId,
-      clientSecret: appleClientSecret,
+      // A getter, not a value: NextAuth re-reads provider options per request,
+      // so a long-running process re-signs before Apple's 6-month cap
+      // (lib/auth/appleClientSecret). The callback URL to register with Apple
+      // is `${NEXTAUTH_URL}/api/auth/callback/apple`.
+      get clientSecret() {
+        return resolveAppleClientSecret();
+      },
     })
   );
 }
@@ -457,6 +470,10 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
     error: "/auth/error",
   },
+  // Apple returns users with a cross-site POST; without these two cookies
+  // re-declared SameSite=None every Apple sign-in fails on a missing PKCE
+  // verifier. Only set when Apple is configured, so nothing changes until then.
+  ...(appleConfigured ? { cookies: appleFormPostCookies(useSecureAuthCookies) } : {}),
   logger: {
     error(code, metadata) {
       const inner = (metadata as { error?: Error } | null | undefined)?.error

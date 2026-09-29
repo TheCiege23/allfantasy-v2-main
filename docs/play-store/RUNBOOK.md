@@ -100,10 +100,20 @@ bubblewrap build
      - Data encrypted in transit; users delete in-app at **Settings → Account →
        Start account deletion**, or by email via
        `https://allfantasy.ai/data-deletion` if locked out.
-     - The same facts drive **App Store Connect → App Privacy**: Contact Info
-       (email, phone, name), Location (coarse), Usage Data (product interaction,
-       advertising data), Diagnostics (crash, performance), and "Data Used to
-       Track You" = yes, because of the Meta, Google, TikTok and Reddit ad tags.
+     - **App Store Connect → App Privacy takes the SAME categories and the OPPOSITE
+       tracking answer, and that is not an inconsistency.** Contact Info (email,
+       phone, name), Location (coarse), Usage Data (product interaction), Diagnostics
+       (crash, performance) — but "Data Used to Track You" = **No** there. See
+       `docs/app-store/RUNBOOK.md`: every ad loader checks the iOS app's User-Agent
+       marker (`lib/platform/iosApp`), so none of them runs inside that app, and
+       declaring tracking would oblige an App Tracking Transparency prompt (5.1.2)
+       the app does not have.
+     - 🛑 **THE ANDROID APP HAS NO SUCH MARKER, SO THIS FORM IS THE OPPOSITE CASE.**
+       The Play build is a Bubblewrap TWA loading the same web pages as a browser —
+       the Meta Pixel, GTM and the TikTok/Reddit tags it carries all run in it.
+       "Shared with third parties for advertising" = **yes** here is correct, and
+       copying iOS's "No" onto this form would be a false declaration. One codebase,
+       two apps, two honest answers.
    - Content rating questionnaire → category Utility/Sports → this GENERATES
      the real IARC rating (the old manifest carried an invented one; it has
      been removed).
