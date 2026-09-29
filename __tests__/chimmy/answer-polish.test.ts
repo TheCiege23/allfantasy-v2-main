@@ -19,8 +19,9 @@ vi.mock('@/lib/chimmy/pendingTradeQuestions', () => ({ pendingTradeQuestions: vi
 
 import { decisionAnswerMeta } from '@/lib/chimmy/decisionAnswerContract'
 import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
-import { answerKeysFrom, scenarioVerdict } from '@/lib/chimmy/answerPolishBuild'
+import { answerKeysFrom, eliminationSettleVerdict, scenarioVerdict } from '@/lib/chimmy/answerPolishBuild'
 import {
+  VERDICT_LABEL,
   newerAnswers,
   readAnswerKeys,
   readAnswerPolish,
@@ -106,6 +107,32 @@ describe('the verdict chip comes from the engine', () => {
     const out = await prepareChimmyDecisionAnswer({ question: 'Set my best lineup', leagueId: 'l1', userId: 'u1' })
     expect(decisionAnswerMeta(out!).answerKeys).toEqual(['optimize_my_lineup:league-1'])
     expect(decisionAnswerMeta(out!)).not.toHaveProperty('verdict')
+  })
+})
+
+/*
+ * SAFE / OUT (2026-09-28): a guillotine week that is already DECIDED, from `settleEliminationWeek`'s
+ * verdict — never from the margin and never from the sentence the model is given about it.
+ */
+describe('the guillotine settle chip', () => {
+  it('safe → SAFE (good news), chopped → OUT (bad news), from the settle object', () => {
+    expect(eliminationSettleVerdict({ verdict: 'safe', finishedBelow: 3, chops: 1 })).toEqual({ key: 'safe', source: 'elimination_settle', detail: 'Week decided' })
+    expect(eliminationSettleVerdict({ verdict: 'chopped', chops: 1 })).toEqual({ key: 'out', source: 'elimination_settle', detail: 'Week decided' })
+    expect(VERDICT_LABEL.safe).toEqual({ label: 'SAFE', tone: 'go' })
+    expect(VERDICT_LABEL.out).toEqual({ label: 'OUT', tone: 'stop' })
+  })
+
+  it('an open race, a week with no chop, and no read decide nothing', () => {
+    expect(eliminationSettleVerdict({ verdict: 'open', yourUpcoming: 0, yourLive: 0, yourUnknown: 0, finishedBelow: 0, chops: 1, cutLinePending: 1 })).toBeNull()
+    expect(eliminationSettleVerdict({ verdict: 'no_chop' })).toBeNull()
+    expect(eliminationSettleVerdict(null)).toBeNull()
+    expect(eliminationSettleVerdict(undefined)).toBeNull()
+  })
+
+  it('the drawer\'s reader accepts both, and only from the settle source', () => {
+    expect(readChimmyVerdict({ key: 'safe', source: 'elimination_settle', detail: 'Week decided' })).toEqual({ key: 'safe', source: 'elimination_settle', detail: 'Week decided' })
+    expect(readChimmyVerdict({ key: 'out', source: 'elimination_settle' })).toEqual({ key: 'out', source: 'elimination_settle', detail: null })
+    expect(readChimmyVerdict({ key: 'safe', source: 'the_model' })).toBeNull()
   })
 })
 

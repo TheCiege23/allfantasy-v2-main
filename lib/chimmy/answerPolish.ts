@@ -5,7 +5,8 @@
  * Three things ride on an answer's `meta`, all built on the server from ENGINE data, never from the
  * model's prose (see `answerPolishBuild.ts`):
  *
- *   - `verdict` — a small pill at the top of the answer: HOLD / BID / START / YES / NO / COUNTER.
+ *   - `verdict` — a small pill at the top of the answer: HOLD / BID / START / YES / NO / COUNTER,
+ *     and SAFE / OUT for a guillotine week that is already decided.
  *   - `faabPlan` — the structured `get_faab_bid_plan` result as a compact card.
  *   - `answerKeys` — which whole-league deterministic tools ran, for which league, so an earlier
  *     answer can be marked "Newer answer below" when a later one re-ran the same tool.
@@ -16,13 +17,19 @@
  */
 
 /** The verdicts a chip can show. The label is fixed per key — the wire never carries display text. */
-export type ChimmyVerdictKey = 'yes' | 'no' | 'hold' | 'counter' | 'counter_hold' | 'start' | 'start_both' | 'sit_both' | 'bid'
+export type ChimmyVerdictKey =
+  | 'yes' | 'no' | 'hold' | 'counter' | 'counter_hold' | 'start' | 'start_both' | 'sit_both' | 'bid'
+  /* A guillotine week that is already DECIDED (`lib/core-app/eliminationSettle.ts`). Never a margin. */
+  | 'safe' | 'out'
 
-/** go = act, stop = do not, wait = hold off / renegotiate. Colour AND text carry it. */
+/**
+ * go = act / good news, stop = do not / bad news, wait = hold off / renegotiate. Colour AND text
+ * carry it. SAFE is `go` and OUT is `stop` — the same good / bad the Week board's SAFE / OUT badge uses.
+ */
 export type ChimmyVerdictTone = 'go' | 'stop' | 'wait'
 
 /** Which engine decided — shown as the chip's title so "who says so" is one hover away. */
-export type ChimmyVerdictSource = 'trade_engine' | 'lineup_engine' | 'faab_plan'
+export type ChimmyVerdictSource = 'trade_engine' | 'lineup_engine' | 'faab_plan' | 'elimination_settle'
 
 export type ChimmyVerdict = {
   key: ChimmyVerdictKey
@@ -41,12 +48,15 @@ export const VERDICT_LABEL: Record<ChimmyVerdictKey, { label: string; tone: Chim
   start_both: { label: 'START BOTH', tone: 'go' },
   sit_both: { label: 'SIT BOTH', tone: 'stop' },
   bid: { label: 'BID', tone: 'go' },
+  safe: { label: 'SAFE', tone: 'go' },
+  out: { label: 'OUT', tone: 'stop' },
 }
 
 export const VERDICT_SOURCE_LABEL: Record<ChimmyVerdictSource, string> = {
   trade_engine: 'Decided by the AllFantasy trade engine',
   lineup_engine: "Decided by this week's lineup projection under your league's scoring",
   faab_plan: 'Decided by the FAAB bid plan',
+  elimination_settle: "Decided by this week's finished games, not by a projection",
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v)

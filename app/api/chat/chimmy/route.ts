@@ -174,10 +174,11 @@ import { buildMyRosterInjuriesContext } from '@/lib/chimmy/tools/myRosterInjurie
 import { buildDecisionOsGroundingPacket } from '@/lib/decision-os/grounding/packet'
 import { recordChatWaiverAdvice } from '@/lib/chimmy-advice/chatWaiverAdvice'
 import { recordChatStartSitAdvice } from '@/lib/chimmy-advice/chatStartSitAdvice'
-import type { ChatStartCall, ChimmyFaabPlanRun, ChimmyToolRun } from '@/lib/chimmy/tools/chimmyTools'
+import type { ChatStartCall, ChimmyEliminationSettleRun, ChimmyFaabPlanRun, ChimmyToolRun } from '@/lib/chimmy/tools/chimmyTools'
 import type { ChimmyActionCard } from '@/lib/chimmy/actions/types'
 import type { ChimmyTradeGrade } from '@/lib/chimmy/tradeGradeCheck'
-import { answerKeysFrom, faabCardFromPlan, faabPlanVerdict, tradeTargetVerdict } from '@/lib/chimmy/answerPolishBuild'
+import { answerKeysFrom, eliminationSettleVerdict, faabCardFromPlan, faabPlanVerdict, tradeTargetVerdict } from '@/lib/chimmy/answerPolishBuild'
+import { readAnswerKeys, readChimmyFaabCard, readChimmyVerdict } from '@/lib/chimmy/answerPolish'
 import { resolveCallerTeamId } from '@/lib/chimmy/callerTeam'
 import { readAdviceLearningSnapshot } from '@/lib/chimmy-outcomes/adviceLearning'
 import { trackRecordsFrom } from '@/lib/chimmy-outcomes/learningSnapshot'
@@ -1200,6 +1201,18 @@ function readStoredDisplay(meta: unknown): Record<string, unknown> {
   if (typeof source.mode === 'string' && source.mode) out.mode = source.mode
   if (typeof source.imagePreview === 'string' && source.imagePreview.startsWith('/api/chat/chimmy?attachment=')) out.imagePreview = source.imagePreview
   if (typeof source.imageName === 'string') out.imageName = source.imageName.slice(0, 180)
+  /*
+   * The answer's polish (`lib/chimmy/answerPolish.ts`), through the SAME readers the drawer uses on a
+   * live answer — a stored row is never trusted to be well-formed. Restored unlike `advice`/`scenario`
+   * because each is a record of what the engine decided THEN, not a control to act on now, and
+   * `answerKeys` is exactly what marks an older one "Newer answer below" once a later answer re-ran it.
+   */
+  const verdict = readChimmyVerdict(source.verdict)
+  if (verdict) out.verdict = verdict
+  const faabPlan = readChimmyFaabCard(source.faabPlan)
+  if (faabPlan) out.faabPlan = faabPlan
+  const answerKeys = readAnswerKeys(source.answerKeys)
+  if (answerKeys.length > 0) out.answerKeys = answerKeys
   return out
 }
 
@@ -3038,8 +3051,9 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     /*
      * `faabPlans` / `toolRuns` feed the answer's polish (`lib/chimmy/answerPolish.ts`): the bid card,
      * the HOLD / BID chip, and "Newer answer below". All from what the tools computed, never the prose.
+     * `eliminationSettles` does the same for a decided guillotine week: SAFE / OUT.
      */
-    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[] }
+    const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[] }
     const loopArgs = {
       question: message,
       /*
@@ -3186,14 +3200,21 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        */
       const lastFaabPlan = loopDelivery.delivered ? toolContext.faabPlans[toolContext.faabPlans.length - 1] ?? null : null
       const loopFaabCard = lastFaabPlan ? faabCardFromPlan(lastFaabPlan.plan, lastFaabPlan.leagueId) : null
-      const loopVerdict = lastFaabPlan ? faabPlanVerdict(lastFaabPlan.plan) : null
+      /*
+       * SAFE / OUT from the LAST single-league matchup read's settle verdict — never the sentence the
+       * model was given about it. Only when that read was for the league this answer reports
+       * (`boundLeague`): a read for a league the model later moved away from would put one league's
+       * verdict on another's answer. The all-leagues view records no settle, so it gets no chip.
+       *
+       * The bid plan's HOLD / BID keeps precedence when both ran: it was the chip before this one.
+       */
+      const lastSettle = loopDelivery.delivered ? toolContext.eliminationSettles[toolContext.eliminationSettles.length - 1] ?? null : null
+      const loopSettleVerdict = lastSettle && boundLeague && lastSettle.leagueId === boundLeague.id ? eliminationSettleVerdict(lastSettle.settle) : null
+      const loopVerdict = (lastFaabPlan ? faabPlanVerdict(lastFaabPlan.plan) : null) ?? loopSettleVerdict
       const loopAnswerKeys = loopDelivery.delivered ? answerKeysFrom(toolContext.toolRuns) : []
-      return NextResponse.json({
-        response: loopText,
-        result: loopText,
-        source: 'chimmy_tool_loop',
-        sessionId,
-        meta: {
+      /* Stored like every other path's, so the history row can show the image the question came with. */
+      const loopScreenshot = userId && imageFile ? await storeChimmyScreenshot(userId, imageFile) : null
+      const loopMeta = {
           /* The mode that shaped this answer — only when one was asked for and applied. */
           ...(loopModeRequested ? { mode: selectedAssistantMode } : {}),
           /* The spend already happened above; report what it actually cost. */
@@ -3246,6 +3267,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
           ...(loopVerdict ? { verdict: loopVerdict } : {}),
           ...(loopFaabCard ? { faabPlan: loopFaabCard } : {}),
           ...(loopAnswerKeys.length > 0 ? { answerKeys: loopAnswerKeys } : {}),
+          ...(loopScreenshot ? { screenshotAttachment: loopScreenshot } : {}),
           responseStructure: {
             shortAnswer: loop.text.split('\n')[0]?.slice(0, 200) ?? '',
             /*
@@ -3255,7 +3277,46 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
              */
             caveats: ['Chimmy chose which of your league data to read for this answer; the sources are listed.'],
           },
-        },
+      }
+      /*
+       * 🛑 THE PATH THAT ANSWERS MOST MESSAGES NEVER WROTE ITS ANSWERS TO `chat_history` (found in
+       * #1552). Every other return writes both halves; this one returned straight away, so a tool-loop
+       * answer vanished from the transcript on reload, Chimmy's own prompt context never saw it, and
+       * "Newer answer below" could not survive a new tab. Written here exactly as the other paths do.
+       *
+       * ⚠ AFTER THE SPEND AND THE SETTLEMENT, AND IT READS THEM — IT NEVER DECIDES THEM. The charge
+       * (above the loop), the refund of an undelivered answer and the allowance release are all done
+       * by this point; `cost` is copied from the `tokenSpend` this response reports. A failed write
+       * is swallowed by `allSettled`, so it cannot cost the user the answer or change what they paid.
+       *
+       * The row's league is the proven, tool-bound one (`boundLeague`), never the request field.
+       */
+      if (userId) {
+        const rowLeagueId = boundLeague?.id ?? null
+        await Promise.allSettled([
+          appendChatHistory({ conversationId, role: 'user', content: message || '[image-only request]', userId, leagueId: rowLeagueId,
+            meta: loopScreenshot ? { display: { imagePreview: loopScreenshot.url, imageName: loopScreenshot.name } } : undefined }),
+          appendChatHistory({ conversationId, role: 'assistant', content: loopText, userId, leagueId: rowLeagueId,
+            meta: {
+              toolsUsed: loop.toolsUsed,
+              display: {
+                grounding: loopMeta.leagueGrounding,
+                cost: loopMeta.tokenSpend?.tokenCost ?? null,
+                mode: loopModeRequested ? selectedAssistantMode : null,
+                /* Read back by `readStoredDisplay` through the drawer's own readers. */
+                ...(loopVerdict ? { verdict: loopVerdict } : {}),
+                ...(loopFaabCard ? { faabPlan: loopFaabCard } : {}),
+                ...(loopAnswerKeys.length > 0 ? { answerKeys: loopAnswerKeys } : {}),
+              },
+            } }),
+        ])
+      }
+      return NextResponse.json({
+        response: loopText,
+        result: loopText,
+        source: 'chimmy_tool_loop',
+        sessionId,
+        meta: loopMeta,
       })
     }
   }

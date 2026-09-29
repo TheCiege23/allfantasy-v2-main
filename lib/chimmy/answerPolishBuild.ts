@@ -1,4 +1,5 @@
 import type { FaabBidPlan } from '@/lib/chimmy/tools/faabBidTool'
+import type { EliminationSettle } from '@/lib/core-app/eliminationSettle'
 import { verifiedHandoff } from '@/lib/core-app/platformLinks'
 import { tradeDecisionAction } from './tradeDecisionRecommendation'
 import type { ReadyChimmyScenario, ReadyStartSitScenario } from './tradeScenarioTypes'
@@ -61,6 +62,21 @@ export function faabPlanVerdict(plan: FaabBidPlan): ChimmyVerdict | null {
   if (plan.status !== 'ok') return null
   if (plan.outcome === 'save') return { key: 'hold', source: 'faab_plan', detail: 'Save your FAAB' }
   if (plan.outcome === 'bid') return { key: 'bid', source: 'faab_plan', detail: null }
+  return null
+}
+
+/**
+ * A guillotine week's settle verdict (`settleEliminationWeek`) as a chip: `safe` → SAFE, `chopped` →
+ * OUT. Nothing else has one — `open` is a race still running (a margin, however wide, is not a
+ * verdict), `no_chop` eliminates nobody, and a week with no settle read decided nothing.
+ *
+ * 🛑 THE SETTLE OBJECT ONLY. The model is told the same verdict in a sentence (`settleSentence`), but
+ * the chip never reads that sentence or the answer — it is the one line the model cannot soften.
+ */
+export function eliminationSettleVerdict(settle: EliminationSettle | null | undefined): ChimmyVerdict | null {
+  if (!settle) return null
+  if (settle.verdict === 'safe') return { key: 'safe', source: 'elimination_settle', detail: 'Week decided' }
+  if (settle.verdict === 'chopped') return { key: 'out', source: 'elimination_settle', detail: 'Week decided' }
   return null
 }
 
