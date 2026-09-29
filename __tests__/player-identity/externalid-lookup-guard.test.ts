@@ -24,9 +24,11 @@ import { describe, expect, it } from 'vitest'
 const UNAUDITED = new Set<string>([
   'app/api/leagues/[leagueId]/dynasty-projections/handler.ts', // roster ids — platform-dependent space
   'lib/ai-payload/resolveAiTeamContext.ts',
-  'lib/ai/waivers/waiverRecommendationService.ts', // "whichever id space the source platform used"
+  // BLOCKED by the decision-engine boundary: editing this legacy recommender fails that guard. Its
+  // one caller refuses every non-Sleeper-id league instead; the fix is moving the route onto
+  // lib/decision-os/waiver/pool.ts, which already reads ids in their own space.
+  'lib/ai/waivers/waiverRecommendationService.ts',
   'lib/core-app/depthChartBackups.ts',
-  'lib/core-app/warRoomBoard.ts', // DraftPick.playerId: ours, the provider's, or Sleeper's
   'lib/nfl-data-foundation/nflDataFoundationService.ts',
   'lib/player-data/getPlayerDataForSurface.ts', // has a name-agreement guard (the 211-photo fix)
   'lib/provider-trades/scanPendingYahooTrades.ts',

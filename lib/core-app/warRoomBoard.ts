@@ -1,6 +1,12 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import {
+  indexBySleeperId,
+  leagueIdSpaces,
+  nonSleeperExternalIdWhere,
+  sleeperIdWhere,
+} from '@/lib/player-identity/externalIdNamespace'
 
 /**
  * The last picks made in the drafts that are running right now.
@@ -77,9 +83,24 @@ export async function getLiveDraftPicks(
   const sessions = await prisma.draftSession
     .findMany({
       where: { leagueId: { in: liveLeagueIds } },
-      select: { id: true, leagueId: true, slotOrder: true, teamCount: true },
+      select: {
+        id: true,
+        leagueId: true,
+        slotOrder: true,
+        teamCount: true,
+        league: { select: { platform: true, sport: true } },
+      },
     })
-    .catch(() => [] as Array<{ id: string; leagueId: string; slotOrder: unknown; teamCount: number }>)
+    .catch(
+      () =>
+        [] as Array<{
+          id: string
+          leagueId: string
+          slotOrder: unknown
+          teamCount: number
+          league: { platform: string | null; sport: string } | null
+        }>,
+    )
 
   if (sessions.length === 0) return EMPTY
 
@@ -166,10 +187,16 @@ export async function getLiveDraftPicks(
    * this board does not need — so the fallback runs only for picks whose stored
    * image is null, and if that set is empty it does not run at all.
    *
-   * ⚠ AND IT MATCHES ACROSS THREE ID SPACES WHEN IT DOES RUN. `DraftPick.playerId`
-   * carries whichever id the drafting room had — ours, the provider's, or
-   * Sleeper's — the same three-key match `myTeam.ts` and the waiver recommender
-   * already do. A single-column join silently drops most of them.
+   * 🛑 EACH PICK IS ASKED ONLY IN ITS OWN LEAGUE'S ID SPACE. This used to match every
+   * id against `id`, `externalId` AND `sleeperId` and key the rows under all three,
+   * last write winning. `externalId` holds Rolling Insights' and the backfill's own
+   * numbers for other people, and measured on production 2026-09-29, 3,558 of the
+   * 6,692 Sleeper-league picks (every one a Sleeper id; none our row id) ALSO
+   * matched such a row for a different-named player — so half the board could
+   * show a stranger's headshot, club and position, and hand the player card his
+   * Sleeper id. `leagueIdSpaces` sends a Sleeper draft's ids to `sleeperIdWhere`,
+   * a native draft's non-Sleeper ids (`name:…`, a native NHL draft's Rolling
+   * Insights numbers) to `externalId`, and any other platform's to nothing.
    */
   /*
    * ⚠ WIDENED FROM "picks with no stored headshot" TO EVERY PICK, because the
@@ -179,48 +206,55 @@ export async function getLiveDraftPicks(
    * `TAIL * sessions * 3` (TAIL = 4) and only exists while a draft is LIVE, so
    * this is a dozen ids per draft, not a table scan.
    */
-  const playerIds = [
-    ...new Set(picks.map((p) => p.playerId).filter((x): x is string => !!x)),
-  ]
-  const players =
-    playerIds.length > 0
-      ? await prisma.sportsPlayer
-          .findMany({
-            where: {
-              OR: [
-                { id: { in: playerIds } },
-                { externalId: { in: playerIds } },
-                { sleeperId: { in: playerIds } },
-              ],
-            },
-            select: {
-              id: true,
-              externalId: true,
-              sleeperId: true,
-              imageUrl: true,
-              team: true,
-              position: true,
-            },
-          })
-          .catch(() => [])
-      : []
+  type PickMeta = { imageUrl: string | null; team: string | null; position: string | null; sleeperId: string | null }
+  const leagueOfSession = new Map(sessions.map((s) => [s.id, s.league]))
+  /** Each pick's lookup key: `sleeper:<id>` or `<SPORT>:<id>` for a provider id; null when unreadable. */
+  const keyOfPick = new Map<string, string>()
+  const sleeperIds = new Set<string>()
+  const providerIdsBySport = new Map<string, Set<string>>()
+  for (const p of picks) {
+    if (!p.playerId) continue
+    const league = leagueOfSession.get(p.sessionId)
+    const sport = String(league?.sport ?? 'NFL').toUpperCase()
+    const split = leagueIdSpaces([p.playerId], sport, league?.platform)
+    if (split.sleeperIds.length > 0) {
+      sleeperIds.add(p.playerId)
+      keyOfPick.set(`${p.sessionId}:${p.overall}`, `sleeper:${p.playerId}`)
+    } else if (split.providerIds.length > 0) {
+      const set = providerIdsBySport.get(sport) ?? new Set<string>()
+      set.add(p.playerId)
+      providerIdsBySport.set(sport, set)
+      keyOfPick.set(`${p.sessionId}:${p.overall}`, `${sport}:${p.playerId}`)
+    }
+  }
 
-  const byPlayerKey = new Map<
-    string,
-    { imageUrl: string | null; team: string | null; position: string | null; sleeperId: string | null }
-  >()
-  for (const p of players) {
-    const v = {
-      imageUrl: p.imageUrl ?? null,
-      team: p.team ?? null,
-      position: p.position ?? null,
-      sleeperId: p.sleeperId ?? null,
-    }
-    // Keyed under all three vocabularies, so a lookup succeeds whichever one the
-    // drafting room stored — and yields the SLEEPER id regardless.
-    for (const k of [p.id, p.externalId, p.sleeperId]) {
-      if (k) byPlayerKey.set(k, v)
-    }
+  const metaSelect = { externalId: true, sleeperId: true, source: true, imageUrl: true, team: true, position: true } as const
+  const [bySleeperRows, byProviderRows] = await Promise.all([
+    sleeperIds.size > 0
+      ? prisma.sportsPlayer.findMany({ where: sleeperIdWhere([...sleeperIds]), select: metaSelect }).catch(() => [])
+      : Promise.resolve([]),
+    Promise.all(
+      [...providerIdsBySport].map(([sport, ids]) =>
+        prisma.sportsPlayer
+          .findMany({ where: nonSleeperExternalIdWhere([...ids], sport), select: metaSelect })
+          .then((rows) => rows.map((r) => ({ ...r, sport })))
+          .catch(() => []),
+      ),
+    ).then((lists) => lists.flat()),
+  ])
+
+  const metaOf = (p: { imageUrl: string | null; team: string | null; position: string | null; sleeperId: string | null }): PickMeta => ({
+    imageUrl: p.imageUrl ?? null,
+    team: p.team ?? null,
+    position: p.position ?? null,
+    sleeperId: p.sleeperId ?? null,
+  })
+  const byPlayerKey = new Map<string, PickMeta>()
+  // Sleeper's own row wins over the provider rows the crosswalk stamped with the same Sleeper id.
+  for (const [sleeperId, row] of indexBySleeperId(bySleeperRows)) byPlayerKey.set(`sleeper:${sleeperId}`, metaOf(row))
+  for (const row of byProviderRows) {
+    const key = `${row.sport}:${row.externalId}`
+    if (!byPlayerKey.has(key)) byPlayerKey.set(key, metaOf(row))
   }
 
   const byLeague: Record<string, LivePick[]> = {}
@@ -243,7 +277,8 @@ export async function getLiveDraftPicks(
       .slice(0, TAIL)
       .reverse()
       .map((p): LivePick => {
-        const meta = p.playerId ? byPlayerKey.get(p.playerId) : undefined
+        const pickKey = keyOfPick.get(`${p.sessionId}:${p.overall}`)
+        const meta = pickKey ? byPlayerKey.get(pickKey) : undefined
         return {
           overall: p.overall,
           round: p.round || Math.floor((p.overall - 1) / teams) + 1,
