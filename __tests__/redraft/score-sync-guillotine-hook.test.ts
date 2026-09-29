@@ -187,7 +187,7 @@ describe('score-sync tournament integration', () => {
 })
 
 
-describe('score-sync — completed tournament recovery', () => {
+describe('score-sync â€” completed tournament recovery', () => {
   it('repairs archival before resolving a calendar or syncing player stats', async () => {
     m.seasons.mockResolvedValue([{ id: 'finished', leagueId: 'L', status: 'complete', sport: 'NFL', league: { bestBallMode: true, bbContestId: 'c', settings: { best_ball_settings: { contestStructure: 'tournament' } } } }])
     m.tournament.mockResolvedValue('complete')
