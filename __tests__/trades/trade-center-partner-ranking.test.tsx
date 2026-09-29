@@ -163,7 +163,13 @@ describe('Trade Center — trade depth paywall', () => {
     render(<TradeCenter league={LEAGUE} depthAccess={LOCKED} />)
     await analyze()
     expect(screen.getByRole('region', { name: 'The full trade breakdown — AF Pro' })).toBeInTheDocument()
-    expect(document.body.textContent).not.toContain('Decision OS · this deal')
+    /*
+     * The breakdown SECTION, not its heading text. This asserted the string "Decision OS · this
+     * deal", so renaming that label to "This deal" — internal jargon a user should never see —
+     * failed a test about the PAYWALL. `[data-mstep='review']` is what distinguishes this section
+     * from the trade finder, which reuses the same `.af-tc-dos` class.
+     */
+    expect(document.querySelector(".af-tc-dos[data-mstep='review']")).toBeNull()
     expect(document.body.textContent).not.toContain('You sell a starter for depth you do not need.')
   })
 
@@ -171,7 +177,7 @@ describe('Trade Center — trade depth paywall', () => {
     render(<TradeCenter league={LEAGUE} depthAccess={PRELAUNCH} />)
     expect(document.querySelector('.af-tc-fits')).not.toBeNull()
     await analyze()
-    expect(document.body.textContent).toContain('Decision OS · this deal')
+    expect(document.querySelector(".af-tc-dos[data-mstep='review']")).not.toBeNull()
     expect(document.body.textContent).toContain('You sell a starter for depth you do not need.')
     expect(screen.getByTestId('core-free-until-trade_depth')).toHaveTextContent('Free until Oct 15 — then AF Pro')
     expect(screen.queryByTestId('core-lock-trade_depth')).toBeNull()
