@@ -377,6 +377,12 @@
   text-transform: uppercase;
   color: var(--warn);
 }
+/* The reason a "soon" chip is soon, on its own line under the strip. */
+.af-lp-soon-note {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--faint);
+}
 
 .af-lp-sports {
   margin-left: auto;

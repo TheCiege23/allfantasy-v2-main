@@ -419,6 +419,12 @@ export function LandingV4({
             <span className="af-lp-sports-label">{c.connects.createLabel}</span> {CREATE_SPORTS.map((s) => sportLabel(s, c)).join(' · ')}
           </span>
         </span>
+        {/* Why a "soon" chip is soon — only while the config still has that platform off. */}
+        {PLATFORMS.filter((p) => p.state === 'soon' && c.connects.soonNotes[p.provider]).map((p) => (
+          <span key={`${p.provider}-note`} className="af-lp-soon-note" data-provider={p.provider}>
+            {c.connects.soonNotes[p.provider]}
+          </span>
+        ))}
       </section>
 
       {/* ── How it works: what a new account actually does ─────────── */}
