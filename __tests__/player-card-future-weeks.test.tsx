@@ -47,6 +47,8 @@ vi.mock('@/lib/core-app/rosteredMarket', () => ({
 vi.mock('@/lib/core-app/playerProjections', () => ({
   latestProjectionWeek: h.latestWeek,
   lookupProjections: h.lookup,
+  // The AF engine read the card also makes; no AF rows here, so the strip is what these tests assert.
+  lookupAfEngineProjections: vi.fn(async () => new Map()),
 }))
 vi.mock('@/lib/core-app/archivedTradeGrade', () => ({ gradeArchivedTradeRows: vi.fn(async () => new Map()) }))
 vi.mock('@/lib/projections/futureWeekProjections', () => ({ readFutureWeekProjections: h.readFuture }))
@@ -123,6 +125,22 @@ describe('loadSchedule with later-week projections', () => {
         { week: 7, opponent: 'SEA', home: true, bye: false, projection: null },
       ],
     })
+  })
+})
+
+describe('loadSchedule with the AF engine number as well', () => {
+  it('puts AF on the current week only, never on a later week carrying Sleeper’s early line', async () => {
+    const { schedule } = await loadSchedule('GB', 2026, 3, 3, 5.1, 5, futureFor(), 6.3)
+    if (!schedule.available) throw new Error('expected a schedule')
+    expect(schedule.data.weeks.map((w) => [w.week, w.projection, w.afProjection ?? null])).toEqual([
+      [3, 5.1, 6.3],
+      [4, 14.2, null],
+      [5, null, null],
+      [6, null, null],
+      [7, null, null],
+    ])
+    // A later week never gains the field at all.
+    expect(schedule.data.weeks.slice(1).some((w) => 'afProjection' in w)).toBe(false)
   })
 })
 
