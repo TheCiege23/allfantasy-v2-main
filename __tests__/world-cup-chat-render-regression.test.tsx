@@ -15,6 +15,13 @@ describe("World Cup chat render regression guard", () => {
     expect(source).not.toContain("Latest Pool Updates")
     expect(source).not.toContain("Commissioner Announcements")
     expect(source).not.toContain("System Reminders")
-    expect(source).not.toContain("Moderation")
+    /*
+     * The old drawer had a "Moderation" settings PANEL — a visible heading, `<p …>Moderation</p>`.
+     * That is what stays out. The per-message Report/Block menu (MessageModerationMenu) is a
+     * different thing and is REQUIRED: App Review (guideline 1.2) needs report and block on every
+     * chat, and the Terms promise it. So forbid the heading, and require the menu.
+     */
+    expect(source).not.toMatch(/>\s*Moderation\s*</)
+    expect(source).toContain("<MessageModerationMenu")
   })
 })
