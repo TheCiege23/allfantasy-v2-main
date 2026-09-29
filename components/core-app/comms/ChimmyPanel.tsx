@@ -39,6 +39,15 @@ import '@/components/core-app/af-comms.css'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
 import ChimmyActionCard from '@/components/chimmy/ChimmyActionCard'
 import { readActionCards, type ChimmyActionCard as ChimmyActionCardData } from '@/lib/chimmy-chat/actionCards'
+import {
+  newerAnswers,
+  readAnswerPolish,
+  readChimmyFaabCard,
+  readChimmyVerdict,
+  type ChimmyFaabCard,
+  type ChimmyVerdict,
+} from '@/lib/chimmy/answerPolish'
+import { ChimmyFaabBidCard, ChimmyNewerAnswerTag, ChimmyVerdictChip } from './ChimmyAnswerPolish'
 
 /**
  * Chimmy's private chat — ONE component, shown in two places:
@@ -183,6 +192,15 @@ type ChatTurn = {
    * A card changes nothing until the user taps Confirm on it; see lib/chimmy/actions/confirmAction.ts.
    */
   actionCards?: ChimmyActionCardData[] | null
+  /** The engine's call — HOLD / BID / START … — from `meta`, never from the text. See answerPolish.ts. */
+  verdict?: ChimmyVerdict | null
+  /** The structured `get_faab_bid_plan` result, rendered as a card. */
+  faabPlan?: ChimmyFaabCard | null
+  /**
+   * `<tool>:<leagueId>` for each whole-league computation the answer ran. Kept on the turn (and so in
+   * sessionStorage) so an earlier answer can be marked "Newer answer below" by a later one.
+   */
+  answerKeys?: string[] | null
 }
 
 function scenarioFollowUps(scenario: ReadyChimmyScenario | null): string[] | null {
@@ -851,6 +869,7 @@ export function ChimmyPanel({
             : null
 
         const answeredPlan = readPlanAllowanceView(payload.meta?.planAllowance)
+        const polish = readAnswerPolish(payload.meta)
         setTurns((t) => [
           ...t,
           {
@@ -888,6 +907,9 @@ export function ChimmyPanel({
             answerId: newAnswerId(),
             tools: readToolsUsed(payload.meta?.toolsUsed),
             actionCards: readActionCards(payload.meta),
+            verdict: polish.verdict,
+            faabPlan: polish.faabPlan,
+            answerKeys: polish.answerKeys.length ? polish.answerKeys : null,
           },
         ])
         if (answeredPlan) setPlanStatus(answeredPlan)
@@ -955,8 +977,21 @@ export function ChimmyPanel({
   /* Follow-up chips render under the newest answer only; older ones would be stale suggestions. */
   const lastChimmyId = [...turns].reverse().find((t) => t.role === 'chimmy')?.id ?? null
 
+  /*
+   * "Newer answer below": an answer a LATER one re-ran the same whole-league computation for (the bid
+   * plan, the best lineup, the playoff outlook) in the same league. From the stored `answerKeys` only —
+   * a correction in the prose ("I owe you a correction") marks nothing unless the tool actually ran.
+   */
+  const newerById = useMemo(() => newerAnswers(turns), [turns])
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  const jumpToTurn = useCallback((id: string) => {
+    const nodes = panelRef.current?.querySelectorAll<HTMLElement>('[data-turn-id]') ?? []
+    const target = Array.from(nodes).find((n) => n.dataset.turnId === id)
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+
   return (
-    <div className="af-cm-panel" data-chimmy="true">
+    <div className="af-cm-panel" data-chimmy="true" ref={panelRef}>
       {source !== 'messages_ai' ? <Link className="af-cm-expand" href={'/chimmy/chat' + (scopeId ? '?leagueId=' + encodeURIComponent(scopeId) : '')}>Open full-page analysis ↗</Link> : null}
       {/* Scope selector. The current scope is always visible, by contract. */}
       <div className="af-cm-scope">
@@ -1048,11 +1083,26 @@ export function ChimmyPanel({
           </div>
         ) : (
           turns.map((t) => (
-            <div key={t.id} className="af-cm-turn" data-role={t.role} data-carried={t.carried ? 'true' : undefined}>
+            <div
+              key={t.id}
+              className="af-cm-turn"
+              data-role={t.role}
+              data-carried={t.carried ? 'true' : undefined}
+              data-turn-id={t.id}
+              data-superseded={t.role === 'chimmy' && newerById.has(t.id) ? 'true' : undefined}
+            >
               <span className="af-cm-turn-author">
                 {t.role === 'chimmy' ? 'Chimmy' : 'You'}
                 {t.carried ? ' · earlier' : ''}
               </span>
+
+              {/* Answer polish: superseded tag, then the engine's verdict, then the bid card — above the prose. */}
+              {t.role === 'chimmy' && newerById.has(t.id) ? (
+                <ChimmyNewerAnswerTag onJump={() => jumpToTurn(newerById.get(t.id) as string)} />
+              ) : null}
+              {/* Re-read at render: a turn restored from sessionStorage is not re-validated on the way in. */}
+              {t.role === 'chimmy' && readChimmyVerdict(t.verdict) ? <ChimmyVerdictChip verdict={readChimmyVerdict(t.verdict)!} /> : null}
+              {t.role === 'chimmy' && readChimmyFaabCard(t.faabPlan) ? <ChimmyFaabBidCard card={readChimmyFaabCard(t.faabPlan)!} /> : null}
 
               {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
               {t.role === 'chimmy' ? (

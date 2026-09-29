@@ -605,6 +605,129 @@
 }
 
 /*
+ * Answer polish (lib/chimmy/answerPolish.ts): the engine's verdict as a pill at the top of an answer,
+ * the FAAB bid plan as a card, and "Newer answer below" on a superseded answer. Tone is a token AND
+ * a word — HOLD / BID never rely on colour alone.
+ */
+.af-cm-verdict {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  margin: 4px 0 2px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--chip);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.af-cm-verdict-label {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.af-cm-verdict-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.af-cm-verdict[data-tone='go'] { border-color: var(--good); }
+.af-cm-verdict[data-tone='go'] .af-cm-verdict-label { color: var(--good); }
+.af-cm-verdict[data-tone='stop'] { border-color: var(--bad); }
+.af-cm-verdict[data-tone='stop'] .af-cm-verdict-label { color: var(--bad); }
+.af-cm-verdict[data-tone='wait'] { border-color: var(--warn); }
+.af-cm-verdict[data-tone='wait'] .af-cm-verdict-label { color: var(--warn); }
+
+.af-cm-faab {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--chip);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.af-cm-faab-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 10px;
+}
+
+.af-cm-faab-budget { font-weight: 700; color: var(--text); }
+
+.af-cm-faab-save {
+  margin: 6px 0 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.af-cm-faab-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.af-cm-faab-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+
+.af-cm-faab-row:first-child { border-top: 0; }
+
+.af-cm-faab-name {
+  min-width: 0;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.af-cm-faab-pos { font-weight: 400; color: var(--faint); }
+
+.af-cm-faab-bid {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--good);
+  white-space: nowrap;
+}
+
+.af-cm-faab-effect {
+  flex-basis: 100%;
+  color: var(--faint);
+}
+
+.af-cm-faab-note { margin: 6px 0 0; color: var(--faint); }
+
+.af-cm-newer {
+  display: inline-block;
+  margin: 2px 0 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.af-cm-newer:hover { background: var(--accent-line); }
+
+/*
  * "Did it / Not doing it" under advice Chimmy put on file. Quiet by design: it asks once, it is
  * optional, and the answer above it matters more.
  */

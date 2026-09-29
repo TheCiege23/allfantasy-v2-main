@@ -26,6 +26,8 @@ import { QuotedMessage } from './QuotedMessage'
 import { renderMessageText } from './messageText'
 import { MessageReactions } from './MessageReactions'
 import { hasRichContent } from './RichMessage'
+import { ChimmyVerdictChip } from './ChimmyAnswerPolish'
+import { readAnswerPolish } from '@/lib/chimmy/answerPolish'
 import {
   describeReactors,
   initialsFor,
@@ -403,6 +405,7 @@ export function ChatMessageList({
            * never "mine" — not even for the commissioner — whatever id the wire carries.
            */
           const chimmy = isChimmyAuthored(m.metadata)
+          const chimmyVerdict = chimmy && !isDeletedMessage(m.metadata) ? readAnswerPolish(m.metadata).verdict : null
           const mine = item.mine && !chimmy
           const deleted = isDeletedMessage(m.metadata)
           const rich = !deleted && richOf(m)
@@ -584,6 +587,12 @@ export function ChatMessageList({
                         Links and "@sam" highlights as React nodes (messageText.tsx) — the one place
                         a bubble's words are drawn, for league chat, DMs and huddles alike.
                       */}
+                      {/*
+                        A private @chimmy reply from the decision engine stores its verdict on the
+                        message (`metadata.decision.verdict`); the chip reads that, never the text,
+                        and only on a Chimmy-marked row.
+                      */}
+                      {chimmyVerdict ? <ChimmyVerdictChip verdict={chimmyVerdict} /> : null}
                       {shown ? <p className="af-cm-bubble-text">{renderMessageText(censorProfanity(shown))}</p> : null}
                       {rich ? renderRich(m) : null}
                     </>

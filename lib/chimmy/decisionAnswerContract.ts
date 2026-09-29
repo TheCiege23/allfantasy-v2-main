@@ -2,6 +2,7 @@ import { isGeneralMarketValueQuestion } from '@/lib/chimmy-chat/question-routing
 import { resolveAiAuthority } from '@/lib/decision-os/three-brain/phase4/aiAuthorityPolicy'
 import type { ReadyChimmyScenario } from './tradeScenarioTypes'
 import type { ChatStartCall } from './tools/chimmyTools'
+import type { ChimmyVerdict } from './answerPolish'
 
 export type ChimmyDecisionKind = 'trade' | 'lineup' | 'waiver'
 export type ChimmyDecisionAnswer = {
@@ -16,6 +17,13 @@ export type ChimmyDecisionAnswer = {
   gap?: { code: string; remedy: string }
   scenario?: ReadyChimmyScenario
   startCalls?: ChatStartCall[]
+  /**
+   * The engine's call, for the chip at the top of the answer — set only on a READY answer whose
+   * engine states one (`answerPolishBuild.ts`). Never derived from `answer`.
+   */
+  verdict?: ChimmyVerdict | null
+  /** Whole-league computations this answer ran, for "Newer answer below" (`answerPolish.ts`). */
+  answerKeys?: string[]
 }
 
 const TYPES = { trade: 'manager.trade.evaluate', lineup: 'manager.lineup.set', waiver: 'manager.waiver.claim' } as const
@@ -40,5 +48,8 @@ export function decisionAnswer(args: Omit<ChimmyDecisionAnswer, 'version' | 'aut
 /** Client metadata deliberately excludes private engine inputs and the duplicate answer text. */
 export function decisionAnswerMeta(result: ChimmyDecisionAnswer) {
   return { version: result.version, kind: result.kind, decisionType: result.decisionType, authority: result.authority,
-    status: result.status, leagueId: result.leagueId, sources: result.sources, ...(result.gap ? { gap: result.gap } : {}) }
+    status: result.status, leagueId: result.leagueId, sources: result.sources, ...(result.gap ? { gap: result.gap } : {}),
+    /* A chip only on a READY answer: a free partial ("needs_data") decided nothing, whatever it opens with. */
+    ...(result.status === 'ready' && result.verdict ? { verdict: result.verdict } : {}),
+    ...(result.status === 'ready' && result.answerKeys?.length ? { answerKeys: result.answerKeys } : {}) }
 }
