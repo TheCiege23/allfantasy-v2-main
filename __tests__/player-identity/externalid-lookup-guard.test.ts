@@ -31,8 +31,6 @@ const UNAUDITED = new Set<string>([
   'lib/core-app/warRoomBoard.ts', // DraftPick.playerId: ours, the provider's, or Sleeper's
   'lib/injury-impact-dashboard/runInjuryImpactDashboard.ts',
   'lib/integrity/TankingDetectionEngine.ts',
-  'lib/lineup-actions/nativeLineupScan.ts',
-  'lib/lineup-actions/sleeperLineupScan.ts',
   'lib/nfl-data-foundation/nflDataFoundationService.ts',
   'lib/player-data/getPlayerDataForSurface.ts', // has a name-agreement guard (the 211-photo fix)
   'lib/player-identity/findSportsPlayerByLeagueId.ts',
