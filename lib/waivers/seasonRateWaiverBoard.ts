@@ -1,11 +1,12 @@
 import type { PrismaClient } from '@prisma/client'
 
-import { findMyRoster, rosterPlayerIds } from '@/lib/core-app/myRoster'
+import { findMyRoster } from '@/lib/core-app/myRoster'
 import { canFillSlotForSport, isStartableInSport } from '@/lib/core-app/sportSlotEligibility'
 import { startingSlots } from '@/lib/core-app/slotEligibility'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 
 import {
+  allRosterIds,
   leagueIdColumn,
   leagueIdOf,
   loadIdentityForKeys,
@@ -14,6 +15,7 @@ import {
   newestSeasonRateSeason,
   priceSeasonRate,
   resolveRosterIdsToKeys,
+  SEASON_RATE_ID_FLOOR,
 } from './seasonRatePool'
 import { bestLineup, type Scored, type WaiverBoard, type WaiverBoardState, type WaiverCandidate } from './waiverBoard'
 import { noSeasonProjectionsReason, waiverBasisSentence, waiverSportLabel, type WaiverSportPlan } from './waiverSportBasis'
@@ -37,33 +39,6 @@ import { noSeasonProjectionsReason, waiverBasisSentence, waiverSportLabel, type 
 
 /** How many projected players to consider. Well past the depth of any real wire. */
 export const SEASON_RATE_POOL = 600
-
-/** The share of your roster that must resolve before the league can be priced — as the NFL board. */
-export const SEASON_RATE_ID_FLOOR = 0.5
-
-/** Starters, in the few shapes rosters store them. `0` is an unfilled slot, not a player. */
-export function starterIdsOf(playerData: unknown): Set<string> {
-  const out = new Set<string>()
-  const raw = playerData && typeof playerData === 'object' && !Array.isArray(playerData)
-    ? (playerData as Record<string, unknown>).starters
-    : null
-  if (!Array.isArray(raw)) return out
-  for (const x of raw) {
-    const id =
-      typeof x === 'string' || typeof x === 'number'
-        ? String(x).trim()
-        : x && typeof x === 'object'
-          ? String((x as Record<string, unknown>).playerId ?? (x as Record<string, unknown>).id ?? '').trim()
-          : ''
-    if (id && id !== '0') out.add(id)
-  }
-  return out
-}
-
-/** Every player id on a roster, holes excluded. */
-export function allRosterIds(playerData: unknown): string[] {
-  return rosterPlayerIds(playerData).filter((id) => id !== '0')
-}
 
 const empty = (
   state: WaiverBoardState,

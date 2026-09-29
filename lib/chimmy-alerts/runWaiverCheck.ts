@@ -34,6 +34,13 @@ import {
  * points are already scored, and the window stays closed: the check waits for the week ahead
  * rather than advising on the week behind. The window is keyed on THAT week's first kickoff, so a
  * feed that has not moved yet reads as "the week's games have started" and nothing is sent.
+ *
+ * ⚠ NFL ROWS ONLY, DELIBERATELY — `board.rows`, never `board.sports`. The board's other-sport
+ * sections are priced PER GAME from a season rate; this message says "+N projected pts in week W",
+ * gates on WAIVER_CHECK_MIN_GAIN points per NFL week, is windowed on the NFL schedule and goes to an
+ * NFL-league audience. None of that is true of a basketball gain, so sending one here would state a
+ * weekly forecast the number never made. Messaging those sports needs their own window, audience
+ * and "worth a claim" threshold — a product decision, not a widening of this filter.
  */
 
 export type WaiverCheckUserOutcome =

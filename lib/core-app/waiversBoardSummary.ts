@@ -76,8 +76,12 @@ const STALE_WHILE_REVALIDATE_MS = 10 * 60_000
 
 registerScreenSummary<WaiversBoardData | null>({
   screen: WAIVERS_BOARD_SCREEN,
-  /** ⚠ Bump whenever `WaiversBoardData` changes shape — the version is part of the cache key. */
-  version: 1,
+  /**
+   * ⚠ Bump whenever `WaiversBoardData` changes shape — the version is part of the cache key.
+   * 2: the per-sport `sports` sections, and `considered` counting NFL leagues only. A v1 entry for a
+   * basketball-only account would otherwise keep serving the board with its leagues silently gone.
+   */
+  version: 2,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a user-scoped key carries no league id, so a league sweep would match nothing.
