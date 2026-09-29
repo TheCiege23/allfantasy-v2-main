@@ -4,7 +4,9 @@
  * Vercel Cron schedule: daily at 10:00 UTC (see vercel.json).
  * Calls runAdpImporter to refresh AdpDataRecord rows from provider ADP feeds
  * (Fantrax, Sleeper, ESPN, MFL, NFFC, FFC, Rolling Insights, AI ADP snapshots)
- * and build consensus rows for all supported sports.
+ * and build consensus rows for all supported sports. Then, each failure-isolated:
+ * FantasyCalc value capture, the defender board, the AI ADP job, and the Market
+ * Movers player-valuation sync (`player-valuations:{sport}`).
  *
  * Optional query params:
  *   sport  — comma-separated sport codes (e.g. "NFL") — defaults to all supported sports
@@ -34,9 +36,47 @@ import { ingestPlayerValues } from "@/lib/player-values/ingestPlayerValues"
 import { runAiAdpJob } from "@/lib/ai-adp-engine"
 import { prisma } from "@/lib/prisma"
 import { refreshCanonicalDefenderBoardCache } from "@/lib/values/canonicalDefenderBoardCache"
+import { PLAYER_VALUATION_SPORTS, syncPlayerValuations } from "@/lib/player-valuation-sync"
+import type { ApiChainSport } from "@/lib/workers/api-config"
+import { redactAndCap } from "@/lib/security/redactSecrets"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
+
+/*
+ * Player-valuation phase bounds. The route has `maxDuration` 300s and four phases ahead of this
+ * one, so the phase takes what is left minus a margin, capped, and is skipped outright if too
+ * little remains to finish even one sport.
+ */
+const ROUTE_BUDGET_MS = maxDuration * 1000
+const VALUATIONS_MARGIN_MS = 30_000
+const VALUATIONS_MAX_MS = 150_000
+const VALUATIONS_MIN_MS = 20_000
+/*
+ * Daily writer, so the rows are written to outlive a day. The reader serves stale rows anyway
+ * (`allowStale: true`) and only LABELS them stale, so 30h means "stale" is shown only when a run
+ * was actually missed — not every afternoon, which is what the script's 6h default would do.
+ */
+const VALUATIONS_TTL_MS = 30 * 60 * 60 * 1000
+
+/** This route's sport codes (upper case, ADP vocabulary) → the valuation writer's. */
+const VALUATION_SPORT_BY_CODE: Record<string, ApiChainSport> = {
+  NFL: "nfl",
+  NBA: "nba",
+  MLB: "mlb",
+  NHL: "nhl",
+  NCAAF: "ncaaf",
+  NCAAFB: "ncaaf",
+  NCAAB: "ncaab",
+  NCAABB: "ncaab",
+  SOCCER: "soccer_euro",
+}
+
+function valuationSportsFor(sports: string[] | undefined): ApiChainSport[] {
+  if (!sports) return PLAYER_VALUATION_SPORTS
+  const mapped = sports.map((s) => VALUATION_SPORT_BY_CODE[s]).filter((s): s is ApiChainSport => Boolean(s))
+  return Array.from(new Set(mapped))
+}
 
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
@@ -59,7 +99,7 @@ async function handle(req: NextRequest) {
         dryRun: true,
         sports: sports ?? "all",
         message:
-          "Dry run — no DB writes performed (ADP import, player-value capture and AI ADP job all skipped).",
+          "Dry run — no DB writes performed (ADP import, player-value capture, AI ADP job and player-valuation sync all skipped).",
         durationMs: Date.now() - startedAt,
       })
     }
@@ -152,11 +192,68 @@ async function handle(req: NextRequest) {
       aiAdp = { error: message.slice(0, 200) }
     }
 
+    /*
+     * MARKET MOVERS' VALUATIONS RIDE ALONG, AND THIS IS THE ONLY THING THAT SCHEDULES THEM.
+     *
+     * `/market-movers` reads `player-valuations:{sport}` through `/api/player-valuations`, and
+     * the only writer was the npm script `sync:player-valuations` — which nothing ran, so the
+     * surface served whatever a human last synced (`lib/enrichment-cache.ts` called it an
+     * "unscheduled writer"). Owner decision 2026-09-29: schedule it WITHOUT a new cron slot —
+     * the CI cron budget caps job count — and this is the daily player-value job already.
+     * The writer is the script's own, moved to `lib/player-valuation-sync.ts`, not a copy.
+     *
+     * LAST, and BOUNDED. It calls Rolling Insights (4 endpoints × 7 sports), the slowest thing
+     * here, so it gets what the route has left rather than a fixed slice: sports not yet started
+     * when the budget runs out are skipped and reported, and the route does not wait past the
+     * budget for one still in flight.
+     *
+     * FAILURE IS ISOLATED, same rule as its siblings: every earlier phase has already written.
+     * One sport failing is recorded per sport by the writer; a throw here is caught and reported.
+     */
+    let playerValuations:
+      | Awaited<ReturnType<typeof syncPlayerValuations>>
+      | { skipped: string }
+      | { timedOut: true; budgetMs: number }
+      | { error: string }
+      | null = null
+    try {
+      const valuationSports = valuationSportsFor(sports)
+      const budgetMs = Math.min(VALUATIONS_MAX_MS, startedAt + ROUTE_BUDGET_MS - VALUATIONS_MARGIN_MS - Date.now())
+      if (valuationSports.length === 0) {
+        playerValuations = { skipped: "no requested sport has player valuations" }
+      } else if (budgetMs < VALUATIONS_MIN_MS) {
+        playerValuations = { skipped: `route time budget spent (${Math.max(0, budgetMs)}ms left)` }
+      } else {
+        let timer: ReturnType<typeof setTimeout> | undefined
+        const timeout = new Promise<{ timedOut: true; budgetMs: number }>((resolve) => {
+          timer = setTimeout(() => resolve({ timedOut: true, budgetMs }), budgetMs)
+        })
+        try {
+          playerValuations = await Promise.race([
+            syncPlayerValuations({
+              sports: valuationSports,
+              ttlMs: VALUATIONS_TTL_MS,
+              deadlineAt: Date.now() + budgetMs,
+            }),
+            timeout,
+          ])
+        } finally {
+          if (timer) clearTimeout(timer)
+        }
+      }
+    } catch (e) {
+      // Redacted: this phase talks to Rolling Insights, whose token rides in the query string.
+      const message = redactAndCap(e instanceof Error ? e.message : e, 200)
+      console.error("[cron/adp-refresh] player valuation sync failed:", message)
+      playerValuations = { error: message }
+    }
+
     return NextResponse.json({
       ok: true,
       dryRun: false,
       playerValues,
       aiAdp,
+      playerValuations,
       imported: result.imported,
       sports: result.sports,
       season: result.season,

@@ -102,7 +102,9 @@ export async function writeCache(
  * found families that are read ON PURPOSE after they expire, several with nothing that rebuilds
  * them: `trade-grades:v2:` and `draft-report:v1:` (career and receipts history), `h2h:v2:` (read
  * with "EXPIRY IS IGNORED ON PURPOSE"), `fantasycalc:values:` (the warm list is built from these
- * rows), `player-valuations:` (unscheduled writer), `college-team-directory:v1` (writer never
+ * rows), `player-valuations:` (read with `allowStale: true`; written daily by
+ * `/api/cron/adp-refresh` since 2026-09-29, and a missed run must leave the last good rows
+ * in place), `college-team-directory:v1` (writer never
  * called), `projection_accuracy:`, `league-context:rules:v1:`, the sports-router `<SPORT>:<type>:`
  * keys and `nfl-redraft-provider:` (served stale at any age). A table-wide purge would have
  * deleted all of them. Families that fall back to an expired row only when a live fetch fails are
