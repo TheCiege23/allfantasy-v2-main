@@ -24,6 +24,8 @@ import {
   receiptGradeFields,
   receiptPromptBlock,
 } from '@/lib/decision-os/trade/receiptViews'
+import { createLegacyPackageGrader } from '@/lib/legacy/legacyOneGrade'
+import { gradeLegacyCounters } from '@/lib/legacy/legacyPackageGrade'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { fetchPlayerNewsFromGrok } from '@/lib/ai-gm-intelligence'
@@ -2969,6 +2971,27 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       engineAnalysis = await runTradeAnalysis(engineReq)
     } catch {}
 
+    /*
+     * 🛑 THE COUNTER SUGGESTIONS CARRY THE ONE GRADE, NOT THIS ENGINE'S (2026-09-29). `runTradeAnalysis`
+     * is kept only for what it SUGGESTS — its counters (which player to add or ask back) and its title
+     * odds. Its verdict, fairness score, acceptance probability and acceptance buckets are no longer sent,
+     * and each counter's own `acceptProb` / `fairnessScore` ("Est. Accept", "Fairness" on the card) is
+     * replaced by the one grade of the deal the counter leaves — the same orientation as the receipt
+     * above (give = assetsB, get = assetsA).
+     */
+    let engineClientView: { counters: Awaited<ReturnType<typeof gradeLegacyCounters>>; championshipEquity: unknown } | null = null
+    if (engineAnalysis) {
+      const counterGrader = await createLegacyPackageGrader({ suppliedLeagueId: leagueId, userId: sessionUserId, viewerSide: false })
+      engineClientView = {
+        counters: await gradeLegacyCounters(
+          engineAnalysis.counters,
+          { give: gradeInputsFromLegacyAssets(assetsB as never[], numTeams), get: gradeInputsFromLegacyAssets(assetsA as never[], numTeams) },
+          counterGrader,
+        ),
+        championshipEquity: engineAnalysis.championshipEquity ?? null,
+      }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // 🛑 THE LETTER IS THE RECEIPT'S, ALWAYS (2026-09-26). Before the one engine the canonical grade
     // overrode the LLM's only when it could grade, and otherwise "legacy's existing answer stood" —
@@ -3044,7 +3067,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       ...(analyticsEnhanced ? { analytics: analyticsEnhanced } : {}),
       ...(valuationEvidence ? { valuationEvidence } : {}),
       intelligenceAudit: providerAudit,
-      ...(engineAnalysis ? { engineAnalysis, engineRequest: engineReqSaved } : {}),
+      ...(engineClientView ? { engineAnalysis: engineClientView, engineRequest: engineReqSaved } : {}),
       ...(offseasonContext ? { offseasonContext } : {}),
       ...(newsValueAdjustments.length > 0 ? {
         newsAdjustments: newsValueAdjustments

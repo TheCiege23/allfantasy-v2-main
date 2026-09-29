@@ -167,3 +167,78 @@ export async function gradeLegacyTradeSuggestions(
     }),
   )
 }
+
+/** A counter candidate as the second trade engine names it (`lib/engine/trade.ts` counters' options). */
+export type CounterCandidate = { id?: string | null; name?: string | null; pos?: string | null; team?: string | null }
+
+/**
+ * The deal a counter leaves on the table: the original deal plus the one asset the counter adds to
+ * what you give and/or asks back — exactly what the counter card's "Apply" button puts in the builder
+ * (the FIRST candidate of each list). Players by name, as the full analyzer prices them. PURE.
+ */
+export function appliedCounterInputs(
+  base: { give: GradeInputs; get: GradeInputs },
+  applied: { addToGive?: CounterCandidate | null; addToGet?: CounterCandidate | null },
+): { give: GradeInputs; get: GradeInputs } {
+  const plus = (side: GradeInputs, c: CounterCandidate | null | undefined): GradeInputs => {
+    if (!c) return side
+    const name = c.name?.trim()
+    return name
+      ? { assets: [...side.assets, { kind: 'player', name }], unpriceable: side.unpriceable }
+      : { assets: side.assets, unpriceable: [...side.unpriceable, 'a counter asset with no name'] }
+  }
+  return { give: plus(base.give, applied.addToGive), get: plus(base.get, applied.addToGet) }
+}
+
+export const COUNTER_WITHOUT_ASSET_REASON =
+  'This counter is advice, not a specific deal — apply a player to it and the trade grade is taken on the result.'
+
+type EngineCounter = {
+  label?: string
+  changes?: unknown[]
+  whyTheyAccept?: string[]
+  whyItHelpsYou?: string[]
+  options?: { addCandidates?: CounterCandidate[]; askCandidates?: CounterCandidate[] }
+  [key: string]: unknown
+}
+
+/**
+ * The counter suggestions the legacy analyzer shows (`TradeCounterSuggestions`), each with THE grade of
+ * the deal it leaves (`appliedCounterInputs`), and WITHOUT the second engine's `acceptProb` and
+ * `fairnessScore` — the "Est. Accept" and "Fairness" the card used to print. A counter that names no
+ * asset is withheld with the reason. Never throws.
+ */
+export async function gradeLegacyCounters(
+  counters: ReadonlyArray<EngineCounter> | null | undefined,
+  base: { give: GradeInputs; get: GradeInputs },
+  gradeOf: LegacyPackageGradeFn,
+): Promise<Array<{
+  label: string
+  changes: unknown[]
+  whyTheyAccept: string[]
+  whyItHelpsYou: string[]
+  options: { addCandidates: CounterCandidate[]; askCandidates: CounterCandidate[] }
+  grade: LegacyPackageGrade
+}>> {
+  return Promise.all(
+    (counters ?? []).map(async (c) => {
+      const addCandidates = Array.isArray(c.options?.addCandidates) ? c.options!.addCandidates! : []
+      const askCandidates = Array.isArray(c.options?.askCandidates) ? c.options!.askCandidates! : []
+      let grade: LegacyPackageGrade
+      if (addCandidates.length === 0 && askCandidates.length === 0) {
+        grade = { graded: false, reason: COUNTER_WITHOUT_ASSET_REASON }
+      } else {
+        const deal = appliedCounterInputs(base, { addToGive: addCandidates[0], addToGet: askCandidates[0] })
+        grade = await gradeOf(deal.give, deal.get).catch((): LegacyPackageGrade => ({ graded: false, reason: 'This deal could not be priced just now.' }))
+      }
+      return {
+        label: String(c.label ?? ''),
+        changes: Array.isArray(c.changes) ? c.changes : [],
+        whyTheyAccept: Array.isArray(c.whyTheyAccept) ? c.whyTheyAccept : [],
+        whyItHelpsYou: Array.isArray(c.whyItHelpsYou) ? c.whyItHelpsYou : [],
+        options: { addCandidates, askCandidates },
+        grade,
+      }
+    }),
+  )
+}
