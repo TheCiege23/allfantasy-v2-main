@@ -5,6 +5,7 @@ import type { PlayerShares } from '@/lib/core-app/playerShares'
 import type { LeagueHolder, LeagueShareView } from '@/lib/core-app/playerSharesLeague'
 import { shareOf } from '@/lib/core-app/playerSharesRank'
 import { playerRef } from '@/lib/core-app/playerRef'
+import { TeamSplit } from '@/components/core-app/player-finder/TeamSplit'
 
 /**
  * "YOUR SHARES" — the Player Finder home's board of the players you roster most (Phase 2).
@@ -146,6 +147,8 @@ export function PlayerSharesBoard({
           })}
         </ol>
       )}
+      {/* All leagues only: the split is across every roster, which a one-league view would misstate. */}
+      {!league ? <TeamSplit data={state.data.teamSplit} /> : null}
       <p className="af-pf-shares-foot">
         {league
           ? `Ranked by how many of your rosters hold him. "Value" is ${league.leagueName}'s format and scoring (* when its scoring moves the market number); points are this season under ${league.leagueName}'s own scoring, from his game stat lines.`
