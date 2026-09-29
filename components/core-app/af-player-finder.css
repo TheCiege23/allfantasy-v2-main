@@ -4251,3 +4251,18 @@
   color: var(--muted);
   font-size: 12px;
 }
+
+/*
+ * ⚠ `.af-card` CARRIES NO PADDING (af-core.css) — every finder card sets its own (.af-pf-shares 16px,
+ * .af-pf-calls 14px, …). These five shipped without one, so their content sat flush against the border:
+ * the free-agent bids, next man up, who'd start him, market value and the live badge. The first was seen
+ * in a preview and wrongly put down to the preview's missing styles; measuring `.af-card`'s own rule is
+ * what settled it.
+ */
+.af-core .af-pf-fa,
+.af-core .af-pf-dc,
+.af-core .af-pf-ws,
+.af-core .af-pf-vt,
+.af-core .af-pf-live {
+  padding: 14px 16px;
+}
