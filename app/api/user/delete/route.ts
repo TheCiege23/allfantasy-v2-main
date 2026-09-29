@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { releaseDeletedAccountLinks } from "@/lib/account/releaseDeletedAccountLinks"
 
 export const dynamic = "force-dynamic"
 
@@ -68,6 +69,15 @@ export async function POST(req: Request) {
           emailVerified: null,
         },
       })
+      /*
+       * 🛑 THE ROW ABOVE WAS ALL THIS ROUTE ERASED, AND IT WAS NOT ENOUGH. The profile kept the
+       * phone, the Sleeper link, Discord/Spotify identities AND their live access tokens; the
+       * unique ones (Sleeper id, phone, Discord id, platform identities) stayed OWNED by a
+       * deleted account, so the same person could not link their Sleeper handle to a new
+       * account and every re-import refused. Found 2026-09-28 by deleting the App Review demo
+       * account. See lib/account/releaseDeletedAccountLinks.
+       */
+      await releaseDeletedAccountLinks(tx, userId)
     })
   } catch (error) {
     console.error("[user/delete] erasure failed:", error)

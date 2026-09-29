@@ -9,12 +9,18 @@ const {
   emailVerifyDeleteMany,
   passwordResetDeleteMany,
   appUserUpdate,
+  profileUpdateMany,
+  identityDeleteMany,
+  teamUpdateMany,
 } = vi.hoisted(() => ({
   getServerSessionMock: vi.fn(),
   authAccountDeleteMany: vi.fn(),
   emailVerifyDeleteMany: vi.fn(),
   passwordResetDeleteMany: vi.fn(),
   appUserUpdate: vi.fn(),
+  profileUpdateMany: vi.fn(),
+  identityDeleteMany: vi.fn(),
+  teamUpdateMany: vi.fn(),
 }))
 
 vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
@@ -27,6 +33,9 @@ vi.mock("@/lib/prisma", () => ({
         emailVerifyToken: { deleteMany: emailVerifyDeleteMany },
         passwordResetToken: { deleteMany: passwordResetDeleteMany },
         appUser: { update: appUserUpdate },
+        userProfile: { updateMany: profileUpdateMany },
+        platformIdentity: { deleteMany: identityDeleteMany },
+        leagueTeam: { updateMany: teamUpdateMany },
       }),
   },
 }))
@@ -48,6 +57,34 @@ describe("POST /api/user/delete", () => {
     emailVerifyDeleteMany.mockResolvedValue({ count: 0 })
     passwordResetDeleteMany.mockResolvedValue({ count: 0 })
     appUserUpdate.mockResolvedValue({ id: "u1" })
+    profileUpdateMany.mockResolvedValue({ count: 1 })
+    identityDeleteMany.mockResolvedValue({ count: 2 })
+    teamUpdateMany.mockResolvedValue({ count: 3 })
+  })
+
+  /*
+   * 🛑 Found by deleting the App Review demo account (2026-09-28): the new review
+   * account could not re-import the same Sleeper leagues, because the deleted
+   * account still OWNED the unique Sleeper link — and still held live Discord and
+   * Spotify tokens and the phone number.
+   */
+  it("releases the Sleeper link, phone, Discord/Spotify tokens, platform identities, claimed teams and Legacy", async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: "u1" } })
+    expect((await POST(req({ confirm: true }))).status).toBe(200)
+
+    const profile = profileUpdateMany.mock.calls[0][0]
+    expect(profile.where).toEqual({ userId: "u1" })
+    for (const field of [
+      "sleeperUserId", "sleeperUsername", "phone", "discordUserId", "discordEmail",
+      "discordAccessToken", "discordRefreshToken", "spotifyAccessToken", "spotifyRefreshToken",
+    ]) {
+      expect(profile.data[field], field).toBeNull()
+    }
+    expect(identityDeleteMany).toHaveBeenCalledWith({ where: { userId: "u1" } })
+    expect(teamUpdateMany).toHaveBeenCalledWith({ where: { claimedByUserId: "u1" }, data: { claimedByUserId: null } })
+    // The anonymising update stays first; the Legacy release follows it.
+    expect(appUserUpdate.mock.calls[0][0].data.passwordHash).toBeNull()
+    expect(appUserUpdate).toHaveBeenCalledWith({ where: { id: "u1" }, data: { legacyUserId: null } })
   })
 
   it("401 when unauthenticated", async () => {
