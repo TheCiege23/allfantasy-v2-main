@@ -1070,10 +1070,11 @@ function TradeHubInner() {
           <div className="max-w-3xl">
             <div className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300/80">Premium Analysis</div>
             <h2 className="mt-3 text-2xl font-black leading-tight sm:text-4xl">
-              Run the same backend trade engine through a modern visual workspace.
+              Grade a trade before you send it.
             </h2>
             <p className="mt-4 text-sm leading-6 text-white/60 sm:text-base">
-              Planning, pricing, engine reasoning, AI synthesis, and output checks flow into one premium trade review.
+              Put the players and picks on each side, choose the league it&apos;s in, and see a letter grade for both
+              teams against the current market, with Chimmy&apos;s read on the deal.
             </p>
           </div>
         </div>
