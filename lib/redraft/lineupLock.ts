@@ -27,6 +27,19 @@ import { cfbdScheduleTeamKeys } from '@/lib/sports-data/collegeTeamNames'
 // this file is in client bundles (teamDefenseIdentity -> the league Team tab).
 import { readRiScheduleWindow } from '@/lib/sports-data/riScheduleCache'
 
+/**
+ * Week-windowed sports whose players this lock does NOT lock yet, each with its reason.
+ *
+ * SOCCER: its week is a GAMEWEEK that skips international breaks (`resolveDailySportWeekWindow`,
+ * which the finalizer and the stat sync read), while the windows below are seven days from the
+ * opener — after the first break the lock would read a different set of games than the week is
+ * sealed on. And the RI-schedule team names for European clubs have not been checked against
+ * rostered players' teams. A lock on the wrong games is worse than none, so soccer stays unlocked
+ * until both are done — which is what the soccer PR shipped and tested. (It became reachable only
+ * because the NCAAB lock taught this module to read the RI schedule while that PR was open.)
+ */
+const LOCK_NOT_WIRED_SPORTS: readonly string[] = ['SOCCER']
+
 /** `RedraftSeason.sport` stores the config key `NCAAFB`; every other layer says `NCAAF`. */
 function isNcaafLockSport(sport: string): boolean {
   const s = String(sport).toUpperCase()
@@ -258,7 +271,7 @@ export async function buildWeekKickoffMap(
    * said in a warning rather than read as "no game". The next schedule sync writes them.
    * ⚠ A game with no start time locks at the start of its Eastern day — early, never late.
    */
-  if (DATE_WINDOWED_SPORTS.includes(sport) && RI_SCHEDULE_SLATE_SPORTS.includes(sport)) {
+  if (DATE_WINDOWED_SPORTS.includes(sport) && RI_SCHEDULE_SLATE_SPORTS.includes(sport) && !LOCK_NOT_WIRED_SPORTS.includes(sport)) {
     const seasonStart = resolveDailySportSeasonStart(sport, args.season)
     const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
     if (!window) {
@@ -302,7 +315,12 @@ export async function buildWeekKickoffMap(
     return { byTeam, firstKickoff, warnings }
   }
 
-  if (sport !== 'NFL' && DATE_WINDOWED_SPORTS.includes(sport) && !RI_SCHEDULE_SLATE_SPORTS.includes(sport)) {
+  if (
+    sport !== 'NFL' &&
+    DATE_WINDOWED_SPORTS.includes(sport) &&
+    !RI_SCHEDULE_SLATE_SPORTS.includes(sport) &&
+    !LOCK_NOT_WIRED_SPORTS.includes(sport)
+  ) {
     const seasonStart = resolveDailySportSeasonStart(sport, args.season)
     const window = seasonStart ? weekWindowFromSeasonStart(seasonStart, args.week) : null
     if (!window) {
@@ -335,7 +353,7 @@ export async function buildWeekKickoffMap(
 
   if (sport !== 'NFL') {
     // Named from the lists, so this cannot go stale again when the next sport joins.
-    const lockable = ['NFL', 'NCAAF', ...DATE_WINDOWED_SPORTS]
+    const lockable = ['NFL', 'NCAAF', ...DATE_WINDOWED_SPORTS.filter((s) => !LOCK_NOT_WIRED_SPORTS.includes(s))]
     warnings.push(`Lineup lock schedule lookup is wired for ${lockable.join(', ')} only; ${args.sport} players are not locked.`)
     return { byTeam, firstKickoff, warnings }
   }
