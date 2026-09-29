@@ -998,3 +998,32 @@ html[data-mode='af'] .af-core {
     display: none;
   }
 }
+
+/*
+ * The commissioner badge (CommissionerBadge.tsx): the crest in miniature — navy
+ * fill, cyan ring, white C — beside any league the viewer commissions. Fixed
+ * colours on purpose: it is the brand mark, so it does not follow the theme
+ * accent the way a status chip does. Deliberately NOT inside any @media block.
+ */
+.af-commish-c {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: #0b2f7a;
+  border: 1.5px solid #22d3ee;
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+.af-commish-c::before {
+  content: "C";
+}

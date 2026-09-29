@@ -145,6 +145,15 @@ describe('the /core rail and its header league switcher', () => {
     expect(tile?.getAttribute('aria-label')).toBe(`${TWELVE} · 0e53 on manual`)
   })
 
+  it('marks only the league you commission with the blue C (CommissionerBadge)', () => {
+    const withCommish = rail.map((l, i) => ({ ...l, isCommissioner: i === 6 }))
+    const { container } = render(shell({ leagues: withCommish }))
+    const badged = Array.from(container.querySelectorAll('.af-rail-row'))
+      .filter((row) => row.querySelector('[data-testid="commissioner-badge"]'))
+      .map((row) => row.querySelector('.af-rail-row-name')?.textContent)
+    expect(badged).toEqual([EXPECTED[6]])
+  })
+
   it('names the selected league in the header switcher with the same label the rail shows', () => {
     const { container } = render(shell({ leagueFirst: true, selectedLeagueId: 'lg-12b-0d42' }))
     expect(container.querySelector('.af-lf-switch-name')?.textContent).toBe(`${TWELVE} · 0d42`)

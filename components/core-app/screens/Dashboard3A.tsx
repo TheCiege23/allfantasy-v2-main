@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
+import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING. This screen renders at /dashboard
  * OUTSIDE AfCoreShell, which is what imports the token layer for everything
@@ -1181,7 +1182,10 @@ export function Dash3ALeagues({
                       <Mark src={l.imageUrl} alt={l.name ?? 'League'} letter={platformTile(l.platform)} />
                     </span>
                     <span className="af3a-league-body">
-                      <b>{l.name ?? 'Untitled league'}</b>
+                      <b>
+                        {l.name ?? 'Untitled league'}
+                        {l.isCommissioner ? <CommissionerBadge /> : null}
+                      </b>
                       <em>{l.formatLabel ?? 'Imported league'}</em>
                     </span>
                   </Link>

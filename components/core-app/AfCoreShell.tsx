@@ -35,6 +35,7 @@ import { CORE_NAV_ATTRIBUTE, CoreNavPendingContext, pendingCoreNavTarget } from 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
+import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
 
@@ -72,6 +73,8 @@ export type RailLeague = {
   /** Something needs attention in this league. */
   hasAlert?: boolean
   alertTone?: 'bad' | 'warn'
+  /** The viewer commissions this league — draws the blue C (CommissionerBadge). */
+  isCommissioner?: boolean
 }
 
 /**
@@ -1828,6 +1831,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 <span className="af-rail-row">
                   <span className="af-rail-row-headline">
                     <span className="af-rail-row-name">{railName}</span>
+                    {l.isCommissioner ? <CommissionerBadge /> : null}
                     {railSwings[l.id] != null ? (
                       <span className="af-rail-swing">
                         {railSwings[l.id] > 0 ? '+' : ''}{railSwings[l.id].toFixed(1)} swing
