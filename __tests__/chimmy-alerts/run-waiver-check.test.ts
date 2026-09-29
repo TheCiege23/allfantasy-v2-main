@@ -261,4 +261,32 @@ describe('runWaiverCheck', () => {
     expect(run).toMatchObject({ outcomes: { error: 1, sent: 1 }, notReached: 0 })
     if (run.ran) expect(run.errors).toEqual([{ userId: 'u1', error: 'board read failed' }])
   })
+
+  /*
+   * The board now carries a section per sport, priced PER GAME from a season rate. This message says
+   * "+N projected pts in week W" and its threshold is points per NFL week — neither is true of a
+   * per-game basketball gain, so the check reads the NFL rows only. Guarded here so the sections
+   * cannot leak into it by someone widening `board.rows` later.
+   */
+  it('never messages a season-rate section pick — its gain is per game, not for the week ahead', async () => {
+    deps.loadAudience = vi.fn(async () => new Map([['u1', [league('L1'), league('B1')]]]))
+    deps.board = vi.fn(async () => ({
+      ...board([]),
+      sports: [
+        {
+          sport: 'NBA',
+          state: 'ok' as const,
+          reason: null,
+          basis: 'season_per_game_af_default' as const,
+          basisLabel: null,
+          season: 2026,
+          rows: [row('B1', 40, { sport: 'NBA' })],
+          considered: 1,
+          withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
+        },
+      ],
+    }))
+    expect(await runWaiverCheck({}, deps)).toMatchObject({ ran: true, outcomes: { no_picks: 1 }, picks: 0 })
+    expect(deps.dispatch).not.toHaveBeenCalled()
+  })
 })

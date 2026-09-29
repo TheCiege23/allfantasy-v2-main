@@ -15,6 +15,9 @@ import { isStartableIn, startingSlots } from './slotEligibility'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import type { WaiverValueBasis } from '@/lib/waivers/waiverSportBasis'
+import { faabRemainingOf, formatOf, runsAtLabel } from './waiverRowMeta'
+import { buildWaiverSportSections } from './waiversBoardSports'
 
 /**
  * Waivers, across every league — "the single best add on each wire, ranked by
@@ -61,6 +64,11 @@ import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
  */
 
 export type WaiverPlayer = {
+  /**
+   * On an NFL row (`WaiversBoardData.rows`) a SLEEPER id — see `idSpaceOk`. On a season-rate row
+   * (`WaiversBoardData.sports[].rows`, which carries `sport`) the projection key
+   * (`AFProjectionSnapshot.playerId`) — never a Sleeper id, and never rendered as one.
+   */
   playerId: string
   name: string
   position: string | null
@@ -101,6 +109,38 @@ export type WaiverBoardRow = {
   href: string
   /** One derived sentence. Assembled from the fields above; never generated. */
   reasoning: string
+  /**
+   * Set only on a season-rate section row, where `netGain` and both `projected` figures are PER
+   * GAME from a season rate. Absent on an NFL row, whose figures are the projection week's.
+   */
+  sport?: string
+}
+
+/**
+ * One sport's section of the board, for every sport but the NFL.
+ *
+ * 🛑 A SPORT WITHOUT A PRODUCER IS A SECTION WITH A REASON, NEVER A MISSING ONE. The board used to
+ * filter to the NFL and say nothing else: a manager whose leagues are all basketball saw "None of
+ * your leagues could be priced this week — the reasons are below" and no reasons below.
+ *
+ * ⚠ NOT RANKED AGAINST THE NFL ROWS. A per-game basketball gain and a weekly football gain are not
+ * the same quantity (an NBA team plays two to four games a week), so each sport ranks on its own.
+ */
+export type WaiverSportSection = {
+  sport: string
+  /** `no_producer`: nothing projects this sport. `no_projections`: the producer has written nothing. */
+  state: 'ok' | 'no_producer' | 'no_projections'
+  /** One line, when `state` is not ok. */
+  reason: string | null
+  basis: WaiverValueBasis | null
+  /** One sentence naming the basis every number in the section was priced on. */
+  basisLabel: string | null
+  /** The projection season the numbers come from. */
+  season: number | null
+  rows: WaiverBoardRow[]
+  /** Real leagues of this sport considered. */
+  considered: number
+  withheld: WaiversBoardData['withheld']
 }
 
 export type WaiversBoardData = {
@@ -134,6 +174,11 @@ export type WaiversBoardData = {
    * next week's points.
    */
   weekKickoffs: string[] | null
+  /**
+   * Every other sport the account holds a team in, one section each — present only when there is
+   * at least one, so an NFL-only account's payload is exactly what it was.
+   */
+  sports?: WaiverSportSection[]
 }
 
 const EMPTY: WaiversBoardData = {
@@ -163,8 +208,6 @@ const ROW_CAP = 10
  */
 const ID_SPACE_FLOOR = 0.5
 
-const DAY_LABEL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-
 function rosterIds(playerData: unknown): { all: string[]; starters: Set<string> } {
   const out: string[] = []
   const starters = new Set<string>()
@@ -184,17 +227,9 @@ function rosterIds(playerData: unknown): { all: string[]; starters: Set<string> 
   return { all: [...new Set(out)], starters }
 }
 
-/** "Dynasty · Superflex" from what the league actually declares. */
-function formatOf(leagueType: string | null, scoringType: string | null): string | null {
-  const parts = [leagueType, scoringType]
-    .map((x) => (x ?? '').trim())
-    .filter((x) => x.length > 0)
-    .map((x) => x.charAt(0).toUpperCase() + x.slice(1))
-  return parts.length > 0 ? parts.join(' · ') : null
-}
-
-export async function getWaiversBoard(userId: string): Promise<WaiversBoardData> {
-  const claimed = await prisma.leagueTeam
+/** Every team this account has claimed, with the league fields both halves of the board read. */
+function readClaimedTeams(userId: string) {
+  return prisma.leagueTeam
     .findMany({
       where: { claimedByUserId: userId },
       select: {
@@ -220,18 +255,42 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
       },
     })
     .catch(() => [])
+}
 
+export type ClaimedTeam = Awaited<ReturnType<typeof readClaimedTeams>>[number]
+
+export async function getWaiversBoard(userId: string): Promise<WaiversBoardData> {
+  const claimed = await readClaimedTeams(userId)
+
+  /*
+   * The NFL rows and every other sport's section are computed apart and never ranked together —
+   * see `WaiverSportSection`. A section that cannot be built costs the sections, never the NFL rows.
+   */
+  const [nfl, sports] = await Promise.all([
+    nflWaiversBoard(claimed, userId),
+    buildWaiverSportSections(claimed, userId).catch(() => [] as WaiverSportSection[]),
+  ])
+  return sports.length > 0 ? { ...nfl, sports } : nfl
+}
+
+/** The NFL board, exactly as it was before the other sports joined it. */
+async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string): Promise<WaiversBoardData> {
   /*
    * ⚠ NFL ONLY, DELIBERATELY. `fantasyProjection` is an NFL feed keyed on Sleeper
    * ids; NCAAF projections live in a different table behind a different lookup
    * and the other sports have no weekly feed here at all. Pricing a basketball
    * wire against football projections is not a degraded answer, it is a wrong
-   * one — so those leagues are excluded and counted, not ranked on nothing.
+   * one — so those leagues are priced in their own sections (waiversBoardSports.ts).
    */
   const mine = claimed.filter(
     (c) => c.league != null && String(c.league.sport ?? 'NFL').toUpperCase() === 'NFL',
   )
-  if (mine.length === 0) return { ...EMPTY, considered: claimed.length }
+  /*
+   * NFL leagues considered: none. This used to report every claimed team here, so an account whose
+   * leagues were all basketball read "None of your leagues could be priced this week — the reasons
+   * are below" with no reasons below. Those leagues are counted in their own sections now.
+   */
+  if (mine.length === 0) return { ...EMPTY, considered: 0 }
 
   const leagueIds = [...new Set(mine.map((c) => c.leagueId))]
 
@@ -539,10 +598,7 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
     const drop = dropId ? toPlayer(dropId, dropPts) : null
 
     const w = waiverByLeague.get(c.leagueId)
-    const runsAt =
-      w && w.processingDayOfWeek != null && w.processingTimeUtc
-        ? `${DAY_LABEL[w.processingDayOfWeek] ?? 'Unknown day'} ${w.processingTimeUtc} UTC`
-        : null
+    const runsAt = runsAtLabel(w)
 
     const netGain = drop ? add.projected - drop.projected : add.projected
 
@@ -575,10 +631,7 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
       netGain,
       add,
       drop,
-      faabRemaining:
-        w && String(w.waiverType ?? '').toLowerCase() === 'faab'
-          ? (myRoster.faabRemaining ?? null)
-          : null,
+      faabRemaining: faabRemainingOf(w, myRoster),
       runsAt,
       href: `/core/waivers?league=${encodeURIComponent(c.leagueId)}`,
       reasoning: `${bits.join(', ')}.${ownership}`,

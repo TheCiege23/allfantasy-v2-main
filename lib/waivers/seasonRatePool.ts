@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client'
 
+import { rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 
@@ -38,6 +39,38 @@ import type { WaiverValueBasis } from './waiverSportBasis'
  */
 
 type Db = Pick<PrismaClient, 'aFProjectionSnapshot' | 'playerIdentityMap'>
+
+/**
+ * The share of your roster that must resolve before a league can be priced — the NFL board's
+ * `ID_SPACE_FLOOR`, for the same reason: not zero (one coincidental match would pass an unreadable
+ * league), not one (a rookie the identity map has not linked would withhold a healthy one).
+ */
+export const SEASON_RATE_ID_FLOOR = 0.5
+
+/** Every player id on a roster, in whatever shape it is stored; Sleeper's `0` hole is not a player. */
+export function allRosterIds(playerData: unknown): string[] {
+  return rosterPlayerIds(playerData).filter((id) => id !== '0')
+}
+
+/** Starters, in the same shapes. */
+export function starterIdsOf(playerData: unknown): Set<string> {
+  const out = new Set<string>()
+  const raw =
+    playerData && typeof playerData === 'object' && !Array.isArray(playerData)
+      ? (playerData as Record<string, unknown>).starters
+      : null
+  if (!Array.isArray(raw)) return out
+  for (const x of raw) {
+    const id =
+      typeof x === 'string' || typeof x === 'number'
+        ? String(x).trim()
+        : x && typeof x === 'object'
+          ? String((x as Record<string, unknown>).playerId ?? (x as Record<string, unknown>).id ?? '').trim()
+          : ''
+    if (id && id !== '0') out.add(id)
+  }
+  return out
+}
 
 /** The `PlayerIdentityMap` columns a league's roster ids can be written in. */
 export type LeagueIdColumn = 'rollingInsightsId' | 'espnId' | 'fantraxId' | 'mflId' | 'fleaflickerId' | 'sleeperId'

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
-import type { WaiverBoardRow, WaiverPlayer, WaiversBoardData } from '@/lib/core-app/waiversBoard'
+import type { WaiverBoardRow, WaiverPlayer, WaiversBoardData, WaiverSportSection } from '@/lib/core-app/waiversBoard'
+import { PER_GAME_UNIT, waiverSportLabel } from '@/lib/waivers/waiverSportBasis'
 import { claimLink } from '@/lib/core-app/platformLinks'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
@@ -57,12 +58,15 @@ function Side({
   tone,
   emptyNote,
   leagueId,
+  sport,
 }: {
   label: string
   player: WaiverPlayer | null
   tone: 'good' | 'bad'
   emptyNote?: string
   leagueId: string
+  /** Set on a season-rate row only: its figures are per game and its `playerId` is not a Sleeper id. */
+  sport?: string
 }) {
   return (
     <div className="af-bd-side" data-tone={tone}>
@@ -73,7 +77,7 @@ function Side({
             <PlayerFace
               imageUrl={player.imageUrl}
               name={player.name}
-              teamLogoUrl={teamLogoUrl('NFL', player.team)}
+              teamLogoUrl={teamLogoUrl(sport ?? 'NFL', player.team)}
             />
             <span className="af-bd-asset-name">
               {/*
@@ -85,10 +89,14 @@ function Side({
                 projection id space, which is Sleeper's. A league whose ids do
                 not resolve is withheld before a row is ever built, so there is
                 no path by which an ESPN id reaches here.
+
+                🛑 EXCEPT ON A SEASON-RATE ROW (`sport` set), where `playerId` is
+                a projection key. It is never passed as a Sleeper id: the name
+                renders as text rather than open a card on someone else's number.
               */}
               <PlayerName
-                sport="NFL"
-                sleeperId={player.playerId}
+                sport={sport ?? 'NFL'}
+                sleeperId={sport ? null : player.playerId}
                 name={player.name}
                 position={player.position}
                 team={player.team}
@@ -112,7 +120,7 @@ function Side({
             <span className="af-bd-asset-val" data-sev={tone}>
               {player.projected.toFixed(1)}
             </span>
-            <span className="af-bd-k">Proj pts</span>
+            <span className="af-bd-k">{sport ? `Proj ${PER_GAME_UNIT}` : 'Proj pts'}</span>
           </span>
           {/*
             ⚠ THE MARKET PERCENTAGES ARE NULL BELOW THE DENOMINATOR GATE, and an
@@ -136,6 +144,8 @@ function Side({
 function Card({ row }: { row: WaiverBoardRow }) {
   const claim = claimLink({ id: row.leagueId, platform: row.platform })
   const gain = `${row.netGain >= 0 ? '+' : ''}${row.netGain.toFixed(1)}`
+  /* A season-rate row's gain is per GAME; saying "this week" of it would be a forecast it never made. */
+  const perGame = row.sport != null
 
   return (
     <li>
@@ -172,9 +182,9 @@ function Card({ row }: { row: WaiverBoardRow }) {
           <span
             className="af-bd-pill"
             data-sev={row.netGain >= 0 ? 'good' : 'bad'}
-            aria-label={`Net gain ${gain} projected points this week`}
+            aria-label={perGame ? `Net gain ${gain} projected points per game` : `Net gain ${gain} projected points this week`}
           >
-            {gain} <span className="af-bd-pill-unit">pts/wk</span>
+            {gain} <span className="af-bd-pill-unit">{perGame ? PER_GAME_UNIT : 'pts/wk'}</span>
           </span>
           {claim ? (
             <a
@@ -188,7 +198,7 @@ function Card({ row }: { row: WaiverBoardRow }) {
         </header>
 
         <div className="af-bd-card-body af-bd-swap">
-          <Side label="Add" player={row.add} tone="good" leagueId={row.leagueId} />
+          <Side label="Add" player={row.add} tone="good" leagueId={row.leagueId} sport={row.sport} />
           <span className="af-bd-swap-arrow" aria-hidden>
             →
           </span>
@@ -198,6 +208,7 @@ function Card({ row }: { row: WaiverBoardRow }) {
             tone="bad"
             emptyNote="No bench player here could be priced, so no drop is named."
             leagueId={row.leagueId}
+            sport={row.sport}
           />
         </div>
 
@@ -228,6 +239,77 @@ function Card({ row }: { row: WaiverBoardRow }) {
   )
 }
 
+/**
+ * ⚠ FOUR DIFFERENT EXCLUSIONS, NAMED SEPARATELY. "We could not find your
+ * roster", "this league's ids are not in the projection feed's id space",
+ * "this league published no scoring settings" and "the wire had nobody we
+ * could price" are four different facts, and a single "N leagues excluded"
+ * would be the shape that makes a board stop being trustworthy at sixty
+ * leagues. One component, so the NFL rows and every sport section say them
+ * the same way.
+ */
+function ExcludedNote({ withheld }: { withheld: WaiversBoardData['withheld'] }) {
+  const excluded = withheld.noRoster + withheld.idSpace + withheld.noScoring + withheld.noCandidate
+  if (excluded <= 0) return null
+  return (
+    <p className="af-bd-note">
+      <strong>
+        {excluded} {excluded === 1 ? 'league is' : 'leagues are'} not on this board.
+      </strong>{' '}
+      {withheld.idSpace > 0
+        ? `${withheld.idSpace} ${withheld.idSpace === 1 ? 'stores' : 'store'} player ids the projection feed does not use, so we cannot tell a free agent from a rostered player there. `
+        : ''}
+      {withheld.noScoring > 0
+        ? `${withheld.noScoring} ${withheld.noScoring === 1 ? 'has' : 'have'} never published their scoring settings, and a projection scored under someone else's rules is not this league's number. `
+        : ''}
+      {withheld.noRoster > 0
+        ? `${withheld.noRoster} ${withheld.noRoster === 1 ? 'has' : 'have'} no roster of yours imported. `
+        : ''}
+      {withheld.noCandidate > 0
+        ? `${withheld.noCandidate} had nobody on the wire we could price.`
+        : ''}
+    </p>
+  )
+}
+
+/**
+ * One sport's section. Ranked on its own — a per-game gain is not a weekly one — and never
+ * missing: a sport with no producer shows its reason, so no league leaves the board unexplained.
+ */
+function SportSection({ section }: { section: WaiverSportSection }) {
+  const label = waiverSportLabel(section.sport)
+  const id = `af-wv-${section.sport.toLowerCase()}`
+  const leagues = `${section.considered.toLocaleString()} ${section.considered === 1 ? 'league' : 'leagues'}`
+  return (
+    <section className="af-bd-sec" aria-labelledby={id} data-testid={`waivers-sport-${section.sport}`}>
+      <SectionHead
+        id={id}
+        label={
+          section.rows.length > 0
+            ? `${label} · top ${section.rows.length} · ranked by net gain per game`
+            : label
+        }
+        count={section.season != null ? `season rate, ${section.season}` : leagues}
+      />
+      {section.state !== 'ok' ? (
+        <p className="af-bd-note">{section.reason}</p>
+      ) : section.rows.length > 0 ? (
+        <ul className="af-bd-cards af-bd-cards--rich">
+          {section.rows.map((r) => (
+            <Card key={r.leagueId} row={r} />
+          ))}
+        </ul>
+      ) : (
+        <p className="af-bd-note">None of your {label} leagues could be priced — the reasons are below.</p>
+      )}
+      {section.basisLabel && section.state === 'ok' ? (
+        <p className="af-bd-note af-bd-note--plain">{section.basisLabel}</p>
+      ) : null}
+      <ExcludedNote withheld={section.withheld} />
+    </section>
+  )
+}
+
 export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }: WaiversBoardProps) {
   /* Counted HERE, at render, because the loader is cached and must stay clock-free. */
   const kickoffs = data.weekKickoffs ?? []
@@ -235,9 +317,14 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
     kickoffs.length > 0
       ? { played: kickoffs.filter((iso) => Date.parse(iso) <= nowMs).length, total: kickoffs.length }
       : null
-  const { withheld } = data
-  const excluded =
-    withheld.noRoster + withheld.idSpace + withheld.noScoring + withheld.noCandidate
+  const sports = data.sports ?? []
+  /*
+   * The NFL block renders whenever the account has an NFL league, or has nothing else to show. An
+   * account whose leagues are all basketball gets its basketball section — not an NFL empty state
+   * above it saying no NFL team is claimed.
+   */
+  const showNfl = data.rows.length > 0 || data.considered > 0 || sports.length === 0
+  const shownRows = data.rows.length + sports.reduce((n, s) => n + s.rows.length, 0)
 
   /* No leagues on this account yet: say so and offer a way forward (BoardKit NoLeaguesYet). */
   if (totalLeagues === 0) {
@@ -274,11 +361,11 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
         </p>
       ) : null}
 
-      {data.rows.length > 0 ? (
+      {!showNfl ? null : data.rows.length > 0 ? (
         <section className="af-bd-sec" aria-labelledby="af-wv-board">
           <SectionHead
             id="af-wv-board"
-            label={`Top ${data.rows.length} · ranked by net gain`}
+            label={`${sports.length > 0 ? 'NFL · ' : ''}Top ${data.rows.length} · ranked by net gain`}
             count={
               data.at ? `week ${data.at.week}, ${data.at.season}` : null
             }
@@ -292,51 +379,31 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
       ) : (
         <p className="af-bd-note">
           {data.considered === 0
-            ? 'No NFL team is claimed to this account, so there is no wire to read. Waiver pricing needs a weekly projection feed, which today exists for NFL only.'
-            : 'None of your leagues could be priced this week — the reasons are below.'}
+            ? 'No team is claimed to this account, so there is no wire to read.'
+            : `None of your ${sports.length > 0 ? 'NFL ' : ''}leagues could be priced this week — the reasons are below.`}
         </p>
       )}
 
-      <p className="af-bd-note af-bd-note--plain">
-        Every projection here is re-scored under that league&apos;s own{' '}
-        <code>scoring_settings</code>
-        {data.at ? ` for week ${data.at.week} of ${data.at.season}` : ''}, which is what makes
-        the net-gain column comparable between leagues.
-        {data.marketLeagues > 0
-          ? ` Rostered and started rates are measured across ${data.marketLeagues.toLocaleString()} leagues on AllFantasy.`
-          : ' Rostered and started rates are withheld — too few leagues to measure them over.'}
-      </p>
-
-      {/*
-        ⚠ FOUR DIFFERENT EXCLUSIONS, NAMED SEPARATELY. "We could not find your
-        roster", "this league's ids are not in the projection feed's id space",
-        "this league published no scoring settings" and "the wire had nobody we
-        could price" are four different facts, and a single "N leagues excluded"
-        would be the shape that makes a board stop being trustworthy at sixty
-        leagues.
-      */}
-      {excluded > 0 ? (
-        <p className="af-bd-note">
-          <strong>
-            {excluded} {excluded === 1 ? 'league is' : 'leagues are'} not on this board.
-          </strong>{' '}
-          {withheld.idSpace > 0
-            ? `${withheld.idSpace} ${withheld.idSpace === 1 ? 'stores' : 'store'} player ids the projection feed does not use, so we cannot tell a free agent from a rostered player there. `
-            : ''}
-          {withheld.noScoring > 0
-            ? `${withheld.noScoring} ${withheld.noScoring === 1 ? 'has' : 'have'} never published their scoring settings, and a projection scored under someone else's rules is not this league's number. `
-            : ''}
-          {withheld.noRoster > 0
-            ? `${withheld.noRoster} ${withheld.noRoster === 1 ? 'has' : 'have'} no roster of yours imported. `
-            : ''}
-          {withheld.noCandidate > 0
-            ? `${withheld.noCandidate} had nobody on the wire we could price.`
-            : ''}
+      {showNfl ? (
+        <p className="af-bd-note af-bd-note--plain">
+          Every projection here is re-scored under that league&apos;s own{' '}
+          <code>scoring_settings</code>
+          {data.at ? ` for week ${data.at.week} of ${data.at.season}` : ''}, which is what makes
+          the net-gain column comparable between leagues.
+          {data.marketLeagues > 0
+            ? ` Rostered and started rates are measured across ${data.marketLeagues.toLocaleString()} leagues on AllFantasy.`
+            : ' Rostered and started rates are withheld — too few leagues to measure them over.'}
         </p>
       ) : null}
 
+      {showNfl ? <ExcludedNote withheld={data.withheld} /> : null}
+
+      {sports.map((s) => (
+        <SportSection key={s.sport} section={s} />
+      ))}
+
       <FooterSummary
-        hidden={Math.max(0, totalLeagues - data.rows.length)}
+        hidden={Math.max(0, totalLeagues - shownRows)}
         total={totalLeagues}
         href={allHref}
         quiet="are not on this board — either already covered above, or named in the note."
