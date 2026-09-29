@@ -819,6 +819,32 @@
 
 /* ── Responsive ──────────────────────────────────────────────────────── */
 
+/*
+ * ⚠ TABLET NAV: SIGN IN AND "GET STARTED" WERE UNTAPPABLE ON EVERY iPAD IN PORTRAIT.
+ * The hamburger only takes over at ≤720px, but the full nav does not fit on one row until
+ * ~980px (English) or ~1100px (Spanish). In between it wrapped, and because `.af-lp-nav` had a
+ * fixed 74px height the second row — the language switch, Sign in and the primary CTA — hung out
+ * of the bar UNDER the launch banner. Measured 2026-09-29: at 721–899px a tap on either button
+ * landed on the banner, in both languages, signed in and out.
+ *
+ * Two parts. The three text links (every one reachable by scrolling or from the footer) step
+ * aside until the row fits, so the actions stay on one line. And the bar grows instead of
+ * overflowing, so a wider label or a new nav item can make the bar taller but can never again
+ * push a button underneath the page. Scoped above 720px: the phone nav has its own 64px bar.
+ */
+@media (min-width: 721px) and (max-width: 1099px) {
+  .af-lp-nav-links {
+    display: none;
+  }
+}
+
+@media (min-width: 721px) {
+  .af-lp-nav {
+    height: auto;
+    min-height: 74px;
+  }
+}
+
 @media (max-width: 1080px) {
   .af-lp-cap-grid {
     grid-template-columns: repeat(2, 1fr);
