@@ -240,8 +240,8 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
           and you may not use chat, messages or any other feature to abuse other users.
         </p>
         <p className="mt-3">
-          <strong>Reporting and blocking.</strong> In league chat, draft and mock-draft chat, bracket pool chat and direct messages
-          you can report a message and block its sender from the message itself: press and hold the message (or right-click it on
+          <strong>Reporting and blocking.</strong> In every chat — league, draft and mock-draft, bracket and World Cup pool chats,
+          and direct messages — you can report a message and block its sender from the message itself: press and hold the message (or right-click it on
           a computer), or tap its &ldquo;&hellip;&rdquo; button, then choose Report or Block. Blocking hides that user&apos;s
           messages from you. We review reports within 24 hours, remove content that breaks
           these Terms, and may suspend or remove the accounts responsible. You can also report content to{" "}

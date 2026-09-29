@@ -4,6 +4,8 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, ArrowUp, AtSign, BarChart3, Baseline, Bell, Bold, Bot, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, Clock, Copy, Edit3, Film, Globe2, Hash, ImageIcon, Italic, ListOrdered, Loader2, Lock, MessageSquare, Mic, PlayCircle, Plus, RefreshCw, Send, Settings, Share2, Smile, Sparkles, Strikethrough, Trophy, Underline, Users, X, Zap } from "lucide-react"
 import { toast } from "sonner"
+import { MessageModerationMenu } from "@/components/moderation/MessageModerationMenu"
+import { WORLD_CUP_UNREPORTABLE_TYPES, worldCupReportThreadId } from "@/lib/moderation/reportRooms"
 import type { WorldCupChallengeView, WorldCupMatchView, WorldCupPickView } from "@/lib/world-cup/types"
 import { isWorldCupChallengeLocked } from "@/lib/world-cup/worldCupBracketBuilder"
 import type {
@@ -5433,6 +5435,10 @@ function WorldCupCommunityFoundationPanel({
   const { language } = useOptionalLanguage()
   const tChat = useMemo(() => makeWcT(language), [language])
   const [messages, setMessages] = useState<WorldCupPoolChatMessage[]>([])
+  /** Who is reading, from the chat route — Report and Block are offered on everyone's messages but yours. */
+  const [chatViewerUserId, setChatViewerUserId] = useState<string | null>(null)
+  /** People blocked from this pool's chat or DMs, hidden at once. */
+  const [chatBlockedAuthors, setChatBlockedAuthors] = useState<ReadonlySet<string>>(() => new Set())
   // chatMode must be declared before chatBody so the draft derivation can use it
   const [chatMode, setChatMode] = useState<WorldCupChatMode>("pool")
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false)
@@ -5538,9 +5544,12 @@ function WorldCupCommunityFoundationPanel({
       )
     }
     return messages.filter((message) =>
-      !message.isPrivate && message.messageType !== "chimmy_private_response"
+      !message.isPrivate &&
+      message.messageType !== "chimmy_private_response" &&
+      // Blocked from this pool's chat, hidden at once — the chat route drops them from the next read.
+      (!message.userId || !chatBlockedAuthors.has(message.userId))
     )
-  }, [chatMode, messages])
+  }, [chatMode, messages, chatBlockedAuthors])
   const activeMentionQuery = useMemo(() => getActiveWorldCupMentionQuery(chatBody), [chatBody])
   const mentionSuggestions = useMemo<WorldCupMentionSuggestion[]>(() => {
     if (chatMode === "dm" || activeMentionQuery === null) return []
@@ -5619,6 +5628,7 @@ function WorldCupCommunityFoundationPanel({
         throw new Error(data.error || "Could not load pool chat")
       }
       setMessages(Array.isArray(data.messages) ? data.messages : [])
+      if (typeof data.viewerUserId === "string") setChatViewerUserId(data.viewerUserId)
     } catch (err) {
       setChatError(err instanceof Error ? err.message : "Could not load pool chat")
     } finally {
@@ -6241,12 +6251,23 @@ function WorldCupCommunityFoundationPanel({
                     </div>
                   ) : selectedDmThreadId && dmMessages.length > 0 ? (
                     <div data-testid="wc-dm-message-list" className="min-h-[16rem] space-y-2 overflow-y-auto pr-1 sm:min-h-[22rem]">
-                      {dmMessages.map((message) => (
+                      {dmMessages.filter((m) => !m.senderUserId || !chatBlockedAuthors.has(m.senderUserId)).map((message) => (
                         <div key={message.id} className="rounded-xl border border-white/10 bg-white/[0.055] px-3.5 py-2.5 text-sm">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-black text-slate-50">{message.senderName}</span>
-                            <span className="text-[11px] text-slate-300/58">
+                            <span className="flex items-center gap-1 text-[11px] text-slate-300/58">
                               {new Date(message.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                              {/* A DM is a platform thread: the report and block routes DMs already use. */}
+                              {selectedDmThreadId ? (
+                                <MessageModerationMenu
+                                  threadId={selectedDmThreadId}
+                                  messageId={message.id}
+                                  authorId={message.senderUserId}
+                                  authorName={message.senderName}
+                                  viewerId={chatViewerUserId}
+                                  onBlocked={(id) => setChatBlockedAuthors((prev) => new Set(prev).add(id))}
+                                />
+                              ) : null}
                             </span>
                           </div>
                           <p className="mt-1.5 whitespace-pre-wrap break-words leading-6 text-slate-100/86">{message.body}</p>
@@ -6277,8 +6298,9 @@ function WorldCupCommunityFoundationPanel({
           ) : visibleChatMessages.length > 0 ? (
             <div data-testid="wc-chat-message-list" className="min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1">
               {visibleChatMessages.map((message) => (
+                <div key={message.id} className="flex items-start gap-1">
+                <div className="min-w-0 flex-1">
                 <WorldCupChatMessageBubble
-                  key={message.id}
                   message={message}
                   isVoting={pollVotingMessageId === message.id}
                   onVote={(optionId) => void voteWorldCupPoll(message.id, optionId)}
@@ -6301,6 +6323,25 @@ function WorldCupCommunityFoundationPanel({
                   }}
                   labels={{ privateLabel: tChat("wc.chat.privateLabel") }}
                 />
+                </div>
+                {/*
+                  Report / Block (App Store guideline 1.2) against this pool's "worldcup:<id>" room.
+                  Never on your own message, and never on Chimmy's, system or event rows — those have
+                  no human author to report or block.
+                */}
+                <MessageModerationMenu
+                  threadId={worldCupReportThreadId(challengeId)}
+                  messageId={message.id}
+                  authorId={
+                    message.isOwnMessage || WORLD_CUP_UNREPORTABLE_TYPES.has(String(message.messageType))
+                      ? null
+                      : message.userId
+                  }
+                  authorName={message.authorName}
+                  viewerId={chatViewerUserId}
+                  onBlocked={(id) => setChatBlockedAuthors((prev) => new Set(prev).add(id))}
+                />
+                </div>
               ))}
             </div>
           ) : (

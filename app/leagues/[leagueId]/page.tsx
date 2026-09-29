@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useMemo, useState, useEffect, useCallback, useRef } from "react"
 import { useParams, useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { MessageModerationMenu } from "@/components/moderation/MessageModerationMenu"
 import { SmartDataView } from "@/components/app/league/SmartDataView"
 import PlayerDetailModal from "@/components/PlayerDetailModal"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
@@ -101,6 +102,8 @@ type RosterResponse = {
 type ChatResponse = {
   messages?: Array<{
     id: string
+    /** The author (the bracket chat read returns it) — Report and Block need it. */
+    userId?: string | null
     message: string
     createdAt: string
     user?: { displayName?: string | null; email?: string | null }
@@ -155,6 +158,16 @@ export default function LeagueHomeShellPage() {
   const trackedDiscoveryViewRef = useRef(false)
 
   const isAuthenticated = status === "authenticated"
+
+  /* The viewer's app user id — Report and Block are offered on everyone's chat messages but theirs. */
+  const viewerUserId = (session?.user as { id?: string } | undefined)?.id ?? null
+  /* Blocked from this page, hidden at once; the bracket chat read drops them from the next load. */
+  const [blockedAuthors, setBlockedAuthors] = useState<ReadonlySet<string>>(() => new Set())
+  const shownChatMessages = useMemo(
+    () => (chatMessages ?? []).filter((m) => !m.userId || !blockedAuthors.has(m.userId)),
+    [chatMessages, blockedAuthors],
+  )
+  const onChatAuthorBlocked = useCallback((id: string) => setBlockedAuthors((prev) => new Set(prev).add(id)), [])
 
   const userLabel = useMemo(() => {
     if (!isAuthenticated) return "Guest"
@@ -438,10 +451,20 @@ export default function LeagueHomeShellPage() {
                 <Card title="Recent Activity">
                   <InlineNote text="Latest trades, waivers, and chat highlights." />
                   <ul className="mt-2 space-y-1 text-xs text-white/70">
-                    {chatMessages && chatMessages.length > 0 ? (
-                      chatMessages.slice(-5).reverse().map((msg) => (
-                        <li key={msg.id}>
-                          <span className="font-semibold">{msg.user?.displayName || 'User'}:</span> {msg.message}
+                    {shownChatMessages.length > 0 ? (
+                      shownChatMessages.slice(-5).reverse().map((msg) => (
+                        <li key={msg.id} className="flex items-start gap-1">
+                          <span className="min-w-0 flex-1">
+                            <span className="font-semibold">{msg.user?.displayName || 'User'}:</span> {msg.message}
+                          </span>
+                          <MessageModerationMenu
+                            threadId={`league:${leagueId}`}
+                            messageId={msg.id}
+                            authorId={msg.userId}
+                            authorName={msg.user?.displayName}
+                            viewerId={viewerUserId}
+                            onBlocked={onChatAuthorBlocked}
+                          />
                         </li>
                       ))
                     ) : (
@@ -774,11 +797,22 @@ export default function LeagueHomeShellPage() {
 
             {activeTab === "Chat" && (
               <Card title="League Chat">
-                {chatMessages && chatMessages.length > 0 ? (
+                {shownChatMessages.length > 0 ? (
                   <ul className="space-y-2">
-                    {chatMessages.map((m) => (
+                    {shownChatMessages.map((m) => (
                       <li key={m.id} className="rounded-lg border border-white/10 p-3 text-sm">
-                        <div className="text-xs text-white/50">{m.user?.displayName || m.user?.email || "Manager"}</div>
+                        <div className="flex items-center justify-between gap-2 text-xs text-white/50">
+                          <span>{m.user?.displayName || "Manager"}</span>
+                          {/* Report / Block (App Store guideline 1.2): this is bracket league chat, the "league:<id>" room. */}
+                          <MessageModerationMenu
+                            threadId={`league:${leagueId}`}
+                            messageId={m.id}
+                            authorId={m.userId}
+                            authorName={m.user?.displayName}
+                            viewerId={viewerUserId}
+                            onBlocked={onChatAuthorBlocked}
+                          />
+                        </div>
                         <div className="text-white/90">{m.message}</div>
                       </li>
                     ))}
