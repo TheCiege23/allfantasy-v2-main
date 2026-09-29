@@ -525,6 +525,7 @@ describe('the /core Player Finder trade card — one verdict, the one grade (202
 const LEGACY_SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'lib/legacy/legacyOneGrade.ts', entry: /gradeDeal\(/, what: 'the AF Legacy door to the one grader' },
   { file: 'server/api-route-modules/legacy/trade/quick-evaluate/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy Trade Hub live preview (quick evaluate)' },
+  { file: 'server/api-route-modules/legacy/trade/league-analyze/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy league trade finder (league-analyze)' },
 ]
 
 describe.each(LEGACY_SURFACES)('AF Legacy — $what', ({ file, entry }) => {
@@ -559,5 +560,19 @@ describe('AF Legacy — the page prints the one grade, never a verdict, fairness
     expect(PREVIEW_PRIVATE.test("tradeHubLivePreview.verdict === 'FAIR' ? 'text-emerald-400' :")).toBe(true)
     expect(PREVIEW_PRIVATE.test('{tradeHubLivePreview.sweeteners.map((s: any, i: number) => (')).toBe(true)
     expect(PREVIEW_PRIVATE.test('<LegacyOneGrade grade={tradeHubLivePreview.grade} />')).toBe(false)
+  })
+
+  it('the league trade finder runs no private engine and asks the model for no letter; the one grader grades its packages', () => {
+    const src = code('server/api-route-modules/legacy/trade/league-analyze/route.ts')
+    expect(src).not.toMatch(/runTradeEngine\(/)
+    expect(src).not.toMatch(/"tradeGrade":\s*"A\/B\/C"/)
+    expect(src).toMatch(/await gradeLegacyTradeSuggestions\(tradeSuggestions, gradeOf\)/)
+    // /api/ai/trade/league-analyze is the same handler, not a second grader.
+    expect(code('app/api/ai/trade/league-analyze/route.ts')).toMatch(/return legacyPost\(req, \{\}\)/)
+  })
+
+  it('positive controls: the finder shapes match the code they replaced', () => {
+    expect(/runTradeEngine\(/.test('deterministicTrades = runTradeEngine(userRoster.rosterId, unifiedIntelligence, undefined, calWeights)')).toBe(true)
+    expect(/"tradeGrade":\s*"A\/B\/C"/.test('      "tradeGrade": "A/B/C",')).toBe(true)
   })
 })

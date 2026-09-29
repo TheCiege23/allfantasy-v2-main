@@ -17,7 +17,7 @@
  */
 import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
-import type { GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
+import { gradeInputsFromAssetLabels, type GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 
 export type LegacyPackageGrade =
   | {
@@ -125,4 +125,45 @@ export function gradeInputsFromRosterAssets(
     else out.unpriceable.push('a player with no name')
   }
   return out
+}
+
+/** A grader for one league (see `createLegacyPackageGrader`), injected so this module stays pure. */
+export type LegacyPackageGradeFn = (give: GradeInputs, get: GradeInputs) => Promise<LegacyPackageGrade>
+
+export const ONE_SIDED_SUGGESTION_REASON = 'This suggestion names nothing on one side of the deal, so there is nothing to grade.'
+
+/**
+ * THE grade on each trade the league trade finder suggests (`/api/legacy/trade/league-analyze`).
+ *
+ * 🛑 THE MODEL USED TO GRADE ITS OWN SUGGESTIONS ("tradeGrade": "A/B/C"), from player names and a
+ * FantasyCalc dump, and that letter went to the page, the feedback log and the legacy chat snapshot.
+ * The model still PROPOSES the packages; each one's letter is now the one grader's, taken on the
+ * labels exactly as the model wrote them (`gradeInputsFromAssetLabels`, the reader the dynasty
+ * analyzer's chips use). `tradeGrade` keeps its name because those readers use it, and holds the one
+ * letter or null — whatever the model put there is overwritten, never kept.
+ *
+ * Mutates the suggestions in place (the route's own objects, about to be serialised). Never throws: a
+ * grade that fails costs that trade its letter, with the reason.
+ */
+export async function gradeLegacyTradeSuggestions(
+  suggestions: ReadonlyArray<{ suggestedTrades: Array<Record<string, unknown>> }>,
+  gradeOf: LegacyPackageGradeFn,
+): Promise<void> {
+  const labels = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map((name) => ({ name })) : []
+  const trades = suggestions.flatMap((s) => (Array.isArray(s.suggestedTrades) ? s.suggestedTrades : []))
+  await Promise.all(
+    trades.map(async (trade) => {
+      const give = gradeInputsFromAssetLabels(labels(trade.youGive))
+      const get = gradeInputsFromAssetLabels(labels(trade.youReceive))
+      let grade: LegacyPackageGrade
+      if (give.assets.length + give.unpriceable.length === 0 || get.assets.length + get.unpriceable.length === 0) {
+        grade = { graded: false, reason: ONE_SIDED_SUGGESTION_REASON }
+      } else {
+        grade = await gradeOf(give, get).catch((): LegacyPackageGrade => ({ graded: false, reason: 'This deal could not be priced just now.' }))
+      }
+      trade.oneGrade = grade
+      trade.tradeGrade = grade.graded ? grade.letter : null
+    }),
+  )
 }
