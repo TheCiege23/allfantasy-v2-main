@@ -409,3 +409,27 @@ describe('FAAB a side received', () => {
     expect(html).not.toContain('FAAB')
   })
 })
+
+/*
+ * A giveaway's reason stands alone (Guap, 2026-09-29: "fix the wording"). The stock "No letter is
+ * shown rather than one drawn from part of the deal" read as nonsense under "received nothing".
+ */
+describe('a giveaway explains itself without the partial-deal line', () => {
+  const ZAY_GIVEAWAY = trade([
+    { ...side({ rosterId: 4, ownerId: 'u4', managerName: 'BigTzzy57', playersOut: [player('Zay Flowers', 0)], net: 0 }), faabIn: 0, faabOut: 0 },
+    { ...side({ rosterId: 11, ownerId: 'u11', managerName: 'cstanhope12', playersIn: [player('Zay Flowers', 0)], net: 0 }), faabIn: 0, faabOut: 0 },
+  ])
+  const REASON = 'BigTzzy57 received nothing in return — no player, pick or FAAB on Sleeper’s record — so there is no value gap to grade.'
+
+  it('prints the giveaway reason and nothing after it', () => {
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: ZAY_GIVEAWAY, ledgerUrl: URL, grade: { graded: false, reason: REASON, basis: null } })
+    expect(html).toContain(`>${REASON}</div>`)
+    expect(html).not.toContain('part of the deal')
+  })
+
+  it('every other withheld grade keeps the partial-deal line', () => {
+    const g: TradeGradeView = { graded: false, reason: '1 asset has no value on this league’s chart.', basis: null }
+    const { html } = buildTradeGradeEmail({ leagueName: 'L', trade: PRESEASON, ledgerUrl: URL, grade: g })
+    expect(html).toContain('No letter is shown rather than one drawn from part of the deal.')
+  })
+})
