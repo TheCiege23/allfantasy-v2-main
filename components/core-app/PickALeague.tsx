@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import '@/components/core-app/af-pick-league.css'
 import type { ReactNode } from 'react'
+import { NoLeaguesYet } from '@/components/core-app/boards/BoardKit'
 
 /**
  * The no-league state for a league-scoped screen.
@@ -75,6 +76,26 @@ export function PickALeague({
     .slice(0, 10)
 
   const leagueCount = new Set(routable.map((i) => i.leagueId)).size
+
+  /*
+   * 🛑 NO LEAGUES IS NOT "NOTHING IS WAITING" (2026-09-29). With an empty account this screen said
+   * "Nothing in your leagues is waiting on a decision… Pick one below", then "0 on file" and no
+   * league to pick — a false all-clear and a dead end, on the screen a new user or an App Store
+   * reviewer lands on when a board has no data. It now offers the same ways forward as the boards.
+   */
+  if (leagues.length === 0) {
+    return (
+      <div className="af-pl">
+        <header className="af-pl-head">
+          <p className="af-label af-pl-eyebrow">Core · {title}</p>
+          <h1 className="af-display af-pl-title">{title}</h1>
+          <p className="af-pl-blurb">{blurb}</p>
+        </header>
+        {above}
+        <NoLeaguesYet what={`Once one is, ${title} works inside it, with that league's own scoring and rules.`} />
+      </div>
+    )
+  }
 
   return (
     <div className="af-pl">

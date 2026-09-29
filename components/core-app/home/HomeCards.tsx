@@ -13,6 +13,7 @@ import { ScopeResetLink } from '@/components/core-app/ScopeSwitcher'
 import Dashboard3A, {
   Dash3ACareer,
   Dash3AChimmy,
+  connectedLeagueCount,
   Dash3AExposure,
   Dash3AFollowing,
   Dash3ALeagues,
@@ -387,7 +388,7 @@ async function MatchupsCard({
 async function ChimmyCard({ dash34, issues }: Pick<HomeLoads, 'dash34' | 'issues'>) {
   const [data, list] = await Promise.all([dash34, issues])
   if (!data) return null
-  return <Dash3AChimmy openCount={list.length} />
+  return <Dash3AChimmy openCount={list.length} leagueCount={connectedLeagueCount(data)} />
 }
 
 /*

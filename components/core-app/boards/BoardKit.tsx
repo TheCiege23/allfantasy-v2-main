@@ -157,6 +157,40 @@ export function BoardNote({ children }: { children: ReactNode }) {
   return <p className="af-bd-note">{children}</p>
 }
 
+/**
+ * What a board says to an account with NO leagues yet — and what to do instead (2026-09-29).
+ *
+ * 🛑 FOUR BOARDS DEAD-ENDED HERE. Trades, Waivers and Draft HQ (bottom-bar tabs) and Week each
+ * printed one sentence ("No team of yours is claimed…", "No draft to show yet.", "You are not
+ * projected ahead in any league") and stopped — the first thing a new user or an App Store
+ * reviewer sees, with no way forward. My Team already linked to the importer; every board now
+ * does, and offers the two tools that work without a league at all.
+ *
+ * `what` is this board's own sentence: what fills it in once a league is connected.
+ */
+export const NO_LEAGUE_ACTIONS = [
+  { href: '/import', label: 'Connect a league', primary: true },
+  { href: '/mock-draft', label: 'Try a mock draft', primary: false },
+  { href: '/trade-evaluator', label: 'Grade a trade', primary: false },
+] as const
+
+export function NoLeaguesYet({ what }: { what: string }) {
+  return (
+    <section className="af-bd-noleagues" data-testid="board-no-leagues" aria-label="No leagues connected yet">
+      <p className="af-bd-noleagues-lead">
+        <strong>No leagues connected yet.</strong> {what}
+      </p>
+      <div className="af-bd-noleagues-actions">
+        {NO_LEAGUE_ACTIONS.map((a) => (
+          <Link key={a.href} href={a.href} className={a.primary ? 'af-btn' : 'af-btn af-btn--ghost'}>
+            {a.label}
+          </Link>
+        ))}
+      </div>
+    </section>
+  )
+}
+
 /* ── league crest ────────────────────────────────────────────────────────── */
 
 export type CrestSize = 'md' | 'sm' | 'xs'

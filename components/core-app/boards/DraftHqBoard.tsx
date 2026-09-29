@@ -13,6 +13,7 @@ import {
   SectionHead,
   StatPair,
   platformKey,
+  NoLeaguesYet,
 } from '@/components/core-app/boards/BoardKit'
 import { DraftClock } from '@/components/core-app/boards/DraftClock'
 import '@/components/core-app/af-core-boards.css'
@@ -357,6 +358,16 @@ export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoar
     .slice(0, 10)
 
   const withDraft = data.rows.length
+
+  /* No leagues on this account yet: say so and offer a way forward (BoardKit NoLeaguesYet). */
+  if (totalLeagues === 0) {
+    return (
+      <div className="af-bd">
+        <BoardHead eyebrow="Core · Draft HQ" title="Draft HQ" blurb="Every draft you are in, ranked by the clock — the one on you first, then the ones running, then the ones still to come." />
+        <NoLeaguesYet what="Once one is, every draft you are in shows here, ranked by the clock. A mock draft works right now, with no league at all." />
+      </div>
+    )
+  }
 
   return (
     <div className="af-bd">

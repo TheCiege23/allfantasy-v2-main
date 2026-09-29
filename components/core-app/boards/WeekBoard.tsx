@@ -19,6 +19,7 @@ import {
   LeagueCrest,
   SectionHead,
   columnsTooUneven,
+  NoLeaguesYet,
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-core-boards.css'
 
@@ -274,6 +275,16 @@ export function WeekBoard({
       board.eliminationWeeks.length +
       board.withoutSchedule,
   )
+
+  /* No leagues on this account yet: say so and offer a way forward (BoardKit NoLeaguesYet). */
+  if (totalLeagues === 0) {
+    return (
+      <div className="af-bd">
+        <BoardHead eyebrow="Core · Your week" title="Your week" blurb="The five leagues you are furthest ahead in, against the five you are behind in that a playoff run still depends on." />
+        <NoLeaguesYet what="Once one is, this board shows the leagues you lead and trail in this week's matchups." />
+      </div>
+    )
+  }
 
   return (
     <div className="af-bd">
