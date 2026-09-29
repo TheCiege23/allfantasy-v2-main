@@ -302,6 +302,13 @@ const nextConfig = {
 
   async rewrites() {
     return [
+      // Which links open the iOS app. A route rather than a static file: it has no extension (a
+      // static file would not be served as JSON) and names the Apple Team ID from the server's own
+      // env at request time. See lib/platform/appSiteAssociation.ts.
+      {
+        source: '/.well-known/apple-app-site-association',
+        destination: '/api/ios/app-site-association',
+      },
       // PostHog ingestion proxy — avoids ad-blocker interference
       // Assets go through our own route, NOT straight to us-assets.i.posthog.com:
       // that host is behind Cloudflare, which 403s ("DNS points to prohibited IP")

@@ -211,6 +211,10 @@ const GEO_EXEMPT_PREFIXES = [
   "/api/community/discord/webhook",
   "/_next",
   "/favicon.ico",
+  // Host-proof files (assetlinks.json, apple-app-site-association) fetched by Google and Apple
+  // from their own servers, wherever those sit. A geo refusal there is a silent failure to
+  // verify the Android or iOS app, and the files hold no user content.
+  "/.well-known",
 ]
 
 /** Exact-prefix match: `/pro` matches `/pro` and `/pro/foo`, not `/professional`. */
