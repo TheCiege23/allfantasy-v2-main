@@ -137,7 +137,7 @@ function toProspect(row: PoolRow, rank: number): DevyProspect {
   }
 }
 
-function newsKindOf(category: string | null): DevyNewsKind {
+export function newsKindOf(category: string | null): DevyNewsKind {
   const c = (category ?? '').toLowerCase()
   if (c.includes('injur')) return 'injury'
   if (c.includes('transfer') || c.includes('portal')) return 'transfer'
@@ -147,7 +147,7 @@ function newsKindOf(category: string | null): DevyNewsKind {
 }
 
 /** Coarse relative time. Formatted server-side so the component stays pure. */
-function ageOf(at: Date | null, now: Date): string {
+export function ageOf(at: Date | null, now: Date): string {
   if (!at) return ''
   const mins = Math.max(0, Math.round((now.getTime() - at.getTime()) / 60000))
   if (mins < 60) return `${mins}m ago`
