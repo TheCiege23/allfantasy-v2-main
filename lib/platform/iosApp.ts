@@ -47,6 +47,29 @@ export const IOS_APP_UA_TEST_JS = `(typeof navigator!=="undefined"&&navigator.us
   IOS_APP_UA_MARKER,
 )})!==-1)`
 
+/**
+ * Where a signed-out visitor to `/core` goes inside the iOS app, or null for the
+ * usual `/login` bounce.
+ *
+ * The app LAUNCHES at bare `/core` (`server.url` in ios-app/capacitor.config.json),
+ * so on the web's rule a first-time user's very first screen was a sign-in form
+ * with nothing saying what the app is. Only that exact launch URL goes to the
+ * landing page: a deep link (`/core/trades`, `/core?league=…`) is someone who
+ * already knows where they are going, and still goes to sign-in carrying it.
+ *
+ * Changing this rather than `server.url` fixes builds already in TestFlight — the
+ * binary keeps opening `/core`, and the server decides what that means.
+ */
+export function iosAppSignedOutDestination(
+  userAgent: string | null | undefined,
+  segment: string,
+  carriedQuery: string,
+): string | null {
+  if (!isIosAppUserAgent(userAgent)) return null
+  if (segment !== "" || carriedQuery !== "") return null
+  return "/"
+}
+
 /** Where a purchase page sends the iOS app. Must not itself be a purchase page. */
 export const IOS_APP_PLANS_PATH = "/ios-app/plans"
 
