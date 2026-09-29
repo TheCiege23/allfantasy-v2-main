@@ -67,7 +67,42 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
 ## Before pressing "Add for Review"
 
 - **Demo account** under App Review Information: an email/password account (not
-  a social login, which is hidden in the app) with 1–2 imported leagues.
+  a social login, which is hidden in the app) with 1–2 imported leagues. Its
+  credentials go in App Store Connect's own fields — never in this repo, which is
+  public.
+- **Notes** under App Review Information: paste the block below. Re-read it
+  against the app first; every sentence in it is a claim the reviewer can test.
+
+  ```
+  AllFantasy is a companion for season-long fantasy sports leagues people
+  already play on Sleeper, ESPN and Fantrax. It imports those leagues read-only
+  and shows lineup, matchup, waiver and trade analysis in one place. There is no
+  gambling, no betting and no real-money contests in the app.
+
+  SIGN-IN: use the demo account above (email and password). The demo account
+  already has imported leagues, so every tab has real data.
+
+  PURCHASES: nothing is sold in the app. Subscriptions and tokens are sold only
+  on our website; an account that already bought them there keeps that access in
+  the app (guideline 3.1.3(b)). Purchase pages and checkout are unavailable
+  inside the app.
+
+  ACCOUNT DELETION: More (bottom bar) > Settings > Account > "Start account
+  deletion". Deletion is immediate and permanent after typing DELETE to confirm.
+
+  USER CONTENT: league chat and direct messages. Press and hold any message to
+  Report it or Block its sender; blocked users' messages are hidden. Offensive
+  language is filtered, and reports are reviewed within 24 hours (Terms of
+  Service, section 11).
+
+  TRACKING: the app does not track users. Ad and analytics pixels used on our
+  website do not load inside the app.
+  ```
+
+  ⚠ Keep it true. Draft-room chat has no Report/Block yet, which is why the note
+  says "league chat and direct messages" and not "all chat" — wire it there before
+  widening the sentence. If a purchase surface or a tracker is ever added to the
+  app, this block is wrong the same day.
 - **App Privacy**: "Data Used to Track You", **No**. Measure it before each
   submission; do not copy last time's answer:
 

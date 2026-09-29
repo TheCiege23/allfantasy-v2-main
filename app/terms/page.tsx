@@ -234,6 +234,24 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
           misleading, or otherwise inappropriate. We are not obligated to host or display any content and may modify or discontinue
           features without liability.
         </p>
+        <p className="mt-3">
+          <strong>Zero tolerance.</strong> AllFantasy has zero tolerance for objectionable content and abusive users. You may not
+          post content that is hateful, harassing, threatening, sexually explicit or discriminatory, or that targets another person,
+          and you may not use chat, messages or any other feature to abuse other users.
+        </p>
+        <p className="mt-3">
+          <strong>Reporting and blocking.</strong> In league chat and direct messages you can report a message and block its
+          sender from the message itself: press and hold the message (or right-click it on a computer), then choose Report or
+          Block. Blocking hides that user&apos;s messages from you. We review reports within 24 hours, remove content that breaks
+          these Terms, and may suspend or remove the accounts responsible. You can also report content to{" "}
+          <a href="mailto:support@allfantasy.ai" className="text-cyan-400 hover:text-cyan-300">
+            support@allfantasy.ai
+          </a>
+          .
+        </p>
+        <p className="mt-3">
+          <strong>Filtering.</strong> We filter offensive language in chat and may hide content that appears to break these Terms.
+        </p>
       </section>
 
       <section id="clause-12">
