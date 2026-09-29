@@ -22,18 +22,30 @@ export function getDraftLotteryLastResultFromSettings(
   return raw as unknown as WeightedLotteryResult
 }
 
-export async function getDraftOrderModeAndLotteryConfig(leagueId: string): Promise<{
+export type DraftOrderModeAndLotteryConfig = {
   draftOrderMode: DraftOrderMode
   lotteryConfig: WeightedLotteryConfig
   lotteryLastSeed: string | null
   lotteryLastRunAt: string | null
   lotteryLastResult: WeightedLotteryResult | null
-}> {
+}
+
+export async function getDraftOrderModeAndLotteryConfig(
+  leagueId: string
+): Promise<DraftOrderModeAndLotteryConfig> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
     select: { settings: true },
   })
-  const settings = (league?.settings as Record<string, unknown>) ?? {}
+  return readDraftOrderModeAndLotteryConfig(league?.settings)
+}
+
+/**
+ * The same parse, from a League.settings value the caller already holds, so a screen that has
+ * read the league row does not read it again just to learn the draft order mode.
+ */
+export function readDraftOrderModeAndLotteryConfig(rawSettings: unknown): DraftOrderModeAndLotteryConfig {
+  const settings = (rawSettings as Record<string, unknown>) ?? {}
   const mode = (settings[KEY_ORDER_MODE] as DraftOrderMode) ?? 'randomize'
   const raw = settings[KEY_LOTTERY_CONFIG] as Record<string, unknown> | undefined
   const lotteryConfig: WeightedLotteryConfig = raw && typeof raw === 'object'

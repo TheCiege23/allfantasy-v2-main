@@ -9,7 +9,8 @@ export type DynastyLotteryEligibility = {
   isStartupLeague: boolean
 }
 
-function isDynastyLeagueRow(league: {
+/** Exported so a caller holding the league row can skip the guard's own read for a non-dynasty league. */
+export function isDynastyLeagueRow(league: {
   isDynasty: boolean
   leagueVariant: string | null
 }): boolean {
