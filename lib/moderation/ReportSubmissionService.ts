@@ -6,7 +6,12 @@ import { prisma } from "@/lib/prisma"
 import { resolveLeagueAccess } from "@/lib/league-access"
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core/ChatRoomResolver"
 import { REPORT_REASONS, type ReportReason } from "./shared"
-import { draftIdFromMockDraftThread, sessionKeyFromDraftRoomThread } from "./reportRooms"
+import {
+  WORLD_CUP_UNREPORTABLE_TYPES,
+  challengeIdFromWorldCupThread,
+  draftIdFromMockDraftThread,
+  sessionKeyFromDraftRoomThread,
+} from "./reportRooms"
 
 /**
  * League chat lives in a virtual room ("league:<leagueId>"), not a platform
@@ -93,6 +98,39 @@ async function resolveMockDraftMessage(
 }
 
 /**
+ * A World Cup bracket pool's chat ("worldcup:<challengeId>", WorldCupBracketChatEvent). The same
+ * test the chat's read applies — the pool's owner or a participant (a site admin reads it too, but
+ * needs no report) — and the message must be one this reporter can SEE: public, or a private row
+ * they sent or received. Chimmy's answers and system/event rows have no human author and are refused.
+ */
+async function resolveWorldCupMessage(
+  reporterUserId: string,
+  messageId: string,
+  challengeId: string,
+): Promise<{ senderUserId: string | null } | null> {
+  const row = await (prisma as any).worldCupBracketChatEvent.findFirst({
+    where: { id: messageId, challengeId },
+    select: { userId: true, isAiGenerated: true, metadata: true },
+  })
+  if (!row || row.isAiGenerated) return null
+  const meta = row.metadata && typeof row.metadata === "object" ? (row.metadata as Record<string, unknown>) : {}
+  if (WORLD_CUP_UNREPORTABLE_TYPES.has(String(meta.messageType ?? "text"))) return null
+  if (meta.visibility === "private_to_user" && row.userId !== reporterUserId && meta.targetUserId !== reporterUserId) {
+    return null
+  }
+  const [challenge, participant] = await Promise.all([
+    (prisma as any).worldCupBracketChallenge.findUnique({ where: { id: challengeId }, select: { ownerUserId: true } }),
+    (prisma as any).worldCupBracketParticipant.findUnique({
+      where: { challengeId_userId: { challengeId, userId: reporterUserId } },
+      select: { id: true },
+    }),
+  ])
+  if (!challenge) return null
+  if (challenge.ownerUserId !== reporterUserId && !participant) return null
+  return { senderUserId: row.userId ?? null }
+}
+
+/**
  * A virtual room's message and author: `undefined` when the thread is a platform thread (DM or
  * huddle, handled below), `null` when it is a virtual room but the report must be refused.
  */
@@ -106,6 +144,8 @@ async function resolveVirtualRoomMessage(
   if (sessionKey) return resolveDraftRoomMessage(reporterUserId, messageId, sessionKey)
   const draftId = draftIdFromMockDraftThread(threadId)
   if (draftId) return resolveMockDraftMessage(reporterUserId, messageId, draftId)
+  const challengeId = challengeIdFromWorldCupThread(threadId)
+  if (challengeId) return resolveWorldCupMessage(reporterUserId, messageId, challengeId)
   return undefined
 }
 

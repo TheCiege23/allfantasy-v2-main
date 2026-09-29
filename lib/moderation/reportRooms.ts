@@ -8,6 +8,7 @@
  *   "draftroom:<sessionKey>"  → DraftRoomChatMessage   (the app/draft shell's chat; the session
  *                                key is itself "mock:<id>" or "live:<leagueId>")
  *   "mockdraft:<draftId>"     → MockDraftChat          (the mock draft simulator's chat)
+ *   "worldcup:<challengeId>"  → WorldCupBracketChatEvent (a World Cup bracket pool's chat)
  *
  * Client-safe: the chat panels build the same ids the server resolves.
  */
@@ -36,3 +37,26 @@ export function draftIdFromMockDraftThread(threadId: string): string | null {
   const id = threadId.slice(MOCK_DRAFT_REPORT_PREFIX.length).trim()
   return id || null
 }
+
+export const WORLD_CUP_REPORT_PREFIX = "worldcup:"
+
+export function worldCupReportThreadId(challengeId: string): string {
+  return `${WORLD_CUP_REPORT_PREFIX}${challengeId}`
+}
+
+/** The challenge id of a "worldcup:" room, or null for any other room. */
+export function challengeIdFromWorldCupThread(threadId: string): string | null {
+  if (!threadId.startsWith(WORLD_CUP_REPORT_PREFIX)) return null
+  const id = threadId.slice(WORLD_CUP_REPORT_PREFIX.length).trim()
+  return id || null
+}
+
+/**
+ * World Cup pool rows with no human author to report or block: Chimmy's answers, and system /
+ * event lines. The UI offers neither action on them and the server refuses a report on them.
+ */
+export const WORLD_CUP_UNREPORTABLE_TYPES: ReadonlySet<string> = new Set([
+  "chimmy_private_response",
+  "system",
+  "event",
+])

@@ -90,8 +90,8 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
   ACCOUNT DELETION: More (bottom bar) > Settings > Account > "Start account
   deletion". Deletion is immediate and permanent after typing DELETE to confirm.
 
-  USER CONTENT: league chat, draft and mock-draft chat, bracket pool chat and
-  direct messages. Press and hold a message, or tap its "..." button, to Report
+  USER CONTENT: every chat — league, draft and mock-draft, bracket and World Cup
+  pool chats, and direct messages. Press and hold a message, or tap its "..." button, to Report
   it or Block its sender; blocked users' messages are hidden. Offensive
   language is filtered, and reports are reviewed within 24 hours (Terms of
   Service, section 11).
@@ -100,22 +100,22 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
   website do not load inside the app.
   ```
 
-  ⚠ Keep it true. Report/Block now covers league chat (both renderers —
-  `LeagueConversation` and the dashboard's `LeagueChatInPanel`), DMs/huddles, the
-  live draft room (#1565), the `app/draft` shell's chat, bracket pool chat
-  (`PoolChat`) and the mock draft chat; every one of their reads hides blocked senders
-  and answers 503 rather than serve an unfiltered list. `RedraftCommunicationPanel`
-  shows no member chat (notices and events only; its composer posts into league chat).
-  STILL MISSING (census 2026-09-29, all four import forms checked), which is why the
-  note does not say "all chat":
-  - `app/leagues/[leagueId]/page.tsx` — the bracket league page renders bracket chat
-    in two lists with no Report (its read already hides blocked senders);
-  - `components/brackets/world-cup/WorldCupBracketShell.tsx` — World Cup challenge
-    chat (`/api/brackets/world-cup/[id]/chat`), no Report or Block, own table;
-  - `app/af-legacy/page.tsx` → `/api/legacy/chat` — NOT YET CLASSIFIED (may be the AI
-    assistant, which is not user content).
-  Wire them before widening the sentence. If a purchase surface or a tracker is ever
-  added to the app, this block is wrong the same day.
+  ⚠ Keep it true. "Every chat" is a census claim (2026-09-29, every client that
+  fetches a chat/messages API, all four import forms). Report/Block covers:
+  league chat (both renderers — `LeagueConversation` and the dashboard's
+  `LeagueChatInPanel`), DMs/huddles (`ThreadPanel`), the live draft room, the
+  `app/draft` shell's chat, the mock draft chat, bracket pool chat (`PoolChat` and
+  the bracket league page's two lists), and World Cup pool chat and its DMs. Every
+  one of their reads hides blocked senders and answers 503 rather than serve an
+  unfiltered list.
+  NOT user content, so nothing to report: `app/af-legacy` (the AI assistant),
+  `/zombie/[leagueId]/chat` (Chimmy command cards and a link into league chat),
+  `RedraftCommunicationPanel` (notices and events; its composer posts into league chat).
+  🛑 THREE CHAT APIs HAVE NO UI TODAY — `/api/survivor/chat`,
+  `/api/zombie/universe/[universeId]/chat`, `/api/commissioner/leagues/[leagueId]/chat`.
+  Anything that starts rendering them must add Report/Block and the blocked-sender
+  filter in the same change, or this block is wrong the day it ships. The same goes
+  for any new chat, purchase surface or tracker.
 - **App Privacy**: "Data Used to Track You", **No**. Measure it before each
   submission; do not copy last time's answer:
 

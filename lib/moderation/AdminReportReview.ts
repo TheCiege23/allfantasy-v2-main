@@ -7,6 +7,7 @@
  *   "league:<id>"          → leagueChatMessage, or bracketLeagueMessage for a bracket league
  *   "draftroom:<session>"  → draftRoomChatMessage (the app/draft shell's chat)
  *   "mockdraft:<draftId>"  → mockDraftChat (the mock draft simulator's chat)
+ *   "worldcup:<challenge>" → worldCupBracketChatEvent (a World Cup pool's chat; has metadata)
  *   anything else          → platformChatMessage (DMs and huddles)
  *
  * ⚠ The two draft tables have NO metadata column, so their removal is the text alone
@@ -24,9 +25,9 @@
 
 import { prisma } from "@/lib/prisma"
 import { getLeagueIdFromVirtualRoom, isLeagueVirtualRoom } from "@/lib/chat-core/ChatRoomResolver"
-import { draftIdFromMockDraftThread, sessionKeyFromDraftRoomThread } from "./reportRooms"
+import { challengeIdFromWorldCupThread, draftIdFromMockDraftThread, sessionKeyFromDraftRoomThread } from "./reportRooms"
 
-export type ReportedMessageStore = "league" | "bracket" | "platform" | "draft_room" | "mock_draft"
+export type ReportedMessageStore = "league" | "bracket" | "platform" | "draft_room" | "mock_draft" | "world_cup"
 
 export interface ReportForReview {
   id: string
@@ -111,6 +112,15 @@ async function loadMessage(messageId: string, threadId: string): Promise<{
     })
     if (!row) return null
     return { store: "mock_draft", text: row.content, authorId: row.userId ?? null, createdAt: row.createdAt, metadata: textOnlyDeletion(row.content), roomName: "Mock draft chat" }
+  }
+  const worldCupChallengeId = challengeIdFromWorldCupThread(threadId)
+  if (worldCupChallengeId) {
+    const row = await (prisma as any).worldCupBracketChatEvent.findFirst({
+      where: { id: messageId, challengeId: worldCupChallengeId },
+      select: { eventBody: true, userId: true, createdAt: true, metadata: true, challenge: { select: { name: true } } },
+    })
+    if (!row) return null
+    return { store: "world_cup", text: row.eventBody, authorId: row.userId ?? null, createdAt: row.createdAt, metadata: asMeta(row.metadata), roomName: row.challenge?.name ?? "World Cup pool" }
   }
   const platform = await (prisma as any).platformChatMessage.findFirst({
     where: { id: messageId, threadId },
@@ -217,6 +227,8 @@ export async function reviewReport(reportId: string, action: ReviewAction, admin
       await prisma.leagueChatMessage.update({ where: { id: report.messageId }, data: { message: "[message deleted]", metadata } })
     } else if (message.store === "bracket") {
       await (prisma as any).bracketLeagueMessage.update({ where: { id: report.messageId }, data: { message: "[message deleted]", metadata } })
+    } else if (message.store === "world_cup") {
+      await (prisma as any).worldCupBracketChatEvent.update({ where: { id: report.messageId }, data: { eventBody: "[message deleted]", metadata } })
     } else {
       await (prisma as any).platformChatMessage.update({ where: { id: report.messageId }, data: { body: "[message deleted]", metadata, updatedAt: new Date() } })
     }

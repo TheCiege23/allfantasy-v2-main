@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { userHasBracketBrainAi } from "@/lib/bracket-brain/bracketBrainAccess"
 import { prisma } from "@/lib/prisma"
+import { BlockListUnavailableError, getBlockedSenderSetForRead } from "@/lib/moderation/BlockUserService"
 import {
   getGifProviderName,
   isGifSearchConfigured,
@@ -1029,8 +1030,23 @@ export async function GET(
     return NextResponse.json({ members })
   }
 
-  const messages = await listChatMessages(params.data.challengeId, auth.user.id)
-  return NextResponse.json({ messages })
+  /*
+   * People this viewer blocked are not shown (App Store guideline 1.2), and a failed block-list read
+   * is a 503, never an unfiltered pool chat — the rule every other chat read follows. Author-less
+   * rows are never filtered, and the viewer is never in their own block set.
+   */
+  let blocked: Set<string>
+  try {
+    blocked = await getBlockedSenderSetForRead(auth.user.id)
+  } catch (err) {
+    if (!(err instanceof BlockListUnavailableError)) throw err
+    return NextResponse.json({ error: "Messages are temporarily unavailable. Try again in a moment." }, { status: 503 })
+  }
+  const messages = (await listChatMessages(params.data.challengeId, auth.user.id)).filter(
+    (m) => !m.userId || !blocked.has(m.userId),
+  )
+  /* `viewerUserId`: the shell offers Report and Block on everyone's messages but the viewer's own. */
+  return NextResponse.json({ messages, viewerUserId: auth.user.id })
 }
 
 export async function POST(
