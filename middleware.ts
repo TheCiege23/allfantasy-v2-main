@@ -60,6 +60,10 @@ function iosAppPurchaseRefusal(request: NextRequest, pathname: string): NextResp
  */
 async function iosAppSignedOutLanding(request: NextRequest, pathname: string): Promise<NextResponse | null> {
   if (pathname !== "/core") return null
+  // ⚠ A query IS a deep link: `?league=` alone decides which league /core opens, and the
+  // pathname cannot see it. Measured live 2026-09-29: `/core?league=<id>` in the app was sent
+  // here to "/" with the league stripped, while Safari kept it in /login?callbackUrl=.
+  if (request.nextUrl.search) return null
   if (!isIosAppUserAgent(request.headers.get("user-agent"))) return null
   const secret = resolveAuthSecret()
   if (!secret) return null
