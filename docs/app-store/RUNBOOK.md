@@ -88,6 +88,30 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
   wrong answer was itself grounds for rejection. PostHog and Sentry still collect
   first-party analytics and diagnostics: declare those under the data the app
   collects, not under tracking. See the Play runbook's data-safety notes.
+
+  🛑 **AND "No" HERE IS NOT "no trackers exist" — THE WEB SITE RUNS FIVE.** Measured
+  2026-09-28 on `https://www.allfantasy.ai/` with a normal desktop UA, the hosts
+  contacted on first load are `connect.facebook.net`, `www.googletagmanager.com`,
+  `analytics.tiktok.com` (+ `analytics-ipv6.tiktokw.us`), `www.redditstatic.com` /
+  `pixel-config.reddit.com` / `alb.reddit.com`, `ad.doubleclick.net`, plus
+  `static.cloudflareinsights.com` and `sentry.io`. That list is what `/privacy` and
+  Play's data-safety form have to match; this App Privacy answer is about the APP,
+  and the two are different questions with different correct answers. TikTok and
+  Reddit are NOT in this repo — they load from inside the GTM container — so `grep`
+  cannot find them, which is how the privacy policy under-disclosed both for weeks.
+  ⚠ Measure with `performance.getEntriesByType('resource')`: an in-app-browser
+  network panel reported only same-origin requests and none of the ad hosts, which
+  reads exactly like "nothing fires".
+- **What is verified in production, and what still needs a build.** Verified by
+  effect 2026-09-28: `/upgrade` answers **307 → `/ios-app/plans`** for a UA carrying
+  `AllFantasyiOS` and **200** for a desktop UA, so the 3.1.1 purchase-page gate is
+  live server-side. The tracker half is covered by `probe-ios-app-trackers.cjs`
+  above. What neither covers is **hiding the social sign-in buttons**: that is done
+  CLIENT-side off the `data-ios-app` flag, so a `curl` with the iOS UA returns
+  byte-identical HTML and proves nothing either way. Confirm it on a real TestFlight
+  build — the web login page does show Google, Spotify and Discord (Apple reads
+  "SOON"), which is exactly the 4.8 shape review would reject if the in-app hiding
+  ever silently stopped working.
 - **Release**: "Manually release this version".
 
 ## Known remaining risk

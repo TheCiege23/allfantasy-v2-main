@@ -259,8 +259,8 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
         {/* 17a requires this line to stay visually distinct rather than buried. */}
         <LegalCallout tone="accent">
           <strong>
-            We do not sell your personal information. We share limited data with Meta and Google for
-            ad measurement, as described below.
+            We do not sell your personal information. We share limited data with our advertising
+            partners — Meta, Google, TikTok and Reddit — for ad measurement, as described below.
           </strong>
         </LegalCallout>
       </section>
@@ -271,14 +271,33 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
         checkout, Stripe webhook, instant trade ViewContent, /api/meta/events) — hashed email
         + account id, IP, user agent. meta-capi never sends a phone number. Adding a new Meta
         event or data field means updating this text.
+
+        🛑 TIKTOK AND REDDIT WERE MISSING FROM THIS LIST, AND THE CODE CANNOT TELL YOU THEY ARE
+        THERE. They load from INSIDE the GTM container, which is configured in Google's UI and is
+        not in this repo — so grepping for "tiktok" finds nothing and the policy under-disclosed
+        two ad partners. `lib/platform/iosApp.ts` already said GTM "carries the TikTok/Reddit/Google
+        tags"; the policy never caught up.
+
+        ⚠ RE-MEASURE FROM THE LIVE SITE, NOT FROM THE SOURCE. Measured 2026-09-28 on
+        https://www.allfantasy.ai/ — third-party hosts actually contacted on first load:
+        connect.facebook.net · www.googletagmanager.com · analytics.tiktok.com (+
+        analytics-ipv6.tiktokw.us) · www.redditstatic.com, pixel-config.reddit.com, alb.reddit.com ·
+        ad.doubleclick.net · static.cloudflareinsights.com · sentry.io (diagnostics).
+
+        ⚠ AND USE `performance.getEntriesByType('resource')`, NOT A NETWORK PANEL. The devtools
+        network list in the in-app browser reported ONLY same-origin requests and showed zero of the
+        hosts above — which reads exactly like "no trackers fire". The performance timeline is what
+        exposed all twelve. A tracker audit run on the wrong instrument concludes the opposite of
+        the truth.
       */}
       <section id="advertising-and-measurement">
         <h2>Advertising and measurement</h2>
         <p>
-          We use advertising and measurement tools from Meta (the Meta Pixel and the Conversions API)
-          and Google (Google Tag Manager and the Google tags it loads). When you visit AllFantasy, these
-          tools may collect your IP address, browser and device information, the pages you view, and
-          cookie identifiers.
+          We use advertising and measurement tools from Meta (the Meta Pixel and the Conversions
+          API), Google (Google Tag Manager, Google Ads conversion tracking and the Google tags it
+          loads), TikTok (the TikTok Pixel) and Reddit (the Reddit Pixel). When you visit
+          AllFantasy, these tools may collect your IP address, browser and device information, the
+          pages you view, and cookie identifiers.
         </p>
         <p>
           When you take certain actions, such as signing up, creating a league, creating or entering a
@@ -288,13 +307,18 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
           your phone number.
         </p>
         <p>
-          You can limit ad personalization in your Meta and Google ad settings, and you can block these
-          cookies in your browser.
+          You can limit ad personalization in your Meta, Google, TikTok and Reddit ad settings, and
+          you can block these cookies in your browser.
         </p>
-        {/* Enforced by lib/platform/iosApp: the layout loaders, meta-client and meta-capi all skip the app. */}
+        {/*
+          Enforced by lib/platform/iosApp: the layout loaders, meta-client and meta-capi all skip the
+          app. ⚠ That suppression covers TikTok and Reddit too, but only because it drops the whole
+          GTM container rather than named pixels — which is exactly why iosApp.ts refuses to load GTM
+          instead of trying to filter it.
+        */}
         <p>
-          Our iOS app does not use any of these tools. Nothing you do in the iOS app is shared with Meta
-          or Google for advertising or measurement.
+          Our iOS app does not use any of these tools. Nothing you do in the iOS app is shared with
+          Meta, Google, TikTok or Reddit for advertising or measurement.
         </p>
       </section>
 
