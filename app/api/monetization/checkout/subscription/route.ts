@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { isAppleIosShellRequest } from "@/lib/monetization/isAppleIosShellRequest"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import {
@@ -37,6 +38,9 @@ type CheckoutSubscriptionBody = {
 
 export async function POST(req: Request) {
   try {
+    if (isAppleIosShellRequest(req)) {
+      return NextResponse.json({ error: "Use Apple In-App Purchase in the iOS app." }, { status: 403 })
+    }
     const geoBlock = await enforcePaidSubscriptionGeo(req)
     if (geoBlock) return geoBlock
 

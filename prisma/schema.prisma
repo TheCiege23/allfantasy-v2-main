@@ -13369,6 +13369,8 @@ model UserSubscription {
   stripeCustomerId        String?          @db.VarChar(128)
   stripeSubscriptionId    String?          @unique @db.VarChar(128)
   stripeCheckoutSessionId String?          @unique @db.VarChar(128)
+  appleOriginalTransactionId String?        @unique @db.VarChar(128)
+  appleLatestTransactionId   String?        @db.VarChar(128)
   currentPeriodStart      DateTime?
   currentPeriodEnd        DateTime?
   gracePeriodEnd          DateTime?
