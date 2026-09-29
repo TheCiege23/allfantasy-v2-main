@@ -12,6 +12,8 @@ import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/compon
 import { readReactions, toggleReactionLocally, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
+import { chatFailure } from '@/components/core-app/comms/chatFailure'
+import type { ReportReason } from '@/lib/moderation/shared'
 import '@/components/core-app/af-comms.css'
 
 /**
@@ -162,7 +164,19 @@ export function DraftChatPanel({
     for (const m of messages) map.set(m.id, m)
     return map
   }, [messages])
-  const listMessages = useMemo(() => messages.map(toListMessage), [messages])
+  /*
+   * People blocked from THIS panel, hidden at once. The server drops blocked senders from the
+   * next read (draftRoomChatWireLoad), but the room MERGES each read into what it already holds
+   * (mergeDraftChatWire), so without this their earlier messages would stay until a reload.
+   */
+  const [blockedAuthors, setBlockedAuthors] = useState<ReadonlySet<string>>(() => new Set())
+  const listMessages = useMemo(
+    () =>
+      messages
+        .filter((m) => !m.senderUserId || !blockedAuthors.has(m.senderUserId))
+        .map(toListMessage),
+    [messages, blockedAuthors],
+  )
 
   const nameForUserId = useCallback(
     (id: string): string | null => messages.find((m) => m.senderUserId === id)?.from ?? null,
@@ -250,6 +264,44 @@ export function DraftChatPanel({
       refresh?.()
     },
     [room, refresh],
+  )
+
+  /*
+   * ── Report and Block (App Store guideline 1.2) ────────────────────────────────────
+   * The draft view had neither, while league chat and DMs had both. Every draft message is a
+   * LeagueChatMessage in `league:<id>`, so these are league chat's own calls on the same room:
+   * ReportSubmissionService checks the reporter can read the league and the message is really in
+   * it. Pick announcements and copilot notes carry no author (toListMessage), so ChatMessageList
+   * offers neither action on them. Both THROW on a non-OK answer so the sheet stays open and says why.
+   */
+  const reportMessage = useCallback(
+    async (m: ChatListMessage, reason: ReportReason) => {
+      if (!room) throw new Error('Report not sent: this chat has no league.')
+      const res = await fetch('/api/shared/chat/report/message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId: m.id, threadId: room, reason }),
+      })
+      if (!res.ok) throw await chatFailure(res, 'Report not sent', 'Report not sent. Try again in a moment.')
+    },
+    [room],
+  )
+
+  const blockAuthor = useCallback(
+    async (m: ChatListMessage) => {
+      const blockedUserId = m.authorId
+      if (!blockedUserId) throw new Error('There is nobody to block on that message.')
+      const res = await fetch('/api/shared/chat/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blockedUserId }),
+      })
+      if (!res.ok) throw await chatFailure(res, 'Not blocked', 'Not blocked. Try again in a moment.')
+      setBlockedAuthors((prev) => new Set(prev).add(blockedUserId))
+      setReplyTo((r) => (r && r.senderUserId === blockedUserId ? null : r))
+      refresh?.()
+    },
+    [refresh],
   )
 
   /*
@@ -671,6 +723,8 @@ export function DraftChatPanel({
               onReply={(m) => setReplyTo(byId.get(m.id) ?? null)}
               onEdit={room ? editMessage : undefined}
               onDelete={room ? deleteMessage : undefined}
+              onReport={room ? reportMessage : undefined}
+              onBlock={room ? blockAuthor : undefined}
               nameForUserId={nameForUserId}
               renderSystem={renderSystem}
               tagFor={tagFor}
