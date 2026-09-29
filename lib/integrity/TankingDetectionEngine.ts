@@ -8,6 +8,8 @@ import Anthropic from "@anthropic-ai/sdk"
 import type { Prisma } from "@prisma/client"
 
 import { prisma } from "@/lib/prisma"
+import { ourIdOrSleeperIdWhere, playerRowKeys } from "@/lib/player-identity/externalIdNamespace"
+import { isForeignIdSpace } from "@/lib/core-app/rosterIdSpace"
 
 import { notifyCommissionerOfFlag } from "./integrityNotifier"
 import { normalizeSensitivity, TANKING_BENCH_GAP_POINTS } from "./sensitivity"
@@ -155,23 +157,36 @@ function parseLineupSnapshots(raw: unknown): { rosterId: string; starters: { pla
  * -facing sentence rendered as "started 6080 (OUT) at 0.0 projected over a bench
  * option at 12.4". The single most damning line on the flag was unreadable, and
  * a commissioner cannot verify an accusation against a player they cannot
- * identify. Ids arrive in whichever shape the source platform used, so both the
- * sleeper id and the externalId are tried; anything that does not resolve keeps
- * its id rather than inventing a name.
+ * identify. Anything that does not resolve keeps its id rather than inventing a
+ * name.
+ *
+ * 🛑 AND A WRONG NAME IS WORSE THAN A NUMBER. This used to try "both the sleeper
+ * id and the externalId", but `externalId` is where Rolling Insights keeps its OWN
+ * numbers for different people: Sleeper 9228 is Bryce Young, RI 9228 is Michael
+ * Tarquin, an offensive tackle. On this surface that becomes a commissioner told a
+ * manager "started Michael Tarquin (OUT)" — an accusation about a player who was
+ * never in the lineup. The redraft engine's ids are Sleeper ids or our own row ids
+ * (`ourIdOrSleeperIdWhere`); a foreign league's ids are not looked up at all (see
+ * the caller). externalIdNamespace.ts has the measurement.
  */
 async function resolvePlayerNames(ids: string[], sport: string): Promise<Map<string, string>> {
   const unique = [...new Set(ids.map((i) => i.trim()).filter(Boolean))]
   if (unique.length === 0) return new Map()
   const rows = await prisma.sportsPlayer
     .findMany({
-      where: { sport, OR: [{ sleeperId: { in: unique } }, { externalId: { in: unique } }] },
-      select: { externalId: true, sleeperId: true, name: true },
+      where: ourIdOrSleeperIdWhere(unique, sport),
+      select: { id: true, sleeperId: true, source: true, name: true },
     })
-    .catch(() => [] as Array<{ externalId: string; sleeperId: string | null; name: string }>)
+    .catch(() => [] as Array<{ id: string; sleeperId: string | null; source: string; name: string }>)
   const byId = new Map<string, string>()
+  const fromSleeper = new Set<string>()
   for (const r of rows) {
-    if (r.sleeperId && !byId.has(r.sleeperId)) byId.set(r.sleeperId, r.name)
-    if (!byId.has(r.externalId)) byId.set(r.externalId, r.name)
+    for (const key of playerRowKeys(r)) {
+      // Sleeper's own row wins a shared Sleeper id; otherwise the first row found.
+      if (byId.has(key) && (fromSleeper.has(key) || r.source !== "sleeper")) continue
+      byId.set(key, r.name)
+      if (r.source === "sleeper") fromSleeper.add(key)
+    }
   }
   return byId
 }
@@ -211,8 +226,11 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number): 
 
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { playoffStartWeek: true, sport: true },
+    select: { playoffStartWeek: true, sport: true, platform: true },
   })
+  // A foreign platform's player ids collide with Sleeper's; a stranger's name in an accusation is
+  // worse than the bare id, so those are left unresolved (the same rule as nativeLineupScan).
+  const resolvableIds = !isForeignIdSpace(league?.platform)
   const playoffWeek = league?.playoffStartWeek ?? 15
   const weeksUntilPlayoffs = Math.max(0, playoffWeek - weekNumber)
 
@@ -280,10 +298,12 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number): 
 
       // Resolve ids to names before the evidence is persisted, so the stored
       // payload is readable rather than needing a second lookup at render time.
-      const nameById = await resolvePlayerNames(
-        suspicious.map((x) => x.startedPlayerName),
-        String(league?.sport ?? "NFL"),
-      )
+      const nameById = resolvableIds
+        ? await resolvePlayerNames(
+            suspicious.map((x) => x.startedPlayerName),
+            String(league?.sport ?? "NFL"),
+          )
+        : new Map<string, string>()
       for (const row of suspicious) {
         const resolved = nameById.get(row.startedPlayerName)
         if (resolved) row.startedPlayerName = resolved

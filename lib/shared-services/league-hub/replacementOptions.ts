@@ -12,6 +12,7 @@
  * No projection rows → honest empty lists + reason, never invented numbers.
  */
 import { prisma } from '@/lib/prisma'
+import { indexBySleeperId, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
 import { resolveLinkedPlatformUserIds } from '../game-day/UserPlayerExposureService'
 import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
@@ -261,19 +262,25 @@ export async function resolveReplacementOptions(args: {
 
   // Unrostered candidates: resolve identity (name/position) via SportsPlayer,
   // then filter to the affected position when known.
+  /*
+   * 🛑 Projection ids are Sleeper ids, so by Sleeper id only — never against `externalId`, where
+   * Rolling Insights keeps its own numbers for different people (Sleeper 9228 is Bryce Young; RI
+   * 9228 is an offensive tackle). Here the impostor did double damage: its name was offered as the
+   * replacement, and its POSITION decided whether a real candidate survived the same-position filter
+   * below. 422 of the top 900 week-4 projections had such an impostor (2026-09-29).
+   */
   const poolIds = poolProjections.map((p) => p.playerId)
   const identityRows = poolIds.length
     ? await prisma.sportsPlayer
         .findMany({
-          where: { sport: league.sport, OR: [{ sleeperId: { in: poolIds } }, { externalId: { in: poolIds } }] },
-          select: { sleeperId: true, externalId: true, name: true, position: true, team: true },
+          where: sleeperIdWhere(poolIds, league.sport),
+          select: { sleeperId: true, source: true, name: true, position: true, team: true },
         })
-        .catch(() => [] as Array<{ sleeperId: string | null; externalId: string | null; name: string; position: string | null; team: string | null }>)
+        .catch(() => [] as Array<{ sleeperId: string | null; source: string; name: string; position: string | null; team: string | null }>)
     : []
   const identityById = new Map<string, { name: string; position: string | null; team: string | null }>()
-  for (const row of identityRows) {
-    if (row.sleeperId) identityById.set(row.sleeperId, { name: row.name, position: row.position, team: row.team })
-    if (row.externalId) identityById.set(row.externalId, { name: row.name, position: row.position, team: row.team })
+  for (const [sleeperId, row] of indexBySleeperId(identityRows)) {
+    identityById.set(sleeperId, { name: row.name, position: row.position, team: row.team })
   }
   const freeAgentCandidates = poolProjections
     .map((p) => {
