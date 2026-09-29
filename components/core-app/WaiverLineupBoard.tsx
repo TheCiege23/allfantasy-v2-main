@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import type { WaiverBoard, WaiverBoardState } from '@/lib/waivers/waiverBoard'
+import { isPerGameBasis } from '@/lib/waivers/waiverSportBasis'
 
 /**
  * Who is worth adding, ranked by what the add does to YOUR starting lineup.
@@ -29,6 +30,8 @@ const REASON: Record<Exclude<WaiverBoardState, 'ok'>, string> = {
   no_scoring_settings: 'this league publishes no scoring settings, so nothing here can be priced',
   no_slots: 'this league publishes no starting slots, so there is no lineup to improve',
   no_projections: 'nothing on your roster could be projected under this league’s scoring yet',
+  // The note below names the sport and why; this line only says what that means for the wire.
+  no_producer: 'nothing projects this sport’s players yet, so this wire cannot be priced',
 }
 
 export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
@@ -57,6 +60,13 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
    */
   if (failed || !board) return null
 
+  /*
+   * ⚠ OUTSIDE THE NFL EVERY NUMBER IS PER GAME, FROM A SEASON RATE — never "this week". The header,
+   * each row and the empty state say so; the board's notes say which scoring priced it.
+   */
+  const perGame = isPerGameBasis(board.basis)
+  const sport = board.sport ?? 'NFL'
+
   return (
     <section className="af-card af-wv-section af-wlb" data-testid="waiver-lineup-board">
       <div className="af-wv-section-head">
@@ -64,7 +74,7 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
         {board.state === 'ok' && board.currentLineupPoints != null ? (
           <span className="af-wv-section-note af-num">
             your lineup {board.currentLineupPoints}
-            {board.week ? ` · wk ${board.week}` : ''}
+            {perGame ? ' per game' : board.week ? ` · wk ${board.week}` : ''}
           </span>
         ) : null}
       </div>
@@ -74,17 +84,24 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
       ) : board.candidates.length === 0 ? (
         // A finding, not an error — nobody available changes the lineup.
         <p className="af-wlb-why">
-          nobody on the wire would improve your starting lineup this week
+          {perGame
+            ? 'nobody on the wire would improve your starting lineup per game'
+            : 'nobody on the wire would improve your starting lineup this week'}
         </p>
       ) : (
         <ul className="af-wlb-list">
           {board.candidates.map((c) => (
-            <li key={c.sleeperId} className="af-wlb-row">
+            <li key={c.sleeperId ?? c.playerKey ?? c.name} className="af-wlb-row">
               <span className="af-wlb-who">
                 <span className="af-wlb-name">
-                  {/* Opens the player card in this league's context (handoff STATE 7). */}
+                  {/*
+                    Opens the player card in this league's context (handoff STATE 7). Outside the
+                    NFL there is no Sleeper id (`sleeperId` is null), so the name renders as text:
+                    the card's other lookup is by `externalId`, which is not scoped to a provider,
+                    and a college Rolling Insights number can be a CFBD row's number too.
+                  */}
                   <PlayerName
-                    sport="NFL"
+                    sport={sport}
                     sleeperId={c.sleeperId}
                     name={c.name}
                     position={c.position}
@@ -106,6 +123,14 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
                   {c.basis === 'form' ? (
                     <span className="af-wlb-chip" title="No projection feed covers him — this is his recent scoring here">
                       form · {c.formGames}g
+                    </span>
+                  ) : null}
+                  {c.basis === 'season_rate' ? (
+                    <span
+                      className="af-wlb-chip"
+                      title="A per-game rate from AllFantasy's season projection, not a projection for this week"
+                    >
+                      per game · season
                     </span>
                   ) : null}
                 </span>

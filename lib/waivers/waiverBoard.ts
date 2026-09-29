@@ -8,6 +8,7 @@ import { canFillSlot, startingSlots } from '@/lib/core-app/slotEligibility'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 
 import { projectFromRecentForm } from './recentFormProjection'
+import { waiverSportPlan, type WaiverValueBasis } from './waiverSportBasis'
 
 /**
  * What a waiver add is actually worth: how much it improves YOUR starting lineup.
@@ -28,7 +29,14 @@ import { projectFromRecentForm } from './recentFormProjection'
  */
 
 export interface WaiverCandidate {
-  sleeperId: string
+  /**
+   * The Sleeper id, for an NFL candidate. NULL for every other sport — those players have no
+   * Sleeper id in our data, and their projection key must never be passed off as one (a player
+   * card opened on it would find whoever holds that number in Sleeper's space).
+   */
+  sleeperId: string | null
+  /** A season-rate candidate's projection key (`AFProjectionSnapshot.playerId`). Absent for the NFL. */
+  playerKey?: string
   name: string
   position: string | null
   team: string | null
@@ -37,7 +45,7 @@ export interface WaiverCandidate {
   /** Points added to your best starting lineup by rostering him. Zero means he would not start. */
   gain: number
   /** The starter he pushes out, when he displaces one. Null when he fills an unfilled slot. */
-  displaces: { sleeperId: string; name: string; projectedPoints: number } | null
+  displaces: { sleeperId: string | null; playerKey?: string; name: string; projectedPoints: number } | null
   /**
    * Where the projection came from.
    *
@@ -45,8 +53,12 @@ export interface WaiverCandidate {
    * what he has actually scored under this league's rules — it knows nothing about a coming bye,
    * a return from injury or a changed depth chart. A surface that renders it identically to a
    * real projection is making a forecast the number never made.
+   *
+   * ⚠ 'season_rate' IS PER GAME, NOT PER WEEK (every sport but the NFL — see waiverSportBasis.ts).
+   * It is AllFantasy's season projection divided into games, and the board's `basis` says which
+   * scoring it was priced under.
    */
-  basis: 'projection' | 'form'
+  basis: 'projection' | 'form' | 'season_rate'
   /** Games behind a 'form' number, so a two-game estimate can be weighed as one. */
   formGames?: number
 }
@@ -60,6 +72,8 @@ export type WaiverBoardState =
   | 'no_scoring_settings'
   | 'no_slots'
   | 'no_projections'
+  /** Nothing projects this sport's players at all (Soccer today). The note names the sport and why. */
+  | 'no_producer'
 
 export interface WaiverBoard {
   state: WaiverBoardState
@@ -69,6 +83,12 @@ export interface WaiverBoard {
   currentLineupPoints: number | null
   candidates: WaiverCandidate[]
   notes: string[]
+  /**
+   * Set only for a league outside the NFL — the NFL payload is unchanged, field for field. Every
+   * fact on a non-NFL board carries its sport, and `basis` says what its numbers are.
+   */
+  sport?: string
+  basis?: WaiverValueBasis
 }
 
 const EMPTY = (state: WaiverBoardState, notes: string[] = []): WaiverBoard => ({
@@ -98,13 +118,20 @@ export interface Scored {
  * starting slot empty and undervalues every subsequent candidate. Sorting slots by how many of
  * the available positions can fill them puts dedicated slots ahead of flex automatically, with
  * no list of which slots are "flex" to keep in sync.
+ *
+ * `fits` is football's `canFillSlot` unless a caller names its sport's rule (sportSlotEligibility.ts).
+ * `Scored.sleeperId` is used here only as an identity key for "already seated".
  */
-export function bestLineup(players: readonly Scored[], slots: readonly string[]): {
+export function bestLineup(
+  players: readonly Scored[],
+  slots: readonly string[],
+  fits: (slot: string, position: string | null) => boolean = canFillSlot,
+): {
   total: number
   used: Set<string>
 } {
   const positions = [...new Set(players.map((p) => (p.position ?? '').toUpperCase()))]
-  const breadth = (slot: string) => positions.filter((pos) => canFillSlot(slot, pos)).length
+  const breadth = (slot: string) => positions.filter((pos) => fits(slot, pos)).length
   const ordered = [...slots].sort((a, b) => breadth(a) - breadth(b))
 
   const pool = [...players].sort((a, b) => b.points - a.points)
@@ -112,7 +139,7 @@ export function bestLineup(players: readonly Scored[], slots: readonly string[])
   let total = 0
 
   for (const slot of ordered) {
-    const pick = pool.find((p) => !used.has(p.sleeperId) && canFillSlot(slot, p.position))
+    const pick = pool.find((p) => !used.has(p.sleeperId) && fits(slot, p.position))
     if (!pick) continue
     used.add(pick.sleeperId)
     total += pick.points
@@ -134,16 +161,37 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
 
   const league =
     (await args.prisma.league
-      .findUnique({ where: { id: args.leagueId }, select: { id: true, settings: true, platform: true } })
+      .findUnique({ where: { id: args.leagueId }, select: { id: true, settings: true, platform: true, sport: true } })
       .catch(() => null)) ??
     (await args.prisma.league
       .findFirst({
         where: { platformLeagueId: args.leagueId },
         orderBy: { updatedAt: 'desc' },
-        select: { id: true, settings: true, platform: true },
+        select: { id: true, settings: true, platform: true, sport: true },
       })
       .catch(() => null))
   if (!league) return EMPTY('no_scoring_settings')
+
+  /*
+   * 🛑 EVERY READ BELOW IS NFL: Sleeper ids, `playerGameStat` for `sportType: 'NFL'`, the NFL
+   * projection feed. This loader never looked at the league's sport, so a college football league
+   * got a free-agent pool of NFL players (no college id is an NFL roster id, so every NFL player
+   * read as available, and a college id equal to some Sleeper id was priced as that NFL player),
+   * and a basketball league got "No available player can fill a starting slot" — true of NFL
+   * players, and not what was wrong. Any other sport now leaves here for its own
+   * producer, or says there is none. A league with no sport stored has always meant the NFL.
+   */
+  const plan = waiverSportPlan(league.sport)
+  if (plan.kind !== 'weekly') {
+    const { loadSeasonRateWaiverBoard } = await import('./seasonRateWaiverBoard')
+    return loadSeasonRateWaiverBoard({
+      prisma: args.prisma,
+      league: { id: league.id, settings: league.settings, platform: league.platform },
+      plan,
+      userId: args.userId,
+      limit,
+    })
+  }
 
   const settings = (league.settings ?? {}) as Record<string, unknown>
   const scoring = (settings.scoring_settings ?? settings.scoringSettings ?? null) as
