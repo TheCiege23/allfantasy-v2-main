@@ -46,6 +46,39 @@ const BASE_WORDS = [
   'dumbass',
   'jackass',
   'motherfucker',
+  // Slurs that take ordinary endings (retarded, niggas).
+  'nigger',
+  'nigga',
+  'retard',
+]
+
+/*
+ * Slurs and sexual-violence terms matched as WHOLE WORDS with at most a plural
+ * "s" — added for App Store guideline 1.2, which requires filtering objectionable
+ * material, and which a swear list alone does not cover.
+ *
+ * ⚠ THESE DO NOT TAKE THE SUFFIX LIST BELOW, AND THAT IS THE POINT. SUFFIX allows
+ * a trailing "y", so "spic" in BASE_WORDS would mask "spicy"; "rape" with "-s/-ed"
+ * reaches no innocent word, but "gook" + "y" or "fag" + "y" start to. Each entry
+ * here is spelled out instead, and the tests pin spicy, therapist, grape and
+ * retardant as untouched.
+ */
+const EXACT_WORDS = [
+  'faggot',
+  'fag',
+  'tranny',
+  'trannies',
+  'kike',
+  'spic',
+  'wetback',
+  'gook',
+  'beaner',
+  'raghead',
+  'towelhead',
+  'rape',
+  'raped',
+  'raping',
+  'rapist',
 ]
 
 /*
@@ -69,7 +102,7 @@ const SUFFIX = '(?:s|es|ed|er|ers|ing|in|in\'|y|ies)?'
  * message through untouched, and every test that asserted a censored result
  * failed at once.
  */
-const PATTERN_SOURCE = `\\b(${BASE_WORDS.join('|')})${SUFFIX}\\b`
+const PATTERN_SOURCE = `\\b(?:(?:${BASE_WORDS.join('|')})${SUFFIX}|(?:${EXACT_WORDS.join('|')})s?)\\b`
 
 /**
  * The symbol run standing in for a word, after its first letter.
