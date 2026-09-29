@@ -763,6 +763,19 @@
   }
 }
 
+/*
+ * ⚠ STOPPING THIS ONE NEEDS MORE THAN `animation: none`. The spinner is a ring with a single
+ * coloured edge (`border-top-color`), which only reads as "working" because it turns — frozen, it
+ * looks like a broken control rather than a busy one. So the reduced-motion form is a deliberate
+ * solid ring: no rotation, still visibly an indicator sitting beside the message.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    border-color: #22d3ee;
+  }
+}
+
 .chimmyInputRow {
   display: flex;
   gap: 8px;
