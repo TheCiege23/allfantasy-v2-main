@@ -1,4 +1,4 @@
-import type { GradeLetter } from '@/lib/trade-intel/gradeScale'
+import { PROJECTED_EVEN_BAND, PROJECTED_STRONG_BAND, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import type {
   GradedTrade,
   TradePickAsset,
@@ -264,6 +264,59 @@ function sidesCard(views: SideView[]): string {
   return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${CARD};border:1px solid ${BORDER};border-radius:16px;border-collapse:separate;overflow:hidden">${body}</table>`
 }
 
+function article(letter: GradeLetter): string {
+  return letter === 'A' || letter === 'F' ? 'an' : 'a'
+}
+
+/**
+ * Why each side holds its letter, in the deal's own numbers (Guap, 2026-09-29: "make the email
+ * explain why it's a C"). A bare C beside "−2%" read as a grader stuck on one letter.
+ *
+ * ⚠ THE BANDS ARE IMPORTED, NEVER RESTATED. `projectedLetterFor` draws the letter from
+ * `PROJECTED_EVEN_BAND` / `PROJECTED_STRONG_BAND`; a copy of "10%" or "25%" typed here would keep
+ * explaining the old scale the day those move, beside a letter drawn from the new one.
+ */
+function whyTheseLetters(views: SideView[]): { reason: string; scale: string } | null {
+  if (views.length !== 2) return null
+  const [a, b] = views as [SideView, SideView]
+  if (!a.letter || !b.letter || a.pct == null || a.total == null || b.total == null) return null
+  const name = (v: SideView) => (v.isViewer ? 'You' : v.side.managerName)
+  const even = PROJECTED_EVEN_BAND
+  const strong = PROJECTED_STRONG_BAND
+  const scale = `The scale: a gap under ${even}% is a C for both sides · ${even}–${strong - 1}% is a B and a D · ${strong}% or more is an A and an F.`
+
+  if (a.letter === 'C') {
+    const gap = Math.abs(a.total - b.total)
+    const reason =
+      gap === 0
+        ? `Both sides got a C: each received ${fmtValue(a.total)} in this league’s values — dead even.`
+        : `Both sides got a C: ${name(a)} received ${fmtValue(a.total)} and ${name(b)} received ${fmtValue(b.total)} in this league’s values. ` +
+          `That is ${fmtValue(gap)} apart, ${Math.abs(a.pct)}% of the bigger side — under ${even}%, so the trade reads as even and neither side earns a B.`
+    return { reason, scale }
+  }
+
+  const [up, down] = a.pct > 0 ? [a, b] : [b, a]
+  const pct = Math.abs(a.pct)
+  const band =
+    up.letter === 'A'
+      ? `A gap of ${strong}% or more is an A for the side that gained and an F for the side that gave.`
+      : `A gap of ${even}–${strong - 1}% is a B for the side that gained and a D for the side that gave; ${strong}% or more would be an A and an F.`
+  const reason =
+    `${name(up)} got ${article(up.letter!)} ${up.letter} and ${name(down)} ${article(down.letter!)} ${down.letter}: ` +
+    `${name(up)} received ${fmtValue(up.total!)} in this league’s values for ${fmtValue(down.total!)}, ${pct}% more. ${band}`
+  return { reason, scale }
+}
+
+function whyCard(views: SideView[]): string {
+  const why = whyTheseLetters(views)
+  if (!why) return ''
+  return card(
+    `${eyebrow('Why these letters')}` +
+      `<div style="font-size:13px;line-height:1.6;color:${TEXT};margin-top:6px">${escapeHtml(why.reason)}</div>` +
+      `<div style="font-size:11.5px;line-height:1.5;color:${FAINT};margin-top:6px">${escapeHtml(why.scale)}</div>`,
+  )
+}
+
 function card(inner: string, accent: string | null = null): string {
   return (
     `<tr><td style="padding:14px 16px;background:${CARD};border:1px solid ${BORDER};` +
@@ -468,6 +521,7 @@ export function buildTradeGradeEmail(params: {
 
   const rows =
     `<tr><td>${sidesCard(ordered)}</td></tr><tr><td style="height:12px"></td></tr>` +
+    (graded ? whyCard(ordered) : '') +
     card(`${eyebrow(graded ? 'How this is graded' : 'Why there is no grade')}<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-top:6px">${escapeHtml(how)}</div>`) +
     leagueTypeCard(leagueType, params.confirmUrl ?? null) +
     (params.receiptUrl ? cta(params.receiptUrl, 'View the original evaluation', 'The exact grade and values in this email, preserved for comparison.') : '') +
