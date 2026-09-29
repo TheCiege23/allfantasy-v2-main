@@ -68,6 +68,7 @@ import { getManagerPresence } from '@/lib/core-app/managerPresence'
 import { loadGameDayTriage } from '@/lib/core-app/gameDayTriageLoader'
 import { getPlayerDepth } from '@/lib/core-app/playerDepth'
 import { loadFreeAgentBids } from '@/lib/core-app/freeAgentBids'
+import { loadDepthChartView } from '@/lib/core-app/depthChartBackups'
 import { freeLeagueIds } from '@/lib/core-app/leagueStrip'
 import { loadPlayerShares } from '@/lib/core-app/playerShares'
 import { loadLeagueShareView } from '@/lib/core-app/playerSharesLeague'
@@ -2131,6 +2132,21 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : Promise.resolve(null)
 
   /*
+   * "Next man up": his team's depth chart at his spot (NFL), and for each player around him where that
+   * player is in your leagues — yours, taken, free to claim, or unreadable. Free: facts and presence.
+   * Presence only over leagues the card itself could read; signed out, the chart alone.
+   */
+  const depthChartRead =
+    activeKey === 'players' && playerDetail
+      ? loadDepthChartView({
+          sleeperId: playerDetail.player.sleeperId ?? null,
+          sport: playerDetail.player.sport,
+          userId: userId ?? null,
+          leagueIds: userId && playerDetail.leagues.available ? (selectedLeagueId ? [selectedLeagueId] : finderLeagueIds) : [],
+        }).catch(() => null)
+      : Promise.resolve(null)
+
+  /*
    * Compare (2026-09-06): a second player held beside the first, the same
    * loader over the same leagues, so the two columns are priced the same way.
    * Only when the first resolved — a `vs` with no `player` is nothing to
@@ -2143,6 +2159,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
   const playerDepth = await playerDepthRead
   const freeAgentBids = await freeAgentBidsRead
+  const depthChart = await depthChartRead
 
   /*
    * "Recently searched", per account. The write is fire-and-forget by design
@@ -4241,6 +4258,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           pickLeagues={playedLeagues.map((l) => ({ id: l.id, name: String(l.name ?? 'League'), platform: (l as { platform?: string | null }).platform ?? null }))}
           savedPicks={finderScope.picked ? finderLeagueIds : null}
           freeAgentBids={freeAgentBids}
+          depthChart={depthChart}
           leagueView={playerLeagueView}
           recent={recentPlayerSearches}
           tradeVisual={playerTradeVisual}

@@ -3705,3 +3705,131 @@
     min-height: 44px;
   }
 }
+
+/* ── Next man up (depthChartBackups.ts): the depth chart at his spot + where each player is ──────── */
+.af-core .af-pf-dc {
+  margin-top: 12px;
+}
+.af-core .af-pf-dc-list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.af-core .af-pf-dc-row {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-core .af-pf-dc-row.is-him {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+.af-core .af-pf-dc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.af-core .af-pf-dc-depth {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  border: 1px solid var(--chip-line);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.af-core .af-pf-dc-name {
+  color: var(--text);
+  font-weight: 700;
+}
+.af-core a.af-pf-dc-name {
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+.af-core a.af-pf-dc-name:hover,
+.af-core a.af-pf-dc-name:focus-visible {
+  text-decoration-color: var(--accent);
+}
+.af-core .af-pf-dc-you {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-dc-where {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 0 34px;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-pf-dc-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.af-core .af-pf-dc-tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.af-core .af-pf-dc-cell.is-yours .af-pf-dc-tag {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-core .af-pf-dc-cell.is-free .af-pf-dc-tag {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.af-core .af-pf-dc-cell.is-yours,
+.af-core .af-pf-dc-cell.is-free {
+  color: var(--text);
+}
+.af-core .af-pf-dc-detail {
+  color: var(--muted);
+}
+.af-core .af-pf-dc-claim {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-core .af-pf-dc-claim:hover,
+.af-core .af-pf-dc-claim:focus-visible {
+  border-color: var(--accent);
+}
+.af-core .af-pf-dc-foot {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+@media (max-width: 720px) {
+  .af-core .af-pf-dc-where {
+    padding-left: 0;
+  }
+  .af-core .af-pf-dc-claim {
+    min-height: 44px;
+  }
+}
