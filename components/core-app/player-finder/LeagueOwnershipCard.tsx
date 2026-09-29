@@ -3,7 +3,9 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import type { PlayerLeagueView } from '@/lib/core-app/playerLeagueView'
-import { claimLink, lineupLink, platformLabel, tradeLink } from '@/lib/core-app/platformLinks'
+import { platformLabel } from '@/lib/core-app/platformLinks'
+import { leagueViewActions } from '@/lib/core-app/leagueViewActions'
+import { ActionLink } from '@/components/core-app/player-finder/ActionLink'
 
 /**
  * The league-scoped answer: in THIS league, is he yours, someone's, or free.
@@ -48,16 +50,7 @@ export function LeagueOwnershipCard({
   view: PlayerLeagueView
   playerName: string
 }) {
-  const league = {
-    id: view.leagueId,
-    platform: view.platform,
-    platformLeagueId: view.platformLeagueId,
-    season: view.season,
-    name: view.leagueName,
-    teamId: view.yourTeam?.externalId ?? null,
-    partnerTeamId: view.ownership.kind === 'other' ? (view.ownership.owner?.externalId ?? null) : null,
-  }
-  const last = playerName.trim().split(/\s+/).slice(-1)[0] ?? playerName
+  const actions = leagueViewActions(view, playerName)
   const o = view.ownership
 
   return (
@@ -146,55 +139,10 @@ export function LeagueOwnershipCard({
           )}
         </span>
 
-        <span className="af-pf-lv-actions">
-          {o.kind === 'yours' ? (
-            (() => {
-              const l = lineupLink(league)
-              return l ? (
-                <a
-                  className="af-btn af-pf-lv-btn"
-                  href={l.href}
-                  {...(l.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                >
-                  {l.label}
-                </a>
-              ) : null
-            })()
-          ) : o.kind === 'other' ? (
-            (() => {
-              const t = tradeLink(league)
-              return (
-                <>
-                  <Link className="af-btn af-pf-lv-btn" href={t.here.href}>
-                    Trade for {last} →
-                  </Link>
-                  {t.there ? (
-                    <a
-                      className="af-btn af-btn--ghost af-pf-lv-btn"
-                      href={t.there.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {t.there.label}
-                    </a>
-                  ) : null}
-                </>
-              )
-            })()
-          ) : o.kind === 'free-agent' ? (
-            (() => {
-              const c = claimLink(league)
-              return c ? (
-                <a
-                  className="af-btn af-pf-lv-btn"
-                  href={c.href}
-                  {...(c.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                >
-                  Claim {last} — {c.label.replace(/^Open in /, 'on ')}
-                </a>
-              ) : null
-            })()
-          ) : null}
+        {/* The same actions the phone's sticky bar shows (leagueViewActions.ts) — it hides while these are on screen. */}
+        <span className="af-pf-lv-actions" id="af-pf-lv-actions">
+          {actions.primary ? <ActionLink action={actions.primary} className="af-btn af-pf-lv-btn" /> : null}
+          {actions.secondary ? <ActionLink action={actions.secondary} className="af-btn af-btn--ghost af-pf-lv-btn" /> : null}
         </span>
       </div>
 

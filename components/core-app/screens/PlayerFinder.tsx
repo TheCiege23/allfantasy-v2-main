@@ -8,6 +8,7 @@ import { PlayerVerdict } from '@/components/core-app/player-finder/PlayerVerdict
 import { SwapCandidates } from '@/components/core-app/player-finder/SwapCandidates'
 import { RecommendedMoves } from '@/components/core-app/player-finder/RecommendedMoves'
 import { LeagueOwnershipCard } from '@/components/core-app/player-finder/LeagueOwnershipCard'
+import { StickyActionBar } from '@/components/core-app/player-finder/StickyActionBar'
 import { TradeVisual } from '@/components/core-app/player-finder/TradeVisual'
 import { TradeWindow } from '@/components/core-app/player-finder/TradeWindow'
 import { TradeWindows } from '@/components/core-app/player-finder/TradeWindows'
@@ -739,6 +740,8 @@ export function PlayerFinder({
 
         {/* ── The league in context: who has him HERE ─────────────────── */}
         {detail && leagueView ? <LeagueOwnershipCard view={leagueView} playerName={detail.player.name} /> : null}
+        {/* Phones: the same next move, pinned above the tab bar once the card's buttons scroll away. */}
+        {detail && leagueView ? <StickyActionBar view={leagueView} playerName={detail.player.name} /> : null}
         {/* The trade visual, under the ownership card, when someone else has him here. */}
         {detail && leagueView?.ownership.kind === 'other' && depthAccess && depthLocked ? (
           <CoreDepthLock access={depthAccess} what={`Trading for ${detail.player.name}`} />

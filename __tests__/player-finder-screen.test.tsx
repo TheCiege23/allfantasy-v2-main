@@ -448,7 +448,13 @@ describe('Player Finder — league in context', () => {
       leagueView: { ...LEAGUE_VIEW, ownership: { kind: 'free-agent' } },
     })
     expect(screen.getByText('Unrostered in this league')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Claim Kincaid/ })).toBeInTheDocument()
+    // The card's own button — scoped, because the phone's sticky bar (CSS-hidden above 720px, but in
+    // the DOM here, where no stylesheet applies) carries the same action by design.
+    const card = document.querySelector('.af-pf-lv') as HTMLElement
+    const claim = within(card).getByRole('link', { name: /Claim Kincaid/ })
+    expect(claim).toBeInTheDocument()
+    const bar = document.querySelector('.af-pf-stickybar') as HTMLElement
+    expect(within(bar).getByRole('link', { name: /Claim Kincaid/ }).getAttribute('href')).toBe(claim.getAttribute('href'))
   })
 })
 
