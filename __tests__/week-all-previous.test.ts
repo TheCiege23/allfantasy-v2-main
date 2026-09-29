@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ current: vi.fn(), count: vi.fn(), matchups: vi.fn(), teams: vi.fn(), metadata: vi.fn() }))
+const h = vi.hoisted(() => ({ current: vi.fn(), count: vi.fn(), matchups: vi.fn(), teams: vi.fn(), metadata: vi.fn(), games: vi.fn() }))
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/core-app/currentWeek', () => ({ resolveCurrentWeek: h.current }))
@@ -15,6 +15,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     weeklyMatchup: { count: h.count, findMany: h.matchups },
     leagueTeam: { findMany: h.teams },
+    sportsGame: { findMany: h.games },
   },
 }))
 
@@ -121,5 +122,41 @@ describe('getWeekAll previous', () => {
     h.current.mockResolvedValue({ seasonYear: 2026, week: 3 })
     expect((await getWeekAll('u1', LEAGUES)).week).toBe(3)
     expect(h.count).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * 🛑 THE TUESDAY AFTER A WEEK. Sleeper keeps the league on week 3 until Wednesday, so "week < leg"
+ * alone read a fully played week 3 as in progress: the home said "Week 3 · scores so far · 0% win"
+ * and the results review fell back to week 2 ("0-0 across 0 leagues") — App Review account,
+ * 2026-09-29. The NFL schedule already had every week-3 game final.
+ */
+describe('getWeekAll: the schedule finishes a week the platform has not rolled yet', () => {
+  const finalWeek3 = [
+    { season: 2026, week: 3, homeTeam: 'CHI', awayTeam: 'PHI', status: 'final', seasonType: 'regular', startTime: new Date('2026-09-29T00:15:00Z'), fetchedAt: new Date('2026-09-29T14:00:00Z') },
+  ]
+
+  beforeEach(() => {
+    vi.setSystemTime(new Date('2026-09-29T15:00:00Z'))
+    h.current.mockResolvedValue({ seasonYear: 2026, week: 3 })
+    h.metadata.mockResolvedValue([{ platformLeagueId: 'sl-ice', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: 3 } }])
+  })
+
+  it('every week-3 game final: the week-3 row is a completed result, and the review is week 3', async () => {
+    h.games.mockResolvedValue(finalWeek3)
+    const out = await getWeekAll('u1', LEAGUES)
+    expect(out.rows[0]).toMatchObject({ week: 3, completed: true, won: true })
+    expect((await getWeekAll('u1', LEAGUES, { previous: true })).week).toBe(3)
+  })
+
+  it('one week-3 game still to play: still in progress, review stays on week 2', async () => {
+    h.games.mockResolvedValue([...finalWeek3, { ...finalWeek3[0], homeTeam: 'BUF', awayTeam: 'MIA', status: 'scheduled' }])
+    expect((await getWeekAll('u1', LEAGUES)).rows[0]).toMatchObject({ completed: false, won: false })
+    expect((await getWeekAll('u1', LEAGUES, { previous: true })).week).toBe(2)
+  })
+
+  it('a schedule read that fails claims nothing', async () => {
+    h.games.mockRejectedValue(new Error('db down'))
+    expect((await getWeekAll('u1', LEAGUES)).rows[0].completed).toBe(false)
   })
 })

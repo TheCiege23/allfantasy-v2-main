@@ -21,3 +21,20 @@ describe('completed fantasy weeks', () => {
     expect(leagueWeekProgress({ season: 2026 }).isFinal(2026, 3)).toBe(false)
   })
 })
+
+describe('the schedule says the current week is played (Tuesday, Sleeper still on it)', () => {
+  const finished = new Set(['2026:3'])
+
+  it('an NFL league\'s current week is final once every game in it is', () => {
+    const p = leagueWeekProgress({ season: 2026, sport: 'NFL', settings: { leg: 3 } }, finished)
+    expect(p.isFinal(2026, 3)).toBe(true)
+    // Never a week ahead of the league's marker — the schedule cannot speak for it.
+    expect(p.isFinal(2026, 4)).toBe(false)
+  })
+
+  it('not for a league in another sport, and not without the schedule fact', () => {
+    expect(leagueWeekProgress({ season: 2026, sport: 'NBA', settings: { leg: 3 } }, finished).isFinal(2026, 3)).toBe(false)
+    expect(leagueWeekProgress({ season: 2026, sport: 'NFL', settings: { leg: 3 } }).isFinal(2026, 3)).toBe(false)
+    expect(leagueWeekProgress({ season: 2026, sport: 'NFL', settings: { leg: 3 } }, new Set(['2025:3'])).isFinal(2026, 3)).toBe(false)
+  })
+})

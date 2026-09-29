@@ -35,3 +35,48 @@ export function starterGameStates(
     return [id, state]
   }))
 }
+
+const FINAL_STATUS = /^(final|finished|completed?|status_final|status_final_ot)$/
+
+/**
+ * Has every REGULAR-SEASON game of one week been played to a final?
+ *
+ * 🛑 WHY. A fantasy week's scores read "so far" until the platform's league settings move to the
+ * next week — and Sleeper does not do that until Wednesday. On Tuesday 2026-09-29, with every
+ * week-3 game final, the home still said "Week 3 · scores so far · 0% win" and Your Week said
+ * "−40.8 so far". The schedule already knew: all 16 regular-season week-3 fixtures read `final`
+ * in every source. This answers from it, under the same rule as `starterGameStates` — a kickoff
+ * alone never proves a game finished; only a final status does.
+ *
+ * ⚠ REGULAR SEASON ONLY, AND NOT MERELY "seasonType IS NOT NULL". Preseason weeks reuse the
+ * numbers 1–4 (`seasonType: 'pre'`), and the live-score writer stores rows with NO seasonType,
+ * preseason ones included — measured the same day: `espn_live` held week-3 rows from August.
+ * A fixture is a `regular` row; an untyped row only counts as a newer reading of one of them
+ * (same clubs, kickoff within a minute), exactly as above.
+ *
+ * Several sources describe each game and can disagree while one lags, so each fixture is read
+ * from its NEWEST row. No regular-season fixture at all means "not known to be finished" — false.
+ */
+export function weekFinished(games: Game[]): boolean {
+  const key = (g: Game) => {
+    const teams = [normalizeTeamAbbrev(g.homeTeam), normalizeTeamAbbrev(g.awayTeam)]
+    if (!g.startTime || teams.some((t) => !t)) return null
+    return { minute: Math.round(g.startTime.getTime() / 60_000), clubs: [...teams].sort().join('|') }
+  }
+  const newest = new Map<string, Game>()
+  const fixtures = games.filter((g) => g.seasonType === 'regular')
+  for (const f of fixtures) {
+    const k = key(f)
+    if (!k) continue
+    const id = `${k.minute}|${k.clubs}`
+    for (const g of games) {
+      if (g.seasonType !== 'regular' && g.seasonType != null) continue
+      const gk = key(g)
+      if (!gk || gk.clubs !== k.clubs || Math.abs(gk.minute - k.minute) > 1) continue
+      const prior = newest.get(id)
+      if (!prior || g.fetchedAt > prior.fetchedAt) newest.set(id, g)
+    }
+  }
+  if (newest.size === 0) return false
+  return [...newest.values()].every((g) => FINAL_STATUS.test(String(g.status ?? '').toLowerCase()))
+}
