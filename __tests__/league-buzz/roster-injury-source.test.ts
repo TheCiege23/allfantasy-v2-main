@@ -37,8 +37,8 @@ describe('collectRosterInjuryActivity — only for owned + injured players (§8)
   it('emits only for owned players whose status is uncertain/unavailable', async () => {
     exposureMock.mockResolvedValue({
       exposures: [
-        { playerId: 'p_cmc', playerName: 'Christian McCaffrey', position: 'RB', leagueCount: 2 },
-        { playerId: 'p_ok', playerName: 'Healthy Guy', position: 'WR', leagueCount: 1 },
+        { sport: 'NFL', idSpace: 'sleeper', playerId: 'p_cmc', playerName: 'Christian McCaffrey', position: 'RB', leagueCount: 2 },
+        { sport: 'NFL', idSpace: 'sleeper', playerId: 'p_ok', playerName: 'Healthy Guy', position: 'WR', leagueCount: 1 },
       ],
       connectedLeagueCount: 2,
     })

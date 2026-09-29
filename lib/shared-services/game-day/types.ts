@@ -17,6 +17,7 @@
 
 import type { MatchupCenterPayload, MatchupPlayerSlot, MatchupSidePayload } from '@/lib/matchup-center/types'
 import type { LineupActionItem } from '@/lib/lineup-actions/types'
+import type { RosterIdSpace } from '@/lib/core-app/rosterIdSpace'
 import type { ManagerBehaviorProfile, PlayerExposure as KnowledgeGraphPlayerExposure } from '@/lib/shared-services/knowledge-graph/types'
 
 export type { MatchupCenterPayload, MatchupPlayerSlot, MatchupSidePayload, LineupActionItem }
@@ -96,7 +97,18 @@ export type ExposureSlotKind = 'starter' | 'bench' | 'ir' | 'taxi'
  * store. See README for the full distinction.
  */
 export interface UserPlayerExposure {
+  /** The id as the league's roster holds it — meaningful only in `idSpace`, and for native leagues only with `sport`. */
   playerId: string
+  /** The league's sport. A native NHL roster's ids are Rolling Insights numbers, never NFL Sleeper ids. */
+  sport: string
+  /**
+   * Whose ids `playerId` is in (`rosterIdSpaceOf`): 'sleeper' for Sleeper and native leagues, 'espn'
+   * for ESPN ids (translatable through `PlayerIdentityMap.espnId`), 'other' for a foreign platform's
+   * own ids — which must never reach a Sleeper-id read (`lib/core-app/rosterIdSpace.ts`).
+   */
+  idSpace: RosterIdSpace
+  /** `exposureKey(platform, sport, playerId)` — what to JOIN on. A bare `playerId` join crosses id spaces. */
+  exposureKey: string
   playerName: string | null
   position: string | null
   leagueCount: number

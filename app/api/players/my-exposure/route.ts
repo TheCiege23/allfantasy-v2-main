@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { computeUserPlayerExposure } from '@/lib/shared-services/game-day/UserPlayerExposureService'
+import { indexBySleeperId } from '@/lib/player-identity/externalIdNamespace'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,24 +53,29 @@ export async function GET(req: Request) {
       return NextResponse.json({ players: [], connectedLeagueCount })
     }
 
-    // Enrich identity from the catalog: roster ids are usually Sleeper ids.
+    // Enrich identity from the catalog. 🛑 Only an NFL Sleeper-space id is asked as a Sleeper id: a
+    // native NHL roster's Rolling Insights ids, and a foreign platform's own, are numbers that ARE
+    // Sleeper ids for somebody else (1332 on the production NHL roster is Sleeper's Ifeanyi Momah),
+    // and the catalog name overrode the roster's own correct one. Everyone else keeps the roster's
+    // name, or is matched by our own row id, which cannot collide.
+    const isNflSleeperId = (e: (typeof exposures)[number]) => e.idSpace === 'sleeper' && e.sport === 'NFL'
     const ids = exposures.map((e) => e.playerId).filter(Boolean)
+    const sleeperIds = exposures.filter(isNflSleeperId).map((e) => e.playerId).filter(Boolean)
     const catalog = await prisma.sportsPlayer
       .findMany({
-        where: { OR: [{ sleeperId: { in: ids } }, { id: { in: ids } }] },
-        select: { id: true, sleeperId: true, name: true, position: true, team: true },
+        where: { OR: [{ sleeperId: { in: sleeperIds } }, { id: { in: ids } }] },
+        select: { id: true, sleeperId: true, source: true, name: true, position: true, team: true },
       })
-      .catch(() => [] as Array<{ id: string; sleeperId: string | null; name: string | null; position: string | null; team: string | null }>)
+      .catch(() => [] as Array<{ id: string; sleeperId: string | null; source: string; name: string | null; position: string | null; team: string | null }>)
 
-    const byId = new Map<string, { name: string | null; position: string | null; team: string | null }>()
-    for (const p of catalog) {
-      const identity = { name: p.name, position: p.position, team: p.team }
-      if (p.sleeperId) byId.set(p.sleeperId, identity)
-      byId.set(p.id, identity)
-    }
+    type Identity = { name: string | null; position: string | null; team: string | null }
+    const identityOf = (p: (typeof catalog)[number]): Identity => ({ name: p.name, position: p.position, team: p.team })
+    const byOurId = new Map<string, Identity>(catalog.map((p) => [p.id, identityOf(p)]))
+    const bySleeperId = new Map<string, Identity>()
+    for (const [sleeperId, p] of indexBySleeperId(catalog)) bySleeperId.set(sleeperId, identityOf(p))
 
     const enriched = exposures.map((e) => {
-      const cat = byId.get(e.playerId)
+      const cat = (isNflSleeperId(e) ? bySleeperId.get(e.playerId) : undefined) ?? byOurId.get(e.playerId)
       return {
         playerId: e.playerId,
         name: cat?.name ?? e.playerName ?? null,

@@ -37,7 +37,7 @@ describe('computeUserPlayerExposure', () => {
 
     expect(result.connectedLeagueCount).toBe(1)
     expect(result.exposures).toEqual([
-      { playerId: 'p1', playerName: 'Player One', position: 'RB', leagueCount: 1, rosterCount: 1, startingCount: 1, benchCount: 0, irTaxiCount: 0, exposurePercent: 1, leaguesRequiringAttention: [], injuryStatus: null, gameWindow: null },
+      { playerId: 'p1', sport: 'NFL', idSpace: 'sleeper', exposureKey: 'sleeper:NFL:p1', playerName: 'Player One', position: 'RB', leagueCount: 1, rosterCount: 1, startingCount: 1, benchCount: 0, irTaxiCount: 0, exposurePercent: 1, leaguesRequiringAttention: [], injuryStatus: null, gameWindow: null },
     ])
   })
 
@@ -74,7 +74,7 @@ describe('computeUserPlayerExposure', () => {
 
     expect(mockRosterFindMany).toHaveBeenCalledWith({
       where: { platformUserId: { in: ['user-1', 'sleeper-123'] } },
-      select: { id: true, leagueId: true, playerData: true },
+      select: { id: true, leagueId: true, playerData: true, league: { select: { platform: true, sport: true } } },
     })
   })
 
@@ -82,5 +82,19 @@ describe('computeUserPlayerExposure', () => {
     mockRosterFindMany.mockResolvedValue([{ id: 'roster-1', leagueId: 'league-1', playerData: rosterPlayerData({ starters: [{ position: 'RB' }] }) }])
     const result = await computeUserPlayerExposure({ userId: 'user-1' })
     expect(result.exposures).toEqual([])
+  })
+
+  it('never merges one number from two id spaces into one player (Sleeper NFL 1332 vs a native NHL roster)', async () => {
+    // 1332 is Sleeper's Ifeanyi Momah and, on the production native NHL roster, Rolling Insights'
+    // Alan Quine — two people. Merged on the bare id they were one "player on 2 of your rosters".
+    mockRosterFindMany.mockResolvedValue([
+      { id: 'r-1', leagueId: 'league-nfl', playerData: rosterPlayerData({ starters: [{ id: '1332', name: 'Ifeanyi Momah', position: 'WR' }] }), league: { platform: 'sleeper', sport: 'NFL' } },
+      { id: 'r-2', leagueId: 'league-nhl', playerData: rosterPlayerData({ starters: [{ id: '1332', name: 'Alan Quine', position: 'C' }] }), league: { platform: 'manual', sport: 'NHL' } },
+    ])
+    const result = await computeUserPlayerExposure({ userId: 'user-1' })
+    expect(result.exposures.map((e) => [e.exposureKey, e.playerName, e.leagueCount])).toEqual([
+      ['sleeper:NFL:1332', 'Ifeanyi Momah', 1],
+      ['sleeper:NHL:1332', 'Alan Quine', 1],
+    ])
   })
 })
