@@ -90,7 +90,7 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
   ACCOUNT DELETION: More (bottom bar) > Settings > Account > "Start account
   deletion". Deletion is immediate and permanent after typing DELETE to confirm.
 
-  USER CONTENT: league chat and direct messages. Press and hold any message to
+  USER CONTENT: league chat, live draft-room chat and direct messages. Press and hold any message to
   Report it or Block its sender; blocked users' messages are hidden. Offensive
   language is filtered, and reports are reviewed within 24 hours (Terms of
   Service, section 11).
@@ -99,10 +99,16 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
   website do not load inside the app.
   ```
 
-  ⚠ Keep it true. Draft-room chat has no Report/Block yet, which is why the note
-  says "league chat and direct messages" and not "all chat" — wire it there before
-  widening the sentence. If a purchase surface or a tracker is ever added to the
-  app, this block is wrong the same day.
+  ⚠ Keep it true. The live draft room gained Report/Block in #1565. These chat
+  surfaces are still live and still have NEITHER (census 2026-09-29, all four import
+  forms checked), which is why the note does not say "all chat":
+  - `app/draft/components/DraftChatPanel.tsx` (the `app/draft` shell's own chat —
+    not the live draft room's `components/app/draft-room/DraftChatPanel.tsx`);
+  - `components/bracket/PoolChat.tsx` (bracket league home tabs);
+  - `components/redraft/RedraftCommunicationPanel.tsx` (NFL redraft league home);
+  - `components/mock-draft/MockDraftChatPanel.tsx` (mock draft simulator).
+  Wire them before widening the sentence. If a purchase surface or a tracker is ever
+  added to the app, this block is wrong the same day.
 - **App Privacy**: "Data Used to Track You", **No**. Measure it before each
   submission; do not copy last time's answer:
 
