@@ -42,6 +42,19 @@ describe('lineupRefreshCandidates', () => {
     expect(mockTeamFindMany.mock.calls[0][0].where).toEqual({ claimedByUserId: 'me', league: { season: 2026 } })
     expect(out.map((c) => c.runKey)).toEqual(['sleeper:111:2026:active', 'espn:919055222:2026:active'])
   })
+
+  /*
+   * Chimmy's "Refresh league data" names one league. The filter sits INSIDE the claimed-team query,
+   * so it can only narrow: a league the caller holds no claimed team in returns nothing to refresh.
+   */
+  it('narrows to one league inside the claimed-team query, never around it', async () => {
+    mockTeamFindMany.mockResolvedValue([team('sleeper', '111')])
+    await refreshLineupsNow({ userId: 'me', leagueId: 'af-league-1', now: NOW })
+    expect(mockTeamFindMany.mock.calls[0][0].where).toEqual({ claimedByUserId: 'me', league: { season: 2026, id: 'af-league-1' } })
+    mockTeamFindMany.mockResolvedValue([])
+    const none = await refreshLineupsNow({ userId: 'me', leagueId: 'someone-elses-league', now: NOW })
+    expect(none).toEqual({ total: 0, attempted: [], remaining: 0 })
+  })
 })
 
 describe('refreshLineupsNow', () => {

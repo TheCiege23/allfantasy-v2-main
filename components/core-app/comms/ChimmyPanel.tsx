@@ -11,6 +11,7 @@ import { ChimmyScreenshot } from './ChimmyScreenshot'
 import { ChimmyScenarioCard } from './ChimmyScenario'
 import { ChimmyAdviceFollow, type ChimmyAdviceRef } from './ChimmyAdviceFollow'
 import { ChimmyAnswerRating } from './ChimmyAnswerRating'
+import { ChimmyGroundingLine } from './ChimmyGroundingLine'
 import { PushOptInPrompt } from '@/components/notifications/PushOptInPrompt'
 import {
   ChimmyAnswerModeToggle,
@@ -1141,12 +1142,16 @@ export function ChimmyPanel({
               */}
               {t.role === 'chimmy' && t.grounding ? (
                 t.grounding.grounded ? (
-                  <p className="af-cm-grounding" data-grounded="true">
-                    Read from {t.grounding.leagueName ?? 'your league'}
-                    {t.grounding.lastSyncedAt
-                      ? ` · synced ${new Date(t.grounding.lastSyncedAt).toLocaleString()}`
-                      : ' · never synced'}
-                  </p>
+                  /*
+                    "synced 12 min ago", amber past three hours, with a one-league Refresh on the
+                    newest answer. The exact timestamp stays beside it for anyone who wants it.
+                  */
+                  <ChimmyGroundingLine
+                    leagueId={t.grounding.leagueId ?? null}
+                    leagueName={t.grounding.leagueName ?? null}
+                    lastSyncedAt={t.grounding.lastSyncedAt ?? null}
+                    offerRefresh={t.id === lastChimmyId && !busy}
+                  />
                 ) : (
                   <p className="af-cm-grounding" data-grounded="false">
                     Chimmy could not read your league for this answer.

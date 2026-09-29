@@ -373,6 +373,25 @@
 .af-cm-grounding[data-grounded='true'] { color: var(--faint); }
 
 /*
+ * Stale league data (over three hours, lib/chimmy/groundingFreshness.ts): the same warn token the
+ * ungrounded state uses, without its weight — the answer read the league, just not recently.
+ */
+.af-cm-grounding[data-grounded='true'][data-stale='true'] { color: var(--warn, var(--accent)); }
+.af-cm-grounding-exact { opacity: 0.75; }
+.af-cm-grounding-refresh {
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: none;
+  border: 0;
+  padding: 6px 2px; /* a bigger tap target without growing the 10px line */
+  margin: -6px 0;
+  cursor: pointer;
+}
+.af-cm-grounding-refresh:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/*
  * Ungrounded is the state the user must not miss, so it is the one that carries
  * weight and colour. It reads as a caveat on the answer, not as an error strip —
  * the answer above it is still worth something, it just did not read the league.

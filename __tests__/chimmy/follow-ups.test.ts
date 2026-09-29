@@ -52,6 +52,20 @@ describe('suggestChimmyFollowUps', () => {
       }
     }
   })
+
+  /* get_faab_bid_plan (2026-09-28) had no row, so a bid plan got the generic chips. */
+  it('follows a waiver answer with "how much do I bid", and a bid plan with its lineup and week', () => {
+    expect(suggestChimmyFollowUps({ toolsUsed: ['get_available_players'], leagueScoped: true })[0]).toBe('How much FAAB should I bid this week?')
+    expect(suggestChimmyFollowUps({ toolsUsed: ['evaluate_waiver_move'], leagueScoped: true })[0]).toBe('How much FAAB should I bid this week?')
+    expect(suggestChimmyFollowUps({ toolsUsed: ['get_faab_bid_plan'], leagueScoped: true })).toEqual([
+      'Set my best lineup for this week',
+      'How does my matchup look this week?',
+      "Who's hurt on my teams?",
+    ])
+    // A bid plan is league-only: never offered with no league in scope, never re-offered after one ran.
+    expect(suggestChimmyFollowUps({ toolsUsed: ['get_available_players'], leagueScoped: false })).not.toContain('How much FAAB should I bid this week?')
+    expect(suggestChimmyFollowUps({ toolsUsed: ['get_faab_bid_plan', 'get_available_players'], leagueScoped: true })).not.toContain('How much FAAB should I bid this week?')
+  })
 })
 
 describe('readFollowUps', () => {

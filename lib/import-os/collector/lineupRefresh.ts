@@ -64,10 +64,19 @@ function activeSeasonYear(now: Date): number {
 }
 
 /** The user's own connected leagues this season, one connection per (provider, league, season), keyed on the active lane. */
-export async function lineupRefreshCandidates(userId: string, now: Date = new Date()): Promise<LeagueSyncConnection[]> {
+export async function lineupRefreshCandidates(
+  userId: string,
+  now: Date = new Date(),
+  /**
+   * Narrow to ONE AllFantasy league (Chimmy's "Refresh" under an answer). It filters inside the
+   * claimed-team query, so a league the user has no claimed team in simply yields nothing — the
+   * client can name a league but can never widen what it may refresh.
+   */
+  onlyLeagueId?: string | null,
+): Promise<LeagueSyncConnection[]> {
   const season = activeSeasonYear(now)
   const teams = await prisma.leagueTeam.findMany({
-    where: { claimedByUserId: userId, league: { season } },
+    where: { claimedByUserId: userId, league: { season, ...(onlyLeagueId ? { id: onlyLeagueId } : {}) } },
     select: { league: { select: { platform: true, platformLeagueId: true, season: true, sport: true } } },
   })
   const byKey = new Map<string, LeagueSyncConnection>()
@@ -94,6 +103,8 @@ function outcomeOf(connection: LeagueSyncConnection, sync: SyncConnectedResult):
 
 export async function refreshLineupsNow(input: {
   userId: string
+  /** Only this AllFantasy league, when the user holds a claimed team in it. See `lineupRefreshCandidates`. */
+  leagueId?: string | null
   now?: Date
   budgetMs?: number
   /** Test seam: a fixture loader, never a provider. */
@@ -103,7 +114,7 @@ export async function refreshLineupsNow(input: {
   const startedAt = Date.now()
   const budgetMs = input.budgetMs ?? LINEUP_REFRESH_BUDGET_MS
 
-  const candidates = await lineupRefreshCandidates(input.userId, now)
+  const candidates = await lineupRefreshCandidates(input.userId, now, input.leagueId)
   if (candidates.length === 0) return { total: 0, attempted: [], remaining: 0 }
 
   const states = await prisma.leagueSyncState.findMany({
