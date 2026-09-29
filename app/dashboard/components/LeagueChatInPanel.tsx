@@ -9,6 +9,7 @@ import { isLeagueMessageThreaded } from './chat/chat-timestamps'
 import { parseAtMentions } from '@/lib/chat-core/mentionPrivacyFilter'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { CHIMMY_DISPLAY_NAME, chimmyMomentLabelOf, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
+import { MessageModerationMenu } from '@/components/moderation/MessageModerationMenu'
 
 export type LeagueChatMessage = {
   id: string
@@ -205,6 +206,7 @@ export function LeagueChatInPanel({
   commissionerLeagues = [],
 }: LeagueChatInPanelProps) {
   const [messages, setMessages] = useState<LeagueChatMessage[]>([])
+  const [blockedAuthors, setBlockedAuthors] = useState<ReadonlySet<string>>(() => new Set())
   const [queryPrefill, setQueryPrefill] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
@@ -503,9 +505,11 @@ export function LeagueChatInPanel({
   )
 
   const isUserCommissioner = selectedLeague.isCommissioner === true
-  const visibleMessages = isBigBrotherLeague
+  const channelMessages = isBigBrotherLeague
     ? messages.filter((message) => readBbChannelFromMessage(message.metadata) === selectedBbChannel)
     : messages
+  /* Blocked from this panel, hidden at once — /api/league/chat already drops them from the next read. */
+  const visibleMessages = channelMessages.filter((m) => !m.authorId || !blockedAuthors.has(m.authorId))
   const selectedChannelMeta = bbChannels.find((channel) => channel.key === selectedBbChannel) ?? null
 
   return (
@@ -782,6 +786,21 @@ export function LeagueChatInPanel({
                     {threaded ? (
                       <p className="mt-0.5 text-[11px] text-white/30">{formatChatTime(message.createdAt)}</p>
                     ) : null}
+                  </div>
+                  {/*
+                    Report / Block (App Store guideline 1.2) — league chat's own room and routes, the
+                    same ones LeagueConversation uses. Only another member's message reaches here:
+                    outgoing, system, Chimmy and activity rows all returned above.
+                  */}
+                  <div className="self-center">
+                    <MessageModerationMenu
+                      threadId={`league:${selectedLeague.id}`}
+                      messageId={message.id}
+                      authorId={message.authorId || null}
+                      authorName={displayName}
+                      viewerId={userId}
+                      onBlocked={(id) => setBlockedAuthors((prev) => new Set(prev).add(id))}
+                    />
                   </div>
                 </div>
               )

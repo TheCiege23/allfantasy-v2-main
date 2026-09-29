@@ -89,6 +89,17 @@ export async function getBlockedUserIdsForRead(blockerUserId: string): Promise<s
 }
 
 /**
+ * The senders whose messages this viewer must not be shown — `getBlockedUserIdsForRead` as a Set,
+ * never containing the viewer (their own messages always stay). Throws BlockListUnavailableError
+ * exactly as that does; a chat read answers 503 rather than serve an unfiltered transcript.
+ */
+export async function getBlockedSenderSetForRead(viewerUserId: string): Promise<Set<string>> {
+  const blocked = new Set(await getBlockedUserIdsForRead(viewerUserId))
+  blocked.delete(viewerUserId)
+  return blocked
+}
+
+/**
  * Is there a block, in EITHER direction, between `userId` and any of `otherUserIds`?
  *
  * Used before starting a DM or huddle, or adding someone to one. Direction is deliberately not

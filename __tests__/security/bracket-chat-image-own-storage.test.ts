@@ -18,6 +18,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     bracketLeagueMember: { findUnique: h.member },
     bracketLeagueMessage: { create: h.create, findMany: h.findMany },
+    /* The GET now hides blocked senders and FAILS CLOSED (503) without a readable block list. */
+    platformBlockedUser: { findMany: async () => [] },
   },
 }))
 
