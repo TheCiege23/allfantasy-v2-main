@@ -85,8 +85,37 @@ function Fingerprint({ manager, axisMax }: { manager: ManagerFingerprint; axisMa
         </p>
       ) : null}
       <div style={{ height: 150 }}>
+        {/*
+           * ⚠ THE 30px SIDE MARGINS BUY ROOM FOR "Activity", AND 18 IS NOT ENOUGH. Do not trim
+           * them back to match top/bottom — it clips the label on a narrow card, silently.
+           *
+           * The axis labels sit OUTSIDE the ring, so the space one gets is
+           * `width/2 - outerRadius - 8` (the 8 is recharts' own `tickSize || 8` in
+           * PolarAngleAxis.getTickLineCoord), and a horizontal label extends away from its
+           * anchor because getTickTextAnchor returns start/end by `cos`. "Activity" is the widest
+           * of the four at 35.6px in Inter 11px — "Aggression" is wider still but sits at a
+           * VERTICAL extreme, centred on cx with the whole half-width to spare, so it never
+           * competes for this space.
+           *
+           * Measured 2026-09-29, card width vs space for the label:
+           *
+           *            margin 18   margin 30
+           *   150px      26.0        34.6      <- grid minimum, `minmax(150px, 1fr)` below
+           *   164px      27.9        36.6      <- a 2-up phone layout lands about here
+           *   187px      35.8        47.6
+           *
+           * At 18 the label needs a 187px card; at 30 it needs 157px, which is under the grid's
+           * own minimum, so it fits at every width this grid can produce. The cost is a smaller
+           * ring — radius 46.1 -> 37.4 at a 164px card — accepted deliberately: a clipped word is
+           * worse than a slightly smaller chart.
+           *
+           * ⚠ This was a PRE-EXISTING clip that the 11px type floor widened, not a new one. At
+           * the old 9px the label was 29.1px and already overflowed a 150px card by 3.1px; the
+           * floor took it to 9.6px. Restoring 9px would not fix it and would breach the floor —
+           * see __tests__/core-app/type-floor.test.ts.
+           */}
         <ResponsiveContainer width="100%" height="100%">
-          <RadarChart data={data} margin={{ top: 8, right: 18, bottom: 4, left: 18 }} outerRadius="72%">
+          <RadarChart data={data} margin={{ top: 8, right: 30, bottom: 4, left: 30 }} outerRadius="72%">
             <PolarGrid stroke="var(--border)" />
             <PolarAngleAxis dataKey="axis" tick={{ fill: 'var(--muted2)', fontSize: 11 }} />
             {/* Ticks hidden but the domain pinned: the ring IS 100, stated once in the panel note. */}
