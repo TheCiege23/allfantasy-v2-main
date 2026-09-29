@@ -513,3 +513,51 @@ describe('the /core Player Finder trade card — one verdict, the one grade (202
     expect(src).toMatch(/grade\.data\.letter/)
   })
 })
+
+/*
+ * 🛑 THE AF LEGACY PAGE'S TRADE TOOLS (2026-09-29) — sold as the AF Legacy plan, and each printed a
+ * verdict of its own beside (or instead of) the letter the full analyzer on the same page gives. Every
+ * one now reaches the one grader through `lib/legacy/legacyOneGrade.ts`; see
+ * `lib/legacy/legacyPackageGrade.ts` for the list of what each used to print.
+ *
+ * Kept as its own list at the END of the file so it merges beside other surfaces' entries untouched.
+ */
+const LEGACY_SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
+  { file: 'lib/legacy/legacyOneGrade.ts', entry: /gradeDeal\(/, what: 'the AF Legacy door to the one grader' },
+  { file: 'server/api-route-modules/legacy/trade/quick-evaluate/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy Trade Hub live preview (quick evaluate)' },
+]
+
+describe.each(LEGACY_SURFACES)('AF Legacy — $what', ({ file, entry }) => {
+  const src = code(file)
+
+  it('reaches the one grader', () => {
+    expect(entry.test(src)).toBe(true)
+  })
+
+  it.each(PRIVATE_LETTERS)('prints no private letter: $name', ({ shape }) => {
+    expect(shape.test(src)).toBe(false)
+  })
+})
+
+describe('AF Legacy — the page prints the one grade, never a verdict, fairness or acceptance number of its own', () => {
+  const PREVIEW_PRIVATE = /tradeHubLivePreview\.(?:acceptProbability|verdict|lean|fairnessDelta|marketDeltaPct|confidence|scores|sweeteners|acceptDrivers|riskFlags|lineupDelta)\b/
+
+  it('quick evaluate never asks the driver model or the acceptance model', () => {
+    const src = code('server/api-route-modules/legacy/trade/quick-evaluate/route.ts')
+    expect(src).not.toMatch(/computeTradeDrivers\(|computeAcceptProbability\(/)
+  })
+
+  it('the Trade Hub live preview reads the grade, and nothing the driver model printed', () => {
+    const page = code('app/af-legacy/page.tsx')
+    expect(page).toMatch(/<LegacyOneGrade grade=\{tradeHubLivePreview\.grade\} \/>/)
+    expect(PREVIEW_PRIVATE.test(page)).toBe(false)
+  })
+
+  it('positive controls: each shape matches the code it replaced', () => {
+    expect(/computeTradeDrivers\(|computeAcceptProbability\(/.test('const drivers = computeTradeDrivers(\n      giveAssets, receiveAssets,')).toBe(true)
+    expect(PREVIEW_PRIVATE.test('{tradeHubLivePreview.acceptProbability}%')).toBe(true)
+    expect(PREVIEW_PRIVATE.test("tradeHubLivePreview.verdict === 'FAIR' ? 'text-emerald-400' :")).toBe(true)
+    expect(PREVIEW_PRIVATE.test('{tradeHubLivePreview.sweeteners.map((s: any, i: number) => (')).toBe(true)
+    expect(PREVIEW_PRIVATE.test('<LegacyOneGrade grade={tradeHubLivePreview.grade} />')).toBe(false)
+  })
+})

@@ -30,6 +30,7 @@ import EnhancedRankingsPanel from "@/components/EnhancedRankingsPanel"
 import LeagueRankingsV2Panel from "@/components/LeagueRankingsV2Panel"
 import DraftRoom from "@/app/af-legacy/components/mock-draft/DraftRoom"
 import LegacyStrategyTab from '@/components/legacy/LegacyStrategyTab'
+import LegacyOneGrade from '@/components/legacy/LegacyOneGrade'
 import { FeatureGate } from '@/components/subscription/FeatureGate'
 import LegacyShopTab from '@/app/af-legacy/components/tabs/LegacyShopTab'
 import LegacyIdeasTab from '@/app/af-legacy/components/tabs/LegacyIdeasTab'
@@ -2090,16 +2091,8 @@ function AFLegacyContent() {
         return items
       }
 
-      const benchCandidates = teamB.players
-        .filter((p: any) => !tradeHubPlayersB.includes(p.id) && !(teamB.starters || []).includes(p.id))
-        .slice(0, 15)
-        .map((p: any) => {
-          const id = String(p.id || '').trim()
-          const team = p.team ? String(p.team).trim() : undefined
-          return { type: 'player' as const, name: p.name, pos: p.pos, team, id, media: { headshotUrl: headshotUrl(id), teamLogoUrl: teamLogoUrl(team) } }
-        })
-
       try {
+        // THE trade grade for the deal as built (the full analyzer's letter) — see the route's header.
         const res = await fetch('/api/legacy/trade/quick-evaluate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2128,8 +2121,6 @@ function AFLegacyContent() {
               },
               roster: { slots: tradeHubLeagueSettings.roster?.slots || {} },
             } : undefined,
-            suggestSweetener: true,
-            sweetenerCandidates: benchCandidates,
           }),
         })
         if (!controller.signal.aborted && res.ok) {
@@ -10888,136 +10879,18 @@ function AFLegacyContent() {
                           <div className={`mt-4 rounded-2xl border overflow-hidden transition-all ${tradeHubLiveLoading ? 'border-purple-500/20 bg-purple-900/10' : 'border-purple-500/30 bg-gradient-to-br from-slate-900/95 via-purple-900/20 to-slate-900/95'}`}>
                             <div className="h-0.5 bg-gradient-to-r from-purple-500 via-cyan-400 to-purple-500" style={tradeHubLiveLoading ? { animation: 'pulse 1.5s ease-in-out infinite' } : {}} />
                             <div className="p-4 space-y-4">
-                              {/* Header + Accept Rate */}
+                              {/* Header + THE trade grade (the one grader's letter — the full analyzer's letter for this deal) */}
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <span className="text-lg">⚡</span>
                                   <span className="text-sm font-bold text-white">Live Preview</span>
                                   {tradeHubLiveLoading && <span className="animate-spin text-xs">⏳</span>}
                                 </div>
-                                {tradeHubLivePreview && (
-                                  <div className="flex items-center gap-3">
-                                    <div className="text-right">
-                                      <div className="text-[11px] text-white/40 uppercase tracking-wider">Accept Rate</div>
-                                      <div className={`text-2xl font-black ${
-                                        tradeHubLivePreview.acceptProbability >= 60 ? 'text-emerald-400' :
-                                        tradeHubLivePreview.acceptProbability >= 40 ? 'text-amber-400' :
-                                        tradeHubLivePreview.acceptProbability >= 25 ? 'text-orange-400' : 'text-rose-400'
-                                      }`}>
-                                        {tradeHubLivePreview.acceptProbability}%
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
                               </div>
 
                               {tradeHubLivePreview && (
                                 <>
-                                  {/* Accept Rate Bar */}
-                                  <div className="relative h-3 rounded-full bg-slate-800 overflow-hidden">
-                                    <div
-                                      className="absolute inset-y-0 left-0 rounded-full transition-all duration-500"
-                                      style={{
-                                        width: `${Math.min(100, tradeHubLivePreview.acceptProbability)}%`,
-                                        backgroundColor: tradeHubLivePreview.acceptProbability >= 60 ? '#10b981' :
-                                          tradeHubLivePreview.acceptProbability >= 40 ? '#f59e0b' :
-                                          tradeHubLivePreview.acceptProbability >= 25 ? '#f97316' : '#ef4444',
-                                      }}
-                                    />
-                                    <div className="absolute inset-y-0 left-1/2 w-px bg-white/20" />
-                                  </div>
-
-                                  {/* Quick Stats Row */}
-                                  <div className="grid grid-cols-4 gap-2">
-                                    <div className="p-2 rounded-lg bg-slate-800/60 text-center">
-                                      <div className="text-[11px] text-white/40 uppercase">Verdict</div>
-                                      <div className={`text-xs font-bold mt-0.5 ${
-                                        tradeHubLivePreview.verdict === 'FAIR' ? 'text-emerald-400' :
-                                        tradeHubLivePreview.verdict === 'GOOD' || tradeHubLivePreview.lean === 'LEAN_ACCEPT' ? 'text-cyan-400' :
-                                        tradeHubLivePreview.lean === 'LEAN_DECLINE' ? 'text-rose-400' : 'text-amber-400'
-                                      }`}>{tradeHubLivePreview.verdict}</div>
-                                    </div>
-                                    <div className="p-2 rounded-lg bg-slate-800/60 text-center">
-                                      <div className="text-[11px] text-white/40 uppercase">Fairness</div>
-                                      <div className={`text-xs font-bold mt-0.5 ${tradeHubLivePreview.fairnessDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        {tradeHubLivePreview.fairnessDelta >= 0 ? '+' : ''}{tradeHubLivePreview.fairnessDelta}
-                                      </div>
-                                    </div>
-                                    <div className="p-2 rounded-lg bg-slate-800/60 text-center">
-                                      <div className="text-[11px] text-white/40 uppercase">Market</div>
-                                      <div className={`text-xs font-bold mt-0.5 ${tradeHubLivePreview.marketDeltaPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                        {tradeHubLivePreview.marketDeltaPct >= 0 ? '+' : ''}{tradeHubLivePreview.marketDeltaPct}%
-                                      </div>
-                                    </div>
-                                    <div className="p-2 rounded-lg bg-slate-800/60 text-center">
-                                      <div className="text-[11px] text-white/40 uppercase">Confidence</div>
-                                      <div className="text-xs font-bold mt-0.5 text-purple-300">{tradeHubLivePreview.confidence}%</div>
-                                    </div>
-                                  </div>
-
-                                  {/* 4-Factor Score Bar */}
-                                  <div className="space-y-1.5">
-                                    <div className="text-[11px] text-white/40 uppercase tracking-wider">4-Factor Breakdown</div>
-                                    {[
-                                      { label: 'Lineup Impact', value: tradeHubLivePreview.scores?.lineupImpact, weight: '40%', color: '#3b82f6' },
-                                      { label: 'VORP', value: tradeHubLivePreview.scores?.vorp, weight: '25%', color: '#a855f7' },
-                                      { label: 'Market', value: tradeHubLivePreview.scores?.market, weight: '20%', color: '#10b981' },
-                                      { label: 'Behavior', value: tradeHubLivePreview.scores?.behavior, weight: '15%', color: '#f59e0b' },
-                                    ].map(f => (
-                                      <div key={f.label} className="flex items-center gap-2">
-                                        <div className="w-20 text-[11px] text-white/50 truncate">{f.label}</div>
-                                        <div className="flex-1 h-2 rounded-full bg-slate-800 overflow-hidden">
-                                          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${f.value}%`, backgroundColor: f.color }} />
-                                        </div>
-                                        <div className="w-10 text-[11px] text-white/50 text-right">{f.value}</div>
-                                        <div className="w-8 text-[11px] text-white/30 text-right">{f.weight}</div>
-                                      </div>
-                                    ))}
-                                  </div>
-
-                                  {/* NEWS IMPACT ALERTS */}
-                                  {tradeHubLivePreview.newsAlerts?.length > 0 && (
-                                    <div className="space-y-1.5">
-                                      <div className="text-[11px] text-white/40 uppercase tracking-wider flex items-center gap-1.5">
-                                        <span className="text-amber-400">NEWS IMPACT</span>
-                                        <span className="text-white/30">— Values adjusted</span>
-                                      </div>
-                                      {tradeHubLivePreview.newsAlerts.map((alert: any, i: number) => (
-                                        <div
-                                          key={i}
-                                          className={`flex items-start gap-2 p-2 rounded-lg border text-xs ${
-                                            alert.severity === 'critical' ? 'bg-rose-500/10 border-rose-500/25' :
-                                            alert.severity === 'significant' ? 'bg-orange-500/10 border-orange-500/25' :
-                                            alert.sentiment === 'bullish' ? 'bg-emerald-500/10 border-emerald-500/25' :
-                                            'bg-amber-500/10 border-amber-500/25'
-                                          }`}
-                                        >
-                                          <span className="text-sm mt-px">
-                                            {alert.severity === 'critical' ? '\u{1F6A8}' :
-                                             alert.severity === 'significant' ? '\u26A0\uFE0F' :
-                                             alert.sentiment === 'bullish' ? '\u{1F4C8}' : '\u{1F4C9}'}
-                                          </span>
-                                          <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="font-semibold text-white">{alert.playerName}</span>
-                                              <span className={`px-1.5 py-0.5 rounded text-[11px] font-bold uppercase ${
-                                                alert.severity === 'critical' ? 'bg-rose-500/30 text-rose-300' :
-                                                alert.severity === 'significant' ? 'bg-orange-500/30 text-orange-300' :
-                                                alert.sentiment === 'bullish' ? 'bg-emerald-500/30 text-emerald-300' :
-                                                'bg-amber-500/30 text-amber-300'
-                                              }`}>
-                                                {alert.sentiment}
-                                              </span>
-                                            </div>
-                                            <div className="text-white/50 mt-0.5 leading-snug">{alert.reason}</div>
-                                            {alert.headlines?.[0] && (
-                                              <div className="text-white/30 text-[11px] mt-1 italic truncate">{alert.headlines[0]}</div>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
+                                  <LegacyOneGrade grade={tradeHubLivePreview.grade} />
 
                                   {/* SLOT DELTA MAP */}
                                   {tradeHubLivePreview.slotMap?.deltas?.length > 0 && (
@@ -11028,11 +10901,14 @@ function AFLegacyContent() {
                                       >
                                         <span className="text-sm">🗺️</span>
                                         <span className="text-[11px] text-white/40 uppercase tracking-wider flex-1">Slot Delta Map — Your Starting Lineup</span>
-                                        <span className={`text-xs font-bold ${
-                                          tradeHubLivePreview.lineupDelta?.deltaYou >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                                        }`}>
-                                          {tradeHubLivePreview.lineupDelta?.deltaYou >= 0 ? '+' : ''}{tradeHubLivePreview.lineupDelta?.deltaYou?.toFixed(1)} PPG
-                                        </span>
+                                        {(() => {
+                                          const lineupNet = (tradeHubLivePreview.slotMap.deltas as Array<{ delta: number }>).reduce((s, d) => s + (d.delta || 0), 0)
+                                          return (
+                                            <span className={`text-xs font-bold ${lineupNet >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                              {lineupNet >= 0 ? '+' : ''}{lineupNet.toFixed(1)} PPG
+                                            </span>
+                                          )
+                                        })()}
                                         <span className={`text-white/30 transition-transform ${tradeHubExpandedSlotMap ? 'rotate-180' : ''}`}>▼</span>
                                       </button>
                                       {tradeHubExpandedSlotMap && (
@@ -11122,75 +10998,6 @@ function AFLegacyContent() {
                                     </div>
                                   )}
 
-                                  {/* SWEETENER SUGGESTIONS */}
-                                  {tradeHubLivePreview.sweeteners?.length > 0 && (
-                                    <div>
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-sm">🍬</span>
-                                        <span className="text-[11px] text-white/40 uppercase tracking-wider">Sweetener Suggestions</span>
-                                      </div>
-                                      <div className="space-y-1.5">
-                                        {tradeHubLivePreview.sweeteners.map((s: any, i: number) => (
-                                          <button
-                                            key={i}
-                                            onClick={() => {
-                                              if (s.asset?.id && !tradeHubPlayersB.includes(s.asset.id)) {
-                                                setTradeHubPlayersB([...tradeHubPlayersB, s.asset.id])
-                                              }
-                                            }}
-                                            className="w-full flex items-center gap-2 p-2 rounded-lg bg-amber-500/5 border border-amber-500/15 hover:bg-amber-500/15 transition text-left"
-                                          >
-                                            <div className="flex-1 min-w-0">
-                                              <div className="text-xs text-white font-medium truncate">{s.asset?.name || '?'}</div>
-                                              <div className="text-[11px] text-white/40">{s.asset?.pos}</div>
-                                            </div>
-                                            <div className="flex items-center gap-3 flex-shrink-0">
-                                              <div className="text-center">
-                                                <div className="text-[11px] text-white/30">Accept</div>
-                                                <div className="text-xs font-bold text-emerald-400">+{Math.round(s.acceptDelta * 100)}%</div>
-                                              </div>
-                                              <div className="text-center">
-                                                <div className="text-[11px] text-white/30">Fairness</div>
-                                                <div className={`text-xs font-bold ${s.fairnessImpact <= -5 ? 'text-rose-400' : 'text-amber-400'}`}>
-                                                  {s.fairnessImpact >= 0 ? '+' : ''}{s.fairnessImpact}
-                                                </div>
-                                              </div>
-                                              <span className="text-amber-400 text-xs">+ Add</span>
-                                            </div>
-                                          </button>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Accept Drivers */}
-                                  {tradeHubLivePreview.acceptDrivers?.length > 0 && (
-                                    <div>
-                                      <div className="text-[11px] text-white/40 uppercase tracking-wider mb-1.5">Accept Signals</div>
-                                      <div className="flex flex-wrap gap-1.5">
-                                        {tradeHubLivePreview.acceptDrivers.slice(0, 6).map((d: any, i: number) => (
-                                          <div key={i} className={`px-2 py-1 rounded-full text-[11px] border ${
-                                            d.direction === 'UP' ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10' :
-                                            d.direction === 'DOWN' ? 'border-rose-500/30 text-rose-300 bg-rose-500/10' :
-                                            'border-slate-600/30 text-white/40 bg-slate-800/30'
-                                          }`}>
-                                            {d.emoji} {d.name}: {d.direction === 'UP' ? '↑' : d.direction === 'DOWN' ? '↓' : '—'}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Risk Flags */}
-                                  {tradeHubLivePreview.riskFlags?.length > 0 && (
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {tradeHubLivePreview.riskFlags.map((flag: string, i: number) => (
-                                        <div key={i} className="px-2 py-1 rounded-full text-[11px] border border-amber-500/30 text-amber-300 bg-amber-500/10">
-                                          ⚠️ {flag}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
                                 </>
                               )}
                             </div>
