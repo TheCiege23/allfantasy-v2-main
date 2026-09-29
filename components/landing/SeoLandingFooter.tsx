@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useSession } from 'next-auth/react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import LanguageToggle from '@/components/i18n/LanguageToggle'
 import { loginUrlWithIntent } from '@/lib/auth/auth-intent-resolver'
@@ -44,6 +45,11 @@ const FOOTER_SECTIONS = [
 
 export default function SeoLandingFooter() {
   const { t } = useLanguage()
+  // "Sign in" is for signed-out readers only; a signed-in one has Dashboard under Product.
+  // Same test as app/page.tsx's `signedIn` (a real user id), and read defensively as
+  // PostHogUserIdentifier does — a footer must never crash a page over the session.
+  const userId = (useSession()?.data?.user as { id?: string } | undefined)?.id
+  const signedIn = typeof userId === 'string' && userId.trim() !== ''
 
   return (
     <footer
@@ -122,9 +128,11 @@ export default function SeoLandingFooter() {
             <Link href="/data-deletion" className="text-xs transition-colors hover:opacity-100" style={{ color: 'var(--muted)' }}>
               {t('landing.footer.dataDeletion')}
             </Link>
-            <Link href={loginUrlWithIntent('/dashboard')} className="text-xs transition-colors hover:opacity-100" style={{ color: 'var(--muted)' }}>
-              {t('common.signIn')}
-            </Link>
+            {signedIn ? null : (
+              <Link href={loginUrlWithIntent('/dashboard')} className="text-xs transition-colors hover:opacity-100" style={{ color: 'var(--muted)' }}>
+                {t('common.signIn')}
+              </Link>
+            )}
             <LanguageToggle />
           </div>
         </div>
