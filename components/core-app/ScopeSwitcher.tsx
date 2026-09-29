@@ -13,6 +13,7 @@ import {
   serializeFavoriteIds,
   type ScopeOption,
 } from '@/lib/core-app/homeScope'
+import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import '@/components/core-app/af-scope-switcher.css'
 
 /**
@@ -114,19 +115,27 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
   }, [open])
 
   const options = useMemo(() => scopeOptions(leagues, favorites), [leagues, favorites])
+  /*
+   * Same-named leagues get the app's one disambiguation rule (lib/core-app/leagueNameCollision.ts):
+   * measured 2026-09-28, one account's list held four identical "…12-Team NFL Redraft League
+   * (manual)" rows. Computed once over the whole list, not the search-filtered one, so a row's
+   * label never changes as the reader types.
+   */
+  const labels = useMemo(() => distinctLeagueLabels(leagues), [leagues])
+  const labelOf = (l: ScopeSwitcherLeague) => labels.get(l.id) ?? l.name
   const q = query.trim().toLowerCase()
   const shownLeagues = useMemo(() => {
     const matched = q
       ? leagues.filter(
           (l) =>
-            l.name.toLowerCase().includes(q) ||
+            (labels.get(l.id) ?? l.name).toLowerCase().includes(q) ||
             l.sport.toLowerCase() === q ||
             platformLabel(l.platform).toLowerCase().includes(q),
         )
       : leagues
     // Starred first, then the order the rail uses (by name) — stable within each group.
     return [...matched].sort((a, b) => Number(favorites.has(b.id)) - Number(favorites.has(a.id)))
-  }, [leagues, favorites, q])
+  }, [leagues, labels, favorites, q])
 
   const filterHref = (value: string | null) =>
     value == null ? `/core?${HOME_SCOPE_PARAM}=all` : `/core?${HOME_SCOPE_PARAM}=${encodeURIComponent(value)}`
@@ -260,7 +269,7 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                         type="button"
                         className="af-scope-star"
                         aria-pressed={starred}
-                        aria-label={`${starred ? 'Remove' : 'Add'} ${league.name} ${starred ? 'from' : 'to'} favorites`}
+                        aria-label={`${starred ? 'Remove' : 'Add'} ${labelOf(league)} ${starred ? 'from' : 'to'} favorites`}
                         onClick={() => toggleFavorite(league.id)}
                       >
                         {starred ? '★' : '☆'}
@@ -271,7 +280,7 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
                         aria-current={league.id === selectedLeagueId ? 'true' : undefined}
                         onClick={() => setOpen(false)}
                       >
-                        <span className="af-scope-league-name">{league.name}</span>
+                        <span className="af-scope-league-name">{labelOf(league)}</span>
                         <span className="af-scope-league-meta">
                           {league.sport} · {platformLabel(league.platform)}
                         </span>

@@ -243,6 +243,7 @@ import {
   sportOf,
   type HomeScope,
 } from '@/lib/core-app/homeScope'
+import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { leagueDataFreshness } from '@/lib/core-app/cardFreshness'
 import { CARD_USE_COOKIE, orderHomeCards, parseCardUsage, timeSensitiveCards } from '@/lib/core-app/homeCardOrder'
 
@@ -1349,16 +1350,26 @@ export default async function AfCorePage({
   const homeScope: HomeScope = appliesHomeScope
     ? parseHomeScope(sp[HOME_SCOPE_PARAM] ?? cookieJar.get(SCOPE_COOKIE)?.value)
     : { kind: 'all' }
+  const scopeLeagues = playedLeagues.map((l) => ({
+    id: l.id,
+    name: l.name,
+    platform: platformOf(l),
+    sport: sportOf(l),
+  }))
+  /*
+   * The switcher's button names the selected league with the SAME label its own list shows —
+   * `<name> · <last 4 of id>` when another league in that list shares the name
+   * (lib/core-app/leagueNameCollision.ts). Measured 2026-09-28: one account had four leagues
+   * all named "…12-Team NFL Redraft League (manual)", so the header read the same for each.
+   */
+  const selectedScopeLabel = selectedLeagueId
+    ? (distinctLeagueLabels(scopeLeagues).get(selectedLeagueId) ?? selectedLeagueName)
+    : selectedLeagueName
   const shellScope = {
     value: serializeHomeScope(homeScope),
-    label: scopeLabel(homeScope, selectedLeagueName),
+    label: scopeLabel(homeScope, selectedScopeLabel),
     favoriteIds: [...favoriteIds],
-    leagues: playedLeagues.map((l) => ({
-      id: l.id,
-      name: l.name,
-      platform: platformOf(l),
-      sport: sportOf(l),
-    })),
+    leagues: scopeLeagues,
   }
 
   recordRootDuration('af.shell_ms', shellStartedAt)

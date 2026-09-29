@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { ModeToggle } from '@/components/theme/ModeToggle'
 import { groupLeagueHubs, type LeagueHub } from '@/lib/core-app/leagueHubGroups'
+import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
@@ -1561,7 +1562,18 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
   // "More" is current whenever the screen you are on is not one of the five
   // pinned ones — otherwise the bar shows nothing as active and reads broken.
   const activeInBar = mobileItems.some((i) => i.key === active)
-  const selectedLeagueName = leagues.find((league) => league.id === props.selectedLeagueId)?.name ?? null
+  /*
+   * ⚠ SAME-NAMED LEAGUES READ AS ONE. Measured 2026-09-28: one account's rail held two
+   * "…8-Team NFL Redraft League (manual)" and four "…12-Team NFL Redraft League (manual)" rows,
+   * and the header switcher named whichever was selected identically. The app's one rule
+   * (lib/core-app/leagueNameCollision.ts) appends the id's last four when a name repeats.
+   * Computed ONCE over exactly the rows the rail draws by name — a hub card draws its own
+   * members — and the header reads the same label, so the two never disagree.
+   */
+  const railRows = useMemo(() => groupLeagueHubs(leagues), [leagues])
+  const railLabels = useMemo(() => distinctLeagueLabels(railRows.filter((l) => !l.hub)), [railRows])
+  const selectedLeague = leagues.find((league) => league.id === props.selectedLeagueId)
+  const selectedLeagueName = selectedLeague ? (railLabels.get(selectedLeague.id) ?? selectedLeague.name) : null
 
   /*
    * 🛑 "MORE" WAS THE ONE /core OVERLAY THAT NEVER ADOPTED THE SHARED HOOK, AND IT HAND-ROLLED
@@ -1714,7 +1726,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           second screen.
         */}
         <div className="af-rail-scroll" id="af-rail-scroll" ref={railScrollRef}>
-          {groupLeagueHubs(leagues).map((l) => {
+          {railRows.map((l) => {
             if (l.hub) return <ConnectedLeagueRailGroup key={l.hub.id} hub={l.hub} selectedLeagueId={props.selectedLeagueId} expanded={railOpen} onNavigate={(href, event) => { saveRailScroll(railScrollRef.current, railLayout); if (railOpen && typeof window !== 'undefined' && window.innerWidth <= 720 && !event.metaKey && !event.ctrlKey) { event.preventDefault(); setRailChoice('closed'); router.push(href) } }} />
             const saved = props.railMatchups?.[l.id]
             const live = l.syncPaused ? undefined : liveRail.scores[l.id]
@@ -1735,6 +1747,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             const mFreshMinutes = railClock != null && Number.isFinite(mFreshAt)
               ? Math.max(0, Math.floor((railClock - mFreshAt) / 60_000))
               : null
+            const railName = railLabels.get(l.id) ?? l.name
             /* League-first opens a league on its matchup when it has a head-to-head this week —
                the same rule the /core landing uses (resolveLeagueFirstLanding). */
             const leagueHref = props.leagueFirst && m && !m.unpaired
@@ -1775,8 +1788,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 data-active={l.id === props.selectedLeagueId}
                 data-score-changed={railSwings[l.id] != null ? 'true' : undefined}
                 aria-current={l.id === props.selectedLeagueId ? 'true' : undefined}
-                title={`${l.name} · ${l.platform}`}
-                aria-label={`${l.name} on ${l.platform}`}
+                title={`${railName} · ${l.platform}`}
+                aria-label={`${railName} on ${l.platform}`}
                 /*
                   ⚠ CLOSES THE TRAY ON SELECTION, ON MOBILE ONLY. The handoff asks
                   for it, and it matters: the tray is full-screen, so navigating
@@ -1814,7 +1827,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 */}
                 <span className="af-rail-row">
                   <span className="af-rail-row-headline">
-                    <span className="af-rail-row-name">{l.name}</span>
+                    <span className="af-rail-row-name">{railName}</span>
                     {railSwings[l.id] != null ? (
                       <span className="af-rail-swing">
                         {railSwings[l.id] > 0 ? '+' : ''}{railSwings[l.id].toFixed(1)} swing
