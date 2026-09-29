@@ -844,11 +844,13 @@ export async function POST(req: Request) {
         const { getDeploymentLinkOrigin } = await import("@/lib/site-public-origin")
         const { USER_FACING_SITE_ORIGIN } = await import("@/lib/auth/user-facing-site-origin")
         const emailOrigin = getDeploymentLinkOrigin() || USER_FACING_SITE_ORIGIN
-        // returnTo=/onboarding routes ONLY this new-signup cohort into the profile
-        // setup step after they verify (they hold an auto-generated username).
-        // /onboarding self-guards and bounces already-complete profiles onward, so
-        // existing users and other verification flows are unaffected.
-        const verifyUrl = `${emailOrigin}/verify/email?token=${encodeURIComponent(rawToken)}&returnTo=${encodeURIComponent("/onboarding")}`
+        // 🛑 returnTo=/import, NOT /onboarding (Guap, 2026-09-29). /onboarding put a legacy-styled
+        // profile form and a 5-step tour between verifying and importing — 7+ screens before a new
+        // user saw anything of theirs, the biggest drop-off in the first run (UI audit). Age
+        // confirmation is enforced app-wide by AgeConfirmationPrompt (SafeGlobalChrome), so nothing
+        // required is skipped; the auto-generated username can be changed in Settings. The home
+        // card's resend button already used /import.
+        const verifyUrl = `${emailOrigin}/verify/email?token=${encodeURIComponent(rawToken)}&returnTo=${encodeURIComponent("/import")}`
 
         const { buildVerificationEmailHtml, resolveEmailSafeName } = await import("@/lib/email/verification-email-html")
         const safeName = resolveEmailSafeName({ username })
