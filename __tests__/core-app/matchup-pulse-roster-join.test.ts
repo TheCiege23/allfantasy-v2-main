@@ -170,3 +170,21 @@ describe('getMatchupPulse roster join', () => {
     expect(pulse.notRanked.unpriceable).toBe(1)
   })
 })
+
+/*
+ * The importer stores an unowned Sleeper roster as teamName "Unknown" / ownerName "Unknown" (252
+ * teams across 37 leagues on 2026-09-29). The board printed "vs Unknown" for it while Your Week
+ * said "opponent not named" and the home "vs Roster 8" — one roster, three names.
+ */
+describe('getMatchupPulse opponent label', () => {
+  it('a stored "Unknown" is no name: the row is "Team 2", the same label every surface uses', async () => {
+    db.teams[1] = { ...db.teams[1], teamName: 'Unknown', ownerName: 'Unknown' }
+    const row = (await getMatchupPulse(USER, NOW)).leading[0]
+    expect(row).toMatchObject({ opponentName: null, opponentLabel: 'Team 2', opponentInitials: expect.any(String) })
+  })
+
+  it('a real name is kept as the label', async () => {
+    const row = (await getMatchupPulse(USER, NOW)).leading[0]
+    expect(row).toMatchObject({ opponentName: 'Theirs', opponentLabel: 'Theirs' })
+  })
+})

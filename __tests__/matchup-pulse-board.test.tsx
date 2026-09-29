@@ -48,6 +48,7 @@ function row(over: Partial<PulseRow> = {}): PulseRow {
     logoUrl: null,
     leagueBadge: 'DW',
     opponentName: 'Gridiron Ghosts',
+    opponentLabel: 'Gridiron Ghosts',
     opponentAvatarUrl: null,
     opponentInitials: 'GG',
     margin: 12.4,
@@ -134,12 +135,20 @@ describe('MatchupPulseBoard', () => {
     expect(diffs).toEqual(['+12.4', '−9.2'])
   })
 
-  /* An unnamed opposing roster stays unnamed — never given a placeholder name. */
-  it('says the opponent is not named rather than inventing one', () => {
+  /*
+   * An opposing roster with no real name is the platform's own "Team N" (`rosterLabel`) — the same
+   * label every surface uses, never a manager we made up and never the stored placeholder "Unknown".
+   */
+  it('prints the roster label for an opponent with no real name', () => {
     const { container } = render(
-      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row({ opponentName: null })] })} />,
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({ leading: [row({ opponentName: null, opponentLabel: 'Team 8' })] })}
+      />,
     )
-    expect(container.textContent ?? '').toContain('opponent not named')
+    expect(container.textContent ?? '').toContain('vs Team 8')
+    expect(container.textContent ?? '').not.toMatch(/Unknown|opponent not named/)
   })
 
   /*

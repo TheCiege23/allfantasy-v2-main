@@ -1,6 +1,7 @@
 'use client'
 
 import type { LeagueScoreboard, ScoreboardTeam } from '@/lib/core-app/leagueScoreboard'
+import { rosterLabel } from '@/lib/core-app/managerName'
 
 /**
  * Every game in the league this week.
@@ -51,7 +52,7 @@ function Side({
         </span>
       )}
       <span className="af-sb-name">
-        {team.teamName ?? team.managerName ?? `Roster ${team.rosterId}`}
+        {rosterLabel([team.teamName, team.managerName], team.rosterId)}
       </span>
       <span className="af-sb-pts af-num" data-projected={unplayed}>
         {value != null ? value.toFixed(1) : '—'}
@@ -180,7 +181,7 @@ export function LeagueScoreboardPanel({
           <span className="af-label">Not paired into a game yet</span>
           <span className="af-sb-unpaired-who">
             {board.unpaired
-              .map((t) => t.teamName ?? t.managerName ?? `Roster ${t.rosterId}`)
+              .map((t) => rosterLabel([t.teamName, t.managerName], t.rosterId))
               .join(', ')}
           </span>
         </div>

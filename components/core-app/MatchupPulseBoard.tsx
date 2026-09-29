@@ -94,12 +94,13 @@ function Face({ row }: { row: PulseRow }) {
 /**
  * "vs Gridiron Ghosts · 6 left to play".
  *
- * Each clause is dropped rather than faked when its source is absent: an
- * unnamed opposing roster stays unnamed, and a lineup we could not place
- * against a fixture list carries no count at all.
+ * Each clause is dropped rather than faked when its source is absent: a lineup
+ * we could not place against a fixture list carries no count at all. An
+ * opposing roster with no real name is "Team N" — the platform's own label,
+ * the same on every surface (`rosterLabel`), never a manager we made up.
  */
 function metaOf(row: PulseRow): string {
-  const parts: string[] = [row.opponentName ? `vs ${row.opponentName}` : 'opponent not named']
+  const parts: string[] = [`vs ${row.opponentLabel}`]
   if (row.startersLeft != null) {
     parts.push(`${row.startersLeft} left to play`)
   }
