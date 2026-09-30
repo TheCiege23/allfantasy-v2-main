@@ -32,6 +32,7 @@ class BetaAdmissionConsumeError extends Error {
 }
 import { validateLeagueJoin } from "@/lib/league-privacy"
 import { hasProfanityInUsername } from "@/lib/signup/UsernameProfanityGuard"
+import { isOffensiveDisplayName, OFFENSIVE_DISPLAY_NAME_MESSAGE } from "@/lib/moderation/offensiveName"
 import { generateUniqueUsername } from "@/lib/signup/AutoUsernameGenerator"
 import { resolvePreferredLanguage } from "@/lib/signup/LanguagePreferenceResolver"
 import {
@@ -320,6 +321,12 @@ export async function POST(req: Request) {
         })
       )
       return Boolean(hit)
+    }
+
+    // Other managers read the display name on every chat message, and the auto-generated
+    // username below is built from it (lib/moderation/offensiveName).
+    if (typeof displayName === "string" && isOffensiveDisplayName(displayName.trim())) {
+      return NextResponse.json({ error: OFFENSIVE_DISPLAY_NAME_MESSAGE }, { status: 400 })
     }
 
     // The redesigned /signup form no longer collects a username — it is generated
