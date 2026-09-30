@@ -15,7 +15,6 @@ describe('ai tool registry', () => {
       'draft_helper',
       'matchup',
       'rankings',
-      'psychological',
       'story_creator',
       'ai_commissioner',
       'fantasy_coach',
