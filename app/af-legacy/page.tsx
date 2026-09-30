@@ -4309,7 +4309,7 @@ function AFLegacyContent() {
     { id: 'waiver' as Tab, label: 'Waiver Engine', icon: <TrendingUp className="w-4 h-4" />, badge: 'Chimmy' },
     { id: 'rankings' as Tab, label: 'Team Direction', icon: <Trophy className="w-4 h-4" /> },
     { id: 'pulse' as Tab, label: 'Market Board', icon: <Radio className="w-4 h-4" />, badge: 'Beta' },
-    { id: 'compare' as Tab, label: 'Opponent Behavior', icon: <Swords className="w-4 h-4" /> },
+    { id: 'compare' as Tab, label: 'Manager Comparison', icon: <Swords className="w-4 h-4" /> },
     { id: 'chat' as Tab, label: 'Chimmy Chat', icon: <MessageCircle className="w-4 h-4" />, badge: 'Chimmy' },
     { id: 'mock-draft' as Tab, label: 'AF Legacy Draft', icon: <LayoutGrid className="w-4 h-4" />, badge: 'Chimmy' },
     { id: 'share' as Tab, label: 'League Fairness', icon: <Share2 className="w-4 h-4" /> },
@@ -14362,7 +14362,7 @@ function AFLegacyContent() {
                       </div>
                     </div>
 
-                    <FeatureGate featureId="legacy_manager_compare" featureNameOverride="Opponent Behavior">
+                    <FeatureGate featureId="legacy_manager_compare" featureNameOverride="Manager Comparison">
                     <button
                       onClick={runManagerComparison}
                       disabled={compareLoading || !compareOpponent.trim()}
