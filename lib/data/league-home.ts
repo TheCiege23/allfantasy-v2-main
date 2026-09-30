@@ -808,12 +808,18 @@ async function buildCollegePlayersData(
   if (variant.mode === 'standard' || variant.collegeSports.length === 0) return null
 
   const sports = variant.collegeSports
-  const [trendRows, availableRows, leaderRows] = await Promise.all([
-    prisma.devyPlayer.findMany({
-      where: { sport: { in: sports } },
-      orderBy: [{ stockTrendDelta: 'desc' }, { draftProjectionScore: 'desc' }],
-      take: 20,
-    }).catch(() => []),
+  /*
+   * 🛑 THERE IS NO COLLEGE TREND LIST, AND `stockTrendDelta` MUST NOT BECOME ONE AGAIN.
+   * This used to order a "trend" list by `DevyPlayer.stockTrendDelta desc` and hand that column
+   * to the Trend tab as `trendValue`, drawn as "+N.N". The column is a LEVEL — its only writer
+   * (`lib/workers/devy-data-worker.ts`) stores `score/100*10 + c2cPoints/10`, non-negative for
+   * every scored prospect — so the tab showed the whole pool rising. No measured college trend
+   * exists (`lib/devy/devyTrend.ts`, which the Devy hub and per-league Devy tab already use), and
+   * the list's fallback ranking (draftProjectionScore) is what Leaders below already shows, so it
+   * is removed rather than relabelled. When a real delta has a writer, add it through
+   * `devyTrendOf`, not by reading this column.
+   */
+  const [availableRows, leaderRows] = await Promise.all([
     prisma.devyPlayer.findMany({
       where: { sport: { in: sports }, graduatedToNFL: false },
       orderBy: [{ devyAdp: 'asc' }, { draftProjectionScore: 'desc' }],
@@ -834,11 +840,6 @@ async function buildCollegePlayersData(
   ])
 
   return {
-    trend: trendRows.map((player) =>
-      toCollegeResolvedPlayer(player, {
-        trendValue: player.stockTrendDelta ?? player.draftProjectionScore ?? null,
-      })
-    ),
     available: availableRows.map((player) => toCollegeResolvedPlayer(player)),
     leaders: leaderRows.map((player) =>
       toCollegeResolvedPlayer(player, {
