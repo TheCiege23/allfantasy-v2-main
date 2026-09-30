@@ -97,6 +97,7 @@ describe('CommsDrawer — adopted behaviour', () => {
     openChimmy(1)
     fireEvent.click(screen.getByRole('tab', { name: /League/ }))
     fireEvent.change(screen.getByLabelText('League scope'), { target: { value: 'l0' } })
-    expect(screen.getByRole('button', { name: /ask the league.*publicly/i })).toBeTruthy()
+    // Copy renamed in the brand-voice pass: the assistant is Chimmy, not "the league's AI".
+    expect(screen.getByRole('button', { name: /ask chimmy.*publicly/i })).toBeTruthy()
   })
 })
