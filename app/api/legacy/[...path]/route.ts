@@ -34,7 +34,6 @@ const ROUTES: Array<{ pattern: string[]; load: RouteLoader }> = [
   { pattern: ["trade","analyze"], load: () => import('@/server/api-route-modules/legacy/trade/analyze/route') },
   { pattern: ["trade","feedback"], load: () => import('@/server/api-route-modules/legacy/trade/feedback/route') },
   { pattern: ["trade","goal-proposals"], load: () => import('@/server/api-route-modules/legacy/trade/goal-proposals/route') },
-  { pattern: ["trade","league-analyze"], load: () => import('@/server/api-route-modules/legacy/trade/league-analyze/route') },
   { pattern: ["trade","league-managers"], load: () => import('@/server/api-route-modules/legacy/trade/league-managers/route') },
   { pattern: ["trade","preferences"], load: () => import('@/server/api-route-modules/legacy/trade/preferences/route') },
   { pattern: ["trade","proposal-generator"], load: () => import('@/server/api-route-modules/legacy/trade/proposal-generator/route') },

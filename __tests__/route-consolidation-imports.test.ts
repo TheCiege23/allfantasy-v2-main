@@ -16,7 +16,6 @@ describe('route consolidation import smoke tests', () => {
     '../app/api/leagues/[leagueId]/survivor/[...path]/route',
     '../app/api/ai/community-insights/route',
     '../app/api/ai/decision-log/route',
-    '../app/api/ai/trade/league-analyze/route',
     '../app/api/ai/waiver/leagues/route',
   ]
 

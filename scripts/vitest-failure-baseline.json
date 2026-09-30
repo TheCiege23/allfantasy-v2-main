@@ -51,7 +51,6 @@
     "__tests__/sport-rules-engine.test.ts",
     "__tests__/stripe-webhook-route-contract.test.ts",
     "__tests__/token-pricing-matrix-policy.test.ts",
-    "__tests__/trade-league-analyze-api.test.ts",
     "__tests__/user-contact-email-route-contract.test.ts",
     "__tests__/user-os/userOsContext.test.ts",
     "__tests__/waiver-leagues-api.test.ts",
