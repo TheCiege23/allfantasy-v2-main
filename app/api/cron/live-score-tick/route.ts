@@ -17,6 +17,7 @@ import { RollingInsightsLiveProvider } from '@/lib/live/rollingInsightsLiveProvi
 import { runPollLoop, createCadenceGate, LIVE_POLL_INTERVAL_MS, PBP_POLL_INTERVAL_MS, POLL_BUDGET_MS } from '@/lib/live/gamedayPoller'
 import { refreshPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import { refreshLiveSleeperPoints, LIVE_POINTS_INTERVAL_MS } from '@/lib/live/liveSleeperPointsSync'
+import { runGrokTdClipPilot } from '@/lib/live/grokTdClipPilot'
 
 /**
  * Opt-in Rolling Insights live provider, PRESEASON ONLY.
@@ -112,6 +113,7 @@ export async function GET(request: NextRequest) {
     let loop: Awaited<ReturnType<typeof runPollLoop>> | null = null
     let pbp: Awaited<ReturnType<typeof refreshPlayByPlayFeed>> | null = null
     let points: Awaited<ReturnType<typeof refreshLiveSleeperPoints>> | null = null
+    let clipPilot: Awaited<ReturnType<typeof runGrokTdClipPilot>> | null = null
 
     const report = await withSyncJobRun(
       {
@@ -152,6 +154,18 @@ export async function GET(request: NextRequest) {
          * take down scoring.
          */
         const pointsDue = createCadenceGate(LIVE_POINTS_INTERVAL_MS)
+        /*
+         * PILOT (off unless GROK_TD_CLIP_PILOT=1): Grok X-search for touchdown
+         * clips, logged only — see lib/live/grokTdClipPilot.ts. Started BESIDE the
+         * scoring loop, not inside it, because one search takes seconds and the
+         * loop's cadence is the product. It reads the play feed as it stood at the
+         * start of this invocation, which is fine: a play is not due for five
+         * minutes anyway. Bounded by the loop's own budget and never thrown.
+         */
+        const clipPilotRun = runGrokTdClipPilot({ deadline: Date.now() + POLL_BUDGET_MS }).catch((err) => {
+          console.error('[live-score-tick] clip pilot failed:', err instanceof Error ? err.message : err)
+          return null
+        })
         const tickOnce = async () => {
           const scored = await runLiveScoringForActiveSeasons(prisma, provider ? { provider } : {})
           if (pbpDue()) pbp = await refreshPlayByPlayFeed().catch(() => pbp)
@@ -162,6 +176,7 @@ export async function GET(request: NextRequest) {
         loop = await runPollLoop(async () => {
           last = await tickOnce()
         })
+        clipPilot = await clipPilotRun
         return last
       },
       (r) => ({
@@ -204,6 +219,12 @@ export async function GET(request: NextRequest) {
           /* Starter swing alerts handed to the notification engine this tick. */
           pointsSwingAlerts: points?.swingAlerts ?? 0,
           pointsSkipped: points?.skipped ?? null,
+          /* The Grok clip pilot. 'disabled' is the default and says nothing is
+             being spent; the searched/found pair is the pilot's running tally. */
+          clipPilotSkipped: clipPilot?.skipped ?? null,
+          clipPilotSearched: clipPilot?.searched ?? 0,
+          clipPilotFound: clipPilot?.found ?? 0,
+          clipPilotErrors: clipPilot?.errors ?? 0,
         },
       }),
     )
