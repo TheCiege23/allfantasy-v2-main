@@ -271,6 +271,12 @@ export type AfEngineProjection = {
   /** How the engine built it — `sleeper_weekly_projection`, `weekly_actuals_recency`, … */
   basis: string | null
   confidence: string | null
+  /**
+   * The engine's own player key (`AFProjectionSnapshot.playerId`), which the mirror row records.
+   * The bridge from a Sleeper id to the engine's season-long rows. Optional: older mirror rows and
+   * hand-built fixtures may not carry it.
+   */
+  canonicalPlayerId?: string | null
 }
 
 export async function lookupAfEngineProjections(
@@ -290,12 +296,13 @@ export async function lookupAfEngineProjections(
   for (const r of rows) {
     const points = Number(r.projectedPoints)
     if (!Number.isFinite(points)) continue
-    const s = (r.stats ?? {}) as { basis?: unknown; confidenceLevel?: unknown }
+    const s = (r.stats ?? {}) as { basis?: unknown; confidenceLevel?: unknown; canonicalPlayerId?: unknown }
     out.set(r.playerId, {
       playerId: r.playerId,
       projectedPoints: points,
       basis: typeof s.basis === 'string' ? s.basis : null,
       confidence: typeof s.confidenceLevel === 'string' ? s.confidenceLevel : null,
+      canonicalPlayerId: typeof s.canonicalPlayerId === 'string' && s.canonicalPlayerId ? s.canonicalPlayerId : null,
     })
   }
   return out

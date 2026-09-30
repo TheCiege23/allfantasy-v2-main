@@ -2,6 +2,7 @@
 
 import '@/components/core-app/af-draft-hq.css'
 import type { DraftHqData } from '@/lib/core-app/draftHq'
+import { draftAfText, draftAfTitle } from '@/lib/core-app/draftAfLabel'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { DraftCompetitiveEdge, type DraftEdgeState } from '@/components/core-app/screens/DraftCompetitiveEdge'
 
@@ -174,6 +175,12 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
                 <span className="af-dh-made-name">{p.playerName}</span>
                 <span className="af-dh-made-meta">
                   {[p.position, p.team].filter(Boolean).join(' · ')}
+                  {/* AllFantasy's own projection for your pick; season total on hover. */}
+                  {draftAfText(p.af) ? (
+                    <span className="af-dh-af af-num" title={draftAfTitle(p.af)}>
+                      {' · '}{draftAfText(p.af)}
+                    </span>
+                  ) : null}
                 </span>
               </li>
             ))}
@@ -313,6 +320,12 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
                         <span className="af-dh-bpick-player">{p.playerName}</span>
                         <span className="af-dh-bpick-meta">
                           {p.position !== '\u2014' ? p.position : ''}
+                          {/* AllFantasy's own projection for the pick; season total on hover. */}
+                          {draftAfText(p.af) ? (
+                            <span className="af-dh-af af-num" title={draftAfTitle(p.af)}>
+                              {' '}{draftAfText(p.af)}
+                            </span>
+                          ) : null}
                         </span>
                         <span className="af-dh-bpick-team">{p.teamName ?? p.teamKey}</span>
                       </li>

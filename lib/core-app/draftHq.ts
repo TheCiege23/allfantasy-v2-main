@@ -19,6 +19,7 @@ import type { DraftType, QueueEntry, TradedPickRecord } from '@/lib/live-draft-e
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { leagueContextFor, type LeagueContext, type LeagueContextRow } from './leagueContext'
 import { composePlayerIdentities } from './playerIdentityCompose'
+import { loadDraftAfProjections, type DraftAfProjection } from './draftAfProjections'
 
 /**
  * Draft HQ — "before the draft: your picks, the lottery, the board settings and
@@ -124,6 +125,8 @@ export type MadePick = {
    * inherit them from here.
    */
   imageUrl: string | null
+  /** AllFantasy's own projection for the player — see draftAfProjections.ts. Absent when none. */
+  af?: DraftAfProjection
 }
 
 /** One pick on the completed board - any team's, not just yours. */
@@ -136,6 +139,8 @@ export type BoardPick = {
   isYou: boolean
   playerName: string
   position: string
+  /** AllFantasy's own projection for the player — see draftAfProjections.ts. Absent when none. */
+  af?: DraftAfProjection
 }
 
 export type CompletedDraft = {
@@ -765,6 +770,13 @@ async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<
     resolvePlayerNames([...new Set(rows.map((r) => r.playerId))], boardLeague?.platform ?? ''),
   ])
 
+  /* AllFantasy's own projection for every player on the board — one read. */
+  const afs = await loadDraftAfProjections({
+    platform: boardLeague?.platform,
+    playerIds: rows.map((r) => r.playerId),
+    leagueSettings: boardLeague?.settings,
+  })
+
   const teamCount = teams.length
   const nameByKey = new Map<string, string>()
   for (const t of teams) {
@@ -790,6 +802,7 @@ async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<
       isYou: yours.has(teamKey),
       playerName: hit?.name ?? `Player ${r.playerId} (not yet mapped)`,
       position: hit?.position ?? '\u2014',
+      ...(afs.byPlayerId.has(r.playerId) ? { af: afs.byPlayerId.get(r.playerId)! } : {}),
     }
     const bucket = byRound.get(r.round)
     if (bucket) bucket.push(pick)
@@ -895,6 +908,11 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
     rows.map((r) => r.playerId),
     league?.platform ?? '',
   )
+  const afs = await loadDraftAfProjections({
+    platform: league?.platform,
+    playerIds: rows.map((r) => r.playerId),
+    leagueSettings: league?.settings,
+  })
 
   return {
     available: true,
@@ -929,6 +947,7 @@ async function loadImportedDraftPicks(lc: LeagueContext): Promise<SectionState<M
         position: hit?.position ?? '—',
         team: hit?.team ?? null,
         imageUrl: hit?.imageUrl ?? null,
+        ...(afs.byPlayerId.has(r.playerId) ? { af: afs.byPlayerId.get(r.playerId)! } : {}),
       }
     }),
   }
@@ -1129,6 +1148,11 @@ export async function getDraftHqData(
     [...new Set(made.map((p) => p.playerId).filter((id): id is string => Boolean(id)))],
     String(league.platform ?? '').toLowerCase(),
   ).catch(() => new Map<string, ResolvedDraftPlayer>())
+  const madeAfs = await loadDraftAfProjections({
+    platform: league.platform,
+    playerIds: made.map((p) => p.playerId),
+    leagueSettings: league.settings,
+  })
 
   const madePicks: SectionState<MadePick[]> =
     made.length > 0
@@ -1148,6 +1172,7 @@ export async function getDraftHqData(
             position: p.position,
             team: p.team,
             imageUrl: p.playerId ? madeFaces.get(p.playerId)?.imageUrl ?? null : null,
+            ...(p.playerId && madeAfs.byPlayerId.has(p.playerId) ? { af: madeAfs.byPlayerId.get(p.playerId)! } : {}),
           })),
         }
       : {

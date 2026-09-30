@@ -215,3 +215,38 @@ describe('Draft HQ — queue and keepers', () => {
     expect(document.body.textContent).toContain('this draft has no keepers set up')
   })
 })
+
+describe('Draft HQ — AllFantasy projections on picks', () => {
+  it('shows AF on your picks and on the full board, with the season total on hover, and nothing for a pick without one', () => {
+    const af = { af: 18.4, ros: 240.5, rosWeeks: 14, week: 4 }
+    render(
+      <DraftHq
+        data={data({
+          madePicks: {
+            available: true,
+            data: [
+              { overall: 2, round: 1, label: '1.02', playerName: 'Bijan Robinson', position: 'RB', team: 'ATL', imageUrl: null, af },
+              { overall: 5, round: 2, label: '2.02', playerName: 'No Engine Row', position: 'WR', team: 'KC', imageUrl: null },
+            ],
+          },
+          board: {
+            available: true,
+            data: {
+              season: 2026,
+              rounds: [{ round: 1, picks: [{ round: 1, overall: 1, label: '1.01', teamKey: 't1', teamName: 'Kim', isYou: false, playerName: 'Ja’Marr Chase', position: 'WR', af: { af: 21.1, ros: null, rosWeeks: null, week: 4 } }] }],
+              teams: [{ teamKey: 't1', name: 'Kim', isYou: false, picks: 1 }],
+              totalPicks: 1,
+            },
+          },
+        })}
+      />,
+    )
+    const text = document.body.textContent ?? ""
+    expect(text).toContain('AF 18.4')
+    expect(text).toContain('AF 21.1')
+    // Exactly two AF figures: the pick with no engine row shows none.
+    expect(text.match(/AF \d/g)?.length).toBe(2)
+    const titles = [...document.querySelectorAll('.af-dh-af')].map((e) => e.getAttribute('title'))
+    expect(titles).toContain("AllFantasy projection, week 4: 18.4 under this league's scoring · rest of season 240.5 PPR over 14 games")
+  })
+})
