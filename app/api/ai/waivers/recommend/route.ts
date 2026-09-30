@@ -91,7 +91,7 @@ export async function POST(request: Request) {
 
     /*
      * 🛑 THE DECISION OS WAIVER ENGINE, NOT THE LEGACY RECOMMENDER (2026-09-29). This route called
-     * `generateWaiverRecommendations` in lib/ai/waivers — a standing decision-engine-boundary
+     * `generateWaiverRecommendations` in lib/ai/waivers (since retired, 2026-09-30) — a standing decision-engine-boundary
      * violation that could not be fixed in place (the guard refuses any edit to it). It read rosters
      * raw and matched roster ids against `id`, `externalId` AND `sleeperId`, so a Rolling Insights
      * player of the same number could lend you his position. Chimmy's waiver answer already ran
