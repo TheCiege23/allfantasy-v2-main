@@ -49,6 +49,7 @@ type WizardProps = {
   submitError: string | null
   submitting: boolean
   importSourceName?: string
+  importCarryover?: boolean
   onSubmit: () => void
   onCancel: () => void
 }
@@ -197,7 +198,7 @@ export function CreateLeagueWizard(props: WizardProps) {
             <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} priority className="h-auto w-44 max-w-full sm:w-52" />
             {props.importSourceName ? (
               <p className="rounded-xl border border-violet-500/35 bg-violet-600/10 p-3 text-sm leading-6" data-testid="standalone-import-template-notice">
-                Using {props.importSourceName} as a setup template. This creates a separate AllFantasy league with a new draft and open teams. Existing managers, rosters, and history stay in the imported league; invite managers and run a fresh draft here.
+                Creating a separate AllFantasy league from {props.importSourceName}. Teams and current player rosters carry over. The existing draft is recorded as complete; past matchups, transactions, and chat stay in the imported league. Keep the sport and team count the same to preserve every roster.
               </p>
             ) : null}
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">
@@ -248,10 +249,10 @@ export function CreateLeagueWizard(props: WizardProps) {
 
           <div className="rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card)] p-4 shadow-xl shadow-black/5 sm:p-5">
             {activeStep === 'sport' ? (
-              <SportStep state={props.state} onChange={props.onChange} />
+              <SportStep state={props.state} onChange={props.onChange} importCarryover={props.importCarryover} />
             ) : null}
             {activeStep === 'basics' ? (
-              <LeagueBasicsStep state={props.state} onChange={props.onChange} fieldErrors={props.fieldErrors} />
+              <LeagueBasicsStep state={props.state} onChange={props.onChange} fieldErrors={props.fieldErrors} importCarryover={props.importCarryover} />
             ) : null}
             {activeStep === 'draft' ? (
               <DraftStep state={props.state} onChange={props.onChange} fieldErrors={props.fieldErrors} />
@@ -335,7 +336,7 @@ export function CreateLeagueWizard(props: WizardProps) {
   )
 }
 
-export function SportStep({ state, onChange }: Pick<WizardProps, 'state' | 'onChange'>) {
+export function SportStep({ state, onChange, importCarryover }: Pick<WizardProps, 'state' | 'onChange' | 'importCarryover'>) {
   const { t } = useLanguage()
 
   return (
@@ -370,6 +371,7 @@ export function SportStep({ state, onChange }: Pick<WizardProps, 'state' | 'onCh
                   : 'Draft and league tools only — weekly scoring is not wired for this sport yet'
               }
               selected={selected}
+              disabled={importCarryover && !selected}
               media={media}
               onSelect={() => onChange(nextStateForSport(state, sport))}
               testId={`g30-sport-${sport}`}
@@ -385,17 +387,20 @@ export function LeagueBasicsStep({
   state,
   onChange,
   fieldErrors,
-}: Pick<WizardProps, 'state' | 'onChange' | 'fieldErrors'>) {
+  importCarryover,
+}: Pick<WizardProps, 'state' | 'onChange' | 'fieldErrors' | 'importCarryover'>) {
   const { t } = useLanguage()
   // Only the concepts the server accepts for this sport (the catalog's allowedSportsByConcept).
   const teamCountOptions = getTeamCountOptions(state.sport, getEffectiveLeagueType(state) ?? 'redraft', state.soccerPipeline)
   const teamCountStep = teamCountOptions.length > 1 ? teamCountOptions[1] - teamCountOptions[0] : 1
   const catalog = getClientLeagueCreateOptionsCatalog()
   const typeOptions = catalog.concepts.filter((concept) =>
-    concept.id !== 'idp' && isSportAllowedForType(state.sport, concept.id as LeagueTypeId),
+    concept.id !== 'idp' && isSportAllowedForType(state.sport, concept.id as LeagueTypeId) &&
+      (!importCarryover || getTeamCountOptions(state.sport, concept.id as LeagueTypeId, state.soccerPipeline).includes(state.teamCount)),
   )
   const showIdp = catalog.concepts.some((concept) => concept.id === 'idp') &&
-    (state.sport === 'NFL' || state.sport === 'NCAAF')
+    (state.sport === 'NFL' || state.sport === 'NCAAF') &&
+    (!importCarryover || getTeamCountOptions(state.sport, 'redraft', state.soccerPipeline).includes(state.teamCount))
 
   return (
     <section className="space-y-5" data-testid="g30-basics-step">
@@ -472,6 +477,7 @@ export function LeagueBasicsStep({
             step={teamCountStep}
             aria-describedby="g30-team-count-options"
             value={state.teamCount}
+            disabled={importCarryover}
             onChange={(event) => {
               const teamCount = Number(event.target.value)
               onChange({ teamCount, ...(state.leagueType === 'dynasty' ? { dynasty: fitDynastySetupToTeamCount(state.dynasty, teamCount) } : {}), ...(state.leagueType === 'best_ball' ? { bestBall: { ...state.bestBall, playoffTeams: Math.min(state.bestBall.playoffTeams, Math.max(0, teamCount)) } } : {}) })

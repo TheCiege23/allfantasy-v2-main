@@ -13,6 +13,7 @@ import type { CreateLeagueErrorResponse, CreateLeagueSuccessResponse } from '@/l
 import { logLeagueCreated } from '@/server/services/auditService'
 import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
+import { carryOverImportedLeague, ImportedLeagueCarryoverError } from '@/lib/league-creation/canonical/carryOverImportedLeague'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -36,6 +37,7 @@ export type ExecuteCanonicalLeagueCreationResult =
 export async function executeCanonicalLeagueCreation(args: {
   appUserId: string
   body: ValidatedCreateLeagueBody
+  sourceLeagueId?: string
 }): Promise<ExecuteCanonicalLeagueCreationResult> {
   const { appUserId, body } = args
   const engineDraft = normalizeDraftTypeForEngine(body.draftType)
@@ -72,23 +74,42 @@ export async function executeCanonicalLeagueCreation(args: {
 
   let createdLeagueId = ''
   let homepageUrl = ''
+  let importedPlayerCount = 0
+  let carryoverFinalized = false
 
   try {
     const result = await prisma.$transaction(
       async (tx) => {
-        return createCanonicalLeagueInTransaction(
+        const created = await createCanonicalLeagueInTransaction(
           tx as Prisma.TransactionClient,
           appUserId,
           body,
           engine,
           (ev, payload) => log(ev, payload)
         )
+        if (args.sourceLeagueId) {
+          importedPlayerCount = await carryOverImportedLeague(tx as Prisma.TransactionClient, {
+            sourceLeagueId: args.sourceLeagueId,
+            targetLeagueId: created.leagueId,
+            creatorUserId: appUserId,
+            sport: String(body.sport),
+            teamCount: body.teamCount,
+          })
+        }
+        return created
       },
       { maxWait: 20000, timeout: 25000 }
     )
     createdLeagueId = result.leagueId
     homepageUrl = result.homepageUrl
   } catch (e) {
+    if (e instanceof ImportedLeagueCarryoverError) {
+      return {
+        ok: false,
+        status: 400,
+        response: { success: false, error: e.message, errors: [{ path: 'sourceLeagueId', message: e.message }] },
+      }
+    }
     const detail = prismaErrorDetail(e)
     console.error(`${LOG_PREFIX} transaction_failed`, detail)
     recordProductEvent(CREATE_LEAGUE.SERVER_FAIL, {
@@ -153,21 +174,46 @@ export async function executeCanonicalLeagueCreation(args: {
   // Slice 7: auto-materialize the draft so every joined human is seated and
   // remaining slots are AI-managed orphans. Best-effort — commissioner can
   // always click "Fill empty slots" in the Pre-Draft Setup card if this fails.
-  try {
-    const { autoMaterializeDraftForLeague } = await import('@/lib/league-setup/autoMaterializeDraftForLeague')
-    const result = await autoMaterializeDraftForLeague(createdLeagueId)
-    if (result.ok) {
-      log('auto_materialize_success', {
-        leagueId: createdLeagueId,
-        slotOrderSeeded: result.slotOrderSeeded,
-        materializedCreated: result.materializedCreated,
-        materializedAlready: result.materializedAlready,
-      })
-    } else {
-      console.warn(`${LOG_PREFIX} auto_materialize_non_fatal`, result.reason)
+  if (args.sourceLeagueId) {
+    try {
+      const { runPostDraftFinalizationArtifacts } = await import('@/lib/live-draft-engine/postDraftFinalizeArtifacts')
+      await runPostDraftFinalizationArtifacts(createdLeagueId)
+    } catch (e) {
+      console.error(`${LOG_PREFIX} imported_roster_finalization_failed`, e)
     }
-  } catch (e) {
-    console.warn(`${LOG_PREFIX} auto_materialize_non_fatal`, e)
+    try {
+      const [season, materializedPlayers] = await Promise.all([
+        prisma.redraftSeason.findFirst({ where: { leagueId: createdLeagueId }, select: { id: true } }),
+        prisma.redraftRosterPlayer.count({ where: { roster: { leagueId: createdLeagueId }, droppedAt: null } }),
+      ])
+      carryoverFinalized = Boolean(season) && materializedPlayers >= importedPlayerCount
+      if (carryoverFinalized) {
+        await prisma.league.update({
+          where: { id: createdLeagueId },
+          data: { status: 'active', lifecycleState: 'active' },
+        })
+      }
+    } catch (e) {
+      console.error(`${LOG_PREFIX} imported_roster_verification_failed`, e)
+      carryoverFinalized = false
+    }
+  } else {
+    try {
+      const { autoMaterializeDraftForLeague } = await import('@/lib/league-setup/autoMaterializeDraftForLeague')
+      const result = await autoMaterializeDraftForLeague(createdLeagueId)
+      if (result.ok) {
+        log('auto_materialize_success', {
+          leagueId: createdLeagueId,
+          slotOrderSeeded: result.slotOrderSeeded,
+          materializedCreated: result.materializedCreated,
+          materializedAlready: result.materializedAlready,
+        })
+      } else {
+        console.warn(`${LOG_PREFIX} auto_materialize_non_fatal`, result.reason)
+      }
+    } catch (e) {
+      console.warn(`${LOG_PREFIX} auto_materialize_non_fatal`, e)
+    }
   }
 
   const resBody: CreateLeagueSuccessResponse = {
@@ -180,7 +226,7 @@ export async function executeCanonicalLeagueCreation(args: {
       teamCount: body.teamCount,
       draftType: body.draftType,
       scoringPreset: body.scoringPreset,
-      status: 'setup',
+      status: carryoverFinalized ? 'active' : 'setup',
       presetKey: engine.presetKey,
     },
     homepageUrl,
@@ -188,6 +234,9 @@ export async function executeCanonicalLeagueCreation(args: {
 
   if (engine.warnings.length > 0) {
     resBody.warnings = engine.warnings
+  }
+  if (args.sourceLeagueId && !carryoverFinalized) {
+    resBody.warnings = [...(resBody.warnings ?? []), 'Imported teams and rosters were copied, but native season materialization is pending. League setup remains open.']
   }
 
   log('success', { leagueId: createdLeagueId, homepageUrl })

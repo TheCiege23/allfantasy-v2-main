@@ -26,6 +26,9 @@ import { normalizeDraftTypeForEngineValidation } from '@/lib/draft-types/draftTy
 import { buildFantasyLeagueLeadMetaEvent } from '@/lib/meta-funnel-events'
 import { trackMetaServerEvent } from '@/lib/meta-capi'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import { prisma } from '@/lib/prisma'
+import { getLeagueRole, isCommissionerRole } from '@/lib/league/permissions'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import {
   findPremiumCreateSettingKeys,
   hasAfCommissionerCreateEntitlement,
@@ -60,6 +63,12 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
     )
   }
 
+  const rawObject = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {}
+  const sourceLeagueId = rawObject.sourceLeagueId
+  if (sourceLeagueId !== undefined && (typeof sourceLeagueId !== 'string' || !sourceLeagueId.trim())) {
+    return NextResponse.json({ success: false, error: 'Invalid imported league ID', errors: [] }, { status: 400 })
+  }
+
   const { body: sanitizedBody, strippedKeys } = stripForbiddenCreateLeagueFields(raw)
   if (strippedKeys.length > 0) {
     log('client_user_id_fields_stripped', { strippedKeys })
@@ -75,6 +84,28 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
       },
       { status: validated.status }
     )
+  }
+
+  if (typeof sourceLeagueId === 'string') {
+    const source = await prisma.league.findUnique({
+      where: { id: sourceLeagueId },
+      select: { id: true, platform: true, sport: true, leagueSize: true },
+    })
+    if (!source || isNativePlatform(source.platform) ||
+        !isCommissionerRole(await getLeagueRole(source.id, session.user.id))) {
+      return NextResponse.json({ success: false, error: 'Imported league unavailable', errors: [] }, { status: 403 })
+    }
+    const currentTeams = await prisma.leagueTeam.count({
+      where: { leagueId: source.id, lifecycleState: { not: 'ARCHIVED' } },
+    })
+    if (String(source.sport) !== String(validated.data.sport) ||
+        currentTeams !== validated.data.teamCount) {
+      return NextResponse.json({
+        success: false,
+        error: 'Sport and team count must match the imported league to carry over rosters.',
+        errors: [],
+      }, { status: 400 })
+    }
   }
 
   const catalog = await getLeagueCreateOptionsCatalog()
@@ -191,6 +222,7 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
 
   const exec = await executeCanonicalLeagueCreation({
     appUserId: resolvedUser.appUserId,
+    ...(typeof sourceLeagueId === 'string' ? { sourceLeagueId } : {}),
     body: {
       ...validated.data,
       timezone: validated.data.timezone?.trim() || catalog.defaultTimezone || 'America/New_York',
