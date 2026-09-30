@@ -64,8 +64,13 @@ const GUARD_CALL = /\b(assertAiSpendAllowed|isAiSpendEnabled)\s*\(/
  * Lowered to 38 on 2026-09-30, a DELETION: `app/api/instant/improve-trade/route.ts` was removed
  * together with `app/components/ImproveTradeModal.tsx`, its only fetcher, which nothing mounted.
  * Measured 39 on b85cdfb15; the guarded set differs by that one file only.
+ *
+ * Lowered to 37 on 2026-09-30, a DELETION: `app/api/start-sit/chimmy/route.ts` was removed with
+ * the rest of `app/api/start-sit/` and `components/StartSitPopup/`, its only fetcher, which nothing
+ * mounted (0 production requests in 7 days). Measured: 38 on origin/main, 37 on the branch, and
+ * the guarded sets differ by that one file only.
  */
-const MINIMUM = 38
+const MINIMUM = 37
 
 const ROOTS = ['lib', 'app', 'server', 'components']
 const SKIP_DIRS = new Set(['node_modules', '.next', 'dist', 'build', '__tests__', '.git'])
