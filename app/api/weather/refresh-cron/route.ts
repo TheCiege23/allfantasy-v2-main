@@ -90,6 +90,51 @@ function resolveGameCoords(g: {
   return null
 }
 
+/*
+ * 🛑 COLLEGE FOOTBALL IS OFF BY DEFAULT, AND THE OFF STATE STILL MEASURES.
+ *
+ * Measured 2026-09-29: 544 of the 600 rows this cron scanned were NCAAF, and none could be placed,
+ * because no venue table covers college stadiums. The only one that exists is `NCAAF_TEAM_STADIUM`
+ * (15 teams), reached through `resolveVenueForTeam` — which is exactly what My Team's
+ * `getGameWeather` reads for an NCAAF league, so prewarming through it lands on the reader's key.
+ *
+ * Every placed game is a paid provider call on nearly every run (a row older than 3h is stale and
+ * this runs every 3h), and that spend is the owner's call, not this route's. So unless
+ * `WEATHER_REFRESH_NCAAF` is exactly "true", NCAAF rows are only COUNTED: how many would be placed,
+ * the calls/day that implies, and samples of the two ways a row fails to place. The response says
+ * what enabling would cost before anyone enables it.
+ *
+ * A NAMED VENUE MUST AGREE WITH THE HOME TEAM'S STADIUM. College football plays neutral-site games
+ * (kickoff classics, rivalry games, bowls), and forecasting the home campus for one would write a
+ * confident wrong answer onto the key My Team reads. A row with no venue is accepted on the team.
+ */
+export function ncaafWeatherEnabled(): boolean {
+  return process.env.WEATHER_REFRESH_NCAAF === 'true'
+}
+
+const RUNS_PER_DAY = 8 // every 3 hours — see cron-schedule.json
+
+function venueKey(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+type NcaafResolution =
+  | { kind: 'placed'; lat: number; lng: number }
+  | { kind: 'unknown_team' }
+  | { kind: 'venue_mismatch'; stadium: string }
+
+function resolveNcaafCoords(g: { venue: string | null; homeTeam: string | null }): NcaafResolution {
+  const byTeam = resolveVenueForTeam({ sport: 'NCAAF', teamAbbrev: g.homeTeam })
+  if (byTeam.kind !== 'coords') return { kind: 'unknown_team' }
+  const venue = g.venue?.trim()
+  if (venue) {
+    const a = venueKey(venue)
+    const b = venueKey(byTeam.label)
+    if (!a.includes(b) && !b.includes(a)) return { kind: 'venue_mismatch', stadium: byTeam.label }
+  }
+  return { kind: 'placed', lat: byTeam.lat, lng: byTeam.lng }
+}
+
 // This branch added its own cron GET here; #284 landed an identical one further down
 // (kept), so both would have exported `GET` from the same module. Git auto-merged this
 // without a conflict because the two sit in different places — the duplicate export only
@@ -125,6 +170,11 @@ export async function POST(request: NextRequest) {
    * coordinate table covers them) and would crowd the dispatcher's 1,500-character log echo.
    */
   const unresolvedNflVenues = new Set<string>()
+  const ncaafOn = ncaafWeatherEnabled()
+  /** Distinct coords/day keys NCAAF rows place on — refreshed when on, only counted when off. */
+  const ncaafKeys = new Set<string>()
+  const ncaafUnknownTeams = new Set<string>()
+  const ncaafVenueMismatches = new Set<string>()
   let duplicates = 0
   let overCap = 0
   let scanLimitHit = false
@@ -151,7 +201,18 @@ export async function POST(request: NextRequest) {
     const seenKeys = new Set<string>()
     for (const r of rows) {
       if (!r.startTime) continue
-      const coords = resolveGameCoords(r)
+      let coords = resolveGameCoords(r)
+      if (!coords && r.sport === 'NCAAF') {
+        const res = resolveNcaafCoords(r)
+        if (res.kind === 'placed') {
+          ncaafKeys.add(buildWeatherCoordsCacheKey(res.lat, res.lng, r.startTime))
+          if (ncaafOn) coords = { lat: res.lat, lng: res.lng }
+        } else if (res.kind === 'unknown_team') {
+          ncaafUnknownTeams.add(String(r.homeTeam ?? '(none)'))
+        } else {
+          ncaafVenueMismatches.add(`${r.homeTeam} @ ${r.venue?.trim()} (home: ${res.stadium})`)
+        }
+      }
       if (!coords) {
         unresolved += 1
         unresolvedBySport[r.sport] = (unresolvedBySport[r.sport] ?? 0) + 1
@@ -287,10 +348,27 @@ export async function POST(request: NextRequest) {
   }
 
   const nflVenueMisses = [...unresolvedNflVenues].slice(0, 12)
+  /*
+   * Ahead of the NFL venue list in the response on purpose: the dispatcher echoes only the first
+   * 1,500 characters of the body into the Actions log, and this block is the measurement the owner
+   * needs before `WEATHER_REFRESH_NCAAF` is turned on. `estCallsPerDay` is an upper bound: it
+   * assumes every placeable game is refetched on every run, which is what a 3h staleness window
+   * on a 3h schedule does in steady state.
+   */
+  const ncaaf = {
+    enabled: ncaafOn,
+    placeable: ncaafKeys.size,
+    estCallsPerDay: ncaafKeys.size * RUNS_PER_DAY,
+    unknownTeam: ncaafUnknownTeams.size,
+    venueMismatch: ncaafVenueMismatches.size,
+    unknownTeamSamples: [...ncaafUnknownTeams].slice(0, 6),
+    venueMismatchSamples: [...ncaafVenueMismatches].slice(0, 4),
+  }
   console.info(
     `[weather/refresh-cron] refreshed ${refreshed} cache entries ` +
       `(scanned ${scanned}, unresolved ${unresolved}, duplicates ${duplicates}, overCap ${overCap})` +
-      (nflVenueMisses.length ? ` unresolved NFL venues: ${nflVenueMisses.join(' | ')}` : ''),
+      (nflVenueMisses.length ? ` unresolved NFL venues: ${nflVenueMisses.join(' | ')}` : '') +
+      ` ncaaf: ${JSON.stringify(ncaaf)}`,
   )
   // Deferred work is reported, never silently dropped: a run that refreshed 12 of 120 and one
   // that found only 12 to do are the same number otherwise.
@@ -302,6 +380,7 @@ export async function POST(request: NextRequest) {
     skipped,
     deferred,
     budgetExhausted: budget.exhausted(),
+    ncaaf,
     // How the window was spent before any refresh: rows read, rows with no location, copies of a
     // game already queued, and placeable games past the cap. `refreshed: 0` with a large
     // `unresolved` is the 2026-09-29 failure; with `scanned: 0` it is an empty schedule.
