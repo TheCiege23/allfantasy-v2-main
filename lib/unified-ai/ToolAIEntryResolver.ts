@@ -17,8 +17,10 @@ export interface ToolAIEntry {
  * 🛑 `psychological` and `psychological_profiles` have NO entry. Both pointed at
  * /api/leagues/[leagueId]/psychological-profiles/explain, which is retired to a constant
  * 410 (Milestone 32: manager characterisation is shown to nobody), and there is no
- * replacement to repoint them to. The keys stay in ToolAIEntryKey because other surfaces
- * still use them as envelope tool keys; this map only answers "where does this tool live".
+ * replacement to repoint them to. As of 2026-09-29 they are gone from ToolAIEntryKey too:
+ * no caller typed them. The `psychological` featureType that
+ * /api/leagues/[leagueId]/reputation/explain still sends is a DIFFERENT key space — the
+ * ai-tool-layer's ToolContextMap and the ai-orchestration normalizer — and stays there.
  */
 const TOOL_ENTRIES: Partial<Record<ToolAIEntryKey, Omit<ToolAIEntry, "key">>> = {
   trade_analyzer: {
