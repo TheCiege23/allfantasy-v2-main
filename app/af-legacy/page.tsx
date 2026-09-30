@@ -1845,85 +1845,6 @@ function AFLegacyContent() {
     }
   }
 
-  const analyzeInlineTrade = async () => {
-    if (!inlineSideA.trim() || !inlineSideB.trim()) {
-      setInlineTradeError('Please enter players for both sides')
-      return
-    }
-    gtagEvent('trade_analysis_started', { source: 'inline_evaluator' })
-    setInlineTradeLoading(true)
-    setInlineTradeError('')
-    setInlineTradeResult(null)
-    
-    const parsePlayers = (input: string) => {
-      return input.split(/[,\n]/).map(p => p.trim()).filter(Boolean)
-    }
-    
-    const sideAPlayers = parsePlayers(inlineSideA)
-    const sideBPlayers = parsePlayers(inlineSideB)
-    
-    try {
-      const res = await fetch('/api/legacy/trade/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sideA: sideAPlayers.map(name => ({ type: 'player', player: { name, pos: 'UNKNOWN' } })),
-          sideB: sideBPlayers.map(name => ({ type: 'player', player: { name, pos: 'UNKNOWN' } })),
-          format: inlineTradeFormat,
-          leagueId: tradeSelectedLeague || undefined,
-          username: username || undefined,
-          numTeams: effectiveNumTeams,
-        })
-      })
-      const rawResponse = await res.json()
-      if (!res.ok) {
-        setInlineTradeError(rawResponse.error || 'Failed to analyze trade')
-        return
-      }
-      const data = rawResponse.data || rawResponse
-      const confidenceRisk = rawResponse.confidenceRisk
-      const ok = await triggerGuardianCheck({
-        actionType: 'trade',
-        sideAPlayers,
-        sideBPlayers,
-        tradeGrade: data.grade,
-        verdict: data.verdict,
-        fairnessScore: data.fairnessScore || data.balanceScore,
-        netDelta: data.netDelta ? parseFloat(String(data.netDelta)) : undefined,
-        winProbShift: data.winProbabilityShift,
-        confidenceRisk: confidenceRisk,
-        format: inlineTradeFormat,
-        acceptancePct: data.acceptancePct,
-        acceptanceDrivers: data.acceptanceDrivers,
-        failureRiskLine: data.failureRiskLine,
-        tier: data.tier,
-        totalAssets: sideAPlayers.length + sideBPlayers.length,
-      })
-      if (!ok) return
-
-      const ea = rawResponse.engineAnalysis
-      const engineCounters = ea?.counters || data.counters
-      const engineChampEq = ea?.championshipEquity || data.championshipEquity
-      const engineReqForSim = rawResponse.engineRequest || undefined
-      const acceptBuckets = ea?.acceptanceProbability?.buckets || null
-      const offseasonCtx = rawResponse.offseasonContext || null
-      setInlineTradeResult({ ...data, confidenceRisk, counters: engineCounters || data.counters, championshipEquity: engineChampEq, engineRequest: engineReqForSim, acceptanceBuckets: acceptBuckets, offseasonContext: offseasonCtx })
-      setLastTradeResult({
-        sideA: sideAPlayers.map(name => ({ name })),
-        sideB: sideBPlayers.map(name => ({ name })),
-        grade: data.grade,
-        verdict: data.verdict,
-        leagueType: inlineTradeFormat
-      })
-      trackToolUse('trade_analyzer', { format: inlineTradeFormat })
-      gtagEvent('trade_analysis_completed', { source: 'inline_evaluator', grade: data.grade, verdict: data.verdict })
-    } catch {
-      setInlineTradeError('Network error - please try again')
-    } finally {
-      setInlineTradeLoading(false)
-    }
-  }
-
   const triggerGuardianCheck = async (actionData: Record<string, unknown>): Promise<boolean> => {
     if (guardianVisible) return false
     if (guardianResolveRef.current) {
@@ -10907,9 +10828,10 @@ function AFLegacyContent() {
                         {inlineTradeError && (
                           <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-sm text-rose-400 flex flex-wrap items-center justify-center gap-2">
                             <span className="flex-1 min-w-0 text-center">{inlineTradeError}</span>
+                            {/* Every error shown here comes from the Trade Hub report, so Retry re-runs it. */}
                             <button
                               type="button"
-                              onClick={() => { setInlineTradeError(''); analyzeInlineTrade(); }}
+                              onClick={() => { setInlineTradeError(''); generateTradeHubReport(); }}
                               disabled={inlineTradeLoading}
                               className="shrink-0 px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/30 text-rose-200 text-xs font-medium disabled:opacity-50"
                             >
