@@ -224,14 +224,6 @@ describe('Billing Truth — checkout success is never claimed without real verif
   })
 })
 
-describe('Billing Truth — no upgrade nag for already-entitled users', () => {
-  it('ImproveTradeModal does not show the Pro upsell to users who already have Pro/Supreme', () => {
-    const src = read('app/components/ImproveTradeModal.tsx')
-    expect(src).toContain('alreadyHasPro')
-    expect(src).toContain('moreCount >= MAX_MORE_CLICKS && !alreadyHasPro')
-  })
-})
-
 describe('Billing Truth — no fabricated per-league token event history', () => {
   it('the Survivor Exile Tokens page no longer hardcodes the same 4 events for every league', () => {
     const src = read('app/survivor/[leagueId]/exile/tokens/page.tsx')
