@@ -53,3 +53,15 @@ export function buildMatchupStrip(data: MatchupData | null, loadFailed = false):
     remaining: counts && counts.unknown === 0 ? { upcoming: counts.upcoming, live: counts.live } : null,
   }
 }
+
+/**
+ * What the strip shows after a refresh. A failed poll keeps the last good strip and says it is stale,
+ * rather than replacing real points with an error or quietly presenting old ones as current.
+ */
+export function nextStripState(
+  prev: MatchupStrip | null,
+  result: MatchupStrip | null | 'error',
+): { strip: MatchupStrip | null; stale: boolean } {
+  if (result === 'error') return { strip: prev, stale: prev != null }
+  return { strip: result, stale: false }
+}
