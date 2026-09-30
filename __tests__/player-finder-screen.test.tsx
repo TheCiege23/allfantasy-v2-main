@@ -1080,3 +1080,50 @@ describe('Player Finder — the start/sit call, league by league (Phase 3a)', ()
     expect(names).not.toContain('Waiver Warriors')
   })
 })
+
+/*
+ * AllFantasy's own projection on the Finder (2026-09-30). The loader sends the engine's
+ * standard-scoring number; the screen carries it into each league with that league's provider
+ * number, the same carry-over every /core surface uses (afEngineCarry.ts).
+ */
+describe('Player Finder — AllFantasy projection', () => {
+  const AF = { available: true as const, data: { points: 14.5, season: '2026', week: 12 } }
+  const carry = (leaguePts: number) => Math.round(14.5 * (leaguePts / 13.8) * 100) / 100
+
+  it('shows the AF tile across leagues at standard scoring', () => {
+    renderCore({ detail: { ...DETAIL, afProjection: AF } })
+    const tile = screen.getByText('AF proj wk 12').closest('.af-pf-tile') as HTMLElement
+    expect(tile.querySelector('.af-pf-tile-value')?.textContent).toBe('14.5')
+    expect(tile.textContent).toContain('Standard scoring')
+  })
+
+  it('carries AF into each league row by that row’s own provider figure', () => {
+    const { container } = renderCore({ detail: { ...DETAIL, afProjection: AF }, signedIn: true })
+    const rows = [...container.querySelectorAll('.af-pf-table tbody tr')]
+    let priced = 0
+    for (const row of rows) {
+      const proj = row.querySelector('td.af-pf-col-proj:not(.af-pf-col-af)')?.textContent?.trim() ?? ''
+      const af = row.querySelector('td.af-pf-col-af')?.textContent?.trim() ?? ''
+      if (/^\d/.test(proj)) {
+        priced += 1
+        expect(af).toBe(carry(Number(proj)).toFixed(1))
+      } else {
+        expect(af).toBe('—')
+      }
+    }
+    expect(priced).toBeGreaterThan(0)
+  })
+
+  it('in league mode the AF tile is carried into the held league’s scoring', () => {
+    renderCore({ detail: { ...DETAIL, afProjection: AF }, selectedLeagueId: 'L-gang', leagueView: LEAGUE_VIEW })
+    const tile = screen.getByText('AF proj wk 12').closest('.af-pf-tile') as HTMLElement
+    // League provider 9.8 against generic 13.8.
+    expect(tile.querySelector('.af-pf-tile-value')?.textContent).toBe(carry(9.8).toFixed(1))
+    expect(tile.textContent).toContain('this league’s scoring')
+  })
+
+  it('draws no AF tile when the loader sent no AF projection', () => {
+    renderCore()
+    expect(screen.queryByText(/^AF proj/)).toBeNull()
+  })
+})
