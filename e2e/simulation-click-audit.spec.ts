@@ -392,7 +392,7 @@ test.describe('@simulation full click audit', () => {
     await page.getByLabel('Playoff spots selector').fill('4')
     await page.getByRole('button', { name: 'Apply' }).click()
     await page.getByRole('button', { name: 'Rerun season simulation' }).click()
-    await page.getByRole('button', { name: 'Explain season simulation with AI' }).click()
+    await page.getByRole('button', { name: 'Explain season simulation with Chimmy' }).click()
     await expect(page.getByText(/Alpha leads the race/i)).toBeVisible()
     const playoffChatLink = page.getByRole('link', { name: 'Ask Chimmy about playoff odds →' })
     await expect(playoffChatLink).toHaveAttribute('href', /leagueId=league_sim_1/)

@@ -108,10 +108,10 @@ export function AICoachingPage({
   }, [plan?.coreAssets, timelineYears, league.teamCount])
 
   const chimmyHref = useMemo(() => {
-    if (!plan) return getChimmyChatHrefWithPrompt('Help me interpret my AI Coaching plan for this league.', chimmyBase)
+    if (!plan) return getChimmyChatHrefWithPrompt('Help me interpret my coaching plan for this league.', chimmyBase)
     const body = [
       `League: ${league.name}. Team: ${userTeam?.teamName ?? 'my team'}.`,
-      `AI Coaching — mode ${modeLabel(plan.mode)}, ${timelineYears}-year horizon, lens ${strategyLens.replace(/_/g, ' ')}.`,
+      `Coaching plan — mode ${modeLabel(plan.mode)}, ${timelineYears}-year horizon, lens ${strategyLens.replace(/_/g, ' ')}.`,
       `Confidence ${plan.confidence}%. ${plan.summary}`,
       `Priority actions: ${plan.priorityActions.slice(0, 5).join(' | ')}`,
       `Why are you recommending this path? What should I sell or buy first?`,
@@ -382,7 +382,7 @@ export function AICoachingPage({
               <div>
                 <h2 className="text-sm font-bold text-white">Ask Chimmy about this plan</h2>
                 <p className="mt-1 max-w-prose text-[12px] text-white/55">
-                  Opens your existing AI chat with this league, team, and coaching context preloaded — same Chimmy, richer prompt.
+                  Opens your existing chat with Chimmy with this league, team, and coaching context preloaded — same Chimmy, richer prompt.
                 </p>
               </div>
               <Link

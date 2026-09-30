@@ -89,9 +89,9 @@ const tutorialSteps: TutorialStep[] = [
   },
   {
     icon: "💬",
-    title: "AI Fantasy Coach",
+    title: "Chimmy, Your Fantasy Coach",
     tagline: "Your Personal Advisor",
-    description: "Chat with an AI that knows YOUR teams, YOUR leagues, and YOUR situation. Get personalized advice on any fantasy question.",
+    description: "Chat with Chimmy, who knows YOUR teams, YOUR leagues, and YOUR situation. Get personalized advice on any fantasy question.",
     color: "from-indigo-500 to-blue-500",
     tab: "chat",
   },

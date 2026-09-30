@@ -50,7 +50,7 @@ export function IDPWaiverSection({ leagueId, week }: { leagueId: string; week: n
           data-testid="idp-waiver-ai-targets"
         >
           <Sparkles className="h-3.5 w-3.5" />
-          {loading ? 'Loading…' : 'AI Targets'}
+          {loading ? 'Loading…' : "Chimmy's Targets"}
         </Button>
       </div>
       {targets?.length ? (
@@ -69,7 +69,7 @@ export function IDPWaiverSection({ leagueId, week }: { leagueId: string; week: n
         <p className="mt-3 text-sm text-white/60" data-testid="idp-waiver-empty">
           {loaded
             ? 'No IDP waiver targets stood out this week.'
-            : 'Tap AI Targets for personalized IDP waiver ideas from Chimmy.'}
+            : "Tap Chimmy's Targets for personalized IDP waiver ideas."}
         </p>
       )}
     </div>

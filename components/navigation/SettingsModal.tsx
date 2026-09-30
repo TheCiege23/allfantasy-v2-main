@@ -22,7 +22,7 @@ const TABS: { id: TabId; label: string; icon: React.ComponentType<any> }[] = [
   { id: "friends", label: "Friends", icon: Users },
   { id: "privacy", label: "Privacy", icon: Shield },
   { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "ai", label: "AI Settings", icon: Bot },
+  { id: "ai", label: "Chimmy Settings", icon: Bot },
   { id: "blocked", label: "Blocked Users", icon: Slash },
 ]
 
@@ -367,10 +367,10 @@ function AiSettings({ onClose }: { onClose: () => void }) {
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-        AI Settings
+        Chimmy Settings
       </h3>
       <p className="text-[11px]" style={{ color: "var(--muted)" }}>
-        Control how AllFantasy&apos;s AI assistant behaves and which providers it can use to personalize your advice.
+        Control how Chimmy behaves and which providers it can use to personalize your advice.
       </p>
       <Link
         href="/settings?tab=connected"

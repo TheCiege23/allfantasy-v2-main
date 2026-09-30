@@ -22,7 +22,7 @@ const TOOL_LINKS = [
   { label: "Trade analyzer", href: "/legacy?tab=trade" },
   { label: "Mock draft", href: "/legacy?tab=mock-draft" },
   { label: "Brackets", href: "/brackets" },
-  { label: "Chimmy AI", href: "/chimmy" },
+  { label: "Chimmy", href: "/chimmy" },
 ]
 
 const SPORT_LABELS: Record<string, string> = {
@@ -163,7 +163,7 @@ export function WelcomeFlow({
       {step === "tool_suggestions" && (
         <div className="space-y-4">
           <h2 className="text-xl font-semibold text-white">Try these tools</h2>
-          <p className="text-white/80 text-sm">Trade analyzer, mock draft, brackets, and Chimmy AI.</p>
+          <p className="text-white/80 text-sm">Trade analyzer, mock draft, brackets, and Chimmy.</p>
           <ul className="space-y-2">
             {TOOL_LINKS.map((tool) => (
               <li key={tool.href}>

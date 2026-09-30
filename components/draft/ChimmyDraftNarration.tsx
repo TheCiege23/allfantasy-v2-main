@@ -182,7 +182,7 @@ export function ChimmyDraftNarration({
             <p className="text-[12px] leading-relaxed text-white/60 italic">
               &ldquo;{data.analysis}&rdquo;
             </p>
-            <p className="mt-2 text-right text-[11px] text-cyan-300/50">— Chimmy, AllFantasy AI</p>
+            <p className="mt-2 text-right text-[11px] text-cyan-300/50">— Chimmy</p>
           </div>
         </div>
 

@@ -70,14 +70,14 @@ export default function AIWaiverRecommendationsPanel({ leagueId }: { leagueId: s
           setGeneratedAt(null)
           return
         }
-        setError(payload?.message || payload?.error || 'Failed to load AI waiver recommendations.')
+        setError(payload?.message || payload?.error || "Chimmy's waiver recommendations could not load.")
         return
       }
 
       setRecommendations(Array.isArray(payload.recommendations) ? payload.recommendations : [])
       setGeneratedAt(payload.generatedAt ?? null)
     } catch {
-      setError('Network error while loading AI waiver recommendations.')
+      setError("Network error while loading Chimmy's waiver recommendations.")
     } finally {
       setLoading(false)
     }
@@ -87,7 +87,7 @@ export default function AIWaiverRecommendationsPanel({ leagueId }: { leagueId: s
     <section className="rounded-xl border border-sky-400/25 bg-sky-500/5 p-4" data-testid="ai-waiver-recommendations-panel">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-sky-100">AI Waiver Recommendations</h2>
+          <h2 className="text-sm font-semibold text-sky-100">Chimmy&apos;s Waiver Recommendations</h2>
           <p className="mt-1 text-xs text-white/65">
             Recommendation-only guidance for add/drop targets, FAAB bids, and risk-aware priorities.
           </p>
@@ -100,13 +100,13 @@ export default function AIWaiverRecommendationsPanel({ leagueId }: { leagueId: s
           data-testid="ai-waiver-recommendations-load"
         >
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-          {loading ? 'Analyzing...' : hasResults ? 'Refresh AI suggestions' : 'Get AI suggestions'}
+          {loading ? 'Analyzing...' : hasResults ? "Refresh Chimmy's suggestions" : "Get Chimmy's suggestions"}
         </button>
       </div>
 
       {locked?.error === 'AF_PRO_REQUIRED' && (
         <div className="mt-3 rounded-lg border border-amber-400/30 bg-amber-500/10 p-3" data-testid="ai-waiver-recommendations-locked">
-          <p className="text-sm font-medium text-amber-100">AI waiver recommendations are an AF Pro feature.</p>
+          <p className="text-sm font-medium text-amber-100">Chimmy&apos;s waiver recommendations are an AF Pro feature.</p>
           <p className="mt-1 text-xs text-amber-100/85">
             Unlock AF Pro to get add/drop suggestions, FAAB bids, roster-fit analysis, and waiver deadline reminders.
           </p>

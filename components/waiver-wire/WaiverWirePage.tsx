@@ -1366,11 +1366,11 @@ export default function WaiverWirePage({
           <div>
             <h2 className="text-sm font-semibold text-[#ffd7e5]">Waiver AI Engine</h2>
             <p className="mt-1 text-xs text-white/60">
-              Deterministic waiver pickups scored from available players and team-needs context, with optional AI explanation.
+              Deterministic waiver pickups scored from available players and team-needs context, with an optional explanation from Chimmy.
             </p>
             {!aiAssistantEnabled && !aiAvailabilityLoading && (
               <p className="mt-1 text-[11px] text-amber-200">
-                AI assistant is disabled. Deterministic waiver scoring remains available.
+                Chimmy is switched off. Deterministic waiver scoring remains available.
               </p>
             )}
           </div>
@@ -1545,7 +1545,7 @@ export default function WaiverWirePage({
             className="inline-flex items-center gap-2 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3 py-2 text-xs text-[#ffb8d1] hover:bg-[#ff3d81]/20 transition-colors"
           >
             <MessageSquare className="h-3.5 w-3.5" />
-            {aiAssistantEnabled ? "Get AI waiver help" : "Open deterministic waiver guidance"}
+            {aiAssistantEnabled ? "Get Chimmy's waiver help" : "Open deterministic waiver guidance"}
           </Link>
         </div>
       </section>

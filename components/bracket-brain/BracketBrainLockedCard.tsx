@@ -23,7 +23,7 @@ export default function BracketBrainLockedCard({
             Bracket Brain AI
           </p>
           <p className="text-[11px] leading-snug text-white/45">
-            Upgrade to AF Pro for Ask AI and deep matchup explanations. Basic matchup stats above remain
+            Upgrade to AF Pro to ask Chimmy for deep matchup explanations. Basic matchup stats above remain
             available without Pro.
           </p>
           <Link

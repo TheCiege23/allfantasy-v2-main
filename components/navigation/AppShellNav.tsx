@@ -123,7 +123,7 @@ export default function AppShellNav({
                   href={chimmyEntry.href}
                   className="rounded-lg border p-2 transition hover:opacity-90"
                   style={{ borderColor: "color-mix(in srgb, var(--accent-cyan) 45%, var(--border))", background: "color-mix(in srgb, var(--accent-cyan) 14%, transparent)", color: "var(--accent-cyan-strong)" }}
-                  title="AI Chat"
+                  title="Chat with Chimmy"
                 >
                   <Sparkles className="h-4 w-4" />
                 </Link>

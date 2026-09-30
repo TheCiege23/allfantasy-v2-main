@@ -254,7 +254,7 @@ export function PlayerComparisonPremiumView({ data, leagueId, className, compact
       >
         <div className="mb-2 flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-sky-300" />
-          <p className="text-sm font-semibold text-white">AI summary</p>
+          <p className="text-sm font-semibold text-white">Chimmy&apos;s summary</p>
           {data.explanation?.source === 'ai' ? (
             <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-[11px] font-medium text-sky-200">
               AI
@@ -291,7 +291,7 @@ export function PlayerComparisonPremiumView({ data, leagueId, className, compact
             data.start_vs_extras?.actions?.ask_chimmy.href ??
             `/chimmy/chat?prompt=${encodeURIComponent(`Compare ${a.name} vs ${b.name}`)}&sport=${encodeURIComponent(data.sport)}${leagueId ? `&leagueId=${encodeURIComponent(leagueId)}` : ''}`
           }
-          label="AI chat"
+          label="Chat with Chimmy"
           sub="Ask Chimmy"
         />
         <WorkflowButton

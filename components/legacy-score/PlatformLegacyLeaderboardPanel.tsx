@@ -76,7 +76,7 @@ export default function PlatformLegacyLeaderboardPanel() {
     setNarrativeKey(key)
     setNarrative(null)
     if (!row.leagueId) {
-      setNarrative("This entry is platform-scoped. Open a league-scoped record to generate a detailed AI explanation.")
+      setNarrative("This entry is platform-scoped. Open a league-scoped record to get a detailed explanation from Chimmy.")
       return
     }
     const res = await fetch(`/api/leagues/${encodeURIComponent(row.leagueId)}/legacy-score/explain`, {
@@ -211,7 +211,7 @@ export default function PlatformLegacyLeaderboardPanel() {
                     onClick={() => void explainRow(row)}
                     data-testid={`platform-legacy-explain-${key}`}
                   >
-                    AI explain
+                    Explain with Chimmy
                   </button>
                 </div>
               </article>

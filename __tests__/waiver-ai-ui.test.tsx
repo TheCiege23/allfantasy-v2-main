@@ -49,7 +49,8 @@ describe('Waiver AI UI', () => {
     await waitFor(() => {
       expect(screen.getByTestId('ai-waiver-recommendations-locked')).toBeInTheDocument()
     })
-    expect(screen.getByText(/AI waiver recommendations are an AF Pro feature/i)).toBeInTheDocument()
+    // Brand voice: the panel names Chimmy, never a bare "AI" (was "AI waiver recommendations ...").
+    expect(screen.getByText(/Chimmy's waiver recommendations are an AF Pro feature/i)).toBeInTheDocument()
   })
 
   it('renders AF Pro recommendation response fields and deeper analysis link', async () => {

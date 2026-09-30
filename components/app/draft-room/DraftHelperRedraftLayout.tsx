@@ -93,7 +93,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
         ? error
         : recommendation
           ? `${recommendation.player.name} · ${truncate(recommendation.reason, 96)}`
-          : 'Expand for AI explanation, picks, scarcity, and queue actions'
+          : "Expand for Chimmy's explanation, picks, scarcity, and queue actions"
 
   const warSubtitle =
     warRoom?.snapshot?.bestPick?.name != null
@@ -109,7 +109,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
     sportsFeed?.available && sportsFeed.headlines[0]?.title
       ? sportsFeed.headlines[0].title
       : aiFeatureStatus?.chimmyReady
-        ? 'Feeds + AI features active — expand for headlines & injuries'
+        ? 'Feeds + Chimmy active — expand for headlines & injuries'
         : 'Expand for news, injuries, and tool status'
 
   const chimmySubtitle = chimmyToolSummary ? truncate(chimmyToolSummary, 100) : 'Draft-aware assistant with league context'
@@ -481,7 +481,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                 </div>
               ) : (
                 <p className="mt-2 text-[11px] text-white/50">
-                  Sports feed is standing by. Draft AI still works from the live room context even while feed rows are sparse.
+                  Sports feed is standing by. Chimmy still works from the live room context even while feed rows are sparse.
                 </p>
               )}
             </div>
@@ -492,7 +492,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
           variant="redraft_snake"
           persistenceKey="af:draft:redraft:sec:chimmy"
           defaultOpen
-          title="Chimmy AI chat"
+          title="Chat with Chimmy"
           collapsedSubtitle={chimmySubtitle}
           testId="draft-helper-accordion-chimmy"
         >
@@ -501,7 +501,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
             data-testid="draft-helper-chimmy-panel"
           >
             <p className="mb-2 text-[11px] leading-relaxed text-white/70">
-              Draft-aware chat uses your league, sport, queue, and live AI context inside the room.
+              Draft-aware chat uses your league, sport, queue, and live draft context inside the room.
             </p>
             {aiAssistantEnabled ? (
               <ChimmyChatPanel

@@ -92,7 +92,7 @@ function buildFallbackSummary(item: TrendFeedItem): TrendSummary {
   return {
     headline: `${displayName} is flagged as a ${trendLabel.toLowerCase()}.`,
     rationale: `Trend score ${item.trendScore.toFixed(1)} with usage ${formatSigned(item.signals?.usageChange ?? 0, 2)} and share ${formatPercent(item.signals?.minutesOrSnapShare ?? 0)}.`,
-    recommendation: 'Open the AI overlay for a provider-backed explanation.',
+    recommendation: "Open Chimmy's insight for a fuller explanation.",
   }
 }
 
@@ -312,7 +312,7 @@ function TrendCard({ item }: { item: TrendFeedItem }) {
           disabled={loadingInsight}
           className="rounded-full border border-slate-300/90 bg-white px-4 py-2 text-sm font-medium text-slate-900 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500 dark:hover:bg-slate-800"
         >
-          {loadingInsight ? 'Loading...' : 'Get AI insight'}
+          {loadingInsight ? 'Loading...' : "Get Chimmy's insight"}
         </button>
         {insight && (
           <div className="mt-4 grid gap-3 xl:grid-cols-3">

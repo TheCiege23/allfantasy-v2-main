@@ -35,7 +35,7 @@ const WALKTHROUGH_CARDS = [
   },
   {
     icon: Bot,
-    title: "AI assistant",
+    title: "Chimmy, your assistant",
     description: "Chimmy helps with trades, waivers, drafts, and strategy.",
   },
 ]
@@ -312,7 +312,7 @@ export default function OnboardingFunnelClient({
             AI features to try
           </h2>
           <p className="text-white/80">
-            Trade grades, waiver priorities, draft help, and Chimmy—your AI assistant. Click any card to try it.
+            Trade grades, waiver priorities, draft help, and Chimmy—your fantasy assistant. Click any card to try it.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             {AI_FEATURE_CARDS.map(({ icon: Icon, title, description, href }) => (

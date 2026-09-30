@@ -118,7 +118,7 @@ export default function ChimmyLandingClient({ trackRecord = null }: { trackRecor
           <section className="mt-10">
             <h2 className="text-xl font-semibold mb-4">Use Chimmy inside AllFantasy</h2>
             <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
-              Open Messages AI chat to continue league-aware conversations, or launch from AI Hub and tools.
+              Open your chat with Chimmy in Messages to continue league-aware conversations, or launch from the Chimmy hub and tools.
             </p>
             <div className="flex flex-wrap gap-3">
               <Link
@@ -141,7 +141,7 @@ export default function ChimmyLandingClient({ trackRecord = null }: { trackRecor
                 style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
               >
                 <Zap className="h-4 w-4" />
-                AI Hub
+                Chimmy Hub
               </Link>
               <Link
                 href="/af-legacy"
@@ -163,7 +163,7 @@ export default function ChimmyLandingClient({ trackRecord = null }: { trackRecor
               </li>
               <li>
                 <Link href="/tools/ai-draft-assistant" className="rounded-lg border px-3 py-2 text-sm hover:opacity-90" style={{ borderColor: 'var(--border)' }}>
-                  AI Draft Assistant
+                  Chimmy Draft Assistant
                 </Link>
               </li>
               <li>

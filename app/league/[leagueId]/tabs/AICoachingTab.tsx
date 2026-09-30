@@ -16,7 +16,7 @@ export function AICoachingTab({ league, userTeam, sport }: AICoachingTabProps) {
     <div className="min-h-0 px-1 sm:px-0">
       <FeatureGate
         featureId="league_ai_coaching"
-        featureNameOverride="League AI Coaching"
+        featureNameOverride="League Coaching with Chimmy"
         className="rounded-2xl border border-white/[0.08] bg-[#050814]/80 p-5 sm:p-7"
         showTokenFallback={false}
       >

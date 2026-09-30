@@ -228,7 +228,7 @@ test.describe("@relationship integration click audit", () => {
     await page.getByLabel("Unified insights season filter").fill("2026");
     await page.getByRole("button", { name: "Refresh" }).click();
     await page.getByRole("button", { name: "Sync layer" }).click();
-    await page.getByRole("button", { name: "AI explain" }).first().click();
+    await page.getByRole("button", { name: "Explain with Chimmy" }).first().click();
     await expect.poll(() => explainPosts.length).toBeGreaterThan(0);
 
     await page.getByRole("link", { name: "Rivalry context" }).first().click();

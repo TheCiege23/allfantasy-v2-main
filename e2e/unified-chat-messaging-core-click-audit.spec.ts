@@ -309,7 +309,7 @@ test.describe("@db @messaging unified chat click audit", () => {
     await page.getByRole("button", { name: "Back" }).click()
     await expect(page.getByRole("button", { name: /Weekend Waiver Group/i }).first()).toBeVisible()
 
-    const aiChatButton = page.getByRole("button", { name: /AI Chatbot|AI Chat/i }).first()
+    const aiChatButton = page.getByRole("button", { name: /^Chimmy$|AI Chatbot|AI Chat/i }).first()
     if (await aiChatButton.isVisible().catch(() => false)) {
       await aiChatButton.click()
     } else {

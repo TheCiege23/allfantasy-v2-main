@@ -623,7 +623,7 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
     } catch {
       setCoachInsights(prev => ({
         ...prev,
-        [team.rosterId]: { bullets: ['AI Coach is temporarily unavailable.'], challenge: '', tone: 'motivational' },
+        [team.rosterId]: { bullets: ['Chimmy is temporarily unavailable.'], challenge: '', tone: 'motivational' },
       }))
     } finally {
       setLoadingCoach(null)

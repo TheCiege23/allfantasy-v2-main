@@ -336,7 +336,7 @@ function LegacyScoreCard({
               ? "…"
               : explainKey === rowKey && explainNarrative
                 ? "Hide"
-                : "AI explain"}
+                : "Explain with Chimmy"}
           </button>
         </div>
       </div>

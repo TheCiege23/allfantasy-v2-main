@@ -607,7 +607,7 @@ export function LeagueSettingsTab({
         />
         <SettingsRow
           label="AI Auto-Pick"
-          description="Chimmy AI drafts intelligently when timer expires — considers roster build, positional scarcity, projections, and bye weeks."
+          description="Chimmy drafts intelligently when timer expires — considers roster build, positional scarcity, projections, and bye weeks."
           faqText="AI Auto-Pick uses Chimmy to make smart draft decisions. Falls back to CPU if AI unavailable."
           control={
             <div>

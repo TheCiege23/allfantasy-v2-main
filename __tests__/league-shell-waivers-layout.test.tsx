@@ -118,7 +118,7 @@ describe('League shell layout and waivers integration', () => {
   it('renders AF Pro waiver AI locked/recommendations panel within waiver page', () => {
     expect(waiverWire).toContain('<AIWaiverRecommendationsPanel leagueId={leagueId} />')
     expect(waiverAiPanel).toContain('AF_PRO_REQUIRED')
-    expect(waiverAiPanel).toContain('AI waiver recommendations are an AF Pro feature.')
+    expect(waiverAiPanel).toContain('Chimmy&apos;s waiver recommendations are an AF Pro feature.')
   })
 
   it('renders commissioner waiver insights panel with lock state within waiver page', () => {

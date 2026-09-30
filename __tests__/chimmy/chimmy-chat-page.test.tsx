@@ -126,7 +126,9 @@ describe('/chimmy/chat is the drawer\'s Chimmy tab, full screen', () => {
     expect(screen.getByText('Chimmy answers may cost 9 tokens. Under 2 answers\' worth, your balance tops back up to 2 once a day. Free lookups and typing cost nothing.')).toBeInTheDocument()
 
     // What the hands-on test saw on the old page, none of which the drawer has.
-    for (const gone of [/AI Quick Ask/, /AI Hub/, /AI Status/, /Wallet Summary/, /Chimmy shortcuts/, /Assistant mode/]) {
+    // The right-rail headings were relabelled Chimmy Quick Ask / Chimmy Hub / Chimmy Status (brand
+    // voice); both spellings stay forbidden so the absence check cannot pass by rename alone.
+    for (const gone of [/AI Quick Ask/, /AI Hub/, /AI Status/, /Chimmy Quick Ask/, /Chimmy Hub/, /Chimmy Status/, /Wallet Summary/, /Chimmy shortcuts/, /Assistant mode/]) {
       expect(screen.queryByText(gone)).toBeNull()
     }
     expect(screen.queryByTestId('chimmy-chat-shell')).toBeNull()

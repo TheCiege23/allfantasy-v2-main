@@ -317,8 +317,8 @@ export function UnifiedRelationshipInsightsPanel({ leagueId }: { leagueId: strin
                     {explainLoadingId === row.id
                       ? 'Explaining…'
                       : explainByRow[row.id]
-                        ? 'Hide AI explain'
-                        : 'AI explain'}
+                        ? "Hide Chimmy's explanation"
+                        : 'Explain with Chimmy'}
                   </button>
                 </div>
                 {explainByRow[row.id] && (

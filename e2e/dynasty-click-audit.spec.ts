@@ -224,7 +224,7 @@ test.describe('@dynasty full click audit', () => {
     await page.getByLabel('Dynasty team selector').selectOption('teamB')
     await page.getByLabel('Dynasty comparison selector A').selectOption('teamA')
     await page.getByLabel('Dynasty comparison selector B').selectOption('teamC')
-    await page.getByRole('button', { name: 'Get AI dynasty advice' }).click()
+    await page.getByRole('button', { name: "Get Chimmy's dynasty advice" }).click()
     await expect(page.getByText(/Move one aging scorer/i)).toBeVisible()
     await expect(page.getByRole('link', { name: 'Open trade analyzer with dynasty context' })).toHaveAttribute(
       'href',
@@ -236,7 +236,7 @@ test.describe('@dynasty full click audit', () => {
     await page.goto('/app/dynasty-insights')
     await page.getByLabel('Dynasty insights sport filter').selectOption('SOCCER')
     await page.getByLabel('Dynasty insights position filter').selectOption('FWD')
-    await page.getByRole('button', { name: 'Get AI dynasty insights' }).click()
+    await page.getByRole('button', { name: "Get Chimmy's dynasty insights" }).click()
     await expect(page.getByText(/Age curve \(SOCCER FWD\)/i)).toBeVisible()
     await expect(page.getByRole('heading', { name: 'AI insight' })).toBeVisible()
 

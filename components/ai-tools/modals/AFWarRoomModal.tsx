@@ -62,7 +62,7 @@ const VIEW_TABS: { id: WarRoomViewTabId; label: string }[] = [
   { id: 'power', label: 'Power' },
   { id: 'schedule', label: 'Schedule' },
   { id: 'team_outlook', label: 'Team Outlook' },
-  { id: 'ai_chat', label: 'AI Chat' },
+  { id: 'ai_chat', label: 'Chimmy Chat' },
 ]
 
 const DEFAULT_TOGGLES: WarRoomToggles = {

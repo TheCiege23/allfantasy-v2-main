@@ -240,7 +240,7 @@ test.describe('@player-trend full click audit', () => {
     await expect(page.getByRole('heading', { name: 'Player trend feed' })).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'Sport' })).toHaveValue('NBA')
     await expect(page.getByRole('combobox', { name: 'Timeframe' })).toHaveValue('30d')
-    await page.getByRole('button', { name: 'Get AI insight' }).first().click()
+    await page.getByRole('button', { name: "Get Chimmy's insight" }).first().click()
     await expect(page.getByText('DeepSeek math validation')).toBeVisible()
     await expect(page.getByText('OpenAI explanation')).toBeVisible()
     await page.getByRole('combobox', { name: 'Sport' }).selectOption('SOCCER')

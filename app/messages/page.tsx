@@ -17,7 +17,7 @@ export default function MessagesPage() {
       <section className="mode-panel rounded-2xl p-5">
         <h1 className="text-2xl font-semibold mode-text">Messages</h1>
         <p className="mt-1 text-sm mode-muted">
-          Unified inbox for DMs, group chats, and AI chat.
+          Unified inbox for DMs, group chats, and your chat with Chimmy.
         </p>
       </section>
 

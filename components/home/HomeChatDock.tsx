@@ -280,7 +280,7 @@ export default function HomeChatDock() {
       ? "League Chat"
       : activeTab === "dm"
       ? "Private DMs"
-      : "AI Chat"
+      : "Chimmy"
 
   if (!open) {
     return (
@@ -333,7 +333,7 @@ export default function HomeChatDock() {
               className="text-[11px]"
               style={{ color: "var(--muted2)" }}
             >
-              League talk, private DMs, and AI coaching in one dock.
+              League talk, private DMs, and coaching from Chimmy in one dock.
             </p>
           </div>
         </div>
@@ -377,7 +377,7 @@ export default function HomeChatDock() {
             active={activeTab === "ai"}
             onClick={() => setActiveTab("ai")}
             icon={<Sparkles className="h-3 w-3" />}
-            label="AI"
+            label="Chimmy"
           />
         </div>
       </div>
@@ -758,7 +758,7 @@ export default function HomeChatDock() {
                 activeThreadBlockedDirect
                   ? "Conversation blocked. Unblock to message."
                   : activeTab === "ai"
-                  ? "Ask the AI coach about a trade or matchup…"
+                  ? "Ask Chimmy about a trade or matchup…"
                   : "Message league, @mention, or /poll…"
               }
               className="w-full bg-transparent text-xs outline-none"

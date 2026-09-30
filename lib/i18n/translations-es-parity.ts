@@ -220,7 +220,7 @@ export const translationsEsParity: Record<string, string> = {
   "league.tab.schedule": "Calendario",
   "league.tab.scores": "Marcadores",
   "league.tab.warRoom": "Sala de guerra",
-  "league.tab.aiCoaching": "Coaching IA",
+  "league.tab.aiCoaching": "Coaching con Chimmy",
   "league.tab.settings": "⚙ Ajustes",
   "league.tab.squad": "Plantilla",
   "league.tab.standings": "Posiciones",

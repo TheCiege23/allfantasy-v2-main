@@ -95,7 +95,7 @@ import { buildChimmyToolDisplayContext } from "@/lib/chimmy-interface"
 const TABS = [
   { id: "dm" as const, label: "Private DMs" },
   { id: "groups" as const, label: "Group Chats" },
-  { id: "ai" as const, label: "AI Chatbot" },
+  { id: "ai" as const, label: "Chimmy" },
 ]
 
 function buildDmAISeedPrompt(messages: PlatformChatMessage[]): string {
@@ -1015,7 +1015,7 @@ export default function MessagesContent() {
                           title="Ask Chimmy about this conversation"
                           aria-label="Ask Chimmy about this conversation"
                         >
-                          Ask AI
+                          Ask Chimmy
                         </button>
                       )}
                       {selectedThread?.threadType === "group" && (

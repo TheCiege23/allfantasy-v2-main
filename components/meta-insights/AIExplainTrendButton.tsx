@@ -51,7 +51,7 @@ export function AIExplainTrendButton({
         type="button"
         onClick={handleClick}
         className="rounded border border-violet-400/50 bg-violet-500/10 px-2 py-1 text-sm text-violet-300 hover:bg-violet-500/20"
-        aria-label="Explain this trend with AI"
+        aria-label="Explain this trend with Chimmy"
       >
         Explain this trend
       </button>
@@ -59,7 +59,7 @@ export function AIExplainTrendButton({
         <div
           className="absolute right-0 top-full z-10 mt-1 w-72 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-800"
           role="dialog"
-          aria-label="AI trend explanation"
+          aria-label="Chimmy's trend explanation"
         >
           {loading && <p className="text-xs text-slate-500">Loading…</p>}
           {error && <p className="text-xs text-red-500">{error}</p>}

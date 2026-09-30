@@ -381,7 +381,7 @@ export function LeagueShell({
         // engines (league-pulse, manager-intelligence, /api/league/history,
         // /api/draft/intel), now reachable per league here too.
         { id: 'decide', label: 'Decide' },
-        { id: 'ai_coaching', label: 'AI Coaching' },
+        { id: 'ai_coaching', label: 'Chimmy Coaching' },
         { id: 'draft', label: 'Draft' },
         { id: 'draft_intel', label: 'Live Intel' },
         { id: 'roster', label: 'My Team' },

@@ -89,7 +89,7 @@ describe('NFL redraft core — LeagueShell tabDefs branch', () => {
      * ⚠ `ai_coaching` CAME OFF THIS LIST DELIBERATELY. The guard is about tabs
      * LEAKING in from the generic path — ids that appear with no curation and
      * bloat the compact redraft shell. ai_coaching is now the opposite of that:
-     * an explicit `{ id: 'ai_coaching', label: 'AI Coaching' }` sitting in the
+     * an explicit `{ id: 'ai_coaching', label: 'Chimmy Coaching' }` sitting in the
      * hand-written core list between `decide` and `draft`, with a label, which
      * an injected tab would not have.
      *
@@ -104,7 +104,8 @@ describe('NFL redraft core — LeagueShell tabDefs branch', () => {
       expect(branch, `forbidden tab id '${id}' leaked into the nflRedraftCore branch`).not.toMatch(re)
     }
     // Curated, not injected: present AND labelled, in the hand-written list.
-    expect(branch).toMatch(/\{ id: 'ai_coaching', label: 'AI Coaching' \}/)
+    // Label is Chimmy's, never bare "AI" (brand voice — was 'AI Coaching').
+    expect(branch).toMatch(/\{ id: 'ai_coaching', label: 'Chimmy Coaching' \}/)
   })
 
   it('only exposes the Settings tab in the redraft branch behind an isCommissioner gate', () => {

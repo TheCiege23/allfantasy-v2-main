@@ -66,7 +66,7 @@ export default async function PaidRestrictedPage({
           <ul className="space-y-2 text-emerald-100/90">
             <li>✅ Create a free account</li>
             <li>✅ Join and participate in free leagues</li>
-            <li>✅ Use AI tools (Chimmy AI, Trade Analyzer, etc.)</li>
+            <li>✅ Use Chimmy and the analysis tools (Trade Analyzer, etc.)</li>
             <li>✅ Draft, set lineups, manage rosters</li>
             <li>✅ Compete for fun with friends</li>
           </ul>
