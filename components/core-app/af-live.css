@@ -2792,3 +2792,43 @@
     order: -1;
   }
 }
+
+/* ── Your matchup strip ─────────────────────────────────────────── */
+.af-live-matchup {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--af-border, rgba(255, 255, 255, 0.12));
+  border-radius: 12px;
+}
+.af-live-matchup-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+.af-live-matchup-team {
+  flex: 1 1 120px;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.af-live-matchup-team:last-child {
+  text-align: right;
+}
+.af-live-matchup-score {
+  font-size: 22px;
+  font-weight: 700;
+}
+.af-live-matchup[data-lead='lead'] .af-live-matchup-score:nth-of-type(1),
+.af-live-matchup[data-lead='trail'] .af-live-matchup-score:nth-of-type(2) {
+  color: var(--af-good, #3ecf8e);
+}
+.af-live-matchup-meta,
+.af-live-matchup-note {
+  margin: 6px 0 0;
+  font-size: 13px;
+  opacity: 0.8;
+}
+.af-live-matchup-note {
+  margin: 0;
+}

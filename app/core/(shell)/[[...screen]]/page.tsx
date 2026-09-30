@@ -85,6 +85,7 @@ import { getMyTeamData } from '@/lib/core-app/myTeam'
 import MyTeamBoard from '@/components/core-app/MyTeamBoard'
 import { getMyTeamPulse } from '@/lib/core-app/myTeamPulse'
 import { getMatchupData } from '@/lib/core-app/matchup'
+import { buildMatchupStrip } from '@/lib/live/matchupStrip'
 import MatchupPulseBoard from '@/components/core-app/MatchupPulseBoard'
 import { getMatchupPulse } from '@/lib/core-app/matchupPulse'
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
@@ -2763,6 +2764,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     : null
   const liveDefaultSport = liveHeldLeague ? normalizeToLiveSport(String(liveHeldLeague.sport ?? 'NFL')) : 'NFL'
 
+  /* Your matchup in the held league, through the same loader `/core/matchup` uses. */
+  let liveMatchupFailed = false
+  const liveMatchup =
+    activeKey === 'live' && !liveGameId && selectedLeagueId
+      ? await getMatchupData(selectedLeagueId, userId, null, leagueCtx).catch((e: unknown) => {
+          console.error('[core/live] matchup read failed', e)
+          liveMatchupFailed = true
+          return null
+        })
+      : null
+  const liveMatchupStrip = buildMatchupStrip(liveMatchup, liveMatchupFailed)
+
   const liveScores =
     activeKey === 'live' && !liveGameId
       ? await getLivePageData({
@@ -4609,7 +4622,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             backHref={`/core/live?sport=${encodeURIComponent(liveGameSport)}${selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''}`}
           />
         ) : liveScores ? (
-          <LiveScores data={liveScores} selectedLeagueId={selectedLeagueId} />
+          <LiveScores data={liveScores} selectedLeagueId={selectedLeagueId} matchupStrip={liveMatchupStrip} />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
