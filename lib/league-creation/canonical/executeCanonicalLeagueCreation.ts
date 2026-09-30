@@ -14,7 +14,6 @@ import { logLeagueCreated } from '@/server/services/auditService'
 import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { carryOverImportedLeague, ImportedLeagueCarryoverError } from '@/lib/league-creation/canonical/carryOverImportedLeague'
-import { finalizeImportedCarryover } from '@/lib/league-creation/canonical/finalizeImportedCarryover'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -75,7 +74,6 @@ export async function executeCanonicalLeagueCreation(args: {
 
   let createdLeagueId = ''
   let homepageUrl = ''
-  let carryoverFinalized = false
 
   try {
     const result = await prisma.$transaction(
@@ -174,14 +172,10 @@ export async function executeCanonicalLeagueCreation(args: {
   // Slice 7: auto-materialize the draft so every joined human is seated and
   // remaining slots are AI-managed orphans. Best-effort — commissioner can
   // always click "Fill empty slots" in the Pre-Draft Setup card if this fails.
-  if (args.sourceLeagueId) {
-    try {
-      carryoverFinalized = (await finalizeImportedCarryover(createdLeagueId)).complete
-    } catch (e) {
-      console.error(`${LOG_PREFIX} imported_roster_finalization_failed`, e)
-      carryoverFinalized = false
-    }
-  } else {
+  // The create response must return after the transaction commits. A full imported
+  // roster can take longer to materialize than this request's runtime budget.
+  // The wizard invokes the commissioner-only finalizer in a separate retryable request.
+  if (!args.sourceLeagueId) {
     try {
       const { autoMaterializeDraftForLeague } = await import('@/lib/league-setup/autoMaterializeDraftForLeague')
       const result = await autoMaterializeDraftForLeague(createdLeagueId)
@@ -210,7 +204,7 @@ export async function executeCanonicalLeagueCreation(args: {
       teamCount: body.teamCount,
       draftType: body.draftType,
       scoringPreset: body.scoringPreset,
-      status: carryoverFinalized ? 'active' : 'setup',
+      status: 'setup',
       presetKey: engine.presetKey,
     },
     homepageUrl,
@@ -219,7 +213,7 @@ export async function executeCanonicalLeagueCreation(args: {
   if (engine.warnings.length > 0) {
     resBody.warnings = engine.warnings
   }
-  if (args.sourceLeagueId && !carryoverFinalized) {
+  if (args.sourceLeagueId) {
     resBody.warnings = [
       ...(resBody.warnings ?? []),
       {

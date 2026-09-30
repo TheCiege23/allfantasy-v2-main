@@ -122,6 +122,26 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
 
   const completionIssues = useMemo(() => analyzeCreateLeagueCompletion(state), [state])
 
+  const finishImportedLeague = useCallback(async (leagueId: string, href: string) => {
+    setRetryingFinalization(true)
+    try {
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/import-carryover/finalize`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      const result = (await response.json()) as { complete?: boolean; error?: string }
+      if (response.ok && result.complete) {
+        router.push(href)
+      } else {
+        setCreationWarning(result.error ?? 'Your league was created, but roster setup is still pending. Retry setup or open the league to review it.')
+      }
+    } catch {
+      setCreationWarning('Your league was created, but roster setup could not be completed. Please retry setup.')
+    } finally {
+      setRetryingFinalization(false)
+    }
+  }, [router])
+
   const handleSubmit = useCallback(async () => {
     setSubmitting(true)
     setSubmitError(null)
@@ -137,9 +157,11 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       }
       clearPersistedV2State()
       if (result.warning) {
+        const href = result.redirectTo ?? (result.leagueId ? `/core?league=${encodeURIComponent(result.leagueId)}` : '/core')
         setCreatedLeagueId(result.leagueId ?? null)
-        setCreatedLeagueHref(result.redirectTo ?? (result.leagueId ? `/core?league=${encodeURIComponent(result.leagueId)}` : '/core'))
+        setCreatedLeagueHref(href)
         setCreationWarning(result.warning)
+        if (result.leagueId) await finishImportedLeague(result.leagueId, href)
         return
       }
       router.push(result.redirectTo ?? '/dashboard')
@@ -148,28 +170,12 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     } finally {
       setSubmitting(false)
     }
-  }, [router, state, t, importSourceLeagueId])
+  }, [router, state, t, importSourceLeagueId, finishImportedLeague])
 
   const retryFinalization = useCallback(async () => {
     if (!createdLeagueId || retryingFinalization) return
-    setRetryingFinalization(true)
-    try {
-      const response = await fetch(`/api/leagues/${encodeURIComponent(createdLeagueId)}/import-carryover/finalize`, {
-        method: 'POST',
-        credentials: 'include',
-      })
-      const result = (await response.json()) as { complete?: boolean; error?: string }
-      if (result.complete) {
-        router.push(createdLeagueHref ?? `/core?league=${encodeURIComponent(createdLeagueId)}`)
-      } else {
-        setCreationWarning(result.error ?? 'Your league was created, but roster setup is still pending. Retry setup or open the league to review it.')
-      }
-    } catch {
-      setCreationWarning('Your league was created, but roster setup could not be retried. Please try again.')
-    } finally {
-      setRetryingFinalization(false)
-    }
-  }, [createdLeagueHref, createdLeagueId, retryingFinalization, router])
+    await finishImportedLeague(createdLeagueId, createdLeagueHref ?? `/core?league=${encodeURIComponent(createdLeagueId)}`)
+  }, [createdLeagueHref, createdLeagueId, retryingFinalization, finishImportedLeague])
 
   return (
     <CreateLeagueWizard
