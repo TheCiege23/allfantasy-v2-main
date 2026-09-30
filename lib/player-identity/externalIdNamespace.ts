@@ -191,6 +191,52 @@ export function leagueIdSpaces(
   return { sleeperIds, providerIds: clean.filter((id) => !mayBeSleeperId(id, sport)) }
 }
 
+/** The `PlayerIdentityMap` columns a league's own player ids can be written in. */
+export type LeagueIdentityColumn = 'sleeperId' | 'espnId' | 'mflId' | 'fleaflickerId' | 'fantraxId' | 'rollingInsightsId'
+
+const PLATFORM_IDENTITY_COLUMN: Record<string, LeagueIdentityColumn> = {
+  sleeper: 'sleeperId',
+  espn: 'espnId',
+  mfl: 'mflId',
+  fleaflicker: 'fleaflickerId',
+  fantrax: 'fantraxId',
+}
+
+/**
+ * A league's player ids, grouped by the ONE `PlayerIdentityMap` column each is written in — the
+ * identity-map counterpart of `leagueIdSpaces`.
+ *
+ * 🛑 NEVER ONE LIST AGAINST SEVERAL COLUMNS. `sleeperId OR rollingInsightsId OR espnId OR mflId …`
+ * with the same ids finds a different person in every column the number happens to exist in:
+ * Sleeper 9228 is Bryce Young, Rolling Insights 9228 is an offensive tackle, and 17 of 489 live ESPN
+ * ids are somebody else's Sleeper id. A result keyed by every column then files the stranger under
+ * the asked id.
+ *
+ * The platform decides: Sleeper, ESPN, MFL, Fleaflicker and Fantrax ids each have their own column.
+ * A native league (and ids with no league, which are native-shaped) holds Sleeper ids for NFL bare
+ * numbers and Rolling Insights ids for other sports' bare numbers (a native NHL roster). Anything
+ * else — Yahoo, an unknown platform, a self-describing `name:`/`tsdb_` token — has no column and
+ * resolves to nobody.
+ */
+export function leagueIdentityColumns(
+  ids: readonly string[],
+  sport: string | null | undefined,
+  platform: string | null | undefined,
+): Array<{ column: LeagueIdentityColumn; ids: string[] }> {
+  const clean = [...new Set(ids.map((id) => String(id ?? '').trim()).filter(Boolean))]
+  if (clean.length === 0) return []
+  const p = String(platform ?? '').trim().toLowerCase()
+  const own = PLATFORM_IDENTITY_COLUMN[p]
+  if (own) return [{ column: own, ids: clean }]
+  if (!isNativePlatform(p)) return []
+  const { sleeperIds, providerIds } = leagueIdSpaces(clean, sport, p)
+  const riIds = providerIds.filter((id) => /^\d+$/.test(id))
+  return [
+    ...(sleeperIds.length ? [{ column: 'sleeperId' as const, ids: sleeperIds }] : []),
+    ...(riIds.length ? [{ column: 'rollingInsightsId' as const, ids: riIds }] : []),
+  ]
+}
+
 /**
  * Look players up by a PROVIDER's own id, scoped to that provider.
  *

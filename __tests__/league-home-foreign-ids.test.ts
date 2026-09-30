@@ -16,6 +16,7 @@ type Row = Record<string, unknown>
 type Where = { OR?: Array<Record<string, { in: string[] }>> }
 const state = vi.hoisted(() => ({
   platform: 'sleeper',
+  rosterPlayers: ['6038', '9001'] as string[],
   pim: [] as Row[],
   sportsPlayers: [] as Row[],
   media: vi.fn(),
@@ -24,8 +25,18 @@ const state = vi.hoisted(() => ({
 /* Honours `OR: [{ col: { in } }]` the way Postgres would, so a dropped clause really drops the hit. */
 function byOr(rows: Row[], where: Where): Row[] {
   const clauses = where?.OR ?? []
-  return rows.filter((r) =>
-    clauses.some((c) => Object.entries(c).some(([col, cond]) => r[col] != null && cond.in.includes(String(r[col])))),
+  // A plain `{ col: { in } , other: { not: null } }` (the ESPN translation read) is honoured too.
+  const plain = Object.entries(where ?? {}).filter(([k, v]) => k !== 'OR' && v && typeof v === 'object')
+  return rows.filter(
+    (r) =>
+      (clauses.length === 0 ||
+        clauses.some((c) => Object.entries(c).some(([col, cond]) => r[col] != null && cond.in.includes(String(r[col]))))) &&
+      plain.every(([col, cond]) => {
+        const c = cond as { in?: string[]; not?: unknown }
+        if (c.in && !(r[col] != null && c.in.includes(String(r[col])))) return false
+        if ('not' in c && c.not === null && r[col] == null) return false
+        return true
+      }),
   )
 }
 
@@ -58,7 +69,7 @@ vi.mock('@/lib/prisma', () => {
       findFirst: async () => ({
         id: 'r-me',
         platformUserId: 'u1',
-        playerData: { players: ['6038', '9001'], starters: ['6038'] },
+        playerData: { players: state.rosterPlayers, starters: state.rosterPlayers.slice(0, 1) },
         faabRemaining: null,
         waiverPriority: null,
       }),
@@ -93,6 +104,7 @@ const pimRow = (canonicalName: string, cols: Row): Row => ({
 })
 
 beforeEach(() => {
+  state.rosterPlayers = ['6038', '9001']
   state.pim = [
     // '6038' IS a Sleeper id — a stranger to any foreign league that uses 6038 for someone else.
     pimRow('Wrong Player', { sleeperId: '6038' }),
@@ -134,5 +146,37 @@ describe('resolvePlayerIndex — foreign roster ids never match a Sleeper-vocabu
     const n = await names('mfl')
     expect(n['9001']).toBe('Right MFL Man')
     expect(n['6038']).toBe('Player 6038')
+  })
+})
+
+describe('resolvePlayerIndex — one identity column per platform (2026-09-30)', () => {
+  async function players(platform: string) {
+    state.platform = platform
+    const view = await getLeagueRosterView('L1', 'u1')
+    const out: Record<string, { name: string; headshotUrl: string | null }> = {}
+    for (const s of view!.sections) for (const item of s.items) out[item.player.id] = item.player
+    return out
+  }
+
+  it('🛑 a Sleeper league’s rookie with no SportsPlayer row is named by sleeperId, never by the RI row of that number', async () => {
+    state.rosterPlayers = ['9228']
+    state.sportsPlayers = []
+    // The impostor is listed LAST: the old index filed every column's hit under its value, last write winning.
+    state.pim = [pimRow('Bryce Young', { sleeperId: '9228' }), pimRow('Michael Tarquin', { rollingInsightsId: '9228' })]
+    expect((await players('sleeper'))['9228']?.name).toBe('Bryce Young')
+  })
+
+  it('🛑 an ESPN league’s id is translated to Sleeper before any Sleeper-keyed read, and filed back under the ESPN id', async () => {
+    state.rosterPlayers = ['4262921']
+    state.pim = [pimRow('Justin Jefferson', { espnId: '4262921', sleeperId: '6794' })]
+    state.sportsPlayers = [
+      { source: 'sleeper', sleeperId: '6794', name: 'Justin Jefferson', position: 'WR', team: 'MIN', imageUrl: 'https://img/jj.png' },
+      // A Sleeper player whose id equals the ESPN number — the old read took the ESPN id as a Sleeper id.
+      { source: 'sleeper', sleeperId: '4262921', name: 'Sleeper Stranger', position: 'TE', team: 'NYJ', imageUrl: 'https://img/x.png' },
+    ]
+    const p = (await players('espn'))['4262921']
+    expect(p?.name).toBe('Justin Jefferson')
+    expect(p?.headshotUrl).toBe('https://img/jj.png')
+    expect(state.media).toHaveBeenCalledWith([{ playerId: '6794', sport: 'NFL' }])
   })
 })
