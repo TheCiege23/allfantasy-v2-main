@@ -162,9 +162,9 @@ describe('decision-os maintenance cron — activation gate', () => {
 /*
  * Owner decision 2026-09-29: the duplicate Decision OS lineup engine is retired — /core My Team is
  * the one start/sit answer. This cron used to run its shadow sweep every ten minutes behind
- * `DECISION_OS_SHADOW_SWEEP_ENABLED`, which `.env.production` still sets to "true". The flag is set
- * HERE on purpose: the retirement has to hold with the old switch still on, because nobody is going
- * to remember to turn it off.
+ * `DECISION_OS_SHADOW_SWEEP_ENABLED`, which `.env.production` set to "true" until 2026-09-30 (a
+ * Railway/dashboard value may still). The flag is set HERE on purpose: the retirement has to hold
+ * with the old switch still on, because nobody is going to remember to turn it off everywhere.
  */
 describe('decision-os maintenance cron — lineup shadow sweep is retired', () => {
   for (const maintenance of ['true', 'false']) {
