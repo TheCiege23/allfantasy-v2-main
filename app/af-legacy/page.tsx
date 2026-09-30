@@ -31,6 +31,8 @@ import DraftRoom from "@/app/af-legacy/components/mock-draft/DraftRoom"
 import LegacyStrategyTab from '@/components/legacy/LegacyStrategyTab'
 import LegacyOneGrade from '@/components/legacy/LegacyOneGrade'
 import { TRADE_HUB_SIDE_LABELS, tradeHubAnalyzeSides, tradeHubQuickEvaluateSides } from '@/lib/legacy/tradeHubDirection'
+import { tradeAssetLabel, tradeHubBreakdown } from '@/lib/legacy/tradeBreakdown'
+import TradeBreakdownSides from '@/components/legacy/TradeBreakdownSides'
 import { FeatureGate } from '@/components/subscription/FeatureGate'
 import LegacyShopTab from '@/app/af-legacy/components/tabs/LegacyShopTab'
 import LegacyIdeasTab from '@/app/af-legacy/components/tabs/LegacyIdeasTab'
@@ -1032,9 +1034,7 @@ function AFLegacyContent() {
   const [tradeIdeasResults, setTradeIdeasResults] = useState<any[]>([])
   const [tradeIdeasOpportunities, setTradeIdeasOpportunities] = useState<any[]>([])
   
-  // Inline Trade Evaluator state
-  const [inlineSideA, setInlineSideA] = useState('')
-  const [inlineSideB, setInlineSideB] = useState('')
+  // Trade Hub report state (the full analyzer's result, error and loading flag)
   const [inlineTradeLoading, setInlineTradeLoading] = useState(false)
   const [inlineTradeError, setInlineTradeError] = useState('')
   const [inlineTradeResult, setInlineTradeResult] = useState<any>(null)
@@ -2180,18 +2180,8 @@ function AFLegacyContent() {
       const data = rawResponse.data || rawResponse
       const confidenceRisk = rawResponse.confidenceRisk
       
-      const formatAssetName = (item: any) => {
-        if (item.player?.name) return item.player.name
-        if (item.pick?.season && item.pick?.round) {
-          const ord = ['1st', '2nd', '3rd', '4th', '5th'][item.pick.round - 1] || `${item.pick.round}th`
-          const slot = item.pick?.pickNumber ? `.${String(item.pick.pickNumber).padStart(2, '0')}` : ''
-          return `${item.pick.season} ${ord}${slot}`
-        }
-        if (item.amount != null) return `$${item.amount} FAAB`
-        return 'Unknown asset'
-      }
-      const sideANames = sideA.map(formatAssetName)
-      const sideBNames = sideB.map(formatAssetName)
+      const sideANames = sideA.map(tradeAssetLabel)
+      const sideBNames = sideB.map(tradeAssetLabel)
       const ok = await triggerGuardianCheck({
         actionType: 'trade',
         sideAPlayers: sideANames,
@@ -2217,10 +2207,14 @@ function AFLegacyContent() {
       const engineReqForSim2 = rawResponse.engineRequest || undefined
       const acceptBuckets2 = ea2?.acceptanceProbability?.buckets || null
       const offseasonCtx2 = rawResponse.offseasonContext || null
-      setInlineTradeResult({ ...data, confidenceRisk, counters: engineCounters2 || data.counters, championshipEquity: engineChampEq2, engineRequest: engineReqForSim2, acceptanceBuckets: acceptBuckets2, offseasonContext: offseasonCtx2 })
+      setInlineTradeResult({
+        ...data, confidenceRisk, counters: engineCounters2 || data.counters, championshipEquity: engineChampEq2, engineRequest: engineReqForSim2, acceptanceBuckets: acceptBuckets2, offseasonContext: offseasonCtx2,
+        // The Trade Breakdown card lists the assets of THIS request (lib/legacy/tradeBreakdown.ts).
+        breakdown: tradeHubBreakdown({ mine: sideA, partner: sideB }),
+      })
       setLastTradeResult({
-        sideA: sideA.map((item: any) => ({ name: formatAssetName(item) })),
-        sideB: sideB.map((item: any) => ({ name: formatAssetName(item) })),
+        sideA: sideANames.map((name) => ({ name })),
+        sideB: sideBNames.map((name) => ({ name })),
         grade: data.grade,
         verdict: data.verdict,
         leagueType: inlineTradeFormat
@@ -8043,49 +8037,11 @@ function AFLegacyContent() {
                             <span>🔄</span> Trade Breakdown
                           </h4>
                           
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                            {/* Side A Card */}
-                            <div className="rounded-2xl bg-gradient-to-br from-cyan-500/10 to-cyan-500/5 border border-cyan-500/20 p-4">
-                              <div className="flex items-center gap-2 mb-3">
-                                <div className="w-8 h-8 rounded-lg bg-cyan-500/30 flex items-center justify-center text-sm">👤</div>
-                                <span className="font-semibold text-cyan-400">You Get</span>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {inlineSideA.split(',').filter(Boolean).map((item: string, idx: number) => (
-                                  <span key={idx} className="px-3 py-1.5 rounded-lg bg-black/40 border border-cyan-500/30 text-sm text-white">
-                                    {item.trim()}
-                                  </span>
-                                ))}
-                              </div>
-                              {inlineTradeResult.sideAValue && (
-                                <div className="mt-3 pt-3 border-t border-cyan-500/20 text-right">
-                                  <span className="text-xs text-white/50">Total Value: </span>
-                                  <span className="text-lg font-bold text-cyan-400">{inlineTradeResult.sideAValue}</span>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Side B Card */}
-                            <div className="rounded-2xl bg-gradient-to-br from-purple-500/10 to-purple-500/5 border border-purple-500/20 p-4">
-                              <div className="flex items-center gap-2 mb-3">
-                                <div className="w-8 h-8 rounded-lg bg-purple-500/30 flex items-center justify-center text-sm">👥</div>
-                                <span className="font-semibold text-purple-400">You Give</span>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {inlineSideB.split(',').filter(Boolean).map((item: string, idx: number) => (
-                                  <span key={idx} className="px-3 py-1.5 rounded-lg bg-black/40 border border-purple-500/30 text-sm text-white">
-                                    {item.trim()}
-                                  </span>
-                                ))}
-                              </div>
-                              {inlineTradeResult.sideBValue && (
-                                <div className="mt-3 pt-3 border-t border-purple-500/20 text-right">
-                                  <span className="text-xs text-white/50">Total Value: </span>
-                                  <span className="text-lg font-bold text-purple-400">{inlineTradeResult.sideBValue}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                          <TradeBreakdownSides
+                            breakdown={inlineTradeResult.breakdown}
+                            youGetValue={inlineTradeResult.sideAValue}
+                            youGiveValue={inlineTradeResult.sideBValue}
+                          />
 
                           {/* Value Balance Bar */}
                           {(inlineTradeResult.sideAValue || inlineTradeResult.sideBValue) && (
