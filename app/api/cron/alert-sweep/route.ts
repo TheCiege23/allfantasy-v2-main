@@ -35,6 +35,13 @@
  * `waiverCheck`, and record `cron-chimmy-lineup-check` / `cron-chimmy-waiver-check` rows only on a
  * run that actually ran for users, so a quiet day writes nothing.
  *
+ * AND THE WAIVER CHECK FOR EVERY OTHER SPORT (2026-09-29, lib/chimmy-alerts/runSportWaiverCheck.ts):
+ * the Waivers board's per-game sections — NBA, NCAAB, NHL, MLB daily in a morning window on game
+ * days, NCAAF on Tuesday — on the per-sport rules in lib/chimmy-alerts/waiverAlertRules.ts, at most
+ * one message per user per Eastern day. Separate from the NFL's Tuesday check, which is unchanged.
+ * It reports under `sportWaiverCheck` and records `cron-chimmy-sport-waiver-check` only on a run
+ * that actually ran for users.
+ *
  * A THIRD, SHIPPED OFF: THE GUILLOTINE CHOP-RELEASE ALERT (lib/chimmy-alerts/chopRelease.ts). When a
  * guillotine league's chopped roster hits waivers, each surviving member gets their own FAAB bid plan
  * for it. It does nothing — not one read — unless the service carries CHOP_RELEASE_ALERTS_ENABLED=1.
@@ -48,6 +55,9 @@
  *   lineupCheck=off     skip the lineup check this run
  *   waiverCheck=force   run the waiver check outside its window (the weekly claim still holds)
  *   waiverCheck=off     skip the waiver check this run
+ *   sportWaiverCheck=force  run the other-sport waiver check outside its windows (in-season sports
+ *                           only; the daily claim still holds)
+ *   sportWaiverCheck=off    skip the other-sport waiver check this run
  *   chopRelease=off     skip the chop-release alert this run (it is also off unless the flag is set)
  *
  * FAILS LOUDLY on a systemic error (no push configured, sweep threw). It does NOT fail when
@@ -71,6 +81,7 @@ import { decidePushForUser } from '@/lib/notifications/pushGate'
 import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runLineupCheck, type LineupCheckRun } from '@/lib/chimmy-alerts/runLineupCheck'
 import { runWaiverCheck, type WaiverCheckRun } from '@/lib/chimmy-alerts/runWaiverCheck'
+import { runSportWaiverCheck, type SportWaiverCheckRun } from '@/lib/chimmy-alerts/runSportWaiverCheck'
 import type { ChopReleaseRun } from '@/lib/chimmy-alerts/runChopReleaseCheck'
 import { chopReleaseEnabled } from '@/lib/chimmy-alerts/chopRelease'
 import { injuredStarterDedupeKey, injuredStarterHref, mergeAudience } from '@/lib/chimmy-alerts/sweepAudience'
@@ -102,12 +113,15 @@ const JOB = 'cron-alert-sweep'
 /** Recorded only when a weekly check actually ran for users — see the header. */
 const LINEUP_CHECK_JOB = 'cron-chimmy-lineup-check'
 const WAIVER_CHECK_JOB = 'cron-chimmy-waiver-check'
+const SPORT_WAIVER_CHECK_JOB = 'cron-chimmy-sport-waiver-check'
 const CHOP_RELEASE_JOB = 'cron-chimmy-chop-release'
 
 /**
  * A weekly check's share of a run. The injured-starter sweep goes first and is the reason this
  * route exists; a check stops starting new users past this and resumes on the next run. Only one
  * check is ever inside its window at a time (Sunday morning, Tuesday), so they do not compete.
+ * ⚠ The other-sport waiver check's morning window can overlap the NFL's Tuesday one; each still
+ * gets at most this much, and both stop starting users at the ceiling below.
  *
  * ⚠ AND NEVER PAST `SWEEP_CEILING_MS` OF THE WHOLE RUN. The fast-tier runner gives this route
  * 330s. Measured over three days (2026-09-21..24): the sweep alone ran p50 24s, p95 40s — and once
@@ -120,6 +134,7 @@ const SWEEP_CEILING_MS = 240_000
 type PhaseRefusal = { ran: false; reason: 'disabled' | 'error'; error?: string }
 type LineupCheckReport = LineupCheckRun | PhaseRefusal
 type WaiverCheckReport = WaiverCheckRun | PhaseRefusal
+type SportWaiverCheckReport = SportWaiverCheckRun | PhaseRefusal
 type ChopReleaseReport = ChopReleaseRun | PhaseRefusal
 
 type PhaseArgs = {
@@ -140,6 +155,8 @@ async function weeklyCheckPhase<R extends { ran: boolean }>(
   args: PhaseArgs,
   run: (opts: { dryRun: boolean; force: boolean; userId: string | null; budgetMs: number }) => Promise<R>,
   heartbeat: (result: Extract<R, { ran: true }>) => { jobName: string; outcome: Parameters<typeof recordSyncJobRun>[1] },
+  /** The heartbeat row's sport; null for a check spanning several. */
+  sport: string | null = 'NFL',
 ): Promise<R | PhaseRefusal> {
   if (args.mode === 'off' || args.mode === '0') return { ran: false, reason: 'disabled' }
   const force = args.mode === 'force'
@@ -153,7 +170,7 @@ async function weeklyCheckPhase<R extends { ran: boolean }>(
     })
     if (result.ran && !args.dryRun && !args.singleUser && !force) {
       const hb = heartbeat(result as Extract<R, { ran: true }>)
-      await recordSyncJobRun({ jobName: hb.jobName, sport: 'NFL', trigger: 'cron' }, hb.outcome, Date.now() - started)
+      await recordSyncJobRun({ jobName: hb.jobName, sport, trigger: 'cron' }, hb.outcome, Date.now() - started)
     }
     return result
   } catch (err) {
@@ -189,6 +206,26 @@ function waiverCheckPhase(args: PhaseArgs): Promise<WaiverCheckReport> {
       metadata: { week: r.week, firstKickoff: r.firstKickoff, users: r.users, picks: r.picks, outcomes: r.outcomes },
     },
   }))
+}
+
+function sportWaiverCheckPhase(args: PhaseArgs): Promise<SportWaiverCheckReport> {
+  return weeklyCheckPhase(
+    'sport waiver check',
+    args,
+    runSportWaiverCheck,
+    (r) => ({
+      jobName: SPORT_WAIVER_CHECK_JOB,
+      outcome: {
+        rowsRead: r.users,
+        rowsWritten: r.outcomes.sent ?? 0,
+        rowsSkipped: r.notReached,
+        errors: r.errors.map((e) => `${e.userId}: ${e.error}`),
+        status: r.errors.length > 0 ? 'partial' : 'success',
+        metadata: { day: r.day, sports: r.sports, openSports: r.openSports, users: r.users, picks: r.picks, outcomes: r.outcomes },
+      },
+    }),
+    null,
+  )
 }
 
 /**
@@ -622,6 +659,12 @@ async function handle(req: NextRequest) {
       singleUser,
       sweepStartedAt: startedAt,
     })
+    const sportWaiverCheck = await sportWaiverCheckPhase({
+      mode: (url.searchParams.get('sportWaiverCheck') ?? '').trim().toLowerCase(),
+      dryRun,
+      singleUser,
+      sweepStartedAt: startedAt,
+    })
     const chopRelease = await chopReleasePhase({
       mode: (url.searchParams.get('chopRelease') ?? '').trim().toLowerCase(),
       dryRun,
@@ -651,6 +694,8 @@ async function handle(req: NextRequest) {
       lineupCheck,
       /** Chimmy's Tuesday waiver check — the same shape, the same rules. */
       waiverCheck,
+      /** The other sports' waiver check — per-sport windows; mostly `{ ran: false, reason: 'closed' }`. */
+      sportWaiverCheck,
       /** The guillotine chop-release alert — `{ ran: false, reason: 'disabled' }` until the flag is set. */
       chopRelease,
       durationMs: Date.now() - startedAt,

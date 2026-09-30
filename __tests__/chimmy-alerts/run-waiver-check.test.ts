@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 // The runner's defaults reach prisma and the board; every test injects its own instead.
 vi.mock('@/lib/prisma', () => ({ prisma: {} }))
-vi.mock('@/lib/core-app/waiversBoard', () => ({ getWaiversBoard: vi.fn() }))
+vi.mock('@/lib/core-app/waiversBoard', () => ({ getWaiversBoard: vi.fn(), getWaiverSportSections: vi.fn() }))
 vi.mock('@/lib/core-app/playerProjections', () => ({ latestProjectionWeek: vi.fn() }))
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: vi.fn() }))
 vi.mock('@/lib/user-settings', () => ({ getSettingsProfile: vi.fn() }))
@@ -13,6 +13,7 @@ import type { WaiverBoardRow, WaiverPlayer, WaiversBoardData } from '@/lib/core-
 import { getDefaultNotificationPreferences } from '@/lib/notification-settings/NotificationPreferenceResolver'
 import type { NotificationPreferences } from '@/lib/notification-settings/types'
 import { runWaiverCheck, type WaiverCheckDeps } from '@/lib/chimmy-alerts/runWaiverCheck'
+import { runSportWaiverCheck } from '@/lib/chimmy-alerts/runSportWaiverCheck'
 
 /**
  * The waiver check's runner: once per user per week, only inside the Tuesday window, only for
@@ -263,30 +264,57 @@ describe('runWaiverCheck', () => {
   })
 
   /*
-   * The board now carries a section per sport, priced PER GAME from a season rate. This message says
-   * "+N projected pts in week W" and its threshold is points per NFL week — neither is true of a
-   * per-game basketball gain, so the check reads the NFL rows only. Guarded here so the sections
-   * cannot leak into it by someone widening `board.rows` later.
+   * THE CONTRACT CHANGED 2026-09-29 (owner's decision): the board's per-game sport sections DO reach
+   * Chimmy's waiver alert now — but through their own check (`runSportWaiverCheck`), on their own
+   * per-sport rules, and in "pts per game". This NFL message still reads the NFL rows only: it says
+   * "+N projected pts in week W" and gates on points per NFL week, neither of which is true of a
+   * per-game basketball gain. Both halves pinned here on ONE board, so neither can drift into the
+   * other — a section pick in the weekly message, or a weekly phrase in the per-game one.
    */
-  it('never messages a season-rate section pick — its gain is per game, not for the week ahead', async () => {
+  it('a season-rate section pick goes out per game through the sport check — never in the weekly NFL message', async () => {
+    const nbaSection = {
+      sport: 'NBA',
+      state: 'ok' as const,
+      reason: null,
+      basis: 'season_per_game_af_default' as const,
+      basisLabel: null,
+      season: 2026,
+      rows: [row('B1', 6, { sport: 'NBA' })],
+      considered: 1,
+      withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
+    }
     deps.loadAudience = vi.fn(async () => new Map([['u1', [league('L1'), league('B1')]]]))
-    deps.board = vi.fn(async () => ({
-      ...board([]),
-      sports: [
-        {
-          sport: 'NBA',
-          state: 'ok' as const,
-          reason: null,
-          basis: 'season_per_game_af_default' as const,
-          basisLabel: null,
-          season: 2026,
-          rows: [row('B1', 40, { sport: 'NBA' })],
-          considered: 1,
-          withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
-        },
-      ],
-    }))
+    deps.board = vi.fn(async () => ({ ...board([]), sports: [nbaSection] }))
     expect(await runWaiverCheck({}, deps)).toMatchObject({ ran: true, outcomes: { no_picks: 1 }, picks: 0 })
     expect(deps.dispatch).not.toHaveBeenCalled()
+
+    // The same section, through the sport check: 11:00 ET on an NBA game night in season.
+    const NBA_MORNING = new Date('2026-11-10T16:00:00Z')
+    const sent = vi.fn(async () => {})
+    const run = await runSportWaiverCheck(
+      {},
+      {
+        now: () => NBA_MORNING,
+        loadGames: vi.fn(async (sport: string) =>
+          sport === 'NBA' ? [{ homeTeam: 'BOS', awayTeam: 'NYK', startTime: new Date('2026-11-11T00:30:00Z') }] : [],
+        ),
+        loadAudience: vi.fn(async () => new Map([['u1', [{ ...league('B1'), sport: 'NBA' }]]])),
+        loadSettings: deps.loadSettings,
+        sections: vi.fn(async () => [nbaSection]),
+        alreadySent: vi.fn(async () => false),
+        claim: vi.fn(async () => true),
+        recentlyNamed: vi.fn(async () => new Set<string>()),
+        dispatch: sent,
+        baseUrl: () => 'https://allfantasy.ai',
+      },
+    )
+    expect(run).toMatchObject({ ran: true, openSports: ['NBA'], outcomes: { sent: 1 }, picks: 1 })
+    const msg = sent.mock.calls[0]![0] as { title: string; body: string; emailOverride: { html: string } }
+    expect(msg.title).toBe("Chimmy's NBA waiver pick for League B1: Jaylen Warren (+6.0 pts/game)")
+    expect(msg.body).toContain('+6.0 pts per game')
+    for (const text of [msg.title, msg.body, msg.emailOverride.html]) {
+      expect(text).not.toMatch(/\bweek\b/i)
+      expect(text).not.toContain('projected pts')
+    }
   })
 })

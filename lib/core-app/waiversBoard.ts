@@ -284,6 +284,16 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
   return sports.length > 0 ? { ...nfl, sports } : nfl
 }
 
+/**
+ * Only the other-sport sections of `getWaiversBoard` — the same claimed teams, the same builder, so
+ * a section here is the section that board shows. For Chimmy's per-sport waiver check
+ * (lib/chimmy-alerts/runSportWaiverCheck.ts), which has no use for the NFL half and should not pay
+ * for it. Unlike the board it does not swallow a section failure: the caller reports it per user.
+ */
+export async function getWaiverSportSections(userId: string): Promise<WaiverSportSection[]> {
+  return buildWaiverSportSections(await readClaimedTeams(userId), userId)
+}
+
 /** The NFL board, exactly as it was before the other sports joined it. */
 async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string): Promise<WaiversBoardData> {
   /*

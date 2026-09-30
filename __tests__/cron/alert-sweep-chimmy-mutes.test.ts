@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   dispatch: vi.fn(),
   runLineupCheck: vi.fn(),
   runWaiverCheck: vi.fn(),
+  runSportWaiverCheck: vi.fn(),
   recordSyncJobRun: vi.fn(),
   findFirst: vi.fn(),
 }))
@@ -35,6 +36,7 @@ vi.mock('@/lib/chimmy-alerts/runLineupCheck', () => ({ runLineupCheck: h.runLine
 // Mocked, not left real: unmocked, it ran against the stub prisma above and failed into
 // `{ reason: 'error' }` on every test — green, and exercising nothing.
 vi.mock('@/lib/chimmy-alerts/runWaiverCheck', () => ({ runWaiverCheck: h.runWaiverCheck }))
+vi.mock('@/lib/chimmy-alerts/runSportWaiverCheck', () => ({ runSportWaiverCheck: h.runSportWaiverCheck }))
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
   withSyncJobRun: async (_ctx: unknown, fn: () => Promise<unknown>) => fn(),
   recordSyncJobRun: h.recordSyncJobRun,
@@ -71,6 +73,7 @@ beforeEach(() => {
   h.dispatch.mockResolvedValue(undefined)
   h.runLineupCheck.mockResolvedValue({ ran: false, reason: 'early', week: null, mainSlate: null })
   h.runWaiverCheck.mockResolvedValue({ ran: false, reason: 'early', week: null, firstKickoff: null })
+  h.runSportWaiverCheck.mockResolvedValue({ ran: false, reason: 'closed', day: '2026-09-29', sports: {} })
 })
 
 describe('alert sweep — Chimmy alert controls', () => {
@@ -238,5 +241,87 @@ describe('alert sweep — the waiver check rides along too', () => {
     await call('dryRun=1')
     await call('waiverCheck=force')
     expect(h.recordSyncJobRun).not.toHaveBeenCalled()
+  })
+})
+
+describe('alert sweep — the other sports’ waiver check', () => {
+  const ranSports = {
+    ran: true as const,
+    dryRun: false,
+    day: '2026-11-10',
+    sports: { NBA: 'open', NHL: 'no_games', NCAAF: 'not_today', NCAAB: 'open', MLB: 'out_of_season' },
+    openSports: ['NBA', 'NCAAB'],
+    users: 4,
+    outcomes: { sent: 2, no_picks: 2 },
+    notReached: 0,
+    picks: 3,
+    previews: [],
+    errors: [],
+  }
+
+  it('runs after the NFL waiver check with the same scope, and reports under `sportWaiverCheck`', async () => {
+    const body = await (await call('userId=u1&dryRun=1')).json()
+    expect(h.runSportWaiverCheck).toHaveBeenCalledWith({ dryRun: true, force: false, userId: 'u1', budgetMs: expect.any(Number) })
+    expect(h.runSportWaiverCheck.mock.calls[0]![0].budgetMs).toBeLessThanOrEqual(90_000)
+    expect(h.runWaiverCheck.mock.invocationCallOrder[0]!).toBeLessThan(h.runSportWaiverCheck.mock.invocationCallOrder[0]!)
+    expect(body.sportWaiverCheck).toEqual({ ran: false, reason: 'closed', day: '2026-09-29', sports: {} })
+  })
+
+  it('has its own force and off switches, independent of the NFL waiver check', async () => {
+    await call('userId=u1&sportWaiverCheck=force')
+    expect(h.runSportWaiverCheck).toHaveBeenLastCalledWith(expect.objectContaining({ force: true }))
+    expect(h.runWaiverCheck).toHaveBeenLastCalledWith(expect.objectContaining({ force: false }))
+    h.runSportWaiverCheck.mockClear()
+    h.runWaiverCheck.mockClear()
+    const body = await (await call('userId=u1&sportWaiverCheck=off')).json()
+    expect(h.runSportWaiverCheck).not.toHaveBeenCalled()
+    expect(h.runWaiverCheck).toHaveBeenCalledTimes(1)
+    expect(body.sportWaiverCheck).toEqual({ ran: false, reason: 'disabled' })
+  })
+
+  it('🛑 throwing cannot fail the sweep or the NFL check', async () => {
+    h.runSportWaiverCheck.mockRejectedValue(new Error('sections exploded'))
+    const res = await call('userId=u1')
+    const body = await res.json()
+    expect(res.status).toBe(200)
+    expect(h.dispatch).toHaveBeenCalled()
+    expect(body.waiverCheck).toEqual({ ran: false, reason: 'early', week: null, firstKickoff: null })
+    expect(body.sportWaiverCheck).toEqual({ ran: false, reason: 'error', error: 'sections exploded' })
+  })
+
+  it('records `cron-chimmy-sport-waiver-check` (no single sport) only on a scheduled run that ran for users', async () => {
+    h.runSportWaiverCheck.mockResolvedValue(ranSports)
+    await call('')
+    expect(h.recordSyncJobRun).toHaveBeenCalledTimes(1)
+    expect(h.recordSyncJobRun.mock.calls[0]![0]).toEqual({ jobName: 'cron-chimmy-sport-waiver-check', sport: null, trigger: 'cron' })
+    expect(h.recordSyncJobRun.mock.calls[0]![1]).toMatchObject({
+      rowsRead: 4,
+      rowsWritten: 2,
+      status: 'success',
+      metadata: expect.objectContaining({ day: '2026-11-10', openSports: ['NBA', 'NCAAB'], picks: 3 }),
+    })
+
+    h.recordSyncJobRun.mockClear()
+    await call('userId=u1')
+    await call('dryRun=1')
+    await call('sportWaiverCheck=force')
+    expect(h.recordSyncJobRun).not.toHaveBeenCalled()
+  })
+
+  it('the NFL checks still record under sport NFL', async () => {
+    h.runWaiverCheck.mockResolvedValue({
+      ran: true,
+      dryRun: false,
+      week: { season: '2026', week: 4 },
+      firstKickoff: '2026-10-02T00:15:00.000Z',
+      users: 1,
+      outcomes: { sent: 1 },
+      notReached: 0,
+      picks: 1,
+      previews: [],
+      errors: [],
+    })
+    await call('')
+    expect(h.recordSyncJobRun.mock.calls[0]![0]).toEqual({ jobName: 'cron-chimmy-waiver-check', sport: 'NFL', trigger: 'cron' })
   })
 })
