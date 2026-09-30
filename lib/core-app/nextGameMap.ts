@@ -71,12 +71,19 @@ function better(next: NextGameCandidate, current: NextGameCandidate | undefined)
 export function buildNextGameMap(
   games: readonly FixtureRow[],
   rosterTeams: ReadonlySet<string>,
+  /*
+   * How a feed's team string becomes a join key. The default is the NFL fold, and
+   * every NFL caller relies on it. College passes the CFBD directory resolver instead
+   * (collegeNextGame.ts): `normalizeTeamAbbrev` is NFL-only and folds "Miami" and
+   * "Tennessee" onto the Dolphins and the Titans.
+   */
+  fold: (team: string | null) => string | null = normalizeTeamAbbrev,
 ): Map<string, NextGameCandidate> {
   const best = new Map<string, NextGameCandidate>()
   for (const g of games) {
     if (!g.startTime) continue
-    const home = normalizeTeamAbbrev(g.homeTeam)
-    const away = normalizeTeamAbbrev(g.awayTeam)
+    const home = fold(g.homeTeam)
+    const away = fold(g.awayTeam)
     for (const [team, opponent, isHome] of [
       [home, away, true],
       [away, home, false],

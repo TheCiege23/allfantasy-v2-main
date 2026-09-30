@@ -26,6 +26,8 @@ import { parseDescriptiveId } from './descriptiveId'
 import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { buildNextGameMap } from './nextGameMap'
+import { collegeFixturesByPlayerTeam } from './collegeNextGame'
+import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import { displayPosition, inferSlotLabel } from './positionLabels'
 import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, resolveSourceScreenLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
@@ -742,6 +744,51 @@ async function resolvePlayers(
         preseason: false, venue: null, injuryStatus: null, ruledOut: false, projectedPoints: null,
         afProjectedPoints: null, indoors: null, weather: null, market: null, onBye: false,
       })
+    }
+
+    /*
+     * 🛑 A COLLEGE STARTER'S GAME, WHICH THIS BRANCH NEVER LOOKED UP. The entries above are
+     * built with `gameContext: null, kickoff: null`, and the Sleeper-id join that fills those
+     * for every other league cannot reach a Fantrax id. So the one production college league
+     * (Fantrax, 12 rosters, measured 2026-09-30) had no opponent, no kickoff and therefore no
+     * lineup lock on any starter. The join goes through the CFBD directory on both sides —
+     * see collegeNextGame.ts for why the NFL fold cannot be used here.
+     *
+     * Same week window as the Sleeper path: `week` comes from `resolveSportsWeek(sport)`. A
+     * missing directory or week leaves every fixture null, exactly as before.
+     */
+    if (String(sport).toUpperCase() === 'NCAAF' && week) {
+      const pending = [...out.entries()].filter(([, p]) => p.team && p.kickoff == null)
+      const index = pending.length > 0 ? await loadCollegeTeamIndex().catch(() => null) : null
+      if (index) {
+        const collegeGames = await prisma.sportsGame
+          .findMany({
+            where: { sport, season: week.season, week: week.week, seasonType: week.seasonType },
+            orderBy: { startTime: 'asc' },
+            // A college week is hundreds of fixtures (549 rows across four sources for the week
+            // measured), not the NFL's sixteen, so the NFL path's 400 would cut it short.
+            take: 2000,
+            select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
+          })
+          .catch(() => [])
+        const fixtures = collegeFixturesByPlayerTeam(
+          collegeGames,
+          pending.map(([, p]) => p.team as string),
+          index,
+        )
+        for (const [id, p] of pending) {
+          const g = fixtures.get(p.team as string)
+          if (!g) continue
+          const time = formatKickoff(g.at)
+          out.set(id, {
+            ...p,
+            gameContext: `${g.team} ${g.home ? 'vs' : '@'} ${g.opponent}${time ? ` · ${time}` : ''}`,
+            kickoff: g.at,
+            preseason: g.preseason,
+            venue: g.venue,
+          })
+        }
+      }
     }
   }
 
