@@ -8,7 +8,7 @@ A full inventory of every real waiver-related implementation was built before an
 
 ### Recommendation/scoring engines
 - **`lib/waiver-engine/waiver-scoring.ts`** (`scoreWaiverCandidates`) + **`lib/waiver-ai-engine/` (`runWaiverAIService` → `suggestWaiverPickups`)** — the real, live, canonical deterministic engine. Called by `app/api/waiver-ai/engine/route.ts` and already wrapped (not recomputed) by Decision OS's own `lib/decision-os/waiver/decision.ts`. **This is what this module reuses as its own primary recommendation value** — same role `computeTradeDrivers` played for Trade OS.
-- **`lib/ai/waivers/waiverRecommendationService.ts`** (`generateWaiverRecommendations`) — a genuinely independent, cruder, live engine (own FAAB percentage-slicing, own prisma reads). Its only caller now is `WaiverRecommendationAdapter` below: `app/api/ai/waivers/recommend/route.ts` moved to the Decision OS waiver engine on 2026-09-29 (the legacy recommender read rosters raw and matched roster ids across three id spaces, and the decision-engine boundary forbids fixing it in place). **This is the one real comparison-only "legacy grader" this module logs divergence against** — same role T2 played for Trade OS.
+- **`lib/ai/waivers/waiverRecommendationService.ts`** (`generateWaiverRecommendations`) — a genuinely independent, cruder, live engine (own FAAB percentage-slicing, own prisma reads). Its only caller now is `WaiverRecommendationAdapter` below: `app/api/ai/waivers/recommend/route.ts` moved to the Decision OS waiver engine on 2026-09-29 (the legacy recommender read rosters raw and matched roster ids across three id spaces, and the decision-engine boundary forbids fixing it in place). It was the one real comparison-only "legacy grader" this module logged divergence against (the role T2 played for Trade OS) until it was **retired on 2026-09-30**, together with its adapter and its private `waiverPreferenceService` — `WaiverEvaluation.divergence` is empty until another independent grader exists.
 - Format-specific "War Room" engines (redraft/dynasty/keeper/guillotine/best-ball waiver engines) — a legitimate separate family of per-format-tuned engines, each live via its own route. Not duplicates of the above; out of scope for this phase.
 - **Orphaned/dead code found, deliberately left untouched**: `lib/waiver-engine/waiver-faab-engine.ts`'s exported `computeFaabBid`/`computeFaabStrategy` (re-exported by the barrel but zero real callers anywhere in the repo — `waiver-scoring.ts` has its own private, differently-shaped `computeFaabBid` at line 646 that the live chain actually uses) and `lib/trade-engine/waiverEngine.ts` (no callers found at all).
 
@@ -27,14 +27,13 @@ No `WaiverOfferEvent`/`WaiverOutcomeEvent` models or `waiverLearningCapture.ts` 
 ## Modules
 
 - **`WaiverContextAssembler.ts`** — assembles a provider-neutral `WaiverAIEngineInput` from real Prisma reads + the sport-scoped free-agent pool + batch FantasyCalc valuation.
-- **`WaiverRecommendationAdapter.ts`** — wraps `generateWaiverRecommendations` (the one real comparison-only engine) for divergence.
-- **`WaiverShadowService.ts`** — orchestrates the assembler + `runWaiverAIService` (primary, reused) + the adapter (comparison, caught) + Phase 3 Knowledge Graph manager tendency, producing one canonical `WaiverEvaluation`.
+- **`WaiverShadowService.ts`** — orchestrates the assembler + `runWaiverAIService` (primary, reused) + Phase 3 Knowledge Graph manager tendency, producing one canonical `WaiverEvaluation`.
 - **`WaiverShadowResultStore.ts`** — in-memory shadow log, same disclosed non-durable pattern as Trade OS's.
 - **`backtest/`** — see [`backtest/README.md`](backtest/README.md).
 
 ## Known limitations
 
-- `WaiverRecommendationAdapter`'s legacy call uses `Roster.platformUserId` as `generateWaiverRecommendations`'s `userId` parameter — that function's own internal prisma reads were not audited in depth, so a provider-dependent mismatch is possible. Comparison-only impact, never authoritative.
+- No legacy grader runs since 2026-09-30, so the divergence log, `WaiverShadowResultStore.findDiverging()` and `backtest/WaiverDivergenceAnalyzer` have nothing to compare and report empty.
 - `isTEP` (tight-end-premium) is not detected and defaults to `false` — the same documented, bounded simplification `tradeLearningCapture.ts` already uses.
 - Player valuation falls back to a flat value (200) when no FantasyCalc name match is found — same convention as Trade OS's live capture code.
 - `rosterPositions`/team-needs (`needs`/`surplus`) are empty when `League.starters` isn't a resolvable array — a real, reported data gap, not a guess.

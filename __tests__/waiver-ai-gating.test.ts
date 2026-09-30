@@ -7,7 +7,7 @@
  * 3. AI waiver endpoint allows AF Pro user.
  * 4. AF Pro helper respects AF_PRO_DEV_BYPASS in test/dev only.
  * 5. AF Commissioner helper respects AF_COMMISSIONER_DEV_BYPASS in test/dev only.
- * 6. Recommendation service returns stable shape.
+ * 6. Panel recommendations (claimsToPanelRecommendations) return a stable shape.
  * 7. FAAB recommendation appears when includeFaab=true and league uses FAAB.
  * 8. Non-Pro upgrade response contains AF_PRO_REQUIRED and upgradePath.
  * 9. Commissioner AI endpoint returns AF_COMMISSIONER_REQUIRED for non-entitled commissioner.
@@ -77,7 +77,7 @@ import {
   AfProRequiredError,
   AfCommissionerRequiredError,
 } from "@/lib/entitlements/afAccess"
-import { generateWaiverRecommendations } from "@/lib/ai/waivers/waiverRecommendationService"
+import { claimsToPanelRecommendations } from "@/lib/decision-os/waiver/panelRecommendations"
 
 // ─── 1. Basic waiver automation does not require AF Pro ─────────────────────
 describe("basic waiver automation — no AF Pro gate", () => {
@@ -166,157 +166,46 @@ describe("AF_COMMISSIONER_DEV_BYPASS", () => {
   })
 })
 
-// ─── 6. Recommendation service returns stable shape ─────────────────────────
-describe("generateWaiverRecommendations — stable shape", () => {
-  it("returns a valid WaiverRecommendationOutput shape even with missing data", async () => {
-    const output = await generateWaiverRecommendations({
-      userId: "user-1",
-      leagueId: "league-1",
-      mode: "quick",
+// ─── 6. Panel recommendations keep a stable shape ───────────────────────────
+// The route serves the panel through claimsToPanelRecommendations (Decision OS) since 2026-09-29;
+// the legacy generateWaiverRecommendations these sections used to exercise was retired 2026-09-30.
+const CLAIM = {
+  addPlayerId: "p1",
+  addPlayerName: "Real Player",
+  dropPlayerId: "d1",
+  dropPlayerName: "Bench Guy",
+  faabBid: 12,
+  compositeScore: 84,
+  recommendation: "Strong Add",
+  reason: "Fills the WR hole.",
+  position: "WR",
+  priorityRank: 1,
+} as never
+
+describe("claimsToPanelRecommendations — stable shape", () => {
+  it("returns every field the panel renders", () => {
+    const [rec] = claimsToPanelRecommendations([CLAIM], { leagueId: "league-1", includeFaab: true, limit: 3 })
+    expect(rec).toEqual({
+      addPlayerId: "p1",
+      addPlayerName: "Real Player",
+      dropPlayerId: "d1",
+      dropPlayerName: "Bench Guy",
+      priority: 1,
+      suggestedFaabBid: 12,
+      confidence: "high",
+      risk: "low",
+      reasoning: "Fills the WR hole.",
+      deeperAnalysisPath: "/chimmy/chat?topic=waiver-analysis&leagueId=league-1",
+      tags: ["WR", "Strong Add"],
     })
-
-    expect(output).toMatchObject({
-      recommendations: expect.any(Array),
-      rosterNeeds: expect.any(Array),
-      leagueContext: expect.objectContaining({
-        leagueId: "league-1",
-        waiverType: expect.any(String),
-      }),
-      generatedAt: expect.any(String),
-    })
-  })
-
-  /*
-   * ⚠ THE POINT OF THIS TEST IS THE EMPTY ARRAY.
-   *
-   * It used to loop over `output.recommendations` asserting each had the required fields — which
-   * passes vacuously on an empty list and, worse, passed on the ONE fabricated entry the service
-   * emitted with no roster and no player pool: `addPlayerId: "unknown"`, name "Best available WR",
-   * a FAAB bid computed from the user's real budget, and prose about target share that no data
-   * supported. A "stable shape" assertion cannot tell an answer from an invention.
-   *
-   * With no roster and no pool the honest output is NO recommendations plus a stated reason.
-   */
-  it("returns no recommendations — not a placeholder — when there is no roster and no pool", async () => {
-    const output = await generateWaiverRecommendations({
-      userId: "user-1",
-      leagueId: "league-1",
-      mode: "quick",
-    })
-
-    expect(output.recommendations).toEqual([])
-    expect(output.meta?.dataGaps).toContain("roster_not_found")
-    expect(output.meta?.dataGaps).toContain("free_agent_pool_empty")
-    // And specifically: none of the old invented values may come back.
-    expect(JSON.stringify(output)).not.toContain("Best available WR")
-    expect(JSON.stringify(output)).not.toContain("unknown")
-  })
-
-  it("does not invent roster needs when the roster cannot be read", async () => {
-    // The old implementation returned a hardcoded ["WR_depth", "RB_depth"] here, for every user
-    // in every league in every sport — and `buildReasoning` cited it back as "fills a roster need".
-    const output = await generateWaiverRecommendations({
-      userId: "user-1",
-      leagueId: "league-1",
-      mode: "quick",
-    })
-
-    expect(output.rosterNeeds).toEqual([])
-    expect(output.meta?.dataGaps).toContain("cannot_analyze_roster_needs_no_roster")
-  })
-
-  it("each recommendation has required fields when a pool exists", async () => {
-    const { getPlayerPoolForSport } = await import("@/lib/sport-teams/SportPlayerPoolResolver")
-    vi.mocked(getPlayerPoolForSport).mockResolvedValue([
-      { player_id: "p1", full_name: "Real Player", position: "WR", external_source_id: null },
-    ] as never)
-
-    const output = await generateWaiverRecommendations({
-      userId: "user-1",
-      leagueId: "league-1",
-      mode: "quick",
-    })
-
-    expect(output.recommendations.length).toBeGreaterThan(0)
-    for (const rec of output.recommendations) {
-      expect(rec.addPlayerId).toBe("p1")
-      expect(rec.addPlayerName).toBe("Real Player")
-      expect(rec).toHaveProperty("priority")
-      expect(rec).toHaveProperty("confidence")
-      expect(rec).toHaveProperty("risk")
-      expect(rec).toHaveProperty("reasoning")
-      expect(rec).toHaveProperty("deeperAnalysisPath")
-      expect(rec).toHaveProperty("tags")
-    }
   })
 })
 
-// ─── 7. FAAB recommendation appears when includeFaab=true ───────────────────
-describe("generateWaiverRecommendations — FAAB leagues", () => {
-  beforeEach(async () => {
-    const { getEffectiveLeagueWaiverSettings } = await import(
-      "@/lib/waiver-wire/settings-service"
-    )
-    vi.mocked(getEffectiveLeagueWaiverSettings).mockResolvedValue({
-      waiverType: "faab",
-      normalizedWaiverType: "faab",
-      faabBudget: 1000,
-    } as any)
-  })
-
-  it("includes suggestedFaabBid when includeFaab=true for FAAB league", async () => {
-    const { prisma } = await import("@/lib/prisma")
-    const { getPlayerPoolForSport } = await import("@/lib/sport-teams/SportPlayerPoolResolver")
-
-    /* Real column (`faabRemaining`) and real shape (`playerData` JSON), not the invented
-     * `faabBalance` / `players` relation the previous mock described. */
-    vi.mocked(prisma.roster.findMany as any).mockResolvedValue([
-      { id: "roster-1", platformUserId: "user-1", faabRemaining: 500, playerData: { players: ["rp1"] } },
-    ])
-    vi.mocked(prisma.sportsPlayer.findMany as any).mockResolvedValue([{ position: "WR" }])
-    vi.mocked(getPlayerPoolForSport).mockResolvedValue([
-      { player_id: "fa1", full_name: "Available Back", position: "RB", external_source_id: null },
-    ] as never)
-
-    const output = await generateWaiverRecommendations({
-      userId: "user-1",
-      leagueId: "faab-league",
-      mode: "quick",
-      includeFaab: true,
-    })
-
-    expect(output.leagueContext.waiverType).toBe("faab")
-    expect(output.leagueContext.faabRemaining).toBe(500)
-    expect(output.recommendations.length).toBeGreaterThan(0)
-    const rec = output.recommendations[0]
-    // A real free agent, and a bid sized off the real remaining budget.
-    expect(rec.addPlayerName).toBe("Available Back")
-    expect(rec.suggestedFaabBid).toBeTypeOf("number")
-  })
-
-  it("excludes players already rostered anywhere in the league", async () => {
-    const { prisma } = await import("@/lib/prisma")
-    const { getPlayerPoolForSport } = await import("@/lib/sport-teams/SportPlayerPoolResolver")
-
-    vi.mocked(prisma.roster.findMany as any).mockResolvedValue([
-      { id: "r1", platformUserId: "user-1", faabRemaining: 100, playerData: { players: ["mine"] } },
-      { id: "r2", platformUserId: "rival", faabRemaining: 100, playerData: { players: ["theirs"] } },
-    ])
-    vi.mocked(prisma.sportsPlayer.findMany as any).mockResolvedValue([{ position: "WR" }])
-    vi.mocked(getPlayerPoolForSport).mockResolvedValue([
-      { player_id: "mine", full_name: "On My Roster", position: "WR", external_source_id: null },
-      { player_id: "theirs", full_name: "On Their Roster", position: "RB", external_source_id: null },
-      { player_id: "free", full_name: "Genuinely Free", position: "TE", external_source_id: null },
-    ] as never)
-
-    const output = await generateWaiverRecommendations({
-      userId: "user-1",
-      leagueId: "faab-league",
-      mode: "quick",
-    })
-
-    const names = output.recommendations.map((r) => r.addPlayerName)
-    expect(names).toEqual(["Genuinely Free"])
+// ─── 7. FAAB bid appears only when the league uses FAAB ──────────────────────
+describe("claimsToPanelRecommendations — FAAB leagues", () => {
+  it("keeps the bid when includeFaab is true and drops it otherwise", () => {
+    expect(claimsToPanelRecommendations([CLAIM], { leagueId: "l", includeFaab: true, limit: 3 })[0]?.suggestedFaabBid).toBe(12)
+    expect(claimsToPanelRecommendations([CLAIM], { leagueId: "l", includeFaab: false, limit: 3 })[0]?.suggestedFaabBid).toBeNull()
   })
 })
 
@@ -370,21 +259,12 @@ describe("processLeagueWaiversJob — idempotency key", () => {
 
 // ─── 11. Deeper analysis path routes to Chimmy and requires AF Pro ───────────
 describe("deeperAnalysisPath", () => {
-  it("points to Chimmy chat with waiver-analysis topic", async () => {
-    const { getPlayerPoolForSport } = await import("@/lib/sport-teams/SportPlayerPoolResolver")
-    vi.mocked(getPlayerPoolForSport).mockResolvedValue([
-      { player_id: "p1", full_name: "Real Player", position: "WR", external_source_id: null },
-    ] as never)
-
-    const output = await generateWaiverRecommendations({
-      userId: "user-1",
-      leagueId: "league-xyz",
-      mode: "quick",
-    })
+  it("points to Chimmy chat with waiver-analysis topic", () => {
+    const recs = claimsToPanelRecommendations([CLAIM], { leagueId: "league-xyz", includeFaab: false, limit: 5 })
 
     /* Previously this looped over an empty array and passed without checking anything. */
-    expect(output.recommendations.length).toBeGreaterThan(0)
-    for (const rec of output.recommendations) {
+    expect(recs.length).toBeGreaterThan(0)
+    for (const rec of recs) {
       expect(rec.deeperAnalysisPath).toContain("/chimmy/chat")
       expect(rec.deeperAnalysisPath).toContain("waiver-analysis")
       expect(rec.deeperAnalysisPath).toContain("league-xyz")

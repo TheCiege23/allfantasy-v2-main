@@ -7,8 +7,9 @@
  * the CLIENT posts it (`availablePlayers: z.array(...).min(1)` on /api/waiver-ai/engine) — there is
  * no server-side assembly there to reuse. This module is that assembly.
  *
- * ⚠ IT IS THE SAME RESOLVER AND THE SAME SUBTRACTION THE WAIVER ASSISTANT ALREADY USES
- * (`lib/ai/waivers/waiverRecommendationService.ts`), reused rather than re-derived. Two answers to
+ * ⚠ IT IS THE SAME RESOLVER AND THE SAME SUBTRACTION THE OLD WAIVER ASSISTANT USED
+ * (`lib/ai/waivers/waiverRecommendationService.ts`, retired 2026-09-30 — /api/ai/waivers/recommend
+ * now reads THIS module), reused rather than re-derived. Two answers to
  * "who is available in this league" is the bug; the assistant and the packet must not be able to
  * disagree about it.
  *

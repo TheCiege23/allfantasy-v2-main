@@ -10,19 +10,14 @@ import type { ManagerBehaviorProfile } from '@/lib/shared-services/knowledge-gra
 
 export type { WaiverRosterPlayer, ScoredWaiverTarget, WaiverAIEngineInput, UserGoal }
 
-/** The one real, independently-computed comparison-only engine found during the Phase 7 audit (lib/ai/waivers/waiverRecommendationService.ts). Format-specific "War Room" engines are a legitimate separate family (per-format tuning), not duplicates, and are out of scope here — see the README. */
+/**
+ * The one real, independently-computed comparison-only engine found during the Phase 7 audit
+ * (lib/ai/waivers/waiverRecommendationService.ts). RETIRED 2026-09-30 with its adapter, so no
+ * divergence record carries this id any more; the type stays for the divergence shape and any
+ * future grader. Format-specific "War Room" engines are a legitimate separate family (per-format
+ * tuning), not duplicates, and are out of scope here — see the README.
+ */
 export type LegacyWaiverGraderId = 'waiver_recommendation_service'
-
-export interface LegacyWaiverGraderResult {
-  graderId: LegacyWaiverGraderId
-  topAddPlayerId: string | null
-  topAddPlayerName: string | null
-  faabBid: number | null
-  priority: number | null
-  confidence: 'high' | 'medium' | 'low' | null
-  /** Set when the real legacy call itself failed — divergence is not computed against a failed call. */
-  error: string | null
-}
 
 export interface WaiverGraderDivergence {
   graderId: LegacyWaiverGraderId
