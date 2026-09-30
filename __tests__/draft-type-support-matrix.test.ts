@@ -35,10 +35,10 @@ describe('draft type support matrix', () => {
     )
   })
 
-  it('create-league v2 salary_cap options include auction + auto only', () => {
+  it('create-league v2 salary cap offers the supported auction draft', () => {
     const opts = getDraftTypeOptions('salary_cap', 'NFL').map((o) => o.id)
     expect(opts).toContain('auction')
-    expect(opts).toContain('auto')
+    expect(opts).not.toContain('auto')
     expect(opts).not.toContain('slow_draft')
     expect(opts).not.toContain('mock_draft')
     expect(opts).not.toContain('offline')
@@ -79,7 +79,7 @@ describe('draft type support matrix', () => {
     expect(wire).toContain('team')
   })
 
-  it('validateCreatePayload clears devy canonical ids that match the matrix (blocked only by the college creation gate)', () => {
+  it('validateCreatePayload accepts devy canonical ids that match the matrix', () => {
     const r = validateCreatePayload({
       concept: 'devy',
       sport: 'NFL',
@@ -88,11 +88,7 @@ describe('draft type support matrix', () => {
       draftType: 'devy_snake',
       leagueName: 'Matrix Test Devy',
     })
-    expect(r.ok).toBe(false)
-    if (!r.ok) {
-      expect(r.errors.some((e) => e.code === 'COLLEGE_FORMATS_NOT_OPEN')).toBe(true)
-      expect(r.errors.some((e) => e.path === 'draftType')).toBe(false)
-    }
+    expect(r.ok).toBe(true)
   })
 
   it('blocks invalid concept + draft pairs consistently', () => {

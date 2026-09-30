@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  COLLEGE_FORMATS_NOT_OPEN_CODE,
-  COLLEGE_FORMATS_NOT_OPEN_MESSAGE,
   validateCreatePayload,
 } from '@/lib/league-creation/canonical/validateCreateLeague'
 
@@ -13,17 +11,8 @@ const base = {
   leagueName: 'Mapped Draft Test',
 }
 
-/**
- * Option B launch gate: devy/c2c payloads must clear every structural and
- * draft-type check and be stopped ONLY by the college-formats creation gate —
- * a draftType error here would mean the id normalization under test regressed.
- */
-function expectBlockedByCollegeGateOnly(r: ReturnType<typeof validateCreatePayload>) {
-  expect(r.ok).toBe(false)
-  if (!r.ok) {
-    expect(r.errors.some((e) => e.code === COLLEGE_FORMATS_NOT_OPEN_CODE)).toBe(true)
-    expect(r.errors.some((e) => e.path === 'draftType')).toBe(false)
-  }
+function expectCreatable(r: ReturnType<typeof validateCreatePayload>) {
+  expect(r.ok, r.ok ? undefined : r.error).toBe(true)
 }
 
 describe('validateCreatePayload — devy/c2c draft id normalization', () => {
@@ -33,7 +22,7 @@ describe('validateCreatePayload — devy/c2c draft id normalization', () => {
       concept: 'devy',
       draftType: 'snake',
     })
-    expectBlockedByCollegeGateOnly(r)
+    expectCreatable(r)
   })
 
   it('devy + auction clears draft checks (maps to devy_auction)', () => {
@@ -42,7 +31,7 @@ describe('validateCreatePayload — devy/c2c draft id normalization', () => {
       concept: 'devy',
       draftType: 'auction',
     })
-    expectBlockedByCollegeGateOnly(r)
+    expectCreatable(r)
   })
 
   it('devy + offline clears draft checks (execution mode; maps via normalizeDraftTypeForEngine to devy_snake)', () => {
@@ -51,7 +40,7 @@ describe('validateCreatePayload — devy/c2c draft id normalization', () => {
       concept: 'devy',
       draftType: 'offline',
     })
-    expectBlockedByCollegeGateOnly(r)
+    expectCreatable(r)
   })
 
   it('c2c + snake clears draft checks (maps to c2c_snake)', () => {
@@ -60,7 +49,7 @@ describe('validateCreatePayload — devy/c2c draft id normalization', () => {
       concept: 'c2c',
       draftType: 'snake',
     })
-    expectBlockedByCollegeGateOnly(r)
+    expectCreatable(r)
   })
 
   it('c2c + auction clears draft checks (maps to c2c_auction)', () => {
@@ -69,18 +58,18 @@ describe('validateCreatePayload — devy/c2c draft id normalization', () => {
       concept: 'c2c',
       draftType: 'auction',
     })
-    expectBlockedByCollegeGateOnly(r)
+    expectCreatable(r)
   })
 
   it('canonical devy_snake / devy_auction clear draft checks when sent explicitly', () => {
-    expectBlockedByCollegeGateOnly(
+    expectCreatable(
       validateCreatePayload({
         ...base,
         concept: 'devy',
         draftType: 'devy_snake',
       }),
     )
-    expectBlockedByCollegeGateOnly(
+    expectCreatable(
       validateCreatePayload({
         ...base,
         concept: 'devy',
@@ -107,14 +96,10 @@ describe('validateCreatePayload — devy/c2c draft id normalization', () => {
     expect(r.ok).toBe(true)
   })
 
-  it('devy/c2c creation returns the labeled college-formats 400 (Option B)', () => {
+  it('allows supported devy and C2C formats through canonical validation', () => {
     for (const concept of ['devy', 'c2c', 'DEVY', 'C2C']) {
       const r = validateCreatePayload({ ...base, concept, draftType: 'snake' })
-      expect(r.ok, concept).toBe(false)
-      if (!r.ok) {
-        expect(r.status, concept).toBe(400)
-        expect(r.error, concept).toBe(COLLEGE_FORMATS_NOT_OPEN_MESSAGE)
-      }
+      expect(r.ok, concept).toBe(true)
     }
   })
 })

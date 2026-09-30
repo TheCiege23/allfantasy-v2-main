@@ -468,6 +468,12 @@ export function LeagueBasicsStep({
         ) : null}
       </div>
 
+      {(getEffectiveLeagueType(state) === 'devy' || getEffectiveLeagueType(state) === 'c2c') ? (
+        <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm leading-6">
+          College formats are in active build. Review roster, scoring, and future-season rules before inviting managers.
+        </p>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_160px]">
         <label className="space-y-2">
           <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
