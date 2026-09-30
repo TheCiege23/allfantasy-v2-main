@@ -2258,6 +2258,59 @@
   color: var(--text2);
 }
 
+/* ── Your starters in the game view, and the football box score ─────────────
+   Top level on purpose: none of this belongs to a width band. */
+.af-gv-mine-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+/* A starter's live line sits under his row, aligned past the headshot. */
+.af-gv-mine-line {
+  margin: 4px 0 0 40px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 11.5px;
+  color: var(--text2);
+}
+.af-gv-mine-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.af-gv-mine-cell-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.af-gv-box-table tr[data-mine] th,
+.af-gv-box-table tr[data-mine] td {
+  background: var(--accent-soft);
+}
+.af-gv-box-mine {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.af-gv-box-more {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-gv-box-more > summary {
+  cursor: pointer;
+  padding: 4px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.af-gv-box-more > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 @media (max-width: 620px) {
   .af-gv-bplay {
     grid-template-columns: 18px 38px minmax(0, 1fr) auto;

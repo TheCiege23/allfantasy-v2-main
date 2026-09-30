@@ -189,7 +189,7 @@ import { LiveGameView } from '@/components/core-app/screens/LiveGameView'
 import { V3WeightsPanel } from '@/components/admin/V3WeightsPanel'
 import { UsageAnalyticsPanel } from '@/components/admin/UsageAnalyticsPanel'
 import { getAdminAccessState } from '@/lib/adminAuth'
-import { getLivePageData } from '@/lib/live/liveScoresPage'
+import { getGameStarters, getLivePageData } from '@/lib/live/liveScoresPage'
 import { highlightForGameDetail } from '@/lib/live/gameHighlights'
 import { normalizeToLiveSport } from '@/lib/sport-scope'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
@@ -2739,6 +2739,16 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       })
     : null
   const liveGameHighlightId = liveGame ? await highlightForGameDetail(liveGame.detail) : null
+  // Your starters in this game — the same join the slate card makes, for one game.
+  const liveGameStarters = liveGame?.detail
+    ? await getGameStarters({
+        userId,
+        sport: liveGameSport,
+        gameId: liveGame.detail.gameId,
+        homeAbbrev: liveGame.detail.home.abbrev,
+        awayAbbrev: liveGame.detail.away.abbrev,
+      })
+    : null
 
   /*
    * 🛑 WITH A LEAGUE HELD, THE SLATE OPENS ON THAT LEAGUE'S SPORT. The nav links
@@ -4577,10 +4587,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : activeKey === 'live' ? (
         liveGameId ? (
           <LiveGameView
-            initial={liveGame}
+            initial={liveGame ? { ...liveGame, starters: liveGameStarters } : null}
             sport={liveGameSport}
             gameId={liveGameId}
             highlightYoutubeId={liveGameHighlightId}
+            selectedLeagueId={selectedLeagueId}
             backHref={`/core/live?sport=${encodeURIComponent(liveGameSport)}${selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''}`}
           />
         ) : liveScores ? (

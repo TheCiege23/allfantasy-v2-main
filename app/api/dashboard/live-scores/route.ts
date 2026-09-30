@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
-import { getLivePageData } from '@/lib/live/liveScoresPage'
+import { getGameStarters, getLivePageData } from '@/lib/live/liveScoresPage'
 import { etagMatches, livePayloadEtag } from '@/lib/live/livePayloadEtag'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import type { DashboardLiveScore } from '@/lib/types/liveScoring'
@@ -159,11 +159,33 @@ export async function GET(request: NextRequest) {
    * validates sport and game id, and serves the DB cache before ESPN.
    */
   if (view === 'game') {
+    const sport = request.nextUrl.searchParams.get('sport') ?? ''
     const data = await getEspnGameSummary({
-      sport: request.nextUrl.searchParams.get('sport') ?? '',
+      sport,
       gameId: request.nextUrl.searchParams.get('game') ?? '',
     })
-    return NextResponse.json(data)
+    /*
+     * Your starters in this game ride the same poll, so their points move while
+     * the game does. Signed out, `starters` is null and the payload is the
+     * public one it always was.
+     *
+     * ⚠ WITH STARTERS IT NAMES A USER, SO IT MUST NOT BE SHARED BY A CACHE. The
+     * public shape stays cacheable-by-default; the personal one is `private,
+     * no-store`, the same boundary `view=live` draws with its ETag headers.
+     */
+    const starters = data.detail
+      ? await getGameStarters({
+          userId: session?.user?.id ?? null,
+          sport,
+          gameId: data.detail.gameId,
+          homeAbbrev: data.detail.home.abbrev,
+          awayAbbrev: data.detail.away.abbrev,
+        })
+      : null
+    return NextResponse.json(
+      { ...data, starters },
+      starters ? { headers: { 'Cache-Control': 'private, no-store' } } : undefined,
+    )
   }
   if (view === 'live') {
     const data = await getLivePageData({

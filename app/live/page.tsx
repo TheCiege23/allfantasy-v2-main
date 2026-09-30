@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
-import { getLivePageData } from '@/lib/live/liveScoresPage'
+import { getGameStarters, getLivePageData } from '@/lib/live/liveScoresPage'
 import { highlightForGameDetail } from '@/lib/live/gameHighlights'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import { LiveScoresClient } from '@/components/live/LiveScoresClient'
@@ -47,11 +47,22 @@ export default async function LivePage({
       return { detail: null, stale: false, failed: true }
     })
     const highlightYoutubeId = await highlightForGameDetail(game.detail)
+    // Public page: a signed-out visitor gets null and no starters panel.
+    const gameSession = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+    const starters = game.detail
+      ? await getGameStarters({
+          userId: gameSession?.user?.id ?? null,
+          sport,
+          gameId: game.detail.gameId,
+          homeAbbrev: game.detail.home.abbrev,
+          awayAbbrev: game.detail.away.abbrev,
+        })
+      : null
     return (
       <div className="live-page px-4 py-5 sm:px-6">
         <div className="af-core live-card-scope">
           <LiveGameView
-            initial={game}
+            initial={{ ...game, starters }}
             sport={sport}
             gameId={params.game}
             highlightYoutubeId={highlightYoutubeId}
