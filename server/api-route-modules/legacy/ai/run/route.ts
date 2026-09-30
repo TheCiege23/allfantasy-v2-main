@@ -221,7 +221,7 @@ Based on their data, recommend specific actions:
 Output JSON only:
 {
   "rating": number (0-100, be honest - 70+ is genuinely good),
-  "title": string (e.g., "Dynasty Dominator", "Waiver Wire Wizard", "Perpetual Rebuilder"),
+  "title": string (a short headline built ONLY from their record, e.g. "2x Champion · 61% Win Rate" or "5 Playoff Trips in 6 Seasons" — never a persona or playstyle label),
   "window_status": "READY_TO_COMPETE" | "REBUILDING" | "OVEREXTENDED" | "AGING_CORE" | "DIRECTION_NEEDED",
   "window_status_emoji": "🏆" | "🔨" | "⚠️" | "📉" | "🧱",
   "window_status_label": string (human readable: "Ready to Compete (2025)", "Rebuilding (2026+)", etc.),
@@ -597,12 +597,11 @@ function normalizeLegacyResponse(
   audit: LegacyAudit,
 ): NormalizedLegacyResponse {
   const insights = (aiResponse.insights as Record<string, unknown> | null) || null
+  // A record, never a label (Milestone 32): the title is shown on the report and the share card.
   const fallbackTitle =
-    snapshot.win_percentage >= 60
-      ? "Dynasty Contender"
-      : snapshot.win_percentage >= 50
-        ? "Competitive Manager"
-        : "Rebuild Candidate"
+    snapshot.championships > 0
+      ? `${snapshot.championships}x Champion · ${snapshot.win_percentage}% Win Rate`
+      : `${snapshot.win_percentage}% Win Rate`
 
   // Honesty (Task 2): every field the model omits is filled by a FORMULA over the snapshot —
   // a derived value, not an observation. The tracker records exactly which fields that
