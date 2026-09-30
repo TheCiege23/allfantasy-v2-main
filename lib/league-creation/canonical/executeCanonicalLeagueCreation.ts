@@ -190,7 +190,7 @@ export async function executeCanonicalLeagueCreation(args: {
       if (carryoverFinalized) {
         await prisma.league.update({
           where: { id: createdLeagueId },
-          data: { status: 'active', lifecycleState: 'active' },
+          data: { status: 'active', lifecycleState: 'in_season' },
         })
       }
     } catch (e) {
@@ -236,7 +236,14 @@ export async function executeCanonicalLeagueCreation(args: {
     resBody.warnings = engine.warnings
   }
   if (args.sourceLeagueId && !carryoverFinalized) {
-    resBody.warnings = [...(resBody.warnings ?? []), 'Imported teams and rosters were copied, but native season materialization is pending. League setup remains open.']
+    resBody.warnings = [
+      ...(resBody.warnings ?? []),
+      {
+        path: 'sourceLeagueId',
+        code: 'IMPORT_MATERIALIZATION_PENDING',
+        message: 'Imported teams and rosters were copied, but native season materialization is pending. League setup remains open.',
+      },
+    ]
   }
 
   log('success', { leagueId: createdLeagueId, homepageUrl })

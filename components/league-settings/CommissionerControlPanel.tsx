@@ -157,17 +157,25 @@ export function CommissionerControlPanel({ leagueId }: Props) {
     try {
       for (const team of teams) {
         const shouldBeCo = commissionerSelections[team.id] ?? false
-        if (shouldBeCo !== (team.isCommissioner || team.isCoCommissioner)) {
-          await fetch('/api/league/settings/co-commissioners', {
+        if (!team.isCommissioner && shouldBeCo !== team.isCoCommissioner) {
+          const res = await fetch('/api/league/settings/co-commissioners', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ leagueId, memberId: team.id, isCoCommissioner: shouldBeCo }),
           })
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({})) as { error?: string }
+            throw new Error(body.error ?? `Failed to update ${team.teamName}`)
+          }
         }
       }
+      setTeams((current) => current.map((team) => ({
+        ...team,
+        isCoCommissioner: team.isCommissioner ? team.isCoCommissioner : Boolean(commissionerSelections[team.id]),
+      })))
       setSuccess('Commissioners updated.')
       setTimeout(() => setSuccess(null), 3000)
-    } catch { setError('Failed to update commissioners') }
+    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to update commissioners') }
     finally { setActionLoading(false) }
   }, [leagueId, teams, commissionerSelections])
 

@@ -15,6 +15,7 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 import { isCommissionerRosterLocked, readCommissionerRosterLocks, withCommissionerRosterLocks } from '@/lib/league/commissioner-roster-lock'
+import { addDropErrorStatus, mapAddDropErrorCode } from '@/lib/waiver-wire/addDropErrors'
 
 describe('commissioner roster locks', () => {
   beforeEach(() => {
@@ -42,5 +43,11 @@ describe('commissioner roster locks', () => {
     expect(await isCommissionerRosterLocked('league1', 'roster1')).toBe(false)
     leagueFind.mockResolvedValue({ settings: { commissionerRosterLocks: {} } })
     expect(await isCommissionerRosterLocked('league1', 'roster1')).toBe(false)
+  })
+
+  it('returns a roster-specific error for blocked add/drop actions', () => {
+    const code = mapAddDropErrorCode('This roster is locked by the commissioner.', { hasDrop: false })
+    expect(code).toBe('ROSTER_LOCKED')
+    expect(addDropErrorStatus(code)).toBe(423)
   })
 })

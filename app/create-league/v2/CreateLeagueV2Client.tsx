@@ -62,6 +62,8 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<CreateLeagueFieldErrors | null>(null)
+  const [createdLeagueHref, setCreatedLeagueHref] = useState<string | null>(null)
+  const [creationWarning, setCreationWarning] = useState<string | null>(null)
 
   useEffect(() => {
     if (importTemplate) {
@@ -132,6 +134,11 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
         return
       }
       clearPersistedV2State()
+      if (result.warning) {
+        setCreatedLeagueHref(result.redirectTo ?? (result.leagueId ? `/core?league=${encodeURIComponent(result.leagueId)}` : '/core'))
+        setCreationWarning(result.warning)
+        return
+      }
       router.push(result.redirectTo ?? '/dashboard')
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : t('createLeague.v2.submitError'))
@@ -150,6 +157,8 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       submitting={submitting}
       importSourceName={importSourceName}
       importCarryover={Boolean(importSourceLeagueId)}
+      createdLeagueHref={createdLeagueHref}
+      creationWarning={creationWarning}
       onSubmit={handleSubmit}
       onCancel={() => router.push('/core')}
     />

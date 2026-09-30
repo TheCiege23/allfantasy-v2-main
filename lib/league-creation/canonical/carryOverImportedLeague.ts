@@ -173,6 +173,9 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   }
   const missing = sourceIds.filter((id) => !idMap.has(id))
   if (missing.length) refuse(`${missing.length} imported player IDs cannot be verified for a native league. Refresh player identities before carrying rosters over.`)
+  if (new Set(sourceIds.map((id) => idMap.get(id))).size !== sourceIds.length) {
+    refuse('Multiple imported player IDs map to one native player. Refresh player identities before carrying rosters over.')
+  }
 
   const picks: Prisma.DraftPickCreateManyInput[] = []
   const playerPicksBySlot: Array<Array<{ nativeId: string; name: string; position: string; team: string | null }>> = []
