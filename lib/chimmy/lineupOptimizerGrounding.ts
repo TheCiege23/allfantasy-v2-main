@@ -15,6 +15,7 @@ import { fillLineup, DEFAULT_SLOT_ELIGIBILITY, type ImpactPlayer } from '@/lib/d
 import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { afEngineForLeague, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
 import { activePlayerIds, viewerRosterOf } from './leagueRosterIndex'
 import type { RosterIdsUnreadable, ScenarioWeek } from './tradeScenarioTypes'
 import type { ChatStartCall } from './tools/chimmyTools'
@@ -68,6 +69,12 @@ export type OptimizerPlayer = {
   injury: string | null
   /** This week's points under the league's rules. NULL is "not priced", never zero. */
   points: number | null
+  /**
+   * AllFantasy's OWN engine for the same week, carried into this league's scoring by the provider
+   * line (`afEngineForLeague`). A SECOND OPINION for the model to quote — the lineup, every total and
+   * the swap list are computed from `points` alone. Absent when the engine has no row for him.
+   */
+  af?: number | null
 }
 
 export type LineupOptimizationUnresolvedReason =
@@ -121,6 +128,14 @@ export interface LineupOptimizerDeps extends LeagueWeekPricingDeps {
     ids: string[],
   ) => Promise<Map<string, { name: string | null; position: string | null; team?: string | null; injury?: string | null }>>
   checkLocks?: (args: { sport: string; season: number; week: number; players: Array<{ playerId: string; name: string; team: string | null; gameTime: null }> }) => Promise<LockCheck>
+  /**
+   * AllFantasy's engine (PPR) and the provider's generic PPR total for the same week, by id — what
+   * carries AF into the league's scoring. Optional: without it the block simply shows no AF.
+   */
+  loadAfWeek?: (args: { week: { season: string; week: number }; ids: string[] }) => Promise<{
+    engine: ReadonlyMap<string, number>
+    generic: ReadonlyMap<string, number>
+  }>
 }
 
 /** Enough for any roster with IR and taxi; the name read is bounded by it. */
@@ -131,6 +146,16 @@ const defaultDeps: LineupOptimizerDeps = {
   resolveWorld: resolveCanonicalWorld,
   loadPlayers: async (sport, ids) => enrichLineupAvailability(sport, await resolveNames(normalizeToSupportedSport(sport), ids, MAX_ROSTER_IDS)),
   checkLocks: checkStartedGames,
+  loadAfWeek: async ({ week, ids }) => {
+    const [engine, providers] = await Promise.all([
+      lookupAfEngineProjections(ids, week),
+      lookupProjections(ids, week),
+    ])
+    return {
+      engine: new Map([...engine].map(([id, e]) => [id, e.projectedPoints])),
+      generic: new Map([...providers].map(([id, p]) => [id, p.projectedPoints])),
+    }
+  },
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100
@@ -173,6 +198,10 @@ export async function buildLineupOptimization(
     const entry = priced.get(id)
     if (entry && unavailableForLineup(meta.get(id)?.injury)) priced.set(id, { ...entry, projectedPoints: 0 })
   }
+  /* AllFantasy's own engine for the same week — shown beside each number, never used to fill the lineup. */
+  const afWeek = deps.loadAfWeek
+    ? await deps.loadAfWeek({ week: basis.week, ids: active }).catch(() => null)
+    : null
   const impact: ImpactPlayer[] = active.map((id) => priced.get(id)!)
   if (impact.every((p) => p.projectedPoints == null)) {
     return unresolved(
@@ -226,7 +255,15 @@ export async function buildLineupOptimization(
       team: m?.team ?? null,
       injury: lineupDesignation(m?.injury),
       points: p?.projectedPoints ?? null,
+      ...afFor(id, p?.projectedPoints ?? null),
     }
+  }
+  function afFor(id: string, leaguePoints: number | null): { af?: number } {
+    if (!afWeek) return {}
+    // Ruled out: the provider number is already a certain 0, and AF says the same.
+    if (unavailableForLineup(meta.get(id)?.injury) && afWeek.engine.has(id)) return { af: 0 }
+    const af = afEngineForLeague(afWeek.engine.get(id), afWeek.generic.get(id) ?? null, leaguePoints)
+    return af == null ? {} : { af }
   }
 
   const bestIds = new Set(best.starterIds)
@@ -286,8 +323,11 @@ const who = (p: OptimizerPlayer) => {
   const bits = [p.position, p.team].filter(Boolean).join(', ')
   return bits ? `${p.name} (${bits})` : p.name
 }
-const pts = (p: OptimizerPlayer, week: number) =>
-  p.points == null ? `no week ${week} projection` : `${fmt(p.points)} pts`
+const pts = (p: OptimizerPlayer, week: number) => {
+  const af = p.af != null ? fmt(p.af) : null
+  if (p.points == null) return af != null ? `no week ${week} projection (AF ${af}, not used in the maths)` : `no week ${week} projection`
+  return af != null ? `${fmt(p.points)} pts · AF ${af}` : `${fmt(p.points)} pts`
+}
 
 export function isOutDesignation(status: string | null | undefined): boolean {
   return unavailableForLineup(status)
@@ -306,6 +346,13 @@ export function renderLineupOptimizationBlock(result: LineupOptimization): strin
   const wk = r.week.week
   const lines: Array<string | null> = [
     `LINEUP OPTIMIZER (week ${wk}, this league's real roster, projections scored under THIS league's own rules — repeat these numbers, never estimate your own):`,
+    /*
+     * Said once, up front, whenever any AF figure appears: which number the maths used, and that AF
+     * is a second opinion — so the model can quote both without re-ranking the lineup by AF.
+     */
+    [...r.best.slots.map((s) => s.player), ...r.bench, ...r.startInstead, ...r.benchInstead, ...r.current.starters].some((p) => p.af != null)
+      ? `- Each player shows the provider (Sleeper) projection first, then "AF": AllFantasy's own projection engine for the same week under the same rules. The best lineup, every total and every swap are computed from the FIRST number only. Quote AF as a second opinion — worth mentioning when it disagrees — but never re-rank the lineup or change a recommendation by it.`
+      : null,
     `- Best lineup projects ${fmt(r.best.points)} pts:`,
     ...r.best.slots.map(({ slot, player }) => `  ${slot}: ${who(player)} — ${pts(player, wk)}${player.injury ? ` [${player.injury}]` : ''}`),
   ]

@@ -312,3 +312,50 @@ it('reports unknown locks when the schedule read fails', async () => {
   expect(r.unverifiedLocks?.length).toBe(MINE.length-1)
   expect(renderLineupOptimizationBlock(r)).toContain('Kickoff locks could not be verified')
 })
+
+/*
+ * AllFantasy's own engine as a second opinion (2026-09-30). It rides on every player, carried into
+ * the league's rules by the provider line — and it must never move the lineup, a total or a swap.
+ */
+describe('buildLineupOptimization — AF beside the provider number', () => {
+  const withAf = (): LineupOptimizerDeps => ({
+    ...deps,
+    loadAfWeek: async () => ({
+      // Allen: 30 engine x (22 league / 20 generic) = 33. Lamb AF far BELOW Wilson's, on purpose.
+      engine: new Map([['qb1', 30], ['wr1', 5], ['wr2', 40], ['rb-ir', 25]]),
+      generic: new Map([['qb1', 20], ['wr1', 17], ['wr2', 11]]),
+    }),
+  })
+
+  it('attaches AF under the league rules and changes nothing the maths decided', async () => {
+    const plain = await run()
+    const r = await buildLineupOptimization({ leagueId: 'L1', userId: 'viewer-1' }, withAf())
+    if (r.status !== 'ready' || plain.status !== 'ready') throw new Error('not ready')
+    // Same lineup, same total, same swaps as without AF — AF is display only.
+    expect(r.best.points).toBe(plain.best.points)
+    expect(r.best.slots.map((s) => s.player.playerId)).toEqual(plain.best.slots.map((s) => s.player.playerId))
+    expect(r.startInstead.map((p) => p.playerId)).toEqual(plain.startInstead.map((p) => p.playerId))
+    expect(r.gain).toBe(plain.gain)
+    const byId = new Map(r.best.slots.map((s) => [s.player.playerId, s.player]))
+    expect(byId.get('qb1')?.af).toBe(33)
+    expect(byId.get('wr1')?.af).toBe(5)
+    // A player the engine never wrote carries no AF key at all.
+    expect(byId.get('rb1') && 'af' in byId.get('rb1')!).toBe(false)
+  })
+
+  it('without the AF read the players carry no AF, exactly as before', async () => {
+    const r = await run()
+    if (r.status !== 'ready') throw new Error('not ready')
+    expect(r.best.slots.some((s) => 'af' in s.player)).toBe(false)
+  })
+
+  it('a failed AF read leaves the optimization intact', async () => {
+    const r = await buildLineupOptimization(
+      { leagueId: 'L1', userId: 'viewer-1' },
+      { ...deps, loadAfWeek: async () => { throw new Error('db down') } },
+    )
+    if (r.status !== 'ready') throw new Error('not ready')
+    expect(r.best.points).toBe(106)
+    expect(r.best.slots.some((s) => 'af' in s.player)).toBe(false)
+  })
+})
