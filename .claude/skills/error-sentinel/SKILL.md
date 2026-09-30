@@ -43,6 +43,32 @@ Repository: `TheCiege23/allfantasy-v2-main`. Sentry: org `all-fantasy`, project
   a local reproduction to 20 minutes. Finish the run with a report even when
   nothing was actionable.
 
+## 0a. Which tools this firing actually has
+
+A Routine-fired session may arrive without connector tools. Check before
+anything else, and say what you found in the report:
+
+| tool family | present | absent → do this |
+|---|---|---|
+| `mcp__github__*` | use them as written below | use the GitHub REST API through `curl` with the container's `$GITHUB_TOKEN` (it is set in this environment; never echo it). The endpoints are listed under each step. |
+| `mcp__Sentry__*` | use them as written below | **Sentry is unavailable this firing.** The egress proxy denies `us.sentry.io` (measured 2026-09-30: `CONNECT` 403), so there is no REST fallback. Run the Playwright half only, and put "Sentry: no connector on this firing" in the report so the owner can attach the connector to the Routine. |
+| `subscribe_pr_activity` | use it in step 5 | skip it and say so; the PR still gets opened and the ledger still records it. |
+
+GitHub REST fallback, all against `https://api.github.com/repos/TheCiege23/allfantasy-v2-main`
+with `-H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json"`:
+
+```
+GET  /actions/workflows/playwright.yml/runs?branch=main&status=completed&per_page=30
+GET  /actions/runs/<run_id>/jobs?per_page=50
+GET  /actions/jobs/<job_id>/logs                      # follows a redirect; use curl -L, then tail -n 4000
+GET  /issues?state=open&labels=error-sentinel&per_page=100
+GET  /pulls?state=open&per_page=50
+POST /issues            {"title","body","labels":["error-sentinel"]}
+POST /issues/<n>/comments {"body"}
+PATCH /issues/<n>       {"labels":[...]}
+POST /pulls             {"title","head":"sentinel/<slug>","base":"main","body"}
+```
+
 ## 0. Bootstrap the checkout
 
 ```bash
