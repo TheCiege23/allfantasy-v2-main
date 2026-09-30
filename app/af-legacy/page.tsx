@@ -1158,14 +1158,6 @@ function AFLegacyContent() {
   const [proposalError, setProposalError] = useState('')
   const [proposalResults, setProposalResults] = useState<any[]>([])
   
-  // Trade Preferences Quiz state
-  const [quizTrades, setQuizTrades] = useState<any[]>([])
-  const [quizResponses, setQuizResponses] = useState<Record<number, 'A' | 'B'>>({})
-  const [quizCurrentIndex, setQuizCurrentIndex] = useState(0)
-  const [quizCompleted, setQuizCompleted] = useState(false)
-  const [quizLoading, setQuizLoading] = useState(false)
-  const [quizChecked, setQuizChecked] = useState(false)
-
   // Trade Notifications state
   const [tradeNotifications, setTradeNotifications] = useState<any[]>([])
   const [tradeNotifLoading, setTradeNotifLoading] = useState(false)
@@ -2989,13 +2981,6 @@ function AFLegacyContent() {
     }
   }, [username, importStatus])
 
-  // Check quiz status when finder tab is opened
-  useEffect(() => {
-    if (activeTab === 'finder' && username && !quizChecked) {
-      checkQuizStatus()
-    }
-  }, [activeTab, username, quizChecked]) // eslint-disable-line react-hooks/exhaustive-deps
-
   useEffect(() => {
     if (activeTab !== 'overview' || !username || importStatus !== 'complete') return
     if (autoHydrateTriggered || rankRefreshLoading) return
@@ -3446,63 +3431,6 @@ function AFLegacyContent() {
       setEmailSignupError('Network error - please try again')
     } finally {
       setEmailSignupLoading(false)
-    }
-  }
-
-  // Check if user has completed the trade preferences quiz
-  const checkQuizStatus = async () => {
-    if (!username || quizChecked) return
-    setQuizLoading(true)
-    try {
-      const res = await fetch(`/api/legacy/trade/preferences?sleeper_username=${encodeURIComponent(username)}`)
-      const data = await res.json()
-      setQuizChecked(true)
-      setQuizCompleted(data.hasCompletedQuiz ?? false)
-      if (data.quizTrades) {
-        setQuizTrades(data.quizTrades)
-      }
-    } catch (e) {
-      console.error('Failed to check quiz status:', String(e))
-      setQuizChecked(true)
-      setQuizCompleted(true) // Fallback to skip quiz on error
-    } finally {
-      setQuizLoading(false)
-    }
-  }
-
-  // Submit quiz responses
-  const submitQuiz = async () => {
-    if (!username) return
-    gtagEvent('trade_quiz_submitted')
-    setQuizLoading(true)
-    try {
-      const responses = Object.entries(quizResponses).map(([id, choice]) => ({
-        tradeId: parseInt(id),
-        choice,
-      }))
-      const res = await fetch('/api/legacy/trade/preferences', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sleeper_username: username,
-          responses,
-        }),
-      })
-      if (res.ok) {
-        setQuizCompleted(true)
-      }
-    } catch (e) {
-      console.error('Failed to submit quiz:', String(e))
-    } finally {
-      setQuizLoading(false)
-    }
-  }
-
-  // Handle quiz answer selection
-  const handleQuizAnswer = (tradeId: number, choice: 'A' | 'B') => {
-    setQuizResponses(prev => ({ ...prev, [tradeId]: choice }))
-    if (quizCurrentIndex < quizTrades.length - 1) {
-      setTimeout(() => setQuizCurrentIndex(i => i + 1), 300)
     }
   }
 
