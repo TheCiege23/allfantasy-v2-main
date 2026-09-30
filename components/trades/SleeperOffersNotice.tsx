@@ -18,7 +18,11 @@ import { useEffect, useState } from 'react'
  * read it should not have to scroll past it forever.
  */
 
-const STORAGE_KEY = 'af:sleeper-offers-notice:v1'
+/*
+ * v2 (2026-09-30): the notice gained the screenshot upload. A manager who dismissed v1 has not been
+ * told about it, so the key moved and they see the notice once more.
+ */
+const STORAGE_KEY = 'af:sleeper-offers-notice:v2'
 
 /** Where the builder opens straight into "enter an offer by hand" — see `TradeCenter`'s `startWithOfferEntry`. */
 export function sleeperOfferEntryHref(leagueId: string): string {
@@ -65,21 +69,20 @@ export function SleeperOffersNotice(props: {
         Sleeper only shares a trade after it&rsquo;s accepted. Until then, an offer someone sent you &mdash; or one you
         sent &mdash; never reaches AllFantasy, so it can&rsquo;t appear here or be graded on its own.
       </p>
-      <p className="mt-2 font-semibold text-white">To get a pending offer graded now:</p>
-      <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+      <p className="mt-2 font-semibold text-white">
+        To get a pending offer graded now, {props.leagueId ? 'open this league’s Trade Center' : 'open the league’s Trade Center'} and either:
+      </p>
+      <ul className="mt-1 list-disc space-y-1 pl-5">
         <li>
-          {props.leagueId ? (
-            <>Tap <b>Grade a Sleeper offer</b> below (it&rsquo;s also in this league&rsquo;s Trade Center).</>
-          ) : (
-            <>Open the league&rsquo;s trades and choose <b>Grade a Sleeper offer</b>.</>
-          )}
+          <b>Upload a screenshot</b> &mdash; screenshot the offer in Sleeper and upload it. We read both sides and
+          fill in the trade; check every asset against Sleeper, then Analyze.
         </li>
-        <li>Pick the manager on the other side of the deal.</li>
         <li>
-          Add every player, pick and FAAB each manager would send &mdash; exactly as Sleeper shows it.
+          <b>Grade a Sleeper offer</b> by hand &mdash; pick the manager on the other side, then add every player,
+          pick and FAAB each manager would send, exactly as Sleeper shows it, and Analyze.
         </li>
-        <li>Analyze. You get the same grade as any trade in that league.</li>
-      </ol>
+      </ul>
+      <p className="mt-2">Either way you get the same grade as any trade in that league.</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {props.leagueId ? (
           <Link
