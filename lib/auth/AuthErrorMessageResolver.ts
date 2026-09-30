@@ -1,8 +1,15 @@
+/** Shown when a suspended or banned account tries to sign in (lib/moderation/accountSuspension). */
+export const ACCOUNT_SUSPENDED_MESSAGE =
+  'This account has been suspended for violating the AllFantasy Terms of Use. If you think this is a mistake, email support@allfantasy.ai.'
+
 export function resolveLoginErrorMessage(error: string | null | undefined): string {
   if (!error) return 'Unable to sign in. Please try again.'
   if (error.includes('SLEEPER_LOOKUP_UNAVAILABLE')) {
     return 'Sleeper sign-in is temporarily unavailable. Please try again in a moment.'
   }
+  // Only reachable with the right password (lib/auth.ts checks it after bcrypt), so saying so
+  // discloses nothing.
+  if (error.includes('ACCOUNT_SUSPENDED')) return ACCOUNT_SUSPENDED_MESSAGE
   // NOTE: SLEEPER_ONLY_ACCOUNT and PASSWORD_NOT_SET intentionally return the
   // generic message below — revealing account existence or auth method is an
   // info-disclosure risk.  Users without a password can recover via reset.
