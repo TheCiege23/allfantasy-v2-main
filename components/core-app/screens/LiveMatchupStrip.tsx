@@ -1,8 +1,59 @@
-import Link from 'next/link'
-import type { MatchupStrip } from '@/lib/live/matchupStrip'
+'use client'
 
-/** You vs your opponent for the league held on the live screen. Points are as of page load. */
-export function LiveMatchupStrip({ strip, leagueId }: { strip: MatchupStrip | null; leagueId: string }) {
+import Link from 'next/link'
+import { useEffect, useRef, useState } from 'react'
+import { nextStripState, type MatchupStrip } from '@/lib/live/matchupStrip'
+
+/**
+ * You vs your opponent for the league held on the live screen, refreshed on the slate's cadence.
+ *
+ * A final matchup stops polling. A tab in the background does not poll, and refreshes the moment it
+ * returns. A failed poll keeps the last good strip and says it is out of date.
+ */
+export function LiveMatchupStrip({
+  strip: initial,
+  leagueId,
+  pollMs,
+}: {
+  strip: MatchupStrip | null
+  leagueId: string
+  pollMs: number
+}) {
+  const [{ strip, stale }, setState] = useState(() => nextStripState(null, initial))
+  const seqRef = useRef(0)
+  const done = strip?.kind === 'scored' && strip.isFinal
+
+  useEffect(() => {
+    setState(nextStripState(null, initial))
+  }, [initial, leagueId])
+
+  useEffect(() => {
+    if (done) return
+    const load = async () => {
+      if (document.hidden) return
+      const seq = ++seqRef.current
+      let result: MatchupStrip | null | 'error' = 'error'
+      try {
+        const res = await fetch(`/api/dashboard/live-scores?view=matchup&league=${encodeURIComponent(leagueId)}`, {
+          cache: 'no-store',
+        })
+        if (res.ok) result = ((await res.json()) as { strip: MatchupStrip | null }).strip
+      } catch {
+        /* keep the last good strip */
+      }
+      if (seq === seqRef.current) setState((prev) => nextStripState(prev.strip, result))
+    }
+    const id = window.setInterval(() => void load(), pollMs)
+    const onVisible = () => {
+      if (!document.hidden) void load()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [leagueId, pollMs, done])
+
   if (!strip) return null
   const href = `/core/matchup?league=${encodeURIComponent(leagueId)}`
   if (strip.kind === 'failed') {
@@ -49,6 +100,7 @@ export function LiveMatchupStrip({ strip, leagueId }: { strip: MatchupStrip | nu
           : ''}
         {' · '}
         <Link href={href}>Open matchup</Link>
+        {stale ? ' · could not refresh, showing the last reading' : ''}
       </p>
     </section>
   )

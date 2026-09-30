@@ -469,7 +469,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
         </p>
       </header>
 
-      {selectedLeagueId ? <LiveMatchupStrip strip={matchupStrip} leagueId={selectedLeagueId} /> : null}
+      {selectedLeagueId ? <LiveMatchupStrip strip={matchupStrip} leagueId={selectedLeagueId} pollMs={pollIntervalMs} /> : null}
 
       {/* ── Control bar ─────────────────────────────────────────────── */}
       <div className="af-live-bar">

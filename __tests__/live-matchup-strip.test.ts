@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildMatchupStrip } from '@/lib/live/matchupStrip'
+import { buildMatchupStrip, nextStripState } from '@/lib/live/matchupStrip'
 import type { MatchupData } from '@/lib/core-app/matchup'
 
 const team = (teamName: string, isYou: boolean) => ({ teamName, ownerName: '', record: null, isYou, avatarUrl: null })
@@ -53,5 +53,22 @@ describe('buildMatchupStrip', () => {
     )
     expect(s).toMatchObject({ kind: 'scored', pWin: null, remaining: null })
     expect(buildMatchupStrip(data({ starterCounts: null }))).toMatchObject({ remaining: null })
+  })
+})
+
+describe('nextStripState', () => {
+  const good = buildMatchupStrip(data())!
+  it('takes a fresh reading and clears stale', () => {
+    const next = buildMatchupStrip(data({ sides: { available: true, data: { you: side('Me', 90, true), opponent: side('Them', 70, false) } } }))!
+    expect(nextStripState(good, next)).toEqual({ strip: next, stale: false })
+  })
+  it('keeps the last good strip and marks it stale when a poll fails', () => {
+    expect(nextStripState(good, 'error')).toEqual({ strip: good, stale: true })
+  })
+  it('has nothing to call stale when the first read fails', () => {
+    expect(nextStripState(null, 'error')).toEqual({ strip: null, stale: false })
+  })
+  it('lets a server "no matchup" replace the strip, since that is a real answer', () => {
+    expect(nextStripState(good, null)).toEqual({ strip: null, stale: false })
   })
 })

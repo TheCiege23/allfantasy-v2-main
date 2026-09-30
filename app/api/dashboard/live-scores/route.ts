@@ -4,6 +4,8 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
 import { getGameStarters, getLivePageData } from '@/lib/live/liveScoresPage'
+import { getMatchupData } from '@/lib/core-app/matchup'
+import { buildMatchupStrip } from '@/lib/live/matchupStrip'
 import { etagMatches, livePayloadEtag } from '@/lib/live/livePayloadEtag'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import type { DashboardLiveScore } from '@/lib/types/liveScoring'
@@ -225,6 +227,26 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data, {
       headers: { ETag: etag, 'Cache-Control': 'private, max-age=0, must-revalidate' },
     })
+  }
+
+  /*
+   * The live matchup strip's poll rides this route for the same ceiling reason as the views above.
+   *
+   * ⚠ PERSONAL, SO SESSION-GATED AND `private, no-store`. `getMatchupData` scopes the league to the
+   * user itself and returns null for one they are not in; a failed read is a 500 (the client keeps the
+   * last good strip) and never `{ strip: null }`, which means "no matchup".
+   */
+  if (view === 'matchup') {
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const leagueId = request.nextUrl.searchParams.get('league') ?? ''
+    if (!leagueId) return NextResponse.json({ error: 'league is required' }, { status: 400 })
+    try {
+      const data = await getMatchupData(leagueId, session.user.id, null)
+      return NextResponse.json({ strip: buildMatchupStrip(data) }, { headers: { 'Cache-Control': 'private, no-store' } })
+    } catch (e) {
+      console.error('[dashboard/live-scores] matchup strip read failed', e)
+      return NextResponse.json({ error: 'matchup read failed' }, { status: 500 })
+    }
   }
 
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
