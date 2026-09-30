@@ -84,8 +84,8 @@ export type LeagueRoster = {
   teamExternalId: string | null
   ownerName: string | null
   /**
-   * Other names this manager goes by (Sleeper login username, display name). Optional: absent from a
-   * server that predates it, and empty for a league synced before the username was stored.
+   * Other names this manager goes by — the manager's own name where `ownerName` is the team name, and
+   * the account name. Optional: absent from a server that predates it.
    */
   ownerHandles?: string[]
   /** Manager avatar from the league, for the header above their asset list. */

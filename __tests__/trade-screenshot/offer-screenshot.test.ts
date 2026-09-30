@@ -158,11 +158,11 @@ describe('matchOfferToRosters — the players decide the sides', () => {
   })
 
   /*
-   * The bug that test above hid: there the roster's label IS the username. On a real league the roster
-   * carries Sleeper's DISPLAY name ("Jeff the Great") and the DM card prints the login username, so the
-   * partner was never found (2026-09-30, AFC Dreaming!). The username rides on `ownerHandles`.
+   * The bug that test above hid: there the roster's label IS the manager's name. On an imported league
+   * the roster is labelled with the Sleeper TEAM name ("Jeff the Great") while the DM card names the
+   * manager, so the partner was never found (2026-09-30, AFC Dreaming!). The manager rides on `ownerHandles`.
    */
-  it('the DM card names the LOGIN username; the roster is labelled with the display name', () => {
+  it('the DM card names the manager; the roster is labelled with the team name', () => {
     const me = { ...roster('1', 'Ciege', [player('11588', 'Braelon Allen', 'RB')]), ownerHandles: ['TheCiege24'] }
     const jeff = { ...roster('4', 'Jeff the Great', [player('9999', 'Somebody Else', 'WR')]), ownerHandles: ['JeffersonTD'] }
     const card: OfferRead = {
@@ -183,10 +183,11 @@ describe('matchOfferToRosters — the players decide the sides', () => {
     expect(matchOfferToRosters({ read: labelled, rosters: [me, jeff, OTHER], viewerRosterId: '1' })).toMatchObject({ partnerRosterId: '4' })
   })
 
-  it('rosterManagerHandles: username, display name and account name, deduped; none for an older sync', () => {
-    expect(rosterManagerHandles({ source_manager_username: 'JeffersonTD', source_manager_display_name: 'Jeff the Great' }, 'jeffersontd'))
-      .toEqual(['JeffersonTD', 'Jeff the Great'])
-    expect(rosterManagerHandles({ source_provider: 'sleeper' }, null)).toEqual([])
+  it('rosterManagerHandles: the stored manager name, the account name and the import names, deduped', () => {
+    expect(rosterManagerHandles({ import: { ownerName: 'JeffersonTD', displayName: 'JeffersonTD' } }, ['JeffersonTD', 'jeff_account']))
+      .toEqual(['JeffersonTD', 'jeff_account'])
+    expect(rosterManagerHandles({ import: { ownerName: 'JeffersonTD' } })).toEqual(['JeffersonTD'])
+    expect(rosterManagerHandles({ source_provider: 'sleeper' }, [null, undefined])).toEqual([])
     expect(rosterManagerHandles(null)).toEqual([])
   })
 
