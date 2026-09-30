@@ -6,6 +6,7 @@ import type { TradeGradeView } from './tradeGrade'
 import type { GradeInputs } from './tradeGradeInputs'
 import type { TradeAssetInput } from '@/lib/trade-value-console/types'
 import { giveawayReason } from '@/lib/trade-intel/tradeGiveaway'
+import { emptySideIndex, isPirateSteal, pirateStealReason, PIRATE_STEAL_KIND } from '@/lib/trade-intel/pirateSteal'
 import {
   frozenOriginalFor,
   saveFrozenCompletedGrades,
@@ -117,9 +118,16 @@ export async function oneGradeForCompletedTrade(
   }
   const inputs = completedTradeInputs(trade, currentSeason)
   if (!inputs) return { graded: false, reason: 'the trade has no sides on record', basis: null }
+  const grader = await (deps.graderFor ?? completedTradeGraderFor)(leagueId)
+  /*
+   * A Pirate STEAL before a giveaway: the same one-way shape, but in a Pirate league it is the rules
+   * settling a result, not a trade — see `lib/trade-intel/pirateSteal.ts`.
+   */
+  const steal = pirateStealView(grader, trade)
+  if (steal) return steal
   const giveaway = giveawayReason(trade)
   if (giveaway) return { graded: false, reason: giveaway, basis: null }
-  const current = await gradeDeal(await (deps.graderFor ?? completedTradeGraderFor)(leagueId), { ...inputs, viewerSide: false })
+  const current = await gradeDeal(grader, { ...inputs, viewerSide: false })
   if (deps.frozen) {
     const { view, toFreeze } = withFrozenOriginal({
       tradeId: trade.id, inputs, current, frozen: deps.frozen.get(sleeperTradeKey(trade.id)), now: deps.now ?? new Date(),
@@ -131,6 +139,26 @@ export async function oneGradeForCompletedTrade(
     return view
   }
   return frozenOriginalFor({ afLeagueId: leagueId, tradeId: trade.id, inputs, current, now: deps.now })
+}
+
+/** The withheld view for a Pirate steal, or null when this is not one. */
+function pirateStealView(grader: LeagueTradeGrader | null, trade: GradedTrade): TradeGradeView | null {
+  const [a, b] = trade.sides
+  if (!a || !b || trade.sides.length !== 2) return null
+  const sides = [
+    { playersIn: a.playersIn.length, picksIn: a.picksIn.length, faabIn: a.faabIn },
+    { playersIn: b.playersIn.length, picksIn: b.picksIn.length, faabIn: b.faabIn },
+  ] as const
+  if (!isPirateSteal({ pirateLeague: grader?.pirateLeague === true, sides })) return null
+  const empty = emptySideIndex(sides)
+  const [from, taker] = empty === 0 ? [a, b] : [b, a]
+  return {
+    graded: false,
+    kind: PIRATE_STEAL_KIND,
+    reason: pirateStealReason({ taker: taker.managerName, from: from.managerName }),
+    basis: null,
+    leagueType: grader?.leagueType ?? null,
+  }
 }
 
 type ArchivedPick = {
@@ -194,6 +222,17 @@ export async function gradeArchivedTrade(
     picksOut: ReadonlyArray<ArchivedPick>
     currentSeason: number
     /**
+     * Who the row's two sides are, for a Pirate steal's sentence ("X took this from Y"). Optional —
+     * without them the steal is still named, just not who took whom.
+     */
+    labels?: { receiver?: string | null; partner?: string | null }
+    /**
+     * FAAB each way, when the caller READ it (a raw Sleeper transaction's `waiver_budget`). Absent means
+     * unknown — `LeagueTrade` stores none — and then a one-way row is never called a Pirate steal, since
+     * a player sold for FAAB has the same shape (Jameis Winston for $35, Pirate League twinty, week 3).
+     */
+    faab?: { received: number; gave: number } | null
+    /**
      * Which trade this is, on which AF league row — so the letter is the trade's FROZEN ORIGINAL with
      * today's grade as `current` (see `frozenCompletedGrade.ts`). Absent: today's grade only.
      */
@@ -218,6 +257,24 @@ export async function gradeArchivedTradeWithInputs(
 ): Promise<{ grade: TradeGradeView; give: GradeInputs; get: GradeInputs }> {
   const give = archivedSide(args.gave, args.picksOut, args.currentSeason)
   const get = archivedSide(args.received, args.picksIn, args.currentSeason)
+  /*
+   * A Pirate steal is not graded — and never frozen, since only a letter freezes. Only with FAAB in
+   * hand: without it the one-way shape could be a FAAB sale (see `faab`).
+   */
+  const sides = [
+    { playersIn: args.received.length, picksIn: args.picksIn.length, faabIn: args.faab?.received },
+    { playersIn: args.gave.length, picksIn: args.picksOut.length, faabIn: args.faab?.gave },
+  ] as const
+  if (args.faab && isPirateSteal({ pirateLeague: grader?.pirateLeague === true, sides })) {
+    const receiverTook = emptySideIndex(sides) === 1
+    const taker = receiverTook ? args.labels?.receiver : args.labels?.partner
+    const from = receiverTook ? args.labels?.partner : args.labels?.receiver
+    return {
+      grade: { graded: false, kind: PIRATE_STEAL_KIND, reason: pirateStealReason({ taker, from }), basis: null, leagueType: grader?.leagueType ?? null },
+      give,
+      get,
+    }
+  }
   const current = await gradeDeal(grader, { give, get, viewerSide: false })
   const o = args.original
   if (!o) return { grade: current, give, get }

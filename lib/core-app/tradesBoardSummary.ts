@@ -89,8 +89,12 @@ registerScreenSummary<TradesBoardData | null>({
    * holds a `windows` list built one-per-COPY rather than one-per-league, and the key's
    * fingerprint is derived from the league list rather than from this rule, so nothing else
    * would evict it.
+   *
+   * 4 — rows gained `freshTrade` / `oneWayOnFile`, a trade made this week leads the board, and
+   * one-way moves in a Pirate league no longer count as trades or headline a card. A v3 entry would keep a new trade
+   * off screen for up to its stale window, which is the defect v4 fixes.
    */
-  version: 3,
+  version: 4,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a user-scoped key carries no league id, so a league sweep would match nothing.

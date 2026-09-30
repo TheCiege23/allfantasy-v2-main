@@ -132,6 +132,11 @@ export type TradeGradeView =
       reason: string
       basis: string | null
       leagueType?: LeagueTypeBasis | null
+      /**
+       * Set when there is no letter because the transaction is not a trade at all: a Pirate steal
+       * (`lib/trade-intel/pirateSteal.ts`). Lets a surface label it and skip it as a "trade".
+       */
+      kind?: 'pirate_steal'
     }
 
 /**

@@ -78,6 +78,9 @@ export async function gradeSleeperActivityTrade(args: {
       picksIn: picksTo(a),
       picksOut: picksTo(b),
       currentSeason: new Date(now).getUTCFullYear(),
+      // FAAB was read above and is zero both ways, so a one-way move here can be named a Pirate steal.
+      faab: { received: 0, gave: 0 },
+      labels: { receiver: args.rosterNames.get(a) ?? null, partner: args.rosterNames.get(b) ?? null },
       // The trade's frozen original — the same letter its email and history show (`frozenCompletedGrade.ts`).
       original: { afLeagueId: args.afLeagueId, tradeId: tx.transaction_id, now: new Date(now) },
     })

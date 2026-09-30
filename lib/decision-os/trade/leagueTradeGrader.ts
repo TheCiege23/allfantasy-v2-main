@@ -24,6 +24,8 @@ import { proposalEligibilityReason } from '@/lib/trade-value-console/tradeEligib
 import { createNcaafLeagueGrader } from './ncaafLeagueGrader'
 import { createLeagueAssetPolicy } from './leagueAssetPolicy'
 import { DEVY_BASIS_NOTE } from './leagueAssetRules'
+import { belowChartFloorNote } from '@/lib/trade-value/belowChartFloor'
+import { isPirateLeague } from '@/lib/trade-intel/pirateSteal'
 
 /**
  * The ONE trade grade, computed. Every surface that shows a letter for a deal that has not happened
@@ -214,6 +216,11 @@ export type LeagueTradeGrader = {
   /** The league type every grade here is priced under, and how we know it. Also on each grade. */
   leagueType: LeagueTypeBasis
   /**
+   * The league plays Pirate rules (`isPirateLeague`), so a one-way transaction in it is a STEAL, not a
+   * trade — see `lib/trade-intel/pirateSteal.ts`. Read by the completed-trade grade.
+   */
+  pirateLeague?: boolean
+  /**
    * Price and grade one deal on this league's chart. `give` is what the graded side sends.
    * `viewerSide: true` adds personal roster utility separately; it does not change the letter.
    */
@@ -321,7 +328,21 @@ export async function createLeagueTradeGrader(args: {
         fcPlayers: chart.fcPlayers,
         resolveEnrichmentIds: false,
       }
-      const [g, t] = await Promise.all([resolveAssets(give, opts), resolveAssets(get, opts)])
+      let [g, t] = await Promise.all([resolveAssets(give, opts), resolveAssets(get, opts)])
+      /*
+       * A skill player missing from this league's chart but listed on another FantasyCalc chart is
+       * BELOW this chart, not unknown — priced at 0 and said so (`lib/trade-value/belowChartFloor.ts`).
+       * One extra read, and a second pricing pass, only for a deal that has such a player.
+       */
+      const candidates = [...g.floorCandidates, ...t.floorCandidates]
+      if (candidates.length > 0) {
+        const onAnotherChart = await loadOnAnotherFantasyCalcChart(candidates)
+        if (onAnotherChart.size > 0) {
+          const floorOpts = { ...opts, onAnotherChart }
+          ;[g, t] = await Promise.all([resolveAssets(give, floorOpts), resolveAssets(get, floorOpts)])
+        }
+      }
+      const floorNote = belowChartFloorNote([...g.belowFloor, ...t.belowFloor])
       const unresolved = [...g.unresolved, ...t.unresolved]
       if (unresolved.length > 0) {
         return {
@@ -340,7 +361,7 @@ export async function createLeagueTradeGrader(args: {
         getLines: td.lines,
         givePriced: applyChartTePremium(chart, gd.priced),
         getPriced: applyChartTePremium(chart, td.priced),
-        basisNotes: gd.devyPriced + td.devyPriced > 0 ? [DEVY_BASIS_NOTE] : [],
+        basisNotes: [...(gd.devyPriced + td.devyPriced > 0 ? [DEVY_BASIS_NOTE] : []), ...(floorNote ? [floorNote] : [])],
         need: needRoster
           ? { leagueId: args.leagueId, userId: args.userId ?? '', sport, starters: leagueRow.starters, playerData: needRoster.playerData }
           : viewerSide && args.userId
@@ -357,10 +378,30 @@ export async function createLeagueTradeGrader(args: {
     leagueId: args.leagueId,
     chart,
     leagueType,
+    pirateLeague: isPirateLeague({ name: leagueRow.name, settings: leagueRow.settings }),
     async grade(deal) {
       return withType(await gradeOnce(deal))
     },
   }
+}
+
+/**
+ * Which of these Sleeper ids FantasyCalc lists on ANY of its charts in the last week — the evidence
+ * `lib/trade-value/belowChartFloor.ts` needs before it prices a player missing from THIS league's chart
+ * at 0. Never throws: an unreadable table means no evidence, and the player stays unpriced (the grade
+ * withholds, exactly as before).
+ */
+async function loadOnAnotherFantasyCalcChart(sleeperIds: readonly string[]): Promise<Set<string>> {
+  const ids = [...new Set(sleeperIds)].filter(Boolean)
+  if (ids.length === 0) return new Set()
+  const rows = await prisma.playerValueSnapshot
+    .findMany({
+      where: { sleeperId: { in: ids }, source: 'FANTASYCALC', capturedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+      select: { sleeperId: true },
+      distinct: ['sleeperId'],
+    })
+    .catch(() => [] as Array<{ sleeperId: string }>)
+  return new Set(rows.map((r) => r.sleeperId))
 }
 
 /**

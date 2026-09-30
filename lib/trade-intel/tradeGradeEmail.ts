@@ -508,7 +508,14 @@ export function buildTradeGradeEmail(params: {
     ? ordered.map((v) => `${v.isViewer ? 'you' : v.side.managerName} ${v.letter}`).join(', ')
     : 'not graded'
   const verb = params.status === 'pending' ? 'offered' : 'completed'
-  const subject = `Trade ${verb} in ${leagueName} — ${letters}${namePart}`
+  /*
+   * A Pirate steal is the league's steal rule, not a trade (`lib/trade-intel/pirateSteal.ts`) — the
+   * email says so in its subject and eyebrow instead of "Trade completed … not graded".
+   */
+  const steal = !!grade && !grade.graded && grade.kind === 'pirate_steal'
+  const subject = steal
+    ? `Pirate steal in ${leagueName}${namePart}`
+    : `Trade ${verb} in ${leagueName} — ${letters}${namePart}`
 
   const withheldReason = graded
     ? null
@@ -526,7 +533,7 @@ export function buildTradeGradeEmail(params: {
   const how = graded
     ? `Each side is graded on what it received against what it sent, on ${basis ? `${basis} ` : 'this league’s '}values at email time. The calculator and trade history use the same trade-value rules; refreshed market values can change a later evaluation. Personal roster fit is shown separately and does not change this letter.` +
       (hasPicks ? ' Unresolved future picks use the chart’s season-and-round value; a specific early, mid or late tier is used only when supplied to the evaluator.' : '')
-    : grade && !grade.graded && giveawaySide(trade)
+    : steal || (grade && !grade.graded && giveawaySide(trade))
       // A giveaway has no "part of the deal" a letter could be drawn from — the reason says it all.
       ? `${withheldReason}`
       : `${withheldReason} No letter is shown rather than one drawn from part of the deal.`
@@ -542,7 +549,7 @@ export function buildTradeGradeEmail(params: {
   const weekPart = Number.isFinite(trade.week) && trade.week > 0 ? ` · week ${trade.week}` : ''
   const html = shell({
     preheader: summary,
-    eyebrow: `Trade ${verb} · ${trade.season}${weekPart}`,
+    eyebrow: steal ? `Pirate steal · ${trade.season}${weekPart}` : `Trade ${verb} · ${trade.season}${weekPart}`,
     title: leagueName,
     sub: viewer && viewer.letter ? `Your side graded ${viewer.letter} — ${LETTER_WORDS[viewer.letter].toLowerCase()}.` : null,
     rows,
