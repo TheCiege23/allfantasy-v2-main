@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { ageOf, newsKindOf } from '@/lib/core-app/devy'
+import { devyTrendOf } from '@/lib/devy/devyTrend'
 import { findMyRoster } from '@/lib/core-app/myRoster'
 import { matchTeamIdForRoster } from '@/lib/leagues/rosterTeamIdentity'
 import { DEVY_RIGHTS_NOT_HELD_STATES } from '@/lib/decision-os/trade/leagueAssetPolicy'
@@ -48,7 +49,8 @@ import type {
  * ⚠ NO TREND COLUMN IS FILLED. `DevyPlayer.stockTrendDelta` is not a delta: its only writer
  * (`workers/devy-data-worker.ts`) stores `score/100*10 + c2cPoints/10`, a LEVEL that is non-negative for
  * every scored prospect, so reading it as a trend paints the whole pool as rising. `DevyPlayer.trend`
- * has no writer at all. Trend is null ("no trend measured"), never a manufactured arrow.
+ * has no writer at all. Trend is null ("no trend measured"), never a manufactured arrow — and it
+ * comes from `devyTrendOf` in `lib/devy/devyTrend.ts`, the same helper the cross-league hub uses.
  *
  * NCAAF only: devy is college football, and `DevyPlayer` also holds rows for other college sports.
  * Never throws; each section degrades to an empty list plus a one-line reason.
@@ -411,7 +413,7 @@ export async function loadDevyLeagueTab(args: {
         id: p.id,
         player: p.name,
         value: option.value,
-        trend: null,
+        trend: devyTrendOf(p),
         status: r.rosterId === myRosterId ? 'Rostered · You' : `Rostered · ${teamNames.get(r.rosterId) ?? 'Another team'}`,
       })
     }
