@@ -3166,6 +3166,19 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   /*
+   * This week's lineups, projected — AF beside API — as a section on the one-league hub. Display
+   * only, and only once the hub's own gate has admitted the viewer (`commissionerHub` is null
+   * otherwise). A failed read costs the section and nothing else.
+   */
+  const hubLineups =
+    commissionerHub?.allowed && leagueCtx
+      ? await leagueCtx
+          .league()
+          .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
+          .catch(() => null)
+      : null
+
+  /*
    * The all-leagues Commissioner Hub — `/core/commissioner` with no league. Matched on
    * `segment` because /core/discord and /core/hubs share the commissioner nav key. The
    * candidates are the leagues the nav badge counts, so the "All leagues" pill and the
@@ -4551,7 +4564,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * role check to bypass because there is no client-side role check.
          */
         commissionerHub ? (
-          <CommissionerHub data={commissionerHub} />
+          <CommissionerHub data={commissionerHub} lineups={hubLineups} />
         ) : /*
            * ⚠ TWO DIFFERENT FACTS, TWO DIFFERENT RENDERINGS. "A league is
            * selected and we failed to read it" is a read failure on our side.

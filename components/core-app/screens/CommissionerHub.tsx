@@ -32,6 +32,8 @@ import { AutomationRecipes } from '@/components/core-app/commissioner/Automation
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
+import { WeekLineupsBody } from '@/components/core-app/standings/WeekLineupsTable'
 
 /**
  * Screen 38a·9 — Commissioner Hub, the per-league commissioner cockpit.
@@ -70,9 +72,15 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 
 export type CommissionerHubProps = {
   data: CommissionerHubResult
+  /**
+   * This week's lineups, projected — AllFantasy's engine (AF) beside the provider's (API) — for
+   * every team, as its own section. DISPLAY ONLY, and free: it is standings-grade information, not
+   * commissioner depth. Null draws no section and no jump link.
+   */
+  lineups?: StandingsLineups | null
 }
 
-export function CommissionerHub({ data }: CommissionerHubProps) {
+export function CommissionerHub({ data, lineups = null }: CommissionerHubProps) {
   if (!data.allowed) {
     return (
       <div className="af-ch afh" data-format="all">
@@ -190,7 +198,7 @@ export function CommissionerHub({ data }: CommissionerHubProps) {
         </div>
       </section>
 
-      <HubNav />
+      <HubNav omit={lineups ? [] : ['ch-lineups']} />
 
       {/*
         ⚠ THE BANNER IS THE POINT, NOT DECORATION. Without it a league nobody has
@@ -233,6 +241,18 @@ export function CommissionerHub({ data }: CommissionerHubProps) {
 
       {/* ── 6 · Every league area (item 2) ────────────────────────────── */}
       <LeagueAreas data={data} />
+
+      {/* ── This week's lineups, projected (AF beside API, 2026-09-30) ── */}
+      {lineups ? (
+        <HubSection
+          id="ch-lineups"
+          title="This week’s lineups, projected"
+          note={<span className="af-num">week {lineups.week}</span>}
+          className="af-ch-lineups"
+        >
+          <WeekLineupsBody lineups={lineups} caveat="nothing here changes a standing or a ruling." />
+        </HubSection>
+      ) : null}
 
       {/* ── Waiver oversight (handoff 2026-09-13) ─────────────────────── */}
       <HubDepthGate depth={depth} id="ch-waivers" what="Waiver oversight">
