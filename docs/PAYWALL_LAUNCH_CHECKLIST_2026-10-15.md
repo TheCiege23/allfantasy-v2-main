@@ -235,14 +235,16 @@ Each needs a *production* read, and the two kinds differ:
   | cancelled → locked again | `prove:purchase` | ✅ |
   | §3b per-call gate refusals | `ai-cost-gate`, `ai-cost-gate-wiring`, `core-depth-paywall-routes`, `core-depth-paywall`, `plan-refusal`, `commissioner-os-depth-paywall` | ✅ 150 tests, 7 files, green 2026-09-30 |
   | the lock card's words | `ios-app-paywall-copy` | ✅ |
-  | **the card RENDERING on each of the four surfaces, seen in a browser** | nothing | ❌ **the only residue** |
+  | **the card RENDERING on each of the four surfaces, seen in a browser** | the hand walk | ✅ **walked 2026-09-30 — all four lock, see the item above for what each card said** |
 
   So the human step is: sign in as a no-plan account and confirm the lock card actually appears —
   right card, right plan name, no broken or empty state — on **/core players, Trade Center, Waivers
   or Draft HQ (Competitive Edge), and the /core commissioner hub**. Everything else on the list
   above is already machine-checked. Budget minutes, not an hour.
 
-  🛑 **AND IT CANNOT BE DONE FROM A CLAUDE SESSION TODAY — the reason is a trap, not an excuse.**
+  🛑 **AND `preview_*` CANNOT DO IT — the reason is a trap, not an excuse.** (The walk itself was
+  done, by starting a server from a worktree instead; the recipe is in the item above. What follows
+  is why the obvious route is the wrong one.)
   `preview_*` only reaches the PRIMARY checkout (`C:\allfantasy-v2-main`), and measured 2026-09-30
   that checkout's local `main` is **diverged from `origin/main`, not merely behind**
   (`merge-base --is-ancestor` rc=1), sitting on a **2026-09-10** commit with 78 dirty files.
