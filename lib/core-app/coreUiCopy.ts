@@ -240,6 +240,20 @@ const spanish: Record<string, string> = {
   meeting: 'encuentro',
   meetings: 'encuentros',
   'last:': 'último:',
+  "AllFantasy engine projection, under this league's scoring": 'Proyección de AllFantasy con la puntuación de esta liga',
+  'Projected from only part of this lineup': 'Proyección basada en parte de la alineación',
+  'Chance of winning, from both projected totals and the spread of a real fantasy week': 'Probabilidad de ganar según ambas proyecciones y la variación de una semana real',
+  game: 'partido',
+  games: 'partidos',
+  'Nothing scored yet — these are projections, under your league’s scoring': 'Aún no hay puntos; estas cifras son proyecciones con la puntuación de tu liga',
+  PROJ: 'PROY.',
+  PTS: 'PTS',
+  FROM: 'BASE',
+  WIN: 'GANA',
+  MARGIN: 'DIF.',
+  level: 'empate',
+  by: 'por',
+  'Not paired into a game yet': 'Aún sin rival asignado',
 }
 
 export function coreUiCopy(english: string, language: string): string {

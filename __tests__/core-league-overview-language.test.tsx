@@ -13,6 +13,8 @@ vi.mock('@/components/i18n/LanguageProviderClient', () => ({
 }))
 
 import { LeagueHome } from '@/components/core-app/screens/LeagueHome'
+import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScoreboardPanel'
+import type { LeagueScoreboard } from '@/lib/core-app/leagueScoreboard'
 
 const off = { available: false as const, reason: 'Sin datos' }
 
@@ -42,5 +44,30 @@ describe('Spanish league overview', () => {
     expect(screen.getByRole('heading', { name: 'Preguntar a Chimmy' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Conectar una liga →' })).toHaveAttribute('href', '/core/connect-leagues?league=league-1')
     expect(screen.getAllByRole('link', { name: 'Volver al inicio →' })).toHaveLength(2)
+  })
+
+  it('labels projected league scores and incomplete coverage in Spanish', () => {
+    const board = {
+      week: 4,
+      games: [{
+        matchupId: 1,
+        unplayed: true,
+        margin: null,
+        winProbability: null,
+        teams: [{
+          rosterId: 'one', teamName: 'Equipo Uno', managerName: null, avatarUrl: null,
+          isYou: true, points: null, projected: 98, afProjected: null,
+          projectedFrom: 7, starterCount: 9,
+        }],
+      }],
+      allUnplayed: true,
+      unpaired: [],
+      unpricedReason: null,
+    } as unknown as LeagueScoreboard
+
+    render(<LeagueScoreboardPanel board={board} />)
+    expect(screen.getByText('Semana 4 · 1 partido')).toBeTruthy()
+    expect(screen.getByText('Aún no hay puntos; estas cifras son proyecciones con la puntuación de tu liga')).toBeTruthy()
+    expect(screen.getByTitle('Proyección basada en parte de la alineación')).toHaveTextContent('7/9')
   })
 })
