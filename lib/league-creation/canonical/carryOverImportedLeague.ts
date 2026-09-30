@@ -60,9 +60,31 @@ function mapPlayerRows(rows: unknown, idMap: Map<string, string>): unknown {
   })
 }
 
+function rowIds(rows: unknown): string[] {
+  if (!Array.isArray(rows)) return []
+  return rows.map((row) => typeof row === 'string' ? row : String(asRecord(row).id ?? asRecord(row).player_id ?? ''))
+    .filter(Boolean)
+}
+
+export function importedOwnedPlayerIds(data: unknown): string[] {
+  const raw = asRecord(data)
+  const sections = asRecord(raw.lineup_sections)
+  const lineupIds = [...new Set([
+    ...rowIds(raw.starters), ...rowIds(raw.reserve), ...rowIds(raw.taxi),
+    ...Object.values(sections).flatMap(rowIds),
+  ])]
+  const ownedIds = [...new Set(getRosterPlayerIds(data).map(String))]
+  if (!ownedIds.length) return lineupIds
+  const owned = new Set(ownedIds)
+  if (lineupIds.some((id) => !owned.has(id))) {
+    refuse('An imported lineup contains a player missing from its team roster. Refresh the import before carrying it over.')
+  }
+  return ownedIds
+}
+
 export function translateImportedRosterData(data: unknown, idMap: Map<string, string>, sourceLeagueId: string): Record<string, unknown> {
   const raw = asRecord(data)
-  const players = Array.isArray(data) ? data : raw.players
+  const players = Array.isArray(data) ? data : Array.isArray(raw.players) && raw.players.length ? raw.players : importedOwnedPlayerIds(data)
   const sections = asRecord(raw.lineup_sections)
   const { source_provider: _provider, source_league_id: _sourceId, source_team_id: _teamId,
     source_manager_id: _managerId, source_season_id: _seasonId, import_batch_id: _batchId,
@@ -112,8 +134,9 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   if (new Set(sourceRosters.map((roster) => roster.id)).size !== sourceRosters.length) {
     refuse('Multiple imported teams point to the same roster. Refresh the import first.')
   }
-  const sourceIds = [...new Set(sourceRosters.flatMap((roster) => getRosterPlayerIds(roster.playerData)))]
-  const totalPlayers = sourceRosters.reduce((count, roster) => count + getRosterPlayerIds(roster.playerData).length, 0)
+  const sourcePlayerIdsByRoster = sourceRosters.map((roster) => importedOwnedPlayerIds(roster.playerData))
+  const sourceIds = [...new Set(sourcePlayerIdsByRoster.flat())]
+  const totalPlayers = sourcePlayerIdsByRoster.reduce((count, ids) => count + ids.length, 0)
   if (totalPlayers !== sourceIds.length) refuse('The import has duplicate player ownership. Refresh it before carrying rosters over.')
   const columns = leagueIdentityColumns(sourceIds, args.sport, source.platform)
   if (sourceIds.length && !columns.length) {
@@ -192,7 +215,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     }
     draftSlotOrder.push({ slot: slot.slotNumber, rosterId: targetRoster.id, displayName: team.teamName, open: !claimedUserId })
     const rosterPicks: Array<{ nativeId: string; name: string; position: string; team: string | null }> = []
-    for (const sourceId of getRosterPlayerIds(sourceRoster.playerData)) {
+    for (const sourceId of sourcePlayerIdsByRoster[i]!) {
       const nativeId = idMap.get(sourceId)!
       const player = playerDetails.get(nativeId)!
       rosterPicks.push({ nativeId, ...player })
