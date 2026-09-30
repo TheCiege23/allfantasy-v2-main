@@ -525,7 +525,8 @@ describe('the /core Player Finder trade card — one verdict, the one grade (202
 const LEGACY_SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string }> = [
   { file: 'lib/legacy/legacyOneGrade.ts', entry: /gradeDeal\(/, what: 'the AF Legacy door to the one grader' },
   { file: 'server/api-route-modules/legacy/trade/quick-evaluate/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy Trade Hub live preview (quick evaluate)' },
-  { file: 'server/api-route-modules/legacy/trade/league-analyze/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy league trade finder (league-analyze)' },
+  // The league trade finder (league-analyze) is not listed: it was REMOVED on 2026-09-30 (a GPT-4o
+  // call per league select that nothing rendered) — see __tests__/legacy/league-analyze-removed.test.ts.
   { file: 'server/api-route-modules/legacy/trade/proposal-generator/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy proposal generator' },
   { file: 'server/api-route-modules/legacy/trade/goal-proposals/route.ts', entry: /createLegacyPackageGrader\(/, what: 'the AF Legacy goal proposals' },
   { file: 'server/api-route-modules/legacy/trade/analyze/route.ts', entry: /await gradeLegacyCounters\(/, what: 'the AF Legacy analyzer’s counter suggestions' },
@@ -566,18 +567,9 @@ describe('AF Legacy — the page prints the one grade, never a verdict, fairness
     expect(PREVIEW_PRIVATE.test('<LegacyOneGrade grade={tradeHubLivePreview.grade} />')).toBe(false)
   })
 
-  it('the league trade finder runs no private engine and asks the model for no letter; the one grader grades its packages', () => {
-    const src = code('server/api-route-modules/legacy/trade/league-analyze/route.ts')
-    expect(src).not.toMatch(/runTradeEngine\(/)
-    expect(src).not.toMatch(/"tradeGrade":\s*"A\/B\/C"/)
-    expect(src).toMatch(/await gradeLegacyTradeSuggestions\(tradeSuggestions, gradeOf\)/)
-    // /api/ai/trade/league-analyze is the same handler, not a second grader.
-    expect(code('app/api/ai/trade/league-analyze/route.ts')).toMatch(/return legacyPost\(req, \{\}\)/)
-  })
-
-  it('positive controls: the finder shapes match the code they replaced', () => {
-    expect(/runTradeEngine\(/.test('deterministicTrades = runTradeEngine(userRoster.rosterId, unifiedIntelligence, undefined, calWeights)')).toBe(true)
-    expect(/"tradeGrade":\s*"A\/B\/C"/.test('      "tradeGrade": "A/B/C",')).toBe(true)
+  it('the league trade finder, which printed the LLM’s own letter, no longer exists to print one', () => {
+    expect(existsSync(resolve(process.cwd(), 'server/api-route-modules/legacy/trade/league-analyze/route.ts'))).toBe(false)
+    expect(existsSync(resolve(process.cwd(), 'app/api/ai/trade/league-analyze/route.ts'))).toBe(false)
   })
 
   const PROPOSAL_PRIVATE = /proposal\.(?:fairnessScore|acceptanceModel|fairnessNote|myTotal|theirTotal|acceptProb|acceptLabel|giveTotal|receiveTotal|counterPath|sweeteners|topDrivers)\b|<AcceptanceMeter\b/
