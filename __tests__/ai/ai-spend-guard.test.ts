@@ -159,11 +159,11 @@ describe('AI spend guard — provider boundary coverage', () => {
     // (two OpenAI clients and a direct api.x.ai fetch inside the handler), was
     // DELETED 2026-09-30 with ImproveTradeModal, its only fetcher, which nothing
     // mounted — a deletion, not an unlisting; see the floor below.
-    // The other three inline-provider routes, guarded 2026-08-27.
-    // start-sit/chimmy has NO session check and NO rate limit, so the spend
-    // switch is the only thing between an anonymous caller and a paid call.
+    // The other three inline-provider routes, guarded 2026-08-27. The third,
+    // app/api/start-sit/chimmy/route.ts, was DELETED 2026-09-30 with StartSitPopup,
+    // its only fetcher, which nothing mounted (0 requests in 7 days) — a deletion,
+    // not an unlisting; see the floor below.
     'lib/chimmy/screenshotVision.ts',
-    'app/api/start-sit/chimmy/route.ts',
     'app/api/waiver-ai/grok/route.ts',
     // Moved off the ratchet 2026-08-27. Reached from 18 route files, the widest
     // surface on that list at the time.
@@ -314,7 +314,9 @@ describe('AI spend guard — provider boundary coverage', () => {
     // explainTrade → providerRouter, which is guarded. A deletion, not a silent revert.
     // Then 32 on 2026-09-30: app/api/instant/improve-trade/route.ts was DELETED (dead route, its only
     // fetcher ImproveTradeModal was mounted by nothing). A deletion, not a silent revert.
-    expect(GUARDED.length).toBeGreaterThanOrEqual(32)
+    // Then 31 the same day: app/api/start-sit/chimmy/route.ts was DELETED (dead route, its only
+    // fetcher StartSitPopup was mounted by nothing; 0 production requests in 7 days). A deletion.
+    expect(GUARDED.length).toBeGreaterThanOrEqual(31)
   })
 
   it('the unguarded ratchet has not grown', () => {

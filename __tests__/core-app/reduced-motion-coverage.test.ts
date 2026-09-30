@@ -5,7 +5,8 @@
  * setting, and exactly two animated without honouring it —
  *   - components/core-app/af-commish-hub.css   `af-ch-pulse`, an INFINITE skeleton pulse
  *   - components/StartSitPopup/StartSitPopup.module.css  `spin`, an INFINITE spinner
- * Both are now guarded; this keeps the count at zero.
+ * Both were guarded (the second file has since been deleted with the unmounted popup); this keeps
+ * the count at zero.
  *
  * ⚠ SCOPED TO `@keyframes` / `animation:`, NOT `transition:`. A transition fires once on an
  * interaction and is a different (much larger, much lower-risk) population — folding it in here
