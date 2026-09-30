@@ -220,7 +220,41 @@ Each needs a *production* read, and the two kinds differ:
   - Run a local server on the `.env.test` database with `AF_PAYWALL_STARTS_AT=2020-01-01T00:00:00Z`,
     and sign in as a **no-plan test account**.
   - 🛑 `.env.local` points at the production database. Never walk locks on it.
+  - ⚠ And `.env.test` is **not** what a dev server reads on its own — Next loads `.env.local`, so
+    `DATABASE_URL` has to be passed explicitly in the environment. Verify by effect which host the
+    server actually connected to; do not infer it from the file you meant it to read.
   - Admin accounts bypass every plan, so an admin sees no locks.
+
+  **This is far narrower than it reads, because the logic is already proven — checked 2026-09-30.**
+  What the phrase "walk the locked state" covers, and what is left:
+
+  | | covered by | status |
+  |---|---|---|
+  | all four depths locked, no-plan, after launch | `prove:purchase`, real code + `.env.test` DB | ✅ `{"player":false,"trade":false,"edge":false,"commissioner":false}` |
+  | paid → player/trade/edge open, commissioner stays locked | `prove:purchase` | ✅ |
+  | cancelled → locked again | `prove:purchase` | ✅ |
+  | §3b per-call gate refusals | `ai-cost-gate`, `ai-cost-gate-wiring`, `core-depth-paywall-routes`, `core-depth-paywall`, `plan-refusal`, `commissioner-os-depth-paywall` | ✅ 150 tests, 7 files, green 2026-09-30 |
+  | the lock card's words | `ios-app-paywall-copy` | ✅ |
+  | **the card RENDERING on each of the four surfaces, seen in a browser** | nothing | ❌ **the only residue** |
+
+  So the human step is: sign in as a no-plan account and confirm the lock card actually appears —
+  right card, right plan name, no broken or empty state — on **/core players, Trade Center, Waivers
+  or Draft HQ (Competitive Edge), and the /core commissioner hub**. Everything else on the list
+  above is already machine-checked. Budget minutes, not an hour.
+
+  🛑 **AND IT CANNOT BE DONE FROM A CLAUDE SESSION TODAY — the reason is a trap, not an excuse.**
+  `preview_*` only reaches the PRIMARY checkout (`C:\allfantasy-v2-main`), and measured 2026-09-30
+  that checkout's local `main` is **diverged from `origin/main`, not merely behind**
+  (`merge-base --is-ancestor` rc=1), sitting on a **2026-09-10** commit with 78 dirty files.
+  `lib/monetization/paywallLaunch.ts` and `lib/core-app/corePaywall.ts` **do not exist there at
+  all** — `git diff origin/main` on those two paths is 88 deletions and 0 insertions, and a grep for
+  `DEFAULT_PAYWALL_STARTS_AT` finds nothing.
+
+  ⚠ **A dev server started there shows NO LOCKS, and looks like a working app.** There is no launch
+  date to be past, no `isPaywallLive`, no depth resolver — so every depth renders open. Walk it
+  there and the honest-looking conclusion is "nothing is locked", which is true of that server and
+  says nothing whatever about `main`. Pull the primary checkout up to `origin/main` first, or do the
+  walk from a worktree with its own server.
 - [x] **Date-bomb sweep — RUN 2026-09-29 against `b85cdfb15`. Zero date bombs.**
 
   🛑 **AND THE METHOD ORIGINALLY WRITTEN HERE IS WRONG. Do not use it.** It said to set
