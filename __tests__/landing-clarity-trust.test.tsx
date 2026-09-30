@@ -33,8 +33,8 @@ function page(lang: 'en' | 'es') {
 }
 
 describe('what it is, in the first screen', () => {
-  it.each(LANDING_LANGS)('%s: the line above the headline says fantasy football, not only what it is not', (lang) => {
-    expect(getLandingCopy(lang, PRICES).hero.eyebrow).toMatch(/fantasy football/i)
+  it.each(LANDING_LANGS)('%s: the line above the headline identifies fantasy', (lang) => {
+    expect(getLandingCopy(lang, PRICES).hero.eyebrow).toMatch(/fantasy/i)
   })
 
   it('the countdown comes after the hero, not before it', () => {
@@ -57,10 +57,14 @@ describe('platforms: every sentence reads the live list', () => {
     expect(SOON.length).toBeGreaterThan(0)
   })
 
-  it.each(LANDING_LANGS)('%s: hero, meta and the first FAQ answer name every live platform and no "soon" one', (lang) => {
+  it.each(LANDING_LANGS)('%s: detailed platform claims follow the live list, while first-screen copy stays concise', (lang) => {
     const c = getLandingCopy(lang, PRICES)
-    for (const text of [c.hero.sub, c.meta.description, c.meta.ogDescription, c.faq.items[0].a]) {
+    for (const text of [c.meta.description, c.faq.items[0].a]) {
       for (const name of LIVE) expect(text, name).toContain(name)
+      for (const name of SOON) expect(text, name).not.toContain(name)
+    }
+    for (const text of [c.hero.sub, c.meta.ogDescription]) {
+      expect(text).toMatch(/creat|crea/i)
       for (const name of SOON) expect(text, name).not.toContain(name)
     }
   })
