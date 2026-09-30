@@ -4728,7 +4728,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               /*
                * ⚠ LEAGUES, AND THE FIELD IS NAMED FOR IT. This briefly read
                * `seasonsOnFile: playedLeagues.length`, which put a league count
-               * under the word "seasons" on the Manager Psychology card — a
+               * under the word "seasons" on a Tools card's teaser — a
                * dynasty league running six years is one league and six seasons,
                * so the two are not interchangeable. Career history is a separate
                * read and is not worth paying for to fill a teaser.
