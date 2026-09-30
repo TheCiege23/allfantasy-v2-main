@@ -5,6 +5,7 @@ import { DEVY_DYNASTY_VARIANT } from '@/lib/devy/types'
 import { MERGED_DEVY_C2C_VARIANT } from '@/lib/merged-devy-c2c/types'
 import { resolveLeagueConcept } from '@/lib/league/leagueConceptOptions'
 import { getCrossLeagueExposure } from '@/lib/core-app/dash3aPanels'
+import { devyTrendOf } from '@/lib/devy/devyTrend'
 import type {
   DevyCollegeTile,
   DevyCoreProps,
@@ -14,7 +15,6 @@ import type {
   DevyPosition,
   DevyProspect,
   DevyRankedPlayer,
-  DevyTrend,
 } from '@/components/core-app/screens/DevyCore'
 
 /**
@@ -79,7 +79,6 @@ type PoolRow = {
   school: string
   classYearLabel: string | null
   draftProjectionScore: number | null
-  stockTrendDelta: number | null
   headshotUrl: string | null
   passAttempts: number | null
   passCompletions: number | null
@@ -87,16 +86,13 @@ type PoolRow = {
   airYardsAttempts: number | null
 }
 
-/**
- * `stockTrendDelta` → the three-way indicator the design draws.
- *
- * ⚠ NULL IS FLAT, NOT DOWN. A prospect nothing has re-scored yet has no trend; rendering
- * that as a red arrow would invent a fall that never happened.
+/*
+ * 🛑 NO TREND IS READ HERE, AND `stockTrendDelta` IS DELIBERATELY NOT SELECTED. This hub used to
+ * map that column's sign to an arrow. It is a LEVEL (`score/100*10 + c2cPoints/10`, written by
+ * `workers/devy-data-worker.ts`), non-negative for every scored prospect, so the hub drew every
+ * prospect as "Trending up" while the per-league tab said "no trend measured". Both now ask
+ * `devyTrendOf` in `lib/devy/devyTrend.ts`, which is the one place to wire a real delta.
  */
-function trendOf(delta: number | null): DevyTrend {
-  if (delta == null || delta === 0) return 'flat'
-  return delta > 0 ? 'up' : 'down'
-}
 
 /**
  * The three stats beside each hero card.
@@ -126,7 +122,7 @@ function toProspect(row: PoolRow, rank: number): DevyProspect {
     school: row.school,
     classYear: row.classYearLabel,
     grade: row.draftProjectionScore,
-    trend: trendOf(row.stockTrendDelta),
+    trend: devyTrendOf(row),
     headshotUrl: row.headshotUrl,
     // No college colour table exists in this schema, so no badge rather than a grey blob.
     teamColor: null,
@@ -171,7 +167,6 @@ export async function getDevyCoreData(userId: string, leagueIds: string[], now =
         school: true,
         classYearLabel: true,
         draftProjectionScore: true,
-        stockTrendDelta: true,
         headshotUrl: true,
         passAttempts: true,
         passCompletions: true,

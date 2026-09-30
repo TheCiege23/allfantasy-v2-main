@@ -19,6 +19,7 @@
 import '../af-core.css'
 import '../af-devy.css'
 import type { DevyNewsItem, DevyTrend, DevyViewState } from './DevyCore'
+import DevyTrendMark from './DevyTrendMark'
 
 /**
  * Devy — the per-league tab.
@@ -152,24 +153,6 @@ function Avatar({ url, name, color }: { url: string | null; name: string; color:
   )
 }
 
-function Trend({ trend }: { trend: DevyTrend | null }) {
-  if (trend == null) {
-    return (
-      <span className="af-devy-trend" title="No trend measured">
-        <span aria-hidden="true">·</span>
-        <span className="af-sr-only"> No trend measured</span>
-      </span>
-    )
-  }
-  const glyph = trend === 'up' ? '↑' : trend === 'down' ? '↓' : '—'
-  const label = trend === 'up' ? 'Trending up' : trend === 'down' ? 'Trending down' : 'Flat'
-  return (
-    <span className={`af-devy-trend af-devy-trend--${trend}`} title={label}>
-      <span aria-hidden="true">{glyph}</span>
-      <span className="af-sr-only"> {label}</span>
-    </span>
-  )
-}
 
 export default function DevyLeagueTab({
   viewState,
@@ -459,7 +442,7 @@ export default function DevyLeagueTab({
                       <td>{t.player}</td>
                       <td className="af-devy-num">{t.value == null ? '—' : Math.round(t.value)}</td>
                       <td>
-                        <Trend trend={t.trend} />
+                        <DevyTrendMark trend={t.trend} />
                       </td>
                       <td>{t.status}</td>
                     </tr>
