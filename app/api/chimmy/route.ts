@@ -10,9 +10,10 @@
  * ⚠ THE DOCS DISAGREE AND THE DOCS ARE WRONG. `docs/AI_CHIMMY_QA_DELIVERABLE.md` states "League
  * chat AI tab: uses `useAIChat({ leagueId })` → POST /api/chimmy", and
  * `docs/CHIMMY_UNIFIED_ASSISTANT_DELIVERABLE.md` calls it "the preferred client entry point".
- * Traced: `useAIChat` posts to `/api/ai/chat?stream=1` and `ChimmyChatShell` to
- * `/api/shared/chat/threads`. Neither touches this file. Those are dated deliverables and are
- * left as the historical record they are — this note is where a reader will actually be.
+ * Traced: `useAIChat` posted to `/api/ai/chat?stream=1` (both since deleted as dead code, PR #1621)
+ * and `ChimmyChatShell` to `/api/shared/chat/threads`. Neither touched this file. Those are dated
+ * deliverables and are left as the historical record they are — this note is where a reader will
+ * actually be.
  *
  * WHAT IT STILL DOES, AND WHY IT IS NOT DELETED: it adds commissioner, league-intelligence and
  * portfolio grounding, then forwards to `postChatChimmy`. All three resolvers are now also read by
