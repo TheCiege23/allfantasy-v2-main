@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 
 import { parseOfferRead, type OfferRead } from '@/lib/trade-screenshot/offerRead'
 import { findRosterPlayer, matchOfferToRosters, normalizePlayerName, screenshotDraftNote } from '@/lib/trade-screenshot/matchOffer'
-import { rosterManagerHandles } from '@/lib/trade-screenshot/managerHandles'
+import { managerNameBesideLabel, rosterManagerHandles } from '@/lib/trade-screenshot/managerHandles'
 import type { LeagueRoster } from '@/components/core-app/screens/useLeagueRosters'
 
 const player = (id: string, name: string, position = 'QB') => ({
@@ -189,6 +189,13 @@ describe('matchOfferToRosters — the players decide the sides', () => {
     expect(rosterManagerHandles({ import: { ownerName: 'JeffersonTD' } })).toEqual(['JeffersonTD'])
     expect(rosterManagerHandles({ source_provider: 'sleeper' }, [null, undefined])).toEqual([])
     expect(rosterManagerHandles(null)).toEqual([])
+  })
+
+  it('managerNameBesideLabel: shown only when the chip label is a different name', () => {
+    expect(managerNameBesideLabel('Dolphins (B2B Champs)', ['JeffersonTD', 'jeff_account'])).toBe('JeffersonTD')
+    expect(managerNameBesideLabel('JeffersonTD', ['jeffersontd'])).toBeNull()
+    expect(managerNameBesideLabel('Paul Brown', [])).toBeNull()
+    expect(managerNameBesideLabel('Paul Brown', undefined)).toBeNull()
   })
 
   it('reads the bracketed original owner off a pick', () => {
