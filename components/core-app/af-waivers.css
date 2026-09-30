@@ -284,6 +284,12 @@
   color: var(--faint);
   margin: 0;
 }
+/* AllFantasy's own engine, beside the provider projection on each free agent. */
+.af-core .af-wlb-af {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 .af-core .af-wlb-chip {
   margin-left: 6px;
   padding: 2px 5px;

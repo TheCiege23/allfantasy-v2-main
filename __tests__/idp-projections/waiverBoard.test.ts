@@ -11,7 +11,10 @@ vi.mock('@/lib/core-app/myRoster', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/core-app/myRoster')>()),
   findMyRoster: vi.fn(async () => ({ found: true, playerData: { players: ['6038'] } })),
 }))
-vi.mock('@/lib/core-app/playerProjections', () => ({
+vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => ({
+  // The AF engine column: the carry-over arithmetic stays real, and the read finds no AF rows.
+  afEngineForLeague: (await importOriginal<typeof import('@/lib/core-app/playerProjections')>()).afEngineForLeague,
+  lookupAfEngineProjections: vi.fn(async () => new Map()),
   lookupProjections: vi.fn(async (ids: readonly string[]) => {
     const feed: Record<string, { name: string; line: number }> = {
       '6038': { name: 'Wrong Player', line: 5 },
@@ -169,5 +172,21 @@ describe('loadWaiverBoard — foreign roster ids', () => {
     const board = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
     expect(board.state).toBe('ok')
     expect(board.candidates[0]?.displaces?.name).toBe('Wrong Player')
+  })
+
+  it('puts the AllFantasy engine beside the free agent and the starter he displaces, without moving the gain', async () => {
+    const { lookupAfEngineProjections } = await import('@/lib/core-app/playerProjections')
+    vi.mocked(lookupAfEngineProjections).mockResolvedValueOnce(new Map([
+      ['fa1', { playerId: 'fa1', projectedPoints: 24, basis: null, confidence: null }],
+      ['6038', { playerId: '6038', projectedPoints: 10, basis: null, confidence: null }],
+    ]))
+    const before = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    const board = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    // Provider line scores the same under this league as generic (rec x1), so AF carries over 1:1.
+    expect(before.candidates[0]?.afProjectedPoints).toBe(24)
+    expect(before.candidates[0]?.displaces?.afProjectedPoints).toBe(10)
+    // Without AF rows the figures are absent, and the gain is identical either way.
+    expect(board.candidates[0] && 'afProjectedPoints' in board.candidates[0]).toBe(false)
+    expect(before.candidates[0]?.gain).toBe(board.candidates[0]?.gain)
   })
 })

@@ -112,7 +112,10 @@ const NFL_FEED: Record<string, { name: string; rec: number }> = {
   'nfl-1': { name: 'NFL Interloper', rec: 30 },
   c1: { name: 'NFL Namesake', rec: 4 },
 }
-vi.mock('@/lib/core-app/playerProjections', () => ({
+vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => ({
+  // The AF engine column: the carry-over arithmetic stays real, and the read finds no AF rows.
+  afEngineForLeague: (await importOriginal<typeof import('@/lib/core-app/playerProjections')>()).afEngineForLeague,
+  lookupAfEngineProjections: vi.fn(async () => new Map()),
   lookupProjections: vi.fn(async (ids: readonly string[]) =>
     new Map(
       ids

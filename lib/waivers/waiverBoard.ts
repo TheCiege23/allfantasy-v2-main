@@ -42,10 +42,16 @@ export interface WaiverCandidate {
   team: string | null
   /** Projected under THIS league's scoring. Never a generic-PPR number. */
   projectedPoints: number
+  /**
+   * AllFantasy's own engine for him (NFL only), carried into this league's scoring by his provider
+   * line; the engine's PPR number where he has no provider line. Absent when the engine has no row.
+   * Display only — `gain` and the ranking stay on `projectedPoints`.
+   */
+  afProjectedPoints?: number
   /** Points added to your best starting lineup by rostering him. Zero means he would not start. */
   gain: number
   /** The starter he pushes out, when he displaces one. Null when he fills an unfilled slot. */
-  displaces: { sleeperId: string | null; playerKey?: string; name: string; projectedPoints: number } | null
+  displaces: { sleeperId: string | null; playerKey?: string; name: string; projectedPoints: number; afProjectedPoints?: number } | null
   /**
    * Where the projection came from.
    *
@@ -234,7 +240,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   for (const r of allRosters) for (const id of rosterPlayerIds(r.playerData)) rostered.add(id)
   for (const id of myIds) rostered.add(id)
 
-  const { lookupProjections } = await import('@/lib/core-app/playerProjections')
+  const { afEngineForLeague, lookupAfEngineProjections, lookupProjections } = await import('@/lib/core-app/playerProjections')
 
   /*
    * The candidate pool is players who ACTUALLY PLAYED in the most recent scored week, plus
@@ -417,6 +423,38 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   }
 
   candidates.sort((a, b) => b.gain - a.gain)
+  const shown = candidates.slice(0, limit)
+
+  /*
+   * AllFantasy's own engine beside each shown number — the free agent and the starter he displaces.
+   * One read for the players actually shown, after the ranking is settled, so it can never change
+   * who is recommended. A failed read leaves the AF figures off and the board exactly as it was.
+   */
+  const afIds = shown.flatMap((c) => [c.sleeperId, c.displaces?.sleeperId ?? null]).filter((id): id is string => id != null)
+  if (afIds.length > 0) {
+    const engine = await lookupAfEngineProjections(afIds, null).catch(
+      (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
+    )
+    /* The provider's generic PPR total, for the carry into this league's scoring. A 'form'
+       candidate has none, so his AF figure stands as the engine's PPR number. */
+    const genericOf = (id: string): number | null =>
+      (poolProj.get(id) ?? mineProj.get(id))?.projectedPoints ?? null
+    for (const c of shown) {
+      if (c.sleeperId) {
+        const v = afEngineForLeague(
+          engine.get(c.sleeperId)?.projectedPoints,
+          c.basis === 'projection' ? genericOf(c.sleeperId) : null,
+          c.basis === 'projection' ? c.projectedPoints : null,
+        )
+        if (v != null) c.afProjectedPoints = v
+      }
+      const d = c.displaces
+      if (d?.sleeperId) {
+        const v = afEngineForLeague(engine.get(d.sleeperId)?.projectedPoints, genericOf(d.sleeperId), d.projectedPoints)
+        if (v != null) d.afProjectedPoints = v
+      }
+    }
+  }
 
   const notes: string[] = [
     `Ranked by how much each adds to your best starting lineup, not by raw projection — ` +
@@ -443,7 +481,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
     season: statSeason != null ? String(statSeason) : null,
     week: statWeek,
     currentLineupPoints: base.total,
-    candidates: candidates.slice(0, limit),
+    candidates: shown,
     notes,
   }
 }

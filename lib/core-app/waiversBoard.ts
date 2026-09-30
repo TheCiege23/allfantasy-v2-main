@@ -3,7 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { getRosteredMarket, MIN_LEAGUES_FOR_MARKET } from './rosteredMarket'
-import { latestProjectionWeek } from './playerProjections'
+import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections } from './playerProjections'
 import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 import { myRosterCandidates } from './myRoster'
@@ -76,6 +76,12 @@ export type WaiverPlayer = {
   imageUrl: string | null
   /** Projected under THIS league's scoring, not the generic preset. */
   projected: number
+  /**
+   * AllFantasy's own engine for the same player, carried into this league's scoring
+   * (`afEngineForLeague`). NFL rows only; absent when the engine has no row for him. Shown beside
+   * `projected` — it never ranks the board or picks the add or the drop.
+   */
+  afProjected?: number
   /** Share of counted leagues rostering him, 0–1. Null below the market gate. */
   ownPct: number | null
   /** Share of the leagues rostering him that start him, 0–1. Null likewise. */
@@ -100,6 +106,11 @@ export type WaiverBoardRow = {
   format: string | null
   /** Best available minus weakest droppable, in this league's points. */
   netGain: number
+  /**
+   * The same swap on AllFantasy's own engine. Present only when the engine priced the add AND
+   * (when there is one) the drop — half a swap is not a gain.
+   */
+  afNetGain?: number
   add: WaiverPlayer
   drop: WaiverPlayer | null
   /** FAAB left, when the league runs FAAB and a budget was read. */
@@ -659,9 +670,13 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
   )
 
   deduped.sort((a, b) => b.netGain - a.netGain)
+  const shown = deduped.slice(0, ROW_CAP)
+  /* AllFantasy's own engine beside the provider figures, for the players actually shown. A failed
+     read costs the AF figures and nothing else. */
+  await attachAfEngine(shown, at, (id) => poolById.get(id)?.generic ?? null).catch(() => undefined)
 
   return {
-    rows: deduped.slice(0, ROW_CAP),
+    rows: shown,
     /* Real leagues, not AF rows — otherwise this count inflates the same way. */
     considered: countRealLeagues(
       mine.map((c) => ({
@@ -675,6 +690,33 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
     at,
     /* A schedule read that fails costs the note, never the board. */
     weekKickoffs: await projectionWeekKickoffs(at).catch(() => null),
+  }
+}
+
+/**
+ * Put AllFantasy's own engine number beside each shown player, and on the swap.
+ *
+ * One read for every add and drop on the board. Each figure is the engine's PPR number scaled by
+ * that player's provider line (`generic` PPR against the league-scored `projected`) — the same
+ * carry-over every /core surface uses — so it is in this league's points like the figure beside it.
+ */
+export async function attachAfEngine(
+  rows: WaiverBoardRow[],
+  at: { season: string; week: number },
+  genericOf: (playerId: string) => number | null,
+): Promise<void> {
+  const ids = [...new Set(rows.flatMap((r) => [r.add.playerId, ...(r.drop ? [r.drop.playerId] : [])]))]
+  if (ids.length === 0) return
+  const engine = await lookupAfEngineProjections(ids, at)
+  for (const r of rows) {
+    for (const p of [r.add, r.drop]) {
+      if (!p) continue
+      const v = afEngineForLeague(engine.get(p.playerId)?.projectedPoints, genericOf(p.playerId), p.projected)
+      if (v != null) p.afProjected = v
+    }
+    if (r.add.afProjected != null && (!r.drop || r.drop.afProjected != null)) {
+      r.afNetGain = Math.round((r.add.afProjected - (r.drop?.afProjected ?? 0)) * 100) / 100
+    }
   }
 }
 
