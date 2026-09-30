@@ -12,6 +12,7 @@ import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { recordAfRosterMoveHistory } from './rosterMoveHistory'
 import { upsertAfLineupLockState, resolveFullLineupLockContext } from './lineupLockService'
 import type { LineupValidationContext } from './types'
+import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 
 function weekFromLeagueSettings(settings: unknown): number {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return 1
@@ -55,6 +56,10 @@ export async function persistRosterLineupWithEngine(
     where: { id: input.rosterId, leagueId: input.leagueId },
   })
   if (!roster) return { ok: false, error: 'Roster not found', status: 404 }
+
+  if (input.source === 'user_save' && await isCommissionerRosterLocked(input.leagueId, input.rosterId)) {
+    return { ok: false, error: 'This roster is locked by the commissioner.', status: 403 }
+  }
 
   const sport = String(league.sport ?? 'NFL')
   const formatType = getFormatTypeForVariant(sport, (league.leagueVariant as string | null) ?? undefined)

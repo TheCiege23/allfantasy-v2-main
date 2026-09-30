@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { evaluateLegalityForPersistedRoster } from '@/lib/roster-legality/loadLegalityEvaluationContext'
+import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 
 export type ResolvedRosterTransactionRules = {
   /** Block trades when either party's roster is illegal (settings-driven). */
@@ -42,11 +43,18 @@ export async function assertRosterTransactionsAllowed(params: {
   rosterIds: string[]
   userId: string
   kind: 'trade' | 'waiver_claim'
-}): Promise<{ ok: true } | { ok: false; error: string; code: 'ILLEGAL_ROSTER_BLOCKED' }> {
+}): Promise<{ ok: true } | { ok: false; error: string; code: 'ILLEGAL_ROSTER_BLOCKED' | 'COMMISSIONER_ROSTER_LOCKED' }> {
   const league =
     params.league ??
     (await prisma.league.findUnique({ where: { id: params.leagueId }, select: { id: true, settings: true } }))
   if (!league) return { ok: false, error: 'League not found', code: 'ILLEGAL_ROSTER_BLOCKED' }
+
+  const uniq = [...new Set(params.rosterIds.filter(Boolean))]
+  for (const rosterId of uniq) {
+    if (await isCommissionerRosterLocked(params.leagueId, rosterId)) {
+      return { ok: false, error: 'This roster is locked by the commissioner.', code: 'COMMISSIONER_ROSTER_LOCKED' }
+    }
+  }
 
   const rules = resolveRosterTransactionRules(league)
   const needBlock =
@@ -57,7 +65,6 @@ export async function assertRosterTransactionsAllowed(params: {
     rules.illegalRosterCommissionerBypass && (await isElevatedCommissioner(params.leagueId, params.userId))
   if (bypass) return { ok: true }
 
-  const uniq = [...new Set(params.rosterIds.filter(Boolean))]
   for (const rosterId of uniq) {
     const roster = await prisma.roster.findFirst({
       where: { id: rosterId, leagueId: params.leagueId },

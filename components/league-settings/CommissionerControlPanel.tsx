@@ -86,9 +86,15 @@ export function CommissionerControlPanel({ leagueId }: Props) {
   // Load teams
   useEffect(() => {
     let active = true
-    fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/division-settings`, { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((data) => {
+    Promise.all([
+      fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/division-settings`, { cache: 'no-store' }),
+      fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-locks`, { cache: 'no-store' }),
+    ])
+      .then(async ([teamsResponse, locksResponse]) => {
+        if (!teamsResponse.ok || !locksResponse.ok) throw new Error('Failed to load commissioner controls')
+        return Promise.all([teamsResponse.json(), locksResponse.json()])
+      })
+      .then(([data, locksData]) => {
         if (!active) return
         const rawTeams = (data.teams ?? []) as Array<Record<string, unknown>>
         setTeams(rawTeams.map((t) => ({
@@ -100,7 +106,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
           losses: (t.losses as number) ?? 0,
           isCommissioner: (t.isCommissioner as boolean) ?? false,
           isCoCommissioner: (t.isCoCommissioner as boolean) ?? false,
-          isLocked: false,
+          isLocked: locksData.lockedRosters?.[t.id as string] === true,
           platformUserId: (t.platformUserId as string) ?? null,
         })))
         // Init commissioner selections
@@ -109,6 +115,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
           cs[t.id as string] = Boolean(t.isCommissioner) || Boolean(t.isCoCommissioner)
         })
         setCommissionerSelections(cs)
+        setLockedSelections(locksData.lockedRosters ?? {})
       })
       .catch(() => { if (active) setError('Failed to load') })
       .finally(() => { if (active) setLoading(false) })
@@ -170,12 +177,16 @@ export function CommissionerControlPanel({ leagueId }: Props) {
     setError(null)
     setSuccess(null)
     try {
-      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/settings`, {
-        method: 'PATCH',
+      const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(leagueId)}/roster-locks`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ lockedRosters: lockedSelections }),
       })
-      if (!res.ok) { setError('Failed to save'); return }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string }
+        setError(body.error ?? 'Failed to save')
+        return
+      }
       setSuccess('Roster locks saved.')
       setTimeout(() => setSuccess(null), 3000)
     } catch { setError('Request failed') }
