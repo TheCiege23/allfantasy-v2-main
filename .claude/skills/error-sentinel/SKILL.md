@@ -82,16 +82,24 @@ PUT /organizations/all-fantasy/issues/<issue_id>/  {"status":"resolved"}   # ste
 
 ## 0. Bootstrap the checkout
 
-A Routine-fired session starts in an EMPTY working directory (measured
-2026-09-30: `cwd` was `/home/user`, no checkout). Clone first if there is no
-`.git` where you are:
+The Routine fires into a **persistent** session whose container was created
+with this repo as its source (see `ROUTINE.md` beside this file). That means
+the checkout may carry leftovers from the previous firing, and after a
+container reclaim it is a fresh clone at `main`. Either way, start from
+`origin/main`:
 
 ```bash
-[ -d .git ] || { git clone -q https://github.com/TheCiege23/allfantasy-v2-main.git repo && cd repo; }
+[ -d .git ] || { git clone -q https://github.com/TheCiege23/allfantasy-v2-main.git repo && cd repo; }   # only a fresh-session Routine needs this
 git fetch origin main
-git status --short | head            # must be clean before you start
+git status --short | head            # dirty = a previous firing's leftovers, not yours
+git stash push -u -m "sentinel-leftover-$(date -u +%Y%m%dT%H%M)" 2>/dev/null   # keep, do not delete; mention it in the report
+git checkout --detach origin/main
 npm ci --no-audit --no-fund           # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 is preset; chromium is at /opt/pw-browsers
 ```
+
+A stash is never the source of truth: if an earlier firing left an unpushed
+fix, the ledger issue still says what it was, and the next attempt starts
+from `origin/main` again.
 
 Confirm you can push before you invest in a fix: `git ls-remote origin` must
 work and `$GITHUB_TOKEN` (or `$GH_TOKEN`) must be set. If neither is true,
