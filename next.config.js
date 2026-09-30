@@ -236,6 +236,11 @@ const nextConfig = {
     return config;
   },
 
+  // API routes read files under ./data at runtime; keep them in the traced output.
+  outputFileTracingIncludes: {
+    "/api/**": ["./data/**"],
+  },
+
   experimental: {
     // Next 14.2 compiles the client and server passes in parallel build workers.
     // On Railway (Linux) that build loses the root layout: app-build-manifest.json
@@ -252,10 +257,9 @@ const nextConfig = {
     //
     // Serialising the compilations costs build time and nothing else.
     webpackBuildWorker: false,
-    instrumentationHook: process.env.NODE_ENV === 'production' || process.env.AF_ENABLE_DEV_INSTRUMENTATION === '1',
-    outputFileTracingIncludes: {
-      "/api/**": ["./data/**"],
-    },
+    // (Next 15) `instrumentationHook` is gone — instrumentation is always on, and the
+    // dev-only gate moved into instrumentation.ts. `outputFileTracingIncludes` moved to
+    // the top level of this config.
     // Rewrites barrel imports (`import { Icon } from 'lucide-react'`) into direct
     // path imports so a route ships only the icons/helpers it actually uses
     // instead of the whole package. Only list packages this repo imports from —
