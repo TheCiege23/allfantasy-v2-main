@@ -183,9 +183,11 @@ describe('LiveGameView', () => {
   })
 
   it('a stale refresh keeps the game on screen and says so', () => {
-    view(detail(), { stale: true })
+    const { container } = view(detail(), { stale: true })
     expect(screen.getByRole('status')).toHaveTextContent(/last update we have/)
-    expect(screen.getByText('Cincinnati Bengals')).toBeInTheDocument()
+    // The header, specifically: the football box score now names each team too.
+    const names = [...container.querySelectorAll('.af-gv-team-name')].map((n) => n.textContent)
+    expect(names).toContain('Cincinnati Bengals')
   })
 
   it('a failed read with nothing cached says it is our problem, not the game', () => {

@@ -17,6 +17,7 @@ export type TieInLike = {
   playerName: string
   position: string | null
   imageUrl: string | null
+  team?: string | null
   isStarter: boolean
   points: number | null
 }
@@ -26,6 +27,8 @@ export type StarterGroup = {
   playerName: string
   position: string | null
   imageUrl: string | null
+  /** The club that placed him in this game, when the tie-in carried it. */
+  team: string | null
   leagues: Array<{ leagueId: string; leagueName: string; points: number | null }>
 }
 
@@ -40,6 +43,7 @@ export function groupStartersByPlayer(tieIns: readonly TieInLike[]): StarterGrou
         playerName: t.playerName,
         position: t.position,
         imageUrl: t.imageUrl,
+        team: t.team ?? null,
         leagues: [],
       }
       byPlayer.set(t.playerId, group)
@@ -66,4 +70,21 @@ export function pointsSummary(group: StarterGroup): { min: number; max: number }
   const values = group.leagues.map((l) => l.points).filter((p): p is number => p != null && Number.isFinite(p))
   if (values.length === 0) return null
   return { min: Math.min(...values), max: Math.max(...values) }
+}
+
+/**
+ * The points label on a starter row: THAT league's number when a league is held,
+ * otherwise the range across his leagues. An em dash when nobody has reported.
+ *
+ * One function for the slate card and the clicked-game view, so the same player
+ * cannot read "12.4 pts" on one and "10.1–12.4 pts" on the other.
+ */
+export function formatStarterPoints(group: StarterGroup, selectedLeagueId: string | null): string {
+  const selected = selectedLeagueId != null ? group.leagues.find((l) => l.leagueId === selectedLeagueId) : undefined
+  if (selected) return selected.points == null ? '—' : `${selected.points.toFixed(1)} pts`
+  const summary = pointsSummary(group)
+  if (summary == null) return '—'
+  return summary.min === summary.max
+    ? `${summary.max.toFixed(1)} pts`
+    : `${summary.min.toFixed(1)}–${summary.max.toFixed(1)} pts`
 }

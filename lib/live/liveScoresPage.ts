@@ -80,6 +80,12 @@ export type LiveRosterTieIn = {
    * broken `<img>` beside a real name.
    */
   imageUrl: string | null
+  /**
+   * The club that placed him in this game, in the slate's own abbreviation. It
+   * says which side he is on — the clicked-game view needs it to find his line
+   * in the box score. Optional so fixtures that predate it stay valid.
+   */
+  team?: string | null
   /** True when he is in your starting lineup this week. */
   isStarter: boolean
   /** Points as THIS league scored them. Null when the league has not reported yet. */
@@ -525,6 +531,109 @@ async function loadRosteredPlayers(
   return { players, hasRosterData: true, rosterFailed: incomplete }
 }
 
+/** Real-world team -> your players on it. */
+function playersByTeam(players: Map<string, RosteredPlayer>): Map<string, RosteredPlayer[]> {
+  const byTeam = new Map<string, RosteredPlayer[]>()
+  for (const p of players.values()) {
+    if (!p.team) continue
+    const list = byTeam.get(p.team) ?? []
+    list.push(p)
+    byTeam.set(p.team, list)
+  }
+  return byTeam
+}
+
+/**
+ * Your starters on either of a game's two teams, one row per (player, league),
+ * highest points first. The ONE rule for "whose game is this" — the slate card
+ * and the clicked-game view both come through here.
+ *
+ * STARTERS ONLY — user decision, 2026-09-13, replacing the handoff's "build rule
+ * 4" (bench players visible, dimmed). One WR rostered in fifteen leagues printed
+ * fifteen rows, bench included, and a game card several screens tall. A
+ * bench/IR/taxi slot does not score for you, so it is also dropped from the
+ * live-impact total that sums these.
+ */
+function starterTieInsForTeams(
+  byTeam: Map<string, RosteredPlayer[]>,
+  teams: readonly string[],
+): LiveRosterTieIn[] {
+  const tieIns: LiveRosterTieIn[] = []
+  for (const team of new Set(teams)) {
+    for (const p of byTeam.get(team) ?? []) {
+      for (const l of p.leagues) {
+        if (!l.isStarter) continue
+        tieIns.push({
+          leagueId: l.leagueId,
+          leagueName: l.leagueName,
+          playerId: p.playerId,
+          playerName: p.name,
+          position: p.position,
+          imageUrl: p.imageUrl,
+          team,
+          isStarter: l.isStarter,
+          points: l.points,
+        })
+      }
+    }
+  }
+  tieIns.sort((a, b) => (b.points ?? 0) - (a.points ?? 0))
+  return tieIns
+}
+
+/** Your starters in one game, for the clicked-game view. */
+export type GameStarters = {
+  tieIns: LiveRosterTieIn[]
+  /** False when you have claimed no team in this sport — "nobody to show", not a failure. */
+  hasRosterData: boolean
+  /** The roster read failed or was incomplete. Distinct from having no starters here. */
+  rosterFailed: boolean
+}
+
+/**
+ * Your starters in ONE game — the clicked-game view's half of the same join the
+ * slate card makes. Null when signed out: the view simply has no panel.
+ *
+ * ⚠ THE WEEK COMES FROM THE GAME, NOT FROM THE CLOCK. A league whose settings do
+ * not state a week falls back to the fixture's own season and week (the stored
+ * ESPN row), exactly as the slate falls back to its rows. Reading "this week"
+ * instead would show last week's points on a game opened from history.
+ */
+export async function getGameStarters(opts: {
+  userId: string | null
+  sport: string
+  gameId: string
+  homeAbbrev: string
+  awayAbbrev: string
+}): Promise<GameStarters | null> {
+  if (!opts.userId) return null
+  const sport = String(opts.sport).toUpperCase()
+  try {
+    const period = ['NFL', 'NCAAF'].includes(sport)
+      ? await prisma.sportsGame
+          .findFirst({
+            where: { sport, externalId: opts.gameId, source: { in: ['espn', 'espn_live'] }, season: { not: null }, week: { not: null } },
+            select: { season: true, week: true },
+          })
+          .catch(() => null)
+      : null
+    const { players, hasRosterData, rosterFailed } = await loadRosteredPlayers(
+      opts.userId,
+      sport,
+      period?.season != null && period.week != null ? { season: period.season, week: period.week } : null,
+    )
+    const tieIns = starterTieInsForTeams(playersByTeam(players), [
+      liveTeamAbbreviation(opts.homeAbbrev, sport),
+      liveTeamAbbreviation(opts.awayAbbrev, sport),
+    ])
+    return { tieIns, hasRosterData, rosterFailed: rosterFailed === true }
+  } catch (err) {
+    // Same rule as the slate: a roster fault is said, never drawn as "no starters".
+    console.error('[live] game starters read failed:', err instanceof Error ? err.message : err)
+    return { tieIns: [], hasRosterData: false, rosterFailed: true }
+  }
+}
+
 /** Games starting within this window of now still count as "the current slate". */
 const SLATE_BEFORE_MS = 6 * 60 * 60 * 1000
 const SLATE_AFTER_MS = 18 * 60 * 60 * 1000
@@ -876,14 +985,7 @@ export async function getLivePageData(opts: {
       })
     : { players: new Map<string, RosteredPlayer>(), hasRosterData: false }
 
-  // Real-world team -> your players on it.
-  const byTeam = new Map<string, RosteredPlayer[]>()
-  for (const p of players.values()) {
-    if (!p.team) continue
-    const list = byTeam.get(p.team) ?? []
-    list.push(p)
-    byTeam.set(p.team, list)
-  }
+  const byTeam = playersByTeam(players)
 
   const nowMs = Date.now()
   const games: LiveGameCard[] = rows.map((sourceRow) => {
@@ -891,32 +993,7 @@ export async function getLivePageData(opts: {
     // NFL aliases such as STL -> LAR must not rename baseball or basketball clubs.
     const home = liveTeamAbbreviation(row.homeTeam, sport)
     const away = liveTeamAbbreviation(row.awayTeam, sport)
-    const involved = [...(byTeam.get(home) ?? []), ...(byTeam.get(away) ?? [])]
-
-    const tieIns: LiveRosterTieIn[] = []
-    for (const p of involved) {
-      for (const l of p.leagues) {
-        /*
-         * STARTERS ONLY — user decision, 2026-09-13, replacing the handoff's
-         * "build rule 4" (bench players visible, dimmed). One WR rostered in
-         * fifteen leagues printed fifteen rows, bench included, and a game card
-         * several screens tall. A bench/IR/taxi slot does not score for you, so
-         * it is also dropped from the live-impact total that sums these.
-         */
-        if (!l.isStarter) continue
-        tieIns.push({
-          leagueId: l.leagueId,
-          leagueName: l.leagueName,
-          playerId: p.playerId,
-          playerName: p.name,
-          position: p.position,
-          imageUrl: p.imageUrl,
-          isStarter: l.isStarter,
-          points: l.points,
-        })
-      }
-    }
-    tieIns.sort((a, b) => (b.points ?? 0) - (a.points ?? 0))
+    const tieIns = starterTieInsForTeams(byTeam, [home, away])
 
     // ESPN sends 0-0 before kickoff; a score is only real once play began.
     const played = hasStarted(row.status) || row.completed

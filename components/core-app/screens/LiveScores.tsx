@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { gameDetailHref } from '@/lib/live/gameDetailLink'
@@ -9,7 +9,7 @@ import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
 import { deriveImpact } from '@/lib/live/liveImpact'
 import { GameHighlight } from '@/components/live/GameHighlight'
-import { groupStartersByPlayer, pointsSummary, type StarterGroup } from '@/lib/live/liveTieInGroups'
+import { formatStarterPoints, groupStartersByPlayer, type StarterGroup } from '@/lib/live/liveTieInGroups'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
 import {
   connectionDetail,
@@ -1460,16 +1460,23 @@ function Shooting({ shooting }: { shooting: TeamShooting }) {
  * decision 2026-09-13; the old list printed one row per league with bench
  * included, which is how one game card reached forty-six rows.
  */
-function MyStarters({
+export function MyStarters({
   gameId,
   sport,
   groups,
   selectedLeagueId,
+  renderStatLine,
 }: {
   gameId: string
   sport: string
   groups: StarterGroup[]
   selectedLeagueId: string | null
+  /**
+   * The clicked-game view passes each starter's live box-score line here; the
+   * slate card passes nothing and renders exactly as before. One list component
+   * for both, so the points and the league breakdown cannot drift apart.
+   */
+  renderStatLine?: (group: StarterGroup) => ReactNode
 }) {
   /*
    * The whole list collapses (user request, 2026-09-13): on a game you start
@@ -1498,7 +1505,14 @@ function MyStarters({
       {open ? (
         <ul id={listId} className="af-live-mine">
           {groups.map((g) => (
-            <StarterRow key={g.playerId} gameId={gameId} sport={sport} group={g} selectedLeagueId={selectedLeagueId} />
+            <StarterRow
+              key={g.playerId}
+              gameId={gameId}
+              sport={sport}
+              group={g}
+              selectedLeagueId={selectedLeagueId}
+              statLine={renderStatLine ? renderStatLine(g) : null}
+            />
           ))}
         </ul>
       ) : null}
@@ -1511,15 +1525,16 @@ function StarterRow({
   sport,
   group,
   selectedLeagueId,
+  statLine = null,
 }: {
   gameId: string
   sport: string
   group: StarterGroup
   selectedLeagueId: string | null
+  statLine?: ReactNode
 }) {
   const lowDataOn = useLowData().lowData
   const [open, setOpen] = useState(false)
-  const summary = pointsSummary(group)
   const panelId = `af-live-mine-${gameId}-${group.playerId}`
   const selected =
     selectedLeagueId != null ? (group.leagues.find((l) => l.leagueId === selectedLeagueId) ?? null) : null
@@ -1529,15 +1544,7 @@ function StarterRow({
    * shows THAT league's points; across leagues it is a range, and the disclosure
    * lists every league's own number. An em dash when nobody has reported.
    */
-  const points = selected
-    ? selected.points == null
-      ? '—'
-      : `${selected.points.toFixed(1)} pts`
-    : summary == null
-      ? '—'
-      : summary.min === summary.max
-        ? `${summary.max.toFixed(1)} pts`
-        : `${summary.min.toFixed(1)}–${summary.max.toFixed(1)} pts`
+  const points = formatStarterPoints(group, selectedLeagueId)
 
   return (
     <li className="af-live-mine-row" data-open={open} data-selected={selected != null}>
@@ -1576,6 +1583,7 @@ function StarterRow({
           <span className="af-live-mine-chev" aria-hidden />
         </button>
       </div>
+      {statLine}
       {open ? (
         <ul id={panelId} className="af-live-mine-leagues">
           {group.leagues.map((l) => (
