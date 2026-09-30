@@ -146,8 +146,8 @@ describe("each header and secret requireCronAuth accepts is honoured", () => {
 })
 
 describe("machine surfaces exempt by prefix — their handlers enforce their own keys", () => {
-  it("/api/internal (x-internal-key / x-ingestion-key)", async () => {
-    expect(refused((await middleware(fromWA("/api/internal/analyze-trades", {}, "POST"))).status)).toBe(false)
+  it("/api/internal (x-ingestion-key)", async () => {
+    expect(refused((await middleware(fromWA("/api/internal/schedule-stats/ingest", {}, "POST"))).status)).toBe(false)
   })
 
   it("/api/v1 — the partner Intelligence API, gated by API keys", async () => {
