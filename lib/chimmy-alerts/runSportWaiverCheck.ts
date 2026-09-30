@@ -238,7 +238,8 @@ export async function runSportWaiverCheck(
   )
   const userIds = rotation([...audience.keys()].sort(), now).slice(0, opts.limit ?? 500)
   const dedupePrefix = sportWaiverCheckDedupeKey(day)
-  const openSports = new Set(open.map((o) => o.rule.sport))
+  // Widened to string: it is probed with a league's upper-cased sport, which is any string.
+  const openSports = new Set<string>(open.map((o) => o.rule.sport))
 
   const outcomes: Partial<Record<SportWaiverCheckUserOutcome, number>> = {}
   const previews: Array<{ userId: string; title: string; body: string }> = []
