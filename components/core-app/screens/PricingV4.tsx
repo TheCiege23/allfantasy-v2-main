@@ -153,7 +153,12 @@ function Shield() {
  * actually stops the Stripe webhook crediting anything. Printing the discounts
  * would advertise a product that was deliberately withdrawn.
  */
-const FAQS: { q: string; a: string }[] = [
+/*
+ * ⚠ `appleA` IS THE ANSWER INSIDE THE iOS APP. A StoreKit subscription can only be
+ * cancelled through Apple, so "Settings → Billing" is wrong there and App Review
+ * reads this screen.
+ */
+const FAQS: { q: string; a: string; appleA?: string }[] = [
   {
     q: 'What stays free?',
     a: "Creating, importing and running your leagues — drafts, trades, waivers, live scoring, standings and the commissioner basics. League creation and imports are unlimited, with no trial clock.",
@@ -165,6 +170,8 @@ const FAQS: { q: string; a: string }[] = [
   {
     q: 'Can I cancel?',
     a: 'Any time, from Settings → Billing. Purchases follow the pricing shown at checkout and the applicable refund policy.',
+    appleA:
+      'Any time. Subscriptions bought in the iPhone app are managed by Apple: tap Manage Subscriptions below, or open iPhone Settings → your name → Subscriptions. Refunds for App Store purchases are handled by Apple.',
   },
   {
     q: 'Is this gambling?',
@@ -378,7 +385,8 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           return (
             <section key={plan.planFamily} className="af-pr-card" data-best={best}>
               {best ? <span className="af-pr-tab">Best value</span> : null}
-              <h2 className="af-pr-name">{plan.name}</h2>
+              {/* Named per interval so the card matches the App Store product it sells. */}
+              <h2 className="af-pr-name">{plan.name} {interval === 'month' ? 'Monthly' : 'Yearly'}</h2>
               <p className="af-pr-desc">{plan.description}</p>
 
               <div className="af-pr-price">
@@ -474,7 +482,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
             <div className="af-pr-yearly-grid">
               {yearlyLanes.map((plan) => (
                 <div key={plan.planFamily} className="af-pr-yearly-card">
-                  <span className="af-pr-yearly-name">{plan.name}</span>
+                  <span className="af-pr-yearly-name">{plan.name} Yearly</span>
                   <span className="af-pr-yearly-price">{appleApp ? (plan.yearlySku ? applePrices[plan.yearlySku] ?? 'Loading Apple price…' : '—') : money(plan.yearlyPrice as number)}</span>
                   {!appleApp && plan.savings ? (
                     <span className="af-pr-yearly-save af-num">
@@ -530,7 +538,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           {FAQS.map((f) => (
             <article key={f.q} className="af-pr-faq-item">
               <h3 className="af-pr-faq-q">{f.q}</h3>
-              <p className="af-pr-faq-a">{f.a}</p>
+              <p className="af-pr-faq-a">{appleApp && f.appleA ? f.appleA : f.a}</p>
             </article>
           ))}
         </div>
