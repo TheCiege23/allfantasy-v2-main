@@ -26,9 +26,12 @@ describe('ToolAIEntryResolver — no entry points at a retired profile route', (
   })
 
   it('the psychological keys resolve to nothing rather than to a 410', () => {
-    expect(getToolEntry('psychological')).toBeNull()
-    expect(getToolEntry('psychological_profiles')).toBeNull()
-    expect(getApiPathForTool('psychological', 'L1')).toBe('')
+    // No longer members of ToolAIEntryKey (2026-09-29); an untyped caller still gets nothing.
+    type Key = Parameters<typeof getToolEntry>[0]
+    expect(getToolEntry('psychological' as Key)).toBeNull()
+    expect(getToolEntry('psychological_profiles' as Key)).toBeNull()
+    expect(getApiPathForTool('psychological' as Key, 'L1')).toBe('')
+    expect(getAllToolEntries().filter((e) => /psych/i.test(`${e.key} ${e.label}`))).toEqual([])
     // Live entries still resolve.
     expect(getApiPathForTool('rivalries', 'L1')).toBe('/api/leagues/L1/rivalries/explain')
   })
