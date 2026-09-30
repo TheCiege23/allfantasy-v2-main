@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
   dispatch: vi.fn(),
   runLineupCheck: vi.fn(),
   runWaiverCheck: vi.fn(),
+  runSportWaiverCheck: vi.fn(),
   runChop: vi.fn(),
   recordSyncJobRun: vi.fn(),
 }))
@@ -32,6 +33,7 @@ vi.mock('@/lib/notifications/pushGate', () => ({ decidePushForUser: vi.fn(async 
 vi.mock('@/lib/chimmy-alerts/injuryFanOut', () => ({ buildFanOutLeagues: vi.fn(async () => []) }))
 vi.mock('@/lib/chimmy-alerts/runLineupCheck', () => ({ runLineupCheck: h.runLineupCheck }))
 vi.mock('@/lib/chimmy-alerts/runWaiverCheck', () => ({ runWaiverCheck: h.runWaiverCheck }))
+vi.mock('@/lib/chimmy-alerts/runSportWaiverCheck', () => ({ runSportWaiverCheck: h.runSportWaiverCheck }))
 vi.mock('@/lib/chimmy-alerts/runChopReleaseCheck', () => ({ runChopReleaseCheck: h.runChop }))
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
   withSyncJobRun: async (_ctx: unknown, fn: () => Promise<unknown>) => fn(),
@@ -68,6 +70,7 @@ beforeEach(() => {
   h.detect.mockReturnValue([])
   h.runLineupCheck.mockResolvedValue({ ran: false, reason: 'early', week: null, mainSlate: null })
   h.runWaiverCheck.mockResolvedValue({ ran: false, reason: 'early', week: null, firstKickoff: null })
+  h.runSportWaiverCheck.mockResolvedValue({ ran: false, reason: 'closed', day: '2026-09-29', sports: {} })
   h.runChop.mockResolvedValue(RAN)
 })
 

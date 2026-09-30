@@ -41,8 +41,14 @@ export function describeProactiveFrom(from: ProactiveFrom): {
 }
 
 /** Opens Chimmy in that league with the question already typed — one tap to send — and the tag. */
-export function chimmyChatHref(args: { prompt: string; leagueId: string; from: ProactiveFrom }): string {
-  const q = new URLSearchParams({ prompt: args.prompt, leagueId: args.leagueId, sport: 'NFL', from: args.from })
+export function chimmyChatHref(args: {
+  prompt: string
+  leagueId: string
+  from: ProactiveFrom
+  /** The league's sport. Omitted means NFL — every weekly check before the other-sport waiver check. */
+  sport?: string
+}): string {
+  const q = new URLSearchParams({ prompt: args.prompt, leagueId: args.leagueId, sport: args.sport ?? 'NFL', from: args.from })
   return `/chimmy/chat?${q.toString()}`
 }
 

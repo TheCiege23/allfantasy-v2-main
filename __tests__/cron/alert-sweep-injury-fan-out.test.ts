@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   dispatch: vi.fn(),
   runLineupCheck: vi.fn(),
   runWaiverCheck: vi.fn(),
+  runSportWaiverCheck: vi.fn(),
   recordSyncJobRun: vi.fn(),
   findFirst: vi.fn(),
   fanOut: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock('@/lib/chimmy-alerts/runLineupCheck', () => ({ runLineupCheck: h.runLine
 // Mocked, not left real: unmocked, it ran against the stub prisma above and failed into
 // `{ reason: 'error' }` on every test — green, and exercising nothing.
 vi.mock('@/lib/chimmy-alerts/runWaiverCheck', () => ({ runWaiverCheck: h.runWaiverCheck }))
+vi.mock('@/lib/chimmy-alerts/runSportWaiverCheck', () => ({ runSportWaiverCheck: h.runSportWaiverCheck }))
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
   withSyncJobRun: async (_ctx: unknown, fn: () => Promise<unknown>) => fn(),
   recordSyncJobRun: h.recordSyncJobRun,
@@ -71,6 +73,7 @@ beforeEach(() => {
   h.fanOut.mockResolvedValue([])
   h.runLineupCheck.mockResolvedValue({ ran: false, reason: 'early', week: null, mainSlate: null })
   h.runWaiverCheck.mockResolvedValue({ ran: false, reason: 'early', week: null, firstKickoff: null })
+  h.runSportWaiverCheck.mockResolvedValue({ ran: false, reason: 'closed', day: '2026-09-29', sports: {} })
 })
 
 describe('alert sweep — injury fan-out', () => {

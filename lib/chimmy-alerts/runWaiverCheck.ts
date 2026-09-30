@@ -39,8 +39,9 @@ import {
  * sections are priced PER GAME from a season rate; this message says "+N projected pts in week W",
  * gates on WAIVER_CHECK_MIN_GAIN points per NFL week, is windowed on the NFL schedule and goes to an
  * NFL-league audience. None of that is true of a basketball gain, so sending one here would state a
- * weekly forecast the number never made. Messaging those sports needs their own window, audience
- * and "worth a claim" threshold — a product decision, not a widening of this filter.
+ * weekly forecast the number never made. Those sports have their own window, audience and "worth a
+ * claim" threshold (owner's decision 2026-09-29) — in `runSportWaiverCheck.ts`, on the rules in
+ * `waiverAlertRules.ts`, never by widening this filter.
  */
 
 export type WaiverCheckUserOutcome =
