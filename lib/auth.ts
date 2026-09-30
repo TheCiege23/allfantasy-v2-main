@@ -18,6 +18,11 @@ import DiscordProvider from "next-auth/providers/discord";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { resolveUnifiedAuthIdentity } from "@/lib/auth/AuthIdentityResolver";
+import {
+  ACCOUNT_SUSPENDED_ERROR,
+  ACCOUNT_SUSPENDED_ERROR_URL,
+  activeAccountRestriction,
+} from "@/lib/moderation/accountSuspension";
 import { linkSocialAccountToAppUser } from "@/lib/auth/SocialAccountLinkingService";
 import { ensureSharedAccountProfile } from "@/lib/auth/SharedAccountBootstrapService";
 import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken";
@@ -249,6 +254,12 @@ const providers: NextAuthOptions["providers"] = [
 
         if (!isValidPassword) {
           return null;
+        }
+
+        // A suspended or banned account (lib/moderation/accountSuspension). Checked only after
+        // the password matched, so it tells nothing to someone who does not have it.
+        if (await activeAccountRestriction(user.id)) {
+          throw new Error(ACCOUNT_SUSPENDED_ERROR);
         }
 
         return {
@@ -501,7 +512,7 @@ export const authOptions: NextAuthOptions = {
       }
 
       if (account.provider === "google" || account.provider === "apple" || account.provider === "spotify" || account.provider === "facebook" || account.provider === "discord") {
-        const runSocialLink = async (): Promise<true> => {
+        const runSocialLink = async (): Promise<true | string> => {
           const oauthEmail = resolveOAuthEmailFromCallback(user, profile);
           if (oauthEmail) {
             user.email = oauthEmail;
@@ -546,6 +557,12 @@ export const authOptions: NextAuthOptions = {
             sessionState:
               typeof account.session_state === "string" ? account.session_state : null,
           });
+
+          // Every social provider comes through here, so this one check refuses a suspended or
+          // banned account on all of them (lib/moderation/accountSuspension).
+          if (await activeAccountRestriction(linkedUser.id)) {
+            return ACCOUNT_SUSPENDED_ERROR_URL;
+          }
 
           (user as { id?: string }).id = linkedUser.id;
           user.email = linkedUser.email;

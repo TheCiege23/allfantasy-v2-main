@@ -42,6 +42,33 @@ export function ModerationQueue({ reports }: { reports: ReportForReview[] }) {
     }
   }
 
+  /*
+   * Act on the AUTHOR, not the message (lib/moderation/accountSuspension). Guideline 1.2 asks for a
+   * way to remove an abusive user, and removing their message alone left them free to post again.
+   * Suspend and ban both end every session the author has open.
+   */
+  const [restricted, setRestricted] = useState<Record<string, string>>({})
+  async function restrictAuthor(reportId: string, authorId: string, author: string, action: "suspend" | "ban") {
+    const what = action === "ban" ? `Ban @${author} permanently` : `Suspend @${author} for 7 days`
+    if (!window.confirm(`${what}? They are signed out everywhere and cannot sign back in.`)) return
+    setBusy(reportId)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/moderation/users/${encodeURIComponent(authorId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(action === "ban" ? { action, reason: `report ${reportId}` } : { action, days: 7, reason: `report ${reportId}` }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(data.error ?? `Failed (${res.status})`)
+      setRestricted((s) => ({ ...s, [authorId]: action === "ban" ? "Banned" : "Suspended for 7 days" }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong")
+    } finally {
+      setBusy(null)
+    }
+  }
+
   if (reports.length === 0) {
     return <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-6 text-sm text-white/60">Nothing to review.</p>
   }
@@ -98,6 +125,32 @@ export function ModerationQueue({ reports }: { reports: ReportForReview[] }) {
                   Dismiss — no action
                 </button>
               </div>
+            ) : null}
+            {m?.authorId ? (
+              restricted[m.authorId] ? (
+                <p className="mt-2 text-xs text-amber-300" data-testid="author-restricted">
+                  @{m.authorUsername ?? m.authorId}: {restricted[m.authorId]}
+                </p>
+              ) : (
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={busy === r.id}
+                    onClick={() => void restrictAuthor(r.id, m.authorId as string, m.authorUsername ?? (m.authorId as string), "suspend")}
+                    className="rounded-xl border border-amber-400/40 px-3 py-1.5 text-sm font-semibold text-amber-200 disabled:opacity-50"
+                  >
+                    Suspend author 7 days
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy === r.id}
+                    onClick={() => void restrictAuthor(r.id, m.authorId as string, m.authorUsername ?? (m.authorId as string), "ban")}
+                    className="rounded-xl border border-rose-400/40 px-3 py-1.5 text-sm font-semibold text-rose-200 disabled:opacity-50"
+                  >
+                    Ban author
+                  </button>
+                </div>
+              )
             ) : null}
           </article>
         )
