@@ -366,7 +366,7 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
       /*
        * ⚠ THE HONEST DEGRADE, AND IT IS THE LIKELY PATH FOR SOME PROVIDERS.
        * `loadWaiverWorldFacts` returns null when no roster resolves for this user, and
-       * `WaiverRecommendationAdapter` records that the userId/managerKey pairing can legitimately
+       * the (since retired) `WaiverRecommendationAdapter` recorded that the userId/managerKey pairing can legitimately
        * disagree by provider. An unresolved manager gets a stated gap, never an invented claim.
        */
       return {

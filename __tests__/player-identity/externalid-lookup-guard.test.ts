@@ -9,10 +9,10 @@
  * waiver board considers, 422 had such an impostor. An unscoped `externalId IN (ids)` read therefore
  * names the wrong player whenever it is handed a Sleeper id.
  *
- * The files below still carry such a read and have NOT been audited for which id space reaches them.
- * The list is a burn-down, not a blessing: migrate a file (`sleeperIdWhere`, `ourIdOrSleeperIdWhere`,
- * or `providerIdWhere` with its `source`) and delete its line. A file NOT on the list that grows such a
- * read fails here.
+ * The list below held the files that still carried such a read unaudited; it was a burn-down, and it
+ * is now empty. A file that grows such a read fails here: scope it (`sleeperIdWhere`,
+ * `ourIdOrSleeperIdWhere`, `providerIdWhere` with its `source`, `findSportsPlayersForLeague`) or, if it
+ * is unscoped on purpose and shown safe, mark it as described next.
  *
  * The detector is a heuristic over source text — an `externalId: { in:` inside a `sportsPlayer` call
  * with no `source:` beside it — and is checked against planted snippets below, so it is known to fire.
@@ -28,12 +28,14 @@ import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const UNAUDITED = new Set<string>([
-  // BLOCKED by the decision-engine boundary: editing this legacy recommender fails that guard. Its
-  // one caller refuses every non-Sleeper-id league instead; the fix is moving the route onto
-  // lib/decision-os/waiver/pool.ts, which already reads ids in their own space.
-  'lib/ai/waivers/waiverRecommendationService.ts',
-])
+/*
+ * EMPTY SINCE 2026-09-30 — the burn-down is finished. The last entry, the legacy waiver recommender
+ * (lib/ai/waivers/waiverRecommendationService.ts), was retired rather than migrated: the live route had
+ * already moved to lib/decision-os/waiver/pool.ts and its only remaining caller was a shadow comparison.
+ * Every unscoped read in the repo is now either scoped or carries an `externalid-audited:` reason, so
+ * the list should stay empty; adding to it is a regression that needs saying so in the commit.
+ */
+const UNAUDITED = new Set<string>([])
 
 const AUDITED_MARKER = /externalid-audited:\s*\S.{9,}/
 
