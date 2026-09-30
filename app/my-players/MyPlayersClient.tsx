@@ -4,8 +4,7 @@
  * Cross-League Player Intelligence phase — Parts 12-13.
  *
  * A real, authenticated "My Players" workspace — not a broad dashboard
- * redesign, reuses the same dark/opacity Tailwind convention already
- * established in `LeagueHubClient.tsx`/`CommissionerOsActionsSummary.tsx`.
+ * redesign, reuses the app's existing dark/opacity Tailwind convention.
  * Fetches from `/api/player-portfolio` (server-derives the user, never
  * trusts a client-supplied id) and renders a filterable/sortable grid plus
  * an inline detail drawer per player, distinguishing loading/empty/

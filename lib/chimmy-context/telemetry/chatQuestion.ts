@@ -5,8 +5,9 @@ import { recordChimmyContextRun } from './recordRun'
  * question — which screen it came from, which tool Chimmy used, whether it answered").
  *
  * Measured the same day: `chimmy_context_runs` was EMPTY. Its writer was wired only to the older
- * `/api/ai/chat` route, never to `/api/chat/chimmy`, which every Chimmy surface now uses — so there
- * was no record of what anyone asked, where from, or where Chimmy failed them.
+ * `/api/ai/chat` route (since deleted as dead code, PR #1621), never to `/api/chat/chimmy`, which
+ * every Chimmy surface uses — so there was no record of what anyone asked, where from, or where
+ * Chimmy failed them. This module is now `recordChimmyContextRun`'s only caller.
  *
  * Stored in that same table (no migration) as surface `chimmy_chat`:
  *   intent            where it was asked — `drawer:<screen>` from the /core drawer, else the caller's

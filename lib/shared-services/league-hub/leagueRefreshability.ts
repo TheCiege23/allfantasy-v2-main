@@ -12,12 +12,14 @@
  *                                        state rather than missing data" — and such a row can
  *                                        never acquire one.
  *
- * ⚠ THE LABEL IS NOT COSMETIC; IT GATES WHAT THE PRODUCT WILL SAY ABOUT A PERSON.
- * `commissionerOsContext` turns `csv_snapshot` into `isSnapshotOnly`, which suppresses integrity
- * recommendations outright and filters out `manager_engagement_risk`. The reasoning is sound and
- * must survive this change: one snapshot proves a lineup was empty AT THE MOMENT OF UPLOAD, never
- * that a manager is abandoning the league. So a genuinely frozen snapshot must keep that
- * suppression, and only a league that is really being re-read may lose it.
+ * ⚠ THE LABEL IS NOT COSMETIC; IT GATES WHAT THE PRODUCT MAY SAY ABOUT A PERSON.
+ * The Commissioner OS recommendations stack that consumed it (`commissionerOsContext`, removed as
+ * dead code in PR #1621) turned `csv_snapshot` into `isSnapshotOnly`, which suppressed integrity
+ * recommendations outright and filtered out `manager_engagement_risk`. Today the label reaches the
+ * league hub through `LeaguePortfolioService` → `deriveImportType`. The reasoning must survive any
+ * future consumer: one snapshot proves a lineup was empty AT THE MOMENT OF UPLOAD, never that a
+ * manager is abandoning the league. So a genuinely frozen snapshot must keep that suppression, and
+ * only a league that is really being re-read may lose it.
  *
  * Getting that backwards in either direction is a real cost — suppress a refreshable league and
  * its commissioner never hears about an inactive manager; un-suppress a frozen one and the product
