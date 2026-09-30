@@ -138,11 +138,11 @@ describe('wiring', () => {
     expect(form).not.toMatch(/sections\.valueVerdict\.edge\b/)
     expect(form).not.toMatch(/\ba\.winner\b|\ba\.dynastyVerdict\b|\{result\.winner\}|\$\{result\.winner\}/)
     expect(form).toMatch(/const gradeWinner = winnerFromLeagueGrade\(tradeGrade, teamAName, teamBName\) \?\? NOT_GRADED_WINNER/)
-    // The verdict card, the no-sections card and both copy texts.
-    expect(form.match(/>\{gradeWinner\}</g)).toHaveLength(2)
-    expect(form.match(/\$\{gradeWinner\}/g)).toHaveLength(2)
-    // What a share link stores (and /trade/[id] prints as "Winner") is the letter's winner too.
-    expect(form).toMatch(/winner: winnerFromLeagueGrade\(data\.tradeGrade \?\? null, teamAName, teamBName\) \?\? NOT_GRADED_WINNER,/)
+    // 2026-09-29: one winner card (with or without the AI sections) and one copy text.
+    expect(form.match(/>\{gradeWinner\}</g)).toHaveLength(1)
+    expect(form.match(/\$\{gradeWinner\}/g)).toHaveLength(1)
+    // The analysis kept on the page (and shared) holds no winner at all — a share stores the grade.
+    expect(form).not.toMatch(/^\s*winner:/m)
     expect(NOT_GRADED_WINNER).toBe('Not graded')
   })
 
