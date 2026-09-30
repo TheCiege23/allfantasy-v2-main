@@ -175,6 +175,7 @@ async function batchLoadCanonicalPlayerMedia(
         where: {
           sport: normalizedSport,
           OR: [
+            // externalid-audited: an id match is used only when the names agree (see `namesAgree` below)
             ...(rawIds.length > 0 ? [{ externalId: { in: rawIds } }, { sleeperId: { in: rawIds } }] : []),
             ...(names.length > 0 ? [{ name: { in: names } }] : []),
           ],

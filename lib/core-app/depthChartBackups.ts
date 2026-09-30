@@ -107,6 +107,7 @@ async function roundTripRefs(sleeperIds: readonly string[]): Promise<Map<string,
   if (chosen.size === 0) return out
 
   const sharing = await prisma.sportsPlayer.findMany({
+    // externalid-audited: unscoped ON PURPOSE — it must see every row the `NFL:<externalId>` resolver can reach
     where: { sport: 'NFL', externalId: { in: [...new Set(chosen.values())] }, sleeperId: { not: null } },
     select: { externalId: true, sleeperId: true },
   })

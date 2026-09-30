@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 
-import { mayBeSleeperId, nonSleeperExternalIdWhere, sleeperIdWhere } from './externalIdNamespace'
+import { leagueIdSpaces, mayBeSleeperId, nonSleeperExternalIdWhere, sleeperIdWhere } from './externalIdNamespace'
 
 /**
  * Resolve the ids a LEAGUE uses to `SportsPlayer` rows, authoritative match first.
@@ -99,5 +99,47 @@ export async function findSportsPlayersByLeagueIds(
     for (const row of fallback) keep(row.externalId, row)
   }
 
+  return out
+}
+
+/**
+ * `findSportsPlayersByLeagueIds` for a league whose PLATFORM is known, which is the stronger form:
+ * the platform decides the space (`leagueIdSpaces`), so no id is ever asked of a column it is not in.
+ *
+ * ⚠ WHY NOT JUST THE ONE ABOVE. It decides by sport, and that is wrong for a SLEEPER league outside
+ * NFL: Sleeper's NBA/MLB/NHL ids are bare numbers, `mayBeSleeperId` says no for them (only NFL rows
+ * carry a `sleeperId`), so they fall through to `externalId` and find Rolling Insights' player of
+ * that number — a stranger. Here a Sleeper league's ids are only ever Sleeper ids, and an ESPN,
+ * Yahoo or other league's ids resolve to NOTHING unless the caller has translated them
+ * (`sleeperReadableRosters`, then `{ translated: true }`) — an unnamed player, never a wrong one.
+ *
+ * Keyed by the id the caller asked with. Where several rows carry one Sleeper id, Sleeper's own row
+ * wins (it holds the fantasy-shaped position), then the newest — the rule `indexBySleeperId` uses.
+ */
+export async function findSportsPlayersForLeague(
+  sport: string,
+  platform: string | null | undefined,
+  leaguePlayerIds: readonly string[],
+  opts: { translated?: boolean } = {},
+): Promise<Map<string, NonNullable<SportsPlayerRow>>> {
+  const sk = sport.toUpperCase()
+  const { sleeperIds, providerIds } = leagueIdSpaces(leaguePlayerIds, sk, platform, opts)
+  const out = new Map<string, NonNullable<SportsPlayerRow>>()
+  const rank = (row: NonNullable<SportsPlayerRow>) => (row.source === 'sleeper' ? 1 : 0)
+  const keep = (key: string, row: NonNullable<SportsPlayerRow>) => {
+    const cur = out.get(key)
+    if (!cur || rank(row) > rank(cur) || (rank(row) === rank(cur) && row.updatedAt > cur.updatedAt)) out.set(key, row)
+  }
+
+  const [bySleeper, byProvider] = await Promise.all([
+    sleeperIds.length ? prisma.sportsPlayer.findMany({ where: sleeperIdWhere(sleeperIds, sk) }) : [],
+    providerIds.length ? prisma.sportsPlayer.findMany({ where: nonSleeperExternalIdWhere(providerIds, sk) }) : [],
+  ])
+  const askedSleeper = new Set(sleeperIds)
+  for (const row of bySleeper) {
+    const key = sleeperKeyOf(row)
+    if (key && askedSleeper.has(key)) keep(key, row)
+  }
+  for (const row of byProvider) keep(row.externalId, row)
   return out
 }

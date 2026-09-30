@@ -128,6 +128,7 @@ export async function resolveNames(
   const namespaced = missing.filter((id) => !out.has(id) && !BARE_NUMBER.test(id))
   if (namespaced.length > 0) {
     const byProvider = await prisma.sportsPlayer.findMany({
+      // externalid-audited: bare numbers are filtered out above; a self-describing token names its own space
       where: { sport, externalId: { in: namespaced } },
       orderBy: { fetchedAt: 'desc' },
       select: playerSelect,

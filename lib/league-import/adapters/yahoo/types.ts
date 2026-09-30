@@ -90,6 +90,12 @@ export interface YahooImportTransaction {
   teamKeys: string[]
   adds: Record<string, string>
   drops: Record<string, string>
+  /**
+   * Who each moved player IS, keyed like `adds`/`drops`, as Yahoo names them in the same payload.
+   * Our `SportsPlayer` table holds no Yahoo keys (0 of 139,610 rows, 2026-09-30), so this is the
+   * only place a Yahoo player id gets a name.
+   */
+  players?: Record<string, { name: string; position: string | null; team: string | null }>
 }
 
 export interface YahooImportDraftPick {

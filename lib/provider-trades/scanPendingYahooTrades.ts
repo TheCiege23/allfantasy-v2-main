@@ -30,6 +30,7 @@ export type PendingYahooScan = {
 }
 
 type YahooTrade = {
+  players?: Record<string, { name: string; position: string | null; team: string | null }>
   transactionId: string
   status: string
   createdAt: string | null
@@ -113,33 +114,17 @@ export async function scanPendingYahooTrades(args: {
   const result = await fetchYahooPendingTrades(userId, platformLeagueId, teamKey)
   if (!result.ok) return { trades: [], scanned: false, reason: result.reason }
 
-  /*
-   * Names for the ids in the offer. Yahoo player keys are stored on our own
-   * rows at import, so this is a local read — a miss leaves the id showing,
-   * which is worse to look at and still true.
-   */
-  const ids = [
-    ...new Set(
-      result.trades.flatMap((t) => [...Object.keys(t.adds ?? {}), ...Object.keys(t.drops ?? {})]),
-    ),
-  ]
-  const known = ids.length
-    ? await prisma.sportsPlayer
-        .findMany({
-          where: { externalId: { in: ids } },
-          select: { externalId: true, name: true, position: true, team: true },
-        })
-        .catch(() => [])
-    : []
-  const byId = new Map(known.map((p) => [p.externalId, p]))
-  const nameOf = (playerId: string) => {
-    const p = byId.get(playerId)
-    return p ? { name: p.name, position: p.position, team: p.team } : null
-  }
-
   const out: PendingProviderTrade[] = []
   for (const t of result.trades) {
     if (!t.teamKeys?.includes(teamKey)) continue
+    /*
+     * 🛑 NAMES COME FROM YAHOO'S OWN PAYLOAD, NEVER FROM `SportsPlayer.externalId`. This used to
+     * look the ids up there on the belief that Yahoo keys were stored at import. They are not: 0 of
+     * 139,610 rows hold one (2026-09-30), so a `461.p.30123` key never named anyone — and a bare
+     * `player_id` fallback matched a Rolling Insights or backfill row of that number, a stranger.
+     * A miss leaves the id showing, which is worse to look at and still true.
+     */
+    const nameOf = (playerId: string) => t.players?.[playerId] ?? null
     const { assetsGiven, assetsReceived } = splitYahooTradeForTeam({ trade: t, teamKey, nameOf })
     if (assetsGiven.length === 0 && assetsReceived.length === 0) continue
 
