@@ -50,6 +50,8 @@ type WizardProps = {
   submitting: boolean
   importSourceName?: string
   importCarryover?: boolean
+  createdLeagueHref?: string | null
+  creationWarning?: string | null
   onSubmit: () => void
   onCancel: () => void
 }
@@ -187,7 +189,7 @@ export function CreateLeagueWizard(props: WizardProps) {
   useEffect(() => {
     if (hasStalePremium) onChange({ advancedSetup: {} })
   }, [hasStalePremium, onChange])
-  const canCreate = props.completionIssues.length === 0
+  const canCreate = props.completionIssues.length === 0 && !props.createdLeagueHref
 
   return (
     <div className="min-h-screen bg-[color:var(--surface-app)] text-[color:var(--text-primary)]" data-testid="g30-create-league-wizard">
@@ -199,6 +201,12 @@ export function CreateLeagueWizard(props: WizardProps) {
             {props.importSourceName ? (
               <p className="rounded-xl border border-violet-500/35 bg-violet-600/10 p-3 text-sm leading-6" data-testid="standalone-import-template-notice">
                 Creating a separate AllFantasy league from {props.importSourceName}. Teams and current player rosters carry over. The existing draft is recorded as complete; past matchups, transactions, and chat stay in the imported league. Keep the sport and team count the same to preserve every roster.
+              </p>
+            ) : null}
+            {props.creationWarning && props.createdLeagueHref ? (
+              <p className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm leading-6" role="status">
+                {props.creationWarning}{' '}
+                <a href={props.createdLeagueHref} className="font-bold underline">Open your league</a>
               </p>
             ) : null}
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">

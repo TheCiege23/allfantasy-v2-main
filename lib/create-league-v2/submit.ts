@@ -46,6 +46,7 @@ export interface CreateLeagueV2Result {
   error?: string
   redirectTo?: string
   fieldErrors?: CreateLeagueFieldErrors
+  warning?: string
 }
 
 // ── Endpoint routing ────────────────────────────────────────────────
@@ -422,7 +423,9 @@ export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLea
 
   const leagueId = parseLeagueId(json)
   const redirectTo = parseRedirectUrl(state, json)
+  const warnings = Array.isArray(json.warnings) ? json.warnings as Array<{ code?: string; message?: string }> : []
+  const warning = warnings.find((item) => item.code === 'IMPORT_MATERIALIZATION_PENDING')?.message
   trackMetaEventsFromResponse(json)
 
-  return { ok: true, leagueId, redirectTo }
+  return { ok: true, leagueId, redirectTo, warning }
 }
