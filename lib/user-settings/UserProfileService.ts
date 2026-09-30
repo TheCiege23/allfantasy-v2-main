@@ -3,6 +3,12 @@ import { isAllowedSessionIdleMinutes } from "@/lib/auth/session-idle-constants"
 import { SUPPORTED_SPORTS, isSupportedSport } from "@/lib/sport-scope"
 import { isSelectableChimmyTtsVoiceId } from "@/lib/tts/voices"
 import { validateUsername } from "@/lib/auth/username-validation"
+import {
+  isOffensiveDisplayName,
+  isOffensiveUsername,
+  OFFENSIVE_DISPLAY_NAME_MESSAGE,
+  OFFENSIVE_USERNAME_MESSAGE,
+} from "@/lib/moderation/offensiveName"
 import type { ProfileUpdatePayload } from "./types"
 
 /**
@@ -21,12 +27,25 @@ export async function updateUserProfile(
     }
   }
 
+  /*
+   * 🛑 THE SIGN-UP NAME FILTER WAS SKIPPED HERE. A username rejected at sign-up could be set from
+   * Settings the next day, and a display name — what other managers see on every chat message —
+   * was never checked anywhere (lib/moderation/offensiveName). Checked before ANY write, so a
+   * refused name leaves the rest of the payload unsaved too rather than half-applied.
+   */
+  if (typeof payload.displayName === "string" && isOffensiveDisplayName(payload.displayName.trim())) {
+    return { ok: false, error: OFFENSIVE_DISPLAY_NAME_MESSAGE }
+  }
+
   if (payload.username !== undefined && payload.username !== null) {
     const validation = validateUsername(String(payload.username))
     if (!validation.ok) {
       return { ok: false, error: validation.reason }
     }
     const { normalized } = validation
+    if (isOffensiveUsername(normalized)) {
+      return { ok: false, error: OFFENSIVE_USERNAME_MESSAGE }
+    }
     const taken = await prisma.appUser.findFirst({
       where: { username: { equals: normalized, mode: "insensitive" }, NOT: { id: userId } },
       select: { id: true },
