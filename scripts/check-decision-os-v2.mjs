@@ -33,7 +33,7 @@ const seams = [
   'lib/league-context-engine/resolvePeriod.ts',
   '__tests__/chat-chimmy-route-contract.test.ts',
   'lib/psychological-profiles/ProfileAccess.ts', 'lib/psychological-profiles/retiredProfileRoute.ts',
-  'app/api/rankings/manager-psychology/route.ts', 'components/ManagerPsychology.tsx', 'components/ManagerStyleBadge.tsx',
+  'app/api/rankings/manager-psychology/route.ts', 'components/ManagerPsychology.tsx',
   'lib/relationship-insights/publicView.ts', 'lib/core-app/scout.ts', 'components/core-app/screens/Scout.tsx',
   'lib/drama-engine/publicNarrative.ts', 'lib/drama-engine/DramaQueryService.ts', 'lib/drama-engine/DramaTimelineBuilder.ts',
   'lib/drama-engine/DramaEventDetector.ts', 'lib/decision-os/grounding/serialize.ts',

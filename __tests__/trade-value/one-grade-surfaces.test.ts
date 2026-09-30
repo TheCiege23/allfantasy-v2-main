@@ -705,6 +705,21 @@ describe('/trade-finder has one client, and it is the graded one', () => {
     expect(page).toMatch(/toFinderTrades/)
     expect(page).not.toMatch(/TradeFinderClient|computeTradeGrade\(|dynastyVerdict/)
   })
+
+  /*
+   * 2026-09-30: TradeFinderClient was the only importer of components/PartnerMatchView.tsx, which was
+   * the only importer of ManagerStyleBadge (a null compatibility stub), ReputationBadge and
+   * LegacyScoreBadge. Censused in all four import forms, tests and mocks — nothing else named them.
+   * The API routes they fetched stay: /trade-finder still calls /api/trade-partner-match itself.
+   */
+  it.each([
+    'components/PartnerMatchView.tsx',
+    'components/ManagerStyleBadge.tsx',
+    'components/ReputationBadge.tsx',
+    'components/LegacyScoreBadge.tsx',
+  ])('the orphan %s went with it', (file) => {
+    expect(existsSync(resolve(process.cwd(), file))).toBe(false)
+  })
 })
 
 /*
