@@ -216,7 +216,60 @@ Each needs a *production* read, and the two kinds differ:
   `sk_test_` key but points `DATABASE_URL` at **production**, and `.env` holds an **`sk_live_`**
   key. That is exactly why the script takes the database from `.env.test` alone and refuses
   `ep-curly-block` outright (`prove-purchase-path.guards.ts:13,58,63`).
-- [ ] **Walk the locked state by hand.**
+- [x] **Walk the locked state by hand — WALKED 2026-09-30 against `main`. All four depths lock, with
+  the right plan named on each.**
+
+  Signed in as a no-plan, non-admin account with one league, launch date forced past. Every line
+  below is the lock card's own text, read off the rendered page:
+
+  | depth | surface | what it said |
+  |---|---|---|
+  | `player_depth` | player card (`/core/players?player=…`) | "Suggested FAAB bids are part of **AF Pro**" and "Recommended moves are part of **AF Pro**" → **See AF Pro** (twice on one card) |
+  | `trade_depth` | Trade Center (`/core/trades?league=…`) | "The trade finder is part of **AF Pro**" → **See AF Pro** |
+  | `competitive_edge` | Waivers (`/core/waivers?league=…`) | "**Competitive Edge** is part of AF Pro" → **See AF Pro** |
+  | `commissioner_depth` | `/commissioner-os/analytics` | "League analytics are part of **AF Commissioner**" → **See AF Commissioner** |
+
+  Every card carried the same honest framing — *"Your leagues, scores and the basics stay free.
+  Upgrade to see the rest."* — and no surface rendered a broken or empty lock. The free content
+  stayed visible alongside it: injury status, next game, news and market value on the player card;
+  the trade timeline and league rules on Trade Center; FAAB rules and roster counts on Waivers; the
+  whole `/core/commissioner` hub.
+
+  ✅ **And the distinction worth having checked: the account was that league's COMMISSIONER by role
+  and still saw `commissioner_depth` locked.** Role is not plan. An admin would have seen no locks
+  at all, which is why the account must be neither.
+
+  🛑 **THE GATES SIT ON THE DETAIL, NOT THE PAGE — so "load four pages" does not walk this.** Every
+  one of the four boards renders free and unlocked at its list level; the lock only appears once the
+  gated content has something to show. Three things each have to be true or a surface looks open
+  when it is merely empty:
+  - **a league must be selected.** `/core/trades` and `/core/waivers` show an all-leagues board with
+    no lock; the gate is inside the per-league view, reached with `?league=<id>`.
+  - **the detail must be opened.** The Player Finder list never locks; the card does.
+  - **the gated block needs data.** Draft HQ's edge slot said "ranking the best available needs the
+    undrafted player pool scored for this league; no draft recommendation output is stored" — a data
+    gap wearing the same clothes as an open gate. Do not read that as unlocked.
+
+  ⚠ **HOW TO REDO IT, because the obvious route is blocked and the setup is the hard part.**
+  `preview_*` reaches only the primary checkout, which has no paywall code (see below), so the
+  server has to be started from a worktree by hand:
+  1. Compose `.env.local` in the worktree from the primary's, then **override every key that can
+     reach a database** — `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `DIRECT_URL`, `COMMISH_APP_URL`,
+     `COMMISH_PLATFORM_URL`, `TRADE_OS_VALIDATION_DATABASE_URL` — with `.env.test`'s values, and add
+     `AF_PAYWALL_STARTS_AT=2020-01-01T00:00:00.000Z` plus a private `AF_NEXT_DIST_DIR`.
+     🛑 Overriding only `DATABASE_URL`/`DIRECT_URL` is NOT enough: the production host appears in
+     **five** keys, so the first attempt here still pointed at production and was caught only by
+     asserting the prod host occurs **zero** times in the composed file. Assert that, every time.
+  2. Sign in the way the suite does — seed the row through `PUT /api/e2e/run-relay`
+     (`x-allfantasy-e2e: 1`), then sign a token with the server's own secret. See
+     `e2e/helpers/session-cookie.ts`; `sub`, `id` and `username` are all load-bearing.
+  3. Seed a league with `POST /api/e2e/decision-os-proof-league`, and **keep it until the walk is
+     finished** — deleting it first drops the app back to the no-league board and the gates vanish.
+  4. Read pages with the browser's page-text tool, not `innerText`: this route returns empty from
+     `innerText` while rendering fine.
+  5. First compile of `/core/[[...screen]]` takes **~250-280s**. That is not a hang.
+  6. Clean up: delete the league, stop the server, remove `.env.local` (it holds real secrets copied
+     from the primary), and `git checkout -- tsconfig.json` — `next dev` rewrites it.
   - Run a local server on the `.env.test` database with `AF_PAYWALL_STARTS_AT=2020-01-01T00:00:00Z`,
     and sign in as a **no-plan test account**.
   - 🛑 `.env.local` points at the production database. Never walk locks on it.
