@@ -9,7 +9,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
   outcomeFindMany: vi.fn(),
@@ -69,6 +69,22 @@ function expectOnlyCloses() {
     expect(arg.data.resolvedAt).toBeInstanceOf(Date)
   }
 }
+
+/*
+ * ⚠ THE CLOCK IS PINNED, BECAUSE THE RESOLVER READS IT. Without `now` it uses the real date and
+ * closes any row older than ABANDONED_AFTER_DAYS with no pick. The fixtures are dated SERVED_AT, so
+ * every default-clock call here silently changed meaning once the real date passed SERVED_AT + 14
+ * days: "leaves a recommendation pending" started failing on 2026-09-30 with nothing changed.
+ * One hour after serving is "the manager has not picked yet". Only `Date` is faked; timers and
+ * promises stay real. Tests about the 14-day edge pass an explicit `now` and are unaffected.
+ */
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(SERVED_AT.getTime() + 60 * 60 * 1000))
+})
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 beforeEach(() => {
   vi.clearAllMocks()
