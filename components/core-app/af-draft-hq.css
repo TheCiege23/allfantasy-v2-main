@@ -294,6 +294,13 @@
   color: var(--muted);
 }
 
+/* AllFantasy's own projection for a pick, on your picks and on the full board. */
+.af-dh-af {
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
 /* ── Empty ───────────────────────────────────────────────────────────── */
 
 .af-dh-empty {

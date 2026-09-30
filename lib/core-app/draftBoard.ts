@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
+import { loadDraftAfProjections, type DraftAfProjection } from './draftAfProjections'
 
 /**
  * The per-league draft board — "on the clock: board, queue, recommendations and
@@ -43,6 +44,8 @@ export type BoardCell = {
   position: string | null
   isYours: boolean
   isOnTheClock: boolean
+  /** AllFantasy's own projection for the drafted player — see draftAfProjections.ts. Absent when none. */
+  af?: DraftAfProjection
 }
 
 export type BoardColumn = {
@@ -135,7 +138,13 @@ export async function getDraftBoardData(
   const picks = await prisma.draftPick.findMany({
     where: { sessionId: session.id },
     orderBy: { overall: 'asc' },
-    select: { overall: true, round: true, rosterId: true, playerName: true, position: true },
+    select: { overall: true, round: true, rosterId: true, playerName: true, position: true, playerId: true },
+  })
+  /* AllFantasy's own projection for every drafted player — one read for the board. */
+  const afs = await loadDraftAfProjections({
+    platform: league.platform,
+    playerIds: picks.map((p) => p.playerId),
+    leagueSettings: league.settings,
   })
 
   const totalPicks = session.rounds * session.teamCount
@@ -209,6 +218,7 @@ export async function getDraftBoardData(
       position: p.position,
       isYours: myRosterId != null && String(p.rosterId) === myRosterId,
       isOnTheClock: false,
+      ...(p.playerId && afs.byPlayerId.has(p.playerId) ? { af: afs.byPlayerId.get(p.playerId)! } : {}),
     }
   })
 

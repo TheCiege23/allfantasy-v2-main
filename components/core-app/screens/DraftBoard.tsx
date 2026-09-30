@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import '@/components/core-app/af-war-room.css'
 import DraftMusicWidget from '@/components/core-app/draft-music/DraftMusicWidget'
 import type { BoardCell, BoardColumn, DraftBoardData } from '@/lib/core-app/draftBoard'
+import { draftAfText, draftAfTitle } from '@/lib/core-app/draftAfLabel'
 
 /**
  * The per-league draft board, clock and queue.
@@ -101,6 +102,12 @@ function Board({ columns, cells }: { columns: BoardColumn[]; cells: BoardCell[] 
                         <span className="af-wr-cell-name">{cell.playerName}</span>
                         {cell.position ? (
                           <span className="af-wr-cell-pos af-num">{cell.position}</span>
+                        ) : null}
+                        {/* AllFantasy's own projection for the pick; season total on hover. */}
+                        {draftAfText(cell.af) ? (
+                          <span className="af-wr-cell-af af-num" title={draftAfTitle(cell.af)}>
+                            {draftAfText(cell.af)}
+                          </span>
                         ) : null}
                       </>
                     ) : (
