@@ -59,6 +59,7 @@ export function resolvePasswordResetErrorMessage(
   const map: Record<string, string> = {
     INVALID_OR_USED_TOKEN: 'Invalid or expired code. Request a new one.',
     EXPIRED_TOKEN: 'Code expired. Request a new one.',
+    TOO_MANY_ATTEMPTS: 'Too many incorrect codes. Wait 15 minutes, then request a new one.',
     WEAK_PASSWORD: 'Password must be at least 8 characters with a letter and number.',
     RESET_FAILED: 'Something went wrong. Please try again.',
     MISSING_FIELDS: 'Please complete all required fields.',
