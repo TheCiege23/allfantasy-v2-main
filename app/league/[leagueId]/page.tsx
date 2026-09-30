@@ -112,7 +112,7 @@ export default async function LeaguePage(
               )
   }
 
-  const { leagueId } = await params
+  const { leagueId } = await props.params
 
   /*
    * ⚠ NOT AWAITED, AND NOT IN A `try`. `touchLeagueViewed` swallows every error itself and

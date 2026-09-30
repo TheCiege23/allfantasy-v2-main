@@ -13,7 +13,7 @@ export default async function DevyImportPage(
   }
 ) {
   const searchParams = await props.searchParams
-  const { leagueId } = await params
+  const { leagueId } = await props.params
   const sp = searchParams ? await searchParams : {}
   const sid = sp.sessionId
   const initialSessionId = typeof sid === 'string' ? sid : Array.isArray(sid) ? sid[0] : undefined
