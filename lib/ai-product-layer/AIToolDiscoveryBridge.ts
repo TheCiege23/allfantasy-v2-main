@@ -28,7 +28,8 @@ const LINKS: Array<Omit<AIToolDiscoveryLink, 'href'> & { featureKey: ToolAIEntry
     featureKey: 'league_start_sit_ai',
     category: 'tool',
   },
-  { label: 'Psychological Profiles', description: 'Manager behavior and rivalry insights', featureKey: 'psychological_profiles', category: 'governance' },
+  // 🛑 No "Psychological Profiles" link (owner decision 2026-09-29, Milestone 32:
+  // manager characterisation is shown to nobody). It was the only 'governance' link.
   { label: 'Story Creator', description: 'Legacy, rivalry, and prestige narratives', featureKey: 'story_creator', category: 'story' },
   { label: 'Content Generator', description: 'Social, media, and blog generation', featureKey: 'content', category: 'media' },
   { label: 'Meet Chimmy', description: 'Chimmy landing page', featureKey: 'chimmy_landing', category: 'chat' },
