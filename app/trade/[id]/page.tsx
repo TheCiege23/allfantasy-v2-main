@@ -2,28 +2,16 @@ import { prisma } from '@/lib/prisma';
 import { notFound } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, Crown, AlertTriangle, CheckCircle } from 'lucide-react';
+import { TrendingUp, Crown, CheckCircle } from 'lucide-react';
 import { formatInTimezone } from '@/lib/preferences/TimezoneFormattingResolver';
 import { resolveServerRenderPreferences } from '@/lib/preferences/ServerRenderPreferenceResolver';
+import { DynastyLeagueGrade } from '@/components/dynasty-trade/DynastyLeagueGrade';
+import { readSharedTrade } from '@/components/dynasty-trade/sharedTrade';
 
 interface TradeAsset {
   id: string;
   name: string;
   type: 'player' | 'pick';
-}
-
-interface TradeAnalysis {
-  winner: string;
-  valueDelta: string;
-  factors: string[];
-  confidence: number;
-  dynastyVerdict?: string;
-  vetoRisk?: string;
-  agingConcerns?: string[];
-  recommendations?: string[];
-  teamAName?: string;
-  teamBName?: string;
-  leagueContext?: string;
 }
 
 export default async function TradeSharePage({ params }: { params: { id: string } }) {
@@ -36,11 +24,15 @@ export default async function TradeSharePage({ params }: { params: { id: string 
 
   if (share.expiresAt && new Date(share.expiresAt) < new Date()) notFound();
 
-  const analysis = share.analysis as TradeAnalysis;
+  /*
+   * 🛑 THE ONE GRADE, OR NO VERDICT (2026-09-29). The page printed the stored `winner`, `valueDelta`,
+   * `confidence`, `dynastyVerdict` and `vetoRisk` — the dual-brain engine's own scale. It now prints the
+   * stored league grade and a winner read off its letter; an old share without one shows neither.
+   */
+  const analysis = readSharedTrade(share.analysis);
   const sideA = (share.sideA || []) as TradeAsset[];
   const sideB = (share.sideB || []) as TradeAsset[];
-  const teamAName = analysis.teamAName || 'Team A';
-  const teamBName = analysis.teamBName || 'Team B';
+  const { teamAName, teamBName } = analysis;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0a0a0f] to-[#0f0f1a] py-16">
@@ -119,46 +111,29 @@ export default async function TradeSharePage({ params }: { params: { id: string 
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-sm text-gray-400">Winner:</span>
-                  <span className="ml-2 font-semibold text-white">{analysis.winner}</span>
-                </div>
-                <div>
-                  <span className="text-sm text-gray-400">Value Delta:</span>
-                  <span className="ml-2 font-semibold text-cyan-300">{analysis.valueDelta}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-400">Confidence:</span>
-                <div className="flex-1 bg-gray-800 rounded-full h-2">
-                  <div
-                    className="bg-gradient-to-r from-cyan-500 to-purple-500 h-2 rounded-full"
-                    style={{ width: `${analysis.confidence}%` }}
+              {analysis.leagueGrade ? (
+                <>
+                  <DynastyLeagueGrade
+                    tradeGrade={analysis.leagueGrade}
+                    teamAName={teamAName}
+                    teamBName={teamBName}
+                    leagueChosen
+                    leagueOptionCount={0}
                   />
-                </div>
-                <span className="text-sm text-white">{analysis.confidence}%</span>
-              </div>
-
-              {analysis.dynastyVerdict && (
-                <div className="p-3 bg-purple-950/20 border border-purple-800/30 rounded-lg">
-                  <span className="text-sm font-medium text-purple-300">Dynasty Verdict:</span>
-                  <p className="text-sm text-gray-300 mt-1">{analysis.dynastyVerdict}</p>
-                </div>
+                  {analysis.winner && (
+                    <div data-testid="shared-trade-winner">
+                      <span className="text-sm text-gray-400">Winner:</span>
+                      <span className="ml-2 font-semibold text-white">{analysis.winner}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p data-testid="shared-trade-no-grade" className="text-sm text-gray-400">
+                  This trade was shared before AllFantasy graded shared trades, so it carries no grade.
+                </p>
               )}
 
-              {analysis.vetoRisk && (
-                <div className="p-3 bg-red-950/20 border border-red-800/30 rounded-lg flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
-                  <div>
-                    <span className="text-sm font-medium text-red-300">Veto Risk:</span>
-                    <p className="text-sm text-gray-300 mt-1">{analysis.vetoRisk}</p>
-                  </div>
-                </div>
-              )}
-
-              {analysis.factors?.length > 0 && (
+              {analysis.factors.length > 0 && (
                 <div>
                   <span className="text-sm font-medium text-gray-300 mb-2 block">Key Factors:</span>
                   <ul className="space-y-1">

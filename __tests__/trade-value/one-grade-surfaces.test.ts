@@ -657,3 +657,25 @@ describe('AF Legacy — the page prints the one grade, never a verdict, fairness
     expect(TIER_VERDICT.test('import { detectSFFromRosterPositions } from \'@/lib/dynasty-tiers\'')).toBe(false)
   })
 })
+
+/*
+ * 2026-09-29: the /trade/[id] share page printed an old share's stored dual-brain winner, value delta,
+ * confidence, verdict and veto risk. It prints the stored one grade, or no verdict (behaviour pinned in
+ * __tests__/dynasty-trade/shared-trade-one-grade.test.tsx).
+ */
+describe('the /trade/[id] share page prints the stored one grade, never the stored dual-brain verdict', () => {
+  const SHARE_PRIVATE = /analysis\.(?:valueDelta|confidence|dynastyVerdict|vetoRisk)\b|share\.analysis as TradeAnalysis/
+
+  it('reads the share through readSharedTrade and draws DynastyLeagueGrade', () => {
+    const page = code('app/trade/[id]/page.tsx')
+    expect(page).toMatch(/const analysis = readSharedTrade\(share\.analysis\)/)
+    expect(page).toMatch(/<DynastyLeagueGrade/)
+    expect(SHARE_PRIVATE.test(page)).toBe(false)
+  })
+
+  it('positive control: the shape matches the lines the page printed', () => {
+    expect(SHARE_PRIVATE.test('<span className="ml-2 font-semibold text-cyan-300">{analysis.valueDelta}</span>')).toBe(true)
+    expect(SHARE_PRIVATE.test('<span className="text-sm text-white">{analysis.confidence}%</span>')).toBe(true)
+    expect(SHARE_PRIVATE.test('const analysis = share.analysis as TradeAnalysis;')).toBe(true)
+  })
+})
