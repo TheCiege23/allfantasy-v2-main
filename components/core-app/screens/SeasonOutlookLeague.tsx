@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { OutlookLeague, SwingMatchup } from '@/lib/core-app/seasonOutlook'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
+import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
+import { WeekLineupsTable } from '@/components/core-app/standings/WeekLineupsTable'
 import { describeTeamOutlook, ordinal, pct, rangeLabel, signedPts, band } from '@/lib/core-app/outlookCopy'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import {
@@ -48,6 +50,11 @@ export type SeasonOutlookLeagueProps = {
   priorities?: Array<{ leagueName: string; reason: string; href: string }>
   /** The board's age. Null when it was computed on this request. */
   freshness?: { meta: FreshnessMeta; initialLabel: string; initialWarn: boolean } | null
+  /**
+   * Every team's lineup for this week, AF beside API. DISPLAY ONLY — the odds above are simulated
+   * without AF and nothing here feeds them. Null draws no section.
+   */
+  lineups?: StandingsLineups | null
 }
 
 const TABS = [
@@ -70,7 +77,7 @@ function readTab(): TabKey | null {
   return TABS.some((t) => t.key === v) ? (v as TabKey) : null
 }
 
-export function SeasonOutlookLeague({ league, swing, basis, priorities = [], freshness = null }: SeasonOutlookLeagueProps) {
+export function SeasonOutlookLeague({ league, swing, basis, priorities = [], freshness = null, lineups = null }: SeasonOutlookLeagueProps) {
   const you = league.you
   const focus = league.focus
   const [tab, setTab] = useState<TabKey>('path')
@@ -125,7 +132,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
             still below.
           </p>
         </div>
-        <Standings league={league} />
+        <Standings league={league} lineups={lineups} />
       </div>
     )
   }
@@ -305,7 +312,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
             </p>
           )
         ) : tab === 'standings' ? (
-          <Standings league={league} />
+          <Standings league={league} lineups={lineups} />
         ) : (
           <>
             <p className="af-sol-basis">{basis}</p>
@@ -429,7 +436,7 @@ function Clinch({ league, swing }: { league: OutlookLeague; swing: SwingMatchup 
   )
 }
 
-function Standings({ league }: { league: OutlookLeague }) {
+function Standings({ league, lineups }: { league: OutlookLeague; lineups: StandingsLineups | null }) {
   const showBye = league.byeTeams > 0
   return (
     <div className="af-sol-tablewrap">
@@ -506,6 +513,9 @@ function Standings({ league }: { league: OutlookLeague }) {
           ))}
         </tbody>
       </table>
+      {lineups ? (
+        <WeekLineupsTable lineups={lineups} caveat="the playoff and title odds above are simulated without AF." />
+      ) : null}
     </div>
   )
 }
