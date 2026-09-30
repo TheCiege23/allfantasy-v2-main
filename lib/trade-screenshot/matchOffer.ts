@@ -72,9 +72,10 @@ function ownersOf(rosters: readonly LeagueRoster[], name: string): LeagueRoster[
   return rosters.filter((r) => findRosterPlayer(r, name) != null)
 }
 
+/** Manager labels compare on letters and digits only: "@TheCiege24", "The Ciege 24" and "theciege24" meet. */
 function sameName(a: string | null | undefined, b: string | null | undefined): boolean {
-  const x = normalizePlayerName(a ?? '').replace(/\s/g, '')
-  const y = normalizePlayerName(b ?? '').replace(/\s/g, '')
+  const x = normalizePlayerName(a ?? '').replace(/[^a-z0-9]/g, '')
+  const y = normalizePlayerName(b ?? '').replace(/[^a-z0-9]/g, '')
   return x.length > 0 && x === y
 }
 
@@ -154,11 +155,22 @@ export function matchOfferToRosters(args: {
   const partnerTeam: ReadTeam = teams[1 - viewerIdx]!
 
   const byVotes = [...partnerVotes.entries()].sort((x, y) => y[1] - x[1])
+  /*
+   * With no player of theirs to vote, a pick the viewer RECEIVES names its original owner
+   * ("2028 2nd Rd (JeffersonTD)") — who is, for an offer's own pick, the other manager. Accepted only
+   * when every such pick names the same roster. Then the partner side's label.
+   */
+  const ownerRosters = new Set(
+    viewerTeam.receives.flatMap((a) =>
+      a.type === 'pick' && a.originalOwner ? others.filter((r) => sameName(r.ownerName, a.originalOwner)).map((r) => r.rosterId) : [],
+    ),
+  )
   const partner =
     (byVotes.length > 0 && (byVotes.length === 1 || byVotes[0]![1] > byVotes[1]![1])
       ? others.find((r) => r.rosterId === byVotes[0]![0])
       : null) ??
-    others.find((r) => sameName(r.ownerName, partnerTeam.name)) ??
+    (ownerRosters.size === 1 ? others.find((r) => ownerRosters.has(r.rosterId)) : null) ??
+    others.find((r) => sameName(r.ownerName, partnerTeam.name?.replace(/^@/, ''))) ??
     null
 
   const unmatched: string[] = [...read.unreadable]
@@ -226,4 +238,11 @@ export function screenshotDraftNote(m: Extract<OfferMatch, { ok: true }>): strin
     parts.push(`Not placed on a roster, so add by hand before you analyze: ${m.unmatched.join(', ')}.`)
   }
   return parts.join(' ')
+}
+
+/** The confirmation beside the upload button: what loaded, and where to look. */
+export function screenshotLoadedLine(m: Extract<OfferMatch, { ok: true }>): string {
+  const n = (k: number) => `${k} ${k === 1 ? 'asset' : 'assets'}`
+  const missing = m.unmatched.length > 0 ? ` ${m.unmatched.length} still to add by hand.` : ''
+  return `Loaded into the trade builder: you send ${n(m.give.length)}, you get ${n(m.get.length)}.${missing} Check them against Sleeper, then Analyze.`
 }

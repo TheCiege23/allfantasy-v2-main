@@ -16,7 +16,17 @@
 
 export type ReadAsset =
   | { type: 'player'; name: string; position: string | null }
-  | { type: 'pick'; year: number | null; round: number | null }
+  | {
+      type: 'pick'
+      year: number | null
+      round: number | null
+      /**
+       * The team the pick ORIGINALLY belonged to, when the screen says — Sleeper prints it in brackets:
+       * "2028 2nd Rd (JeffersonTD)". Not a side of the trade; it is how the matcher finds the other
+       * manager when the viewer receives only picks.
+       */
+      originalOwner: string | null
+    }
   | { type: 'faab'; amount: number }
 
 export type ReadTeam = {
@@ -43,10 +53,12 @@ export const OFFER_READ_SYSTEM = [
   'Return ONLY a JSON object, no prose, no code fence, in exactly this shape:',
   '{"isTradeOffer": boolean, "teams": [{"name": string|null, "receives": [asset, ...]}], "unreadable": [string, ...]}',
   'where each asset is one of',
-  '{"type":"player","name":"Full Name","position":"QB"|null}, {"type":"pick","year":2027,"round":1}, {"type":"faab","amount":35}.',
+  '{"type":"player","name":"Name as shown","position":"QB"|null}, {"type":"pick","year":2027,"round":1,"originalOwner":"name"|null}, {"type":"faab","amount":35}.',
   'Rules: list every team shown. Put each asset under the team that RECEIVES it — if the screen labels a',
   'column "sends", "gives" or "trades away", those assets belong to the OTHER team. List each asset once.',
-  'Write full player names as shown; keep suffixes like Jr. Keep defenders and kickers.',
+  'Write player names exactly as shown, including an abbreviated first name like "B. Allen"; keep suffixes like Jr. Keep defenders and kickers.',
+  'Sleeper shows an offer as a card with one "@username" section per manager: each section lists what THAT manager RECEIVES.',
+  'A pick written like "2028 2nd Rd (JeffersonTD)" is year 2028, round 2, and the bracketed name is its originalOwner — not a team in the trade.',
   'A pick is its season year and round number; use null for a part you cannot read.',
   'Put anything you cannot read in "unreadable" as a short description. Ignore buttons, timers and statuses.',
   'If the image is not a trade offer, return {"isTradeOffer": false, "teams": [], "unreadable": []}.',
@@ -72,7 +84,10 @@ function asset(raw: unknown): ReadAsset | null {
     const name = str(a.name)
     return name ? { type: 'player', name, position: str(a.position, 6)?.toUpperCase() ?? null } : null
   }
-  if (a.type === 'pick') return { type: 'pick', year: int(a.year, 2000, 2100), round: int(a.round, 1, 10) }
+  if (a.type === 'pick') {
+    const owner = str(a.originalOwner, 40)?.replace(/^@/, '') ?? null
+    return { type: 'pick', year: int(a.year, 2000, 2100), round: int(a.round, 1, 10), originalOwner: owner || null }
+  }
   if (a.type === 'faab') {
     const amount = typeof a.amount === 'string' ? Number(a.amount.replace(/[$,\s]/g, '')) : a.amount
     return typeof amount === 'number' && Number.isFinite(amount) && amount > 0 && amount <= 100_000

@@ -376,6 +376,8 @@ export function TradeInbox(props: {
   screenshotBusy?: boolean
   /** Why the last screenshot could not be loaded, in words the manager can act on. */
   screenshotError?: string | null
+  /** What the last screenshot loaded — said here, beside the button, because the builder may be off screen. */
+  screenshotDone?: string | null
   /**
    * Hands a NATIVE offer to the builder in counter mode. Absent means the screen
    * cannot counter, and no counter control is rendered — a button that cannot
@@ -730,6 +732,10 @@ export function TradeInbox(props: {
           {props.screenshotError ? (
             <span className="af-tc-row-sub" role="alert">
               {props.screenshotError}
+            </span>
+          ) : props.screenshotDone ? (
+            <span className="af-tc-row-sub" role="status">
+              {props.screenshotDone}
             </span>
           ) : null}
           {pending.scanned && checkedAt ? (

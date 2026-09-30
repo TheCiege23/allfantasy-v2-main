@@ -46,7 +46,7 @@ describe('parseOfferRead — the model reply, bounded', () => {
       unreadable: [],
       teams: [{ name: 'A', receives: [
         { type: 'player', name: 'Joe Burrow', position: 'QB' },
-        { type: 'pick', year: 2027, round: 1 },
+        { type: 'pick', year: 2027, round: 1, originalOwner: null },
         { type: 'faab', amount: 35 },
       ] }],
     })
@@ -63,7 +63,7 @@ describe('parseOfferRead — the model reply, bounded', () => {
   it('drops assets that do not fit the shape instead of inventing one', () => {
     const r = parseOfferRead('{"isTradeOffer":true,"teams":[{"name":"A","receives":[{"type":"player","name":""},{"type":"trophy"},{"type":"faab","amount":-5},{"type":"pick","year":"2027","round":9},{"type":"player","name":"Real Guy"}]}]}')
     expect(r.kind === 'offer' && r.teams[0]!.receives).toEqual([
-      { type: 'pick', year: 2027, round: 9 },
+      { type: 'pick', year: 2027, round: 9, originalOwner: null },
       { type: 'player', name: 'Real Guy', position: null },
     ])
   })
@@ -117,7 +117,7 @@ describe('matchOfferToRosters — the players decide the sides', () => {
       unreadable: [],
       teams: [
         { name: null, receives: [{ type: 'player', name: 'Joe Burrow', position: 'QB' }] },
-        { name: null, receives: [{ type: 'pick', year: 2027, round: 1 }] },
+        { name: null, receives: [{ type: 'pick', year: 2027, round: 1, originalOwner: null }] },
       ],
     }
     const m = matchOfferToRosters({ read, rosters: ROSTERS, viewerRosterId: '1' })
@@ -126,6 +126,39 @@ describe('matchOfferToRosters — the players decide the sides', () => {
     expect(m.ok && m.partnerRosterId).toBeNull()
     expect(m.ok && m.unmatched).toEqual(['2027 round 1 pick'])
     expect(m.ok ? screenshotDraftNote(m) : '').toMatch(/Pick the manager who sent it/)
+  })
+
+  /*
+   * The real Sleeper DM card (AFC Dreaming!, 2026-09-30): "@TheCiege24 — 2028 2nd Rd (JeffersonTD)",
+   * "@JeffersonTD — B. Allen RB-NYJ". Each @section is what that manager GETS; the bracket is the
+   * pick's original owner. The viewer receives only a pick, so no player of the partner's can name
+   * him — the pick's owner does.
+   */
+  it('the Sleeper DM card: an abbreviated name, and the partner named by the pick’s original owner', () => {
+    const me = roster('1', 'TheCiege24', [player('11588', 'Braelon Allen', 'RB'), player('6770', 'Joe Burrow')])
+    const jeff = roster('4', 'JeffersonTD', [player('9999', 'Somebody Else', 'WR')])
+    const card: OfferRead = {
+      kind: 'offer',
+      unreadable: [],
+      teams: [
+        { name: '@TheCiege24', receives: [{ type: 'pick', year: 2028, round: 2, originalOwner: 'JeffersonTD' }] },
+        { name: '@JeffersonTD', receives: [{ type: 'player', name: 'B. Allen', position: 'RB' }] },
+      ],
+    }
+    const m = matchOfferToRosters({ read: card, rosters: [me, jeff, OTHER], viewerRosterId: '1' })
+    expect(m.ok && m.partnerRosterId).toBe('4')
+    expect(m.ok && m.give.map((a) => a.kind === 'player' && a.playerId)).toEqual(['11588'])
+    expect(m.ok && m.get).toEqual([expect.objectContaining({ kind: 'pick', year: 2028, round: 2 })])
+    expect(m.ok && m.unmatched).toEqual([])
+
+    // Unreadable labels: the pick's owner still names the partner.
+    const anon = { ...card, teams: card.teams.map((t) => ({ ...t, name: null })) }
+    expect(matchOfferToRosters({ read: anon, rosters: [me, jeff, OTHER], viewerRosterId: '1' })).toMatchObject({ ok: true, partnerRosterId: '4' })
+  })
+
+  it('reads the bracketed original owner off a pick', () => {
+    const r = parseOfferRead('{"isTradeOffer":true,"teams":[{"name":"@TheCiege24","receives":[{"type":"pick","year":2028,"round":2,"originalOwner":"@JeffersonTD"}]}]}')
+    expect(r.kind === 'offer' && r.teams[0]!.receives[0]).toEqual({ type: 'pick', year: 2028, round: 2, originalOwner: 'JeffersonTD' })
   })
 
   it('a name on no roster is listed for the manager — never swapped for a lookalike', () => {
@@ -144,7 +177,7 @@ describe('matchOfferToRosters — the players decide the sides', () => {
       kind: 'offer',
       unreadable: [],
       teams: [
-        { name: 'Hibboisthebest', receives: [{ type: 'pick', year: 2027, round: 1 }, { type: 'faab', amount: 20 }] },
+        { name: 'Hibboisthebest', receives: [{ type: 'pick', year: 2027, round: 1, originalOwner: null }, { type: 'faab', amount: 20 }] },
         { name: 'TheCiege24', receives: [{ type: 'player', name: 'Justin Herbert', position: 'QB' }] },
       ],
     }
@@ -161,7 +194,7 @@ describe('matchOfferToRosters — the players decide the sides', () => {
       unreadable: [],
       teams: [
         { name: 'The Ciege 24', receives: [{ type: 'faab', amount: 5 }] },
-        { name: 'Hibboisthebest', receives: [{ type: 'pick', year: 2027, round: 1 }] },
+        { name: 'Hibboisthebest', receives: [{ type: 'pick', year: 2027, round: 1, originalOwner: null }] },
       ],
     }
     const m = matchOfferToRosters({ read: picksOnly, rosters: ROSTERS, viewerRosterId: '1' })

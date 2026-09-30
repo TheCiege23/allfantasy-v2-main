@@ -45,3 +45,18 @@ describe('extractPickMentions', () => {
     expect(pickLabel({ season: 2026, round: 3 })).toBe('2026 3rd-round pick')
   })
 })
+
+describe('Sleeper trade card picks (2026-09-30)', () => {
+  it('reads "2028 2nd Rd (JeffersonTD)" as a 2028 2nd, owner JeffersonTD, with nothing left over', () => {
+    expect(extractPickMentions('2028 2nd Rd (JeffersonTD)')).toEqual({
+      picks: [{ season: 2028, round: 2, text: '2028 2nd Rd (JeffersonTD)', owner: 'JeffersonTD' }],
+      unclear: false,
+    })
+  })
+
+  it('"Rd." and "Rd pick" are round words too; a bracket without a pick is not an owner', () => {
+    expect(extractPickMentions('a 2027 1st Rd. pick').picks).toEqual([expect.objectContaining({ season: 2027, round: 1 })])
+    expect(extractPickMentions('a 2027 1st Rd. pick').unclear).toBe(false)
+    expect(extractPickMentions('Puka Nacua (WR)').picks).toEqual([])
+  })
+})

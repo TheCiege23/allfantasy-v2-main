@@ -226,10 +226,14 @@ export async function buildTradeScenario(
       return { error: 'players_not_rostered' }
     }
     /*
-     * The partner is identified by the players you would RECEIVE. With only picks on that side
-     * there is no way to know whose picks they are — refused, and the reply asks for a name.
+     * The partner is identified by the players you would RECEIVE. With only picks on that side, the
+     * one other signal is the pick's bracketed original owner — "2028 2nd Rd (JeffersonTD)", as a
+     * Sleeper trade card writes it (2026-09-30). Accepted only when every received pick names the
+     * same manager and that manager is exactly one other roster; otherwise refused, and the reply
+     * asks for a name.
      */
-    if (getSide.length === 0) return { error: 'pick_partner_unclear' }
+    const pickOwnerRoster = getSide.length === 0 ? rosterNamedByPickOwners(world, getPicks, viewerRoster.rosterId) : null
+    if (getSide.length === 0 && !pickOwnerRoster) return { error: 'pick_partner_unclear' }
     const give: Located[] = []
     for (const hits of giveSide) {
       const mine = hits.filter((h) => h.rosterId === viewerRoster.rosterId)
@@ -245,6 +249,7 @@ export async function buildTradeScenario(
       get.push(theirs[0]!)
       partnerIds.add(theirs[0]!.rosterId)
     }
+    if (pickOwnerRoster) partnerIds.add(pickOwnerRoster)
     if (partnerIds.size !== 1) return { error: 'multiple_partners' }
     return { give, get, givePicks, getPicks, partnerRosterId: [...partnerIds][0]! }
   }
@@ -403,6 +408,28 @@ export async function buildTradeScenario(
     lineupUnavailable: lineup ? null : impact?.blockedReason ?? receipt.canonicalError ?? 'The starting lineup could not be priced for this league.',
     playoffOdds: { available: false, reason: PLAYOFF_ODDS_UNAVAILABLE },
   }
+}
+
+/**
+ * The one other roster every one of these picks names as its original owner, or null. Names compare
+ * on letters and digits only ("@JeffersonTD" and "JeffersonTD" meet), against the team's owner and
+ * display name. Exported for tests.
+ */
+export function rosterNamedByPickOwners(
+  world: Pick<CanonicalWorld, 'teams' | 'rosters'>,
+  picks: readonly PickMention[],
+  viewerRosterId: string,
+): string | null {
+  const key = (s: string | null | undefined) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
+  if (picks.length === 0) return null
+  const owners = new Set(picks.map((p) => key(p.owner)))
+  if (owners.size !== 1 || owners.has('')) return null
+  const want = [...owners][0]!
+  const teamIds = new Set(world.teams.filter((t) => key(t.ownerName) === want || key(t.displayName) === want).map((t) => t.teamId))
+  const rosterIds = new Set(
+    world.rosters.filter((r) => r.teamId != null && teamIds.has(r.teamId) && r.rosterId !== viewerRosterId).map((r) => r.rosterId),
+  )
+  return rosterIds.size === 1 ? [...rosterIds][0]! : null
 }
 
 /** Why a trade that names picks cannot be evaluated, or null when every pick is usable. */
