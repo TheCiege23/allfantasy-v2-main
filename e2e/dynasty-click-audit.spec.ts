@@ -238,7 +238,7 @@ test.describe('@dynasty full click audit', () => {
     await page.getByLabel('Dynasty insights position filter').selectOption('FWD')
     await page.getByRole('button', { name: "Get Chimmy's dynasty insights" }).click()
     await expect(page.getByText(/Age curve \(SOCCER FWD\)/i)).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'AI insight' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: "Chimmy's insight" })).toBeVisible()
 
     expect(dynastyProjectionGets.some((r) => r.sport === 'NCAAB')).toBe(true)
     expect(dynastyProjectionGets.some((r) => r.refresh === '1')).toBe(true)
