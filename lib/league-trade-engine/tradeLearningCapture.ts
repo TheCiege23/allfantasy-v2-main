@@ -30,9 +30,14 @@ import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 /**
  * Conservative flat fallback for any asset whose real value can't be
  * resolved (unmatched player, pick without season/round metadata, or a
- * specialty asset type with no established valuation). Matches the exact
- * fallback convention already used by lib/trade-learning.ts's
- * analyzeHistoricalTrade() (`fcPlayer?.value || 200`), not a new invention.
+ * specialty asset type with no established valuation).
+ *
+ * ⚠ This copied the `fcPlayer?.value || 200` convention of the original
+ * lib/trade-learning.ts pipeline, retired 2026-09-30. Its scheduled
+ * replacement (lib/comprehensive-trade-learning.ts, PR #1703) does the
+ * opposite by owner's ruling: an unmatched asset is recorded WITHOUT a
+ * value rather than priced by a guess. Whether live capture should follow
+ * is a separate decision; nothing here has changed.
  */
 const LIVE_CAPTURE_FALLBACK_VALUE = 200
 
