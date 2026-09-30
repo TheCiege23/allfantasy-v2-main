@@ -66,6 +66,9 @@ describe('gradeSleeperActivityTrade', () => {
       picksIn: [{ season: 2027, round: 2, label: '2027 round 2' }],
       picksOut: [],
       currentSeason: 1970,
+      // FAAB was read off the transaction (none), so a one-way move here may be named a Pirate steal.
+      faab: { received: 0, gave: 0 },
+      labels: { receiver: 'Hoovi', partner: 'Nicolodeon' },
       // Which trade on which row, so the letter is its frozen original (`frozenCompletedGrade.ts`).
       original: { afLeagueId: 'af-1', tradeId: 'tx-1', now: new Date(0) },
     })
