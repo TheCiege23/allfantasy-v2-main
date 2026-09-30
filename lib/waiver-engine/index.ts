@@ -55,18 +55,6 @@ export type {
   DeterministicFactsResult,
 } from "./waiver-deterministic-facts";
 
-// --- FAAB Engine ---
-export {
-  computeFaabBid,
-  computeFaabStrategy,
-} from "./waiver-faab-engine";
-export type {
-  FaabContext,
-  FaabBidResult,
-  FaabBidInput,
-  FaabStrategyNote,
-} from "./waiver-faab-engine";
-
 // --- Sport Adapters ---
 export {
   getWaiverSportAdapter,
