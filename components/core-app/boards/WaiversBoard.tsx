@@ -121,6 +121,12 @@ function Side({
               {player.projected.toFixed(1)}
             </span>
             <span className="af-bd-k">{sport ? `Proj ${PER_GAME_UNIT}` : 'Proj pts'}</span>
+            {/* AllFantasy's own engine, beside the provider's figure above. NFL rows only. */}
+            {!sport && player.afProjected != null ? (
+              <span className="af-bd-af" title="AllFantasy engine projection, adjusted to this league's scoring">
+                AF {player.afProjected.toFixed(1)}
+              </span>
+            ) : null}
           </span>
           {/*
             ⚠ THE MARKET PERCENTAGES ARE NULL BELOW THE DENOMINATOR GATE, and an
@@ -186,6 +192,12 @@ function Card({ row }: { row: WaiverBoardRow }) {
           >
             {gain} <span className="af-bd-pill-unit">{perGame ? PER_GAME_UNIT : 'pts/wk'}</span>
           </span>
+          {/* The same swap on AllFantasy's own engine. The pill above is the ranking key; this is not. */}
+          {!perGame && row.afNetGain != null ? (
+            <span className="af-bd-af-net" title="Net gain on AllFantasy's own projection engine">
+              AF {row.afNetGain >= 0 ? '+' : ''}{row.afNetGain.toFixed(1)}
+            </span>
+          ) : null}
           {claim ? (
             <a
               className="af-bd-btn"

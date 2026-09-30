@@ -113,6 +113,15 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
                   {c.position ?? '—'}
                   {c.team ? ` · ${c.team}` : ''} · proj{' '}
                   <span className="af-num">{c.projectedPoints.toFixed(1)}</span>
+                  {/* AllFantasy's own engine, beside the provider's figure. */}
+                  {c.afProjectedPoints != null ? (
+                    <>
+                      {' · '}
+                      <span className="af-wlb-af af-num" title="AllFantasy engine projection, adjusted to this league's scoring">
+                        AF {c.afProjectedPoints.toFixed(1)}
+                      </span>
+                    </>
+                  ) : null}
                   {/*
                     ⚠ A FORM NUMBER IS BACKWARD-LOOKING AND SAYS SO. It is a recency-weighted mean
                     of what he has actually scored here, used only where no projection feed covers
@@ -141,7 +150,10 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
                 {c.displaces ? (
                   <>
                     over {c.displaces.name}{' '}
-                    <span className="af-num">({c.displaces.projectedPoints.toFixed(1)})</span>
+                    <span className="af-num">
+                      ({c.displaces.projectedPoints.toFixed(1)}
+                      {c.displaces.afProjectedPoints != null ? ` · AF ${c.displaces.afProjectedPoints.toFixed(1)}` : ''})
+                    </span>
                   </>
                 ) : (
                   // No incumbent to name; a blank here would read as a bug.

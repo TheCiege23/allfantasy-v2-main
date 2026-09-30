@@ -829,6 +829,14 @@
 }
 /* The drop's number is what you give up, not a warning — the design greys it. */
 .af-core .af-bd-cards--rich .af-bd-swap .af-bd-proj .af-bd-asset-val[data-sev='bad'] { color: var(--muted); }
+/* AllFantasy's own engine, beside the provider figure and beside the net-gain pill. */
+.af-core .af-bd-af,
+.af-core .af-bd-af-net {
+  font: 700 11px/1.2 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  white-space: nowrap;
+}
 .af-core .af-bd-cards--rich .af-bd-swap .af-bd-kvrow {
   display: flex;
   gap: 14px;
