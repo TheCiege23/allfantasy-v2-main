@@ -2892,12 +2892,20 @@ export function ImportV4({
             extraActions={
               <>
             {phase.leagueId && !phase.joinedExisting ? (
-              <Link
-                href={`/core/commissioner?league=${encodeURIComponent(phase.leagueId)}`}
-                className="af-btn af-btn--ghost af-done-alt"
-              >
-                Customize your AllFantasy copy
-              </Link>
+              <>
+                <Link
+                  href={`/core/commissioner?league=${encodeURIComponent(phase.leagueId)}`}
+                  className="af-btn af-btn--ghost af-done-alt"
+                >
+                  Customize your AllFantasy copy
+                </Link>
+                <Link
+                  href={`/create-league?fromLeague=${encodeURIComponent(phase.leagueId)}`}
+                  className="af-btn af-btn--ghost af-done-alt"
+                >
+                  Create a standalone league from this import
+                </Link>
+              </>
             ) : null}
             {phase.skipped ? (
               <button
