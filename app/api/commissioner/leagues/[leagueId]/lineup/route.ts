@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
+import { withClientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getFormatTypeForVariant } from '@/lib/sport-defaults/LeagueVariantRegistry'
 import { getRosterTemplateForLeague } from '@/lib/multi-sport/MultiSportRosterService'
@@ -171,5 +172,5 @@ export async function POST(
     },
     select: { id: true, settings: true },
   })
-  return NextResponse.json(updated)
+  return NextResponse.json(withClientLeagueSettings(updated))
 }

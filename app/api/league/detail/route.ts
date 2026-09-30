@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { getServedOrigin } from '@/lib/http/served-origin'
 import { prisma } from '@/lib/prisma'
 import { getLeagueDrafts } from '@/lib/sleeper-client'
+import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 
 type SleeperDraftSummary = {
   start_time?: number | null
@@ -86,7 +87,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const settings = toRecord(league.settings)
+  const settings = clientLeagueSettings(toRecord(league.settings))
   const baseUrl = process.env.NEXTAUTH_URL?.trim() || getServedOrigin(req)
   const inviteToken = league.invites[0]?.token ?? null
   const inviteUrl = inviteToken ? `${baseUrl}/join/${inviteToken}` : null

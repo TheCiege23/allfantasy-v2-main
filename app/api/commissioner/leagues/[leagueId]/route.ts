@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { leagueChatThreadLinkRefusal } from '@/lib/league/leagueChatThreadLink'
+import { withClientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 
 const ALLOWED_KEYS = ['name', 'scoring', 'status', 'avatarUrl', 'rosterSize', 'leagueSize', 'starters', 'sport', 'season'] as const
 const SETTINGS_KEYS = ['description', 'lineupLockRule', 'publicDashboard', 'rankedVisibility', 'orphanSeeking', 'orphanDifficulty', 'leagueChatThreadId', 'tradeReviewType', 'vetoThreshold', 'benchSize', 'rosterPositions'] as const
@@ -56,5 +57,5 @@ export async function PATCH(
     data: updates,
     select: { id: true, name: true, settings: true, updatedAt: true },
   })
-  return NextResponse.json(updated)
+  return NextResponse.json(withClientLeagueSettings(updated))
 }
