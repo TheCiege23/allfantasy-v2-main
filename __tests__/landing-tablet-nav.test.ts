@@ -43,9 +43,9 @@ describe('landing nav on tablets', () => {
     expect(tablet?.decls).toMatchObject({ height: 'auto', 'min-height': '74px' })
   })
 
-  it('leaves the phone bar at its own fixed 64px (a base min-height would have overridden it)', () => {
-    const phone = rulesFor('.af-lp-nav').find((r) => r.media.join() === '(max-width: 720px)')
-    expect(phone?.decls.height).toBe('64px')
+  it('uses a fixed compact bar through 1100px without a conflicting base min-height', () => {
+    const compact = rulesFor('.af-lp-nav').find((r) => r.media.join() === '(max-width: 1100px)')
+    expect(compact?.decls.height).toBe('64px')
     const base = rulesFor('.af-lp-nav').find((r) => r.media.length === 0)
     expect(base?.decls['min-height']).toBeUndefined()
   })

@@ -103,14 +103,14 @@ export async function generateMetadata({
 const HOME_WEBPAGE_SCHEMA = getWebPageSchema({
   name: 'AllFantasy.ai',
   description:
-    'Commissioner-first fantasy sports platform for NFL, NBA, NHL, MLB, NCAA, and Soccer with league management, live drafts, trades, and waiver tools.',
+    'Create or connect fantasy leagues, manage teams, drafts, trades and waivers, and get AI help with decisions.',
   url: '/',
 })
 
 const HOME_SOFTWARE_APP_SCHEMA = getSoftwareApplicationSchema({
   name: 'AllFantasy.ai',
   description:
-    'Commissioner-first fantasy sports platform for serious managers with league management, live drafts, trade tools, and waiver wire tracking.',
+    'Fantasy sports app for creating or connecting leagues, managing teams, and getting AI help with lineup, waiver and trade decisions.',
   url: 'https://allfantasy.ai/',
   applicationCategory: 'SportsApplication',
 })
