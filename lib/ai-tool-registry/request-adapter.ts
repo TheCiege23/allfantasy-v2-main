@@ -27,7 +27,6 @@ const GROUNDED_TOOL_KEYS = new Set([
   'draft_helper',
   'matchup',
   'rankings',
-  'psychological',
   'legacy_score',
   'rivalries',
   'story_creator',
@@ -69,11 +68,6 @@ function buildToolLayerEnvelopeIfSupported(
       return buildToolLayerEnvelope('legacy_score', base)
     case 'rivalries':
       return buildToolLayerEnvelope('rivalries', base)
-    case 'psychological':
-      return buildToolLayerEnvelope(layerTool, {
-        ...base,
-        behaviorPayload: contract.leagueSettings ?? null,
-      })
     default:
       return null
   }

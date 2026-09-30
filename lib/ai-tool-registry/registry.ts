@@ -68,15 +68,10 @@ const REGISTRY: AIToolRegistration[] = [
     requiredContextFields: ['ordering', 'tiers'],
     responseSchema: ['evidence', 'aiExplanation', 'actionPlan', 'confidence', 'uncertainty'],
   },
-  {
-    toolKey: 'psychological',
-    toolName: 'Psychological System',
-    deterministicRequired: true,
-    allowedProviders: ['openai', 'deepseek', 'grok'],
-    supportedModes: ['single_model', 'specialist', 'consensus'],
-    requiredContextFields: ['profile', 'evidence'],
-    responseSchema: ['evidence', 'aiExplanation', 'actionPlan', 'confidence', 'uncertainty'],
-  },
+  // 🛑 No `psychological` tool (owner decision 2026-09-29, Milestone 32: manager
+  // characterisation is shown to nobody). It asked an LLM to explain a
+  // caller-supplied manager profile. Its aliases are gone too, so every spelling
+  // is "Unsupported tool" on /api/ai/run and /api/ai/compare.
   {
     toolKey: 'legacy_score',
     toolName: 'Legacy / Dynasty Explainer',
@@ -190,8 +185,6 @@ const TOOL_ALIASES: Record<string, string> = {
   'league-rankings-explainer': 'rankings',
   'league rankings explainer': 'rankings',
   league_rankings_explainer: 'rankings',
-  'psychological-system': 'psychological',
-  'psychological system': 'psychological',
   story: 'story_creator',
   'league-story-creator': 'story_creator',
   'league story creator': 'story_creator',
@@ -218,8 +211,6 @@ const TOOL_ALIASES: Record<string, string> = {
   'start vs b': 'start_vs',
   player_comparison: 'start_vs',
   'player-comparison': 'start_vs',
-  psychology: 'psychological',
-  psychological_profiles: 'psychological',
   legacy: 'legacy_score',
   rivalry: 'rivalries',
   simulation: 'matchup',

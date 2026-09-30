@@ -2,28 +2,39 @@ import { describe, expect, it } from "vitest"
 import { requestContractToUnified } from "@/lib/ai-tool-registry/request-adapter"
 
 describe("requestContractToUnified", () => {
-  it("builds psychology envelope with canonical feature key and sport normalization", () => {
+  it("builds a tool envelope with canonical feature key and sport normalization", () => {
     const unified = requestContractToUnified({
-      tool: "psychological",
+      tool: "League Rankings Explainer",
       sport: "soccer",
       leagueId: "lg-1",
       deterministicContext: {
-        profile: { style: "aggressive" },
-        evidence: ["trade frequency"],
+        ordering: ["Team A", "Team B"],
+        tiers: { tier1: ["Team A"] },
       },
-      leagueSettings: { scoring: "ppr" },
-      userMessage: "Explain this profile safely.",
+      userMessage: "Explain these rankings.",
     })
 
-    expect(unified.envelope.featureType).toBe("psychological")
+    expect(unified.envelope.featureType).toBe("rankings")
     expect(unified.envelope.sport).toBe("SOCCER")
     expect(unified.envelope.hardConstraints).toEqual(
-      expect.arrayContaining([
-        "Explain only using the provided profile scores and evidence.",
-        "Deterministic-first: never override hard engine outputs.",
-      ])
+      expect.arrayContaining(["Deterministic-first: never override hard engine outputs."])
     )
-    expect(unified.mode).toBe("single_model")
+  })
+
+  // Milestone 32: the `psychological` tool is retired from the registry (the routes
+  // refuse it — see ai-psychological-tool-retired.test.ts), and the adapter no
+  // longer builds its profile-explanation envelope either.
+  it("builds no profile-explanation envelope for the retired psychological tool", () => {
+    const unified = requestContractToUnified({
+      tool: "psychological",
+      sport: "NFL",
+      deterministicContext: { profile: { style: "aggressive" }, evidence: ["trade frequency"] },
+      userMessage: "Explain this profile.",
+    })
+    expect(unified.envelope.hardConstraints).not.toContain(
+      "Explain only using the provided profile scores and evidence."
+    )
+    expect(unified.envelope.deterministicContextEnvelope ?? null).toBeNull()
   })
 
   it("maps simulation alias into matchup adapter and respects requested mode", () => {
