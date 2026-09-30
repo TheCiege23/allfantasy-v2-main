@@ -10,7 +10,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const postBodySchema = z.object({
-  jobType: z.enum(["refresh-rankings", "psychology", "dynasty-roadmap"]),
+  // No "psychology": that job produced a manager characterisation label and is retired
+  // (see lib/workers/power-rankings-worker.ts). A stale client asking for it gets a 400
+  // here rather than a queued job that can only fail.
+  jobType: z.enum(["refresh-rankings", "dynasty-roadmap"]),
   leagueId: z.string().min(1, "leagueId required"),
   rosterId: z.number().int().optional(),
   managerName: z.string().optional(),

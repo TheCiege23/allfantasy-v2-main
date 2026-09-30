@@ -19,7 +19,13 @@ import { selectLatestSeasonLeagues } from "./latestSeasonLeagues";
 type LeagueFormat = "redraft" | "dynasty" | "keeper";
 type RankingView = "power" | "dynasty" | "composite";
 type Trend = "up" | "down" | "neutral";
-type JobKind = "refresh" | "psychology" | "roadmap";
+/*
+ * No "psychology" kind. The "Get My Coaching Insight" button queued a job that rendered a
+ * manager characterisation label — archetype, trait-based strengths and weaknesses, blind
+ * spot — about whichever team was expanded. Milestone 32 shows those to nobody; the job, its
+ * route value and this render path are retired together.
+ */
+type JobKind = "refresh" | "roadmap";
 
 interface UserLeague {
   id: string;
@@ -214,18 +220,6 @@ interface NextStepView {
   detail: string;
 }
 
-interface ManagerPsychology {
-  archetype: string;
-  emoji: string;
-  summary: string;
-  traits: Array<{ trait: string; score: number; description: string }>;
-  tendencies: string[];
-  blindSpot: string;
-  negotiationStyle: string;
-  riskProfile: "LOW" | "MEDIUM" | "HIGH";
-  decisionSpeed: "IMPULSIVE" | "DELIBERATE" | "REACTIVE";
-}
-
 interface DynastyRoadmap {
   horizon: string;
   currentPhase: string;
@@ -268,7 +262,6 @@ interface TeamRanking {
   positionValues?: PositionValuesView;
   nextSteps?: NextStepView[];
   insight?: string;
-  psychology?: ManagerPsychology;
   dynastyRoadmap?: DynastyRoadmap;
 }
 
@@ -650,20 +643,6 @@ function phaseBadgeClass(label: string) {
   return "bg-white/[0.04] text-white/70 border-white/10";
 }
 
-function personalityStrengths(profile: ManagerPsychology): string[] {
-  const highTraits = profile.traits
-    .filter((trait) => trait.score >= 60)
-    .map((trait) => trait.trait);
-  return [...highTraits, ...profile.tendencies].slice(0, 4);
-}
-
-function personalityWeaknesses(profile: ManagerPsychology): string[] {
-  const lowTraits = profile.traits
-    .filter((trait) => trait.score < 45)
-    .map((trait) => `${trait.trait.toLowerCase()} pressure`);
-  return [profile.blindSpot, ...lowTraits].slice(0, 4);
-}
-
 function LoadingCard() {
   return <div className="h-28 animate-pulse rounded-2xl border border-white/8 bg-[#0c0c1e]" />;
 }
@@ -941,25 +920,19 @@ function HeroCard({
 function ExpandedTeamDetail({
   team,
   currentJob,
-  onCoach,
   onRoadmap,
   kickerValuation,
 }: {
   team: TeamRanking;
   currentJob: ActiveJob | null;
-  onCoach: (team: TeamRanking) => void;
   onRoadmap: (team: TeamRanking) => void;
   /* League-level, so it is threaded from the page rather than read off `team`. */
   kickerValuation: KickerValuationView | null;
 }) {
   const { t, tInterpolate } = useLanguage();
   const rankExplanation = team.rankExplanation;
-  const psychologyLoading =
-    currentJob?.kind === "psychology" && currentJob.rosterId === team.rosterId;
   const roadmapLoading =
     currentJob?.kind === "roadmap" && currentJob.rosterId === team.rosterId;
-  const psychologyStrengths = team.psychology ? personalityStrengths(team.psychology) : [];
-  const psychologyWeaknesses = team.psychology ? personalityWeaknesses(team.psychology) : [];
 
   return (
     <div className="border-t border-cyan-500/20 bg-white/[0.02] px-4 py-5">
@@ -1233,20 +1206,6 @@ function ExpandedTeamDetail({
             <div className="mt-4 grid gap-3">
               <button
                 type="button"
-                onClick={() => onCoach(team)}
-                disabled={psychologyLoading}
-                className="rounded-2xl px-4 py-3 text-sm font-black text-black transition-all disabled:opacity-50"
-                style={{
-                  background: "linear-gradient(135deg, #14b8a6, #06b6d4)",
-                  boxShadow: "0 10px 30px rgba(6,182,212,0.18)",
-                }}
-              >
-                {psychologyLoading
-                  ? t("powerRankingsPage.coach.loadingInsight")
-                  : t("powerRankingsPage.coach.getInsight")}
-              </button>
-              <button
-                type="button"
                 onClick={() => onRoadmap(team)}
                 disabled={roadmapLoading}
                 className="rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-white/75 transition-all hover:border-white/20 hover:text-white disabled:opacity-50"
@@ -1257,74 +1216,18 @@ function ExpandedTeamDetail({
               </button>
             </div>
 
-            {(psychologyLoading || roadmapLoading) && currentJob ? (
+            {roadmapLoading && currentJob ? (
               <div className="mt-4 space-y-2">
                 <div className="flex items-center justify-between text-xs text-white/45">
                   <span>
                     {tInterpolate("powerRankingsPage.job.label", {
-                      kind:
-                        currentJob.kind === "psychology"
-                          ? t("powerRankingsPage.job.psychology")
-                          : t("powerRankingsPage.job.roadmap"),
+                      kind: t("powerRankingsPage.job.roadmap"),
                     })}
                   </span>
                   <span>{currentJob.progress}%</span>
                 </div>
                 <div className="h-2 rounded-full bg-white/5 overflow-hidden">
                   <div className="h-full rounded-full bg-cyan-500 transition-all duration-300" style={{ width: `${currentJob.progress}%` }} />
-                </div>
-              </div>
-            ) : null}
-
-            {team.psychology ? (
-              <div className="mt-5 rounded-2xl border border-violet-500/20 bg-violet-500/10 p-4">
-                <div className="inline-flex rounded-full bg-violet-500/20 px-2.5 py-1 text-xs font-bold text-violet-200">
-                  {team.psychology.emoji} {team.psychology.archetype}
-                </div>
-                <div className="mt-4 space-y-2 text-sm text-white/70">
-                  <div>
-                    <span className="text-white/45">{t("powerRankingsPage.psychology.decisionStyle")}</span>{" "}
-                    {humanizeKey(team.psychology.decisionSpeed.toLowerCase())}
-                  </div>
-                  <div>
-                    <span className="text-white/45">{t("powerRankingsPage.psychology.tradeTendencies")}</span>{" "}
-                    {team.psychology.tendencies[0] ?? team.psychology.negotiationStyle}
-                  </div>
-                  <div>
-                    <span className="text-white/45">{t("powerRankingsPage.psychology.draftStyle")}</span>{" "}
-                    {team.psychology.tendencies[1] ?? team.psychology.summary}
-                  </div>
-                </div>
-
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/35">
-                      {t("powerRankingsPage.psychology.strengths")}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {psychologyStrengths.map((item) => (
-                        <span key={item} className="rounded-full bg-green-500/20 px-2.5 py-1 text-xs text-green-200">
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/35">
-                      {t("powerRankingsPage.psychology.weaknesses")}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {psychologyWeaknesses.map((item) => (
-                        <span key={item} className="rounded-full bg-red-500/20 px-2.5 py-1 text-xs text-red-200">
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 border-l-2 border-cyan-500 pl-3 text-sm italic leading-6 text-cyan-100/75">
-                  {team.psychology.summary}
                 </div>
               </div>
             ) : null}
@@ -1391,7 +1294,6 @@ function TeamRow({
   detailLoading,
   onToggle,
   currentJob,
-  onCoach,
   onRoadmap,
   kickerValuation,
 }: {
@@ -1401,7 +1303,6 @@ function TeamRow({
   detailLoading: boolean;
   onToggle: () => void;
   currentJob: ActiveJob | null;
-  onCoach: (team: TeamRanking) => void;
   onRoadmap: (team: TeamRanking) => void;
   kickerValuation: KickerValuationView | null;
 }) {
@@ -1527,7 +1428,6 @@ function TeamRow({
             <ExpandedTeamDetail
               team={team}
               currentJob={currentJob}
-              onCoach={onCoach}
               onRoadmap={onRoadmap}
               kickerValuation={kickerValuation}
             />
@@ -1725,7 +1625,6 @@ export default function PowerRankingsPage() {
         status?: string;
         progress?: number;
         result?: {
-          psychology?: unknown;
           roadmap?: unknown;
         };
         failedReason?: string | null;
@@ -1750,16 +1649,6 @@ export default function PowerRankingsPage() {
 
         if (kind === "refresh" && selectedLeague) {
           await loadRankings(selectedLeague);
-        }
-
-        if (kind === "psychology" && rosterId != null && payload.result?.psychology) {
-          setTeams((current) =>
-            current.map((team) =>
-              team.rosterId === rosterId
-                ? { ...team, psychology: payload.result?.psychology as ManagerPsychology }
-                : team
-            )
-          );
         }
 
         if (kind === "roadmap" && rosterId != null && payload.result?.roadmap) {
@@ -1885,23 +1774,6 @@ export default function PowerRankingsPage() {
       }
     },
     [expandedRosterId, loadTeamDetail]
-  );
-
-  const requestCoach = useCallback(
-    async (team: TeamRanking) => {
-      if (!selectedLeague) return;
-      try {
-        await startJob("psychology", {
-          jobType: "psychology",
-          leagueId: getTargetLeagueId(selectedLeague),
-          rosterId: team.rosterId,
-          managerName: team.managerName,
-        });
-      } catch (error) {
-        setJobError(error instanceof Error ? error.message : "Failed to queue psychology job.");
-      }
-    },
-    [selectedLeague, startJob]
   );
 
   const requestRoadmap = useCallback(
@@ -2188,7 +2060,6 @@ export default function PowerRankingsPage() {
                     detailLoading={detailLoadingRosterId === team.rosterId}
                     onToggle={() => void toggleExpanded(team)}
                     currentJob={activeJob}
-                    onCoach={requestCoach}
                     onRoadmap={requestRoadmap}
                     kickerValuation={rankingsMeta?.meta?.kickerValuation ?? null}
                   />
