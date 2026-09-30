@@ -29,7 +29,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/snapshots/latest", too
     const snap = await readLatestSnapshot({ leagueId, sleeperUsername, snapshotType, contextKey })
     if (!snap) {
       return NextResponse.json(
-        { ok: false, error: 'Snapshot not found. Run league-analyze / otb-packages first.' },
+        { ok: false, error: 'Snapshot not found.' },
         { status: 404 }
       )
     }
