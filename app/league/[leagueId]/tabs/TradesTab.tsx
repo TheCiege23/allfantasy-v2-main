@@ -29,6 +29,7 @@ import { ReverseTradeDialog } from '@/components/league-trade/ReverseTradeDialog
 import { TradeReviewPanel } from '@/components/trade-review/TradeReviewPanel'
 import { reviewIdFor } from '@/lib/trade-review/reviewIdStore'
 import { previewGenericTradeReversal, requestGenericTradeReversal } from '@/lib/trade-reversal/client'
+import { SleeperOffersNotice } from '@/components/trades/SleeperOffersNotice'
 import {
   groupTradeTimelineBySeason,
   tradeSeasonFromIso,
@@ -1392,6 +1393,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             </button>
         </div>
       </div>
+
+      {/* Sleeper never shares an offer before it is accepted — say so, and how to grade one. */}
+      {platformKey === 'sleeper' ? <SleeperOffersNotice leagueId={league.id} /> : null}
 
       {/* ── League context bar ───────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2.5 rounded-2xl border border-[#1E2A42] bg-[#131929] px-3.5 py-3">

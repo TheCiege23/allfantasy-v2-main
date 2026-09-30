@@ -7,6 +7,7 @@ import type {
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import BoardActionLink from '@/components/core-app/boards/BoardActionLink'
+import { SleeperOffersNotice } from '@/components/trades/SleeperOffersNotice'
 import {
   BoardHead,
   FooterSummary,
@@ -362,6 +363,12 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
         title="Trades"
         blurb="Your trade windows, soonest to close first — with the most recent real trade in each league and how it graded."
       />
+
+      {/*
+        Sleeper never shares an offer before it is accepted, so a manager looking here for one they
+        were just sent must be told why it is missing and how to grade it (Guap, 2026-09-30).
+      */}
+      {data.windows.some((w) => w.platform === 'sleeper') ? <SleeperOffersNotice className="af-bd-sec" /> : null}
 
       {/*
         ⚠ THIS SECTION IS WIRED AND ALMOST ALWAYS EMPTY, AND THAT IS CORRECT.
