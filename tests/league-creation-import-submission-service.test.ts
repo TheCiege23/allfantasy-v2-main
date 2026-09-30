@@ -42,6 +42,8 @@ describe('LeagueCreationImportSubmissionService', () => {
   })
 
   it('routes yahoo create through import commit endpoint', async () => {
+    // Yahoo is gated by platform approval; isolate routing from availability here.
+    availabilitySpy = vi.spyOn(providerUiConfig, 'isImportProviderAvailable').mockReturnValue(true)
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -88,7 +90,7 @@ describe('LeagueCreationImportSubmissionService', () => {
     })
   })
 
-  it('routes sleeper create through /api/league/create import flags', async () => {
+  it('routes sleeper create through the unified import commit endpoint', async () => {
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -106,21 +108,16 @@ describe('LeagueCreationImportSubmissionService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe('/api/league/create')
+    expect(url).toBe('/api/leagues/import/commit')
     expect(init.method).toBe('POST')
     expect(JSON.parse(String(init.body))).toEqual({
-      platform: 'sleeper',
-      createFromSleeperImport: true,
-      sleeperLeagueId: '123456',
+      provider: 'sleeper',
+      sourceId: '123456',
     })
   })
 
   it('routes mfl create through import commit endpoint', async () => {
-    // mfl's sourceId format ("year:id") is worth its own case even though
-    // provider-ui-config.ts now marks mfl unavailable pending a credential UI
-    // (docs/redraft/G61_IMPORT_PROVIDER_AVAILABILITY_RECONCILIATION.md) — this
-    // test is about routing/serialization, not availability policy.
-    availabilitySpy = vi.spyOn(providerUiConfig, 'isImportProviderAvailable').mockReturnValue(true)
+    // MFL's sourceId format ("year:id") is worth its own case.
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({
