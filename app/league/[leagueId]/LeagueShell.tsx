@@ -75,7 +75,7 @@ import LeagueChatSurface, { isAfHostedPlatform } from '@/components/chat/LeagueC
 import { RightControlPanel } from '@/app/dashboard/components/RightControlPanel'
 import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import {
-  getLeagueTabs,
+  getLeagueTabsForViewer,
   leagueTabSportEmoji,
   localizeLeagueTabs,
   type TabDef,
@@ -406,7 +406,7 @@ export function LeagueShell({
       })
     }
 
-    let base = getLeagueTabs(String(league.sport))
+    let base = getLeagueTabsForViewer(String(league.sport), isCommissioner)
     if (league.bestBallMode) {
       const idx = base.findIndex((t) => t.id === 'redraft')
       const bb = { id: 'bestball', label: 'Best Ball' }

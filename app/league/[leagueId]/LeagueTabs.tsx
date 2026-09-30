@@ -115,6 +115,18 @@ export function getLeagueTabs(sport: string): TabDef[] {
   return SPORT_TABS.NFL ?? NFL_TABS
 }
 
+/** Common league tools appear for every sport, with commissioner access gated by role. */
+export function getLeagueTabsForViewer(sport: string, isCommissioner: boolean): TabDef[] {
+  const tabs = getLeagueTabs(sport).filter((tab) => tab.id !== 'commissioner')
+  if (!tabs.some((tab) => tab.id === 'league_chat')) {
+    tabs.push({ id: 'league_chat', label: 'League Chat' })
+  }
+  if (isCommissioner) {
+    tabs.push({ id: 'commissioner', label: 'Commissioner' })
+  }
+  return tabs
+}
+
 const LEAGUE_TAB_I18N_KEY: Record<string, string> = {
   home: 'league.tab.home',
   matchup: 'league.tab.matchup',
