@@ -138,6 +138,18 @@ Each needs a *production* read, and the two kinds differ:
     (`foundingMember.ts:15-17,27-30`). This is a Railway variable write, so it redeploys.
   - Current value: **UNVERIFIED.**
 - [ ] **Tell existing users.** Decided 2026-09-24: an offer by **Oct 8**. Nothing in code sends it.
+  - **Copy drafted 2026-09-30: [`FOUNDING_OFFER_EMAIL_DRAFT.md`](./FOUNDING_OFFER_EMAIL_DRAFT.md)** —
+    subject options, an English body in two variants (with and without `FOUNDING_OFFER_LABEL`), a
+    Spanish note, and every claim traced to the file it came from.
+  - 🛑 **It is blocked on the coupon, not on writing.** The draft must not be sent while
+    `STRIPE_FOUNDING_COUPON_ID` is unset: an email cannot check the flag at render time the way the
+    pages do, so every founding line in it would be false the moment someone clicked through —
+    `/pricing` shows no founding pricing at all and checkout applies nothing. That is the invariant
+    `launchCopy.ts:10-12` exists to protect. Coupon first, then variables, then read them back, then
+    send.
+  - ⚠ One sentence in the draft the code **cannot** verify: "your founding pricing doesn't expire"
+    is true only if the coupon is `forever` rather than `once`/`repeating`. Duration lives in Stripe
+    (`foundingMember.ts:10-13`), so check it against the coupon you create or cut the clause.
 - [ ] **Live price IDs.** The 11 `STRIPE_PRICE_AF_*` variables (8 subscription, 3 token) must point at
   live prices matching the catalog:
 
