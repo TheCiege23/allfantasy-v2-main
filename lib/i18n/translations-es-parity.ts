@@ -487,8 +487,6 @@ export const translationsEsParity: Record<string, string> = {
   "powerRankingsPage.changeLeague": "Cambiar liga",
   "powerRankingsPage.coach.generatePlan": "Generar plan 3-5 años",
   "powerRankingsPage.coach.generatingPlan": "Generando plan 3-5 años...",
-  "powerRankingsPage.coach.getInsight": "Obtener mi insight de coach",
-  "powerRankingsPage.coach.loadingInsight": "Cargando insight de coach...",
   "powerRankingsPage.coach.scoreFallback": "Puntuación {{n}}",
   "powerRankingsPage.coach.title": "Tu coach",
   "powerRankingsPage.col.rank": "Rango",
@@ -545,7 +543,6 @@ export const translationsEsParity: Record<string, string> = {
   "powerRankingsPage.introTitle":
     "Lee la tabla completa, expande cada manager y ejecuta trabajos de psicología y hoja de ruta dynasty respaldados por workers.",
   "powerRankingsPage.job.label": "Trabajo {{kind}}",
-  "powerRankingsPage.job.psychology": "Psicología",
   "powerRankingsPage.job.roadmap": "Hoja de ruta",
   "powerRankingsPage.leagueTeamsLine": "{{n}} equipos · {{scoring}} · Temporada {{season}}",
   "powerRankingsPage.level.high": "Alto",
@@ -579,11 +576,6 @@ export const translationsEsParity: Record<string, string> = {
   "powerRankingsPage.position.kickerBasis":
     "Los pateadores se valoran como posición, no se clasifican. La clasificación de pateadores no se mantiene de una temporada a otra, y todo el grupo titulable puntúa dentro de aproximadamente 1,5x entre sí, así que ningún orden de pateadores predeciría nada aquí. El reemplazo está alrededor de K{{rank}}.",
   "powerRankingsPage.position.starterValue": "Valor de titulares:",
-  "powerRankingsPage.psychology.decisionStyle": "Estilo de decisión:",
-  "powerRankingsPage.psychology.draftStyle": "Estilo de draft:",
-  "powerRankingsPage.psychology.strengths": "Fortalezas",
-  "powerRankingsPage.psychology.tradeTendencies": "Tendencias de traspaso:",
-  "powerRankingsPage.psychology.weaknesses": "Debilidades",
   "powerRankingsPage.refreshRankings": "Actualizar rankings",
   "powerRankingsPage.refreshingRankings": "Actualizando rankings...",
   "powerRankingsPage.roadmap.title": "Hoja de ruta dynasty",
