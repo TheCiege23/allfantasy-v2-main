@@ -5,7 +5,7 @@ import { activityHandler } from '@/lib/intelligence/api/handlers'
 export const dynamic = 'force-dynamic'
 
 // GET /api/v1/intelligence/leagues/[leagueId]/activity — manager-readable
-export async function GET(_req: NextRequest, ctx: { params: { leagueId: string } }) {
-  const r = await activityHandler(ctx.params.leagueId, createIntelligenceApiDeps())
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) {
+  const r = await activityHandler((await ctx.params).leagueId, createIntelligenceApiDeps())
   return NextResponse.json(r.body, { status: r.status })
 }

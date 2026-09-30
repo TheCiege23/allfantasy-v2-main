@@ -769,7 +769,7 @@ export default async function AfCorePage({
    */
   const leagueFirst = isLeagueFirstEnabled({
     userId,
-    cookieValue: cookies().get(LEAGUE_FIRST_COOKIE)?.value,
+    cookieValue: (await cookies()).get(LEAGUE_FIRST_COOKIE)?.value,
     rolloutEnv: process.env.AF_LEAGUE_FIRST_ROLLOUT,
   })
   if (leagueFirst && selectedLeagueRow) void rememberLastLeague(userId, selectedLeagueRow.id)
@@ -1352,7 +1352,7 @@ export default async function AfCorePage({
    * ⚠ IT NARROWS `playedLeagues` AND NOTHING ELSE. The league-id authorization check above has
    * already run on the full list; favorites are intersected with that list before use.
    */
-  const cookieJar = cookies()
+  const cookieJar = await cookies()
   const favoriteIds = parseFavoriteIds(
     cookieJar.get(FAVORITES_COOKIE)?.value,
     playedLeagues.map((l) => l.id),
@@ -3659,10 +3659,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * null league list means "unknown", not "zero".
    */
   if (isHome3a) {
+    // Next 15: cookies() is async; read the jar once here so the sync getter can close over it.
+    const activationCookies = await cookies()
     void recordDashboardActivation({
       userId,
       leagueCount: leagueListPayload ? leagueListPayload.leagues.length : null,
-      getCookie: (name) => cookies().get(name)?.value,
+      getCookie: (name) => activationCookies.get(name)?.value,
     })
   }
 
@@ -4820,7 +4822,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               pausedSyncLeagueIds,
             )}
             order={orderHomeCards({
-              usage: parseCardUsage(cookies().get(CARD_USE_COOKIE)?.value),
+              usage: parseCardUsage((await cookies()).get(CARD_USE_COOKIE)?.value),
               timeSensitive: timeSensitiveCards({
                 gameDayActive: coreActivity.gameDayActive,
                 draftLive: coreActivity.liveDraftLeagueIds.length > 0,
@@ -4862,5 +4864,5 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         </div>
       )}
     </>
-  )
+  );
 }

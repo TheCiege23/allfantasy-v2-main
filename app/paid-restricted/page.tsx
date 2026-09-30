@@ -7,11 +7,12 @@ export const dynamic = "force-dynamic"
 
 type PaidRestrictedParams = { state?: string; reason?: string }
 
-export default async function PaidRestrictedPage({
-  searchParams,
-}: {
-  searchParams?: Promise<PaidRestrictedParams> | PaidRestrictedParams
-}) {
+export default async function PaidRestrictedPage(
+  props: {
+    searchParams?: Promise<Promise<PaidRestrictedParams> | PaidRestrictedParams>
+  }
+) {
+  const searchParams = await props.searchParams
   const sp = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
 
   /*

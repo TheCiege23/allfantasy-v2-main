@@ -1,12 +1,13 @@
 import CommissionerTab from '@/components/app/tabs/CommissionerTab'
 
 type E2eCommissionerPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     leagueId?: string
-  }
+  }>
 }
 
-export default function E2eCommissionerPage({ searchParams }: E2eCommissionerPageProps) {
+export default async function E2eCommissionerPage(props: E2eCommissionerPageProps) {
+  const searchParams = await props.searchParams
   const leagueId = searchParams?.leagueId?.trim() || 'e2e-commissioner-league'
 
   return (

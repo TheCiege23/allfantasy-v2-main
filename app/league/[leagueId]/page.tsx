@@ -29,11 +29,12 @@ export const dynamic = 'force-dynamic'
  * mobile (most users hit the league dashboard from a phone). Kept lean: one
  * indexed-safe title + description, no private data beyond the league name.
  */
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ leagueId: string }> | { leagueId: string }
-}) {
+export async function generateMetadata(
+  props: {
+    params: Promise<Promise<{ leagueId: string }> | { leagueId: string }>
+  }
+) {
+  const params = await props.params
   const { leagueId } = params instanceof Promise ? await params : params
   try {
     const league = await prisma.league.findFirst({
@@ -92,24 +93,24 @@ function logLeaguePageFailure(details: {
   }
 }
 
-export default async function LeaguePage({
-    params,
-    searchParams,
-}: {
-    params: Promise<{ leagueId: string }>
-    searchParams?: Promise<Record<string, string | string[] | undefined>>
-}) {
-    const missingEnvVars = getDashboardMissingEnvVars()
-    if (missingEnvVars.length > 0) {
-          const issue = createDashboardRuntimeIssue(missingEnvVars)
-          return (
-                  <DashboardUnavailableState
-                            title={issue.title}
-                            message={issue.message}
-                            missing={issue.missing}
-                          />
-                )
-    }
+export default async function LeaguePage(
+  props: {
+      params: Promise<{ leagueId: string }>
+      searchParams?: Promise<Record<string, string | string[] | undefined>>
+  }
+) {
+  const searchParams = await props.searchParams
+  const missingEnvVars = getDashboardMissingEnvVars()
+  if (missingEnvVars.length > 0) {
+        const issue = createDashboardRuntimeIssue(missingEnvVars)
+        return (
+                <DashboardUnavailableState
+                          title={issue.title}
+                          message={issue.message}
+                          missing={issue.missing}
+                        />
+              )
+  }
 
   const { leagueId } = await params
 
@@ -143,17 +144,17 @@ export default async function LeaguePage({
   let session: {
         user?: { id?: string; name?: string | null; email?: string | null; image?: string | null }
   } | null
-    try {
-          session = (await getServerSession(authOptions as never)) as typeof session
-    } catch (error) {
-          console.error('[league] getServerSession failed:', error)
-          return (
-                  <DashboardUnavailableState
-                            title="League page temporarily unavailable"
-                            message="We couldn't verify your session. Please sign in again or try again in a moment."
-                          />
-                )
-    }
+  try {
+        session = (await getServerSession(authOptions as never)) as typeof session
+  } catch (error) {
+        console.error('[league] getServerSession failed:', error)
+        return (
+                <DashboardUnavailableState
+                          title="League page temporarily unavailable"
+                          message="We couldn't verify your session. Please sign in again or try again in a moment."
+                        />
+              )
+  }
 
   if (!session?.user?.id) {
         const leaguePath = embedMode ? `/league/${leagueId}?embed=1` : `/league/${leagueId}`

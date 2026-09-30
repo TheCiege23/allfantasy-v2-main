@@ -8,10 +8,8 @@ import { leagueChatThreadLinkRefusal } from '@/lib/league/leagueChatThreadLink'
 const ALLOWED_KEYS = ['name', 'scoring', 'status', 'avatarUrl', 'rosterSize', 'leagueSize', 'starters', 'sport', 'season'] as const
 const SETTINGS_KEYS = ['description', 'lineupLockRule', 'publicDashboard', 'rankedVisibility', 'orphanSeeking', 'orphanDifficulty', 'leagueChatThreadId', 'tradeReviewType', 'vetoThreshold', 'benchSize', 'rosterPositions'] as const
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

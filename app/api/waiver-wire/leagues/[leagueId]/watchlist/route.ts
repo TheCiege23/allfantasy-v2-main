@@ -15,7 +15,8 @@ async function requireMember(leagueId: string, userId: string): Promise<boolean>
   return Boolean(owner || roster)
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { leagueId: string } }) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -24,7 +25,8 @@ export async function GET(_req: NextRequest, { params }: { params: { leagueId: s
   return NextResponse.json({ playerIds })
 }
 
-export async function POST(req: NextRequest, { params }: { params: { leagueId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -47,7 +49,8 @@ export async function POST(req: NextRequest, { params }: { params: { leagueId: s
   return NextResponse.json({ ok: true, playerIds })
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { leagueId: string } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

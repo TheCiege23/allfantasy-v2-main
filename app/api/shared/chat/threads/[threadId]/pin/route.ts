@@ -8,7 +8,8 @@ import { prisma } from '@/lib/prisma'
 
 const PIN_SNIPPET_MAX = 120
 
-export async function POST(req: NextRequest, { params }: { params: { threadId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

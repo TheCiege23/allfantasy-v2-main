@@ -13,10 +13,8 @@ type SessionWithUser = { user?: { id?: string; email?: string | null } } | null
  * and enabling orphan AI drafter mode for this league.
  * Body: { rosterId: string }
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as SessionWithUser
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

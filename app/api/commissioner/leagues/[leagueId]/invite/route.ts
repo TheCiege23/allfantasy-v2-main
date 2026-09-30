@@ -131,10 +131,8 @@ async function ensureLeagueInvite(
 }
 
 /** GET: return current invite code/link from settings. POST: regenerate and store in settings. */
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -162,10 +160,8 @@ export async function GET(
   })
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

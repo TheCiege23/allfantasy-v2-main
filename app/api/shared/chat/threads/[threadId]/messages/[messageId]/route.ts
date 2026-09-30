@@ -28,8 +28,9 @@ function mergeMetadata(existing: unknown, additions: Record<string, unknown>): R
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { threadId: string; messageId: string } }
+  props: { params: Promise<{ threadId: string; messageId: string }> }
 ) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -100,8 +101,9 @@ export async function PATCH(
 
 export async function DELETE(
   _req: NextRequest,
-  { params }: { params: { threadId: string; messageId: string } }
+  props: { params: Promise<{ threadId: string; messageId: string }> }
 ) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

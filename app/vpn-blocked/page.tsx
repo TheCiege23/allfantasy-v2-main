@@ -27,13 +27,13 @@ function safeReturnPath(raw: unknown): string {
   return path.startsWith("/vpn-blocked") ? "/" : path
 }
 
-export default async function VpnBlockedPage({
-  searchParams,
-}: {
-  searchParams?:
-    | Promise<{ from?: string; why?: string; scope?: string }>
-    | { from?: string; why?: string; scope?: string }
-}) {
+export default async function VpnBlockedPage(
+  props: {
+    searchParams?: Promise<| Promise<{ from?: string; why?: string; scope?: string }>
+    | { from?: string; why?: string; scope?: string }>
+  }
+) {
+  const searchParams = await props.searchParams
   const sp = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const retry = safeReturnPath(sp.from)
   // `why` is set by the middleware from the verdict that sent the person here.

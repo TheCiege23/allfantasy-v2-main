@@ -13,10 +13,8 @@ import { createStatsBotMessage } from "@/lib/platform/chat-service"
  * `/messages` returned 401). Nothing in the repo calls this route, so the gate breaks no caller:
  * an internal job or an admin, and nobody else.
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { threadId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const gate = await requireAdminOrBearer(req)
   if (!gate.ok) return gate.res
 

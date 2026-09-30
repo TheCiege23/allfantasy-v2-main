@@ -6,11 +6,12 @@ function first(q: string | string[] | undefined): string | undefined {
   return q
 }
 
-export default async function PlayerComparePage({
-  searchParams,
-}: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>
-}) {
+export default async function PlayerComparePage(
+  props: {
+    searchParams?: Promise<Record<string, string | string[] | undefined>>
+  }
+) {
+  const searchParams = await props.searchParams
   const sp = searchParams ? await searchParams : {}
   return (
     <Suspense

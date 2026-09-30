@@ -33,8 +33,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { threadId: string; messageId: string } }
+  props: { params: Promise<{ threadId: string; messageId: string }> }
 ) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

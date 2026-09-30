@@ -42,10 +42,8 @@ function normalizePosition(position: string | null | undefined): string {
   return upper.substring(0, 3) || "N/A"
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

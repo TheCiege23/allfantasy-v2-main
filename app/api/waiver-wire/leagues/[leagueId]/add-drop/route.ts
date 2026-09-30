@@ -25,7 +25,8 @@ function errorResponse(code: AddDropErrorCode, message?: string) {
  * claim drawer instead. Single-roster only — never runs the league-wide processor, so other teams'
  * pending claims are untouched and never exposed.
  */
-export async function POST(req: NextRequest, { params }: { params: { leagueId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return errorResponse("UNAUTHORIZED")

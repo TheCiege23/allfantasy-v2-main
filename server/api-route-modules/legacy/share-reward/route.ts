@@ -9,7 +9,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/share-reward", tool: "
       return NextResponse.json({ error: 'Invalid request origin' }, { status: 403 })
     }
 
-    const session = getUserSessionFromCookie()
+    const session = (await getUserSessionFromCookie())
     if (!session?.sleeperUsername) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
@@ -70,7 +70,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/share-reward", tool: "
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/share-reward", tool: "LegacyShareReward" })(async () => {
   try {
-    const session = getUserSessionFromCookie()
+    const session = (await getUserSessionFromCookie())
     if (!session?.sleeperUsername) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }

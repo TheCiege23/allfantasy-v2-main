@@ -56,7 +56,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 type WorldCupRouteContext = {
-  params: { path?: string[] }
+  params: Promise<{ path?: string[] }>
 }
 
 const createWorldCupChallengeSchema = z.object({
@@ -168,8 +168,8 @@ function notFound() {
   return NextResponse.json({ error: "Route not found" }, { status: 404 })
 }
 
-function getPath(context: WorldCupRouteContext) {
-  return context.params.path ?? []
+async function getPath(context: WorldCupRouteContext) {
+  return (await context.params).path ?? []
 }
 
 async function createChallenge(request: Request) {
@@ -1076,7 +1076,7 @@ async function adminResetSimulation(request: Request, challengeId: string) {
 }
 
 export async function GET(request: Request, context: WorldCupRouteContext) {
-  const path = getPath(context)
+  const path = await getPath(context)
 
   if (path.length === 1 && path[0] === "live") return getLiveMatches()
   if (path.length === 2 && path[0] === "invite") return getInvite(path[1])
@@ -1091,7 +1091,7 @@ export async function GET(request: Request, context: WorldCupRouteContext) {
 }
 
 export async function POST(request: Request, context: WorldCupRouteContext) {
-  const path = getPath(context)
+  const path = await getPath(context)
 
   if (path.length === 1 && path[0] === "create") return createChallenge(request)
   if (path.length === 1 && path[0] === "sync") return syncChallenges(request)
@@ -1124,7 +1124,7 @@ export async function POST(request: Request, context: WorldCupRouteContext) {
 }
 
 export async function PATCH(request: Request, context: WorldCupRouteContext) {
-  const path = getPath(context)
+  const path = await getPath(context)
 
   if (path.length === 1) return patchChallenge(request, path[0])
 

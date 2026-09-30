@@ -1669,11 +1669,12 @@ function AdminAccessDenied() {
   )
 }
 
-export default async function AdminPage({
-  searchParams,
-}: {
-  searchParams?: { q?: string | string[] }
-}) {
+export default async function AdminPage(
+  props: {
+    searchParams?: Promise<{ q?: string | string[] }>
+  }
+) {
+  const searchParams = await props.searchParams
   const gate = await getAdminAccessState()
   if (gate.status === "unauthenticated") {
     redirect("/admin-login?next=/admin")

@@ -26,9 +26,9 @@ const patchWorldCupChallengeSchema = z.object({
   bracketLeagueId: z.string().min(8).nullable().optional(),
 })
 
-export async function GET(request: Request, context: { params: { challengeId: string } }) {
+export async function GET(request: Request, context: { params: Promise<{ challengeId: string }> }) {
   try {
-    const params = worldCupChallengeParamsSchema.safeParse(context.params)
+    const params = worldCupChallengeParamsSchema.safeParse((await context.params))
     if (!params.success) {
       return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
     }
@@ -49,16 +49,16 @@ export async function GET(request: Request, context: { params: { challengeId: st
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     const stack = err instanceof Error ? err.stack : undefined
-    console.error("[world-cup/GET]", context.params?.challengeId, msg, stack)
+    console.error("[world-cup/GET]", (await context.params)?.challengeId, msg, stack)
     return NextResponse.json({ error: "Internal server error", detail: msg }, { status: 500 })
   }
 }
 
-export async function PATCH(request: Request, context: { params: { challengeId: string } }) {
+export async function PATCH(request: Request, context: { params: Promise<{ challengeId: string }> }) {
   const auth = await requireWorldCupApiUser()
   if (!auth.ok) return auth.response
 
-  const params = worldCupChallengeParamsSchema.safeParse(context.params)
+  const params = worldCupChallengeParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
   }
