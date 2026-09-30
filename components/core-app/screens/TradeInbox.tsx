@@ -369,6 +369,14 @@ export function TradeInbox(props: {
    */
   onEnterByHand?: () => void
   /**
+   * Reads a screenshot of the offer as Sleeper shows it into the builder (TradeCenter
+   * `readOfferScreenshot`). Absent: no builder, so no upload control.
+   */
+  onScreenshot?: (file: File) => void
+  screenshotBusy?: boolean
+  /** Why the last screenshot could not be loaded, in words the manager can act on. */
+  screenshotError?: string | null
+  /**
    * Hands a NATIVE offer to the builder in counter mode. Absent means the screen
    * cannot counter, and no counter control is rendered — a button that cannot
    * finish what it starts is the thing this panel already refuses to draw.
@@ -407,7 +415,7 @@ export function TradeInbox(props: {
   /** When the feed last answered — the freshness line under the Sleeper notice. */
   const [checkedAt, setCheckedAt] = useState<Date | null>(null)
 
-  const { leagueId, onLoad, onCounter, onEnterByHand, reloadToken = 0 } = props
+  const { leagueId, onLoad, onCounter, onEnterByHand, onScreenshot, reloadToken = 0 } = props
   useEffect(() => { setTimelineLimit(5) }, [leagueId, timelineFilter])
 
   const load = useCallback(async (opts?: { background?: boolean }) => {
@@ -687,8 +695,27 @@ export function TradeInbox(props: {
         <div className="af-tc-scan-receipt af-tc-sleeper-offers" role="note">
           <b>Offers waiting in Sleeper don&rsquo;t appear here</b>
           Sleeper only shares a trade once it&rsquo;s accepted, so an offer still waiting for an answer
-          never reaches AllFantasy. Enter it yourself and it gets the same grade as any trade in this league.
+          never reaches AllFantasy. Screenshot it in Sleeper and upload it, or enter it yourself &mdash; either
+          way it gets the same grade as any trade in this league.
           <span className="af-tc-offer-actions">
+            {onScreenshot ? (
+              <label className="af-btn af-btn--ghost" aria-disabled={props.screenshotBusy || undefined}>
+                {props.screenshotBusy ? 'Reading screenshot…' : 'Upload a screenshot'}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="sr-only"
+                  disabled={props.screenshotBusy}
+                  data-testid="trade-offer-screenshot-input"
+                  onChange={(e) => {
+                    const file = e.currentTarget.files?.[0]
+                    // Cleared so choosing the same file again still fires.
+                    e.currentTarget.value = ''
+                    if (file) onScreenshot(file)
+                  }}
+                />
+              </label>
+            ) : null}
             {onEnterByHand ? (
               <button type="button" className="af-btn af-btn--ghost" onClick={onEnterByHand}>
                 Grade a Sleeper offer
@@ -700,6 +727,11 @@ export function TradeInbox(props: {
               </a>
             ) : null}
           </span>
+          {props.screenshotError ? (
+            <span className="af-tc-row-sub" role="alert">
+              {props.screenshotError}
+            </span>
+          ) : null}
           {pending.scanned && checkedAt ? (
             <span className="af-tc-row-sub">
               Accepted trades last checked at{' '}
