@@ -2193,6 +2193,7 @@ function LeagueTabRouter({
           league={selectedLeague}
           leagueId={leagueId}
           isCommissioner={isCommissioner}
+          isOwner={isOwner}
           hasActiveRedraftSeason={hasActiveRedraftSeason}
           onOpenSettings={onOpenLeagueSettingsModal}
           onOpenTab={onSelectTab}
