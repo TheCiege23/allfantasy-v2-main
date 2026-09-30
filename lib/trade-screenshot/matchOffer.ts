@@ -79,6 +79,11 @@ function sameName(a: string | null | undefined, b: string | null | undefined): b
   return x.length > 0 && x === y
 }
 
+/** A screenshot's label against every name the roster's manager goes by. */
+function rosterIsNamed(r: LeagueRoster, label: string | null | undefined): boolean {
+  return [r.ownerName, ...(r.ownerHandles ?? [])].some((n) => sameName(n, label))
+}
+
 function describe(a: ReadAsset): string {
   if (a.type === 'player') return a.name
   if (a.type === 'faab') return `$${a.amount} FAAB`
@@ -144,8 +149,8 @@ export function matchOfferToRosters(args: {
     votes0 > votes1 ? 0 : votes1 > votes0 ? 1 : null
   // A tie (or no players at all) falls to the team labels.
   if (viewerIdx == null) {
-    const a = sameName(teams[0]!.name, viewer.ownerName)
-    const b = sameName(teams[1]!.name, viewer.ownerName)
+    const a = rosterIsNamed(viewer, teams[0]!.name)
+    const b = rosterIsNamed(viewer, teams[1]!.name)
     if (a !== b) viewerIdx = a ? 0 : 1
   }
   if (viewerIdx == null) {
@@ -162,7 +167,7 @@ export function matchOfferToRosters(args: {
    */
   const ownerRosters = new Set(
     viewerTeam.receives.flatMap((a) =>
-      a.type === 'pick' && a.originalOwner ? others.filter((r) => sameName(r.ownerName, a.originalOwner)).map((r) => r.rosterId) : [],
+      a.type === 'pick' && a.originalOwner ? others.filter((r) => rosterIsNamed(r, a.originalOwner)).map((r) => r.rosterId) : [],
     ),
   )
   const partner =
@@ -170,7 +175,7 @@ export function matchOfferToRosters(args: {
       ? others.find((r) => r.rosterId === byVotes[0]![0])
       : null) ??
     (ownerRosters.size === 1 ? others.find((r) => ownerRosters.has(r.rosterId)) : null) ??
-    others.find((r) => sameName(r.ownerName, partnerTeam.name?.replace(/^@/, ''))) ??
+    others.find((r) => rosterIsNamed(r, partnerTeam.name?.replace(/^@/, ''))) ??
     null
 
   const unmatched: string[] = [...read.unreadable]

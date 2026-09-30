@@ -83,6 +83,11 @@ export type LeagueRoster = {
   /** `LeagueTeam.externalId` — what the analyzer means by opponent. */
   teamExternalId: string | null
   ownerName: string | null
+  /**
+   * Other names this manager goes by (Sleeper login username, display name). Optional: absent from a
+   * server that predates it, and empty for a league synced before the username was stored.
+   */
+  ownerHandles?: string[]
   /** Manager avatar from the league, for the header above their asset list. */
   avatarUrl: string | null
   /** ⚠ 0-0-0 is a REAL record pre-season, not "unknown". Render it. */

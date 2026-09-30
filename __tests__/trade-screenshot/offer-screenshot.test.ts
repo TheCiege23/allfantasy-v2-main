@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 
 import { parseOfferRead, type OfferRead } from '@/lib/trade-screenshot/offerRead'
 import { findRosterPlayer, matchOfferToRosters, normalizePlayerName, screenshotDraftNote } from '@/lib/trade-screenshot/matchOffer'
+import { rosterManagerHandles } from '@/lib/trade-screenshot/managerHandles'
 import type { LeagueRoster } from '@/components/core-app/screens/useLeagueRosters'
 
 const player = (id: string, name: string, position = 'QB') => ({
@@ -154,6 +155,39 @@ describe('matchOfferToRosters — the players decide the sides', () => {
     // Unreadable labels: the pick's owner still names the partner.
     const anon = { ...card, teams: card.teams.map((t) => ({ ...t, name: null })) }
     expect(matchOfferToRosters({ read: anon, rosters: [me, jeff, OTHER], viewerRosterId: '1' })).toMatchObject({ ok: true, partnerRosterId: '4' })
+  })
+
+  /*
+   * The bug that test above hid: there the roster's label IS the username. On a real league the roster
+   * carries Sleeper's DISPLAY name ("Jeff the Great") and the DM card prints the login username, so the
+   * partner was never found (2026-09-30, AFC Dreaming!). The username rides on `ownerHandles`.
+   */
+  it('the DM card names the LOGIN username; the roster is labelled with the display name', () => {
+    const me = { ...roster('1', 'Ciege', [player('11588', 'Braelon Allen', 'RB')]), ownerHandles: ['TheCiege24'] }
+    const jeff = { ...roster('4', 'Jeff the Great', [player('9999', 'Somebody Else', 'WR')]), ownerHandles: ['JeffersonTD'] }
+    const card: OfferRead = {
+      kind: 'offer',
+      unreadable: [],
+      teams: [
+        { name: '@TheCiege24', receives: [{ type: 'pick', year: 2028, round: 2, originalOwner: 'JeffersonTD' }] },
+        { name: '@JeffersonTD', receives: [{ type: 'player', name: 'B. Allen', position: 'RB' }] },
+      ],
+    }
+    const m = matchOfferToRosters({ read: card, rosters: [me, jeff, OTHER], viewerRosterId: '1' })
+    expect(m.ok && m.partnerRosterId).toBe('4')
+    // Control: without the handle nothing links them — the pick stays for the manager to add.
+    const bare = matchOfferToRosters({ read: card, rosters: [me, { ...jeff, ownerHandles: [] }, OTHER], viewerRosterId: '1' })
+    expect(bare.ok && bare.partnerRosterId).toBeNull()
+    // Labels alone (no pick owner) find the partner through the handle too.
+    const labelled: OfferRead = { ...card, teams: [{ name: '@TheCiege24', receives: [{ type: 'faab', amount: 5 }] }, card.teams[1]!] }
+    expect(matchOfferToRosters({ read: labelled, rosters: [me, jeff, OTHER], viewerRosterId: '1' })).toMatchObject({ partnerRosterId: '4' })
+  })
+
+  it('rosterManagerHandles: username, display name and account name, deduped; none for an older sync', () => {
+    expect(rosterManagerHandles({ source_manager_username: 'JeffersonTD', source_manager_display_name: 'Jeff the Great' }, 'jeffersontd'))
+      .toEqual(['JeffersonTD', 'Jeff the Great'])
+    expect(rosterManagerHandles({ source_provider: 'sleeper' }, null)).toEqual([])
+    expect(rosterManagerHandles(null)).toEqual([])
   })
 
   it('reads the bracketed original owner off a pick', () => {
