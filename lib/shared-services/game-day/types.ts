@@ -31,7 +31,9 @@ export type { KnowledgeGraphPlayerExposure }
  * flow through FantasyScheduleGame.status; bye is a real `resolveGenericMatchupContext`
  * outcome kind) plus honest failure/staleness states this module adds for
  * its own freshness contract. Never inferred purely from "scheduled time has
- * passed" — see MatchupStateNormalizer.ts's docstring.
+ * passed". (Its producer, the Game Day OS shadow normalizer, had no production
+ * caller and was removed; the type is kept because it is part of this file's
+ * shared shape — see README.md.)
  */
 export type GameDayMatchupState =
   | 'upcoming'
