@@ -5,6 +5,8 @@ import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { teamLogoUrl } from '@/lib/media-url'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import type {
   MatchupData,
   MatchupPlayerCell,
@@ -71,6 +73,8 @@ function TeamCard({
   afProjected?: number | null
   align: 'left' | 'right'
 }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const showing = points ?? projected
   return (
     <div className="af-mu-team" data-align={align} data-you={team.isYou}>
@@ -85,8 +89,8 @@ function TeamCard({
       <div className="af-mu-team-text">
         <div className="af-mu-team-name">{team.teamName}</div>
         <div className="af-mu-team-meta">
-          {[team.isYou ? 'You' : team.ownerName || null, team.record].filter(Boolean).join(' · ') ||
-            'no record on file'}
+          {[team.isYou ? copy('You') : team.ownerName || null, team.record].filter(Boolean).join(' · ') ||
+            copy('no record on file')}
         </div>
       </div>
       <div className="af-mu-score-stack" data-align={align}>
@@ -94,10 +98,10 @@ function TeamCard({
           {showing == null ? '—' : showing.toFixed(1)}
         </div>
         {points == null && showing != null ? (
-          <span className="af-mu-score-tag af-label">proj</span>
+          <span className="af-mu-score-tag af-label">{copy('proj')}</span>
         ) : null}
         {points == null && afProjected != null ? (
-          <span className="af-mu-score-af af-num" title="AllFantasy engine projection for this lineup, adjusted to this league's scoring">
+          <span className="af-mu-score-af af-num" title={copy("AllFantasy engine projection for this lineup, adjusted to this league's scoring")}>
             AF {afProjected.toFixed(1)}
           </span>
         ) : null}
@@ -123,6 +127,8 @@ function PlayerHalf({
   align: 'left' | 'right'
   live: boolean
 }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   if (!cell) {
     return <div className="af-mu-half" data-align={align} data-state="none" />
   }
@@ -134,8 +140,8 @@ function PlayerHalf({
           —
         </span>
         <div className="af-mu-half-text">
-          <div className="af-mu-half-name">Slot empty</div>
-          <div className="af-mu-half-sub">nobody is started here</div>
+          <div className="af-mu-half-name">{copy('Slot empty')}</div>
+          <div className="af-mu-half-sub">{copy('nobody is started here')}</div>
         </div>
         <div className="af-mu-half-pts af-num">—</div>
       </div>
@@ -184,12 +190,12 @@ function PlayerHalf({
               imageUrl={cell.imageUrl}
             />
           ) : (
-            <span className="af-mu-half-unresolved">Unresolved player</span>
+            <span className="af-mu-half-unresolved">{copy('Unresolved player')}</span>
           )}
         </div>
         <div className="af-mu-half-sub">
           {cell.name
-            ? [cell.position, cell.team].filter(Boolean).join(' · ') || 'no position on file'
+            ? [cell.position, cell.team].filter(Boolean).join(' · ') || copy('no position on file')
             : `id ${cell.playerId}`}
         </div>
       </div>
@@ -206,8 +212,8 @@ function PlayerHalf({
             className="af-mu-flag"
             title={
               cell.unavailable === 'bye'
-                ? 'His team is not playing this week. A starter on bye is a guaranteed zero.'
-                : 'Unavailable this week. In Best Ball, another eligible roster player can replace this player automatically.'
+                ? copy('His team is not playing this week. A starter on bye is a guaranteed zero.')
+                : copy('Unavailable this week. In Best Ball, another eligible roster player can replace this player automatically.')
             }
           >
             {cell.unavailable === 'bye' ? 'BYE' : 'OUT'}
@@ -219,7 +225,7 @@ function PlayerHalf({
           points are live the board is about what happened, not about either projection.
         */}
         {!live && cell.afEngine != null ? (
-          <span className="af-mu-half-af" title="AllFantasy engine projection, adjusted to this league's scoring">
+          <span className="af-mu-half-af" title={copy("AllFantasy engine projection, adjusted to this league's scoring")}>
             AF {cell.afEngine.toFixed(1)}
           </span>
         ) : null}
@@ -267,6 +273,8 @@ function columnTotal(slots: MatchupSlot[], key: 'you' | 'opponent', live: boolea
 }
 
 function LineupBoard({ data }: { data: MatchupData }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   if (!data.lineups.available) {
     return <p className="af-mu-unavailable">{data.lineups.reason}</p>
   }
@@ -299,21 +307,21 @@ function LineupBoard({ data }: { data: MatchupData }) {
       */}
       <p className="af-mu-note af-mu-note--lead">
         {live
-          ? `Live points as ${data.playerScoring.data.source} scored them — ${data.playerScoring.data.playersScored} players on file.`
+          ? language === 'es' ? `Puntos en vivo según ${data.playerScoring.data.source} — ${data.playerScoring.data.playersScored} jugadores registrados.` : `Live points as ${data.playerScoring.data.source} scored them — ${data.playerScoring.data.playersScored} players on file.`
           : data.playerScoring.reason}
       </p>
-      {data.league.bestBall ? <p className="af-mu-note">Best Ball scores your eligible full roster automatically. This board shows provider-listed starters; eligible bench players can also contribute.</p> : null}
+      {data.league.bestBall ? <p className="af-mu-note">{copy('Best Ball scores your eligible full roster automatically. This board shows provider-listed starters; eligible bench players can also contribute.')}</p> : null}
 
-      <div className="af-mu-board" role="table" aria-label="Head to head, slot by slot">
+      <div className="af-mu-board" role="table" aria-label={copy('Head to head, slot by slot')}>
         <div className="af-mu-board-head" role="row">
           <span className="af-label af-mu-board-side" role="columnheader">
-            You
+            {copy('You')}
           </span>
           <span className="af-label af-mu-board-slot" role="columnheader">
             {heading}
           </span>
           <span className="af-label af-mu-board-side af-mu-board-side--right" role="columnheader">
-            Opponent
+            {copy('Opponent')}
           </span>
         </div>
 
@@ -329,7 +337,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
 
         <div className="af-mu-board-foot" role="row">
           <span className="af-mu-foot-total af-num">{yours.total.toFixed(1)}</span>
-          <span className="af-mu-foot-label af-label">{data.league.bestBall ? 'listed total' : live ? 'total' : 'projected'}</span>
+          <span className="af-mu-foot-label af-label">{copy(data.league.bestBall ? 'listed total' : live ? 'total' : 'projected')}</span>
           <span className="af-mu-foot-total af-mu-foot-total--right af-num">
             {theirs.total.toFixed(1)}
           </span>
@@ -338,7 +346,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
         {!live && (yoursAf != null || theirsAf != null) ? (
           <div className="af-mu-board-foot af-mu-board-foot--af" role="row">
             <span className="af-mu-foot-total af-num">{yoursAf == null ? '—' : yoursAf.toFixed(1)}</span>
-            <span className="af-mu-foot-label af-label">AF projected</span>
+            <span className="af-mu-foot-label af-label">{copy('AF projected')}</span>
             <span className="af-mu-foot-total af-mu-foot-total--right af-num">
               {theirsAf == null ? '—' : theirsAf.toFixed(1)}
             </span>
@@ -354,8 +362,9 @@ function LineupBoard({ data }: { data: MatchupData }) {
       */}
       {yours.from < yours.of || theirs.from < theirs.of ? (
         <p className="af-mu-note">
-          Built from {yours.from} of your {yours.of} starters and {theirs.from} of their{' '}
-          {theirs.of}, so both totals read low — and by different amounts.
+          {language === 'es'
+            ? `Calculado con ${yours.from} de tus ${yours.of} titulares y ${theirs.from} de sus ${theirs.of}; ambos totales pueden ser bajos en distinta medida.`
+            : `Built from ${yours.from} of your ${yours.of} starters and ${theirs.from} of their ${theirs.of}, so both totals read low — and by different amounts.`}
         </p>
       ) : null}
     </>
@@ -363,6 +372,8 @@ function LineupBoard({ data }: { data: MatchupData }) {
 }
 
 export function Matchup({ data }: MatchupProps) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   /*
    * The two numbers the banner compares: the scored totals when the week has
    * been scored, and the projected finals when it has not. Kept as one pair so
@@ -438,7 +449,7 @@ export function Matchup({ data }: MatchupProps) {
         {data.week.available ? (
           <>
             <span className="af-label af-mu-week-label">
-              Week {data.week.data.week} · {data.week.data.season}
+              {copy('Week')} {data.week.data.week} · {data.week.data.season}
             </span>
             {/*
               ⚠ "NOT SCORED" READ AS BROKEN. Before kickoff nothing is wrong: the
@@ -450,7 +461,7 @@ export function Matchup({ data }: MatchupProps) {
               data-final={data.week.data.isFinal}
               data-state={weekState}
             >
-              {weekState === 'final' ? 'Final' : weekState === 'live' ? 'Live' : 'Upcoming'}
+              {copy(weekState === 'final' ? 'Final' : weekState === 'live' ? 'Live' : 'Upcoming')}
             </span>
           </>
         ) : (
@@ -494,7 +505,7 @@ export function Matchup({ data }: MatchupProps) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              Set lineup in {data.league.lineupLink.platformLabel} <span aria-hidden>↗</span>
+              {copy('Set lineup in')} {data.league.lineupLink.platformLabel} <span aria-hidden>↗</span>
             </a>
           ) : null}
         </div>
@@ -513,7 +524,7 @@ export function Matchup({ data }: MatchupProps) {
             />
 
             <div className="af-mu-centre">
-              <div className="af-label af-mu-centre-label">Win probability</div>
+              <div className="af-label af-mu-centre-label">{copy('Win probability')}</div>
               {data.winProbability.available ? (
                 <>
                   <div className="af-mu-centre-value af-num">
@@ -527,7 +538,7 @@ export function Matchup({ data }: MatchupProps) {
                   */}
                   <p className="af-mu-centre-why">
                     {data.winProbability.data.detail} · {data.winProbability.data.confidence}{' '}
-                    confidence
+                    {copy('confidence')}
                   </p>
                 </>
               ) : (
@@ -552,22 +563,22 @@ export function Matchup({ data }: MatchupProps) {
               */}
               {compared == null ? (
                 <div className="af-mu-margin af-num" data-leader="unknown">
-                  No margin yet
+                  {copy('No margin yet')}
                 </div>
               ) : leader ? (
                 <div className="af-mu-margin af-num" data-leader={leader}>
                   {scored
                     ? leader === 'you'
-                      ? 'You lead by '
-                      : 'Behind by '
+                      ? copy('You lead by ')
+                      : copy('Behind by ')
                     : leader === 'you'
-                      ? 'Projected ahead by '
-                      : 'Projected behind by '}
+                      ? copy('Projected ahead by ')
+                      : copy('Projected behind by ')}
                   {Math.abs(compared.you - compared.opponent).toFixed(1)}
                 </div>
               ) : (
                 <div className="af-mu-margin af-num" data-leader="tied">
-                  {scored ? 'Level' : 'Projected level'}
+                  {copy(scored ? 'Level' : 'Projected level')}
                 </div>
               )}
             </div>
@@ -598,7 +609,7 @@ export function Matchup({ data }: MatchupProps) {
       {/* ── Per-player scoring ──────────────────────────────────────── */}
       <section className="af-frame af-mu-section">
         <header className="af-mu-section-head">
-          <h2 className="af-label">Head to head, slot by slot</h2>
+          <h2 className="af-label">{copy('Head to head, slot by slot')}</h2>
         </header>
         <LineupBoard data={data} />
       </section>
@@ -606,21 +617,21 @@ export function Matchup({ data }: MatchupProps) {
       {/* ── What decides it ─────────────────────────────────────────── */}
       <section className="af-frame af-mu-section">
         <header className="af-mu-section-head">
-          <h2 className="af-label">What decides it</h2>
+          <h2 className="af-label">{copy('What decides it')}</h2>
         </header>
         <ul className="af-mu-missing">
           <li>
-            <span className="af-mu-missing-key">Players yet to play</span>
+            <span className="af-mu-missing-key">{copy('Players yet to play')}</span>
             <span className="af-mu-missing-why">{data.yetToPlay.reason}</span>
           </li>
           <li>
-            <span className="af-mu-missing-key">{data.projectedFinal.available && data.projectedFinal.data.model === 'best_ball_full_roster' ? 'Projected Best Ball final' : 'Projected final'}</span>
+            <span className="af-mu-missing-key">{copy(data.projectedFinal.available && data.projectedFinal.data.model === 'best_ball_full_roster' ? 'Projected Best Ball final' : 'Projected final')}</span>
             {data.projectedFinal.available ? (
               <span className="af-mu-missing-value af-num">
                 {data.projectedFinal.data.you.toFixed(1)} –{' '}
                 {data.projectedFinal.data.opponent.toFixed(1)}
                 {data.projectedFinal.data.model === 'best_ball_full_roster' ? (
-                  <em className="af-mu-missing-caveat"> — highest projected legal lineup from each eligible full roster</em>
+                  <em className="af-mu-missing-caveat"> — {copy('highest projected legal lineup from each eligible full roster')}</em>
                 ) : null}
                 {/*
                   ⚠ SHOWN WHENEVER EITHER SIDE IS SHORT, BECAUSE THE TWO SIDES CAN
@@ -633,9 +644,9 @@ export function Matchup({ data }: MatchupProps) {
                 0 ? (
                   <em className="af-mu-missing-caveat">
                     {' '}
-                    — built without {data.projectedFinal.data.unprojected.you} of your starters and{' '}
-                    {data.projectedFinal.data.unprojected.opponent} of theirs, so both totals read
-                    low
+                    — {language === 'es'
+                      ? `calculado sin ${data.projectedFinal.data.unprojected.you} de tus titulares y ${data.projectedFinal.data.unprojected.opponent} de los suyos; ambos totales pueden ser bajos`
+                      : `built without ${data.projectedFinal.data.unprojected.you} of your starters and ${data.projectedFinal.data.unprojected.opponent} of theirs, so both totals read low`}
                   </em>
                 ) : null}
               </span>
