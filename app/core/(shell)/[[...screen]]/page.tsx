@@ -189,6 +189,8 @@ import { V3WeightsPanel } from '@/components/admin/V3WeightsPanel'
 import { UsageAnalyticsPanel } from '@/components/admin/UsageAnalyticsPanel'
 import { getAdminAccessState } from '@/lib/adminAuth'
 import { getLivePageData } from '@/lib/live/liveScoresPage'
+import { highlightForGameDetail } from '@/lib/live/gameHighlights'
+import { normalizeToLiveSport } from '@/lib/sport-scope'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
@@ -2727,12 +2729,25 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         return { detail: null, stale: false, failed: true }
       })
     : null
+  const liveGameHighlightId = liveGame ? await highlightForGameDetail(liveGame.detail) : null
+
+  /*
+   * 🛑 WITH A LEAGUE HELD, THE SLATE OPENS ON THAT LEAGUE'S SPORT. The nav links
+   * here as `/core/live?league=<id>` with no sport, and this defaulted to NFL —
+   * so an NBA or MLB league landed on the NFL tab, filtered to a league with no
+   * NFL players, and read "None of your players are playing right now". An
+   * explicit `?sport=` still wins: a tab the reader picked is their choice.
+   */
+  const liveHeldLeague = selectedLeagueId
+    ? (playedLeagues.find((league) => league.id === selectedLeagueId) ?? null)
+    : null
+  const liveDefaultSport = liveHeldLeague ? normalizeToLiveSport(String(liveHeldLeague.sport ?? 'NFL')) : 'NFL'
 
   const liveScores =
     activeKey === 'live' && !liveGameId
       ? await getLivePageData({
           userId,
-          sport: typeof sp.sport === 'string' ? sp.sport : 'NFL',
+          sport: typeof sp.sport === 'string' ? sp.sport : liveDefaultSport,
           scope: sp.scope === 'all' ? 'all' : 'my',
         }).catch((err) => {
           /*
@@ -4554,6 +4569,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             initial={liveGame}
             sport={liveGameSport}
             gameId={liveGameId}
+            highlightYoutubeId={liveGameHighlightId}
             backHref={`/core/live?sport=${encodeURIComponent(liveGameSport)}${selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''}`}
           />
         ) : liveScores ? (
