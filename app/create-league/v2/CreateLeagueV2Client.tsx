@@ -24,6 +24,7 @@ export interface CreateLeagueV2ClientProps {
   userId: string
   importTemplate?: CreateLeagueV2State
   importSourceName?: string
+  importSourceLeagueId?: string
 }
 
 function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State {
@@ -53,7 +54,7 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
   }
 }
 
-export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName }: CreateLeagueV2ClientProps) {
+export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId }: CreateLeagueV2ClientProps) {
   const { t } = useLanguage()
   const router = useRouter()
   const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(importTemplate ?? DEFAULT_V2_STATE))
@@ -110,8 +111,10 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
   const onChange = useCallback((patch: Partial<CreateLeagueV2State>) => {
     setSubmitError(null)
     setFieldErrors(null)
-    setState((prev) => ({ ...prev, ...patch }))
-  }, [])
+    setState((prev) => ({ ...prev, ...patch,
+      ...(importSourceLeagueId && importTemplate ? { sport: importTemplate.sport, teamCount: importTemplate.teamCount } : {}),
+    }))
+  }, [importSourceLeagueId, importTemplate])
 
   const completionIssues = useMemo(() => analyzeCreateLeagueCompletion(state), [state])
 
@@ -120,7 +123,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     setSubmitError(null)
     setFieldErrors(null)
     try {
-      const result = await submitCreateLeagueV2(state)
+      const result = await submitCreateLeagueV2(state, importSourceLeagueId)
       if (!result.ok) {
         setSubmitError(result.error ?? t('createLeague.v2.submitError'))
         if (result.fieldErrors && Object.keys(result.fieldErrors).length > 0) {
@@ -135,7 +138,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     } finally {
       setSubmitting(false)
     }
-  }, [router, state, t])
+  }, [router, state, t, importSourceLeagueId])
 
   return (
     <CreateLeagueWizard
@@ -146,6 +149,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       submitError={submitError}
       submitting={submitting}
       importSourceName={importSourceName}
+      importCarryover={Boolean(importSourceLeagueId)}
       onSubmit={handleSubmit}
       onCancel={() => router.push('/core')}
     />

@@ -67,6 +67,7 @@ export default async function CreateLeaguePage(
   return (
     <CreateLeaguePageClient
       userId={userId}
+      importSourceLeagueId={source.id}
       importTemplate={createStateFromImportedLeague({
         ...source,
         sport: String(source.sport),

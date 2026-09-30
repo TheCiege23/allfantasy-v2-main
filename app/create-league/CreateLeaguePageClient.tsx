@@ -11,10 +11,12 @@ export function CreateLeaguePageClient({
   userId,
   importTemplate,
   importSourceName,
+  importSourceLeagueId,
 }: {
   userId: string
   importTemplate?: CreateLeagueV2State
   importSourceName?: string
+  importSourceLeagueId?: string
 }) {
-  return <CreateLeagueV2Client userId={userId} importTemplate={importTemplate} importSourceName={importSourceName} />
+  return <CreateLeagueV2Client userId={userId} importTemplate={importTemplate} importSourceName={importSourceName} importSourceLeagueId={importSourceLeagueId} />
 }
