@@ -1882,12 +1882,18 @@ export function ImportV4({
       <StepBar current={stepsFilled} total={3} />
 
       <header className="af-im-head">
-        <span className="af-label">Connect your league to AllFantasy</span>
-        <h1 className="af-im-title">Connect your league in seconds.</h1>
+        <span className="af-label">Set up your league</span>
+        <h1 className="af-im-title">Connect an existing league.</h1>
         <p className="af-im-sub">
           Pick your platform and drop in your Sleeper username or league ID. We build a read-only
           copy of your real teams, matchups and scoring &mdash; AllFantasy analyzes your league but
           never changes anything on the external platform.
+        </p>
+        <p className="af-im-create-option">
+          Starting fresh?{' '}
+          <Link href="/create-league" data-testid="import-create-league">
+            Create a new league <span aria-hidden>&rarr;</span>
+          </Link>
         </p>
       </header>
 

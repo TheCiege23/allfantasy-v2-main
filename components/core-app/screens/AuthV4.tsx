@@ -466,7 +466,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
       <header className="af-au-head">
         <div>
           <h1 className="af-au-title">Create your account</h1>
-          <p className="af-au-sub">Free forever for players. Next: verify your email, then connect your league.</p>
+          <p className="af-au-sub">Free to create or connect leagues. Next: verify your email, then choose how to start.</p>
         </div>
       </header>
 
