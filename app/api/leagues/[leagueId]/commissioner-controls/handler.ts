@@ -8,6 +8,7 @@ import {
   setEmergencyPause,
   setLeagueLocked,
 } from '@/server/services/commissionerService'
+import { withClientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,13 +46,13 @@ export async function POST(
   try {
     switch (body.action) {
       case 'lock':
-        return NextResponse.json({ ok: true, league: await setLeagueLocked(leagueId, userId, true) })
+        return NextResponse.json({ ok: true, league: withClientLeagueSettings(await setLeagueLocked(leagueId, userId, true)) })
       case 'unlock':
-        return NextResponse.json({ ok: true, league: await setLeagueLocked(leagueId, userId, false) })
+        return NextResponse.json({ ok: true, league: withClientLeagueSettings(await setLeagueLocked(leagueId, userId, false)) })
       case 'emergency_pause_on':
-        return NextResponse.json({ ok: true, league: await setEmergencyPause(leagueId, userId, true) })
+        return NextResponse.json({ ok: true, league: withClientLeagueSettings(await setEmergencyPause(leagueId, userId, true)) })
       case 'emergency_pause_off':
-        return NextResponse.json({ ok: true, league: await setEmergencyPause(leagueId, userId, false) })
+        return NextResponse.json({ ok: true, league: withClientLeagueSettings(await setEmergencyPause(leagueId, userId, false)) })
       case 'run_waivers':
         return NextResponse.json({ ok: true, results: await runWaiversNow(leagueId, userId) })
       case 'run_automation':

@@ -4,6 +4,7 @@
  */
 
 import { prisma } from "@/lib/prisma"
+import { clientLeagueSettings } from "@/lib/league/clientLeagueSettings"
 import type { LeagueSettingsPatch, LeagueConfigurationView } from "./types"
 import { invalidateLeagueDraftCaches } from "@/lib/league/invalidateLeagueDraftCaches"
 import { getPlatformEvents, EVENT } from "@/lib/events"
@@ -62,7 +63,9 @@ export async function getLeagueConfiguration(leagueId: string): Promise<LeagueCo
     leagueSize: league.leagueSize,
     rosterSize: league.rosterSize,
     starters: league.starters,
-    settings,
+    // A client-facing view (GET/PATCH /api/commissioner/leagues/[id]/settings): never the retired
+    // manager-label keys. `updateLeagueSettings` merges onto a fresh DB read, not onto this.
+    settings: clientLeagueSettings(settings),
   }
 }
 

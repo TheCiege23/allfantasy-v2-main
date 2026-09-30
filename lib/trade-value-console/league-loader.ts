@@ -1,6 +1,7 @@
 import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
+import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 
 export type LoadedTradeLeague = {
   id: string
@@ -59,9 +60,12 @@ export async function loadLeagueForTrade(args: {
     },
   })
   if (!row) return null
+  // 🛑 Stripped HERE, once: this row's `settings` is carried whole into the league snapshot that
+  // trade-value/analyze, start-sit, trending and the war-room dashboard return to the browser.
+  // Nothing reads the retired manager-label keys (lib/league/clientLeagueSettings.ts).
   const settings =
     row.settings && typeof row.settings === 'object' && !Array.isArray(row.settings)
-      ? (row.settings as Record<string, unknown>)
+      ? clientLeagueSettings(row.settings as Record<string, unknown>)
       : null
   return {
     id: row.id,
