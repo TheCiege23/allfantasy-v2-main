@@ -340,7 +340,7 @@ export function DraftHelperPanel(props: DraftHelperPanelProps) {
               </div>
             ) : (
               <p className="mt-2 text-[11px] text-white/50">
-                Sports feed is standing by. Draft AI still works from the live room context even while feed rows are sparse.
+                Sports feed is standing by. Chimmy still works from the live room context even while feed rows are sparse.
               </p>
             )}
           </div>
@@ -564,9 +564,9 @@ export function DraftHelperPanel(props: DraftHelperPanelProps) {
         <div className="mt-3 rounded-xl border border-cyan-400/18 bg-cyan-500/6 p-2.5" data-testid="draft-helper-chimmy-panel">
           <div className="mb-2 flex items-center justify-between gap-2">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/90">Chimmy AI chat</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/90">Chat with Chimmy</p>
               <p className="text-[11px] text-white/55">
-                Draft-aware chat uses your league, sport, queue, and live AI context inside the room.
+                Draft-aware chat uses your league, sport, queue, and live draft context inside the room.
               </p>
             </div>
           </div>

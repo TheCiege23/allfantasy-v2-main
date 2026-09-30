@@ -142,10 +142,10 @@ export function SurvivorAIPanel({ leagueId, summary }: SurvivorAIPanelProps) {
       <section className="rounded-2xl border border-amber-500/20 bg-amber-950/10 p-4 sm:p-6">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
           <Sparkles className="h-5 w-5 text-amber-400" />
-          AI Host · Chimmy
+          Host · Chimmy
         </h2>
         <p className="mb-4 text-sm text-white/70">
-          Generate host posts or get strategy advice. Outcomes (elimination, votes, idols, immunity, exile return) are always decided by the game engine — AI only narrates and advises.
+          Generate host posts or get strategy advice. Outcomes (elimination, votes, idols, immunity, exile return) are always decided by the game engine — Chimmy only narrates and advises.
         </p>
 
         <div className="mb-4">
@@ -177,7 +177,7 @@ export function SurvivorAIPanel({ leagueId, summary }: SurvivorAIPanelProps) {
             ? 'Intro, scroll, and idol coaching are included for all managers. The game engine still decides votes, idols, and elimination.'
             : aiSubFeature === 'commissioner_ai_narration'
               ? 'Host narration for commissioners uses Commissioner AI. Co-commissioners can use it too.'
-              : 'Strategy helpers use your AllFantasy AI (Chimmy) subscription.'}
+              : 'Strategy helpers use your Chimmy subscription.'}
         </p>
 
         <button

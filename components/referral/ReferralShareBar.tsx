@@ -13,7 +13,7 @@ import {
 import { buildInviteShareUrl } from "@/lib/invite-engine/shareUrls"
 import type { InviteShareChannel } from "@/lib/invite-engine/types"
 
-const DEFAULT_MESSAGE = "Join me on AllFantasy for smarter fantasy tools, league intel, and AI coaching."
+const DEFAULT_MESSAGE = "Join me on AllFantasy for smarter fantasy tools, league intel, and coaching from Chimmy."
 
 const CHANNELS: { key: InviteShareChannel; label: string; icon: typeof Copy; action: "copy" | "external" | "manual_copy" }[] = [
   { key: "copy_link", label: "Copy link", icon: Copy, action: "copy" },

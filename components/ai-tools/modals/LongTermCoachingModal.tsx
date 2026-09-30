@@ -92,7 +92,7 @@ export function LongTermCoachingModal({
         setError(
           json && typeof json === 'object' && 'message' in json && typeof json.message === 'string'
             ? json.message
-            : 'League AI Coaching requires AF Pro. Upgrade to continue.',
+            : 'League Coaching with Chimmy requires AF Pro. Upgrade to continue.',
         )
         return
       }
@@ -315,7 +315,7 @@ export function LongTermCoachingModal({
 
             {narrative ? (
               <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.07] p-4">
-                <p className="text-sm font-semibold text-violet-100">AI coach narrative</p>
+                <p className="text-sm font-semibold text-violet-100">Chimmy&apos;s coaching narrative</p>
                 <div className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-white/80">{narrative}</div>
                 <a
                   href={getChimmyChatHrefWithPrompt(

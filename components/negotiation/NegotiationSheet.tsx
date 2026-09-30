@@ -397,7 +397,7 @@ export default function NegotiationSheet({
 
           <div className="border-t border-white/10 px-4 py-3 flex items-center justify-between">
             <div className="text-xs text-white/50">
-              Tip: Apply 1 tweak, then re-check with AI if needed.
+              Tip: Apply 1 tweak, then re-check with Chimmy if needed.
             </div>
             <button
               onClick={onClose}

@@ -720,7 +720,7 @@ function TradeCard({
         )}
         <Button variant="ghost" size="sm" onClick={onAskAI} className="flex-1">
           <MessageCircle className="w-3.5 h-3.5" />
-          <span>Ask AI</span>
+          <span>Ask Chimmy</span>
         </Button>
       </div>
 
@@ -736,7 +736,7 @@ function TradeCard({
             ) : (
               <Zap className="w-3.5 h-3.5" />
             )}
-            <span>{recheckLoading ? 'Re-checking...' : 'Re-check with AI'}</span>
+            <span>{recheckLoading ? 'Re-checking...' : 'Re-check with Chimmy'}</span>
           </button>
         </div>
       )}
@@ -874,7 +874,7 @@ function LoadingAnimation({ mode }: { mode: FinderMode }) {
         {mode === 'DEEP' ? 'Deep scanning every roster...' : 'Finding the best trades...'}
       </h3>
       <p className="text-xs text-white/40 max-w-[240px] text-center">
-        AI is scanning every team, roster, and pick in your league
+        Chimmy is scanning every team, roster, and pick in your league
       </p>
     </div>
   )
@@ -1352,7 +1352,7 @@ export default function TradeFinderV2({
             <div className="py-8 text-center space-y-2">
               <Handshake className="w-8 h-8 text-white/20 mx-auto" />
               <p className="text-sm text-white/50">Pick a goal above and find the best trade partners in your league</p>
-              <p className="text-xs text-white/30">AI scores managers by need overlap, bias alignment, and trade willingness</p>
+              <p className="text-xs text-white/30">Chimmy scores managers by need overlap, bias alignment, and trade willingness</p>
             </div>
           )}
         </>
@@ -1578,7 +1578,7 @@ export default function TradeFinderV2({
         <AIBottomSheet
           open={!!chatTradeContext}
           onClose={() => setChatTradeContext(null)}
-          title="Ask AI About This Trade"
+          title="Ask Chimmy About This Trade"
           height="half"
         >
           <div className="space-y-3">
@@ -1586,7 +1586,7 @@ export default function TradeFinderV2({
               {chatTradeContext}
             </div>
             <p className="text-xs text-white/40 text-center">
-              Head to the Chat tab to discuss this trade with your AI assistant
+              Head to the Chat tab to discuss this trade with Chimmy
             </p>
             <div className="flex flex-col gap-2">
               <Button

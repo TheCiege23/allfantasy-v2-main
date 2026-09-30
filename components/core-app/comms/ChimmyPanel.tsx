@@ -271,7 +271,7 @@ const CHIMMY_ERROR_COPY: Record<string, string> = {
   insufficient_token_balance:
     'You are out of tokens, so this answer was not bought. Top up and ask again.',
   token_confirmation_required: 'Confirm the token spend and ask again.',
-  ai_spend_disabled: 'AI answers are switched off right now. Nothing was attempted.',
+  ai_spend_disabled: "Chimmy's answers are switched off right now. Nothing was attempted.",
 }
 
 function describeChimmyError(code: unknown): string {

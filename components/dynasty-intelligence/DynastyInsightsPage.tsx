@@ -331,10 +331,10 @@ export default function DynastyInsightsPage() {
               type="button"
               onClick={loadAIInsight}
               disabled={loading || loadingAI}
-              aria-label="Get AI dynasty insights"
+              aria-label="Get Chimmy's dynasty insights"
               className="rounded-2xl bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-500 disabled:opacity-60"
             >
-              {loadingAI ? 'AI...' : 'Get AI dynasty insights'}
+              {loadingAI ? 'Asking Chimmy…' : "Get Chimmy's dynasty insights"}
             </button>
           </div>
         </div>
@@ -514,7 +514,7 @@ export default function DynastyInsightsPage() {
 
           {insight ? (
             <section>
-              <h2 className="mb-3 text-lg font-semibold text-slate-950">AI insight</h2>
+              <h2 className="mb-3 text-lg font-semibold text-slate-950">Chimmy&apos;s insight</h2>
               <div className="grid gap-4 lg:grid-cols-3">
                 {providerCards.map((provider) => (
                   <article

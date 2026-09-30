@@ -299,7 +299,7 @@ test.describe('@prestige Prompt43 integration click audit', () => {
 
     await gotoWithRetry(page, `/e2e/reputation?leagueId=${leagueId}`)
     await expect(page.getByRole('heading', { name: /e2e reputation harness/i })).toBeVisible()
-    await expect(page.getByText(/unified prestige context for ai/i)).toBeVisible()
+    await expect(page.getByText(/unified prestige context for chimmy/i)).toBeVisible()
     await expect(page.getByTestId('reputation-legacy-breakdown-link')).toHaveAttribute(
       'href',
       new RegExp(`/legacy/breakdown\\?entityType=MANAGER&entityId=mgr_alpha&sport=NFL`)

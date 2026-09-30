@@ -127,7 +127,7 @@ export default function LegacyOverview() {
           { id: 'overview', label: 'Overview', icon: '🏠' },
           { id: 'trade', label: 'AI Trade Hub', icon: '⚖️' },
           { id: 'waiver', label: 'Waiver AI', icon: '📈' },
-          { id: 'chat', label: 'AI Chat', icon: '💬' },
+          { id: 'chat', label: 'Chimmy Chat', icon: '💬' },
           { id: 'mock-draft', label: 'Mock Draft AI', icon: '🧠' },
           { id: 'ideas', label: 'Submit Ideas', icon: '💡' },
           { id: 'transfer', label: 'Transfer', icon: '🔄' },

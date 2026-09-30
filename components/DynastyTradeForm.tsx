@@ -921,7 +921,7 @@ export default function DynastyTradeForm() {
                 className="mt-4 inline-flex items-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-300 hover:bg-cyan-500/20 transition-colors"
               >
                 <MessageSquare className="h-4 w-4" />
-                Discuss in AI Chat
+                Discuss with Chimmy
               </NextLink>
             </CardContent>
           </Card>

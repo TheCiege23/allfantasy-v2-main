@@ -31,6 +31,8 @@ describe('G32 NFL redraft league home contracts', () => {
     expect(shell).toContain("case 'league_chat':")
     expect(shell).toContain("case 'commissioner':")
     expect(tabs).not.toContain("label: 'AI Coaching'")
+    // The tab was relabelled 'Chimmy Coaching'; keep the negative honest under the new name.
+    expect(tabs).not.toContain("label: 'Chimmy Coaching'")
   })
 
   it('labels settings surfaces with customer-safe Intelligence/Helper language (no "Decision OS")', () => {

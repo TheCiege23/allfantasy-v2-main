@@ -573,7 +573,7 @@ export default function CareerTab({ leagueId, isCommissioner = false }: LeagueTa
                     disabled={xpExplainLoading === managerId}
                     onClick={() => explainXP(managerId)}
                   >
-                    {xpExplainLoading === managerId ? "…" : "Explain with AI"}
+                    {xpExplainLoading === managerId ? "…" : "Explain with Chimmy"}
                   </button>
                 </div>
                 {xpExplainManagerId === managerId && xpExplainNarrative && (
@@ -655,7 +655,7 @@ export default function CareerTab({ leagueId, isCommissioner = false }: LeagueTa
                         ? "Self only"
                         : xpExplainLoading === row.managerId
                           ? "…"
-                          : "Explain AI"}
+                          : "Explain with Chimmy"}
                     </button>
                   </div>
                 </div>

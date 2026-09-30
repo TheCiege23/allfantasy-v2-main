@@ -304,7 +304,7 @@ export default function PlayersTab({
                 href={`/waiver-ai?leagueId=${leagueId}`}
                 className="flex min-h-[48px] items-center justify-between rounded-2xl border border-[#00D4AA]/30 bg-[#0F3D35] px-4 py-3 text-[15px] font-semibold text-[#00D4AA]"
               >
-                <span>✦ Get AI waiver picks</span>
+                <span>✦ Get Chimmy&apos;s waiver picks</span>
                 <ArrowRightLeft className="h-4 w-4" />
               </Link>
               <div className="space-y-3">
@@ -359,7 +359,7 @@ export default function PlayersTab({
                     href={`/trade-evaluator?leagueId=${leagueId}`}
                     className="inline-flex text-[13px] font-semibold text-[#00D4AA]"
                   >
-                    ✦ Analyze with AI
+                    ✦ Analyze with Chimmy
                   </Link>
                 </div>
               ))

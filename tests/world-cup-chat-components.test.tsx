@@ -197,7 +197,9 @@ describe("WorldCupChatModeTabs", () => {
 
   it("16. AI available dot shown on inactive AI tab when aiAvailable=true", () => {
     render(<WorldCupChatModeTabs mode="pool" onModeChange={vi.fn()} aiAvailable />)
-    expect(screen.getByLabelText("AI available")).toBeTruthy()
+    // The dot sits inside the "Ask Chimmy" tab, so its own label is just "available" (brand voice —
+    // was "AI available").
+    expect(screen.getByLabelText("available")).toBeTruthy()
   })
 })
 

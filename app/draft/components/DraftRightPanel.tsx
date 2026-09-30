@@ -171,9 +171,9 @@ function DefaultAIPanel() {
         <AIFeatureCard
           icon="💬"
           title="Ask Chimmy"
-          description="Chat with the AI about draft strategy, player comparisons, or your next move."
+          description="Chat with Chimmy about draft strategy, player comparisons, or your next move."
           accentColor="#06b6d4"
-          badge="AI Chat"
+          badge="Chimmy Chat"
         />
 
         {/* Draft Notifications */}

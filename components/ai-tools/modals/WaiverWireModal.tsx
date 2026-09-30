@@ -1163,7 +1163,7 @@ export function WaiverWireModal({
             href={chimmyHref}
             className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-300 hover:text-emerald-200"
           >
-            Open in Messages AI →
+            Open Chat with Chimmy →
           </Link>
         </div>
       </AIToolModalShell>

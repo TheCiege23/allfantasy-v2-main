@@ -22,7 +22,7 @@ test.describe.configure({ timeout: 180_000 })
 
 const HARNESS_PATH = '/e2e/nfl-redraft-league-dashboard'
 
-const FORBIDDEN_PRIMARY_TABS = ['Settings', 'Commissioner Panel', 'Commissioner', 'History', 'War Room', 'AI Coaching']
+const FORBIDDEN_PRIMARY_TABS = ['Settings', 'Commissioner Panel', 'Commissioner', 'History', 'War Room', 'AI Coaching', 'Chimmy Coaching']
 const REQUIRED_PRIMARY_TABS = ['Home', 'Roster', 'Matchups', 'Players', 'Trades', 'League']
 
 async function gotoHarnessReady(page: Page): Promise<void> {
@@ -65,7 +65,7 @@ test.describe('@nfl-redraft @league-shell settings-gear consolidation', () => {
     // only the names that match our allow-listed labels.
     const visibleTabNames = await page
       .locator('button, a')
-      .filter({ hasText: /^(Home|Roster|Matchups|Players|Trades|League|Settings|War Room|AI Coaching|History|Commissioner Panel)$/ })
+      .filter({ hasText: /^(Home|Roster|Matchups|Players|Trades|League|Settings|War Room|AI Coaching|Chimmy Coaching|History|Commissioner Panel)$/ })
       .allTextContents()
 
     const trimmed = visibleTabNames.map((s) => s.trim())

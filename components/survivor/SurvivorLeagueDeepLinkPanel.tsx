@@ -30,7 +30,7 @@ const COPY: Record<SurvivorDeepLinkTabId, { title: string; subtitle: string }> =
   },
   survivor_chimmy: {
     title: 'Chimmy',
-    subtitle: 'AI coaching and narrative context for this league open in the island workspace.',
+    subtitle: 'Coaching from Chimmy and narrative context for this league open in the island workspace.',
   },
   survivor_exile: {
     title: 'Exile',

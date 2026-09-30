@@ -76,7 +76,7 @@ export function AIDraftAssistantPanel({
           <Bot className="h-4 w-4 text-cyan-400" />
         </span>
         <div>
-          <p className="font-semibold text-white">AI Draft Assistant</p>
+          <p className="font-semibold text-white">Chimmy Draft Assistant</p>
           <p className="text-[11px] text-white/55">
             Suggestions only - not a guarantee. You decide.
           </p>
@@ -87,7 +87,7 @@ export function AIDraftAssistantPanel({
           onClick={() => params && fetchSuggestion(params)}
           className="ml-auto rounded-lg border border-white/15 bg-black/20 p-1.5 text-white/70 hover:bg-white/10 disabled:opacity-50"
           data-testid="mock-draft-ai-assistant-refresh"
-          aria-label="Refresh AI suggestion"
+          aria-label="Refresh Chimmy's suggestion"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
         </button>
@@ -228,7 +228,7 @@ export function AIDraftAssistantPanel({
       )}
 
       {!loading && !bestPick && !error && params && (
-        <p className="text-white/55">Select a pick or start the draft to see AI suggestions.</p>
+        <p className="text-white/55">Select a pick or start the draft to see Chimmy&apos;s suggestions.</p>
       )}
     </section>
   )

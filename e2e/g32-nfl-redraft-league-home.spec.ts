@@ -41,6 +41,7 @@ test.describe('@g32 @nfl-redraft league home overhaul', () => {
       await expect(tabNav.getByRole('button', { name: tab, exact: true })).toBeVisible()
     }
     await expect(page.getByText('AI Coaching')).toHaveCount(0)
+    await expect(page.getByText('Chimmy Coaching')).toHaveCount(0)
 
     await expect(page.getByRole('heading', { name: 'Commissioner Command Center' })).toBeVisible()
     await expect(page.getByTestId('g32-commissioner-intelligence-section')).toContainText('League Intelligence')

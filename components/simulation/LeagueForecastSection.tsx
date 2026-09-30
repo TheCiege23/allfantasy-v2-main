@@ -133,12 +133,12 @@ export function LeagueForecastSection({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        setAiError(data?.error || 'Failed to generate AI explanation')
+        setAiError(data?.error || "Chimmy couldn't generate an explanation")
         return
       }
       setAiSummary(typeof data?.summary === 'string' ? data.summary : null)
     } catch {
-      setAiError('Failed to generate AI explanation')
+      setAiError("Chimmy couldn't generate an explanation")
     } finally {
       setAiLoading(false)
     }
@@ -303,10 +303,10 @@ export function LeagueForecastSection({
             type="button"
             onClick={() => void generateAiSummary()}
             disabled={aiLoading || !forecasts?.length}
-            aria-label="Explain season simulation with AI"
+            aria-label="Explain season simulation with Chimmy"
             className="rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50"
           >
-            {aiLoading ? 'Explaining…' : 'AI explanation'}
+            {aiLoading ? 'Explaining…' : "Chimmy's explanation"}
           </button>
         </div>
       </div>

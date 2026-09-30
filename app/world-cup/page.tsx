@@ -278,7 +278,7 @@ export default function WorldCupAdLandingPage() {
             </h1>
 
             <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-300/85 sm:text-lg lg:mx-0">
-              Invite friends, build brackets, track standings, and use Chimmy AI to help predict the tournament.{" "}
+              Invite friends, build brackets, track standings, and use Chimmy to help predict the tournament.{" "}
               <strong className="text-white">Free to start. No gambling. Just bragging rights.</strong>
             </p>
 
@@ -631,10 +631,10 @@ export default function WorldCupAdLandingPage() {
               <Bot className="h-8 w-8 text-cyan-300" />
             </div>
             <div className="flex-1">
-              <div className="mb-1 text-[11px] font-black uppercase tracking-[0.20em] text-cyan-300">Chimmy AI</div>
-              <h2 className="text-xl font-black text-white sm:text-2xl">Your AI World Cup co-pilot</h2>
+              <div className="mb-1 text-[11px] font-black uppercase tracking-[0.20em] text-cyan-300">Chimmy</div>
+              <h2 className="text-xl font-black text-white sm:text-2xl">Your World Cup co-pilot</h2>
               <p className="mt-2 text-sm leading-6 text-white/60">
-                Ask Chimmy who wins each group, which upsets to pick, how to build your bracket, or who has the best path through the knockout stage. AI help is optional and available when you&apos;re ready to upgrade.
+                Ask Chimmy who wins each group, which upsets to pick, how to build your bracket, or who has the best path through the knockout stage. Chimmy is optional and available when you&apos;re ready to upgrade.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {["Who wins Group A?", "Best upset picks", "Grade my bracket", "Dark horse teams"].map((q) => (

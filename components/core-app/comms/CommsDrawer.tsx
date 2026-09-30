@@ -245,7 +245,7 @@ function LeaguePanel({
           <span className="af-cm-scope-label">League</span>
           <LeagueScopePicker leagues={leagues} value={scopeId} onChange={onScope} />
           <button type="button" className="af-cm-summon" onClick={() => setAskChimmy(true)}>
-            @chimmy — ask the league&apos;s AI, publicly
+            @chimmy — ask Chimmy, publicly
           </button>
         </>
       }

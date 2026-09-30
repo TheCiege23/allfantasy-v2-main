@@ -204,8 +204,8 @@ test.describe("@graph league intelligence click audit", () => {
     await expect(page.getByRole("heading", { name: "Node detail" })).toBeVisible();
     await page.getByRole("button", { name: "Back" }).first().click();
 
-    await page.getByRole("button", { name: "AI explain" }).click();
-    await expect(page.getByRole("dialog", { name: "Graph AI insight" })).toBeVisible();
+    await page.getByRole("button", { name: "Explain with Chimmy" }).click();
+    await expect(page.getByRole("dialog", { name: "Chimmy's graph insight" })).toBeVisible();
     await expect(page.getByText(/Graph summary for this league is healthy/i)).toBeVisible();
     await page.getByRole("button", { name: "Regenerate" }).click();
     await page.getByRole("button", { name: "Close" }).click();

@@ -289,7 +289,7 @@ export default function WorldCupMatchupIntelligencePanel({
               className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-2.5 py-1.5 text-[11px] font-bold text-white/85 disabled:opacity-40"
             >
               <Sparkles className="h-3 w-3" />
-              {intentLoading === "ask_ai" ? "Asking…" : "Ask AI"}
+              {intentLoading === "ask_ai" ? "Asking…" : "Ask Chimmy"}
             </button>
             <button
               type="button"

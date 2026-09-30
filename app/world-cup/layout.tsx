@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Create Your 2026 World Cup Pool — Free on AllFantasy.AI",
     description:
-      "Set up a World Cup pool in 60 seconds. Invite friends, build brackets, track standings, and use Chimmy AI to predict the tournament. Free to start. No gambling.",
+      "Set up a World Cup pool in 60 seconds. Invite friends, build brackets, track standings, and use Chimmy to predict the tournament. Free to start. No gambling.",
     images: [
       {
         url: OG_IMAGE,

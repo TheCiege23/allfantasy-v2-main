@@ -1821,7 +1821,7 @@ export default function MockDraftSleeperRoomClient({
               className="rounded-xl bg-[linear-gradient(135deg,#7c3aed,#0891b2)] px-3 py-2 text-xs font-bold text-white"
               data-testid="mock-draft-ask-ai"
             >
-              Ask AI
+              Ask Chimmy
             </button>
           </div>
         </div>

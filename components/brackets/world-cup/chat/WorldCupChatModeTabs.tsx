@@ -94,7 +94,7 @@ export function WorldCupChatModeTabs({
             ) : null}
             {showAiBadge && !isActive ? (
               <span
-                aria-label="AI available"
+                aria-label="available"
                 className="absolute right-1 top-0.5 h-2 w-2 rounded-full bg-cyan-400"
               />
             ) : null}

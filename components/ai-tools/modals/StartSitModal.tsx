@@ -680,7 +680,7 @@ export function StartSitModal({
           href={chimmyHref}
           className="inline-flex items-center gap-1.5 rounded-[6px] border border-[#a78bfa]/40 bg-[rgba(167,139,250,0.1)] px-3 py-2 text-[11px] font-semibold text-[#a78bfa] no-underline hover:bg-[rgba(167,139,250,0.18)]"
         >
-          <Sparkles className="h-3.5 w-3.5" /> Open in Messages AI
+          <Sparkles className="h-3.5 w-3.5" /> Open Chat with Chimmy
         </Link>
         <p className="mt-2 text-[11px] text-[#5c6480]">
           Projections and floors use your `sports_players` row and league scoring hints — nothing is invented.

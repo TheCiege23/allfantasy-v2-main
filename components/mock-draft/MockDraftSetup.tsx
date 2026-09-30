@@ -337,7 +337,7 @@ export function MockDraftSetup({
             className="h-4 w-4 rounded border-white/20 bg-black/40 text-cyan-500"
           />
           <Label htmlFor="mock-ai-toggle" className="cursor-pointer text-white/80">
-            Enable AI Draft Assistant (suggestions only)
+            Enable Chimmy Draft Assistant (suggestions only)
           </Label>
         </div>
       </div>
