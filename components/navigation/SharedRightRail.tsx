@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRightRailData } from '@/hooks/useRightRailData'
 import { useAIAccessStatus } from '@/hooks/useAIAccessStatus'
 import { getPrimaryChimmyEntry, getChimmyChatHrefWithPrompt, AI_HUB_HREF } from '@/lib/ai-product-layer'
+import { inIosAppAccessLine } from '@/lib/chimmy/outOfAnswers'
 
 export default function SharedRightRail() {
   const { data, loading, error } = useRightRailData()
@@ -110,7 +111,9 @@ export default function SharedRightRail() {
                 Plan: <span className="mode-text">Premium</span>
               </div>
             )}
-            <div>{aiAccess.data.message}</div>
+            {/* The resolver's line can end in "Upgrade or buy tokens" — never in the iOS app (3.1.1). */}
+            <div data-hide-in-ios-app>{aiAccess.data.message}</div>
+            <div data-only-in-ios-app>{inIosAppAccessLine(aiAccess.data)}</div>
           </div>
         ) : (
           <p className="mt-2 text-xs mode-muted">Sign in to see your AI access.</p>

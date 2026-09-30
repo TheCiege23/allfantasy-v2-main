@@ -34,9 +34,47 @@ export type OutOfAnswers = {
  * ⚠ A PLAN HOLDER IS NEVER SOLD THE PLAN THEY HAVE. Reaching this with a plan means the day's
  * included answers are used AND the token balance is empty, so the only useful offer is tokens —
  * "Get AF Pro" to an AF Pro subscriber reads as though we lost track of what they bought.
+ *
+ * 🛑 INSIDE THE iOS APP IT OFFERS NOTHING TO BUY (App Store 3.1.1). The app sells no plan or tokens,
+ * and its CSS already hid the two links — but the BODY still said "AF Pro includes … or buy tokens
+ * to keep going now", which points a reviewer at a purchase the app cannot make. In the app the card
+ * says only what is true there: when the answers come back.
  */
-export function describeOutOfAnswers(plan: ChimmyPlanAllowanceView | null): OutOfAnswers {
+/**
+ * The AI-access line for a surface inside the iOS app. `AIAccessResolver`'s message ends in
+ * "Upgrade or buy tokens for more" for a free account — true on the web, a purchase pointer in the
+ * app (3.1.1) — so the app shows this instead, built from the same status fields.
+ */
+export function inIosAppAccessLine(status: { hasSubscription: boolean; tokenBalance: number }): string {
+  if (status.hasSubscription) return 'Premium AI active.'
+  if (status.tokenBalance > 0) {
+    return `${status.tokenBalance} AI token${status.tokenBalance === 1 ? '' : 's'} available.`
+  }
+  return `${FREE_CHIMMY_QUESTIONS_PER_DAY} free Chimmy questions a day.`
+}
+
+export function describeOutOfAnswers(
+  plan: ChimmyPlanAllowanceView | null,
+  opts: { inIosApp?: boolean } = {},
+): OutOfAnswers {
   const buyTokens = (primary: boolean): OutOfAnswersAction => ({ label: 'Buy tokens', href: CHIMMY_BUY_TOKENS_HREF, primary })
+  const free = FREE_CHIMMY_QUESTIONS_PER_DAY
+
+  if (opts.inIosApp) {
+    return plan
+      ? {
+          title: `Today's ${plan.limit} ${plan.planName} answers are used`,
+          body: `This answer was not bought. Your ${plan.planName} answers refill at midnight UTC.`,
+          actions: [],
+        }
+      : {
+          title: 'You are out of Chimmy answers',
+          body:
+            `This answer was not bought. Your ${free} free ` +
+            `${free === 1 ? 'question comes' : 'questions come'} back at midnight UTC.`,
+          actions: [],
+        }
+  }
 
   if (plan) {
     return {
@@ -48,7 +86,6 @@ export function describeOutOfAnswers(plan: ChimmyPlanAllowanceView | null): OutO
     }
   }
 
-  const free = FREE_CHIMMY_QUESTIONS_PER_DAY
   return {
     title: 'You are out of Chimmy answers',
     body:

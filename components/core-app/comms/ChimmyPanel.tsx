@@ -32,6 +32,7 @@ import {
   type ChimmyPlanAllowanceView,
 } from '@/lib/chimmy/planAllowanceView'
 import { describeOutOfAnswers, type OutOfAnswers } from '@/lib/chimmy/outOfAnswers'
+import { isInIosAppClient } from '@/lib/platform/iosApp'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { confirmTokenSpend } from '@/lib/tokens/client-confirm'
@@ -751,7 +752,11 @@ export function ChimmyPanel({
           setDraft(question)
           if (activeScope.current === scopeId) {
             setScreenshot(attached)
-            setOutOfAnswers(describeOutOfAnswers(readPlanAllowanceView(from.planAllowance) ?? planStatus))
+            setOutOfAnswers(
+              describeOutOfAnswers(readPlanAllowanceView(from.planAllowance) ?? planStatus, {
+                inIosApp: isInIosAppClient(),
+              }),
+            )
           }
         }
 
@@ -1310,18 +1315,20 @@ export function ChimmyPanel({
           <div className="af-cm-outofanswers" role="status">
             <p className="af-cm-outofanswers-title">{outOfAnswers.title}</p>
             <p className="af-cm-outofanswers-body">{outOfAnswers.body}</p>
-            <div className="af-cm-outofanswers-actions">
-              {outOfAnswers.actions.map((a) => (
-                <Link
-                  key={a.href}
-                  href={a.href}
-                  className="af-cm-outofanswers-btn"
-                  data-primary={a.primary ? 'true' : undefined}
-                >
-                  {a.label}
-                </Link>
-              ))}
-            </div>
+            {outOfAnswers.actions.length > 0 ? (
+              <div className="af-cm-outofanswers-actions">
+                {outOfAnswers.actions.map((a) => (
+                  <Link
+                    key={a.href}
+                    href={a.href}
+                    className="af-cm-outofanswers-btn"
+                    data-primary={a.primary ? 'true' : undefined}
+                  >
+                    {a.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
         <div ref={endRef} />
