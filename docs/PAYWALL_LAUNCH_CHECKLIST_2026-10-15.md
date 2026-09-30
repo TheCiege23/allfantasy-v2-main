@@ -4,6 +4,12 @@
 read from. Nothing was run against production, Stripe or any database to write it. What could not
 be read from code is marked **UNVERIFIED**. Re-check anything marked that way before relying on it.
 
+**Re-verified 2026-09-29 against `b85cdfb15`, 73 commits later.** §1, §3a, §3b, §6 and §8 anchors
+still resolve. Two things changed: **§7 is entirely fixed** (commit `d5e261459`, all four defects,
+53 tests) and **the §6 date-bomb sweep has been run** — clean, but the method the sweep was
+described with is misleading and is corrected there. Everything still open in §5 needs a
+production read (a Railway variable or a DB row) and is owner-only.
+
 This is the ONLY launch checklist for the paywall. `AF_STRIPE_CUTOVER_CHECKLIST.md` and
 `AF_TIER_BILLING_BUILD.md` (repo root, July 2026) are superseded: their prices contradict the
 catalog. See §8.
@@ -111,6 +117,19 @@ These gate through `requireEntitlement` / `FeatureGateService` / `requireFeature
 
 ## 5. Owner-only tasks
 
+**Why these stayed UNVERIFIED after the 2026-09-29 re-check, rather than being left unexamined.**
+Each needs a *production* read, and the two kinds differ:
+
+- `STRIPE_FOUNDING_COUPON_ID` and the 11 `STRIPE_PRICE_AF_*` values are **Railway variables**.
+  Reading them means pulling the service's whole variable list, production secrets included, into
+  whatever transcript or log is doing the reading. Not worth it for a presence check — especially
+  as **unset is fail-safe here**: `foundingMember.ts:15-17,27-30` means no page mentions founding
+  pricing and checkout behaves exactly as before, so the failure mode is "no discount", never "a
+  page promised a discount the charge did not apply".
+- `commissioner_recipes_send_enabled` is **not** an env var. It is a platform toggle row
+  (`RECIPES_SEND_TOGGLE`, `lib/core-app/commissioner/recipes.ts:50`), so its production value is a
+  database read. Default off; commissioners can save recipes and nothing sends.
+
 - [ ] **Founding coupon.**
   - Create it in the LIVE Stripe account.
   - Set `STRIPE_FOUNDING_COUPON_ID` on `allfantasy-v2-main`, plus `FOUNDING_OFFER_LABEL` if you want
@@ -152,42 +171,80 @@ These gate through `requireEntitlement` / `FeatureGateService` / `requireFeature
     and sign in as a **no-plan test account**.
   - 🛑 `.env.local` points at the production database. Never walk locks on it.
   - Admin accounts bypass every plan, so an admin sees no locks.
-- [ ] **Date-bomb sweep.** Run the unit suite once with `AF_PAYWALL_STARTS_AT=2020-01-01T00:00:00Z`
-  and compare failures against the same run without it. A test that only fails once the date is past
-  is a test that turns red by itself on Oct 15.
+- [x] **Date-bomb sweep — RUN 2026-09-29 against `b85cdfb15`. Zero date bombs.**
+
+  🛑 **AND THE METHOD ORIGINALLY WRITTEN HERE IS WRONG. Do not use it.** It said to set
+  `AF_PAYWALL_STARTS_AT=2020-01-01T00:00:00Z` and compare. That moves the **launch date**, not the
+  clock — the opposite of what happens on Oct 15, where the launch date stays put and the clock
+  passes it. The two are not interchangeable, because a test that correctly pins
+  `now: 2026-10-01` suddenly finds itself *after* an overridden launch and fails while being in no
+  danger at all.
+
+  Measured both ways over the 19 launch-date-dependent suites (328 tests):
+
+  | run | condition | result |
+  |---|---|---|
+  | A | baseline | 19 files, 328 tests pass |
+  | B | `AF_PAYWALL_STARTS_AT=2020-01-01` (the old method) | **5 failed**, all in `ai-cost-gate` |
+  | C | clock faked to 2026-10-20, env var **unset** (the real thing) | 19 files, 328 tests pass |
+
+  All 5 run-B failures are artifacts of the method. `ai-cost-gate` pins `now` (`BEFORE`/`AFTER`,
+  `:27-28`) and passes it explicitly, but `isPaywallLive(now)` compares against
+  `getPaywallStartsAt()`, which reads the env var — so overriding the date relabels `BEFORE` as
+  after-launch. Two of the five even say "before launch" in their names. On Oct 15, with the var
+  unset, `now: BEFORE` is still before the default launch and they pass. Run C proves it.
+
+  **To re-run it, move the clock, not the date:** a temporary vitest config whose `setupFiles`
+  APPENDS `vi.useFakeTimers({ now: <after launch>, toFake: ['Date'], shouldAdvanceTime: true })`.
+  - ⚠ `--setupFiles` is **not** a vitest CLI option here (it exits 1 having run nothing, which
+    reads exactly like a clean pass). Use `-c <config>`.
+  - 🛑 The probe config must keep `vitest.setup.db-guard.ts` **first** in `setupFiles`. Replacing
+    the list instead of appending to it unpins `DATABASE_URL` and points the suite at production.
+  - Confirm the probe worked before trusting a green run: assert the ambient clock is past launch
+    AND that `AF_PAYWALL_STARTS_AT` is still unset. Both were asserted here.
+
+  **Scope, stated so the green is not over-read:** 19 suites selected by grep for
+  `paywallLaunch|isPaywallLive|AF_PAYWALL_STARTS_AT|foundingMember|launchCopy|LaunchBanner|"free
+  until"|"Oct 15"`, plus `core-depth-paywall-routes` (which the grep missed and this list names).
+  A date bomb in a suite mentioning none of those terms would not be covered. A full-suite clock
+  shift was declined deliberately: it moves every date, so NFL-week and freshness assertions would
+  drown the paywall signal, and the box had 5.4 GB free with 3 peer test runs live.
+
   - Tests that deliberately cover post-launch: `ai-cost-gate`, `core-depth-paywall`,
     `core-depth-paywall-routes`, `commissioner-os-depth-paywall`, `founding-member-checkout`,
-    `founding-member-rule`.
-- [ ] **E2E is pinned to 2099** (`playwright.config.ts:201-208`, guarded by
-  `__tests__/playwright-paywall-pin.test.ts`), so **no E2E spec covers the post-launch state.**
-  Accepted as-is unless someone adds one.
+    `founding-member-rule`. All six pass under run C.
+- [x] **E2E is pinned to 2099** (`playwright.config.ts:208`, guarded by
+  `__tests__/playwright-paywall-pin.test.ts` — both re-verified 2026-09-29, guard passes), so
+  **no E2E spec covers the post-launch state.** Accepted as-is unless someone adds one. Ticked
+  because this is a verified state, not an outstanding task — the gap it names is deliberate.
 
-## 7. Known defects to fix before launch
+## 7. Known defects — ALL FOUR FIXED
 
-Each was read on `origin/main` 2026-09-29.
+Read on `origin/main` 2026-09-29 and **all four closed the same day by `d5e261459`**, "fix(tokens):
+four pre-launch defects". Re-verified against `b85cdfb15`; 53 tests across the three suites that
+commit added pass. The paths below are the real ones — the original entries shortened them and two
+did not resolve (`app/api/leagues/[leagueId]/...`, not `app/api/...`).
 
-- [ ] **Storylines charge tokens with no confirmation.**
-  - `drama/tell-story/route.ts:36-41` and `story/create/route.ts:51-56` hardcode
-    `confirmTokenSpend: true`.
-  - The callers post `{ eventId }` on a click with no confirm step: `MatchupDramaWidget`,
-    `drama/page`, `drama/[eventId]/page`, `LeagueDramaWidget`, `LeagueStoryModal`.
-  - On tell-story **the charge happens before `eventId` is validated**, so a bad request costs tokens.
-  - An error shows as "No story available."
-- [ ] **Survivor AI panel can never spend tokens.**
-  - `SurvivorAIPanel` posts `{ type, week }` without `confirmTokenSpend`. The route defaults it to
-    false, and the guard answers `409 token_confirmation_required`
-    (`survivor-ai-route-guard.ts:215-227`).
-  - `useAfSubGate` handles only 402/403, so the user sees an error.
-  - The confirming hook (`useSurvivorAiRequest`) is used only by a smoke button.
-- [ ] **Survivor command-centre token prices are wrong on screen.**
-  - It shows 15/50/100 (`survivor-ai-token-catalog.ts:42-56`); the charged rules are 10/30/75
-    (`lib/tokens/pricing-matrix.ts`).
-  - Whether a DB override changes the charge: UNVERIFIED.
-- [ ] **Chimmy's orchestration fallback prints raw `key: value` payload pairs to the user**
-  (`lib/ai-orchestration/orchestration-service.ts:304-319`).
-  - `ChimmyChatShell.tsx:553,566` tells users to "check ElevenLabs API key in settings".
-  - ⚠ The chat route and charge-on-delivery match the outage text so they don't bill for it. Reword
-    only together with that match.
+- [x] **Storylines charge tokens with no confirmation.** Both routes now read the flag from the body
+  (`drama/tell-story/route.ts:86`, `story/create/route.ts:73`: `body.confirmTokenSpend === true`)
+  instead of hardcoding `true`, and **`eventId` is validated first** — `:73-76` rejects a missing
+  id with a 400 and loads the event *before* `requireFeatureEntitlement` at `:81`, so a bad request
+  now costs nothing. Covered by `__tests__/tokens/storyline-token-charge.test.ts`.
+- [x] **Survivor AI panel can never spend tokens.** `SurvivorAIPanel.tsx:9` now goes through
+  `postWithTokenConfirm` from the new `lib/tokens/clientTokenConfirm.ts`, which posts once without
+  confirming and only re-posts with `confirmTokenSpend: true` after the person is told the cost.
+  Covered by `__tests__/tokens/client-token-confirm.test.ts`.
+- [x] **Survivor command-centre token prices are wrong on screen.** Fixed by **deriving** rather
+  than correcting: `survivor-ai-token-catalog.ts:76` now reads
+  `getTokenSpendRuleMatrixEntry(row.ruleCode)?.tokenCost ?? null`, so the screen cannot disagree
+  with `pricing-matrix.ts` again. Re-typing the right numbers would have left the same trap.
+  Covered by `__tests__/survivor/survivor-ai-token-catalog-prices.test.ts`.
+  - The old "does a DB override change the charge: UNVERIFIED" no longer matters for the *display*,
+    because the display now reads the same source the charge does.
+- [x] **Chimmy's orchestration fallback prints raw `key: value` payload pairs.**
+  `orchestration-service.ts:304-319` now names only the *kinds* of context on hand, in words, and
+  never a value. The two strings the outage runbook and `providerOutageAlert` match on are kept
+  verbatim, which was the constraint the original entry flagged.
 
 ## 8. Superseded documents
 
