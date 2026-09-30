@@ -1,7 +1,8 @@
 /**
  * Milestone 32 guard: manager characterisation labels are shown to nobody.
  *
- * The drama engine used to write profile labels into REBUILD_PROGRESS prose, and
+ * The drama engine used to write profile labels into REBUILD_PROGRESS prose (and
+ * later still used them to SELECT rebuild candidates — now retired), and
  * relationship insights returned whole profiles (labels, trait scores, behaviour
  * heat) to the client and to LLM prompts. Each test here first proves its path
  * actually ran (a positive control), then asserts no label vocabulary survives.
@@ -128,16 +129,37 @@ beforeEach(() => {
 })
 
 describe('drama engine — no profile label reaches a drama summary', () => {
-  it('a newly detected REBUILD_PROGRESS event states the measured odds, never the labels', async () => {
+  // Two bubble teams, one of them profiled with every label and a rising odds
+  // line: exactly the input that used to select a "Rebuild watch" candidate.
+  function bubbleLeague() {
+    mocks.simulationFindMany.mockResolvedValue([
+      { weekOrPeriod: 5, teamId: 'mgr-1', playoffProbability: 0.45, createdAt: new Date() },
+      { weekOrPeriod: 5, teamId: 'mgr-2', playoffProbability: 0.5, createdAt: new Date() },
+      { weekOrPeriod: 4, teamId: 'mgr-1', playoffProbability: 0.2, createdAt: new Date() },
+      { weekOrPeriod: 4, teamId: 'mgr-2', playoffProbability: 0.55, createdAt: new Date() },
+    ])
+  }
+
+  it('no REBUILD_PROGRESS is generated — a label was its only trigger', async () => {
+    bubbleLeague()
     const { detectDramaEvents } = await import('@/lib/drama-engine/DramaEventDetector')
     const candidates = await detectDramaEvents({ leagueId: 'league-1', sport: 'NFL', season: 2026 })
-    const rebuild = candidates.find((c) => c.dramaType === 'REBUILD_PROGRESS')
-    // Positive control: the label-keyed path genuinely ran.
-    expect(rebuild).toBeDefined()
-    expect(rebuild!.summary).toBe('Playoff odds moved from 20% to 45% since the previous simulation.')
+    // Positive control: the detector ran on the same facts and produced a storyline.
+    expect(candidates.map((c) => c.dramaType)).toContain('PLAYOFF_BUBBLE')
+    expect(candidates.find((c) => c.dramaType === 'REBUILD_PROGRESS')).toBeUndefined()
     for (const c of candidates) {
       expect(findLabels(`${c.headline} ${c.summary}`)).toEqual([])
     }
+  })
+
+  it('profile labels do not change which storylines are detected', async () => {
+    bubbleLeague()
+    const { detectDramaEvents } = await import('@/lib/drama-engine/DramaEventDetector')
+    const labelled = await detectDramaEvents({ leagueId: 'league-1', sport: 'NFL', season: 2026 })
+    mocks.listProfilesByLeague.mockResolvedValue([{ ...profile('mgr-1'), profileLabels: [] }])
+    const unlabelled = await detectDramaEvents({ leagueId: 'league-1', sport: 'NFL', season: 2026 })
+    expect(labelled.length).toBeGreaterThan(0)
+    expect(labelled).toEqual(unlabelled)
   })
 
   it('a stored legacy summary is projected label-free on every read path', async () => {
