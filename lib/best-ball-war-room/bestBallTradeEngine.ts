@@ -79,12 +79,13 @@ export function analyzeBestBallTrade(context: BestBallWarRoomContext, input: Ana
   const outVals = outgoing.map(ceilOf)
   const inVals = incoming.map(ceilOf)
   const haveAny = [...outVals, ...inVals].some((v) => v != null)
+  // 🛑 Kept for this engine's shadow telemetry only (2026-09-29): the War Room's value scale is never a
+  // line users read — the verdict on this screen is the one grade (warRoomTradeGrade.ts).
   let valueDelta: number | null = null
   if (haveAny) {
     const inSum = inVals.reduce<number>((s, v) => s + (v ?? 0), 0)
     const outSum = outVals.reduce<number>((s, v) => s + (v ?? 0), 0)
     valueDelta = Math.round((inSum - outSum) * 100) / 100
-    facts.push(`Ceiling value in ${inSum.toFixed(1)} vs out ${outSum.toFixed(1)} (delta ${valueDelta >= 0 ? '+' : ''}${valueDelta}).`)
   }
 
   const fragile = new Set(evaluateDepth(context, input.rosterId).fragilePositions)
@@ -101,7 +102,7 @@ export function analyzeBestBallTrade(context: BestBallWarRoomContext, input: Ana
   let verdict: BestBallTradeVerdict
   if (!haveAny) {
     verdict = 'needs_more_data'
-    missingDataFlags.push('No value signal for the involved players — verdict unavailable.')
+    missingDataFlags.push('No value signal for the involved players.')
   } else {
     const composite = (valueDelta ?? 0) + rosterFitDelta * 1.5
     if (composite >= 3) verdict = 'accept'

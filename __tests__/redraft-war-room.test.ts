@@ -6,6 +6,7 @@ import {
 import { buildLineupRecommendation } from '@/lib/redraft-war-room/redraftLineupEngine'
 import { buildWaiverRecommendations } from '@/lib/redraft-war-room/redraftWaiverEngine'
 import { analyzeTrade, findTradeTargets } from '@/lib/redraft-war-room/redraftTradeEngine'
+import { WAR_ROOM_PRIVATE_SCALE } from './war-room/warRoomPrivateScale'
 import {
   REDRAFT_WAR_ROOM_SYSTEM_RULES,
   buildRedraftWarRoomPrompt,
@@ -282,6 +283,9 @@ describe('redraftTradeEngine', () => {
     expect(result.verdict).toBe('accept')
     expect(result.valueDelta).toBeGreaterThan(0)
     expect(result.lineupImpact.some((s) => /QB need/i.test(s))).toBe(true)
+    // 🛑 2026-09-29: the War Room's own value scale is not shown — the verdict is the one grade.
+    const shown = [...result.explanationFacts, ...result.lineupImpact, ...result.benchImpact, ...result.riskFlags, ...result.missingDataFlags]
+    expect(shown.filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 
   it('returns needs_more_data when no value signal exists for the players', () => {
@@ -295,6 +299,15 @@ describe('redraftTradeEngine', () => {
     const result = analyzeTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['a'], incomingPlayerIds: ['b'] })
     expect(result.verdict).toBe('needs_more_data')
     expect(result.valueDelta).toBeNull()
+    expect(result.missingDataFlags.some((s) => /no projection\/stat signal/i.test(s))).toBe(true)
+    expect([...result.explanationFacts, ...result.riskFlags, ...result.missingDataFlags].filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
+  })
+
+  it('positive control: the private-scale shape matches the lines the engine printed', () => {
+    expect(WAR_ROOM_PRIVATE_SCALE.test('Value in 22.0 vs value out 11.0 (delta +11).')).toBe(true)
+    expect(WAR_ROOM_PRIVATE_SCALE.test('No projection/stat signal for the involved players — value verdict unavailable.')).toBe(true)
+    expect(WAR_ROOM_PRIVATE_SCALE.test('Some players lack a value signal — verdict weighted by available data only.')).toBe(true)
+    expect(WAR_ROOM_PRIVATE_SCALE.test('Incoming Josh Allen addresses QB need.')).toBe(false)
   })
 
   it('trade finder needs value data, and finds complementary partners when present', () => {

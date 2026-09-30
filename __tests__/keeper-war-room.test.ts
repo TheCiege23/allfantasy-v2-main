@@ -5,6 +5,7 @@ import { buildKeeperCutList } from '@/lib/keeper-war-room/keeperCutListEngine'
 import { evaluateKeeperRosterNeeds } from '@/lib/keeper-war-room/keeperRosterNeedsEngine'
 import { buildKeeperDraftPlan } from '@/lib/keeper-war-room/keeperDraftPlanEngine'
 import { analyzeKeeperTrade } from '@/lib/keeper-war-room/keeperTradeEngine'
+import { WAR_ROOM_PRIVATE_SCALE } from './war-room/warRoomPrivateScale'
 import { findKeeperTradeTargets } from '@/lib/keeper-war-room/keeperTradeFinderEngine'
 import { buildKeeperWaiverRecommendations } from '@/lib/keeper-war-room/keeperWaiverEngine'
 import { buildKeeperLineupRecommendation } from '@/lib/keeper-war-room/keeperLineupEngine'
@@ -263,6 +264,8 @@ describe('keeperTradeEngine + finder', () => {
     const res = analyzeKeeperTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['fair'], incomingPlayerIds: ['targetKeeper'] })
     expect(res.verdict).not.toBe('needs_more_data')
     expect(res.keeperImpact.some((s) => s.includes('targetKeeper'))).toBe(true)
+    // 🛑 2026-09-29: the War Room's own value scale is not shown — the verdict is the one grade.
+    expect([...res.explanationFacts, ...res.keeperImpact, ...res.riskFlags, ...res.missingDataFlags].filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 
   it('returns needs_more_data when no value signal exists', () => {
@@ -272,6 +275,7 @@ describe('keeperTradeEngine + finder', () => {
     })
     const res = analyzeKeeperTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['np'], incomingPlayerIds: [] })
     expect(res.verdict).toBe('needs_more_data')
+    expect([...res.explanationFacts, ...res.riskFlags, ...res.missingDataFlags].filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 
   it('trade finder matches surplus-keeper teams with needy teams', () => {

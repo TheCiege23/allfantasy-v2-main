@@ -6,6 +6,7 @@ import { buildFaabPlan } from '@/lib/guillotine-war-room/guillotineFaabEngine'
 import { buildWaiverRecommendations } from '@/lib/guillotine-war-room/guillotineWaiverEngine'
 import { evaluateDroppedPlayers } from '@/lib/guillotine-war-room/guillotineDroppedPlayerEngine'
 import { analyzeGuillotineTrade } from '@/lib/guillotine-war-room/guillotineTradeEngine'
+import { WAR_ROOM_PRIVATE_SCALE } from './war-room/warRoomPrivateScale'
 import { buildWeeklyPlan } from '@/lib/guillotine-war-room/guillotineWeeklyPlanEngine'
 import { GUILLOTINE_WAR_ROOM_SYSTEM_RULES, buildGuillotineWarRoomPrompt } from '@/lib/guillotine-war-room/guillotineWarRoomPrompt'
 import type {
@@ -287,6 +288,17 @@ describe('guillotineTradeEngine', () => {
     const res = analyzeGuillotineTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['r1-bench1'], incomingPlayerIds: ['oqb'] })
     expect(res.verdict).not.toBe('disabled')
     expect(res.valueDelta).not.toBeNull()
+    // 🛑 2026-09-29: the War Room's own value scale is not shown — the verdict is the one grade.
+    expect([...res.explanationFacts, ...res.riskFlags, ...res.missingDataFlags].filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
+  })
+
+  it('names no verdict when no player has a value signal', () => {
+    const me = fullRoster('r1', true)
+    const other = team({ rosterId: 'r2', players: [player({ playerId: 'nv', position: 'QB', slotType: 'starter' })] })
+    const ctx = makeContext({ teams: [me, other], guillotine: { ...makeContext().guillotine, tradesEnabled: true } })
+    const res = analyzeGuillotineTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: [], incomingPlayerIds: ['nv'] })
+    expect(res.verdict).toBe('needs_more_data')
+    expect([...res.explanationFacts, ...res.riskFlags, ...res.missingDataFlags].filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 })
 

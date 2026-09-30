@@ -5,6 +5,12 @@ import { evaluateBuySellHold } from '@/lib/dynasty-war-room/dynastyBuySellHoldEn
 import { buildDynastyLineupRecommendation } from '@/lib/dynasty-war-room/dynastyLineupEngine'
 import { buildDynastyWaiverRecommendations } from '@/lib/dynasty-war-room/dynastyWaiverEngine'
 import { analyzeDynastyTrade, findDynastyTradeTargets } from '@/lib/dynasty-war-room/dynastyTradeEngine'
+import { WAR_ROOM_PRIVATE_SCALE } from './war-room/warRoomPrivateScale'
+
+/** Every line the dynasty War Room panel prints from a trade analysis. */
+const dynastyShown = (r: ReturnType<typeof analyzeDynastyTrade>): string[] => [
+  ...r.explanationFacts, ...r.ageImpact, ...r.pickImpact, ...(r.directionImpact ? [r.directionImpact] : []), ...r.riskFlags, ...r.missingDataFlags,
+]
 import { evaluateDynastyPickValue } from '@/lib/dynasty-war-room/dynastyPickValueEngine'
 import {
   DYNASTY_WAR_ROOM_SYSTEM_RULES,
@@ -329,6 +335,8 @@ describe('dynastyTradeEngine', () => {
     expect(res.verdict).not.toBe('needs_more_data')
     expect(res.valueDelta).not.toBeNull()
     expect(res.ageImpact.length).toBeGreaterThan(0)
+    // 🛑 2026-09-29: the War Room's own value scale is not shown — the verdict is the one grade.
+    expect(dynastyShown(res).filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 
   it('flags picks as unpriced and needs_more_data without value', () => {
@@ -344,6 +352,7 @@ describe('dynastyTradeEngine', () => {
     })
     expect(res.verdict).toBe('needs_more_data')
     expect(res.riskFlags.some((r) => r.toLowerCase().includes('pick'))).toBe(true)
+    expect(dynastyShown(res).filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 
   it('matches a contender with a rebuilder in the trade finder', () => {
@@ -442,6 +451,7 @@ describe('dynasty pick capital integration', () => {
     })
     expect(withPick.pickImpact.some((s) => s.includes('2027 R1'))).toBe(true)
     expect(withPick.valueDelta).not.toBeNull()
+    expect(dynastyShown(withPick).filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
 
     // Same pick id, but tracking unavailable → excluded + flagged, no crash.
     const ctxNoPicks = makeContext({ teams: [c, r], availability: { futurePicks: 'missing' } })
@@ -452,6 +462,7 @@ describe('dynasty pick capital integration', () => {
       incomingPickIds: ['rp1'],
     })
     expect(noPick.riskFlags.some((s) => /not tracked/i.test(s))).toBe(true)
+    expect(dynastyShown(noPick).filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 
   it('trade finder surfaces a pick angle between a contender and a pick-rich rebuilder', () => {

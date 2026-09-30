@@ -8,6 +8,7 @@ import { evaluateStacks } from '@/lib/best-ball-war-room/bestBallStackCorrelatio
 import { evaluateRisk } from '@/lib/best-ball-war-room/bestBallRiskEngine'
 import { buildBestBallWaiverRecommendations } from '@/lib/best-ball-war-room/bestBallWaiverEngine'
 import { analyzeBestBallTrade, findBestBallTradeTargets } from '@/lib/best-ball-war-room/bestBallTradeEngine'
+import { WAR_ROOM_PRIVATE_SCALE } from './war-room/warRoomPrivateScale'
 import { BEST_BALL_WAR_ROOM_SYSTEM_RULES, buildBestBallWarRoomPrompt } from '@/lib/best-ball-war-room/bestBallWarRoomPrompt'
 import type {
   BestBallDataAvailability,
@@ -290,6 +291,8 @@ describe('bestBallWaiver + trade (draft-only defaults)', () => {
     const res = analyzeBestBallTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['wr5'], incomingPlayerIds: ['oqb'] })
     expect(res.verdict).not.toBe('disabled')
     expect(res.valueDelta).not.toBeNull()
+    // 🛑 2026-09-29: the War Room's own value scale is not shown — the verdict is the one grade.
+    expect([...res.explanationFacts, ...res.riskFlags, ...res.missingDataFlags].filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 })
 

@@ -98,14 +98,13 @@ export function analyzeTrade(context: RedraftWarRoomContext, input: AnalyzeTrade
   const haveAnyValue = [...outValues, ...inValues].some((v) => v != null)
 
   // Value delta from the user's perspective: value received - value given.
+  // 🛑 Kept for this engine's shadow telemetry only (2026-09-29): the War Room's value scale is never a
+  // line users read — the verdict on this screen is the one grade (warRoomTradeGrade.ts).
   let valueDelta: number | null = null
   if (haveAnyValue) {
     const inSum = inValues.reduce<number>((s, v) => s + (v ?? 0), 0)
     const outSum = outValues.reduce<number>((s, v) => s + (v ?? 0), 0)
     valueDelta = Math.round((inSum - outSum) * 100) / 100
-    facts.push(
-      `Value in ${inSum.toFixed(1)} vs value out ${outSum.toFixed(1)} (delta ${valueDelta >= 0 ? '+' : ''}${valueDelta}).`,
-    )
   }
 
   // Roster-fit delta: does the incoming set address a need while outgoing doesn't open one?
@@ -156,11 +155,11 @@ export function analyzeTrade(context: RedraftWarRoomContext, input: AnalyzeTrade
   let verdict: TradeVerdict
   if (!haveAnyValue) {
     verdict = 'needs_more_data'
-    missingDataFlags.push('No projection/stat signal for the involved players — value verdict unavailable.')
+    missingDataFlags.push('No projection/stat signal for the involved players.')
   } else {
     const valueScore = valueDelta ?? 0
     const composite = valueScore + rosterFitDelta * 1.5
-    if (!haveAllValues) riskFlags.push('Some players lack a value signal — verdict weighted by available data only.')
+    if (!haveAllValues) riskFlags.push('Some players have no projection/stat signal.')
     if (composite >= 3) verdict = 'accept'
     else if (composite <= -3) verdict = 'reject'
     else verdict = 'neutral'
