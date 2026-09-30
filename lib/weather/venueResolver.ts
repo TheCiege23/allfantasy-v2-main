@@ -1,5 +1,6 @@
 import { NFL_TEAM_VENUES, NFL_VENUE_COORDS } from '@/lib/openweathermap'
 import type { SupportedSport } from '@/lib/sport-scope'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { MLB_TEAM_BALLPARK } from '@/lib/weather/mlbTeamBallparks'
 import { NCAAF_TEAM_STADIUM } from '@/lib/weather/ncaafTeamStadiums'
 import { SOCCER_TEAM_GEOCODE_QUERY } from '@/lib/weather/soccerTeamGeocode'
@@ -36,7 +37,14 @@ export function resolveVenueForTeam(args: { sport: SupportedSport; teamAbbrev: s
   if (!abbrev) return { kind: 'none' }
 
   if (args.sport === 'NFL') {
-    const venueName = NFL_TEAM_VENUES[abbrev]
+    /*
+     * ⚠ `normAbbrev` slices to 4 characters, so a full name ("Cleveland Browns" → "CLEV") matched
+     * nothing here and every caller that passed one — the weather cron's no-venue fallback,
+     * chat enrichment — silently got `none`. Fold NFL through the canonical alias map first, so
+     * every spelling a feed sends lands on the same stadium and the same cache key.
+     */
+    const nflAbbrev = normalizeTeamAbbrev(args.teamAbbrev) ?? abbrev
+    const venueName = NFL_TEAM_VENUES[nflAbbrev]
     if (!venueName) return { kind: 'none' }
     const row = NFL_VENUE_COORDS[venueName]
     if (!row) return { kind: 'none' }
