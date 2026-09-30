@@ -1910,6 +1910,19 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ).catch(() => null)
       : null
 
+  /*
+   * This week's lineups, projected — AF beside API — as two columns on the Overview's Power board.
+   * Display only: the power rank is all-play over scored weeks and never reads AF. A failed read
+   * costs the columns and nothing else.
+   */
+  const homeLineups =
+    activeKey === 'home' && leagueHome && leagueCtx
+      ? await leagueCtx
+          .league()
+          .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
+          .catch(() => null)
+      : null
+
   // Player Finder searches and selects entirely through query params — no client
   // fetch and no new API route, which matters because the repo is at the route
   // ceiling and a search box is not worth a route.
@@ -3982,6 +3995,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         <LeagueHome
           data={leagueHome}
           identityInShell={leagueHeaderShown}
+          lineups={homeLineups}
           /*
            * "What's on file", streamed. Its nine counts wait behind their own boundary so the rest
            * of the Overview never waits on them; the skeleton holds the panel's height.

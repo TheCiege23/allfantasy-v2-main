@@ -20,6 +20,8 @@ import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 
 import { ConnectedRoster } from './ConnectedRoster'
 import { rosterLabel } from '@/lib/core-app/managerName'
+import { rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
+import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 
 /**
  * Jump to another week.
@@ -132,6 +134,12 @@ export type LeagueHomeProps = {
    * and there this header is the only thing naming the league.
    */
   identityInShell?: boolean
+  /**
+   * This week's lineups, projected — AllFantasy's engine (AF) beside the provider's (API) —
+   * drawn as two columns on the Power board. DISPLAY ONLY: the power rank is all-play, computed
+   * from scored weeks, and nothing here feeds it. Null draws the board as before.
+   */
+  lineups?: StandingsLineups | null
   /**
    * Replaces the one-sentence import banner with the fuller per-kind panel.
    *
@@ -446,6 +454,7 @@ export function LeagueHome({
   issues = [],
   identityInShell = false,
   coverageSlot,
+  lineups = null,
 }: LeagueHomeProps) {
   const { league } = data
   const platformLabel = league.platform === 'manual' ? 'your platform' : league.platform
@@ -623,6 +632,7 @@ export function LeagueHome({
             <span className="af-lh-here">
               through {data.powerBoard.data.weeksCounted}{' '}
               {data.powerBoard.data.weeksCounted === 1 ? 'week' : 'weeks'}
+              {lineups ? ` · AF / API projected, week ${lineups.week}` : ''}
             </span>
           ) : undefined
         }
@@ -630,7 +640,7 @@ export function LeagueHome({
         state={data.powerBoard}
       >
         {(pb) => (
-          <ol className="af-pb-list">
+          <ol className="af-pb-list" data-proj={lineups ? 'true' : undefined}>
             {pb.rows.map((r) => (
               <li key={r.rosterId} className="af-pb-row">
                 <span className="af-pb-rank af-num">{r.powerRank}</span>
@@ -687,6 +697,7 @@ export function LeagueHome({
                 ) : (
                   <span className="af-pb-luck af-pb-move--none" aria-hidden />
                 )}
+                {lineups ? <ProjectedCells row={lineupFor(lineups, r.rosterId)} /> : null}
               </li>
             ))}
           </ol>
@@ -1064,6 +1075,40 @@ export function LeagueHome({
         </section>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * The Power board's AF / API columns. A lineup total built from part of a lineup shows its
+ * coverage (`7/9`) rather than passing for a whole one; a side the engine could not price is a
+ * dash, never 0; a roster the loader did not return gets two dashes.
+ *
+ * rosterIdsMatch, not `===`: an MFL externalId ("0001") stops equalling the board's roster id
+ * ("1") once it has been through the Int column — see rosterIdMatch.ts.
+ */
+function lineupFor(lineups: StandingsLineups, rosterId: string) {
+  return lineups.rows.find((l) => rosterIdsMatch(l.rosterId, rosterId)) ?? null
+}
+
+function ProjectedCells({ row }: { row: StandingsLineups['rows'][number] | null }) {
+  const cell = (v: number | null, from: number, of: number, title: string) =>
+    v == null ? (
+      <span className="af-pb-proj af-num af-pb-proj--none" title={title} aria-label={`${title}: not priced`}>
+        —
+      </span>
+    ) : (
+      <span className="af-pb-proj af-num" title={title}>
+        {v.toFixed(1)}
+        {from < of ? <span className="af-pb-proj-cov"> {from}/{of}</span> : null}
+      </span>
+    )
+  return (
+    <>
+      <span className="af-pb-proj-af">
+        {cell(row?.af ?? null, row?.afFrom ?? 0, row?.starterCount ?? 0, 'AF — AllFantasy’s own projection for this week’s lineup')}
+      </span>
+      {cell(row?.api ?? null, row?.apiFrom ?? 0, row?.starterCount ?? 0, 'API — the provider’s projection for this week’s lineup')}
+    </>
   )
 }
 

@@ -893,9 +893,30 @@
 .af-pb-luck[data-dir='lucky'] { color: var(--warn); }
 .af-pb-luck[data-dir='unlucky'] { color: var(--accent); }
 
+/* AF beside API — this week's lineups, projected. Display only; the rank is all-play. */
+.af-pb-list[data-proj='true'] .af-pb-row {
+  grid-template-columns: 26px 34px 1fr 56px 64px 46px 60px 60px;
+}
+.af-pb-proj {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.af-pb-proj-af .af-pb-proj {
+  color: var(--accent);
+  font-weight: 700;
+}
+.af-pb-proj-cov {
+  font-size: 11px;
+  color: var(--warn);
+}
+.af-pb-proj--none { color: var(--faint); }
+
 @media (max-width: 720px) {
   /* Head-to-head goes first: it is the number already visible in standings. */
   .af-pb-row { grid-template-columns: 24px 30px 1fr 64px 44px; }
+  .af-pb-list[data-proj='true'] .af-pb-row { grid-template-columns: 24px 30px 1fr 64px 44px 56px 56px; }
   .af-pb-rec { display: none; }
 }
 
