@@ -26,6 +26,7 @@ import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
 import { ledgerKey, loadLedgerSidesForTrades } from './archivedPickOutcomes'
 import { draftedPickNamesForRow, withDraftedNames } from './archivedPickMatch'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { isPirateLeague, isPirateSteal } from '@/lib/trade-intel/pirateSteal'
 
 /**
  * Trades, across every league — the cross-league board at `/core/trades`.
@@ -124,6 +125,20 @@ export type TradeWindowRow = {
   tradesOnFile: number
   /** The most recent one, graded. Null when none is on file. */
   latest: BoardTrade | null
+  /**
+   * The latest trade is from this week or last — see `isFreshTrade`. Such leagues lead the board,
+   * newest first, so a trade made today is on screen today. Optional: a board cached before
+   * 2026-09-30 does not carry it, and reads as not fresh.
+   */
+  freshTrade?: boolean
+  /**
+   * One-way moves on file in a Pirate league: a player went one way and nothing came back on this
+   * store's record. Almost always a steal (`lib/trade-intel/pirateSteal.ts`) — but `LeagueTrade` holds
+   * no FAAB, so a player sold for FAAB reads the same here (Jameis Winston for $35, same league, week
+   * 3). Counted apart from `tradesOnFile`, never the `latest` trade, and never called a steal by this
+   * board. The league's own Trades list reads FAAB and names each one. Optional for cached boards.
+   */
+  oneWayOnFile?: number
   href: string
   reasoning: string
   /**
@@ -288,11 +303,32 @@ export function managerLabel(raw: string | null | undefined, resolved?: string |
  * Reported from the live screen, not caught by any test. The deadline still orders
  * within each group, so urgency is subordinated to having content, not discarded.
  */
-export function byTradeUrgency(
-  a: { weeksLeft: number | null; deadlineWeek: number | null; noDeadline: boolean; tradesOnFile: number },
-  b: { weeksLeft: number | null; deadlineWeek: number | null; noDeadline: boolean; tradesOnFile: number },
-): number {
-  const rank = (w: typeof a) =>
+type UrgencyRow = {
+  weeksLeft: number | null
+  deadlineWeek: number | null
+  noDeadline: boolean
+  tradesOnFile: number
+  freshTrade?: boolean
+  latest?: { at: string | null } | null
+}
+
+/*
+ * 🛑 AND A TRADE MADE THIS WEEK COMES BEFORE ALL OF IT (Guap, 2026-09-30: the board "should show all
+ * trades as they come in"). Deadline-first put a league with 8 weeks left at row 11 of a 10-row board,
+ * so a 4-for-2 made that morning in Pirate League twinty — emailed, and on the league's own Trades
+ * tab — never reached this screen. Fresh leagues lead, NEWEST TRADE FIRST, whatever their window;
+ * everything below keeps the deadline rule unchanged.
+ */
+export function byTradeUrgency(a: UrgencyRow, b: UrgencyRow): number {
+  const fa = a.freshTrade ? 0 : 1
+  const fb = b.freshTrade ? 0 : 1
+  if (fa !== fb) return fa - fb
+  if (fa === 0) {
+    const ta = Date.parse(a.latest?.at ?? '') || 0
+    const tb = Date.parse(b.latest?.at ?? '') || 0
+    if (ta !== tb) return tb - ta
+  }
+  const rank = (w: UrgencyRow) =>
     w.weeksLeft != null && w.weeksLeft >= 0 ? 0 : w.deadlineWeek != null ? 1 : w.noDeadline ? 2 : 3
   const ra = rank(a)
   const rb = rank(b)
@@ -304,6 +340,24 @@ export function byTradeUrgency(
     return (a.weeksLeft as number) - (b.weeksLeft as number)
   }
   return b.tradesOnFile - a.tradesOnFile
+}
+
+/**
+ * Whether a league's latest trade counts as new: this season, from the current week or the one before.
+ *
+ * ⚠ BY WEEK, NOT BY CLOCK. This board's payload is cached and its source is asserted to hold no clock
+ * read (`tradesBoardSummary`), so "new" is measured against the `currentWeek` the caller passes. The
+ * week before counts too: Sleeper files a trade made between Monday night and the waiver run under the
+ * week just played. PURE.
+ */
+export function isFreshTrade(
+  latest: { season: number | null; week: number | null } | null,
+  leagueSeason: number | null | undefined,
+  currentWeek: number | null,
+): boolean {
+  if (!latest || currentWeek == null || latest.week == null) return false
+  if (leagueSeason != null && latest.season != null && latest.season !== leagueSeason) return false
+  return latest.week >= currentWeek - 1 && latest.week <= currentWeek
 }
 
 /**
@@ -753,7 +807,25 @@ export async function getTradesBoard(
     return [{ ...t, leagueId: league.id, username: h.sleeperUsername, sleeperLeagueId: h.sleeperLeagueId }]
   })
 
-  const { counts: countByLeague, firstByLeague } = collapseMirroredTrades(resolved)
+  /*
+   * 🛑 A PIRATE STEAL IS NOT A TRADE (Guap, 2026-09-30). The league's steal rule moves a player one way
+   * and Sleeper records it as a trade, so Pirate League twinty's card counted its week-3 steals as
+   * trades and headlined whichever came last. One-way moves are counted apart and never become
+   * `latest` — and are NOT called steals here, because this store cannot see FAAB (see `oneWayOnFile`).
+   */
+  const pirateLeagueIds = new Set(
+    mine.flatMap((c) => (c.league && isPirateLeague({ name: c.league.name, settings: c.league.settings }) ? [c.league.id] : [])),
+  )
+  const isOneWay = (t: (typeof resolved)[number]) =>
+    isPirateSteal({
+      pirateLeague: pirateLeagueIds.has(t.leagueId),
+      sides: [
+        { playersIn: idsOf(t.playersReceived).length, picksIn: pickAssets(t.picksReceived).length },
+        { playersIn: idsOf(t.playersGiven).length, picksIn: pickAssets(t.picksGiven).length },
+      ],
+    })
+  const { counts: countByLeague, firstByLeague } = collapseMirroredTrades(resolved.filter((t) => !isOneWay(t)))
+  const { counts: oneWayByLeague } = collapseMirroredTrades(resolved.filter(isOneWay))
 
   /*
    * 🛑 A USED PICK IS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25), on this board too. The
@@ -900,6 +972,8 @@ export async function getTradesBoard(
 
     const latest = latestByLeague.get(l.id) ?? null
     const tradesOnFile = countByLeague.get(l.id) ?? 0
+    const oneWayOnFile = oneWayByLeague.get(l.id) ?? 0
+    const freshTrade = isFreshTrade(latest, l.season, currentWeek)
 
     const bits: string[] = []
     if (d.none) {
@@ -922,6 +996,11 @@ export async function getTradesBoard(
         ? `${tradesOnFile} ${tradesOnFile === 1 ? 'trade' : 'trades'} on file here.`
         : 'No trade has been made here on any season we hold.',
     )
+    if (oneWayOnFile > 0) {
+      bits.push(
+        `${oneWayOnFile} one-way ${oneWayOnFile === 1 ? 'move' : 'moves'} on file as well — Pirate steals, or a player sold for FAAB, which this list cannot tell apart. They are not counted as trades here; the league's Trades list names each one.`,
+      )
+    }
     if (latest?.withheldReason) {
       bits.push(`The latest one is ungraded: ${latest.withheldReason}.`)
     }
@@ -941,6 +1020,8 @@ export async function getTradesBoard(
       regularSeasonLength: d.regularSeasonLength,
       tradesOnFile,
       latest,
+      freshTrade,
+      oneWayOnFile,
       href: `/core/trades?league=${encodeURIComponent(l.id)}`,
       reasoning: bits.join(' '),
       realKey: realLeagueKey({ platform: l.platform, platformLeagueId: l.platformLeagueId, season: l.season, leagueId: l.id }),

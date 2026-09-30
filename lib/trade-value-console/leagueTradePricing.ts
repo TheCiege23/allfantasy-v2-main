@@ -13,6 +13,7 @@ import { loadLeagueTradeValues } from '@/lib/league-values/leagueTradeValues'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { normalizedFaabValue } from '@/lib/trade-value/faabValue'
 import { analysisUnpricedReason, noPickMarketUnpricedReason, type UnpricedReason } from '@/lib/trade-value/unpricedReason'
+import { belowChartFloorAsset, isFloorEligible } from '@/lib/trade-value/belowChartFloor'
 import { marketContextFor } from '@/lib/trade-intel/marketContext'
 import { pricesOnDynastyChart } from '@/lib/core-app/valueBook'
 import type { LoadedTradeLeague } from './league-loader'
@@ -333,11 +334,27 @@ export async function resolveAssets(
     fcPlayers: FantasyCalcPlayer[]
     /** Resolve the Decision OS enrichment id per player. Default true; the grader turns it off. */
     resolveEnrichmentIds?: boolean
+    /**
+     * Sleeper ids FantasyCalc lists on ANOTHER of its charts today. Such a player missing from THIS
+     * league's chart is below its floor, and is priced at 0 rather than left unpriced — see
+     * `lib/trade-value/belowChartFloor.ts`. Only the grader passes it.
+     */
+    onAnotherChart?: ReadonlySet<string>
   },
-): Promise<{ priced: PricedAsset[]; lines: TradeConsolePlayerLine[]; unresolved: string[] }> {
+): Promise<{
+  priced: PricedAsset[]
+  lines: TradeConsolePlayerLine[]
+  unresolved: string[]
+  /** Unpriced skill players with a Sleeper id — the ones `onAnotherChart` could price at the floor. */
+  floorCandidates: string[]
+  /** Names priced at 0 because they sit below this league's chart. */
+  belowFloor: string[]
+}> {
   const priced: PricedAsset[] = []
   const lines: TradeConsolePlayerLine[] = []
   const unresolved: string[] = []
+  const floorCandidates: string[] = []
+  const belowFloor: string[] = []
 
   for (const raw of items) {
     if (raw.kind === 'pick') {
@@ -423,7 +440,17 @@ export async function resolveAssets(
       if (!row && knownSleeperId) {
         displayName = matched?.player.name ?? args.nflCtx.leagueValueBySleeperId?.get(knownSleeperId)?.name ?? displayName
       }
-      const pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position })
+      let pa = await pricePlayer(displayName, args.nflCtx, { sleeperId: knownSleeperId, position })
+      if (
+        pa.unpriced && knownSleeperId && args.fcPlayers.length > 0 &&
+        isFloorEligible(pa, position, args.nflCtx.leagueUnpricedReasonBySleeperId?.get(knownSleeperId))
+      ) {
+        floorCandidates.push(knownSleeperId)
+        if (args.onAnotherChart?.has(knownSleeperId)) {
+          pa = belowChartFloorAsset(displayName, pa.position ?? position ?? undefined)
+          belowFloor.push(displayName)
+        }
+      }
       const defenderProjection = pa.source === 'idp-vorp' ? leagueValueForPlayer({
         name: displayName, identity: { sleeperId: knownSleeperId, position },
         bySleeperId: args.nflCtx.leagueValueBySleeperId,
@@ -511,7 +538,7 @@ export async function resolveAssets(
     )
   }
 
-  return { priced, lines, unresolved }
+  return { priced, lines, unresolved, floorCandidates, belowFloor }
 }
 
 export function pprForNflFromLeagueContext(

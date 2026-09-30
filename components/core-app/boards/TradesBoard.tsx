@@ -223,6 +223,11 @@ function WindowCard({ row }: { row: TradeWindowRow }) {
             An unknown or absent deadline is a fact about what we hold, not an
             alert — so it reads faint, not in the accent it used to borrow.
           */}
+          {row.freshTrade ? (
+            <span className="af-bd-tag" data-sev="good">
+              NEW TRADE
+            </span>
+          ) : null}
           <span
             className="af-bd-tag"
             data-sev={urgent ? 'bad' : row.deadlineWeek != null ? 'warn' : 'muted'}
@@ -344,6 +349,8 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
     heading promising trades.
   */
   const anyTrades = data.windows.some((w) => w.tradesOnFile > 0)
+  /* The loader leads with leagues traded this week or last, newest first — the label must say so. */
+  const anyFresh = data.windows.some((w) => w.freshTrade)
 
   /* No leagues on this account yet: say so and offer a way forward (BoardKit NoLeaguesYet). */
   if (totalLeagues === 0) {
@@ -440,7 +447,9 @@ export function TradesBoard({ data, allHref, totalLeagues }: TradesBoardProps) {
             */
             label={
               anyDeadline
-                ? anyTrades
+                ? anyFresh
+                  ? `Top ${data.windows.length} · newest trades first, then leagues with trades, then deadline`
+                  : anyTrades
                   ? `Top ${data.windows.length} · leagues with trades first, then deadline`
                   : `Top ${data.windows.length} · ranked by deadline · no trades on file in any of them`
                 : `Your ${data.windows.length} ${data.windows.length === 1 ? 'league' : 'leagues'} · no deadline ingested for any of them`
