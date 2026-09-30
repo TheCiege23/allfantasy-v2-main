@@ -31,6 +31,7 @@ import LeagueRankingsV2Panel from "@/components/LeagueRankingsV2Panel"
 import DraftRoom from "@/app/af-legacy/components/mock-draft/DraftRoom"
 import LegacyStrategyTab from '@/components/legacy/LegacyStrategyTab'
 import LegacyOneGrade from '@/components/legacy/LegacyOneGrade'
+import { TRADE_HUB_SIDE_LABELS, tradeHubAnalyzeSides, tradeHubQuickEvaluateSides } from '@/lib/legacy/tradeHubDirection'
 import { FeatureGate } from '@/components/subscription/FeatureGate'
 import LegacyShopTab from '@/app/af-legacy/components/tabs/LegacyShopTab'
 import LegacyIdeasTab from '@/app/af-legacy/components/tabs/LegacyIdeasTab'
@@ -2088,8 +2089,11 @@ function AFLegacyContent() {
           headers: { 'Content-Type': 'application/json' },
           signal: controller.signal,
           body: JSON.stringify({
-            assetsYouGet: buildQuickAssets(tradeHubPlayersA, tradeHubPicksA, tradeHubFaabA, teamA),
-            assetsYouGive: buildQuickAssets(tradeHubPlayersB, tradeHubPicksB, tradeHubFaabB, teamB),
+            // Team A is the user's own roster: its list is what the user GIVES (lib/legacy/tradeHubDirection.ts).
+            ...tradeHubQuickEvaluateSides({
+              mine: buildQuickAssets(tradeHubPlayersA, tradeHubPicksA, tradeHubFaabA, teamA),
+              partner: buildQuickAssets(tradeHubPlayersB, tradeHubPicksB, tradeHubFaabB, teamB),
+            }),
             yourRoster: teamA.players,
             theirRoster: teamB.players,
             yourStarters: teamA.starters || [],
@@ -2251,8 +2255,9 @@ function AFLegacyContent() {
           sleeper_username_b: teamB.displayName,
           sleeperUserA: { username: teamA.username || teamA.displayName, userId: teamA.userId || '' },
           sleeperUserB: { username: teamB.username || teamB.displayName, userId: teamB.userId || '' },
-          assetsA: sideA,
-          assetsB: sideB,
+          // Team A (the user) RECEIVES `assetsA` and GIVES `assetsB`: sideA is picked from the user's own
+          // roster, so it is `assetsB` (lib/legacy/tradeHubDirection.ts).
+          ...tradeHubAnalyzeSides({ mine: sideA, partner: sideB }),
           tradeGoal: tradeHubGoal || undefined,
           numTeams: effectiveNumTeams,
           leagueContext,
@@ -2355,19 +2360,9 @@ function AFLegacyContent() {
     }, 1200)
   }
 
+  // A counter's "add" candidates come off the user's own bench (Team A, the side that GIVES) and its
+  // "ask" candidates off the partner's (Team B, the side the user GETS from) — lib/legacy/tradeHubDirection.ts.
   const addCounterCandidateToGive = (playerId: string) => {
-    if (!playerId) return
-    setTradeHubPlayersB(prev => {
-      if (prev.includes(playerId)) return prev
-      return [...prev, playerId]
-    })
-    triggerHighlight(playerId)
-    setTimeout(() => {
-      sideBRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-    }, 100)
-  }
-
-  const addCounterCandidateToGet = (playerId: string) => {
     if (!playerId) return
     setTradeHubPlayersA(prev => {
       if (prev.includes(playerId)) return prev
@@ -2376,6 +2371,18 @@ function AFLegacyContent() {
     triggerHighlight(playerId)
     setTimeout(() => {
       sideARef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
+    }, 100)
+  }
+
+  const addCounterCandidateToGet = (playerId: string) => {
+    if (!playerId) return
+    setTradeHubPlayersB(prev => {
+      if (prev.includes(playerId)) return prev
+      return [...prev, playerId]
+    })
+    triggerHighlight(playerId)
+    setTimeout(() => {
+      sideBRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
     }, 100)
   }
 
@@ -10549,16 +10556,16 @@ function AFLegacyContent() {
                         {/* Trade Builder - Shows after league is loaded */}
                         {tradeHubManagers.length > 0 && !tradeHubLoading && (
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Team A (You) */}
+                            {/* Team A (You) — defaults to your roster; what you pick here is what you GIVE */}
                             <div className="rounded-xl bg-cyan-500/5 border border-cyan-500/20 p-4">
                               <div className="flex items-center gap-2 mb-4">
                                 <span className="w-7 h-7 rounded-lg bg-cyan-500/30 flex items-center justify-center text-xs font-bold text-cyan-400">A</span>
-                                <span className="text-sm font-semibold text-cyan-400">You Get</span>
+                                <span className="text-sm font-semibold text-cyan-400">{TRADE_HUB_SIDE_LABELS.mine.title}</span>
                               </div>
 
                               {/* Team A Manager Selector */}
                               <div className="mb-4">
-                                <label className="block text-xs text-white/50 mb-1">From Team</label>
+                                <label className="block text-xs text-white/50 mb-1">{TRADE_HUB_SIDE_LABELS.mine.teamLabel}</label>
                                 <select
                                   value={tradeHubTeamA}
                                   onChange={(e) => {
@@ -10703,16 +10710,16 @@ function AFLegacyContent() {
                               })()}
                             </div>
 
-                            {/* Team B (Trade Partner) */}
+                            {/* Team B (Trade Partner) — what you pick here is what you GET */}
                             <div className="rounded-xl bg-purple-500/5 border border-purple-500/20 p-4">
                               <div className="flex items-center gap-2 mb-4">
                                 <span className="w-7 h-7 rounded-lg bg-purple-500/30 flex items-center justify-center text-xs font-bold text-purple-400">B</span>
-                                <span className="text-sm font-semibold text-purple-400">You Give</span>
+                                <span className="text-sm font-semibold text-purple-400">{TRADE_HUB_SIDE_LABELS.partner.title}</span>
                               </div>
 
                               {/* Team B Manager Selector */}
                               <div className="mb-4">
-                                <label className="block text-xs text-white/50 mb-1">To Team</label>
+                                <label className="block text-xs text-white/50 mb-1">{TRADE_HUB_SIDE_LABELS.partner.teamLabel}</label>
                                 <select
                                   value={tradeHubTeamB}
                                   onChange={(e) => {

@@ -26,6 +26,7 @@ import {
   receiptPromptBlock,
 } from '@/lib/decision-os/trade/receiptViews'
 import { createLegacyPackageGrader } from '@/lib/legacy/legacyOneGrade'
+import { tradeSideAssetOffRoster } from '@/lib/legacy/tradeHubDirection'
 import { gradeLegacyCounters } from '@/lib/legacy/legacyPackageGrade'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -1613,25 +1614,16 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
         )
       }
 
-      const rosterAIds = new Set(clientRosterA.map((p) => p.id))
-      const rosterBIds = new Set(clientRosterB.map((p) => p.id))
-
-      for (const a of assetsARaw) {
-        if (a.type === 'player' && a.player.id && !rosterAIds.has(a.player.id)) {
-          return NextResponse.json(
-            { error: `Side A asset "${a.player.name}" (${a.player.id}) not found on Side A roster.` },
-            { status: 400 }
-          )
-        }
-      }
-
-      for (const a of assetsBRaw) {
-        if (a.type === 'player' && a.player.id && !rosterBIds.has(a.player.id)) {
-          return NextResponse.json(
-            { error: `Side B asset "${a.player.name}" (${a.player.id}) not found on Side B roster.` },
-            { status: 400 }
-          )
-        }
+      // Team A RECEIVES `assetsA` (so they sit on Team B's roster) and GIVES `assetsB` (on Team A's) —
+      // the same orientation the grade below is taken in. See `lib/legacy/tradeHubDirection.ts`.
+      const offRoster = tradeSideAssetOffRoster({
+        assetsA: assetsARaw,
+        assetsB: assetsBRaw,
+        rosterA: clientRosterA,
+        rosterB: clientRosterB,
+      })
+      if (offRoster) {
+        return NextResponse.json({ error: offRoster }, { status: 400 })
       }
     }
 
@@ -2837,8 +2829,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     logTradeOfferEvent({
       leagueId: leagueId || null,
       senderUserId: canonicalA || null,
-      assetsGiven: assetsA.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
-      assetsReceived: assetsB.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
+      // The sender is Team A, which GIVES `assetsB` and RECEIVES `assetsA`.
+      assetsGiven: assetsB.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
+      assetsReceived: assetsA.map((a: any) => ({ name: a.player?.name || `${a.pick?.year} R${a.pick?.round}`, value: a.player?.value || a.pick?.value, type: a.type })),
       features: tradeDriverData ? {
         lineupImpact: tradeDriverData.lineupImpactScore,
         vorp: tradeDriverData.vorpScore,
