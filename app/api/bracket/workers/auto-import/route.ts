@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { requireCronAuth } from "@/app/api/cron/_auth"
 import { prisma } from "@/lib/prisma"
 import { selectBestProvider } from "@/lib/brackets/providers"
 import { generateNcaamBracketStructure } from "@/lib/brackets/ncaamStructure"
@@ -7,6 +8,11 @@ import { applyTournamentFieldToBracket } from "@/lib/brackets/teamImport"
 export const dynamic = "force-dynamic"
 
 export async function POST(req: NextRequest) {
+  // Worker endpoint: it writes tournaments, nodes, picks or feed events, so it
+  // takes the same cron/admin secret as sync-playoff. It was reachable anonymously.
+  if (!requireCronAuth(req, "CRON_SECRET")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
   try {
     const body = await req.json().catch(() => ({} as any))
     const season = Number(body?.season || new Date().getFullYear())

@@ -103,10 +103,13 @@ function resolveOAuthEmailFromCallback(
  * - Apple: the decoded id_token claim `email_verified` is often the STRING
  *   "true"/"false" rather than a boolean.
  * - Discord: raw `/users/@me` response includes boolean `verified`.
- * - Spotify: the Web API exposes no verification flag at all. Spotify itself
- *   requires a verified email before its own signup completes, so a returned
- *   email is treated as verified-by-platform-design (this mirrors the
- *   provider's existing explicit `allowDangerousEmailAccountLinking: true`).
+ * - Spotify: the Web API exposes no verification flag at all, and a Spotify
+ *   account is fully usable with an UNCONFIRMED email. This used to return
+ *   true on the belief that Spotify verifies before signup completes; it does
+ *   not, so "sign up to Spotify with the victim's address, then Sign in with
+ *   Spotify here" linked straight into the victim's AllFantasy account.
+ *   Unverified now: a new account starts unverified, and an existing email
+ *   account refuses with SOCIAL_EMAIL_UNVERIFIED instead of linking.
  * - Facebook: the Graph API only returns `email` once Facebook considers it
  *   confirmed — presence of the field already implies verification.
  */
@@ -122,9 +125,9 @@ function resolveOAuthEmailVerifiedFromCallback(
       return raw?.email_verified === true || raw?.email_verified === "true";
     case "discord":
       return raw?.verified === true;
-    case "spotify":
     case "facebook":
       return true;
+    case "spotify":
     default:
       return false;
   }

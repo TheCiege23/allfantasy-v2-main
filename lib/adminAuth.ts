@@ -4,7 +4,8 @@ import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import { verifyAdminSessionCookie } from "@/lib/adminSession";
 import { authOptions } from "@/lib/auth";
-import { isAllFantasyTestEmail, isSiteAdmin } from "@/lib/auth/admin";
+import { isAllFantasyTestEmail, isAllFantasyTestUsername } from "@/lib/auth/admin";
+import { prisma } from "@/lib/prisma";
 
 export type AdminUser = {
   id?: string;
@@ -110,6 +111,25 @@ function getCookieAdminAccessState(): AdminAccessState | null {
   return { status: "admin", source: "admin_session", user };
 }
 
+/**
+ * Does the account behind this session hold `email` AND has it verified it?
+ * Read from the database, never from the token: the token's email is copied
+ * from the row whether or not it was ever proven. Any failure answers "no".
+ */
+async function isEmailProvenForUser(userId: string, email: string | null | undefined): Promise<boolean> {
+  const wanted = String(email ?? "").trim().toLowerCase();
+  if (!userId || !wanted) return false;
+  try {
+    const row = await prisma.appUser.findUnique({
+      where: { id: userId },
+      select: { email: true, emailVerified: true },
+    });
+    return Boolean(row?.emailVerified) && String(row?.email ?? "").trim().toLowerCase() === wanted;
+  } catch {
+    return false;
+  }
+}
+
 async function getAppSessionAdminAccessState(): Promise<AdminAccessState> {
   const session = (await getServerSession(authOptions as any).catch(() => null)) as {
     user?: {
@@ -124,15 +144,28 @@ async function getAppSessionAdminAccessState(): Promise<AdminAccessState> {
     return { status: "unauthenticated", source: "none" };
   }
 
+  // ⚠ An allowlisted EMAIL is only a credential once the account has PROVEN it.
+  // Registration and email-change both let an account hold an address nobody
+  // has verified, so trusting session.user.email alone let anyone who claimed an
+  // allowlisted address (one with no account yet) sign in as a full admin. The
+  // handle path is separate and unchanged — it cannot be self-assigned (see
+  // lib/auth/admin.ts) and it is how the founder's second provider signs in.
+  const grantedByHandle = isAllFantasyTestUsername(session.user.username);
+  const grantedByEmail =
+    !grantedByHandle &&
+    isAdminEmailAllowed(session.user.email) &&
+    (await isEmailProvenForUser(session.user.id, session.user.email));
+  const isAdmin = grantedByHandle || grantedByEmail;
+
   const user: AdminUser = {
     id: session.user.id ?? undefined,
     email: session.user.email ?? undefined,
     name: session.user.name ?? undefined,
     username: session.user.username ?? undefined,
-    role: isAdminEmailAllowed(session.user.email) || isSiteAdmin(session.user) ? "admin" : undefined,
+    role: isAdmin ? "admin" : undefined,
   };
 
-  if (isAdminEmailAllowed(session.user.email) || isSiteAdmin(session.user)) {
+  if (isAdmin) {
     return { status: "admin", source: "app_session", user };
   }
 

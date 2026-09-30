@@ -6,6 +6,7 @@ import {
   getMonetizationCatalogItemBySku,
   type MonetizationSku,
 } from "@/lib/monetization/catalog"
+import { verifyClientReferenceSkuPurchase } from "@/lib/monetization/clientReferencePurchaseGuard"
 import { parseStripeCheckoutClientReferenceId } from "@/lib/monetization/StripeCheckoutLinkRegistry"
 import { TokenSpendService } from "@/lib/tokens/TokenSpendService"
 import { syncUserProfileFromSubscriptions } from "@/lib/subscription/syncBridge"
@@ -64,7 +65,13 @@ function resolveCheckoutPurchaseType(session: Stripe.Checkout.Session): string |
 
 function resolveCheckoutContext(
   session: Stripe.Checkout.Session
-): { userId: string; sku: MonetizationSku; couponCode?: string | null } | null {
+): {
+  userId: string
+  sku: MonetizationSku
+  couponCode?: string | null
+  /** "metadata" is set server-side at session creation; "client_reference" is buyer-controlled. */
+  source: "metadata" | "client_reference"
+} | null {
   const metadata = (session.metadata ?? {}) as Record<string, string | undefined>
   const metadataUserId = metadata.userId?.trim()
   const metadataSku = metadata.sku?.trim().toLowerCase()
@@ -74,6 +81,7 @@ function resolveCheckoutContext(
       userId: metadataUserId,
       sku: metadataSku as MonetizationSku,
       couponCode: metadataCouponCode,
+      source: "metadata",
     }
   }
 
@@ -83,6 +91,23 @@ function resolveCheckoutContext(
     userId: fromClientReference.userId,
     sku: fromClientReference.sku,
     couponCode: fromClientReference.couponCode,
+    source: "client_reference",
+  }
+}
+
+/**
+ * The SKU in a buyer-controlled client_reference_id only stands if the session
+ * bought that SKU's catalog price (lib/monetization/clientReferencePurchaseGuard).
+ * A mismatch is refused as non-retryable — it lands in the admin error list
+ * instead of a retry storm — and is never granted on the claim alone.
+ */
+async function assertClientReferenceSkuWasPaidFor(
+  session: Stripe.Checkout.Session,
+  sku: MonetizationSku
+): Promise<void> {
+  const verdict = await verifyClientReferenceSkuPurchase(getStripeClient(), session, sku)
+  if (!verdict.ok) {
+    throw new NonRetryableWebhookError(`${verdict.reason} — refusing to grant`)
   }
 }
 
@@ -316,6 +341,10 @@ async function routeCheckoutSessionCompleted(session: Stripe.Checkout.Session): 
       lockAccount: lockAccountForCardBillingState,
     })
     if (refusal) return `refused_paid_state:${refusal.stateCode}`
+
+    if (checkoutContext?.source === "client_reference") {
+      await assertClientReferenceSkuWasPaidFor(session, checkoutContext.sku)
+    }
 
     if (purchaseType === "subscription") {
       await persistSubscriptionEntitlementFromCheckout(session, checkoutContext)

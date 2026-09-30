@@ -14,6 +14,7 @@ import {
 } from "@/lib/beta-invite/betaAdmissionService";
 import { BETA_ADMISSION_COOKIE } from "@/lib/beta-invite/betaAdmissionCookie";
 import { SIGNUP_CONSENT_COOKIE, isConsentCookieValue } from "@/lib/auth/signupConsentCookie";
+import { revokeAllSessionsForUser } from "@/lib/auth/sessionRevocation";
 
 const OAUTH_PLACEHOLDER_BCRYPT_ROUNDS = 10;
 
@@ -209,6 +210,10 @@ export async function linkSocialAccountToAppUser(
         })
       : null;
 
+  // Set when this sign-in attaches to an EXISTING account found by email rather
+  // than by an already-linked provider account. See the takeover note below.
+  let linkedByEmailMatch = false;
+
   // Only link to an EXISTING AppUser by email match when the provider itself
   // asserts the email is verified. An unverified email claim must never be
   // trusted to take over someone else's account.
@@ -226,6 +231,7 @@ export async function linkSocialAccountToAppUser(
         emailVerified: true,
       },
     });
+    linkedByEmailMatch = Boolean(user);
   }
 
   if (!user && !normalizedEmail) {
@@ -353,6 +359,7 @@ export async function linkSocialAccountToAppUser(
           },
           select,
         });
+        linkedByEmailMatch = Boolean(user);
 
         if (!user) {
           // Likely a rare username race: retry with a different reserved username.
@@ -367,7 +374,27 @@ export async function linkSocialAccountToAppUser(
     displayName?: string;
     avatarUrl?: string | null;
     emailVerified?: Date;
+    passwordHash?: string;
   } = {};
+
+  /*
+   * ⚠ PRE-ACCOUNT TAKEOVER. Registration and email-change both let an account
+   * hold an address nobody has proven. So an attacker can register with the
+   * victim's email first, set a password, and wait: when the victim later signs
+   * in with a provider that DOES verify that email, the lookup above lands them
+   * in the attacker's account — and the attacker's password still works.
+   *
+   * The verified sign-in is the first real proof of who owns the address, so it
+   * wins: the unproven password is replaced with the OAuth-only placeholder and
+   * every session already on the account is revoked. A genuine owner who simply
+   * never clicked "verify" loses nothing but that password, and can set a new
+   * one through reset.
+   */
+  const neutralizeUnprovenCredentials =
+    linkedByEmailMatch && Boolean(user) && !user?.emailVerified && providerVerifiedEmail;
+  if (neutralizeUnprovenCredentials) {
+    userUpdates.passwordHash = await hashOAuthOnlyPlaceholder();
+  }
 
   if (user && normalizedEmail && providerVerifiedEmail && user.email.toLowerCase() !== normalizedEmail) {
     const conflictingEmailOwner = await prisma.appUser.findFirst({
@@ -412,6 +439,13 @@ export async function linkSocialAccountToAppUser(
 
   if (!user) {
     throw new Error("SOCIAL_ACCOUNT_LINK_FAILED");
+  }
+
+  if (neutralizeUnprovenCredentials) {
+    // Cut off every session issued BEFORE this second. The session this very
+    // sign-in is about to mint is issued now, and `iat <= cutoff` would
+    // otherwise revoke the rightful owner on arrival.
+    await revokeAllSessionsForUser(user.id, Math.floor(Date.now() / 1000) - 1).catch(() => undefined);
   }
 
   const accountPayload = {
