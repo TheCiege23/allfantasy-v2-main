@@ -129,10 +129,23 @@ export function getWebPageSchema(opts: {
   }
 }
 
+/**
+ * Serialize for an inline `<script type="application/ld+json">`.
+ *
+ * ⚠ JSON.stringify is NOT script-safe. It leaves `<` alone, so a string value
+ * containing `</script><img onerror=…>` closes the script element and runs as
+ * HTML. JSON-LD routinely carries user-controlled text (league and team names
+ * on the public standings page). `<` is the same character to a JSON
+ * parser and cannot end the element. Use this for every inline JSON-LD block.
+ */
+export function serializeJsonLd(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c")
+}
+
 /** Return multiple schemas as JSON-LD array (single script payload). */
 export function buildStructuredDataScript(
   schemas: object | object[]
 ): string {
   const arr = Array.isArray(schemas) ? schemas : [schemas]
-  return JSON.stringify(arr.length === 1 ? arr[0] : arr)
+  return serializeJsonLd(arr.length === 1 ? arr[0] : arr)
 }

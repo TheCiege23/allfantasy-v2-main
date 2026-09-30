@@ -16,6 +16,7 @@ import { SPOTIFY_SCOPES } from "@/lib/spotify/scopes";
 import FacebookProvider from "next-auth/providers/facebook";
 import DiscordProvider from "next-auth/providers/discord";
 import bcrypt from "bcryptjs";
+import { clearSharedRateLimit, consumeSharedRateLimit } from "@/lib/security/sharedRateLimit";
 import { prisma } from "@/lib/prisma";
 import { resolveUnifiedAuthIdentity } from "@/lib/auth/AuthIdentityResolver";
 import {
@@ -253,11 +254,24 @@ const providers: NextAuthOptions["providers"] = [
           throw new Error("PASSWORD_NOT_SET");
         }
 
+        // ⚠ PER-ACCOUNT GUESS BUDGET. The only limit here used to be per IP and
+        // in-process, so an attacker rotating addresses could grind one account's
+        // password indefinitely. Keyed on the resolved user, so email / username /
+        // phone spellings of one account share it; spent BEFORE the compare so a
+        // parallel burst cannot all get a guess in. Answers exactly like a wrong
+        // password — it must not confirm the account exists.
+        const budgetKey = `signin-account:${user.id}`;
+        const budget = await consumeSharedRateLimit(budgetKey, 10, 15 * 60);
+        if (!budget.success) {
+          return null;
+        }
+
         const isValidPassword = await bcrypt.compare(password, user.passwordHash);
 
         if (!isValidPassword) {
           return null;
         }
+        await clearSharedRateLimit(budgetKey).catch(() => undefined);
 
         // A suspended or banned account (lib/moderation/accountSuspension). Checked only after
         // the password matched, so it tells nothing to someone who does not have it.

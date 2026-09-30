@@ -4,6 +4,7 @@ import { clientIpFromHeaders } from "@/lib/http/clientIp";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { signAdminSessionCookie } from "@/lib/adminSession";
+import { consumeSharedRateLimit } from "@/lib/security/sharedRateLimit";
 
 type Bucket = { count: number; resetAt: number; lockedUntil?: number };
 const buckets = new Map<string, Bucket>();
@@ -73,6 +74,23 @@ export const POST = withApiUsage({ endpoint: "/api/auth/login", tool: "AuthLogin
 
   const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH || "";
   const adminPassword = process.env.ADMIN_PASSWORD || "";
+
+  // ⚠ The lockout above lives in this process's memory: per replica, and reset by
+  // every deploy. And the admin password is ONE shared secret, so the budget that
+  // matters is global, not per address — many IPs could otherwise grind it
+  // together. Both ceilings are shared across instances and spent before the
+  // compare. Tripping the global one only closes THIS password login for a
+  // while; admins still sign in through their own accounts.
+  const perIp = await consumeSharedRateLimit(`admin-password:${ip}`, MAX_ATTEMPTS, LOCK_MS / 1000);
+  const global = perIp.success
+    ? await consumeSharedRateLimit("admin-password:all", 40, LOCK_MS / 1000)
+    : perIp;
+  if (!global.success) {
+    return NextResponse.json(
+      { error: "Too many attempts. Try again soon.", remaining: 0, lockedUntil: now + LOCK_MS },
+      { status: 429 }
+    );
+  }
 
   let ok = false;
   if (password && (adminPassword || adminPasswordHash)) {

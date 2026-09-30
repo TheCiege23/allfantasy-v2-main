@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { rateLimit } from '@/lib/rate-limit';
 import { runMatchupSimulation } from '@/lib/simulation-engine/MatchupSimulator';
 import { getMatchupSimulationInsight } from '@/lib/simulation-engine/MatchupSimulationInsightAI';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
@@ -25,6 +28,17 @@ function getStructuredCandidate(response: {
 }
 
 export async function POST(req: NextRequest) {
+  // Every call runs the model orchestration, which we pay for. It answered
+  // anonymous callers with no limit.
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null;
+  const userId = session?.user?.id;
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!rateLimit(`sim-matchup-insight:${userId}`, 10, 60_000).success) {
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+  }
+
   let body: {
     teamA?: { mean: number; stdDev?: number }
     teamB?: { mean: number; stdDev?: number }
