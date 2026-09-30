@@ -1,7 +1,6 @@
 'use client'
 
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { TrendIndicator } from '@/components/commissioner-os/primitives/TrendIndicator'
 import { EmptyState } from '@/components/commissioner-os/states'
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
@@ -41,10 +40,7 @@ export function ManagerIntelligenceView({ managers, dataMode }: ManagerIntellige
           {managers.map((manager) => (
             <Card key={manager.id}>
               <CardHeader>
-                <div className="flex items-center justify-between gap-2">
-                  <CardTitle>{manager.managerName}</CardTitle>
-                  <Badge variant="secondary">{manager.archetype}</Badge>
-                </div>
+                <CardTitle>{manager.managerName}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {/* Tenure and trend are each rendered ONLY when real. An absent trend means the

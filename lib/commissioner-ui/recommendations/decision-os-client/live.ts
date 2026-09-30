@@ -66,9 +66,9 @@ interface LeagueIntelligenceRecommendationsShape {
  * Human titles for the backend's stable `recommendationId`s.
  *
  * Keyed on the id because that IS the contract — five ids, all guaranteed present. This is
- * presentation of a real field, not invention: the same treatment `managers/live.ts` already gives
- * `ManagerIdentityLabel` when it renders an archetype. The id says what was detected; this is what
- * a commissioner calls it.
+ * presentation of a real field, not invention. The id says what was detected; this is what a
+ * commissioner calls it. (These title a league SIGNAL, never a manager — a manager identity label
+ * is shown to nobody; see `managers/decision-os-client/live.ts`.)
  */
 const RECOMMENDATION_TITLES: Record<string, string> = {
   rec_follow_up_critical_risk: 'Managers at risk of leaving',
