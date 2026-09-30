@@ -160,12 +160,50 @@ Each needs a *production* read, and the two kinds differ:
 
 ## 6. Engineering checks before launch
 
-- [ ] **`npm run prove:purchase`.**
+- [x] **`npm run prove:purchase` — RUN 2026-09-30 against `431d97425`. 24 of 24 checks passed, exit 0.**
   - Real Stripe **sandbox** objects: price parity, checkout session, webhook grant (player/trade/edge
     depth open, commissioner depth still locked), idempotency, test-clock renewal, cancel, full refund,
     chargeback (`scripts/prove-purchase-path.ts:7-19`).
   - Needs the `.env.test` DB and an `sk_test_` key, and refuses anything else.
   - Covers **AF Pro only**. It does not cover the hosted card page or live webhook delivery.
+
+  What the run actually established, beyond "it passed" — the renewal and refund rules are the ones
+  worth naming, because they are the two that silently lock out or fail to lock out a real payer:
+
+  | | |
+  |---|---|
+  | price parity | `price_…QNLJx` = 999 usd/month vs catalog $9.99 |
+  | grant | AF Pro on `af_pro_monthly`; entitlement reads `plans=["pro"] active` |
+  | depth after paying | player/trade/edge **open**, commissioner **locked** |
+  | idempotency | delivered twice, `duplicate: true`, 1 row |
+  | renewal (test clock) | period end moved **2026-10-30 → 2026-11-30 (+31.0 days)**, still active |
+  | cancel | locked again; expired one second after Stripe's end |
+  | partial refund | plan and billing **unchanged** |
+  | full refund | access ends **and** billing cancelled |
+  | chargeback | same, on the sandbox disputing card |
+
+  ⚠ **The safety properties held, and they are the reason to read the run's own output rather than
+  just its exit code:** the database was `ep-muddy-leaf…` (the `.env.test` host, not production
+  `ep-curly-block`); `removed 0 variable(s) a .env load added`, so the `.env` pin worked; and
+  `META_CONVERSIONS_API_TOKEN not set, skipping CAPI event` — the irreversible Meta "Purchase"
+  conversion never fired. Cleanup removed 4 test clocks with their customers and subscriptions, 13
+  webhook events and 4 test users. No key-shaped prefix appears anywhere in the log.
+
+  🛑 **HOW TO RUN IT HERE, because `npm run prove:purchase` fails in the obvious place.** The env
+  files live in the primary checkout (`C:\allfantasy-v2-main`), which is pinned at an older commit
+  whose `package.json` has no such script — so the npm alias errors with `Missing script`. The
+  worktrees have the script but no env files, since those are gitignored. Run the current code and
+  point it at the primary's files:
+
+  ```
+  node --require ./scripts/_audit-preload.cjs --import tsx scripts/prove-purchase-path.ts \
+    --db-env C:/allfantasy-v2-main/.env.test --stripe-env C:/allfantasy-v2-main/.env.local
+  ```
+
+  The defaults are the only safe pairing and are not interchangeable: `.env.local` holds the
+  `sk_test_` key but points `DATABASE_URL` at **production**, and `.env` holds an **`sk_live_`**
+  key. That is exactly why the script takes the database from `.env.test` alone and refuses
+  `ep-curly-block` outright (`prove-purchase-path.guards.ts:13,58,63`).
 - [ ] **Walk the locked state by hand.**
   - Run a local server on the `.env.test` database with `AF_PAYWALL_STARTS_AT=2020-01-01T00:00:00Z`,
     and sign in as a **no-plan test account**.
