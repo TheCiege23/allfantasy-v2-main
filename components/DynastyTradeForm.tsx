@@ -30,6 +30,7 @@ import AIFailureStateRenderer from '@/components/ai-reliability/AIFailureStateRe
 import StickyAIActions from '@/components/ai-interface/StickyAIActions';
 import { GradeLeaguePicker, gradeLeagueOptions, type GradeLeagueListRow } from '@/components/trade-evaluator/GradeLeaguePicker';
 import { DynastyLeagueGrade, NOT_GRADED_WINNER, winnerFromLeagueGrade, type DynastyTradeGrade } from '@/components/dynasty-trade/DynastyLeagueGrade';
+import { shareableLeagueGrade } from '@/components/dynasty-trade/sharedTrade';
 
 type Player = {
   id: string;
@@ -513,7 +514,16 @@ export default function DynastyTradeForm() {
         body: JSON.stringify({
           sideA: teamAAssets,
           sideB: teamBAssets,
-          analysis: { ...result, teamAName, teamBName, leagueContext },
+          // 🛑 THE grade, never the dual-brain verdict — see components/dynasty-trade/sharedTrade.ts.
+          analysis: {
+            leagueGrade: shareableLeagueGrade(tradeGrade),
+            factors: result.factors,
+            agingConcerns: result.agingConcerns ?? [],
+            recommendations: result.recommendations ?? [],
+            teamAName,
+            teamBName,
+            leagueContext,
+          },
         }),
       });
       if (!res.ok) throw new Error('Failed');
