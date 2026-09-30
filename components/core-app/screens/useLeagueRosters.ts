@@ -46,6 +46,8 @@ export type RosterPlayer = {
   stockDelta?: number | null
   /** Why `value` is null, in the words the builder prints. Optional for the same rollout reason. */
   unpricedReason?: UnpricedReason | null
+  /** AllFantasy's own weekly projection under this league's scoring. Display only; optional for rollout. */
+  afProjection?: number | null
 }
 
 export type RosterPick = {

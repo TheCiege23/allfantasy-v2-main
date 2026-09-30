@@ -6,7 +6,7 @@
  * every other trade action route already uses — since roster composition isn't sensitive within a
  * league (it's already visible on the Matchups tab).
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest'
 
 const getServerSession = vi.fn()
 const assertLeagueMember = vi.fn()
@@ -39,6 +39,26 @@ const findFirstRedraftSeason = vi.fn()
 const findFirstDraftSession = vi.fn()
 const findUniqueDynastyConfig = vi.fn()
 
+/*
+ * The projection reads, PASSED THROUGH to the real module unless a test sets an override — so every
+ * case above behaves exactly as it did before this mock existed, and only the AF case injects rows.
+ */
+const projOverride = vi.hoisted(() => ({
+  week: null as null | { season: string; week: number },
+  provider: null as null | Map<string, unknown>,
+  engine: null as null | Map<string, unknown>,
+}))
+vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/core-app/playerProjections')>()
+  return {
+    ...actual,
+    latestProjectionWeek: async () => projOverride.week ?? actual.latestProjectionWeek(),
+    lookupProjections: async (...a: Parameters<typeof actual.lookupProjections>) =>
+      (projOverride.provider as Awaited<ReturnType<typeof actual.lookupProjections>> | null) ?? actual.lookupProjections(...a),
+    lookupAfEngineProjections: async (...a: Parameters<typeof actual.lookupAfEngineProjections>) =>
+      (projOverride.engine as Awaited<ReturnType<typeof actual.lookupAfEngineProjections>> | null) ?? actual.lookupAfEngineProjections(...a),
+  }
+})
 vi.mock('next-auth', () => ({ getServerSession: (...args: unknown[]) => getServerSession(...args) }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 /*
@@ -1120,5 +1140,49 @@ describe('🛑 a native dynasty league lists picks it can actually trade', () =>
     findUniqueLeague.mockResolvedValue({ season: 2026, sport: 'NFL', platform: 'sleeper', leagueType: 'dynasty', isDynasty: true, settings: { status: 'in_season' } })
     await load()
     expect(findFirstRedraftSeason).not.toHaveBeenCalled()
+  })
+})
+
+describe('AllFantasy projection on the roster players (display only)', () => {
+  beforeEach(() => {
+    getServerSession.mockResolvedValue({ user: { id: 'u1' } })
+    assertLeagueMember.mockResolvedValue({ ok: true, league: {} })
+    findUniqueLeague.mockResolvedValue({ season: 2026 })
+    findManyAppUser.mockResolvedValue([])
+    findFirstLeagueTeam.mockResolvedValue(null)
+    findUniqueUserProfile.mockResolvedValue(null)
+    getFantasyCalcValues.mockResolvedValue(new Map())
+    findManyRoster.mockResolvedValue([
+      { id: 'roster-a', platformUserId: 'user-a', playerData: { players: ['p1', 'p2'] }, faabRemaining: 0 },
+    ])
+    findManyLeagueTeam.mockResolvedValue([{ platformUserId: 'user-a', teamName: 'Dogs', externalId: '4' }])
+    findManySportsPlayer.mockResolvedValue([
+      { sleeperId: 'p1', name: 'Perry Vance', position: 'WR', team: 'GB', imageUrl: null, sport: 'NFL', source: 'sleeper' },
+      { sleeperId: 'p2', name: 'Otis Nell', position: 'RB', team: 'KC', imageUrl: null, sport: 'NFL', source: 'sleeper' },
+    ])
+    projOverride.week = { season: '2026', week: 4 }
+    projOverride.provider = new Map([
+      ['p1', { playerId: 'p1', projectedPoints: 12.4, name: null, position: 'WR', team: 'GB', componentStats: null }],
+      ['p2', { playerId: 'p2', projectedPoints: 8.1, name: null, position: 'RB', team: 'KC', componentStats: null }],
+    ])
+    projOverride.engine = new Map([['p1', { playerId: 'p1', projectedPoints: 13.6, basis: null, confidence: null }]])
+  })
+  afterEach(() => {
+    projOverride.week = null
+    projOverride.provider = null
+    projOverride.engine = null
+  })
+
+  it('puts AF beside the provider projection, and leaves the simulation input untouched', async () => {
+    const res = await GET(new Request('http://localhost/api/leagues/league-1/trades/rosters') as never, ctx('league-1'))
+    const body = (await res.json()) as { rosters: Array<{ players: Array<Record<string, unknown>> }> }
+    const byId = new Map(body.rosters[0]!.players.map((p) => [p.id, p]))
+    // No league scoring is on file here, so AF stands as the engine wrote it.
+    expect(byId.get('p1')?.afProjection).toBe(13.6)
+    // `weeklyProjection` feeds the proposal simulation and stays the provider number.
+    expect(byId.get('p1')?.weeklyProjection).toBe(12.4)
+    // No engine row: the key is absent, never a 0.
+    expect(byId.get('p2') && 'afProjection' in byId.get('p2')!).toBe(false)
+    expect(byId.get('p2')?.weeklyProjection).toBe(8.1)
   })
 })

@@ -292,6 +292,23 @@
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
+/* The AF weekly points line sits under the value total, without a second rule. */
+.af-tc-total--af {
+  padding-top: 4px;
+  border-top: 0;
+}
+.af-tc-total--af b {
+  color: var(--accent);
+}
+/* AllFantasy's own projection on a roster row and a deal line. */
+.af-tc-af {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  white-space: nowrap;
+}
 
 /* ── Verdict ─────────────────────────────────────────────────────────── */
 
