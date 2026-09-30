@@ -36,7 +36,7 @@ describe("ai product layer integration", () => {
     expect(widgets.some((w) => w.href.includes("leagueId=league-1"))).toBe(true)
   })
 
-  it("exposes discovery links across tool, chat, story, media, governance", () => {
+  it("exposes discovery links across tool, chat, story, media", () => {
     const links = getAIToolDiscoveryLinks({ source: "search" })
 
     const categories = new Set(links.map((link) => link.category))
@@ -44,7 +44,8 @@ describe("ai product layer integration", () => {
     expect(categories.has("chat")).toBe(true)
     expect(categories.has("story")).toBe(true)
     expect(categories.has("media")).toBe(true)
-    expect(categories.has("governance")).toBe(true)
+    // The only 'governance' link was "Psychological Profiles", retired under
+    // Milestone 32 — see ai-product-layer-no-psychology.test.ts.
   })
 
   it("routes feature keys to the expected product destination", () => {
