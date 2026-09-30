@@ -44,7 +44,14 @@ vi.mock('@/lib/chimmy-outcomes/adviceLearning', () => ({
   recomputeAdviceLearning: (...args: unknown[]) => adviceLearningMock(...args),
 }))
 
+// The tick heartbeat (2026-09-30) — added with its mock, per the note above.
+const recordRunMock = vi.fn(async () => undefined)
+vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
+  recordSyncJobRun: (...args: unknown[]) => recordRunMock(...args),
+}))
+
 import { GET } from '@/app/api/cron/decision-os-intelligence-maintenance/route'
+import { PROBES } from '../../scripts/cron-freshness-check.mjs'
 
 const SECRET = 'test-cron-secret'
 const ENV_KEYS = ['CRON_SECRET', 'DECISION_OS_MAINTENANCE_ENABLED', 'DECISION_OS_SHADOW_SWEEP_ENABLED'] as const
@@ -55,6 +62,7 @@ beforeEach(() => {
   runMock.mockClear()
   depsMock.mockClear()
   adviceLearningMock.mockClear()
+  recordRunMock.mockClear()
   process.env.CRON_SECRET = SECRET
   delete process.env.DECISION_OS_MAINTENANCE_ENABLED
 })
@@ -169,6 +177,50 @@ describe('decision-os maintenance cron — lineup shadow sweep is retired', () =
       expect(body).not.toHaveProperty('sweep')
     })
   }
+})
+
+/*
+ * The freshness probe for this route read `decision_parity_record`, whose steady writer was the
+ * lineup sweep retired above. From 21:53Z on 2026-09-29 it read STALE hourly while the route fired
+ * every ten minutes. It now reads this heartbeat, so every authorized tick must record one.
+ */
+describe('decision-os maintenance cron — tick heartbeat', () => {
+  const jobName = () =>
+    (PROBES as Record<string, { heartbeat?: string }>)['/api/cron/decision-os-intelligence-maintenance']!.heartbeat
+
+  for (const maintenance of ['true', 'false']) {
+    it(`records one heartbeat per authorized tick, named as the probe expects (maintenance=${maintenance})`, async () => {
+      process.env.DECISION_OS_MAINTENANCE_ENABLED = maintenance
+      await GET(authed())
+      expect(recordRunMock).toHaveBeenCalledTimes(1)
+      const [ctx, outcome] = recordRunMock.mock.calls[0] as [{ jobName: string }, { errors?: string[]; warnings: string[] }]
+      expect(ctx.jobName).toBe(jobName())
+      expect(outcome.errors ?? []).toEqual([])
+      expect(outcome.warnings).toEqual([])
+    })
+  }
+
+  it('records nothing for an unauthorized caller', async () => {
+    await GET(req())
+    expect(recordRunMock).not.toHaveBeenCalled()
+  })
+
+  it('records a caught advice-rebuild failure as a warning (partial), not a failure', async () => {
+    adviceLearningMock.mockRejectedValueOnce(new Error('db down'))
+    await GET(authed())
+    const [, outcome] = recordRunMock.mock.calls[0] as [unknown, { errors?: string[]; warnings: string[] }]
+    expect(outcome.warnings).toEqual(['adviceLearning: db down'])
+    expect(outcome.errors ?? []).toEqual([])
+  })
+
+  it('records a maintenance throw as FAILED', async () => {
+    process.env.DECISION_OS_MAINTENANCE_ENABLED = 'true'
+    runMock.mockRejectedValueOnce(new Error('lease lost'))
+    const res = await GET(authed())
+    expect(res.status).toBe(500)
+    const [, outcome] = recordRunMock.mock.calls[0] as [unknown, { errors?: string[] }]
+    expect(outcome.errors).toEqual(['lease lost'])
+  })
 })
 
 describe('decision-os maintenance cron — Chimmy outcome loop', () => {

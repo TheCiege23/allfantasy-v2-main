@@ -240,9 +240,14 @@ export const PROBES = {
   '/api/cron/decision-os-activity-ingest?discover=1': { table: 'decision_os_imported_activity', column: 'updatedAt' },
   '/api/cron/decision-os-snapshot-capture?discover=1': { table: 'intelligence_league_snapshot', column: 'updatedAt' },
 
-  // Produces decision_parity_record rows; the `*/10` job whose 37-hour gap is how the whole
-  // scheduler outage was found in the first place.
-  '/api/cron/decision-os-intelligence-maintenance': { table: 'decision_parity_record', column: 'recordedAt' },
+  // The `*/10` job whose 37-hour gap is how the whole scheduler outage was found in the first
+  // place. ⚠ HEARTBEAT, NOT `decision_parity_record.recordedAt` ANY MORE. That table's steady
+  // writer was the lineup shadow sweep this route drove (9,340 of its 9,420 rows on 2026-09-04),
+  // and the sweep was retired on 2026-09-29. After that the route kept firing every ten minutes
+  // with HTTP 200 while the table probe read STALE hourly from 21:53Z, measuring user decision
+  // traffic rather than the job. A heartbeat still catches the scheduler outage it was kept for.
+  // (Line comments on purpose: the schedule string would close a block comment.)
+  '/api/cron/decision-os-intelligence-maintenance': { heartbeat: 'cron-decision-os-intelligence-maintenance' },
 
   // ── fast tier (stays on the host) ──
   // Monitored here on purpose. The whole reason the tiers are split is so that a host outage

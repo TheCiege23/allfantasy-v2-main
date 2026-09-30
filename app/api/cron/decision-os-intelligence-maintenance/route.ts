@@ -5,6 +5,37 @@ import { recomputeAdviceLearning } from '@/lib/chimmy-outcomes/adviceLearning'
 import { createManagedIntelligenceDeps } from '@/lib/decision-os/three-brain/phase2/realAdapters'
 import { runIntelligenceMaintenance } from '@/lib/decision-os/three-brain/phase2/maintenanceRunner'
 import { awaitPendingParityWrites } from '@/lib/decision-os/core/parity/durableParityStore'
+import { recordSyncJobRun, type SyncJobOutcome } from '@/lib/production-health/syncJobRunTelemetry'
+
+/*
+ * 🛑 THE FRESHNESS PROBE FOR THIS ROUTE READ A TABLE WHOSE WRITER WAS RETIRED ON 2026-09-29.
+ *
+ * It probed `decision_parity_record.recordedAt`. On 2026-09-04 that table held 9,420 rows, 9,340
+ * of them `manager.lineup.set`, written by the lineup shadow sweep this route drove every ten
+ * minutes (see the note above GET). The sweep was deleted on 2026-09-29, and the worker picked up
+ * that change that evening. The route kept firing every ten minutes and returning 200, while the
+ * probe reported it STALE hourly from 21:53Z, because the only remaining writers are user-driven
+ * decision paths that have no schedule.
+ *
+ * So each authorized tick records this heartbeat and the probe reads it. A caught failure in the
+ * outcome resolver or the advice rebuild records PARTIAL; a maintenance throw records FAILED.
+ */
+const HEARTBEAT_JOB = 'cron-decision-os-intelligence-maintenance'
+
+async function recordTick(outcome: SyncJobOutcome, startedAt: number): Promise<void> {
+  await recordSyncJobRun({ jobName: HEARTBEAT_JOB, trigger: 'cron' }, outcome, Date.now() - startedAt)
+}
+
+function tickWarnings(draftOutcomes: unknown, adviceLearning: unknown): string[] {
+  const warnings: string[] = []
+  if (draftOutcomes && typeof draftOutcomes === 'object' && 'error' in draftOutcomes) {
+    warnings.push(`draftOutcomes: ${String((draftOutcomes as { error: unknown }).error)}`)
+  }
+  if (adviceLearning && typeof adviceLearning === 'object' && (adviceLearning as { status?: unknown }).status === 'error') {
+    warnings.push(`adviceLearning: ${String((adviceLearning as { error?: unknown }).error ?? 'error')}`)
+  }
+  return warnings
+}
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -58,6 +89,7 @@ export async function GET(request: Request) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
+  const startedAt = Date.now()
 
   const chimmyRecovered = await (await import('@/lib/chimmy/requestReceipts')).reconcileExpiredRequests(20)
     .catch(() => null)
@@ -95,10 +127,13 @@ export async function GET(request: Request) {
   // protect, so it is the right place to wait. Bounded internally, so a slow database cannot hold
   // the invocation open until a platform duration kill (which runs no user code at all).
   const parityWrites = await awaitPendingParityWrites()
+  const warnings = tickWarnings(draftOutcomes, adviceLearning)
 
   if (!maintenanceEnabled()) {
     // Authenticated but disabled → inert success for MAINTENANCE. Do NOT touch the DB, runner,
-    // providers, tokens, or freshness.
+    // providers, tokens, or freshness. The heartbeat is telemetry for the tick itself, which did
+    // run the outcome resolver and advice rebuild above, so it is still recorded.
+    await recordTick({ warnings, metadata: { maintenance: 'disabled' } }, startedAt)
     return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', parityWrites, draftOutcomes, adviceLearning, chimmyRecovered })
   }
   try {
@@ -110,8 +145,13 @@ export async function GET(request: Request) {
       deps: createManagedIntelligenceDeps(),
       config: { refreshBatch: 20, reconcileBatch: 200 },
     })
+    await recordTick({ warnings, metadata: { maintenance: 'enabled', tickId } }, startedAt)
     return NextResponse.json({ ok: true, enabled: true, tickId, ...result, parityWrites, draftOutcomes, adviceLearning, chimmyRecovered })
   } catch (error) {
+    await recordTick(
+      { warnings, errors: [error instanceof Error ? error.message : 'maintenance failed'] },
+      startedAt,
+    )
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed', draftOutcomes, adviceLearning },
       { status: 500 },
