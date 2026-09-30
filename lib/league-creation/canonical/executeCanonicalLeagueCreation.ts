@@ -14,6 +14,7 @@ import { logLeagueCreated } from '@/server/services/auditService'
 import { CREATE_LEAGUE } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { carryOverImportedLeague, ImportedLeagueCarryoverError } from '@/lib/league-creation/canonical/carryOverImportedLeague'
+import { finalizeImportedCarryover } from '@/lib/league-creation/canonical/finalizeImportedCarryover'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -74,7 +75,6 @@ export async function executeCanonicalLeagueCreation(args: {
 
   let createdLeagueId = ''
   let homepageUrl = ''
-  let importedPlayerCount = 0
   let carryoverFinalized = false
 
   try {
@@ -88,7 +88,7 @@ export async function executeCanonicalLeagueCreation(args: {
           (ev, payload) => log(ev, payload)
         )
         if (args.sourceLeagueId) {
-          importedPlayerCount = await carryOverImportedLeague(tx as Prisma.TransactionClient, {
+          await carryOverImportedLeague(tx as Prisma.TransactionClient, {
             sourceLeagueId: args.sourceLeagueId,
             targetLeagueId: created.leagueId,
             creatorUserId: appUserId,
@@ -98,7 +98,7 @@ export async function executeCanonicalLeagueCreation(args: {
         }
         return created
       },
-      { maxWait: 20000, timeout: 25000 }
+      { maxWait: 20000, timeout: args.sourceLeagueId ? 60000 : 25000 }
     )
     createdLeagueId = result.leagueId
     homepageUrl = result.homepageUrl
@@ -176,25 +176,9 @@ export async function executeCanonicalLeagueCreation(args: {
   // always click "Fill empty slots" in the Pre-Draft Setup card if this fails.
   if (args.sourceLeagueId) {
     try {
-      const { runPostDraftFinalizationArtifacts } = await import('@/lib/live-draft-engine/postDraftFinalizeArtifacts')
-      await runPostDraftFinalizationArtifacts(createdLeagueId)
+      carryoverFinalized = (await finalizeImportedCarryover(createdLeagueId)).complete
     } catch (e) {
       console.error(`${LOG_PREFIX} imported_roster_finalization_failed`, e)
-    }
-    try {
-      const [season, materializedPlayers] = await Promise.all([
-        prisma.redraftSeason.findFirst({ where: { leagueId: createdLeagueId }, select: { id: true } }),
-        prisma.redraftRosterPlayer.count({ where: { roster: { leagueId: createdLeagueId }, droppedAt: null } }),
-      ])
-      carryoverFinalized = Boolean(season) && materializedPlayers >= importedPlayerCount
-      if (carryoverFinalized) {
-        await prisma.league.update({
-          where: { id: createdLeagueId },
-          data: { status: 'active', lifecycleState: 'in_season' },
-        })
-      }
-    } catch (e) {
-      console.error(`${LOG_PREFIX} imported_roster_verification_failed`, e)
       carryoverFinalized = false
     }
   } else {

@@ -52,6 +52,8 @@ type WizardProps = {
   importCarryover?: boolean
   createdLeagueHref?: string | null
   creationWarning?: string | null
+  retryingFinalization?: boolean
+  onRetryFinalization?: () => void
   onSubmit: () => void
   onCancel: () => void
 }
@@ -204,10 +206,15 @@ export function CreateLeagueWizard(props: WizardProps) {
               </p>
             ) : null}
             {props.creationWarning && props.createdLeagueHref ? (
-              <p className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm leading-6" role="status">
+              <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm leading-6" role="status">
                 {props.creationWarning}{' '}
                 <a href={props.createdLeagueHref} className="font-bold underline">Open your league</a>
-              </p>
+                {props.onRetryFinalization ? (
+                  <button type="button" onClick={props.onRetryFinalization} disabled={props.retryingFinalization} className="ml-3 font-bold underline disabled:opacity-50">
+                    {props.retryingFinalization ? 'Retrying setup…' : 'Retry roster setup'}
+                  </button>
+                ) : null}
+              </div>
             ) : null}
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">
               {t('createLeague.g30.eyebrow')}

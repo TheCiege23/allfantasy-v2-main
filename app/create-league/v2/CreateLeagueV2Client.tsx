@@ -63,7 +63,9 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<CreateLeagueFieldErrors | null>(null)
   const [createdLeagueHref, setCreatedLeagueHref] = useState<string | null>(null)
+  const [createdLeagueId, setCreatedLeagueId] = useState<string | null>(null)
   const [creationWarning, setCreationWarning] = useState<string | null>(null)
+  const [retryingFinalization, setRetryingFinalization] = useState(false)
 
   useEffect(() => {
     if (importTemplate) {
@@ -135,6 +137,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       }
       clearPersistedV2State()
       if (result.warning) {
+        setCreatedLeagueId(result.leagueId ?? null)
         setCreatedLeagueHref(result.redirectTo ?? (result.leagueId ? `/core?league=${encodeURIComponent(result.leagueId)}` : '/core'))
         setCreationWarning(result.warning)
         return
@@ -146,6 +149,27 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       setSubmitting(false)
     }
   }, [router, state, t, importSourceLeagueId])
+
+  const retryFinalization = useCallback(async () => {
+    if (!createdLeagueId || retryingFinalization) return
+    setRetryingFinalization(true)
+    try {
+      const response = await fetch(`/api/leagues/${encodeURIComponent(createdLeagueId)}/import-carryover/finalize`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      const result = (await response.json()) as { complete?: boolean; error?: string }
+      if (result.complete) {
+        router.push(createdLeagueHref ?? `/core?league=${encodeURIComponent(createdLeagueId)}`)
+      } else {
+        setCreationWarning(result.error ?? 'Your league was created, but roster setup is still pending. Retry setup or open the league to review it.')
+      }
+    } catch {
+      setCreationWarning('Your league was created, but roster setup could not be retried. Please try again.')
+    } finally {
+      setRetryingFinalization(false)
+    }
+  }, [createdLeagueHref, createdLeagueId, retryingFinalization, router])
 
   return (
     <CreateLeagueWizard
@@ -159,6 +183,8 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       importCarryover={Boolean(importSourceLeagueId)}
       createdLeagueHref={createdLeagueHref}
       creationWarning={creationWarning}
+      retryingFinalization={retryingFinalization}
+      onRetryFinalization={createdLeagueId ? retryFinalization : undefined}
       onSubmit={handleSubmit}
       onCancel={() => router.push('/core')}
     />
