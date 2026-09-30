@@ -118,6 +118,13 @@ export async function POST(request: NextRequest) {
   let scanned = 0
   let unresolved = 0
   const unresolvedBySport: Record<string, number> = {}
+  /*
+   * The NFL venue strings that matched nothing, verbatim. The first run of the 2026-09-29 fix
+   * reported 22 unresolved NFL rows without saying which, and the table can only be corrected from
+   * the names the providers actually send. NFL only: the NCAAF and soccer misses are expected (no
+   * coordinate table covers them) and would crowd the dispatcher's 1,500-character log echo.
+   */
+  const unresolvedNflVenues = new Set<string>()
   let duplicates = 0
   let overCap = 0
   let scanLimitHit = false
@@ -148,6 +155,7 @@ export async function POST(request: NextRequest) {
       if (!coords) {
         unresolved += 1
         unresolvedBySport[r.sport] = (unresolvedBySport[r.sport] ?? 0) + 1
+        if (r.sport === 'NFL') unresolvedNflVenues.add(r.venue?.trim() || `(no venue; home ${r.homeTeam})`)
         continue
       }
       const cacheKey = buildWeatherCoordsCacheKey(coords.lat, coords.lng, r.startTime)
@@ -278,9 +286,11 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  const nflVenueMisses = [...unresolvedNflVenues].slice(0, 12)
   console.info(
     `[weather/refresh-cron] refreshed ${refreshed} cache entries ` +
-      `(scanned ${scanned}, unresolved ${unresolved}, duplicates ${duplicates}, overCap ${overCap})`,
+      `(scanned ${scanned}, unresolved ${unresolved}, duplicates ${duplicates}, overCap ${overCap})` +
+      (nflVenueMisses.length ? ` unresolved NFL venues: ${nflVenueMisses.join(' | ')}` : ''),
   )
   // Deferred work is reported, never silently dropped: a run that refreshed 12 of 120 and one
   // that found only 12 to do are the same number otherwise.
@@ -298,6 +308,7 @@ export async function POST(request: NextRequest) {
     scanned,
     unresolved,
     unresolvedBySport,
+    unresolvedNflVenues: nflVenueMisses,
     duplicates,
     overCap,
     scanLimitHit,

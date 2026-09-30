@@ -128,6 +128,21 @@ describe('weather refresh window', () => {
     expect(body.refreshed).toBe(0)
     expect(body.unresolved).toBe(1)
     expect(getWeatherMock).not.toHaveBeenCalled()
+    // Named, so the table can be fixed from what providers actually send.
+    expect(body.unresolvedNflVenues).toEqual(['Tottenham Hotspur Stadium'])
+  })
+
+  it('places the Browns under their stadium name since 2024, on the key My Team reads', async () => {
+    const kickoff = new Date(Date.now() + 30 * HOUR)
+    rowsMock.rows = [
+      { externalId: 'c1', sport: 'NFL', venue: 'Huntington Bank Field', homeTeam: 'CLE', startTime: kickoff },
+    ]
+
+    const body = await run()
+
+    expect(body.refreshed).toBe(1)
+    expect(body.unresolvedNflVenues).toEqual([])
+    expect(getWeatherMock.mock.calls[0]![0].cacheKey).toBe(consumerKey('CLE', kickoff))
   })
 
   it('caps placeable games and reports the overflow', async () => {
