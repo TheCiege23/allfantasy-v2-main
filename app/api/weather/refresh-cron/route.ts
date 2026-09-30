@@ -7,6 +7,9 @@ import {
   MLB_VENUE_COORDS,
 } from '@/lib/weather/weatherService'
 import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
+import { resolveCollegeVenue } from '@/lib/weather/collegeVenue'
+import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
+import type { CollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIdentity'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { createRunBudget } from '@/lib/cron/runBudget'
 
@@ -94,9 +97,14 @@ function resolveGameCoords(g: {
  * 🛑 COLLEGE FOOTBALL IS OFF BY DEFAULT, AND THE OFF STATE STILL MEASURES.
  *
  * Measured 2026-09-29: 544 of the 600 rows this cron scanned were NCAAF, and none could be placed,
- * because no venue table covers college stadiums. The only one that exists is `NCAAF_TEAM_STADIUM`
- * (15 teams), reached through `resolveVenueForTeam` — which is exactly what My Team's
- * `getGameWeather` reads for an NCAAF league, so prewarming through it lands on the reader's key.
+ * because no venue table covered college stadiums. Since 2026-09-30 the stadium comes from the CFBD
+ * team directory (664 teams, every FBS school) through `resolveCollegeVenue` — the SAME resolver
+ * My Team's `getGameWeather` reads NCAAF through, so the prewarmed row lands on the reader's key.
+ *
+ * ⚠ EVERY NCAAF ROW GOES THROUGH HERE, INCLUDING ONES AT AN NFL STADIUM. They used to be placed by
+ * `resolveGameCoords` from the NFL table first — Miami at Hard Rock, Pitt at Acrisure — which both
+ * bypassed this flag (paid calls with college prewarming off) and wrote NFL-table coordinates that
+ * need not round to the same key as the CFBD ones the reader uses.
  *
  * Every placed game is a paid provider call on nearly every run (a row older than 3h is stale and
  * this runs every 3h), and that spend is the owner's call, not this route's. So unless
@@ -123,9 +131,12 @@ type NcaafResolution =
   | { kind: 'unknown_team' }
   | { kind: 'venue_mismatch'; stadium: string }
 
-function resolveNcaafCoords(g: { venue: string | null; homeTeam: string | null }): NcaafResolution {
-  const byTeam = resolveVenueForTeam({ sport: 'NCAAF', teamAbbrev: g.homeTeam })
-  if (byTeam.kind !== 'coords') return { kind: 'unknown_team' }
+function resolveNcaafCoords(
+  g: { venue: string | null; homeTeam: string | null },
+  index: CollegeTeamIndex | null,
+): NcaafResolution {
+  const byTeam = resolveCollegeVenue(g.homeTeam, index)
+  if (!byTeam) return { kind: 'unknown_team' }
   const venue = g.venue?.trim()
   if (venue) {
     const a = venueKey(venue)
@@ -171,6 +182,8 @@ export async function POST(request: NextRequest) {
    */
   const unresolvedNflVenues = new Set<string>()
   const ncaafOn = ncaafWeatherEnabled()
+  // One directory read per run; null (never ingested, or a store failure) places no NCAAF row.
+  const collegeIndex = await loadCollegeTeamIndex().catch(() => null)
   /** Distinct coords/day keys NCAAF rows place on — refreshed when on, only counted when off. */
   const ncaafKeys = new Set<string>()
   const ncaafUnknownTeams = new Set<string>()
@@ -201,9 +214,10 @@ export async function POST(request: NextRequest) {
     const seenKeys = new Set<string>()
     for (const r of rows) {
       if (!r.startTime) continue
-      let coords = resolveGameCoords(r)
-      if (!coords && r.sport === 'NCAAF') {
-        const res = resolveNcaafCoords(r)
+      // NCAAF never takes the NFL/MLB venue tables — see the note above `ncaafWeatherEnabled`.
+      let coords = r.sport === 'NCAAF' ? null : resolveGameCoords(r)
+      if (r.sport === 'NCAAF') {
+        const res = resolveNcaafCoords(r, collegeIndex)
         if (res.kind === 'placed') {
           ncaafKeys.add(buildWeatherCoordsCacheKey(res.lat, res.lng, r.startTime))
           if (ncaafOn) coords = { lat: res.lat, lng: res.lng }

@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
 import { buildWeatherCoordsCacheKey } from '@/lib/weather/weatherService'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
+import { resolveCollegeVenue } from '@/lib/weather/collegeVenue'
 
 /**
  * Weather for each player's game, read from cache only.
@@ -79,11 +81,25 @@ export async function getGameWeather(args: {
   /** cacheKey -> the player keys waiting on it. */
   const waiting = new Map<string, string[]>()
 
+  /*
+   * College goes through the CFBD directory, not the NFL fold: `normalizeTeamAbbrev`
+   * turns "Tennessee" into the Titans. `resolveCollegeVenue` is the SAME resolver the
+   * weather prewarm writes with, which is the only way the two keys can meet.
+   */
+  const college = String(args.sport).toUpperCase() === 'NCAAF'
+  const collegeIndex = college ? await loadCollegeTeamIndex().catch(() => null) : null
+
   for (const [playerKey, g] of args.games) {
-    const abbrev = normalizeTeamAbbrev(g.hostTeam)
-    if (!abbrev) continue
-    const venue = resolveVenueForTeam({ sport: args.sport as 'NFL', teamAbbrev: abbrev })
-    if (venue.kind !== 'coords') continue
+    let venue: { lat: number; lng: number; dome: boolean } | null
+    if (college) {
+      venue = resolveCollegeVenue(g.hostTeam, collegeIndex)
+    } else {
+      const abbrev = normalizeTeamAbbrev(g.hostTeam)
+      if (!abbrev) continue
+      const resolved = resolveVenueForTeam({ sport: args.sport as 'NFL', teamAbbrev: abbrev })
+      venue = resolved.kind === 'coords' ? resolved : null
+    }
+    if (!venue) continue
 
     if (venue.dome) {
       out.set(playerKey, domeWeather())

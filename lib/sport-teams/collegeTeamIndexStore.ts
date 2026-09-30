@@ -59,9 +59,24 @@ export function parseDirectoryPayload(data: unknown): CollegeTeamRecord[] {
         : null,
       classification: typeof raw.classification === 'string' ? raw.classification : null,
       logo: typeof raw.logo === 'string' ? raw.logo : null,
+      venue: parseVenue(raw.venue),
     })
   }
   return out
+}
+
+/** A stored venue, or null — including for every row ingested before venues were kept. */
+function parseVenue(v: unknown): CollegeTeamRecord['venue'] {
+  if (!isRecord(v)) return null
+  const { latitude, longitude } = v
+  if (typeof latitude !== 'number' || typeof longitude !== 'number') return null
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+  return {
+    name: typeof v.name === 'string' && v.name.trim() ? v.name.trim() : null,
+    latitude,
+    longitude,
+    dome: v.dome === true,
+  }
 }
 
 /**

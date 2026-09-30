@@ -36,6 +36,10 @@ export interface CollegeTeamIngestResult {
   written: number
   withLogo: number
   errors: number
+  /** Teams stored with a stadium. 664 of 1,933 in the call measured on 2026-09-30. */
+  withVenue?: number
+  /** Per-team rows left unwritten because the caller's deadline passed. The directory row is still written. */
+  deferredTeamRows?: number
   skipped?: string
 }
 
@@ -48,6 +52,7 @@ export function toCollegeTeamRecord(raw: {
   alternateNames?: string[] | null
   classification?: string | null
   logo?: string | null
+  venue?: CollegeTeamRecord['venue']
 }): CollegeTeamRecord {
   return {
     id: raw.id,
@@ -57,10 +62,47 @@ export function toCollegeTeamRecord(raw: {
     alternateNames: raw.alternateNames ?? null,
     classification: raw.classification ?? null,
     logo: raw.logo ?? null,
+    venue: raw.venue ?? null,
   }
 }
 
-export async function ingestCollegeTeams(): Promise<CollegeTeamIngestResult> {
+/** How often the directory is re-ingested. Teams and stadiums change about once a year. */
+export const COLLEGE_TEAM_DIRECTORY_REFRESH_MS = 7 * 24 * 60 * 60 * 1000
+/** Mirrors the `expiresAt` the ingest below writes, so its age can be read back from it. */
+const DIRECTORY_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
+/**
+ * 🛑 THE DIRECTORY HAD NO SCHEDULED WRITER. `ingestCollegeTeams` was added on 2026-08-28
+ * and nothing called it, so the index every college reader builds on — crests, the
+ * Fantrax roster names, My Team's college fixtures, and now stadiums — was whatever one
+ * manual run left behind. That is the `ingestCFBDStats` failure from CLAUDE.md again: a
+ * reader pointed at a table nothing refreshes looks correct and silently ages.
+ *
+ * Called from the `?intel=1` tick of `/api/cron/import-players`. It gates itself: it runs
+ * when the stored directory is older than a week, or when it holds no stadiums at all
+ * (every row ingested before venues were kept). `skipped` means the gate declined.
+ */
+export async function ingestCollegeTeamsIfDue(
+  opts: { now?: number; deadlineAt?: number } = {},
+): Promise<CollegeTeamIngestResult> {
+  const now = opts.now ?? Date.now()
+  const row = await prisma.sportsDataCache
+    .findUnique({ where: { cacheKey: COLLEGE_TEAM_DIRECTORY_CACHE_KEY }, select: { data: true, expiresAt: true } })
+    .catch(() => null)
+  if (row) {
+    const writtenAt = row.expiresAt.getTime() - DIRECTORY_TTL_MS
+    const fresh = now - writtenAt < COLLEGE_TEAM_DIRECTORY_REFRESH_MS
+    const hasVenues =
+      Array.isArray(row.data) &&
+      (row.data as Array<Record<string, unknown>>).some((t) => t && typeof t === 'object' && t.venue != null)
+    if (fresh && hasVenues) {
+      return { fetched: 0, written: 0, withLogo: 0, errors: 0, skipped: 'directory refreshed within 7 days' }
+    }
+  }
+  return ingestCollegeTeams({ deadlineAt: opts.deadlineAt })
+}
+
+export async function ingestCollegeTeams(opts: { deadlineAt?: number } = {}): Promise<CollegeTeamIngestResult> {
   const result: CollegeTeamIngestResult = { fetched: 0, written: 0, withLogo: 0, errors: 0 }
 
   /*
@@ -74,12 +116,23 @@ export async function ingestCollegeTeams(): Promise<CollegeTeamIngestResult> {
 
   const teams = directory.map(toCollegeTeamRecord)
   result.fetched = teams.length
+  result.withVenue = teams.filter((t) => t.venue).length
 
   const now = new Date()
   // Teams change once a year; a month is generous and still self-healing.
   const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
-  for (const team of teams) {
+  for (const [i, team] of teams.entries()) {
+    /*
+     * A scheduled caller passes a deadline, because ~1,900 sequential upserts carry no
+     * bound of their own. Stopping here defers only the per-team `SportsTeam` rows: the
+     * directory row below is written from the full fetch either way, and it is what every
+     * reader builds its index from.
+     */
+    if (opts.deadlineAt != null && Date.now() > opts.deadlineAt) {
+      result.deferredTeamRows = teams.length - i
+      break
+    }
     try {
       const data = {
         name: team.school,

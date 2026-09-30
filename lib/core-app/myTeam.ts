@@ -1309,9 +1309,17 @@ export async function getMyTeamData(
       [...resolved.values()].map((p) => [
         p.sleeperId,
         {
+          /*
+           * Home game: the LEFT side of `gameContext`, not `p.team`. For the NFL the two are
+           * the same string by construction. For college they are not — the left side is the
+           * canonical CFBD school collegeNextGame.ts resolved, while `p.team` can be a raw
+           * Fantrax code (`wisc`) that only the Fantrax-scoped resolver understands.
+           */
           hostTeam: p.gameContext?.includes(' @ ')
             ? (p.gameContext.split(' @ ')[1] ?? '').split(' · ')[0]
-            : p.team,
+            : p.gameContext?.includes(' vs ')
+              ? (p.gameContext.split(' vs ')[0] ?? p.team)
+              : p.team,
           kickoff: p.kickoff,
         },
       ]),
