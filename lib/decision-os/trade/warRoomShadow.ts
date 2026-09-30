@@ -8,6 +8,7 @@
  */
 import { recordTradeSurfaceShadow, type TradeSurface } from './surfaceShadow'
 import { warRoomSurfaceObservation } from './legacyParity'
+import { warRoomLegacyVerdict } from './warRoomLegacyVerdict'
 
 export type WarRoomFormat = 'redraft' | 'dynasty' | 'keeper' | 'bestball' | 'guillotine'
 
@@ -26,15 +27,29 @@ export function recordWarRoomTradeShadow(input: {
   rosterId?: string | null
   outgoingCount?: number
   incomingCount?: number
+  /** Guillotine and best ball can switch trades off; the legacy rule called that 'disabled'. */
+  tradesEnabled?: boolean
+  /**
+   * The engine's INPUTS, not a verdict: the engines stopped computing one (2026-09-30), and the retired
+   * rule is derived here, inside Decision OS, for this telemetry only (warRoomLegacyVerdict.ts).
+   */
   analysis: {
-    verdict?: string | null
     valueDelta?: number | null
     rosterFitDelta?: number | null
+    keeperSurplusDelta?: number | null
   } | null
 }): void {
   try {
+    const verdict = input.analysis
+      ? warRoomLegacyVerdict({
+          valueDelta: input.analysis.valueDelta,
+          rosterFitDelta: input.analysis.rosterFitDelta,
+          keeperSurplusDelta: input.analysis.keeperSurplusDelta,
+          tradesEnabled: input.tradesEnabled,
+        })
+      : null
     const observation = warRoomSurfaceObservation({
-      verdict: input.analysis?.verdict,
+      verdict,
       valueDelta: input.analysis?.valueDelta,
       rosterFitDelta: input.analysis?.rosterFitDelta,
     })
@@ -45,7 +60,7 @@ export function recordWarRoomTradeShadow(input: {
       proposerRosterId: input.rosterId ?? null,
       assetsGive: input.outgoingCount,
       assetsGet: input.incomingCount,
-      surfaceVerdict: input.analysis?.verdict ?? null,
+      surfaceVerdict: verdict,
       surfaceValueDeltaPct: input.analysis?.valueDelta ?? null,
       // 'abstained' is a real, honest state in these engines
       // ('needs_more_data') — recorded distinctly so it is never mistaken for

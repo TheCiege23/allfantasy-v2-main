@@ -7,7 +7,8 @@ import { buildBestBallDraftPlan } from '@/lib/best-ball-war-room/bestBallDraftPl
 import { evaluateStacks } from '@/lib/best-ball-war-room/bestBallStackCorrelationEngine'
 import { evaluateRisk } from '@/lib/best-ball-war-room/bestBallRiskEngine'
 import { buildBestBallWaiverRecommendations } from '@/lib/best-ball-war-room/bestBallWaiverEngine'
-import { analyzeBestBallTrade, findBestBallTradeTargets } from '@/lib/best-ball-war-room/bestBallTradeEngine'
+import { bestBallTradeFacts, findBestBallTradeTargets } from '@/lib/best-ball-war-room/bestBallTradeEngine'
+import { warRoomLegacyVerdict } from '@/lib/decision-os/trade/warRoomLegacyVerdict'
 import { WAR_ROOM_PRIVATE_SCALE } from './war-room/warRoomPrivateScale'
 import { BEST_BALL_WAR_ROOM_SYSTEM_RULES, buildBestBallWarRoomPrompt } from '@/lib/best-ball-war-room/bestBallWarRoomPrompt'
 import type {
@@ -267,8 +268,11 @@ describe('bestBallWaiver + trade (draft-only defaults)', () => {
 
   it('trade analyze returns disabled when trades are off', () => {
     const ctx = makeContext({ teams: [userRoster()] })
-    const res = analyzeBestBallTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['wr5'], incomingPlayerIds: [] })
-    expect(res.verdict).toBe('disabled')
+    const res = bestBallTradeFacts(ctx, { rosterId: 'r1', outgoingPlayerIds: ['wr5'], incomingPlayerIds: [] })
+    // 🛑 2026-09-30: facts, never a verdict — "disabled" is a fact here, and the shadow's rule reads the flag.
+    expect(res).not.toHaveProperty('verdict')
+    expect(res.explanationFacts).toEqual(['Trades are disabled in this best-ball league (draft-only).'])
+    expect(warRoomLegacyVerdict({ ...res, tradesEnabled: ctx.bestBall.tradesEnabled })).toBe('disabled')
   })
 
   it('trade finder is disabled when trades are off', () => {
@@ -288,8 +292,9 @@ describe('bestBallWaiver + trade (draft-only defaults)', () => {
     const me = userRoster()
     const other = team({ rosterId: 'r2', players: [player({ playerId: 'oqb', position: 'QB', team: 'PHI', adp: 20, maxPoints: 30 })] })
     const ctx = makeContext({ teams: [me, other], bestBall: { ...makeContext().bestBall, tradesEnabled: true } })
-    const res = analyzeBestBallTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['wr5'], incomingPlayerIds: ['oqb'] })
-    expect(res.verdict).not.toBe('disabled')
+    const res = bestBallTradeFacts(ctx, { rosterId: 'r1', outgoingPlayerIds: ['wr5'], incomingPlayerIds: ['oqb'] })
+    expect(res).not.toHaveProperty('verdict')
+    expect(warRoomLegacyVerdict({ ...res, tradesEnabled: ctx.bestBall.tradesEnabled })).not.toBe('disabled')
     expect(res.valueDelta).not.toBeNull()
     // 🛑 2026-09-29: the War Room's own value scale is not shown — the verdict is the one grade.
     expect([...res.explanationFacts, ...res.riskFlags, ...res.missingDataFlags].filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])

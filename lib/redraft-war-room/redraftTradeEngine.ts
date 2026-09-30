@@ -1,11 +1,17 @@
 /**
- * REDRAFT TRADE ANALYZER / FINDER — pure, deterministic. No AI, no fabrication.
+ * REDRAFT TRADE FACTS / FINDER — pure, deterministic. No AI, no fabrication.
  *
- * analyzeTrade(): compares outgoing vs incoming players using the BEST AVAILABLE
+ * redraftTradeFacts(): compares outgoing vs incoming players using the BEST AVAILABLE
  * value signal (current-week projection → season-to-date actual). It evaluates
- * roster-fit and lineup/bench impact before and after the swap. When no value
- * signal exists for the involved players, the verdict is 'needs_more_data' rather
- * than a fabricated grade.
+ * roster-fit and lineup/bench impact before and after the swap, and flags a missing
+ * value signal rather than fabricating one.
+ *
+ * 🛑 IT RETURNS FACTS, NEVER A VERDICT (2026-09-30). The verdict on the War Room is THE
+ * grade (lib/decision-os/trade/warRoomTradeGrade.ts). This used to be `analyzeTrade()`
+ * and finish with its own accept / reject / neutral — a verdict outside
+ * lib/decision-os/<domain>/, which scripts/check-decision-engine-boundary.mjs reports.
+ * `valueDelta` and `rosterFitDelta` remain as the shadow's INPUTS; the retired rule that
+ * reads them is lib/decision-os/trade/warRoomLegacyVerdict.ts. Do not add a verdict back.
  *
  * findTradeTargets(): ranks other rosters by complementary needs/surplus (their
  * surplus at your need positions, and vice-versa). Requires a value signal.
@@ -17,11 +23,11 @@ import { evaluateTeamNeeds } from './redraftTeamNeedsEngine'
 import { playerValue } from './playerValue'
 import type { RedraftPlayerFact, RedraftWarRoomContext } from './types'
 
-export type TradeVerdict = 'accept' | 'reject' | 'neutral' | 'needs_more_data'
-
 export interface TradeAnalysis {
-  verdict: TradeVerdict
-  /** Outgoing - incoming value delta from the USER's perspective (positive = user gains value). */
+  /**
+   * Incoming − outgoing value delta from the USER's perspective (positive = user gains value); null
+   * when no involved player has a value signal. Shadow input only — never sent to the page.
+   */
   valueDelta: number | null
   rosterFitDelta: number
   lineupImpact: string[]
@@ -68,7 +74,7 @@ export interface AnalyzeTradeInput {
   incomingPlayerIds: string[]
 }
 
-export function analyzeTrade(context: RedraftWarRoomContext, input: AnalyzeTradeInput): TradeAnalysis {
+export function redraftTradeFacts(context: RedraftWarRoomContext, input: AnalyzeTradeInput): TradeAnalysis {
   const missingDataFlags = [...context.missingDataFlags]
   const facts: string[] = []
   const riskFlags: string[] = []
@@ -80,7 +86,6 @@ export function analyzeTrade(context: RedraftWarRoomContext, input: AnalyzeTrade
 
   if (outgoing.length === 0 && incoming.length === 0) {
     return {
-      verdict: 'needs_more_data',
       valueDelta: null,
       rosterFitDelta: 0,
       lineupImpact: [],
@@ -151,22 +156,11 @@ export function analyzeTrade(context: RedraftWarRoomContext, input: AnalyzeTrade
     }
   }
 
-  // Verdict.
-  let verdict: TradeVerdict
-  if (!haveAnyValue) {
-    verdict = 'needs_more_data'
-    missingDataFlags.push('No projection/stat signal for the involved players.')
-  } else {
-    const valueScore = valueDelta ?? 0
-    const composite = valueScore + rosterFitDelta * 1.5
-    if (!haveAllValues) riskFlags.push('Some players have no projection/stat signal.')
-    if (composite >= 3) verdict = 'accept'
-    else if (composite <= -3) verdict = 'reject'
-    else verdict = 'neutral'
-  }
+  // Value-signal coverage — facts, not a verdict (the retired rule is warRoomLegacyVerdict.ts).
+  if (!haveAnyValue) missingDataFlags.push('No projection/stat signal for the involved players.')
+  else if (!haveAllValues) riskFlags.push('Some players have no projection/stat signal.')
 
   return {
-    verdict,
     valueDelta,
     rosterFitDelta,
     lineupImpact: [...new Set(lineupImpact)],

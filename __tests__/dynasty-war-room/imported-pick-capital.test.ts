@@ -53,7 +53,7 @@ vi.mock('@/lib/dynasty-core/DynastySettingsService', () => ({
 import { buildDynastyWarRoomContext } from '@/lib/dynasty-war-room/dynastyWarRoomContext'
 import { evaluateDynastyPickValue } from '@/lib/dynasty-war-room/dynastyPickValueEngine'
 import { evaluateDynastyTeamDirection } from '@/lib/dynasty-war-room/dynastyTeamDirectionEngine'
-import { analyzeDynastyTrade } from '@/lib/dynasty-war-room/dynastyTradeEngine'
+import { dynastyTradeFacts } from '@/lib/dynasty-war-room/dynastyTradeEngine'
 import { pickHeuristicValue } from '@/lib/dynasty-war-room/dynastyPlayerValue'
 
 const team = (id: string, externalId: string, platformUserId: string, teamName: string) => ({
@@ -193,7 +193,7 @@ describe('🛑 an imported league\'s teams get their pick capital', () => {
 
     it('a trade can still price a pick the list names', async () => {
       const { ctx } = await build()
-      const res = analyzeDynastyTrade(ctx, {
+      const res = dynastyTradeFacts(ctx, {
         rosterId: 'r1',
         outgoingPlayerIds: [],
         incomingPlayerIds: [],

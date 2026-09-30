@@ -642,7 +642,7 @@ export async function buildRedraftWarRoomContext(
       teamNeeds: availability.rosterRules === 'available',
       lineup: availability.rosterRules === 'available',
       waivers: availability.waiverPool === 'available',
-      tradeAnalyze: true, // roster-fit analysis works even without values; verdict degrades to needs_more_data
+      tradeAnalyze: true, // roster-fit facts work even without values; the missing value signal is flagged
       tradeFind: hasValueSignal,
     },
   }
