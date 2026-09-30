@@ -236,15 +236,6 @@ export function LandingV4({
               {c.nav.signIn}
             </Link>
           )}
-          {/* Partners points at the B2B screen, which is served by the
-              /core catch-all as the `partners` segment — no extra route. It was
-              previously an in-page #business anchor, which became a dead link
-              when the band moved off this page. */}
-          <span className="af-lp-nav-divider" aria-hidden />
-          <Link href="/core/partners" className="af-lp-partners">
-            {c.nav.partners}
-            <span className="af-lp-api-chip af-num">API</span>
-          </Link>
           <Link href={primaryCta.href} className="af-btn af-lp-cta" data-testid="landing-nav-primary">
             {primaryCta.label}
           </Link>
@@ -330,7 +321,7 @@ export function LandingV4({
           of the product with example leagues — not a live reading — so it must
           not be mistaken for someone's actual data.
         */}
-        <aside className="af-lp-hero-card" aria-label="Example of the leagues view">
+        <aside className="af-lp-hero-card" aria-label={`${c.hero.cardTitle} · ${c.hero.cardWeek}`}>
           <div className="af-lp-card-head">
             <span className="af-lp-card-title">{c.hero.cardTitle}</span>
             <span className="af-lp-card-week af-num">{c.hero.cardWeek}</span>
@@ -561,6 +552,7 @@ export function LandingV4({
           <nav className="af-lp-footer-links" aria-label="Footer">
             <Link href="/core/players">{c.footer.playerFinder}</Link>
             <Link href="/core">{c.footer.dashboard}</Link>
+            <Link href="/core/partners">{c.nav.partners}</Link>
             <Link href="/privacy">{c.footer.privacy}</Link>
             <Link href="/terms">{c.footer.terms}</Link>
             <Link href="/data-deletion">{c.footer.dataDeletion}</Link>
