@@ -6,6 +6,7 @@ import { StandingsBoardView, Move } from '@/components/core-app/standings/Standi
 import '@/components/core-app/af-standings.css'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
+import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 
 /**
  * Screen 38a·7 — Standings: the league table and AllFantasy's power ranking, side by side.
@@ -44,6 +45,8 @@ export type StandingsProps = {
   freshness?: StandingsFreshness | null
   /** View, division and layout from the URL. */
   view?: StandingsViewState
+  /** This week's AF and API lineup projections for every team. Optional; absent draws no section. */
+  lineups?: StandingsLineups | null
 }
 
 function n1(v: number): string {
@@ -147,7 +150,7 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
   )
 }
 
-export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW }: StandingsProps) {
+export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, lineups = null }: StandingsProps) {
   /*
    * ⚠ THE REFUSAL BRANCH IS LABELLED TOO, AND THAT IS NOT DECORATION. An `available: false` board is
    * cached exactly like an available one, so "we could not read this league's results" can itself be
@@ -245,6 +248,8 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW }: St
 
       <StandingsBoardView board={board} initial={view} />
 
+      {lineups ? <WeekLineupsTable lineups={lineups} /> : null}
+
       {/* ── Your season ─────────────────────────────────────────────── */}
       {me ? (
         <>
@@ -332,6 +337,58 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW }: St
       </p>
       <SeasonHistory rows={history} />
     </div>
+  )
+}
+
+/**
+ * This week's lineups, projected — every team, AllFantasy's engine (AF) beside the provider's (API).
+ *
+ * ⚠ A PROJECTION OF THE COMING WEEK, NOT A STANDING. The table above ranks on points already scored;
+ * this ranks on what each lineup as set is projected to score this week, and says so. A total built
+ * from part of a lineup shows its coverage rather than passing for a whole one.
+ */
+function WeekLineupsTable({ lineups }: { lineups: StandingsLineups }) {
+  const cell = (v: number | null, from: number, of: number) =>
+    v == null ? (
+      <span className="af-st-lu-none">—</span>
+    ) : (
+      <>
+        {v.toFixed(1)}
+        {from < of ? <span className="af-st-lu-cov"> {from}/{of}</span> : null}
+      </>
+    )
+  return (
+    <section className="af-st-section af-st-lineups" aria-labelledby="af-st-lu-h">
+      <h2 className="af-label af-st-seclabel" id="af-st-lu-h">
+        This week’s lineups, projected · week {lineups.week}
+      </h2>
+      <p className="af-st-lu-note">
+        Each team’s lineup as currently set, projected for week {lineups.week} under this league’s scoring. AF is
+        AllFantasy’s own projection engine; API is the provider’s (Sleeper). A forecast of the coming week — the table
+        above is points already scored.
+      </p>
+      <table className="af-st-lu-table">
+        <thead>
+          <tr>
+            <th scope="col">Team</th>
+            <th scope="col" className="af-num">AF</th>
+            <th scope="col" className="af-num">API</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lineups.rows.map((r) => (
+            <tr key={r.rosterId} data-you={r.isYou ? 'true' : undefined}>
+              <th scope="row">
+                {r.name ?? `Team ${r.rosterId}`}
+                {r.isYou ? <span className="af-st-lu-you"> · you</span> : null}
+              </th>
+              <td className="af-num af-st-lu-af">{cell(r.af, r.afFrom, r.starterCount)}</td>
+              <td className="af-num">{cell(r.api, r.apiFrom, r.starterCount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   )
 }
 
