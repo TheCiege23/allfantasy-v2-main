@@ -284,8 +284,11 @@ export type LeaguePlayersData = {
   trend: ResolvedLeaguePlayer[]
   available: ResolvedLeaguePlayer[]
   leaders: ResolvedLeaguePlayer[]
+  /**
+   * No `trend` list: no college trend is measured (see `lib/devy/devyTrend.ts`), and the one that
+   * used to be here ranked a LEVEL (`DevyPlayer.stockTrendDelta`) as if it were a change.
+   */
   college: {
-    trend: ResolvedLeaguePlayer[]
     available: ResolvedLeaguePlayer[]
     leaders: ResolvedLeaguePlayer[]
     availablePositions: string[]

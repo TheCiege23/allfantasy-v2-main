@@ -13,6 +13,7 @@ import {
 import { LeagueTradePanel } from '@/components/league-trade'
 import PlayerHeadshot from '@/components/league/PlayerHeadshot'
 import { ActiveTradeCard, TradeBlockCarousel } from '@/components/league/TradeCard'
+import { DEVY_NO_TREND_LABEL } from '@/lib/devy/devyTrend'
 import type {
   LeaguePlayersData,
   LeaguePlayersSubtab,
@@ -160,9 +161,14 @@ export default function PlayersTab({
     [playerUniverse]
   )
 
+  /*
+   * Pro players only. No college trend is measured (`lib/devy/devyTrend.ts`); the college list that
+   * used to be merged here ranked `DevyPlayer.stockTrendDelta`, a LEVEL, and drew it as "+N.N" —
+   * so every prospect read as rising. The Trend tab says so instead (`college-trend-unmeasured`).
+   */
   const filteredTrend = useMemo(
-    () => sortPlayers(filterByPosition(mergeUniverse(players.trend, players.college?.trend ?? []), position), sortBy),
-    [mergeUniverse, players.trend, players.college?.trend, position, sortBy]
+    () => sortPlayers(filterByPosition(mergeUniverse(players.trend, []), position), sortBy),
+    [mergeUniverse, players.trend, position, sortBy]
   )
   const filteredAvailable = useMemo(
     () => sortPlayers(filterByPosition(mergeUniverse(players.available, players.college?.available ?? []), position), sortBy),
@@ -288,6 +294,14 @@ export default function PlayersTab({
 
           {subtab === 'trend' ? (
             <div className="space-y-3">
+              {players.college && playerUniverse !== 'PRO_PLAYERS' ? (
+                <div
+                  data-testid="college-trend-unmeasured"
+                  className="rounded-2xl border border-[#1E2A42] bg-[#131929] p-4 text-[14px] text-[#8B9DB8]"
+                >
+                  College prospects — {DEVY_NO_TREND_LABEL}. See Available and Leaders for them.
+                </div>
+              ) : null}
               {filteredTrend.map((player) => (
                 <PlayerListCard key={player.id} player={player} showTrend />
               ))}
