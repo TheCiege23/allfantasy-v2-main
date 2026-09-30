@@ -3,7 +3,7 @@ import 'server-only'
 
 import type { LeagueLifecycleState, LeagueSport, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { indexBySleeperId, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
+import { indexBySleeperId, leagueIdentityColumns, sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { getLeagueRole } from '@/lib/league/permissions'
 import { getAllowedActions } from '@/server/services/leagueLifecycleService'
@@ -15,7 +15,7 @@ import { getScheduleConfigForLeague } from '@/lib/schedule-defaults/ScheduleConf
 import { getDevyConfig } from '@/lib/devy/DevyLeagueConfig'
 import { getC2CConfig } from '@/lib/merged-devy-c2c/C2CLeagueConfig'
 import { attachPlayerMediaBatch } from '@/lib/player-media'
-import { isForeignIdSpace } from '@/lib/core-app/rosterIdSpace'
+import { isForeignIdSpace, loadEspnToSleeperMap, rosterIdSpaceOf } from '@/lib/core-app/rosterIdSpace'
 import { getLeagueChatMessages } from '@/lib/league-chat/LeagueChatMessageService'
 import { getFormatIntroMetadata } from '@/lib/league/format-engine'
 import { resolveLeagueIntroFormatKey } from '@/lib/league/resolveLeagueIntroFormatKey'
@@ -425,18 +425,32 @@ async function resolvePlayerIndex(
    */
   const foreign = isForeignIdSpace(platform)
 
+  /*
+   * 🛑 EACH ID IS ASKED OF ITS OWN IDENTITY COLUMN, AND AN ESPN ID IS TRANSLATED BEFORE ANY
+   * SLEEPER-KEYED READ (2026-09-30). This used to put the whole list to `sleeperId`,
+   * `rollingInsightsId`, `apiSportsId`, `clearSportsId`, `espnId` and `mflId` at once and file every
+   * hit under every column's value — so a Sleeper league's 9228 could come back as Rolling Insights'
+   * 9228, an offensive tackle, whenever no Sleeper row overwrote it. And an ESPN league (not
+   * "foreign" to `isForeignIdSpace`) had its ids read as Sleeper ids below: 17 of 489 live ESPN ids
+   * are somebody else's Sleeper id. `leagueIdentityColumns` owns the column rule.
+   */
+  const identityLookups = leagueIdentityColumns(uniqueIds, sport, platform)
+  const espn = rosterIdSpaceOf(platform) === 'espn'
+  /** League id → the Sleeper id its Sleeper-keyed reads use. Empty for a foreign league. */
+  const sleeperIdOf = new Map<string, string>(
+    foreign
+      ? []
+      : espn
+        ? [...(await loadEspnToSleeperMap(uniqueIds))]
+        : uniqueIds.map((id) => [id, id] as [string, string])
+  )
+  const sleeperIds = [...new Set(sleeperIdOf.values())]
+
   const [identityRows, sportsPlayers, sportsRecords, mediaMap] = await Promise.all([
-    prisma.playerIdentityMap.findMany({
+    identityLookups.length === 0 ? [] : prisma.playerIdentityMap.findMany({
       where: {
         sport: sport.toUpperCase(),
-        OR: [
-          ...(foreign ? [] : [{ sleeperId: { in: uniqueIds } }]),
-          { rollingInsightsId: { in: uniqueIds } },
-          { apiSportsId: { in: uniqueIds } },
-          { clearSportsId: { in: uniqueIds } },
-          { espnId: { in: uniqueIds } },
-          { mflId: { in: uniqueIds } },
-        ],
+        OR: identityLookups.map(({ column, ids }) => ({ [column]: { in: ids } })),
       },
       select: {
         canonicalName: true,
@@ -444,10 +458,10 @@ async function resolvePlayerIndex(
         currentTeam: true,
         sleeperId: true,
         rollingInsightsId: true,
-        apiSportsId: true,
-        clearSportsId: true,
         espnId: true,
         mflId: true,
+        fleaflickerId: true,
+        fantraxId: true,
       },
     }).catch((error) => {
       logOptionalLeagueDataWarning('player identity index', error)
@@ -458,8 +472,8 @@ async function resolvePlayerIndex(
      * a bare id against `externalId`, where Rolling Insights keeps its own numbers for different
      * people (RI 9228 is an offensive tackle; Sleeper 9228 is Bryce Young). externalIdNamespace.ts.
      */
-    foreign ? [] : prisma.sportsPlayer.findMany({
-      where: sleeperIdWhere(uniqueIds, sport),
+    sleeperIds.length === 0 ? [] : prisma.sportsPlayer.findMany({
+      where: sleeperIdWhere(sleeperIds, sport),
       orderBy: { fetchedAt: 'desc' },
       select: {
         source: true,
@@ -493,7 +507,7 @@ async function resolvePlayerIndex(
       logOptionalLeagueDataWarning('sports player records', error)
       return []
     }),
-    foreign ? (new Map() as PlayerMediaBatchMap) : attachPlayerMediaBatch(uniqueIds.map((playerId) => ({ playerId, sport }))).catch((error) => {
+    sleeperIds.length === 0 ? (new Map() as PlayerMediaBatchMap) : attachPlayerMediaBatch(sleeperIds.map((playerId) => ({ playerId, sport }))).catch((error) => {
       logOptionalLeagueDataWarning('player media', error)
       return new Map() as PlayerMediaBatchMap
     }),
@@ -501,32 +515,40 @@ async function resolvePlayerIndex(
 
   const index = new Map<string, ResolvedPlayerIndexEntry>()
 
-  for (const row of identityRows) {
-    const keys = [
-      foreign ? null : row.sleeperId,
-      row.rollingInsightsId,
-      row.apiSportsId,
-      row.clearSportsId,
-      row.espnId,
-      row.mflId,
-    ].filter((value): value is string => Boolean(value))
-    for (const key of keys) {
-      index.set(key, {
-        id: key,
-        name: row.canonicalName,
-        position: row.position ?? 'FLEX',
-        team: row.currentTeam ?? null,
-        adp: null,
-        injuryStatus: null,
-        stats: {},
-        headshotUrl: null,
-        teamLogoUrl: null,
-      })
+  /*
+   * Filed ONLY under an asked id, and only under the column it was asked in. Two identity rows
+   * answering one id (possible outside `sleeperId`, the one unique column) name nobody.
+   */
+  const identityByAsked = new Map<string, (typeof identityRows)[number] | null>()
+  for (const { column, ids } of identityLookups) {
+    const asked = new Set(ids)
+    for (const row of identityRows) {
+      const key = row[column]
+      if (!key || !asked.has(key)) continue
+      identityByAsked.set(key, identityByAsked.has(key) ? null : row)
     }
   }
+  for (const [key, row] of identityByAsked) {
+    if (!row) continue
+    index.set(key, {
+      id: key,
+      name: row.canonicalName,
+      position: row.position ?? 'FLEX',
+      team: row.currentTeam ?? null,
+      adp: null,
+      injuryStatus: null,
+      stats: {},
+      headshotUrl: null,
+      teamLogoUrl: null,
+    })
+  }
 
-  // Keyed by Sleeper id alone (Sleeper's own row wins a shared id) — never by `externalId`.
-  for (const [key, row] of indexBySleeperId(sportsPlayers)) {
+  // By Sleeper id alone (Sleeper's own row wins a shared id) — never by `externalId` — and filed
+  // under the LEAGUE id that asked, which for an ESPN league is not the Sleeper id.
+  const bySleeperId = indexBySleeperId(sportsPlayers)
+  for (const [key, sleeperId] of sleeperIdOf) {
+    const row = bySleeperId.get(sleeperId)
+    if (!row) continue
     const existing = index.get(key)
     index.set(key, {
       id: key,
@@ -557,7 +579,8 @@ async function resolvePlayerIndex(
   }
 
   for (const playerId of uniqueIds) {
-    const media = mediaMap.get(playerId)
+    const sleeperId = sleeperIdOf.get(playerId)
+    const media = sleeperId ? mediaMap.get(sleeperId) : undefined
     const existing = index.get(playerId)
     index.set(playerId, {
       id: playerId,
@@ -1532,7 +1555,9 @@ async function buildTradesData(context: LeagueContext): Promise<LeagueTradesData
       ...jsonAssetLabels(trade.playersReceived as Prisma.JsonValue),
     ])
   )
-  const mediaIndex = await resolvePlayerIndex(String(context.league.sport), blockPlayerIds)
+  // `currentListings` yields Sleeper ids whatever the league's platform — say so, or a Sleeper NBA
+  // league's ids would be read by the native rule as Rolling Insights numbers.
+  const mediaIndex = await resolvePlayerIndex(String(context.league.sport), blockPlayerIds, 'sleeper')
 
   const tradeBlock: LeagueTradeBlockItem[] = tradeBlockRows.map((row, index) => {
     const player = mediaIndex.get(row.playerId)
