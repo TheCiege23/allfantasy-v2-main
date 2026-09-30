@@ -2,6 +2,8 @@ import Link from 'next/link'
 
 import type { SeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import type { WeekBoard as WeekBoardData, WeekMatchup } from '@/lib/core-app/weekBoard'
+import type { WeekLineups } from '@/lib/core-app/weekLineups'
+import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
 /*
  * ⚠ THE THRESHOLD, FROM THE SHARED RULES MODULE — NOT FROM `weekBoard.ts`.
  * That loader is `server-only`; importing a VALUE from it pulls prisma into the
@@ -69,6 +71,8 @@ export type WeekBoardProps = {
    * route to the picker — then offered "View all 0".
    */
   totalLeagues: number
+  /** This week's AF and API lineup projections — the rail's read. Optional; absent draws none. */
+  lineups?: WeekLineups | null
 }
 
 /** Below this the season is, for practical purposes, decided against you. */
@@ -106,7 +110,7 @@ function pctLabel(pct: number | null): string {
  * line; "% to win" sits under the margin; and "projected margin" is the value's
  * accessible name, because a bare "+38.2" beside a league reads as a score.
  */
-function MatchRow({ row, ahead }: { row: Row; ahead: boolean }) {
+function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?: WeekLineups | null }) {
   const { m } = row
   const abs = Math.abs(row.margin).toFixed(1)
   const win = Math.round(m.projection ? m.projection.winProbability * 100 : 0)
@@ -140,6 +144,7 @@ function MatchRow({ row, ahead }: { row: Row; ahead: boolean }) {
             {row.playoffPct != null ? ` · ${pctLabel(row.playoffPct)} playoff odds` : ''}
             {m.elimination ? ' · lowest score is eliminated' : ''}
           </span>
+          <WeekLineupLine lineups={lineups} leagueId={m.leagueId} season={m.season} week={m.week} />
         </span>
         <span
           className="af-bd-val"
@@ -165,11 +170,13 @@ function Column({
   rows,
   ahead,
   quiet,
+  lineups,
 }: {
   label: string
   rows: Row[]
   ahead: boolean
   quiet: string
+  lineups?: WeekLineups | null
 }) {
   return (
     <section className="af-bd-sec">
@@ -177,7 +184,7 @@ function Column({
       {rows.length > 0 ? (
         <ul className="af-bd-rows af-bd-rows--compact">
           {rows.map((r) => (
-            <MatchRow key={r.m.leagueId} row={r} ahead={ahead} />
+            <MatchRow key={r.m.leagueId} row={r} ahead={ahead} lineups={lineups} />
           ))}
         </ul>
       ) : (
@@ -193,6 +200,7 @@ export function WeekBoard({
   rivalriesHref,
   allHref,
   totalLeagues,
+  lineups,
 }: WeekBoardProps) {
   const pctByLeague = new Map<string, number>()
   if (outlook) {
@@ -305,11 +313,13 @@ export function WeekBoard({
           rows={leading}
           ahead
           quiet="You are not projected ahead in any league this week."
+          lineups={lineups}
         />
         <Column
           label="Trailing · bottom 5, playoffs still live"
           rows={trailing}
           ahead={false}
+          lineups={lineups}
           quiet={
             behind.length > 0
               ? 'Every league you are behind in this week is already out of playoff reach.'

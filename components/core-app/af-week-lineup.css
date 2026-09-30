@@ -1,0 +1,36 @@
+/*
+ * This week's lineup projections under a Your Week matchup (WeekLineupLine). One small file of its
+ * own because the line renders in three views that each load a different stylesheet.
+ */
+.af-wk-lineup {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.af-wk-lineup-k {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-wk-lineup-af {
+  font-weight: 700;
+  color: var(--accent);
+}
+.af-wk-lineup-partial {
+  color: var(--warn);
+}
+/*
+ * The compact card is a single flex row. Only a card that carries this line wraps, and the line takes
+ * a full row of its own under the league/probability/score — every other card is laid out as before.
+ */
+.af-wk-lean:has(.af-wk-lineup) {
+  flex-wrap: wrap;
+}
+.af-wk-lean .af-wk-lineup {
+  flex-basis: 100%;
+  margin-top: 0;
+}
