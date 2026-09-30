@@ -30,6 +30,7 @@ import type { GuillotineWaiverResult } from '@/lib/guillotine-war-room/guillotin
 import type { GuillotineDroppedPlayerResult } from '@/lib/guillotine-war-room/guillotineDroppedPlayerEngine'
 import type { GuillotineTradeAnalysis } from '@/lib/guillotine-war-room/guillotineTradeEngine'
 import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import type { WarRoomTradeAnalysisView } from '@/lib/decision-os/trade/warRoomTradeView'
 import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 
 type Tool = 'roster-risk' | 'lineup-safety' | 'faab-plan' | 'waivers' | 'dropped-players' | 'trade-analyze' | null
@@ -72,7 +73,7 @@ export function GuillotineWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [faab, setFaab] = useState<GuillotineFaabPlanResult | null>(null)
   const [waivers, setWaivers] = useState<GuillotineWaiverResult | null>(null)
   const [dropped, setDropped] = useState<GuillotineDroppedPlayerResult | null>(null)
-  const [tradeAnalysis, setTradeAnalysis] = useState<GuillotineTradeAnalysis | null>(null)
+  const [tradeAnalysis, setTradeAnalysis] = useState<WarRoomTradeAnalysisView<GuillotineTradeAnalysis> | null>(null)
   const [tradeGrade, setTradeGrade] = useState<SuggestionGrade | null>(null)
   const [tradeOutgoingId, setTradeOutgoingId] = useState('')
   const [tradeIncomingIds, setTradeIncomingIds] = useState('')

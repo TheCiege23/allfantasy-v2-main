@@ -13,6 +13,7 @@ import type { BestBallWaiverResult } from './bestBallWaiverEngine'
 import type { BestBallTradeAnalysis, BestBallTradeFinderResult } from './bestBallTradeEngine'
 /** THE grade on trade-analyze (2026-09-29, lib/decision-os/trade/warRoomTradeGrade.ts). */
 import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import type { WarRoomTradeAnalysisView } from '@/lib/decision-os/trade/warRoomTradeView'
 
 const base = (leagueId: string) => `/api/leagues/${encodeURIComponent(leagueId)}/best-ball-war-room`
 
@@ -57,7 +58,7 @@ export const fetchBestBallWaivers = (leagueId: string, rosterId?: string) =>
 export const analyzeBestBallWarRoomTrade = (
   leagueId: string,
   input: { rosterId?: string; outgoingPlayerIds: string[]; incomingPlayerIds: string[] },
-) => postAction<{ tradeAnalysis: BestBallTradeAnalysis; tradeGrade?: SuggestionGrade | null }>(leagueId, 'trade-analyze', input)
+) => postAction<{ tradeAnalysis: WarRoomTradeAnalysisView<BestBallTradeAnalysis>; tradeGrade?: SuggestionGrade | null }>(leagueId, 'trade-analyze', input)
 
 export const findBestBallWarRoomTrades = (leagueId: string, rosterId?: string) =>
   postAction<{ tradeFinder: BestBallTradeFinderResult }>(leagueId, 'trade-find', { rosterId })

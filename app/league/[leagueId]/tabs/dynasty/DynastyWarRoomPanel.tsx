@@ -27,6 +27,7 @@ import type { DynastyLineupResult } from '@/lib/dynasty-war-room/dynastyLineupEn
 import type { DynastyWaiverResult } from '@/lib/dynasty-war-room/dynastyWaiverEngine'
 import type { DynastyTradeAnalysis, DynastyTradeFinderResult } from '@/lib/dynasty-war-room/dynastyTradeEngine'
 import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import type { WarRoomTradeAnalysisView } from '@/lib/decision-os/trade/warRoomTradeView'
 import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 
 type Tool = 'buy-sell-hold' | 'waivers' | 'lineup' | 'trade-analyze' | 'trade-find' | null
@@ -64,7 +65,7 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [buySellHold, setBuySellHold] = useState<BuySellHoldResult | null>(null)
   const [waivers, setWaivers] = useState<DynastyWaiverResult | null>(null)
   const [lineup, setLineup] = useState<DynastyLineupResult | null>(null)
-  const [tradeAnalysis, setTradeAnalysis] = useState<DynastyTradeAnalysis | null>(null)
+  const [tradeAnalysis, setTradeAnalysis] = useState<WarRoomTradeAnalysisView<DynastyTradeAnalysis> | null>(null)
   const [tradeGrade, setTradeGrade] = useState<SuggestionGrade | null>(null)
   const [tradeFinder, setTradeFinder] = useState<DynastyTradeFinderResult | null>(null)
   const [tradeOutgoingId, setTradeOutgoingId] = useState('')
@@ -485,19 +486,11 @@ export function DynastyWarRoomPanel({ leagueId }: { leagueId: string }) {
           {tradeAnalysis ? (
             <div className="mt-2 space-y-1" data-testid="dynasty-war-room-trade-analyze-result">
               {/*
-                🛑 THE GRADE IS THE VERDICT (2026-09-28). The engine's own accept/reject/neutral and its
-                private value delta show only when the route sent no grade at all.
+                🛑 THE GRADE IS THE VERDICT (2026-09-28). Since 2026-09-29 there is no fallback: the
+                engine's own accept/reject/neutral and value delta are not sent, and no grade reads
+                "Not graded" with the reason.
               */}
-              {tradeGrade ? (
-                <WarRoomTradeGradeLine grade={tradeGrade} testId="dynasty-war-room-trade-grade" />
-              ) : (
-                <p className="font-semibold text-white/80">
-                  Verdict: {tradeAnalysis.verdict.replace(/_/g, ' ')}
-                  {tradeAnalysis.valueDelta != null ? (
-                    <span className="text-white/40"> · value {tradeAnalysis.valueDelta}</span>
-                  ) : null}
-                </p>
-              )}
+              <WarRoomTradeGradeLine grade={tradeGrade} testId="dynasty-war-room-trade-grade" />
               {tradeAnalysis.explanationFacts.map((f) => (
                 <p key={f}>{f}</p>
               ))}

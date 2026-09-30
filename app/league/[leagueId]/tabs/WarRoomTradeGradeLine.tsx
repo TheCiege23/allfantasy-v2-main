@@ -6,12 +6,18 @@ import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
  * THE grade on the War Room's trade analyzer, all five War Rooms (2026-09-28/29) — in place of the
  * engines' own accept/reject/neutral verdict. See lib/decision-os/trade/warRoomTradeGrade.ts.
  */
+/** Said when the route sent no grade at all (an older server, a failed request) — see below. */
+export const WAR_ROOM_NO_GRADE_REASON = 'This trade could not be graded just now.'
+
 export function WarRoomTradeGradeLine({ grade, testId }: { grade: SuggestionGrade | null | undefined; testId: string }) {
-  if (!grade) return null
-  if (!grade.graded) {
+  /*
+   * 🛑 NO GRADE IS "NOT GRADED" (2026-09-29) — never nothing, and never the engine's own verdict. The
+   * redraft and dynasty panels printed "Verdict: accept · value 9.4" in this case.
+   */
+  if (!grade || !grade.graded) {
     return (
       <p data-testid={`${testId}-withheld`} className="text-amber-200/85">
-        Not graded: {grade.reason}
+        Not graded: {grade ? grade.reason : WAR_ROOM_NO_GRADE_REASON}
       </p>
     )
   }

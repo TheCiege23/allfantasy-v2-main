@@ -30,6 +30,7 @@ import type { BestBallRiskResult } from '@/lib/best-ball-war-room/bestBallRiskEn
 import type { BestBallWaiverResult } from '@/lib/best-ball-war-room/bestBallWaiverEngine'
 import type { BestBallTradeAnalysis, BestBallTradeFinderResult } from '@/lib/best-ball-war-room/bestBallTradeEngine'
 import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import type { WarRoomTradeAnalysisView } from '@/lib/decision-os/trade/warRoomTradeView'
 import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 
 type Tool = 'upside' | 'draft-plan' | 'stacks' | 'risk' | 'waivers' | 'trade-analyze' | 'trade-find' | null
@@ -59,7 +60,7 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [stacks, setStacks] = useState<BestBallStackResult | null>(null)
   const [risk, setRisk] = useState<BestBallRiskResult | null>(null)
   const [waivers, setWaivers] = useState<BestBallWaiverResult | null>(null)
-  const [tradeAnalysis, setTradeAnalysis] = useState<BestBallTradeAnalysis | null>(null)
+  const [tradeAnalysis, setTradeAnalysis] = useState<WarRoomTradeAnalysisView<BestBallTradeAnalysis> | null>(null)
   const [tradeGrade, setTradeGrade] = useState<SuggestionGrade | null>(null)
   const [tradeFinder, setTradeFinder] = useState<BestBallTradeFinderResult | null>(null)
   const [tradeOutgoingId, setTradeOutgoingId] = useState('')

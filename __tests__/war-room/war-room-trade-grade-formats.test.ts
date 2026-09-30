@@ -81,7 +81,9 @@ describe.each(ROUTES)('%s War Room trade-analyze', (_kind, post, canDisableTrade
     const { status, json } = await analyze(post, { outgoingPlayerIds: ['6813'], incomingPlayerIds: ['8148'] })
     expect(status).toBe(200)
     expect(json.tradeGrade).toEqual(GRADED)
-    expect(json.tradeAnalysis).toMatchObject({ verdict: 'accept' })
+    // 🛑 2026-09-29: the analysis's facts, never the engine's own verdict or value scale.
+    expect(json.tradeAnalysis).toMatchObject({ explanationFacts: [], riskFlags: [] })
+    for (const key of ['verdict', 'valueDelta', 'rosterFitDelta']) expect(json.tradeAnalysis).not.toHaveProperty(key)
     expect(h.createGrader).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'u1' })
     expect(h.gradeDeal.mock.calls[0]![1]).toMatchObject({
       give: { assets: [{ kind: 'player', playerId: '6813', name: 'Travis Kelce' }], unpriceable: [] },

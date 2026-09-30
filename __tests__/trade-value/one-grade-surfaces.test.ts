@@ -739,3 +739,31 @@ describe.each([
     expect(ENGINE_PRIVATE.test('pickImpact.push(`Acquiring ${pickLabel(pk)} pick${pk.estValue != null ? ` (tier ${pk.estValue.toFixed(1)})` : \'\'}.`)')).toBe(true)
   })
 })
+
+/*
+ * 2026-09-29: the redraft and dynasty War Room panels fell back to the engine's "Verdict: accept ·
+ * value 9.4" when no grade came back. No War Room route sends the verdict any more, and no grade reads
+ * "Not graded" with the reason (WarRoomTradeGradeLine).
+ */
+describe.each(['redraft', 'dynasty', 'keeper', 'guillotine', 'best-ball'])('the %s War Room never shows its engine’s verdict', (kind) => {
+  it('the route sends the analysis through warRoomTradeAnalysisForClient', () => {
+    expect(code(`app/api/leagues/[leagueId]/${kind}-war-room/[action]/route.ts`)).toMatch(
+      /NextResponse\.json\(\{ tradeAnalysis: warRoomTradeAnalysisForClient\(analysis\), tradeGrade \}\)/,
+    )
+  })
+})
+
+describe('the War Room panels have no fallback verdict', () => {
+  it.each([
+    'app/league/[leagueId]/tabs/redraft/RedraftWarRoomPanel.tsx',
+    'app/league/[leagueId]/tabs/dynasty/DynastyWarRoomPanel.tsx',
+  ])('%s', (file) => {
+    const src = code(file)
+    expect(src).not.toMatch(/tradeAnalysis\.verdict|tradeAnalysis\.valueDelta/)
+    expect(src).toMatch(/<WarRoomTradeGradeLine grade=\{tradeGrade\}/)
+  })
+
+  it('positive control: the shape matches the fallback the panels printed', () => {
+    expect(/tradeAnalysis\.verdict|tradeAnalysis\.valueDelta/.test('<span className="text-white/40"> · value {tradeAnalysis.valueDelta}</span>')).toBe(true)
+  })
+})
