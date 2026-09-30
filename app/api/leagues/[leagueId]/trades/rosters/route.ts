@@ -178,7 +178,7 @@ export type TradeableRoster = {
   teamExternalId: string | null
   /** Team name where the league has one, else the AllFantasy account's name. */
   ownerName: string | null
-  /** Other names this manager goes by (Sleeper login username, display name), for matching a screenshot's label. */
+  /** Other names this manager goes by (the manager's own name beside the team name), for matching a screenshot's label. */
   ownerHandles: string[]
   /** Manager avatar from `LeagueTeam`, so the picker can show whose roster it is. */
   avatarUrl: string | null
@@ -336,6 +336,8 @@ export async function GET(
           where: { leagueId },
           select: {
             platformUserId: true, teamName: true, externalId: true,
+            // The manager's own Sleeper name; the chips show the TEAM name. A DM screenshot uses this one.
+            ownerName: true,
             // Already one query; these ride along rather than costing another.
             avatarUrl: true, wins: true, losses: true, ties: true,
             // The roster↔team join the imported pick inventory needs.
@@ -513,6 +515,9 @@ export async function GET(
   const teamNameByPlatformId = new Map(
     namedTeams.map((t) => [String(t.platformUserId), t.teamName]),
   )
+  const managerNameByPlatformId = new Map(
+    namedTeams.map((t) => [String(t.platformUserId), t.ownerName ?? null]),
+  )
   const externalIdByPlatformId = new Map(
     namedTeams.map((t) => [String(t.platformUserId), String(t.externalId)]),
   )
@@ -638,7 +643,7 @@ export async function GET(
           account?.displayName ||
           account?.username ||
           null,
-        ownerHandles: rosterManagerHandles(r.playerData, account?.username),
+        ownerHandles: rosterManagerHandles(r.playerData, [managerNameByPlatformId.get(String(r.platformUserId)), account?.username]),
         canReceiveProposal: Boolean(account),
       }
     }),
