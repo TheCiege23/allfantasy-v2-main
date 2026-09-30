@@ -66,12 +66,12 @@ export async function POST(req: Request) {
       })
       return NextResponse.json({ ok: true }, { status: 200 })
     }
-    let profile: { userId: string } | null = null
+    let profile: { userId: string; phoneVerifiedAt: Date | null } | null = null
     let profileLookupError: unknown = null
     try {
       profile = await (prisma as any).userProfile.findUnique({
         where: { phone },
-        select: { userId: true },
+        select: { userId: true, phoneVerifiedAt: true },
       })
     } catch (error) {
       profileLookupError = error
@@ -93,6 +93,22 @@ export async function POST(req: Request) {
       void logPasswordResetAudit({
         outcome: "sms_profile_not_found",
         type: "sms",
+        phone,
+        ip,
+      })
+      return NextResponse.json({ ok: true }, { status: 200 })
+    }
+
+    // ⚠ Only a VERIFIED number gets a reset code. A profile can hold a phone
+    // that was typed in and never confirmed, and this path sends with raw
+    // messages.create — no Verify fraud screening — so an unverified number is
+    // both an SMS-pumping target and a code sent to someone who may not own the
+    // account. Answered exactly like "no such phone"; email reset still works.
+    if (!profile.phoneVerifiedAt) {
+      void logPasswordResetAudit({
+        outcome: "sms_phone_unverified",
+        type: "sms",
+        userId: profile.userId,
         phone,
         ip,
       })

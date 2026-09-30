@@ -21,6 +21,19 @@ vi.mock("next-auth", () => ({ getServerSession: mocks.getServerSession }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
 vi.mock("next/headers", () => ({ cookies: () => ({ get: mocks.cookiesGet }) }))
 vi.mock("@/lib/adminSession", () => ({ verifyAdminSessionCookie: mocks.verifyAdminSessionCookie }))
+// An allowlisted email grants admin only when the account row holds it VERIFIED
+// (lib/adminAuth isEmailProvenForUser). Every account here has proven its email.
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    appUser: {
+      findUnique: async ({ where }: { where: { id: string } }) => ({
+        id: where.id,
+        email: process.env.ADMIN_EMAILS?.split(",")[0]?.trim() ?? "",
+        emailVerified: new Date("2026-01-01T00:00:00Z"),
+      }),
+    },
+  },
+}))
 
 /*
  * ⚠ `app/leagues/[leagueId]/admin/model/page.tsx` IS NO LONGER IN THIS LIST, AND THAT

@@ -18,6 +18,8 @@ const isRailwayRuntime = !!(
 
 const nextConfig = {
   reactStrictMode: true,
+  // No `X-Powered-By: Next.js` banner: it tells a scanner which advisories to try.
+  poweredByHeader: false,
     optimizeFonts: false,
   distDir: process.env.AF_NEXT_DIST_DIR || (isProd ? '.next' : '.next-dev-local'),
 

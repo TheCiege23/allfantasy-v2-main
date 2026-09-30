@@ -4,6 +4,7 @@ type PasswordResetAuditOutcome =
   | "rate_limited"
   | "invalid_sms_phone"
   | "sms_profile_not_found"
+  | "sms_phone_unverified"
   | "sms_lookup_failed"
   | "sms_token_write_failed"
   | "sms_provider_missing"

@@ -976,13 +976,51 @@ export async function middleware(request: NextRequest) {
       // else is refused. The rules, and why, are in originLockRefusal.
       const refusal = originLockRefusal({ method: request.method, pathname, search, host }, getPublicSiteHostname())
       reportOriginLock(lock.reason, host, pathname, refusal.kind === "redirect" ? "redirected" : "refused")
-      if (refusal.kind === "redirect") return NextResponse.redirect(refusal.location, 308)
-      return new NextResponse("Forbidden", { status: 403, headers: { "content-type": "text/plain", "cache-control": "no-store" } })
+      if (refusal.kind === "redirect") return applyBaselineSecurityHeaders(NextResponse.redirect(refusal.location, 308))
+      return applyBaselineSecurityHeaders(
+        new NextResponse("Forbidden", { status: 403, headers: { "content-type": "text/plain", "cache-control": "no-store" } })
+      )
     }
   }
 
   const response = await routeMiddleware(request)
-  return applyAttributionCapture(request, response)
+  return applyBaselineSecurityHeaders(applyAttributionCapture(request, response))
+}
+
+/*
+ * Baseline browser security headers on EVERY response this middleware produces.
+ *
+ * Until this, pages carried none of them: any page could be framed
+ * (clickjacking), nothing told browsers to stay on HTTPS, and full URLs leaked
+ * in Referer to third parties. They are set here rather than in next.config
+ * `headers()` because a catch-all source there expands to one rule per route
+ * and trips the 2048-rule cap noted beside that config.
+ *
+ * Deliberately NOT here yet: a script-restricting Content-Security-Policy. Meta
+ * Pixel, PostHog, Sentry, GA and Stripe all load scripts, and an enforced CSP
+ * that misses one breaks checkout or analytics silently — that needs a
+ * Report-Only rollout of its own. `frame-ancestors` alone restricts nothing
+ * but framing, so it is safe to enforce now.
+ *
+ * HSTS omits includeSubDomains on purpose: it would pin every subdomain to
+ * HTTPS for a year, and nothing here inventories what the subdomains serve.
+ */
+const BASELINE_SECURITY_HEADERS: Record<string, string> = {
+  "Strict-Transport-Security": "max-age=31536000",
+  "X-Frame-Options": "DENY",
+  "Content-Security-Policy": "frame-ancestors 'none'",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  // The app uses the microphone (voice input); camera and geolocation are unused.
+  "Permissions-Policy": "camera=(), geolocation=(), microphone=(self)",
+}
+
+function applyBaselineSecurityHeaders<T extends Response>(response: T): T {
+  for (const [key, value] of Object.entries(BASELINE_SECURITY_HEADERS)) {
+    // Never overwrite a header a route set on purpose (e.g. its own CSP).
+    if (!response.headers.has(key)) response.headers.set(key, value)
+  }
+  return response
 }
 
 async function routeMiddleware(request: NextRequest) {

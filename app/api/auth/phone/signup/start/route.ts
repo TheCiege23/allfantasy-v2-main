@@ -21,8 +21,14 @@ export async function POST(req: Request) {
   }
 
   const ip = getClientIp(req)
+  // ⚠ SMS PUMPING. Keyed on ip+phone alone, rotating the NUMBER made sends from
+  // one IP unlimited — each text is billed to us. Three buckets now: the
+  // original per-pair resend throttle, a per-IP ceiling across all numbers,
+  // and a per-number ceiling across all IPs.
   const rl = rateLimit(`signup-phone-start:${ip}:${phone}`, 3, 120_000)
-  if (!rl.success) {
+  const perIp = rl.success ? rateLimit(`signup-phone-start-ip:${ip}`, 10, 60 * 60 * 1000) : rl
+  const perPhone = perIp.success ? rateLimit(`signup-phone-start-num:${phone}`, 5, 60 * 60 * 1000) : perIp
+  if (!perPhone.success) {
     return NextResponse.json(
       {
         error: "RATE_LIMITED",
