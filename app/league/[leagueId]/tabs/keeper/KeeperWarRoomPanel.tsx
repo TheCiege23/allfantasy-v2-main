@@ -29,6 +29,7 @@ import type { KeeperLineupResult } from '@/lib/keeper-war-room/keeperLineupEngin
 import type { KeeperTradeAnalysis } from '@/lib/keeper-war-room/keeperTradeEngine'
 import type { KeeperTradeFinderResult } from '@/lib/keeper-war-room/keeperTradeFinderEngine'
 import type { SuggestionGrade } from '@/lib/trade-intel/partnerRanking'
+import type { WarRoomTradeAnalysisView } from '@/lib/decision-os/trade/warRoomTradeView'
 import { WarRoomTradeGradeLine } from '../WarRoomTradeGradeLine'
 
 type Tool = 'cut-list' | 'draft-plan' | 'waivers' | 'lineup' | 'trade-analyze' | 'trade-find' | null
@@ -64,7 +65,7 @@ export function KeeperWarRoomPanel({ leagueId }: { leagueId: string }) {
   const [draftPlan, setDraftPlan] = useState<KeeperDraftPlanResult | null>(null)
   const [waivers, setWaivers] = useState<KeeperWaiverResult | null>(null)
   const [lineup, setLineup] = useState<KeeperLineupResult | null>(null)
-  const [tradeAnalysis, setTradeAnalysis] = useState<KeeperTradeAnalysis | null>(null)
+  const [tradeAnalysis, setTradeAnalysis] = useState<WarRoomTradeAnalysisView<KeeperTradeAnalysis> | null>(null)
   const [tradeGrade, setTradeGrade] = useState<SuggestionGrade | null>(null)
   const [tradeFinder, setTradeFinder] = useState<KeeperTradeFinderResult | null>(null)
   const [tradeOutgoingId, setTradeOutgoingId] = useState('')

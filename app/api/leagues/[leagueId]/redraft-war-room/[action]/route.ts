@@ -30,6 +30,7 @@ import { classifyRedraftQuestionForModel, selectOpenAIModelForIntent } from '@/l
 import type { RedraftWarRoomContext } from '@/lib/redraft-war-room/types'
 import { recordWarRoomTradeShadow } from '@/lib/decision-os/trade/warRoomShadow'
 import { gradeWarRoomTrade, warRoomTradeSide } from '@/lib/decision-os/trade/warRoomTradeGrade'
+import { warRoomTradeAnalysisForClient } from '@/lib/decision-os/trade/warRoomTradeView'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -126,7 +127,8 @@ export async function POST(
         outgoing: warRoomTradeSide({ playerIds: body.outgoingPlayerIds, players }),
         incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, players }),
       })
-      return NextResponse.json({ tradeAnalysis: analysis, tradeGrade })
+      // 🛑 The facts only — the engine's verdict and value delta stay on the server (2026-09-29).
+      return NextResponse.json({ tradeAnalysis: warRoomTradeAnalysisForClient(analysis), tradeGrade })
     }
 
     case 'trade-find':

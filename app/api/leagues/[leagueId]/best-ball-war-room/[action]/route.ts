@@ -34,6 +34,7 @@ import { openaiChatText } from '@/lib/openai-client'
 import type { BestBallWarRoomContext } from '@/lib/best-ball-war-room/types'
 import { recordWarRoomTradeShadow } from '@/lib/decision-os/trade/warRoomShadow'
 import { gradeWarRoomTrade, warRoomTradeSide } from '@/lib/decision-os/trade/warRoomTradeGrade'
+import { warRoomTradeAnalysisForClient } from '@/lib/decision-os/trade/warRoomTradeView'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -142,7 +143,8 @@ export async function POST(
         incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, players }),
         tradesEnabled: context.bestBall.tradesEnabled,
       })
-      return NextResponse.json({ tradeAnalysis: analysis, tradeGrade })
+      // 🛑 The facts only — the engine's verdict and value delta stay on the server (2026-09-29).
+      return NextResponse.json({ tradeAnalysis: warRoomTradeAnalysisForClient(analysis), tradeGrade })
     }
     case 'trade-find':
       return NextResponse.json({ tradeFinder: findBestBallTradeTargets(context, rosterId) })
