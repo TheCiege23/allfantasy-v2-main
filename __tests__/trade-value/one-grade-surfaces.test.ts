@@ -714,3 +714,28 @@ describe('/trade-finder has one client, and it is the graded one', () => {
     expect(page).not.toMatch(/TradeFinderClient|computeTradeGrade\(|dynastyVerdict/)
   })
 })
+
+/*
+ * 2026-09-29: all five War Rooms' trade analyses printed "value in X vs out Y (delta …)" on their own
+ * scale, a pick "(tier 8.5)", and flags naming their private verdict ("verdict unavailable"). The one
+ * grade line is the verdict; behaviour pinned in each War Room engine suite (WAR_ROOM_PRIVATE_SCALE).
+ */
+describe.each([
+  'lib/redraft-war-room/redraftTradeEngine.ts',
+  'lib/dynasty-war-room/dynastyTradeEngine.ts',
+  'lib/keeper-war-room/keeperTradeEngine.ts',
+  'lib/guillotine-war-room/guillotineTradeEngine.ts',
+  'lib/best-ball-war-room/bestBallTradeEngine.ts',
+])('%s writes no private-scale line for users', (file) => {
+  const ENGINE_PRIVATE = /value in \$\{|vs (?:value )?out \$\{|\(delta \$\{|\(tier \$\{|verdict unavailable|verdict weighted|value delta\.'/
+
+  it('no value-in/out, delta, pick tier or verdict wording in a user-facing string', () => {
+    expect(ENGINE_PRIVATE.test(code(file))).toBe(false)
+  })
+
+  it('positive control: the shape matches the lines the engines wrote', () => {
+    expect(ENGINE_PRIVATE.test("facts.push(`Floor value in ${inSum.toFixed(1)} vs out ${outSum.toFixed(1)} (delta ${valueDelta >= 0 ? '+' : ''}${valueDelta}).`)")).toBe(true)
+    expect(ENGINE_PRIVATE.test("missingDataFlags.push('No value signal for the involved players — verdict unavailable.')")).toBe(true)
+    expect(ENGINE_PRIVATE.test('pickImpact.push(`Acquiring ${pickLabel(pk)} pick${pk.estValue != null ? ` (tier ${pk.estValue.toFixed(1)})` : \'\'}.`)')).toBe(true)
+  })
+})
