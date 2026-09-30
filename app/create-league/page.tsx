@@ -64,15 +64,30 @@ export default async function CreateLeaguePage(
     notFound()
   }
 
+  const currentTeamCount = await prisma.leagueTeam.count({
+    where: { leagueId: source.id, lifecycleState: { not: 'ARCHIVED' } },
+  })
+  const importTemplate = createStateFromImportedLeague({
+    ...source,
+    sport: String(source.sport),
+    leagueSize: currentTeamCount,
+    draftType: source.leagueSettings?.draftType ?? null,
+  })
+  if (importTemplate.teamCount !== currentTeamCount) {
+    return (
+      <main className="mx-auto max-w-2xl p-8 text-center">
+        <h1 className="text-2xl font-bold">This import cannot be copied yet</h1>
+        <p className="mt-4">The imported league has {currentTeamCount} current teams, and AllFantasy does not support that team count for this sport and league type. Every team must carry over, so choose a supported source league or create a new league.</p>
+        <a className="mt-6 inline-block font-bold underline" href="/create-league">Create a new league</a>
+      </main>
+    )
+  }
+
   return (
     <CreateLeaguePageClient
       userId={userId}
       importSourceLeagueId={source.id}
-      importTemplate={createStateFromImportedLeague({
-        ...source,
-        sport: String(source.sport),
-        draftType: source.leagueSettings?.draftType ?? null,
-      })}
+      importTemplate={importTemplate}
       importSourceName={source.name?.trim() || 'Imported League'}
     />
   )
