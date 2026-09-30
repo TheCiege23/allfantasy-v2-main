@@ -1467,3 +1467,59 @@
     text-align: left;
   }
 }
+
+/* ── This week's lineups, projected (AF beside API) ─────────────────────── */
+.af-st-lineups {
+  overflow-x: auto;
+}
+.af-st-lu-note {
+  margin: 4px 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.af-st-lu-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.af-st-lu-table th,
+.af-st-lu-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+.af-st-lu-table thead th {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-st-lu-table .af-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.af-st-lu-table tbody th {
+  font-weight: 600;
+  color: var(--text);
+}
+.af-st-lu-table tr[data-you='true'] {
+  background: var(--accent-soft, transparent);
+}
+.af-st-lu-af {
+  color: var(--accent);
+  font-weight: 700;
+}
+.af-st-lu-you {
+  font-weight: 700;
+  color: var(--accent);
+}
+.af-st-lu-cov {
+  font-size: 11px;
+  color: var(--warn);
+}
+.af-st-lu-none {
+  color: var(--faint);
+}

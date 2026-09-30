@@ -208,6 +208,7 @@ import PickALeague from '@/components/core-app/PickALeague'
 import LeagueTabs from '@/components/core-app/LeagueTabs'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
+import { getStandingsLineups } from '@/lib/core-app/standingsLineups'
 import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummary'
 import { readWeekAllSummary } from '@/lib/core-app/weekAllSummary'
 import { readSeasonOutlookSummary, seasonOutlookFingerprint } from '@/lib/core-app/seasonOutlookSummary'
@@ -2839,6 +2840,19 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   /*
+   * This week's lineups, projected by AllFantasy's engine (AF) and the provider (API), for every team
+   * in the league — only on the standings screen, only when the table itself loaded. A failed read
+   * costs that section and nothing else.
+   */
+  const standingsLineups =
+    activeKey === 'standings' && selectedLeagueId && standings && leagueCtx
+      ? await leagueCtx
+          .league()
+          .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
+          .catch(() => null)
+      : null
+
+  /*
    * Point 9's visible half. The envelope's age becomes a chip in the board's header.
    *
    * ⚠ THE LABEL IS COMPUTED HERE, ON THE SERVER, AND PASSED DOWN. `FreshnessChip` renders this
@@ -4541,7 +4555,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'standings' ? (
         standings ? (
-          <Standings data={standings} freshness={standingsFreshness} view={standingsView} />
+          <Standings data={standings} freshness={standingsFreshness} view={standingsView} lineups={standingsLineups} />
         ) : (
           /* Same split as Commissioner: a read failure is not an unpicked league. */
           selectedLeagueId ? (

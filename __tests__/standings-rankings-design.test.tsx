@@ -182,3 +182,38 @@ describe('Standings — the per-league Rankings design', () => {
     expect(document.body.textContent).not.toMatch(/on the playoff line/)
   })
 })
+
+/*
+ * This week's lineups, projected (2026-09-30): every team's AF and API lineup totals, under the table.
+ * A forecast of the coming week, labelled as one — never a standing.
+ */
+describe('Standings — this week’s lineups, projected', () => {
+  const lineups = {
+    season: 2026,
+    week: 4,
+    rows: [
+      { rosterId: '1', name: 'Alpha', isYou: false, af: 131.2, afFrom: 9, api: 128.4, apiFrom: 9, starterCount: 9 },
+      { rosterId: '2', name: 'Mine', isYou: true, af: 120.5, afFrom: 7, api: 118.9, apiFrom: 9, starterCount: 9 },
+      { rosterId: '3', name: null, isYou: false, af: null, afFrom: 0, api: 99.1, apiFrom: 9, starterCount: 9 },
+    ],
+  }
+
+  it('lists every team with AF and API, labels the week and marks yours', () => {
+    const { container } = render(<Standings data={standings()} lineups={lineups} />)
+    const section = container.querySelector('.af-st-lineups')!
+    expect(section.textContent).toContain('This week’s lineups, projected · week 4')
+    expect(section.textContent).toContain('the table above is points already scored')
+    const rows = [...section.querySelectorAll('tbody tr')].map((r) => r.textContent)
+    expect(rows[0]).toBe('Alpha131.2128.4')
+    // A partial AF total shows its coverage; yours is marked.
+    expect(rows[1]).toBe('Mine · you120.5 7/9118.9')
+    // An unnamed team says which roster; an unpriced AF is a dash, not 0.
+    expect(rows[2]).toBe('Team 3—99.1')
+    expect(section.querySelector('tr[data-you="true"]')).not.toBeNull()
+  })
+
+  it('draws no section without lineups — the screen is as before', () => {
+    const { container } = render(<Standings data={standings()} />)
+    expect(container.querySelector('.af-st-lineups')).toBeNull()
+  })
+})
