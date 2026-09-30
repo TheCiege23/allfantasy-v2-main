@@ -12,6 +12,18 @@ import '@/components/core-app/af-standings.css'
  * `import type` only from the server module: this file is client-safe.
  */
 export function WeekLineupsTable({ lineups, caveat }: { lineups: StandingsLineups; caveat: string }) {
+  return (
+    <section className="af-st-section af-st-lineups" aria-labelledby="af-st-lu-h">
+      <h2 className="af-label af-st-seclabel" id="af-st-lu-h">
+        This week’s lineups, projected · week {lineups.week}
+      </h2>
+      <WeekLineupsBody lineups={lineups} caveat={caveat} />
+    </section>
+  )
+}
+
+/** The note and the table without the section and heading — for a host that supplies its own. */
+export function WeekLineupsBody({ lineups, caveat }: { lineups: StandingsLineups; caveat: string }) {
   const cell = (v: number | null, from: number, of: number) =>
     v == null ? (
       <span className="af-st-lu-none">—</span>
@@ -22,10 +34,7 @@ export function WeekLineupsTable({ lineups, caveat }: { lineups: StandingsLineup
       </>
     )
   return (
-    <section className="af-st-section af-st-lineups" aria-labelledby="af-st-lu-h">
-      <h2 className="af-label af-st-seclabel" id="af-st-lu-h">
-        This week’s lineups, projected · week {lineups.week}
-      </h2>
+    <>
       <p className="af-st-lu-note">
         Each team’s lineup as currently set, projected for week {lineups.week} under this league’s scoring. AF is
         AllFantasy’s own projection engine; API is the provider’s (Sleeper). A forecast of the coming week — {caveat}
@@ -51,6 +60,6 @@ export function WeekLineupsTable({ lineups, caveat }: { lineups: StandingsLineup
           ))}
         </tbody>
       </table>
-    </section>
+    </>
   )
 }
