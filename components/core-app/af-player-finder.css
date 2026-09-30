@@ -1207,6 +1207,10 @@
   font-weight: 800;
   color: var(--text);
 }
+/* AllFantasy's own projection, beside the provider's. */
+.af-core .af-pf-proj.af-pf-af {
+  color: var(--accent);
+}
 .af-core .af-pf-nothing {
   font-size: 11.5px;
   color: var(--faint);

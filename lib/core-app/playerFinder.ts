@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import type { SectionState, UnavailableSection } from './leagueHome'
 import { isBestBallLeagueRow } from './leagueBestBall'
-import { latestProjectionWeek, lookupProjections, positionRanks } from './playerProjections'
+import { latestProjectionWeek, lookupAfEngineProjections, lookupProjections, positionRanks } from './playerProjections'
 import { normalizePosition } from './positionNormalization'
 import { asHeadshotUrl } from './playerIdentityCompose'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
@@ -170,6 +170,14 @@ export type PlayerDetail = {
    * the copy says "standard scoring".
    */
   projection: SectionState<{ points: number; season: string; week: number }>
+  /**
+   * AllFantasy's OWN engine for the same week, generic PPR — the AF number beside `projection`.
+   *
+   * League-free here, like `projection`. The screen carries it into a league with
+   * `afEngineForLeague` (afEngineCarry.ts) against that league's provider number, which it already
+   * holds, so no per-league read is needed. Optional so a cached or older payload still parses.
+   */
+  afProjection?: SectionState<{ points: number; season: string; week: number }>
   /**
    * The game he plays this week — the instant every lineup lock on the card
    * counts down to (2026-09-06). From the ingested schedule for the resolved
@@ -873,7 +881,7 @@ export async function getPlayerDetail(
    */
   const facts = await playerFacts.get(cardFactsKey(refSport, externalId), () => loadPlayerFacts(refSport, externalId))
   if (!facts) return null
-  const { row, identityResolved, injury, injuryTimeline, seasonStats, projection, snapShare, idpValue, positionRank: rank } = facts
+  const { row, identityResolved, injury, injuryTimeline, seasonStats, projection, afProjection, snapShare, idpValue, positionRank: rank } = facts
 
 
   const resolvedSlots = identityResolved
@@ -1008,6 +1016,7 @@ export async function getPlayerDetail(
     rosterCoverage,
     impact,
     projection,
+    afProjection,
     game,
     kickoffs,
     scheduleWeek,
@@ -1383,7 +1392,32 @@ async function loadPlayerFacts(refSport: string | null | undefined, externalId: 
       }
 
 
-  return { row, identityResolved, injury, injuryTimeline, seasonStats, projection, snapShare, idpValue, positionRank: rank }
+  /*
+   * AllFantasy's own engine, same week and same Sleeper-id key as the provider row above. Read once
+   * per player per minute with the rest of these facts; a failed read costs the AF figure only.
+   */
+  const afRow = projectionWeek && row.sleeperId
+    ? (await lookupAfEngineProjections([projKey], projectionWeek).catch(
+        (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
+      )).get(projKey)
+    : undefined
+  const afProjection: PlayerDetail['afProjection'] = afRow
+    ? {
+        available: true,
+        data: {
+          points: Math.round(afRow.projectedPoints * 100) / 100,
+          season: projectionWeek!.season,
+          week: projectionWeek!.week,
+        },
+      }
+    : {
+        available: false,
+        reason: row.sleeperId
+          ? 'AllFantasy’s engine has no projection for this player this week'
+          : 'we hold no Sleeper id for this player, and AllFantasy’s projections are keyed by one',
+      }
+
+  return { row, identityResolved, injury, injuryTimeline, seasonStats, projection, afProjection, snapShare, idpValue, positionRank: rank }
 }
 
 /**

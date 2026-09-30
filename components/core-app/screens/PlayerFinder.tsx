@@ -35,6 +35,7 @@ function asIso(v: Date | string | null | undefined): string | null {
   return v instanceof Date ? v.toISOString() : v
 }
 import type { LeagueImpact } from '@/lib/core-app/playerImpact'
+import { afEngineForLeague } from '@/lib/core-app/afEngineCarry'
 import type { LeagueSlot, PlayerDetail, PlayerMatch } from '@/lib/core-app/playerFinder'
 import type { PlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 import type { PlayerTradeVisual } from '@/lib/core-app/playerTradeVisual'
@@ -557,6 +558,21 @@ export function PlayerFinder({
   const elsewhereCount = leagueRows.filter((r) => !r.slot.isYours).length
   // In league mode the header's numbers are the league's own, when we have them.
   const leagueProj = leagueMode && leagueView ? leagueView.afPoints : null
+  /*
+   * AllFantasy's own engine. League-free from the loader (PPR); carried into a league's scoring here
+   * with the provider's generic and league numbers this screen already holds — the same carry-over
+   * every /core surface uses, so the AF here matches the AF on My Team for the same league.
+   */
+  const afPpr = detail?.afProjection?.available ? detail.afProjection.data.points : null
+  const providerGeneric = detail?.projection.available ? detail.projection.data.points : null
+  const afIn = (leaguePoints: number | null | undefined): number | null =>
+    afEngineForLeague(afPpr, providerGeneric, leaguePoints ?? null)
+  const afTile =
+    afPpr == null
+      ? null
+      : leagueProj
+        ? afIn(leagueProj.available ? leagueProj.data.points : null)
+        : afPpr
   const leagueRank = leagueMode && leagueView ? leagueView.positionRank : null
   const otherMatches = detail
     ? matches.filter((m) => !(m.externalId === detail.player.externalId && m.sport === detail.player.sport))
@@ -917,6 +933,26 @@ export function PlayerFinder({
                   }
                 />
               )}
+              {/*
+                AllFantasy's own projection, beside the provider's. In league mode it is carried into
+                this league's scoring; across leagues it is the engine's standard-scoring number, like
+                the tile beside it.
+              */}
+              {detail.afProjection ? (
+                <StatTile
+                  label={detail.afProjection.available ? `AF proj wk ${detail.afProjection.data.week}` : 'AF proj'}
+                  state={detail.afProjection}
+                  value={afTile != null ? afTile.toFixed(1) : null}
+                  tone="good"
+                  tip={{
+                    title: 'AllFantasy projection',
+                    body: leagueProj
+                      ? 'AllFantasy’s own projection engine for this week, adjusted to this league’s scoring. The tile beside it is the provider’s (Sleeper) projection.'
+                      : 'AllFantasy’s own projection engine for this week, standard scoring. What he projects in each of YOUR leagues is the AF column in the table below.',
+                  }}
+                  help={detail.afProjection.available ? (leagueProj ? 'this league’s scoring' : 'Standard scoring') : undefined}
+                />
+              ) : null}
               {leagueRank ? (
                 <StatTile
                   label="Pos rank"
@@ -1084,7 +1120,8 @@ export function PlayerFinder({
                         <th className="af-label">League</th>
                         <th className="af-label">Slot</th>
                         <th className="af-label af-pf-col-status">Status</th>
-                        <th className="af-label af-pf-col-proj">Proj</th>
+                        <th className="af-label af-pf-col-proj" title="Provider (Sleeper) projection under this league’s scoring">Proj</th>
+                        <th className="af-label af-pf-col-proj af-pf-col-af" title="AllFantasy’s own projection under this league’s scoring">AF</th>
                         {leagueValues ? (
                           <th className="af-label af-pf-col-value" title="What this league’s format and scoring make him worth">
                             Value
@@ -1157,6 +1194,20 @@ export function PlayerFinder({
                                   —
                                 </span>
                               )}
+                            </td>
+                            <td className="af-pf-col-proj af-pf-col-af">
+                              {(() => {
+                                // Only where the provider figure beside it is priced — the carry needs it.
+                                const af =
+                                  l.isYours && r.impact?.afPoints.available ? afIn(r.impact.afPoints.data.points) : null
+                                return af != null ? (
+                                  <span className="af-pf-proj af-pf-af af-num" title="AllFantasy’s own projection, under this league’s scoring">
+                                    {af.toFixed(1)}
+                                  </span>
+                                ) : (
+                                  <span className="af-pf-nothing">—</span>
+                                )
+                              })()}
                             </td>
                             {leagueValues ? (
                               <td className="af-pf-col-value">

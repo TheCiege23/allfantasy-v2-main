@@ -64,6 +64,7 @@ function leader(a: number | null, b: number | null, better: 'higher' | 'lower'):
 
 function tilesFor(a: PlayerDetail, b: PlayerDetail): Tile[] {
   const proj = (d: PlayerDetail) => (d.projection.available ? d.projection.data.points : null)
+  const afProj = (d: PlayerDetail) => (d.afProjection?.available ? d.afProjection.data.points : null)
   const rank = (d: PlayerDetail) => (d.positionRank.available ? d.positionRank.data.rank : null)
   const rankLabel = (d: PlayerDetail) => (d.positionRank.available ? `${d.positionRank.data.position}${d.positionRank.data.rank}` : null)
   const snap = (d: PlayerDetail) => (d.snapShare.available ? d.snapShare.data.share : null)
@@ -76,6 +77,14 @@ function tilesFor(a: PlayerDetail, b: PlayerDetail): Tile[] {
       b: fmt(proj(b), (n) => n.toFixed(1)),
       lead: leader(proj(a), proj(b), 'higher'),
       help: 'Standard scoring · the table below is each league’s own',
+    },
+    // AllFantasy's own engine, same week and same standard scoring as the row above.
+    {
+      label: week ? `AF proj wk ${week}` : 'AF proj',
+      a: fmt(afProj(a), (n) => n.toFixed(1)),
+      b: fmt(afProj(b), (n) => n.toFixed(1)),
+      lead: leader(afProj(a), afProj(b), 'higher'),
+      help: 'AllFantasy’s own projection engine · standard scoring',
     },
     // A rank reads the other way: TE6 leads TE9.
     { label: 'Pos rank', a: rankLabel(a), b: rankLabel(b), lead: leader(rank(a), rank(b), 'lower') },
