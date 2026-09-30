@@ -353,7 +353,6 @@ export type ImportedHistorySlice = {
   careerRecord: string | null
   winPercentage: number | null
   championships: number
-  archetype: string | null
   recentLeagues: Array<{
     name: string
     season: number
