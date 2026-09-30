@@ -92,6 +92,32 @@
   color: var(--muted);
 }
 
+.af-im-create-option {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.af-im-create-option a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  gap: 6px;
+  color: var(--accent);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.af-im-create-option a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ── Card ────────────────────────────────────────────────────────────── */
 
 .af-im-card {
