@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchImportedRoster, translateImportedRosterData } from '@/lib/league-creation/canonical/carryOverImportedLeague'
+import { importedOwnedPlayerIds, matchImportedRoster, translateImportedRosterData } from '@/lib/league-creation/canonical/carryOverImportedLeague'
 
 const team = {
   id: 'team-1', externalId: 'source-seat-1', platformUserId: 'source-manager-1', claimedByUserId: null,
@@ -32,5 +32,16 @@ describe('standalone imported league carryover', () => {
     expect(result).not.toHaveProperty('source_provider')
     expect(result).not.toHaveProperty('import')
     expect(result.foundation).toEqual({ openTeam: false, carriedOverFromLeagueId: 'source-league' })
+  })
+
+  it('uses lineup players when the legacy import has no flat players list', () => {
+    const data = { starters: ['one'], lineup_sections: { bench: ['two'] } }
+    expect(importedOwnedPlayerIds(data)).toEqual(['one', 'two'])
+    expect(translateImportedRosterData(data, new Map([['one', 'native-1'], ['two', 'native-2']]), 'source').players)
+      .toEqual(['native-1', 'native-2'])
+  })
+
+  it('rejects lineups that name players outside the team roster', () => {
+    expect(() => importedOwnedPlayerIds({ players: ['one'], starters: ['two'] })).toThrow(/missing from its team roster/)
   })
 })
