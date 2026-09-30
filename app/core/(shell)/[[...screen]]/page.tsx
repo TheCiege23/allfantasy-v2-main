@@ -3023,6 +3023,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : await getSeasonOutlook(userId, outlookLeagues, selectedLeagueId).catch(() => null)
     : null
 
+  /*
+   * This week's lineups, projected — AF beside API — for the ONE league whose outlook is on screen.
+   * Display only: the simulation above reads the provider's lines and never AF. A failed read costs
+   * the section and nothing else.
+   */
+  const outlookLineups =
+    activeKey === 'season-outlook' &&
+    selectedLeagueId &&
+    leagueCtx &&
+    outlook?.leagues.some((l) => l.leagueId === selectedLeagueId)
+      ? await leagueCtx
+          .league()
+          .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
+          .catch(() => null)
+      : null
+
   /* The board's age, for the same chip Standings shows. Null off-cohort, as there. */
   const outlookFreshness = outlookFresh
     ? {
@@ -4636,6 +4652,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               basis={outlook.basis}
               priorities={outlook.priorities}
               freshness={outlookFreshness}
+              lineups={outlookLineups}
             />
           ) : (
             <SeasonOutlook data={slimOutlookForBoard(outlook)} freshness={outlookFreshness} />

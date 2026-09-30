@@ -185,6 +185,24 @@ describe('SeasonOutlookLeague', () => {
     expect(screen.getByRole('tabpanel').textContent).toContain('Too few completed weeks to model')
   })
 
+  it('Standings tab draws this week’s AF/API lineups under the odds, and nothing without them', () => {
+    const lineups = {
+      season: 2026,
+      week: 4,
+      rows: [{ rosterId: '3', name: 'Mine', isYou: true, af: 120.5, afFrom: 7, api: 118.9, apiFrom: 9, starterCount: 9 }],
+    }
+    const { unmount } = render(<SeasonOutlookLeague league={league()} swing={swing} basis="x" lineups={lineups} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Standings' }))
+    const section = document.querySelector('.af-st-lineups')!
+    expect(section.textContent).toContain('week 4')
+    expect(section.textContent).toContain('simulated without AF')
+    expect(section.querySelector('tbody tr')!.textContent).toBe('Mine · you120.5 7/9118.9')
+    unmount()
+    render(<SeasonOutlookLeague league={league()} swing={swing} basis="x" />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Standings' }))
+    expect(document.querySelector('.af-st-lineups')).toBeNull()
+  })
+
   it('runs a what-if in the browser and reports the change against its own baseline', async () => {
     render(<SeasonOutlookLeague league={league()} swing={swing} basis="10,000 simulations" />)
     fireEvent.click(screen.getByRole('tab', { name: 'What-if' }))
