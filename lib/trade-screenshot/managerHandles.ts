@@ -24,3 +24,17 @@ export function rosterManagerHandles(playerData: unknown, extra: ReadonlyArray<s
   }
   return out
 }
+
+/**
+ * The manager's own name to show beside a roster label, or null when the label already is that name.
+ * A Sleeper roster is labelled with the team name ("Dolphins (B2B Champs)"), while trades and DMs name
+ * the manager ("JeffersonTD"); showing both lets a manager be found by either. The first handle is the
+ * stored league manager name, so that is the one shown.
+ */
+export function managerNameBesideLabel(label: string | null | undefined, handles: ReadonlyArray<string> | null | undefined): string | null {
+  const key = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const first = handles?.[0]?.trim()
+  if (!first) return null
+  if (label && key(label) === key(first)) return null
+  return first
+}
