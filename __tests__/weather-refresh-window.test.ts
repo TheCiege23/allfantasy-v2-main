@@ -175,6 +175,38 @@ describe('weather refresh window', () => {
     expect(getWeatherMock.mock.calls[0]![0].cacheKey).toBe(consumerKey('HOU', kickoff))
   })
 
+  it('🛑 a venue string that is only a generic word is UNRESOLVED, not placed in Arizona', async () => {
+    // `name.includes(venue)` used to let "Stadium" match the first table row (State Farm Stadium).
+    const kickoff = new Date(Date.now() + 30 * HOUR)
+    rowsMock.rows = [
+      { externalId: 'g1', sport: 'NFL', venue: 'Stadium', homeTeam: 'GB', startTime: kickoff },
+      { externalId: 'g2', sport: 'NFL', venue: 'Field', homeTeam: 'GB', startTime: kickoff },
+      { externalId: 'g3', sport: 'NFL', venue: 'The Stadium at Field', homeTeam: 'GB', startTime: kickoff },
+    ]
+
+    const body = await run()
+
+    expect(body.refreshed).toBe(0)
+    expect(getWeatherMock).not.toHaveBeenCalled()
+    expect(body.unresolvedNflVenues).toEqual(['Stadium', 'Field', 'The Stadium at Field'])
+  })
+
+  it('still places a specific short form and a differently punctuated name', async () => {
+    const kickoff = new Date(Date.now() + 30 * HOUR)
+    rowsMock.rows = [
+      { externalId: 'k1', sport: 'NFL', venue: 'Arrowhead', homeTeam: 'KC', startTime: kickoff },
+      { externalId: 's1', sport: 'NFL', venue: 'Levis Stadium', homeTeam: 'SF', startTime: kickoff },
+      { externalId: 'm1', sport: 'NFL', venue: 'US Bank Stadium', homeTeam: 'MIN', startTime: kickoff },
+    ]
+
+    const body = await run()
+
+    expect(body.refreshed).toBe(3)
+    expect(body.unresolvedNflVenues).toEqual([])
+    const keys = getWeatherMock.mock.calls.map((c) => c[0].cacheKey)
+    expect(keys).toEqual([consumerKey('KC', kickoff), consumerKey('SF', kickoff), consumerKey('MIN', kickoff)])
+  })
+
   it('caps placeable games and reports the overflow', async () => {
     const { WEATHER_REFRESH_MAX_GAMES } = await import('@/app/api/weather/refresh-cron/route')
     const start = Date.now() + HOUR
