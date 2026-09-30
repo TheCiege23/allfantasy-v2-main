@@ -1,24 +1,31 @@
 /**
- * KEEPER TRADE ANALYZER — pure, deterministic. No AI, no fabrication.
+ * KEEPER TRADE FACTS — pure, deterministic. No AI, no fabrication.
  *
  * Compares outgoing vs incoming on SEASON value (projection → avg → ADP) AND keeper
  * implications: a player who is also a strong future keeper (positive surplus) carries
- * extra value; acquiring an expensive/negative-surplus player is flagged. When no value
- * signal exists, the verdict is 'needs_more_data' rather than a fabricated grade.
+ * extra value; acquiring an expensive/negative-surplus player is flagged. A missing value
+ * signal is flagged, never fabricated.
  * Keeper-only: NO future picks, NO dynasty pick capital.
+ *
+ * 🛑 IT RETURNS FACTS, NEVER A VERDICT (2026-09-30) — see redraftTradeEngine.ts. The
+ * verdict is THE grade (lib/decision-os/trade/warRoomTradeGrade.ts); the retired
+ * accept / reject / neutral rule that reads `valueDelta` / `rosterFitDelta` /
+ * `keeperSurplusDelta` for the shadow is lib/decision-os/trade/warRoomLegacyVerdict.ts.
  */
 
 import { playerSeasonValue } from './keeperValueEngine'
 import { evaluateKeeperRosterNeeds } from './keeperRosterNeedsEngine'
 import type { KeeperPlayerFact, KeeperWarRoomContext } from './types'
 
-export type KeeperTradeVerdict = 'accept' | 'reject' | 'neutral' | 'needs_more_data'
-
 export interface KeeperTradeAnalysis {
-  verdict: KeeperTradeVerdict
-  /** Incoming − outgoing season-value delta from the USER's perspective. */
+  /** Incoming − outgoing season-value delta from the USER's perspective. Shadow input only. */
   valueDelta: number | null
   rosterFitDelta: number
+  /**
+   * Keeper-surplus term: + for acquiring a strong keeper, − for surrendering one (capped per player).
+   * Shadow input only — it was the keeper engine's extra term in the retired composite.
+   */
+  keeperSurplusDelta: number
   /** Notes about keeper-surplus implications of the involved players. */
   keeperImpact: string[]
   riskFlags: string[]
@@ -42,7 +49,7 @@ export interface AnalyzeKeeperTradeInput {
   incomingPlayerIds: string[]
 }
 
-export function analyzeKeeperTrade(context: KeeperWarRoomContext, input: AnalyzeKeeperTradeInput): KeeperTradeAnalysis {
+export function keeperTradeFacts(context: KeeperWarRoomContext, input: AnalyzeKeeperTradeInput): KeeperTradeAnalysis {
   const missingDataFlags = [...context.missingDataFlags]
   const facts: string[] = []
   const riskFlags: string[] = []
@@ -53,9 +60,9 @@ export function analyzeKeeperTrade(context: KeeperWarRoomContext, input: Analyze
 
   if (outgoing.length === 0 && incoming.length === 0) {
     return {
-      verdict: 'needs_more_data',
       valueDelta: null,
       rosterFitDelta: 0,
+      keeperSurplusDelta: 0,
       keeperImpact: [],
       riskFlags: [],
       explanationFacts: ['No players resolved for this trade.'],
@@ -114,22 +121,14 @@ export function analyzeKeeperTrade(context: KeeperWarRoomContext, input: Analyze
     if (p.injuryStatus && !/^(healthy|active|ok)$/i.test(p.injuryStatus)) riskFlags.push(`Incoming ${p.playerName} listed ${p.injuryStatus}.`)
   }
 
-  let verdict: KeeperTradeVerdict
-  if (!haveAnyValue) {
-    verdict = 'needs_more_data'
-    missingDataFlags.push('No value signal for the involved players.')
-  } else {
-    if (!haveAllValues) riskFlags.push('Some players have no value signal.')
-    const composite = (valueDelta ?? 0) + rosterFitDelta * 1.5 + keeperBonus
-    if (composite >= 3) verdict = 'accept'
-    else if (composite <= -3) verdict = 'reject'
-    else verdict = 'neutral'
-  }
+  // Value-signal coverage — facts, not a verdict (the retired rule is warRoomLegacyVerdict.ts).
+  if (!haveAnyValue) missingDataFlags.push('No value signal for the involved players.')
+  else if (!haveAllValues) riskFlags.push('Some players have no value signal.')
 
   return {
-    verdict,
     valueDelta,
     rosterFitDelta,
+    keeperSurplusDelta: keeperBonus,
     keeperImpact: [...new Set(keeperImpact)],
     riskFlags: [...new Set(riskFlags)],
     explanationFacts: facts,

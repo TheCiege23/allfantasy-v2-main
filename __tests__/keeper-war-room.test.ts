@@ -4,7 +4,8 @@ import { recommendKeepers } from '@/lib/keeper-war-room/keeperRecommendationEngi
 import { buildKeeperCutList } from '@/lib/keeper-war-room/keeperCutListEngine'
 import { evaluateKeeperRosterNeeds } from '@/lib/keeper-war-room/keeperRosterNeedsEngine'
 import { buildKeeperDraftPlan } from '@/lib/keeper-war-room/keeperDraftPlanEngine'
-import { analyzeKeeperTrade } from '@/lib/keeper-war-room/keeperTradeEngine'
+import { keeperTradeFacts } from '@/lib/keeper-war-room/keeperTradeEngine'
+import { warRoomLegacyVerdict } from '@/lib/decision-os/trade/warRoomLegacyVerdict'
 import { WAR_ROOM_PRIVATE_SCALE } from './war-room/warRoomPrivateScale'
 import { findKeeperTradeTargets } from '@/lib/keeper-war-room/keeperTradeFinderEngine'
 import { buildKeeperWaiverRecommendations } from '@/lib/keeper-war-room/keeperWaiverEngine'
@@ -261,8 +262,12 @@ describe('keeperTradeEngine + finder', () => {
       players: [player({ playerId: 'targetKeeper', position: 'WR', slotType: 'WR', adp: 15, keeperCostRound: 9 })],
     })
     const ctx = makeContext({ teams: [me, other] })
-    const res = analyzeKeeperTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['fair'], incomingPlayerIds: ['targetKeeper'] })
-    expect(res.verdict).not.toBe('needs_more_data')
+    const res = keeperTradeFacts(ctx, { rosterId: 'r1', outgoingPlayerIds: ['fair'], incomingPlayerIds: ['targetKeeper'] })
+    // 🛑 2026-09-30: facts, never a verdict — the retired rule reads these inputs, for the shadow only.
+    expect(res).not.toHaveProperty('verdict')
+    expect(warRoomLegacyVerdict(res)).not.toBe('needs_more_data')
+    // The keeper term the retired composite added is still reported, so the shadow sees the same verdict.
+    expect(res.keeperSurplusDelta).toBeGreaterThan(0)
     expect(res.keeperImpact.some((s) => s.includes('targetKeeper'))).toBe(true)
     // 🛑 2026-09-29: the War Room's own value scale is not shown — the verdict is the one grade.
     expect([...res.explanationFacts, ...res.keeperImpact, ...res.riskFlags, ...res.missingDataFlags].filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
@@ -273,8 +278,9 @@ describe('keeperTradeEngine + finder', () => {
       teams: [team({ rosterId: 'r1', isUserTeam: true, players: [player({ playerId: 'np', position: 'WR' })] })],
       availability: { playerValues: 'missing', keeperCosts: 'missing' },
     })
-    const res = analyzeKeeperTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['np'], incomingPlayerIds: [] })
-    expect(res.verdict).toBe('needs_more_data')
+    const res = keeperTradeFacts(ctx, { rosterId: 'r1', outgoingPlayerIds: ['np'], incomingPlayerIds: [] })
+    expect(res).not.toHaveProperty('verdict')
+    expect(warRoomLegacyVerdict(res)).toBe('needs_more_data')
     expect([...res.explanationFacts, ...res.riskFlags, ...res.missingDataFlags].filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 

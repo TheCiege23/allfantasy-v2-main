@@ -77,7 +77,8 @@ export function warRoomVerdictToAdvantage(verdict: string | null | undefined): T
  * One call site for all five war rooms, so instrumentation can't drift the way
  * their copy-pasted `adpToValue` did. They share the verdict rule
  * (composite >= 3 accept / <= -3 reject / else neutral) but use different value
- * bases, so each reports as its own surface.
+ * bases, so each reports as its own surface. Since 2026-09-30 that rule exists
+ * once, in `warRoomLegacyVerdict.ts`; the engines return only its inputs.
  *
  * NOTE: the war rooms do not run the canonical engine, so there is no second
  * verdict to compare against here — these are recorded as structured

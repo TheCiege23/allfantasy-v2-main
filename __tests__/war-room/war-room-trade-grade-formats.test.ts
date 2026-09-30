@@ -15,7 +15,8 @@ const h = vi.hoisted(() => ({
   createGrader: vi.fn(),
   gradeDeal: vi.fn(),
   context: null as unknown,
-  engineVerdict: { verdict: 'accept', valueDelta: 9, rosterFitDelta: 0, keeperImpact: [], riskFlags: [], explanationFacts: [], missingDataFlags: [] },
+  // The engines return facts plus the shadow's inputs — no verdict since 2026-09-30.
+  engineFacts: { valueDelta: 9, rosterFitDelta: 0, keeperSurplusDelta: 2, keeperImpact: [], riskFlags: [], explanationFacts: [], missingDataFlags: [] },
 }))
 
 vi.mock('@/lib/decision-os/trade/leagueTradeGrader', () => ({ createLeagueTradeGrader: h.createGrader, gradeDeal: h.gradeDeal }))
@@ -26,10 +27,10 @@ vi.mock('@/lib/subscription/requireEntitlement', () => ({ requireEntitlement: vi
 vi.mock('@/lib/keeper-war-room/keeperWarRoomContext', () => ({ buildKeeperWarRoomContext: vi.fn(async () => ({ ok: true, context: h.context })) }))
 vi.mock('@/lib/guillotine-war-room/guillotineWarRoomContext', () => ({ buildGuillotineWarRoomContext: vi.fn(async () => ({ ok: true, context: h.context })) }))
 vi.mock('@/lib/best-ball-war-room/bestBallWarRoomContext', () => ({ buildBestBallWarRoomContext: vi.fn(async () => ({ ok: true, context: h.context })) }))
-vi.mock('@/lib/keeper-war-room/keeperTradeEngine', () => ({ analyzeKeeperTrade: vi.fn(() => h.engineVerdict) }))
-vi.mock('@/lib/guillotine-war-room/guillotineTradeEngine', () => ({ analyzeGuillotineTrade: vi.fn(() => h.engineVerdict) }))
+vi.mock('@/lib/keeper-war-room/keeperTradeEngine', () => ({ keeperTradeFacts: vi.fn(() => h.engineFacts) }))
+vi.mock('@/lib/guillotine-war-room/guillotineTradeEngine', () => ({ guillotineTradeFacts: vi.fn(() => h.engineFacts) }))
 vi.mock('@/lib/best-ball-war-room/bestBallTradeEngine', () => ({
-  analyzeBestBallTrade: vi.fn(() => h.engineVerdict),
+  bestBallTradeFacts: vi.fn(() => h.engineFacts),
   findBestBallTradeTargets: vi.fn(),
 }))
 
@@ -37,6 +38,7 @@ import { POST as keeperPOST } from '@/app/api/leagues/[leagueId]/keeper-war-room
 import { POST as guillotinePOST } from '@/app/api/leagues/[leagueId]/guillotine-war-room/[action]/route'
 import { POST as bestBallPOST } from '@/app/api/leagues/[leagueId]/best-ball-war-room/[action]/route'
 import { WAR_ROOM_TRADES_DISABLED_REASON, gradeWarRoomTrade } from '@/lib/decision-os/trade/warRoomTradeGrade'
+import { recordWarRoomTradeShadow } from '@/lib/decision-os/trade/warRoomShadow'
 
 const code = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8')
 
@@ -83,7 +85,7 @@ describe.each(ROUTES)('%s War Room trade-analyze', (_kind, post, canDisableTrade
     expect(json.tradeGrade).toEqual(GRADED)
     // 🛑 2026-09-29: the analysis's facts, never the engine's own verdict or value scale.
     expect(json.tradeAnalysis).toMatchObject({ explanationFacts: [], riskFlags: [] })
-    for (const key of ['verdict', 'valueDelta', 'rosterFitDelta']) expect(json.tradeAnalysis).not.toHaveProperty(key)
+    for (const key of ['verdict', 'valueDelta', 'rosterFitDelta', 'keeperSurplusDelta']) expect(json.tradeAnalysis).not.toHaveProperty(key)
     expect(h.createGrader).toHaveBeenCalledWith({ leagueId: 'L1', userId: 'u1' })
     expect(h.gradeDeal.mock.calls[0]![1]).toMatchObject({
       give: { assets: [{ kind: 'player', playerId: '6813', name: 'Travis Kelce' }], unpriceable: [] },
@@ -108,6 +110,12 @@ describe.each(ROUTES)('%s War Room trade-analyze', (_kind, post, canDisableTrade
       const { json } = await analyze(post, { outgoingPlayerIds: ['6813'], incomingPlayerIds: ['8148'] })
       expect(json.tradeGrade).toEqual({ graded: false, reason: WAR_ROOM_TRADES_DISABLED_REASON })
       expect(h.createGrader).not.toHaveBeenCalled()
+    })
+
+    it('🛑 the shadow is told trades are off — the engine no longer carries a "disabled" verdict (2026-09-30)', async () => {
+      h.context = contextFor(false)
+      await analyze(post, { outgoingPlayerIds: ['6813'], incomingPlayerIds: ['8148'] })
+      expect(vi.mocked(recordWarRoomTradeShadow)).toHaveBeenLastCalledWith(expect.objectContaining({ tradesEnabled: false }))
     })
   }
 })

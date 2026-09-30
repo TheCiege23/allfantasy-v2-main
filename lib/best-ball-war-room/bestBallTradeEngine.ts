@@ -4,17 +4,20 @@
  * Most best-ball leagues DISABLE trades — in that case analyze/find return a truthful
  * disabled state. When trades ARE enabled, analysis weighs CEILING/value + roster-fit
  * (does the incoming set address a thin/fragile position?). No manual lineup, no future
- * picks. When no value signal exists the verdict is 'needs_more_data'.
+ * picks. A missing value signal is flagged, never fabricated.
+ *
+ * 🛑 IT RETURNS FACTS, NEVER A VERDICT (2026-09-30) — see redraftTradeEngine.ts. The
+ * verdict is THE grade (lib/decision-os/trade/warRoomTradeGrade.ts); the retired
+ * accept / reject / neutral / disabled rule for the shadow is
+ * lib/decision-os/trade/warRoomLegacyVerdict.ts (the route passes `tradesEnabled`).
  */
 
 import { ceilingValue } from './bestBallValue'
 import { evaluateDepth } from './bestBallDepthEngine'
 import type { BestBallPlayerFact, BestBallWarRoomContext } from './types'
 
-export type BestBallTradeVerdict = 'accept' | 'reject' | 'neutral' | 'needs_more_data' | 'disabled'
-
 export interface BestBallTradeAnalysis {
-  verdict: BestBallTradeVerdict
+  /** Incoming − outgoing ceiling-value delta; null when no value signal. Shadow input only. */
   valueDelta: number | null
   rosterFitDelta: number
   riskFlags: string[]
@@ -55,11 +58,10 @@ export interface AnalyzeBestBallTradeInput {
   incomingPlayerIds: string[]
 }
 
-export function analyzeBestBallTrade(context: BestBallWarRoomContext, input: AnalyzeBestBallTradeInput): BestBallTradeAnalysis {
+export function bestBallTradeFacts(context: BestBallWarRoomContext, input: AnalyzeBestBallTradeInput): BestBallTradeAnalysis {
   const missingDataFlags = [...context.missingDataFlags]
   if (!context.bestBall.tradesEnabled) {
     return {
-      verdict: 'disabled',
       valueDelta: null,
       rosterFitDelta: 0,
       riskFlags: [],
@@ -73,7 +75,7 @@ export function analyzeBestBallTrade(context: BestBallWarRoomContext, input: Ana
   const outgoing = findPlayers(context, input.outgoingPlayerIds)
   const incoming = findPlayers(context, input.incomingPlayerIds)
   if (outgoing.length === 0 && incoming.length === 0) {
-    return { verdict: 'needs_more_data', valueDelta: null, rosterFitDelta: 0, riskFlags: [], explanationFacts: ['No players resolved for this trade.'], missingDataFlags }
+    return { valueDelta: null, rosterFitDelta: 0, riskFlags: [], explanationFacts: ['No players resolved for this trade.'], missingDataFlags }
   }
 
   const outVals = outgoing.map(ceilOf)
@@ -99,18 +101,10 @@ export function analyzeBestBallTrade(context: BestBallWarRoomContext, input: Ana
   }
   rosterFitDelta = Math.round(rosterFitDelta * 10) / 10
 
-  let verdict: BestBallTradeVerdict
-  if (!haveAny) {
-    verdict = 'needs_more_data'
-    missingDataFlags.push('No value signal for the involved players.')
-  } else {
-    const composite = (valueDelta ?? 0) + rosterFitDelta * 1.5
-    if (composite >= 3) verdict = 'accept'
-    else if (composite <= -3) verdict = 'reject'
-    else verdict = 'neutral'
-  }
+  // Value-signal coverage — a fact, not a verdict (the retired rule is warRoomLegacyVerdict.ts).
+  if (!haveAny) missingDataFlags.push('No value signal for the involved players.')
 
-  return { verdict, valueDelta, rosterFitDelta, riskFlags: [...new Set(riskFlags)], explanationFacts: facts, missingDataFlags: [...new Set(missingDataFlags)] }
+  return { valueDelta, rosterFitDelta, riskFlags: [...new Set(riskFlags)], explanationFacts: facts, missingDataFlags: [...new Set(missingDataFlags)] }
 }
 
 export function findBestBallTradeTargets(context: BestBallWarRoomContext, rosterId: string): BestBallTradeFinderResult {

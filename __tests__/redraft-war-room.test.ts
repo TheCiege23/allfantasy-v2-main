@@ -5,7 +5,8 @@ import {
 } from '@/lib/redraft-war-room/redraftTeamNeedsEngine'
 import { buildLineupRecommendation } from '@/lib/redraft-war-room/redraftLineupEngine'
 import { buildWaiverRecommendations } from '@/lib/redraft-war-room/redraftWaiverEngine'
-import { analyzeTrade, findTradeTargets } from '@/lib/redraft-war-room/redraftTradeEngine'
+import { redraftTradeFacts, findTradeTargets } from '@/lib/redraft-war-room/redraftTradeEngine'
+import { warRoomLegacyVerdict } from '@/lib/decision-os/trade/warRoomLegacyVerdict'
 import { WAR_ROOM_PRIVATE_SCALE } from './war-room/warRoomPrivateScale'
 import {
   REDRAFT_WAR_ROOM_SYSTEM_RULES,
@@ -275,12 +276,14 @@ describe('redraftTradeEngine', () => {
         teamWith('r2', [player({ playerId: 'qbX', position: 'QB', weekProjection: 22 })]),
       ],
     })
-    const result = analyzeTrade(ctx, {
+    const result = redraftTradeFacts(ctx, {
       rosterId: 'r1',
       outgoingPlayerIds: ['wr3'], // bench WR (proj 11)
       incomingPlayerIds: ['qbX'], // fills the QB hole (proj 22)
     })
-    expect(result.verdict).toBe('accept')
+    // 🛑 2026-09-30: facts, never a verdict — the retired rule reads these inputs, for the shadow only.
+    expect(result).not.toHaveProperty('verdict')
+    expect(warRoomLegacyVerdict(result)).toBe('accept')
     expect(result.valueDelta).toBeGreaterThan(0)
     expect(result.lineupImpact.some((s) => /QB need/i.test(s))).toBe(true)
     // 🛑 2026-09-29: the War Room's own value scale is not shown — the verdict is the one grade.
@@ -296,8 +299,9 @@ describe('redraftTradeEngine', () => {
       ],
       availability: { ...FULL_AVAILABILITY, projections: 'missing', playerStats: 'missing', tradeValues: 'missing' },
     })
-    const result = analyzeTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['a'], incomingPlayerIds: ['b'] })
-    expect(result.verdict).toBe('needs_more_data')
+    const result = redraftTradeFacts(ctx, { rosterId: 'r1', outgoingPlayerIds: ['a'], incomingPlayerIds: ['b'] })
+    expect(result).not.toHaveProperty('verdict')
+    expect(warRoomLegacyVerdict(result)).toBe('needs_more_data')
     expect(result.valueDelta).toBeNull()
     expect(result.missingDataFlags.some((s) => /no projection\/stat signal/i.test(s))).toBe(true)
     expect([...result.explanationFacts, ...result.riskFlags, ...result.missingDataFlags].filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])

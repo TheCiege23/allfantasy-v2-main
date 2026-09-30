@@ -27,7 +27,7 @@ import { buildBestBallDraftPlan } from '@/lib/best-ball-war-room/bestBallDraftPl
 import { evaluateStacks } from '@/lib/best-ball-war-room/bestBallStackCorrelationEngine'
 import { evaluateRisk } from '@/lib/best-ball-war-room/bestBallRiskEngine'
 import { buildBestBallWaiverRecommendations } from '@/lib/best-ball-war-room/bestBallWaiverEngine'
-import { analyzeBestBallTrade, findBestBallTradeTargets } from '@/lib/best-ball-war-room/bestBallTradeEngine'
+import { bestBallTradeFacts, findBestBallTradeTargets } from '@/lib/best-ball-war-room/bestBallTradeEngine'
 import { BEST_BALL_WAR_ROOM_SYSTEM_RULES, buildBestBallWarRoomPrompt } from '@/lib/best-ball-war-room/bestBallWarRoomPrompt'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { openaiChatText } from '@/lib/openai-client'
@@ -113,7 +113,7 @@ export async function POST(
     case 'waivers':
       return NextResponse.json({ waivers: buildBestBallWaiverRecommendations(context, rosterId) })
     case 'trade-analyze': {
-      const analysis = analyzeBestBallTrade(context, {
+      const analysis = bestBallTradeFacts(context, {
         rosterId,
         outgoingPlayerIds: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds : [],
         incomingPlayerIds: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds : [],
@@ -127,12 +127,13 @@ export async function POST(
         rosterId,
         outgoingCount: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds.length : 0,
         incomingCount: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds.length : 0,
+        tradesEnabled: context.bestBall.tradesEnabled,
         analysis,
       })
       /*
        * 🛑 THE VERDICT IS THE ONE GRADE (2026-09-29, lib/decision-os/trade/warRoomTradeGrade.ts).
-       * `analysis.verdict` is this engine's own accept/reject/neutral; the panel shows the grade in its
-       * place and keeps the analysis's facts (value, construction fit).
+       * The engine returns facts only (2026-09-30); its retired accept/reject/neutral/disabled is derived
+       * for the shadow above, inside Decision OS. The panel shows the grade and the facts.
        */
       const players = context.teams.flatMap((t) => t.players)
       const tradeGrade = await gradeWarRoomTrade({
@@ -143,7 +144,7 @@ export async function POST(
         incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, players }),
         tradesEnabled: context.bestBall.tradesEnabled,
       })
-      // 🛑 The facts only — the engine's verdict and value delta stay on the server (2026-09-29).
+      // 🛑 The facts only — the engine's value and fit deltas stay on the server (2026-09-29).
       return NextResponse.json({ tradeAnalysis: warRoomTradeAnalysisForClient(analysis), tradeGrade })
     }
     case 'trade-find':

@@ -5,7 +5,8 @@ import { evaluateLineupSafety } from '@/lib/guillotine-war-room/guillotineLineup
 import { buildFaabPlan } from '@/lib/guillotine-war-room/guillotineFaabEngine'
 import { buildWaiverRecommendations } from '@/lib/guillotine-war-room/guillotineWaiverEngine'
 import { evaluateDroppedPlayers } from '@/lib/guillotine-war-room/guillotineDroppedPlayerEngine'
-import { analyzeGuillotineTrade } from '@/lib/guillotine-war-room/guillotineTradeEngine'
+import { guillotineTradeFacts } from '@/lib/guillotine-war-room/guillotineTradeEngine'
+import { warRoomLegacyVerdict } from '@/lib/decision-os/trade/warRoomLegacyVerdict'
 import { WAR_ROOM_PRIVATE_SCALE } from './war-room/warRoomPrivateScale'
 import { buildWeeklyPlan } from '@/lib/guillotine-war-room/guillotineWeeklyPlanEngine'
 import { GUILLOTINE_WAR_ROOM_SYSTEM_RULES, buildGuillotineWarRoomPrompt } from '@/lib/guillotine-war-room/guillotineWarRoomPrompt'
@@ -278,15 +279,20 @@ describe('guillotineWaiverEngine', () => {
 describe('guillotineTradeEngine', () => {
   it('returns disabled when trades are off', () => {
     const ctx = makeContext({ teams: [fullRoster('r1', true)] })
-    expect(analyzeGuillotineTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['r1-bench1'], incomingPlayerIds: [] }).verdict).toBe('disabled')
+    const res = guillotineTradeFacts(ctx, { rosterId: 'r1', outgoingPlayerIds: ['r1-bench1'], incomingPlayerIds: [] })
+    // 🛑 2026-09-30: facts, never a verdict — "disabled" is a fact here, and the shadow's rule reads the flag.
+    expect(res).not.toHaveProperty('verdict')
+    expect(res.explanationFacts).toEqual(['Trades are disabled in this guillotine league.'])
+    expect(warRoomLegacyVerdict({ ...res, tradesEnabled: ctx.guillotine.tradesEnabled })).toBe('disabled')
   })
 
   it('analyzes when trades are enabled', () => {
     const me = fullRoster('r1', true, { thinQb: true })
     const other = team({ rosterId: 'r2', players: [player({ playerId: 'oqb', position: 'QB', slotType: 'starter', weekProjection: 22, adp: 20 })] })
     const ctx = makeContext({ teams: [me, other], guillotine: { ...makeContext().guillotine, tradesEnabled: true } })
-    const res = analyzeGuillotineTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: ['r1-bench1'], incomingPlayerIds: ['oqb'] })
-    expect(res.verdict).not.toBe('disabled')
+    const res = guillotineTradeFacts(ctx, { rosterId: 'r1', outgoingPlayerIds: ['r1-bench1'], incomingPlayerIds: ['oqb'] })
+    expect(res).not.toHaveProperty('verdict')
+    expect(warRoomLegacyVerdict({ ...res, tradesEnabled: ctx.guillotine.tradesEnabled })).not.toBe('disabled')
     expect(res.valueDelta).not.toBeNull()
     // 🛑 2026-09-29: the War Room's own value scale is not shown — the verdict is the one grade.
     expect([...res.explanationFacts, ...res.riskFlags, ...res.missingDataFlags].filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
@@ -296,8 +302,9 @@ describe('guillotineTradeEngine', () => {
     const me = fullRoster('r1', true)
     const other = team({ rosterId: 'r2', players: [player({ playerId: 'nv', position: 'QB', slotType: 'starter' })] })
     const ctx = makeContext({ teams: [me, other], guillotine: { ...makeContext().guillotine, tradesEnabled: true } })
-    const res = analyzeGuillotineTrade(ctx, { rosterId: 'r1', outgoingPlayerIds: [], incomingPlayerIds: ['nv'] })
-    expect(res.verdict).toBe('needs_more_data')
+    const res = guillotineTradeFacts(ctx, { rosterId: 'r1', outgoingPlayerIds: [], incomingPlayerIds: ['nv'] })
+    expect(res).not.toHaveProperty('verdict')
+    expect(warRoomLegacyVerdict({ ...res, tradesEnabled: ctx.guillotine.tradesEnabled })).toBe('needs_more_data')
     expect([...res.explanationFacts, ...res.riskFlags, ...res.missingDataFlags].filter((s) => WAR_ROOM_PRIVATE_SCALE.test(s))).toEqual([])
   })
 })

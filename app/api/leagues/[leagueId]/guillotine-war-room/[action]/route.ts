@@ -24,7 +24,7 @@ import { evaluateLineupSafety } from '@/lib/guillotine-war-room/guillotineLineup
 import { buildFaabPlan } from '@/lib/guillotine-war-room/guillotineFaabEngine'
 import { buildWaiverRecommendations } from '@/lib/guillotine-war-room/guillotineWaiverEngine'
 import { evaluateDroppedPlayers } from '@/lib/guillotine-war-room/guillotineDroppedPlayerEngine'
-import { analyzeGuillotineTrade } from '@/lib/guillotine-war-room/guillotineTradeEngine'
+import { guillotineTradeFacts } from '@/lib/guillotine-war-room/guillotineTradeEngine'
 import { buildWeeklyPlan } from '@/lib/guillotine-war-room/guillotineWeeklyPlanEngine'
 import { GUILLOTINE_WAR_ROOM_SYSTEM_RULES, buildGuillotineWarRoomPrompt } from '@/lib/guillotine-war-room/guillotineWarRoomPrompt'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
@@ -108,7 +108,7 @@ export async function POST(
     case 'dropped-players':
       return NextResponse.json({ droppedPlayers: evaluateDroppedPlayers(context, rosterId) })
     case 'trade-analyze': {
-      const analysis = analyzeGuillotineTrade(context, {
+      const analysis = guillotineTradeFacts(context, {
         rosterId,
         outgoingPlayerIds: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds : [],
         incomingPlayerIds: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds : [],
@@ -122,12 +122,13 @@ export async function POST(
         rosterId,
         outgoingCount: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds.length : 0,
         incomingCount: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds.length : 0,
+        tradesEnabled: context.guillotine.tradesEnabled,
         analysis,
       })
       /*
        * 🛑 THE VERDICT IS THE ONE GRADE (2026-09-29, lib/decision-os/trade/warRoomTradeGrade.ts).
-       * `analysis.verdict` is this engine's own accept/reject/neutral; the panel shows the grade in its
-       * place and keeps the analysis's facts (floor value, elimination-risk fit).
+       * The engine returns facts only (2026-09-30); its retired accept/reject/neutral/disabled is derived
+       * for the shadow above, inside Decision OS. The panel shows the grade and the facts.
        */
       const players = context.teams.flatMap((t) => t.players)
       const tradeGrade = await gradeWarRoomTrade({
@@ -138,7 +139,7 @@ export async function POST(
         incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, players }),
         tradesEnabled: context.guillotine.tradesEnabled,
       })
-      // 🛑 The facts only — the engine's verdict and value delta stay on the server (2026-09-29).
+      // 🛑 The facts only — the engine's value and fit deltas stay on the server (2026-09-29).
       return NextResponse.json({ tradeAnalysis: warRoomTradeAnalysisForClient(analysis), tradeGrade })
     }
     case 'weekly-plan':

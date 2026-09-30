@@ -26,7 +26,7 @@ import { evaluateKeeperRosterNeeds } from '@/lib/keeper-war-room/keeperRosterNee
 import { buildKeeperDraftPlan } from '@/lib/keeper-war-room/keeperDraftPlanEngine'
 import { buildKeeperWaiverRecommendations } from '@/lib/keeper-war-room/keeperWaiverEngine'
 import { buildKeeperLineupRecommendation } from '@/lib/keeper-war-room/keeperLineupEngine'
-import { analyzeKeeperTrade } from '@/lib/keeper-war-room/keeperTradeEngine'
+import { keeperTradeFacts } from '@/lib/keeper-war-room/keeperTradeEngine'
 import { findKeeperTradeTargets } from '@/lib/keeper-war-room/keeperTradeFinderEngine'
 import { KEEPER_WAR_ROOM_SYSTEM_RULES, buildKeeperWarRoomPrompt } from '@/lib/keeper-war-room/keeperWarRoomPrompt'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
@@ -123,7 +123,7 @@ export async function POST(
       return NextResponse.json({ lineup: buildKeeperLineupRecommendation(context, rosterId) })
 
     case 'trade-analyze': {
-      const analysis = analyzeKeeperTrade(context, {
+      const analysis = keeperTradeFacts(context, {
         rosterId,
         outgoingPlayerIds: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds : [],
         incomingPlayerIds: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds : [],
@@ -141,8 +141,8 @@ export async function POST(
       })
       /*
        * 🛑 THE VERDICT IS THE ONE GRADE (2026-09-29, lib/decision-os/trade/warRoomTradeGrade.ts).
-       * `analysis.verdict` is this engine's own accept/reject/neutral; the panel shows the grade in its
-       * place and keeps the analysis's facts (season value, keeper surplus, roster fit).
+       * The engine returns facts only (2026-09-30); its retired accept/reject/neutral is derived for the
+       * shadow above, inside Decision OS. The panel shows the grade and the facts (keeper surplus, fit).
        */
       const players = context.teams.flatMap((t) => t.players)
       const tradeGrade = await gradeWarRoomTrade({
@@ -152,7 +152,7 @@ export async function POST(
         outgoing: warRoomTradeSide({ playerIds: body.outgoingPlayerIds, players }),
         incoming: warRoomTradeSide({ playerIds: body.incomingPlayerIds, players }),
       })
-      // 🛑 The facts only — the engine's verdict and value delta stay on the server (2026-09-29).
+      // 🛑 The facts only — the engine's value, fit and surplus deltas stay on the server (2026-09-29).
       return NextResponse.json({ tradeAnalysis: warRoomTradeAnalysisForClient(analysis), tradeGrade })
     }
 
