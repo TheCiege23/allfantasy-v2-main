@@ -1,3 +1,4 @@
+import { rosterManagerHandles } from '@/lib/trade-screenshot/managerHandles'
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -177,6 +178,8 @@ export type TradeableRoster = {
   teamExternalId: string | null
   /** Team name where the league has one, else the AllFantasy account's name. */
   ownerName: string | null
+  /** Other names this manager goes by (Sleeper login username, display name), for matching a screenshot's label. */
+  ownerHandles: string[]
   /** Manager avatar from `LeagueTeam`, so the picker can show whose roster it is. */
   avatarUrl: string | null
   /**
@@ -635,6 +638,7 @@ export async function GET(
           account?.displayName ||
           account?.username ||
           null,
+        ownerHandles: rosterManagerHandles(r.playerData, account?.username),
         canReceiveProposal: Boolean(account),
       }
     }),

@@ -539,6 +539,10 @@ export async function syncSleeperLeague(
       source_league_id: sleeperLeagueId,
       source_team_id: rId,
       source_manager_id: ownerId,
+      // A Sleeper DM card prints the login username; rosters are labelled with the display name.
+      // Stored so a screenshot's "@JeffersonTD" can be matched to a team (lib/trade-screenshot).
+      ...(sleeperUser?.username ? { source_manager_username: sleeperUser.username } : {}),
+      ...(sleeperUser?.display_name ? { source_manager_display_name: sleeperUser.display_name } : {}),
       source_season_id: season,
       imported_at: new Date().toISOString(),
       ...(platformUserId !== ownerId ? { app_user_id: platformUserId } : {}),
