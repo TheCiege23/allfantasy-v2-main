@@ -51,8 +51,8 @@ anything else, and say what you found in the report:
 | tool family | present | absent → do this |
 |---|---|---|
 | `mcp__github__*` | use them as written below | use the GitHub REST API through `curl` with the container's `$GITHUB_TOKEN` (it is set in this environment; never echo it). The endpoints are listed under each step. |
-| `mcp__Sentry__*` | use them as written below | **Sentry is unavailable this firing.** The egress proxy denies `us.sentry.io` (measured 2026-09-30: `CONNECT` 403), so there is no REST fallback. Run the Playwright half only, and put "Sentry: no connector on this firing" in the report so the owner can attach the connector to the Routine. |
-| `subscribe_pr_activity` | use it in step 5 | skip it and say so; the PR still gets opened and the ledger still records it. |
+| `mcp__Sentry__*` | use them as written below | Try REST: it needs BOTH `$SENTRY_AUTH_TOKEN` set in the environment AND `us.sentry.io` allowed by the egress policy (`curl -sS -o /dev/null -w '%{http_code}' https://us.sentry.io/api/0/` must not be a proxy 403; measured 2026-09-30 it WAS denied). If either is missing, **Sentry is unavailable this firing**: run the Playwright half only and put "Sentry: no connector, REST blocked" in the report so the owner can attach the connector to the Routine or open the host and add the token. |
+| `subscribe_pr_activity` | use it in step 5 | nobody watches the PR between firings, so step 5b (maintain open `sentinel/*` PRs) is how it gets driven to green. |
 
 GitHub REST fallback, all against `https://api.github.com/repos/TheCiege23/allfantasy-v2-main`
 with `-H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json"`:
@@ -69,13 +69,34 @@ PATCH /issues/<n>       {"labels":[...]}
 POST /pulls             {"title","head":"sentinel/<slug>","base":"main","body"}
 ```
 
+Sentry REST fallback, all with `-H "Authorization: Bearer $SENTRY_AUTH_TOKEN"` against `https://us.sentry.io/api/0`:
+
+```
+GET /projects/all-fantasy/allfantasy-v2-main/issues/?query=is:unresolved%20level:error%20firstSeen:-24h&sort=freq&statsPeriod=24h
+GET /projects/all-fantasy/allfantasy-v2-main/issues/?query=is:regressed&statsPeriod=7d
+GET /projects/all-fantasy/allfantasy-v2-main/issues/?query=is:escalating&sort=user&statsPeriod=7d
+GET /organizations/all-fantasy/issues/<issue_id>/               # numeric id from the list, not the short id
+GET /organizations/all-fantasy/issues/<issue_id>/events/latest/  # stack trace lives in entries[].data.values[].stacktrace
+PUT /organizations/all-fantasy/issues/<issue_id>/  {"status":"resolved"}   # step 6 only
+```
+
 ## 0. Bootstrap the checkout
 
+A Routine-fired session starts in an EMPTY working directory (measured
+2026-09-30: `cwd` was `/home/user`, no checkout). Clone first if there is no
+`.git` where you are:
+
 ```bash
+[ -d .git ] || { git clone -q https://github.com/TheCiege23/allfantasy-v2-main.git repo && cd repo; }
 git fetch origin main
 git status --short | head            # must be clean before you start
 npm ci --no-audit --no-fund           # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 is preset; chromium is at /opt/pw-browsers
 ```
+
+Confirm you can push before you invest in a fix: `git ls-remote origin` must
+work and `$GITHUB_TOKEN` (or `$GH_TOKEN`) must be set. If neither is true,
+this firing is read-only: do the triage, write the ledger through REST if that
+works, and report the rest as skipped.
 
 If `npm ci` fails, record it in the report and continue with the read-only
 triage (steps 1 to 3); do not attempt a fix you cannot verify.
@@ -294,6 +315,28 @@ Then, in this order:
 3. Do **not** change the Sentry issue's status. Merging the PR does not prove
    the error stopped; step 6 does.
 
+## 5b. Maintain the open `sentinel/*` PRs (every firing, before new fixes)
+
+Nobody watches a sentinel PR between firings unless `subscribe_pr_activity`
+was available when it was opened. So every firing, for each open PR whose head
+starts with `sentinel/`:
+
+1. Read its head SHA and mergeability (`GET /pulls/<n>`) and the check runs on
+   that head (`GET /commits/<sha>/check-runs?per_page=100`; keep the latest
+   run per name).
+2. **Merge conflict** → `git fetch origin main && git merge origin/main` on the
+   branch, resolve, verify as in step 4, push. Never rebase or force-push.
+3. **Red required check** whose failure is in code this PR touches → fix,
+   verify, push. A check that is red on `main`'s head too is not this PR's;
+   comment once on the PR saying which check and why, then leave it.
+4. **Review comments** from a human → address small, local asks and push;
+   reply with a proposal for anything larger. Never resolve a thread you did
+   not address.
+5. **Merged** → step 6. **Closed without merge** → step 3's rule.
+
+This maintenance is one of the two fixes this firing may spend. New findings
+get whatever budget is left.
+
 ## 6. Verify earlier fixes actually worked
 
 For each open ledger issue labelled `sentinel:in-progress` whose PR is
@@ -320,6 +363,7 @@ End every firing with one short message, even a quiet one:
 
 ```
 error-sentinel <date>
+Tools       github: mcp|rest|none   sentry: mcp|rest|none   pr-watcher: yes|no   push: yes|no
 Playwright  R1 <run url> <conclusion>  R0 <conclusion>  nightly <conclusion>
   red lanes: <list or none>   regressions: <n>   infra: <n>   backlog seen: <n>
 Sentry      new 24h: <n>   regressed: <n>   escalating: <n>   candidates read: <n>
