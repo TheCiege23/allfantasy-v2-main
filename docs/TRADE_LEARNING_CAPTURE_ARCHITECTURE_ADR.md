@@ -1,5 +1,7 @@
 # ADR — Trade Learning: Live Capture Architecture
 
+> **Retired 2026-09-30 (#1710).** `lib/trade-learning.ts` and `POST /api/internal/analyze-trades` no longer exist; references to them below are historical. The calibration cycle that endpoint ran (`runFullCalibration` → `runDriftDetection` → `logAcceptedTradesAsOutcomes`) now runs from `/api/cron/reap-sync-runs` via `lib/trade-engine/calibrationPass.ts`, after the comprehensive trade-learning writer scheduled there by #1703.
+
 **Status:** Proposed and **implemented (Trade Learning Phase 8)**. Schema migration authored and validated offline — **not yet deployed to any environment** (no database connection made during implementation, consistent with this workstream's established rule).
 **Branch:** `g15-event-foundation`
 **Follows:** `docs/TRADE_LEARNING_DATA_CAPTURE_AUDIT.md` (root-cause audit, corrected `d0ab01590`), `docs/TRADE_LEARNING_CALIBRATED_B0_OWNERSHIP_ADR.md` (the precedent this ADR's format and governance approach deliberately mirrors), `docs/TRADE_LEARNING_SHADOW_ROLLOUT.md`.

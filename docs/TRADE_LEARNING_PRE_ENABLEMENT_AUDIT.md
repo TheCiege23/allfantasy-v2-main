@@ -1,5 +1,7 @@
 # Trade Learning — Pre-Enablement Data Readiness Audit
 
+> **Retired 2026-09-30 (#1710).** `lib/trade-learning.ts` and `POST /api/internal/analyze-trades` no longer exist; references to them below are historical. The calibration cycle that endpoint ran (`runFullCalibration` → `runDriftDetection` → `logAcceptedTradesAsOutcomes`) now runs from `/api/cron/reap-sync-runs` via `lib/trade-engine/calibrationPass.ts`, after the comprehensive trade-learning writer scheduled there by #1703.
+
 **Status:** Audit complete, real staging measurement done (Phase 4), **and the migration is now deployed + end-to-end validated on staging (Phase 9)**. `TRADE_ENGINE_WEEKLY_RECALIBRATION_ENABLED` **still not enabled anywhere**. No calibration math, thresholds, or recommendation logic changed.
 **Branch:** `g15-event-foundation`
 **Scope:** Phase 3 (§1–8, code-only) + Phase 4 (§9, real read-only staging measurement) + **Phase 9 (§10, migration deployment + real write validation)**, following Phase 1 (`0376b9ed0`), Phase 2 (`092b0a114`), Phase 8 (`7fb69eb4d`, capture implementation).

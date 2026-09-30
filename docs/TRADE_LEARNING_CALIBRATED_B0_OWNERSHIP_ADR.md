@@ -1,5 +1,7 @@
 # ADR — Trade Learning: `TradeLearningStats.calibratedB0` Ownership
 
+> **Retired 2026-09-30 (#1710).** `lib/trade-learning.ts` and `POST /api/internal/analyze-trades` no longer exist; references to them below are historical. The calibration cycle that endpoint ran (`runFullCalibration` → `runDriftDetection` → `logAcceptedTradesAsOutcomes`) now runs from `/api/cron/reap-sync-runs` via `lib/trade-engine/calibrationPass.ts`, after the comprehensive trade-learning writer scheduled there by #1703.
+
 **Status:** Proposed. Not implemented. No source code changed in this session.
 **Branch:** `g15-event-foundation`
 **Follows:** `docs/DECISION_OS_CLOSED_LOOP_LEARNING_AUDIT.md` §7 Step 0, `docs/TRADE_LEARNING_ACTIVATION_BLOCKERS.md` (§4 "Secondary, non-blocking-but-relevant finding" and §6 item 3), commit `34a0d4fa8` (fixed the `TradeOutcome` enum case-mismatch bug that was the *primary* activation blocker).
