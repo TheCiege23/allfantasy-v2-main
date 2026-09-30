@@ -12,9 +12,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import { prisma } from '@/lib/prisma'
-import { buildLeagueGameDayContext } from '@/lib/shared-services/game-day/GameDayContextAssembler'
 import { computeUserPlayerExposure } from '@/lib/shared-services/game-day/UserPlayerExposureService'
-import { computeGameWindows } from '@/lib/shared-services/game-day/GameWindowService'
+// The Game Day OS shadow modules this suite also exercised (GameDayContextAssembler, GameWindowService)
+// had no production caller and were removed; UserPlayerExposureService is live and stays.
 
 // Real leagues confirmed via direct SQL audit this phase (platform: 'sleeper', genuinely imported).
 const REAL_SLEEPER_LEAGUE_IDS = [
@@ -47,40 +47,5 @@ describe.skipIf(NO_DB)('Game Day OS — real .env.test execution (Phase 33)', ()
     expect(result.connectedLeagueCount).toBeGreaterThanOrEqual(2)
     const multiLeaguePlayers = result.exposures.filter((e) => e.leagueCount >= 2)
     console.log(`[Phase 33 real result] ${multiLeaguePlayers.length} real players rostered in 2+ of this user's leagues`)
-  })
-
-  it('buildLeagueGameDayContext against a real Sleeper league honestly reports its real data-availability state', async () => {
-    const league = await prisma.league.findUnique({ where: { id: REAL_SLEEPER_LEAGUE_IDS[0] } })
-    if (!league) {
-      console.warn('Skipping: DATABASE_URL is not pointed at the real .env.test database.')
-      return
-    }
-
-    const ctx = await buildLeagueGameDayContext({
-      leagueId: REAL_SLEEPER_LEAGUE_IDS[0],
-      viewerUserId: league.userId,
-    })
-
-    console.log('[Phase 33 real result] buildLeagueGameDayContext:', JSON.stringify({ matchupState: ctx.matchupState.state, unavailableReason: ctx.unavailableReason, hasMatchup: ctx.matchup != null, missingDataReason: ctx.matchupState.attribution.missingDataReason }))
-    // Real finding this phase: this real league has 0 RedraftMatchup/WeeklyMatchup rows,
-    // so we expect an honest non-crashing result, not a fabricated matchup.
-    // Phase 34, Track A: this real league also has 0 TeamWeekResult rows -- post-fix,
-    // this must be 'unavailable' with a truthful reason, never a fabricated 'bye'.
-    expect(ctx.leagueId).toBe(REAL_SLEEPER_LEAGUE_IDS[0])
-    expect(ctx.matchupState.state).toBe('unavailable')
-    expect(ctx.matchupState.attribution.missingDataReason).toContain('no_team_week_result_for_week')
-  })
-
-  it('computeGameWindows against the real (empty) FantasyScheduleGame table returns an honest empty result, not a crash', async () => {
-    const league = await prisma.league.findUnique({ where: { id: REAL_SLEEPER_LEAGUE_IDS[0] } })
-    if (!league) {
-      console.warn('Skipping: DATABASE_URL is not pointed at the real .env.test database.')
-      return
-    }
-
-    const windows = await computeGameWindows({ sport: 'NFL', season: '2026', week: 4 })
-    console.log('[Phase 33 real result] computeGameWindows (real, empty FantasyScheduleGame table):', JSON.stringify(windows))
-    // Real finding this phase: FantasyScheduleGame has 0 rows in .env.test.
-    expect(windows).toEqual([])
   })
 })
