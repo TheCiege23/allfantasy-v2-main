@@ -43,6 +43,11 @@ export type PickedAsset =
       sportHint?: string
       /** Why `value` is null, as the list that offered him explained it. */
       unpricedReason?: UnpricedReason | null
+      /**
+       * AllFantasy's own weekly projection under this league's scoring, as the roster offered it.
+       * DISPLAY ONLY — `toInput` in TradeCenter never sends it, so it cannot reach the grade.
+       */
+      afProjection?: number | null
     }
   /**
    * `pickId` is present only when the pick came off a real roster. A hand-typed
@@ -212,6 +217,12 @@ export function RosterPlayerRow(props: {
             0 — states a fact a manager could plan around and be wrong.
           */}
           {p.byeWeek != null ? <span className="af-tc-bye">BYE {p.byeWeek}</span> : null}
+          {/* AllFantasy's own projection for this week, under this league's scoring. */}
+          {p.afProjection != null ? (
+            <span className="af-tc-af" title="AllFantasy projection this week, under this league's scoring">
+              AF {p.afProjection.toFixed(1)}
+            </span>
+          ) : null}
           {props.added ? <span className="af-tc-tag">In this trade</span> : null}
         </span>
       </span>
@@ -479,6 +490,7 @@ export function TradeAssetPicker(props: {
                       stockDelta: p.stockDelta,
                       sportHint: props.sport ?? undefined,
                       unpricedReason: p.unpricedReason ?? null,
+                      afProjection: p.afProjection ?? null,
                     })
                   }
                 />

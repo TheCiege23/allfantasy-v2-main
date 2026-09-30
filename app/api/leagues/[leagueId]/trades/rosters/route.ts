@@ -33,7 +33,7 @@ import { inventoryPickId, roundOrdinal, type InventoryPick } from '@/lib/league-
 import { isNativeFuturePickLeague, loadNativeFuturePicks } from '@/lib/league-trade-engine/nativeFuturePicks'
 import { isDraftPickTradingAllowed } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import { valueBookFor, describeValueBook, pricesOnDynastyChart } from '@/lib/core-app/valueBook'
-import { latestProjectionWeek, lookupProjections } from '@/lib/core-app/playerProjections'
+import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 import {
   generateMultiTeamTradeSuggestions,
@@ -107,6 +107,13 @@ export type TradeableRosterPlayer = {
   value: number | null
   /** Current provider weekly projection used only for before/after simulation. */
   weeklyProjection: number | null
+  /**
+   * AllFantasy's own engine for the same week, carried into this league's scoring by the player's
+   * provider line (`afEngineForLeague`). DISPLAY ONLY: nothing in the simulation, the proposal
+   * evidence or the grade reads it — those stay on `weeklyProjection`. Optional for the same rollout
+   * reason as `stock`; absent or null when the engine has no row for him.
+   */
+  afProjection?: number | null
   /**
    * Why `value` is null, in words the builder prints beside "Unpriced"; null when priced.
    *
@@ -713,7 +720,7 @@ export async function GET(
    * what keeps a missing snapshot table from costing the rosters.
    */
   const positionBySleeperId = new Map(result.flatMap((roster) => roster.players.map((player) => [player.id, player.position] as const)))
-  const [stock, projections, loadedMarketRows, leagueValues] = await Promise.all([
+  const [stock, projections, loadedMarketRows, leagueValues, afEngine] = await Promise.all([
     stockIds.length > 0
       ? resolvePlayerStock(stockIds, { format: valueBook.format, qbFormat: valueBook.qbFormat }).catch(
           () => new Map(),
@@ -734,6 +741,13 @@ export async function GET(
         numTeams: Number(league?.leagueSize) || rosters.length || null,
       },
     }).catch(() => null),
+    /* AllFantasy's own engine, same ids and week as the provider read above. Display only; a failed
+       read costs the AF figures and nothing else. */
+    stockIds.length > 0
+      ? lookupAfEngineProjections(stockIds, projectionWeek).catch(
+          (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
+        )
+      : Promise.resolve(new Map() as Awaited<ReturnType<typeof lookupAfEngineProjections>>),
   ])
 
   const marketRows = loadedMarketRows ?? []
@@ -814,6 +828,13 @@ export async function GET(
         ? computeLeagueProjectedPoints(projection.componentStats, scoring)?.points ?? null
         : null
       p.weeklyProjection = leagueProjection ?? projection?.projectedPoints ?? null
+      // Set only when the engine priced him, so every other player's shape is exactly as before.
+      const afProjection = afEngineForLeague(
+        afEngine.get(p.id)?.projectedPoints,
+        projection?.projectedPoints ?? null,
+        leagueProjection,
+      )
+      if (afProjection != null) p.afProjection = afProjection
       p.unpricedReason =
         p.value == null
           ? (resolvedForLeague.has(p.id)

@@ -188,6 +188,8 @@ type Line = {
   leagueValue?: number | null
   /** What moved `marketValue` to `leagueValue`, each with its reason. */
   adjustments?: ValueAdjustment[]
+  /** AllFantasy's own weekly projection under this league's scoring. Display only — never graded. */
+  afProjection?: number | null
 }
 
 type ValueAdjustment = { kind: 'scoring' | 'need'; factor: number; reason: string }
@@ -290,6 +292,17 @@ function totalOf(lines: Line[]): string {
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
   if (priced.length === 0) return '—'
   return priced.reduce((a, b) => a + b, 0).toLocaleString()
+}
+
+/**
+ * AllFantasy's weekly projection summed over one side — the points that side moves THIS WEEK, beside
+ * the value total. Display only: the verdict never reads it. Null when no line on the side has one,
+ * so a side of picks and FAAB reads as absent rather than as a confident 0.0.
+ */
+function afWeekTotal(lines: Line[]): number | null {
+  const pts = lines.map((l) => l.afProjection).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+  if (pts.length === 0) return null
+  return Math.round(pts.reduce((a, b) => a + b, 0) * 10) / 10
 }
 
 /** The same sum as a number, null when nothing on the side is priced. */
@@ -685,6 +698,8 @@ export function TradeCenter(props: {
             imageUrl: a.imageUrl ?? null,
             stock: a.stock ?? null,
             stockDelta: a.stockDelta ?? null,
+            // A draft restored from this device is parsed, not trusted: only a real number renders.
+            afProjection: typeof a.afProjection === 'number' && Number.isFinite(a.afProjection) ? a.afProjection : null,
             ...leagueOf(engine),
           }
         }
@@ -1774,6 +1789,12 @@ export function TradeCenter(props: {
                         FAAB gets no tag: before Analyze it is waiting for the verdict's
                         conversion rather than missing a price, and the reason below says so.
                       */}
+                      {/* AllFantasy's own projection for this week — display only, never graded. */}
+                      {l.afProjection != null ? (
+                        <span className="af-tc-af" title="AllFantasy projection this week, under this league's scoring">
+                          AF {l.afProjection.toFixed(1)}
+                        </span>
+                      ) : null}
                       {l.marketValue == null && kindOf(l) !== 'faab' ? (
                         <span className="af-tc-tag" data-tone="bad">
                           Unpriced
@@ -1921,6 +1942,7 @@ export function TradeCenter(props: {
                             stock: pl.stock,
                             stockDelta: pl.stockDelta,
                             unpricedReason: pl.unpricedReason ?? null,
+                            afProjection: pl.afProjection ?? null,
                           })
                         }
                         added={Boolean(pl.id && inDeal.has(pl.id))}
@@ -1940,6 +1962,13 @@ export function TradeCenter(props: {
               </span>
               <b className="af-num">{totalOf(side.lines)}</b>
             </div>
+            {/* This week's AllFantasy points on this side, beside the value total. Not part of the grade. */}
+            {afWeekTotal(side.lines) != null ? (
+              <div className="af-tc-total af-tc-total--af" title="AllFantasy's weekly projection for the players on this side, under this league's scoring. Not part of the grade.">
+                <span>AF this week</span>
+                <b className="af-num">{afWeekTotal(side.lines)!.toFixed(1)}</b>
+              </div>
+            ) : null}
           </div>
         ))}
       </div>

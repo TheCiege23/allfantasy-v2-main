@@ -271,6 +271,33 @@ describe('the persistent control', () => {
     expect(body.sideGive.map((a: { name: string }) => a.name)).toEqual(['DK Metcalf'])
     expect(body.sideGet.map((a: { name: string }) => a.name)).toEqual(['Christian McCaffrey'])
   })
+
+  it('🛑 never sends the AllFantasy projection to the verdict — it is display only', async () => {
+    rosterData.current = {
+      rosters: [
+        roster('r1', 'You', [{ ...player('p1', 'DK Metcalf', 5000), afProjection: 14.2 }]),
+        roster('r2', 'Matt Jones', [{ ...player('p9', 'Christian McCaffrey', 7000), afProjection: 19.8 }]),
+      ],
+      viewerRosterId: 'r1',
+      viewerTeamRosterId: 'r1',
+    }
+    render(<TradeCenter league={LEAGUE} />)
+    fireEvent.click(screen.getByLabelText('Add DK Metcalf'))
+    fireEvent.click(step('Get'))
+    chooseMatt()
+    fireEvent.click(screen.getByLabelText('Add Christian McCaffrey'))
+    fireEvent.click(step('Review'))
+    await act(async () => {
+      fireEvent.click(primary())
+    })
+    const call = fetchMock.mock.calls.find(([u]) => String(u).includes('/api/trade-value/analyze'))
+    expect(call).toBeTruthy()
+    const raw = String((call![1] as RequestInit).body)
+    // The positive control: the players ARE in the request, so an absent key is a real absence.
+    expect(raw).toContain('DK Metcalf')
+    expect(raw).not.toContain('afProjection')
+    expect(raw).not.toContain('14.2')
+  })
 })
 
 /** Both sides filled, partner chosen, analysis answered with `answer`. */
