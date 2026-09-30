@@ -60,8 +60,8 @@ const UNGATED_HANDLER_ALLOWANCE: Record<string, number> = {
   // GET reads and DELETE clears the caller's OWN cookie via getUserSessionFromCookie().
   // Neither accepts a username, and both are origin-checked.
   'session/route.ts': 2,
-  // GET is an admin listing gated on the `admin_session` cookie — a different, real gate.
-  'trade/feedback/route.ts': 1,
+  // (`trade/feedback/route.ts` — an admin-cookie-gated GET — was listed here until the route was
+  // deleted on 2026-09-30 with its last caller; see __tests__/legacy/trade-quiz-feedback-removed.test.ts.)
 }
 
 /**
