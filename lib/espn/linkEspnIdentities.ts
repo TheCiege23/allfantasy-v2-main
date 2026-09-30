@@ -126,7 +126,8 @@ async function loadSleeperDobs(sportKey: string): Promise<Map<string, string>> {
   const dobRows = await prisma.sportsPlayer
     .findMany({
       where: { sport: sportKey, sleeperId: { in: sleeperIds }, dob: { not: null } },
-      select: { sleeperId: true, dob: true },
+      /* `source`, so Sleeper's own row outranks a provider row stamped with its id (sleeperDobMap). */
+      select: { sleeperId: true, dob: true, source: true },
     })
     .catch(() => [])
 

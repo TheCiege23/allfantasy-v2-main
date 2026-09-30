@@ -679,13 +679,21 @@ async function handle(req: NextRequest) {
       deferredPhases.push('canonicalBirthdays')
     } else if (!dryRun && wantsNfl) {
       try {
-        const { backfillCanonicalBirthdays } = await import(
+        const { backfillCanonicalBirthdays, promoteSleeperBirthdays } = await import(
           '@/lib/player-identity/backfillCanonicalBirthdays'
         )
-        canonicalBirthdays = await backfillCanonicalBirthdays({
+        /*
+         * SLEEPER FIRST, and it may correct: a canonical player's Sleeper identity IS Sleeper's player,
+         * so Sleeper's birthday is his by id. TheSportsDB then only fills players Sleeper sent none for
+         * — its dates put Justin Jefferson, Josh Allen and Kyler Murray on the wrong birthday and the
+         * ESPN linker (next phase) refused all three. See `promoteSleeperBirthdays`.
+         */
+        const sleeper = await promoteSleeperBirthdays({ sport: 'NFL', isExhausted: () => budget.exhausted() })
+        const thesportsdb = await backfillCanonicalBirthdays({
           sport: 'NFL',
           isExhausted: () => budget.exhausted(),
         })
+        canonicalBirthdays = { sleeper, thesportsdb }
       } catch (dobErr) {
         /* Enrichment must never fail the import it rides on. */
         canonicalBirthdays = {
