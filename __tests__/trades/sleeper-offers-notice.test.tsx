@@ -12,11 +12,20 @@ beforeEach(() => window.localStorage.clear())
 afterEach(() => cleanup())
 
 describe('SleeperOffersNotice', () => {
-  it('says why the offer is missing and how to enter each manager’s assets', () => {
+  it('says why the offer is missing, and both ways in: a screenshot, or each manager’s assets by hand', () => {
     render(<SleeperOffersNotice leagueId="L1" />)
     const text = screen.getByTestId('sleeper-offers-notice').textContent ?? ''
     expect(text).toMatch(/only shares a trade after it.s accepted/i)
+    expect(text).toMatch(/Upload a screenshot/)
+    expect(text).toMatch(/check every asset against Sleeper/i)
     expect(text).toMatch(/every player, pick and FAAB each manager would send/i)
+  })
+
+  /* The screenshot option is new, so a v1 dismissal must not hide the notice that announces it. */
+  it('a dismissal from before the screenshot option does not hide it', () => {
+    window.localStorage.setItem('af:sleeper-offers-notice:v1', '1')
+    render(<SleeperOffersNotice />)
+    expect(screen.getByTestId('sleeper-offers-notice')).toBeTruthy()
   })
 
   it('links one league straight into the hand-entry builder', () => {
