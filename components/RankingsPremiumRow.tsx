@@ -172,18 +172,11 @@ export function RankingsPremiumRow(props: RankingsPremiumRowProps) {
 
           {drawerCell.topTargets.length > 0 && (
             <div className="space-y-1.5">
-              <div className="text-[11px] text-white/40 uppercase tracking-wider">Top Targets</div>
+              <div className="text-[11px] text-white/40 uppercase tracking-wider">Average premium paid, by manager</div>
               {drawerCell.topTargets.map((t: any, i: number) => (
                 <div key={i} className="flex items-center justify-between bg-gray-800/40 rounded-lg px-3 py-2">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-white font-medium">{t.name}</span>
-                    <span className={`px-1.5 py-0.5 text-[11px] font-semibold rounded border ${
-                      t.label === "Overpayer"
-                        ? "bg-red-500/15 text-red-400 border-red-500/20"
-                        : "bg-yellow-500/10 text-yellow-400 border-yellow-500/20"
-                    }`}>
-                      {t.label}
-                    </span>
                   </div>
                   <div className="flex items-center gap-3 text-xs">
                     <span className="text-gray-500">{t.nByPos} trades</span>

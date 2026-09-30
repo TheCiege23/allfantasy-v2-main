@@ -218,7 +218,7 @@ export interface TradeHubShortcut {
   ldiPos: string
   ldiScore: number
   leverageScore: number
-  ctas: Array<{ id: 'generate_offers' | 'find_overpayers' | 'open_trade_hub'; label: string; href: string }>
+  ctas: Array<{ id: 'generate_offers' | 'find_trade_partners' | 'open_trade_hub'; label: string; href: string }>
   evidence: {
     exposureByPos: Record<string, number>
     ldiByPos: Record<string, number>
@@ -228,7 +228,6 @@ export interface TradeHubShortcut {
       sample: number
       ldiForPos: number
       meanPremiumPctForPos: number
-      tag: 'Overpayer' | 'Learning'
       posN: number
     }>
   }
@@ -274,7 +273,6 @@ export interface LeagueRankingsV2Output {
       ldiByPos: number
       meanPremiumPct: number
       nByPos: number
-      label: 'Overpayer' | 'Learning'
     }>
     weightVersion: string
     weightCalibratedAt: string
@@ -2489,7 +2487,7 @@ function computeTradeHubShortcuts(args: {
       leverageScore,
       ctas: [
         { id: 'generate_offers', label: 'Generate offers', href: `/af-legacy?tab=trade&leagueId=${leagueId}&season=${seasonYear}&rosterId=${t.rosterId}&pos=${encodeURIComponent(pos)}&mode=generate` },
-        { id: 'find_overpayers', label: 'Find overpayers', href: `/af-legacy?tab=finder&leagueId=${leagueId}&season=${seasonYear}&pos=${encodeURIComponent(pos)}` },
+        { id: 'find_trade_partners', label: 'Find trade partners', href: `/af-legacy?tab=finder&leagueId=${leagueId}&season=${seasonYear}&pos=${encodeURIComponent(pos)}` },
         { id: 'open_trade_hub', label: 'Open Trade Hub', href: `/af-legacy?tab=trade&leagueId=${leagueId}&season=${seasonYear}` },
       ],
       evidence: {
@@ -2550,12 +2548,6 @@ function attachProposalTargetsToShortcuts(args: {
     return s1 + s2 + s3
   }
 
-  function tagForPos(p: PartnerTendency, pos: string): 'Overpayer' | 'Learning' {
-    const posN = partnerPosCounts?.[p.partnerName]?.[pos] ?? 0
-    if (posN >= 5) return 'Overpayer'
-    return 'Learning'
-  }
-
   return shortcuts.map(sc => {
     const pos = sc.ldiPos?.toUpperCase?.() ?? sc.ldiPos
 
@@ -2573,7 +2565,6 @@ function attachProposalTargetsToShortcuts(args: {
           ldiForPos,
           meanPremiumPctForPos,
           posN,
-          tag: tagForPos(p, pos),
           _score: score,
         }
       })
@@ -2586,7 +2577,6 @@ function attachProposalTargetsToShortcuts(args: {
       sample: p.sample,
       ldiForPos: p.ldiForPos,
       meanPremiumPctForPos: p.meanPremiumPctForPos,
-      tag: p.tag,
       posN: p.posN,
     }))
 
@@ -3501,7 +3491,6 @@ export async function computeLeagueRankingsV2(
         ldiByPos: ldi,
         meanPremiumPct: mean,
         nByPos: posN,
-        label: posN >= 5 ? 'Overpayer' : 'Learning',
       })
     }
   }
