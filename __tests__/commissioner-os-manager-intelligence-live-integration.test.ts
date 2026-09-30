@@ -140,7 +140,13 @@ describe("Manager Intelligence live.ts — the directory is real now, and still 
     withActiveLeague()
   })
 
-  it("returns a real directory with humanized archetypes, no error", async () => {
+  /*
+   * Milestone 32: the backend row still carries the DNA classifier's `primaryIdentity`
+   * ("serial_trader", "committed_grinder"), and this client used to humanise it into an
+   * `archetype` ("Active Trader", "Steady Operator") on every card. A characterisation label of a
+   * named manager is shown to nobody, commissioners included, so it is no longer read.
+   */
+  it("returns a real directory with names and no archetype label, no error", async () => {
     callDecisionOSMock.mockResolvedValue(
       directoryResponse([row({ managerId: "u-1" }), row({ managerId: "u-2", primaryIdentity: "committed_grinder" })]),
     )
@@ -153,9 +159,11 @@ describe("Manager Intelligence live.ts — the directory is real now, and still 
 
     expect(result.error).toBeNull()
     expect(result.data).toHaveLength(2)
-    expect(result.data?.[0]).toMatchObject({ id: "u-1", managerName: "Priya N.", archetype: "Active Trader" })
+    expect(result.data?.[0]).toMatchObject({ id: "u-1", managerName: "Priya N.", engagementReliability: "reliable" })
     // displayName null falls back to username, matching Mission Control's own resolution.
-    expect(result.data?.[1]).toMatchObject({ managerName: "sam_r", archetype: "Steady Operator" })
+    expect(result.data?.[1]).toMatchObject({ managerName: "sam_r" })
+    for (const profile of result.data ?? []) expect(profile).not.toHaveProperty("archetype")
+    expect(JSON.stringify(result.data)).not.toMatch(/Active Trader|Steady Operator|serial_trader|committed_grinder/)
   })
 
   it("OMITS tenureSeasons entirely — it has no source, and a fabricated number is worse than a gap", async () => {
