@@ -49,6 +49,8 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
+import { matchOfferToRosters, screenshotDraftNote } from '@/lib/trade-screenshot/matchOffer'
+import type { OfferRead } from '@/lib/trade-screenshot/offerRead'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -902,6 +904,59 @@ export function TradeCenter(props: {
   }, [goToStep])
 
   /**
+   * A screenshot of the offer as Sleeper shows it on the manager's phone — the only place a pending
+   * Sleeper offer exists (no feed, no email). The server only READS the image; placing it on this
+   * league's rosters happens here, on the rosters this page already loaded
+   * (`lib/trade-screenshot/matchOffer.ts`).
+   *
+   * ⚠ IT LOADS THE BUILDER AND STOPS. The manager checks each asset against Sleeper and presses Analyze
+   * — a misread name would otherwise become a confident grade on a trade nobody offered. Replaces the
+   * board, as loading any offer does.
+   */
+  const [screenshotRead, setScreenshotRead] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null })
+  const readOfferScreenshot = useCallback(
+    async (file: File) => {
+      const leagueId = props.league?.id
+      if (!leagueId) return
+      if (!rosterData) {
+        setScreenshotRead({ busy: false, error: 'This league’s rosters are still loading — try again in a moment.' })
+        return
+      }
+      setScreenshotRead({ busy: true, error: null })
+      try {
+        const body = new FormData()
+        body.append('image', file)
+        const r = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/trades/screenshot`, { method: 'POST', body })
+        const j = (await r.json().catch(() => null)) as { read?: OfferRead; error?: string } | null
+        if (!r.ok || !j?.read) {
+          setScreenshotRead({ busy: false, error: j?.error ?? 'We could not read that screenshot. Enter the offer by hand.' })
+          return
+        }
+        const m = matchOfferToRosters({ read: j.read, rosters: rosterData.rosters, viewerRosterId: rosterData.viewerTeamRosterId })
+        if (!m.ok) {
+          setScreenshotRead({ busy: false, error: m.reason })
+          return
+        }
+        setDraftTouched(true)
+        setRecoverableDraft(null)
+        setGiveAssets(m.give)
+        setGetAssets(m.get)
+        setPartnerRosterId(m.partnerRosterId)
+        setCountering(null)
+        setPicking(null)
+        setResult(null)
+        setError(null)
+        setDraftNote(screenshotDraftNote(m))
+        setScreenshotRead({ busy: false, error: null })
+        goToStep('review')
+      } catch {
+        setScreenshotRead({ busy: false, error: 'The screenshot did not upload. Check your connection and try again.' })
+      }
+    },
+    [props.league?.id, rosterData, goToStep],
+  )
+
+  /**
    * Arm counter mode: the builder holds their deal, seen from this manager, and the
    * send goes to `/counter` with the parent attached.
    *
@@ -1586,6 +1641,9 @@ export function TradeCenter(props: {
           leagueId={props.league?.id ?? null}
           onLoad={loadOffer}
           onEnterByHand={enterOfferByHand}
+          onScreenshot={readOfferScreenshot}
+          screenshotBusy={screenshotRead.busy}
+          screenshotError={screenshotRead.error}
           onCounter={startCounter}
           reloadToken={inboxReloadToken}
           importedHistory={props.completedHistory}
