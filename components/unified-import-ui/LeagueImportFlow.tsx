@@ -879,9 +879,9 @@ export function LeagueImportFlow({
         </div>
 
         {/*
-          ⚠ Hidden in the iOS app (2.1): its provider copy (import.providerHelp and
-          import.provider.{fantrax,mfl,fleaflicker}.detail in lib/i18n/translations.ts) still calls
-          Fantrax, MFL and Fleaflicker "coming soon", and all three are live.
+          ⚠ Hidden in the iOS app (2.1): it lists Yahoo as not available yet, a placeholder. (Its
+          copy used to call Fantrax, MFL and Fleaflicker "coming soon" too, though all three are
+          live; lib/i18n/translations.ts import.provider.*.detail now says how each one imports.)
         */}
         <details className="group mt-10 rounded-2xl border border-white/10 bg-white/[0.03] p-4" data-hide-in-ios-app="">
           <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold text-white/70">
