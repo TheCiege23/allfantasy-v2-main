@@ -16,6 +16,37 @@ export { FREE_CHIMMY_QUESTIONS_PER_DAY }
 /** The rule the route actually spends against, so the floor tracks real pricing. */
 const CHIMMY_SPEND_RULE_CODE = 'ai_chimmy_chat_message'
 
+/**
+ * App Review accounts get a working day of Chimmy, not two questions.
+ *
+ * The App Store review notes send the reviewer to Chimmy, and a free account is out after two
+ * questions — a reviewer testing it properly hits the limit mid-review, on a card that (inside the
+ * app) cannot offer a way to buy more. Accounts named in `CHIMMY_REVIEW_ACCOUNT_USER_IDS`
+ * (comma-separated AppUser ids, set on the web service) get this floor instead.
+ *
+ * ⚠ BY USER ID, FROM THE ENVIRONMENT, AND NEVER IN SOURCE. This repo is public: naming the review
+ * account here would publish it. And the floor is still a floor — the same once-a-day top-up, the
+ * same ledger lock — so an id on the list can never bank more than one day of it.
+ */
+export const REVIEW_ACCOUNT_CHIMMY_QUESTIONS_PER_DAY = 25
+
+export function reviewAccountUserIds(env: Record<string, string | undefined> = process.env): Set<string> {
+  return new Set(
+    (env.CHIMMY_REVIEW_ACCOUNT_USER_IDS ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  )
+}
+
+/** How many Chimmy questions this account's daily floor pays for. */
+export function dailyChimmyQuestionsFor(
+  userId: string,
+  env: Record<string, string | undefined> = process.env,
+): number {
+  return reviewAccountUserIds(env).has(userId) ? REVIEW_ACCOUNT_CHIMMY_QUESTIONS_PER_DAY : FREE_CHIMMY_QUESTIONS_PER_DAY
+}
+
 /** UTC, so the reset is not a moving target per user timezone. */
 function todayKey(userId: string, now: Date): string {
   return `daily-free:${userId}:${now.toISOString().slice(0, 10)}`
@@ -49,7 +80,8 @@ export async function grantDailyFreeTokens(userId: string, now: Date = new Date(
   })
   if (!rule || rule.tokenCost <= 0) return { granted: 0, reason: 'no_spend_rule' }
 
-  const floor = rule.tokenCost * FREE_CHIMMY_QUESTIONS_PER_DAY
+  const questions = dailyChimmyQuestionsFor(userId)
+  const floor = rule.tokenCost * questions
   const idempotencyKey = todayKey(userId, now)
 
   try {
@@ -93,7 +125,10 @@ export async function grantDailyFreeTokens(userId: string, now: Date = new Date(
           balanceAfter: balance.balance + delta,
           sourceType: 'daily_free_tokens',
           idempotencyKey,
-          description: `Daily free floor: ${FREE_CHIMMY_QUESTIONS_PER_DAY} Chimmy questions`,
+          description:
+            questions === FREE_CHIMMY_QUESTIONS_PER_DAY
+              ? `Daily free floor: ${questions} Chimmy questions`
+              : `Daily free floor (App Review account): ${questions} Chimmy questions`,
         },
       })
 
