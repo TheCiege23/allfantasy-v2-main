@@ -12,6 +12,8 @@ import { ChimmyPanel, PUBLIC_ANSWER_NOTICE, type CommsLeague } from './ChimmyPan
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useOverlayContainment } from '../useOverlayContainment'
 import '@/components/core-app/af-comms.css'
 import type { CoreSurfaceKey } from '@/lib/core-app/coreSurface'
@@ -486,6 +488,7 @@ export function CommsDrawer({
   openRequest = null,
   userId,
 }: CommsDrawerProps) {
+  const { language } = useOptionalLanguage()
   const [tab, setTab] = useState<CommsTab>(initialTab)
   const [scopeId, setScopeId] = useState<string | null>(pageLeagueId)
   const panelRef = useRef<HTMLElement | null>(null)
@@ -603,7 +606,7 @@ export function CommsDrawer({
           type="button"
           ref={scrimRef}
           className="af-cm-scrim"
-          aria-label="Close communications"
+          aria-label={language === 'es' ? 'Cerrar mensajes' : 'Close communications'}
           onClick={onClose}
         />
       ) : null}
@@ -615,24 +618,41 @@ export function CommsDrawer({
         tabIndex={-1}
         role={mode === 'overlay' ? 'dialog' : 'complementary'}
         aria-modal={mode === 'overlay' ? true : undefined}
-        aria-label="Communications"
+        aria-label={coreUiCopy('Communications', language)}
       >
         <header className="af-cm-head">
           <div className="af-cm-headtop">
             <span className="af-cm-brand">
               <MessagesSquare size={15} aria-hidden />
-              <h2 className="af-cm-title">Communications</h2>
+              <h2 className="af-cm-title">{coreUiCopy('Communications', language)}</h2>
             </span>
             {/* Contract 4: current scope, always visible. */}
             <span className="af-cm-scopechip" data-global={scopeId == null}>
-              {scopeName ?? 'GLOBAL'}
+              {scopeName ?? (language === 'es' ? 'TODAS LAS LIGAS' : 'GLOBAL')}
             </span>
-            <button type="button" className="af-cm-close" onClick={onClose} aria-label="Close">
+            <button type="button" className="af-cm-close" onClick={onClose} aria-label={coreUiCopy('Close', language)}>
               <X size={16} aria-hidden />
             </button>
           </div>
 
-          <nav className="af-cm-tabs" role="tablist">
+          <nav
+            className="af-cm-tabs"
+            role="tablist"
+            aria-label={language === 'es' ? 'Canales de mensajes' : 'Message channels'}
+            onKeyDown={(event) => {
+              const current = TABS.findIndex((item) => item.id === tab)
+              const next = event.key === 'ArrowRight' ? (current + 1) % TABS.length
+                : event.key === 'ArrowLeft' ? (current - 1 + TABS.length) % TABS.length
+                : event.key === 'Home' ? 0
+                : event.key === 'End' ? TABS.length - 1
+                : -1
+              if (next < 0) return
+              event.preventDefault()
+              setTab(TABS[next].id)
+              const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+              buttons[next]?.focus()
+            }}
+          >
             {TABS.map((t) => {
               const Icon = TAB_ICONS[t.id]
               return (
@@ -641,13 +661,14 @@ export function CommsDrawer({
                   type="button"
                   role="tab"
                   aria-selected={tab === t.id}
+                  tabIndex={tab === t.id ? 0 : -1}
                   className="af-cm-tab"
                   data-on={tab === t.id}
                   onClick={() => setTab(t.id)}
-                  title={t.audience}
+                  title={coreUiCopy(t.audience, language)}
                 >
                   <Icon size={14} aria-hidden />
-                  <span>{t.label}</span>
+                  <span>{coreUiCopy(t.label, language)}</span>
                 </button>
               )
             })}
@@ -659,7 +680,7 @@ export function CommsDrawer({
           */}
           <p className="af-cm-audience">
             <Eye size={12} aria-hidden />
-            <span>Who sees this: {TABS.find((t) => t.id === tab)!.audience}</span>
+            <span>{coreUiCopy('Who sees this:', language)} {coreUiCopy(TABS.find((t) => t.id === tab)!.audience, language)}</span>
           </p>
         </header>
 
@@ -704,7 +725,7 @@ export function CommsDrawer({
 
         <footer className="af-cm-foot">
           <Link href="/settings?tab=notifications" className="af-cm-footlink">
-            Notification settings
+            {coreUiCopy('Notification settings', language)}
           </Link>
           {/*
             V10: this said "Read-only · AllFantasy never writes to your platform" inside a chat you type

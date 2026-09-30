@@ -50,6 +50,17 @@ const drawer = (openRequest: Req, initialDraft?: string) => (
 const scopeValue = () => (screen.getByLabelText('League scope') as HTMLSelectElement).value
 
 describe('CommsDrawer openRequest', () => {
+  it('moves between channels with arrow keys and keeps one tab in the keyboard order', () => {
+    render(drawer(null))
+    const list = screen.getByRole('tablist', { name: 'Message channels' })
+    const chimmy = screen.getByRole('tab', { name: 'Chimmy' })
+    chimmy.focus()
+    fireEvent.keyDown(list, { key: 'ArrowLeft' })
+    const league = screen.getByRole('tab', { name: 'League' })
+    expect(league.getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(league)
+    expect(screen.getAllByRole('tab').filter((tab) => tab.tabIndex === 0)).toEqual([league])
+  })
   it('seeds the requested league after saved drafts load, without seeding the previous scope', async () => {
     const question = 'Review my Draft Junkies Best Ball roster using Decision OS.'
     const { rerender } = render(drawer(null))

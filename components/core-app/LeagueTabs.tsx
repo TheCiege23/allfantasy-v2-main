@@ -1,4 +1,8 @@
+'use client'
+
 import Link from 'next/link'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { LeagueTabsPrewarm } from '@/components/core-app/LeagueTabsPrewarm'
 import { LeagueTabsScroller } from '@/components/core-app/LeagueTabsScroller'
 import '@/components/core-app/af-league-tabs.css'
@@ -50,12 +54,12 @@ export type LeagueTabsProps = {
 }
 
 /** The compact strip's five, in order, with their short labels. `''` is the league home. */
-const COMPACT_PRIMARY: Array<{ key: string; label: string }> = [
-  { key: 'matchup', label: 'Match' },
-  { key: 'my-team', label: 'Team' },
-  { key: 'players', label: 'Players' },
-  { key: 'trades', label: 'Trades' },
-  { key: '', label: 'League' },
+const COMPACT_PRIMARY: Array<{ key: string; label: string; labelEs: string }> = [
+  { key: 'matchup', label: 'Match', labelEs: 'Partido' },
+  { key: 'my-team', label: 'Team', labelEs: 'Equipo' },
+  { key: 'players', label: 'Players', labelEs: 'Jugad.' },
+  { key: 'trades', label: 'Trades', labelEs: 'Cambios' },
+  { key: '', label: 'League', labelEs: 'Liga' },
 ]
 
 type TabRequirement = 'scores' | 'trades' | 'draft'
@@ -89,6 +93,8 @@ export function LeagueTabs({
   platform = null,
   compact = false,
 }: LeagueTabsProps) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const q = `?league=${encodeURIComponent(leagueId)}`
   const hiddenFor = (requires: TabRequirement): boolean =>
     requires === 'scores' ? hasScoredWeek === false : requires === 'trades' ? !tradeSupported : !draftSupported
@@ -97,7 +103,7 @@ export function LeagueTabs({
   const notes = describeHiddenTabs({ hasScoredWeek, tradeSupported, draftSupported, platform })
 
   return (
-    <nav className="af-lt" aria-label={`${leagueName} views`}>
+    <nav className="af-lt" aria-label={language === 'es' ? `Secciones de ${leagueName}` : `${leagueName} views`}>
       {/*
         Warms My team and Matchup once the screen you asked for has landed.
 
@@ -136,11 +142,11 @@ export function LeagueTabs({
         const restActive = rest.some((t) => t.key === activeKey)
         return (
           <div className="af-lt-compact">
-            <div className="af-lt-compact-row">{primary.map((t) => tab(t.key, t.label))}</div>
+            <div className="af-lt-compact-row" style={{ gridTemplateColumns: `repeat(${primary.length}, minmax(0, 1fr))` }}>{primary.map((t) => tab(t.key, language === 'es' ? t.labelEs : t.label))}</div>
             {rest.length ? (
               <details className="af-lt-more" open={restActive || undefined}>
-                <summary className="af-lt-tab" data-active={restActive}>More</summary>
-                <div className="af-lt-more-list">{rest.map((t) => tab(t.key, t.label))}</div>
+                <summary className="af-lt-tab" data-active={restActive}>{copy('More')}</summary>
+                <div className="af-lt-more-list">{rest.map((t) => tab(t.key, copy(t.label)))}</div>
               </details>
             ) : null}
           </div>
@@ -160,7 +166,7 @@ export function LeagueTabs({
                   data-active={active}
                   aria-current={active ? 'page' : undefined}
                 >
-                  {t.label}
+                  {copy(t.label)}
                 </Link>
               </span>
             )

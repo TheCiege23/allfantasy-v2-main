@@ -848,3 +848,41 @@
 .af-ml-hub-members a { display:flex; min-height:44px; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid var(--line); border-radius:10px; color:var(--text); background:var(--chip); text-decoration:none; }
 .af-ml-hub-members small { color:var(--accent); }
 .af-ml-hub-members a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+
+/* Keep all league actions visible while making the primary path easy to scan. */
+.af-ml-head {
+  align-items: center;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+}
+.af-ml-actions .af-ml-btn:not(.af-ml-btn--ghost) {
+  box-shadow: 0 10px 24px var(--accent-soft);
+}
+.af-ml-controls {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface2);
+}
+.af-ml-grid[data-view='grid'][data-tier='quiet'] {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.af-ml-card {
+  border-radius: 16px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
+}
+.af-ml-card[data-tone='bad'],
+.af-ml-card[data-tone='warn'] {
+  background: linear-gradient(135deg, var(--accent-soft), transparent 48%), var(--surface);
+}
+@media (max-width: 720px) {
+  .af-ml-head { padding: 16px; }
+  .af-ml-actions { width: 100%; }
+  .af-ml-actions .af-ml-btn { flex: 1 1 auto; }
+  .af-ml-actions .af-ml-btn:not(.af-ml-btn--ghost) { flex-basis: 100%; order: -1; }
+  .af-ml-controls { padding: 10px; }
+  .af-ml-search { flex-basis: 100%; }
+  .af-ml-grid[data-view='grid'][data-tier='quiet'] { grid-template-columns: 1fr; }
+}

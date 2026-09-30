@@ -2134,6 +2134,7 @@
 }
 
 /* `af` is the third dark theme; it takes the dark values. Light inverts. */
+html[data-mode='legacy'] .af-core,
 html[data-mode='af'] .af-core {
   --af-sk-fill: rgba(255, 255, 255, 0.14);
   --af-sk-sheen: rgba(255, 255, 255, 0.1);
@@ -3073,4 +3074,55 @@ html[data-mode='light'] .af-core {
 .af-shell .af-rail-tile[data-nav-pending='true'] {
   background: var(--accent-soft);
   border-color: var(--accent-line);
+}
+
+/* Core readability pass: keep the same controls and data, with clearer scan points. */
+@media (min-width: 721px) {
+  .af-core .af-nav-item {
+    border-radius: 11px;
+  }
+  .af-core .af-nav-item[data-active='true'] {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile {
+    margin-block: 2px;
+    border: 1px solid transparent;
+    border-radius: 13px;
+  }
+  .af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile[data-active='true'] {
+    border-color: var(--accent-line);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .af-core .af-rail-row-name {
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1080px) {
+  .af-core.af-shell:not([data-rail-open='true']) {
+    grid-template-columns: 68px 220px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .af-core .af-tabbar {
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.12);
+  }
+  .af-core .af-tabbar-item[data-active='true'] {
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+  .af-core.af-shell[data-league-first='true'] .af-lf-chatbar {
+    border-color: var(--accent-line);
+    background: var(--surface);
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.22);
+  }
+  .af-core.af-shell[data-league-first='true'] .af-lf-chatbar-icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
 }

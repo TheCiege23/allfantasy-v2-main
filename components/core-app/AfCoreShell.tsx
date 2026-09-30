@@ -36,6 +36,8 @@ import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
 import { CORE_NAV_ATTRIBUTE, CoreNavPendingContext, pendingCoreNavTarget } from '@/components/core-app/coreNavPending'
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 import '@/components/core-app/af-core.css'
@@ -1225,6 +1227,8 @@ export function syncChipText(ageLabel: string): string {
 }
 
 export function AfCoreShell(incoming: AfCoreShellProps) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   /*
    * The screen streams in after this shell paints, so the few pieces of chrome only a screen
    * can know (week label, tab badges, Chimmy's home signals, the live slate count) arrive by
@@ -1661,7 +1665,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         type="button"
         className="af-rail-handle"
         ref={railHandleRef}
-        aria-label={railOpen ? 'Close leagues' : 'Open leagues'}
+        aria-label={railOpen ? (language === 'es' ? 'Cerrar ligas' : 'Close leagues') : (language === 'es' ? 'Abrir ligas' : 'Open leagues')}
         aria-expanded={railOpen}
         aria-controls="af-rail"
         onClick={toggleRail}
@@ -1670,7 +1674,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <AfCrest size={20} tone="inherit" />
         </span>
         <span className="af-rail-handle-text">
-          {railOpen ? 'Close' : selectedLeagueName ?? 'Leagues'}
+          {railOpen ? copy('Close') : selectedLeagueName ?? copy('Leagues')}
         </span>
       </button>
 
@@ -1679,7 +1683,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         ref={railRef}
         className="af-rail"
         id="af-rail"
-        aria-label="Leagues"
+        aria-label={copy('Leagues')}
         onClick={(event) => {
           if (mobileRailOpen && (event.target as HTMLElement).closest('a[href]')) {
             setRailChoice('closed')
@@ -1924,9 +1928,9 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           them. This is the half that makes removing the cap safe.
         */}
         <div className="af-rail-foot">
-        <Link href="/import" className="af-rail-tile af-rail-add" aria-label="Add a league">
+        <Link href="/import" className="af-rail-tile af-rail-add" aria-label={copy('Add league')}>
           <span className="af-rail-foot-icon" aria-hidden>+</span>
-          <span className="af-rail-foot-copy"><strong>Add league</strong><small>Connect a platform</small></span>
+          <span className="af-rail-foot-copy"><strong>{copy('Add league')}</strong><small>{copy('Connect a platform')}</small></span>
         </Link>
 
         <Link href="/settings" className="af-rail-tile af-rail-profile" title="Profile, settings and modes">
@@ -1961,7 +1965,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <div className="af-nav-group" key={section.id}>
             {section.heading ? (
               <div className="af-nav-heading af-label" aria-hidden>
-                {section.heading}
+                {copy(section.heading)}
               </div>
             ) : null}
             {/*
@@ -1970,7 +1974,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               aria-hidden because it is repeated as the list's accessible name —
               announcing it twice is worse than not styling it at all.
             */}
-            <ul className="af-nav-items" aria-label={section.heading ?? 'Primary'}>
+            <ul className="af-nav-items" aria-label={section.heading ? copy(section.heading) : copy('Primary')}>
               {section.items.map((item) => (
                 <li key={item.key}>
                   <Link
@@ -1984,7 +1988,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     <span className="af-nav-glyph" aria-hidden>
                       {item.glyph}
                     </span>
-                    <span className="af-nav-label">{item.label}</span>
+                    <span className="af-nav-label">{copy(item.label)}</span>
                     {item.badge ? (
                       <span className="af-nav-badge" data-tone={item.badge.tone}>
                         {item.badge.text}
@@ -2009,10 +2013,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         */}
         <div className="af-nav-foot">
         <div className="af-import-cta">
-          <div className="af-import-title">Import a league</div>
+          <div className="af-import-title">{copy('Import a league')}</div>
           <p className="af-import-body">{availableImportPlatformsPhrase()}. Read-only, takes about a minute.</p>
           <Link href="/import" className="af-btn af-import-btn">
-            Connect a platform
+            {copy('Connect a platform')}
           </Link>
         </div>
 
@@ -2027,7 +2031,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           className="af-nav-support"
           onClick={() => window.dispatchEvent(new CustomEvent(SUPPORT_OPEN_EVENT))}
         >
-          Contact support
+          {copy('Contact support')}
         </button>
         </div>
       </aside>
@@ -2257,7 +2261,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             aria-current={active !== 'live' && !mobileMoreOpen ? 'page' : undefined}
           >
             <span className="af-tabbar-glyph" aria-hidden>▣</span>
-            <span className="af-tabbar-label">Leagues</span>
+            <span className="af-tabbar-label">{copy('Leagues')}</span>
           </Link>
           <Link
             href="/core/live"
@@ -2267,7 +2271,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             aria-current={active === 'live' && !mobileMoreOpen ? 'page' : undefined}
           >
             <span className="af-tabbar-glyph" aria-hidden>●</span>
-            <span className="af-tabbar-label">Live</span>
+            <span className="af-tabbar-label">{copy('Live')}</span>
           </Link>
           <button
             type="button"
@@ -2289,7 +2293,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             }}
           >
             <span className="af-tabbar-glyph" aria-hidden>⊕</span>
-            <span className="af-tabbar-label">Play</span>
+            <span className="af-tabbar-label">{copy('Play')}</span>
           </button>
           <button
             type="button"
@@ -2304,7 +2308,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             }}
           >
             <span className="af-tabbar-glyph" aria-hidden>◉</span>
-            <span className="af-tabbar-label">Me</span>
+            <span className="af-tabbar-label">{copy('Me')}</span>
           </button>
         </nav>
       ) : (
@@ -2322,7 +2326,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 {item.glyph}
                 {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
               </span>
-              <span className="af-tabbar-label">{item.label}</span>
+              <span className="af-tabbar-label">{copy(item.label)}</span>
             </Link>
           ))}
           <button
@@ -2337,7 +2341,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             <span className="af-tabbar-glyph" aria-hidden>
               ⋯
             </span>
-            <span className="af-tabbar-label">More</span>
+            <span className="af-tabbar-label">{copy('More')}</span>
           </button>
         </nav>
       )}
@@ -2363,23 +2367,23 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             id="af-mobile-more"
             role="dialog"
             aria-modal="true"
-            aria-label={props.leagueFirst && mobileSheet === 'play' ? 'Play' : 'More screens'}
+            aria-label={props.leagueFirst && mobileSheet === 'play' ? copy('Play') : copy('More screens')}
           >
             <header className="af-mobile-more-head">
               <span>
-                <span className="af-label">{props.leagueFirst ? (mobileSheet === 'play' ? 'Play' : 'Me') : 'More'}</span>
-                <strong>{selectedLeagueName ?? props.scope?.label ?? 'All leagues'}</strong>
+                <span className="af-label">{copy(props.leagueFirst ? (mobileSheet === 'play' ? 'Play' : 'Me') : 'More')}</span>
+                <strong>{selectedLeagueName ?? props.scope?.label ?? copy('All leagues')}</strong>
               </span>
               <button type="button" aria-label="Close more menu" onClick={() => setMobileMoreOpen(false)}>×</button>
             </header>
             {props.leagueFirst && mobileSheet === 'play' ? (
               <div className="af-mobile-more-list">
                 <div className="af-mobile-more-group">
-                  <span className="af-label">Start something</span>
+                  <span className="af-label">{copy('Start something')}</span>
                   {LEAGUE_FIRST_PLAY_LINKS.map((item) => (
                     <Link key={item.href} href={item.href} className="af-mobile-more-link" data-core-nav="" onClick={() => setMobileMoreOpen(false)}>
                       <span className="af-mobile-more-icon" aria-hidden>{item.glyph}</span>
-                      <span>{item.label}</span>
+                      <span>{copy(item.label)}</span>
                     </Link>
                   ))}
                 </div>
@@ -2388,7 +2392,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             <div className="af-mobile-more-list">
               {sections.map((section) => (
                 <div className="af-mobile-more-group" key={section.id}>
-                  {section.heading ? <span className="af-label">{section.heading}</span> : null}
+                  {section.heading ? <span className="af-label">{copy(section.heading)}</span> : null}
                   {section.items.map((item) => (
                     <Link
                       key={item.key}
@@ -2406,7 +2410,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       <span className="af-mobile-more-icon" aria-hidden>
                         <CoreNavIcon navKey={item.key} />
                       </span>
-                      <span>{item.label}</span>
+                      <span>{copy(item.label)}</span>
                       {item.badge ? <b>{item.badge.text}</b> : null}
                     </Link>
                   ))}
@@ -2426,7 +2430,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 one support modal and one code path, not a phone copy.
               */}
               <div className="af-mobile-more-group">
-                <span className="af-label">Help</span>
+                <span className="af-label">{copy('Help')}</span>
                 <button
                   type="button"
                   className="af-mobile-more-link"
@@ -2454,7 +2458,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       <path d="M12 16.6h.01" />
                     </svg>
                   </span>
-                  <span>Contact support</span>
+                  <span>{copy('Contact support')}</span>
                 </button>
               </div>
             </div>
