@@ -4,9 +4,12 @@ import { prisma } from "@/lib/prisma"
 import { normalizeToSupportedSport } from "@/lib/sport-scope"
 import { BLOG_CATEGORIES } from "@/lib/automated-blog/types"
 import { getBlogProviderStatus } from "@/lib/automated-blog/BlogGenerationService"
+import { requireAdminOrBearer } from "@/lib/adminAuth"
 
 /** POST /api/blog/generate-and-save — generate and save as draft in one step. Body: sport, category, topicHint?. */
 export async function POST(req: NextRequest) {
+  const gate = await requireAdminOrBearer(req)
+  if (!gate.ok) return gate.res
   try {
     const body = await req.json()
     const sport = body?.sport ?? ""

@@ -276,15 +276,26 @@ const nextConfig = {
       { protocol: "https", hostname: "img.mlbstatic.com" },
       { protocol: "https", hostname: "ak-static.cms.nba.com" },
       // World Cup chat + media
-      { protocol: "https", hostname: "res.cloudinary.com" },
+      //
+      // ⚠ Hosts where ANYONE can upload a file are pinned to the paths we
+      // actually serve. `/_next/image` decodes whatever these patterns admit
+      // with sharp, and "any Cloudinary account" or "any Discord attachment"
+      // let an attacker hand the optimizer a hostile image (GHSA-2xp9-vwfh-vxw4:
+      // RCE via AVIF in the image optimizer). Our Cloudinary assets live under
+      // our own cloud name; Discord and Google are only ever profile avatars.
+      ...(process.env.CLOUDINARY_CLOUD_NAME
+        ? [{ protocol: "https", hostname: "res.cloudinary.com", pathname: `/${process.env.CLOUDINARY_CLOUD_NAME}/**` }]
+        : [{ protocol: "https", hostname: "res.cloudinary.com" }]),
       { protocol: "https", hostname: "media.giphy.com" },
       { protocol: "https", hostname: "i.giphy.com" },
       { protocol: "https", hostname: "media.tenor.com" },
       { protocol: "https", hostname: "c.tenor.com" },
       { protocol: "https", hostname: "media.api-sports.io" },
       { protocol: "https", hostname: "flagcdn.com" },
-      { protocol: "https", hostname: "lh3.googleusercontent.com" },
-      { protocol: "https", hostname: "cdn.discordapp.com" },
+      { protocol: "https", hostname: "lh3.googleusercontent.com", pathname: "/a/**" },
+      { protocol: "https", hostname: "lh3.googleusercontent.com", pathname: "/a-/**" },
+      { protocol: "https", hostname: "cdn.discordapp.com", pathname: "/avatars/**" },
+      { protocol: "https", hostname: "cdn.discordapp.com", pathname: "/embed/avatars/**" },
     ],
   },
 

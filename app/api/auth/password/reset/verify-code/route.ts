@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { sha256Hex } from "@/lib/tokens"
+import { consumeResetCodeAttempt } from "@/lib/auth/passwordResetAttempts"
 
 export const runtime = "nodejs"
 
@@ -34,6 +35,12 @@ export async function POST(req: Request) {
 
   if (!userId) {
     return NextResponse.json({ error: "INVALID_OR_USED_TOKEN" }, { status: 400 })
+  }
+
+  // A yes/no answer about a guessed code is as good as the reset itself to an
+  // attacker, so this spends from the same per-user budget as confirm.
+  if (!(await consumeResetCodeAttempt(userId))) {
+    return NextResponse.json({ error: "TOO_MANY_ATTEMPTS" }, { status: 429 })
   }
 
   const row = await (prisma as any).passwordResetToken.findFirst({

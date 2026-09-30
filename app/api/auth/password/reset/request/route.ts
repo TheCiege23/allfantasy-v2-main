@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto"
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { sha256Hex, makeToken } from "@/lib/tokens"
@@ -98,7 +99,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true }, { status: 200 })
     }
 
-    const code = String(Math.floor(100000 + Math.random() * 900000))
+    const code = String(randomInt(100000, 1000000))
     const tokenHash = sha256Hex(code)
     const expiresAt = new Date(Date.now() + 1000 * 60 * 15)
 

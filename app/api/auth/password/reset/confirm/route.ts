@@ -2,8 +2,27 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
 import { sha256Hex, isStrongPassword } from "@/lib/tokens"
+import { clearResetCodeAttempts, consumeResetCodeAttempt } from "@/lib/auth/passwordResetAttempts"
+import { revokeAllSessionsForUser } from "@/lib/auth/sessionRevocation"
 
 export const runtime = "nodejs"
+
+const TOO_MANY_ATTEMPTS = () =>
+  NextResponse.json({ error: "TOO_MANY_ATTEMPTS" }, { status: 429 })
+
+/**
+ * A reset is the recovery path for a compromised account, so every session
+ * that existed before it ends — otherwise whoever held the account keeps it.
+ */
+async function afterSuccessfulReset(userId: string): Promise<void> {
+  // Best-effort: the password is already changed, so neither failure may undo that.
+  try {
+    await clearResetCodeAttempts(userId)
+  } catch {}
+  try {
+    await revokeAllSessionsForUser(userId)
+  } catch {}
+}
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
@@ -31,6 +50,7 @@ export async function POST(req: Request) {
     if (!profile) {
       return NextResponse.json({ error: "INVALID_OR_USED_TOKEN" }, { status: 400 })
     }
+    if (!(await consumeResetCodeAttempt(profile.userId))) return TOO_MANY_ATTEMPTS()
     const tokenHash = sha256Hex(code)
     const row = await (prisma as any).passwordResetToken.findFirst({
       where: { userId: profile.userId, tokenHash },
@@ -53,13 +73,14 @@ export async function POST(req: Request) {
           data: { passwordHash },
         })
         await tx.passwordResetToken.deleteMany({
-          where: { userId, tokenHash },
+          where: { userId },
         })
       })
     } catch (txErr) {
       console.error("[password/reset/confirm] SMS transaction failed:", txErr)
       return NextResponse.json({ error: "RESET_FAILED" }, { status: 500 })
     }
+    await afterSuccessfulReset(userId)
     return NextResponse.json({ ok: true })
   }
 
@@ -71,6 +92,9 @@ export async function POST(req: Request) {
     if (!user) {
       return NextResponse.json({ error: "INVALID_OR_USED_TOKEN" }, { status: 400 })
     }
+    // This branch also accepts the 6-digit SMS code (the lookup is by user, not
+    // channel), so it spends from the same per-user guess budget.
+    if (!(await consumeResetCodeAttempt(user.id))) return TOO_MANY_ATTEMPTS()
     const tokenHash = sha256Hex(code)
     const row = await (prisma as any).passwordResetToken.findFirst({
       where: { userId: user.id, tokenHash },
@@ -93,13 +117,14 @@ export async function POST(req: Request) {
           data: { passwordHash },
         })
         await tx.passwordResetToken.deleteMany({
-          where: { userId, tokenHash },
+          where: { userId },
         })
       })
     } catch (txErr) {
       console.error("[password/reset/confirm] Email-code transaction failed:", txErr)
       return NextResponse.json({ error: "RESET_FAILED" }, { status: 500 })
     }
+    await afterSuccessfulReset(userId)
     return NextResponse.json({ ok: true })
   }
 
@@ -140,5 +165,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "RESET_FAILED" }, { status: 500 })
   }
 
+  await afterSuccessfulReset(row.userId)
   return NextResponse.json({ ok: true })
 }
