@@ -2891,6 +2891,14 @@ export function ImportV4({
             }}
             extraActions={
               <>
+            {phase.leagueId && !phase.joinedExisting ? (
+              <Link
+                href={`/league/${encodeURIComponent(phase.leagueId)}/settings`}
+                className="af-btn af-btn--ghost af-done-alt"
+              >
+                Customize your AllFantasy copy
+              </Link>
+            ) : null}
             {phase.skipped ? (
               <button
                 type="button"

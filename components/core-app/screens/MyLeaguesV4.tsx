@@ -188,6 +188,9 @@ export function MyLeaguesV4({
         </div>
 
         <div className="af-ml-actions">
+          <Link href="/create-league" className="af-ml-btn">
+            Create a league
+          </Link>
           {/*
             ⚠ ONLY WHEN THERE IS SOMEWHERE TO GO. /leagues/sync is retired, so
             this renders nothing rather than pointing at /import beside a button
@@ -331,6 +334,9 @@ export function MyLeaguesV4({
               : 'Try a different platform, clear the chip filter, or turn on “+ history” to search past seasons.'}
           </p>
           <div className="af-ml-empty-actions">
+            <Link href="/create-league" className="af-ml-btn">
+              Create a league
+            </Link>
             {counts.live === 0 ? (
               <Link href={importHref} className="af-ml-btn">
                 Import a league
