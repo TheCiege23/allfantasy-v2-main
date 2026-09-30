@@ -2281,7 +2281,8 @@
   gap: 4px 10px;
 }
 .af-gv-mine-cell-label {
-  font-size: 10.5px;
+  /* 11px is this app's type floor (__tests__/core-app/type-floor.test.ts). */
+  font-size: 11px;
   font-weight: 700;
   color: var(--faint);
 }
@@ -2290,7 +2291,7 @@
   background: var(--accent-soft);
 }
 .af-gv-box-mine {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--accent);
 }
