@@ -11,7 +11,6 @@ export interface DraftWarRoomInput {
 
 export interface LegacyReportSignal {
   title?: string
-  archetype?: string
   window_status?: string
   insights?: {
     strengths?: string[]
