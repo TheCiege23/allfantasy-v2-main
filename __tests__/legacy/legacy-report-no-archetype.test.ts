@@ -171,6 +171,29 @@ describe('legacy AI report — no manager archetype', () => {
   })
 })
 
+describe('legacy AI report — the title is a record, not a label', () => {
+  it('the prompt no longer seeds persona titles', async () => {
+    mocks.findUnique.mockResolvedValue(legacyUser())
+    await (POST as (r: unknown) => Promise<Response>)(request({ sleeper_username: 'viewer' }))
+    const system = String(mocks.create.mock.calls[0][0].messages[0].content)
+    // Positive control: the title field is still requested.
+    expect(system).toMatch(/"title": string/)
+    expect(system).not.toMatch(/Dynasty Dominator|Waiver Wire Wizard|Perpetual Rebuilder/)
+  })
+
+  it('when the model omits a title, the fallback is built from the record', async () => {
+    mocks.create.mockResolvedValue({
+      choices: [{ message: { content: JSON.stringify({ rating: 70, window_status: 'REBUILDING' }) } }],
+    })
+    mocks.findUnique.mockResolvedValue(legacyUser())
+    const res = await (POST as (r: unknown) => Promise<Response>)(request({ sleeper_username: 'viewer' }))
+    const body = (await res.json()) as { report: { title: string } }
+    // 10-4 with one title in the single standard league.
+    expect(body.report.title).toBe('1x Champion · 71.4% Win Rate')
+    expect(body.report.title).not.toMatch(/Contender|Competitive Manager|Rebuild Candidate/)
+  })
+})
+
 describe('/af-legacy renders no archetype', () => {
   const page = readFileSync(path.join(ROOT, 'app/af-legacy/page.tsx'), 'utf8')
 
