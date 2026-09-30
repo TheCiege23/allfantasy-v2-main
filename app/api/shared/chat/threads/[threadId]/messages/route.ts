@@ -125,10 +125,8 @@ async function resolveDraftIntelThreadState(threadId: string): Promise<{
   return { isDraftIntel: false, archived: false, leagueId: null }
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { threadId: string } },
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -229,10 +227,8 @@ export async function GET(
   })
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { threadId: string } },
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -357,8 +353,8 @@ export async function POST(
           messageSubtype: 'chimmy_prompt',
         })
         const replyText =
-          await tryDeterministicAnswer(chimmyBody || 'help', req.cookies?.get?.('af_lang')?.value)
-            .catch(() => null) ??
+          (await tryDeterministicAnswer(chimmyBody || 'help', req.cookies?.get?.('af_lang')?.value)
+            .catch(() => null)) ??
           "I don't have reliable data for that yet. I can answer cached scores, schedules, news, weather, FantasyCalc values, and league context when those data sources are available."
         const reply = await createLeagueChatMessage(leagueId, user.appUserId, replyText, {
           type: 'text',

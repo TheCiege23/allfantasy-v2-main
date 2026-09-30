@@ -1,10 +1,12 @@
+import { compatRouteParams } from '@/lib/http/compatRouteParams'
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 120
 
-type RouteContext = { params: Record<string, string | string[] | undefined> }
+// Next 15 hands route params in as a Promise.
+type RouteContext = { params: Promise<Record<string, string | string[] | undefined>> }
 type RouteModule = Partial<Record<string, (request: NextRequest, context: RouteContext) => Response | Promise<Response>>>
 type RouteLoader = () => Promise<unknown>
 
@@ -91,8 +93,8 @@ const ROUTES: Array<{ pattern: string[]; load: RouteLoader }> = [
   { pattern: ["transfer"], load: () => import('@/server/api-route-modules/legacy/transfer/route') },
 ]
 
-function normalizePath(context: RouteContext): string[] {
-  const raw = context.params?.path
+function normalizePath(outer: Record<string, string | string[] | undefined>): string[] {
+  const raw = outer?.path
   if (Array.isArray(raw)) return raw.map(String).filter(Boolean)
   if (typeof raw === 'string' && raw.length > 0) return [raw]
   return []
@@ -119,7 +121,8 @@ function matchPattern(pattern: string[], actual: string[]): Record<string, strin
 }
 
 async function dispatch(method: string, request: NextRequest, context: RouteContext) {
-  const path = normalizePath(context)
+  const outer = await context.params
+  const path = normalizePath(outer)
   for (const route of ROUTES) {
     const matchedParams = matchPattern(route.pattern, path)
     if (!matchedParams) continue
@@ -130,10 +133,10 @@ async function dispatch(method: string, request: NextRequest, context: RouteCont
     }
     return handler(request, {
       ...context,
-      params: {
-        ...context.params,
+      params: compatRouteParams({
+        ...outer,
         ...matchedParams,
-      },
+      }),
     })
   }
   return NextResponse.json({ error: 'Route not found', path: path.join('/') }, { status: 404 })

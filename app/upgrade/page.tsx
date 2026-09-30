@@ -1,11 +1,12 @@
 import MonetizationPurchaseSurface from "@/components/monetization/MonetizationPurchaseSurface";
 import { normalizePlanFamilyInput } from "@/lib/monetization/upgradeDestination";
 
-export default function UpgradePage({
-  searchParams,
-}: {
-  searchParams?: { plan?: string | string[] };
-}) {
+export default async function UpgradePage(
+  props: {
+    searchParams?: Promise<{ plan?: string | string[] }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const plan = Array.isArray(searchParams?.plan) ? searchParams?.plan[0] : searchParams?.plan;
   const focusPlanFamily = normalizePlanFamilyInput(plan);
   return (

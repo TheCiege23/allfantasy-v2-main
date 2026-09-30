@@ -13,7 +13,7 @@ import {
 } from "@/lib/legal/smsProgram"
 
 interface PrivacyPageProps {
-  searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
+  searchParams?: Promise<Promise<{ from?: string; next?: string }> | { from?: string; next?: string }>
 }
 
 export const metadata = {
@@ -37,7 +37,8 @@ export const metadata = {
  * to match both the handoff and the product-wide copy rule against the bare term
  * "AI". The disclosure itself is unchanged.
  */
-export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
+export default async function PrivacyPage(props: PrivacyPageProps) {
+  const searchParams = await props.searchParams
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const fromSignup = params.from === "signup"
   const next = typeof params.next === "string" ? params.next : undefined

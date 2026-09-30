@@ -13,13 +13,13 @@ function firstStringParam(
   return typeof value === 'string' ? value : value[0]
 }
 
-export default async function CreateLeaguePage({
-  searchParams,
-}: {
-  searchParams?:
-    | Promise<Record<string, string | string[] | undefined>>
-    | Record<string, string | string[] | undefined>
-}) {
+export default async function CreateLeaguePage(
+  props: {
+    searchParams?: Promise<| Promise<Record<string, string | string[] | undefined>>
+    | Record<string, string | string[] | undefined>>
+  }
+) {
+  const searchParams = await props.searchParams
   const sp =
     searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const e2eAuth = firstStringParam(sp.e2eAuth)

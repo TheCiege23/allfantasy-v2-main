@@ -4,10 +4,8 @@ import { prisma } from "@/lib/prisma"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-export async function GET(
-  _req: Request,
-  { params }: { params: { tournamentId: string } }
-) {
+export async function GET(_req: Request, props: { params: Promise<{ tournamentId: string }> }) {
+  const params = await props.params
   try {
     const { tournamentId } = params
 

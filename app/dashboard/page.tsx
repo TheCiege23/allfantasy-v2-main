@@ -10,11 +10,12 @@ export const dynamic = 'force-dynamic'
  * composition this file used to hold stops type-checking against deleted
  * screens.
  */
-export default function DashboardRedirect({
-  searchParams,
-}: {
-  searchParams?: Record<string, string | string[] | undefined>
-}) {
+export default async function DashboardRedirect(
+  props: {
+    searchParams?: Promise<Record<string, string | string[] | undefined>>
+  }
+) {
+  const searchParams = await props.searchParams
   const qs = new URLSearchParams()
   for (const [key, value] of Object.entries(searchParams ?? {})) {
     if (typeof value === 'string') qs.set(key, value)

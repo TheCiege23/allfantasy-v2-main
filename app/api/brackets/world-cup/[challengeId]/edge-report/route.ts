@@ -28,10 +28,8 @@ export const runtime = "nodejs"
 // `coachingFromCache` flag so the UI can show "already unlocked today" without
 // making another request.
 
-export async function GET(
-  request: Request,
-  { params: rawParams }: { params: unknown }
-) {
+export async function GET(request: Request, props: { params: Promise<unknown> }) {
+  const rawParams = await props.params
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
 
@@ -91,10 +89,8 @@ const postSchema = z.object({
   confirmedTokenSpend: z.boolean().optional().default(false),
 })
 
-export async function POST(
-  request: Request,
-  { params: rawParams }: { params: unknown }
-) {
+export async function POST(request: Request, props: { params: Promise<unknown> }) {
+  const rawParams = await props.params
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
 

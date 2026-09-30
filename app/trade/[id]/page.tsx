@@ -14,7 +14,8 @@ interface TradeAsset {
   type: 'player' | 'pick';
 }
 
-export default async function TradeSharePage({ params }: { params: { id: string } }) {
+export default async function TradeSharePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const { timezone, language } = await resolveServerRenderPreferences();
   const share = await (prisma as any).tradeShare.findUnique({
     where: { id: params.id },

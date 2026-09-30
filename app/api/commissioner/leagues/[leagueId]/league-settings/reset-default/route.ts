@@ -14,7 +14,8 @@ import type {
   ResetLeagueSettingsResponse,
 } from '@/lib/league-settings-engine/LeagueSettingsEngineTypes';
 
-export async function POST(req: NextRequest, { params }: { params: { leagueId: string } }): Promise<NextResponse> {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   try {
     const session = await getServerSession();
 

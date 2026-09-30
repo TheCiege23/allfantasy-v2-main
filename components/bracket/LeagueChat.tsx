@@ -24,7 +24,7 @@ export function LeagueChat({ leagueId, currentUserId }: { leagueId: string; curr
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval>>()
+  const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
 
   const fetchMessages = useCallback(async () => {
     try {

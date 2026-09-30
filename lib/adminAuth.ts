@@ -76,8 +76,8 @@ function checkAdminSecret(request: Request): boolean {
   return timingSafeCompare(headerSecret, adminSecret);
 }
 
-function getCookieAdminAccessState(): AdminAccessState | null {
-  const cookieStore = cookies();
+async function getCookieAdminAccessState(): Promise<AdminAccessState | null> {
+  const cookieStore = await cookies();
   const adminSession = cookieStore.get("admin_session");
   if (!adminSession?.value) return null;
 
@@ -173,7 +173,7 @@ async function getAppSessionAdminAccessState(): Promise<AdminAccessState> {
 }
 
 export async function getAdminAccessState(): Promise<AdminAccessState> {
-  const cookieState = getCookieAdminAccessState();
+  const cookieState = await getCookieAdminAccessState();
   if (cookieState?.status === "admin") return cookieState;
   const sessionState = await getAppSessionAdminAccessState();
   if (sessionState.status === "admin") return sessionState;
@@ -200,14 +200,39 @@ export async function requireAdminOrBearer(request: Request) {
   return requireAdmin();
 }
 
+/** One cookie's value from a request's Cookie header, or null. */
+function readRequestCookie(request: Request, name: string): string | null {
+  const header = request.headers.get("cookie");
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() === name) {
+      const raw = part.slice(eq + 1).trim();
+      try {
+        return decodeURIComponent(raw);
+      } catch {
+        return raw;
+      }
+    }
+  }
+  return null;
+}
+
+/*
+ * ⚠ DELIBERATELY SYNCHRONOUS. Next 15 made `cookies()` async; converting this to
+ * async would turn every `Boolean(isAuthorizedRequest(req) || …)` that missed an
+ * `await` into `Boolean(promise)` — always true, a silent admin bypass that no
+ * type check reports. It already receives the request, so it reads the cookie
+ * from the request's own Cookie header instead of next/headers.
+ */
 export function isAuthorizedRequest(request: Request): boolean {
   if (checkBearerToken(request) || checkAdminSecret(request)) return true;
 
   try {
-    const cookieStore = cookies();
-    const adminSession = cookieStore.get("admin_session");
-    if (!adminSession?.value) return false;
-    const payload = verifyAdminSessionCookie(adminSession.value);
+    const adminSessionValue = readRequestCookie(request, "admin_session");
+    if (!adminSessionValue) return false;
+    const payload = verifyAdminSessionCookie(adminSessionValue);
     if (!payload?.authenticated) return false;
     const role = payload.role?.toLowerCase();
     return role === "admin" || !!isAdminEmailAllowed(payload.email);

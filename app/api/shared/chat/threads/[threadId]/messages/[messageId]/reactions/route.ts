@@ -61,8 +61,9 @@ function removeReaction(entries: ReactionEntry[], emoji: string, userId: string)
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { threadId: string; messageId: string } }
+  props: { params: Promise<{ threadId: string; messageId: string }> }
 ) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -147,8 +148,9 @@ export async function POST(
  */
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { threadId: string; messageId: string } }
+  props: { params: Promise<{ threadId: string; messageId: string }> }
 ) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

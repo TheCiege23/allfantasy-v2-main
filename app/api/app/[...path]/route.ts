@@ -25,7 +25,8 @@ function leagueSection(path: string[]): string | null {
   return null
 }
 
-export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
+  const params = await props.params
   const path = params.path || []
 
   if (path.length === 1 && path[0] === 'home') {
@@ -223,7 +224,8 @@ export async function GET(req: NextRequest, { params }: { params: { path: string
   return notMapped(path, 'GET')
 }
 
-export async function POST(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
+  const params = await props.params
   const path = params.path || []
 
   if (path.length === 1 && path[0] === 'leagues') {
@@ -271,7 +273,8 @@ export async function POST(req: NextRequest, { params }: { params: { path: strin
   return notMapped(path, 'POST')
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
+  const params = await props.params
   const path = params.path || []
 
   const leagueId = leagueIdFromPath(path)

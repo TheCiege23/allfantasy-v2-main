@@ -57,18 +57,19 @@ function formatTimestamp(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString()
 }
 
-export default async function DecisionOsTelemetryViewerPage({
-  searchParams,
-}: {
-  searchParams?: {
-    event?: string
-    decisionType?: string
-    userId?: string
-    leagueId?: string
-    decisionId?: string
-    limit?: string
+export default async function DecisionOsTelemetryViewerPage(
+  props: {
+    searchParams?: Promise<{
+      event?: string
+      decisionType?: string
+      userId?: string
+      leagueId?: string
+      decisionId?: string
+      limit?: string
+    }>
   }
-}) {
+) {
+  const searchParams = await props.searchParams
   if (!isDecisionTelemetryDebugSurfaceEnabled()) notFound()
 
   const user = await getCurrentUser()

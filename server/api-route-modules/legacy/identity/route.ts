@@ -19,7 +19,7 @@ export async function GET() {
       })
     }
 
-    const legacyCookieSession = getUserSessionFromCookie()
+    const legacyCookieSession = (await getUserSessionFromCookie())
     const identity = await resolveLegacyIdentityForAppUser({
       appUserId,
       fallbackSleeperUsername: legacyCookieSession?.sleeperUsername || null,

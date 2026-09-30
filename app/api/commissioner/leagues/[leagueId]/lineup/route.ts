@@ -24,10 +24,8 @@ async function resolveLeagueRosterTemplate(
 /** GET: list rosters invalid under the resolved sport/variant roster template.
  * POST: set lineup lock rules or force-correct one roster using template validation/correction.
  */
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -87,10 +85,8 @@ export async function GET(
   })
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

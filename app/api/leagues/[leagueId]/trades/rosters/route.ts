@@ -1101,5 +1101,5 @@ export async function GET(
      */
     pickCoverage: nativePicks ? 'complete' : importedPicks.coverage,
     pickPreviewBook,
-  })
+  });
 }

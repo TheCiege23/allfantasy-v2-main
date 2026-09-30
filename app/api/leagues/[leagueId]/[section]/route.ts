@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server'
+import { compatRouteParams } from '@/lib/http/compatRouteParams'
 import { NextResponse } from 'next/server'
 
 /**
@@ -99,7 +100,8 @@ async function dispatch(method: string, req: NextRequest, ctx: Ctx): Promise<Res
   const mod = await load()
   const fn = mod[method]
   if (typeof fn !== 'function') return NextResponse.json({ error: 'Method not allowed' }, { status: 405 })
-  return (fn as (r: NextRequest, c?: unknown) => Promise<Response>)(req, ctx)
+  // Handlers are mixed (some await params, some destructure); hand them both shapes.
+  return (fn as (r: NextRequest, c?: unknown) => Promise<Response>)(req, { ...ctx, params: compatRouteParams(params) })
 }
 
 export const GET = (req: NextRequest, ctx: Ctx) => dispatch('GET', req, ctx)
