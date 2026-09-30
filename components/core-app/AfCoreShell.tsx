@@ -1924,9 +1924,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           them. This is the half that makes removing the cap safe.
         */}
         <div className="af-rail-foot">
-        <Link href="/import" className="af-rail-tile af-rail-add" aria-label="Add a league">
+        <Link href="/create-league" className="af-rail-tile af-rail-add">
           <span className="af-rail-foot-icon" aria-hidden>+</span>
-          <span className="af-rail-foot-copy"><strong>Add league</strong><small>Connect a platform</small></span>
+          <span className="af-rail-foot-copy"><strong>Create a league</strong><small>Build a custom league</small></span>
+        </Link>
+        <Link href="/import" className="af-rail-tile af-rail-add">
+          <span className="af-rail-foot-icon" aria-hidden>↓</span>
+          <span className="af-rail-foot-copy"><strong>Import a league</strong><small>Connect a platform</small></span>
         </Link>
 
         <Link href="/settings" className="af-rail-tile af-rail-profile" title="Profile, settings and modes">
