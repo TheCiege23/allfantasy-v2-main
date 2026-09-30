@@ -96,10 +96,11 @@ RULES for tab links:
 
 **RULE 2: League Analysis Data**
 When user asks "What trades should I make?" or "Who should I target?":
-- Use leagueAnalyze.payload.tradeSuggestions for AI-generated trade ideas
-- Use leagueAnalyze.payload.userTeam for user's roster context
-- Use leagueAnalyze.payload.scoringType for format context
-- If no league_analyze snapshot exists, say: "I don't have league analysis data yet. Please run the Trade Finder first."
+- If a league_analyze snapshot exists below, it is a SAVED analysis from an earlier date (these are no longer generated): say when it was analyzed, then
+  - Use leagueAnalyze.payload.tradeSuggestions for its trade ideas
+  - Use leagueAnalyze.payload.userTeam for user's roster context
+  - Use leagueAnalyze.payload.scoringType for format context
+- If no league_analyze snapshot exists, NEVER tell the user to run something to create one — no tool produces league analysis snapshots anymore. Say: "I don't have a saved league analysis to pull trade ideas from. You can look for trade ideas in the [[tab:finder]], or tell me the trade you're weighing and I'll break it down."
 
 **RULE 3: OTB Package Data**
 When user asks about On-The-Block players or "cheapest package for X":
@@ -107,7 +108,7 @@ When user asks about On-The-Block players or "cheapest package for X":
 - Use otbPackages[].payload.packages[] for all available package cards
 - Use otbPackages[].payload.packages[].scores for exact fairness, net value, totals
 - Use otbPackages[].payload.packages[].offer.user_sends / user_receives for exact assets
-- If no otb_packages snapshot exists for that player, say: "I don't have OTB package data for that player. Please run OTB Packages analysis first."
+- If no otb_packages snapshot exists for that player, NEVER tell the user to run something to create one — no tool produces OTB package snapshots anymore. Say: "I don't have saved package data for that player. Tell me what you'd offer and I'll break it down, or grade it in the [[tab:trade]]."
 
 **RULE 4: Exact Values Only**
 - Fairness scores: Quote exact percentage (e.g., "87.3%")
@@ -263,7 +264,7 @@ function buildSnapshotPromptSection(ctx: ChatDeterministicContext): string {
     if (ctx.notes?.leagueAnalyzeMissingForRequestedLeague && ctx.notes.requestedLeagueId) {
       section += `No league_analyze snapshot found for league_id=${ctx.notes.requestedLeagueId}.\n`
     } else {
-      section += 'User has not run Trade Finder yet for this league (or any league).\n'
+      section += 'No saved league analysis exists for this user (these snapshots are no longer generated).\n'
     }
   }
 
@@ -341,7 +342,7 @@ function buildSnapshotPromptSection(ctx: ChatDeterministicContext): string {
     }
   } else {
     section += '\n### OTB PACKAGES: None available\n'
-    section += 'No otb_packages snapshots found (or none match this league/player). Run OTB Packages for specific players.\n'
+    section += 'No otb_packages snapshots found (or none match this league/player). These snapshots are no longer generated.\n'
   }
 
   return section

@@ -21,7 +21,7 @@ Baseline: 63 violations (`npm run guard:db-first-api`)
 | P1 | app/api/legacy/rankings/analyze/route.ts | Unassigned | 2026-04-18 | No | Done | Route-level direct Sleeper URL fetches removed; now uses shared Sleeper client accessors. |
 | P1 | app/api/legacy/rankings/historical-ratings/route.ts | Unassigned | 2026-04-18 | No | Done | Route-level direct Sleeper URL fetches removed; now uses shared Sleeper client accessors. |
 | P1 | app/api/legacy/trade-ideas/route.ts | Unassigned | 2026-04-18 | No | Done | Route-level direct Sleeper URL fetches removed; now uses shared Sleeper client accessors. |
-| P1 | app/api/legacy/trade/league-analyze/route.ts | Unassigned | 2026-04-18 | No | Done | Route-level direct Sleeper URL fetches removed; now uses shared Sleeper client accessors. |
+| P1 | app/api/legacy/trade/league-analyze/route.ts | Unassigned | 2026-04-18 | No | Done | Route-level direct Sleeper URL fetches removed; now uses shared Sleeper client accessors. *(The route itself was removed on 2026-09-30 — commit `1b2e29ca4`.)* |
 | P1 | app/api/legacy/rankings/league-format/route.ts | Unassigned | 2026-04-18 | No | Done | Route-level direct Sleeper URL fetches removed; now uses shared Sleeper client accessors. |
 | P1 | app/api/legacy/rankings/playoff-forecast/route.ts | Unassigned | 2026-04-18 | No | Done | Route-level direct Sleeper URL fetches removed; now uses shared Sleeper client accessors. |
 | P1 | app/api/league/refresh/route.ts | Unassigned | 2026-04-18 | No | Done | Route-level direct Sleeper URL fetches removed; now uses shared Sleeper client accessors. |
