@@ -7,6 +7,7 @@ import {
   MLB_VENUE_COORDS,
 } from '@/lib/weather/weatherService'
 import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { resolveCollegeVenue } from '@/lib/weather/collegeVenue'
 import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import type { CollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIdentity'
@@ -87,7 +88,10 @@ function resolveGameCoords(g: {
   const byVenue = resolveVenueCoords(g.venue)
   if (byVenue) return byVenue
   if (g.sport === 'NFL' && !g.venue?.trim()) {
-    const byTeam = resolveVenueForTeam({ sport: 'NFL', teamAbbrev: g.homeTeam })
+    // The row carries a full name ("Cleveland Browns"); `resolveVenueForTeam` truncates whatever it
+    // is given to 4 characters, so a full name became "CLEV" and matched nothing. Fold to the
+    // canonical abbreviation first, as the My Team reader does.
+    const byTeam = resolveVenueForTeam({ sport: 'NFL', teamAbbrev: normalizeTeamAbbrev(g.homeTeam) })
     if (byTeam.kind === 'coords') return { lat: byTeam.lat, lng: byTeam.lng }
   }
   return null

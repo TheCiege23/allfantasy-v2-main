@@ -49,6 +49,8 @@ export const NFL_VENUE_COORDS: Record<string, { lat: number; lon: number; dome: 
   'Ford Field': { lat: 42.3400, lon: -83.0456, dome: true },
   'Lambeau Field': { lat: 44.5013, lon: -88.0622, dome: false },
   'NRG Stadium': { lat: 29.6847, lon: -95.4107, dome: true },
+  // NRG Stadium's name before 2014, still sent by some providers. Same coordinates as the row above.
+  'Reliant Stadium': { lat: 29.6847, lon: -95.4107, dome: true },
   'Lucas Oil Stadium': { lat: 39.7601, lon: -86.1639, dome: true },
   'EverBank Stadium': { lat: 30.3239, lon: -81.6373, dome: false },
   'GEHA Field at Arrowhead Stadium': { lat: 39.0489, lon: -94.4839, dome: false },

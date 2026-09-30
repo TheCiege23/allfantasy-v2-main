@@ -145,6 +145,36 @@ describe('weather refresh window', () => {
     expect(getWeatherMock.mock.calls[0]![0].cacheKey).toBe(consumerKey('CLE', kickoff))
   })
 
+  it('🛑 places a no-venue NFL row whose home team is a FULL NAME, on the key My Team reads', async () => {
+    // Measured 2026-09-30: "(no venue; home Cleveland Browns)" was unresolved because the full
+    // name was truncated to 4 characters ("CLEV") before the table lookup.
+    const kickoff = new Date(Date.now() + 30 * HOUR)
+    rowsMock.rows = [
+      { externalId: 'f1', sport: 'NFL', venue: null, homeTeam: 'Cleveland Browns', startTime: kickoff },
+      { externalId: 'f2', sport: 'NFL', venue: '', homeTeam: 'Green Bay Packers', startTime: kickoff },
+    ]
+
+    const body = await run()
+
+    expect(body.refreshed).toBe(2)
+    expect(body.unresolvedNflVenues).toEqual([])
+    const keys = getWeatherMock.mock.calls.map((c) => c[0].cacheKey)
+    expect(keys).toContain(consumerKey('CLE', kickoff))
+    expect(keys).toContain(consumerKey('GB', kickoff))
+  })
+
+  it('places "Reliant Stadium" (NRG Stadium\'s old name) on the Houston key', async () => {
+    const kickoff = new Date(Date.now() + 30 * HOUR)
+    rowsMock.rows = [
+      { externalId: 'h1', sport: 'NFL', venue: 'Reliant Stadium', homeTeam: 'HOU', startTime: kickoff },
+    ]
+
+    const body = await run()
+
+    expect(body.refreshed).toBe(1)
+    expect(getWeatherMock.mock.calls[0]![0].cacheKey).toBe(consumerKey('HOU', kickoff))
+  })
+
   it('caps placeable games and reports the overflow', async () => {
     const { WEATHER_REFRESH_MAX_GAMES } = await import('@/app/api/weather/refresh-cron/route')
     const start = Date.now() + HOUR
