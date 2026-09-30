@@ -838,7 +838,7 @@ function parseYahooTeamMatchups(matchupsData: any, season: number): YahooImportS
     }))
 }
 
-function parseYahooTransactions(transactionsData: any): YahooImportTransaction[] {
+export function parseYahooTransactions(transactionsData: any): YahooImportTransaction[] {
   const leagueNode = transactionsData?.fantasy_content?.league
   const transactionWrappers = getYahooCollectionItems(getYahooProperty(leagueNode, 'transactions'))
 
@@ -851,11 +851,20 @@ function parseYahooTransactions(transactionsData: any): YahooImportTransaction[]
       const teamKeys = new Set<string>()
       const adds: Record<string, string> = {}
       const drops: Record<string, string> = {}
+      const players: NonNullable<YahooImportTransaction['players']> = {}
       const playerWrappers = getYahooCollectionItems(getYahooProperty(transaction, 'players'))
 
       for (const playerWrapper of playerWrappers) {
         const player = mergeYahooEntityFragments(playerWrapper, 'player')
         const playerId = String(player.player_key ?? player.player_id ?? '')
+        const fullName = getYahooProperty(player, 'name')?.full
+        if (playerId && typeof fullName === 'string' && fullName.trim()) {
+          players[playerId] = {
+            name: fullName.trim(),
+            position: typeof player.display_position === 'string' ? player.display_position : null,
+            team: typeof player.editorial_team_abbr === 'string' ? player.editorial_team_abbr : null,
+          }
+        }
         const transactionData = getYahooProperty(player, 'transaction_data')
         const actionType = String(transactionData?.type ?? '').toLowerCase()
         const destinationTeamKey = String(transactionData?.destination_team_key ?? '')
@@ -899,6 +908,7 @@ function parseYahooTransactions(transactionsData: any): YahooImportTransaction[]
         teamKeys: Array.from(teamKeys),
         adds,
         drops,
+        players,
       }
     })
     .filter(Boolean) as YahooImportTransaction[]

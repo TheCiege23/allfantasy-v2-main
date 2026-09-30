@@ -11,6 +11,13 @@ import {
 import { getResolvedDraftPoolForLeague } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
 import { buildAllFantasyProjection } from '@/lib/redraft/projectionEngine'
 import { hydrateRedraftLineupLocks } from '@/lib/redraft/lineupLock'
+import {
+  externalIdNamespace,
+  mayBeSleeperId,
+  nonSleeperExternalIdWhere,
+  providerIdWhere,
+  sleeperIdWhere,
+} from '@/lib/player-identity/externalIdNamespace'
 import { getCanonicalNflDataCoverage } from './nflDataCoverage'
 import type {
   CanonicalNflAiContext,
@@ -412,12 +419,26 @@ export function buildCanonicalNflProjection(input: ProjectionSignalInput): Canon
   }
 }
 
+/*
+ * 🛑 AN ID IS MATCHED ONLY AGAINST THE COLUMN OF ITS OWN SPACE (2026-09-30).
+ *
+ * These two lookups used to put one id to every column at once — `rollingInsightsId OR sleeperId OR
+ * espnId …` on the identity map, `externalId OR sleeperId` on `SportsPlayer` — and take the newest or
+ * "best" row. The spaces overlap numerically and name different people: Sleeper 9228 is Bryce Young,
+ * Rolling Insights 9228 is an offensive tackle. So a league's player could come back as the tackle,
+ * and the projection generator, which looks a Rolling Insights row's identity up by its externalId,
+ * could attach Bryce Young's identity to the tackle's row and persist it.
+ *
+ * The ids reaching `findIdentityById` are LEAGUE ids (redraft rosters, draft pools, trade assets),
+ * and in NFL a bare number there is a Sleeper id (`mayBeSleeperId`). A provider row states its own
+ * space in `source`, so `findIdentityForRow` asks the column that space is written in.
+ */
 async function findIdentityById(db: DbClient, id: string): Promise<IdentityMapRow | null> {
   const value = String(id ?? '').trim()
   if (!value) return null
-  return ((await (db as any).playerIdentityMap
-    .findFirst({
-      where: {
+  const where = mayBeSleeperId(value, 'NFL')
+    ? { sport: 'NFL', sleeperId: value }
+    : {
         sport: 'NFL',
         OR: [
           { rollingInsightsId: value },
@@ -427,28 +448,51 @@ async function findIdentityById(db: DbClient, id: string): Promise<IdentityMapRo
           { espnId: value },
           { clearSportsId: value },
         ],
-      },
-      orderBy: { updatedAt: 'desc' },
-    })
+      }
+  return ((await (db as any).playerIdentityMap
+    .findFirst({ where, orderBy: { updatedAt: 'desc' } })
     .catch(() => null)) ?? null) as IdentityMapRow | null
 }
 
-async function findSportsPlayerByAnyId(
+/** The identity of a `SportsPlayer` row, asked in the space its `source` writes `externalId` in. */
+async function findIdentityForRow(db: DbClient, row: SportsPlayerRow): Promise<IdentityMapRow | null> {
+  const ask = async (where: Record<string, unknown>) =>
+    ((await (db as any).playerIdentityMap
+      .findFirst({ where: { sport: 'NFL', ...where }, orderBy: { updatedAt: 'desc' } })
+      .catch(() => null)) ?? null) as IdentityMapRow | null
+  const byRi =
+    externalIdNamespace(row.source) === 'rolling_insights' ? await ask({ rollingInsightsId: row.externalId }) : null
+  if (byRi) return byRi
+  const sleeperKey = row.sleeperId ?? (row.externalId.startsWith('sleeper:') ? row.externalId.slice('sleeper:'.length) : null)
+  return sleeperKey ? ask({ sleeperId: sleeperKey }) : null
+}
+
+/**
+ * A `SportsPlayer` row for one player, each id asked of its own space (see above). `ids` is a LEAGUE
+ * id — our row id, a Sleeper id when it is a bare number, else a self-describing provider token.
+ */
+async function findSportsPlayerByIds(
   db: DbClient,
-  ids: Array<string | null | undefined>,
+  spaces: {
+    leagueIds?: Array<string | null | undefined>
+    sleeperIds?: Array<string | null | undefined>
+    rollingInsightsIds?: Array<string | null | undefined>
+  },
 ): Promise<SportsPlayerRow | null> {
-  const values = uniq(ids)
-  if (!values.length) return null
+  const league = uniq(spaces.leagueIds ?? [])
+  const sleeper = uniq([...(spaces.sleeperIds ?? []), ...league.filter((id) => mayBeSleeperId(id, 'NFL'))])
+  const ri = uniq(spaces.rollingInsightsIds ?? [])
+  const namespaced = league.filter((id) => !mayBeSleeperId(id, 'NFL'))
+  const or: Array<Record<string, unknown>> = [
+    ...(league.length ? [{ id: { in: league } }] : []),
+    ...(sleeper.length ? sleeperIdWhere(sleeper).OR : []),
+    ...(ri.length ? [providerIdWhere('rolling_insights', ri)] : []),
+    ...(namespaced.length ? [nonSleeperExternalIdWhere(namespaced, 'NFL')] : []),
+  ]
+  if (!or.length) return null
   const rows = (await (db as any).sportsPlayer
     .findMany({
-      where: {
-        sport: 'NFL',
-        OR: [
-          { id: { in: values } },
-          { externalId: { in: values } },
-          { sleeperId: { in: values } },
-        ],
-      },
+      where: { sport: 'NFL', OR: or },
       take: 20,
       orderBy: [{ updatedAt: 'desc' }],
     })
@@ -909,12 +953,11 @@ export async function getCanonicalNflPlayerContext(
   const season = Number(options?.season ?? new Date().getUTCFullYear())
   const week = Math.max(1, Number(options?.week ?? 1))
   const identity = await findIdentityById(db, playerId)
-  const row = await findSportsPlayerByAnyId(db, [
-    playerId,
-    identity?.rollingInsightsId,
-    identity?.sleeperId,
-    identity?.fantasyCalcId,
-  ])
+  const row = await findSportsPlayerByIds(db, {
+    leagueIds: [playerId],
+    sleeperIds: [identity?.sleeperId],
+    rollingInsightsIds: [identity?.rollingInsightsId],
+  })
   if (!row) return null
   return buildCanonicalPlayerFromRow(row, identity, { season, week, prismaClient: db })
 }
@@ -930,7 +973,7 @@ export async function getCanonicalNflPlayerByNameTeam(
   const identity = await findIdentityByNameTeam(db, name, team, options?.position)
   const row =
     (identity
-      ? await findSportsPlayerByAnyId(db, [identity.rollingInsightsId, identity.sleeperId, identity.fantasyCalcId])
+      ? await findSportsPlayerByIds(db, { sleeperIds: [identity.sleeperId], rollingInsightsIds: [identity.rollingInsightsId] })
       : null) ??
     (await findSportsPlayerByNameTeam(db, name, team, options?.position))
   if (!row) return null
@@ -1099,7 +1142,7 @@ export async function generateAndPersistCanonicalNflProjections(options?: {
   let rosPersisted = 0
   let skipped = 0
   for (const row of rows) {
-    const identity = await findIdentityById(db, row.externalId).catch(() => null)
+    const identity = await findIdentityForRow(db, row).catch(() => null)
     const player = await buildCanonicalPlayerFromRow(row, identity, { season, week, prismaClient: db })
     if (!player.projection) {
       skipped += 1

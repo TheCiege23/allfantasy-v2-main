@@ -140,6 +140,7 @@ export async function scoreLeagueWeek(input: {
           season: input.season,
           weekOrRound: input.weekOrRound,
           rosterPlayerIds,
+          platform: league.platform,
           formatType,
         })
       : null
