@@ -7,6 +7,8 @@ import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { gameDetailHref } from '@/lib/live/gameDetailLink'
 import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
+import { deriveImpact } from '@/lib/live/liveImpact'
+import { GameHighlight } from '@/components/live/GameHighlight'
 import { groupStartersByPlayer, pointsSummary, type StarterGroup } from '@/lib/live/liveTieInGroups'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
 import {
@@ -349,10 +351,12 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
 
   const pickSport = (next: string) => {
     setSport(next)
+    syncViewToUrl(next, scope)
     void load(next, scope)
   }
   const pickScope = (next: 'my' | 'all') => {
     setScope(next)
+    syncViewToUrl(sport, next)
     void load(sport, next)
   }
 
@@ -402,15 +406,35 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
    * Memoised on `data.impact.plays` alone: it is rebuilt on every 20s poll and
    * the slate can hold a dozen cards, so re-deriving it per card per render is
    * the kind of quiet cost this screen's `contain: layout` note is about.
+   *
+   * ⚠ KEYED ON `slateGameId`, NEVER `gameId`. A play's `gameId` is the Rolling
+   * Insights id; a card's is ESPN's. Keyed on `gameId` this map could never be
+   * looked up by any ESPN card, so the fallback never rendered. `slateGameId` is
+   * the card's own id, placed by team on the server (`attachSlateGames`).
    */
   const latestPlayByGame = useMemo(() => {
     const byGame = new Map<string, LivePageData['impact']['plays'][number]>()
     for (const p of data.impact.plays) {
-      if (!p.gameId || byGame.has(p.gameId)) continue
-      byGame.set(p.gameId, p)
+      if (!p.slateGameId || byGame.has(p.slateGameId)) continue
+      byGame.set(p.slateGameId, p)
     }
     return byGame
   }, [data.impact.plays])
+
+  /*
+   * 🛑 WITH A LEAGUE HELD, THE SIDE PANEL DESCRIBES THAT LEAGUE TOO. The server
+   * builds the panel across every league, so the slate narrowed to one league
+   * while "fantasy pts scored live right now", Live plays and Up next still
+   * counted the rest — two halves of one screen answering different questions.
+   * Rebuilt here from `scopedGames` with the same pure rule the server uses.
+   */
+  const impact = useMemo(
+    () =>
+      leagueFilterId
+        ? deriveImpact(scopedGames, data.impact.plays, { onlyTheseGamesPlays: true })
+        : data.impact,
+    [leagueFilterId, scopedGames, data.impact],
+  )
 
   return (
     <LowDataProvider decision={lowData}>
@@ -633,16 +657,16 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
             ) : data.hasRosterData ? (
               <>
                 <p className="af-live-impact-total">
-                  <span className="af-num">{data.impact.totalPoints.toFixed(1)}</span>
+                  <span className="af-num">{impact.totalPoints.toFixed(1)}</span>
                   <span>fantasy pts scored live right now</span>
                 </p>
                 <p className="af-live-impact-sub">
-                  {data.impact.livePlayers === 0
+                  {impact.livePlayers === 0
                     ? 'None of your players are on the field at the moment.'
-                    : `${data.impact.livePlayers} of your players ${
-                        data.impact.livePlayers === 1 ? 'is' : 'are'
-                      } live across ${data.impact.liveGames} ${
-                        data.impact.liveGames === 1 ? 'game' : 'games'
+                    : `${impact.livePlayers} of your players ${
+                        impact.livePlayers === 1 ? 'is' : 'are'
+                      } live across ${impact.liveGames} ${
+                        impact.liveGames === 1 ? 'game' : 'games'
                       }.`}
                 </p>
               </>
@@ -664,21 +688,21 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
             )}
           </div>
 
-          {data.impact.biggestMover ? (
+          {impact.biggestMover ? (
             <div className="af-live-card">
               <h2 className="af-label">Biggest mover</h2>
               <div className="af-live-mover">
                 <MiniPlayerImg
                   sleeperId={null}
-                  name={data.impact.biggestMover.playerName}
-                  avatarUrl={data.impact.biggestMover.imageUrl}
+                  name={impact.biggestMover.playerName}
+                  avatarUrl={impact.biggestMover.imageUrl}
                   size={34} suppress={lowDataOn} />
                 <div className="af-live-mover-text">
-                  <span className="af-live-mover-name">{data.impact.biggestMover.playerName}</span>
-                  <span className="af-live-mover-line">{data.impact.biggestMover.headline}</span>
-                  {data.impact.biggestMover.leagues.length > 0 ? (
+                  <span className="af-live-mover-name">{impact.biggestMover.playerName}</span>
+                  <span className="af-live-mover-line">{impact.biggestMover.headline}</span>
+                  {impact.biggestMover.leagues.length > 0 ? (
                     <span className="af-live-mover-leagues">
-                      {data.impact.biggestMover.leagues.join(' · ')}
+                      {impact.biggestMover.leagues.join(' · ')}
                     </span>
                   ) : null}
                 </div>
@@ -686,7 +710,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
             </div>
           ) : null}
 
-          {data.impact.plays.length > 0 ? (
+          {impact.plays.length > 0 ? (
             <div className="af-live-card">
               {/*
                 Conditional, not empty-stated, because both cards either side of
@@ -696,7 +720,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
               */}
               <h2 className="af-label">Live plays</h2>
               <ul className="af-live-plays">
-                {data.impact.plays.map((p) => (
+                {impact.plays.map((p) => (
                   /* Keyed on the feed's own idempotency key — the same key it
                      dedupes on, so re-polling cannot duplicate a row. */
                   <li key={p.id} className="af-live-play" data-tone={playTone(p.type)}>
@@ -759,11 +783,11 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
             </div>
           ) : null}
 
-          {data.impact.upNext.length > 0 ? (
+          {impact.upNext.length > 0 ? (
             <div className="af-live-card">
               <h2 className="af-label">Up next for you</h2>
               <ul className="af-live-next">
-                {data.impact.upNext.map((u, i) => (
+                {impact.upNext.map((u, i) => (
                   <li key={`${u.playerName}-${i}`}>
                     <span className="af-live-next-label">
                       {u.playerName} · {u.matchup}
@@ -903,6 +927,19 @@ export function GameCard({
       </div>
 
       <Linescore game={game} isFootball={isFootball} isBaseball={isBaseball} />
+
+      {/*
+        The game's highlight package, finals only. Right under the score because
+        that is where the eye is when a game ends; nothing loads until tapped.
+      */}
+      {game.completed && game.highlight ? (
+        <div className="af-live-highlight">
+          <GameHighlight
+            youtubeId={game.highlight.youtubeId}
+            title={`${game.away.name} at ${game.home.name} highlights`}
+          />
+        </div>
+      ) : null}
 
       {/*
         ── Field strip ─────────────────────────────────────────────────────────
@@ -1601,6 +1638,34 @@ function Side({
       </span>
     </div>
   )
+}
+
+/**
+ * Mirror the tab and scope into the address bar.
+ *
+ * ⚠ THE SERVER ALREADY READS `?sport=` AND `?scope=`, AND NOTHING WROTE THEM. So a
+ * refresh or a shared link dropped the reader back onto the default tab and "My
+ * games", whatever they had picked.
+ *
+ * `replaceState`, not the router: the client already fetched the new slate, and
+ * a router navigation would re-render the whole server page to fetch it again.
+ * Replace rather than push, so flicking through tabs does not fill the back
+ * stack. `my` is the default and is left out, matching how the server reads it.
+ */
+export function liveViewUrl(current: string, sport: string, scope: 'my' | 'all'): string {
+  const url = new URL(current)
+  url.searchParams.set('sport', sport)
+  if (scope === 'all') url.searchParams.set('scope', 'all')
+  else url.searchParams.delete('scope')
+  return `${url.pathname}${url.search}${url.hash}`
+}
+
+function syncViewToUrl(sport: string, scope: 'my' | 'all') {
+  try {
+    window.history.replaceState(window.history.state, '', liveViewUrl(window.location.href, sport, scope))
+  } catch {
+    // An address bar we cannot write is a convenience lost, never a broken screen.
+  }
 }
 
 function leads(a: number | null, b: number | null): boolean {

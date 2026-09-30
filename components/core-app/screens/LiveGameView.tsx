@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
+import { GameHighlight } from '@/components/live/GameHighlight'
 import type {
   BaseballAtBat,
   BaseballBoxTable,
@@ -55,11 +56,18 @@ export function LiveGameView({
   sport,
   gameId,
   backHref,
+  highlightYoutubeId = null,
 }: {
   initial: GameViewPayload | null
   sport: string
   gameId: string
   backHref: string
+  /**
+   * The game's highlight video, resolved on the server (`highlightForGameDetail`).
+   * A prop rather than part of the payload so the poll, which re-reads the ESPN
+   * summary alone, cannot drop it.
+   */
+  highlightYoutubeId?: string | null
 }) {
   const [payload, setPayload] = useState<GameViewPayload | null>(initial)
   const [tab, setTab] = useState<'scoring' | 'all'>('scoring')
@@ -124,6 +132,18 @@ export function LiveGameView({
         <p className="af-gv-stale" role="status">
           Showing the last update we have — the latest refresh did not come through. Retrying.
         </p>
+      ) : null}
+
+      {highlightYoutubeId && state === 'post' ? (
+        <section className="af-gv-card af-gv-highlight" aria-labelledby="af-gv-highlight-h">
+          <h2 className="af-label" id="af-gv-highlight-h">
+            Highlights
+          </h2>
+          <GameHighlight
+            youtubeId={highlightYoutubeId}
+            title={`${detail.away.name} at ${detail.home.name} highlights`}
+          />
+        </section>
       ) : null}
 
       <div className="af-gv-grid">

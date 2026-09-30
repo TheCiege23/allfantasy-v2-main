@@ -15,7 +15,9 @@ import { myRosterCandidates, rosterPlayerIds } from '@/lib/core-app/myRoster'
 import { sleeperReadablePlayerDataOf } from '@/lib/core-app/rosterIdSpace'
 import { resolveRostersForTeams } from '@/lib/leagues/rosterTeamIdentity'
 import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
-import { isRosteredPlayer, rosterNameKeys } from '@/lib/live/rosterPlayMatch'
+import { attachSlateGames, deriveImpact } from '@/lib/live/liveImpact'
+import { loadGameHighlights } from '@/lib/live/gameHighlights'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
 import { isLiveSport, type LiveSport } from '@/lib/sport-scope'
 import {
@@ -197,7 +199,19 @@ export type LiveGameCard = {
   tieIns: LiveRosterTieIn[]
   /** Distinct leagues affected — the sort key for "My games". */
   leaguesAffected: number
+  /**
+   * The game's highlight video, finished games only — see `gameHighlightMatch.ts`.
+   * Game-level: TheSportsDB has no per-play clips. Optional so every existing
+   * fixture and caller that predates it stays valid.
+   */
+  highlight?: { youtubeId: string } | null
 }
+
+/**
+ * A feed play, placed in the slate game it happened in (`attachSlateGames`).
+ * `gameId` is the FEED's id and never meets the slate's; `slateGameId` does.
+ */
+export type LivePlay = PlayFeedItem & { slateGameId?: string | null }
 
 export type LiveImpact = {
   /** Sum of your live points across every rostered player in a live game. */
@@ -205,7 +219,7 @@ export type LiveImpact = {
   livePlayers: number
   liveGames: number
   /** The most recent notable play involving a player you roster. */
-  biggestMover: (PlayFeedItem & { leagues: string[] }) | null
+  biggestMover: (LivePlay & { leagues: string[] }) | null
   /**
    * The recent play feed for this slate, newest first — the very rows
    * `biggestMover` is picked from, now kept instead of thrown away.
@@ -216,7 +230,7 @@ export type LiveImpact = {
    * feed render under another sport's tab would caption real plays with the
    * wrong games — the exact class of confident lie this page refuses to tell.
    */
-  plays: PlayFeedItem[]
+  plays: LivePlay[]
   /** Your players whose games have not kicked off yet. */
   upNext: Array<{ playerName: string; matchup: string; startTime: string }>
 }
@@ -1007,6 +1021,23 @@ export async function getLivePageData(opts: {
     return closeness(a) - closeness(b)
   })
 
+  /*
+   * Highlight videos for the finished games on this slate, from rows we already
+   * hold. Only finals: TheSportsDB posts a game's package after it ends, and a
+   * live card has better things to show than a gap.
+   */
+  const finals = visible.filter((g) => g.completed)
+  if (finals.length > 0) {
+    const highlights = await loadGameHighlights(
+      sport,
+      finals.map((g) => ({ key: g.gameId, homeName: g.home.name, awayName: g.away.name, startTime: g.startTime })),
+    )
+    for (const g of finals) {
+      const youtubeId = highlights.get(g.gameId)
+      if (youtubeId) g.highlight = { youtubeId }
+    }
+  }
+
   return {
     sport,
     scope,
@@ -1028,23 +1059,6 @@ async function buildImpact(
   players: Map<string, RosteredPlayer>,
   sport: string,
 ): Promise<LiveImpact> {
-  const liveGames = games.filter((g) => g.isLive)
-
-  /*
-   * ⚠ SUMMED PER (PLAYER, LEAGUE), NOT PER PLAYER. The same player in three
-   * leagues contributes three separate scores, because that is three separate
-   * matchups of yours he is affecting. Deduplicating to one would understate the
-   * total by exactly the amount that makes this page worth opening.
-   */
-  let totalPoints = 0
-  const livePlayerIds = new Set<string>()
-  for (const g of liveGames) {
-    for (const t of g.tieIns) {
-      if (t.points != null) totalPoints += t.points
-      livePlayerIds.add(t.playerId)
-    }
-  }
-
   /*
    * ⚠ SCOPED BY SPORT, NOT BY GAME ID — AND THAT IS NOT THE OBVIOUS CHOICE.
    * The tempting scoping is "keep the plays whose `gameId` is on this slate".
@@ -1058,49 +1072,22 @@ async function buildImpact(
    * Skipping the read outright off-NFL also spares every other tab a cache
    * lookup that could only ever return plays it must not display.
    */
-  const plays = sport === 'NFL' ? await getPlayFeed().catch(() => [] as PlayFeedItem[]) : []
-  const liveGameIds = new Set(liveGames.map((g) => g.gameId))
+  const feed = sport === 'NFL' ? await getPlayFeed().catch(() => [] as PlayFeedItem[]) : []
   /*
-   * The most recent play involving a player YOU roster, in a game that is
-   * actually live. A league-wide "biggest play" would be editorialising with
-   * data the user did not ask about.
+   * ⚠ THE PLAYS ARE PLACED IN SLATE GAMES BY TEAM, BECAUSE OF THE NOTE ABOVE.
+   * "Biggest mover" used to require `liveGameIds.has(p.gameId)` — a Rolling
+   * Insights id tested against a set of ESPN ids, the exact join that note says
+   * yields nothing. `attachSlateGames` places each play by its team instead; a
+   * rostered player's team backs up a feed row that arrived without one.
+   *
+   * Names are compared normalised, never with `===`: the two vendors disagree on
+   * 748 of 9,412 NFL names — see `rosterPlayMatch.ts`.
    */
-  const roster = [...players.values()]
-  /*
-   * ⚠ MATCHED ON A NORMALISED NAME, NOT WITH `===`. The roster side and the
-   * play side come from different vendors and disagree about case, punctuation
-   * and generational suffixes on 748 of 9,412 NFL names — see
-   * `rosterPlayMatch.ts`, which holds the measurement and the reason a fuzzy
-   * fallback is deliberately absent.
-   */
-  const rosterNames = rosterNameKeys(roster.map((r) => r.name))
-  const mine = plays.find(
-    (p) => liveGameIds.has(p.gameId) && isRosteredPlayer(rosterNames, p.playerName),
-  )
-  const biggestMover = mine
-    ? {
-        ...mine,
-        leagues: roster
-          .filter((r) => r.name === mine.playerName)
-          .flatMap((r) => r.leagues.map((l) => l.leagueName)),
-      }
-    : null
-
-  const upNext = games
-    .filter((g) => !g.isLive && !g.completed && g.tieIns.length > 0)
-    .slice(0, 3)
-    .map((g) => ({
-      playerName: g.tieIns[0]!.playerName,
-      matchup: `${g.away.abbrev} @ ${g.home.abbrev}`,
-      startTime: g.startTime,
-    }))
-
-  return {
-    totalPoints: Math.round(totalPoints * 10) / 10,
-    livePlayers: livePlayerIds.size,
-    liveGames: liveGames.length,
-    biggestMover,
-    plays,
-    upNext,
+  const rosterTeamByName = new Map<string, string>()
+  for (const p of players.values()) {
+    const key = normalizeMatchName(p.name)
+    if (key && p.team) rosterTeamByName.set(key, p.team)
   }
+  const plays = attachSlateGames(feed, games, sport, rosterTeamByName)
+  return deriveImpact(games, plays, { onlyTheseGamesPlays: false })
 }

@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getLivePageData } from '@/lib/live/liveScoresPage'
+import { highlightForGameDetail } from '@/lib/live/gameHighlights'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import { LiveScoresClient } from '@/components/live/LiveScoresClient'
 import { LiveGameView } from '@/components/core-app/screens/LiveGameView'
@@ -45,6 +46,7 @@ export default async function LivePage({
       console.error('[live] game view read threw:', err instanceof Error ? err.message : err)
       return { detail: null, stale: false, failed: true }
     })
+    const highlightYoutubeId = await highlightForGameDetail(game.detail)
     return (
       <div className="live-page px-4 py-5 sm:px-6">
         <div className="af-core live-card-scope">
@@ -52,6 +54,7 @@ export default async function LivePage({
             initial={game}
             sport={sport}
             gameId={params.game}
+            highlightYoutubeId={highlightYoutubeId}
             backHref={`/live?sport=${encodeURIComponent(sport)}`}
           />
         </div>
