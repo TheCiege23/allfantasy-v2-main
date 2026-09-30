@@ -234,22 +234,13 @@ export function buildToolsHub(input: {
           tokenCost: null,
           tier: 'pro',
         },
-        {
-          id: 'psychology',
-          title: 'Manager Psychology',
-          desc: 'How you actually play — tendencies read from your own transaction history.',
-          href: '/af-legacy?tab=compare',
-          leavesShell: true,
-          live: {
-            text:
-              stats.connectedLeagues > 0
-                ? `Reads your transactions across ${stats.connectedLeagues} connected ${stats.connectedLeagues === 1 ? 'league' : 'leagues'}`
-                : 'No connected leagues to read from',
-            tone: 'calm',
-          },
-          tokenCost: null,
-          tier: 'pro',
-        },
+        /*
+         * 🛑 NO "Manager Psychology" CARD. It promised "how you actually play — tendencies
+         * read from your own transaction history": a characterisation label, which Milestone
+         * 32 shows to nobody (the unified psychological tool went in #1659). Its link,
+         * /af-legacy?tab=compare, never read transactions anyway — it is the same
+         * /api/legacy/compare record comparison the Manager Compare card below opens.
+         */
         {
           id: 'compare',
           title: 'Manager Compare',
