@@ -41,7 +41,7 @@ async function main() {
       'stats (Json)',
     ],
     unique: '[sport, playerId, season, seasonType, source]',
-    routesRead: ['app/api/start-sit/roster/route.ts', 'lib/draft/analytics/nfl-rolling-insights-draft-analytics.ts'],
+    routesRead: ['lib/draft/analytics/nfl-rolling-insights-draft-analytics.ts'],
     canStore: true,
     canBackfill: false,
     fitScore: 100,
@@ -56,7 +56,6 @@ async function main() {
     fields: ['id (VarChar 128)', 'sport', 'name', 'position', 'team', 'projections (Json)', 'stats (Json)'],
     unique: 'id (composite key with sport)',
     routesRead: [
-      'app/api/start-sit/roster/route.ts',
       'lib/draft-room/getResolvedDraftPoolForLeague.ts',
       'multiple routes',
     ],
@@ -84,7 +83,6 @@ async function main() {
     ],
     unique: 'snapshotLookupKey (per-week, per-event)',
     routesRead: [
-      'app/api/start-sit/roster/route.ts (week-based)',
       'lib/draft-room/getResolvedDraftPoolForLeague.ts (lookup)',
     ],
     canStore: false,

@@ -235,7 +235,6 @@ describe('every audited paid-model route asks the gate', () => {
   // silently dropping one.
   const ROUTES = [
     'app/api/chimmy/voice/route.ts',
-    'app/api/start-sit/chimmy/route.ts',
     'app/api/share/generate-copy/route.ts',
     'app/api/ai/trade-analysis/route.ts',
     'app/api/dynasty-trade-analyzer/route.ts',

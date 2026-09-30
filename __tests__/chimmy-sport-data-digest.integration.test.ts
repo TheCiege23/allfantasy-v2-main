@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const getLatestNewsMock = vi.fn()
-const getInjuryReportMock = vi.fn()
 const sportsGameFindManyMock = vi.fn()
 const sportsDataCacheFindManyMock = vi.fn()
 const sportsNewsFindManyMock = vi.fn()
@@ -15,9 +14,8 @@ vi.mock('@/lib/data/news', () => ({
   getLatestNews: getLatestNewsMock,
 }))
 
-vi.mock('@/lib/data/players', () => ({
-  getInjuryReport: getInjuryReportMock,
-}))
+// Still stubbed so nothing it imports is loaded; `getInjuryReport` was deleted 2026-09-30 (no callers).
+vi.mock('@/lib/data/players', () => ({}))
 
 vi.mock('@/app/api/sports/news/sync-helper', () => ({
   fetchNewsAPIEverything: fetchNewsAPIEverythingMock,
@@ -47,7 +45,6 @@ describe('buildChimmySportDataDigest seeded fixture scenarios', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getLatestNewsMock.mockResolvedValue([])
-    getInjuryReportMock.mockResolvedValue([])
     sportsGameFindManyMock.mockResolvedValue([])
     sportsDataCacheFindManyMock.mockResolvedValue([])
     sportsNewsFindManyMock.mockResolvedValue([])
