@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { LiveMatchupStrip } from '@/components/core-app/screens/LiveMatchupStrip'
+import type { MatchupStrip } from '@/lib/live/matchupStrip'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { gameDetailHref } from '@/lib/live/gameDetailLink'
@@ -102,6 +104,8 @@ export type LiveScoresProps = {
   /** The league held in the rail, so its tie-ins can be marked. Null on the
    *  cross-league entry, which is the normal case for this screen. */
   selectedLeagueId?: string | null
+  /** Your matchup in the held league, resolved on the server. Null when no league is held. */
+  matchupStrip?: MatchupStrip | null
 }
 
 export function scopeLiveGamesToLeague(
@@ -118,7 +122,7 @@ export function scopeLiveGamesToLeague(
     }))
 }
 
-export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScoresProps) {
+export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null }: LiveScoresProps) {
   const [data, setData] = useState<LivePageData>(initial)
   const [scope, setScope] = useState<'my' | 'all'>(initial.scope)
   const [sport, setSport] = useState(initial.sport)
@@ -464,6 +468,8 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
               'Every live matchup across your leagues, scored against your rosters in real time.'}
         </p>
       </header>
+
+      {selectedLeagueId ? <LiveMatchupStrip strip={matchupStrip} leagueId={selectedLeagueId} /> : null}
 
       {/* ── Control bar ─────────────────────────────────────────────── */}
       <div className="af-live-bar">

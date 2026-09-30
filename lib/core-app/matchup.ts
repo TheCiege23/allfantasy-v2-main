@@ -266,6 +266,11 @@ export type MatchupData = {
     unprojected: { you: number; opponent: number }
   }>
   yetToPlay: UnavailableSection
+  /**
+   * The same game-state tally `yetToPlay.reason` spells out, as numbers, so a caller does not parse prose.
+   * Null when the lineups could not be read — absent data, never a zero.
+   */
+  starterCounts?: { upcoming: number; live: number; final: number; unknown: number } | null
 }
 
 export async function getMatchupData(
@@ -334,6 +339,7 @@ export async function getMatchupData(
       available: false as const,
       reason: 'no matchup resolved, so there is nothing to project',
     },
+    starterCounts: null as MatchupData['starterCounts'],
     yetToPlay: {
       available: false as const,
         reason: 'Starter game states are unavailable until both lineups can be read.',
@@ -593,6 +599,7 @@ export async function getMatchupData(
       if (player) player.isFinal = state === 'final'
     }
   }
+  if (sideProjections) base.starterCounts = { ...counts }
   if (sideProjections) base.yetToPlay.reason = `${counts.upcoming} yet to start · ${counts.live} in progress · ${counts.final} finished or unavailable${counts.unknown ? ` · ${counts.unknown} game states unavailable` : ''}`
   const bestBall = league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings)
   const forecastReason = !bestBall && counts.unknown > 0
