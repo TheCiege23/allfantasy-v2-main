@@ -30,6 +30,12 @@ const mocks = vi.hoisted(() => ({
 
 const RELAY_FRESH = { status: 'fresh', fetchedAt: '2026-09-05T02:00:00.000Z' }
 
+const learningPass = vi.fn()
+const LEARNING_IDLE = {
+  examined: 0, valued: 0, refused: 0, locked: false, remaining: 0,
+  aggregated: false, aggregateSkipped: 'nothing new was valued', error: null,
+}
+
 const PURGED = {
   available: true,
   deleted: 1200,
@@ -121,6 +127,41 @@ describe('GET /api/cron/reap-sync-runs', () => {
     // The nightly trade agent rides this route; mocked so these tests do not depend on the clock.
     vi.doMock('@/lib/decision-os/trade/tradeAgentPass', () => ({ runTradeAgentPass: mocks.runTradeAgentPass }))
     mocks.runTradeAgentPass.mockResolvedValue({ ran: false, reason: 'outside the nightly window' })
+    // The trade-learning writer rides here too (2026-09-30); mocked so these tests touch no trades.
+    vi.doMock('@/lib/comprehensive-trade-learning', () => ({ runComprehensiveBackgroundAnalysis: learningPass }))
+    learningPass.mockReset().mockResolvedValue(LEARNING_IDLE)
+  })
+
+  it('runs the trade-learning pass AFTER the agent, on the budget the agent left, with its own telemetry row', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 0, cutoff: '2026-09-05T11:30:00.000Z' })
+    const order: string[] = []
+    mocks.runTradeAgentPass.mockImplementationOnce(async () => (order.push('agent'), { ran: false, reason: 'x' }))
+    learningPass.mockImplementationOnce(async () => (order.push('learning'), { ...LEARNING_IDLE, valued: 4, refused: 1 }))
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(order).toEqual(['agent', 'learning'])
+    const budgetMs = learningPass.mock.calls[0]![0].budgetMs
+    expect(budgetMs).toBeGreaterThan(20_000)
+    expect(budgetMs).toBeLessThanOrEqual(240_000)
+    expect(mocks.recordSyncJobRun).toHaveBeenCalledWith(
+      expect.objectContaining({ jobName: 'cron-trade-learning' }),
+      expect.objectContaining({ rowsUpdated: 5 }),
+      expect.any(Number),
+    )
+    expect(await res.json()).toMatchObject({ ok: true, tradeLearning: { valued: 4, refused: 1 } })
+  })
+
+  it('a failing trade-learning pass never fails the reap', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 2, cutoff: '2026-09-05T11:30:00.000Z' })
+    learningPass.mockRejectedValueOnce(new Error('aggregation exploded'))
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, reaped: 2, tradeLearning: { ran: false, reason: 'aggregation exploded' } })
   })
 
   it('runs the trade-agent pass only AFTER the heartbeat, inside the route budget', async () => {
@@ -185,7 +226,9 @@ describe('GET /api/cron/reap-sync-runs', () => {
     // job_name, so a sweep that reaps correctly and records nothing reads as a dead scheduler.
     // Asserted rather than stubbed on purpose -- the missing export made this the one test that
     // reached the call, and a bare vi.fn() would have silenced the error without guarding it.
-    expect(mocks.recordSyncJobRun).toHaveBeenCalledTimes(1)
+    // Twice since 2026-09-30: the reap's own heartbeat, then the trade-learning pass's row.
+    expect(mocks.recordSyncJobRun).toHaveBeenCalledTimes(2)
+    expect(mocks.recordSyncJobRun.mock.calls[0]![0]).toMatchObject({ jobName: 'cron-reap-sync-runs' })
   })
 
   it('purges expired cache rows after the reap, and records what it did', async () => {

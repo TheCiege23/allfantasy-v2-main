@@ -1,15 +1,18 @@
 import { prisma } from './prisma';
 import { findPlayerBySleeperId, findPlayerByName, getPickValue, FantasyCalcPlayer } from './fantasycalc';
 import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db';
-import {
-  calculateDynastyScore,
-  getAgeCurveWithCliffs,
-  getPositionMultiplier,
-  findPlayerTier,
-  ALL_TIERED_PLAYERS,
-  AssetTier,
-} from './dynasty-tiers';
-import { getSportsData } from './sports-router';
+
+/*
+ * 🛑 MARKET VALUES ONLY (2026-09-30, owner's ruling). Every value here is FantasyCalc's — the market
+ * path, which is the authoritative value. This module used to price each player at
+ * `dynastyScore || fantasyCalcValue || 200`: the dynasty-tiers score FIRST, which is ruled not
+ * authoritative, and a flat 200 for anyone FantasyCalc did not know, which is an invented number.
+ * Now a trade with any player FantasyCalc cannot match is marked analyzed with NO values rather
+ * than priced by a guess, and no dynasty-tier figure is stored or written into the text the AI reads.
+ */
+
+/** "Elite" by market: FantasyCalc overall rank at or above this. Replaces the dynasty tier-1 test. */
+const ELITE_OVERALL_RANK = 24;
 
 interface TradePlayer {
   id: string;
@@ -27,16 +30,12 @@ interface EnhancedTradeAnalysis {
   valueReceived: number;
   valueDifferential: number;
   percentDiff: number;
-  dynastyTierScore: number;
-  isFairTrade: boolean;
   playersWithEnrichment: Array<{
     name: string;
     position: string;
     fantasyCalcValue: number;
-    dynastyTier: AssetTier | null;
-    dynastyScore: number;
+    overallRank: number | null;
     age: number | null;
-    ageCurve: number;
   }>;
   consolidationType: '2-for-1' | '3-for-1' | 'multi-for-1' | null;
   involvesPicks: boolean;
@@ -64,13 +63,11 @@ async function getCachedFantasyCalcValues(isDynasty: boolean, numQbs: 1 | 2): Pr
   return data;
 }
 
-function getPlayerAge(player: FantasyCalcPlayer | null, tieredPlayer: { age?: number } | null | undefined): number | null {
-  if (player?.player?.maybeAge) return player.player.maybeAge;
-  if (tieredPlayer?.age) return tieredPlayer.age;
-  return null;
+function getPlayerAge(player: FantasyCalcPlayer | null): number | null {
+  return player?.player?.maybeAge || null;
 }
 
-export async function analyzeTradeComprehensive(
+export async function collectTradeMarketFacts(
   trade: {
     id: string;
     playersGiven: unknown;
@@ -91,6 +88,8 @@ export async function analyzeTradeComprehensive(
 
     if (playersGiven.length === 0 && picksGiven.length === 0) return null;
     if (playersReceived.length === 0 && picksReceived.length === 0) return null;
+    // FantasyCalc prices NFL only; any other sport has no market value to read.
+    if (String(trade.sport ?? 'nfl').toLowerCase() !== 'nfl') return null;
 
     const isDynasty = trade.leagueFormat === 'dynasty' || trade.leagueFormat === 'keeper';
     const isSF = trade.isSuperFlex === true;
@@ -98,48 +97,26 @@ export async function analyzeTradeComprehensive(
 
     const fantasyCalcPlayers = await getCachedFantasyCalcValues(isDynasty, numQbs);
 
-    const allPlayers = [...playersGiven, ...playersReceived];
     const playersWithEnrichment: EnhancedTradeAnalysis['playersWithEnrichment'] = [];
-    const playerAgeData: Record<string, number> = {};
+    const valueOf = new Map<TradePlayer, number>();
 
-    for (const player of allPlayers) {
+    for (const player of [...playersGiven, ...playersReceived]) {
       const fcPlayer = findPlayerBySleeperId(fantasyCalcPlayers, player.id) ||
                        findPlayerByName(fantasyCalcPlayers, player.name);
-      const tieredPlayer = findPlayerTier(player.name);
-      const age = getPlayerAge(fcPlayer, tieredPlayer);
-      const tier = tieredPlayer?.tier ?? null;
-      
-      const fcValue = fcPlayer?.value || 200;
-      const ageCurve = getAgeCurveWithCliffs(player.position, age ?? undefined);
-      
-      const dynastyResult = calculateDynastyScore(
-        fcValue,
-        player.position,
-        age ?? undefined,
-        tier,
-        isSF,
-        false
-      );
+      // No market value is not a value of 200. Refuse the whole trade rather than price it by a guess.
+      if (!fcPlayer || !(fcPlayer.value > 0)) return null;
 
-      if (age) {
-        playerAgeData[player.name] = age;
-      }
-
+      valueOf.set(player, fcPlayer.value);
       playersWithEnrichment.push({
         name: player.name,
         position: player.position,
-        fantasyCalcValue: fcValue,
-        dynastyTier: tier,
-        dynastyScore: dynastyResult.score,
-        age,
-        ageCurve,
+        fantasyCalcValue: fcPlayer.value,
+        overallRank: Number.isFinite(fcPlayer.overallRank) ? fcPlayer.overallRank : null,
+        age: getPlayerAge(fcPlayer),
       });
     }
 
-    const getPlayerValue = (player: TradePlayer): number => {
-      const enriched = playersWithEnrichment.find(p => p.name === player.name);
-      return enriched?.dynastyScore || enriched?.fantasyCalcValue || 200;
-    };
+    const getPlayerValue = (player: TradePlayer): number => valueOf.get(player) ?? 0;
 
     const getPickTotalValue = (picks: TradePick[]): number => {
       return picks.reduce((sum, pick) => sum + getPickValue(pick.season, pick.round, isDynasty), 0);
@@ -163,16 +140,13 @@ export async function analyzeTradeComprehensive(
       else consolidationType = 'multi-for-1';
     }
 
-    const dynastyTierScore = playersWithEnrichment.reduce((sum, p) => sum + p.dynastyScore, 0);
-    const hasElite = playersWithEnrichment.some(p => p.dynastyTier !== null && p.dynastyTier <= 1);
+    const hasElite = playersWithEnrichment.some(p => p.overallRank !== null && p.overallRank <= ELITE_OVERALL_RANK);
 
     return {
       valueGiven,
       valueReceived,
       valueDifferential,
       percentDiff,
-      dynastyTierScore,
-      isFairTrade: percentDiff < 10,
       playersWithEnrichment,
       consolidationType,
       involvesPicks: picksGiven.length > 0 || picksReceived.length > 0,
@@ -219,11 +193,26 @@ async function releaseComprehensiveLock(): Promise<void> {
   } catch {}
 }
 
-export async function processAllHistoricalTrades(limit: number = 100): Promise<number> {
+export type TradeProcessingSummary = {
+  /** Unanalyzed trades read this pass. */
+  examined: number;
+  /** Given market values and marked analyzed. */
+  valued: number;
+  /** Marked analyzed with NO values: an unmatched player, a non-NFL sport, or an empty side. */
+  refused: number;
+  /** Skipped because another pass held the lock. */
+  locked: boolean;
+};
+
+export async function processAllHistoricalTrades(
+  limit: number = 100,
+  opts: { isExhausted?: () => boolean } = {},
+): Promise<TradeProcessingSummary> {
+  const summary: TradeProcessingSummary = { examined: 0, valued: 0, refused: 0, locked: false };
   const hasLock = await acquireComprehensiveLock();
   if (!hasLock) {
     console.log('Comprehensive trade analysis already in progress');
-    return 0;
+    return { ...summary, locked: true };
   }
 
   try {
@@ -236,15 +225,16 @@ export async function processAllHistoricalTrades(limit: number = 100): Promise<n
     });
 
     if (trades.length === 0) {
-      return 0;
+      return summary;
     }
 
     console.log(`Processing ${trades.length} trades from all years...`);
-    let processed = 0;
 
     for (const trade of trades) {
+      if (opts.isExhausted?.()) break;
+      summary.examined++;
       try {
-        const analysis = await analyzeTradeComprehensive({
+        const analysis = await collectTradeMarketFacts({
           id: trade.id,
           playersGiven: trade.playersGiven,
           picksGiven: trade.picksGiven,
@@ -269,11 +259,9 @@ export async function processAllHistoricalTrades(limit: number = 100): Promise<n
               valueGiven: analysis.valueGiven,
               valueReceived: analysis.valueReceived,
               valueDifferential: analysis.valueDifferential,
-              dynastyTierScore: analysis.dynastyTierScore,
               playerAgeData: Object.keys(playerAgeData).length > 0 ? playerAgeData : undefined,
               analysisResult: {
                 percentDiff: analysis.percentDiff,
-                isFairTrade: analysis.isFairTrade,
                 consolidationType: analysis.consolidationType,
                 involvesPicks: analysis.involvesPicks,
                 involvesEliteAsset: analysis.involvesEliteAsset,
@@ -281,19 +269,20 @@ export async function processAllHistoricalTrades(limit: number = 100): Promise<n
               },
             },
           });
-          processed++;
+          summary.valued++;
         } else {
           await prisma.leagueTrade.update({
             where: { id: trade.id },
             data: { analyzed: true },
           });
+          summary.refused++;
         }
       } catch (error) {
         console.error(`Error processing trade ${trade.id}:`, error);
       }
     }
 
-    return processed;
+    return summary;
   } finally {
     await releaseComprehensiveLock();
   }
@@ -304,23 +293,21 @@ interface AggregatedPlayerData {
   position: string;
   tradeCount: number;
   avgValue: number;
-  avgDynastyScore: number;
-  fairTradeRate: number;
+  /** Mean |value gap| between the two sides, in percent, across his trades. */
+  avgGapPct: number;
   avgAge: number | null;
-  tiers: number[];
 }
 
 interface ConsolidationStats {
-  '2-for-1': { count: number; fairCount: number; totalPremium: number };
-  '3-for-1': { count: number; fairCount: number; totalPremium: number };
+  '2-for-1': { count: number; totalPremium: number };
+  '3-for-1': { count: number; totalPremium: number };
 }
 
 interface PositionTrend {
   position: string;
   avgValue: number;
-  avgDynastyScore: number;
   tradeVolume: number;
-  fairTradeRate: number;
+  avgGapPct: number;
 }
 
 interface AgeCurveTrend {
@@ -334,6 +321,8 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
   const allAnalyzedTrades = await prisma.leagueTrade.findMany({
     where: {
       analyzed: true,
+      // A refused trade (no market value for someone in it) is analyzed but carries no values.
+      valueGiven: { not: null },
     },
     select: {
       season: true,
@@ -342,7 +331,6 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
       valueGiven: true,
       valueReceived: true,
       valueDifferential: true,
-      dynastyTierScore: true,
       playerAgeData: true,
       analysisResult: true,
       playersGiven: true,
@@ -359,47 +347,41 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
 
   const playerStats = new Map<string, AggregatedPlayerData>();
   const consolidationStats: ConsolidationStats = {
-    '2-for-1': { count: 0, fairCount: 0, totalPremium: 0 },
-    '3-for-1': { count: 0, fairCount: 0, totalPremium: 0 },
+    '2-for-1': { count: 0, totalPremium: 0 },
+    '3-for-1': { count: 0, totalPremium: 0 },
   };
-  const positionStats = new Map<string, { totalValue: number; totalDynastyScore: number; count: number; fairCount: number }>();
+  const positionStats = new Map<string, { totalValue: number; count: number; totalGap: number }>();
   const ageCurveStats = new Map<string, { totalValue: number; count: number }>();
-  const seasonStats = new Map<number, { count: number; totalValue: number; fairCount: number }>();
+  const seasonStats = new Map<number, { count: number; totalValue: number }>();
 
   for (const trade of allAnalyzedTrades) {
     const result = trade.analysisResult as {
       percentDiff?: number;
-      isFairTrade?: boolean;
       consolidationType?: string;
       playersWithEnrichment?: Array<{
         name: string;
         position: string;
         fantasyCalcValue: number;
-        dynastyTier: number | null;
-        dynastyScore: number;
         age: number | null;
       }>;
     } | null;
 
     if (!result?.playersWithEnrichment) continue;
 
-    const isFair = result.isFairTrade === true;
-    const percentDiff = result.percentDiff || 0;
+    // The value gap between the sides, in percent: a fact. Whether that is "fair" is the engine's call.
+    const percentDiff = Math.abs(result.percentDiff || 0);
 
     if (result.consolidationType === '2-for-1') {
       consolidationStats['2-for-1'].count++;
-      if (isFair) consolidationStats['2-for-1'].fairCount++;
       consolidationStats['2-for-1'].totalPremium += percentDiff;
     } else if (result.consolidationType === '3-for-1') {
       consolidationStats['3-for-1'].count++;
-      if (isFair) consolidationStats['3-for-1'].fairCount++;
       consolidationStats['3-for-1'].totalPremium += percentDiff;
     }
 
-    const seasonStat = seasonStats.get(trade.season) || { count: 0, totalValue: 0, fairCount: 0 };
+    const seasonStat = seasonStats.get(trade.season) || { count: 0, totalValue: 0 };
     seasonStat.count++;
     seasonStat.totalValue += (trade.valueGiven || 0) + (trade.valueReceived || 0);
-    if (isFair) seasonStat.fairCount++;
     seasonStats.set(trade.season, seasonStat);
 
     for (const player of result.playersWithEnrichment) {
@@ -409,23 +391,13 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
         position: player.position,
         tradeCount: 0,
         avgValue: 0,
-        avgDynastyScore: 0,
-        fairTradeRate: 0,
+        avgGapPct: 0,
         avgAge: null,
-        tiers: [],
       };
 
       existing.tradeCount++;
       existing.avgValue = ((existing.avgValue * (existing.tradeCount - 1)) + player.fantasyCalcValue) / existing.tradeCount;
-      existing.avgDynastyScore = ((existing.avgDynastyScore * (existing.tradeCount - 1)) + player.dynastyScore) / existing.tradeCount;
-      if (isFair) {
-        existing.fairTradeRate = (existing.fairTradeRate * (existing.tradeCount - 1) + 1) / existing.tradeCount;
-      } else {
-        existing.fairTradeRate = (existing.fairTradeRate * (existing.tradeCount - 1)) / existing.tradeCount;
-      }
-      if (player.dynastyTier !== null) {
-        existing.tiers.push(player.dynastyTier);
-      }
+      existing.avgGapPct = ((existing.avgGapPct * (existing.tradeCount - 1)) + percentDiff) / existing.tradeCount;
       if (player.age) {
         if (existing.avgAge === null) {
           existing.avgAge = player.age;
@@ -435,11 +407,10 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
       }
       playerStats.set(key, existing);
 
-      const posStat = positionStats.get(player.position) || { totalValue: 0, totalDynastyScore: 0, count: 0, fairCount: 0 };
+      const posStat = positionStats.get(player.position) || { totalValue: 0, count: 0, totalGap: 0 };
       posStat.totalValue += player.fantasyCalcValue;
-      posStat.totalDynastyScore += player.dynastyScore;
       posStat.count++;
-      if (isFair) posStat.fairCount++;
+      posStat.totalGap += percentDiff;
       positionStats.set(player.position, posStat);
 
       if (player.age) {
@@ -464,25 +435,13 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
     .slice(0, 50);
 
   for (const player of topPlayers) {
-    const avgTier = player.tiers.length > 0 
-      ? player.tiers.reduce((a, b) => a + b, 0) / player.tiers.length 
-      : null;
-    
     const confidenceScore = Math.min(1, player.tradeCount / 20);
-    
-    let marketTrend: string;
-    if (player.fairTradeRate >= 0.6) {
-      marketTrend = 'fair_valued';
-    } else if (player.avgDynastyScore > player.avgValue * 1.1) {
-      marketTrend = 'dynasty_premium';
-    } else if (player.avgDynastyScore < player.avgValue * 0.9) {
-      marketTrend = 'dynasty_discount';
-    } else {
-      marketTrend = 'market_aligned';
-    }
 
-    const insightText = `${player.name} (${player.position}): Traded ${player.tradeCount}x, avg value ${Math.round(player.avgValue)}, ` +
-      `dynasty score ${Math.round(player.avgDynastyScore)}, ${Math.round(player.fairTradeRate * 100)}% fair trades. ${marketTrend}.`;
+    // Facts only (owner's facts-vs-labels ruling): no `fair_valued` / `dynasty_premium` style label.
+    // The old labels compared against the dynasty-tiers score, which is ruled not authoritative.
+
+    const insightText = `${player.name} (${player.position}): Traded ${player.tradeCount}x, avg market value ` +
+      `${Math.round(player.avgValue)}, avg value gap between sides ${Math.round(player.avgGapPct)}%.`;
 
     const existingPlayerInsight = await prisma.tradeLearningInsight.findFirst({
       where: {
@@ -496,12 +455,12 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
     const playerInsightData = {
       sampleSize: player.tradeCount,
       avgValueGiven: player.avgValue,
-      avgValueReceived: player.avgDynastyScore,
-      winRate: player.fairTradeRate,
-      marketTrend,
+      avgValueReceived: null,
+      winRate: null,
+      marketTrend: null,
       confidenceScore,
       insightText,
-      examples: { avgTier, tiers: player.tiers },
+      examples: { avgAge: player.avgAge },
     };
 
     if (existingPlayerInsight) {
@@ -527,11 +486,10 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
     if (stat.count < 5) continue;
 
     const avgValue = stat.totalValue / stat.count;
-    const avgDynastyScore = stat.totalDynastyScore / stat.count;
-    const fairRate = stat.fairCount / stat.count;
+    const avgGapPct = stat.totalGap / stat.count;
 
-    const insightText = `${position}: ${stat.count} trades, avg value ${Math.round(avgValue)}, ` +
-      `avg dynasty score ${Math.round(avgDynastyScore)}, ${Math.round(fairRate * 100)}% fair trade rate.`;
+    const insightText = `${position}: ${stat.count} trades, avg market value ${Math.round(avgValue)}, ` +
+      `avg value gap between sides ${Math.round(avgGapPct)}%.`;
 
     const existingPositionInsight = await prisma.tradeLearningInsight.findFirst({
       where: {
@@ -547,8 +505,8 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
         data: {
           sampleSize: stat.count,
           avgValueGiven: avgValue,
-          avgValueReceived: avgDynastyScore,
-          winRate: fairRate,
+          avgValueReceived: null,
+          winRate: null,
           insightText,
           confidenceScore: Math.min(1, stat.count / 50),
         },
@@ -560,8 +518,8 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
           position,
           sampleSize: stat.count,
           avgValueGiven: avgValue,
-          avgValueReceived: avgDynastyScore,
-          winRate: fairRate,
+          avgValueReceived: null,
+          winRate: null,
           insightText,
           season: 0,
           confidenceScore: Math.min(1, stat.count / 50),
@@ -614,12 +572,6 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
     }
   }
 
-  const twoForOneFairRate = consolidationStats['2-for-1'].count > 0 
-    ? Math.round((consolidationStats['2-for-1'].fairCount / consolidationStats['2-for-1'].count) * 100)
-    : 0;
-  const threeForOneFairRate = consolidationStats['3-for-1'].count > 0
-    ? Math.round((consolidationStats['3-for-1'].fairCount / consolidationStats['3-for-1'].count) * 100)
-    : 0;
   const twoForOneAvgPremium = consolidationStats['2-for-1'].count > 0
     ? Math.round(consolidationStats['2-for-1'].totalPremium / consolidationStats['2-for-1'].count)
     : 0;
@@ -627,8 +579,8 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
     ? Math.round(consolidationStats['3-for-1'].totalPremium / consolidationStats['3-for-1'].count)
     : 0;
 
-  const consolidationInsightText = `2-for-1: ${twoForOneFairRate}% fair, avg ${twoForOneAvgPremium}% premium (n=${consolidationStats['2-for-1'].count}). ` +
-    `3-for-1: ${threeForOneFairRate}% fair, avg ${threeForOneAvgPremium}% premium (n=${consolidationStats['3-for-1'].count}).`;
+  const consolidationInsightText = `2-for-1: avg value gap ${twoForOneAvgPremium}% (n=${consolidationStats['2-for-1'].count}). ` +
+    `3-for-1: avg value gap ${threeForOneAvgPremium}% (n=${consolidationStats['3-for-1'].count}).`;
 
   const existingConsolidation = await prisma.tradeLearningInsight.findFirst({
     where: {
@@ -673,9 +625,8 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
           pos,
           {
             avgValue: Math.round(stat.totalValue / stat.count),
-            avgDynastyScore: Math.round(stat.totalDynastyScore / stat.count),
             tradeVolume: stat.count,
-            fairRate: Math.round((stat.fairCount / stat.count) * 100),
+            avgGapPct: Math.round(stat.totalGap / stat.count),
           },
         ])
       ),
@@ -694,9 +645,8 @@ export async function aggregateComprehensiveInsights(): Promise<void> {
           pos,
           {
             avgValue: Math.round(stat.totalValue / stat.count),
-            avgDynastyScore: Math.round(stat.totalDynastyScore / stat.count),
             tradeVolume: stat.count,
-            fairRate: Math.round((stat.fairCount / stat.count) * 100),
+            avgGapPct: Math.round(stat.totalGap / stat.count),
           },
         ])
       ),
@@ -783,18 +733,73 @@ export async function getComprehensiveLearningContext(): Promise<string> {
   return lines.join('\n');
 }
 
-export async function runComprehensiveBackgroundAnalysis(): Promise<{ processed: number; aggregated: boolean }> {
-  try {
-    const processed = await processAllHistoricalTrades(100);
-    
-    if (processed > 0) {
-      await aggregateComprehensiveInsights();
-      return { processed, aggregated: true };
-    }
+/** Re-aggregate at most this often while a backlog is draining — it reads every valued trade. */
+const AGGREGATE_EVERY_MS = 6 * 60 * 60 * 1000;
 
-    return { processed, aggregated: false };
+export type TradeLearningPassResult = TradeProcessingSummary & {
+  /** Unanalyzed trades left after this pass; null if the count could not be read. */
+  remaining: number | null;
+  aggregated: boolean;
+  /** Why aggregation did not run this pass, when it did not. */
+  aggregateSkipped: string | null;
+  error: string | null;
+};
+
+/**
+ * One bounded pass of the trade-learning writer, scheduled on /api/cron/reap-sync-runs (hourly).
+ *
+ * ⚠ NOTHING CALLED THIS UNTIL 2026-09-30, and it is the ONLY writer of `TradeLearningInsight`:
+ * measured then, 25,970 NFL `LeagueTrade` rows were all `analyzed: false` and the insight table had
+ * zero rows, while four live paths (`/api/ai/waiver`, the legacy waiver analyze route,
+ * `ai-gm-intelligence`, `trade-pre-analysis`) read `getComprehensiveLearningContext` and silently got
+ * an empty string. A reader pointed at a table nothing refreshes fails silently and looks correct.
+ *
+ * Bounded by `budgetMs`: trades are processed newest-first until 60% of the budget is spent, and
+ * aggregation (which reads every valued trade) runs only when something new was valued AND either the
+ * backlog is empty or the last aggregation is older than six hours, with budget to spare.
+ */
+export async function runComprehensiveBackgroundAnalysis(
+  opts: { budgetMs?: number; batchSize?: number; now?: () => number } = {},
+): Promise<TradeLearningPassResult> {
+  const now = opts.now ?? Date.now;
+  const startedAt = now();
+  const budgetMs = Math.max(0, opts.budgetMs ?? 60_000);
+  const result: TradeLearningPassResult = {
+    examined: 0,
+    valued: 0,
+    refused: 0,
+    locked: false,
+    remaining: null,
+    aggregated: false,
+    aggregateSkipped: null,
+    error: null,
+  };
+  try {
+    const summary = await processAllHistoricalTrades(opts.batchSize ?? 500, {
+      isExhausted: () => now() - startedAt >= budgetMs * 0.6,
+    });
+    Object.assign(result, summary);
+    result.remaining = await prisma.leagueTrade.count({ where: { analyzed: false } }).catch(() => null);
+
+    if (summary.valued === 0) {
+      result.aggregateSkipped = 'nothing new was valued';
+    } else if (now() - startedAt >= budgetMs * 0.75) {
+      result.aggregateSkipped = 'budget spent';
+    } else {
+      const stats = await prisma.tradeLearningStats
+        .findUnique({ where: { season: 0 }, select: { lastUpdated: true } })
+        .catch(() => null);
+      const stale = !stats || now() - stats.lastUpdated.getTime() >= AGGREGATE_EVERY_MS;
+      if (result.remaining === 0 || stale) {
+        await aggregateComprehensiveInsights();
+        result.aggregated = true;
+      } else {
+        result.aggregateSkipped = 'aggregated within the last 6h and the backlog is still draining';
+      }
+    }
+    return result;
   } catch (error) {
     console.error('Comprehensive background trade analysis error:', error);
-    return { processed: 0, aggregated: false };
+    return { ...result, error: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed' };
   }
 }

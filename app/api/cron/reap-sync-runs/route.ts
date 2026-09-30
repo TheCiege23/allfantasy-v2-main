@@ -7,6 +7,7 @@ import { refreshPrivateRelayRanges } from '@/lib/geo/privateRelayIngest'
 import { prisma } from '@/lib/prisma'
 import { reapAllAbandonedRuns, recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runTradeAgentPass, type TradeAgentPassResult } from '@/lib/decision-os/trade/tradeAgentPass'
+import { runComprehensiveBackgroundAnalysis, type TradeLearningPassResult } from '@/lib/comprehensive-trade-learning'
 
 /**
  * Heartbeat identity, read by PROBES in scripts/cron-freshness-check.mjs.
@@ -34,6 +35,8 @@ export const maxDuration = 300
 
 /** The trade-agent pass stops by here, leaving the platform's 300s kill well clear. */
 const ROUTE_BUDGET_MS = 240_000
+/** Below this, the trade-learning pass is skipped for the hour rather than run too short to finish a batch. */
+const LEARNING_MIN_BUDGET_MS = 20_000
 
 /**
  * GET /api/cron/reap-sync-runs
@@ -129,5 +132,37 @@ export async function GET(request: NextRequest) {
     budgetMs: ROUTE_BUDGET_MS - (Date.now() - startedAt),
   }).catch((error) => ({ ran: false as const, reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed' }))
 
-  return NextResponse.json({ ok: true, reaped, cutoff, cachePurge, privateRelay, tradeAgent })
+  /*
+   * The trade-learning writer rides here too (2026-09-30), for the same ceiling reason, AFTER the
+   * agent so it only ever gets the budget the agent left. It is the only writer of
+   * `TradeLearningInsight`, which four live AI paths read and which had never been written (see
+   * runComprehensiveBackgroundAnalysis). Market values only — owner's ruling. Its own telemetry row
+   * (`cron-trade-learning`) makes a stalled writer visible instead of an empty context looking fine.
+   */
+  const learningStartedAt = Date.now()
+  const learningBudgetMs = ROUTE_BUDGET_MS - (learningStartedAt - startedAt)
+  const tradeLearning: TradeLearningPassResult | { ran: false; reason: string } =
+    learningBudgetMs < LEARNING_MIN_BUDGET_MS
+      ? { ran: false as const, reason: `only ${Math.round(learningBudgetMs / 1000)}s of budget left` }
+      : await runComprehensiveBackgroundAnalysis({ budgetMs: learningBudgetMs }).catch((error) => ({
+          ran: false as const,
+          reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed',
+        }))
+  if ('valued' in tradeLearning) {
+    try {
+      await recordSyncJobRun(
+        { jobName: 'cron-trade-learning', trigger: 'cron' },
+        {
+          rowsUpdated: tradeLearning.valued + tradeLearning.refused,
+          warnings: tradeLearning.error ? [tradeLearning.error] : [],
+          metadata: { ...tradeLearning },
+        },
+        Date.now() - learningStartedAt,
+      )
+    } catch {
+      // Telemetry for the learning pass must never fail the reap it rides.
+    }
+  }
+
+  return NextResponse.json({ ok: true, reaped, cutoff, cachePurge, privateRelay, tradeAgent, tradeLearning })
 }

@@ -731,11 +731,18 @@ async function getMarketInsights(): Promise<ExtendedMarketInsights> {
 
   for (const trade of recentTrades) {
     const playersReceived = (trade.playersReceived as Array<{ name: string; position: string }>) || [];
-    const isFair = Math.abs((trade.valueDifferential as number) || 0) < 500;
+    /*
+     * A trade analyzed WITHOUT values (a player FantasyCalc could not price) has no differential. The
+     * old `|| 0` read that as a perfectly even trade; it is no evidence either way, so it counts as
+     * an acquisition but not toward fairness.
+     */
+    const differential = typeof trade.valueDifferential === 'number' ? trade.valueDifferential : null;
+    const isFair = differential == null ? null : Math.abs(differential) < 500;
 
     for (const p of playersReceived) {
       playerAcquisitions.set(p.name, (playerAcquisitions.get(p.name) || 0) + 1);
-      
+      if (isFair == null) continue;
+
       const posStat = positionFairness.get(p.position) || { fair: 0, total: 0 };
       posStat.total++;
       if (isFair) posStat.fair++;
