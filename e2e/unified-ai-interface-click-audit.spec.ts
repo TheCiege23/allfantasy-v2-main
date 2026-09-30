@@ -49,7 +49,6 @@ test.describe('@ai unified ai interface click audit', () => {
       'unified-ai-entry-waiver-button': 'What waiver move gives me the best edge this week?',
       'unified-ai-entry-draft-button': "I'm on the clock. Give me the best pick and two pivots.",
       'unified-ai-entry-rankings-button': 'Explain these rankings with evidence and caveats.',
-      'unified-ai-entry-psychological-button': 'Explain this manager profile with evidence.',
       'unified-ai-entry-story-button': 'Create a concise rivalry storyline with facts only.',
       'unified-ai-entry-ask-ai-button': 'Help me with my next best move.',
     }
@@ -251,7 +250,6 @@ test.describe('@ai unified ai interface click audit', () => {
     await clickEntryAndWaitForPrompt(page, 'unified-ai-entry-waiver-button', /waiver/i)
     await clickEntryAndWaitForPrompt(page, 'unified-ai-entry-draft-button', /(clock|pick)/i)
     await clickEntryAndWaitForPrompt(page, 'unified-ai-entry-rankings-button', /rankings/i)
-    await clickEntryAndWaitForPrompt(page, 'unified-ai-entry-psychological-button', /profile/i)
     await clickEntryAndWaitForPrompt(page, 'unified-ai-entry-story-button', /storyline/i)
     await clickEntryAndWaitForPrompt(page, 'unified-ai-entry-ask-ai-button', /(best.*move|evidence-based move)/i)
 

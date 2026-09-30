@@ -128,7 +128,6 @@ const WORKBENCH_TOOL_KEYS = [
   'waiver_ai',
   'draft_helper',
   'rankings',
-  'psychological',
   'story_creator',
 ] as const
 
@@ -145,7 +144,6 @@ const ENTRY_BUTTONS = [
   { id: 'waiver', label: 'AI Waiver', tool: 'waiver_ai', prompt: 'What waiver move gives me the best edge this week?' },
   { id: 'draft', label: 'AI Draft Helper', tool: 'draft_helper', prompt: "I'm on the clock. Give me the best pick and two pivots." },
   { id: 'rankings', label: 'Rankings Explanation', tool: 'rankings', prompt: 'Explain these rankings with evidence and caveats.' },
-  { id: 'psychological', label: 'Psychological Profile', tool: 'psychological', prompt: 'Explain this manager profile with evidence.' },
   { id: 'story', label: 'Story Creator', tool: 'story_creator', prompt: 'Create a concise rivalry storyline with facts only.' },
 ] as const
 
@@ -183,11 +181,6 @@ function getDeterministicContext(tool: string, sport: string): Record<string, un
           tier1: ['Team Alpha'],
           tier2: ['Team Beta', 'Team Gamma'],
         },
-      }
-    case 'psychological':
-      return {
-        profile: { style: 'aggressive', risk: 'high' },
-        evidence: ['Trade frequency above league median', 'FAAB velocity elevated'],
       }
     case 'story_creator':
       return {
