@@ -60,7 +60,7 @@ with `-H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.githu
 ```
 GET  /actions/workflows/playwright.yml/runs?branch=main&status=completed&per_page=30
 GET  /actions/runs/<run_id>/jobs?per_page=50
-GET  /actions/jobs/<job_id>/logs                      # follows a redirect; use curl -L, then tail -n 4000
+GET  /actions/jobs/<job_id>/logs                      # BLOCKED: redirects to a host the proxy denies (measured 2026-09-30); MCP get_job_logs is the only log path
 GET  /issues?state=open&labels=error-sentinel&per_page=100
 GET  /pulls?state=open&per_page=50
 POST /issues            {"title","body","labels":["error-sentinel"]}
@@ -129,8 +129,16 @@ There is no `gh` CLI here.
 4. For R1 (and N if it is newer than R0), `list_workflow_jobs` and keep jobs
    with conclusion `failure` or `timed_out`.
 5. For each failed job, `get_job_logs` with `job_id`, `return_content: true`,
-   `tail_lines: 4000`. The failing-test summary is at the tail of the
-   `Run Playwright tests (...)` step. Extract each failing test as
+   `tail_lines: 700`. The failing-test summary is at the tail of the
+   `Run Playwright tests (...)` step.
+
+   ⚠ **Fetch job logs ONE AT A TIME.** Measured on the first firing
+   (2026-09-30): a result over roughly 200 lines is not returned inline but
+   saved to a file whose name is derived from the tool name, and parallel
+   `get_job_logs` calls collide on that filename, so one overwrites another.
+   Copy each saved log into the scratchpad under the job id before fetching
+   the next. The REST endpoint `GET /actions/jobs/<id>/logs` is NOT a fallback
+   here: it answers with a redirect to a host the egress proxy denies. Extract each failing test as
    `file › title` from lines shaped like
    `[chromium] › e2e/<file>.spec.ts:<line>:<col> › <title>` and the numbered
    failure blocks. Ignore tests reported `flaky` (they passed on retry).
@@ -240,14 +248,45 @@ git checkout -B sentinel/<pw|sentry>-<short-slug> origin/main
 - Playwright spec, when a local run is feasible inside the 20-minute box:
 
   ```bash
-  # local, disposable Postgres 16 (binaries are under /usr/lib/postgresql/16)
+  # local, disposable Postgres 16 (binaries are under /usr/lib/postgresql/16).
+  # initdb refuses to run as root: run it as the postgres user, and give that
+  # user traverse permission on every directory above the data dir
+  # (chmod o+x on the scratchpad chain), or initdb fails on permissions.
+  PGDATA=<scratchpad>/pg; mkdir -p "$PGDATA"; chown postgres "$PGDATA"
+  su postgres -c "/usr/lib/postgresql/16/bin/initdb -D $PGDATA -U postgres --auth=trust"
+  su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D $PGDATA -o '-p 5432 -k /tmp' -l $PGDATA/log start"
+  su postgres -c "/usr/lib/postgresql/16/bin/createdb -U postgres -h 127.0.0.1 allfantasy_ci"
   export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
   export DIRECT_URL=$DATABASE_URL
   npx prisma db push --skip-generate && node scripts/seed-e2e-tenant.mjs
   CI=1 NEXTAUTH_SECRET=ci-nextauth-secret NEXTAUTH_URL=http://localhost:3000 \
   NODE_OPTIONS=--max-old-space-size=8192 \
-    npx playwright test e2e/<file>.spec.ts --project=chromium --reporter=line -g "<title>"
+    npx playwright test e2e/<file>.spec.ts --project=chromium --reporter=line -g "<title>" \
+      --config playwright.sentinel.config.ts
   ```
+
+  ⚠ **The container's Chromium is not the build the pinned `@playwright/test`
+  wants** (measured 2026-09-30: build 1194 installed, 1217 wanted), and
+  `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` means `npx playwright install` will not
+  fix it. Point Playwright at the installed binary through an UNTRACKED
+  override config at the repo root (the base config's `testDir`,
+  `snapshotDir` and web-server paths are relative to the config file, so it
+  cannot live in the scratchpad), never by editing `playwright.config.ts`:
+
+  ```ts
+  // playwright.sentinel.config.ts at the repo root: never staged, never
+  // committed, deleted when the run ends. It is not in .gitignore, so it
+  // shows in `git status`; the path-scoped `git add` keeps it out.
+  import base from './playwright.config'
+  import { defineConfig } from '@playwright/test'
+  export default defineConfig({
+    ...base,
+    use: { ...base.use, launchOptions: { executablePath: '/opt/pw-browsers/chromium' } },
+  })
+  ```
+
+  A run that prints "Executable doesn't exist" has NOT been reproduced; do
+  not read it as a failing test.
 
   If Postgres cannot be started or the run does not reach the assertion within
   the box, stop reproducing. Reason from the CI log and the code, and write
