@@ -196,11 +196,28 @@ async function handle(req: NextRequest) {
             error: err instanceof Error ? err.message : String(err),
           }))
 
+          /*
+           * The CFBD team directory: every college reader's identity index, and since
+           * 2026-09-30 its stadiums too (My Team's college weather, the weather prewarm).
+           * It had NO scheduled writer before this — see `ingestCollegeTeamsIfDue`.
+           * Weekly-gated inside the helper, and placed before headshots by the rule above:
+           * it changes what the product knows. Needs room for one CFBD fetch and one
+           * directory write, so it defers rather than starting on a nearly spent budget.
+           */
+          const { ingestCollegeTeamsIfDue } = await import('@/lib/sport-teams/ingestCollegeTeams')
+          const COLLEGE_TEAMS_MIN_MS = 30_000
+          const collegeTeams =
+            budget.remainingMs() < COLLEGE_TEAMS_MIN_MS
+              ? { skipped: 'deferred: run budget too low to start' }
+              : await ingestCollegeTeamsIfDue({ deadlineAt: Date.now() + budget.remainingMs() - 15_000 }).catch(
+                  (err: unknown) => ({ error: err instanceof Error ? err.message.slice(0, 200) : String(err) }),
+                )
+
           const devyHeadshots = await refreshDevyHeadshots(budget)
           // SportsPlayer is what the player cards and search actually read —
           // the devy pool is 1,718 of 73,883 NCAAF rows.
           const collegeHeadshots = await refreshCollegeSportsPlayerHeadshots(budget)
-          return { devyIntelSources, devyAdp, devyHeadshots, collegeHeadshots }
+          return { devyIntelSources, devyAdp, collegeTeams, devyHeadshots, collegeHeadshots }
         },
       )
 

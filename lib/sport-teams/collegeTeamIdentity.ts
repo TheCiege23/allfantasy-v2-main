@@ -32,6 +32,18 @@ export interface CollegeTeamRecord {
   alternateNames?: string[] | null
   classification?: string | null
   logo?: string | null
+  /**
+   * Home stadium, from CFBD `location`. Absent on a directory ingested before
+   * 2026-09-30, and null for a team CFBD lists without coordinates.
+   */
+  venue?: CollegeTeamVenue | null
+}
+
+export interface CollegeTeamVenue {
+  name: string | null
+  latitude: number
+  longitude: number
+  dome: boolean
 }
 
 export interface CollegeTeamIndex {

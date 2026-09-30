@@ -67,8 +67,14 @@ vi.mock('@/lib/core-app/connectedRoster', () => ({
 vi.mock('@/lib/sport-teams/collegeTeamIndexStore', () => ({
   loadCollegeTeamIndex: vi.fn(async () =>
     buildCollegeTeamIndex([
-      { id: 275, school: 'Wisconsin', mascot: 'Badgers', abbreviation: 'WIS' },
-      { id: 164, school: 'Rutgers', mascot: 'Scarlet Knights', abbreviation: 'RUTG' },
+      {
+        id: 275, school: 'Wisconsin', mascot: 'Badgers', abbreviation: 'WIS',
+        venue: { name: 'Camp Randall Stadium', latitude: 43.06994, longitude: -89.4126943, dome: false },
+      },
+      {
+        id: 164, school: 'Rutgers', mascot: 'Scarlet Knights', abbreviation: 'RUTG',
+        venue: { name: 'SHI Stadium', latitude: 40.5138, longitude: -74.4648, dome: false },
+      },
     ]),
   ),
 }))
@@ -77,6 +83,7 @@ const LEAGUE_ID = 'league-cfb'
 const USER_ID = 'af-user-1'
 const KICKOFF = new Date('2026-10-03T19:30:00Z')
 const FANTRAX_IDS = ['06k5m', '07abc', '08xyz']
+const weatherKeysAsked: string[] = []
 
 function answerDb() {
   db.answers = {
@@ -85,6 +92,16 @@ function answerDb() {
     ],
     'roster.findFirst': () => ({ playerData: { players: FANTRAX_IDS, starters: FANTRAX_IDS } }),
     'roster.findMany': () => [{ id: 'r4', platformUserId: 'fu4', playerData: { starters: FANTRAX_IDS } }],
+    // Record the forecast keys My Team asks the cache for.
+    // A forecast exists for every key asked, so a starter shows weather exactly when his key was asked.
+    'weatherCache.findMany': (args) => {
+      const keys: string[] = args?.where?.cacheKey?.in ?? []
+      weatherKeysAsked.push(...keys)
+      return keys.map((cacheKey) => ({
+        cacheKey, temperatureF: 58, windSpeedMph: 6, precipChancePct: 10, snowInches: 0,
+        cloudCoverPct: 20, conditionLabel: 'Clear', isDome: false, isIndoor: false,
+      }))
+    },
     // The week's college slate, spelled the way two different feeds spell it.
     'sportsGame.findMany': (args) =>
       args?.where?.sport === 'NCAAF'
@@ -157,5 +174,20 @@ describe('My Team — college starters on a Fantrax roster', () => {
     // A Fantrax code reaches the same fixture as the school name.
     expect(byName.get('Code Receiver')!.gameContext).toMatch(/^Wisconsin vs Rutgers/)
     expect(byName.get('Knight Passer')!.gameContext).toMatch(/^Rutgers @ Wisconsin/)
+  })
+
+  it('🛑 every starter asks for the HOST stadium forecast — including a Fantrax-code home player', async () => {
+    // `wisc` is a Fantrax code the directory only understands through the Fantrax resolver, so a
+    // home player's host must come from `gameContext` (the canonical school), not `p.team`.
+    weatherKeysAsked.length = 0
+    const shown = await starters()
+    const { buildWeatherCoordsCacheKey } = await import('@/lib/weather/weatherService')
+    const campRandall = buildWeatherCoordsCacheKey(43.06994, -89.4126943, KICKOFF)
+    // Keys are de-duplicated before the read, so this alone cannot see a starter who asked nothing…
+    expect([...new Set(weatherKeysAsked)]).toEqual([campRandall])
+    // …which is why the forecast must also land on EACH starter, the `wisc` one included.
+    for (const p of shown) {
+      expect((p as unknown as { weather: { temperatureF: number } | null }).weather?.temperatureF, p.name).toBe(58)
+    }
   })
 })

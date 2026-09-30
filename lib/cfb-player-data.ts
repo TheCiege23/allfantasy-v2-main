@@ -1150,6 +1150,33 @@ export interface CFBTeamDirectoryEntry {
   conference: string | null
   classification: string | null
   logo: string | null
+  /** The team's home stadium, from CFBD's `location`. Null when CFBD gives no coordinates. */
+  venue: CFBTeamVenue | null
+}
+
+export interface CFBTeamVenue {
+  name: string | null
+  latitude: number
+  longitude: number
+  dome: boolean
+}
+
+/**
+ * CFBD `/teams` → `location`, kept only when both coordinates are real numbers.
+ *
+ * Measured 2026-09-30 (one call): 664 of 1,933 teams carry coordinates — all 138
+ * FBS, 127 of 128 FCS, most of Division II and III — and 10 are domes. The rest are
+ * teams CFBD lists without a venue; a null here is the honest answer for them.
+ */
+export function toTeamVenue(loc: any): CFBTeamVenue | null {
+  if (!loc || typeof loc.latitude !== 'number' || typeof loc.longitude !== 'number') return null
+  if (!Number.isFinite(loc.latitude) || !Number.isFinite(loc.longitude)) return null
+  return {
+    name: typeof loc.name === 'string' && loc.name.trim() ? loc.name.trim() : null,
+    latitude: loc.latitude,
+    longitude: loc.longitude,
+    dome: loc.dome === true,
+  }
 }
 
 /**
@@ -1171,7 +1198,12 @@ export async function getCFBTeamDirectory(): Promise<CFBTeamDirectoryEntry[]> {
   const apiKey = getCfbdApiKey()
   if (!apiKey) return []
 
-  const directory = await getCachedOrFetch<CFBTeamDirectoryEntry[]>('cfbd-team-directory', THIRTY_DAYS, async () => {
+  /*
+   * ⚠ `:v2` BECAUSE THE CACHED PAYLOAD CHANGED SHAPE. The v1 entry holds the mapped
+   * directory WITHOUT `venue`, cached for thirty days; reusing its key would hand the
+   * ingest a venue-less copy for up to a month after this shipped.
+   */
+  const directory = await getCachedOrFetch<CFBTeamDirectoryEntry[]>('cfbd-team-directory:v2', THIRTY_DAYS, async () => {
     const response = await fetch(`${CFBD_BASE}/teams`, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     })
@@ -1194,6 +1226,7 @@ export async function getCFBTeamDirectory(): Promise<CFBTeamDirectoryEntry[]> {
         conference: r.conference ?? null,
         classification: r.classification ?? null,
         logo: Array.isArray(r.logos) && r.logos.length > 0 ? r.logos[0] : null,
+        venue: toTeamVenue(r.location),
       }))
   })
 
