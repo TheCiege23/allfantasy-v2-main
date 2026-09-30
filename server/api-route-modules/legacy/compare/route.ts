@@ -49,7 +49,6 @@ Use letter grades: A+, A, A-, B+, B, B-, C+, C, C-, D, F
 - Long-term success (multi-year playoff streaks)
 - Championship windows (sustained contention)
 - Rebuilding efficiency (bouncing back from bad seasons)
-- Trade activity and value extraction
 
 ### Specialty Leagues - Heavy IDP (Only if BOTH managers have them)
 - Adaptation to IDP-heavy formats (3+ IDP starters)
@@ -73,6 +72,12 @@ Weight the comparison using ONLY formats where BOTH managers participate:
 
 If managers play completely different formats (one only dynasty, one only redraft), state that a fair comparison is not possible and grade individually.
 
+## RECORDS, NOT LABELS
+Both managers are real, named people. Every strength, weakness, verdict and trash-talk line must be
+about their RECORD as given above — wins, losses, titles, playoff trips, formats, seasons — and should
+cite the number it rests on. Never assign either manager a persona, archetype, playstyle or behavioural
+type, and never describe their personality or habits (you are given no trade, waiver or draft data).
+
 ## OUTPUT FORMAT
 Return JSON:
 {
@@ -85,8 +90,8 @@ Return JSON:
       "specialty": { "grade": string | "N/A", "record": string, "championships": number, "leagues_played": number, "note": string }
     },
     "specialty_formats_note": string (mention any guillotine/bestball/survivor leagues as fun fact, not graded),
-    "strengths": string[],
-    "weaknesses": string[]
+    "strengths": string[] (record-based facts with their numbers, e.g. "3 titles in 9 dynasty leagues"),
+    "weaknesses": string[] (record-based facts with their numbers, e.g. "1 playoff trip in 5 redraft leagues")
   },
   "manager_b": {
     "username": string,
@@ -97,8 +102,8 @@ Return JSON:
       "specialty": { "grade": string | "N/A", "record": string, "championships": number, "leagues_played": number, "note": string }
     },
     "specialty_formats_note": string (mention any guillotine/bestball/survivor leagues as fun fact, not graded),
-    "strengths": string[],
-    "weaknesses": string[]
+    "strengths": string[] (record-based facts with their numbers, e.g. "3 titles in 9 dynasty leagues"),
+    "weaknesses": string[] (record-based facts with their numbers, e.g. "1 playoff trip in 5 redraft leagues")
   },
   "fair_comparison_possible": boolean (false if managers play completely different formats),
   "comparable_formats": string[] (list of formats both managers play: "redraft", "dynasty", "specialty"),
@@ -111,7 +116,7 @@ Return JSON:
     "dynasty_winner": "A" | "B" | "TIE" | "N/A",
     "specialty_winner": "A" | "B" | "TIE" | "N/A"
   },
-  "trash_talk": string (fun roast of the loser, keep it playful - if incomparable, roast both equally)
+  "trash_talk": string (one playful line about the loser's RECORD — the numbers, never the person; if incomparable, rib both records equally)
 }`
 
 interface LeagueStats {
