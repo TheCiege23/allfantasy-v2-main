@@ -15,8 +15,48 @@ The web app continues to use Stripe. The iOS App Store app must offer Apple In-A
 2. For this app's bundle ID, enable the In-App Purchase capability.
 3. Create auto-renewable subscriptions with **exactly** these product IDs: `af_pro_monthly`, `af_pro_yearly`, `af_commissioner_monthly`, `af_commissioner_yearly`, `af_war_room_monthly`, `af_war_room_yearly`, `af_supreme_monthly`, `af_supreme_yearly`. Put the monthly and yearly variants for a plan in one subscription group. Because the plan families can coexist, use separate groups for each family.
 4. Create consumable In-App Purchases with product IDs `af_tokens_5` (250 tokens), `af_tokens_10` (600 tokens), and `af_tokens_25` (1,500 tokens). Set prices and customer-facing descriptions in App Store Connect. The IDs must match `lib/monetization/catalog.ts`.
+   The fill-in sheet below lists the exact price and copy for each product.
 5. Under **Users and Access → Integrations → In-App Purchase**, create an In-App Purchase key. Record the issuer ID and key ID and securely store the downloaded `.p8` private key.
 6. Configure **App Store Server Notifications V2** for production and sandbox to `https://allfantasy.ai/api/monetization/apple/notifications` (or the actual deployment host).
+
+## App Store Connect fill-in sheet
+
+Prices are the USD `amountUsd` values in `lib/monetization/catalog.ts`, so web (Stripe) and iOS charge the same. The iOS paywall displays the `displayPrice` StoreKit returns, so the price entered here is exactly what iPhone users see. If a price changes in the catalog, change it here and in App Store Connect too.
+
+Apple limits a display name to 30 characters and a description to 45; the catalog's web descriptions are longer, so use the shortened versions below. Product IDs cannot be edited or reused after creation, so copy them exactly.
+
+For each product: set **Subscription Prices** (or **Price Schedule** for tokens) with **United States (USD)** as the base country and let Apple generate other storefronts. Then add the **Localization** (English (U.S.)) and a **Review Screenshot** of the iOS paywall showing that product.
+
+### Subscription groups (auto-renewable)
+
+Create one group per plan family. Give each group an English (U.S.) localization whose display name matches the group name. Put monthly and yearly at the same level (level 1) inside their group.
+
+| Group | Product ID | Reference name | Duration | Price (USD) | Display name | Description |
+|---|---|---|---|---:|---|---|
+| AF Pro | `af_pro_monthly` | AF Pro | 1 month | 9.99 | AF Pro Monthly | Player & trade analysis, Competitive Edge |
+| AF Pro | `af_pro_yearly` | AF Pro Yearly | 1 year | 79.99 | AF Pro Yearly | Player & trade analysis, Competitive Edge |
+| AF Commissioner | `af_commissioner_monthly` | AF Commissioner Monthly | 1 month | 14.99 | AF Commissioner Monthly | League health, integrity checks and recaps |
+| AF Commissioner | `af_commissioner_yearly` | AF Commissioner Yearly | 1 year | 129.99 | AF Commissioner Yearly | League health, integrity checks and recaps |
+| AF Supreme | `af_supreme_monthly` | AF Supreme Monthly | 1 month | 19.99 | AF Supreme Monthly | AF Pro and AF Commissioner in one plan |
+| AF Supreme | `af_supreme_yearly` | AF Supreme Yearly | 1 year | 159.99 | AF Supreme Yearly | AF Pro and AF Commissioner in one plan |
+| AF Legacy | `af_war_room_monthly` | AF Legacy Monthly | 1 month | 9.99 | AF Legacy Monthly | Draft intel, dynasty tools, priority access |
+| AF Legacy | `af_war_room_yearly` | AF Legacy Yearly | 1 year | 79.99 | AF Legacy Yearly | Draft intel, dynasty tools, priority access |
+
+AF Legacy (`af_war_room_*`) was removed from the launch pricing page on 2026-09-24, but it still sells from `/upgrade?plan=war_room` and the iOS shell requests it. If it is not created in App Store Connect, StoreKit omits it and an iOS purchase of Legacy fails with no price shown. Create it unless the plan is being retired.
+
+### Consumables (token packs)
+
+| Product ID | Reference name | Price (USD) | Display name | Description |
+|---|---|---:|---|---|
+| `af_tokens_5` | Tokens 250 | 4.99 | Starter Tokens (250) | 250 tokens for premium one-off actions |
+| `af_tokens_10` | Tokens 600 | 8.99 | Plus Tokens (600) | 600 tokens for premium one-off actions |
+| `af_tokens_25` | Tokens 1500 | 19.99 | Token Pack (1,500) | 1,500 tokens for premium one-off actions |
+
+The token amount granted comes from `tokenAmount` in the catalog, not from App Store Connect. The display name only has to describe it accurately.
+
+### Submitting
+
+The first subscription group and the first consumables must be submitted **with a new app version**. On that version's page, under **In-App Purchases and Subscriptions**, select all of the products above before submitting the build. **Add for Review** on an individual subscription only queues it; it does not submit it.
 
 ## Server environment
 
