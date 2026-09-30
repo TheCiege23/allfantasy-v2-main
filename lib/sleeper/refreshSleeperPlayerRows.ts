@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getPlayersBySport } from '@/lib/sleeper-client'
 import { teamDisplayNameForSport } from '@/lib/team-abbrev'
+import { parseBirthday } from '@/lib/player-identity/birthdayRules'
 
 /**
  * Keep the Sleeper-sourced `SportsPlayer` rows current, without deleting any.
@@ -60,6 +61,26 @@ type FeedPlayer = {
   weight?: string | null
   college?: string | null
   status?: string | null
+  /** `YYYY-MM-DD`. The same field `lib/sports-data-gateway/providers/sleeper.ts` types and reads. */
+  birth_date?: string | null
+}
+
+/**
+ * Sleeper's own birthday for the player, when it is a real date — else undefined, so an update never
+ * blanks a birthday another pass already holds.
+ *
+ * 🛑 THIS FIELD ARRIVED ON EVERY PASS AND WAS THROWN AWAY. Every `source: 'sleeper'` row had
+ * `dob = NULL` (2026-09-30), so the only birthdays reachable through a Sleeper id were Rolling
+ * Insights' and TheSportsDB's — and TheSportsDB's are wrong for exactly the players that matter:
+ * Justin Jefferson 1999-01-16 (true 1999-06-16), Josh Allen 1996-03-21 (1996-05-21), Kyler Murray
+ * 1997-08-27 (1997-08-07), plus same-named OLDER players' dates (Devin Bush 1973, Jack Campbell
+ * 1958). Those wrong dates became canonical birthdays, and the ESPN linker — which corroborates a
+ * name with a birthday — correctly refused every one of those stars. Sleeper's date is the one this
+ * Sleeper-keyed row is about; see `backfillCanonicalBirthdays` for how it is promoted.
+ */
+function sleeperBirthday(p: FeedPlayer): string | undefined {
+  const raw = p.birth_date?.trim()
+  return raw && parseBirthday(raw) ? raw : undefined
 }
 
 /** Matches the seed service's parse: a non-finite value becomes null, never 0. */
@@ -170,6 +191,7 @@ export async function refreshSleeperPlayerRows(args: {
           weight: p.weight?.trim() || null,
           college: p.college?.trim() || null,
           status: p.status?.trim() || null,
+          dob: sleeperBirthday(p),
           fetchedAt: now,
           expiresAt,
         },
@@ -220,6 +242,7 @@ export async function refreshSleeperPlayerRows(args: {
             imageUrl: `https://sleepercdn.com/content/nfl/players/thumb/${id}.jpg`,
             sleeperId: id,
             status: p.status?.trim() || null,
+            dob: sleeperBirthday(p) ?? null,
             source: SOURCE,
             fetchedAt: now,
             expiresAt,
