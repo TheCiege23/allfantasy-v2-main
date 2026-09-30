@@ -700,3 +700,17 @@ describe('the dynasty trade analyzer sends and prints no dual-brain verdict', ()
     expect(ROUTE_PRIVATE.test('      sections,\n      deterministicVerdict')).toBe(true)
   })
 })
+
+/*
+ * 2026-09-29: components/TradeFinderClient.tsx — unimported since 2026-04-02 (/trade-finder renders
+ * app/trade-finder/page.tsx) — carried a private letter (`computeTradeGrade`), an invented "+12%" win
+ * probability and a read of the analyzer's `dynastyVerdict`. Deleted rather than repointed.
+ */
+describe('/trade-finder has one client, and it is the graded one', () => {
+  it('the old client with its own letter is gone, and the page reads the graded candidates', () => {
+    expect(existsSync(resolve(process.cwd(), 'components/TradeFinderClient.tsx'))).toBe(false)
+    const page = code('app/trade-finder/page.tsx')
+    expect(page).toMatch(/toFinderTrades/)
+    expect(page).not.toMatch(/TradeFinderClient|computeTradeGrade\(|dynastyVerdict/)
+  })
+})
