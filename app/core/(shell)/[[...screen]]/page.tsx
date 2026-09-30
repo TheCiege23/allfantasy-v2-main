@@ -127,6 +127,7 @@ import { Career } from '@/components/core-app/screens/Career'
 import { getCareerData } from '@/lib/core-app/career'
 import { leagueArtUrl } from '@/lib/core-app/leagueArt'
 import { getRailMatchups } from '@/lib/core-app/railMatchups'
+import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import {
   LEAGUE_FIRST_ALL_VIEW,
   LEAGUE_FIRST_COOKIE,
@@ -1482,6 +1483,9 @@ export default async function AfCorePage({
         leagueCtx,
         homeScope,
         favoriteIds,
+        weekLineups: railMatchups
+          ? { byLeague: railMatchups.byLeague, projectionWeek: railMatchups.projectionWeek }
+          : null,
       }}
     />
   )
@@ -1793,6 +1797,11 @@ type CoreScreenContext = {
   homeScope: HomeScope
   /** Starred league ids, already intersected with `playedLeagues`. */
   favoriteIds: ReadonlySet<string>
+  /**
+   * This week's AF and API lineup projections per league — the rail's own read, handed down so the
+   * Your Week screens show them without a second load. Null when the rail read failed.
+   */
+  weekLineups: WeekLineups | null
 }
 
 /**
@@ -4432,14 +4441,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
            * rather than rendering an empty hero.
            */
           weekBoard.leagueBoard ? (
-            <YourWeekLeague board={weekBoard.leagueBoard} allWeeksHref="/core/week" />
+            <YourWeekLeague board={weekBoard.leagueBoard} allWeeksHref="/core/week" lineups={ctx.weekLineups} />
           ) : showAllLeagues ? (
             /*
              * The full cross-league table, kept whole behind `?all=1`. The two
              * ranked columns above it are a summary, not a replacement — a
              * manager who wants every game still has one page that lists them.
              */
-            <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" />
+            <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" lineups={ctx.weekLineups} />
           ) : (
             <WeekBoard
               board={weekBoard}
@@ -4447,6 +4456,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               rivalriesHref="/core/week?view=rivalries"
               allHref="/core/week?all=1"
               totalLeagues={playedLeagues.length}
+              lineups={ctx.weekLineups}
             />
           )
         ) : (

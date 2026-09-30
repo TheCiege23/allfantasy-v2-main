@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import type { LeagueWeekBoard, LeagueSideline } from '@/lib/core-app/weekBoard'
+import type { WeekLineups } from '@/lib/core-app/weekLineups'
+import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
 import '@/components/core-app/af-week-league.css'
 
 /**
@@ -37,6 +39,8 @@ export type YourWeekLeagueProps = {
   board: LeagueWeekBoard
   /** Link back to the cross-league view, which this does not replace. */
   allWeeksHref: string
+  /** This week's AF and API lineup projections — the rail's read. Optional; absent draws none. */
+  lineups?: WeekLineups | null
 }
 
 function n1(v: number): string {
@@ -109,7 +113,7 @@ function recordOf(board: LeagueWeekBoard, rosterId: string | null | undefined): 
   return r ? `${r.wins}—${r.losses}` : null
 }
 
-export function YourWeekLeague({ board, allWeeksHref }: YourWeekLeagueProps) {
+export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueProps) {
   const { yours, sidelines, rivalry } = board
   const proj = yours?.projection ?? null
   const yourRecord = recordOf(board, board.yourRosterId)
@@ -213,6 +217,9 @@ export function YourWeekLeague({ board, allWeeksHref }: YourWeekLeagueProps) {
               </span>
             </div>
           )}
+
+          {/* This week's lineups, projected by AllFantasy's engine and the provider — a different measure from the above. */}
+          <WeekLineupLine lineups={lineups} leagueId={yours.leagueId} season={yours.season} week={yours.week} />
 
           {/* ── Rivalry ─────────────────────────────────────────────── */}
           <div

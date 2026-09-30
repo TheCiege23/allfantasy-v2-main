@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import type { WeekBoard, WeekMatchup } from '@/lib/core-app/weekBoard'
+import type { WeekLineups } from '@/lib/core-app/weekLineups'
+import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 // Client-safe: eliminationSettle.ts has no runtime imports (its one import is a type).
 import { settleBadge } from '@/lib/core-app/eliminationSettle'
@@ -39,6 +41,8 @@ export type YourWeekProps = {
   data: WeekBoard
   /** Rivalry Radar lives on the same screen key behind ?view=rivalries. */
   rivalriesHref: string
+  /** This week's AF and API lineup projections — the rail's read. Optional; absent draws none. */
+  lineups?: WeekLineups | null
 }
 
 function pct(p: number): string {
@@ -65,7 +69,7 @@ function OpponentName({ matchup }: { matchup: WeekMatchup }) {
 }
 
 /** Large card — the coin-flip tier. */
-function CoinFlipCard({ matchup }: { matchup: WeekMatchup }) {
+function CoinFlipCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: WeekLineups | null }) {
   const p = matchup.projection!
   const gap = Math.abs(p.margin)
   const favoured = p.margin >= 0
@@ -110,12 +114,13 @@ function CoinFlipCard({ matchup }: { matchup: WeekMatchup }) {
         <b>{p.them.toFixed(1)}</b>
         <span className="af-wk-projtag">projected</span>
       </div>
+      <WeekLineupLine lineups={lineups} leagueId={matchup.leagueId} season={matchup.season} week={matchup.week} />
     </Link>
   )
 }
 
 /** Compact card — the leaning tier. */
-function LeaningCard({ matchup }: { matchup: WeekMatchup }) {
+function LeaningCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: WeekLineups | null }) {
   const p = matchup.projection!
   const favoured = p.margin >= 0
   return (
@@ -129,11 +134,12 @@ function LeaningCard({ matchup }: { matchup: WeekMatchup }) {
       <span className="af-wk-lean-score af-num">
         {p.you.toFixed(1)}–{p.them.toFixed(1)}
       </span>
+      <WeekLineupLine lineups={lineups} leagueId={matchup.leagueId} season={matchup.season} week={matchup.week} />
     </Link>
   )
 }
 
-export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
+export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
   /*
    * ⚠ ELIMINATION WEEKS COUNT TOWARD THE TOTAL. They are matchups in every sense the
    * header means — leaving them out would render the section and then announce "No
@@ -202,7 +208,7 @@ export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
           </div>
           <div className="af-wk-flips">
             {data.coinFlips.map((m) => (
-              <CoinFlipCard key={`${m.leagueId}-${m.opponent.rosterId}`} matchup={m} />
+              <CoinFlipCard key={`${m.leagueId}-${m.opponent.rosterId}`} matchup={m} lineups={lineups} />
             ))}
           </div>
         </section>
@@ -218,7 +224,7 @@ export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
           </div>
           <div className="af-wk-leans">
             {data.leaning.map((m) => (
-              <LeaningCard key={`${m.leagueId}-${m.opponent.rosterId}`} matchup={m} />
+              <LeaningCard key={`${m.leagueId}-${m.opponent.rosterId}`} matchup={m} lineups={lineups} />
             ))}
           </div>
         </section>
@@ -285,6 +291,8 @@ export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
                     ? ` · ${m.form.you.toFixed(1)} to ${m.form.them.toFixed(1)} per week`
                     : ''}
                 </span>
+                {/* Too little history for the week model — but this week's lineups can still be projected. */}
+                <WeekLineupLine lineups={lineups} leagueId={m.leagueId} season={m.season} week={m.week} />
               </Link>
             ))}
           </div>
