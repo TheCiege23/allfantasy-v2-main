@@ -22,6 +22,8 @@ import { getDefaultScoringPresetId, resolveScoringPresetId } from '@/lib/league-
 
 export interface CreateLeagueV2ClientProps {
   userId: string
+  importTemplate?: CreateLeagueV2State
+  importSourceName?: string
 }
 
 function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State {
@@ -51,22 +53,27 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
   }
 }
 
-export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientProps) {
+export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName }: CreateLeagueV2ClientProps) {
   const { t } = useLanguage()
   const router = useRouter()
-  const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(DEFAULT_V2_STATE))
+  const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(importTemplate ?? DEFAULT_V2_STATE))
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<CreateLeagueFieldErrors | null>(null)
 
   useEffect(() => {
+    if (importTemplate) {
+      setState(normalizeInitialState(importTemplate))
+      setHydrated(true)
+      return
+    }
     const persisted = loadPersistedV2State()
     if (persisted) {
       setState((current) => normalizeInitialState({ ...current, ...persisted }))
     }
     setHydrated(true)
-  }, [])
+  }, [importTemplate])
 
   useEffect(() => {
     if (!hydrated) return
@@ -138,6 +145,7 @@ export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientPr
       fieldErrors={fieldErrors}
       submitError={submitError}
       submitting={submitting}
+      importSourceName={importSourceName}
       onSubmit={handleSubmit}
       onCancel={() => router.push('/core')}
     />

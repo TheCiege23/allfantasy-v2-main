@@ -48,6 +48,7 @@ type WizardProps = {
   fieldErrors: Partial<Record<string, string>> | null
   submitError: string | null
   submitting: boolean
+  importSourceName?: string
   onSubmit: () => void
   onCancel: () => void
 }
@@ -194,6 +195,11 @@ export function CreateLeagueWizard(props: WizardProps) {
         <section className="space-y-5">
           <header className="space-y-3">
             <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} priority className="h-auto w-44 max-w-full sm:w-52" />
+            {props.importSourceName ? (
+              <p className="rounded-xl border border-violet-500/35 bg-violet-600/10 p-3 text-sm leading-6" data-testid="standalone-import-template-notice">
+                Using {props.importSourceName} as a setup template. This creates a separate AllFantasy league with a new draft and open teams. Existing managers, rosters, and history stay in the imported league; invite managers and run a fresh draft here.
+              </p>
+            ) : null}
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-violet-600 dark:text-violet-300">
               {t('createLeague.g30.eyebrow')}
             </p>

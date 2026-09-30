@@ -19,6 +19,7 @@ import {
 import type { UserLeague } from '@/app/dashboard/types'
 import { CommissionerPulse } from '@/components/decide/CommissionerPulse'
 import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 
 type WorkspaceAction = {
   id: string
@@ -184,6 +185,14 @@ export function CommissionerOperationsWorkspace({
             >
               Open Commissioner OS →
             </CommissionerOsLink>
+          ) : null}
+          {!isNativePlatform(league.platform) ? (
+            <a
+              href={`/create-league?fromLeague=${encodeURIComponent(leagueId)}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3.5 py-2 text-[12px] font-extrabold text-[#ff9ec0] transition hover:bg-[#ff3d81]/20"
+            >
+              Create standalone AllFantasy league →
+            </a>
           ) : null}
         </div>
       </header>
