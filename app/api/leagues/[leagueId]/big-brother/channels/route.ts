@@ -6,10 +6,8 @@ import { isBigBrotherLeague } from '@/lib/big-brother/BigBrotherLeagueConfig'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { leagueId: string } },
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

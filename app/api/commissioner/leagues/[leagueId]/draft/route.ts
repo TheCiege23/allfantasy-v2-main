@@ -7,10 +7,8 @@ import { assertCommissioner } from '@/lib/commissioner/permissions'
 import { getLeagueDrafts, getDraftPicks } from '@/lib/sleeper-client'
 
 /** GET: Draft state from platform (Sleeper). Read-only; use for live draft display. */
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -64,10 +62,8 @@ export async function GET(
 /** Draft controls: pause, resume, reset_timer, undo_pick, assign_pick.
  * When AllFantasy live draft session exists, delegates to live-draft-engine. Otherwise returns stub for Sleeper.
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

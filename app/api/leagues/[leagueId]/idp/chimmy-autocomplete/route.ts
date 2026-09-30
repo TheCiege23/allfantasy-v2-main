@@ -62,7 +62,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ leagueId: s
       ? IDP_CHIMMY_OPTIONS
       : IDP_CHIMMY_OPTIONS.filter((o) => {
           const ol = o.toLowerCase()
-          return ol.includes(tail) || tail.split(/\s+/).every((w) => w.length > 0 && ol.includes(w))
+          return ol.includes(tail) || tail.split(/\s+/).every((w) => w.length > 0 && ol.includes(w));
         })
 
   return NextResponse.json({ type: 'command', options: options.slice(0, 12) })

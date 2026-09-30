@@ -7,7 +7,8 @@ export const metadata = {
 }
 
 /** Deep commissioner surface for 3- and 6-league Zombie universes (not shown for single Gamma). */
-export default function ZombieCommissionerDashboardPage({ params }: { params: { leagueId: string } }) {
+export default async function ZombieCommissionerDashboardPage(props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const { leagueId } = params
   return (
     <div className="min-h-screen bg-[#040915] px-4 py-8 text-white">

@@ -10,7 +10,8 @@ type ManageAction =
   | "remove_member"
   | "update_rules"
 
-export async function POST(req: NextRequest, { params }: { params: { leagueId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   try {
     const auth = await requireVerifiedUser()
     if (!auth.ok) return auth.response

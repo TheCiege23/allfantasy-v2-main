@@ -13,11 +13,12 @@ export const dynamic = 'force-dynamic'
 
 type SearchParams = Record<string, string | string[] | undefined>
 
-export default async function MatchupSimulatorPage({
-  searchParams,
-}: {
-  searchParams?: Promise<SearchParams> | SearchParams
-}) {
+export default async function MatchupSimulatorPage(
+  props: {
+    searchParams?: Promise<Promise<SearchParams> | SearchParams>
+  }
+) {
+  const searchParams = await props.searchParams
   const sp = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   permanentRedirect(matchupSimulatorRedirectTarget(sp))
 }

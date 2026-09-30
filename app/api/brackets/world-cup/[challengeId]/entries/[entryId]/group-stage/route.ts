@@ -4,11 +4,11 @@ import { requireWorldCupApiUser, worldCupEntryParamsSchema } from "../../../../_
 
 export const runtime = "nodejs"
 
-export async function GET(request: Request, context: { params: { challengeId: string; entryId: string } }) {
+export async function GET(request: Request, context: { params: Promise<{ challengeId: string; entryId: string }> }) {
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
 
-  const params = worldCupEntryParamsSchema.safeParse(context.params)
+  const params = worldCupEntryParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid parameters" }, { status: 400 })
   }

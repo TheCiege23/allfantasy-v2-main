@@ -50,17 +50,20 @@ export const prismaAccountLockStore: AccountLockStore = {
  * is not `instanceof Headers`, and the geo helpers branch on exactly that check
  * — handed the original, they would read `.headers` off it and throw.
  */
-function currentRequestHeaders(): Headers | null {
+async function currentRequestHeaders(): Promise<Headers | null> {
   try {
-    return new Headers([...requestHeaders().entries()])
-  } catch {
+    return new Headers([...(await requestHeaders()).entries()])
+  } catch (error) {
+    // Outside a request there are no headers (null). A Next.js control-flow throw
+    // (DYNAMIC_SERVER_USAGE during prerender) carries a digest and must propagate.
+    if (error && typeof error === "object" && "digest" in error) throw error
     return null
   }
 }
 
 /** Observe this request for the account and return its lock (`undefined` = could not read). */
 export async function refreshAccountGeoLock(userId: string): Promise<AccountGeoLock | undefined> {
-  return observeAndReadAccountLock(userId, currentRequestHeaders(), prismaAccountLockStore)
+  return observeAndReadAccountLock(userId, await currentRequestHeaders(), prismaAccountLockStore)
 }
 
 /**

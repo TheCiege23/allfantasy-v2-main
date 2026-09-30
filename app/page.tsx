@@ -50,11 +50,12 @@ type HomeSearchParams = { [key: string]: string | string[] | undefined }
  * `alternates.languages` declares the pair to crawlers, and English keeps the
  * bare `/` canonical so the two languages are never treated as duplicate content.
  */
-export async function generateMetadata({
-  searchParams,
-}: {
-  searchParams?: HomeSearchParams
-}): Promise<Metadata> {
+export async function generateMetadata(
+  props: {
+    searchParams?: Promise<HomeSearchParams>
+  }
+): Promise<Metadata> {
+  const searchParams = await props.searchParams
   const lang = resolveLandingLang(searchParams?.lang)
   // The metadata strings quote no price, but getLandingCopy now requires the
   // range so no caller can render the copy without the live catalog behind it.
@@ -115,11 +116,12 @@ const HOME_SOFTWARE_APP_SCHEMA = getSoftwareApplicationSchema({
   applicationCategory: 'SportsApplication',
 })
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams?: HomeSearchParams
-}) {
+export default async function HomePage(
+  props: {
+    searchParams?: Promise<HomeSearchParams>
+  }
+) {
+  const searchParams = await props.searchParams
   const lang = resolveLandingLang(searchParams?.lang)
 
   /*

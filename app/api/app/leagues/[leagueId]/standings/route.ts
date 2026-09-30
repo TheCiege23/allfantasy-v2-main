@@ -7,7 +7,8 @@ import { proxyToExisting } from '@/lib/api/proxy-adapter'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: NextRequest, { params }: { params: { leagueId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const leagueId = params.leagueId
   if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
 

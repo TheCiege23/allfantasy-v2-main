@@ -1,11 +1,12 @@
 import { notFound } from 'next/navigation'
 import DraftSettingsPanel from '@/components/app/settings/DraftSettingsPanel'
 
-export default async function E2EDraftSettingsHarnessPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ leagueId?: string | string[] }>
-}) {
+export default async function E2EDraftSettingsHarnessPage(
+  props: {
+    searchParams?: Promise<{ leagueId?: string | string[] }>
+  }
+) {
+  const searchParams = await props.searchParams
   if (process.env.NODE_ENV === 'production') {
     notFound()
   }

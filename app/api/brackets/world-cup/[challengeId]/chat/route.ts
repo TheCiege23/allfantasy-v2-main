@@ -268,7 +268,7 @@ function imageMetadata(value: unknown) {
 function isAllowedCloudinaryImageUrl(value: string) {
   try {
     const url = new URL(value)
-    return url.protocol === "https:" && /(^|\.)res\.cloudinary\.com$/i.test(url.hostname)
+    return url.protocol === "https:" && /(^|\.)res\.cloudinary\.com$/i.test(url.hostname);
   } catch {
     return false
   }
@@ -279,7 +279,7 @@ function sanitizeGifQuery(value: string | null) {
     .replace(/[<>]/g, "")
     .replace(/[\u0000-\u001F\u007F]/g, "")
     .trim()
-    .slice(0, 64)
+    .slice(0, 64);
 }
 
 function safeNumber(value: unknown) {
@@ -345,7 +345,7 @@ function sanitizePollText(value: string, maxLength: number) {
     .replace(/[\u0000-\u001F\u007F]/g, "")
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, maxLength)
+    .slice(0, maxLength);
 }
 
 function normalizePollOptions(values: string[]) {
@@ -1004,12 +1004,12 @@ async function createPrivateChimmyResponse(input: {
 
 export async function GET(
   request: Request,
-  context: { params: { challengeId: string } }
+  context: { params: Promise<{ challengeId: string }> }
 ) {
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
 
-  const params = worldCupChallengeParamsSchema.safeParse(context.params)
+  const params = worldCupChallengeParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
   }
@@ -1051,12 +1051,12 @@ export async function GET(
 
 export async function POST(
   request: Request,
-  context: { params: { challengeId: string } }
+  context: { params: Promise<{ challengeId: string }> }
 ) {
   const auth = await requireWorldCupApiUser(request)
   if (!auth.ok) return auth.response
 
-  const params = worldCupChallengeParamsSchema.safeParse(context.params)
+  const params = worldCupChallengeParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
   }

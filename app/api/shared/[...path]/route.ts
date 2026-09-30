@@ -30,7 +30,8 @@ function notificationReadPath(path: string[]): string | null {
   return null
 }
 
-export async function GET(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
+  const params = await props.params
   const path = params.path || []
 
   if (path[0] === 'auth' && path[1] === 'me') return proxyToExisting(req, { targetPath: '/api/auth/me' })
@@ -53,7 +54,8 @@ export async function GET(req: NextRequest, { params }: { params: { path: string
   return notMapped(path, 'GET')
 }
 
-export async function POST(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
+  const params = await props.params
   const path = params.path || []
 
   if (path[0] === 'auth' && path[1] === 'login') return proxyToExisting(req, { targetPath: '/api/auth/login' })
@@ -85,7 +87,8 @@ export async function POST(req: NextRequest, { params }: { params: { path: strin
   return notMapped(path, 'POST')
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
+  const params = await props.params
   const path = params.path || []
 
   if (path[0] === 'profile') return proxyToExisting(req, { targetPath: '/api/auth/complete-profile', method: 'PATCH' })
@@ -96,7 +99,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { path: stri
   return notMapped(path, 'PATCH')
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { path: string[] } }) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ path: string[] }> }) {
+  const params = await props.params
   const path = params.path || []
   if (path[0] === 'auth' && path[1] === 'logout') return proxyToExisting(req, { targetPath: '/api/auth/logout', method: 'DELETE' })
   return notMapped(path, 'DELETE')

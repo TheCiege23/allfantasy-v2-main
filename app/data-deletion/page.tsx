@@ -7,7 +7,7 @@ import LegalPageRenderer, {
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
 
 interface DataDeletionPageProps {
-  searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
+  searchParams?: Promise<Promise<{ from?: string; next?: string }> | { from?: string; next?: string }>
 }
 
 export const metadata = {
@@ -45,7 +45,8 @@ export const metadata = {
  * leagues and rosters stay referentially intact). The copy below says "deleted or
  * anonymized" for exactly that reason — do not upgrade it to a flat "deleted".
  */
-export default async function DataDeletionPage({ searchParams }: DataDeletionPageProps) {
+export default async function DataDeletionPage(props: DataDeletionPageProps) {
+  const searchParams = await props.searchParams
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const fromSignup = params.from === "signup"
   const next = typeof params.next === "string" ? params.next : undefined

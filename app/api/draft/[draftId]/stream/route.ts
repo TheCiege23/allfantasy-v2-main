@@ -35,7 +35,7 @@ export async function GET(
           controller.enqueue(encoder.encode(encodeSse(event, payload)))
         }
 
-        const initial = draftStreamStore.getLatestState(draftId) ?? await worker.initializeDraft(draftId)
+        const initial = draftStreamStore.getLatestState(draftId) ?? (await worker.initializeDraft(draftId))
         send('draft_state', initial)
 
         const unsubscribe = draftStreamStore.subscribe(draftId, (event) => {

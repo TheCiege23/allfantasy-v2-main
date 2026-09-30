@@ -12,14 +12,16 @@ import { proxyToExisting } from '@/lib/api/proxy-adapter'
  * The real fantasy league chat is `/api/league/chat` (LeagueChatMessage),
  * which takes `leagueId` as a query param on GET and in the JSON body on POST.
  */
-export async function GET(req: NextRequest, { params }: { params: { leagueId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params;
   return proxyToExisting(req, {
     targetPath: '/api/league/chat',
     query: { leagueId: params.leagueId },
   })
 }
 
-export async function POST(req: NextRequest, { params }: { params: { leagueId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params;
   const raw = (await req.json().catch(() => null)) as Record<string, unknown> | null
   return proxyToExisting(req, {
     targetPath: '/api/league/chat',

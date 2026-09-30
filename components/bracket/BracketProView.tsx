@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useCallback, useRef, useEffect } from "react"
+import { useMemo, useState, useCallback, useRef, useEffect, type JSX } from "react"
 import { Timer, Trophy, Sparkles } from "lucide-react"
 import { useBracketLive } from "@/lib/hooks/useBracketLive"
 import { PickWizard } from "./PickWizard"

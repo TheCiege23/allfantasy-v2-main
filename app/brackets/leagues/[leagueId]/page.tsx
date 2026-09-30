@@ -67,7 +67,8 @@ function EmergencyPoolFallback() {
   )
 }
 
-export async function generateMetadata({ params }: { params: { leagueId: string } }): Promise<Metadata> {
+export async function generateMetadata(props: { params: Promise<{ leagueId: string }> }): Promise<Metadata> {
+  const params = await props.params
   let session: { user?: SessionUser } | null = null
   try {
     session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null
@@ -99,13 +100,14 @@ export async function generateMetadata({ params }: { params: { leagueId: string 
   return { title: "Bracket Pool" }
 }
 
-export default async function BracketLeagueDetailPage({
-  params,
-  searchParams,
-}: {
-  params: { leagueId: string }
-  searchParams?: { entryId?: string }
-}) {
+export default async function BracketLeagueDetailPage(
+  props: {
+    params: Promise<{ leagueId: string }>
+    searchParams?: Promise<{ entryId?: string }>
+  }
+) {
+  const searchParams = await props.searchParams
+  const params = await props.params
   console.warn("[brackets/leagues] loading leagueId", { leagueId: params.leagueId })
 
   let session: { user?: SessionUser } | null = null

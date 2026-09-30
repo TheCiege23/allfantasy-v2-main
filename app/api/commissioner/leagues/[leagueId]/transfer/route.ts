@@ -9,10 +9,8 @@ import { assertCommissioner } from '@/lib/commissioner/permissions'
  * Body: { newCommissionerUserId: string, confirm: true }.
  * New user must have a roster in the league.
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

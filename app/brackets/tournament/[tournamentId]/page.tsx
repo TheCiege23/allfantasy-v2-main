@@ -6,11 +6,12 @@ import { notFound } from "next/navigation"
 import { BracketologySpotlight } from "@/components/bracket/BracketologySpotlight"
 import { ChaosMeter } from "@/components/bracket/ChaosMeter"
 
-export default async function TournamentPage({
-  params,
-}: {
-  params: { tournamentId: string }
-}) {
+export default async function TournamentPage(
+  props: {
+    params: Promise<{ tournamentId: string }>
+  }
+) {
+  const params = await props.params
   let session: { user?: { id?: string } } | null = null
   try {
     session = (await getServerSession(authOptions as any)) as {

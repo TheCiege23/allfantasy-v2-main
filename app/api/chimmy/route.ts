@@ -528,9 +528,9 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  let cookieStore: ReturnType<typeof cookies> | null = null
+  let cookieStore: Awaited<ReturnType<typeof cookies>> | null = null
   try {
-    cookieStore = cookies()
+    cookieStore = await cookies()
   } catch {
     // cookies() unavailable in this context; default to 'en'
   }

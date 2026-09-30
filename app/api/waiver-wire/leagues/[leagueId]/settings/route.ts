@@ -5,10 +5,8 @@ import { prisma } from "@/lib/prisma"
 import { getEffectiveLeagueWaiverSettings, upsertLeagueWaiverSettings } from "@/lib/waiver-wire"
 import { buildWriteAuthorityEnvelope } from "@/lib/league/write-authority"
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -34,10 +32,8 @@ export async function GET(
   })
 }
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
