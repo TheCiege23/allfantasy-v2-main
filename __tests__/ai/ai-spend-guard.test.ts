@@ -155,11 +155,10 @@ describe('AI spend guard — provider boundary coverage', () => {
     'lib/ai/openai-route-client.ts',
     'lib/decision-os/three-brain/orchestrator.ts',
     // A ROUTE can be a provider boundary too, and this list used to assume they
-    // could not be. improve-trade builds two OpenAI SDK clients and fetches
-    // api.x.ai directly, all inside the handler, so nothing under lib/ ever saw
-    // those calls. It is unauthenticated and rate-limited only by IP
-    // (5/60s), and MAX_TOOL_TURNS lets one request drive several model calls.
-    'app/api/instant/improve-trade/route.ts',
+    // could not be. The first one found, app/api/instant/improve-trade/route.ts
+    // (two OpenAI clients and a direct api.x.ai fetch inside the handler), was
+    // DELETED 2026-09-30 with ImproveTradeModal, its only fetcher, which nothing
+    // mounted — a deletion, not an unlisting; see the floor below.
     // The other three inline-provider routes, guarded 2026-08-27.
     // start-sit/chimmy has NO session check and NO rate limit, so the spend
     // switch is the only thing between an anonymous caller and a paid call.
@@ -313,7 +312,9 @@ describe('AI spend guard — provider boundary coverage', () => {
     // 34 on 2026-09-27 (#1385 guarded lib/ai/providerRouter.ts), then 33: lib/integrity/CollusionDetectionEngine.ts
     // is no longer a provider boundary — its direct Anthropic verdict was deleted, and its note now goes through
     // explainTrade → providerRouter, which is guarded. A deletion, not a silent revert.
-    expect(GUARDED.length).toBeGreaterThanOrEqual(33)
+    // Then 32 on 2026-09-30: app/api/instant/improve-trade/route.ts was DELETED (dead route, its only
+    // fetcher ImproveTradeModal was mounted by nothing). A deletion, not a silent revert.
+    expect(GUARDED.length).toBeGreaterThanOrEqual(32)
   })
 
   it('the unguarded ratchet has not grown', () => {
