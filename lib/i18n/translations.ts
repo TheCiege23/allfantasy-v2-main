@@ -2164,7 +2164,7 @@ export const translations: Record<string, Record<string, string>> = {
     "import.settingsWord": "Settings",
     "import.providerStatus": "Provider status",
     "import.providerHelp":
-      "Any member of a league can import it. Sleeper, ESPN, and Yahoo require you to link the matching account in Settings. Fantrax, MFL, and Fleaflicker import is coming soon.",
+      "Any member of a league can import it. Sleeper needs only your username. ESPN, Fantrax, and Fleaflicker import by league ID — a private ESPN league also needs your ESPN cookies saved in Settings. MFL needs the league ID and your MFL API key. Yahoo import isn't available yet.",
     "import.backToCreate": "Back to Create",
     "import.home": "Home",
     "import.otherPlatforms": "Other platforms",
@@ -2189,11 +2189,12 @@ export const translations: Record<string, Record<string, string>> = {
     "import.provider.sleeper.detail": "Any league member with a linked Sleeper account can import.",
     "import.provider.espn.detail":
       "Any league member with a linked ESPN account can import. Private leagues require your ESPN cookies saved in Settings.",
-    "import.provider.yahoo.detail": "Any league member with a linked Yahoo account can import.",
-    "import.provider.fantrax.detail": "Fantrax import is coming soon — not available yet.",
-    "import.provider.mfl.detail": "MFL import is coming soon — not available yet.",
+    "import.provider.yahoo.detail": "Not available yet — we're waiting on Yahoo to approve our access.",
+    "import.provider.fantrax.detail": "Any league member can import with the Fantrax league ID.",
+    "import.provider.mfl.detail":
+      "Any league member can import with the MFL league ID and their MFL API key, saved in Settings.",
     "import.provider.fleaflicker.detail":
-      "Fleaflicker import is coming soon — not available yet.",
+      "Any league member can import with the Fleaflicker league ID.",
 
     // Create League v2 (wired)
     "createLeague.v2.eyebrow": "Create league",
@@ -4260,7 +4261,7 @@ export const translations: Record<string, Record<string, string>> = {
     "import.settingsWord": "Ajustes",
     "import.providerStatus": "Estado del proveedor",
     "import.providerHelp":
-      "Cualquier miembro puede importar la liga. Sleeper, ESPN y Yahoo requieren vincular la cuenta en Ajustes. La importación de Fantrax, MFL y Fleaflicker estará disponible pronto.",
+      "Cualquier miembro puede importar la liga. Sleeper solo necesita tu nombre de usuario. ESPN, Fantrax y Fleaflicker se importan con el ID de la liga; una liga privada de ESPN también necesita tus cookies de ESPN guardadas en Ajustes. MFL necesita el ID de la liga y tu clave API de MFL. La importación de Yahoo aún no está disponible.",
     "import.backToCreate": "Volver a crear",
     "import.home": "Inicio",
     "import.otherPlatforms": "Otras plataformas",
@@ -4285,11 +4286,12 @@ export const translations: Record<string, Record<string, string>> = {
     "import.provider.sleeper.detail": "Cualquier miembro con cuenta Sleeper vinculada puede importar.",
     "import.provider.espn.detail":
       "Cualquier miembro con ESPN vinculada puede importar. Las ligas privadas requieren cookies de ESPN guardadas en Ajustes.",
-    "import.provider.yahoo.detail": "Cualquier miembro con Yahoo vinculada puede importar.",
-    "import.provider.fantrax.detail": "La importación de Fantrax estará disponible pronto.",
-    "import.provider.mfl.detail": "La importación de MFL estará disponible pronto.",
+    "import.provider.yahoo.detail": "Aún no está disponible: estamos esperando que Yahoo apruebe nuestro acceso.",
+    "import.provider.fantrax.detail": "Cualquier miembro puede importar con el ID de la liga de Fantrax.",
+    "import.provider.mfl.detail":
+      "Cualquier miembro puede importar con el ID de la liga de MFL y su clave API de MFL, guardada en Ajustes.",
     "import.provider.fleaflicker.detail":
-      "La importación de Fleaflicker estará disponible pronto.",
+      "Cualquier miembro puede importar con el ID de la liga de Fleaflicker.",
 
     // Create League v2 (wired)
     "createLeague.v2.eyebrow": "Crear liga",
