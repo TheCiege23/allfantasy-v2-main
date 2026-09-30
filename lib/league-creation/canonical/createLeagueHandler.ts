@@ -16,13 +16,12 @@ import { executeCanonicalLeagueCreation } from '@/lib/league-creation/canonical/
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
 import { checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
 import {
-  getAllowedDraftTypesFromCatalog,
+  isAllowedDraftTypeFromCatalog,
   getAllowedScoringPresetsFromCatalog,
   getAllowedSportsFromCatalog,
   getAllowedTeamCountsFromCatalog,
   getLeagueCreateOptionsCatalog,
 } from '@/lib/league-creation/options-catalog'
-import { normalizeDraftTypeForEngineValidation } from '@/lib/draft-types/draftTypeRegistry'
 import { buildFantasyLeagueLeadMetaEvent } from '@/lib/meta-funnel-events'
 import { trackMetaServerEvent } from '@/lib/meta-capi'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
@@ -143,13 +142,7 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
     )
   }
 
-  const allowedDraftTypes = getAllowedDraftTypesFromCatalog(catalog, catalogConcept)
-  const normalizedDraftType = normalizeDraftTypeForEngineValidation(validated.data.draftType)
-  if (
-    allowedDraftTypes.length > 0 &&
-    !allowedDraftTypes.includes(validated.data.draftType) &&
-    !allowedDraftTypes.includes(normalizedDraftType)
-  ) {
+  if (!isAllowedDraftTypeFromCatalog(catalog, catalogConcept, validated.data.draftType)) {
     return NextResponse.json(
       {
         success: false,

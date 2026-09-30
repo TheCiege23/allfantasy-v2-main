@@ -166,16 +166,11 @@ describe('NFL/NCAAF devy creation defaults', () => {
       leagueName: 'Devy Draft Types',
     }
 
-    // Option B: devy creation is closed. Valid draft ids must clear the
-    // draft-type checks and be stopped only by the college-formats gate;
-    // invalid ids must still fail on draftType itself.
+    // Every supported Devy draft id must clear canonical creation validation;
+    // invalid ids still fail on draftType itself.
     for (const draftType of ['snake', 'linear', 'auction', 'devy_snake', 'devy_linear', 'devy_auction', 'mock_draft', 'offline', 'auto']) {
       const r = validateCreatePayload({ ...base, draftType })
-      expect(r.ok, draftType).toBe(false)
-      if (!r.ok) {
-        expect(r.errors.some((e) => e.code === 'COLLEGE_FORMATS_NOT_OPEN'), draftType).toBe(true)
-        expect(r.errors.some((e) => e.path === 'draftType'), draftType).toBe(false)
-      }
+      expect(r.ok, draftType).toBe(true)
     }
 
     for (const draftType of ['slow_draft', 'team', 'rookie_draft', 'best_ball', 'devy_unknown']) {
