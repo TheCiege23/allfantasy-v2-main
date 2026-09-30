@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { reapAllAbandonedRuns, recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runTradeAgentPass, type TradeAgentPassResult } from '@/lib/decision-os/trade/tradeAgentPass'
 import { runComprehensiveBackgroundAnalysis, type TradeLearningPassResult } from '@/lib/comprehensive-trade-learning'
+import { runTradeCalibrationPass, type TradeCalibrationPassResult } from '@/lib/trade-engine/calibrationPass'
 
 /**
  * Heartbeat identity, read by PROBES in scripts/cron-freshness-check.mjs.
@@ -37,6 +38,8 @@ export const maxDuration = 300
 const ROUTE_BUDGET_MS = 240_000
 /** Below this, the trade-learning pass is skipped for the hour rather than run too short to finish a batch. */
 const LEARNING_MIN_BUDGET_MS = 20_000
+/** Below this, the calibration pass waits for the next hour; each of its steps is a bounded read. */
+const CALIBRATION_MIN_BUDGET_MS = 10_000
 
 /**
  * GET /api/cron/reap-sync-runs
@@ -164,5 +167,39 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, reaped, cutoff, cachePurge, privateRelay, tradeAgent, tradeLearning })
+  /*
+   * The calibration cycle rides here last (2026-09-30): feedback calibration, drift detection and
+   * the outcome-event backfill that the retired /api/internal/analyze-trades pipeline used to run
+   * after valuing trades. Same trigger it had there — only when the learning pass valued something
+   * or re-aggregated — so an idle hour costs nothing. Its own telemetry row (`cron-trade-calibration`)
+   * carries each step's failure as a warning; none of it can fail the reap.
+   */
+  const calibrationStartedAt = Date.now()
+  const calibrationBudgetMs = ROUTE_BUDGET_MS - (calibrationStartedAt - startedAt)
+  const calibrationDue = 'valued' in tradeLearning && (tradeLearning.valued > 0 || tradeLearning.aggregated)
+  const tradeCalibration: TradeCalibrationPassResult | { ran: false; reason: string } = !calibrationDue
+    ? { ran: false as const, reason: 'nothing newly valued or aggregated' }
+    : calibrationBudgetMs < CALIBRATION_MIN_BUDGET_MS
+      ? { ran: false as const, reason: `only ${Math.round(calibrationBudgetMs / 1000)}s of budget left` }
+      : await runTradeCalibrationPass({ budgetMs: calibrationBudgetMs }).catch((error) => ({
+          ran: false as const,
+          reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed',
+        }))
+  if (tradeCalibration.ran) {
+    try {
+      await recordSyncJobRun(
+        { jobName: 'cron-trade-calibration', trigger: 'cron' },
+        {
+          rowsUpdated: tradeCalibration.outcomesLogged ?? 0,
+          warnings: tradeCalibration.errors,
+          metadata: { ...tradeCalibration },
+        },
+        Date.now() - calibrationStartedAt,
+      )
+    } catch {
+      // Telemetry for the calibration pass must never fail the reap it rides.
+    }
+  }
+
+  return NextResponse.json({ ok: true, reaped, cutoff, cachePurge, privateRelay, tradeAgent, tradeLearning, tradeCalibration })
 }
