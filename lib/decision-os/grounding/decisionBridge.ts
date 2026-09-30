@@ -408,6 +408,27 @@ export async function loadWaiverDecisionSlice(args: WaiverDecisionBridgeArgs): P
       }
     }
 
+    /*
+     * 🛑 A ROSTERED PLAYER WE COULD NOT EVEN NAME MAY STILL BE ON THE WIRE. `loadWaiverPool` hides an
+     * ESPN league's untranslated rostered players by their ESPN names; one with no name was not
+     * hidden, so any claim could be a player somebody already rosters. Say so rather than recommend.
+     */
+    if ((pool.untranslatedRostered?.unnamed ?? 0) > 0) {
+      return {
+        present: false,
+        value: null,
+        asOf: null,
+        servedFrom: null,
+        confidence: null,
+        conclusive: { ok: true },
+        gap: {
+          reason: 'not_synced',
+          detail: `${pool.untranslatedRostered!.unnamed} rostered player(s) in this league could not be identified, so the free-agent list cannot be trusted.`,
+          remedy: 'Re-sync the league so its player identities are current.',
+        },
+      }
+    }
+
     const result = await runWaiverClaimDecision(
       {
         worldInput: worldInputFromFacts(facts),

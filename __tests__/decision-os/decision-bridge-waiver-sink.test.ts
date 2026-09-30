@@ -137,4 +137,17 @@ describe('waiver decision bridge — onClaims side channel', () => {
     await loadWaiverDecisionSlice({ userId: 'u1', leagueId: 'L1', onClaims: sink })
     expect(sink).toHaveBeenCalledWith([claim], null)
   })
+
+  /*
+   * 🛑 A ROSTERED PLAYER THE POOL COULD NOT EVEN NAME MAY STILL BE ON THE WIRE (an ESPN id with no
+   * identity row). The slice states the gap rather than recommend a claim that may already be rostered.
+   */
+  it('refuses to recommend when the pool reports rostered players it could not identify', async () => {
+    const base = await h.loadPool() // the healthy pool from beforeEach
+    h.loadPool.mockResolvedValue({ ...base, untranslatedRostered: { ids: 2, excludedFromWire: 1, unnamed: 1 } })
+    const slice = await loadWaiverDecisionSlice({ userId: 'u1', leagueId: 'L1' })
+    expect(h.runDecision).not.toHaveBeenCalled()
+    expect(slice.present).toBe(false)
+    expect(slice.gap?.detail).toMatch(/could not be identified/)
+  })
 })

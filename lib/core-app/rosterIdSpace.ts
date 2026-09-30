@@ -278,15 +278,36 @@ export async function sleeperReadableRosters<T extends { playerData: unknown }>(
   rosters: readonly T[],
   platform: string | null | undefined | ((roster: T) => string | null | undefined),
 ): Promise<T[]> {
+  return (await sleeperReadableRostersWithGaps(rosters, platform)).rosters
+}
+
+/**
+ * `sleeperReadableRosters`, plus the ESPN ids it DROPPED because the identity map could not place
+ * them.
+ *
+ * 🛑 FOR A READER THAT SUBTRACTS, A DROPPED ID IS NOT "NOBODY". Dropping is right for naming — an
+ * untranslated ESPN id read as a Sleeper id names a stranger (ESPN 12483 is Matthew Stafford; Sleeper
+ * 12483 is Jack Bech). But it is still a player on somebody's roster, and a reader deciding who is
+ * AVAILABLE (a waiver pool) would offer him. Measured 2026-09-29: 83 of 271 ESPN roster ids do not
+ * translate, and beside ~25 team defenses they include Justin Jefferson, Josh Allen, A.J. Brown and
+ * Kyler Murray. Such a reader must account for these ids itself — see `lib/decision-os/waiver/pool.ts`.
+ */
+export async function sleeperReadableRostersWithGaps<T extends { playerData: unknown }>(
+  rosters: readonly T[],
+  platform: string | null | undefined | ((roster: T) => string | null | undefined),
+): Promise<{ rosters: T[]; untranslatedEspnIds: string[] }> {
   const platformOf = typeof platform === 'function' ? platform : () => platform
   const spaceOf = rosters.map((r) => rosterIdSpaceOf(platformOf(r)))
   const espnIds = collectTranslatableIds(rosters.filter((_, i) => spaceOf[i] === 'espn').map((r) => r.playerData))
   const map = espnIds.length > 0 ? await loadEspnToSleeperMap(espnIds) : new Map<string, string>()
-  return rosters.map((r, i) => {
-    if (spaceOf[i] === 'sleeper') return r
-    if (Array.isArray(r.playerData)) return { ...r, playerData: [] }
-    return { ...r, playerData: spaceOf[i] === 'espn' ? translatePlayerData(r.playerData, map) : stripForeignIds(r.playerData) }
-  })
+  return {
+    rosters: rosters.map((r, i) => {
+      if (spaceOf[i] === 'sleeper') return r
+      if (Array.isArray(r.playerData)) return { ...r, playerData: [] }
+      return { ...r, playerData: spaceOf[i] === 'espn' ? translatePlayerData(r.playerData, map) : stripForeignIds(r.playerData) }
+    }),
+    untranslatedEspnIds: espnIds.filter((id) => id !== '0' && !map.has(id)),
+  }
 }
 
 /** One roster's `playerData`, through `sleeperReadableRosters`. For a loop, pass the rosters at once. */
