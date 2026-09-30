@@ -38,7 +38,9 @@ import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getPlayerPoolForSport } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
-import { sleeperReadableRosters } from '@/lib/core-app/rosterIdSpace'
+import { sleeperReadableRostersWithGaps } from '@/lib/core-app/rosterIdSpace'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { computeTeamNeeds, type TeamNeedsMap } from '@/lib/waiver-engine/team-needs'
 import type { WaiverRosterPlayer } from '@/lib/waiver-engine/waiver-scoring'
 
@@ -109,6 +111,13 @@ export interface WaiverPool {
   /** Rosters found for this league. Zero means the subtraction below was vacuous. */
   leagueRosterCount: number
   pricing: WaiverPoolPricing
+  /**
+   * An ESPN league's rostered ids the identity map could not translate, and what became of them.
+   * Null for every other league. `unnamed` is the residual: rostered ids we could not even name, so
+   * nothing was subtracted for them — a caller that cannot afford a rostered player on the wire must
+   * refuse when it is non-zero.
+   */
+  untranslatedRostered: { ids: number; excludedFromWire: number; unnamed: number } | null
 }
 
 /** Matches the assistant's `deep` mode. A larger slice costs one query, not one per player. */
@@ -160,7 +169,10 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
    * lookup. An ESPN league's are translated — read raw, a rostered Stafford (ESPN 12483) was never
    * "rostered" in Sleeper's space, so he was recommended as an add.
    */
-  const leagueRosters = await sleeperReadableRosters(rosterRows as RosterRow[], league?.platform)
+  const { rosters: leagueRosters, untranslatedEspnIds } = await sleeperReadableRostersWithGaps(
+    rosterRows as RosterRow[],
+    league?.platform,
+  )
 
   /*
    * The season's byes. The league's own season decides, falling back to the projection feed's — the
@@ -188,9 +200,21 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
     for (const id of slots.keys()) rosteredIds.add(id)
   }
 
+  /*
+   * 🛑 AN ESPN ID THE IDENTITY MAP CANNOT PLACE IS STILL A ROSTERED PLAYER. The translation above
+   * drops it — right for naming, since read raw it is somebody else's Sleeper id — but dropped from
+   * THIS set it would leave him on the wire. Measured 2026-09-29: 83 of 271 ESPN roster ids do not
+   * translate, and beside ~25 team defenses they include Justin Jefferson, Josh Allen, A.J. Brown,
+   * Kyler Murray, Marvin Harrison Jr. and Travis Etienne (their canonical birthdays disagree with
+   * ESPN's, so the linker refuses them). Every one of them could have been offered as an add.
+   * `excludeUntranslatedEspn` takes them off the wire by the ESPN identity row's own name.
+   */
+  const untranslated = await excludeUntranslatedEspn(untranslatedEspnIds, sport)
+
   const available = pool.filter((p) => {
     const ids = [p.player_id, p.external_source_id].filter(Boolean) as string[]
-    return !ids.some((id) => rosteredIds.has(id))
+    if (ids.some((id) => rosteredIds.has(id))) return false
+    return !untranslated.hides(p)
   })
 
   /*
@@ -375,10 +399,81 @@ export async function loadWaiverPool(leagueId: string, sport: string, rosterId?:
      */
     poolIncomplete: pool.length >= POOL_LIMIT,
     leagueRosterCount: leagueRosters.length,
+    untranslatedRostered: untranslated.summary(),
     pricing: {
       priced: availablePlayers.filter((p) => p.value > 0).length,
       total: availablePlayers.length,
       basis: priced.basis,
     },
   }
+}
+
+/** "ARI D/ST" — ESPN's team-defense identity rows, which have no athlete counterpart anywhere. */
+const ESPN_DST_NAME = /^([A-Za-z]{2,4})\s+D\/ST$/
+const DEFENSE_POSITIONS = new Set(['DEF', 'DST', 'D/ST'])
+
+type WireRow = { full_name?: string | null; position?: string | null; team_abbreviation?: string | null }
+
+/**
+ * Take an ESPN league's UNTRANSLATED rostered players off the wire, by the name their own ESPN
+ * identity row carries (`sports_core_player_provider_identities`, provider 'espn' — every ESPN roster
+ * id has one: 0 of 83 untranslated lacked a row, 2026-09-29).
+ *
+ *   - A team defense ("ARI D/ST") hides the wire's defense of that club, by team abbreviation.
+ *   - Anyone else hides the wire player whose name matches under `normalizeMatchName`, which strips
+ *     generational suffixes — ESPN writes "Travis Etienne Jr.", the wire "Travis Etienne".
+ *
+ * ⚠ A NAME HERE ONLY EVER HIDES; IT NEVER NAMES, PRICES OR BINDS. That is why a name is acceptable
+ * where it is refused everywhere else in this codebase (`normalizeMatchName`'s own header: "do not
+ * treat a matching key as an identity"). The worst a coincidence can do is hide a genuine free agent
+ * who shares a rostered player's name — the safe direction for a list of who is available.
+ *
+ * ⚠ RESIDUAL, STATED: a nickname defeats it. ESPN's "Hollywood Brown" is the wire's "Marquise Brown",
+ * and no name rule joins them; such a player can still surface. The real fix is upstream — the ESPN
+ * linker refuses these rows because the canonical birthday it corroborates against is wrong for them
+ * (Jefferson 1999-01-16 against ESPN's 1999-06-16), and a fixed link removes the id from this set.
+ */
+async function excludeUntranslatedEspn(
+  espnIds: readonly string[],
+  sport: string,
+): Promise<{ hides: (row: WireRow) => boolean; summary: () => WaiverPool['untranslatedRostered'] }> {
+  if (espnIds.length === 0) return { hides: () => false, summary: () => null }
+
+  const rows = await prisma.playerProviderIdentity
+    .findMany({
+      where: { provider: 'espn', providerPlayerId: { in: [...espnIds] } },
+      select: { providerPlayerId: true, displayName: true },
+    })
+    .catch(() => [] as Array<{ providerPlayerId: string; displayName: string | null }>)
+  const nameById = new Map<string, string>()
+  for (const r of rows) if (r.displayName?.trim() && !nameById.has(r.providerPlayerId)) nameById.set(r.providerPlayerId, r.displayName.trim())
+
+  const defenseTeams = new Set<string>()
+  const names = new Set<string>()
+  for (const id of espnIds) {
+    const name = nameById.get(id)
+    if (!name) continue
+    const dst = ESPN_DST_NAME.exec(name)
+    if (dst) {
+      const abbr = normalizeTeamAbbrev(dst[1])
+      if (abbr) defenseTeams.add(abbr)
+    } else {
+      const key = normalizeMatchName(name)
+      if (key) names.add(key)
+    }
+  }
+
+  let excluded = 0
+  const hides = (row: WireRow): boolean => {
+    const isDefense = DEFENSE_POSITIONS.has(String(row.position ?? '').trim().toUpperCase())
+    const hit = isDefense
+      ? defenseTeams.has(normalizeTeamAbbrev(row.team_abbreviation) ?? '')
+      : names.has(normalizeMatchName(row.full_name))
+    if (hit) excluded += 1
+    return hit
+  }
+
+  const unnamed = espnIds.filter((id) => !nameById.has(id)).length
+  // Read after the wire has been filtered, so `excludedFromWire` counts what was actually hidden.
+  return { hides, summary: () => ({ ids: espnIds.length, excludedFromWire: excluded, unnamed }) }
 }
