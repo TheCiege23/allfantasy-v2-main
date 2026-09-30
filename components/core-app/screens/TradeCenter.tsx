@@ -49,7 +49,7 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
-import { matchOfferToRosters, screenshotDraftNote } from '@/lib/trade-screenshot/matchOffer'
+import { matchOfferToRosters, screenshotDraftNote, screenshotLoadedLine } from '@/lib/trade-screenshot/matchOffer'
 import type { OfferRead } from '@/lib/trade-screenshot/offerRead'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
@@ -628,6 +628,27 @@ export function TradeCenter(props: {
     }
   }, [])
 
+  /**
+   * Bring the builder into view after something LOADED it — an offer, a screenshot, hand entry.
+   *
+   * 🛑 "NOTHING HAPPENED" (field report, 2026-09-30). `goToStep` scrolls only when its anchor is ABOVE
+   * the viewport, and on a desktop that anchor sits in the phone-only step bar, which is hidden. The
+   * Sleeper note and the inbox sit ABOVE the builder, so every button there filled a builder the
+   * manager could not see and the page did not move: "Upload a screenshot" read an offer and loaded
+   * it, and "Grade a Sleeper offer" cleared the board — both invisibly.
+   *
+   * Phones are left to `goToStep`: there the step bar swaps the visible step instead.
+   */
+  const builderTopRef = useRef<HTMLDivElement | null>(null)
+  const revealBuilder = useCallback(() => {
+    if (typeof window === 'undefined') return
+    if (window.matchMedia?.('(max-width: 720px)').matches) return
+    const el = builderTopRef.current
+    if (!el) return
+    const top = el.getBoundingClientRect().top
+    if (top < 0 || top > window.innerHeight * 0.4) el.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [])
+
   /*
    * ── Who you are trading with ──────────────────────────────────────────
    *
@@ -875,6 +896,7 @@ export function TradeCenter(props: {
       setResult(null)
       setError(null)
       setDraftNote(note ?? 'Offer loaded — analyse it to get a verdict.')
+      revealBuilder()
       /*
        * Loading a PROVIDER offer is not answering an AllFantasy one, so it leaves
        * counter mode. Without this, a counter armed a moment ago would still be
@@ -885,7 +907,7 @@ export function TradeCenter(props: {
       /* A loaded offer is a whole deal — on a phone, show both sides of it at once. */
       goToStep('review')
     },
-    [goToStep],
+    [goToStep, revealBuilder],
   )
 
   /**
@@ -906,7 +928,8 @@ export function TradeCenter(props: {
     setError(null)
     setDraftNote('Entering an offer from Sleeper: pick the manager who sent it, add what you would send and what you would get exactly as Sleeper shows it, then analyze.')
     goToStep('give')
-  }, [goToStep])
+    revealBuilder()
+  }, [goToStep, revealBuilder])
 
   /* Arrived from the Sleeper offers notice: open the hand-entry builder, once. */
   const startedOfferEntry = useRef(false)
@@ -926,7 +949,8 @@ export function TradeCenter(props: {
    * — a misread name would otherwise become a confident grade on a trade nobody offered. Replaces the
    * board, as loading any offer does.
    */
-  const [screenshotRead, setScreenshotRead] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null })
+  /* `done` says what loaded, beside the button that did it — the builder may be off screen. */
+  const [screenshotRead, setScreenshotRead] = useState<{ busy: boolean; error: string | null; done?: string | null }>({ busy: false, error: null })
   const readOfferScreenshot = useCallback(
     async (file: File) => {
       const leagueId = props.league?.id
@@ -960,13 +984,14 @@ export function TradeCenter(props: {
         setResult(null)
         setError(null)
         setDraftNote(screenshotDraftNote(m))
-        setScreenshotRead({ busy: false, error: null })
+        setScreenshotRead({ busy: false, error: null, done: screenshotLoadedLine(m) })
         goToStep('review')
+        revealBuilder()
       } catch {
         setScreenshotRead({ busy: false, error: 'The screenshot did not upload. Check your connection and try again.' })
       }
     },
-    [props.league?.id, rosterData, goToStep],
+    [props.league?.id, rosterData, goToStep, revealBuilder],
   )
 
   /**
@@ -1657,6 +1682,7 @@ export function TradeCenter(props: {
           onScreenshot={readOfferScreenshot}
           screenshotBusy={screenshotRead.busy}
           screenshotError={screenshotRead.error}
+          screenshotDone={screenshotRead.done ?? null}
           onCounter={startCounter}
           reloadToken={inboxReloadToken}
           importedHistory={props.completedHistory}
@@ -1738,6 +1764,7 @@ export function TradeCenter(props: {
         counterparty half of the ledger, and what lets each column offer the
         picks that roster actually holds.
       */}
+      <div ref={builderTopRef} aria-hidden />
       {otherRosters.length > 0 ? (
         <div className="af-tc-partner" data-mstep="get">
           {/* Item #8: who is worth trading with, and a deal to start from. */}

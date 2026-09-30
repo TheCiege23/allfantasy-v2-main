@@ -22,6 +22,12 @@ export type PickMention = {
   round: 1 | 2 | 3 | 4
   /** The text that produced it, for the refusal message. */
   text: string
+  /**
+   * The team the pick originally belonged to, when the text brackets one — "2028 2nd Rd (JeffersonTD)"
+   * on a Sleeper trade card. The grader uses it to find the other manager when the viewer would
+   * receive only picks. Absent when the text names none.
+   */
+  owner?: string | null
 }
 
 const ROUND: Record<string, 1 | 2 | 3 | 4> = {
@@ -43,8 +49,11 @@ const NOT_A_PICK = String.raw`(?![\s-]+(?:place|down|quarter|half|string|team|ti
 const MENTION = new RegExp(
   String.raw`(?:\b(a|an|one|two|three|2|3)\s+)?(?:\b((?:19|20)\d{2})\s+)?\b(1st|2nd|3rd|4th|first|second|third|fourth)(s)?\b` +
     /* Longest first: "round pick" before "round", or " pick" is left behind and reads as an unparsed pick. */
-    String.raw`(?:[\s-]+(round\s+(?:draft\s+)?picks?|round(?:er)?s?|(?:draft\s+)?picks?))?` +
-    NOT_A_PICK,
+    /* "Rd" is how Sleeper's trade card writes it: "2028 2nd Rd (JeffersonTD)". */
+    String.raw`(?:[\s-]+(round\s+(?:draft\s+)?picks?|round(?:er)?s?|rd(?![a-z])\.?(?:\s+(?:draft\s+)?picks?)?|(?:draft\s+)?picks?))?` +
+    NOT_A_PICK +
+    /* The bracketed ORIGINAL OWNER Sleeper prints after a pick. Consumed, so it is not read as a name. */
+    String.raw`(?:\s*\(\s*@?([^()]{1,40}?)\s*\))?`,
   'gi',
 )
 
@@ -66,7 +75,7 @@ export function extractPickMentions(sideText: string): { picks: PickMention[]; u
   let remainder = sideText
 
   for (const m of sideText.matchAll(MENTION)) {
-    const [whole, countWord, year, ordinal, plural, pickWord] = m
+    const [whole, countWord, year, ordinal, plural, pickWord, owner] = m
     const round = ROUND[ordinal!.toLowerCase()]
     if (!round) continue
     /*
@@ -81,7 +90,7 @@ export function extractPickMentions(sideText: string): { picks: PickMention[]; u
     if (plural && !countWord) continue
 
     for (let i = 0; i < count; i += 1) {
-      picks.push({ season: year ? Number(year) : null, round, text: whole!.trim() })
+      picks.push({ season: year ? Number(year) : null, round, text: whole!.trim(), ...(owner?.trim() ? { owner: owner.trim() } : {}) })
     }
     remainder = remainder.replace(whole!, ' ')
   }
