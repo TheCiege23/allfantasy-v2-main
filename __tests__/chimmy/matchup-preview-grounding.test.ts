@@ -207,3 +207,64 @@ describe('buildMatchupPreviewContext — every league', () => {
     expect(await buildMatchupPreviewContext({ leagueId: null, userId: 'u1' }, deps)).toMatch(/failed to load/)
   })
 })
+
+/*
+ * This week's LINEUP projections (2026-09-30): AllFantasy's own engine (AF) and the provider's (API),
+ * summed over the lineups as set — the totals the league rail draws. A different measure from the
+ * team averages, labelled as one, and never shown for a week other than the matchup's.
+ */
+describe('buildMatchupPreviewContext — AF and API lineup projections', () => {
+  const side = (over: Record<string, unknown> = {}) => ({
+    projected: 110, afProjected: 118.2, afEngine: 121.5, afEngineFrom: 9, pricedFrom: 9, starterCount: 9, ...over,
+  })
+  const pair = (over: Record<string, unknown> = {}) => ({
+    season: 2026, week: 8, unpaired: false,
+    you: side(), them: side({ afProjected: 112.4, afEngine: 115 }),
+    projectionWeek: { season: '2026', week: 8 },
+    ...over,
+  })
+  const withLineups = (p: Record<string, unknown> | Error) => ({
+    ...deps,
+    loadLineupProjections: vi.fn(async () => {
+      if (p instanceof Error) throw p
+      return new Map([['L1', p as never]])
+    }),
+  })
+
+  it('gives both sources, labelled, for the league in scope — and says not to average them', async () => {
+    const out = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, withLineups(pair()))
+    expect(out).toContain("AF (AllFantasy's own engine) them 121.5 vs opponent 115.0")
+    expect(out).toContain("API (the provider's, Sleeper) them 118.2 vs opponent 112.4")
+    expect(out).toContain('a different measure from the team averages above')
+    expect(out).toContain('do not average them or turn them into a win probability')
+    // The week model's own line is still there, first.
+    expect(out).toMatch(/a coin flip — win probability 64%/)
+  })
+
+  it('🛑 never shows a total from a fallback week as this week’s', async () => {
+    const out = await buildMatchupPreviewContext(
+      { leagueId: 'L1', userId: 'u1' },
+      withLineups(pair({ projectionWeek: { season: '2026', week: 9 } })),
+    )
+    expect(out).not.toContain('LINEUP projections')
+  })
+
+  it('says a partial lineup total is partial', async () => {
+    const out = await buildMatchupPreviewContext(
+      { leagueId: 'L1', userId: 'u1' },
+      withLineups(pair({ you: side({ afEngineFrom: 7 }) })),
+    )
+    expect(out).toContain('them 121.5 (from 7 of 9 starters) vs opponent 115.0')
+  })
+
+  it('carries them onto the matching league across all leagues', async () => {
+    const out = await buildMatchupPreviewContext({ leagueId: null, userId: 'u1' }, withLineups(pair()))
+    expect(out).toMatch(/KBFL, week 8 vs Waiver Wire Warriors: .*AF \(AllFantasy's own engine\) them 121\.5/)
+  })
+
+  it('a failed lineup read leaves the preview exactly as it was', async () => {
+    const plain = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, deps)
+    const failed = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, withLineups(new Error('db down')))
+    expect(failed).toBe(plain)
+  })
+})
