@@ -2893,7 +2893,7 @@ export function ImportV4({
               <>
             {phase.leagueId && !phase.joinedExisting ? (
               <Link
-                href={`/league/${encodeURIComponent(phase.leagueId)}/settings`}
+                href={`/core/commissioner?league=${encodeURIComponent(phase.leagueId)}`}
                 className="af-btn af-btn--ghost af-done-alt"
               >
                 Customize your AllFantasy copy
