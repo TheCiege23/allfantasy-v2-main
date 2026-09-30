@@ -334,7 +334,8 @@ export async function createLeagueTradeGrader(args: {
        * BELOW this chart, not unknown — priced at 0 and said so (`lib/trade-value/belowChartFloor.ts`).
        * One extra read, and a second pricing pass, only for a deal that has such a player.
        */
-      const candidates = [...g.floorCandidates, ...t.floorCandidates]
+      // `?? []`: a pricing double (or an older caller's shape) may not carry the floor fields.
+      const candidates = [...(g.floorCandidates ?? []), ...(t.floorCandidates ?? [])]
       if (candidates.length > 0) {
         const onAnotherChart = await loadOnAnotherFantasyCalcChart(candidates)
         if (onAnotherChart.size > 0) {
@@ -342,7 +343,7 @@ export async function createLeagueTradeGrader(args: {
           ;[g, t] = await Promise.all([resolveAssets(give, floorOpts), resolveAssets(get, floorOpts)])
         }
       }
-      const floorNote = belowChartFloorNote([...g.belowFloor, ...t.belowFloor])
+      const floorNote = belowChartFloorNote([...(g.belowFloor ?? []), ...(t.belowFloor ?? [])])
       const unresolved = [...g.unresolved, ...t.unresolved]
       if (unresolved.length > 0) {
         return {
