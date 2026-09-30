@@ -4101,6 +4101,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               history={<Trades data={trades} hidePending />}
               completedHistory={trades.league.platform === 'sleeper' && trades.history.available ? trades.history.data : []}
               edgeAccess={corePaywall?.competitive_edge ?? null}
+              startWithOfferEntry={sp.enter === 'offer' && trades.league.platform === 'sleeper'}
             />
           </>
         ) : tradesLoadFailed ? (

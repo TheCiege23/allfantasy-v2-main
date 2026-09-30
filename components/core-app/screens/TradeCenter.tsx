@@ -551,6 +551,11 @@ export function TradeCenter(props: {
    * the deal. Its own depth — a War Room plan holder has it without the breakdown above.
    */
   edgeAccess?: CoreDepthAccess | null
+  /**
+   * Open straight into "Grade a Sleeper offer" — the link on the Sleeper offers notice
+   * (`components/trades/SleeperOffersNotice.tsx`, `?enter=offer`). Applied once, on arrival.
+   */
+  startWithOfferEntry?: boolean
 }) {
   const depthAccess = props.depthAccess ?? null
   const depthLocked = depthAccess?.unlocked === false
@@ -900,6 +905,14 @@ export function TradeCenter(props: {
     setDraftNote('Entering an offer from Sleeper: pick the manager who sent it, add what you would send and what you would get exactly as Sleeper shows it, then analyze.')
     goToStep('give')
   }, [goToStep])
+
+  /* Arrived from the Sleeper offers notice: open the hand-entry builder, once. */
+  const startedOfferEntry = useRef(false)
+  useEffect(() => {
+    if (!props.startWithOfferEntry || startedOfferEntry.current) return
+    startedOfferEntry.current = true
+    enterOfferByHand()
+  }, [props.startWithOfferEntry, enterOfferByHand])
 
   /**
    * Arm counter mode: the builder holds their deal, seen from this manager, and the
