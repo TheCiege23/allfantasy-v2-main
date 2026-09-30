@@ -5,6 +5,11 @@ on:
     - cron: '0 14 * * 1'
   workflow_dispatch:
 
+# Least privilege for GITHUB_TOKEN: this workflow only reads the repo. Jobs that
+# need more declare it at job level.
+permissions:
+  contents: read
+
 jobs:
   db-first-weekly-audit:
     name: DB-First Weekly Full Scan

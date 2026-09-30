@@ -95,6 +95,11 @@ concurrency:
   group: playwright-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Least privilege for GITHUB_TOKEN: this workflow only reads the repo. Jobs that
+# need more declare it at job level.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Playwright (${{ matrix.label }})

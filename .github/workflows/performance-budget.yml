@@ -23,6 +23,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Least privilege for GITHUB_TOKEN: this workflow only reads the repo. Jobs that
+# need more declare it at job level.
+permissions:
+  contents: read
+
 jobs:
   landing-performance-budget-strict:
     name: Landing Perf Budget (strict)

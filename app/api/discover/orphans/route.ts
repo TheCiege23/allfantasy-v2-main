@@ -4,6 +4,7 @@
  * Supports ?page=1&limit=12 for offset pagination.
  */
 
+import { getServedOrigin } from '@/lib/http/served-origin'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { isSupportedSport } from '@/lib/sport-scope'
@@ -11,12 +12,10 @@ import { parseOffsetPageParams, cacheControlHeaders } from '@/lib/api-performanc
 
 export const dynamic = 'force-dynamic'
 
-const DEFAULT_BASE = process.env.NEXTAUTH_URL ?? 'https://allfantasy.ai'
-
 function getBaseUrl(req: NextRequest): string {
-  return req.headers.get('x-forwarded-host')
-    ? `${req.headers.get('x-forwarded-proto') || 'https'}://${req.headers.get('x-forwarded-host')}`
-    : DEFAULT_BASE
+  // Config-derived, never the Host / X-Forwarded-Host header, which the caller
+  // controls — see lib/http/served-origin.ts.
+  return getServedOrigin(req)
 }
 
 export interface OrphanLeagueCard {

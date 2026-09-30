@@ -41,6 +41,17 @@ function trimToNull(value: unknown, maxLength = 512): string | null {
   return trimmed.slice(0, maxLength)
 }
 
+/** An absolute http(s) URL, or null. Rendered as a link, so no other scheme is safe. */
+function httpUrlOrNull(value: string | null): string | null {
+  if (!value) return null
+  try {
+    const u = new URL(value)
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.toString() : null
+  } catch {
+    return null
+  }
+}
+
 function normalizeHexColor(value: unknown): string | null {
   const trimmed = trimToNull(value, 16)
   if (!trimmed) return null
@@ -1014,7 +1025,8 @@ export async function upsertCreatorProfile(
       trimToNull(input.communitySummary, 1200) ?? existing?.communitySummary ?? null,
     avatarUrl: trimToNull(input.avatarUrl) ?? existing?.avatarUrl ?? appUser.avatarUrl ?? null,
     bannerUrl: trimToNull(input.bannerUrl) ?? existing?.bannerUrl ?? null,
-    websiteUrl: trimToNull(input.websiteUrl) ?? existing?.websiteUrl ?? null,
+    // http(s) only — anything else (javascript:, data:) is dropped, never stored.
+    websiteUrl: httpUrlOrNull(trimToNull(input.websiteUrl)) ?? existing?.websiteUrl ?? null,
     socialHandles: (socialHandles ?? undefined) as object | undefined,
     visibility,
     communityVisibility,

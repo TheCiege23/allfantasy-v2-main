@@ -4,6 +4,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { assertLeagueMember } from '@/lib/league/league-access'
 import {
   getDraftHistoryForLeague,
   getLeagueHistorySummary,
@@ -41,6 +44,18 @@ export async function GET(request: NextRequest) {
     const leagueId = request.nextUrl.searchParams?.get('leagueId')
     if (!leagueId) {
       return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+    }
+
+    // A league's full history (rosters, transactions, drafts) is for its members.
+    // This answered anyone, signed in or not, for any leagueId.
+    const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+    const viewerId = session?.user?.id
+    if (!viewerId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const membership = await assertLeagueMember(leagueId, viewerId)
+    if (!membership.ok) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: membership.status })
     }
 
     const view = (request.nextUrl.searchParams?.get('view') ?? 'summary') as WarehouseView

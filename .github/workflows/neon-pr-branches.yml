@@ -61,6 +61,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
+# Least privilege for GITHUB_TOKEN: this workflow only reads the repo. Jobs that
+# need more declare it at job level.
+permissions:
+  contents: read
+
 jobs:
   setup:
     name: Branch name
@@ -69,12 +74,19 @@ jobs:
     outputs:
       head_branch: ${{ steps.names.outputs.current_branch }}
     steps:
+      # Was tj-actions/branch-names@v9 — a third-party action on a MUTABLE tag, from
+      # the org whose changed-files action was compromised in 2025, in a workflow that
+      # also holds NEON_API_KEY. All it did was read the PR head branch. The branch
+      # name is attacker-controlled on a PR, so it goes through env (never inlined
+      # into the script) and is reduced to a safe character set.
       - name: Resolve head branch name
         id: names
-        uses: tj-actions/branch-names@v9
-        with:
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
           # Neon branch names must not rely on raw slashes from git (e.g. feature/foo).
-          replace_slashes_with_hyphens: 'true'
+          safe=$(printf '%s' "$HEAD_REF" | tr '/' '-' | tr -c 'A-Za-z0-9._-' '-')
+          echo "current_branch=$safe" >> "$GITHUB_OUTPUT"
 
   delete_neon_branch:
     name: Delete Neon branch

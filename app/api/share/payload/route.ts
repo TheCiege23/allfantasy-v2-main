@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
+import { getServedOrigin } from "@/lib/http/served-origin";
 import { buildSharePayload, buildShareTargetDescriptors } from "@/lib/share-engine";
 import { SHAREABLE_KINDS } from "@/lib/share-engine/types";
 
 function getBaseUrl(req: Request): string {
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3000";
-  const proto = req.headers.get("x-forwarded-proto") || "http";
-  return `${proto}://${host}`;
+  // Config-derived, never a Host header (see lib/http/served-origin.ts).
+  return getServedOrigin(req);
 }
 
 export const dynamic = "force-dynamic";
