@@ -136,7 +136,13 @@ export function LegacyImportSettingsSection() {
               const showReconnect = isSleeper && linked
 
               return (
-                <li key={providerId} className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 last:border-0 last:pb-0" style={{ borderColor: "var(--border)" }}>
+                <li
+                  key={providerId}
+                  className="flex flex-wrap items-center justify-between gap-2 border-b pb-3 last:border-0 last:pb-0"
+                  style={{ borderColor: "var(--border)" }}
+                  /* An unavailable provider reads "Coming soon" twice — a placeholder, not in the iOS app (2.1). */
+                  data-hide-in-ios-app={legacyStatus && !available ? "" : undefined}
+                >
                   <div>
                     <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{name}</p>
                     <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>

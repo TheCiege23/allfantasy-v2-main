@@ -1663,8 +1663,8 @@ const maxWeekMenu = useMemo(() => {
     payload?.source === 'sleeper' && payload.roster
       ? `$FAAB: ${payload.roster.settings.waiver_budget_used}/1000 · Waiver position: #${payload.roster.settings.waiver_position}`
       : payload && payload.source !== 'sleeper' && (payload as DbRosterPayload).faabRemaining != null
-        ? `FAAB: $${(payload as DbRosterPayload).faabRemaining} · Trade hub (Coming Soon)`
-        : 'FAAB: - · Trade hub (Coming Soon)'
+        ? `FAAB: $${(payload as DbRosterPayload).faabRemaining}`
+        : 'FAAB: -'
 
   const showIdpDashboard =
     idpLeagueUi &&

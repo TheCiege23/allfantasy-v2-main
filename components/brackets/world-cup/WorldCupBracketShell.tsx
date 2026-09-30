@@ -6490,7 +6490,8 @@ function WorldCupCommunityFoundationPanel({
               />
               <ComposerUtilityButton icon={Hash} label="Hashtag" onClick={() => insertComposerText("#")} />
               <ComposerUtilityButton icon={ImageIcon} label="Image" onClick={() => setComposerPanel("image")} />
-              <ComposerUtilityButton icon={Mic} label="Voice" onClick={() => setComposerPanel("voice")} />
+              {/* Voice only opens a "coming soon" panel — a placeholder, not in the iOS app (2.1). */}
+              <ComposerUtilityButton icon={Mic} label="Voice" onClick={() => setComposerPanel("voice")} hideInIosApp />
             </div>
           ) : null}
           {composerPanel === "format" ? (
@@ -6700,15 +6701,18 @@ function ComposerUtilityButton({
   icon: Icon,
   label,
   onClick,
+  hideInIosApp,
 }: {
   icon: typeof Smile
   label: string
   onClick: () => void
+  hideInIosApp?: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      data-hide-in-ios-app={hideInIosApp ? "" : undefined}
       className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-cyan-300/15 bg-white/[0.045] px-2.5 text-[11px] font-bold text-white/62 transition hover:border-cyan-300/35 hover:bg-cyan-300/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/55"
     >
       <Icon className="h-3.5 w-3.5" aria-hidden />

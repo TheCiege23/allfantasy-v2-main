@@ -402,7 +402,13 @@ export function LandingV4({
         <span className="af-label">{c.connects.label}</span>
         <div className="af-lp-connect-row">
           {PLATFORMS.map((p) => (
-            <span key={p.name} className="af-lp-connect" data-state={p.state}>
+            <span
+              key={p.name}
+              className="af-lp-connect"
+              data-state={p.state}
+              /* A "soon" platform is a placeholder — not shown in the iOS app (App Store 2.1). */
+              data-hide-in-ios-app={p.state === 'soon' ? '' : undefined}
+            >
               {p.name}
               {p.state === 'soon' ? (
                 <span className="af-lp-soon af-num">{c.connects.soon}</span>
@@ -421,7 +427,7 @@ export function LandingV4({
         </span>
         {/* Why a "soon" chip is soon — only while the config still has that platform off. */}
         {PLATFORMS.filter((p) => p.state === 'soon' && c.connects.soonNotes[p.provider]).map((p) => (
-          <span key={`${p.provider}-note`} className="af-lp-soon-note" data-provider={p.provider}>
+          <span key={`${p.provider}-note`} className="af-lp-soon-note" data-provider={p.provider} data-hide-in-ios-app="">
             {c.connects.soonNotes[p.provider]}
           </span>
         ))}

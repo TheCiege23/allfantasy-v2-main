@@ -396,7 +396,12 @@ export function ConnectedAccountsSettingsSection({
         )}
       </div>
 
-      <div className="space-y-3 rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
+      <div
+        className="space-y-3 rounded-xl border p-4"
+        style={{ borderColor: "var(--border)", background: "var(--panel2)" }}
+        /* Not connected, this card is only "Spotify — coming soon": a placeholder, not in the iOS app (2.1). */
+        data-hide-in-ios-app={(profile as any)?.spotifyConnectedAt ? undefined : ""}
+      >
         <p className="text-sm font-medium" style={{ color: "var(--muted2)" }}>Spotify</p>
         {!(profile as any)?.spotifyConnectedAt ? (
           <div className="space-y-3">

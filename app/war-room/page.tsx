@@ -285,6 +285,8 @@ export default function WarRoomPage() {
               return (
                 <div
                   key={sport}
+                  /* A sport with no page yet is a "Coming Soon" placeholder — not in the iOS app (2.1). */
+                  data-hide-in-ios-app={href ? undefined : ''}
                   className={`flex flex-col rounded-2xl border p-4 ${
                     isActive
                       ? 'border-cyan-500/25 bg-cyan-500/[0.05]'

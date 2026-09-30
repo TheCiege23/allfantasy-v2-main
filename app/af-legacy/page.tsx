@@ -14260,6 +14260,7 @@ function AFLegacyContent() {
                                       </button>
                                       <button
                                         disabled
+                                        data-hide-in-ios-app=""
                                         className="px-4 py-2 rounded-lg bg-slate-700/30 border border-slate-600/30 text-slate-400 text-sm font-medium cursor-not-allowed"
                                       >
                                         💾 Save to Notes <span className="text-[11px] ml-1">(Coming soon)</span>

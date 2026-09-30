@@ -898,6 +898,8 @@ function ImportProviderCard({ provider }: { provider: ImportProviderOption }) {
     <div
       className="rounded-2xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] p-4"
       data-testid={`g30-import-provider-${provider.id}`}
+      /* A card whose only action is a disabled "Coming soon" is a placeholder — not in the iOS app (2.1). */
+      data-hide-in-ios-app={available && provider.route ? undefined : ''}
     >
       <div className="flex items-start justify-between gap-3">
         <div>

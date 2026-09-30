@@ -314,7 +314,12 @@ function PlatformRow({
   onDisconnect?: () => void
 }) {
   return (
-    <li className="af-ca-row" data-status={status}>
+    <li
+      className="af-ca-row"
+      data-status={status}
+      /* A "Coming soon" platform row is a placeholder — not in the iOS app (App Store 2.1). */
+      data-hide-in-ios-app={status === 'coming-soon' ? '' : undefined}
+    >
       <span className="af-platform af-platform-mark af-ca-mark" data-platform={platform} aria-hidden>
         {platform === 'fleaflicker' ? 'FL' : label.charAt(0)}
       </span>
