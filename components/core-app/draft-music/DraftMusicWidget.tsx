@@ -228,7 +228,7 @@ export function DraftMusicWidget({
         Dashboard" page. Matches the SOON treatment on /login and /settings.
       */}
       {state.kind === 'disconnected' || state.kind === 'needs-reauth' ? (
-        <div className="af-dm-connect">
+        <div className="af-dm-connect" data-hide-in-ios-app="">
           <p className="af-dm-msg">
             Spotify connections are coming soon — previews below still play without an account.
           </p>

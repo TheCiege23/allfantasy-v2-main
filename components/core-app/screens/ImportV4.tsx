@@ -1963,6 +1963,8 @@ export function ImportV4({
                 className="af-im-provider"
                 data-active={active}
                 data-available={available}
+                /* An unavailable platform's "Coming soon" tile is a placeholder — not in the iOS app (2.1). */
+                data-hide-in-ios-app={available ? undefined : ''}
                 data-testid={`import-tab-${opt.provider}`}
                 /*
                   ⚠ A PAUSED TILE STILL TAKES THE CLICK — to explain itself, and nothing else.

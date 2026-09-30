@@ -305,7 +305,8 @@ export function AfRankingsLeaderboardPlaceholder() {
     { pos: 3, level: 15, glow: '#06b6d4' },
   ]
   return (
-    <section className="rounded-3xl border border-white/[0.08] bg-[#0a0f1c] p-5 sm:p-6">
+    /* A blurred preview under a "Coming soon" chip is a placeholder — not in the iOS app (2.1). */
+    <section className="rounded-3xl border border-white/[0.08] bg-[#0a0f1c] p-5 sm:p-6" data-hide-in-ios-app="">
       <div className="flex items-center justify-between gap-3 mb-4">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/40">Leaderboard</p>

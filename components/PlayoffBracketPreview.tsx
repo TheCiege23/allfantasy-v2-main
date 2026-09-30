@@ -184,7 +184,7 @@ function BracketShell({ leagueName, season, playoffTeamCount, children }: { leag
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center text-[11px] font-black text-white">AF</div>
           <span className="text-[11px] text-white/40 font-medium">Powered by AllFantasy</span>
         </div>
-        <span className="text-[11px] text-white/25 italic">Live bracket updates coming soon</span>
+        <span className="text-[11px] text-white/25 italic" data-hide-in-ios-app="">Live bracket updates coming soon</span>
       </div>
     </div>
   )

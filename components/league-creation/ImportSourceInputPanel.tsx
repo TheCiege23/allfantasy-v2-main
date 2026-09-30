@@ -67,7 +67,7 @@ export function ImportSourceInputPanel({
 
   if (!available) {
     return (
-      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-3 flex items-start gap-2">
+      <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-3 flex items-start gap-2" data-hide-in-ios-app="">
         <Info className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
         <div className="text-sm text-white/90">
           <p className="font-medium text-amber-200">Import from {getImportProviderLabel(provider)} is coming soon</p>

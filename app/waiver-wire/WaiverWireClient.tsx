@@ -274,6 +274,8 @@ export function WaiverWireClient({ leagueId, preselectPlayerId = null }: WaiverW
           ].map((tab) => (
             <button
               key={tab.id}
+              // "AI Recommendations" only says "Coming soon" — a placeholder, not in the iOS app (2.1).
+              data-hide-in-ios-app={tab.id === "recommendations" ? "" : undefined}
               onClick={() => setActiveTab(tab.id as TabType)}
               className={`px-4 py-2 text-sm transition ${
                 activeTab === tab.id

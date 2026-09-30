@@ -678,6 +678,7 @@ export function LeftChatPanel({
               <button
                 type="button"
                 disabled
+                data-hide-in-ios-app=""
                 title="Mute — coming soon"
                 className="rounded-lg p-1.5 text-white/35 transition hover:bg-white/[0.06] hover:text-white/55 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-white/35"
                 aria-label="Mute league chat — coming soon"
