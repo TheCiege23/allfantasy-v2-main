@@ -20,7 +20,7 @@ describe('create-league-v2 concept-first flow guards', () => {
     const salaryCapDrafts = getDraftTypeOptions('salary_cap', 'NFL').map((option) => option.id)
 
     expect(salaryCapDrafts).toContain('auction')
-    expect(salaryCapDrafts).toContain('auto')
+    expect(salaryCapDrafts).not.toContain('auto')
     expect(salaryCapDrafts).not.toContain('snake')
     expect(salaryCapDrafts).not.toContain('offline')
   })
@@ -30,12 +30,12 @@ describe('create-league-v2 concept-first flow guards', () => {
       leagueType: 'survivor',
       sport: 'NFL',
       idpSelected: false,
-      currentDraftType: 'auction',
+      currentDraftType: 'mock_draft',
     })
 
     const allowed = getDraftTypeOptions('survivor', 'NFL').map((option) => option.id)
     expect(allowed).toContain(resolved)
-    expect(resolved).not.toBe('auction')
+    expect(resolved).not.toBe('mock_draft')
   })
 
   it('resets invalid scoring preset to an allowed concept+sport preset', () => {
