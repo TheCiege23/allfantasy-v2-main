@@ -679,3 +679,24 @@ describe('the /trade/[id] share page prints the stored one grade, never the stor
     expect(SHARE_PRIVATE.test('const analysis = share.analysis as TradeAnalysis;')).toBe(true)
   })
 })
+
+/*
+ * 2026-09-29: the dynasty trade analyzer printed the dual-brain engine's confidence, net delta,
+ * acceptance %, side totals, veto risk, partner-fit score and "Ready to Send" call beside the one grade.
+ * The route sends an allowlisted view; behaviour in __tests__/dynasty-trade/dynasty-analyzer-no-private-verdict.test.ts.
+ */
+describe('the dynasty trade analyzer sends and prints no dual-brain verdict', () => {
+  const ROUTE_PRIVATE = /deterministicVerdict: detVerdict|dynastyVerdict:|aiVerdict:|winner: detVerdict|acceptanceProbability:|\bsections,\n/
+
+  it('the route sends the allowlisted sections and no verdict fields', () => {
+    const src = code('app/api/dynasty-trade-analyzer/route.ts')
+    expect(src).toMatch(/sections: dynastyAnalyzerSectionsForClient\(sections, gate\.filteredCounters\)/)
+    expect(ROUTE_PRIVATE.test(src)).toBe(false)
+  })
+
+  it('positive control: the shape matches the lines the route sent', () => {
+    expect(ROUTE_PRIVATE.test('      deterministicVerdict: detVerdict,')).toBe(true)
+    expect(ROUTE_PRIVATE.test('        dynastyVerdict: detVerdict.winnerLabel,')).toBe(true)
+    expect(ROUTE_PRIVATE.test('      sections,\n      deterministicVerdict')).toBe(true)
+  })
+})

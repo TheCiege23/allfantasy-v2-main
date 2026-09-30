@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { ArrowLeftRight, Plus, X, Loader2, TrendingUp, Crown, Search, Download, Share2, Link as LinkIcon, Shield, Target, MessageSquare, CheckCircle, AlertTriangle, XCircle, Clock } from 'lucide-react';
+import { ArrowLeftRight, Plus, X, Loader2, TrendingUp, Search, Download, Share2, Link as LinkIcon, Shield, Target, MessageSquare, AlertTriangle, XCircle, Clock } from 'lucide-react';
 import {
   buildTradeSummaryForAI,
   canSubmitTradeByAssets,
@@ -31,6 +31,7 @@ import StickyAIActions from '@/components/ai-interface/StickyAIActions';
 import { GradeLeaguePicker, gradeLeagueOptions, type GradeLeagueListRow } from '@/components/trade-evaluator/GradeLeaguePicker';
 import { DynastyLeagueGrade, NOT_GRADED_WINNER, winnerFromLeagueGrade, type DynastyTradeGrade } from '@/components/dynasty-trade/DynastyLeagueGrade';
 import { shareableLeagueGrade } from '@/components/dynasty-trade/sharedTrade';
+import type { DynastyAnalyzerClientSections } from '@/lib/trade-engine/dynastyAnalyzerClientView';
 
 type Player = {
   id: string;
@@ -45,13 +46,12 @@ interface TradeAsset {
   type: 'player' | 'pick';
 }
 
+/*
+ * 🛑 THE PAGE PRINTS THE ONE GRADE AND FACTS, NEVER THE DUAL-BRAIN VERDICT (2026-09-29). The route no
+ * longer sends its winner, verdict, confidence, value delta or veto risk; this is what is left.
+ */
 interface TradeResult {
-  winner: string;
-  valueDelta: string;
   factors: string[];
-  confidence: number;
-  dynastyVerdict?: string;
-  vetoRisk?: string;
   agingConcerns?: string[];
   recommendations?: string[];
 }
@@ -76,88 +76,8 @@ interface CanonicalContextMeta {
   } | null;
 }
 
-interface TradeSections {
-  valueVerdict: {
-    fairnessGrade: string;
-    edge: string;
-    edgeSide: string;
-    valueDeltaPercent: number;
-    valueDeltaAbsolute: number;
-    sideATotalValue: number;
-    sideBTotalValue: number;
-    confidence: number;
-    vetoRisk: string;
-    reasons: string[];
-    warnings: string[];
-    dataFreshness?: {
-      staleSourceCount: number;
-      staleSources: string[];
-    };
-    dataCoverage?: CanonicalContextMeta['dataCoverage'];
-    disagreement?: {
-      winnerMismatch: boolean;
-      confidenceSpread: number;
-      keyDifferences: string[];
-      reviewMode: boolean;
-    };
-    disagreementCodes?: string[];
-    disagreementDetails?: string;
-  };
-  viabilityVerdict: {
-    acceptanceLikelihood: string;
-    acceptanceScore: number;
-    partnerFit: {
-      needsAlignment: string;
-      surplusMatch: string;
-      fitScore: number;
-      details: string[];
-    };
-    timing: {
-      sideAWindow: string;
-      sideBWindow: string;
-      timingFit: string;
-      details: string[];
-    };
-    leagueActivity: string;
-    signals: string[];
-  };
-  actionPlan: {
-    bestOffer: {
-      assessment: string;
-      sendAsIs: boolean;
-      adjustmentNeeded: string | null;
-    };
-    counters: { description: string; rationale: string }[];
-    messageText: string;
-  };
-}
-
-interface DeterministicDriver {
-  label: string;
-  value: string;
-  impact: 'positive' | 'negative' | 'neutral';
-  category: 'value' | 'roster' | 'timing' | 'risk' | 'viability';
-}
-
-interface DeterministicVerdictData {
-  winner: 'A' | 'B' | 'Even';
-  winnerLabel: string;
-  fairnessGrade: string;
-  fairnessScore: number;
-  netValueDelta: number;
-  netValueDeltaPct: number;
-  acceptanceProbability: number;
-  acceptanceLikelihood: string;
-  vetoRisk: string;
-  confidence: number;
-  keyDrivers: DeterministicDriver[];
-  sideATotalValue: number;
-  sideBTotalValue: number;
-  sideANetStarterDelta: number;
-  sideBNetStarterDelta: number;
-  injuryRiskDelta: number;
-  source: string;
-}
+/** The route's allowlisted sections — see lib/trade-engine/dynastyAnalyzerClientView.ts. */
+type TradeSections = DynastyAnalyzerClientSections;
 
 interface PlayerValue {
   value: number;
@@ -172,7 +92,7 @@ const DEFAULT_DYNASTY_SPORT = SPORT_OPTIONS[0]?.value ?? 'NFL';
 const EMPTY_DYNASTY_STATE = getEmptyTradeState({ leagueContext: DEFAULT_LEAGUE_CONTEXT });
 
 export default function DynastyTradeForm() {
-  const { callAI, loading } = useAI<{ analysis: TradeResult; sections: TradeSections; canonicalContext?: CanonicalContextMeta; deterministicVerdict?: DeterministicVerdictData; tradeGrade?: DynastyTradeGrade }>();
+  const { callAI, loading } = useAI<{ analysis: TradeResult; sections: TradeSections; canonicalContext?: CanonicalContextMeta; tradeGrade?: DynastyTradeGrade }>();
   /* The league THE grade is taken in (2026-09-27). Sent as `gradeLeagueId`, used for the grade only. */
   const [gradeLeagueId, setGradeLeagueId] = useState('');
   const [leagueRows, setLeagueRows] = useState<GradeLeagueListRow[]>([]);
@@ -208,8 +128,7 @@ export default function DynastyTradeForm() {
   const [result, setResult] = useState<TradeResult | null>(null);
   const [sections, setSections] = useState<TradeSections | null>(null);
   const [canonicalCtx, setCanonicalCtx] = useState<CanonicalContextMeta | null>(null);
-  const [detVerdict, setDetVerdict] = useState<DeterministicVerdictData | null>(null);
-  const [reliability, setReliability] = useState<{ usedDeterministicFallback?: boolean; fallbackExplanation?: string; confidence?: number; providerResults?: { provider: string; status: string; error?: string }[]; dataQualityWarnings?: string[] } | null>(null);
+  const [reliability, setReliability] = useState<{ usedDeterministicFallback?: boolean; fallbackExplanation?: string; providerResults?: { provider: string; status: string; error?: string }[]; dataQualityWarnings?: string[] } | null>(null);
   const [playerValues, setPlayerValues] = useState<Record<string, PlayerValue>>({});
   const [valueLookupLoading, setValueLookupLoading] = useState<string | null>(null);
   const [lastAnalyzedSignature, setLastAnalyzedSignature] = useState<string | null>(null);
@@ -346,14 +265,9 @@ export default function DynastyTradeForm() {
       setTradeGrade(data.tradeGrade ?? null);
       setGradedInLeague(Boolean(gradeLeagueId));
       const a = data.analysis;
+      // 🛑 No winner, verdict, confidence or value delta is kept: the winner is read off THE letter.
       setResult({
-        // 🛑 The winner is read off THE letter; the dual-brain `winner` / `dynastyVerdict` are never kept
-        // (this object is also what a share link stores and prints).
-        winner: winnerFromLeagueGrade(data.tradeGrade ?? null, teamAName, teamBName) ?? NOT_GRADED_WINNER,
-        valueDelta: a.valueDelta || '',
         factors: Array.isArray(a.factors) ? a.factors : [],
-        confidence: a.confidence || 70,
-        vetoRisk: a.vetoRisk,
         agingConcerns: a.agingConcerns,
         recommendations: a.recommendations,
       });
@@ -364,9 +278,6 @@ export default function DynastyTradeForm() {
       }
       if (data.canonicalContext) {
         setCanonicalCtx(data.canonicalContext);
-      }
-      if (data.deterministicVerdict) {
-        setDetVerdict(data.deterministicVerdict);
       }
       setLastAnalyzedSignature(currentInputSignature);
       const rel = (data as { reliability?: { fallbackExplanation?: string }; fallbackExplanation?: string }).reliability;
@@ -460,7 +371,6 @@ export default function DynastyTradeForm() {
     setResult(null);
     setSections(null);
     setCanonicalCtx(null);
-    setDetVerdict(null);
     setTradeGrade(null);
     setReliability(null);
     setLastAnalyzedSignature(null);
@@ -479,7 +389,6 @@ export default function DynastyTradeForm() {
     setResult(null);
     setSections(null);
     setCanonicalCtx(null);
-    setDetVerdict(null);
     setTradeGrade(null);
     setReliability(null);
     setLastAnalyzedSignature(null);
@@ -741,11 +650,14 @@ export default function DynastyTradeForm() {
             </div>
           </CardContent>
         </Card>
-      ) : result && (sections || detVerdict) ? (
+      ) : result ? (
         <div id="trade-result" className="space-y-6">
           {/*
             🛑 THE ONLY LETTER ON THIS PAGE IS THE LEAGUE GRADE (2026-09-27). The verdict card and the
             AI section each printed a "Fairness" letter of their own, on private scales; both are gone.
+            🛑 AND THE ONLY VERDICT IS ITS WINNER (2026-09-29): the dual-brain engine's confidence, veto
+            risk, net delta, acceptance %, side totals, key drivers, partner-fit score, acceptance
+            likelihood and "Ready to Send / Needs Adjustment" call are gone with it.
           */}
           <DynastyLeagueGrade
             tradeGrade={tradeGrade}
@@ -760,106 +672,30 @@ export default function DynastyTradeForm() {
               fallbackExplanation={reliability.fallbackExplanation}
               onRetry={handleAnalyze}
               retryLoading={loading}
-              confidence={reliability.confidence}
               reliability={reliability as any}
               showDetails
             />
           )}
-          {detVerdict && (
-            <Card className="glass-card border-emerald-900/50 relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-emerald-500 via-cyan-500 to-emerald-500" />
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-3 text-xl">
-                  <Shield className="h-5 w-5 text-emerald-400" />
-                  Trade Verdict
-                  <span className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">
-                    Data-Driven
-                  </span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                <div className="rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-950/30 to-cyan-950/30 p-6">
-                  <div className="flex items-center justify-between flex-wrap gap-4">
-                    <div className="text-center flex-1 min-w-[120px]">
-                      <div className="text-lg font-bold text-white" data-testid="dynasty-grade-winner">{gradeWinner}</div>
-                      <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Winner</div>
-                    </div>
-                    <div className="w-px h-12 bg-gray-700 hidden sm:block" />
-                    <div className="text-center flex-1 min-w-[100px]">
-                      <div className={`text-3xl font-bold font-mono ${
-                        detVerdict.confidence >= 80 ? 'text-green-400' :
-                        detVerdict.confidence >= 60 ? 'text-cyan-400' :
-                        'text-amber-400'
-                      }`}>
-                        {detVerdict.confidence}%
-                      </div>
-                      <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Confidence</div>
-                    </div>
-                    <div className="w-px h-12 bg-gray-700 hidden sm:block" />
-                    <div className="text-center flex-1 min-w-[80px]">
-                      <div className={`text-3xl font-bold ${
-                        detVerdict.vetoRisk === 'None' || detVerdict.vetoRisk === 'Low' ? 'text-green-400' :
-                        detVerdict.vetoRisk === 'High' ? 'text-red-400' :
-                        'text-amber-400'
-                      }`}>
-                        {detVerdict.vetoRisk === 'None' ? 'SAFE' :
-                         detVerdict.vetoRisk === 'Low' ? 'LOW' :
-                         detVerdict.vetoRisk === 'High' ? 'HIGH' : 'MED'}
-                      </div>
-                      <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Veto Risk</div>
-                    </div>
-                  </div>
-                </div>
+          <Card className="glass-card border-emerald-900/50">
+            <CardContent className="p-6">
+              <div className="text-center">
+                <div className="text-lg font-bold text-white" data-testid="dynasty-grade-winner">{gradeWinner}</div>
+                <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Winner — read off the league grade</div>
+              </div>
+            </CardContent>
+          </Card>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3 text-center">
-                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Net Delta</div>
-                    <div className="text-lg font-bold font-mono text-white">{detVerdict.netValueDelta.toLocaleString()}</div>
-                    <div className="text-[11px] text-gray-500">{detVerdict.netValueDeltaPct}% gap</div>
-                  </div>
-                  <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3 text-center">
-                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Accept %</div>
-                    <div className={`text-lg font-bold font-mono ${
-                      detVerdict.acceptanceProbability >= 70 ? 'text-green-400' :
-                      detVerdict.acceptanceProbability >= 50 ? 'text-cyan-400' :
-                      'text-amber-400'
-                    }`}>{detVerdict.acceptanceProbability}%</div>
-                    <div className="text-[11px] text-gray-500">{detVerdict.acceptanceLikelihood}</div>
-                  </div>
-                  <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3 text-center">
-                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{teamAName}</div>
-                    <div className="text-lg font-bold font-mono text-white">{detVerdict.sideATotalValue.toLocaleString()}</div>
-                    <div className="text-[11px] text-gray-500">Total Value</div>
-                  </div>
-                  <div className="rounded-lg border border-gray-800 bg-gray-900/60 p-3 text-center">
-                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{teamBName}</div>
-                    <div className="text-lg font-bold font-mono text-white">{detVerdict.sideBTotalValue.toLocaleString()}</div>
-                    <div className="text-[11px] text-gray-500">Total Value</div>
-                  </div>
-                </div>
-
-                {detVerdict.keyDrivers.length > 0 && (
-                  <div className="rounded-lg border border-emerald-900/30 bg-gray-900/60 p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <TrendingUp className="h-4 w-4 text-emerald-400" />
-                      <span className="text-sm font-semibold text-emerald-400">Key Drivers</span>
-                      <span className="text-[11px] text-gray-500 uppercase tracking-wider ml-auto">Deterministic</span>
-                    </div>
-                    <div className="space-y-2">
-                      {detVerdict.keyDrivers.map((d, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <span className={`h-2 w-2 rounded-full shrink-0 ${
-                            d.impact === 'positive' ? 'bg-green-400' :
-                            d.impact === 'negative' ? 'bg-red-400' :
-                            'bg-gray-500'
-                          }`} />
-                          <span className="text-xs text-gray-500 w-24 shrink-0 uppercase tracking-wider">{d.label}</span>
-                          <span className="text-sm text-gray-300 flex-1">{d.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+          {!sections && result.factors.length > 0 && (
+            <Card className="glass-card border-purple-900/50">
+              <CardContent className="p-4">
+                <ul className="space-y-2">
+                  {result.factors.map((f, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
+                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-cyan-400 shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
               </CardContent>
             </Card>
           )}
@@ -869,47 +705,13 @@ export default function DynastyTradeForm() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-3 text-xl">
                 <Shield className="h-5 w-5 text-purple-400" />
-                Value Details
+                Analysis Details
                 <span className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium uppercase tracking-wider bg-purple-950/40 text-purple-400 border border-purple-500/20">
                   AI-Enhanced
                 </span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
-              <div className="rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-950/40 to-cyan-950/40 p-6">
-                <div className="flex items-center justify-between flex-wrap gap-4">
-                  {/* No "Edge" cell: it named a winner from the engine's own totals (see gradeWinner). */}
-                  <div className="text-center flex-1 min-w-[100px]">
-                    <div className={`text-3xl font-bold font-mono ${
-                      sections.valueVerdict.confidence >= 80 ? 'text-green-400' :
-                      sections.valueVerdict.confidence >= 60 ? 'text-cyan-400' :
-                      'text-amber-400'
-                    }`}>
-                      {sections.valueVerdict.confidence}%
-                    </div>
-                    <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Confidence</div>
-                  </div>
-                  <div className="w-px h-12 bg-gray-700 hidden sm:block" />
-                  <div className="text-center flex-1 min-w-[80px]">
-                    <div className={`text-3xl font-bold ${
-                      sections.valueVerdict.vetoRisk === 'None' || sections.valueVerdict.vetoRisk === 'Low' ? 'text-green-400' :
-                      sections.valueVerdict.vetoRisk === 'High' ? 'text-red-400' :
-                      'text-amber-400'
-                    }`}>
-                      {sections.valueVerdict.vetoRisk === 'None' ? 'SAFE' :
-                       sections.valueVerdict.vetoRisk === 'Low' ? 'LOW' :
-                       sections.valueVerdict.vetoRisk === 'High' ? 'HIGH' : 'MED'}
-                    </div>
-                    <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Veto Risk</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-between text-sm text-gray-400 px-2">
-                <span>{teamAName}: <span className="text-white font-mono">{sections.valueVerdict.sideATotalValue.toLocaleString()}</span></span>
-                <span>{teamBName}: <span className="text-white font-mono">{sections.valueVerdict.sideBTotalValue.toLocaleString()}</span></span>
-              </div>
-
               <TradeAnalysisBadges
                 dataFreshness={canonicalCtx?.dataFreshness}
                 dataCoverage={canonicalCtx?.dataCoverage ?? sections.valueVerdict.dataCoverage}
@@ -1013,33 +815,10 @@ export default function DynastyTradeForm() {
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-3 text-xl">
                 <Target className="h-5 w-5 text-cyan-400" />
-                Viability Verdict
+                Roster &amp; Timing
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
-              <div className="rounded-xl border border-cyan-500/20 bg-gradient-to-r from-cyan-950/30 to-blue-950/30 p-6">
-                <div className="flex items-center justify-between flex-wrap gap-4">
-                  <div className="text-center flex-1 min-w-[120px]">
-                    <div className={`text-2xl font-bold ${
-                      sections.viabilityVerdict.acceptanceLikelihood === 'Very Likely' ? 'text-green-400' :
-                      sections.viabilityVerdict.acceptanceLikelihood === 'Likely' ? 'text-cyan-400' :
-                      sections.viabilityVerdict.acceptanceLikelihood === 'Uncertain' ? 'text-amber-400' :
-                      'text-red-400'
-                    }`}>
-                      {sections.viabilityVerdict.acceptanceLikelihood}
-                    </div>
-                    <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Acceptance</div>
-                  </div>
-                  <div className="w-px h-12 bg-gray-700 hidden sm:block" />
-                  <div className="text-center flex-1 min-w-[100px]">
-                    <div className="text-3xl font-bold font-mono text-white">
-                      {sections.viabilityVerdict.partnerFit.fitScore}
-                    </div>
-                    <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Partner Fit</div>
-                  </div>
-                </div>
-              </div>
-
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-4">
                   <span className="text-xs text-gray-400 uppercase tracking-wider block mb-2">Roster Fit</span>
@@ -1100,29 +879,6 @@ export default function DynastyTradeForm() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
-              <div className={`rounded-xl border p-5 ${
-                sections.actionPlan.bestOffer.sendAsIs
-                  ? 'border-green-500/30 bg-green-950/20'
-                  : 'border-amber-500/30 bg-amber-950/20'
-              }`}>
-                <div className="flex items-start gap-3">
-                  {sections.actionPlan.bestOffer.sendAsIs ? (
-                    <CheckCircle className="h-5 w-5 text-green-400 mt-0.5 shrink-0" />
-                  ) : (
-                    <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5 shrink-0" />
-                  )}
-                  <div>
-                    <p className="text-sm font-semibold text-white mb-1">
-                      {sections.actionPlan.bestOffer.sendAsIs ? 'Ready to Send' : 'Needs Adjustment'}
-                    </p>
-                    <p className="text-sm text-gray-300">{sections.actionPlan.bestOffer.assessment}</p>
-                    {sections.actionPlan.bestOffer.adjustmentNeeded && (
-                      <p className="text-sm text-amber-300 mt-2">{sections.actionPlan.bestOffer.adjustmentNeeded}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-
               {sections.actionPlan.counters.length > 0 && (
                 <div className="space-y-3">
                   <span className="text-sm font-semibold text-green-400 block">Counter Proposals</span>
@@ -1171,44 +927,6 @@ export default function DynastyTradeForm() {
           </Card>
           )}
         </div>
-      ) : result ? (
-        <Card id="trade-result" className="glass-card border-purple-900/50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-2xl text-center justify-center">
-              <Crown className="h-6 w-6 text-yellow-400" />
-              AI Trade Verdict
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-950/40 to-cyan-950/40 p-8">
-              <div className="text-center">
-                <p className="text-sm text-gray-400 mb-2 uppercase tracking-wider">Winner</p>
-                <p className="text-4xl font-bold text-white mb-4">{gradeWinner}</p>
-              </div>
-            </div>
-            <div className="flex justify-center gap-8 text-center py-2">
-              <div>
-                <div className={`text-4xl font-bold font-mono ${
-                  result.confidence >= 80 ? 'text-green-400' :
-                  result.confidence >= 60 ? 'text-cyan-400' : 'text-amber-400'
-                }`}>{result.confidence}%</div>
-                <div className="text-[11px] text-gray-400 uppercase tracking-wider mt-1">Confidence</div>
-              </div>
-            </div>
-            {result.factors.length > 0 && (
-              <div className="rounded-lg border border-cyan-900/30 bg-gray-900/60 p-4">
-                <ul className="space-y-2">
-                  {result.factors.map((f, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
-                      <span className="mt-1 h-1.5 w-1.5 rounded-full bg-cyan-400 shrink-0" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       ) : (
         <div className="h-64 flex items-center justify-center border border-dashed border-gray-700 rounded-2xl text-gray-500">
           Analysis will appear here after clicking &quot;Analyze Trade&quot;
@@ -1219,9 +937,10 @@ export default function DynastyTradeForm() {
         <>
           <StickyAIActions
             copyText={
-              detVerdict
-                ? `${gradeWinner}${tradeGrade?.grade && tradeGrade.partnerGrade ? ` — league grade ${teamAName} ${tradeGrade.grade} · ${teamBName} ${tradeGrade.partnerGrade}` : ''}, ${detVerdict.confidence}% confidence. ${sections?.actionPlan?.messageText ?? ''}`.trim()
-                : `${gradeWinner} — ${result.confidence}% confidence. ${result.valueDelta ?? ''} ${(result.factors ?? []).slice(0, 2).join('; ')}`.trim()
+              // The one grade and its winner — no confidence, no value delta (2026-09-29).
+              `${gradeWinner}${tradeGrade?.grade && tradeGrade.partnerGrade ? ` — league grade ${teamAName} ${tradeGrade.grade} · ${teamBName} ${tradeGrade.partnerGrade}` : ''}. ${
+                sections ? sections.actionPlan.messageText : (result.factors ?? []).slice(0, 2).join('; ')
+              }`.trim()
             }
             chimmyPrompt={buildTradeSummaryForAI(
               teamAAssets.map((a) => a.name).join(', '),
