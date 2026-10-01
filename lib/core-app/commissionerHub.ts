@@ -148,7 +148,7 @@ export type { MemberActivityRow } from './commissioner/activity'
 export type CommissionerHubData = {
   allowed: true
   grant: CommissionerGrant
-  league: { id: string; name: string; platform: string; season: number | null; native: boolean }
+  league: { id: string; name: string; platform: string; sport?: string; season: number | null; native: boolean }
   /** The viewer's own role — drives the co-commissioner boundary note. */
   role: 'commissioner' | 'co_commissioner'
   /** `League.userId`. The Discord bridge routes accept only this person. */
@@ -196,7 +196,7 @@ export type CommissionerHubData = {
    * and the first one is a claim we cannot support.
    */
   unread: boolean
-  /** Disputes, stated rather than silently absent. See DISPUTES_REASON. */
+  /** Integrity coverage is checked on the dedicated monitor; this section does not infer a clean league. */
   disputes: UnavailableSection
   /**
    * Whether this league's standings are published at `/standings/{id}`.
@@ -232,14 +232,14 @@ export type CommissionerHubResult = CommissionerHubData | CommissionerAccessDeni
  * "OPEN DISPUTES" TILE HAS NOTHING BEHIND IT. `CollusionDetectionEngine` reads
  * `RedraftLeagueTrade` and `TankingDetectionEngine` reads `RedraftMatchup` —
  * both AF-native-only tables — so an imported Sleeper league has zero rows and
- * the scan always finds nothing. Tanking has no enqueuer at all.
+ * the scan always finds nothing.
  *
  * A tile reading "0 open disputes" off a scan that structurally cannot find one
  * is the most confident wrong number this screen could show a commissioner, so
  * the tile states the gap instead. The "Resolve a dispute" guide is the
  * replacement: it works the same way whether or not a scan exists.
  */
-const DISPUTES_REASON =
+const IMPORTED_DISPUTES_REASON =
   'Dispute detection only runs on leagues created in AllFantasy — it has no data to read for an imported league, so "none found" would not mean anything here. The “Resolve a dispute” guide on this page works for every league.'
 
 const ROLE_LABEL: Record<'commissioner' | 'co_commissioner', string> = {
@@ -927,7 +927,7 @@ export async function getCommissionerHub(input: {
   return {
     allowed: true,
     grant,
-    league: { id: leagueId, name: leagueName, platform, season: league.season ?? null, native },
+    league: { id: leagueId, name: leagueName, platform, sport, season: league.season ?? null, native },
     role,
     viewerIsOwner,
     viewerCanBroadcast,
@@ -981,7 +981,12 @@ export async function getCommissionerHub(input: {
     settings,
     access,
     unread,
-    disputes: { available: false, reason: DISPUTES_REASON },
+    disputes: {
+      available: false,
+      reason: native
+        ? 'Open the integrity monitor for flags and each detector’s scan status. No flags on file does not establish that a scan ran.'
+        : IMPORTED_DISPUTES_REASON,
+    },
     publicStandings: {
       /*
        * Read from the same `League.settings` key the public page checks, so the

@@ -64,6 +64,7 @@ export function HubSection({
 
 const NAV: Array<{ id: string; label: string }> = [
   { id: 'ch-tasks', label: 'Tasks' },
+  { id: 'ch-intelligence', label: 'Intelligence' },
   { id: 'ch-health', label: 'Health' },
   { id: 'ch-calendar', label: 'Calendar' },
   { id: 'ch-workflows', label: 'Guides' },

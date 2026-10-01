@@ -4,6 +4,7 @@ import '@/components/core-app/af-commish-hub.css'
 import '@/components/core-app/af-format-hubs.css'
 import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
 import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
+import { CommissionerOsActionsSummary } from '@/components/league-hub/CommissionerOsActionsSummary'
 import { PublishStandingsToggle } from '@/components/core-app/PublishStandingsToggle'
 import { WaiverOversight } from '@/components/core-app/WaiverOversight'
 import type { CommissionerHubResult, CommissionerTile } from '@/lib/core-app/commissionerHub'
@@ -210,6 +211,10 @@ export function CommissionerHub({ data }: CommissionerHubProps) {
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} />
 
+      <HubSection id="ch-intelligence" title="Commissioner intelligence">
+        <CommissionerOsActionsSummary leagueId={league.id} sport={league.sport} />
+      </HubSection>
+
       {/* ── 2 · Cockpit (item 1) — the tiles are in the band above ─────── */}
       <div className="af-ch-split">
         <Suspense fallback={<RecentChangesFallback />}>
@@ -268,6 +273,7 @@ export function CommissionerHub({ data }: CommissionerHubProps) {
           <div className="af-ch-disputes">
             <span className="af-label">Disputes</span>
             <p>{disputes.reason}</p>
+            {league.native && <Link href={`/league/${encodeURIComponent(league.id)}/commissioner/integrity`}>Open integrity monitor →</Link>}
           </div>
         </HubSection>
 
@@ -392,20 +398,14 @@ export function CommissionerHub({ data }: CommissionerHubProps) {
           {league.native
             ? 'This league runs on AllFantasy, so settings and rulings saved here are the league’s own.'
             : `AllFantasy reads this league. Settings and rulings are applied on ${platformName}.`}
-          {data.viewerIsOwner ? ' Health trends, manager intelligence and reports are in Commissioner OS.' : ''}
+          {' Health trends, manager intelligence and reports are in Commissioner OS.'}
         </p>
         <Link className="afh-link" href={data.chatHref}>
           Open league chat →
         </Link>
-        {/*
-          Commissioner OS admits the league owner only (`resolveActiveLeagueId`), so
-          a co-commissioner is not sent to a screen that would turn them away.
-        */}
-        {data.viewerIsOwner ? (
-          <CommissionerOsLink className="afh-link" href="/commissioner-os/league-health" leagueId={league.id}>
-            Health trends in Commissioner OS →
-          </CommissionerOsLink>
-        ) : null}
+        <CommissionerOsLink className="afh-link" href="/commissioner-os/league-health" leagueId={league.id}>
+          Health trends in Commissioner OS →
+        </CommissionerOsLink>
       </footer>
     </div>
   )

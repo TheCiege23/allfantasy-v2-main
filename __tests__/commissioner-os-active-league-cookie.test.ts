@@ -79,6 +79,31 @@ describe("resolveActiveLeagueId — cookie override", () => {
     await expect(resolveActiveLeagueId()).resolves.toBe("lg-older")
   })
 
+  it("includes claimed co-commissioner leagues while excluding ordinary members and viewers", async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
+    prismaMock.league.findMany.mockResolvedValue([{ id: "lg-co", status: "active", name: "Co league" }])
+    cookieJar("lg-co")
+
+    await expect(resolveActiveLeagueId()).resolves.toBe("lg-co")
+    expect(prismaMock.league.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { userId: "user-1" },
+          {
+            teams: {
+              some: {
+                claimedByUserId: "user-1",
+                role: { not: "viewer" },
+                OR: [{ isCommissioner: true }, { isCoCommissioner: true }],
+              },
+            },
+          },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+    })
+  })
+
   it("falls back to the most recently created league when no cookie is set", async () => {
     withOwnedLeagues()
     cookieJar(undefined)
