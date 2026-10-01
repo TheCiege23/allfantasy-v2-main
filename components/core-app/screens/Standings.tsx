@@ -9,6 +9,7 @@ import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { WeekLineupsTable } from '@/components/core-app/standings/WeekLineupsTable'
 import { LeagueAwards, SeasonBanner, YourHeadToHead } from '@/components/core-app/standings/StandingsHighlights'
+import { StandingsWhatIf } from '@/components/core-app/standings/StandingsWhatIf'
 import '@/components/core-app/af-standings-highlights.css'
 
 /**
@@ -266,6 +267,8 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
       <LeagueAwards board={board} />
 
       <StandingsBoardView board={board} initial={view} />
+
+      <StandingsWhatIf board={board} />
 
       {lineups ? (
         <WeekLineupsTable lineups={lineups} caveat="the table above is points already scored." />

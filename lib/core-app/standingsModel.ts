@@ -465,6 +465,12 @@ export type StandingsBoard = {
   divisions: Array<{ key: string; name: string }>
   rules: StandingsRules
   gamesRemaining: number
+  /**
+   * The earliest week still to be decided, with its pairings — what the what-if picker offers. Includes
+   * a week held back as in progress. Null when nothing is left. Optional because a board cached before
+   * 2026-10-01 does not carry it.
+   */
+  nextGames?: { week: number; games: Array<{ a: string; b: string }> } | null
   projectionBasis: string
   /** Why projections are missing, when they are. */
   projectionWithheld: string | null
@@ -545,16 +551,21 @@ function h2hThrough(snapshots: WeekSnapshot[]): Record<string, Record<string, Re
   return out
 }
 
-type OrderRow = { rosterId: string; name: string; record: Record3; pointsFor: number; pointsAgainst: number | null }
+export type OrderRow = { rosterId: string; name: string; record: Record3; pointsFor: number; pointsAgainst: number | null }
 
-type OrderCtx = {
+export type OrderCtx = {
   h2h: Record<string, Record<string, Record3>>
   hasHeadToHead: boolean
   tiebreakers: Tiebreaker[]
 }
 
-/** Negative = `a` ranks higher. Win percentage, then the tiebreaker chain, then name so the order is stable. */
-function compareOfficial(a: OrderRow, b: OrderRow, ctx: OrderCtx): number {
+/**
+ * Negative = `a` ranks higher. Win percentage, then the tiebreaker chain, then name so the order is stable.
+ *
+ * Exported for the what-if picker (`standingsWhatIf.ts`), which must re-sort a hypothetical table by
+ * exactly this rule — a second copy of the tiebreak chain would drift from this one.
+ */
+export function compareOfficial(a: OrderRow, b: OrderRow, ctx: OrderCtx): number {
   if (ctx.hasHeadToHead) {
     const d = (winPct(b.record) ?? 0) - (winPct(a.record) ?? 0)
     if (d !== 0) return d
@@ -909,11 +920,27 @@ export function buildStandingsBoard(input: BoardInput): StandingsBoard {
     divisions: [...divisionNames.entries()].map(([key, name]) => ({ key, name })),
     rules,
     gamesRemaining: remaining.length,
+    nextGames: nextGamesOf(remaining),
     projectionBasis: projection.basis,
     projectionWithheld: projection.withheld,
     powerBasis:
       'AF Power is our analysis, not the league table: all-play winning percentage — every team against every other team, every week — with the last three weeks weighted 30% once four weeks are scored. Ties go to points for.',
   }
+}
+
+function nextGamesOf(remaining: RemainingGame[]): StandingsBoard['nextGames'] {
+  if (remaining.length === 0) return null
+  const week = Math.min(...remaining.map((g) => g.week))
+  const seen = new Set<string>()
+  const games: Array<{ a: string; b: string }> = []
+  for (const g of remaining) {
+    if (g.week !== week) continue
+    const key = [g.a, g.b].sort().join('|')
+    if (seen.has(key)) continue
+    seen.add(key)
+    games.push({ a: g.a, b: g.b })
+  }
+  return { week, games }
 }
 
 /** Above this many remaining head-to-head games, outcomes are bounded rather than enumerated. */

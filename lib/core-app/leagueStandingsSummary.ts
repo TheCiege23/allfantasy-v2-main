@@ -108,7 +108,8 @@ registerScreenSummary<LeagueStandingsResult>({
    * that has no idea anything changed. No error, no conflict, wrong screen.
    */
   // v2 (2026-09-17): the result gained `board` — official, power, history, zones, projections.
-  version: 2,
+  // v3 (2026-10-01): `board.nextGames`, the next week's pairings for the what-if picker.
+  version: 3,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   /**

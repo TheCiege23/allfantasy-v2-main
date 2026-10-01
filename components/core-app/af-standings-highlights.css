@@ -422,3 +422,168 @@
   .af-st-banner-top { align-items: flex-start; }
   .af-st-banner-seed { font-size: 36px; }
 }
+
+/* ── what if… ───────────────────────────────────────────────────────────── */
+
+.af-st-whatif,
+.af-st-whatif * { box-sizing: border-box; }
+
+.af-st-whatif {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    radial-gradient(100% 120% at 100% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%),
+    var(--surface);
+}
+
+.af-st-whatif-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.af-st-whatif-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+.af-st-whatif-title .af-num { color: var(--accent); }
+
+.af-st-whatif-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.af-st-whatif-actions button {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.af-st-whatif-actions button:disabled { opacity: 0.45; cursor: default; }
+
+.af-st-whatif-lede { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+.af-st-whatif-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.af-st-whatif-games { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.af-st-whatif-games li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+.af-st-whatif-games li[data-yours='true'] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.af-st-whatif-side { position: relative; display: flex; min-width: 0; }
+.af-st-whatif-vs {
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  padding: 2px 4px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--faint);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.af-st-whatif-pick {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+}
+.af-st-whatif-side:last-child .af-st-whatif-pick { align-items: flex-end; text-align: right; }
+.af-st-whatif-pick[aria-pressed='true'] {
+  border-color: var(--good);
+  background: color-mix(in srgb, var(--good) 18%, var(--chip));
+}
+.af-st-whatif-pick[data-lost='true'] { opacity: 0.5; }
+.af-st-whatif-pick:focus-visible,
+.af-st-whatif-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-st-whatif-pname {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 800;
+}
+.af-st-whatif-prec { font-size: 11px; color: var(--muted); }
+
+.af-st-whatif-result { display: flex; flex-direction: column; gap: 8px; }
+.af-st-whatif-headline {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.af-st-whatif-table { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.af-st-whatif-table li {
+  display: grid;
+  grid-template-columns: 24px 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.af-st-whatif-table li[data-field='true'] .af-st-whatif-seed { color: var(--good); }
+.af-st-whatif-table li[data-cut='true'] { box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--good) 60%, transparent); border-radius: 8px 8px 0 0; }
+.af-st-whatif-table li[data-you='true'] { background: color-mix(in srgb, var(--accent) 14%, transparent); font-weight: 800; }
+.af-st-whatif-seed { font-weight: 900; text-align: center; color: var(--faint); }
+.af-st-whatif-move { font-size: 11px; }
+.af-st-whatif-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.af-st-whatif-rec { font-weight: 700; }
+.af-st-whatif-note { margin: 0; font-size: 11.5px; line-height: 1.45; color: var(--faint); }
+
+@container af-st (max-width: 760px) {
+  .af-st-whatif { padding: 14px; }
+  .af-st-whatif-body { grid-template-columns: minmax(0, 1fr); }
+  .af-st-whatif-actions { width: 100%; }
+  .af-st-whatif-actions button { flex: 1; min-height: 44px; }
+  .af-st-whatif-pick { min-height: 56px; }
+}
