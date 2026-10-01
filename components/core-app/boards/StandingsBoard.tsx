@@ -1,36 +1,37 @@
 import Link from 'next/link'
 
-import type { OutlookLeague, SeasonOutlook } from '@/lib/core-app/seasonOutlook'
+import type { SeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import {
-  BoardHead,
-  FooterSummary,
-  LeagueCrest,
-  SectionHead,
-  columnsTooUneven,
-  platformKey,
-} from '@/components/core-app/boards/BoardKit'
+  TIER_LABEL,
+  TIER_ORDER,
+  buildStandingsPortfolio,
+  type Spotlight,
+  type StandingsPortfolio,
+} from '@/lib/core-app/standingsPortfolio'
+import { BoardHead } from '@/components/core-app/boards/BoardKit'
+import { StandingsExplorer } from '@/components/core-app/boards/StandingsExplorer'
 import '@/components/core-app/af-core-boards.css'
+import '@/components/core-app/af-standings-board.css'
 
 /**
  * `/core/standings` with no league held — where you sit in every league at once.
  *
- * 2026-09-07 handoff (`AF Core Standings.dc.html`).
+ * 2026-10-01 redesign. The 2026-09-07 board showed ten leagues in two columns and accounted for the
+ * rest with one footer line; on a 65-league account that was 55 leagues behind a link. It now leads
+ * with the whole portfolio (how many seats you hold, how many #1 seeds, the berths the simulation
+ * expects), spotlights the handful of leagues worth a look, and lists EVERY league behind a tier filter,
+ * a sort and a search. The maths is `lib/core-app/standingsPortfolio.ts`; the interactive list is
+ * `StandingsExplorer`.
  *
- * ⚠ RANKED BY SEED, NOT BY POINTS FOR, AND THAT IS THE WHOLE DESIGN. The old
- * empty state said it in as many words: points-for only means something inside
- * one league, because two leagues with different scoring settings produce
- * numbers that cannot be compared. A seed is comparable — "#1 of 12" means the
- * same thing everywhere — so the board ranks on it and prints the field size
- * beside it so a #3 of 10 is not read as a #3 of 32.
+ * ⚠ RANKED BY SEED AND ODDS, NEVER BY POINTS FOR, AND THAT IS STILL THE WHOLE DESIGN. Points-for only
+ * means something inside one league. A seed is comparable — "#1 of 12" means the same thing everywhere —
+ * so every row prints the field size beside it and draws the field as a track.
  *
- * ⚠ AND THE ODDS ARE SIMULATED, NOT INFERRED FROM THE TABLE. `playoffPct` comes
- * out of `getSeasonOutlook`'s season simulation over the real remaining
- * schedule. The board says so in its blurb, because a percentage with no stated
- * basis reads as a fact rather than as a model output.
+ * ⚠ AND THE ODDS ARE SIMULATED, NOT INFERRED FROM THE TABLE. `playoffPct` comes out of
+ * `getSeasonOutlook`'s season simulation over the real remaining schedule, and the board says so.
  *
- * ⚠ A LEAGUE WHOSE TEAM WE COULD NOT IDENTIFY IS EXCLUDED AND COUNTED, never
- * rendered with a blank seed. `OutlookLeague.you` is null exactly then, and a
- * row that says "#— of 12" is a row claiming we looked and found nothing.
+ * ⚠ A LEAGUE WHOSE TEAM WE COULD NOT IDENTIFY IS EXCLUDED AND COUNTED, never rendered with a blank
+ * seed. A row that says "#— of 12" is a row claiming we looked and found nothing.
  */
 
 export type StandingsBoardProps = {
@@ -40,178 +41,152 @@ export type StandingsBoardProps = {
   /**
    * Leagues on the account, for the footer's denominator.
    *
-   * ⚠ NOT THE SIMULATION'S OWN COUNT. `outlook.leagues` holds only the leagues
-   * the simulation could run for; on an account whose season has not started
-   * that is zero, and the footer — the only remaining route to the league
-   * picker — then offered "View all 0". Found by rendering it, 2026-09-07.
+   * ⚠ NOT THE SIMULATION'S OWN COUNT. On an account whose season has not started `outlook.leagues` is
+   * zero, and the footer — the only remaining route to the league picker — then offered "View all 0".
    */
   totalLeagues: number
 }
 
-type Ranked = OutlookLeague & { you: NonNullable<OutlookLeague['you']> }
+const TIER_SEV = {
+  clinched: 'good',
+  control: 'good',
+  bubble: 'warn',
+  longshot: 'bad',
+  out: 'muted',
+} as const
 
-/** Above this, the field is all but locked in. Below the lower one, all but gone. */
-const SAFE_PCT = 60
-const LONG_SHOT_PCT = 25
-
-function sevOf(pct: number): 'good' | 'warn' | 'bad' {
-  if (pct >= SAFE_PCT) return 'good'
-  if (pct >= LONG_SHOT_PCT) return 'warn'
-  return 'bad'
-}
-
-/*
- * 2026-09-13 handoff: a compact row — crest, league over "record · N% playoff
- * odds", and the seed stacked over its status on the right.
- *
- * ⚠ NOTHING THE OLD ROW SAID IS GONE, IT MOVED. The rank numeral is dropped (the
- * section label states the order); the platform word and record stay on the sub
- * line with the odds; `whatDecidesIt` gets its own second line rather than being
- * cut to a status word; and IN / OUT sits under the seed.
- */
-function Row({ league }: { league: Ranked }) {
-  const you = league.you
-  const pct = Math.round(you.playoffPct)
-  const sev = sevOf(you.playoffPct)
-  const record = you.wins === 0 && you.losses === 0 ? null : `${you.wins}-${you.losses}`
-  const inField = you.seed <= league.playoffTeams
-
+function Hero({ p }: { p: StandingsPortfolio }) {
+  const { stats } = p
+  const played = stats.wins + stats.losses
+  const winPct = played > 0 ? Math.round((stats.wins / played) * 100) : null
   return (
-    <li>
-      <Link className="af-bd-row" href={league.href}>
-        <LeagueCrest name={league.leagueName} platform={league.platform} size="sm" />
-        <span className="af-bd-league">
-          <span className="af-bd-name">{league.leagueName}</span>
-          <span className="af-bd-sub">
-            <span className="af-bd-plat" data-platform={platformKey(league.platform)}>
-              {league.platform.toUpperCase()}
-            </span>
-            {' · '}
-            {/*
-              ⚠ AN ABSENT RECORD IS NOT 0-0. A freshly synced league carries a
-              whole season of unplayed rows; printing "0-0" states a result.
-            */}
-            {record ?? 'no games played yet'}
-            {' · '}
-            {/*
-              ⚠ `modelled: false` MEANS TOO FEW WEEKS TO MODEL, so the percentage
-              behind it is the simulation's prior rather than a read on this team.
-              It is marked rather than hidden — the seed beside it is still real.
-            */}
-            {pct}%{you.modelled ? '' : '*'} playoff odds
-          </span>
-          {/*
-            The condition in words. `whatDecidesIt` is deliberately specific —
-            "win once in three", not "in contention" — so it is printed rather
-            than collapsed into a status word.
-          */}
-          <span className="af-bd-sub2" title={league.whatDecidesIt}>
-            {league.whatDecidesIt}
-          </span>
-        </span>
-        <span className="af-bd-val af-bd-val--seed" data-sev={sev}>
-          <span>
-            #{you.seed} of {league.teams.length}
-          </span>
-          <span className="af-bd-val-sub af-bd-val-sub--status" data-sev={sev}>
-            {inField ? 'In' : 'Out'}
-          </span>
-        </span>
-      </Link>
-    </li>
+    <section className="af-sb-hero" aria-label="Your standings across every league">
+      <p className="af-sb-headline">{p.headline}</p>
+      <div className="af-sb-tiles">
+        <Tile
+          v={`${stats.inFieldNow}`}
+          of={`/${stats.leagues}`}
+          k="In a playoff spot"
+          sev="good"
+        />
+        <Tile v={`${stats.topSeeds}`} k={stats.topSeeds === 1 ? '#1 seed' : '#1 seeds'} sev="accent" />
+        <Tile
+          v={`~${stats.expectedBerths.toFixed(1)}`}
+          k="Playoff trips expected"
+          hint="The simulation's playoff odds, summed across every league."
+        />
+        <Tile
+          v={played > 0 ? `${stats.wins}-${stats.losses}` : '—'}
+          k={winPct != null ? `Combined · ${winPct}% wins` : 'Combined record'}
+        />
+      </div>
+
+      {/*
+        The whole portfolio as one bar. Proportional by league count, so the bar answers "how is my
+        season going" before a single row is read.
+      */}
+      {stats.leagues > 0 ? (
+        <div className="af-sb-tierbar">
+          <div className="af-sb-tierbar-track" role="img" aria-label={tierAria(p)}>
+            {TIER_ORDER.filter((t) => p.tierCounts[t] > 0).map((t) => (
+              <span
+                key={t}
+                className="af-sb-tierbar-seg"
+                data-sev={TIER_SEV[t]}
+                style={{ flexGrow: p.tierCounts[t] }}
+              />
+            ))}
+          </div>
+          <ul className="af-sb-tierbar-key">
+            {TIER_ORDER.filter((t) => p.tierCounts[t] > 0).map((t) => (
+              <li key={t} data-sev={TIER_SEV[t]}>
+                <span className="af-sb-dot" aria-hidden />
+                {TIER_LABEL[t]} <strong>{p.tierCounts[t]}</strong>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
   )
 }
 
-function Column({
-  label,
-  rows,
-  quiet,
-  tone,
+function tierAria(p: StandingsPortfolio): string {
+  return TIER_ORDER.filter((t) => p.tierCounts[t] > 0)
+    .map((t) => `${p.tierCounts[t]} ${TIER_LABEL[t].toLowerCase()}`)
+    .join(', ')
+}
+
+function Tile({
+  v,
+  of,
+  k,
+  sev,
+  hint,
 }: {
-  label: string
-  rows: Ranked[]
-  quiet: string
-  tone: 'good' | 'warn'
+  v: string
+  of?: string
+  k: string
+  sev?: 'good' | 'accent'
+  hint?: string
 }) {
   return (
-    <section className="af-bd-sec">
-      <SectionHead label={label} tone={tone} />
-      {rows.length > 0 ? (
-        <ul className="af-bd-rows af-bd-rows--compact">
-          {rows.map((l) => (
-            <Row key={l.leagueId} league={l} />
-          ))}
-        </ul>
-      ) : (
-        <p className="af-bd-note">{quiet}</p>
-      )}
+    <div className="af-sb-tile" title={hint}>
+      <span className="af-sb-tile-v" data-sev={sev}>
+        {v}
+        {of ? <span className="af-sb-tile-of">{of}</span> : null}
+      </span>
+      <span className="af-sb-tile-k">{k}</span>
+    </div>
+  )
+}
+
+function Spotlights({ items }: { items: Spotlight[] }) {
+  if (items.length === 0) return null
+  return (
+    <section className="af-sb-spot" aria-label="Spotlight">
+      <ul className="af-sb-spot-row">
+        {items.map((s) => (
+          <li key={s.key}>
+            <Link className="af-sb-card" href={s.href} data-tone={s.tone}>
+              <span className="af-sb-card-k">{s.label}</span>
+              <span className="af-sb-card-v">{s.value}</span>
+              <span className="af-sb-card-league">{s.league}</span>
+              <span className="af-sb-card-d">{s.detail}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </section>
   )
 }
 
 export function StandingsBoard({ outlook, allHref, totalLeagues }: StandingsBoardProps) {
-  const ranked = outlook.leagues.filter((l): l is Ranked => l.you != null)
-  const unidentified = outlook.leagues.length - ranked.length
-  const total = Math.max(totalLeagues, outlook.leagues.length + outlook.withheld.length)
-
-  /*
-   * ⚠ TWO DIFFERENT SORTS, AND THE SECOND IS NOT THE REVERSE OF THE FIRST.
-   * Strongest is "best position", which is seed first and odds as the
-   * tiebreak — a #1 of 12 is a stronger claim than a #2 of 10 with better odds.
-   * The bubble is "closest to missing", which is odds ascending, because a #7
-   * of 10 with a soft run-in is in better shape than a #6 of 12 with a hard
-   * one. Ranking the bubble by seed would put the wrong five in front of you.
-   */
-  const strongest = [...ranked]
-    .sort((a, b) => a.you.seed - b.you.seed || b.you.playoffPct - a.you.playoffPct)
-    .slice(0, 5)
-
-  const strongestIds = new Set(strongest.map((l) => l.leagueId))
-  const bubble = [...ranked]
-    .filter((l) => !strongestIds.has(l.leagueId))
-    .sort((a, b) => a.you.playoffPct - b.you.playoffPct)
-    .slice(0, 5)
-    /* Displayed best-first so the column reads downhill, like the design. */
-    .reverse()
-
-  const shown = strongest.length + bubble.length
-  const anyUnmodelled = [...strongest, ...bubble].some((l) => !l.you.modelled)
+  const p = buildStandingsPortfolio(outlook)
+  const total = Math.max(totalLeagues, outlook.leagues.length + (outlook.withheld?.length ?? 0))
+  const withheldCount = p.withheld.reduce((s, g) => s + g.leagues.length, 0)
 
   return (
-    <div className="af-bd">
+    <div className="af-bd af-sb">
       <BoardHead
         eyebrow="Core · Standings"
         title="Standings"
-        blurb="Points-for cannot be compared across leagues, so this ranks on seed instead — your strongest positions against the ones on the bubble."
+        blurb="Where you sit in every league at once. Points-for cannot be compared across leagues, so this ranks on seed and simulated playoff odds instead."
       />
 
-      {ranked.length > 0 ? (
+      {p.rows.length > 0 ? (
         <>
-          <div
-            className="af-bd-split"
-            data-stack={columnsTooUneven(strongest.length, bubble.length) || undefined}
-          >
-            <Column
-              label="Strongest seeds · top 5"
-              rows={strongest}
-              tone="good"
-              quiet="No league has a seed we can read yet."
-            />
-            <Column
-              label="On the bubble · bottom 5"
-              rows={bubble}
-              tone="warn"
-              quiet="Nothing else is close enough to call a bubble."
-            />
-          </div>
+          <Hero p={p} />
+          <Spotlights items={p.spotlights} />
+          <StandingsExplorer rows={p.rows} tierCounts={p.tierCounts} />
 
           <p className="af-bd-note af-bd-note--plain">
-            Playoff odds are simulated over each league&apos;s real remaining schedule —{' '}
-            {outlook.basis}
+            Playoff odds are simulated over each league&apos;s real remaining schedule — {outlook.basis}
             {/* `basis` is whole sentences ending in a period; appending one read "…how uncertain they are..". */}
-            {anyUnmodelled
+            {p.anyUnmodelled
               ? ' A percentage marked * comes from too few completed weeks to model that team, so read the seed beside it rather than the number.'
-              : null}
+              : null}{' '}
+            Luck is your record against the wins your weekly scores would have earned playing the whole league.
           </p>
         </>
       ) : (
@@ -222,36 +197,52 @@ export function StandingsBoard({ outlook, allHref, totalLeagues }: StandingsBoar
         </p>
       )}
 
-      {/*
-        ⚠ WITHHELD LEAGUES ARE NAMED WITH THEIR REASON, not folded into the
-        footer's count. "We chose not to model this and here is why" is a
-        different fact from "nothing is happening there".
-      */}
-      {outlook.withheld.length > 0 || unidentified > 0 ? (
+      {p.unidentified > 0 ? (
         <p className="af-bd-note">
-          {unidentified > 0 ? (
-            <>
-              <strong>
-                {unidentified} {unidentified === 1 ? 'league' : 'leagues'} could not be ranked
-              </strong>{' '}
-              because we could not tell which team is yours.{' '}
-            </>
-          ) : null}
-          {outlook.withheld.length > 0 ? (
-            <>
-              Withheld: {outlook.withheld.slice(0, 4).map((w) => `${w.leagueName} (${w.reason})`).join('; ')}
-              {outlook.withheld.length > 4 ? `; and ${outlook.withheld.length - 4} more` : ''}.
-            </>
-          ) : null}
+          <strong>
+            {p.unidentified} {p.unidentified === 1 ? 'league' : 'leagues'} could not be ranked
+          </strong>{' '}
+          because we could not tell which team is yours.
         </p>
       ) : null}
 
-      <FooterSummary
-        hidden={Math.max(0, total - shown)}
-        total={total}
-        href={allHref}
-        quiet="sit between these two columns or have no seed to read."
-      />
+      {/*
+        ⚠ WITHHELD LEAGUES ARE NAMED WITH THEIR REASON, not folded into the footer's count — "we chose not
+        to model this and here is why" is a different fact from "nothing is happening there". Grouped by
+        reason and collapsed, because one repeated reason printed per league was a wall of text.
+      */}
+      {withheldCount > 0 ? (
+        <details className="af-sb-withheld">
+          <summary>
+            <span>
+              <strong>
+                {withheldCount} {withheldCount === 1 ? 'league' : 'leagues'} withheld
+              </strong>{' '}
+              from the simulation
+            </span>
+            <span className="af-sb-withheld-cue" aria-hidden>
+              Why?
+            </span>
+          </summary>
+          <ul className="af-sb-withheld-list">
+            {p.withheld.map((g) => (
+              <li key={g.reason}>
+                <p className="af-sb-withheld-reason">{g.reason}</p>
+                <p className="af-sb-withheld-names">{g.leagues.join(' · ')}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
+      <div className="af-bd-foot">
+        <p className="af-bd-foot-text">
+          Open any league for its full table, power ranking and points picture.
+        </p>
+        <Link className="af-bd-foot-cta" href={allHref}>
+          All {total.toLocaleString()} leagues &rarr;
+        </Link>
+      </div>
     </div>
   )
 }

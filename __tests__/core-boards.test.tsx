@@ -221,6 +221,41 @@ describe('StandingsBoard', () => {
     )
     expect(container.textContent ?? '').toMatch(/simulated over each league/i)
   })
+
+  /*
+   * 2026-10-01: the old board showed ten leagues and sent the rest behind one footer link. Every
+   * ranked league is now a row.
+   */
+  it('lists every ranked league, not a top and bottom five', () => {
+    const leagues = Array.from({ length: 11 }, (_, i) =>
+      outlookLeague({ leagueId: `l${i}`, leagueName: `League ${i}`, href: `/core/standings?league=l${i}` }),
+    )
+    const { container } = render(
+      <StandingsBoard outlook={outlook({ leagues })} allHref="/core/standings?all=1" totalLeagues={11} />,
+    )
+    expect(container.querySelectorAll('a.af-sb-row')).toHaveLength(11)
+  })
+
+  it('prints one repeated withheld reason once, naming every league under it', () => {
+    const reason = 'The rest of the schedule is not on file.'
+    const { container } = render(
+      <StandingsBoard
+        outlook={outlook({
+          withheld: [
+            { leagueName: 'Guillotine A', reason },
+            { leagueName: 'Guillotine B', reason },
+            { leagueName: 'Other', reason: 'Not started.' },
+          ],
+        })}
+        allHref="/core/standings?all=1"
+        totalLeagues={9}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text.split(reason)).toHaveLength(2)
+    expect(text).toContain('Guillotine A · Guillotine B')
+    expect(text).toMatch(/3 leagues withheld/)
+  })
 })
 
 /* ── Week ────────────────────────────────────────────────────────────────── */

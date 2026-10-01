@@ -1,0 +1,567 @@
+/*
+ * AF Core — cross-league Standings board (`/core/standings`, no league held).
+ *
+ * Layered on af-core-boards.css: the page frame, head, notes and footer come from there; this file
+ * adds the portfolio hero, the spotlight cards, the filter bar and the seed-track rows.
+ *
+ * ⚠ SCOPED UNDER `.af-core` AND CONSUMES TOKENS ONLY, like every file in this folder, so the three
+ * themes keep working with no per-theme block here.
+ *
+ * ⚠ RESPONSIVE RULES KEY ON THE BOARD (`container: af-board`, set on `.af-bd`), NOT THE VIEWPORT. The
+ * board is the viewport minus the shell's rail, so a tablet in landscape gets a ~600px board and must
+ * take the narrow layout. See the note above the @container blocks in af-core-boards.css.
+ *
+ * ⚠ iOS: tap targets are ≥44px, hover styles are behind (hover: hover) so a tap does not leave a row
+ * stuck highlighted, inputs are 16px so Safari does not zoom on focus, and horizontal scrollers use
+ * scroll-snap with momentum.
+ */
+
+.af-core .af-sb {
+  --sb-good: var(--good);
+  --sb-warn: var(--warn);
+  --sb-bad: var(--bad);
+  --sb-muted: var(--faint);
+  --sb-accent: var(--accent);
+  gap: 20px;
+}
+
+.af-core .af-sb [data-sev='good'] { --sev: var(--sb-good); --sev-soft: var(--good-soft); }
+.af-core .af-sb [data-sev='warn'] { --sev: var(--sb-warn); --sev-soft: var(--warn-soft); }
+.af-core .af-sb [data-sev='bad'] { --sev: var(--sb-bad); --sev-soft: var(--bad-soft); }
+.af-core .af-sb [data-sev='muted'] { --sev: var(--sb-muted); --sev-soft: var(--chip); }
+.af-core .af-sb [data-sev='accent'] { --sev: var(--sb-accent); --sev-soft: var(--accent-soft); }
+
+/* Explicit, not inherited from a global reset: the spotlight cards are `height: 100%` plus padding. */
+.af-core .af-sb *,
+.af-core .af-sb *::before,
+.af-core .af-sb *::after { box-sizing: border-box; }
+
+.af-core .af-sb a,
+.af-core .af-sb button,
+.af-core .af-sb summary {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.af-core .af-sb-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── hero ───────────────────────────────────────────────────────────────── */
+
+.af-core .af-sb-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, var(--accent-soft), transparent 55%),
+    var(--surface);
+}
+
+.af-core .af-sb-headline {
+  margin: 0;
+  font: 800 clamp(17px, 2.4vw, 22px) / 1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-core .af-sb-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.af-core .af-sb-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  min-width: 0;
+}
+
+.af-core .af-sb-tile-v {
+  font: 900 26px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  color: var(--sev, var(--text));
+  white-space: nowrap;
+}
+
+.af-core .af-sb-tile-of {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+.af-core .af-sb-tile-k {
+  font: 600 11px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+
+.af-core .af-sb-tierbar { display: flex; flex-direction: column; gap: 8px; }
+
+.af-core .af-sb-tierbar-track {
+  display: flex;
+  gap: 3px;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.af-core .af-sb-tierbar-seg {
+  flex-basis: 0;
+  min-width: 6px;
+  background: var(--sev);
+  opacity: 0.9;
+}
+.af-core .af-sb-tierbar-seg[data-sev='muted'] { background: var(--line2); }
+
+.af-core .af-sb-tierbar-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: 500 12px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+.af-core .af-sb-tierbar-key li { display: inline-flex; align-items: center; gap: 6px; }
+.af-core .af-sb-tierbar-key strong { color: var(--text); font-variant-numeric: tabular-nums; }
+
+.af-core .af-sb-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sev);
+}
+.af-core .af-sb-tierbar-key [data-sev='muted'] .af-sb-dot { background: var(--line2); }
+
+/* ── spotlight cards ────────────────────────────────────────────────────── */
+
+.af-core .af-sb-spot-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.af-core .af-sb-card {
+  --tone: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  height: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--tone);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.af-core .af-sb-card[data-tone='good'] { --tone: var(--good); }
+.af-core .af-sb-card[data-tone='warn'] { --tone: var(--warn); }
+.af-core .af-sb-card[data-tone='bad'] { --tone: var(--bad); }
+
+.af-core .af-sb-card-k {
+  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tone);
+}
+.af-core .af-sb-card-v {
+  margin-top: 6px;
+  font: 900 24px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+.af-core .af-sb-card-league {
+  margin-top: 4px;
+  font: 700 13px/1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-core .af-sb-card-d {
+  font: 400 12px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+
+.af-core a.af-sb-card:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-line); }
+
+@media (hover: hover) {
+  .af-core a.af-sb-card:hover { transform: translateY(-2px); border-color: var(--line2); }
+}
+
+/* ── controls ───────────────────────────────────────────────────────────── */
+
+.af-core .af-sb-explore { display: flex; flex-direction: column; gap: 10px; }
+
+.af-core .af-sb-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.af-core .af-sb-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.af-core .af-sb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--text2);
+  font: 600 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.af-core .af-sb-chip-n {
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  color: var(--sev, var(--faint));
+}
+.af-core .af-sb-chip[aria-pressed='true'] {
+  border-color: var(--sev, var(--accent));
+  background: var(--sev-soft, var(--accent-soft));
+  color: var(--text);
+}
+.af-core .af-sb-chip:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-line); }
+
+.af-core .af-sb-tools { display: flex; gap: 8px; align-items: center; }
+
+.af-core .af-sb-search input,
+.af-core .af-sb-sort select {
+  min-height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--text);
+  font: 500 13px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-core .af-sb-search input { width: 180px; padding: 0 12px; -webkit-appearance: none; appearance: none; }
+.af-core .af-sb-search input::placeholder { color: var(--faint); }
+.af-core .af-sb-search input:focus,
+.af-core .af-sb-sort select:focus { outline: none; box-shadow: 0 0 0 2px var(--accent-line); }
+
+.af-core .af-sb-sort { display: inline-flex; align-items: center; gap: 6px; }
+.af-core .af-sb-sort-k {
+  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-core .af-sb-sort select { padding: 0 10px; }
+
+/* ── rows ───────────────────────────────────────────────────────────────── */
+
+.af-core .af-sb-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+
+.af-core .af-sb-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 4px;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sev);
+}
+.af-core .af-sb-item:first-child .af-sb-divider { margin-top: 0; }
+.af-core .af-sb-divider span { color: var(--faint); }
+.af-core .af-sb-divider::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+.af-core .af-sb-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 10px 12px 14px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 10px;
+  color: inherit;
+  text-decoration: none;
+}
+/* A tier rail on the left edge — colour carries the standing before any number is read. */
+.af-core .af-sb-row::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--sev);
+  opacity: 0.85;
+}
+.af-core .af-sb-row:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-line); }
+@media (hover: hover) {
+  .af-core .af-sb-row:hover { background: var(--chip); }
+}
+.af-core .af-sb-row:active { background: var(--chip); }
+
+.af-core .af-sb-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+
+.af-core .af-sb-name-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+
+.af-core .af-sb-name {
+  font: 800 14px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.af-core .af-sb-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--sev-soft);
+  color: var(--sev);
+  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.af-core .af-sb-sub {
+  font: 500 11px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+
+.af-core .af-sb-decides {
+  font: 400 12px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.af-core .af-sb-swing {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* The seed track: one pip per team. */
+.af-core .af-sb-track {
+  display: flex;
+  gap: 3px;
+  max-width: 340px;
+  height: 8px;
+  margin: 2px 0;
+}
+.af-core .af-sb-track[data-dense] { gap: 2px; }
+
+.af-core .af-sb-pip {
+  flex: 1 1 0;
+  min-width: 3px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.af-core .af-sb-pip[data-field] { background: var(--line2); }
+.af-core .af-sb-pip[data-bye] { background: var(--chip-line); box-shadow: inset 0 -2px 0 var(--line2); }
+/* The cut: a gap after the last playoff seed, so the line is visible without a legend. */
+.af-core .af-sb-pip[data-cut] { margin-right: 4px; }
+.af-core .af-sb-pip[data-you] {
+  background: var(--sev);
+  transform: scaleY(1.6);
+  box-shadow: 0 0 0 1px var(--surface), 0 0 8px var(--sev);
+}
+
+.af-core .af-sb-side {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 2px;
+}
+
+.af-core .af-sb-ring {
+  grid-row: 1 / span 2;
+  --p: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: conic-gradient(var(--sev) calc(var(--p) * 1%), var(--line) 0);
+}
+.af-core .af-sb-ring-v {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--surface);
+  font: 800 12px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+
+.af-core .af-sb-seed {
+  font: 800 13px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--sev);
+  white-space: nowrap;
+  text-align: right;
+}
+.af-core .af-sb-inout {
+  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sev);
+  text-align: right;
+}
+
+.af-core .af-sb-empty {
+  margin: 0;
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--muted);
+  font: 500 13px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+
+.af-core .af-sb-more {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--text);
+  font: 700 13px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  cursor: pointer;
+}
+.af-core .af-sb-more:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent-line); }
+
+/* ── withheld ───────────────────────────────────────────────────────────── */
+
+.af-core .af-sb-withheld {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  font: 400 12px/1.5 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+.af-core .af-sb-withheld summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-sb-withheld summary::-webkit-details-marker { display: none; }
+.af-core .af-sb-withheld summary strong { color: var(--text); }
+.af-core .af-sb-withheld-cue { color: var(--accent); font-weight: 700; white-space: nowrap; }
+.af-core .af-sb-withheld[open] .af-sb-withheld-cue { visibility: hidden; }
+.af-core .af-sb-withheld-list {
+  margin: 0;
+  padding: 0 14px 14px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.af-core .af-sb-withheld-reason { margin: 0; color: var(--text2); }
+.af-core .af-sb-withheld-names { margin: 2px 0 0; color: var(--faint); }
+
+/* ── motion ─────────────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  .af-core .af-sb-pip[data-you] { animation: af-sb-pop 0.5s ease-out both; }
+  .af-core .af-sb-tierbar-seg { animation: af-sb-grow 0.6s ease-out both; transform-origin: left; }
+}
+@keyframes af-sb-pop { from { transform: scaleY(0.4); } to { transform: scaleY(1.6); } }
+@keyframes af-sb-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* ── narrow board: tablet portrait, phones ──────────────────────────────── */
+
+@container af-board (max-width: 760px) {
+  .af-core .af-sb-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* Spotlights become a swipeable strip — four stacked cards would push the list below the fold. */
+  .af-core .af-sb-spot-row {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  .af-core .af-sb-spot-row::-webkit-scrollbar { display: none; }
+  .af-core .af-sb-spot-row > li { flex: 0 0 78%; max-width: 280px; scroll-snap-align: start; }
+
+  /*
+   * ⚠ NOWRAP HERE IS LOAD-BEARING. A WRAPPING column flex sizes each line to its content, so the chip
+   * strip below took its full 596px max-content width and widened an iPhone's layout viewport to 612px
+   * (measured 2026-10-01). Nowrap makes `stretch` mean the board's width, and the strip scrolls.
+   */
+  .af-core .af-sb-controls { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
+  .af-core .af-sb-chips {
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .af-core .af-sb-chips::-webkit-scrollbar { display: none; }
+  .af-core .af-sb-chip { min-height: 40px; }
+  .af-core .af-sb-tools { width: 100%; }
+  .af-core .af-sb-search { flex: 1; min-width: 0; }
+  .af-core .af-sb-search input { width: 100%; }
+  /* 16px or iOS Safari zooms the page on focus. */
+  .af-core .af-sb-search input,
+  .af-core .af-sb-sort select { font-size: 16px; min-height: 44px; }
+
+  .af-core .af-sb-row { gap: 10px; padding: 12px 6px 12px 12px; }
+  .af-core .af-sb-track { max-width: none; }
+  .af-core .af-sb-side { grid-template-columns: auto; justify-items: center; row-gap: 4px; }
+  .af-core .af-sb-ring { grid-row: auto; width: 46px; height: 46px; }
+  .af-core .af-sb-ring-v { width: 37px; height: 37px; font-size: 11px; }
+  .af-core .af-sb-seed { font-size: 11px; text-align: center; }
+  .af-core .af-sb-inout { display: none; }
+}
+
+@container af-board (max-width: 420px) {
+  .af-core .af-sb-hero { padding: 14px; border-radius: 14px; }
+  .af-core .af-sb-tile { padding: 10px 12px; }
+  .af-core .af-sb-tile-v { font-size: 22px; }
+  .af-core .af-sb-row .af-bd-crest { display: none; }
+  .af-core .af-sb-row { grid-template-columns: minmax(0, 1fr) auto; }
+}
