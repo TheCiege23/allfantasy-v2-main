@@ -128,7 +128,7 @@ async function upsertTeams(client, rows) {
          "shortName"=excluded."shortName",
          "conference"=excluded."conference",
          "division"=excluded."division",
-         "logo"=excluded."logo",
+         "logo"=coalesce(excluded."logo", "SportsTeam"."logo"),
          "fetchedAt"=now(),
          "expiresAt"=excluded."expiresAt",
          "updatedAt"=now()`,
