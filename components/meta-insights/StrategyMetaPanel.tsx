@@ -160,7 +160,7 @@ export default function StrategyMetaPanel(props: {
         <Link href="/mock-draft-simulator" className="text-violet-600 hover:underline dark:text-violet-400">
           Mock draft
         </Link>
-        <Link href="/rankings" className="text-violet-600 hover:underline dark:text-violet-400">
+        <Link href="/core/rankings?scope=league" className="text-violet-600 hover:underline dark:text-violet-400">
           Rankings
         </Link>
       </div>

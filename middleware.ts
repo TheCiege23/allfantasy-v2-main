@@ -788,7 +788,8 @@ function redirectDeprecatedDashboardRoutes(request: NextRequest): NextResponse |
   if (pathname.startsWith("/dashboard/admin") || pathname.startsWith("/dashboard/dispersal")) {
     return null
   }
-  url.pathname = "/core"
+  // The old rankings screen has a direct successor, so it lands there rather than on the home screen.
+  url.pathname = pathname === "/dashboard/rankings" || pathname.startsWith("/dashboard/rankings/") ? "/core/rankings" : "/core"
   return NextResponse.redirect(url)
 }
 

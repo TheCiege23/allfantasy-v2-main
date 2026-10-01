@@ -57,6 +57,7 @@ import { communityEntries, handleOf, levelOf, loadCommunity } from '@/lib/core-a
 import { getSkillView, type SkillView } from '@/lib/rank/skillRating/skillView'
 import { classRangeFor, MANAGER_CLASS_BAND } from '@/lib/league-join/managerClass'
 import { headToHeadWith, type HeadToHead } from '@/lib/core-app/rankingsRivals'
+import { getLeaguePower, type LeaguePowerView } from '@/lib/core-app/rankingsLeaguePower'
 
 /**
  * Rankings — the data layer for `/core/rankings` (handoffs 14a ladder and boards,
@@ -375,6 +376,8 @@ export type LeagueView = {
     week: number | null
     seasonComplete: boolean
   } | null
+  /** Power score and trend from the league's stored power ranking, when one has been run. */
+  power: LeaguePowerView
 }
 
 type Params = Record<string, string | string[] | undefined>
@@ -764,7 +767,10 @@ export async function getRankingsData(
   if (scope === 'league') {
     const selected = leagueId ? visibleLeagues.find((l) => l.id === leagueId) ?? null : null
     let leagueBoard: LeagueView['board'] = null
+    let power: LeaguePowerView = null
     if (userId && selected) {
+      // Membership is already settled: `selected` comes from the viewer's own leagues.
+      power = await getLeaguePower(selected.id, userId).catch(() => null)
       const standings = await getLeagueStandings(selected.id, userId).catch(() => null)
       leagueBoard = standings?.available
         ? {
@@ -808,6 +814,7 @@ export async function getRankingsData(
           }
         : null,
       board: leagueBoard,
+      power,
     }
   }
 

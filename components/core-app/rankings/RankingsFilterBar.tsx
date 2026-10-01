@@ -36,8 +36,9 @@ export function RankingsFilterBar({
   unit?: string
 }) {
   const active = [filters.platform, filters.sport, filters.type, filters.format, filters.season].filter((v) => v != null).length
-  return (
-    <form className="af-rk-filters" action="/core/rankings" method="get" aria-label="Ranking filters">
+  const changed = active + (filters.minSample !== DEFAULT_MIN_SAMPLE ? 1 : 0)
+  const form = (className: string) => (
+    <form className={className} action="/core/rankings" method="get" aria-label="Ranking filters">
       {hidden.map(([k, v]) => (
         <input key={k} type="hidden" name={k} value={v} />
       ))}
@@ -66,13 +67,31 @@ export function RankingsFilterBar({
         <button type="submit" className="af-rk-btn af-rk-btn--primary">
           Apply
         </button>
-        {active > 0 || filters.minSample !== DEFAULT_MIN_SAMPLE ? (
+        {changed > 0 ? (
           <Link className="af-rk-btn" href={resetHref}>
             Reset
           </Link>
         ) : null}
       </div>
     </form>
+  )
+  /*
+   * ⚠ TWO COPIES OF ONE FORM, ONE SHOWN PER WIDTH. A phone gets the filters folded behind a
+   * "Filters" summary so the board is the first thing on screen; a tablet or desktop gets the open
+   * row. A closed <details> cannot be opened by a media query, so CSS picks a copy rather than
+   * restyling one. The hidden copy is `display: none`, which takes it out of the accessibility tree
+   * too, so a screen reader meets one form, not two.
+   */
+  return (
+    <>
+      <details className="af-rk-filterdrawer">
+        <summary className="af-rk-btn">
+          Filters{changed > 0 ? ` · ${changed} on` : ''}
+        </summary>
+        {form('af-rk-filters')}
+      </details>
+      {form('af-rk-filters af-rk-filters--wide')}
+    </>
   )
 }
 

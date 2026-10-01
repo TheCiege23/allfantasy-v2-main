@@ -637,7 +637,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
               <Link className="af3a-tool" href="/trade-evaluator"><i>⇄</i>Trade analyzer</Link>
               <Link className="af3a-tool" href="/core/waivers"><i>◷</i>Waiver assistant</Link>
               <Link className="af3a-tool" href="/mock-draft"><i>▤</i>Mock draft</Link>
-              <Link className="af3a-tool" href="/rankings"><i>★</i>Power rankings</Link>
+              <Link className="af3a-tool" href="/core/rankings?scope=league"><i>★</i>Power rankings</Link>
               {/*
                 Only renders for managers who are in at least one league that starts defenders
                 or kickers — the user-scoped question, because /core is not one league. See

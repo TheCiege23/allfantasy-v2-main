@@ -88,6 +88,22 @@ function chimmyHref(prompt: string, sport?: string | null): string {
   return `/chimmy/chat?${p.toString()}`
 }
 
+/**
+ * Phone only (CSS): your place, pinned to the bottom of the screen while you scroll
+ * someone else's part of the board. Wider screens have the "you" strip in view already.
+ */
+function YouBar({ href, label, value, action }: { href: string; label: string; value: string; action: string }) {
+  return (
+    <div className="af-rk-youbar">
+      <span className="af-rk-youbar-label">{label}</span>
+      <b className="af-rk-youbar-value">{value}</b>
+      <Link className="af-rk-btn" href={href} scroll={false}>
+        {action}
+      </Link>
+    </div>
+  )
+}
+
 /* ────────────────────────────── scope tabs ──────────────────────────────── */
 
 const SCOPES = [
@@ -342,9 +358,14 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
 
       {g.rivals.length > 0 ? <RivalsCard g={g} /> : null}
 
+      {/*
+        Tablet and desktop: when a row is being explained, the board and the explanation sit side by
+        side, so "why" never pushes the board off screen. Phone: stacked, explanation first.
+      */}
+      <div className={g.explain ? 'af-rk-explainsplit' : 'af-rk-explainsplit-off'}>
       <ExplainPanel g={g} data={data} />
 
-      <section className="af-rk-card">
+      <section className="af-rk-card af-rk-explainsplit-main">
         {g.classFilter ? (
           <div className="af-rk-classbar" role="group" aria-label="Who is on this board">
             {g.classFilter.active ? (
@@ -420,7 +441,17 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
           {fmtDate(g.freshness.newestImport)} · least recently updated manager {fmtDate(g.freshness.stalestManager)} ·
           calculated {fmtStamp(data.computedAt)}
         </p>
+        {/* Inside the board's card: sticky only while the board is on screen, never over the "you" strip above it. */}
+        {g.you ? (
+          <YouBar
+            href={g.rows.find((r) => r.isYou)?.explainHref ?? '#rk-explain'}
+            label={`You · #${g.you.rank} of ${g.you.of}`}
+            value={g.you.display}
+            action="Why?"
+          />
+        ) : null}
       </section>
+      </div>
 
       <MethodCard />
     </>
@@ -890,6 +921,7 @@ function LeagueBody({ league }: { league: LeagueView }) {
           />
         </div>
       )}
+      <LeaguePowerCard league={league} />
       <p className="af-rk-fresh">
         <b>Freshness</b> league last synced {fmtStamp(sel.lastSyncedAt)}
         {board?.available && board.week != null ? ` · through week ${board.week}${board.seasonComplete ? ' (season complete)' : ''}` : ''}
@@ -994,7 +1026,7 @@ function SkillBody({ skill, signedIn }: { skill: SkillView; signedIn: boolean })
       )}
 
       {skill.log.length > 0 ? (
-        <section className="af-rk-card">
+        <section className="af-rk-card" id="rk-skill-games">
           <p className="af-rk-eyebrow">
             Your recent games
             <span className="af-rk-spacer" />
@@ -1070,6 +1102,14 @@ function SkillBody({ skill, signedIn }: { skill: SkillView; signedIn: boolean })
           <b>Freshness</b> {skill.gamesInSport.toLocaleString()} {skill.sport} games · {skill.rated.toLocaleString()}{' '}
           managers rated, on AllFantasy or not · calculated {fmtStamp(skill.computedAt)}
         </p>
+        {you ? (
+          <YouBar
+            href="#rk-skill-games"
+            label={`Your ${skill.sport} skill`}
+            value={`${you.rating} ±${you.rd}`}
+            action={you.percentile != null ? `Top ${Math.max(1, 100 - you.percentile)}%` : 'Games'}
+          />
+        ) : null}
       </section>
 
       <SkillMethodCard />
@@ -1102,6 +1142,77 @@ function SkillMethodCard() {
         they have shown. Level, on the other tabs, is how much you have played; skill is how well.
       </p>
     </section>
+  )
+}
+
+/**
+ * Power score and trend for one league — what the retired `/rankings` page showed.
+ * Read from the league's stored power ranking only; nothing is computed on view.
+ */
+function LeaguePowerCard({ league }: { league: LeagueView }) {
+  const power = league.power
+  return (
+    <div className="af-rk-power">
+      <p className="af-rk-eyebrow">
+        Power
+        <span className="af-rk-spacer" />
+        <span>{power ? `week ${power.week}, ${power.season} · run ${fmtStamp(power.computedAt)}` : 'not run yet'}</span>
+      </p>
+      {power ? (
+        <>
+          <RankTable
+            caption={`${league.selected?.name ?? 'League'} power ranking`}
+            columns={[
+              { key: 'rank', label: '#', srLabel: 'Power rank', align: 'right' },
+              { key: 'team', label: 'Team' },
+              { key: 'score', label: 'Power', srLabel: 'Power score', align: 'right' },
+              { key: 'move', label: 'Move', srLabel: 'Places moved since the last power ranking', align: 'center' },
+              { key: 'tier', label: 'Tier', hideOnPhone: true },
+              { key: 'record', label: 'Record', align: 'right', hideOnPhone: true },
+            ]}
+            rows={power.rows.map((r) => {
+              const m = moveText(r.move)
+              return {
+                id: `${r.rank}-${r.name}`,
+                highlight: r.isYou,
+                cells: [
+                  { text: String(r.rank), tone: r.isYou ? 'accent' : undefined },
+                  { text: `${r.name}${r.isYou ? ' (you)' : ''}`, sub: r.momentum ?? undefined },
+                  { text: r.powerScore.toFixed(1), tone: r.isYou ? 'accent' : undefined },
+                  { text: m.text, tone: m.tone, title: m.label },
+                  { text: r.tier ?? '—' },
+                  { text: r.record ?? '—' },
+                ],
+              }
+            })}
+            emptyText="No team in this power ranking."
+          />
+          {power.yours ? (
+            <div className="af-rk-power-notes">
+              {power.yours.strengths ? (
+                <p>
+                  <b className="af-rk-tone-good">Strengths</b> {power.yours.strengths}
+                </p>
+              ) : null}
+              {power.yours.risks ? (
+                <p>
+                  <b className="af-rk-tone-bad">Risks</b> {power.yours.risks}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <p className="af-rk-note">
+          Nobody in this league has run a power ranking yet. Run one in Power rankings and it shows here for everyone.
+        </p>
+      )}
+      <div className="af-rk-headact">
+        <Link className="af-rk-btn" href="/power-rankings">
+          {power ? 'Luck, odds and win window →' : 'Run power rankings →'}
+        </Link>
+      </div>
+    </div>
   )
 }
 
