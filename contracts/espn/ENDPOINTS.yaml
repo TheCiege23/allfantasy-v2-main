@@ -1,0 +1,118 @@
+--- # ============================================================================
+# ESPN site API — Contract
+# NORMATIVE for the two endpoint x sport combinations below, each backed by a
+# committed fixture captured 2026-10-01 through scripts/probe.sh. Nothing else
+# ESPN serves is described here yet; the many existing ESPN call sites
+# (injuries, standings, scores, news — see README "Existing call sites") predate
+# this contract and are NOT covered by it.
+# ============================================================================
+
+meta:
+  vendor: ESPN
+  base_url: https://site.web.api.espn.com/apis/site/v2/sports
+  base_url_source: lib/providers/espnUrls.ts ESPN_SITE_API_BASE   # the only place to build it from
+  blocked_host: site.api.espn.com   # 403 from Akamai on every path since 2026-08-22
+  contract_version: 0.1.0
+  captured_at: 2026-10-01
+  docs_url: none   # ESPN publishes no documentation for this API
+  data_classification: sports_data
+  sla: none
+  role: >
+    Phase 1 of the NCAAB headshot source. College basketball has no other
+    roster source with images: Rolling Insights sends none, TheSportsDB has
+    no NCAAB rosters (theSportsDbIngest hasPlayers:false).
+
+# ============================================================================
+auth:
+  mechanism: none
+  note: >
+    No key, token or cookie. Probed with only `Accept: application/json`.
+    🛑 Never add a browser user-agent, referer or origin to get past a 403 —
+    see lib/providers/espnUrls.ts. A 403 is recorded in GAPS.md and work stops.
+
+transport:
+  rate_limit: unknown   # undocumented; see GAPS E-04
+  caching: none observed   # responses carry a `timestamp`; no ETag/304 behaviour measured
+  timeout_guidance: >
+    Existing ESPN fetchers use 8-20s. No timing was measured here; the four
+    probe calls each returned well under a second.
+
+# ============================================================================
+support_matrix:
+  NCAAB:
+    sport_path: basketball/mens-college-basketball
+    teams: { status: probed, fixture: fixtures/teams.NCAAB.json }
+    roster: { status: probed, fixtures: [fixtures/roster.NCAAB.team150.json, fixtures/roster.NCAAB.team2057.json, fixtures/roster.NCAAB.team2441.json] }
+  # Every other sport: not in this contract. Adding one = probe + fixture + this
+  # matrix, in one commit.
+
+# ============================================================================
+endpoints:
+
+  teams:
+    method: GET
+    path: /{sport_path}/teams
+    query_params:
+      limit: { required: in_practice, value_used: 1000, note: "default page is short; 1000 returned all 362" }
+    measured_2026_10_01:
+      http_status: 200
+      team_count: 362        # Division I; every one isActive=true, every one has logos (14 each)
+      league: { abbreviation: NCAAM, season: { year: 2027, displayName: "2026-27" } }
+      full_body_bytes: 3239022   # committed fixture is a key-union trim (53/53 key paths kept)
+    envelope: >
+      { sports: [ { leagues: [ { abbreviation, season, teams: [ { team: {...} } ] } ] } ] }
+    fields:
+      team.id: { type: string, note: "ESPN team id. SAME id space as CFBD team ids (Akron 2006, Air Force 2005) — CFBD sources its ids from ESPN" }
+      team.abbreviation: { type: string, example: ACU }
+      team.location: { type: string, example: Abilene Christian, note: "the school name; the field to match school names against" }
+      team.name: { type: string, example: Wildcats, note: "the MASCOT, not the school" }
+      team.displayName: { type: string, example: Abilene Christian Wildcats }
+      team.shortDisplayName: { type: string, example: Abilene Chrstn, note: "abbreviated by ESPN; do not match on it" }
+      team.isActive: { type: boolean }
+      team.logos: { type: array, note: "14 variants per team; logos[].href, rel[], width, height" }
+      other_keys: [uid, slug, nickname, color, alternateColor, isAllStar, links]
+
+  roster:
+    method: GET
+    path: /{sport_path}/teams/{espn_team_id}/roster
+    query_params: {}   # none sent; returns the CURRENT season
+    measured_2026_10_01:
+      http_status: 200
+      season: { year: 2027, displayName: "2026-27", name: Preseason }
+      teams_probed:
+        "150 Duke": { athletes: 15, with_headshot: 8 }
+        "2057 Belmont": { athletes: 14, with_headshot: 14 }
+        "2441 New Haven": { athletes: 20, with_headshot: 18 }   # newest D1 program
+      headshot_cdn_check: "all 40 listed headshot.href URLs returned 200 image/png; all 9 athletes WITHOUT the field 404 at the standard CDN path"
+    envelope: >
+      { timestamp, status: "success", season: {...}, team: { id, abbreviation, location,
+        name, displayName, clubhouse, color, logo }, coach: [ ... ], athletes: [ {...} ] }
+    note: >
+      `athletes` is a FLAT array for NCAAB (not grouped by position as some
+      ESPN sports are). Do not assume the grouped shape.
+    fields:
+      athletes[].id: { type: string, note: "ESPN athlete id; equals alternateIds.sdr in every probed row" }
+      athletes[].fullName: { type: string }
+      athletes[].firstName: { type: string }
+      athletes[].lastName: { type: string }
+      athletes[].jersey: { type: string, note: "a STRING ('5'); our SportsPlayer.number is an int — compare as strings" }
+      athletes[].position.abbreviation: { type: string, values_seen: [G, F, C] }
+      athletes[].headshot.href: { type: string, optional: true, note: "🛑 OMITTED, not null, when ESPN has no photo. 40/49 present." }
+      athletes[].experience: { type: object, example: { years: 1, displayValue: Freshman, abbreviation: FR } }
+      athletes[].status: { type: object, values_seen: ["{id:1,name:Active,type:active}"] }
+      athletes[].height: { type: integer, unit: inches, optional: true }
+      athletes[].weight: { type: integer, unit: lbs, optional: true, note: "absent on 17/20 New Haven rows, 0 elsewhere" }
+      athletes[].birthPlace: { type: object, optional: true }
+      athletes[].injuries: { type: array }
+      athletes[].teams: { type: array, note: "$ref links into sports.core.api.espn.pvt — internal host, not fetchable" }
+      other_keys: [uid, guid, alternateIds, displayName, shortName, displayWeight, displayHeight, links, birthCountry, slug, flag]
+
+# ============================================================================
+headshot_cdn:
+  url: https://a.espncdn.com/i/headshots/mens-college-basketball/players/full/{athlete_id}.png
+  note: >
+    Equal to roster headshot.href whenever that field is present. A 404 returns
+    a 1-byte text/html body, so a fetcher must check content-type AND size,
+    exactly as lib/devy/devyHeadshotRefresh.ts already does for the college
+    football path. The CDN host is NOT monitored by the DB-first guard
+    (images, not data) — same reasoning as media.api-sports.io.
