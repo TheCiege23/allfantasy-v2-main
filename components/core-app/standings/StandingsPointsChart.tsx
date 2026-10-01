@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { formatRecord, type BoardTeam, type StandingsBoard } from '@/lib/core-app/standingsModel'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 /**
  * The points picture — item 5 of the standings brief.
@@ -32,6 +34,8 @@ function niceBounds(values: number[]): [number, number] {
 }
 
 function PointsScatter({ teams }: { teams: BoardTeam[] }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
   const [hover, setHover] = useState<string | null>(null)
   const rows = teams.filter((t) => t.pointsAgainst != null && t.weeksPlayed > 0)
   if (rows.length < 2) return null
@@ -47,32 +51,32 @@ function PointsScatter({ teams }: { teams: BoardTeam[] }) {
   return (
     <figure className="af-stb-chart">
       <figcaption className="af-stb-chart-title">
-        <b>Points for vs points against</b>
-        <small>Right = scores more. Up = has faced more. Lines are the league averages.</small>
+        <b>{copy('Points for vs points against')}</b>
+        <small>{copy('Right = scores more. Up = has faced more. Lines are the league averages.')}</small>
       </figcaption>
       <div className="af-stb-chart-plot">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           role="img"
-          aria-label={`Points for against points against for ${rows.length} teams. ${rows
-            .map((t) => `${t.name}: ${pts(t.pointsFor)} for, ${pts(t.pointsAgainst!)} against`)
-            .join('; ')}.`}
+          aria-label={language === 'es'
+            ? `Puntos a favor y en contra de ${rows.length} equipos. ${rows.map((t) => `${t.name}: ${pts(t.pointsFor)} a favor, ${pts(t.pointsAgainst!)} en contra`).join('; ')}.`
+            : `Points for against points against for ${rows.length} teams. ${rows.map((t) => `${t.name}: ${pts(t.pointsFor)} for, ${pts(t.pointsAgainst!)} against`).join('; ')}.`}
         >
           <line className="af-stb-grid" x1={PAD.l} x2={W - PAD.r} y1={H - PAD.b} y2={H - PAD.b} />
           <line className="af-stb-grid" x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={H - PAD.b} />
           <line className="af-stb-avg" x1={sx(avgX)} x2={sx(avgX)} y1={PAD.t} y2={H - PAD.b} />
           <line className="af-stb-avg" x1={PAD.l} x2={W - PAD.r} y1={sy(avgY)} y2={sy(avgY)} />
           <text className="af-stb-quad" x={W - PAD.r - 4} y={PAD.t + 10} textAnchor="end">
-            Scoring, but facing a lot
+            {copy('Scoring, but facing a lot')}
           </text>
           <text className="af-stb-quad" x={W - PAD.r - 4} y={H - PAD.b - 6} textAnchor="end">
-            Scoring, easy schedule
+            {copy('Scoring, easy schedule')}
           </text>
           <text className="af-stb-quad" x={PAD.l + 4} y={PAD.t + 10}>
-            Low scoring, tough schedule
+            {copy('Low scoring, tough schedule')}
           </text>
           <text className="af-stb-quad" x={PAD.l + 4} y={H - PAD.b - 6}>
-            Low scoring, soft schedule
+            {copy('Low scoring, soft schedule')}
           </text>
           {[x0, (x0 + x1) / 2, x1].map((v) => (
             <text key={`x${v}`} className="af-stb-axis" x={sx(v)} y={H - PAD.b + 16} textAnchor="middle">
@@ -85,7 +89,7 @@ function PointsScatter({ teams }: { teams: BoardTeam[] }) {
             </text>
           ))}
           <text className="af-stb-axis" x={(PAD.l + W - PAD.r) / 2} y={H - 4} textAnchor="middle">
-            Points for
+            {copy('Points for')}
           </text>
           {ordered.map((t) => (
             <g
@@ -94,7 +98,9 @@ function PointsScatter({ teams }: { teams: BoardTeam[] }) {
               data-you={t.isYou ? 'true' : undefined}
               data-hover={t.rosterId === hover ? 'true' : undefined}
               tabIndex={0}
-              aria-label={`${t.name}: ${pts(t.pointsFor)} for, ${pts(t.pointsAgainst!)} against`}
+              aria-label={language === 'es'
+                ? `${t.name}: ${pts(t.pointsFor)} a favor, ${pts(t.pointsAgainst!)} en contra`
+                : `${t.name}: ${pts(t.pointsFor)} for, ${pts(t.pointsAgainst!)} against`}
               onPointerEnter={() => setHover(t.rosterId)}
               onPointerLeave={() => setHover(null)}
               onFocus={() => setHover(t.rosterId)}
@@ -104,7 +110,7 @@ function PointsScatter({ teams }: { teams: BoardTeam[] }) {
               <circle className="af-stb-point-dot" cx={sx(t.pointsFor)} cy={sy(t.pointsAgainst!)} r={5} />
               {t.isYou ? (
                 <text className="af-stb-point-label" x={sx(t.pointsFor) + 9} y={sy(t.pointsAgainst!) - 8}>
-                  You
+                  {copy('You')}
                 </text>
               ) : null}
             </g>
@@ -118,17 +124,32 @@ function PointsScatter({ teams }: { teams: BoardTeam[] }) {
           >
             <strong>{hovered.name}</strong>
             <span>
-              <b className="af-num">{pts(hovered.pointsFor)}</b> for · <b className="af-num">{pts(hovered.pointsAgainst!)}</b> against
+              <b className="af-num">{pts(hovered.pointsFor)}</b> {copy('for')} · <b className="af-num">{pts(hovered.pointsAgainst!)}</b> {copy('against')}
             </span>
             <span>{formatRecord(hovered.record)}</span>
           </div>
         ) : null}
       </div>
+      <details className="af-stb-chart-data">
+        <summary>{copy('View chart data')}</summary>
+        <div className="af-stb-chart-data-scroll" role="region" aria-label={copy('Points for vs points against')} tabIndex={0}>
+          <table>
+            <thead><tr><th scope="col">{copy('Team')}</th><th scope="col">{copy('Points for')}</th><th scope="col">{copy('Points against')}</th><th scope="col">{copy('Record')}</th></tr></thead>
+            <tbody>{rows.map((t) => (
+              <tr key={t.rosterId} data-you={t.isYou ? 'true' : undefined}>
+                <th scope="row">{t.name}</th><td className="af-num">{pts(t.pointsFor)}</td><td className="af-num">{pts(t.pointsAgainst!)}</td><td className="af-num">{formatRecord(t.record)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </details>
     </figure>
   )
 }
 
 function WinsVsExpected({ teams }: { teams: BoardTeam[] }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
   const rows = teams
     .filter((t) => t.weeksPlayed > 0)
     .map((t) => ({ t, actual: t.headToHeadWins }))
@@ -145,10 +166,9 @@ function WinsVsExpected({ teams }: { teams: BoardTeam[] }) {
   return (
     <figure className="af-stb-chart">
       <figcaption className="af-stb-chart-title">
-        <b>Wins vs expected wins</b>
+        <b>{copy('Wins vs expected wins')}</b>
         <small>
-          ● actual head-to-head wins · ○ wins its scoring earned against the whole league (all-play). A long line to the
-          right is a kind schedule; to the left, a cruel one.
+          {copy('● actual head-to-head wins · ○ wins its scoring earned against the whole league (all-play). A long line to the right is a kind schedule; to the left, a cruel one.')}
         </small>
       </figcaption>
       <div className="af-stb-chart-plot">
@@ -158,7 +178,9 @@ function WinsVsExpected({ teams }: { teams: BoardTeam[] }) {
           aria-label={rows
             .map(
               ({ t, actual }) =>
-                `${t.name}: ${actual} wins, ${t.expectedWins.toFixed(1)} expected, all-play ${formatRecord(t.allPlay)}`,
+                language === 'es'
+                  ? `${t.name}: ${actual} victorias, ${t.expectedWins.toFixed(1)} esperadas, contra todos ${formatRecord(t.allPlay)}`
+                  : `${t.name}: ${actual} wins, ${t.expectedWins.toFixed(1)} expected, all-play ${formatRecord(t.allPlay)}`,
             )
             .join('; ')}
         >
@@ -176,7 +198,9 @@ function WinsVsExpected({ teams }: { teams: BoardTeam[] }) {
             const e = sx(t.expectedWins)
             return (
               <g key={t.rosterId} className="af-stb-dumbbell" data-you={t.isYou ? 'true' : undefined}>
-                <title>{`${t.name}: ${actual} wins vs ${t.expectedWins.toFixed(2)} expected (all-play ${formatRecord(t.allPlay)})`}</title>
+                <title>{language === 'es'
+                  ? `${t.name}: ${actual} victorias frente a ${t.expectedWins.toFixed(2)} esperadas (contra todos ${formatRecord(t.allPlay)})`
+                  : `${t.name}: ${actual} wins vs ${t.expectedWins.toFixed(2)} expected (all-play ${formatRecord(t.allPlay)})`}</title>
                 <text className="af-stb-rowlabel" x={LABEL - 10} y={cy + 4} textAnchor="end">
                   {t.name.length > 20 ? `${t.name.slice(0, 19)}…` : t.name}
                 </text>
@@ -192,19 +216,34 @@ function WinsVsExpected({ teams }: { teams: BoardTeam[] }) {
           })}
         </svg>
       </div>
+      <details className="af-stb-chart-data">
+        <summary>{copy('View chart data')}</summary>
+        <div className="af-stb-chart-data-scroll" role="region" aria-label={copy('Wins vs expected wins')} tabIndex={0}>
+          <table>
+            <thead><tr><th scope="col">{copy('Team')}</th><th scope="col">{copy('Actual wins')}</th><th scope="col">{copy('Expected wins')}</th><th scope="col">{copy('Luck')}</th></tr></thead>
+            <tbody>{rows.map(({ t, actual }) => (
+              <tr key={t.rosterId} data-you={t.isYou ? 'true' : undefined}>
+                <th scope="row">{t.name}</th><td className="af-num">{actual.toFixed(1)}</td><td className="af-num">{t.expectedWins.toFixed(1)}</td><td className="af-num">{t.luck > 0 ? '+' : t.luck < 0 ? '−' : ''}{Math.abs(t.luck).toFixed(1)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </details>
     </figure>
   )
 }
 
 function PointsBars({ teams }: { teams: BoardTeam[] }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
   const rows = [...teams].filter((t) => t.weeksPlayed > 0).sort((a, b) => b.pointsFor - a.pointsFor)
   if (rows.length === 0) return null
   const max = Math.max(1, ...rows.map((t) => t.pointsFor))
   return (
     <figure className="af-stb-chart">
       <figcaption className="af-stb-chart-title">
-        <b>Points for</b>
-        <small>This league has no head-to-head games, so points are the whole story.</small>
+        <b>{copy('Points for')}</b>
+        <small>{copy('This league has no head-to-head games, so points are the whole story.')}</small>
       </figcaption>
       <ul className="af-stb-bars">
         {rows.map((t) => (

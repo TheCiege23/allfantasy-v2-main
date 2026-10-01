@@ -398,3 +398,47 @@
   color: var(--faint);
   background: transparent;
 }
+
+/* The same league views, with legible labels and a stronger selected state. */
+.af-core .af-lt-tab {
+  font-size: 13px;
+  line-height: 1.2;
+  border-radius: 10px;
+}
+.af-core .af-lt-tab[data-active='true'] {
+  box-shadow: 0 3px 12px var(--accent-soft);
+}
+.af-core .af-lt-compact-row .af-lt-tab {
+  min-width: 0;
+  padding-inline: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.af-core .af-lt-more > summary {
+  justify-content: flex-start;
+  padding-inline: 12px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+}
+.af-core .af-lt-more[open] > summary {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.af-core .af-lt-more > summary[data-active='true'] {
+  color: var(--accent-ink, #0c121b);
+}
+@media (min-width: 721px) {
+  .af-core .af-lt-compact {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    width: 100%;
+    gap: 8px;
+  }
+  .af-core .af-lt-compact-row { flex: 0 1 385px; }
+  .af-core .af-lt-more > summary { min-width: 86px; }
+}
+@media (max-width: 360px) {
+  .af-core .af-lt-compact-row .af-lt-tab { font-size: 11px; letter-spacing: -0.02em; }
+}

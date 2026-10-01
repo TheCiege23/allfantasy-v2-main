@@ -23,11 +23,12 @@ describe('league-first compact league tabs', () => {
     expect(screen.getByRole('link', { name: 'Match' }).getAttribute('aria-current')).toBe('page')
   })
 
-  it('opens More when the current view lives in it, so you can see where you are', () => {
+  it('names the active secondary view while keeping the phone menu compact', () => {
     const { container } = render(
       <LeagueTabs leagueId="L1" leagueName="Sunday Sweat" activeKey="standings" hasScoredWeek tradeSupported draftSupported compact />,
     )
-    expect(container.querySelector('details.af-lt-more')!.hasAttribute('open')).toBe(true)
+    expect(container.querySelector('details.af-lt-more')!.hasAttribute('open')).toBe(false)
+    expect(container.querySelector('details.af-lt-more summary')).toHaveTextContent('More · Standings')
   })
 
   it('drops a primary tab the league cannot show rather than linking to nothing', () => {

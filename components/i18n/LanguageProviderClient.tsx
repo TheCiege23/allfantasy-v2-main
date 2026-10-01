@@ -126,7 +126,8 @@ export function LanguageProviderClient({
   const value = useMemo<LanguageContextValue>(() => {
     const t = (key: string) => {
       const dict = messages || translations[language] || translations.en;
-      return dict[key] ?? translations.en[key] ?? key;
+      // Remote dictionaries may be partial. Keep bundled Spanish before English.
+      return dict[key] ?? translations[language]?.[key] ?? translations.en[key] ?? key;
     };
     return {
       language,

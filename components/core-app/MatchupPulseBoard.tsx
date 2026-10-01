@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
@@ -11,6 +13,8 @@ import {
 } from '@/components/core-app/boards/BoardKit'
 import '@/components/core-app/af-matchup-pulse.css'
 import '@/components/core-app/af-core-boards.css'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 /**
  * `/core/matchup` with no league held — "where you stand" across every league.
@@ -99,10 +103,10 @@ function Face({ row }: { row: PulseRow }) {
  * opposing roster with no real name is "Team N" — the platform's own label,
  * the same on every surface (`rosterLabel`), never a manager we made up.
  */
-function metaOf(row: PulseRow): string {
-  const parts: string[] = [`vs ${row.opponentLabel}`]
+function metaOf(row: PulseRow, language: string): string {
+  const parts: string[] = [`${language === 'es' ? 'contra' : 'vs'} ${row.opponentLabel}`]
   if (row.startersLeft != null) {
-    parts.push(`${row.startersLeft} left to play`)
+    parts.push(language === 'es' ? `${row.startersLeft} por jugar` : `${row.startersLeft} left to play`)
   }
   /*
    * No coverage clause: the loader refuses to RANK a projected row unless both
@@ -113,6 +117,8 @@ function metaOf(row: PulseRow): string {
 }
 
 function Row({ row, tone, tagFinal }: { row: PulseRow; tone: 'good' | 'bad'; tagFinal: boolean }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const abs = Math.abs(row.margin).toFixed(1)
   return (
     <li>
@@ -121,7 +127,7 @@ function Row({ row, tone, tagFinal }: { row: PulseRow; tone: 'good' | 'bad'; tag
         <Crest row={row} />
         <span className="af-mp-text">
           <span className="af-mp-league">{row.leagueName}</span>
-          <span className="af-mp-meta">{metaOf(row)}</span>
+          <span className="af-mp-meta">{metaOf(row, language)}</span>
         </span>
         {/*
           The tag is on the ROW, not only in the section head. A mixed board is
@@ -129,13 +135,13 @@ function Row({ row, tone, tagFinal }: { row: PulseRow; tone: 'good' | 'bad'; tag
           not until Sunday — and a header note cannot tell you which of the ten
           rows in front of you is a projection.
         */}
-        {row.basis === 'projected' ? <span className="af-mp-tag">PROJ</span> : null}
+        {row.basis === 'projected' ? <span className="af-mp-tag">{copy('PROJ')}</span> : null}
         {/*
           FINAL on a MIXED board only: a week that is over sits beside leagues still being played,
           and "leading" would claim a game that can still turn. When every row is final the whole
           board says won/lost instead, and a tag on each row would repeat it.
         */}
-        {tagFinal && row.final ? <span className="af-mp-tag" data-kind="final">FINAL</span> : null}
+        {tagFinal && row.final ? <span className="af-mp-tag" data-kind="final">{copy('FINAL')}</span> : null}
         <span className="af-mp-diff af-num" data-tone={tone}>
           {tone === 'good' ? '+' : '−'}
           {abs}
@@ -146,18 +152,18 @@ function Row({ row, tone, tagFinal }: { row: PulseRow; tone: 'good' | 'bad'; tag
 }
 
 /** One sentence naming what the whole board is measured in. */
-function basisNote(pulse: MatchupPulse): string | null {
+function basisNote(pulse: MatchupPulse, language: string): string | null {
   if (pulse.basis === 'projected') {
-    return 'Nothing has been scored yet, so every margin here is a projection priced under each league’s own scoring rules — not a live score.'
+    return coreUiCopy('Nothing has been scored yet, so every margin here is a projection priced under each league’s own scoring rules — not a live score.', language)
   }
   if (pulse.basis === 'mixed') {
-    return 'Rows tagged PROJ have not kicked off — their margin is projected under that league’s own scoring rules. The rest are live points.'
+    return coreUiCopy('Rows tagged PROJ have not kicked off — their margin is projected under that league’s own scoring rules. The rest are live points.', language)
   }
   return null
 }
 
 /** "we could not rank six of them, and here is why" — never a silent short list. */
-function gapNote(pulse: MatchupPulse): string | null {
+function gapNote(pulse: MatchupPulse, language: string): string | null {
   const { noSchedule, noOpponent, unpriceable, uncomparable, unidentifiedRoster } = pulse.notRanked
   const notStarted = pulse.notRanked.notStarted ?? 0
   const parts: string[] = []
@@ -182,6 +188,16 @@ function gapNote(pulse: MatchupPulse): string | null {
     )
   }
   if (parts.length === 0) return null
+  if (language === 'es') {
+    const reasons: string[] = []
+    if (notStarted > 0) reasons.push(`${notStarted} aún sin comenzar`)
+    if (noSchedule > 0) reasons.push(`${noSchedule} sin calendario`)
+    if (noOpponent > 0) reasons.push(`${noOpponent} sin partido esta semana`)
+    if (unpriceable > 0) reasons.push(`${unpriceable} sin puntuación o proyección`)
+    if (uncomparable > 0) reasons.push(`${uncomparable} con alineaciones no comparables`)
+    if (unidentifiedRoster > 0) reasons.push(`${unidentifiedRoster} con identificadores que no podemos vincular al calendario; es una limitación nuestra`)
+    return `Sin clasificar: ${reasons.join(', ')}.`
+  }
   return `Not ranked: ${parts.join(', ')}.`
 }
 
@@ -213,7 +229,9 @@ export function MatchupPulseBoard({
   allHref,
   totalLeagues,
 }: MatchupPulseBoardProps) {
-  const note = basisNote(pulse)
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const note = basisNote(pulse, language)
   /*
    * 🛑 A FINISHED WEEK IS A RESULT, NOT A STANDING. On the Tuesday after week 3 (App Review account,
    * 2026-09-29) this board said "0 leading · 3 trailing" and "You are not ahead in any league right
@@ -222,7 +240,7 @@ export function MatchupPulseBoard({
    */
   const done = pulse.allFinal === true
   const [aheadWord, behindWord] = done ? ['won', 'lost'] : ['leading', 'trailing']
-  const gap = gapNote(pulse)
+  const gap = gapNote(pulse, language)
   const inPlay = anyInPlay(pulse)
 
   const routable = (issues ?? [])
@@ -236,19 +254,19 @@ export function MatchupPulseBoard({
   return (
     <div className="af-bd">
       <BoardHead
-        eyebrow="Core · Matchup"
-        title="Matchup"
-        blurb="Every league with a head-to-head this week, ranked by margin. Open one for the full box score."
+        eyebrow={`Core · ${copy('Matchup')}`}
+        title={copy('Matchup')}
+        blurb={copy('Every league with a head-to-head this week, ranked by margin. Open one for the full box score.')}
       />
 
       <section className="af-mp" aria-labelledby="af-mp-head">
         <header className="af-mp-head">
           <h2 className="af-label" id="af-mp-head">
-            Where you stand
+            {copy('Where you stand')}
           </h2>
           <span className="af-mp-rule" aria-hidden />
           <span className="af-mp-count">
-            {pulse.leadingTotal ?? pulse.leading.length} {aheadWord} · {pulse.trailingTotal ?? pulse.trailing.length} {behindWord}
+            {pulse.leadingTotal ?? pulse.leading.length} {copy(aheadWord)} · {pulse.trailingTotal ?? pulse.trailing.length} {copy(behindWord)}
           </span>
           {/*
             Only when there is something to keep current. On a board with nothing
@@ -274,7 +292,7 @@ export function MatchupPulseBoard({
           >
             <div className="af-mp-col">
               <h3 className="af-label af-mp-col-head" data-tone="good">
-                {done ? 'Won' : 'Leading'} · top 5
+                {copy(done ? 'Won' : 'Leading')} · {copy('top 5')}
               </h3>
               {pulse.leading.length > 0 ? (
                 <ul className="af-mp-rows">
@@ -283,13 +301,13 @@ export function MatchupPulseBoard({
                   ))}
                 </ul>
               ) : (
-                <p className="af-mp-quiet">{done ? 'You did not win a league this week.' : 'You are not ahead in any league right now.'}</p>
+                <p className="af-mp-quiet">{copy(done ? 'You did not win a league this week.' : 'You are not ahead in any league right now.')}</p>
               )}
             </div>
 
             <div className="af-mp-col">
               <h3 className="af-label af-mp-col-head" data-tone="bad">
-                {done ? 'Lost' : 'Trailing'} · bottom 5
+                {copy(done ? 'Lost' : 'Trailing')} · {copy('bottom 5')}
               </h3>
               {pulse.trailing.length > 0 ? (
                 <ul className="af-mp-rows">
@@ -298,7 +316,7 @@ export function MatchupPulseBoard({
                   ))}
                 </ul>
               ) : (
-                <p className="af-mp-quiet">{done ? 'You did not lose a league this week.' : 'You are not behind in any league right now.'}</p>
+                <p className="af-mp-quiet">{copy(done ? 'You did not lose a league this week.' : 'You are not behind in any league right now.')}</p>
               )}
             </div>
           </div>
@@ -310,8 +328,12 @@ export function MatchupPulseBoard({
           */
           <p className="af-mp-quiet">
             {pulse.considered > 0
-              ? `None of your ${pulse.considered} claimed ${pulse.considered === 1 ? 'team' : 'teams'} has a head-to-head we can rank this week — the line below says why.`
-              : 'No claimed team yet, so there is no head-to-head to stand in.'}
+              ? language === 'es'
+                ? pulse.considered === 1
+                  ? 'Tu equipo asignado no tiene un enfrentamiento clasificable esta semana; abajo se explica por qué.'
+                  : `Ninguno de tus ${pulse.considered} equipos asignados tiene un enfrentamiento clasificable esta semana; abajo se explica por qué.`
+                : `None of your ${pulse.considered} claimed ${pulse.considered === 1 ? 'team' : 'teams'} has a head-to-head we can rank this week — the line below says why.`
+              : copy('No claimed team yet, so there is no head-to-head to stand in.')}
           </p>
         )}
 
@@ -327,8 +349,8 @@ export function MatchupPulseBoard({
         <section className="af-bd-sec af-mp-needs" aria-labelledby="af-mp-needs">
           <SectionHead
             id="af-mp-needs"
-            label="Needs you first"
-            count={`${routable.length} across ${new Set(routable.map((i) => i.leagueId)).size} leagues`}
+            label={copy('Needs you first')}
+            count={language === 'es' ? `${routable.length} en ${new Set(routable.map((i) => i.leagueId)).size} ligas` : `${routable.length} across ${new Set(routable.map((i) => i.leagueId)).size} leagues`}
           />
           <ul className="af-bd-rows">
             {routable.map((i) => (
@@ -345,7 +367,7 @@ export function MatchupPulseBoard({
                     <span className="af-bd-sub">{i.meta}</span>
                   </span>
                   <span className="af-bd-mid" />
-                  <span className="af-bd-cta">{i.leagueName ?? 'Open'} →</span>
+                  <span className="af-bd-cta">{i.leagueName ?? copy('Open')} →</span>
                 </Link>
               </li>
             ))}
@@ -359,7 +381,12 @@ export function MatchupPulseBoard({
         href={allHref}
         /* Most of the rest ARE scored — they sit between the top and bottom five. This said "have no
            game this week or could not be scored", which was false for ~43 of 55 on the measured account. */
-        quiet="sit between the five shown on each side, have no game this week, or could not be scored."
+        quiet={language === 'es'
+          ? hidden === 1
+            ? 'está entre los cinco mostrados a cada lado, no juega esta semana o no se pudo puntuar.'
+            : 'están entre los cinco mostrados a cada lado, no juegan esta semana o no se pudieron puntuar.'
+          : 'sit between the five shown on each side, have no game this week, or could not be scored.'}
+        language={language}
       />
     </div>
   )

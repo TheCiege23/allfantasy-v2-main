@@ -9,6 +9,8 @@ import type { TradesData, TradeRecord, PendingOffer, TradeAgentIdea } from '@/li
 import { useFocusTradeFromUrl } from '@/components/core-app/useFocusTradeFromUrl'
 import { assetValues, gradeReasons } from '@/lib/core-app/importedTradeTimeline'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
 
 /**
  * The Sleeper transaction id a row stands for — the id a trade email or push links to.
@@ -35,7 +37,8 @@ export type TradesProps = {
 }
 
 function Unavailable({ reason }: { reason: string }) {
-  return <p className="af-tr-unavailable">{reason}</p>
+  const language = useOptionalLanguage().language
+  return <p className="af-tr-unavailable">{tradeUiCopy(reason, language)}</p>
 }
 
 /**
@@ -46,6 +49,8 @@ function Unavailable({ reason }: { reason: string }) {
  * `sourceLink` in the header is the way to go and answer it.
  */
 function OfferCard({ offer }: { offer: PendingOffer }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => tradeUiCopy(value, language)
   const side = (label: string, lines: PendingOffer['give']) => (
     <div className="af-tr-offer-side">
       <span className="af-label">{label}</span>
@@ -61,7 +66,7 @@ function OfferCard({ offer }: { offer: PendingOffer }) {
       ) : (
         /* A real shape, not a rendering gap: a pick-only or FAAB-only side of a
            deal genuinely has nothing on it. An empty list would read as broken. */
-        <p className="af-tr-offer-none">nothing</p>
+        <p className="af-tr-offer-none">{copy('nothing')}</p>
       )}
     </div>
   )
@@ -77,8 +82,8 @@ function OfferCard({ offer }: { offer: PendingOffer }) {
         ) : null}
       </header>
       <div className="af-tr-offer-sides">
-        {side('You send', offer.give)}
-        {side('You get', offer.get)}
+        {side(copy('You send'), offer.give)}
+        {side(copy('You get'), offer.get)}
       </div>
       <div className="af-tr-offer-eval" data-graded={offer.evaluation.graded}>
         {/* THE grade — the same letter this deal gets in the Trade Center and on the league page. */}
@@ -87,18 +92,18 @@ function OfferCard({ offer }: { offer: PendingOffer }) {
             <span className="af-tr-offer-grade af-num">{offer.evaluation.letter}</span>
             <span className="af-tr-offer-eval-copy">
               <strong>
-                {offer.evaluation.label} · you get {offer.evaluation.getValue.toLocaleString()} for{' '}
+                {copy(offer.evaluation.label)} · {copy('you get')} {offer.evaluation.getValue.toLocaleString()} {copy('for')}{' '}
                 {offer.evaluation.giveValue.toLocaleString()}
               </strong>
-              <span>{offer.evaluation.recommendation}</span>
-              <small>Graded on league value · {offer.evaluation.basis}</small>
+              <span>{copy(offer.evaluation.recommendation)}</span>
+              <small>{copy('Graded on league value')} · {copy(offer.evaluation.basis)}</small>
             </span>
           </>
         ) : (
           <span className="af-tr-offer-eval-copy">
-            <strong>Grade withheld</strong>
-            <span>{offer.evaluation.reason}</span>
-            {offer.evaluation.basis ? <small>{offer.evaluation.basis}</small> : null}
+            <strong>{copy('Grade withheld')}</strong>
+            <span>{copy(offer.evaluation.reason)}</span>
+            {offer.evaluation.basis ? <small>{copy(offer.evaluation.basis)}</small> : null}
           </span>
         )}
       </div>
@@ -119,9 +124,10 @@ function OfferColumn({
   state: TradesData['inbox']
   empty: string
 }) {
+  const language = useOptionalLanguage().language
   return (
     <section className="af-card af-tr-pending-col">
-      <h2 className="af-label">{title}</h2>
+      <h2 className="af-label">{tradeUiCopy(title, language)}</h2>
       {state.available ? (
         state.data.length > 0 ? (
           <ul className="af-tr-offers">
@@ -146,26 +152,28 @@ const assetList = (assets: TradeAgentIdea['give']) => assets.map((a) => (a.posit
  * league's values, on which both rosters gain. Shown only to this manager — the partner is not told.
  */
 function AgentIdeas({ state }: { state: NonNullable<TradesData['agentIdeas']> }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => tradeUiCopy(value, language)
   return (
-    <section className="af-card af-tr-ideas" aria-label="Trade ideas">
-      <h2 className="af-label">Trade ideas</h2>
+    <section className="af-card af-tr-ideas" aria-label={copy('Trade ideas')}>
+      <h2 className="af-label">{copy('Trade ideas')}</h2>
       <p className="af-tr-ideas-why">
-        Near-even on this league’s values, and each roster comes out ahead. Only you see these; nothing is sent.
+        {copy('Near-even on this league’s values, and each roster comes out ahead. Only you see these; nothing is sent.')}
       </p>
       {state.available ? (
         <ul className="af-tr-ideas-list">
           {state.data.map((idea) => (
             <li key={idea.id} className="af-tr-idea">
               <p className="af-tr-idea-deal">
-                Give <strong>{assetList(idea.give)}</strong> for <strong>{assetList(idea.get)}</strong>
-                {idea.partnerName ? <> with {idea.partnerName}</> : null}
+                {copy('Give')} <strong>{assetList(idea.give)}</strong> {copy('for')} <strong>{assetList(idea.get)}</strong>
+                {idea.partnerName ? <> {copy('with')} {idea.partnerName}</> : null}
               </p>
               <p className="af-tr-idea-grade">
                 <span className="af-num">
                   {idea.letter}/{idea.partnerLetter}
                 </span>{' '}
-                · your roster <span className="af-num">+{idea.viewerFitPct}%</span> · theirs{' '}
-                <span className="af-num">+{idea.partnerFitPct}%</span> · suggested{' '}
+                · {copy('your roster')} <span className="af-num">+{idea.viewerFitPct}%</span> · {copy('theirs')}{' '}
+                <span className="af-num">+{idea.partnerFitPct}%</span> · {copy('suggested')}{' '}
                 <time dateTime={idea.runDate}>{idea.runDate}</time>
               </p>
             </li>
@@ -179,6 +187,8 @@ function AgentIdeas({ state }: { state: NonNullable<TradesData['agentIdeas']> })
 }
 
 function TradeCard({ trade }: { trade: TradeRecord }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => tradeUiCopy(value, language)
   const assets = trade.playersIn + trade.playersOut + trade.picks
   /*
    * THE grade (see `TradeRecord.leagueGrade`) — the letter the Trade Center, the grade email and the
@@ -187,7 +197,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
    */
   const leagueGrade = trade.players.length === 2 ? trade.leagueGrade ?? null : null
   const graded = leagueGrade?.graded ? leagueGrade : null
-  const labelOf = (i: number) => (trade.players[i]?.isYou ? 'You' : trade.players[i]?.manager ?? 'Another manager')
+  const labelOf = (i: number) => (trade.players[i]?.isYou ? copy('You') : trade.players[i]?.manager ?? copy('Another manager'))
   const reasons = graded ? gradeReasons(graded, labelOf(0), labelOf(1)) : []
   const sideValues = (side: TradeRecord['players'][number], i: number) =>
     graded
@@ -206,19 +216,19 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
       <header className="af-tr-card-head">
         <span className="af-tr-when af-num">
           {trade.season ?? '—'}
-          {trade.week != null ? ` · wk ${trade.week}` : ''}
+          {trade.week != null ? ` · ${copy('wk')} ${trade.week}` : ''}
         </span>
         <span className="af-tr-partner">
-          {trade.partnerTeamName ? `with ${trade.partnerTeamName}` : 'partner not identified'}
+          {trade.partnerTeamName ? `${copy('with')} ${trade.partnerTeamName}` : copy('partner not identified')}
         </span>
       </header>
 
-      <div className="af-tr-sides" aria-label={trade.yourSide === 'unknown' ? `Trade from ${trade.players[0]?.manager ?? 'the first manager'}'s perspective` : 'Your trade'}>
+      <div className="af-tr-sides" aria-label={trade.yourSide === 'unknown' ? (language === 'es' ? `Intercambio desde la perspectiva de ${trade.players[0]?.manager ?? 'el primer mánager'}` : `Trade from ${trade.players[0]?.manager ?? 'the first manager'}'s perspective`) : copy('Your trade')}>
         <div className="af-tr-side">
-          <div className="af-label">{trade.yourSide === 'unknown' ? 'Received' : 'In'}</div>
+          <div className="af-label">{copy(trade.yourSide === 'unknown' ? 'Received' : 'In')}</div>
           <div className="af-tr-count af-num">{trade.playersIn}</div>
           <div className="af-tr-count-label">
-            {trade.playersIn === 1 ? 'player' : 'players'}
+            {copy(trade.playersIn === 1 ? 'player' : 'players')}
           </div>
         </div>
 
@@ -227,18 +237,18 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
         </div>
 
         <div className="af-tr-side">
-          <div className="af-label">{trade.yourSide === 'unknown' ? 'Sent' : 'Out'}</div>
+          <div className="af-label">{trade.yourSide === 'unknown' ? copy('Sent') : language === 'es' ? 'Sale' : 'Out'}</div>
           <div className="af-tr-count af-num">{trade.playersOut}</div>
           <div className="af-tr-count-label">
-            {trade.playersOut === 1 ? 'player' : 'players'}
+            {copy(trade.playersOut === 1 ? 'player' : 'players')}
           </div>
         </div>
 
         {trade.picks > 0 ? (
           <div className="af-tr-side">
-            <div className="af-label">Picks</div>
+            <div className="af-label">{copy('Picks')}</div>
             <div className="af-tr-count af-num">{trade.picks}</div>
-            <div className="af-tr-count-label">included</div>
+            <div className="af-tr-count-label">{copy('included')}</div>
           </div>
         ) : null}
       </div>
@@ -258,7 +268,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
               <span className="af-tr-manager-identity">
                 {side.avatarUrl ? <img className="af-tr-manager-avatar" src={side.avatarUrl} alt="" /> : null}
                 <span className="af-label af-tr-players-who" data-you={side.isYou}>
-                  {side.isYou ? 'You got' : `${side.manager ?? 'Another manager'} got`}
+                  {side.isYou ? copy('You got') : `${side.manager ?? copy('Another manager')} ${copy('got')}`}
                 </span>
               </span>
               <span className="af-tr-players-list">
@@ -273,7 +283,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                       team={p.team}
                     />
                     {p.team ? <TeamLogo teamAbbr={p.team} sport="NFL" logoUrl={p.teamLogoUrl} size={20} /> : null}
-                    {values[j] != null ? <em className="af-tr-asset-value af-num" title="League value today">{Math.round(values[j]!).toLocaleString()}</em> : null}
+                    {values[j] != null ? <em className="af-tr-asset-value af-num" title={copy('League value today')}>{Math.round(values[j]!).toLocaleString()}</em> : null}
                   </span>
                 ))}
                 {side.picks?.map((pick, j) => {
@@ -282,8 +292,8 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                   return (
                     <span key={`${pick}-${j}`}>
                       {side.received.length > 0 || j > 0 ? ', ' : ''}{pick}
-                      {drafted ? <span className="af-tr-pick-drafted"> (drafted {drafted})</span> : null}
-                      {value != null ? <em className="af-tr-asset-value af-num" title="League value today">{Math.round(value).toLocaleString()}</em> : null}
+                      {drafted ? <span className="af-tr-pick-drafted"> ({copy('drafted')} {drafted})</span> : null}
+                      {value != null ? <em className="af-tr-asset-value af-num" title={copy('League value today')}>{Math.round(value).toLocaleString()}</em> : null}
                     </span>
                   )
                 })}
@@ -292,8 +302,9 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                 <div className="af-tr-leaguegrade" data-letter={letter}>
                   <span className="af-tr-leaguegrade-letter af-num">{letter}</span>
                   <span className="af-tr-leaguegrade-line">
-                    League grade · got {(i === 0 ? graded.getValue : graded.giveValue).toLocaleString()} for{' '}
-                    {(i === 0 ? graded.giveValue : graded.getValue).toLocaleString()} in league value {gradeMoment(graded)}
+                    {language === 'es'
+                      ? `Calificación de la liga · recibió ${(i === 0 ? graded.getValue : graded.giveValue).toLocaleString()} por ${(i === 0 ? graded.giveValue : graded.getValue).toLocaleString()} en valor de liga ${copy(gradeMoment(graded))}`
+                      : `League grade · got ${(i === 0 ? graded.getValue : graded.giveValue).toLocaleString()} for ${(i === 0 ? graded.giveValue : graded.getValue).toLocaleString()} in league value ${gradeMoment(graded)}`}
                   </span>
                 </div>
               ) : null}
@@ -305,7 +316,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
               {side.gradeBasis && !(graded && side.gradeBasis === 'Market') ? (
                 <div className="af-tr-grade" data-ungradable={!side.grade}>
                   <span className="af-tr-grade-badge af-num">{side.grade ?? '—'}</span>
-                  <span className="af-tr-grade-why">{side.gradeBasis} · {side.gradeNote}</span>
+                  <span className="af-tr-grade-why">{copy(side.gradeBasis)} · {copy(side.gradeNote ?? '')}</span>
                 </div>
               ) : null}
             </div>
@@ -315,12 +326,12 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
       ) : null}
 
       {reasons.length > 0 ? (
-        <ul className="af-tr-leaguegrade-why" aria-label="Why it graded this way">
-          {reasons.map((line) => <li key={line}>{line}</li>)}
+        <ul className="af-tr-leaguegrade-why" aria-label={copy('Why it graded this way')}>
+          {reasons.map((line) => <li key={line}>{copy(line)}</li>)}
         </ul>
       ) : null}
       {leagueGrade && !leagueGrade.graded ? (
-        <p className="af-tr-leaguegrade-withheld">League grade withheld: {leagueGrade.reason}</p>
+        <p className="af-tr-leaguegrade-withheld">{copy('League grade withheld:')} {copy(leagueGrade.reason)}</p>
       ) : null}
 
       {/*
@@ -332,8 +343,8 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
         <span className="af-tr-grade-badge af-num">n/a</span>
         <span className="af-tr-grade-why">
           {assets > 0
-            ? 'Counts only in this view — see Trade grades below for the priced version.'
-            : 'Not gradable — nothing was recorded as moving in this trade.'}
+            ? copy('Counts only in this view — see Trade grades below for the priced version.')
+            : copy('Not gradable — nothing was recorded as moving in this trade.')}
         </span>
       </div> : null}
     </li>
@@ -341,6 +352,8 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
 }
 
 export function Trades({ data, hidePending = false }: TradesProps) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => tradeUiCopy(value, language)
   // A trade email or push lands here with `?trade=`; bring that trade into view.
   useFocusTradeFromUrl()
   return (
@@ -358,20 +371,19 @@ export function Trades({ data, hidePending = false }: TradesProps) {
       {/* ── League-specific grading banner ──────────────────────────── */}
       {data.gradingContext.available ? (
         <div className="af-tr-context">
-          <span className="af-label">Scored for this league only</span>
+          <span className="af-label">{copy('Scored for this league only')}</span>
           <p className="af-tr-context-body">
-            Grades and recommendations on this page are calculated against{' '}
+            {language === 'es' ? 'Las calificaciones y recomendaciones usan las reglas de ' : 'Grades and recommendations on this page are calculated against '}
             <strong>{data.gradingContext.data.leagueName}</strong>
             {data.gradingContext.data.format ? ` — ${data.gradingContext.data.format}` : ''}, {' '}
-            {data.gradingContext.data.teamCount} teams. The same trade grades differently in a
-            different league.
+            {data.gradingContext.data.teamCount} {copy('teams')}. {copy('The same trade grades differently in a different league.')}
           </p>
         </div>
       ) : null}
 
       {/* ── Deadline ────────────────────────────────────────────────── */}
       <div className="af-tr-deadline">
-        <span className="af-label">Trade deadline</span>
+        <span className="af-label">{copy('Trade deadline')}</span>
         {data.deadline.available ? (
           data.deadline.data.none ? (
             /*
@@ -379,19 +391,19 @@ export function Trades({ data, hidePending = false }: TradesProps) {
               the end of the regular season). Rendering it literally would print
               "Week 99" on a screen people plan around.
             */
-            <span className="af-tr-deadline-value">No deadline — trades stay open all season</span>
+            <span className="af-tr-deadline-value">{copy('No deadline — trades stay open all season')}</span>
           ) : (
             <span className="af-tr-deadline-value">
-              Week <span className="af-num">{data.deadline.data.week}</span>
+              {copy('Week')} <span className="af-num">{data.deadline.data.week}</span>
               {data.deadline.data.regularSeasonLength != null ? (
                 <span className="af-tr-deadline-why">
-                  of a {data.deadline.data.regularSeasonLength}-week regular season
+                  {language === 'es' ? `de una temporada regular de ${data.deadline.data.regularSeasonLength} semanas` : `of a ${data.deadline.data.regularSeasonLength}-week regular season`}
                 </span>
               ) : null}
             </span>
           )
         ) : (
-          <span className="af-tr-deadline-why">{data.deadline.reason}</span>
+          <span className="af-tr-deadline-why">{copy(data.deadline.reason)}</span>
         )}
       </div>
 
@@ -406,9 +418,9 @@ export function Trades({ data, hidePending = false }: TradesProps) {
 
       {/* ── Completed trades ────────────────────────────────────────── */}
       <section className="af-tr-history">
-        {data.historyNotice ? <p className="af-tr-grade-why" role="status">{data.historyNotice}</p> : null}
+        {data.historyNotice ? <p className="af-tr-grade-why" role="status">{copy(data.historyNotice)}</p> : null}
         <header className="af-tr-history-head">
-          <h2 className="af-display af-tr-history-title">Completed trades</h2>
+          <h2 className="af-display af-tr-history-title">{copy('Completed trades')}</h2>
           {data.history.available ? (
             <span className="af-chip af-num">{data.history.data.length}</span>
           ) : null}
@@ -431,7 +443,7 @@ export function Trades({ data, hidePending = false }: TradesProps) {
 
       {/* ── Grades ──────────────────────────────────────────────────── */}
       {!data.canonicalHistory ? <section className="af-card af-tr-section">
-        <h2 className="af-label">Trade grades</h2>
+        <h2 className="af-label">{copy('Trade grades')}</h2>
         {data.grades.available ? (
           <ul className="af-tr-graderows">
             {data.grades.data.slice(0, 12).map((g) => (
@@ -447,15 +459,15 @@ export function Trades({ data, hidePending = false }: TradesProps) {
                     {g.letter}
                   </span>
                 ) : (
-                  <span className="af-tr-graderow-letter" data-grade="none" aria-label="not graded">
+                  <span className="af-tr-graderow-letter" data-grade="none" aria-label={copy('not graded')}>
                     —
                   </span>
                 )}
                 <span className="af-tr-graderow-main">
                   <span className="af-tr-graderow-meta af-num">
-                    {[g.season, g.week ? `WK ${g.week}` : null].filter(Boolean).join(' · ')}
+                    {[g.season, g.week ? `${copy('WK')} ${g.week}` : null].filter(Boolean).join(' · ')}
                     {' · '}
-                    {g.playersOut} out / {g.playersIn} in
+                    {g.playersOut} {copy('out')} / {g.playersIn} {copy('in')}
                     {/*
                       ⚠ PICKS GET THEIR OWN CLAUSE RATHER THAN BEING FOLDED INTO THE
                       out/in COUNTS. Adding them there would silently change what those
@@ -464,13 +476,13 @@ export function Trades({ data, hidePending = false }: TradesProps) {
                       without restating the old figures.
                     */}
                     {g.picksOut + g.picksIn > 0
-                      ? ` · ${g.picksOut + g.picksIn} ${g.picksOut + g.picksIn === 1 ? 'pick' : 'picks'}`
+                      ? ` · ${g.picksOut + g.picksIn} ${copy(g.picksOut + g.picksIn === 1 ? 'pick' : 'picks')}`
                       : ''}
                   </span>
                   <span className="af-tr-graderow-why">
                     {g.letter
-                      ? `received ${g.sharePct}% of the traded value`
-                      : g.withheldReason}
+                      ? language === 'es' ? `recibió el ${g.sharePct}% del valor intercambiado` : `received ${g.sharePct}% of the traded value`
+                      : copy(g.withheldReason ?? '')}
                   </span>
                   {/*
                     WHY it graded that way, the same sentences the cross-league board shows.
@@ -484,7 +496,7 @@ export function Trades({ data, hidePending = false }: TradesProps) {
                   {g.breakdown.length > 0 ? (
                     <ul className="af-tr-graderow-breakdown">
                       {g.breakdown.map((line) => (
-                        <li key={line}>{line}</li>
+                        <li key={line}>{copy(line)}</li>
                       ))}
                     </ul>
                   ) : null}

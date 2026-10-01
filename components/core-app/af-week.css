@@ -693,3 +693,10 @@
 .af-core .af-wk-lean {
   min-height: 44px;
 }
+
+@media (max-width: 480px) {
+  .af-wk-leans { grid-template-columns: minmax(0, 1fr); }
+  .af-wk-headactions > * { flex: 1 1 auto; justify-content: center; }
+  .af-wk-flip-head { flex-wrap: wrap; row-gap: 3px; }
+  .af-wk-gap { flex-basis: 100%; }
+}

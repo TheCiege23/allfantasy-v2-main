@@ -3,6 +3,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import type { LeagueRoster, RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 /**
  * Phase 4 — send the deal on the board as a real proposal.
@@ -54,6 +56,19 @@ export function normalizeName(raw: string): string {
     .replace(/\s+(jr|sr|ii|iii|iv|v)$/, '')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+export function proposalBlockCopy(message: string, language: string): string {
+  if (language !== 'es') return message
+  const pickPlatform = message.match(/^(.+) — this league trades its picks on its own platform, not here$/)
+  if (pickPlatform) return `${pickPlatform[1]} — esta liga intercambia sus selecciones en su propia plataforma.`
+  const typedPick = message.match(/^(.+) — typed by hand, so the league has no pick to match it to$/)
+  if (typedPick) return `${typedPick[1]} — se escribió manualmente y no coincide con ninguna selección registrada.`
+  const ambiguous = message.match(/^(.+) — more than one player by that name on (your|their) roster$/)
+  if (ambiguous) return `${ambiguous[1]} — hay más de un jugador con ese nombre en ${ambiguous[2] === 'your' ? 'tu plantilla' : 'la plantilla rival'}.`
+  const absent = message.match(/^(.+) — not on (your|their) roster$/)
+  if (absent) return `${absent[1]} — no está en ${absent[2] === 'your' ? 'tu plantilla' : 'la plantilla rival'}.`
+  return message
 }
 
 /**
@@ -163,6 +178,8 @@ export function TradeProposePanel(props: {
   /** Fired after the league accepts the write, so the screen can refetch what changed. */
   onSent?: () => void
 }) {
+  const language = useOptionalLanguage().language
+  const copy = useCallback((value: string) => coreUiCopy(value, language), [language])
   const { leagueId, give, get, counteringTradeId = null, onSent } = props
 
   const [sending, setSending] = useState(false)
@@ -221,14 +238,14 @@ export function TradeProposePanel(props: {
          * paraphrasing those into "something went wrong" throws away the only
          * useful part of the failure.
          */
-        setOutcome({ ok: false, message: j.error ?? 'The league refused this proposal.' })
+        setOutcome({ ok: false, message: j.error ?? copy('The league refused this proposal.') })
         return
       }
       setOutcome({
         ok: true,
         message: counteringTradeId
-          ? `Counter sent to ${partner.ownerName ?? 'them'}. Their original offer is now closed, and yours expires in 48 hours.`
-          : `Sent to ${partner.ownerName ?? 'them'}. It is pending until they answer, and it expires in 48 hours.`,
+          ? `${copy('Counter sent to')} ${partner.ownerName ?? copy('them')}. ${copy('Their original offer is now closed, and yours expires in 48 hours.')}`
+          : `${copy('Sent to')} ${partner.ownerName ?? copy('them')}. ${copy('It is pending until they answer, and it expires in 48 hours.')}`,
       })
       /*
        * Only after a confirmed 200. Firing this on the attempt would refetch a panel
@@ -240,19 +257,19 @@ export function TradeProposePanel(props: {
       setOutcome({
         ok: false,
         message: counteringTradeId
-          ? 'The counter did not reach the league.'
-          : 'The proposal did not reach the league.',
+          ? copy('The counter did not reach the league.')
+          : copy('The proposal did not reach the league.'),
       })
     } finally {
       setSending(false)
     }
-  }, [leagueId, mine, partner, reconciled, counteringTradeId, offerMessage, onSent])
+  }, [leagueId, mine, partner, reconciled, counteringTradeId, offerMessage, onSent, copy])
 
   if (!leagueId || !hasDeal) return null
 
   return (
     <section className="af-tc-propose">
-      <div className="af-label">{counteringTradeId ? 'Send this as a counter' : 'Send this as a proposal'}</div>
+      <div className="af-label">{copy(counteringTradeId ? 'Send this as a counter' : 'Send this as a proposal')}</div>
 
       {counteringTradeId ? (
         /*
@@ -263,17 +280,17 @@ export function TradeProposePanel(props: {
          * claim, so backing out costs one click rather than a reload.
          */
         <p className="af-tc-row-sub">
-          Answering {props.counteringLabel ?? 'their offer'}. Sending this closes theirs.{' '}
+          {copy('Answering')} {props.counteringLabel ?? copy('their offer')}. {copy('Sending this closes theirs.')}{' '}
           {props.onCancelCounter ? (
             <button type="button" className="af-tc-linklike" onClick={props.onCancelCounter}>
-              Send as a new proposal instead.
+              {copy('Send as a new proposal instead.')}
             </button>
           ) : null}
         </p>
       ) : null}
 
       {props.rosters == null ? (
-        <p className="af-tc-row-sub">Checking who can receive it&hellip;</p>
+        <p className="af-tc-row-sub">{copy('Checking who can receive it…')}</p>
       ) : null}
 
       {/*
@@ -284,17 +301,13 @@ export function TradeProposePanel(props: {
       */}
       {props.rosters != null && !mine ? (
         <p className="af-tc-row-sub">
-          A proposal has to come from a roster you hold in AllFantasy, and none here is registered
-          to your account. On an imported league that is normal &mdash; the rosters belong to the
-          platform, so trades are made there.
+          {copy('A proposal has to come from a roster you hold in AllFantasy, and none here is registered to your account. On an imported league that is normal — the rosters belong to the platform, so trades are made there.')}
         </p>
       ) : null}
 
       {props.rosters != null && mine && reachable.length === 0 ? (
         <p className="af-tc-row-sub">
-          Nobody else in this league has an AllFantasy account yet, so a proposal sent from here
-          would sit where they cannot see it. Build the deal, then send it to them where they
-          play.
+          {copy('Nobody else in this league has an AllFantasy account yet, so a proposal sent from here would sit where they cannot see it. Build the deal, then send it to them where they play.')}
         </p>
       ) : null}
 
@@ -309,12 +322,11 @@ export function TradeProposePanel(props: {
           */}
           {!partner ? (
             <p className="af-tc-row-sub">
-              Choose who you are trading with above, and this can go to them.
+              {copy('Choose who you are trading with above, and this can go to them.')}
             </p>
           ) : !partner.canReceiveProposal ? (
             <p className="af-tc-row-sub">
-              {partner.ownerName ?? 'That manager'} is not on AllFantasy, so a proposal sent from
-              here would sit where they cannot see it. Send it to them where they play.{' '}
+              {partner.ownerName ?? copy('That manager')} {copy('is not on AllFantasy, so a proposal sent from here would sit where they cannot see it. Send it to them where they play.')}{' '}
               {reachable.length > 0 ? (
                 <button
                   type="button"
@@ -325,8 +337,8 @@ export function TradeProposePanel(props: {
                   }}
                 >
                   {reachable.length === 1
-                    ? `${reachable[0]!.ownerName ?? 'One manager'} can receive one.`
-                    : `${reachable.length} managers here can receive one.`}
+                    ? `${reachable[0]!.ownerName ?? copy('One manager')} ${copy('can receive one.')}`
+                    : `${reachable.length} ${copy('managers here can receive one.')}`}
                 </button>
               ) : null}
             </p>
@@ -339,9 +351,7 @@ export function TradeProposePanel(props: {
           */}
           {partners.length > reachable.length ? (
             <p className="af-tc-row-sub">
-              {partners.length - reachable.length} other{' '}
-              {partners.length - reachable.length === 1 ? 'manager is' : 'managers are'} not on
-              AllFantasy yet, so a proposal cannot reach them.
+              {partners.length - reachable.length} {copy(partners.length - reachable.length === 1 ? 'other manager is not on AllFantasy yet, so a proposal cannot reach them.' : 'other managers are not on AllFantasy yet, so a proposal cannot reach them.')}
             </p>
           ) : null}
 
@@ -349,37 +359,37 @@ export function TradeProposePanel(props: {
             reconciled.blocked.length > 0 ? (
               <>
                 <p className="af-tc-row-sub">
-                  This deal can&rsquo;t be sent as it stands:
+                  {copy('This deal can’t be sent as it stands:')}
                 </p>
                 <ul className="af-tc-list">
                   {reconciled.blocked.map((b) => (
-                    <li key={b}>{b}</li>
+                    <li key={b}>{proposalBlockCopy(b, language)}</li>
                   ))}
                 </ul>
                 <p className="af-tc-row-sub">
-                  Nothing partial gets sent &mdash; a trade missing a piece is a different trade.
+                  {copy('Nothing partial gets sent — a trade missing a piece is a different trade.')}
                 </p>
               </>
             ) : (
               <p className="af-tc-row-sub">
                 {reconciled.assets.length}{' '}
-                {reconciled.assets.length === 1 ? 'asset' : 'assets'} ready to send to{' '}
-                {partner.ownerName ?? 'them'}. They answer it in AllFantasy.
+                {copy(reconciled.assets.length === 1 ? 'asset ready to send to' : 'assets ready to send to')}{' '}
+                {partner.ownerName ?? copy('them')}. {copy('They answer it in AllFantasy.')}
               </p>
             )
           ) : null}
 
           {partner?.canReceiveProposal ? (
             <label className="af-tc-offer-message">
-              <span className="af-label">Message to {partner.ownerName ?? 'the other manager'}</span>
+              <span className="af-label">{copy('Message to')} {partner.ownerName ?? copy('the other manager')}</span>
               <textarea
                 value={offerMessage}
                 maxLength={500}
                 rows={3}
                 onChange={(event) => setOfferMessage(event.target.value)}
-                placeholder="Explain why this helps both teams, or invite a counter."
+                placeholder={copy('Explain why this helps both teams, or invite a counter.')}
               />
-              <span className="af-tc-row-sub">{offerMessage.length}/500 · You can edit this before sending.</span>
+              <span className="af-tc-row-sub">{offerMessage.length}/500 · {copy('You can edit this before sending.')}</span>
             </label>
           ) : null}
 
@@ -401,13 +411,13 @@ export function TradeProposePanel(props: {
               outcome?.ok === true
             }
           >
-            {sending
+            {copy(sending
               ? 'Sending…'
               : outcome?.ok
-                ? 'Sent'
+                ? 'Sent successfully'
                 : counteringTradeId
                   ? 'Send counter'
-                  : 'Propose this trade'}
+                  : 'Propose this trade')}
           </button>
         </>
       ) : null}

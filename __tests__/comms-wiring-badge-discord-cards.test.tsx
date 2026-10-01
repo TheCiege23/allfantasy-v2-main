@@ -277,7 +277,11 @@ describe('the bubble draws the live number', () => {
       vi.advanceTimersByTime(CHAT_BADGE_POLL_MS)
     })
     expect(screen.getByRole('button', { name: 'Open communications (1 mention, 3 unread)' })).toBeTruthy()
-    expect(document.querySelector('.af-cm-launchdot')?.textContent).toBe('@3')
+    /*
+     * A mention shows its OWN count, not the unread total: "@1" is one mention,
+     * where "@3" read as three. The unread total stays on the aria-label above.
+     */
+    expect(document.querySelector('.af-cm-launchdot')?.textContent).toBe('@1')
 
     badgeBody = { total: 4, mentions: 0 }
     await act(async () => {

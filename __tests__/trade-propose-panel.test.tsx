@@ -225,7 +225,8 @@ describe('⚠ never write a row the counterparty cannot open', () => {
   })
 
   it('names the managers it can see but cannot reach instead of hiding them', () => {
-    expect(PANEL).toContain('not on\n              AllFantasy yet')
+    expect(PANEL).toContain('partners.length - reachable.length')
+    expect(PANEL).toContain('other managers are not on AllFantasy yet')
   })
 
   it('says plainly that this cannot go to Sleeper', () => {
