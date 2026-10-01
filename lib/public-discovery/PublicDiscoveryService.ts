@@ -5,6 +5,8 @@
 
 import { prisma } from "@/lib/prisma"
 import { getCareerTierName, clampCareerTier, isLeagueVisibleForCareerTier } from "@/lib/ranking/tier-visibility"
+import { decideDivisionGate, getLeagueDivisions } from "@/lib/class-rating/divisionGate"
+import { getManagerClass, type ManagerClass } from "@/lib/class-rating/reads"
 import { isSupportedSport } from "@/lib/sport-scope"
 import { searchLeagues } from "@/lib/league-search"
 import { getDiscoverySports } from "./discovery-sports"
@@ -366,6 +368,21 @@ async function getOwnedLeagueSets(viewerUserId: string | null) {
   }
 }
 
+/**
+ * Is this card inside the viewer's range? A fantasy card is in range exactly when an OPEN join to
+ * it would pass the division gate; any other card keeps the career-tier window. Pure.
+ */
+export function isCardInViewerRange(
+  card: Pick<DiscoveryCard, "source" | "id">,
+  ctx: { viewerTier: number; leagueTier: number; viewerClass: ManagerClass; fantasyDivisions: Map<string, number | null> }
+): boolean {
+  if (card.source === "fantasy") {
+    const leagueDivision = ctx.fantasyDivisions.get(card.id) ?? null
+    return decideDivisionGate({ user: ctx.viewerClass, leagueDivision, path: "open" }).outcome !== "deny"
+  }
+  return isLeagueVisibleForCareerTier(ctx.viewerTier, ctx.leagueTier, 1)
+}
+
 async function applyTierPolicy(
   cards: DiscoveryCard[],
   viewerContext?: DiscoveryViewerContext
@@ -375,12 +392,23 @@ async function applyTierPolicy(
   const viewerUserId = viewerContext?.viewerUserId ?? null
   const owned = await getOwnedLeagueSets(viewerUserId)
 
+  /*
+   * ⚠ FANTASY LEAGUES ARE PLACED BY CLASS DIVISION, NOT CAREER XP (ADR F2.10a, 2026-10-01). A fantasy
+   * card is shown exactly when an open join to it would pass the division gate — the same decision
+   * POST /api/leagues/join makes, so discovery never offers a league the join then refuses. Bracket and
+   * creator cards keep the career-tier window: Class rates NFL fantasy managers and nothing else.
+   */
+  const viewerClass: ManagerClass = viewerUserId ? await getManagerClass(viewerUserId) : { status: 'unrated' }
+  const fantasyIds = cards.filter((c) => c.source === 'fantasy').map((c) => c.id)
+  const fantasyDivisions =
+    viewerClass.status === 'established' && fantasyIds.length > 0 ? await getLeagueDivisions(fantasyIds) : new Map<string, number | null>()
+
   const resolved: DiscoveryCard[] = []
   let hiddenCount = 0
 
   for (const card of cards) {
     const leagueTier = clampCareerTier(card.leagueTier, viewerTier)
-    const inRange = isLeagueVisibleForCareerTier(viewerTier, leagueTier, 1)
+    const inRange = isCardInViewerRange(card, { viewerTier, leagueTier, viewerClass, fantasyDivisions })
 
     if (inRange) {
       const rankingTierDelta = Math.abs(leagueTier - viewerTier)

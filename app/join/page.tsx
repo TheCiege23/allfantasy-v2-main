@@ -80,6 +80,13 @@ export default function JoinByCodePage() {
             }
             return
           }
+          // A division refusal is an answer, not "maybe this is a creator code": without this the
+          // creator-invite retry below runs and its generic error replaces the explanation.
+          if (data.code === 'DIVISION_GATE_BLOCKED') {
+            setStatus('error')
+            setMessage(data.error)
+            return
+          }
           return fetch('/api/creator-invites/join', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
