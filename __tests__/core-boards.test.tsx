@@ -1242,13 +1242,14 @@ describe('TradesBoard — which side each asset is on', () => {
     const s = sides(container)
     expect(s).toHaveLength(2)
 
+    // Each side is what its manager RECEIVED: TheCiege24 sent Vance and got Okoye.
     expect(s[0].label).toContain('TheCiege24')
-    expect(s[0].assets.join(' ')).toContain('Perry Vance')
-    expect(s[0].assets.join(' ')).not.toContain('Dana Okoye')
+    expect(s[0].assets.join(' ')).toContain('Dana Okoye')
+    expect(s[0].assets.join(' ')).not.toContain('Perry Vance')
 
     expect(s[1].label).toContain('Jordan')
-    expect(s[1].assets.join(' ')).toContain('Dana Okoye')
-    expect(s[1].assets.join(' ')).not.toContain('Perry Vance')
+    expect(s[1].assets.join(' ')).toContain('Perry Vance')
+    expect(s[1].assets.join(' ')).not.toContain('Dana Okoye')
   })
 
   /*
@@ -1271,10 +1272,10 @@ describe('TradesBoard — which side each asset is on', () => {
     const okoye = rows.find((r) => r.name.includes('Dana Okoye'))
 
     expect(vance?.value).toBe('6,552')
-    expect(vance?.side).toContain('TheCiege24')
+    expect(vance?.side).toContain('Jordan')
     /* Unpriced, and the dash must be on HIS row rather than anywhere on the card. */
     expect(okoye?.value).toBe('—')
-    expect(okoye?.side).toContain('Jordan')
+    expect(okoye?.side).toContain('TheCiege24')
   })
 
   /*
@@ -1301,12 +1302,13 @@ describe('TradesBoard — which side each asset is on', () => {
     )
     const s = sides(container)
     expect(s).toHaveLength(2)
-    expect(s[1].assets.join(' ')).toMatch(/Nothing on record for this side/i)
-    expect(s[1].assets.join(' ')).not.toMatch(/no players on this side/i)
+    // `received` is TheCiege24's side, which comes first.
+    expect(s[0].assets.join(' ')).toMatch(/Nothing on record for this side/i)
+    expect(s[0].assets.join(' ')).not.toMatch(/no players on this side/i)
 
     /* The other side still renders its own assets, picks included. */
-    expect(s[0].assets.join(' ')).toContain('Perry Vance')
-    expect(s[0].assets.join(' ')).toContain('2027 3rd')
+    expect(s[1].assets.join(' ')).toContain('Perry Vance')
+    expect(s[1].assets.join(' ')).toContain('2027 3rd')
   })
 })
 
@@ -1581,7 +1583,7 @@ describe('TradesBoard — whose side is whose', () => {
   const sideLabels = (c: HTMLElement) =>
     Array.from(c.querySelectorAll('.af-bd-side-label')).map((n) => n.textContent)
 
-  it('says "You sent" for the reader and names the other manager', () => {
+  it('says "You received" for the reader and names the other manager', () => {
     const { container } = render(
       <TradesBoard
         data={tradesData({
@@ -1593,8 +1595,13 @@ describe('TradesBoard — whose side is whose', () => {
         allHref="/core/trades?all=1"
       />,
     )
-    expect(sideLabels(container)).toContain('You sent')
-    expect(sideLabels(container)).toContain('Jordan sent')
+    expect(sideLabels(container)).toContain('You received')
+    expect(sideLabels(container)).toContain('Jordan received')
+    // Each side holds what its named manager RECEIVED, so the reader's grade sits over what they got.
+    const [mine, theirs] = Array.from(container.querySelectorAll('.af-bd-side'))
+    expect(mine.textContent).toContain('Dana Okoye')
+    expect(mine.textContent).not.toContain('Perry Vance')
+    expect(theirs.textContent).toContain('Perry Vance')
   })
 
   /* Unresolved reader: the previous behaviour, not a degraded one. */
@@ -1602,8 +1609,8 @@ describe('TradesBoard — whose side is whose', () => {
     const { container } = render(
       <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
     )
-    expect(sideLabels(container)).toContain('TheCiege24 sent')
-    expect(sideLabels(container)).not.toContain('You sent')
+    expect(sideLabels(container)).toContain('TheCiege24 received')
+    expect(sideLabels(container)).not.toContain('You received')
   })
 })
 

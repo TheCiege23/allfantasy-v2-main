@@ -138,14 +138,19 @@ function Asset({ a, leagueId }: { a: TradeAsset; leagueId: string }) {
   )
 }
 
+/*
+ * Each side is named for the team that RECEIVED it (2026-10-01), so the reader's own column holds
+ * what the grade above credited them with — the convention KeepTradeCut's "Team 1 gets…" uses. Read
+ * as "<name> sent", the card put a manager's grade over the assets they gave away.
+ */
 function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
   return (
     <>
       <div className="af-bd-card-body">
         <div className="af-bd-side">
-          <span className="af-bd-side-label">{t.fromName} sent</span>
-          {t.sent.length > 0 ? (
-            t.sent.map((a) => <Asset key={`s-${a.id}`} a={a} leagueId={leagueId} />)
+          <span className="af-bd-side-label">{t.fromName} received</span>
+          {t.received.length > 0 ? (
+            t.received.map((a) => <Asset key={`r-${a.id}`} a={a} leagueId={leagueId} />)
           ) : (
             <span className="af-bd-asset">
               {/*
@@ -159,9 +164,9 @@ function TradeBody({ t, leagueId }: { t: BoardTrade; leagueId: string }) {
           )}
         </div>
         <div className="af-bd-side">
-          <span className="af-bd-side-label">{t.toName} sent</span>
-          {t.received.length > 0 ? (
-            t.received.map((a) => <Asset key={`r-${a.id}`} a={a} leagueId={leagueId} />)
+          <span className="af-bd-side-label">{t.toName} received</span>
+          {t.sent.length > 0 ? (
+            t.sent.map((a) => <Asset key={`s-${a.id}`} a={a} leagueId={leagueId} />)
           ) : (
             <span className="af-bd-asset">
               {/*
