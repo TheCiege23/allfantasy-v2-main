@@ -129,6 +129,7 @@ export async function POST(req: NextRequest) {
           platform: true,
           leagueSize: true,
           leagueVariant: true,
+          userId: true,
         },
       }),
       tx.roster.findMany({
@@ -310,14 +311,31 @@ export async function POST(req: NextRequest) {
       if (league.leagueSize == null || manualTeamCount < league.leagueSize) {
         const displayName = profile?.displayName?.trim() || profile?.sleeperUsername?.trim() || 'Manager'
         const teamBaseName = league.name?.trim() || 'League'
-        await tx.leagueTeam.create({
-          data: {
+        /*
+         * 🛑 CLAIMED, AND AN UPSERT. This was a bare `create` of an UNCLAIMED row — no
+         * `claimedByUserId`, no `platformUserId` — so the new manager held the roster while every
+         * reader that finds your team by its claim (the redraft member check, the Career Wire, the
+         * home brief) could not see them. Production 2026-10-01: a manager at 1-2 with exactly that
+         * row. And `assignLeagueSeat` now creates a native seat's row itself, so on the placeholder
+         * path the row already exists: a duplicate insert inside this transaction aborts it, which
+         * the `.catch` that used to sit here could hide but never undo. An existing row is left to
+         * the seat writer that made it.
+         */
+        await tx.leagueTeam.upsert({
+          where: { leagueId_externalId: { leagueId: result.leagueId, externalId: roster.id } },
+          create: {
             leagueId: result.leagueId,
             externalId: roster.id,
             ownerName: displayName,
             teamName: `${displayName}'s ${teamBaseName} Team`,
+            claimedByUserId: userId,
+            platformUserId: userId,
+            isOrphan: false,
+            isCommissioner: userId === league.userId,
+            role: userId === league.userId ? 'commissioner' : 'member',
           },
-        }).catch(() => null)
+          update: {},
+        })
       }
     }
 
