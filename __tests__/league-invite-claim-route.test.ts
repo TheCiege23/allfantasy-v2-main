@@ -103,6 +103,9 @@ describe('POST /api/league/invite/claim', () => {
     resolveJoinRankGateMock.mockResolvedValue({
       allowed: true,
       bypassed: false,
+      basis: 'level',
+      sport: 'NFL',
+      userClass: 5,
       userRankLevel: 5,
       minRankLevel: null,
       maxRankLevel: null,
@@ -270,6 +273,9 @@ describe('POST /api/league/invite/claim', () => {
     resolveJoinRankGateMock.mockResolvedValue({
       allowed: false,
       bypassed: false,
+      basis: 'level',
+      sport: 'NFL',
+      userClass: 1,
       userRankLevel: 1,
       minRankLevel: 8,
       maxRankLevel: 12,

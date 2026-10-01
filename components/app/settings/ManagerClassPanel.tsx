@@ -10,9 +10,12 @@ import { useCallback, useEffect, useState } from 'react'
  * Reads GET / writes PATCH on `/api/commissioner/leagues/:id/invite`.
  */
 
-type Person = { userId: string; username: string | null; displayName: string | null; level: number }
+type Person = { userId: string; username: string | null; displayName: string | null; level: number; skillClass: number | null }
 type Summary = {
   range: { center: number; min: number; max: number } | null
+  basis: 'skill' | 'level'
+  sport: string | null
+  ratedMembers: number
   exceptions: Array<Person & { grantedAt: string; via: 'direct' | 'request' }>
   requests: Array<Person & { requestedAt: string }>
 }
@@ -22,6 +25,11 @@ type Action = 'grant' | 'approve' | 'decline' | 'revoke'
 function who(p: Person): string {
   if (p.username) return `@${p.username}`
   return p.displayName ?? 'Manager'
+}
+
+/** "NFL Class 14 · Lvl 9", or just the level while the manager is unrated in this sport. */
+function standing(p: Person, sport: string | null): string {
+  return p.skillClass != null ? `${sport ?? ''} Class ${p.skillClass} · Lvl ${p.level}`.trim() : `Lvl ${p.level} · not rated in ${sport ?? 'this sport'} yet`
 }
 
 function fmtDay(iso: string): string {
@@ -94,11 +102,15 @@ export default function ManagerClassPanel({ leagueId }: { leagueId: string }) {
 
   return (
     <div data-testid="manager-class-panel">
-      <h4 className="text-xs font-semibold uppercase tracking-wider text-white/70">Level range</h4>
+      <h4 className="text-xs font-semibold uppercase tracking-wider text-white/70">
+        {summary?.basis === 'skill' ? 'Skill class' : 'Level range'}
+      </h4>
       <p className="mt-1 text-xs text-white/50">
-        {range
-          ? `This league is for managers at Level ${range.min}–${range.max} — two levels either side of Level ${range.center}. Anyone outside it can ask you to let them in, and you decide one manager at a time.`
-          : 'This league has no level range, so anyone with an invite can join. Leagues imported from another platform keep their own members.'}
+        {!range
+          ? 'This league has no class, so anyone with an invite can join. Leagues imported from another platform keep their own members.'
+          : summary?.basis === 'skill'
+            ? `This league plays at ${summary.sport ?? ''} skill Class ${range.min}–${range.max} — two classes either side of Class ${range.center}, the middle of its ${summary.ratedMembers} rated ${summary.ratedMembers === 1 ? 'manager' : 'managers'}. A joiner not yet rated in this sport is measured by level instead. Anyone outside can ask you to let them in, and you decide one manager at a time.`
+            : `This league is for managers at Level ${range.min}–${range.max} — two levels either side of Level ${range.center}. It switches to skill classes once its managers have rated games in this sport. Anyone outside can ask you to let them in, and you decide one manager at a time.`}
       </p>
 
       {range ? (
@@ -119,7 +131,7 @@ export default function ManagerClassPanel({ leagueId }: { leagueId: string }) {
                     <div className="min-w-0">
                       <p className="truncate text-sm text-white">{who(r)}</p>
                       <p className="text-xs text-white/50">
-                        Level {r.level} · asked {fmtDay(r.requestedAt)}
+                        {standing(r, summary?.sport ?? null)} · asked {fmtDay(r.requestedAt)}
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -165,7 +177,7 @@ export default function ManagerClassPanel({ leagueId }: { leagueId: string }) {
                     <div className="min-w-0">
                       <p className="truncate text-sm text-white">{who(e)}</p>
                       <p className="text-xs text-white/50">
-                        Level {e.level} · {e.via === 'request' ? 'approved request' : 'added by you'} {fmtDay(e.grantedAt)}
+                        {standing(e, summary?.sport ?? null)} · {e.via === 'request' ? 'approved request' : 'added by you'} {fmtDay(e.grantedAt)}
                       </p>
                     </div>
                     <button
@@ -193,7 +205,7 @@ export default function ManagerClassPanel({ leagueId }: { leagueId: string }) {
                 value={username}
                 onChange={(ev) => setUsername(ev.target.value)}
                 placeholder="AllFantasy username"
-                aria-label="Username to let in from outside the level range"
+                aria-label="Username to let in from outside the league's class"
                 data-testid="manager-class-grant-input"
                 className="min-h-[44px] min-w-0 flex-1 rounded border border-white/20 bg-black/40 px-3 py-2 text-sm text-white"
               />

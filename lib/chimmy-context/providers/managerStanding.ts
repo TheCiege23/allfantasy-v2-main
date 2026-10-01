@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { classRangeFor } from "@/lib/league-join/managerClass"
+import { SKILL_CLASS_MIN_GAMES, classRangeFor, skillClassFor } from "@/lib/league-join/managerClass"
 import { resolveUserRankLevel } from "@/lib/league-join/resolveJoinRankGate"
 import { currentSkill, type ManagerSkill } from "@/lib/rank/skillRating/replay"
 import { percentileRank, readSkillBoard } from "@/lib/rank/skillRating/skillRatingStore"
@@ -28,7 +28,9 @@ export async function loadManagerStanding(userId: string): Promise<ManagerStandi
     const level = resolveUserRankLevel(profile)
     const range = classRangeFor(level)
     out.managerLevel = level
-    out.classRange = `Level ${range.min}–${range.max} (can join leagues in this band; outside it only by a commissioner exception)`
+    out.classRange =
+      `Level ${range.min}–${range.max} — used only where skill is not yet rated; in a sport where this manager and a league are both rated, ` +
+      `the band is ±2 skill classes instead (see skillLines). Outside the band only by a commissioner exception.`
   }
 
   if (board) {
@@ -52,10 +54,16 @@ export async function loadManagerStanding(userId: string): Promise<ManagerStandi
       const now = currentSkill(m, sb.latestPeriod)
       const pct = percentileRank(sb.percentiles, now.conservative)
       const record = row.t ? `${row.w}-${row.l}-${row.t}` : `${row.w}-${row.l}`
+      const cls = row.g >= SKILL_CLASS_MIN_GAMES ? skillClassFor(row.r) : null
+      const band = cls != null ? classRangeFor(cls) : null
       lines.push(
         `${sport} skill ${Math.round(now.rating)} ±${Math.round(now.rd)}` +
           (pct != null ? `, better than ${pct}% of ${sb.rated} rated managers` : "") +
-          `, ${row.g} games, ${record} (rated ${board.date})`,
+          `, ${row.g} games, ${record}` +
+          (cls != null && band
+            ? `, skill Class ${cls} — can join ${sport} leagues playing at Class ${band.min}–${band.max}`
+            : `, not yet classed (${SKILL_CLASS_MIN_GAMES - row.g} more games)`) +
+          ` (rated ${board.date})`,
       )
     }
     if (lines.length) out.skillLines = lines

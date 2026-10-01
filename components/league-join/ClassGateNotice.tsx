@@ -17,6 +17,9 @@ export type ClassGateBlocked = {
   minRankLevel?: number
   maxRankLevel?: number
   userRankLevel?: number
+  /** `skill` when the band was measured on skill classes in `sport`; `level` otherwise. */
+  basis?: 'skill' | 'level'
+  sport?: string | null
 }
 
 export function isClassGateBlocked(payload: unknown): payload is ClassGateBlocked {
@@ -90,15 +93,18 @@ export function ClassGateNotice({
       data-testid="class-gate-notice"
       aria-live="polite"
     >
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Outside your level range</p>
+      <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Outside your class</p>
       <p className={`mt-2 text-sm font-semibold ${tone === 'dark' ? 'text-white' : ''}`} style={textStyle}>
         {min != null && max != null && you != null
-          ? `This league is for Level ${min}–${max}. You are Level ${you}.`
-          : blocked.message ?? 'This league is outside your level range.'}
+          ? blocked.basis === 'skill'
+            ? `This league plays at ${blocked.sport ? `${blocked.sport} ` : ''}skill Class ${min}–${max}. You are Class ${you}.`
+            : `This league is for Level ${min}–${max}. You are Level ${you}.`
+          : blocked.message ?? 'This league is outside your range.'}
       </p>
       <p className={`mt-1 text-sm ${muted}`} style={mutedStyle}>
-        AllFantasy matches managers within two levels of each other, so nobody plays far above or below their
-        experience. The commissioner can make an exception for you.
+        {blocked.basis === 'skill'
+          ? 'AllFantasy matches managers within two skill classes of each other — rated game by game, by who they beat — so nobody plays far above or below their weight. The commissioner can make an exception for you.'
+          : 'AllFantasy matches managers within two levels of each other, so nobody plays far above or below their experience. The commissioner can make an exception for you.'}
       </p>
 
       {done ? (

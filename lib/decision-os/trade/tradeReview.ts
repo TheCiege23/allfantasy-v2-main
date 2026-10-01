@@ -151,6 +151,11 @@ export type TradeReviewFacts = {
    * is not an AllFantasy user. Absent: the check reports it could not run.
    */
   managerLevels?: Known<readonly [number | null, number | null]>
+  /**
+   * What `managerLevels` holds: skill classes in the league's sport when both managers are rated
+   * there (the basis the join band uses since 2026-10-01), ladder levels otherwise. Absent = level.
+   */
+  classBasis?: 'skill' | 'level'
 }
 
 // ─── The checks ──────────────────────────────────────────────────────────────
@@ -276,20 +281,23 @@ function deadlineRush(f: TradeReviewFacts): ReviewCheck {
 
 function classGap(f: TradeReviewFacts): ReviewCheck {
   const base = { code: 'class_gap' as const, severity: 'low' as const }
-  if (!f.managerLevels) return { ...base, status: 'not_computed', explanation: 'Manager levels were not read for this review.' }
+  if (!f.managerLevels) return { ...base, status: 'not_computed', explanation: 'Manager classes were not read for this review.' }
   if (!f.managerLevels.ok) return { ...base, status: 'not_computed', explanation: f.managerLevels.reason }
   const [la, lb] = f.managerLevels.value
   if (la == null || lb == null) {
-    return { ...base, status: 'not_computed', explanation: 'Only AllFantasy managers have a level, and one side of this trade does not.' }
+    return { ...base, status: 'not_computed', explanation: 'Only AllFantasy managers have a class, and one side of this trade does not.' }
   }
+  const skill = f.classBasis === 'skill'
+  const unit = skill ? 'skill Class' : 'Level'
+  const units = skill ? 'classes' : 'levels'
   const apart = Math.abs(la - lb)
   if (apart <= CLASS_GAP_LEVELS) {
-    return { ...base, status: 'clear', explanation: `The managers are Level ${la} and Level ${lb} — within ${CLASS_GAP_LEVELS} levels, the same class.` }
+    return { ...base, status: 'clear', explanation: `The managers are ${unit} ${la} and ${unit} ${lb} — within ${CLASS_GAP_LEVELS} ${units}, the same class.` }
   }
   const senior = la > lb ? 0 : 1
-  const levels = `Level ${Math.max(la, lb)} and Level ${Math.min(la, lb)}, ${apart} levels apart`
+  const pair = `${unit} ${Math.max(la, lb)} and ${unit} ${Math.min(la, lb)}, ${apart} ${units} apart`
   if (!f.gapPct.ok) {
-    return { ...base, status: 'not_computed', explanation: `The managers are ${levels}, but the trade is not graded, so which way it leans is unknown.` }
+    return { ...base, status: 'not_computed', explanation: `The managers are ${pair}, but the trade is not graded, so which way it leans is unknown.` }
   }
   // Signed from side A: + means A receives more.
   const towardSenior = senior === 0 ? f.gapPct.value : -f.gapPct.value
@@ -297,10 +305,10 @@ function classGap(f: TradeReviewFacts): ReviewCheck {
     return {
       ...base,
       status: 'raised',
-      explanation: `${f.sides[senior]!.name} (the more experienced manager) receives ${pct(towardSenior)} more value from a manager ${apart} levels below — ${levels}. Worth a look if the newer manager may not know what they gave up.`,
+      explanation: `${f.sides[senior]!.name} (the ${skill ? 'stronger' : 'more experienced'} manager) receives ${pct(towardSenior)} more value from a manager ${apart} ${units} below — ${pair}. Worth a look if the other manager may not know what they gave up.`,
     }
   }
-  return { ...base, status: 'clear', explanation: `The managers are ${levels}, but the trade does not lean toward the more experienced one.` }
+  return { ...base, status: 'clear', explanation: `The managers are ${pair}, but the trade does not lean toward the ${skill ? 'stronger' : 'more experienced'} one.` }
 }
 
 export function recommendationFor(checks: readonly ReviewCheck[]): TradeReviewRecommendation {

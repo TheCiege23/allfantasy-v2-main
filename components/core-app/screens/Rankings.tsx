@@ -381,17 +381,17 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
             )}
             {g.classFilter.active ? (
               <span className="af-rk-tab" aria-current="page">
-                My class · Lvl {g.classFilter.min}–{g.classFilter.max}
+                Near my level · Lvl {g.classFilter.min}–{g.classFilter.max}
               </span>
             ) : (
               <Link href={g.classFilter.href} className="af-rk-tab" scroll={false}>
-                My class · Lvl {g.classFilter.min}–{g.classFilter.max}
+                Near my level · Lvl {g.classFilter.min}–{g.classFilter.max}
               </Link>
             )}
             <span className="af-rk-classnote">
               {g.classFilter.active
-                ? `Managers within ${g.classFilter.band} levels of you — the same range you can join leagues in.`
-                : `You are Level ${g.classFilter.level}. My class shows only the managers you can be matched with.`}
+                ? `Managers within ${g.classFilter.band} levels of you. League joins use your skill class where you are rated — see the Skill tab.`
+                : `You are Level ${g.classFilter.level}. Near my level shows managers within ${g.classFilter.band} levels of you.`}
             </span>
           </div>
         ) : null}
@@ -466,7 +466,7 @@ function RivalsCard({ g }: { g: GlobalView }) {
       <p className="af-rk-eyebrow" id="rk-rivals-h">
         Next to pass
         <span className="af-rk-spacer" />
-        <span>{g.classFilter?.active ? 'in your class' : `on ${g.label}`}</span>
+        <span>{g.classFilter?.active ? 'near your level' : `on ${g.label}`}</span>
       </p>
       <ul className="af-rk-rivals">
         {g.rivals.map((r) => {
@@ -987,6 +987,16 @@ function SkillBody({ skill, signedIn }: { skill: SkillView; signedIn: boolean })
                 'Not enough rated managers to compare yet'
               )}
             </p>
+            <p className="af-rk-sub">
+              {you.skillClass != null && you.classBand ? (
+                <>
+                  Skill <b>Class {you.skillClass}</b> · you can join {skill.sport} leagues playing at Class{' '}
+                  {you.classBand.min}–{you.classBand.max} (ratings {you.classBand.lo}–{you.classBand.hi})
+                </>
+              ) : (
+                <>Your class is set after {Math.max(0, 10 - you.games)} more rated games — until then, leagues match you by level.</>
+              )}
+            </p>
           </div>
           <ul className="af-rk-moves" aria-label="Skill summary">
             <li>
@@ -1071,6 +1081,33 @@ function SkillBody({ skill, signedIn }: { skill: SkillView; signedIn: boolean })
       ) : null}
 
       <section className="af-rk-card">
+        {skill.classFilter ? (
+          <div className="af-rk-classbar" role="group" aria-label="Who is on this board">
+            {skill.classFilter.active ? (
+              <Link href={skill.classFilter.offHref} className="af-rk-tab" scroll={false}>
+                Everyone
+              </Link>
+            ) : (
+              <span className="af-rk-tab" aria-current="page">
+                Everyone
+              </span>
+            )}
+            {skill.classFilter.active ? (
+              <span className="af-rk-tab" aria-current="page">
+                My class
+              </span>
+            ) : (
+              <Link href={skill.classFilter.href} className="af-rk-tab" scroll={false}>
+                My class
+              </Link>
+            )}
+            <span className="af-rk-classnote">
+              {skill.classFilter.active
+                ? `Managers within ${skill.classFilter.band} skill classes of you — the ones ${skill.sport} leagues match you with.`
+                : `My class shows only the managers within ${skill.classFilter.band} skill classes of you.`}
+            </span>
+          </div>
+        ) : null}
         <p className="af-rk-eyebrow">
           {skill.sport} skill board
           <span className="af-rk-spacer" />
@@ -1082,6 +1119,7 @@ function SkillBody({ skill, signedIn }: { skill: SkillView; signedIn: boolean })
             { key: 'rank', label: '#', srLabel: 'Rank', align: 'right' },
             { key: 'manager', label: 'Manager' },
             { key: 'skill', label: 'Skill', srLabel: 'Rating minus two deviations', align: 'right' },
+            { key: 'class', label: 'Class', srLabel: 'Skill class, what league joins are measured on', align: 'right', hideOnPhone: true },
             { key: 'rating', label: 'Rating', srLabel: 'Rating and deviation', align: 'right', hideOnPhone: true },
             { key: 'record', label: 'Record', align: 'right' },
             { key: 'top', label: 'Top', srLabel: 'Percentile among every rated manager', align: 'right', hideOnPhone: true },
@@ -1093,6 +1131,7 @@ function SkillBody({ skill, signedIn }: { skill: SkillView; signedIn: boolean })
               { text: String(r.rank), tone: r.isYou ? 'accent' : undefined },
               { text: `${r.handle}${r.isYou ? ' (you)' : ''}`, sub: r.level != null ? `Lvl ${r.level}` : undefined },
               { text: String(r.conservative), tone: r.isYou ? 'accent' : undefined },
+              { text: String(r.skillClass) },
               { text: `${r.rating} ± ${r.rd}` },
               { text: r.record, sub: `${r.games} games` },
               { text: r.percentile != null ? `${Math.max(1, 100 - r.percentile)}%` : '—' },
@@ -1137,6 +1176,11 @@ function SkillMethodCard() {
         <li>
           <b>± is how sure we are.</b> It shrinks as you play and grows back while you sit out. The board ranks by the
           rating minus twice that, so nobody tops it on a lucky few weeks.
+        </li>
+        <li>
+          <b>Your class is your weight class.</b> Every 50 rating points is a class (Class 13 is 1500). Leagues match
+          managers within two classes — about 100 points — so the weaker side of any game still has a real chance.
+          Until you have 10 rated games in a sport, leagues match you by level instead.
         </li>
       </ul>
       <p className="af-rk-note">

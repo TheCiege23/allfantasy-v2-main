@@ -21,6 +21,8 @@ import { signedGapPct, type TradeGradeView } from './tradeGrade'
 import { gradeInputsFromNativeItems, gradeInputsFromRedraftAssets } from './tradeGradeInputs'
 import type { LoadedTrade, TradeRef, TradeSide } from './tradeRecord'
 import { buildTradeReview, type Known, type ReviewSideLineup, type TradeReview, type TradeReviewFacts } from './tradeReview'
+import { skillClassOf } from '@/lib/league-join/resolveJoinRankGate'
+import { readSkillBoard } from '@/lib/rank/skillRating/skillRatingStore'
 
 /**
  * Gather the facts commissioner review mode needs (`./tradeReview.ts`) for one stored trade, and build
@@ -54,6 +56,8 @@ export type TradeReviewDeps = {
   deadlineKickoff: (args: { sport: string; season: number; week: number }) => Promise<Date | null>
   /** Ladder level (1–25) per AllFantasy user id; ids with no profile are simply absent. */
   managerLevels: (userIds: string[]) => Promise<Map<string, number>>
+  /** Skill class (1–25) in `sport` per user id; unrated managers are absent. */
+  managerSkillClasses: (userIds: string[], sport: string | null) => Promise<Map<string, number>>
   now: () => Date
 }
 
@@ -325,9 +329,21 @@ async function defaultManagerLevels(userIds: string[]): Promise<Map<string, numb
   return out
 }
 
+async function defaultManagerSkillClasses(userIds: string[], sport: string | null): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  if (userIds.length === 0 || !sport) return out
+  const board = await readSkillBoard()
+  for (const id of userIds) {
+    const cls = skillClassOf(board, sport, id)
+    if (cls != null) out.set(id, cls)
+  }
+  return out
+}
+
 export const defaultTradeReviewDeps: TradeReviewDeps = {
   evaluate: evaluateStoredTrade,
   managerLevels: (ids) => defaultManagerLevels(ids),
+  managerSkillClasses: (ids, sport) => defaultManagerSkillClasses(ids, sport),
   leagueRow: (leagueId) => prisma.league.findUnique({ where: { id: leagueId } }).catch(() => null),
   pairHistory: (args) => defaultPairHistory(args).catch(() => ({ ok: false as const, reason: 'Trade history could not be read.' })),
   managerHealth: getLeagueManagerHealth,
@@ -503,12 +519,22 @@ export async function reviewStoredTrade(
     return { ok: true as const, value: kickoff.toISOString() }
   })()
 
-  // Manager levels — `managerUserId` is the AF user id once a team is claimed, otherwise a provider id
-  // that simply has no profile, which the check reports as "not an AllFantasy manager".
+  // Manager classes — `managerUserId` is the AF user id once a team is claimed, otherwise a provider
+  // id that simply has no profile, which the check reports as "not an AllFantasy manager". Skill
+  // classes in the league's sport when BOTH managers are rated there (the join band's basis);
+  // ladder levels otherwise, so a league of newcomers still gets a comparison.
+  let classBasis: TradeReviewFacts['classBasis'] = 'level'
   const managerLevels: TradeReviewFacts['managerLevels'] = await (async () => {
     const ids = [teamA?.managerUserId ?? null, teamB?.managerUserId ?? null]
     if (!ids[0] && !ids[1]) return { ok: false as const, reason: 'The managers behind these teams could not be identified.' }
-    const levels = await d.managerLevels(ids.filter((x): x is string => Boolean(x))).catch(() => null)
+    const present = ids.filter((x): x is string => Boolean(x))
+    const sport = world?.league.sport ?? (league ? String(league.sport) : null)
+    const skill = await d.managerSkillClasses(present, sport ? sport.toUpperCase() : null).catch(() => new Map<string, number>())
+    if (ids[0] && ids[1] && skill.has(ids[0]) && skill.has(ids[1])) {
+      classBasis = 'skill'
+      return { ok: true as const, value: [skill.get(ids[0])!, skill.get(ids[1])!] as const }
+    }
+    const levels = await d.managerLevels(present).catch(() => null)
     if (!levels) return { ok: false as const, reason: 'Manager levels could not be read.' }
     return { ok: true as const, value: [ids[0] ? levels.get(ids[0]) ?? null : null, ids[1] ? levels.get(ids[1]) ?? null : null] as const }
   })()
@@ -525,6 +551,7 @@ export async function reviewStoredTrade(
     // The type the one grade priced the trade on — so "tanking" and "rebuild" follow the grade's own format.
     leagueType: receipt.grade.leagueType ? { type: receipt.grade.leagueType.type, label: receipt.grade.leagueType.label } : null,
     managerLevels,
+    classBasis,
   }
   return { ok: true, review: buildTradeReview(facts), receipt, trade, sideNames, sides: [sideA, sideB], facts }
 }

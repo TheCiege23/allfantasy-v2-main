@@ -7,14 +7,20 @@ import { isAdminEmailAllowed, isAdminRole } from '@/lib/adminAuth'
 import {
   readClassExceptions,
   readClassJoinRequests,
-  resolveLeagueClassRange,
   withClassException,
   withClassJoinRequest,
   withoutClassException,
   withoutClassJoinRequest,
+  type ClassBasis,
   type ClassRange,
 } from '@/lib/league-join/managerClass'
-import { resolveJoinRankGate, resolveUserRankLevel } from '@/lib/league-join/resolveJoinRankGate'
+import {
+  resolveJoinRankGate,
+  resolveLeagueClass,
+  resolveUserRankLevel,
+  skillClassOf,
+} from '@/lib/league-join/resolveJoinRankGate'
+import { readSkillBoard } from '@/lib/rank/skillRating/skillRatingStore'
 
 /**
  * Commissioner exceptions to the ±2 manager-class band, and the requests that
@@ -144,7 +150,10 @@ export async function requestClassException(input: { leagueId: string; userId: s
     leagueId: input.leagueId,
     type: 'manager_class_request',
     title: `${handle} asked to join ${league.name ?? 'your league'}`,
-    body: `${handle} is Level ${gate.userRankLevel}; your league is for Level ${gate.minRankLevel}–${gate.maxRankLevel}. Approve or decline in league settings.`,
+    body:
+      gate.basis === 'skill'
+        ? `${handle} is ${gate.sport ?? ''} skill Class ${gate.userClass}; your league plays at Class ${gate.minRankLevel}–${gate.maxRankLevel}. Approve or decline in league settings.`
+        : `${handle} is Level ${gate.userRankLevel}; your league is for Level ${gate.minRankLevel}–${gate.maxRankLevel}. Approve or decline in league settings.`,
     actionHref: `/league/${input.leagueId}/settings`,
     actionLabel: 'Review request',
   })
@@ -156,11 +165,18 @@ export async function requestClassException(input: { leagueId: string; userId: s
 
 export type ClassGateSummary = {
   range: ClassRange | null
+  /** `skill` once any member is rated in the league's sport; `level` until then. */
+  basis: ClassBasis
+  sport: string | null
+  /** Members whose skill set the class (0 on the level basis). */
+  ratedMembers: number
   exceptions: Array<{
     userId: string
     username: string | null
     displayName: string | null
     level: number
+    /** Skill class in the league's sport; null while unrated. */
+    skillClass: number | null
     grantedAt: string
     via: 'direct' | 'request'
   }>
@@ -169,20 +185,18 @@ export type ClassGateSummary = {
     username: string | null
     displayName: string | null
     level: number
+    skillClass: number | null
     requestedAt: string
   }>
 }
 
 export async function getClassGateSummary(leagueId: string): Promise<ClassGateSummary | null> {
-  const [league, listing] = await Promise.all([
+  const [league, board] = await Promise.all([
     prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } }),
-    prisma.findLeagueListing.findFirst({
-      where: { leagueId, OR: [{ creatorRankLevel: { not: null } }, { minRankLevel: { not: null } }] },
-      orderBy: { createdAt: 'asc' },
-      select: { creatorRankLevel: true, minRankLevel: true, maxRankLevel: true },
-    }),
+    readSkillBoard().catch(() => null),
   ])
   if (!league) return null
+  const leagueClass = await resolveLeagueClass(leagueId, board)
 
   const exceptions = readClassExceptions(league.settings)
   const requests = readClassJoinRequests(league.settings)
@@ -194,14 +208,19 @@ export async function getClassGateSummary(leagueId: string): Promise<ClassGateSu
       : Promise.resolve([]),
   ])
   const levels = new Map(profiles.map((p) => [p.userId, resolveUserRankLevel(p)]))
+  const skillOf = (id: string) => skillClassOf(board, leagueClass.sport, id)
 
   return {
-    range: resolveLeagueClassRange(listing),
+    range: leagueClass.range,
+    basis: leagueClass.basis,
+    sport: leagueClass.sport,
+    ratedMembers: leagueClass.ratedMembers,
     exceptions: exceptions.map((e) => ({
       userId: e.userId,
       username: names.get(e.userId)?.username ?? null,
       displayName: names.get(e.userId)?.displayName ?? null,
       level: levels.get(e.userId) ?? 1,
+      skillClass: skillOf(e.userId),
       grantedAt: e.grantedAt,
       via: e.via,
     })),
@@ -210,6 +229,7 @@ export async function getClassGateSummary(leagueId: string): Promise<ClassGateSu
       username: names.get(r.userId)?.username ?? null,
       displayName: names.get(r.userId)?.displayName ?? null,
       level: levels.get(r.userId) ?? 1,
+      skillClass: skillOf(r.userId),
       requestedAt: r.requestedAt,
     })),
   }

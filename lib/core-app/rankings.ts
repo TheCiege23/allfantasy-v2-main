@@ -825,7 +825,7 @@ export async function getRankingsData(
     }
   }
 
-  const skill = scope === 'skill' ? await getSkillView(userId, one(sp, 'sport')).catch(() => null) : null
+  const skill = scope === 'skill' ? await getSkillView(userId, one(sp, 'sport'), one(sp, 'class')).catch(() => null) : null
 
   const optionRows = scope === 'portfolio' ? mineRows : base.rows
   const shareable =

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { currentSkill, type GameLogEntry, type ManagerSkill } from '@/lib/rank/skillRating/replay'
 import { winProbability } from '@/lib/rank/skillRating/glicko2'
 import { percentileRank, readSkillBoard, readSkillLog, type SkillBoardRow } from '@/lib/rank/skillRating/skillRatingStore'
+import { MANAGER_CLASS_BAND, SKILL_CLASS_MIN_GAMES, classRangeFor, skillClassFor, skillClassRatingSpan } from '@/lib/league-join/managerClass'
 
 /**
  * The Skill tab of `/core/rankings` — the per-game rating read for one sport.
@@ -28,6 +29,8 @@ export type SkillBoardView = {
   record: string
   games: number
   percentile: number | null
+  /** Skill class (1–25) — what league joins are measured on in this sport. */
+  skillClass: number
   isYou: boolean
 }
 
@@ -51,6 +54,10 @@ export type SkillYou = {
   gamesToBoard: number
   /** Chance you would beat an average manager (1500, settled deviation). */
   vsAverage: number
+  /** Your skill class in this sport, once you have the minimum rated games. */
+  skillClass: number | null
+  /** The classes you can join leagues in, and the ratings they span. */
+  classBand: { min: number; max: number; lo: number; hi: number } | null
 }
 
 export type SkillView = {
@@ -62,6 +69,8 @@ export type SkillView = {
   board: SkillBoardView[]
   you: SkillYou | null
   log: SkillLogView[]
+  /** Board narrowed to your class band (`?class=mine`). Null when you have no class yet. */
+  classFilter: { active: boolean; band: number; href: string; offHref: string } | null
   /** Why there is nothing to show, when there is nothing. */
   empty: string | null
 }
@@ -86,7 +95,7 @@ function toSkill(row: SkillBoardRow): ManagerSkill {
   }
 }
 
-export async function getSkillView(userId: string | null, sportParam: string | null): Promise<SkillView> {
+export async function getSkillView(userId: string | null, sportParam: string | null, classParam: string | null = null): Promise<SkillView> {
   const board = await readSkillBoard()
   const sports = board ? Object.keys(board.sports).sort((a, b) => (board.sports[b].games - board.sports[a].games) || a.localeCompare(b)) : []
   const empty: SkillView = {
@@ -98,6 +107,7 @@ export async function getSkillView(userId: string | null, sportParam: string | n
     board: [],
     you: null,
     log: [],
+    classFilter: null,
     empty: board
       ? 'No head-to-head games have been rated yet. Import a league with weekly matchups and your rating appears the next day.'
       : 'Skill ratings are calculated once a day. The first run has not finished yet — check back tomorrow.',
@@ -110,11 +120,19 @@ export async function getSkillView(userId: string | null, sportParam: string | n
 
   // Ratings as of the sport's latest week: someone idle since last season is less certain today.
   const current = sb.rows.map((row) => ({ row, skill: currentSkill(toSkill(row), sb.latestPeriod) }))
+  const mine = userId ? current.find((c) => c.row.u === userId) ?? null : null
+  const myClass = mine && mine.row.g >= SKILL_CLASS_MIN_GAMES ? skillClassFor(mine.row.r) : null
+  const myBand = myClass != null ? classRangeFor(myClass) : null
+  const classMine = myBand != null && classParam === 'mine'
+
   const qualified = current
     .filter((c) => c.row.g >= SKILL_BOARD_MIN_GAMES)
+    .filter((c) => {
+      if (!classMine || !myBand) return true
+      const cls = skillClassFor(c.row.r)
+      return cls >= myBand.min && cls <= myBand.max
+    })
     .sort((a, b) => b.skill.conservative - a.skill.conservative)
-
-  const mine = userId ? current.find((c) => c.row.u === userId) ?? null : null
   const log = userId ? await readSkillLog(userId) : null
   const entries = (log?.sports[sport] ?? []).slice(-LOG_SHOWN).reverse()
 
@@ -148,6 +166,7 @@ export async function getSkillView(userId: string | null, sportParam: string | n
       record: record(c.row),
       games: c.row.g,
       percentile: percentileRank(sb.percentiles, c.skill.conservative),
+      skillClass: skillClassFor(c.row.r),
       isYou: c.row.u === userId,
     }
   })
@@ -165,8 +184,13 @@ export async function getSkillView(userId: string | null, sportParam: string | n
       boardRank: at >= 0 ? at + 1 : null,
       gamesToBoard: Math.max(0, SKILL_BOARD_MIN_GAMES - mine.row.g),
       vsAverage: winProbability(mine.skill, { rating: 1500, rd: 50, volatility: 0.06 }),
+      skillClass: myClass,
+      classBand: myBand
+        ? { min: myBand.min, max: myBand.max, lo: skillClassRatingSpan(myBand.min).lo, hi: skillClassRatingSpan(myBand.max).hi }
+        : null,
     }
   }
+  const sportQ = `scope=skill&sport=${encodeURIComponent(sport)}`
 
   return {
     sports,
@@ -181,6 +205,14 @@ export async function getSkillView(userId: string | null, sportParam: string | n
       opponentLabel: e.opponent.startsWith('af:') ? handle(e.opponent.slice(3)) : e.opponentName?.trim() || 'Unknown manager',
       change: e.ratingAfter - e.ratingBefore,
     })),
+    classFilter: myBand
+      ? {
+          active: classMine,
+          band: MANAGER_CLASS_BAND,
+          href: `/core/rankings?${sportQ}&class=mine`,
+          offHref: `/core/rankings?${sportQ}`,
+        }
+      : null,
     empty: null,
   }
 }

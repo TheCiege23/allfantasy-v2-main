@@ -91,6 +91,7 @@ function deps(over: Partial<TradeReviewDeps> = {}): Partial<TradeReviewDeps> {
     lastMoves: async () => ({ ok: true, value: lastMovesFrom([{ teamId: 'rA', at: new Date(NOW.getTime() - 20 * DAY) }, { teamId: 'rB', at: new Date(NOW.getTime() - DAY) }]) }),
     forecast: async () => ({ week: 10, teamForecasts: [{ teamId: '1', playoffProbability: 0.5 }, { teamId: '2', playoffProbability: 81 }] }),
     deadlineKickoff: async () => new Date(NOW.getTime() + 30 * 3_600_000),
+    managerSkillClasses: async () => new Map(),
     now: () => NOW,
     ...over,
   }
@@ -219,6 +220,28 @@ describe('reviewStoredTrade — each missing source says so', () => {
     expect(managerLevels).toHaveBeenCalledWith(['u-senior', 'u-newer'])
     expect(r.facts.managerLevels).toEqual({ ok: true, value: [15, 5] })
     expect(r.review.checks.find((c) => c.code === 'class_gap')!.status).not.toBe('not_computed')
+  })
+
+  it('compares SKILL classes when both managers are rated in the league sport, levels otherwise', async () => {
+    const named = { ...world, teams: [{ ...world.teams[0], managerUserId: 'u-a' }, { ...world.teams[1], managerUserId: 'u-b' }] }
+    const evaluate = vi.fn(async () => ({ ok: true, trade: trade(), receipt: receipt(), perspectiveTeamId: 'rA', viewerInTrade: false, world: named })) as never
+    const managerSkillClasses = vi.fn(async () => new Map([['u-a', 18], ['u-b', 11]]))
+    const managerLevels = vi.fn(async () => new Map([['u-a', 3], ['u-b', 3]]))
+    const r = await reviewStoredTrade({ leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' }, deps({ evaluate, managerSkillClasses, managerLevels }))
+    if (!r.ok) throw new Error('refused')
+    expect(managerSkillClasses).toHaveBeenCalledWith(['u-a', 'u-b'], 'NFL')
+    expect(r.facts.classBasis).toBe('skill')
+    expect(r.facts.managerLevels).toEqual({ ok: true, value: [18, 11] })
+    expect(managerLevels).not.toHaveBeenCalled()
+
+    // Only one side rated: fall back to levels for both, never a mixed comparison.
+    const half = await reviewStoredTrade(
+      { leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' },
+      deps({ evaluate, managerSkillClasses: async () => new Map([['u-a', 18]]), managerLevels }),
+    )
+    if (!half.ok) throw new Error('refused')
+    expect(half.facts.classBasis).toBe('level')
+    expect(half.facts.managerLevels).toEqual({ ok: true, value: [3, 3] })
   })
 
   it('a manager with no AllFantasy profile has no level: not computed', async () => {

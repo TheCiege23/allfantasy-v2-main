@@ -209,7 +209,59 @@ export function withoutClassJoinRequest(settings: unknown, userId: string): Sett
   return base
 }
 
+/* ──────────────────────────────── skill classes ─────────────────────────── */
+
+/**
+ * SKILL IS THE CLASS BASIS WHEN IT CAN BE (2026-10-01). Level measures how much
+ * someone has played; the per-game skill rating (`lib/rank/skillRating`) measures
+ * how well. A weight class is about how well.
+ *
+ * ⚠ FIXED RATING BANDS, NOT PERCENTILES. Class N covers the same 50 rating points
+ * forever, so a manager's class only moves when THEIR rating moves — never because
+ * the population around them improved. Class 13 is centred on 1500, the rating a
+ * new manager starts at, and the 25 classes mirror the 25 levels so "±2" reads the
+ * same either way.
+ *
+ * ±2 classes is ±100 rating points: the weaker side of any allowed pairing is
+ * still given about a 36% chance — a game, not a mismatch.
+ */
+export const SKILL_CLASS_WIDTH = 50
+export const SKILL_CLASS_CENTER = 13
+export const SKILL_CLASS_CENTER_RATING = 1500
+/** Games in a sport before a manager's skill class is trusted — the Skill board's own bar. */
+export const SKILL_CLASS_MIN_GAMES = 10
+
+export type ClassBasis = 'skill' | 'level'
+
+export function skillClassFor(rating: number): number {
+  return clampLevel(SKILL_CLASS_CENTER + Math.round((rating - SKILL_CLASS_CENTER_RATING) / SKILL_CLASS_WIDTH))
+}
+
+/** The rating span a skill class covers, for saying "Class 14 (1625–1674)". */
+export function skillClassRatingSpan(cls: number): { lo: number; hi: number } {
+  const mid = SKILL_CLASS_CENTER_RATING + (clampLevel(cls) - SKILL_CLASS_CENTER) * SKILL_CLASS_WIDTH
+  return { lo: mid - SKILL_CLASS_WIDTH / 2, hi: mid + SKILL_CLASS_WIDTH / 2 - 1 }
+}
+
+/** The middle value; the lower middle for an even count, so one strong late joiner cannot lift a league. */
+export function medianClass(classes: number[]): number | null {
+  if (classes.length === 0) return null
+  const sorted = [...classes].sort((a, b) => a - b)
+  return sorted[Math.floor((sorted.length - 1) / 2)]
+}
+
 /** The message a blocked manager sees, in one place so every join path says the same thing. */
-export function classBlockedMessage(range: Pick<ClassRange, 'min' | 'max'>, userLevel: number): string {
-  return `This league is for managers at Level ${range.min}–${range.max}, and you are Level ${clampLevel(userLevel)}. You can ask the commissioner to let you in.`
+export function classBlockedMessage(
+  range: Pick<ClassRange, 'min' | 'max'>,
+  userClass: number,
+  basis: ClassBasis = 'level',
+  sport?: string | null,
+): string {
+  if (basis === 'skill') {
+    const lo = skillClassRatingSpan(range.min).lo
+    const hi = skillClassRatingSpan(range.max).hi
+    const you = clampLevel(userClass)
+    return `This league plays at ${sport ? `${sport} ` : ''}skill Class ${range.min}–${range.max} (ratings ${lo}–${hi}), and you are Class ${you}. You can ask the commissioner to let you in.`
+  }
+  return `This league is for managers at Level ${range.min}–${range.max}, and you are Level ${clampLevel(userClass)}. You can ask the commissioner to let you in.`
 }

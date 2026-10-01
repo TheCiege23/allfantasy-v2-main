@@ -245,6 +245,13 @@ describe('class gap (2026-10-01)', () => {
     expect(check(facts({ gapPct: missing('ungraded'), managerLevels: { ok: true, value: [14, 6] } }), 'class_gap').status).toBe('not_computed')
   })
 
+  it('speaks in skill classes when that is the basis', () => {
+    const c = check(facts({ gapPct: { ok: true, value: 18 }, managerLevels: { ok: true, value: [17, 11] }, classBasis: 'skill' }), 'class_gap')
+    expect(c.status).toBe('raised')
+    expect(c.explanation).toContain('Alpha (the stronger manager) receives 18% more value')
+    expect(c.explanation).toContain('skill Class 17 and skill Class 11, 6 classes apart')
+  })
+
   it('on its own never moves the recommendation off approve', () => {
     const r = buildTradeReview(facts({ gapPct: { ok: true, value: 18 }, managerLevels: { ok: true, value: [14, 6] } }))
     expect(r.flags.map((f) => f.code)).toEqual(['class_gap'])

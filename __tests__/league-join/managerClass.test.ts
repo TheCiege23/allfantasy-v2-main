@@ -16,6 +16,7 @@ import {
   withoutClassJoinRequest,
 } from '@/lib/league-join/managerClass'
 import { isLeagueVisibleForCareerTier } from '@/lib/ranking/tier-visibility'
+import { classBlockedMessage, medianClass, skillClassFor, skillClassRatingSpan } from '@/lib/league-join/managerClass'
 
 describe('manager class band', () => {
   it('is ±2', () => {
@@ -123,5 +124,32 @@ describe('exceptions and requests on League.settings', () => {
     expect(readClassExceptions(s)[0].via).toBe('direct')
     expect(readClassJoinRequests(s)).toEqual([])
     expect(hasClassException(null, 'u1')).toBe(false)
+  })
+})
+
+describe('skill classes', () => {
+  it('are fixed 50-point bands with Class 13 centred on 1500', () => {
+    expect(skillClassFor(1500)).toBe(13)
+    expect(skillClassFor(1524)).toBe(13)
+    expect(skillClassFor(1525)).toBe(14)
+    expect(skillClassFor(1474)).toBe(12)
+    expect(skillClassRatingSpan(13)).toEqual({ lo: 1475, hi: 1524 })
+    expect(skillClassFor(5000)).toBe(25)
+    expect(skillClassFor(-5000)).toBe(1)
+  })
+
+  it('±2 classes is about ±100 rating points', () => {
+    expect(skillClassRatingSpan(15).hi - skillClassRatingSpan(11).lo + 1).toBe(250)
+  })
+
+  it('the league median takes the lower middle, so one strong late joiner cannot lift it', () => {
+    expect(medianClass([12, 13, 20])).toBe(13)
+    expect(medianClass([12, 20])).toBe(12)
+    expect(medianClass([])).toBeNull()
+  })
+
+  it('says which basis blocked the manager', () => {
+    expect(classBlockedMessage({ min: 12, max: 16 }, 19, 'skill', 'NFL')).toContain('NFL skill Class 12–16 (ratings 1425–1674), and you are Class 19')
+    expect(classBlockedMessage({ min: 5, max: 9 }, 2)).toContain('Level 5–9, and you are Level 2')
   })
 })
