@@ -72,4 +72,16 @@ describe('standalone carryover transaction', () => {
     expect(tx.roster.update).not.toHaveBeenCalled()
     expect(tx.draftPick.createMany).not.toHaveBeenCalled()
   })
+
+  it('does not reassign a commissioner seat claimed by a different manager', async () => {
+    const tx = transaction()
+    tx.leagueTeam.findMany.mockResolvedValue([
+      { id: 'source-team-1', externalId: 'seat-1', platformUserId: 'manager-1', claimedByUserId: 'other-user', teamName: 'Aces', ownerName: 'Alice', avatarUrl: null, isCommissioner: true },
+      { id: 'source-team-2', externalId: 'seat-2', platformUserId: 'manager-2', claimedByUserId: 'friend', teamName: 'Bears', ownerName: 'Bob', avatarUrl: null, isCommissioner: false },
+    ])
+    await expect(carryOverImportedLeague(tx as never, {
+      sourceLeagueId: 'source', targetLeagueId: 'native', creatorUserId: 'creator', sport: 'NFL', teamCount: 2,
+    })).rejects.toThrow(/Claim your commissioner team/)
+    expect(tx.roster.update).not.toHaveBeenCalled()
+  })
 })
