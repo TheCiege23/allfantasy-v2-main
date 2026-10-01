@@ -9,10 +9,10 @@
  * were pointed at /af-crest.png, which is a JPEG with a `.png` name and an
  * opaque black square around the crest — a black box on the email's white card.
  *
- * ⚠ /af-crest.png IS LEFT ALONE ON PURPOSE. It is the source for the PWA icons
- * (generate-icons.ps1), and an iOS home-screen icon with transparency renders
- * the transparent area black — exactly the box this file exists to remove.
- * Emails already in inboxes also still point at it.
+ * ⚠ /af-crest.png IS LEFT ALONE ON PURPOSE: emails already in inboxes still
+ * point at it. Home-screen icons are NOT made from this file either — they need
+ * an opaque tile (iOS renders icon transparency black); see
+ * scripts/build-pwa-icons.mjs.
  *
  * Square canvas, so it drops into icon-shaped slots (a 28x28 email cell, a
  * notification icon) without being stretched; the crest is centred with a
