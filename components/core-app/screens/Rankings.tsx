@@ -20,7 +20,8 @@ import type { ClassView } from '@/lib/class-rating/classView'
 import { GLICKO } from '@/lib/class-rating/engine'
 import '@/components/core-app/af-rankings-screen.css'
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
-import { RankTable, type RankColumn, type RankRow } from '@/components/core-app/rankings/RankTable'
+import { PhoneSort, RankTable, type RankColumn, type RankRow } from '@/components/core-app/rankings/RankTable'
+import { PhoneFold } from '@/components/core-app/rankings/PhoneFold'
 import { TrendLine } from '@/components/core-app/rankings/TrendLine'
 import { RankingsFilterBar } from '@/components/core-app/rankings/RankingsFilterBar'
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
@@ -317,6 +318,7 @@ function ExplainPanel({ g, data }: { g: GlobalView; data: RankingsData }) {
 }
 
 function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
+  const boardCols = boardColumns(g, data)
   return (
     <>
       {g.you ? (
@@ -369,6 +371,7 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
       <ExplainPanel g={g} data={data} />
 
       <section className="af-rk-card af-rk-explainsplit-main">
+        <PhoneFold id="af-rk-board-controls" summary={boardControlsSummary(g, boardCols)}>
         {g.divisionFilter ? (
           <div className="af-rk-classbar" role="group" aria-label="Who is on this board" data-active={g.divisionFilter.active ? 'true' : 'false'}>
             {g.divisionFilter.active ? (
@@ -403,6 +406,8 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
             </Link>
           ))}
         </nav>
+        {!g.unavailable && g.rows.length > 0 ? <PhoneSort columns={boardCols} /> : null}
+        </PhoneFold>
 
         <p className="af-rk-eyebrow">
           {g.label}
@@ -415,7 +420,8 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
         ) : (
           <RankTable
             caption={`${g.label} — ${data.filtersLabel}`}
-            columns={boardColumns(g, data)}
+            columns={boardCols}
+            phoneSort={false}
             rows={boardRows(g.rows)}
             emptyText={
               g.belowSample > 0
@@ -942,6 +948,18 @@ function LeagueBody({ league }: { league: LeagueView }) {
 function signed(n: number): string {
   const r = Math.round(n)
   return r > 0 ? `+${r}` : r < 0 ? `−${-r}` : '0'
+}
+
+/**
+ * What the folded phone controls say while closed: the board, who is on it, and the sort.
+ * Read off the same values the open controls mark as current, so the two cannot disagree.
+ */
+export function boardControlsSummary(g: GlobalView, columns: RankColumn[]): string {
+  const board = g.tabs.find((t) => t.key === g.board)?.label ?? g.label
+  const who = g.divisionFilter?.active ? divisionRange(g.divisionFilter.band) : 'Everyone'
+  const sorted = columns.find((c) => c.sortHref && c.sort && c.sort !== 'none')
+  const sort = sorted ? `${sorted.label === '#' ? 'Rank' : sorted.label} ${sorted.sort === 'ascending' ? '▲' : '▼'}` : null
+  return [board, g.divisionFilter ? who : null, sort ? `Sort: ${sort}` : null].filter(Boolean).join(' · ')
 }
 
 function divisionRange([lo, hi]: [number, number]): string {
