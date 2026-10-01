@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeek } from './currentWeek'
 import type { SectionState } from './leagueHome'
 import { getTeamLogoUrl } from '@/lib/player-media-urls'
+import { liveLogoOrNull } from '@/lib/sport-teams/knownDeadLogoGuess'
+import { getStoredTeamLogoResolver } from '@/lib/sport-teams/storedTeamLogos'
 
 /**
  * The three cross-league cards that sit at the top of Dashboard v2: today's
@@ -402,6 +404,27 @@ async function resolveNext24(
    * correct arithmetic waiting on a trustworthy input.
    */
 
+  /*
+   * 🛑 OUTSIDE THE NFL THE LOGO IS THE STORED CREST, NOT A GUESS. `getTeamLogoUrl` builds an ESPN
+   * path from the team string, and ESPN keys college and soccer crests by numeric id — so every
+   * college game here drew a broken-image glyph for both teams (2026-10-01), while the crests sat
+   * in `SportsTeam.logo`. Measured on the test DB that day: 658 of 705 NCAAF game team names, and
+   * every NBA one, resolve to a stored crest; the misses are mostly D-II/D-III schools we hold no
+   * crest for, and they get no image rather than a dead one. The NFL path is unchanged.
+   */
+  const storedLogoBySport = new Map(
+    await Promise.all(
+      [...new Set(games.map((g) => g.sport.toUpperCase()))]
+        .filter((s) => s !== 'NFL')
+        .map(async (s) => [s, await getStoredTeamLogoResolver(s)] as const),
+    ),
+  )
+  const logoFor = (team: string | null, sport: string, key: string | null): string | null => {
+    const stored = storedLogoBySport.get(sport.toUpperCase())
+    if (!stored) return getTeamLogoUrl(key, sport)
+    return stored(team) ?? liveLogoOrNull(getTeamLogoUrl(key, sport))
+  }
+
   const seenFixtures = new Set<string>()
   for (const g of games) {
     if (!g.startTime) continue
@@ -421,7 +444,7 @@ async function resolveNext24(
         const spread = market?.spreadHome
         const favorite = spread == null ? null : spread === 0 ? 'Pick’em' : `${spread < 0 ? g.homeTeam : g.awayTeam} favored by ${Math.abs(spread)}`
         return { home: g.sport === 'NFL' ? getTeamInfo(g.homeTeam)?.fullName ?? g.homeTeam : g.homeTeam, away: g.sport === 'NFL' ? getTeamInfo(g.awayTeam)?.fullName ?? g.awayTeam : g.awayTeam,
-          homeLogo: getTeamLogoUrl(teamKey(g.homeTeam), g.sport), awayLogo: getTeamLogoUrl(teamKey(g.awayTeam), g.sport),
+          homeLogo: logoFor(g.homeTeam, g.sport, teamKey(g.homeTeam)), awayLogo: logoFor(g.awayTeam, g.sport, teamKey(g.awayTeam)),
           href: `/core/live?sport=${encodeURIComponent(g.sport)}${g.source === 'espn' ? `&game=${encodeURIComponent(g.externalId)}` : ''}`,
           odds: [
             favorite,
