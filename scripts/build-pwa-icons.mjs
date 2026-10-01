@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 /**
- * Generate the home-screen icons in public/icons/ from public/af-crest.svg.
+ * Generate the home-screen icons in public/icons/, and the native iOS app icon
+ * and launch splash in ios-app/, from public/af-crest.svg — one script, so the
+ * web and native marks cannot drift apart.
  *
  * Replaces generate-icons.ps1, which stretched public/af-crest.png — an older
  * crest variant, as a JPEG on a 1024px black square — to every size, so each
@@ -35,7 +37,28 @@ const CREST_MASKABLE = 0.62
 const ANY_SIZES = [72, 96, 128, 144, 152, 192, 384, 512]
 const MASKABLE_SIZES = [192, 512]
 
-async function icon(size, fraction, file) {
+/*
+ * The native iOS shell (ios-app/, the project ios-testflight.yml archives).
+ * It only reaches users with the next TestFlight build — that workflow is
+ * manual, so regenerating these ships nothing by itself.
+ *
+ * App icon: one 1024 "universal" image, the only slot its Contents.json
+ * declares. App Store Connect REJECTS an app icon with an alpha channel, and
+ * iOS applies its own corner mask, so it is the same opaque square as the web
+ * "any" icons.
+ *
+ * Splash: kept exactly as it was — crest at ~21% of the height on BLACK — with
+ * only the crest replaced. The background must stay #000000: that is the
+ * SplashScreen.backgroundColor in ios-app/capacitor.config.json, and a splash
+ * image that disagreed with it would flash at the hand-off.
+ */
+const IOS_ASSETS = 'ios-app/ios/App/App/Assets.xcassets'
+const IOS_APP_ICON = `${IOS_ASSETS}/AppIcon.appiconset/AppIcon-512@2x.png`
+const IOS_SPLASHES = ['', '-1', '-2'].map((s) => `${IOS_ASSETS}/Splash.imageset/splash-2732x2732${s}.png`)
+const SPLASH_BG = '#000000'
+const CREST_SPLASH = 0.214
+
+async function icon(size, fraction, out, bg = BG) {
   // Rasterise the vector at the target size directly — never resize a raster up.
   const crest = await sharp(path.join(root, 'public/af-crest.svg'), { density: 600 })
     .resize({ height: Math.round(size * fraction), fit: 'inside' })
@@ -43,7 +66,7 @@ async function icon(size, fraction, file) {
     .toBuffer()
   const meta = await sharp(crest).metadata()
 
-  await sharp({ create: { width: size, height: size, channels: 3, background: BG } })
+  await sharp({ create: { width: size, height: size, channels: 3, background: bg } })
     .composite([
       {
         input: crest,
@@ -51,16 +74,18 @@ async function icon(size, fraction, file) {
         top: Math.round((size - (meta.height ?? 0)) / 2),
       },
     ])
-    .flatten({ background: BG })
+    .flatten({ background: bg })
     .removeAlpha()
     .png({ compressionLevel: 9 })
-    .toFile(path.join(root, 'public/icons', file))
-  console.log(`public/icons/${file}`)
+    .toFile(path.join(root, out))
+  console.log(out)
 }
 
 async function main() {
-  for (const size of ANY_SIZES) await icon(size, CREST_ANY, `icon-${size}.png`)
-  for (const size of MASKABLE_SIZES) await icon(size, CREST_MASKABLE, `icon-maskable-${size}.png`)
+  for (const size of ANY_SIZES) await icon(size, CREST_ANY, `public/icons/icon-${size}.png`)
+  for (const size of MASKABLE_SIZES) await icon(size, CREST_MASKABLE, `public/icons/icon-maskable-${size}.png`)
+  await icon(1024, CREST_ANY, IOS_APP_ICON)
+  for (const out of IOS_SPLASHES) await icon(2732, CREST_SPLASH, out, SPLASH_BG)
 }
 
 main().catch((err) => {
