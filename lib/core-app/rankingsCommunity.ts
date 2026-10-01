@@ -16,6 +16,9 @@ import {
   type ScoringCohorts,
 } from '@/lib/core-app/rankingsEngine'
 import { snapshotExists, writeRankSnapshot } from '@/lib/core-app/rankingsSnapshots'
+// Safe under the import rule below: prisma, the ledger and pure XP maths, plus a
+// career-profile hook it loads dynamically and catches — it is run from plain tsx too.
+import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 
 /**
  * The community base for `/core/rankings` — every ranked manager and their
@@ -152,19 +155,79 @@ export type RankingsSnapshotCounts = {
   alreadyWritten: number
   population: number
   failed: number
+  /** Stored levels rewritten because they disagreed with the ledger. */
+  levelsRefreshed: number
+  /** Stale levels whose rewrite returned nothing. Kept apart from `failed`, which is the snapshot. */
+  levelsRefreshFailed: number
+  /** Stale levels left for tomorrow by `LEVEL_REFRESH_CAP`. */
+  levelsDeferred: number
   errors: string[]
 }
 
 export function emptyRankingsSnapshotCounts(): RankingsSnapshotCounts {
-  return { date: null, written: 0, alreadyWritten: 0, population: 0, failed: 0, errors: [] }
+  return {
+    date: null,
+    written: 0,
+    alreadyWritten: 0,
+    population: 0,
+    failed: 0,
+    levelsRefreshed: 0,
+    levelsRefreshFailed: 0,
+    levelsDeferred: 0,
+    errors: [],
+  }
+}
+
+/* ─────────────────────────── the stored level ───────────────────────────── */
+
+/**
+ * Most stale levels rewritten per day. Each rewrite re-reads one manager's ledger,
+ * so this bounds the first fire of the day however large the population grows.
+ */
+export const LEVEL_REFRESH_CAP = 200
+
+/**
+ * Managers whose STORED XP disagrees with the published formula over today's ledger.
+ *
+ * ⚠ THE STORED LEVEL IS ONLY REWRITTEN BY AN IMPORT, SO IT ROTS. `/core/rankings`
+ * computes the level from the ledger on every render, but `user_profiles.xp_level`
+ * is what the join gate, `/api/user/rank` and every badge read — and nothing
+ * rewrote it unless the manager re-imported. Measured 2026-10-01: 8 of 12 ranked
+ * profiles disagreed with their ledger, the largest stored at level 21 against a
+ * ledger-derived 13 (an XP total from an older formula, last written 2026-05-06).
+ *
+ * An empty ledger is skipped: `calculateAndSaveRank` writes nothing for one, so
+ * listing it would retry it every day for nothing.
+ */
+export function staleLevelUserIds(base: CommunityBase): string[] {
+  const out: string[] = []
+  for (const p of base.profiles) {
+    const rows = base.rowsByUser.get(p.userId) ?? []
+    if (rows.length === 0) continue
+    if (p.xpTotal == null || careerXp(rows).total !== p.xpTotal) out.push(p.userId)
+  }
+  return out
+}
+
+async function refreshStaleLevels(base: CommunityBase, out: RankingsSnapshotCounts): Promise<void> {
+  const stale = staleLevelUserIds(base)
+  out.levelsDeferred = Math.max(0, stale.length - LEVEL_REFRESH_CAP)
+  // Sequential on purpose: a handful of ledger reads, never a burst against the pool.
+  for (const userId of stale.slice(0, LEVEL_REFRESH_CAP)) {
+    const saved = await calculateAndSaveRank(userId)
+    if (saved) out.levelsRefreshed += 1
+    else out.levelsRefreshFailed += 1
+  }
 }
 
 /**
- * Write today's Overall board, once per Eastern day.
+ * Write today's Overall board, once per Eastern day — and on that same first fire,
+ * rewrite any stored level that has drifted from the ledger (see `staleLevelUserIds`).
  *
  * Cheap by construction — one existence check per fire, and on the first fire of
- * the day one ledger read and one upsert — so it runs every fire rather than
- * behind a flag. `CORE_RANKINGS_SNAPSHOT_DISABLED=true` turns it off.
+ * the day one ledger read, one upsert, and one ledger read per stale level (capped)
+ * — so it runs every fire rather than behind a flag.
+ * `CORE_RANKINGS_SNAPSHOT_DISABLED=true` turns both off.
  */
 export async function runRankingsDailySnapshot(now: Date = new Date()): Promise<RankingsSnapshotCounts> {
   const out = emptyRankingsSnapshotCounts()
@@ -188,6 +251,10 @@ export async function runRankingsDailySnapshot(now: Date = new Date()): Promise<
     )
     out.written = 1
     out.population = board.rows.length
+    // After the snapshot, never before: a level rewrite must not be able to cost the board.
+    await refreshStaleLevels(base, out).catch((e: unknown) => {
+      out.errors.push(`level_refresh: ${e instanceof Error ? e.message : String(e)}`)
+    })
   } catch (e) {
     out.failed = 1
     out.errors.push(`rankings_snapshot: ${e instanceof Error ? e.message : String(e)}`)

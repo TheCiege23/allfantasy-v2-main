@@ -65,6 +65,12 @@ export type StandingRow = {
   wins: number
   losses: number
   /**
+   * ⚠ OPTIONAL BECAUSE CACHED SUMMARIES PREDATE IT, like `live` below — a row read
+   * from `leagueStandingsSummary` before this field existed has no key, which must
+   * read as "no ties", never as an error.
+   */
+  ties?: number
+  /**
    * Rank change against last completed week. Null when there is no prior week
    * to compare against — the first scored week has no movement, and rendering
    * "—" there is different from rendering "no change".
@@ -546,6 +552,7 @@ export async function getLeagueStandings(
         weeksPlayed: t.weeksPlayed,
         wins: t.record.wins,
         losses: t.record.losses,
+        ties: t.record.ties,
         // Positive is an improvement: moving from 5th to 2nd is +3.
         movement: before != null ? before - rank : null,
       }

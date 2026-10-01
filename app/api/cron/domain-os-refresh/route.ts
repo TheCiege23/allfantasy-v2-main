@@ -326,6 +326,9 @@ export async function GET(req: NextRequest) {
           alreadyWritten: r.snapshot.alreadyWritten,
           ranked: r.snapshot.population,
           failed: r.snapshot.failed,
+          levelsRefreshed: r.snapshot.levelsRefreshed,
+          levelsRefreshFailed: r.snapshot.levelsRefreshFailed,
+          levelsDeferred: r.snapshot.levelsDeferred,
         },
         /*
          * The daily portfolio value record, unsummed. The /core/portfolio chart draws a stored day
