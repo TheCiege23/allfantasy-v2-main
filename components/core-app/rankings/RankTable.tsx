@@ -36,7 +36,7 @@ export type RankColumn = {
   /** Present when the column can be sorted; the link to the page sorted by it. */
   sortHref?: string
   sort?: 'ascending' | 'descending' | 'none'
-  /** Hidden below 720px; the value stays in the row's detail link. */
+  /** Hidden below 720px; the value moves into the row's "More" toggle (`PhoneMore`). */
   hideOnPhone?: boolean
 }
 
@@ -269,6 +269,7 @@ function Row({
       data-index={index}
       aria-rowindex={index + 2}
       className={row.highlight ? 'af-rk-row-you' : undefined}
+      data-phonemore={hiddenOnPhone(columns) >= PHONE_MORE_MIN ? '' : undefined}
       style={height ? { height } : undefined}
     >
       {row.cells.map((cell, ci) => {
@@ -276,8 +277,9 @@ function Row({
         /*
          * The phone card's slot for this cell (CSS reads it at ≤720px): the first cell leads, the
          * row header is the title, the first other always-visible cell is the headline value, and
-         * everything else — including columns a desktop table hides on phones — becomes a labelled
-         * chip, so a phone sees every number rather than half of them.
+         * the other always-visible cells become labelled chips. Columns a desktop table hides on
+         * phones go behind the row's "More" toggle (`PhoneMore`), so a phone still reaches every
+         * number without every card carrying all of them.
          */
         const firstValue = columns.findIndex((c, i) => i !== 0 && i !== rowHeaderIndex && !c.hideOnPhone)
         const card = ci === 0 ? 'lead' : ci === rowHeaderIndex ? 'title' : ci === firstValue ? 'value' : 'detail'
@@ -309,7 +311,58 @@ function Row({
           </td>
         )
       })}
+      <PhoneMore row={row} columns={columns} />
     </tr>
+  )
+}
+
+/**
+ * Phone only (≤720px, CSS). The columns a desktop table hides on phones used to become chips on
+ * every card, which made a row ~160px tall at 375px — four rows to a screen. They now sit behind a
+ * per-row "More" toggle instead, so a phone still reaches every number with one tap.
+ *
+ * ⚠ AN EXTRA CELL WITH NO HEADER. Above 720px it is `display: none`, which removes it from the
+ * accessibility tree too, so a desktop reader never meets a cell its column headers do not name.
+ * At ≤720px the original cells are the hidden ones, so each value is announced exactly once.
+ */
+const PHONE_MORE_MIN = 2
+
+function hiddenOnPhone(columns: RankColumn[]): number {
+  return columns.filter((c) => c.hideOnPhone).length
+}
+
+function PhoneMore({ row, columns }: { row: RankRow; columns: RankColumn[] }) {
+  /*
+   * ⚠ ONE HIDDEN COLUMN STAYS A CHIP. Measured at 375px: a toggle for a single value made the
+   * league table's rows taller (65px → 80px), not shorter. The row's `data-phonemore` is what
+   * tells the CSS to hide the originals, so below the threshold nothing changes at all.
+   */
+  if (hiddenOnPhone(columns) < PHONE_MORE_MIN) return null
+  const hidden = columns.flatMap((c, i) => (c.hideOnPhone && row.cells[i] ? [{ col: c, cell: row.cells[i] }] : []))
+  if (hidden.length === 0) return null
+  return (
+    <td className="af-rk-phonemore" data-card="more">
+      <details>
+        <summary>More</summary>
+        <dl className="af-rk-phonemore-list">
+          {hidden.map(({ col, cell }) => (
+            <div key={col.key}>
+              <dt>{col.srLabel ?? col.label}</dt>
+              <dd className={cell.tone ? `af-rk-tone-${cell.tone}` : undefined}>
+                {cell.href ? (
+                  <Link href={cell.href} scroll={false} className="af-rk-celllink">
+                    {cell.text}
+                  </Link>
+                ) : (
+                  cell.text
+                )}
+                {cell.sub ? <span className="af-rk-cellsub">{cell.sub}</span> : null}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </details>
+    </td>
   )
 }
 

@@ -370,7 +370,7 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
 
       <section className="af-rk-card af-rk-explainsplit-main">
         {g.divisionFilter ? (
-          <div className="af-rk-classbar" role="group" aria-label="Who is on this board">
+          <div className="af-rk-classbar" role="group" aria-label="Who is on this board" data-active={g.divisionFilter.active ? 'true' : 'false'}>
             {g.divisionFilter.active ? (
               <Link href={g.divisionFilter.href} className="af-rk-tab" scroll={false}>
                 Everyone
@@ -481,6 +481,10 @@ function RivalsCard({ g }: { g: GlobalView }) {
                 <small>
                   Lvl {r.level} · {r.display} vs your {r.yourDisplay}
                 </small>
+                {/* A link, not a button: a full-width button per rival tripled each row on a phone. */}
+                <Link className="af-rk-rival-link" href={r.compareHref}>
+                  Compare careers
+                </Link>
               </div>
               <div className="af-rk-rival-h2h">
                 {h ? (
@@ -495,9 +499,6 @@ function RivalsCard({ g }: { g: GlobalView }) {
                   <small>never played</small>
                 )}
               </div>
-              <Link className="af-rk-btn" href={r.compareHref}>
-                Compare
-              </Link>
             </li>
           )
         })}
@@ -910,18 +911,21 @@ function LeagueBody({ league }: { league: LeagueView }) {
             })}
             emptyText="No team in this league has a scored week yet."
           />
-          <WorkbookBarChart
-            title="Points for"
-            subtitle="Top ten, same data as the table"
-            valueLabel="Points"
-            data={board.rows.slice(0, 10).map((row) => ({
-              key: row.rosterId,
-              label: row.name,
-              value: row.pointsFor,
-              displayValue: Math.round(row.pointsFor).toLocaleString(),
-              tone: row.isYou ? 'good' : 'accent',
-            }))}
-          />
+          {/* Phone: drawn as horizontal bars (CSS), so ten team names fit in full instead of ten ellipses. */}
+          <div className="af-rk-pfchart">
+            <WorkbookBarChart
+              title="Points for"
+              subtitle="Top ten, same data as the table"
+              valueLabel="Points"
+              data={board.rows.slice(0, 10).map((row) => ({
+                key: row.rosterId,
+                label: row.name,
+                value: row.pointsFor,
+                displayValue: Math.round(row.pointsFor).toLocaleString(),
+                tone: row.isYou ? 'good' : 'accent',
+              }))}
+            />
+          </div>
         </div>
       )}
       <LeaguePowerCard league={league} />
@@ -1110,7 +1114,7 @@ function ClassBody({ view, signedIn }: { view: ClassView; signedIn: boolean }) {
 
       <section className="af-rk-card">
         {view.divisionFilter ? (
-          <div className="af-rk-classbar" role="group" aria-label="Who is on this board">
+          <div className="af-rk-classbar" role="group" aria-label="Who is on this board" data-active={view.divisionFilter.active ? 'true' : 'false'}>
             {view.divisionFilter.active ? (
               <Link href={view.divisionFilter.offHref} className="af-rk-tab" scroll={false}>
                 Everyone
