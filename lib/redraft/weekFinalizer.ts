@@ -9,6 +9,7 @@ import { resolveDailySportSeasonStart } from '@/lib/season-week/dailySportSeason
 import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
+import { enqueueTankingScan } from '@/lib/integrity/enqueueTankingScan'
 
 /**
  * CLOSE A WEEK, SO THE SEASON CAN MOVE.
@@ -166,6 +167,7 @@ export type WeekFinalizeResult = {
 }
 
 export type WeekFinalizerDeps = {
+  enqueueTankingScan?: (leagueId: string, weekNumber: number, seasonId: string) => Promise<void>
   prisma?: PrismaClient
   now?: () => Date
   recalculateMatchups?: typeof recalculateMatchupsForSeasonWeek
@@ -609,6 +611,15 @@ export async function finalizeRedraftWeek(
     select: { status: true },
   })
   const matchupsFinal = after.filter((m) => m.status === 'final').length
+
+  if (matchupsFinal > 0 && matchupsFinal === after.length) {
+    try {
+      await (deps.enqueueTankingScan ?? enqueueTankingScan)(season.leagueId, params.week, season.id)
+    } catch (error) {
+      // A queue outage must not undo a completed scoring week; coverage remains unscanned.
+      console.error('[weekFinalizer] Unable to queue tanking scan', { leagueId: season.leagueId, week: params.week, error })
+    }
+  }
 
   return {
     ...base,

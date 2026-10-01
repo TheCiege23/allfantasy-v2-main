@@ -3,11 +3,8 @@
 /**
  * Commissioner OS League-Specific Intelligence Wiring phase — Parts 16-17.
  *
- * Commissioner-only — never rendered for a normal manager. Gated on the
- * real, server-verified `context.isCommissioner` from `ActiveLeagueContext`
- * (never a client-side guess); the API call itself is ALSO independently
- * authorization-checked server-side, so even if this component somehow
- * rendered for a non-commissioner, the fetch would still 404. Reuses the
+ * Mounted by the server-gated commissioner hub with an explicit league id.
+ * The API independently checks authorization. Reuses the
  * same dark/opacity Tailwind convention as `UserOsActionsSummary.tsx` — no
  * dashboard redesign.
  *
@@ -22,7 +19,6 @@
  * is ever auto-sent anywhere.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { useActiveLeagueContext } from './ActiveLeagueContextProvider'
 
 interface CopyReadyContent {
   channel: string
@@ -90,18 +86,18 @@ function resolveCommissionerTabId(sport: string | undefined | null): string {
   return FOOTBALL_SPORTS.has(sport.trim().toUpperCase()) ? 'commissioner' : 'league'
 }
 
-export function CommissionerOsActionsSummary() {
-  const { context } = useActiveLeagueContext()
+export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: string; sport?: string | null }) {
   const [data, setData] = useState<CommissionerRecommendationsApiResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
 
-  const isCommissioner = context?.isCommissioner === true
-  const canonicalLeagueId = context?.canonicalLeagueId
+  // The parent hub is server-gated for commissioners and co-commissioners. The API
+  // independently checks the session's league role before returning recommendations.
+  const canonicalLeagueId = leagueId
 
   const load = useCallback(() => {
-    if (!canonicalLeagueId || !isCommissioner) {
+    if (!canonicalLeagueId) {
       setData(null)
       return () => {}
     }
@@ -129,15 +125,12 @@ export function CommissionerOsActionsSummary() {
     return () => {
       active = false
     }
-  }, [canonicalLeagueId, isCommissioner])
+  }, [canonicalLeagueId])
 
   useEffect(() => {
     const cleanup = load()
     return cleanup
   }, [load])
-
-  // Never rendered for a normal manager — no widget, no placeholder, nothing.
-  if (!isCommissioner) return null
 
   return (
     <section
@@ -155,7 +148,7 @@ export function CommissionerOsActionsSummary() {
             Refresh
           </button>
           <a
-            href={`/league/${canonicalLeagueId}?tab=${resolveCommissionerTabId(context?.sport)}`}
+            href={`/league/${canonicalLeagueId}?tab=${resolveCommissionerTabId(sport)}`}
             className="text-xs text-cyan-400 underline"
           >
             View all

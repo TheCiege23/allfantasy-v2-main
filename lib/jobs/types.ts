@@ -92,6 +92,7 @@ export interface IntegrityJobPayload {
   tradeTransactionId?: string
   tradingRosterIds?: string[]
   weekNumber?: number
+  seasonId?: string
 }
 
 /** AutoCoach multi-source status intelligence (BullMQ). */
