@@ -108,7 +108,9 @@ registerScreenSummary<LeagueStandingsResult>({
    * that has no idea anything changed. No error, no conflict, wrong screen.
    */
   // v2 (2026-09-17): the result gained `board` — official, power, history, zones, projections.
-  version: 2,
+  // v3 (2026-10-01): every board team gained `next` and `path`, and the board `showPaths`. A v2 board
+  //   has neither, and the table reads `team.path` unguarded — serving one would crash the screen.
+  version: 3,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   /**
