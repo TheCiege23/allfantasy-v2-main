@@ -12,6 +12,7 @@ import { ChimmyScenarioCard } from './ChimmyScenario'
 import { ChimmyAdviceFollow, type ChimmyAdviceRef } from './ChimmyAdviceFollow'
 import { ChimmyAnswerRating } from './ChimmyAnswerRating'
 import { ChimmyGroundingLine } from './ChimmyGroundingLine'
+import { ChimmyCopyActions } from './ChimmyCopyActions'
 import { PushOptInPrompt } from '@/components/notifications/PushOptInPrompt'
 import {
   ChimmyAnswerModeToggle,
@@ -1112,7 +1113,10 @@ export function ChimmyPanel({
 
               {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
               {t.role === 'chimmy' ? (
-                <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
+                <>
+                  <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
+                  <ChimmyCopyActions text={t.text} />
+                </>
               ) : (
                 <div><p className="af-cm-turn-text">{t.text}</p>{t.imagePreview ? <ChimmyScreenshot src={t.imagePreview} name={t.imageName} /> : null}</div>
               )}

@@ -362,6 +362,29 @@
  * the global `.mode-readable` light clamp rewrites hardcoded pairs and would
  * strip the ungrounded state's warning colour back to body text.
  */
+.af-cm-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.af-cm-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text2);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.af-cm-copy-btn:hover { color: var(--text); border-color: var(--accent); }
+.af-cm-copy-note { font-size: 11px; color: var(--faint); }
+
 .af-cm-grounding {
   display: block;
   margin-top: 5px;
