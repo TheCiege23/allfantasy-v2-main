@@ -79,6 +79,12 @@ function board(opts: { weeks?: number; divisions?: boolean; unplayed?: Remaining
   })
 }
 
+/*
+ * The ladder became the default layout on 2026-10-01. These suites are about the TABLE, so they ask for
+ * it by name rather than relying on the default; the ladder has its own suite below.
+ */
+const TABLE = { ...DEFAULT_STANDINGS_VIEW, layout: 'table' as const }
+
 beforeEach(() => {
   window.history.replaceState(null, '', '/core/standings?league=L1')
   window.localStorage.clear()
@@ -87,7 +93,7 @@ afterEach(cleanup)
 
 describe('StandingsBoardView — official table', () => {
   it('freezes the rank and team columns', () => {
-    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const { container } = render(<StandingsBoardView board={board()} initial={TABLE} />)
     const firstRow = container.querySelector('.af-stb-table tbody tr[data-zone]')!
     expect(firstRow.children[0].className).toContain('af-stb-sticky-rank')
     expect(firstRow.children[1].className).toContain('af-stb-sticky-team')
@@ -95,7 +101,7 @@ describe('StandingsBoardView — official table', () => {
   })
 
   it('draws the bye line and the playoff line between the right rows', () => {
-    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const { container } = render(<StandingsBoardView board={board()} initial={TABLE} />)
     const lines = [...container.querySelectorAll('tr.af-stb-line')]
     expect(lines.map((l) => l.getAttribute('data-line'))).toEqual(['bye', 'playoff'])
     expect(lines[1].textContent).toMatch(/Playoff line — top 2 make it/)
@@ -104,14 +110,14 @@ describe('StandingsBoardView — official table', () => {
   })
 
   it('names every zone in words, not colour alone', () => {
-    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const { container } = render(<StandingsBoardView board={board()} initial={TABLE} />)
     const chips = [...container.querySelectorAll('.af-stb-table .af-stb-zone')].map((c) => c.textContent)
     expect(chips.length).toBe(4)
     for (const text of chips) expect(text).toMatch(/Bye|Playoffs|Bubble|Out|Eliminated|Clinched/)
   })
 
   it('explains a tie in the row and answers "why is A above B"', () => {
-    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const { container } = render(<StandingsBoardView board={board()} initial={TABLE} />)
     const tb = container.querySelector('.af-stb-tb p')
     expect(tb?.textContent).toMatch(/Level at 2-2/)
     const answer = container.querySelector('.af-stb-why-answer')!
@@ -120,7 +126,7 @@ describe('StandingsBoardView — official table', () => {
   })
 
   it('hatches and tags the projection, and keeps the actual record apart', () => {
-    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const { container } = render(<StandingsBoardView board={board()} initial={TABLE} />)
     const projHeads = [...container.querySelectorAll('thead th.af-stb-proj')]
     expect(projHeads).toHaveLength(2)
     for (const h of projHeads) expect(h.querySelector('.af-stb-projtag')?.textContent).toBe('Model')
@@ -132,7 +138,7 @@ describe('StandingsBoardView — official table', () => {
   })
 
   it('says why projections are missing instead of drawing empty columns', () => {
-    const { container } = render(<StandingsBoardView board={board({ weeks: 2 })} initial={DEFAULT_STANDINGS_VIEW} />)
+    const { container } = render(<StandingsBoardView board={board({ weeks: 2 })} initial={TABLE} />)
     expect(container.querySelectorAll('th.af-stb-proj')).toHaveLength(0)
     expect(container.querySelector('.af-stb-projnote')?.textContent).toMatch(/once 3 weeks are final/)
   })
@@ -140,7 +146,7 @@ describe('StandingsBoardView — official table', () => {
 
 describe('StandingsBoardView — power, cards, divisions', () => {
   it('labels AF Power as analysis and writes the view to the URL', () => {
-    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const { container } = render(<StandingsBoardView board={board()} initial={TABLE} />)
     fireEvent.click(screen.getByRole('radio', { name: 'AF Power' }))
     expect(container.querySelector('.af-stb-kind')?.textContent).toMatch(/AllFantasy analysis — not the league table/)
     expect(container.querySelector('table[data-view="power"]')).not.toBeNull()
@@ -152,7 +158,7 @@ describe('StandingsBoardView — power, cards, divisions', () => {
   })
 
   it('renders every team as a labelled card, and remembers the choice', () => {
-    render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    render(<StandingsBoardView board={board()} initial={TABLE} />)
     fireEvent.click(screen.getByRole('radio', { name: 'Cards' }))
     const cards = screen.getAllByRole('article')
     expect(cards).toHaveLength(4)
@@ -167,21 +173,21 @@ describe('StandingsBoardView — power, cards, divisions', () => {
 
   it('applies a remembered card layout only when the URL did not choose', () => {
     window.localStorage.setItem('af-standings-layout', 'cards')
-    const { unmount } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const { unmount } = render(<StandingsBoardView board={board()} initial={TABLE} />)
     expect(screen.getAllByRole('article')).toHaveLength(4)
     unmount()
     window.history.replaceState(null, '', '/core/standings?league=L1&st_layout=table')
-    render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    render(<StandingsBoardView board={board()} initial={TABLE} />)
     expect(screen.queryAllByRole('article')).toHaveLength(0)
   })
 
   it('offers no division control for a league without divisions', () => {
-    render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    render(<StandingsBoardView board={board()} initial={TABLE} />)
     expect(screen.queryByLabelText('Divisions')).toBeNull()
   })
 
   it('groups by division without losing the overall position', () => {
-    const { container } = render(<StandingsBoardView board={board({ divisions: true })} initial={DEFAULT_STANDINGS_VIEW} />)
+    const { container } = render(<StandingsBoardView board={board({ divisions: true })} initial={TABLE} />)
     fireEvent.change(screen.getByLabelText('Divisions'), { target: { value: 'group' } })
     const groups = [...container.querySelectorAll('tr.af-stb-grouprow')].map((g) => g.textContent)
     expect(groups).toEqual(['East', 'West'])
@@ -195,7 +201,7 @@ describe('StandingsBoardView — power, cards, divisions', () => {
 
   it('filters to one division', () => {
     const { container } = render(
-      <StandingsBoardView board={board({ divisions: true })} initial={{ ...DEFAULT_STANDINGS_VIEW, division: 'e' }} />,
+      <StandingsBoardView board={board({ divisions: true })} initial={{ ...TABLE, division: 'e' }} />,
     )
     const names = [...container.querySelectorAll('tr[data-zone] .af-stb-teamname')].map((n) => n.textContent)
     expect(names).toEqual(['Team 1', 'Team 3'])
@@ -204,7 +210,7 @@ describe('StandingsBoardView — power, cards, divisions', () => {
 
 describe('StandingsBoardView — charts and notes', () => {
   it('draws one line per team and highlights yours', () => {
-    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const { container } = render(<StandingsBoardView board={board()} initial={TABLE} />)
     const series = container.querySelectorAll('.af-stb-series')
     expect(series).toHaveLength(4)
     expect(container.querySelectorAll('.af-stb-series[data-tone="you"]')).toHaveLength(1)
@@ -213,18 +219,18 @@ describe('StandingsBoardView — charts and notes', () => {
   })
 
   it('traces a team from the keyboard', () => {
-    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const { container } = render(<StandingsBoardView board={board()} initial={TABLE} />)
     fireEvent.focus(screen.getByRole('button', { name: 'Team 3' }))
     expect(container.querySelectorAll('.af-stb-series[data-tone="hover"]')).toHaveLength(1)
   })
 
   it('says the history needs two weeks rather than drawing one point', () => {
-    render(<StandingsBoardView board={board({ weeks: 1 })} initial={DEFAULT_STANDINGS_VIEW} />)
+    render(<StandingsBoardView board={board({ weeks: 1 })} initial={TABLE} />)
     expect(screen.getByText(/history starts once two weeks are final/)).toBeTruthy()
   })
 
   it('plots points for against points against and wins against expected wins', () => {
-    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const { container } = render(<StandingsBoardView board={board()} initial={TABLE} />)
     expect(container.querySelectorAll('.af-stb-point')).toHaveLength(4)
     expect(container.querySelectorAll('.af-stb-dumbbell')).toHaveLength(4)
     expect(screen.getByText('Wins vs expected wins')).toBeTruthy()
@@ -232,7 +238,7 @@ describe('StandingsBoardView — charts and notes', () => {
 
   it('says a week is still being played', () => {
     const b = { ...board(), pendingWeeks: [5], throughWeek: 4 }
-    render(<StandingsBoardView board={b} initial={DEFAULT_STANDINGS_VIEW} />)
+    render(<StandingsBoardView board={b} initial={TABLE} />)
     expect(screen.getByRole('note').textContent).toMatch(/Week 5 is still being played.*through week 4.*Sleeper/)
   })
 })
@@ -242,7 +248,56 @@ describe('standings view state', () => {
     const state = parseStandingsView((k) => ({ st_view: 'power', st_div: 'group', st_layout: 'cards' })[k])
     expect(state).toEqual({ view: 'power', division: 'group', layout: 'cards' })
     expect(serializeStandingsView(DEFAULT_STANDINGS_VIEW)).toEqual([])
-    expect(parseStandingsView(() => ['power', 'x'])).toEqual({ view: 'power', division: 'power', layout: 'table' })
+    expect(parseStandingsView(() => ['power', 'x'])).toEqual({ view: 'power', division: 'power', layout: 'ladder' })
+    expect(serializeStandingsView(TABLE)).toEqual([['st_layout', 'table']])
     expect(parseStandingsView(() => 'nonsense').view).toBe('official')
+  })
+})
+
+describe('StandingsBoardView — ladder (the default layout)', () => {
+  it('draws one row per team, in seed order, with the lines through the list', () => {
+    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const rows = [...container.querySelectorAll('.af-stl-row')]
+    expect(rows).toHaveLength(4)
+    expect(rows.map((r) => r.querySelector('.af-stl-name')?.textContent)).toEqual(['Team 1', 'Team 3', 'Team 4', 'Team 2'])
+    const lines = [...container.querySelectorAll('.af-stl-line')].map((l) => l.getAttribute('data-line'))
+    expect(lines).toEqual(['bye', 'playoff'])
+    // No table is drawn underneath it.
+    expect(container.querySelector('.af-stb-table')).toBeNull()
+  })
+
+  it('names every zone in words and marks your row', () => {
+    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const chips = [...container.querySelectorAll('.af-stl-row .af-stl-meta .af-stb-zone')].map((c) => c.textContent)
+    expect(chips).toHaveLength(4)
+    for (const text of chips) expect(text).toMatch(/Bye|Playoffs|Bubble|Out|Eliminated|Clinched/)
+    expect(container.querySelectorAll('.af-stl-row[data-you="true"]')).toHaveLength(1)
+  })
+
+  /* The "drops nothing" rule the cards follow: every number the table carries is in the row's disclosure. */
+  it('opens a row to the full set of numbers, projection tagged as a model', () => {
+    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    const you = container.querySelector('.af-stl-row[data-you="true"]')!
+    const terms = [...you.querySelectorAll('dt')].map((d) => d.textContent)
+    for (const t of ['Record', 'Games behind the line', 'Points for', 'Points against', 'AF Power', 'All-play', 'Expected wins']) {
+      expect(terms).toContain(t)
+    }
+    expect(you.querySelector('.af-stb-cardproj')?.textContent).toMatch(/Model.*an expectation, not a result/)
+  })
+
+  it('orders by AF Power with no lines in the power view', () => {
+    const { container } = render(<StandingsBoardView board={board()} initial={{ ...DEFAULT_STANDINGS_VIEW, view: 'power' }} />)
+    const ranks = [...container.querySelectorAll('.af-stl-rank')].map((r) => r.textContent?.replace(/\D/g, ''))
+    expect(ranks).toEqual(['1', '2', '3', '4'])
+    expect(container.querySelectorAll('.af-stl-line')).toHaveLength(0)
+    expect(container.querySelectorAll('.af-stl-row .af-stb-zone')).toHaveLength(0)
+  })
+
+  /* A manager who picked the table before the ladder existed stored 'table'; that choice must survive. */
+  it('restores a remembered table layout', () => {
+    window.localStorage.setItem('af-standings-layout', 'table')
+    const { container } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} />)
+    expect(container.querySelector('.af-stb-table')).not.toBeNull()
+    expect(container.querySelector('.af-stl')).toBeNull()
   })
 })

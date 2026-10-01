@@ -217,3 +217,36 @@ describe('Standings — this week’s lineups, projected', () => {
     expect(container.querySelector('.af-st-lineups')).toBeNull()
   })
 })
+
+/*
+ * The headline layer (2026-10-01): a banner that says where you sit in words and draws it as a track,
+ * the league's awards, and your record against each opponent.
+ */
+describe('Standings — season banner, awards and head-to-head', () => {
+  it('says where you sit in words, and lights your pip on the track', () => {
+    const { container } = render(<Standings data={standings()} />)
+    const banner = container.querySelector('.af-st-banner')!
+    expect(banner.querySelector('.af-st-banner-line')?.textContent).toMatch(/^You’re \d+(st|nd|rd|th) of 4 — /)
+    expect(banner.querySelectorAll('.af-st-pip')).toHaveLength(4)
+    expect(banner.querySelectorAll('.af-st-pip[data-you]')).toHaveLength(1)
+    expect(banner.querySelectorAll('.af-st-pip[data-field]')).toHaveLength(2)
+  })
+
+  it('awards the points leader and lists your head-to-head against teams you played', () => {
+    const { container } = render(<Standings data={standings()} />)
+    expect(screen.getByText('Points machine')).toBeTruthy()
+    const h2h = [...container.querySelectorAll('.af-st-h2h li')]
+    // Team 2 has only played team 1 in this fixture.
+    expect(h2h).toHaveLength(1)
+    expect(h2h[0].textContent).toMatch(/Team 1.*0-3/)
+    expect(h2h[0].getAttribute('data-verdict')).toBe('L')
+  })
+
+  it('draws no banner when we cannot tell which team is yours', () => {
+    const b = board()
+    const noYou = { ...b, teams: b.teams.map((t) => ({ ...t, isYou: false })) }
+    const { container } = render(<Standings data={standings({ board: noYou })} />)
+    expect(container.querySelector('.af-st-banner')).toBeNull()
+    expect(container.querySelector('.af-st-h2h')).toBeNull()
+  })
+})

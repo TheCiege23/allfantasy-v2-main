@@ -17,6 +17,7 @@ import {
 } from '@/lib/core-app/standingsView'
 import { StandingsHistoryChart } from './StandingsHistoryChart'
 import { StandingsPointsChart } from './StandingsPointsChart'
+import { LUCK_FLOOR, currentStreak, streakLabel } from '@/lib/core-app/standingsHighlights'
 
 /**
  * The league table, two ways — items 1–8 and 10 of the 2026-09-17 standings brief.
@@ -538,6 +539,225 @@ function Cards({ board, groups, view }: { board: StandingsBoard; groups: Group[]
   )
 }
 
+/**
+ * The ladder — the default layout since 2026-10-01. One row per team, the playoff line drawn THROUGH the
+ * list, and every row opens to the full set of numbers.
+ *
+ * ⚠ BUILT FOR A PHONE FIRST. The table needs a sideways scroll below ~700px, which is where most managers
+ * read standings. The ladder keeps rank, team, status in words, form and record on one row at 390px, and
+ * moves everything else into the row's own disclosure rather than dropping it — the same "drops nothing"
+ * rule the card layout follows.
+ *
+ * ⚠ `<summary>` HOLDS A BLOCK WITH A GRID INSIDE IT, NOT A GRID ITSELF. Safari ignored `display: grid`
+ * and `flex` on `<summary>` for years; the inner wrapper renders the same everywhere.
+ */
+function Ladder({
+  board,
+  groups,
+  view,
+  plain,
+  field,
+  byes,
+}: {
+  board: StandingsBoard
+  groups: Group[]
+  view: StandingsViewKey
+  plain: boolean
+  field: number
+  byes: number
+}) {
+  const maxPf = Math.max(1, ...board.teams.map((t) => t.pointsFor))
+  return (
+    <div className="af-stl">
+      {groups.map((g) => (
+        <section key={g.key} aria-label={g.title ?? (view === 'power' ? 'AF Power rankings' : 'League table')}>
+          {g.title ? <h3 className="af-stb-grouptitle">{g.title}</h3> : null}
+          <ol className="af-stl-list">
+            {g.teams.map((t, i) => {
+              const next = g.teams[i + 1]
+              const line =
+                plain && next ? (t.seed === byes && byes > 0 ? 'bye' : t.seed === field ? 'playoff' : null) : null
+              return (
+                <li key={t.rosterId}>
+                  <LadderRow team={t} board={board} view={view} maxPf={maxPf} />
+                  {line ? (
+                    <div className="af-stl-line" data-line={line} role="separator">
+                      <span>
+                        {line === 'bye'
+                          ? `Bye line — top ${byes}`
+                          : `Playoff line — top ${field} make it${board.rules.playoffTeamsSource === 'assumed' ? ' (assumed)' : ''}`}
+                      </span>
+                    </div>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ol>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+function LadderRow({
+  team: t,
+  board,
+  view,
+  maxPf,
+}: {
+  team: BoardTeam
+  board: StandingsBoard
+  view: StandingsViewKey
+  maxPf: number
+}) {
+  const h2h = board.hasHeadToHead
+  const power = view === 'power'
+  const rank = power ? t.powerRank : t.seed
+  const streak = currentStreak(t.form)
+  const barPct = power ? t.powerScore : (t.pointsFor / maxPf) * 100
+  const gap = t.seed - t.powerRank
+  return (
+    <details className="af-stl-row" data-zone={power ? undefined : t.zone} data-you={t.isYou ? 'true' : undefined}>
+      <summary>
+        <span className="af-stl-sum">
+          <span className="af-stl-rank af-num">
+            <span className="af-sr">{power ? 'AF Power' : 'Position'} </span>
+            {rank}
+          </span>
+          <span className="af-stl-move">
+            <Move value={power ? t.powerMove : t.seedMove} />
+          </span>
+          {t.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="af-stl-av" src={t.avatarUrl} alt="" loading="lazy" />
+          ) : (
+            <span className="af-stl-av af-stl-av--none" aria-hidden>
+              {t.name.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+          <span className="af-stl-who">
+            <span className="af-stl-nameline">
+              <span className="af-stl-name">{t.name}</span>
+              {t.isYou ? <span className="af-stb-you">You</span> : null}
+            </span>
+            <span className="af-stl-meta">
+              {power ? (
+                <span className="af-stl-tag" data-tone={gap >= 2 ? 'good' : gap <= -2 ? 'bad' : undefined}>
+                  Table {ordinal(t.seed)}
+                </span>
+              ) : (
+                <ZoneChip team={t} />
+              )}
+              {h2h && streak && streak.n >= 2 && streak.kind !== 'T' ? (
+                <span className="af-stl-tag" data-tone={streak.kind === 'W' ? 'good' : 'bad'}>
+                  {streak.kind === 'W' ? '🔥 ' : ''}
+                  {streakLabel(streak, t.form.length)}
+                </span>
+              ) : null}
+              {h2h && Math.abs(t.luck) >= LUCK_FLOOR ? (
+                <span className="af-stl-tag" data-tone={t.luck > 0 ? 'warn' : 'bad'}>
+                  {t.luck > 0 ? 'Lucky' : 'Unlucky'} {t.luck > 0 ? '+' : '−'}
+                  {Math.abs(t.luck).toFixed(1)}
+                </span>
+              ) : null}
+            </span>
+          </span>
+          <span className="af-stl-viz">
+            {h2h && !power ? <Form form={t.form} /> : null}
+            <span className="af-stl-bar" aria-hidden>
+              <i style={{ width: `${Math.max(2, Math.min(100, barPct)).toFixed(1)}%` }} />
+            </span>
+          </span>
+          <span className="af-stl-rec">
+            <span className="af-stl-rec-v af-num">
+              {power ? t.powerScore.toFixed(1) : h2h ? formatRecord(t.record) : pts(t.pointsFor)}
+            </span>
+            <span className="af-stl-rec-s af-num">
+              {power ? `all-play ${formatRecord(t.allPlay)}` : h2h ? `${pts(t.pointsFor)} PF` : `${ordinal(t.pfRank)} in points`}
+            </span>
+          </span>
+          <span className="af-stl-chev" aria-hidden />
+        </span>
+      </summary>
+      <dl className="af-stl-dl">
+        {h2h ? (
+          <div>
+            <dt>Record</dt>
+            <dd className="af-num">
+              {formatRecord(t.record)} <span className="af-stb-muted">({pct(t.winPct)})</span>
+            </dd>
+          </div>
+        ) : null}
+        {h2h && !power ? (
+          <div>
+            <dt>Games behind the line</dt>
+            <dd className="af-num">{gamesBackText(t.gamesBack)}</dd>
+          </div>
+        ) : null}
+        <div>
+          <dt>Points for</dt>
+          <dd className="af-num">
+            {pts(t.pointsFor)} <span className="af-stb-muted">({ordinal(t.pfRank)})</span>
+          </dd>
+        </div>
+        {h2h ? (
+          <div>
+            <dt>Points against</dt>
+            <dd className="af-num">{pts(t.pointsAgainst)}</dd>
+          </div>
+        ) : null}
+        <div>
+          <dt>Per week</dt>
+          <dd className="af-num">{pts(t.average)}</dd>
+        </div>
+        <div>
+          <dt>{power ? 'Table position' : 'AF Power'}</dt>
+          <dd className="af-num">
+            {power ? ordinal(t.seed) : `${ordinal(t.powerRank)} · ${t.powerScore.toFixed(1)}`}
+          </dd>
+        </div>
+        <div>
+          <dt>All-play</dt>
+          <dd className="af-num">{formatRecord(t.allPlay)}</dd>
+        </div>
+        {h2h ? (
+          <div>
+            <dt>Expected wins</dt>
+            <dd className="af-num">
+              {t.expectedWins.toFixed(1)}{' '}
+              <span className="af-stb-muted">
+                (luck {t.luck > 0 ? '+' : t.luck < 0 ? '−' : ''}
+                {Math.abs(t.luck).toFixed(1)})
+              </span>
+            </dd>
+          </div>
+        ) : null}
+        {h2h ? (
+          <div>
+            <dt>Last {t.form.length || 5}</dt>
+            <dd>
+              <Form form={t.form} />
+            </dd>
+          </div>
+        ) : null}
+        {t.division ? (
+          <div>
+            <dt>{t.division.name}</dt>
+            <dd className="af-num">{t.divisionRank != null ? ordinal(t.divisionRank) : '—'}</dd>
+          </div>
+        ) : null}
+      </dl>
+      {!power && t.tiebreak ? <p className="af-stb-cardnote">{t.tiebreak}</p> : null}
+      {!power && t.projected ? (
+        <p className="af-stb-cardproj">
+          <span className="af-stb-projtag">Model</span> Projected finish {formatRecord(t.projected)}, {ordinal(t.projected.seed)} — an
+          expectation, not a result.
+        </p>
+      ) : null}
+    </details>
+  )
+}
+
 function WhyAbove({ board, view }: { board: StandingsBoard; view: StandingsViewKey }) {
   const teams = board.teams
   const you = teams.find((t) => t.isYou) ?? null
@@ -631,9 +851,12 @@ export function StandingsBoardView({
   useEffect(() => {
     try {
       const url = new URL(window.location.href)
-      if (!url.searchParams.has(STANDINGS_VIEW_PARAMS.layout) && window.localStorage.getItem(LAYOUT_STORAGE_KEY) === 'cards') {
-        setLayout('cards')
-      }
+      /*
+       * ⚠ 'table' IS HONOURED TOO SINCE THE LADDER BECAME THE DEFAULT. Before 2026-10-01 a stored 'table'
+       * matched the default and needed no restoring; someone who chose the table then must still get it.
+       */
+      const stored = url.searchParams.has(STANDINGS_VIEW_PARAMS.layout) ? null : window.localStorage.getItem(LAYOUT_STORAGE_KEY)
+      if (stored === 'cards' || stored === 'table' || stored === 'ladder') setLayout(stored)
     } catch {
       /* storage can be unavailable; the table is the default */
     }
@@ -700,6 +923,9 @@ export function StandingsBoardView({
           </label>
         ) : null}
         <div className="af-stb-seg" role="radiogroup" aria-label="Layout">
+          <button type="button" role="radio" aria-checked={layout === 'ladder'} onClick={() => chooseLayout('ladder')}>
+            Ladder
+          </button>
           <button type="button" role="radio" aria-checked={layout === 'table'} onClick={() => chooseLayout('table')}>
             Table
           </button>
@@ -757,7 +983,9 @@ export function StandingsBoardView({
         </ul>
       ) : null}
 
-      {layout === 'cards' ? (
+      {layout === 'ladder' ? (
+        <Ladder board={board} groups={groups} view={view} plain={plain} field={field} byes={byes} />
+      ) : layout === 'cards' ? (
         <Cards board={board} groups={groups} view={view} />
       ) : view === 'official' ? (
         <>

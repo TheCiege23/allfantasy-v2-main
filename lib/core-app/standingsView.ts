@@ -8,7 +8,13 @@
  */
 
 export type StandingsViewKey = 'official' | 'power'
-export type StandingsLayout = 'table' | 'cards'
+/**
+ * `ladder` (2026-10-01) is the default: one tappable row per team, the playoff line drawn through the
+ * list, readable on a phone without scrolling sideways. `table` is the dense every-column view and
+ * `cards` the labelled-per-team view; both keep their own URL value, so a shared table link still opens
+ * as a table.
+ */
+export type StandingsLayout = 'ladder' | 'table' | 'cards'
 /** `all`, `group` (every division, grouped), or one division's key. */
 export type StandingsDivisionFilter = string
 
@@ -24,7 +30,7 @@ export const STANDINGS_VIEW_PARAMS = {
   layout: 'st_layout',
 } as const
 
-export const DEFAULT_STANDINGS_VIEW: StandingsViewState = { view: 'official', division: 'all', layout: 'table' }
+export const DEFAULT_STANDINGS_VIEW: StandingsViewState = { view: 'official', division: 'all', layout: 'ladder' }
 
 function first(v: string | string[] | undefined | null): string | null {
   if (Array.isArray(v)) return v[0] ?? null
@@ -38,7 +44,7 @@ export function parseStandingsView(get: (param: string) => string | string[] | u
   return {
     view: view === 'power' ? 'power' : 'official',
     division: division && division.length <= 64 ? division : 'all',
-    layout: layout === 'cards' ? 'cards' : 'table',
+    layout: layout === 'cards' || layout === 'table' ? layout : 'ladder',
   }
 }
 
@@ -47,6 +53,6 @@ export function serializeStandingsView(state: StandingsViewState): Array<[string
   const out: Array<[string, string]> = []
   if (state.view !== 'official') out.push([STANDINGS_VIEW_PARAMS.view, state.view])
   if (state.division !== 'all') out.push([STANDINGS_VIEW_PARAMS.division, state.division])
-  if (state.layout !== 'table') out.push([STANDINGS_VIEW_PARAMS.layout, state.layout])
+  if (state.layout !== 'ladder') out.push([STANDINGS_VIEW_PARAMS.layout, state.layout])
   return out
 }

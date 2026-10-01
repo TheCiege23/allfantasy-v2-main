@@ -8,6 +8,8 @@ import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { WeekLineupsTable } from '@/components/core-app/standings/WeekLineupsTable'
+import { LeagueAwards, SeasonBanner, YourHeadToHead } from '@/components/core-app/standings/StandingsHighlights'
+import '@/components/core-app/af-standings-highlights.css'
 
 /**
  * Screen 38a·7 — Standings: the league table and AllFantasy's power ranking, side by side.
@@ -87,6 +89,12 @@ function lineText(t: BoardTeam, field: number): string {
   const abs = Math.abs(t.gamesBack)
   const games = `${Number.isInteger(abs) ? abs : abs.toFixed(1)} ${abs === 1 ? 'game' : 'games'}`
   return t.gamesBack < 0 ? `${games} clear of the line` : `${games} behind the line`
+}
+
+/** "You're 4th of 12 — in a playoff spot, 1 game clear of the line." */
+function bannerHeadline(me: BoardTeam, teams: number, field: number, h2h: boolean): string {
+  const where = zoneLine(me)
+  return `You’re ${ordinal(me.seed)} of ${teams} — ${where}${h2h && me.gamesBack != null ? `, ${lineText(me, field)}` : ''}.`
 }
 
 /**
@@ -200,6 +208,14 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
       </header>
 
       {me ? (
+        <SeasonBanner
+          board={board}
+          me={me}
+          headline={bannerHeadline(me, n, Math.min(board.rules.playoffTeams, n), board.hasHeadToHead)}
+        />
+      ) : null}
+
+      {me ? (
         <div className="af-st-tiles">
           <div className="af-st-tile">
             <span className="af-label">Table position</span>
@@ -247,6 +263,8 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
         </div>
       )}
 
+      <LeagueAwards board={board} />
+
       <StandingsBoardView board={board} initial={view} />
 
       {lineups ? (
@@ -268,6 +286,8 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
               )}
             </div>
           </section>
+
+          <YourHeadToHead board={board} />
 
           <div className="af-st-split">
             <section className="af-st-panel">

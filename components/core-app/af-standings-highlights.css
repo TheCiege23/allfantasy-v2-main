@@ -1,0 +1,424 @@
+/*
+ * AF Core — Standings, one league: the ladder layout and the headline layer (2026-10-01).
+ *
+ * Layered on af-standings.css and following its conventions: scoped under `.af-st` / `.af-stb`, tokens
+ * only, and responsive rules keyed on the SCREEN's width (`af-st`) or the BOARD's (`af-stb`), never the
+ * viewport — with both /core rails open a 1100px window leaves this screen ~530px.
+ *
+ * ⚠ iOS: every tappable row and button is ≥44px, hover is behind (hover: hover) so a tap does not leave a
+ * row stuck highlighted, and the swipe strips use scroll-snap with momentum.
+ */
+
+.af-st,
+.af-stb {
+  --z-bye: var(--tier-blue-fg, var(--tier-blue, var(--accent)));
+  --z-playoff: var(--good);
+  --z-bubble: var(--warn);
+  --z-out: var(--faint);
+  --z-elim: var(--bad);
+}
+
+/* Only the new elements — a screen-wide reset would re-measure the existing table's cells. */
+.af-st-banner,
+.af-st-banner *,
+.af-st-award,
+.af-st-award *,
+.af-st-h2h *,
+.af-stl,
+.af-stl *,
+.af-stl *::before { box-sizing: border-box; }
+
+/* ── season banner ──────────────────────────────────────────────────────── */
+
+.af-st-banner {
+  --zc: var(--z-playoff);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--zc) 16%, transparent), transparent 60%),
+    var(--surface);
+}
+.af-st-banner[data-zone='bye'] { --zc: var(--z-bye); }
+.af-st-banner[data-zone='bubble'] { --zc: var(--z-bubble); }
+.af-st-banner[data-zone='out'] { --zc: var(--muted); }
+.af-st-banner[data-zone='eliminated'] { --zc: var(--z-elim); }
+
+.af-st-banner-top { display: flex; align-items: center; gap: 16px; }
+
+.af-st-banner-seed {
+  flex: none;
+  font: 900 52px/0.9 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: -0.05em;
+  color: var(--zc);
+}
+
+.af-st-banner-text { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.af-st-banner-line {
+  margin: 0;
+  font: 800 clamp(16px, 2.2vw, 20px) / 1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-st-banner-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.af-st-banner-chips:empty { display: none; }
+
+.af-st-chip {
+  --tc: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tc) 14%, transparent);
+  color: var(--tc);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.af-st-chip[data-tone='good'] { --tc: var(--good); }
+.af-st-chip[data-tone='warn'] { --tc: var(--warn); }
+.af-st-chip[data-tone='bad'] { --tc: var(--bad); }
+.af-st-chip[data-tone='info'] { --tc: var(--text2); }
+
+.af-st-track-wrap { display: flex; flex-direction: column; gap: 6px; }
+
+.af-st-track {
+  display: flex;
+  gap: 3px;
+  height: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-st-pip {
+  flex: 1 1 0;
+  min-width: 3px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.af-st-pip[data-field] { background: color-mix(in srgb, var(--z-playoff) 32%, var(--line)); }
+.af-st-pip[data-bye] { background: color-mix(in srgb, var(--z-bye) 40%, var(--line)); }
+.af-st-pip[data-cut] { margin-right: 6px; }
+.af-st-pip[data-you] {
+  background: var(--zc);
+  transform: scaleY(1.7);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 12px var(--zc);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .af-st-pip[data-you] { animation: af-st-pop 0.6s ease-out both; }
+}
+@keyframes af-st-pop { from { transform: scaleY(0.3); } to { transform: scaleY(1.7); } }
+
+.af-st-track-key {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+/* ── league awards ──────────────────────────────────────────────────────── */
+
+.af-st-awards { display: flex; flex-direction: column; gap: 10px; }
+
+.af-st-awards-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.af-st-award {
+  --tc: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--tc);
+  border-radius: 14px;
+  background: var(--surface);
+  min-width: 0;
+}
+.af-st-award[data-tone='good'] { --tc: var(--good); }
+.af-st-award[data-tone='warn'] { --tc: var(--warn); }
+.af-st-award[data-tone='bad'] { --tc: var(--bad); }
+.af-st-award[data-tone='info'] { --tc: var(--text2); }
+.af-st-award[data-you='true'] { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+
+.af-st-award-k {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tc);
+}
+.af-st-award-v { margin-top: 4px; font-size: 22px; font-weight: 900; letter-spacing: -0.03em; }
+.af-st-award-team {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-st-award-d { font-size: 12px; line-height: 1.4; color: var(--muted); }
+
+/* ── your head-to-head ──────────────────────────────────────────────────── */
+
+.af-st-h2h-sum { margin: 0 0 10px; font-size: 13px; color: var(--text2); }
+.af-st-h2h-sum .af-num { font-weight: 800; color: var(--text); }
+
+.af-st-h2h {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.af-st-h2h li {
+  --tc: var(--muted);
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--tc);
+  background: color-mix(in srgb, var(--tc) 7%, transparent);
+  font-size: 12.5px;
+}
+.af-st-h2h li[data-verdict='W'] { --tc: var(--good); }
+.af-st-h2h li[data-verdict='L'] { --tc: var(--bad); }
+.af-st-h2h-seed { color: var(--faint); font-size: 11px; font-weight: 700; }
+.af-st-h2h-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; }
+.af-st-h2h-rec { font-weight: 800; color: var(--tc); }
+
+/* ── the ladder ─────────────────────────────────────────────────────────── */
+
+.af-stl { display: flex; flex-direction: column; gap: 14px; }
+.af-stl-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+
+.af-stl-row {
+  --zc: var(--accent);
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.af-stl-row[data-zone='bye'] { --zc: var(--z-bye); }
+.af-stl-row[data-zone='playoff'] { --zc: var(--z-playoff); }
+.af-stl-row[data-zone='bubble'] { --zc: var(--z-bubble); }
+.af-stl-row[data-zone='out'] { --zc: var(--z-out); }
+.af-stl-row[data-zone='eliminated'] { --zc: var(--z-elim); }
+/* The zone rail. Colour reinforces the zone chip's words; it never replaces them. */
+.af-stl-row::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--zc);
+}
+.af-stl-row[data-you='true'] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), 0 6px 24px -12px var(--accent);
+}
+
+.af-stl-row > summary {
+  display: block;
+  list-style: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.af-stl-row > summary::-webkit-details-marker { display: none; }
+.af-stl-row > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 12px; }
+@media (hover: hover) {
+  .af-stl-row > summary:hover { background: var(--chip); }
+}
+
+.af-stl-sum {
+  display: grid;
+  grid-template-columns: 26px 34px 32px minmax(0, 1fr) minmax(120px, 190px) auto 14px;
+  grid-template-areas: 'rank move av who viz rec chev';
+  align-items: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 10px 12px 10px 14px;
+}
+
+.af-stl-rank {
+  grid-area: rank;
+  font-size: 18px;
+  font-weight: 900;
+  text-align: center;
+  color: var(--zc);
+}
+.af-stl-move { grid-area: move; font-size: 11px; }
+.af-stl-av {
+  grid-area: av;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.af-stl-av--none {
+  display: grid;
+  place-items: center;
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.af-stl-who { grid-area: who; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.af-stl-nameline { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.af-stl-name {
+  font-size: 14px;
+  font-weight: 800;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.af-stl-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.af-stl-meta .af-stb-zone { font-size: 10.5px; }
+
+.af-stl-tag {
+  --tc: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tc) 14%, transparent);
+  color: var(--tc);
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.af-stl-tag[data-tone='good'] { --tc: var(--good); }
+.af-stl-tag[data-tone='warn'] { --tc: var(--warn); }
+.af-stl-tag[data-tone='bad'] { --tc: var(--bad); }
+
+.af-stl-viz { grid-area: viz; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.af-stl-bar { display: block; height: 6px; border-radius: 6px; background: var(--chip); overflow: hidden; }
+.af-stl-bar i { display: block; height: 100%; border-radius: 6px; background: var(--zc); opacity: 0.85; }
+.af-stl-row:not([data-zone]) .af-stl-bar i { background: var(--accent); }
+
+.af-stl-rec { grid-area: rec; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.af-stl-rec-v { font-size: 17px; font-weight: 900; letter-spacing: -0.02em; white-space: nowrap; }
+.af-stl-rec-s { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+.af-stl-chev {
+  grid-area: chev;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--faint);
+  border-bottom: 2px solid var(--faint);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.15s ease;
+}
+.af-stl-row[open] .af-stl-chev { transform: rotate(-135deg) translateY(-2px); }
+
+.af-stl-dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px 16px;
+  margin: 0;
+  padding: 4px 16px 14px 18px;
+  border-top: 1px dashed var(--line);
+}
+.af-stl-dl > div { display: flex; flex-direction: column; gap: 2px; padding-top: 10px; }
+.af-stl-dl dt { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.af-stl-dl dd { margin: 0; font-size: 13.5px; font-weight: 700; }
+.af-stl-row > .af-stb-cardnote,
+.af-stl-row > .af-stb-cardproj { margin: 0 16px 12px 18px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .af-stl-row[open] .af-stl-dl { animation: af-stl-open 0.18s ease-out both; }
+}
+@keyframes af-stl-open { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* The lines, drawn through the list rather than as a table row. */
+.af-stl-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 2px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--z-playoff);
+}
+.af-stl-line[data-line='bye'] { color: var(--z-bye); }
+.af-stl-line::before,
+.af-stl-line::after {
+  content: '';
+  flex: 1;
+  height: 0;
+  border-top: 2px dashed currentColor;
+  opacity: 0.55;
+}
+
+/* ── narrow ─────────────────────────────────────────────────────────────── */
+
+@container af-stb (max-width: 640px) {
+  /*
+   * Phone: rank, team and record on the first line; status, form and the bar on the second. The move
+   * arrow tucks under the rank so the name keeps its width.
+   */
+  .af-stl-sum {
+    grid-template-columns: 28px 30px minmax(0, 1fr) auto 12px;
+    grid-template-areas:
+      'rank av who rec chev'
+      'move av viz viz chev';
+    gap: 6px 10px;
+    padding: 10px 10px 10px 12px;
+  }
+  .af-stl-move { justify-self: center; }
+  .af-stl-av { width: 30px; height: 30px; align-self: start; }
+  .af-stl-viz { flex-direction: row; align-items: center; gap: 10px; }
+  .af-stl-bar { flex: 1; }
+  .af-stl-dl { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 14px; }
+}
+
+@container af-st (max-width: 640px) {
+  .af-st-banner { padding: 14px; gap: 12px; }
+  .af-st-banner-seed { font-size: 42px; }
+
+  /* Awards become a swipe strip — six stacked cards would bury the table. */
+  .af-st-awards-row {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  .af-st-awards-row::-webkit-scrollbar { display: none; }
+  .af-st-award { flex: 0 0 72%; max-width: 260px; scroll-snap-align: start; }
+
+  .af-st-h2h { grid-template-columns: minmax(0, 1fr); }
+}
+
+@container af-st (max-width: 380px) {
+  .af-st-banner-top { align-items: flex-start; }
+  .af-st-banner-seed { font-size: 36px; }
+}
