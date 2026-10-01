@@ -243,7 +243,10 @@ function CareerMobile({
               {data.levelName ? ` · ${data.levelName.toUpperCase()}` : ''}
             </span>
           ) : null}
-          <span className="af-crm-chip af-crm-chip--ro">READ-ONLY</span>
+          {/*
+            No "READ-ONLY" chip on a phone (peer review 2026-10-01: jargon to a user, and the
+            header's narrowest row). The desktop frame keeps its marker, where there is room for it.
+          */}
         </div>
       </header>
 
@@ -252,10 +255,12 @@ function CareerMobile({
       <div className="af-crm-body">
         {/* Last week as a story — the thing to tap first on a phone. */}
         {story ? <WeeklyStory story={story} /> : null}
-        {/* Phase 3: every platform first — the question someone opens the app with. */}
-        {wire && nowIso ? (
-          <CareerWire data={wire} nowIso={nowIso} stakes={buildLegacyStakes(data, screen.awards).stakes} />
-        ) : null}
+        {/*
+          The feed first, but COMPACT on a phone: two items, with every platform's sync state and the
+          season board folded behind one tap. Measured at 375px before this: the Wire was 1,529px and
+          pushed the career itself more than two screens down.
+        */}
+        {wire && nowIso ? <CareerWire data={wire} nowIso={nowIso} compact /> : null}
         <CareerFilterBar data={data} view="overview" />
         {data.isEmpty ? (
           <>
@@ -617,9 +622,7 @@ function CareerDesktop({
       */}
       {/* Last week's story sits above the Wire: one tap for the whole week, before the detail. */}
       {view === 'overview' && story ? <WeeklyStory story={story} /> : null}
-      {view === 'overview' && wire && nowIso ? (
-        <CareerWire data={wire} nowIso={nowIso} stakes={buildLegacyStakes(data, screen.awards).stakes} />
-      ) : null}
+      {view === 'overview' && wire && nowIso ? <CareerWire data={wire} nowIso={nowIso} /> : null}
 
       {/* Compare's sides carry their own filters (`ca`/`cb`), so the page filter would only mislead. */}
       {view !== 'share' && view !== 'compare' ? <CareerFilterBar data={data} view={view} /> : null}

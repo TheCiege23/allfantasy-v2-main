@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { buildCareerFeed, feedHref } from '@/lib/core-app/careerFeed'
-import type { LegacyStake } from '@/lib/core-app/careerMilestones'
 import type { CareerWireData, WireChange, WireLeague } from '@/lib/core-app/careerWireModel'
 import { leagueSyncAttentionSignals } from '@/lib/decision-os/careerSignals'
 
@@ -33,19 +32,6 @@ const change = (over: Partial<WireChange> = {}): WireChange => ({
   ...over,
 })
 
-const stake = (over: Partial<LegacyStake> = {}): LegacyStake => ({
-  key: 'k',
-  leagueName: 'Alpha',
-  platform: 'sleeper',
-  record: '3-1',
-  title: 'Win Alpha',
-  detail: 'Ring #3 of your career.',
-  tone: 'title',
-  ask: 'What would a title in Alpha mean?',
-  ringNumber: 3,
-  ...over,
-})
-
 const wire = (over: Partial<CareerWireData> = {}): CareerWireData => ({
   platforms: [],
   leagues: [wl()],
@@ -59,7 +45,7 @@ const wire = (over: Partial<CareerWireData> = {}): CareerWireData => ({
 
 describe('buildCareerFeed', () => {
   it('is empty when nothing moved, nothing is broken and nothing is at stake', () => {
-    expect(buildCareerFeed({ wire: wire(), stakes: [], now: NOW })).toEqual([])
+    expect(buildCareerFeed({ wire: wire(), now: NOW })).toEqual([])
   })
 
   it('sends a loss to My Team and a win to the next matchup, each with its Chimmy question', () => {
@@ -71,7 +57,6 @@ describe('buildCareerFeed', () => {
           change({ leagueId: 'L2', leagueName: 'Beta', platform: 'yahoo', won: 0, lost: 1, ask: 'beta?' }),
         ],
       }),
-      stakes: [],
       now: NOW,
     })
     expect(feed.map((i) => [i.leagueId, i.tone, i.title, i.action.href, i.ask])).toEqual([
@@ -84,7 +69,6 @@ describe('buildCareerFeed', () => {
   it('lets the standings move be the headline — a loss that still climbed is good news', () => {
     const [climb] = buildCareerFeed({
       wire: wire({ changes: [change({ won: 0, lost: 1, rank: 3, previousRank: 5 })] }),
-      stakes: [],
       now: NOW,
     })
     expect(climb.tone).toBe('good')
@@ -93,7 +77,6 @@ describe('buildCareerFeed', () => {
 
     const [slip] = buildCareerFeed({
       wire: wire({ changes: [change({ won: 1, lost: 0, rank: 4, previousRank: 2 })] }),
-      stakes: [],
       now: NOW,
     })
     expect(slip.tone).toBe('bad')
@@ -103,13 +86,13 @@ describe('buildCareerFeed', () => {
 
   it('drops a change with no games and no rank move', () => {
     expect(
-      buildCareerFeed({ wire: wire({ changes: [change({ won: 0, lost: 0, tied: 0 })] }), stakes: [], now: NOW }),
+      buildCareerFeed({ wire: wire({ changes: [change({ won: 0, lost: 0, tied: 0 })] }), now: NOW }),
     ).toEqual([])
   })
 
   it("uses Decision OS's own sync signal wording, links to Sync, and asks Chimmy nothing", () => {
     const leagues = [wl({ status: 'attention' }), wl({ leagueId: 'L2', leagueName: 'Beta', status: 'gone' })]
-    const feed = buildCareerFeed({ wire: wire({ leagues }), stakes: [], now: NOW })
+    const feed = buildCareerFeed({ wire: wire({ leagues }), now: NOW })
     const signals = leagueSyncAttentionSignals(leagues, NOW)
 
     expect(feed.map((i) => i.title)).toEqual(signals.map((s) => s.title))
@@ -120,24 +103,12 @@ describe('buildCareerFeed', () => {
     ])
   })
 
-  it('links a stake to its matchup, and drops one that does not resolve to exactly one league', () => {
-    const leagues = [wl(), wl({ leagueId: 'L2', leagueName: 'Twin', platform: 'espn' }), wl({ leagueId: 'L3', leagueName: 'Twin', platform: 'yahoo' })]
-    const feed = buildCareerFeed({
-      wire: wire({ leagues }),
-      stakes: [stake({ tone: 'streak', ringNumber: 4 }), stake({ leagueName: 'Twin', platform: 'mfl' })],
-      now: NOW,
-    })
-    expect(feed).toHaveLength(1)
-    expect(feed[0]).toMatchObject({
-      kind: 'stake',
-      leagueId: 'L1',
-      title: 'A repeat would be ring #4',
-      action: { label: 'Open matchup', href: feedHref.matchup('L1') },
-      ask: 'What would a title in Alpha mean?',
-    })
+  it('carries no stakes — the overview’s "In play" card owns them, so a phone never shows both', () => {
+    const feed = buildCareerFeed({ wire: wire({ leagues: [wl()], changes: [change()] }), now: NOW })
+    expect(feed.every((i) => i.kind === 'sync' || i.kind === 'result')).toBe(true)
   })
 
-  it('orders problems, then losses, then stakes, then good news — stable within each', () => {
+  it('orders problems, then losses, then good news — stable within each', () => {
     const feed = buildCareerFeed({
       wire: wire({
         leagues: [wl(), wl({ leagueId: 'L2', leagueName: 'Beta' }), wl({ leagueId: 'L3', leagueName: 'Gamma', status: 'never' })],
@@ -147,13 +118,11 @@ describe('buildCareerFeed', () => {
           change({ leagueId: 'L3', leagueName: 'Gamma', won: 1, lost: 0 }),
         ],
       }),
-      stakes: [stake()],
       now: NOW,
     })
     expect(feed.map((i) => `${i.kind}:${i.leagueId}`)).toEqual([
       'sync:L3',
       'result:L2',
-      'stake:L1',
       'result:L1',
       'result:L3',
     ])

@@ -147,3 +147,12 @@
   .af-core .af-cr-xplink { padding-block: 14px; margin-block: -14px; }
   .af-core .af-crw-link { display: inline-block; padding-block: 13px; margin-block: -13px; }
 }
+
+/* ── Tab strip on a tablet ─────────────────────────────────────────────
+ * Eleven tabs measured 744px against 714px of strip at 768px wide (peer review 2026-10-01), so
+ * the last tab was clipped behind a scroll nobody expects on a tablet. Narrower padding fits all
+ * eleven; phones keep the sideways scroll their single row was designed for. Top level, depth 0. */
+@media (min-width: 768px) and (max-width: 1180px) {
+  .af-c13 .af-crx-tabs { gap: 2px; }
+  .af-c13 .af-crx-tabs .af-cr-tab { padding-left: 8px; padding-right: 8px; }
+}

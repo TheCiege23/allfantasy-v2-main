@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { useEffect } from 'react'
 import { hapticOnce } from '@/lib/platform/haptics'
 import { buildCareerFeed, type CareerFeedItem } from '@/lib/core-app/careerFeed'
-import type { LegacyStake } from '@/lib/core-app/careerMilestones'
 import { readAgo, type CareerWireData, type PlatformHealth, type WireLeague, type WireStatus } from '@/lib/core-app/careerWireModel'
 import { askChimmyAboutCareer } from './CareerAskChimmy'
 
@@ -54,12 +53,16 @@ function platformLine(p: PlatformHealth, now: Date): string {
 export function CareerWire({
   data,
   nowIso,
-  stakes = [],
+  compact = false,
 }: {
   data: CareerWireData
   nowIso: string
-  /** The Career screen's live stakes; empty under a filter, which is when `buildLegacyStakes` returns none. */
-  stakes?: readonly LegacyStake[]
+  /**
+   * The phone overview: two feed items, and every platform's sync state plus the season board
+   * folded behind one tap. Diagnostic detail, not career — at full size it pushed the career itself
+   * more than two phone screens down (peer review, measured at 375px, 2026-10-01).
+   */
+  compact?: boolean
 }) {
   const now = new Date(nowIso)
 
@@ -85,11 +88,91 @@ export function CareerWire({
     .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99) || a.leagueName.localeCompare(b.leagueName))
     .slice(0, MAX_BOARD_ROWS)
 
+  const problemCount = data.leagues.filter((l) => l.status === 'attention' || l.status === 'gone' || l.status === 'never').length
+
+  /* ── 2. Is each platform current? ─────────────────────────────── */
+  const platformsEl = (
+    <ul className="af-crw-plats" aria-label="Platform sync">
+      {data.platforms.map((p) => {
+        const problem = firstProblem(p.platform)
+        const body = (
+          <>
+            <span className="af-crw-dot" data-status={p.status} aria-hidden />
+            <span className="af-crw-plat">{p.label}</span>
+            <span className="af-crw-platline">{platformLine(p, now)}</span>
+            {p.needsAttention > 0 ? (
+              <span className="af-crw-flag">
+                {p.needsAttention} {p.needsAttention === 1 ? 'needs' : 'need'} attention
+              </span>
+            ) : p.status === 'delayed' ? (
+              <span className="af-crw-flag af-crw-flag--soft">delayed</span>
+            ) : null}
+          </>
+        )
+        return (
+          <li key={p.platform} className="af-crw-platrow" title={`${p.label}: ${STATUS_TEXT[p.status]}`}>
+            {problem ? (
+              <Link className="af-crw-platlink" href={syncHref(problem.leagueId)}>
+                {body}
+              </Link>
+            ) : (
+              <span className="af-crw-platlink">{body}</span>
+            )}
+          </li>
+        )
+      })}
+    </ul>
+  )
+
+  /* ── 3. This season, every league ─────────────────────────────── */
+  const boardEl = (
+    <div className="af-crw-block">
+      <p className="af-crw-label">This season</p>
+      <table className="af-crw-board">
+        <thead>
+          <tr>
+            <th scope="col">League</th>
+            <th scope="col">Record</th>
+            <th scope="col">Rank</th>
+            <th scope="col">Read</th>
+          </tr>
+        </thead>
+        <tbody>
+          {board.map((l) => (
+            <tr key={l.leagueId}>
+              <td>
+                <Link href={standingsHref(l.leagueId)} className="af-crw-link">
+                  {l.leagueName}
+                </Link>
+                <span className="af-crl-plat">{l.platform}</span>
+              </td>
+              <td className="af-num">{l.record ?? '—'}</td>
+              <td className="af-num">{l.rank != null ? `#${l.rank}` : '—'}</td>
+              <td>
+                <span className="af-crw-dot" data-status={l.status} aria-hidden />
+                {l.status === 'native' ? 'live' : l.status === 'paused' ? 'paused' : readAgo(l.lastReadAt, now)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {data.leagues.length > board.length ? (
+        <p className="af-crl-foot">
+          Showing {board.length} of {data.leagues.length} leagues, best rank first.
+        </p>
+      ) : null}
+      <p className="af-crl-foot">
+        Times show when AllFantasy last read each league, not when the platform last changed it. Records count games
+        already played; nothing here is added to your career totals until the season finishes.
+      </p>
+    </div>
+  )
+
   return (
     // The host is the container the two-pane layout queries (af-career-devices.css): it follows
     // the Wire's OWN width, which inside the /core shell is far narrower than the viewport.
     <div className="af-crw-host">
-    <section className="af-crw" aria-label="Career Wire">
+    <section className="af-crw" aria-label="Career Wire" data-compact={compact ? 'true' : undefined}>
       <header className="af-crw-top">
         <p className="af-crl-head">
           Career Wire
@@ -99,93 +182,47 @@ export function CareerWire({
       </header>
 
       {/* ── 1. Since your last visit — what to do about it ──────────── */}
-      <CareerFeed data={data} stakes={stakes} now={now} />
+      <CareerFeed data={data} now={now} visible={compact ? FEED_VISIBLE_COMPACT : FEED_VISIBLE} />
 
-      {/* ── 2. Is each platform current? ─────────────────────────────── */}
-      <ul className="af-crw-plats" aria-label="Platform sync">
-        {data.platforms.map((p) => {
-          const problem = firstProblem(p.platform)
-          const body = (
-            <>
-              <span className="af-crw-dot" data-status={p.status} aria-hidden />
-              <span className="af-crw-plat">{p.label}</span>
-              <span className="af-crw-platline">{platformLine(p, now)}</span>
-              {p.needsAttention > 0 ? (
-                <span className="af-crw-flag">
-                  {p.needsAttention} {p.needsAttention === 1 ? 'needs' : 'need'} attention
-                </span>
-              ) : p.status === 'delayed' ? (
-                <span className="af-crw-flag af-crw-flag--soft">delayed</span>
-              ) : null}
-            </>
-          )
-          return (
-            <li key={p.platform} className="af-crw-platrow" title={`${p.label}: ${STATUS_TEXT[p.status]}`}>
-              {problem ? (
-                <Link className="af-crw-platlink" href={syncHref(problem.leagueId)}>
-                  {body}
-                </Link>
-              ) : (
-                <span className="af-crw-platlink">{body}</span>
-              )}
-            </li>
-          )
-        })}
-      </ul>
-
-      {/* ── 3. This season, every league ─────────────────────────────── */}
-      <div className="af-crw-block">
-        <p className="af-crw-label">This season</p>
-        <table className="af-crw-board">
-          <thead>
-            <tr>
-              <th scope="col">League</th>
-              <th scope="col">Record</th>
-              <th scope="col">Rank</th>
-              <th scope="col">Read</th>
-            </tr>
-          </thead>
-          <tbody>
-            {board.map((l) => (
-              <tr key={l.leagueId}>
-                <td>
-                  <Link href={standingsHref(l.leagueId)} className="af-crw-link">
-                    {l.leagueName}
-                  </Link>
-                  <span className="af-crl-plat">{l.platform}</span>
-                </td>
-                <td className="af-num">{l.record ?? '—'}</td>
-                <td className="af-num">{l.rank != null ? `#${l.rank}` : '—'}</td>
-                <td>
-                  <span className="af-crw-dot" data-status={l.status} aria-hidden />
-                  {l.status === 'native' ? 'live' : l.status === 'paused' ? 'paused' : readAgo(l.lastReadAt, now)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {data.leagues.length > board.length ? (
-          <p className="af-crl-foot">
-            Showing {board.length} of {data.leagues.length} leagues, best rank first.
-          </p>
-        ) : null}
-        <p className="af-crl-foot">
-          Times show when AllFantasy last read each league, not when the platform last changed it. Records count games
-          already played; nothing here is added to your career totals until the season finishes.
-        </p>
-      </div>
+      {/*
+        Compact (the phone overview): sync state and the season board are diagnostics, not career,
+        so they fold behind one tap — and the summary still says when something needs attention.
+      */}
+      {compact ? (
+        <details className="af-crw-fold">
+          <summary>
+            Every platform · this season
+            <span className="af-crw-fold-n">
+              {data.leagues.length} {data.leagues.length === 1 ? 'league' : 'leagues'}
+              {problemCount > 0 ? ` · ${problemCount} ${problemCount === 1 ? 'needs' : 'need'} attention` : ''}
+            </span>
+          </summary>
+          {platformsEl}
+          {boardEl}
+        </details>
+      ) : (
+        <>
+          {platformsEl}
+          {boardEl}
+        </>
+      )}
     </section>
     </div>
   )
 }
 
-/** Five fit a phone screen above the fold; the rest fold behind one tap rather than a scroll. */
+/** Desktop and tablet: five, the rest behind one tap rather than a scroll. */
 const FEED_VISIBLE = 5
+/**
+ * The phone overview: two. At five, with each item ~160px tall, the feed alone was most of a phone
+ * screen and the career began two screens down (measured at 375px, peer review 2026-10-01).
+ */
+const FEED_VISIBLE_COMPACT = 2
 
-function CareerFeed({ data, stakes, now }: { data: CareerWireData; stakes: readonly LegacyStake[]; now: Date }) {
-  const items = buildCareerFeed({ wire: data, stakes, now })
-  const shown = items.slice(0, FEED_VISIBLE)
-  const rest = items.slice(FEED_VISIBLE)
+function CareerFeed({ data, now, visible }: { data: CareerWireData; now: Date; visible: number }) {
+  const items = buildCareerFeed({ wire: data, now })
+  const shown = items.slice(0, visible)
+  const rest = items.slice(visible)
   const resultCount = items.filter((i) => i.kind === 'result').length
 
   return (
