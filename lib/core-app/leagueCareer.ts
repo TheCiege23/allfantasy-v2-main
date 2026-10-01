@@ -154,6 +154,73 @@ function isCompleted(f: { scoreA: number; scoreB: number; winnerTeamId: string |
   return !(f.scoreA === 0 && f.scoreB === 0 && f.winnerTeamId == null)
 }
 
+/** One played game, from either source. `teamA`/`teamB` are slot keys the caller's `mySlots` uses. */
+type CareerFixture = {
+  season: number | null
+  weekOrPeriod: number
+  teamA: string
+  teamB: string
+  scoreA: number
+  scoreB: number
+  winnerTeamId: string | null
+}
+
+/**
+ * A native league's finished games, as fixtures keyed on `RedraftRoster.id`.
+ *
+ * ⚠ IDENTITY IS `RedraftRoster.ownerId`, NOT A CLAIMED `LeagueTeam`. Native rosters are owned by an
+ * AppUser id directly; every other roster is a placeholder (`open-slot…`, `orphan…`, `local-…`,
+ * measured on production 2026-10-01). A claim lookup would find no team for the owner of a league
+ * they are plainly playing in.
+ *
+ * ⚠ BYES AND MEDIAN GAMES ARE NOT GAMES AGAINST A MANAGER. A null `awayRosterId` is a bye, and an
+ * `isMedianMatchup` row is a game against the league median — counting either would hand you a
+ * "rival" who does not exist. Only `status = 'final'`: a scheduled or live week is not a result.
+ */
+async function readNativeFixtures(
+  leagueId: string,
+  userId: string,
+): Promise<{ fixtures: CareerFixture[]; mySlots: Set<string>; nameBySlot: Map<string, string> } | null> {
+  const [matchups, rosters] = await Promise.all([
+    prisma.redraftMatchup
+      .findMany({
+        where: { leagueId, status: 'final', isMedianMatchup: false, awayRosterId: { not: null } },
+        select: {
+          week: true,
+          homeRosterId: true,
+          awayRosterId: true,
+          homeScore: true,
+          awayScore: true,
+          season: { select: { season: true } },
+        },
+      })
+      .catch(() => []),
+    prisma.redraftRoster
+      .findMany({ where: { leagueId }, select: { id: true, ownerId: true, ownerName: true, teamName: true } })
+      .catch(() => []),
+  ])
+  if (matchups.length === 0) return null
+
+  const nameBySlot = new Map<string, string>()
+  for (const r of rosters) {
+    const label = r.teamName?.trim() || r.ownerName?.trim()
+    if (label) nameBySlot.set(r.id, label)
+  }
+  return {
+    fixtures: matchups.map((m) => ({
+      season: m.season?.season ?? null,
+      weekOrPeriod: m.week,
+      teamA: m.homeRosterId,
+      teamB: m.awayRosterId as string,
+      scoreA: m.homeScore,
+      scoreB: m.awayScore,
+      winnerTeamId: null,
+    })),
+    mySlots: new Set(rosters.filter((r) => r.ownerId === userId).map((r) => r.id)),
+    nameBySlot,
+  }
+}
+
 /** League phases where no week can have been played — the honest answer is "not yet", not "missing". */
 const NOT_STARTED_STATUSES = new Set(['pre_draft', 'drafting', 'draft', 'setup'])
 
@@ -235,11 +302,35 @@ export async function getLeagueCareer(
       .catch(() => []),
   ])
 
-  const mySlots = new Set(
+  let fixtures: CareerFixture[] = facts
+  let mySlots = new Set(
     teams.filter((t) => t.claimedByUserId === userId).map((t) => String(t.externalId)),
   )
+  const nameBySlot = new Map<string, string>()
+  for (const t of teams) {
+    const label = t.teamName?.trim() || t.ownerName?.trim()
+    if (label) nameBySlot.set(String(t.externalId), label)
+  }
+  let progress: { currentWeek: number | null; isFinal(season: number, week: number): boolean } =
+    leagueWeekProgress(league)
 
+  /*
+   * An AllFantasy-native league keeps its own fixtures — `redraft_matchups`, scored by our engine —
+   * and never had a warehouse import to fill `MatchupFact`. Same summary, different source. Only
+   * looked for when the warehouse is empty, so an imported league never pays for the read.
+   */
   if (facts.length === 0) {
+    const native = await readNativeFixtures(leagueId, userId)
+    if (native) {
+      fixtures = native.fixtures
+      mySlots = native.mySlots
+      for (const [slot, name] of native.nameBySlot) nameBySlot.set(slot, name)
+      // `status = 'final'` is the engine's own verdict, already applied in the read.
+      progress = { currentWeek: null, isFinal: () => true }
+    }
+  }
+
+  if (fixtures.length === 0) {
     /*
      * ⚠ NO FIXTURES IS NOT NO HISTORY. The comment that used to stand here called this "the
      * normal path" on the strength of three leagues having matchup facts; measured on production
@@ -297,18 +388,11 @@ export async function getLeagueCareer(
     }
   }
 
-  const nameBySlot = new Map<string, string>()
-  for (const t of teams) {
-    const label = t.teamName?.trim() || t.ownerName?.trim()
-    if (label) nameBySlot.set(String(t.externalId), label)
-  }
-
   const bySeason = new Map<number, CareerSeasonLine>()
   const rivals = new Map<string, { wins: number; losses: number; meetings: number; marginSum: number }>()
 
-  const progress = leagueWeekProgress(league)
   const seenGames = new Set<string>()
-  for (const f of facts) {
+  for (const f of fixtures) {
     if (!isCompleted(f)) continue
     if (f.season == null) continue
     if (progress.currentWeek != null && !progress.isFinal(f.season, f.weekOrPeriod)) continue
