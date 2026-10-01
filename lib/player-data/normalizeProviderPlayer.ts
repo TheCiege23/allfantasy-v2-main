@@ -16,6 +16,7 @@ import {
 } from '@/lib/player-data/unifiedPlayerProductView'
 import { looksLikeSleeperExternalId } from '@/lib/draft-sports-models/player-asset-resolver'
 import { normalizeSoccerLeague } from '@/lib/providers/rollingInsightsSoccerLeague'
+import { liveLogoOrNull } from '@/lib/sport-teams/knownDeadLogoGuess'
 
 function metadataBag(row: PoolPlayerRecord): Record<string, unknown> {
   const m = row.metadata
@@ -56,9 +57,32 @@ export function poolPlayerRecordToRawDraftLike(row: PoolPlayerRecord): RawDraftP
   }
 }
 
+/**
+ * A team logo the caller already resolved (`metadata.teamLogoUrl` — `getPlayerDataForSurface` puts
+ * the record's logo or the stored `SportsTeam` crest there) beats the registry guess that
+ * `normalizeDraftPlayer` derives from the team string. Outside the NFL that guess is built from a
+ * full name or a school and 404s; without this the stored crest was computed and then dropped.
+ * The NFL is left exactly as it was: its registry path is the canonical one.
+ */
+function applySuppliedTeamLogo(entry: NormalizedDraftEntry, supplied: unknown, sport: LeagueSport | string): void {
+  if (String(sport ?? '').trim().toUpperCase() === 'NFL') return
+  const url = typeof supplied === 'string' && /^https?:\/\//i.test(supplied.trim()) ? liveLogoOrNull(supplied) : null
+  if (!url) return
+  // A copy: `resolvePlayerAssets` hands out the object it caches, so mutating it in place would
+  // rewrite the cache entry every other request reads.
+  if (entry.display?.assets) {
+    entry.display.assets = { ...entry.display.assets, teamLogoUrl: url, teamLogoFallbackUsed: false }
+  }
+  const team = entry.display?.team
+  if (team) {
+    entry.display.team = { ...team, logoUrl: url, logoFallbackUsed: false }
+  }
+}
+
 export function normalizePoolRowToEntry(row: PoolPlayerRecord, sport: LeagueSport | string): NormalizedDraftEntry {
   const entry = normalizeDraftPlayer(poolPlayerRecordToRawDraftLike(row), sport)
   const m = metadataBag(row)
+  applySuppliedTeamLogo(entry, m.teamLogoUrl, sport)
   const br = m.birthDateRaw ?? m.birth_date_raw
   const loose: Record<string, unknown> = {}
   if (typeof br === 'string') loose.birthDateRaw = br
