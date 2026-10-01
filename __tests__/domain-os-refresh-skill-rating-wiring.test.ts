@@ -33,9 +33,18 @@ describe('domain-os-refresh → skill rating wiring', () => {
   it('🛑 its writes, deferrals, errors and failures reach the run telemetry', () => {
     expect(src).toMatch(/\+ r\.outlook\.computed \+ r\.skill\.written,/)
     expect(src).toMatch(/r\.skill\.deferred \+/)
-    expect(src).toMatch(/\.\.\.r\.outlook\.errors, \.\.\.r\.skill\.errors\]/)
+    expect(src).toMatch(/\.\.\.r\.outlook\.errors, \.\.\.r\.skill\.errors, \.\.\.r\.recap\.errors\]/)
     expect(src).toMatch(/r\.skill\.failed > 0/)
     expect(src).toMatch(/skill: \{\s*date: r\.skill\.date,\s*written: r\.skill\.written,\s*alreadyWritten: r\.skill\.alreadyWritten,/)
+  })
+
+  it('🛑 recaps queue only after a fresh replay, and drain every fire behind the budget', () => {
+    const queued = src.indexOf('await queueWeeklyRecaps(board)')
+    const written = src.indexOf('if (skill.written) {')
+    expect(written).toBeGreaterThan(0)
+    expect(queued).toBeGreaterThan(written)
+    expect(src).toMatch(/if \(!budget\.exhausted\(\)\) \{\s*const drained = await drainSkillRecaps\(\)/)
+    expect(src).toMatch(/recap: emptyRecapCounts\(\),/)
   })
 
   it('🛑 the store module stays off the screen loader and lib/auth', () => {

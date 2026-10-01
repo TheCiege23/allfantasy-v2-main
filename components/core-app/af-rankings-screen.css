@@ -945,3 +945,35 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   .af-rk-scopes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .af-rk-scope-tab { min-height: 44px; }
 }
+
+/* ── 2026-10-01: class toggle and rivals ─────────────────────────────────── */
+.af-rk-classbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line2);
+}
+.af-rk-classnote { color: var(--text2); font-size: 12.5px; flex: 1 1 220px; }
+.af-rk-rivals { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.af-rk-rivals li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+}
+.af-rk-rival-who { min-width: 0; display: flex; flex-direction: column; }
+.af-rk-rival-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-rk-rival-who small, .af-rk-rival-h2h small { color: var(--text2); font-size: 12px; }
+.af-rk-rival-h2h { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+
+@media (max-width: 720px) {
+  .af-rk-rivals li { grid-template-columns: minmax(0, 1fr) auto; }
+  .af-rk-rivals li .af-rk-btn { grid-column: 1 / -1; justify-content: center; }
+  .af-rk-classbar .af-rk-tab { min-height: 44px; display: inline-flex; align-items: center; }
+}

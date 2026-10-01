@@ -322,9 +322,38 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
         </p>
       ) : null}
 
+      {g.rivals.length > 0 ? <RivalsCard g={g} /> : null}
+
       <ExplainPanel g={g} data={data} />
 
       <section className="af-rk-card">
+        {g.classFilter ? (
+          <div className="af-rk-classbar" role="group" aria-label="Who is on this board">
+            {g.classFilter.active ? (
+              <Link href={g.classFilter.href} className="af-rk-tab" scroll={false}>
+                Everyone
+              </Link>
+            ) : (
+              <span className="af-rk-tab" aria-current="page">
+                Everyone
+              </span>
+            )}
+            {g.classFilter.active ? (
+              <span className="af-rk-tab" aria-current="page">
+                My class · Lvl {g.classFilter.min}–{g.classFilter.max}
+              </span>
+            ) : (
+              <Link href={g.classFilter.href} className="af-rk-tab" scroll={false}>
+                My class · Lvl {g.classFilter.min}–{g.classFilter.max}
+              </Link>
+            )}
+            <span className="af-rk-classnote">
+              {g.classFilter.active
+                ? `Managers within ${g.classFilter.band} levels of you — the same range you can join leagues in.`
+                : `You are Level ${g.classFilter.level}. My class shows only the managers you can be matched with.`}
+            </span>
+          </div>
+        ) : null}
         <nav className="af-rk-tabs" aria-label="Leaderboards">
           {g.tabs.map((t) => (
             <Link key={t.key} href={t.href} className="af-rk-tab" aria-current={t.key === g.board ? 'page' : undefined}>
@@ -377,6 +406,51 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
 
       <MethodCard />
     </>
+  )
+}
+
+function RivalsCard({ g }: { g: GlobalView }) {
+  return (
+    <section className="af-rk-card" aria-labelledby="rk-rivals-h">
+      <p className="af-rk-eyebrow" id="rk-rivals-h">
+        Next to pass
+        <span className="af-rk-spacer" />
+        <span>{g.classFilter?.active ? 'in your class' : `on ${g.label}`}</span>
+      </p>
+      <ul className="af-rk-rivals">
+        {g.rivals.map((r) => {
+          const h = r.headToHead
+          return (
+            <li key={r.userId}>
+              <div className="af-rk-rival-who">
+                <b>
+                  #{r.rank} @{r.handle}
+                </b>
+                <small>
+                  Lvl {r.level} · {r.display} vs your {r.yourDisplay}
+                </small>
+              </div>
+              <div className="af-rk-rival-h2h">
+                {h ? (
+                  <>
+                    <b className={h.wins > h.losses ? 'af-rk-tone-good' : h.wins < h.losses ? 'af-rk-tone-bad' : undefined}>
+                      {h.wins}-{h.losses}
+                      {h.ties ? `-${h.ties}` : ''}
+                    </b>
+                    <small>head to head{h.lastSeason ? `, last ${h.lastSeason}` : ''}</small>
+                  </>
+                ) : (
+                  <small>never played</small>
+                )}
+              </div>
+              <Link className="af-rk-btn" href={r.compareHref}>
+                Compare
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }
 

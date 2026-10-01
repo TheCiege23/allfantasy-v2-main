@@ -55,6 +55,8 @@ import {
 import { firstSnapshotDate, readRankSnapshots } from '@/lib/core-app/rankingsSnapshots'
 import { communityEntries, handleOf, levelOf, loadCommunity } from '@/lib/core-app/rankingsCommunity'
 import { getSkillView, type SkillView } from '@/lib/rank/skillRating/skillView'
+import { classRangeFor, MANAGER_CLASS_BAND } from '@/lib/league-join/managerClass'
+import { headToHeadWith, type HeadToHead } from '@/lib/core-app/rankingsRivals'
 
 /**
  * Rankings — the data layer for `/core/rankings` (handoffs 14a ladder and boards,
@@ -322,6 +324,25 @@ export type GlobalView = {
   you: { rank: number; of: number; display: string; movement: Movement } | null
   explain: { handle: string; rank: number; score: ManagerScore; isYou: boolean } | null
   freshness: { newestImport: string | null; stalestManager: string | null; ledgerRows: number }
+  /**
+   * "My class": the board narrowed to managers within ±MANAGER_CLASS_BAND levels of
+   * you — the same band league joins use. Null when signed out or without a level.
+   */
+  classFilter: { active: boolean; level: number; min: number; max: number; band: number; href: string } | null
+  /** Up to three managers directly above you on this board, closest first. */
+  rivals: RivalRow[]
+}
+
+export type RivalRow = {
+  userId: string
+  handle: string
+  rank: number
+  level: number
+  display: string
+  yourDisplay: string
+  /** Head-to-head across every imported and native league; null when never measured. */
+  headToHead: HeadToHead | null
+  compareHref: string
 }
 
 export type PortfolioView = {
@@ -577,6 +598,8 @@ export async function getRankingsData(
     ...(scope !== 'global' ? ([['scope', scope]] as Array<[string, string]>) : []),
     ...(leagueId ? ([['league', leagueId]] as Array<[string, string]>) : []),
     ...filterParams(filters),
+    // The class slice survives a board, sort or filter change, like the filters do.
+    ...(scope === 'global' && one(sp, 'class') === 'mine' ? ([['class', 'mine']] as Array<[string, string]>) : []),
   ]
   const boardParams: Array<[string, string]> = [
     ...baseParams,
@@ -611,9 +634,15 @@ export async function getRankingsData(
 
   let global: GlobalView | null = null
   if (scope === 'global') {
-    const entries = isDefaultFilters(filters) ? overallEntries : communityEntries(base, filters)
+    const yourClass = you ? classRangeFor(you.level) : null
+    const classMine = yourClass != null && one(sp, 'class') === 'mine'
+    const allEntries = isDefaultFilters(filters) ? overallEntries : communityEntries(base, filters)
+    const entries = classMine && yourClass
+      ? allEntries.filter((e) => e.level >= yourClass.min && e.level <= yourClass.max)
+      : allEntries
     const ranked = rankBoard(entries, board, filters.minSample)
-    const tracked = board === 'overall' && isDefaultFilters(filters)
+    // Snapshots record the whole board, so movement means nothing on a class slice of it.
+    const tracked = board === 'overall' && isDefaultFilters(filters) && !classMine
     const rows = sortBoardRows(
       ranked.rows.map((r) => ({ ...r, movement: tracked ? movementSince(r.userId, r.rank, sevenSnap) : null })),
       sort,
@@ -634,6 +663,28 @@ export async function getRankingsData(
       .filter((s): s is string => !!s)
       .sort()
 
+    // The three managers directly above you — the next people to pass.
+    const above = yourRow
+      ? ranked.rows.filter((r) => r.rank < yourRow.rank && r.userId !== userId).slice(-3).reverse()
+      : []
+    const h2h = userId && above.length ? await headToHeadWith(userId, above.map((r) => r.userId)).catch(() => null) : null
+    const rivals: RivalRow[] = yourRow
+      ? above.map((r) => {
+          const h = h2h?.get(r.userId) ?? null
+          return {
+            userId: r.userId,
+            handle: r.handle,
+            rank: r.rank,
+            level: r.level,
+            display: r.display,
+            yourDisplay: yourRow.display,
+            headToHead: h && h.wins + h.losses + h.ties > 0 ? h : null,
+            compareHref: `/core/rankings${qs([['view', 'compare'], ['kind', 'managers'], ['user', r.handle]])}`,
+          }
+        })
+      : []
+
+    const classParams = boardParams.filter(([k]) => k !== 'class')
     global = {
       board,
       label: BOARD_META[board].label,
@@ -667,6 +718,17 @@ export async function getRankingsData(
         stalestManager: newestPerManager.length ? newestPerManager[0] : null,
         ledgerRows: filteredRows.length,
       },
+      classFilter: yourClass && you
+        ? {
+            active: classMine,
+            level: you.level,
+            min: yourClass.min,
+            max: yourClass.max,
+            band: MANAGER_CLASS_BAND,
+            href: `/core/rankings${qs(classMine ? classParams : [...classParams, ['class', 'mine']])}`,
+          }
+        : null,
+      rivals,
     }
   }
 

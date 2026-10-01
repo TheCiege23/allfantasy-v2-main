@@ -27,9 +27,11 @@ import {
 import {
   runSkillRatingDaily,
   skillRatingWrittenToday,
+  readSkillBoard,
   emptySkillRatingCounts,
   type SkillRatingCounts,
 } from '@/lib/rank/skillRating/skillRatingStore'
+import { drainSkillRecaps, emptyRecapCounts, queueWeeklyRecaps, type RecapCounts } from '@/lib/rank/skillRating/skillRecap'
 import {
   runForecastSweep,
   emptyForecastSweepCounts,
@@ -244,6 +246,11 @@ type RefreshCounts = {
    * first fire of the day; `deferred: 1` means this fire did not have the time to start it.
    */
   skill: SkillRatingCounts & { deferred: number }
+  /**
+   * The weekly skill recap: queued on Tuesdays right after that day's replay, then sent in batches
+   * on later fires — only when `SKILL_RECAP_NOTIFICATIONS=true`. `remaining > 0` is normal mid-drain.
+   */
+  recap: RecapCounts
 }
 
 export async function GET(req: NextRequest) {
@@ -286,7 +293,7 @@ export async function GET(req: NextRequest) {
         r.outlook.deferred +
         r.skill.deferred +
         r.odds.skippedForTime,
-      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors, ...r.snapshot.errors, ...r.portfolio.errors, ...r.outlook.errors, ...r.skill.errors],
+      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors, ...r.snapshot.errors, ...r.portfolio.errors, ...r.outlook.errors, ...r.skill.errors, ...r.recap.errors],
       /*
        * A rankings `failed` is a genuine fault and downgrades the run, the same as a feed failure.
        * `skipped` does NOT: a league whose settings Sleeper will not serve is a normal single-league
@@ -349,6 +356,13 @@ export async function GET(req: NextRequest) {
           rated: r.skill.rated,
           afUsers: r.skill.afUsers,
           ms: r.skill.ms,
+        },
+        recap: {
+          queued: r.recap.queued,
+          baselineWritten: r.recap.baselineWritten,
+          sent: r.recap.sent,
+          failed: r.recap.failed,
+          remaining: r.recap.remaining,
         },
         snapshot: {
           date: r.snapshot.date,
@@ -532,6 +546,7 @@ async function run(): Promise<RefreshCounts> {
     portfolio: emptyPortfolioTotalsCounts(),
     outlook: emptyOutlookPrewarmCounts(),
     skill: { ...emptySkillRatingCounts(), deferred: 0 },
+    recap: emptyRecapCounts(),
   }
 
   // R3.2 — app-level sources first; see the note on refreshAppSources for why the order matters.
@@ -572,8 +587,34 @@ async function run(): Promise<RefreshCounts> {
       return out
     })
     counts.skill = { ...skill, deferred: 0 }
+    if (skill.written) {
+      const board = await readSkillBoard().catch(() => null)
+      if (board) {
+        const queued = await queueWeeklyRecaps(board).catch((e: unknown) => {
+          const out = emptyRecapCounts()
+          out.errors.push(`skill_recap_queue: ${e instanceof Error ? e.message : String(e)}`)
+          return out
+        })
+        counts.recap = { ...counts.recap, queued: queued.queued, baselineWritten: queued.baselineWritten, errors: queued.errors }
+      }
+    }
   } else {
     counts.skill = { ...emptySkillRatingCounts(), deferred: 1 }
+  }
+  // Recaps drain a batch per fire; a no-op unless SKILL_RECAP_NOTIFICATIONS=true and some are queued.
+  if (!budget.exhausted()) {
+    const drained = await drainSkillRecaps().catch((e: unknown) => {
+      const out = emptyRecapCounts()
+      out.errors.push(`skill_recap_send: ${e instanceof Error ? e.message : String(e)}`)
+      return out
+    })
+    counts.recap = {
+      ...counts.recap,
+      sent: drained.sent,
+      failed: drained.failed,
+      remaining: drained.remaining,
+      errors: [...counts.recap.errors, ...drained.errors],
+    }
   }
 
   const leagues = await prisma.league
