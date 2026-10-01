@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
-import { nextStripState, type MatchupStrip } from '@/lib/live/matchupStrip'
+import { describeRemaining, nextStripState, type MatchupStrip } from '@/lib/live/matchupStrip'
 
 /**
  * You vs your opponent for the league held on the live screen, refreshed on the slate's cadence.
@@ -96,7 +96,7 @@ export function LiveMatchupStrip({
         {strip.isFinal ? 'Final' : lead === 'tied' ? 'Tied' : `You ${lead} by ${Math.abs(strip.margin).toFixed(1)}`}
         {strip.pWin != null && !strip.isFinal ? ` · ${Math.round(strip.pWin * 100)}% to win` : ''}
         {strip.remaining && !strip.isFinal
-          ? ` · ${strip.remaining.live} playing, ${strip.remaining.upcoming} yet to start`
+          ? ` · You: ${describeRemaining(strip.remaining.you)} · ${strip.opponent.name}: ${describeRemaining(strip.remaining.opponent)}`
           : ''}
         {' · '}
         <Link href={href}>Open matchup</Link>

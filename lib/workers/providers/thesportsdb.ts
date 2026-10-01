@@ -1,6 +1,7 @@
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { apiChainSportToDbSport, toApiChainSport, type ApiFetchParams, type ApiProvider } from '@/lib/workers/api-config'
 import { getTheSportsDbApiKeyOrFallback } from '@/lib/env/sports-media-keys'
+import { pickHeadshotCandidate } from '@/lib/player-assets/headshotCandidateMatch'
 
 const THESPORTSDB_LEAGUE_IDS = {
   NFL: '4391',
@@ -24,6 +25,33 @@ function leagueIdForSport(sport: string): string {
   }
   const key = chain ? apiChainSportToDbSport(chain) : sport.toUpperCase()
   return THESPORTSDB_LEAGUE_IDS[key as keyof typeof THESPORTSDB_LEAGUE_IDS] || ''
+}
+
+/**
+ * TheSportsDB's `strSport` value for one of our sport codes. The values are the vendor's
+ * documented sport enum (contracts/thesportsdb/ENDPOINTS.yaml, `strStatus_by_sport`);
+ * "American Football" is also confirmed by the committed fixtures. NCAA codes share the pro
+ * sport's value — searchplayers.php has no league field to separate them.
+ */
+export function theSportsDbSportName(sport: string): string | null {
+  const chain = toApiChainSport(sport)
+  if (!chain) return null
+  switch (apiChainSportToDbSport(chain)) {
+    case 'NFL':
+    case 'NCAAF':
+      return 'American Football'
+    case 'NBA':
+    case 'NCAAB':
+      return 'Basketball'
+    case 'MLB':
+      return 'Baseball'
+    case 'NHL':
+      return 'Ice Hockey'
+    case 'SOCCER':
+      return 'Soccer'
+    default:
+      return null
+  }
 }
 
 function toSearch(value: unknown): string {
@@ -180,15 +208,23 @@ export const theSportsDbProvider: ApiProvider = {
       }
       case 'player_headshots': {
         if (!search) return null
+        // searchplayers.php spans every sport TheSportsDB covers, so a basketball player's
+        // name search can return a footballer. Unknown sport → no pick rather than a guess.
+        const wantedSport = theSportsDbSportName(sport)
+        if (!wantedSport) return null
         const data = await fetchTheSportsDb('searchplayers.php', { p: search })
-        const rows = asRows<Record<string, unknown>>(data, 'player')
-        const matched = rows.find((player) => {
-          const sameName = namesEqual(String(player.strPlayer ?? ''), search)
-          const sameTeam =
-            !teamCode ||
-            normalizeTeamAbbrev(String(player.strTeamShort ?? player.strTeam ?? '')) === teamCode
-          return sameName && sameTeam
-        }) ?? rows[0]
+        const rows = asRows<Record<string, unknown>>(data, 'player').filter((player) =>
+          namesEqual(String(player.strSport ?? ''), wantedSport),
+        )
+        // No `?? rows[0]`: when no row is this player, the answer is "no headshot", never the
+        // first search result's photo. See lib/player-assets/headshotCandidateMatch.ts.
+        const matched = pickHeadshotCandidate(rows, {
+          search,
+          nameOf: (player) => String(player.strPlayer ?? ''),
+          teamCodeOf: (player) =>
+            normalizeTeamAbbrev(String(player.strTeamShort ?? player.strTeam ?? '')),
+          teamCode,
+        })
         const imageUrl = matched ? resolvePlayerImage(matched) : null
         if (!imageUrl) return null
         return {

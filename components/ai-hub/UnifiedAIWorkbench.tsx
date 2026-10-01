@@ -424,15 +424,18 @@ export default function UnifiedAIWorkbench() {
       setResult(null)
     } finally {
       setLoading(false)
-      const unlock = () => {
-        requestInFlightRef.current = false
-      }
-      const remainingLockMs = requestLockUntilRef.current - Date.now()
-      if (remainingLockMs > 0 && typeof window !== 'undefined') {
-        window.setTimeout(unlock, remainingLockMs)
-      } else {
-        unlock()
-      }
+      /*
+       * A completed request releases the guard with it. The lock absorbs a
+       * double-dispatched click only while the request is in flight; holding it
+       * past completion (the old deferred unlock) left Run and Retry enabled —
+       * `loading` is already false — for up to REQUEST_LOCK_MIN_MS after a fast
+       * response, with every click in that window silently dropped. Measured on
+       * the mobile step of e2e/ai-reliability-click-audit: a Run click 76–89 ms
+       * after the previous response started no request, so the drawer never
+       * showed the recovery result.
+       */
+      requestInFlightRef.current = false
+      requestLockUntilRef.current = 0
     }
   }
 

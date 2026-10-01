@@ -179,6 +179,8 @@ import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
 import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import { toStandingsOdds } from '@/lib/core-app/standingsOdds'
+import { getLineupEfficiency } from '@/lib/core-app/lineupEfficiency'
+import { buildDraftOrderPreview, readDraftOrderRule } from '@/lib/core-app/standingsDraftOrder'
 import SeasonOutlookLeague from '@/components/core-app/screens/SeasonOutlookLeague'
 import { slimOutlookForBoard } from '@/lib/core-app/outlookCopy'
 import LiveScores from '@/components/core-app/screens/LiveScores'
@@ -3118,6 +3120,33 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     : null
 
   /*
+   * Lineup efficiency (Sleeper only) and next season's draft order, for the same table.
+   *
+   * ⚠ DISPLAY-ONLY READS, EACH ALLOWED TO FAIL ALONE. Neither changes a number the table prints; a
+   * failure costs its own section and nothing else, exactly as the odds above.
+   *
+   * ⚠ EFFICIENCY STOPS AT THE TABLE'S `throughWeek`, so a week the platform has not finalised is never
+   * scored against the lineup someone may still be changing.
+   */
+  const standingsLeagueRow =
+    activeKey === 'standings' && selectedLeagueId && standings?.available && leagueCtx
+      ? await leagueCtx.league().catch(() => null)
+      : null
+  const [standingsEfficiency, standingsDraftOrder] =
+    standings?.available && standingsLeagueRow
+      ? await Promise.all([
+          getLineupEfficiency({
+            league: standingsLeagueRow,
+            season: standings.season,
+            throughWeek: standings.board.throughWeek,
+          }).catch(() => null),
+          readDraftOrderRule(standingsLeagueRow)
+            .then((rule) => (rule ? buildDraftOrderPreview(standings.board, rule) : null))
+            .catch(() => null),
+        ])
+      : [null, null]
+
+  /*
    * This week's lineups, projected — AF beside API — for the ONE league whose outlook is on screen.
    * Display only: the simulation above reads the provider's lines and never AF. A failed read costs
    * the section and nothing else.
@@ -4697,6 +4726,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             view={standingsView}
             lineups={standingsLineups}
             odds={standingsOdds}
+            efficiency={standingsEfficiency}
+            draftOrder={standingsDraftOrder}
           />
         ) : (
           /* Same split as Commissioner: a read failure is not an unpicked league. */

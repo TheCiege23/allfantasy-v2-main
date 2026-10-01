@@ -7,6 +7,8 @@ import type { MatchupData } from '@/lib/core-app/matchup'
  * two screens cannot disagree. This module only decides what to SAY, and says each absence plainly:
  * a matchup with nothing scored is "not started", never 0–0, and a failed read is never "no matchup".
  */
+export type SideRemaining = { upcoming: number; live: number }
+
 export type MatchupStrip =
   | { kind: 'failed' }
   | { kind: 'unavailable'; reason: string }
@@ -26,8 +28,12 @@ export type MatchupStrip =
       margin: number
       /** Null when the win probability could not be computed — never a guess. */
       pWin: number | null
-      /** Starters across BOTH lineups not yet finished. Null unless every starter's game state is known. */
-      remaining: { upcoming: number; live: number } | null
+      /**
+       * Starters still to play, per team. A side is null unless EVERY one of its starters' game states
+       * is known — a partial count would read as fewer left than there are. The whole object is null
+       * when the loader could not tally the lineups at all.
+       */
+      remaining: { you: SideRemaining | null; opponent: SideRemaining | null } | null
     }
 
 export function buildMatchupStrip(data: MatchupData | null, loadFailed = false): MatchupStrip | null {
@@ -41,7 +47,9 @@ export function buildMatchupStrip(data: MatchupData | null, loadFailed = false):
     return { kind: 'unavailable', reason: data.sides.reason }
   }
   const { you, opponent } = data.sides.data
-  const counts = data.starterCounts ?? null
+  const bySide = data.starterCountsBySide ?? null
+  const side = (c: { upcoming: number; live: number; unknown: number } | undefined): SideRemaining | null =>
+    c && c.unknown === 0 ? { upcoming: c.upcoming, live: c.live } : null
   return {
     kind: 'scored',
     week,
@@ -50,7 +58,7 @@ export function buildMatchupStrip(data: MatchupData | null, loadFailed = false):
     opponent: { name: opponent.teamName, points: opponent.points },
     margin: Math.round((you.points - opponent.points) * 100) / 100,
     pWin: data.winProbability.available ? data.winProbability.data.pWin : null,
-    remaining: counts && counts.unknown === 0 ? { upcoming: counts.upcoming, live: counts.live } : null,
+    remaining: bySide ? { you: side(bySide.you), opponent: side(bySide.opponent) } : null,
   }
 }
 
@@ -64,4 +72,12 @@ export function nextStripState(
 ): { strip: MatchupStrip | null; stale: boolean } {
   if (result === 'error') return { strip: prev, stale: prev != null }
   return { strip: result, stale: false }
+}
+
+/** "3 to play (1 live)", "none left", or "unknown" when this side's game states are not all known. */
+export function describeRemaining(r: SideRemaining | null): string {
+  if (r == null) return 'unknown'
+  const left = r.upcoming + r.live
+  if (left === 0) return 'none left'
+  return r.live > 0 ? `${left} to play (${r.live} live)` : `${left} to play`
 }
