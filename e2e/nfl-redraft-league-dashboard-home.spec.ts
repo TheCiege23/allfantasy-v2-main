@@ -33,7 +33,7 @@ const HARNESS_PATH = '/e2e/nfl-redraft-league-dashboard'
 async function gotoHarnessReady(page: Page): Promise<void> {
   await page.goto(HARNESS_PATH, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await page.getByTestId('nfl-redraft-league-dashboard-harness').waitFor({ state: 'visible', timeout: 120_000 })
-  await page.waitForLoadState('networkidle').catch(() => null)
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => null)
   await page.getByTestId('g32-nfl-redraft-home').waitFor({ state: 'visible', timeout: 30_000 })
 }
 
