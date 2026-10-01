@@ -30,7 +30,7 @@ import {
  * picker calls this one, so the logo beside a player in the builder is the same asset as
  * the logo beside him in the list he was picked from.
  */
-import { resolveTeamLogoUrlSync } from '@/lib/draft-sports-models/player-asset-resolver'
+import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
 import { TradeProposePanel } from '@/components/core-app/screens/TradeProposePanel'
 import { useLeagueRosters } from '@/components/core-app/screens/useLeagueRosters'
@@ -59,6 +59,7 @@ import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 /**
  * Screen 36a — Trade Center.
@@ -209,6 +210,18 @@ type ValueAdjustment = { kind: 'scoring' | 'need'; factor: number; reason: strin
  * pricer returns 0 with this flag when it finds nothing at all; the builder took the 0 as a price,
  * so a team defense read "0" after Analyze — and was not counted as unpriced.
  */
+/**
+ * The crest beside a trade line, from the same helper the asset picker uses, so a player carries
+ * the same badge in the list he was picked from and in the deal.
+ *
+ * ⚠ THE SAFE HELPER, NOT THE GUESSING RESOLVER. That one built an ESPN path for any abbreviation,
+ * so every free agent ("FA") drew a broken image beside his name. A line from the engine carries
+ * its sport; one that does not is read as NFL, which can now only cost a crest, never break one.
+ */
+function crestFor(l: Line): string | null {
+  return teamLogoUrl((l as { sport?: string | null }).sport ?? 'NFL', l.team ?? null)
+}
+
 type EngineLine = Line & {
   playerId?: string | null
   enrichmentPlayerId?: string | null
@@ -404,7 +417,7 @@ function AllLeaguesTradeHub(props: {
           <div className="af-tc-value-action-list">
             {props.valueActions.slice(0, 6).map((player) => (
               <article key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
-                {player.imageUrl ? <img src={player.imageUrl} alt="" width={32} height={32} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
+                {player.imageUrl ? <FallbackImg src={player.imageUrl} alt="" width={32} height={32} fallback={<span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
                 <div>
                   <strong>{player.name}</strong>
                   <span>{player.position ?? copy('Player')} · {copy(player.stock === 'up' ? 'up' : 'down')} {money(Math.abs(player.stockDelta ?? 0))} {copy('over 30 days')}</span>
@@ -1905,8 +1918,16 @@ export function TradeCenter(props: {
                   */}
                   {l.imageUrl ? (
                     <span className="af-tc-headshot" aria-hidden="true">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={l.imageUrl} alt="" loading="lazy" />
+                      <FallbackImg
+                        src={l.imageUrl}
+                        alt=""
+                        loading="lazy"
+                        fallback={
+                          <span className="af-tc-glyph" style={{ background: glyphFor(l).color }}>
+                            {glyphFor(l).glyph}
+                          </span>
+                        }
+                      />
                     </span>
                   ) : (
                     <span className="af-tc-glyph" style={{ background: glyphFor(l).color }}>
@@ -1923,10 +1944,7 @@ export function TradeCenter(props: {
                       ) : null}
                       {l.team ? (
                         <span className="af-tc-row-team">
-                          {resolveTeamLogoUrlSync(l.team, 'NFL') ? (
-                            /* eslint-disable-next-line @next/next/no-img-element */
-                            <img src={resolveTeamLogoUrlSync(l.team, 'NFL') as string} alt="" loading="lazy" />
-                          ) : null}
+                          {crestFor(l) ? <FallbackImg src={crestFor(l) as string} alt="" loading="lazy" fallback={null} /> : null}
                           {l.team}
                         </span>
                       ) : null}
@@ -2683,7 +2701,7 @@ export function TradeCenter(props: {
           <div className="af-tc-value-action-list">
             {valueActions.map((player) => (
               <div key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>
-                {player.imageUrl ? <img src={player.imageUrl} alt="" width={32} height={32} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
+                {player.imageUrl ? <FallbackImg src={player.imageUrl} alt="" width={32} height={32} fallback={<span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>} /> : <span className="af-tc-glyph">{player.position?.slice(0, 1) ?? 'P'}</span>}
                 <div>
                   <strong>{player.name}</strong>
                   <span>{player.position ?? 'Player'} · {player.stock === 'up' ? `up ${money(Math.abs(player.stockDelta ?? 0))}` : `down ${money(Math.abs(player.stockDelta ?? 0))}`} over 30 days</span>

@@ -15,6 +15,7 @@ import { CoreDepthLock, FreeUntilNote } from '../CoreDepthLock'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { scheduleProjectionNote, scheduleRowValue } from '@/lib/core-app/scheduleProjectionNote'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 /**
  * STATE 6 / STATE 7 of the design handoff, in one component.
@@ -427,8 +428,17 @@ export default function PlayerCardSheet({
           <div className="af-pc-id">
             <div className="af-pc-face">
               {image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={image} alt="" width={100} height={100} />
+                <FallbackImg
+                  src={image}
+                  alt=""
+                  width={100}
+                  height={100}
+                  fallback={
+                    <span className="af-pc-face-none" aria-hidden>
+                      {initials(name)}
+                    </span>
+                  }
+                />
               ) : (
                 <span className="af-pc-face-none" aria-hidden>
                   {initials(name)}

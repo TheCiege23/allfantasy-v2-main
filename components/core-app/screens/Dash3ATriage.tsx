@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ClubLogo } from '@/components/core-app/ClubLogo'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-triage.css'
 
@@ -147,8 +148,17 @@ export function Dash3ATriage({
           return (
             <li key={`${p.name}|${p.team ?? ''}`} className="af-triage-row" data-tone={p.tone}>
               {p.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img className="af-triage-avatar" src={p.imageUrl} alt="" loading="lazy" />
+                <FallbackImg
+                  className="af-triage-avatar"
+                  src={p.imageUrl}
+                  alt=""
+                  loading="lazy"
+                  fallback={
+                    <span className="af-triage-avatar af-triage-avatar--initials" aria-hidden>
+                      {p.initials}
+                    </span>
+                  }
+                />
               ) : (
                 <span className="af-triage-avatar af-triage-avatar--initials" aria-hidden>
                   {p.initials}
