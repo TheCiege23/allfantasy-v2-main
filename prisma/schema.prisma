@@ -67,6 +67,13 @@ model PlayerValueSnapshot {
 
   capturedAt DateTime @default(now())
 
+  /// Market axes and observation time, added by 20260909130000_decision_os_market_observations.
+  /// Historic rows are NULL — their axes were never recorded. Modelled so that `migrate dev`
+  /// does not propose dropping live columns (see __tests__/prisma/migration-tables-have-models).
+  marketNumTeams Int?
+  marketPpr      Float?
+  observedAt     DateTime? @db.Timestamptz(3)
+
   @@unique([sleeperId, source, format, qbFormat, capturedAt])
   @@index([sleeperId, capturedAt])
   @@index([source, capturedAt])
@@ -17939,6 +17946,52 @@ model DecisionOsBehavioralSnapshot {
   @@index([leagueId, scope, periodKey])
   @@index([leagueId, managerId, capturedAt])
   @@map("decision_os_behavioral_snapshot")
+}
+
+/// Owner-scoped Decision OS strategy state, one row per (user, league, season). Created by
+/// 20260909140000_decision_os_strategy_state, which was applied to production on 2026-09-09 but
+/// only committed on 2026-10-01 — modelled then from that migration so `migrate dev` stops
+/// proposing to drop a live table.
+///
+/// ⚠ The migration also carries CHECK constraints (`active` in balanced/win-now/rebuild,
+/// `revision` >= 0, `lastObservedWeek` >= 1) and ENABLES ROW LEVEL SECURITY with no policies.
+/// Prisma cannot express either; they live in SQL only.
+model DecisionStrategyState {
+  id               String   @id
+  userId           String
+  leagueId         String
+  season           Int
+  active           String   @default("balanced") @db.VarChar(16)
+  revision         Int      @default(0)
+  pending          Json?
+  lastObservedWeek Int?
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, leagueId, season])
+  @@map("decision_strategy_states")
+}
+
+/// Append-only ledger of DecisionStrategyState changes, one row per revision. Same migration,
+/// same CHECK (`action` in observe/confirm) and RLS caveat as above. `stateId` deliberately
+/// carries NO relation: production has no FK on it, and declaring one would make the schema
+/// propose adding it.
+model DecisionStrategyEvent {
+  id         String   @id
+  stateId    String
+  userId     String
+  leagueId   String
+  season     Int
+  revision   Int
+  action     String   @db.VarChar(16)
+  evidenceId String?
+  before     Json
+  after      Json
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([stateId, revision])
+  @@index([userId, leagueId, season, createdAt])
+  @@map("decision_strategy_events")
 }
 
 /// Fantasy OS Suite — Phase OS-A1. Decision OS's provider-agnostic BELIEF about whether real money
