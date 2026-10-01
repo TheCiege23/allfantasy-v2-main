@@ -28,6 +28,8 @@ import { CareerAskChimmy } from '@/components/core-app/career/CareerAskChimmy'
 import { LegacyStakes } from '@/components/core-app/career/LegacyStakes'
 import { careerChimmyPrompts } from '@/lib/core-app/careerChimmy'
 import { buildLegacyStakes } from '@/lib/core-app/careerMilestones'
+import type { CareerWireData } from '@/lib/core-app/careerWireModel'
+import { CareerWire } from '@/components/core-app/career/CareerWire'
 import '@/components/core-app/af-career.css'
 import '@/components/core-app/af-career-brief.css'
 import '@/components/core-app/af-career-live.css'
@@ -191,7 +193,15 @@ function MobileArc({ data }: { data: CareerData }) {
  * Brief item 10: the season story is a swipeable rail here, newest first; the
  * full table is still one tap away on Seasons.
  */
-function CareerMobile({ screen }: { screen: CareerScreenData }) {
+function CareerMobile({
+  screen,
+  wire,
+  nowIso,
+}: {
+  screen: CareerScreenData
+  wire: CareerWireData | null
+  nowIso?: string
+}) {
   const data = screen.data
   const titles = data.titles.slice(0, 3)
   const peak = data.seasons
@@ -226,6 +236,8 @@ function CareerMobile({ screen }: { screen: CareerScreenData }) {
       <CareerTabs view="overview" filter={data.filter} />
 
       <div className="af-crm-body">
+        {/* Phase 3: every platform first — the question someone opens the app with. */}
+        {wire && nowIso ? <CareerWire data={wire} nowIso={nowIso} /> : null}
         <CareerFilterBar data={data} view="overview" />
         {data.isEmpty ? (
           <>
@@ -393,7 +405,18 @@ function CareerMobile({ screen }: { screen: CareerScreenData }) {
   )
 }
 
-export function Career({ screen, share }: { screen: CareerScreenData; share?: ShareCardData | null }) {
+export function Career({
+  screen,
+  share,
+  wire = null,
+  nowIso,
+}: {
+  screen: CareerScreenData
+  share?: ShareCardData | null
+  /** Career Wire — read on the overview only; null elsewhere or when the read failed. */
+  wire?: CareerWireData | null
+  nowIso?: string
+}) {
   /*
    * `share` is a view but not a tab. 13a puts "Share card" in the header action
    * row, not in the tab set.
@@ -405,8 +428,8 @@ export function Career({ screen, share }: { screen: CareerScreenData; share?: Sh
   const overview = screen.view === 'overview'
   return (
     <>
-      <CareerDesktop screen={screen} share={share ?? null} showOnMobile={!overview} />
-      {overview ? <CareerMobile screen={screen} /> : null}
+      <CareerDesktop screen={screen} share={share ?? null} showOnMobile={!overview} wire={wire} nowIso={nowIso} />
+      {overview ? <CareerMobile screen={screen} wire={wire} nowIso={nowIso} /> : null}
     </>
   )
 }
@@ -498,10 +521,14 @@ function CareerDesktop({
   screen,
   share,
   showOnMobile,
+  wire,
+  nowIso,
 }: {
   screen: CareerScreenData
   share: ShareCardData | null
   showOnMobile: boolean
+  wire: CareerWireData | null
+  nowIso?: string
 }) {
   const { data, view } = screen
 
@@ -540,6 +567,13 @@ function CareerDesktop({
           </div>
         </div>
       </div>
+
+      {/*
+        Phase 3: the Career Wire leads the overview — is every platform current, how is each
+        league going, what moved since the last visit. Above the filter bar because it is
+        account-wide: a platform or era filter does not narrow which platforms need a sync.
+      */}
+      {view === 'overview' && wire && nowIso ? <CareerWire data={wire} nowIso={nowIso} /> : null}
 
       {view !== 'share' ? <CareerFilterBar data={data} view={view} /> : null}
 
