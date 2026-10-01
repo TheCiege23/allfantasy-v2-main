@@ -286,8 +286,10 @@ test.describe('@mock-draft-room click audit', () => {
   test('league roster loading hint: delayed until ~400ms, then clears after slow roster-config', async ({ page }) => {
     await mockMockDraftApis(page)
     let rosterConfigHits = 0
+    let rosterConfigRequestedAt = 0
     await page.route('**/api/leagues/**/roster-config**', async (route) => {
       rosterConfigHits += 1
+      rosterConfigRequestedAt = Date.now()
       await new Promise<void>((resolve) => {
         setTimeout(resolve, ROSTER_CONFIG_SLOW_MS)
       })
@@ -310,9 +312,31 @@ test.describe('@mock-draft-room click audit', () => {
     await page.getByRole('option', { name: /E2E NFL League/i }).click()
     await expect.poll(() => rosterConfigHits).toBeGreaterThan(0)
 
-    await expect(hint).toHaveCount(0)
-    await page.waitForTimeout(MOCK_DRAFT_ROSTER_HINT_DELAY_MS - 100)
-    await expect(hint).toHaveCount(0)
+    /*
+     * "Still hidden inside the delay window" is asserted with one-shot reads clocked from the
+     * request, not with a retrying `toHaveCount(0)` after a fixed `waitForTimeout`.
+     *
+     * The previous shape raced the hint it was testing. The 300ms wait started from
+     * `expect.poll` settling, which trails the request by the poll interval plus the test's own
+     * overhead, so the second `toHaveCount(0)` could begin a few milliseconds AFTER the hint had
+     * mounted (measured: hint mounted 435ms after the request). A retrying `toHaveCount(0)` does
+     * not fail on that — it keeps polling until the roster-config response clears the hint
+     * ~5s later, passes, and the `toBeVisible` that follows finds nothing. That is the
+     * "element(s) not found" this test reported on main after the Next 15.5 / React 19.3
+     * upgrade (468fdd3d), which shifted the timings by enough to lose the margin.
+     *
+     * A one-shot `count()` inside the window cannot be waited out: an early hint fails here, on
+     * the assertion that is about it. If the harness is slow enough that the window has already
+     * closed by the time the request is observed, there is nothing to assert about the delay and
+     * the loop body does not run; the visibility and clear-down assertions below still hold.
+     */
+    while (Date.now() - rosterConfigRequestedAt < MOCK_DRAFT_ROSTER_HINT_DELAY_MS - 100) {
+      expect(
+        await hint.count(),
+        `roster hint must stay hidden ${Date.now() - rosterConfigRequestedAt}ms after the request`,
+      ).toBe(0)
+      await page.waitForTimeout(50)
+    }
 
     await expect(hint).toBeVisible({ timeout: ROSTER_CONFIG_SLOW_MS })
 
