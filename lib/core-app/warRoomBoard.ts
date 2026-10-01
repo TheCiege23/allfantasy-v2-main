@@ -32,6 +32,8 @@ import {
  */
 
 export type LivePick = {
+  /** Sport of this draft, so the card and club crest use the right league. */
+  sport?: string
   overall: number
   round: number
   pickInRound: number
@@ -280,6 +282,7 @@ export async function getLiveDraftPicks(
         const pickKey = keyOfPick.get(`${p.sessionId}:${p.overall}`)
         const meta = pickKey ? byPlayerKey.get(pickKey) : undefined
         return {
+          sport: String(s.league?.sport ?? 'NFL').toUpperCase(),
           overall: p.overall,
           round: p.round || Math.floor((p.overall - 1) / teams) + 1,
           /*

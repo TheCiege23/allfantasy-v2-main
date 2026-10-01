@@ -1287,6 +1287,18 @@ function livePicks(over: Partial<LiveDraftPicks> = {}): LiveDraftPicks {
 describe('DraftHqBoard · the live board tail', () => {
   const liveRow = () => draftRow({ leagueId: 'l1', phase: 'live' })
 
+  it('uses the picked league sport for a non-NFL player card and club crest', () => {
+    const picks = livePicks()
+    picks.byLeague.l1![0] = { ...picks.byLeague.l1![0]!, sport: 'NBA', team: 'LAL', playerName: 'LeBron James' }
+    const { container } = render(<DraftHqBoard
+      data={draftData([liveRow()])}
+      allHref="/core/draft-hq?all=1"
+      totalLeagues={1}
+      picks={picks}
+    />)
+    expect(container.querySelector('.af-bd-club')?.getAttribute('src')).toBe('https://a.espncdn.com/i/teamlogos/nba/500/lal.png')
+  })
+
   it('renders the last picks with their round and pick number', () => {
     const { container } = render(
       <DraftHqBoard
