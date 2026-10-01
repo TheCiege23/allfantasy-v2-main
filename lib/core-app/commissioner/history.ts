@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { readRecentImportedTrades } from '@/lib/league-history/leagueWarehouseReads'
+import { describeImportedActivityRows, type LeagueActivityItem } from '@/lib/core-app/leagueActivity'
 
 export type CommissionerHistory = {
   tradeAvailable: boolean
@@ -16,7 +17,33 @@ export type CommissionerHistory = {
   draftNote: string
 }
 
-export async function loadCommissionerHistory(leagueId: string, native: boolean): Promise<CommissionerHistory> {
+const MAX_TRADE_ASSETS = 6
+
+/**
+ * An imported trade as a commissioner reads it: who traded, and what moved.
+ *
+ * 🛑 THIS USED TO PRINT THE PROVIDER'S TRANSACTION ID — "Trade bb408447-…" — which tells a
+ * commissioner nothing (seen 2026-10-01 in the signed-in check). The row already holds the
+ * managers and the players; `describeImportedActivityRows` names them, the same resolver League
+ * Buzz uses, so the two surfaces cannot name one trade differently.
+ *
+ * Assets are listed without direction: Sleeper's `adds` names everything that moved but a reader
+ * that guessed which side got what would be inventing it.
+ */
+export function importedTradeLabel(item: Pick<LeagueActivityItem, 'involvedTeams' | 'managerName' | 'adds' | 'picks'>): string {
+  const sides = item.involvedTeams.length ? item.involvedTeams.join(' ↔ ') : item.managerName ?? 'Unattributed trade'
+  const assets = [...item.adds.map((player) => player.name ?? player.label), ...item.picks]
+  if (!assets.length) return sides
+  const shown = assets.slice(0, MAX_TRADE_ASSETS).join(', ')
+  return `${sides}: ${shown}${assets.length > MAX_TRADE_ASSETS ? ` +${assets.length - MAX_TRADE_ASSETS} more` : ''}`
+}
+
+export async function loadCommissionerHistory(
+  leagueId: string,
+  native: boolean,
+  /** The league's provider and sport, so an ESPN or Yahoo player id is named in its own id space. */
+  provider: { platform?: string | null; sport?: string | null } = {},
+): Promise<CommissionerHistory> {
   const [nativeTrades, importedTrades, sessions, redraftDrafts, corrections] = await Promise.all([
     native ? prisma.redraftLeagueTrade.findMany({
       where: { leagueId }, orderBy: { createdAt: 'desc' }, take: 10,
@@ -35,6 +62,11 @@ export async function loadCommissionerHistory(leagueId: string, native: boolean)
       where: { leagueId }, select: { draftSessionId: true, overallPickNumber: true, action: true, oldPlayerName: true, newPlayerName: true, reason: true }, orderBy: { createdAt: 'desc' }, take: 500,
     }).catch(() => null),
   ])
+
+  // Naming is best-effort: a failed lookup leaves the trade dated and sourced, never dropped.
+  const namedTrades = importedTrades?.length
+    ? await describeImportedActivityRows(importedTrades, { leagueId, ...provider }).then((r) => r.items).catch(() => null)
+    : null
 
   const correctionsByPick = new Map<string, string[]>()
   for (const row of corrections ?? []) {
@@ -61,7 +93,7 @@ export async function loadCommissionerHistory(leagueId: string, native: boolean)
     draftAvailable: sessions !== null && redraftDrafts !== null && corrections !== null,
     trades: native
       ? (nativeTrades ?? []).map((trade) => ({ id: trade.id, at: trade.createdAt.toISOString(), label: `${trade.proposerRoster.teamName ?? trade.proposerRoster.ownerName} ↔ ${trade.receiverRoster.teamName ?? trade.receiverRoster.ownerName}`, status: trade.status, source: 'AllFantasy' }))
-      : (importedTrades ?? []).map((trade) => ({ id: trade.id, at: trade.occurredAt.toISOString(), label: `Trade ${trade.providerEventId ?? trade.id}`, status: 'recorded', source: trade.provider })),
+      : (importedTrades ?? []).map((trade, i) => ({ id: trade.id, at: trade.occurredAt.toISOString(), label: namedTrades?.[i] ? importedTradeLabel(namedTrades[i]) : 'Trade (details unavailable)', status: 'recorded', source: trade.provider })),
     drafts,
     tradeNote: nativeTrades === null || importedTrades === null ? 'Trade history could not be read.' : native ? 'Native trade records on file. This list is limited to the ten newest.' : 'Imported trades recorded in the league warehouse. Provider history may be incomplete.',
     draftNote: sessions === null || redraftDrafts === null || corrections === null ? 'Some draft records or corrections could not be read.' : 'Only connected live draft sessions and native redraft drafts on file are shown. A session year is inferred from its date; missing provider seasons are not reconstructed.',

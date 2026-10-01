@@ -77,11 +77,13 @@ export interface LeagueWarehouseManagerActivity {
 /** Latest imported trades from the provider-neutral activity warehouse. */
 export async function readRecentImportedTrades(leagueId: string, take = 10): Promise<Array<{
   id: string; occurredAt: Date; provider: string; providerEventId: string | null
+  activityType: string; rosterId: string | null; payload: unknown; normalized: unknown
 }>> {
   const identity = await providerIdentity(leagueId)
   return prisma.decisionOsImportedActivity.findMany({
     where: { ...activityWhere(leagueId, identity), activityType: 'trade' },
-    select: { id: true, occurredAt: true, provider: true, providerEventId: true },
+    // payload + normalized carry the players, picks and managers the hub names a trade with.
+    select: { id: true, occurredAt: true, provider: true, providerEventId: true, activityType: true, rosterId: true, payload: true, normalized: true },
     orderBy: { occurredAt: 'desc' }, take,
   })
 }
