@@ -110,7 +110,7 @@ export function getOrganizationSchema(): OrganizationSchema {
     "@type": "Organization",
     name: "AllFantasy",
     url: BASE,
-    logo: `${BASE}/af-crest.png`,
+    logo: `${BASE}/af-crest-transparent.png`,
   }
 }
 

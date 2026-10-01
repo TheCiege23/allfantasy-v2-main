@@ -8,11 +8,15 @@
  * being a 1200x630 JPEG nobody can reproduce.
  *
  * ⚠ THE CARD IS COMPOSED FROM EXISTING BRAND ASSETS ON PURPOSE. Nothing here
- * invents new branding: it crops public/af-crest.png and
+ * invents new branding: it crops public/af-crest-transparent.png and
  * public/branding/allfantasy-wordmark-logo.png to their artwork and lays them
- * out at the size social platforms actually crop to. Both sources are already
- * artwork-on-black, so they composite onto a black canvas with no seams and no
- * masking. Swap either source and re-run.
+ * out at the size social platforms actually crop to. The crest is transparent
+ * and the wordmark is artwork-on-black, so both composite onto a black canvas
+ * with no seams and no masking. Swap either source and re-run.
+ *
+ * The crest source is the transparent PNG (built from public/af-crest.svg by
+ * scripts/build-crest-png.mjs), not public/af-crest.png — that file is an
+ * older crest variant and would put the wrong mark on the card.
  *
  * 1200x630 is the size Facebook, LinkedIn and X all crop toward; anything
  * squarer gets letterboxed or centre-cropped into nonsense, which is what
@@ -42,7 +46,7 @@ async function artwork(file) {
 }
 
 async function main() {
-  const crest = await sharp(await artwork('public/af-crest.png'))
+  const crest = await sharp(await artwork('public/af-crest-transparent.png'))
     .resize({ height: 300, fit: 'inside' })
     .toBuffer()
 

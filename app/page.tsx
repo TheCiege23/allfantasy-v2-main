@@ -81,7 +81,7 @@ export async function generateMetadata(
     openGraphDescription: copy.meta.ogDescription,
     twitterTitle: copy.meta.ogTitle,
     twitterDescription: copy.meta.ogDescription,
-    imagePath: '/af-crest.png',
+    imagePath: '/og-image.jpg',
     keywords: [
       'fantasy sports',
       'fantasy football',
