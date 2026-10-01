@@ -19,6 +19,9 @@ import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { isDraftRoomSource, type LeagueDraftLink } from '@/lib/league-chat/draftChatLink'
 import { CHIMMY_DISPLAY_NAME, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { ENGAGEMENT } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import '@/components/core-app/af-comms.css'
 
 /**
@@ -74,6 +77,8 @@ export type LeagueConversationProps = {
    * A prop rather than a session hook, which throws outside a SessionProvider.
    */
   viewerId?: string | null
+  /** An explicit user-requested draft, never sent automatically. */
+  initialDraft?: string | null
 }
 
 type LeagueMessage = {
@@ -177,7 +182,9 @@ export function LeagueConversation({
   surface = 'drawer',
   source = null,
   viewerId = null,
+  initialDraft = null,
 }: LeagueConversationProps) {
+  const { language } = useOptionalLanguage()
   const tribe = typeof source === 'string' && source.startsWith('tribe_') ? source : null
   const room = `league:${leagueId}`
 
@@ -732,6 +739,10 @@ export function LeagueConversation({
   )
 
   const name = leagueName?.trim() || 'the league'
+  const latestRecap = [...messages].reverse().find((message) => {
+    const marker = message.metadata?.chimmyMoment
+    return marker && typeof marker === 'object' && (marker as Record<string, unknown>).kind === 'weekly_awards'
+  })
   const draftLive = Boolean(draft?.live) && !tribe
   const showDraftBanner = draftLive && surface !== 'draft_room'
   const canToggleDraft = !tribe && surface !== 'draft_room'
@@ -781,6 +792,25 @@ export function LeagueConversation({
           <a className="af-cm-draftlive-link" href={draft.href} data-testid="league-chat-open-draft-room">
             Open the draft room
           </a>
+        </div>
+      ) : null}
+
+      {!tribe && latestRecap ? (
+        <div className="af-cm-recap-shortcut" data-testid="league-weekly-recap-shortcut">
+          <span aria-hidden>🏆</span>
+          <div>
+            <strong>{language === 'es' ? 'Resumen semanal de Chimmy' : 'Chimmy’s weekly recap'}</strong>
+            <small>{latestRecap.message.split('\n')[0]}</small>
+          </div>
+          <button type="button" onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.LEAGUE_RECAP_ACTION, { leagueId, action: 'read' }); setFocusRequest({ id: latestRecap.id, nonce: Date.now() }) }}>
+            {language === 'es' ? 'Ver' : 'Read'}
+          </button>
+          <button type="button" onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.LEAGUE_RECAP_ACTION, { leagueId, action: 'discuss' }); setReplyTo(latestRecap); window.requestAnimationFrame(() => convoRef.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus()) }}>
+            {language === 'es' ? 'Responder' : 'Discuss'}
+          </button>
+          <button type="button" disabled={reactionBusy === latestRecap.id} onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.LEAGUE_RECAP_ACTION, { leagueId, action: 'react' }); void toggleReaction(latestRecap.id, '🔥', reactionOverride[latestRecap.id] ?? readReactions(latestRecap.metadata, viewer)) }}>
+            {language === 'es' ? 'Reaccionar' : 'React'} 🔥
+          </button>
         </div>
       ) : null}
 
@@ -916,6 +946,7 @@ export function LeagueConversation({
         autocompleteLeagues={leagues?.map((l) => ({ id: l.id, name: l.name }))}
         chatType="league"
         placeholder={`Message ${name}…`}
+        initialDraftText={initialDraft}
         onSend={sendPayload}
         onAskChimmy={onAskChimmy}
         isCommissioner={isCommissioner}

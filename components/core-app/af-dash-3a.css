@@ -718,6 +718,18 @@
 .af3a-routine-check { color: var(--good, var(--accent)); font: 800 12px/1 'Archivo', system-ui, sans-serif; }
 .af3a-routine-summary { flex: 1 1 220px; min-width: 0; color: var(--text2); font: 400 12px/1.4 'Archivo', system-ui, sans-serif; }
 .af3a-routine-recap { margin-top: 10px; display: grid; gap: 6px; }
+.af3a-decision-brief { margin-bottom: 10px; padding: 14px; border-color: color-mix(in srgb, var(--accent) 42%, var(--line)); background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--surface)), var(--surface)); }
+.af3a-decision-brief-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.af3a-decision-brief-head p { margin: 5px 0 0; color: var(--text2); font-size: 12px; }
+.af3a-decision-brief-head a { color: var(--accent); font-size: 12px; font-weight: 750; white-space: nowrap; }
+.af3a-decision-brief ol { display: grid; gap: 7px; margin: 12px 0 0; padding: 0; list-style: none; }
+.af3a-decision-brief li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.af3a-decision-brief li > span { color: var(--accent); }
+.af3a-decision-brief li > div { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.af3a-decision-brief li strong { color: var(--text); font-size: 12px; }
+.af3a-decision-brief li small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.af3a-decision-brief li a { color: var(--accent); font-size: 12px; font-weight: 750; white-space: nowrap; }
+@media (max-width: 560px) { .af3a-decision-brief-head { flex-wrap: wrap; } .af3a-decision-brief li { min-height: 52px; } }
 .af3a-routine-recap b { color: var(--text); font: 800 13px/1.3 'Archivo', system-ui, sans-serif; }
 .af3a-routine-recap ul { margin: 0; padding-left: 18px; color: var(--text2); font: 400 12px/1.5 'Archivo', system-ui, sans-serif; }
 .af3a-routine-awards { margin-top: 10px; display: grid; gap: 8px; }

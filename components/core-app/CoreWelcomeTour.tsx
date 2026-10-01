@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { ENGAGEMENT } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import '@/components/core-app/core-welcome-tour.css'
 
 const STORAGE_KEY = 'af-core-welcome-v1'
@@ -13,6 +15,7 @@ type Step = {
   title: string
   body: string
   action?: { label: string; href: string }
+  secondaryAction?: { label: string; href: string }
 }
 
 export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
@@ -38,7 +41,8 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
       body: leagueCount > 0
         ? 'Abre Ligas para cambiar de liga. AllFantasy muestra tus datos sin modificar tu plataforma original.'
         : `Importa desde ${availableImportPlatformsPhrase()}. AllFantasy lee tu liga sin modificar la plataforma original.`,
-      action: leagueCount > 0 ? undefined : { label: 'Importar una liga', href: '/import' },
+      action: leagueCount > 0 ? { label: 'Revisar mi semana', href: '/core/week' } : { label: 'Importar una liga', href: '/import' },
+      secondaryAction: leagueCount > 0 ? undefined : { label: 'Unirme a un grupo de brackets', href: '/brackets/join' },
     },
     {
       kicker: '2 · Elige',
@@ -63,7 +67,8 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
       body: leagueCount > 0
         ? 'Open Leagues to switch between them. AllFantasy shows your data without changing the original platform.'
         : `Import from ${availableImportPlatformsPhrase()}. AllFantasy reads the league and leaves the original platform unchanged.`,
-      action: leagueCount > 0 ? undefined : { label: 'Import a league', href: '/import' },
+      action: leagueCount > 0 ? { label: 'Review my week', href: '/core/week' } : { label: 'Import a league', href: '/import' },
+      secondaryAction: leagueCount > 0 ? undefined : { label: 'Join a bracket pool', href: '/brackets/join' },
     },
     {
       kicker: '2 · Choose',
@@ -100,8 +105,16 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
       <span className="af-welcome-kicker">{current.kicker}</span>
       <h2 id="af-welcome-title">{current.title}</h2>
       <p>{current.body}</p>
+      {step === 0 ? (
+        <p className="af-welcome-first-win">
+          {leagueCount > 0
+            ? spanish ? 'Primer objetivo: abre un enfrentamiento y revisa la próxima decisión de tu equipo.' : 'First win: open a matchup and review your next team decision.'
+            : spanish ? 'Primer objetivo: conecta una liga para recibir consejos según tu plantilla y reglas.' : 'First win: connect a league to see advice based on your roster and rules.'}
+        </p>
+      ) : null}
       <div className="af-welcome-actions">
-        {current.action ? <Link href={current.action.href} onClick={finish}>{current.action.label}</Link> : null}
+        {current.action ? <Link href={current.action.href} onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.CORE_FIRST_WIN_CLICK, { hasLeague: leagueCount > 0, destination: current.action?.href }); finish() }}>{current.action.label}</Link> : null}
+        {current.secondaryAction ? <Link className="af-welcome-secondary" href={current.secondaryAction.href} onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.CORE_FIRST_WIN_CLICK, { hasLeague: false, destination: current.secondaryAction?.href }); finish() }}>{current.secondaryAction.label}</Link> : null}
         {step > 0 ? <button type="button" onClick={() => setStep((value) => value - 1)}>{spanish ? 'Atrás' : 'Back'}</button> : null}
         {step < steps.length - 1 ? (
           <button type="button" className="af-welcome-next" onClick={() => setStep((value) => value + 1)}>{spanish ? 'Siguiente' : 'Next'}</button>

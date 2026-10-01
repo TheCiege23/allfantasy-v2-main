@@ -3,6 +3,10 @@
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, Loader2, Users, Trophy } from "lucide-react"
+import Link from "next/link"
+import { ENGAGEMENT } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 type Preview = {
   leagueId: string
@@ -17,12 +21,14 @@ type Preview = {
 }
 
 function JoinLeagueForm() {
+  const spanish = useOptionalLanguage().language === 'es'
   const [code, setCode] = useState("")
   const [loading, setLoading] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(true)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [authRequired, setAuthRequired] = useState(false)
   const router = useRouter()
   const sp = useSearchParams()
 
@@ -84,7 +90,7 @@ function JoinLeagueForm() {
       const data = await res.json()
       if (!res.ok) {
         if (data.error === "UNAUTHENTICATED") {
-          router.push(`/login?callbackUrl=${encodeURIComponent(returnTo)}`)
+          setAuthRequired(true)
           return
         }
         if (data.error === "AGE_REQUIRED") {
@@ -98,6 +104,7 @@ function JoinLeagueForm() {
         setError(data.error ?? "Failed to join pool")
         return
       }
+      sendProductAnalyticsBeacon(ENGAGEMENT.ACTIVITY_INVITE_JOINED, { focus: 'bracket', leagueId: data.leagueId })
       router.push(`/brackets/leagues/${data.leagueId}`)
     } catch {
       setError("Something went wrong. Please try again.")
@@ -139,6 +146,16 @@ function JoinLeagueForm() {
           {error}
         </div>
       )}
+      {authRequired ? (
+        <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}>
+          <h2 className="font-semibold" style={{ color: 'var(--text)' }}>{spanish ? 'Tu lugar en este grupo te espera' : 'Keep your place in this pool'}</h2>
+          <p className="mt-1 text-sm mode-muted">{spanish ? 'Tu código de invitación estará aquí cuando regreses.' : 'Your invite code will be here when you return.'}</p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <Link href={`/signup?callbackUrl=${encodeURIComponent(`/brackets/join?code=${encodeURIComponent(code.trim().toUpperCase())}`)}`} className="rounded-lg px-4 py-3 text-sm font-bold" style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}>{spanish ? 'Crear cuenta' : 'Create account'}</Link>
+            <Link href={`/login?callbackUrl=${encodeURIComponent(`/brackets/join?code=${encodeURIComponent(code.trim().toUpperCase())}`)}`} className="rounded-lg border px-4 py-3 text-sm font-bold" style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>{spanish ? 'Iniciar sesión' : 'Sign in'}</Link>
+          </div>
+        </div>
+      ) : null}
 
       <form onSubmit={handleJoin} className="space-y-4">
         <div>

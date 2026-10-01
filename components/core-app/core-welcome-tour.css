@@ -40,6 +40,7 @@
 .af-welcome-kicker { color: var(--accent); font: 750 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), monospace; letter-spacing: .14em; text-transform: uppercase; }
 .af-welcome h2 { margin: 9px 0 8px; color: var(--text); font: 900 22px/1.1 var(--font-archivo, Archivo), system-ui, sans-serif; letter-spacing: -.025em; }
 .af-welcome p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.58; }
+.af-welcome .af-welcome-first-win { margin-top: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--accent-line); background: color-mix(in srgb, var(--accent) 9%, var(--surface)); color: var(--text); font-weight: 650; }
 .af-welcome-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 17px; }
 .af-welcome-actions a,
 /* 42px was two short of the 44px floor — the smallest possible miss, and the
@@ -48,6 +49,7 @@
 .af-welcome-actions button { min-height: 44px; padding: 10px 13px; border: 1px solid var(--line2); border-radius: 10px; color: var(--text2); background: var(--chip); font: 800 12px/1 var(--font-archivo, Archivo), system-ui, sans-serif; text-decoration: none; cursor: pointer; }
 .af-welcome-actions a,
 .af-welcome-actions .af-welcome-next { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
+.af-welcome-actions .af-welcome-secondary { color: var(--text2); border-color: var(--line2); background: var(--chip); }
 
 @media (max-width: 720px) {
   .af-welcome {

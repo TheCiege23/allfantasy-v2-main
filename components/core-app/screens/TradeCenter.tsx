@@ -59,6 +59,8 @@ import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { ENGAGEMENT } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 
 /**
  * Screen 36a — Trade Center.
@@ -1472,6 +1474,43 @@ export function TradeCenter(props: {
     }).then(setCardState)
   }, [props.league?.id, result, noSignal, myRoster, partnerRoster, theirLabel, give, get, yourGrade, theirGrade])
 
+  const [shareStatus, setShareStatus] = useState<'idle' | 'shared' | 'copied' | 'failed'>('idle')
+  useEffect(() => setShareStatus('idle'), [result])
+  const tradeSummary = [
+    `${props.league?.name ?? (language === 'es' ? 'Liga de fantasía' : 'Fantasy league')} ${language === 'es' ? 'intercambio' : 'trade'}`,
+    `${language === 'es' ? 'Entrego' : 'I give'}: ${give.map((line) => line.name).join(', ') || '—'}`,
+    `${language === 'es' ? 'Recibo' : 'I get'}: ${get.map((line) => line.name).join(', ') || '—'}`,
+    noSignal
+      ? language === 'es' ? 'Calificación no disponible: faltan precios de algunos activos.' : 'AllFantasy grade unavailable: some assets could not be priced.'
+      : `${language === 'es' ? 'Análisis de valor de AllFantasy' : 'AllFantasy value read'}: ${result?.labels?.fairnessLabel ? copy(result.labels.fairnessLabel) : copy('No verdict')}.`,
+    result?.valueBasis?.label ?? (language === 'es' ? 'El valor depende de las reglas de la liga y los precios actuales.' : 'Value depends on league rules and current prices.'),
+    (result?.dataGaps?.length ?? 0) > 0 ? language === 'es' ? `${result!.dataGaps!.length} datos faltantes; revisa antes de proponer.` : `${result!.dataGaps!.length} data gap(s); review before proposing.` : null,
+    language === 'es' ? 'Analiza tu propuesta en https://allfantasy.ai/trade-evaluator' : 'Analyze your own package at https://allfantasy.ai/trade-evaluator',
+  ].filter(Boolean).join('\n')
+  const discussTrade = () => {
+    if (!props.league) return
+    sendProductAnalyticsBeacon(ENGAGEMENT.TRADE_READ_SHARED, { leagueId: props.league.id, channel: 'league_chat' })
+    window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, {
+      detail: { tab: 'league', leagueId: props.league.id, prefill: `${tradeSummary}\n${language === 'es' ? '¿Qué opinan?' : 'What do you think?'}` },
+    }))
+  }
+  const shareTrade = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: 'AllFantasy trade read', text: tradeSummary })
+        sendProductAnalyticsBeacon(ENGAGEMENT.TRADE_READ_SHARED, { leagueId: props.league?.id, channel: 'native_share' })
+        setShareStatus('shared')
+      } else {
+        await navigator.clipboard.writeText(tradeSummary)
+        sendProductAnalyticsBeacon(ENGAGEMENT.TRADE_READ_SHARED, { leagueId: props.league?.id, channel: 'clipboard' })
+        setShareStatus('copied')
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return
+      setShareStatus('failed')
+    }
+  }
+
   if (!props.league) {
     return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} />
   }
@@ -2250,6 +2289,10 @@ export function TradeCenter(props: {
             <span className="af-tc-row-sub">
               {copy('trade value today — roster fit and realized production are separate')}
             </span>
+          </div>
+          <div className="af-tc-share-actions">
+            <button type="button" onClick={() => void shareTrade()}>{shareStatus === 'shared' ? copy('Shared') : shareStatus === 'copied' ? copy('Copied') : shareStatus === 'failed' ? copy('Retry share') : copy('Share this read')}</button>
+            <button type="button" onClick={discussTrade}>{copy('Discuss in league chat')}</button>
           </div>
 
           {/*

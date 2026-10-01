@@ -1,6 +1,10 @@
 /* Commissioner invite panel. Shared by Portfolio rows and the league page. */
 .af-inv { display: flex; flex-direction: column; gap: 10px; }
 .af-inv[data-compact='true'] { gap: 7px; }
+.af-inv-focus { display: flex; flex-wrap: wrap; gap: 6px; }
+.af-inv-focus button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--line2); border-radius: 9px; background: var(--chip); color: var(--text2); font: 700 12px/1 'Archivo', system-ui, sans-serif; cursor: pointer; }
+.af-inv-focus button[data-active='true'] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); color: var(--text); }
+.af-inv-focus button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .af-inv-progress-wrap { display: flex; flex-direction: column; gap: 5px; }
 
