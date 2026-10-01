@@ -213,11 +213,27 @@ async function handle(req: NextRequest) {
                   (err: unknown) => ({ error: err instanceof Error ? err.message.slice(0, 200) : String(err) }),
                 )
 
+          /*
+           * The NCAAF skill-player pool on the CURRENT season's FBS rosters. Its only writer
+           * used to be a hand-run script last run against the 2025 rosters, which left 593
+           * players on 2026 rosters (461 freshmen) with no pool row at all. After the team
+           * directory, whose list it reads; before the headshots, which fill the rows it adds.
+           * Weekly-gated and resumable, so a short budget defers rows rather than redoing them.
+           */
+          const { refreshCollegeRosterPoolIfDue } = await import('@/lib/ncaaf/cfbdRosterPool')
+          const COLLEGE_ROSTER_POOL_MIN_MS = 30_000
+          const collegeRosterPool =
+            budget.remainingMs() < COLLEGE_ROSTER_POOL_MIN_MS
+              ? { skipped: 'deferred: run budget too low to start' }
+              : await refreshCollegeRosterPoolIfDue({ deadlineAt: Date.now() + budget.remainingMs() - 15_000 }).catch(
+                  (err: unknown) => ({ error: err instanceof Error ? err.message.slice(0, 200) : String(err) }),
+                )
+
           const devyHeadshots = await refreshDevyHeadshots(budget)
           // SportsPlayer is what the player cards and search actually read —
           // the devy pool is 1,718 of 73,883 NCAAF rows.
           const collegeHeadshots = await refreshCollegeSportsPlayerHeadshots(budget)
-          return { devyIntelSources, devyAdp, collegeTeams, devyHeadshots, collegeHeadshots }
+          return { devyIntelSources, devyAdp, collegeTeams, collegeRosterPool, devyHeadshots, collegeHeadshots }
         },
       )
 

@@ -21,6 +21,7 @@
 
 import fs from 'node:fs'
 import { CFBD_BASE_URL } from '@/lib/cfbd-fetch'
+import { indexRiTeams, matchSchoolToRi, normTeam, type RiTeam } from '@/lib/ncaaf/cfbdSchoolMatch'
 
 for (const f of ['.env', '.env.local']) {
   try {
@@ -61,60 +62,7 @@ async function cfbd<T>(path: string): Promise<T> {
   return (await res.json()) as T
 }
 
-/** Normalize a team name for matching across providers. */
-function normTeam(s: string): string {
-  return s
-    .toLowerCase()
-    .replace(/[.,&]/g, ' ')
-    .replace(/\b(university|the|of|at|college)\b/g, ' ')
-    .replace(/[^a-z0-9 ]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 type FbsTeam = { school: string; abbreviation: string | null; alternateNames: string[]; logo: string | null }
-type RiTeam = { externalId: string; name: string; shortName: string | null }
-
-/** Manual aliases for CFBD schools whose name doesn't normalize to the RI name. */
-const SCHOOL_ALIASES: Record<string, string> = {
-  'NC State': 'North Carolina State',
-}
-
-/**
- * Direct RI-externalId overrides for ambiguous names that normalize identically
- * (the only collision in NCAAF is Miami FL [19] vs Miami OH [112]).
- */
-const SCHOOL_TO_RI_EXTERNAL_ID: Record<string, string> = {
-  Miami: '19', // Miami (FL) — University of Miami
-  'Miami (OH)': '112', // Miami (OH) — Miami University
-}
-
-function matchSchoolToRi(
-  team: FbsTeam,
-  riByNorm: Map<string, RiTeam>,
-  riByShort: Map<string, RiTeam>,
-  riByExtId: Map<string, RiTeam>,
-): RiTeam | null {
-  const override = SCHOOL_TO_RI_EXTERNAL_ID[team.school]
-  if (override && riByExtId.has(override)) return riByExtId.get(override)!
-  const alias = SCHOOL_ALIASES[team.school]
-  const candidates = [team.school, ...(alias ? [alias] : []), ...(team.alternateNames ?? [])]
-  for (const c of candidates) {
-    const hit = riByNorm.get(normTeam(c))
-    if (hit) return hit
-  }
-  // Abbreviation ↔ shortName
-  if (team.abbreviation) {
-    const hit = riByShort.get(team.abbreviation.toUpperCase())
-    if (hit) return hit
-  }
-  // Containment fallback (one normalized name contains the other)
-  const target = normTeam(team.school)
-  for (const [norm, ri] of riByNorm) {
-    if (norm && (norm.includes(target) || target.includes(norm))) return ri
-  }
-  return null
-}
 
 async function main() {
   if (!cfbdKey()) {
@@ -139,18 +87,13 @@ async function main() {
   const { PrismaClient } = await import('@prisma/client')
   const prisma = new PrismaClient()
 
+  // Rolling Insights rows ONLY — since 2026-09-30 `SportsTeam` NCAAF also holds CFBD's own
+  // team rows, and matching against them renames every player's team. See cfbdSchoolMatch.ts.
   const riTeams = (await prisma.sportsTeam.findMany({
-    where: { sport: 'NCAAF' },
+    where: { sport: 'NCAAF', source: 'rolling_insights' },
     select: { externalId: true, name: true, shortName: true, logo: true },
   })) as Array<RiTeam & { logo: string | null }>
-  const riByNorm = new Map<string, RiTeam>()
-  const riByShort = new Map<string, RiTeam>()
-  const riByExtId = new Map<string, RiTeam>()
-  for (const r of riTeams) {
-    riByNorm.set(normTeam(r.name), r)
-    if (r.shortName) riByShort.set(r.shortName.toUpperCase(), r)
-    riByExtId.set(r.externalId, r)
-  }
+  const riIndex = indexRiTeams(riTeams)
 
   // Match schools → RI identity + build logo updates.
   const schoolToRi = new Map<string, RiTeam>()
@@ -158,7 +101,7 @@ async function main() {
   const logoUpdates: Array<{ externalId: string; logo: string }> = []
   const riLogoByExt = new Map(riTeams.map((r) => [r.externalId, r.logo]))
   for (const team of fbsTeams) {
-    const ri = matchSchoolToRi(team, riByNorm, riByShort, riByExtId)
+    const ri = matchSchoolToRi(team, riIndex)
     if (ri) {
       schoolToRi.set(team.school, ri)
       if (team.logo && !riLogoByExt.get(ri.externalId)) logoUpdates.push({ externalId: ri.externalId, logo: team.logo })
