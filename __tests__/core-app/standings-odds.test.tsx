@@ -214,6 +214,28 @@ describe('StandingsBoardView — odds, schedule and magic numbers', () => {
     expect(texts.filter((t) => t === '>99%')).toHaveLength(IDS.length - clinched - b.teams.filter((t) => t.zone === 'eliminated').length)
   })
 
+  it('leaves the magic-number column and its note out early in the season', () => {
+    const early = buildStandingsBoard({
+      season: 2026,
+      snapshots: snapshots(2),
+      unplayed: [5, 6, 7, 8].flatMap((w) => [
+        { week: w, a: '1', b: '3' },
+        { week: w, a: '2', b: '4' },
+      ]),
+      teams: teams(),
+      rules: RULES,
+    })
+    expect(early.showPaths).toBe(false)
+    const { container } = render(<StandingsBoardView board={early} initial={DEFAULT_STANDINGS_VIEW} odds={ODDS} />)
+    expect(headers(container)).not.toContain('Magic #')
+    expect(headers(container)).toContain('Playoff %')
+    expect(container.querySelector('.af-stb-path')).toBeNull()
+    expect([...container.querySelectorAll('.af-stb-notes p')].some((p) => p.textContent?.startsWith('Magic numbers'))).toBe(false)
+    // The playoff line still spans the table without the column.
+    const columns = container.querySelectorAll('.af-stb-table thead th').length
+    expect(container.querySelector('tr.af-stb-line td')?.getAttribute('colspan')).toBe(String(columns))
+  })
+
   it('runs the playoff line across every column', () => {
     for (const odds of [null, ODDS]) {
       const { container, unmount } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} odds={odds} />)
@@ -281,6 +303,28 @@ describe('Standings — what is at stake', () => {
     const { container: c2 } = render(<Standings data={data()} odds={older} />)
     expect(c2.querySelector('.af-st-stakes-root')).toBeNull()
     expect(c2.querySelector('.af-st-stakes-game')).not.toBeNull()
+  })
+
+  it('drops the magic-number sentence early in the season, and the panel too when there are no odds', () => {
+    const early = {
+      ...(data() as object),
+      board: buildStandingsBoard({
+        season: 2026,
+        snapshots: snapshots(2),
+        unplayed: [5, 6, 7, 8].flatMap((w) => [
+          { week: w, a: '1', b: '3' },
+          { week: w, a: '2', b: '4' },
+        ]),
+        teams: teams(),
+        rules: RULES,
+      }),
+    } as unknown as LeagueStandingsResult
+    const { container, unmount } = render(<Standings data={early} odds={ODDS} />)
+    expect(container.querySelector('.af-st-stakes-path')).toBeNull()
+    expect(container.querySelector('.af-st-stakes-pct')?.textContent).toBe('<1%')
+    unmount()
+    const { container: bare } = render(<Standings data={early} />)
+    expect(bare.querySelector('.af-st-stakes')).toBeNull()
   })
 
   it("ignores odds that are not about your team", () => {

@@ -127,6 +127,9 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
   const seedOf = new Map(board.teams.map((t) => [t.rosterId, t.seed]))
   const nameOf = (id: string, fallback: string | null) => fallback ?? board.teams.find((t) => t.rosterId === id)?.name ?? 'Unknown team'
   const settled = me.path.winsToClinch === 0 || me.path.lossesToElimination === 0
+  /* Early in the season the sentence is "win out — all 11", which says nothing; a settled team always says something. */
+  const showPath = board.showPaths || settled
+  if (!showPath && !you) return null
 
   return (
     <section className="af-st-stakes" aria-labelledby="af-st-stakes-title">
@@ -147,7 +150,7 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
         ) : null}
       </div>
 
-      <p className="af-st-stakes-path">{pathSentence(me)}</p>
+      {showPath ? <p className="af-st-stakes-path">{pathSentence(me)}</p> : null}
       {you && !settled ? <p className="af-st-stakes-why">{you.whatDecidesIt}</p> : null}
 
       {me.next?.inProgress ? (

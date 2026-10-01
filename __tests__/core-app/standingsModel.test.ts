@@ -9,6 +9,7 @@ import {
   isWeekSnapshot,
   readPlayoffTeams,
   readStandingsRules,
+  showMagicNumbers,
   weekStamp,
   type RemainingGame,
   type ReportedRecord,
@@ -464,6 +465,33 @@ describe('magic numbers and the next game', () => {
       { winsToClinch: 0, lossesToElimination: null, gamesLeft: 0 },
     ])
     expect(over.teams.slice(2).every((t) => t.path.lossesToElimination === 0)).toBe(true)
+  })
+
+  it('shows them from the second half of the season on, or once any team is settled', () => {
+    const at = (playedWeeks: number, remainingWeeks: number, anySettled = false) =>
+      showMagicNumbers({ hasHeadToHead: true, playedWeeks, remainingWeeks, anySettled })
+    expect(at(3, 11)).toBe(false)
+    expect(at(6, 8)).toBe(false)
+    expect(at(7, 7)).toBe(true)
+    expect(at(10, 4)).toBe(true)
+    // A clinch or an elimination is information whenever it happens.
+    expect(at(3, 11, true)).toBe(true)
+    // Nothing left, or nothing head-to-head: there is no number to show.
+    expect(at(14, 0, true)).toBe(false)
+    expect(showMagicNumbers({ hasHeadToHead: false, playedWeeks: 10, remainingWeeks: 4, anySettled: false })).toBe(false)
+    // This board: three weeks played, three left.
+    expect(board.showPaths).toBe(true)
+  })
+
+  it('hides them early in the season, when every number is "win or lose nearly everything"', () => {
+    const later = Array.from({ length: 8 }, (_, w) => [
+      { week: 4 + w, a: 'a', b: 'b' },
+      { week: 4 + w, a: 'c', b: 'd' },
+      { week: 4 + w, a: 'e', b: 'f' },
+    ]).flat()
+    const early = buildStandingsBoard({ season: 2026, snapshots: snaps, unplayed: later, teams: ids.map((id) => meta(id)), rules: { ...RULES, playoffTeams: 2, byes: 0 } })
+    expect(early.teams.some((t) => t.clinched != null || t.zone === 'eliminated')).toBe(false)
+    expect(early.showPaths).toBe(false)
   })
 
   it('uses a bound that only ever over-states when too many games are left to enumerate', () => {
