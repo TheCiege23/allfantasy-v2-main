@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs"
 import { sha256Hex, isStrongPassword } from "@/lib/tokens"
 import { clearResetCodeAttempts, consumeResetCodeAttempt } from "@/lib/auth/passwordResetAttempts"
 import { revokeAllSessionsForUser } from "@/lib/auth/sessionRevocation"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
 
 export const runtime = "nodejs"
 
@@ -28,8 +29,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
   const token = String(body?.token || "")
   const email = String(body?.email || "").trim().toLowerCase()
-  let phone = String(body?.phone || "").trim().replace(/[\s()-]/g, "")
-  if (phone && !phone.startsWith("+")) phone = "+1" + phone
+  const phone = normalizePhoneE164(String(body?.phone || ""))
   const code = String(body?.code || "").trim()
   const newPassword = String(body?.newPassword || "")
 

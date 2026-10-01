@@ -2,6 +2,7 @@
  * Client-side service for phone verification from settings.
  * Calls existing /api/verify/phone/start and /api/verify/phone/check.
  */
+import { normalizePhoneE164 } from "@/lib/phone/e164"
 
 export interface StartPhoneVerificationResult {
   ok: boolean
@@ -18,8 +19,7 @@ export async function startPhoneVerification(
   phone: string,
   opts?: { smsConsent?: boolean; consentSource?: string }
 ): Promise<StartPhoneVerificationResult> {
-  const normalized = phone.replace(/[\s()-]/g, "").trim()
-  const withCountry = normalized.startsWith("+") ? normalized : `+1${normalized}`
+  const withCountry = normalizePhoneE164(phone)
   const res = await fetch("/api/verify/phone/start", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -36,8 +36,7 @@ export async function startPhoneVerification(
 }
 
 export async function checkPhoneCode(phone: string, code: string): Promise<CheckPhoneCodeResult> {
-  const normalized = phone.replace(/[\s()-]/g, "").trim()
-  const withCountry = normalized.startsWith("+") ? normalized : `+1${normalized}`
+  const withCountry = normalizePhoneE164(phone)
   const res = await fetch("/api/verify/phone/check", {
     method: "POST",
     headers: { "content-type": "application/json" },
