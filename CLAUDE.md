@@ -8,6 +8,8 @@ The API contracts are committed at `contracts/`:
 - `contracts/thesportsdb/`
 - `contracts/api-sports/`
 - `contracts/fleaflicker/`
+- `contracts/espn/` — NCAAB teams + roster only so far; ESPN's many older call sites are
+  outside it. ⚠ Its `GAPS.md` M-01: Rolling Insights NCAAB `ACT` is NOT "current roster".
 
 **Do not call any of these providers' APIs to determine a response shape.** Read
 `ENDPOINTS.yaml` and `fixtures/` in the relevant contract directory. Unknowns are
