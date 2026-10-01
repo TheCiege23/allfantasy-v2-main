@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { ClassGateNotice, isClassGateBlocked, type ClassGateBlocked } from '@/components/league-join/ClassGateNotice'
 
 type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean }
 
@@ -18,6 +19,7 @@ export default function JoinByCodePage() {
   const [status, setStatus] = useState<'idle' | 'joining' | 'success' | 'error'>(codeFromUrl ? 'idle' : 'idle')
   const [message, setMessage] = useState<string>('')
   const [joinedLeagueId, setJoinedLeagueId] = useState<string | null>(null)
+  const [classBlocked, setClassBlocked] = useState<ClassGateBlocked | null>(null)
 
   const effectiveCode = codeFromUrl || code
 
@@ -80,11 +82,12 @@ export default function JoinByCodePage() {
             }
             return
           }
-          // A division refusal is an answer, not "maybe this is a creator code": without this the
-          // creator-invite retry below runs and its generic error replaces the explanation.
-          if (data.code === 'DIVISION_GATE_BLOCKED') {
+          // Outside the league's division band (ADR F2.10a): say so and offer the request, rather
+          // than falling through to the creator-invite lookup, which reports a misleading error.
+          if (isClassGateBlocked(data)) {
+            setClassBlocked(data)
             setStatus('error')
-            setMessage(data.error)
+            setMessage(typeof data.error === 'string' ? data.error : '')
             return
           }
           return fetch('/api/creator-invites/join', {
@@ -277,6 +280,24 @@ export default function JoinByCodePage() {
               Browse creators
             </Link>
           </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (classBlocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center mode-surface mode-readable">
+        <div className="max-w-md mx-auto px-4 w-full">
+          <h1 className="text-xl font-bold mb-2" style={{ color: 'var(--text)' }}>
+            Join league
+          </h1>
+          {preview?.name && (
+            <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
+              {preview.name} · {preview.sport}
+            </p>
+          )}
+          <ClassGateNotice blocked={classBlocked} code={effectiveCode} tone="theme" />
         </div>
       </div>
     )

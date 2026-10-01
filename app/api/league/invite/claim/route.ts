@@ -9,8 +9,7 @@ import { assignLeagueSeat } from '@/lib/league/leagueSeats'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
-import { evaluateJoinDivisionGate } from '@/lib/league-join/joinDivisionGate'
-import { divisionGateMessage } from '@/lib/class-rating/divisionGate'
+import { divisionGateRefusal, evaluateJoinDivisionGate } from '@/lib/league-join/joinDivisionGate'
 
 const claimSchema = z.object({
   token: z.string().min(1),
@@ -104,7 +103,7 @@ export async function POST(req: NextRequest) {
     })
     if (divisionGate.outcome === 'deny') {
       return NextResponse.json(
-        { error: divisionGateMessage(divisionGate), code: 'DIVISION_GATE_BLOCKED' },
+        divisionGateRefusal(divisionGate, invite.leagueId),
         { status: 403 },
       )
     }

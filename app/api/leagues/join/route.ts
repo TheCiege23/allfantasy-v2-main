@@ -2,6 +2,13 @@
  * POST /api/leagues/join — Join a league by invite code (and optional password).
  * Body: { code: string, password?: string }
  * Creates a Roster for the user if not already a member.
+ *
+ * Body: { action: 'request_class_exception', code?: string, token?: string }
+ * A manager the division gate refused asks the commissioner to let them in
+ * (`lib/league-join/classRequests.ts`). On this path rather than its own route
+ * because of the route ceiling noted on GET below (ported from PR #1753). The
+ * league's code or a `/join/<token>` token proves the manager was handed the way
+ * in — a bare league id would let anyone queue requests at any league.
  */
 
 import type { Prisma } from '@prisma/client'
@@ -10,8 +17,8 @@ import { getServerSession } from 'next-auth'
 import { getServedOrigin } from '@/lib/http/served-origin'
 import { authOptions } from '@/lib/auth'
 import { validateFantasyInviteCode } from '@/lib/league-invite'
-import { evaluateJoinDivisionGate } from '@/lib/league-join/joinDivisionGate'
-import { divisionGateMessage } from '@/lib/class-rating/divisionGate'
+import { divisionGateRefusal, evaluateJoinDivisionGate } from '@/lib/league-join/joinDivisionGate'
+import { requestClassException } from '@/lib/league-join/classRequests'
 import { prisma } from '@/lib/prisma'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
@@ -19,6 +26,28 @@ import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
+
+async function resolveInvitedLeagueId(code: string | null, token: string | null): Promise<string | null> {
+  if (token) {
+    const invite = await prisma.leagueInvite.findFirst({
+      where: { token, isActive: true },
+      select: { leagueId: true },
+    })
+    if (invite) return invite.leagueId
+  }
+  if (code) {
+    // A tracked invite link (`/invite/accept`) carries its own token, not the league's code.
+    const { getInviteByToken } = await import('@/lib/invite-engine/InviteEngine')
+    const { normalizeToken } = await import('@/lib/invite-engine/tokenGenerator')
+    const tracked = normalizeToken(code)
+    const link = tracked ? await getInviteByToken(tracked).catch(() => null) : null
+    if (link?.type === 'league' && link.targetId) return link.targetId
+    const validation = await validateFantasyInviteCode(code)
+    if (validation.valid) return validation.preview.leagueId
+    return validation.preview?.leagueId ?? null
+  }
+  return null
+}
 
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
@@ -28,6 +57,15 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const code = typeof body.code === 'string' ? body.code.trim() : null
   const password = typeof body.password === 'string' ? body.password : undefined
+
+  if (body.action === 'request_class_exception') {
+    const token = typeof body.token === 'string' ? body.token.trim() : null
+    const leagueId = await resolveInvitedLeagueId(code, token)
+    if (!leagueId) return NextResponse.json({ error: 'Invite not found' }, { status: 404 })
+    const requested = await requestClassException({ leagueId, userId })
+    if (!requested.ok) return NextResponse.json({ error: requested.error }, { status: requested.status })
+    return NextResponse.json({ success: true, leagueId, requestStatus: requested.status })
+  }
 
   if (!code) return NextResponse.json({ error: 'Missing invite code' }, { status: 400 })
 
@@ -76,16 +114,7 @@ export async function POST(req: NextRequest) {
     credential: { kind: 'league_code' },
   })
   if (divisionGate.outcome === 'deny') {
-    return NextResponse.json(
-      {
-        error: divisionGateMessage(divisionGate),
-        code: 'DIVISION_GATE_BLOCKED',
-        userDivision: divisionGate.userDivision,
-        leagueDivision: divisionGate.leagueDivision,
-        band: divisionGate.band,
-      },
-      { status: 403 },
-    )
+    return NextResponse.json(divisionGateRefusal(divisionGate, result.leagueId), { status: 403 })
   }
 
   const joinResult = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
