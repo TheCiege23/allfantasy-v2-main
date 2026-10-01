@@ -91,4 +91,11 @@ describe('CommsDrawer openRequest', () => {
     rerender(drawer({ seq: 1, tab: 'chimmy', leagueId: 'not-mine' }))
     expect(scopeValue()).toBe('l0')
   })
+  it('prefills a league discussion in the selected league without sending it', async () => {
+    const draft = 'AllFantasy trade read: fair value. What do you think?'
+    render(drawer({ seq: 4, tab: 'league', leagueId: 'dj' }, draft))
+    await waitFor(() => expect((screen.getByPlaceholderText('Message Draft Junkies…') as HTMLTextAreaElement).value).toBe(draft))
+    expect(scopeValue()).toBe('dj')
+    expect(vi.mocked(fetch).mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === 'POST' && String((init as RequestInit).body).includes(draft))).toBe(false)
+  })
 })
