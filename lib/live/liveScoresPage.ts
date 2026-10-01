@@ -223,6 +223,8 @@ export type LiveImpact = {
   /** Sum of your live points across every rostered player in a live game. */
   totalPoints: number
   livePlayers: number
+  /** Distinct leagues those live players count in. `totalPoints` sums across them. */
+  liveLeagues?: number
   liveGames: number
   /** The most recent notable play involving a player you roster. */
   biggestMover: (LivePlay & { leagues: string[] }) | null
