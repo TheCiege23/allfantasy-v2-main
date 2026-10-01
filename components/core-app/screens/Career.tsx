@@ -33,6 +33,8 @@ import { careerChimmyPrompts } from '@/lib/core-app/careerChimmy'
 import { buildLegacyStakes } from '@/lib/core-app/careerMilestones'
 import type { CareerWireData } from '@/lib/core-app/careerWireModel'
 import { CareerWire } from '@/components/core-app/career/CareerWire'
+import { WeeklyStory } from '@/components/core-app/career/WeeklyStory'
+import type { WeeklyStory as WeeklyStoryData } from '@/lib/core-app/weeklyStoryModel'
 import { CareerCompareView } from '@/components/core-app/career/CareerCompareView'
 import { HallLayoutToggle, TrophyWall } from '@/components/core-app/career/TrophyWall'
 import { buildTrophyWall } from '@/lib/core-app/trophyWall'
@@ -205,10 +207,12 @@ function MobileArc({ data }: { data: CareerData }) {
 function CareerMobile({
   screen,
   wire,
+  story,
   nowIso,
 }: {
   screen: CareerScreenData
   wire: CareerWireData | null
+  story: WeeklyStoryData | null
   nowIso?: string
 }) {
   const data = screen.data
@@ -245,6 +249,8 @@ function CareerMobile({
       <CareerTabs view="overview" filter={data.filter} />
 
       <div className="af-crm-body">
+        {/* Last week as a story — the thing to tap first on a phone. */}
+        {story ? <WeeklyStory story={story} /> : null}
         {/* Phase 3: every platform first — the question someone opens the app with. */}
         {wire && nowIso ? (
           <CareerWire data={wire} nowIso={nowIso} stakes={buildLegacyStakes(data, screen.awards).stakes} />
@@ -420,12 +426,15 @@ export function Career({
   screen,
   share,
   wire = null,
+  story = null,
   nowIso,
 }: {
   screen: CareerScreenData
   share?: ShareCardData | null
   /** Career Wire — read on the overview only; null elsewhere or when the read failed. */
   wire?: CareerWireData | null
+  /** Last week's story — overview only; null before a week is played or when the read failed. */
+  story?: WeeklyStoryData | null
   nowIso?: string
 }) {
   /*
@@ -449,8 +458,8 @@ export function Career({
 
   return (
     <>
-      <CareerDesktop screen={screen} share={share ?? null} showOnMobile={!overview} wire={wire} nowIso={nowIso} />
-      {overview ? <CareerMobile screen={screen} wire={wire} nowIso={nowIso} /> : null}
+      <CareerDesktop screen={screen} share={share ?? null} showOnMobile={!overview} wire={wire} story={story} nowIso={nowIso} />
+      {overview ? <CareerMobile screen={screen} wire={wire} story={story} nowIso={nowIso} /> : null}
     </>
   )
 }
@@ -543,12 +552,14 @@ function CareerDesktop({
   share,
   showOnMobile,
   wire,
+  story,
   nowIso,
 }: {
   screen: CareerScreenData
   share: ShareCardData | null
   showOnMobile: boolean
   wire: CareerWireData | null
+  story: WeeklyStoryData | null
   nowIso?: string
 }) {
   const { data, view } = screen
@@ -594,6 +605,8 @@ function CareerDesktop({
         league going, what moved since the last visit. Above the filter bar because it is
         account-wide: a platform or era filter does not narrow which platforms need a sync.
       */}
+      {/* Last week's story sits above the Wire: one tap for the whole week, before the detail. */}
+      {view === 'overview' && story ? <WeeklyStory story={story} /> : null}
       {view === 'overview' && wire && nowIso ? (
         <CareerWire data={wire} nowIso={nowIso} stakes={buildLegacyStakes(data, screen.awards).stakes} />
       ) : null}
