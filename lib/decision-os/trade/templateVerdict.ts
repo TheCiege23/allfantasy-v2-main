@@ -60,6 +60,7 @@ const FLAG_WORDS: Record<string, string> = {
   inactive_manager: 'an inactive manager',
   eliminated_team_dumping: 'an eliminated team sending starters to a contender',
   deadline_rush: 'a lopsided trade rushed in before the deadline',
+  class_gap: 'an experienced manager gaining from one several levels newer',
 }
 
 /** The commissioner block, copied from the code's review, with a plain note that names no number. */

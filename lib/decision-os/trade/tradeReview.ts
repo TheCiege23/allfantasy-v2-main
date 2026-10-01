@@ -9,6 +9,8 @@
  *   inactive_manager          one side inactive 14+ days                                      medium
  *   eliminated_team_dumping   an eliminated team sends starters to a contender                medium
  *   deadline_rush             within 48 hours of the deadline and a gap over 25%              low
+ *   class_gap                 managers more than the ±2 class band apart, and the trade      low
+ *                             leans 10%+ toward the more experienced one (2026-10-01)
  *
  * 🛑 A CHECK WITH NO DATA IS `not_computed`, WITH THE REASON — NEVER A GUESS AND NEVER "CLEAR".
  * "We could not tell whether this manager is inactive" and "this manager is active" are different
@@ -31,6 +33,13 @@ export type ReviewFlagCode =
   | 'inactive_manager'
   | 'eliminated_team_dumping'
   | 'deadline_rush'
+  /**
+   * The two managers are further apart in level than the ±2 band a league join allows, and the value
+   * leans toward the more experienced one — the mismatch the manager-class system exists to prevent.
+   * LOW on purpose: a level gap is context for a commissioner, never grounds for a veto by itself, and
+   * a commissioner may have let the newer manager in deliberately.
+   */
+  | 'class_gap'
 
 export type ReviewSeverity = 'low' | 'medium' | 'high'
 export type ReviewCheckStatus = 'raised' | 'clear' | 'not_computed'
@@ -47,7 +56,7 @@ export type ReviewCheck = {
 export type TradeReview = {
   /** The raised checks — the design's `flags`. */
   flags: Array<{ code: ReviewFlagCode; severity: ReviewSeverity; explanation: string }>
-  /** All six, in a fixed order, including the clear and the not-computed ones. */
+  /** Every check, in a fixed order, including the clear and the not-computed ones. */
   checks: ReviewCheck[]
   recommendation: TradeReviewRecommendation
   model: typeof TRADE_REVIEW_MODEL
@@ -64,6 +73,13 @@ export const REPEAT_PARTNER_TRADES = 3
 export const INACTIVE_DAYS = 14
 /** The even band of the one grade (a C): a trade inside it leans nobody's way. */
 export const LEAN_EVEN_BAND_PCT = 10
+/**
+ * Levels apart before two managers are in different classes — the league-join band
+ * (`lib/league-join/managerClass.ts` MANAGER_CLASS_BAND). Restated, not imported, so this file stays
+ * free of anything outside the trade engine; `__tests__/decision-os/trade-review.test.ts` pins the two
+ * to the same number.
+ */
+export const CLASS_GAP_LEVELS = 2
 /**
  * "Strongly negative lineup impact": starting points fall by at least this share of what they were.
  * ⚠ UNCALIBRATED. The design names the signal, not the number; 10% of a starting lineup is a starter's
@@ -130,6 +146,11 @@ export type TradeReviewFacts = {
    * whether a lineup sold for bench value is tanking or a rebuild. Absent: treated as redraft.
    */
   leagueType?: { type: string; label: string } | null
+  /**
+   * Each side's manager level (1–25, the ladder the Rankings tab shows); null for a side whose manager
+   * is not an AllFantasy user. Absent: the check reports it could not run.
+   */
+  managerLevels?: Known<readonly [number | null, number | null]>
 }
 
 // ─── The checks ──────────────────────────────────────────────────────────────
@@ -253,6 +274,35 @@ function deadlineRush(f: TradeReviewFacts): ReviewCheck {
   return { ...base, status: 'clear', explanation: `Within 48 hours of the deadline, but the gap (${pct(f.gapPct.value)}) is under ${DEADLINE_RUSH_GAP_PCT}%.` }
 }
 
+function classGap(f: TradeReviewFacts): ReviewCheck {
+  const base = { code: 'class_gap' as const, severity: 'low' as const }
+  if (!f.managerLevels) return { ...base, status: 'not_computed', explanation: 'Manager levels were not read for this review.' }
+  if (!f.managerLevels.ok) return { ...base, status: 'not_computed', explanation: f.managerLevels.reason }
+  const [la, lb] = f.managerLevels.value
+  if (la == null || lb == null) {
+    return { ...base, status: 'not_computed', explanation: 'Only AllFantasy managers have a level, and one side of this trade does not.' }
+  }
+  const apart = Math.abs(la - lb)
+  if (apart <= CLASS_GAP_LEVELS) {
+    return { ...base, status: 'clear', explanation: `The managers are Level ${la} and Level ${lb} — within ${CLASS_GAP_LEVELS} levels, the same class.` }
+  }
+  const senior = la > lb ? 0 : 1
+  const levels = `Level ${Math.max(la, lb)} and Level ${Math.min(la, lb)}, ${apart} levels apart`
+  if (!f.gapPct.ok) {
+    return { ...base, status: 'not_computed', explanation: `The managers are ${levels}, but the trade is not graded, so which way it leans is unknown.` }
+  }
+  // Signed from side A: + means A receives more.
+  const towardSenior = senior === 0 ? f.gapPct.value : -f.gapPct.value
+  if (towardSenior >= LEAN_EVEN_BAND_PCT) {
+    return {
+      ...base,
+      status: 'raised',
+      explanation: `${f.sides[senior]!.name} (the more experienced manager) receives ${pct(towardSenior)} more value from a manager ${apart} levels below — ${levels}. Worth a look if the newer manager may not know what they gave up.`,
+    }
+  }
+  return { ...base, status: 'clear', explanation: `The managers are ${levels}, but the trade does not lean toward the more experienced one.` }
+}
+
 export function recommendationFor(checks: readonly ReviewCheck[]): TradeReviewRecommendation {
   const raised = checks.filter((c) => c.status === 'raised')
   if (raised.some((c) => c.severity === 'high')) return 'consider_veto'
@@ -261,7 +311,15 @@ export function recommendationFor(checks: readonly ReviewCheck[]): TradeReviewRe
 }
 
 export function buildTradeReview(facts: TradeReviewFacts): TradeReview {
-  const checks = [lopsided(facts), tanking(facts), repeatPartners(facts), inactive(facts), eliminatedDumping(facts), deadlineRush(facts)]
+  const checks = [
+    lopsided(facts),
+    tanking(facts),
+    repeatPartners(facts),
+    inactive(facts),
+    eliminatedDumping(facts),
+    deadlineRush(facts),
+    classGap(facts),
+  ]
   return {
     flags: checks.filter((c) => c.status === 'raised').map(({ code, severity, explanation }) => ({ code, severity, explanation })),
     checks,

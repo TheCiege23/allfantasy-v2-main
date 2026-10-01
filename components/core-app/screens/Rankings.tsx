@@ -81,6 +81,13 @@ function moveText(n: number | null): { text: string; tone?: 'good' | 'bad' | 'mu
     : { text: `▼${-n}`, tone: 'bad', label: `down ${-n} ${n === -1 ? 'place' : 'places'}` }
 }
 
+/** `/chimmy/chat` types `prompt` into the composer and never sends it. */
+function chimmyHref(prompt: string, sport?: string | null): string {
+  const p = new URLSearchParams({ prompt })
+  if (sport) p.set('sport', sport)
+  return `/chimmy/chat?${p.toString()}`
+}
+
 /* ────────────────────────────── scope tabs ──────────────────────────────── */
 
 const SCOPES = [
@@ -313,6 +320,17 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
             <Link className="af-rk-btn" href={`/core/rankings${qs([['scope', 'portfolio'], ...filterParams(data.filters)])}`}>
               My portfolio
             </Link>
+            <a
+              className="af-rk-btn"
+              href={chimmyHref(
+                `I'm #${g.you.rank} of ${g.you.of} on the AllFantasy ${g.label} board (${g.metricLabel}: ${g.you.display})` +
+                  (g.you.movement.sevenDay ? `, ${g.you.movement.sevenDay > 0 ? 'up' : 'down'} ${Math.abs(g.you.movement.sevenDay)} in 7 days` : '') +
+                  (g.rivals[0] ? `. @${g.rivals[0].handle} is right above me at ${g.rivals[0].display}` : '') +
+                  '. What is holding my rank back, and what would move it most?',
+              )}
+            >
+              Ask Chimmy
+            </a>
           </div>
         </section>
       ) : data.signedIn ? (
@@ -950,6 +968,21 @@ function SkillBody({ skill, signedIn }: { skill: SkillView; signedIn: boolean })
               <b>{you.boardRank ? `#${you.boardRank}` : `${you.gamesToBoard} games`}</b>
             </li>
           </ul>
+          <div className="af-rk-headact">
+            <a
+              className="af-rk-btn"
+              href={chimmyHref(
+                `My ${skill.sport} skill rating on AllFantasy is ${you.rating} ±${you.rd}` +
+                  (you.percentile != null ? `, better than ${you.percentile}% of rated managers` : '') +
+                  `, record ${you.record}` +
+                  (skill.log[0] ? `. My last game: ${skill.log[0].result} vs ${skill.log[0].opponentLabel} (rated ${skill.log[0].opponentRating}), rating ${signed(skill.log[0].change)}` : '') +
+                  '. Why did my rating move, and what decisions would raise it?',
+                skill.sport,
+              )}
+            >
+              Ask Chimmy why I moved
+            </a>
+          </div>
         </section>
       ) : signedIn ? (
         <p className="af-rk-note">

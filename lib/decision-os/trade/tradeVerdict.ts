@@ -41,6 +41,7 @@ export const TradeVerdictSchema = z
                 'inactive_manager',
                 'eliminated_team_dumping',
                 'deadline_rush',
+                'class_gap',
               ]),
               severity: z.enum(['low', 'medium', 'high']),
             })

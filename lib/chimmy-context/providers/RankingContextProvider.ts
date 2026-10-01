@@ -11,6 +11,11 @@
  *   - Never throws.
  *   - Returns `{ snapshot: null }` when no imported history exists.
  *   - No persistence (cache table arrives in Batch 2).
+ *
+ * The manager's standing — ladder level, the ±2 class they can be matched in,
+ * and per-sport skill — rides along on every return, history or not
+ * (`managerStanding.ts`). A brand-new manager has a level and a class long
+ * before they have legacy history.
  */
 
 import { prisma } from "@/lib/prisma"
@@ -22,6 +27,7 @@ import type {
 } from "@/lib/chimmy-context/types"
 import { composeRankingSnapshot } from "@/lib/ranking/snapshot"
 import { computeLeagueDifficulty } from "@/lib/ranking/league-difficulty"
+import { loadManagerStanding, type ManagerStanding } from "@/lib/chimmy-context/providers/managerStanding"
 import type {
   ImportedHistoryScore,
   LeagueDifficultyRating,
@@ -45,12 +51,13 @@ export class RankingContextProvider
   ): Promise<ProviderResult<RankingContextSlice>> {
     const startedAt = Date.now()
     const fetchedAt = new Date().toISOString()
+    const standingRead = loadManagerStanding(request.userId).catch((): ManagerStanding => ({}))
     try {
       const legacyUserId = await resolveLegacyUserId(request.userId)
       if (!legacyUserId) {
         return {
           ok: true,
-          data: { snapshot: null },
+          data: { snapshot: null, ...(await standingRead) },
           fetchedAt,
           durationMs: Date.now() - startedAt,
         }
@@ -89,7 +96,7 @@ export class RankingContextProvider
       if (!legacy || legacy.leagues.length === 0) {
         return {
           ok: true,
-          data: { snapshot: null },
+          data: { snapshot: null, ...(await standingRead) },
           fetchedAt,
           durationMs: Date.now() - startedAt,
         }
@@ -169,14 +176,14 @@ export class RankingContextProvider
 
       return {
         ok: true,
-        data: { snapshot },
+        data: { snapshot, ...(await standingRead) },
         fetchedAt,
         durationMs: Date.now() - startedAt,
       }
     } catch (err) {
       return {
         ok: false,
-        data: { snapshot: null },
+        data: { snapshot: null, ...(await standingRead) },
         error: err instanceof Error ? err.message : "Unknown ranking error",
         fetchedAt,
         durationMs: Date.now() - startedAt,

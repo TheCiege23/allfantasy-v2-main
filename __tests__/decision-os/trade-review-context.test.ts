@@ -110,6 +110,8 @@ describe('reviewStoredTrade — every check fed from its source', () => {
     expect(r.review.checks.map((c) => `${c.code}:${c.status}`)).toEqual([
       'heavily_lopsided:raised', 'tanking_signal:raised', 'repeat_partners:raised',
       'inactive_manager:raised', 'eliminated_team_dumping:raised', 'deadline_rush:raised',
+      // The fixture's teams name no manager, so there is no level to compare.
+      'class_gap:not_computed',
     ])
     expect(r.review.recommendation).toBe('consider_veto')
     const text = r.review.checks.map((c) => c.explanation).join(' | ')
@@ -195,6 +197,41 @@ describe('reviewStoredTrade — each missing source says so', () => {
     const noDeadline = async () => ({ id: 'L1', season: 2026, sport: 'NFL', platformLeagueId: 'SL1', tradeDeadlineWeek: null, settings: {} }) as never
     expect((await statusOf({ leagueRow: noDeadline })).deadline_rush).toBe('clear')
     expect((await statusOf({ deadlineKickoff: async () => null })).deadline_rush).toBe('not_computed')
+  })
+
+  it('reads each manager\'s level from their AllFantasy id and compares the two', async () => {
+    const named = {
+      ...world,
+      teams: [
+        { ...world.teams[0], managerUserId: 'u-senior' },
+        { ...world.teams[1], managerUserId: 'u-newer' },
+      ],
+    }
+    const managerLevels = vi.fn(async () => new Map([['u-senior', 15], ['u-newer', 5]]))
+    const r = await reviewStoredTrade(
+      { leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' },
+      deps({
+        evaluate: vi.fn(async () => ({ ok: true, trade: trade(), receipt: receipt(), perspectiveTeamId: 'rA', viewerInTrade: false, world: named })) as never,
+        managerLevels,
+      }),
+    )
+    if (!r.ok) throw new Error('refused')
+    expect(managerLevels).toHaveBeenCalledWith(['u-senior', 'u-newer'])
+    expect(r.facts.managerLevels).toEqual({ ok: true, value: [15, 5] })
+    expect(r.review.checks.find((c) => c.code === 'class_gap')!.status).not.toBe('not_computed')
+  })
+
+  it('a manager with no AllFantasy profile has no level: not computed', async () => {
+    const named = { ...world, teams: [{ ...world.teams[0], managerUserId: 'u-senior' }, { ...world.teams[1], managerUserId: 'sleeper-123' }] }
+    const r = await reviewStoredTrade(
+      { leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' },
+      deps({
+        evaluate: vi.fn(async () => ({ ok: true, trade: trade(), receipt: receipt(), perspectiveTeamId: 'rA', viewerInTrade: false, world: named })) as never,
+        managerLevels: async () => new Map([['u-senior', 15]]),
+      }),
+    )
+    if (!r.ok) throw new Error('refused')
+    expect(r.review.checks.find((c) => c.code === 'class_gap')!.status).toBe('not_computed')
   })
 
   it('history that cannot be read is not computed', async () => {

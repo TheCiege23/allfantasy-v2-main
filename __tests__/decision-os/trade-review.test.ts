@@ -5,12 +5,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  CLASS_GAP_LEVELS,
   buildTradeReview,
   recommendationFor,
   rebuildIsNormal,
   type ReviewCheck,
   type TradeReviewFacts,
 } from '@/lib/decision-os/trade/tradeReview'
+import { MANAGER_CLASS_BAND } from '@/lib/league-join/managerClass'
 
 const NOW = '2026-11-12T12:00:00.000Z'
 const missing = (reason: string) => ({ ok: false as const, reason })
@@ -31,6 +33,7 @@ function facts(over: Partial<TradeReviewFacts> = {}): TradeReviewFacts {
     inactiveDays: { ok: true, value: [2, 3] },
     playoffPct: { ok: true, value: [55, 40] },
     deadlineAt: { ok: true, value: '2026-11-26T18:00:00.000Z' },
+    managerLevels: { ok: true, value: [8, 9] },
     now: NOW,
     ...over,
   }
@@ -38,10 +41,10 @@ function facts(over: Partial<TradeReviewFacts> = {}): TradeReviewFacts {
 const check = (f: TradeReviewFacts, code: ReviewCheck['code']) => buildTradeReview(f).checks.find((c) => c.code === code)!
 
 describe('a clean trade', () => {
-  it('six checks, all clear, no flags, approve', () => {
+  it('seven checks, all clear, no flags, approve', () => {
     const r = buildTradeReview(facts())
     expect(r.checks.map((c) => c.code)).toEqual([
-      'heavily_lopsided', 'tanking_signal', 'repeat_partners', 'inactive_manager', 'eliminated_team_dumping', 'deadline_rush',
+      'heavily_lopsided', 'tanking_signal', 'repeat_partners', 'inactive_manager', 'eliminated_team_dumping', 'deadline_rush', 'class_gap',
     ])
     expect(r.checks.every((c) => c.status === 'clear')).toBe(true)
     expect(r.flags).toEqual([])
@@ -209,5 +212,42 @@ describe('dynasty and keeper: a rebuild, not tanking (Guap, 2026-09-27)', () => 
     const d = { type: 'keeper', label: 'Keeper' }
     expect(buildTradeReview(facts({ leagueType: d })).checks[1]).toMatchObject({ code: 'rebuild_signal', status: 'clear' })
     expect(buildTradeReview(facts({ leagueType: d, lineup: missing('pending only') })).checks[1]).toMatchObject({ code: 'rebuild_signal', status: 'not_computed' })
+  })
+})
+
+describe('class gap (2026-10-01)', () => {
+  it('uses the same band as league joins', () => {
+    expect(CLASS_GAP_LEVELS).toBe(MANAGER_CLASS_BAND)
+  })
+
+  it('raises when the managers are more than two levels apart and the value leans to the senior one', () => {
+    // + gap means side A (Alpha) receives more; Alpha is Level 14, Bravo Level 6.
+    const c = check(facts({ gapPct: { ok: true, value: 18 }, managerLevels: { ok: true, value: [14, 6] } }), 'class_gap')
+    expect(c.status).toBe('raised')
+    expect(c.severity).toBe('low')
+    expect(c.explanation).toContain('Alpha (the more experienced manager) receives 18% more value')
+    expect(c.explanation).toContain('8 levels apart')
+  })
+
+  it('is clear when the trade leans toward the newer manager, or the gap is inside the even band', () => {
+    expect(check(facts({ gapPct: { ok: true, value: -18 }, managerLevels: { ok: true, value: [14, 6] } }), 'class_gap').status).toBe('clear')
+    expect(check(facts({ gapPct: { ok: true, value: 9 }, managerLevels: { ok: true, value: [14, 6] } }), 'class_gap').status).toBe('clear')
+  })
+
+  it('is clear inside the band, whatever the gap', () => {
+    expect(check(facts({ gapPct: { ok: true, value: 35 }, managerLevels: { ok: true, value: [10, 8] } }), 'class_gap').status).toBe('clear')
+  })
+
+  it('is not computed — never clear — without both levels, or without a grade', () => {
+    expect(check(facts({ managerLevels: undefined }), 'class_gap').status).toBe('not_computed')
+    expect(check(facts({ managerLevels: { ok: true, value: [12, null] } }), 'class_gap').status).toBe('not_computed')
+    expect(check(facts({ managerLevels: missing('nope') }), 'class_gap').explanation).toBe('nope')
+    expect(check(facts({ gapPct: missing('ungraded'), managerLevels: { ok: true, value: [14, 6] } }), 'class_gap').status).toBe('not_computed')
+  })
+
+  it('on its own never moves the recommendation off approve', () => {
+    const r = buildTradeReview(facts({ gapPct: { ok: true, value: 18 }, managerLevels: { ok: true, value: [14, 6] } }))
+    expect(r.flags.map((f) => f.code)).toEqual(['class_gap'])
+    expect(r.recommendation).toBe('approve')
   })
 })

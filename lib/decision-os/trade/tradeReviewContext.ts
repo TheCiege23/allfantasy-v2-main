@@ -52,6 +52,8 @@ export type TradeReviewDeps = {
   lastMoves: (args: LastMovesArgs) => Promise<Known<LastMoves>>
   forecast: (args: { leagueIds: string[]; season: number }) => Promise<{ week: number; teamForecasts: unknown } | null>
   deadlineKickoff: (args: { sport: string; season: number; week: number }) => Promise<Date | null>
+  /** Ladder level (1–25) per AllFantasy user id; ids with no profile are simply absent. */
+  managerLevels: (userIds: string[]) => Promise<Map<string, number>>
   now: () => Date
 }
 
@@ -309,8 +311,23 @@ async function defaultLastMoves(args: LastMovesArgs): Promise<Known<LastMoves>> 
   return { ok: false, reason: 'Native leagues read the commissioner hub’s activity instead.' }
 }
 
+async function defaultManagerLevels(userIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  if (userIds.length === 0) return out
+  const rows = await prisma.userProfile.findMany({
+    where: { userId: { in: userIds } },
+    select: { userId: true, xpLevel: true, legacyCareerLevel: true },
+  })
+  for (const r of rows) {
+    const level = r.xpLevel ?? r.legacyCareerLevel
+    if (level != null && Number.isFinite(Number(level))) out.set(r.userId, Math.max(1, Math.floor(Number(level))))
+  }
+  return out
+}
+
 export const defaultTradeReviewDeps: TradeReviewDeps = {
   evaluate: evaluateStoredTrade,
+  managerLevels: (ids) => defaultManagerLevels(ids),
   leagueRow: (leagueId) => prisma.league.findUnique({ where: { id: leagueId } }).catch(() => null),
   pairHistory: (args) => defaultPairHistory(args).catch(() => ({ ok: false as const, reason: 'Trade history could not be read.' })),
   managerHealth: getLeagueManagerHealth,
@@ -486,6 +503,16 @@ export async function reviewStoredTrade(
     return { ok: true as const, value: kickoff.toISOString() }
   })()
 
+  // Manager levels — `managerUserId` is the AF user id once a team is claimed, otherwise a provider id
+  // that simply has no profile, which the check reports as "not an AllFantasy manager".
+  const managerLevels: TradeReviewFacts['managerLevels'] = await (async () => {
+    const ids = [teamA?.managerUserId ?? null, teamB?.managerUserId ?? null]
+    if (!ids[0] && !ids[1]) return { ok: false as const, reason: 'The managers behind these teams could not be identified.' }
+    const levels = await d.managerLevels(ids.filter((x): x is string => Boolean(x))).catch(() => null)
+    if (!levels) return { ok: false as const, reason: 'Manager levels could not be read.' }
+    return { ok: true as const, value: [ids[0] ? levels.get(ids[0]) ?? null : null, ids[1] ? levels.get(ids[1]) ?? null : null] as const }
+  })()
+
   const facts: TradeReviewFacts = {
     sides: [{ name: sideNames[0] }, { name: sideNames[1] }],
     gapPct,
@@ -497,6 +524,7 @@ export async function reviewStoredTrade(
     now: now.toISOString(),
     // The type the one grade priced the trade on — so "tanking" and "rebuild" follow the grade's own format.
     leagueType: receipt.grade.leagueType ? { type: receipt.grade.leagueType.type, label: receipt.grade.leagueType.label } : null,
+    managerLevels,
   }
   return { ok: true, review: buildTradeReview(facts), receipt, trade, sideNames, sides: [sideA, sideB], facts }
 }

@@ -237,6 +237,18 @@ export type StandingsContextSlice = {
 
 export type RankingContextSlice = {
   snapshot: RankingSnapshot | null
+  /**
+   * The manager's standing as the Rankings tab shows it (2026-10-01). FLAT ON
+   * PURPOSE: the grounding serializer renders one level of keys, so a nested
+   * object reaches the model as "present" and an object array as "N items".
+   * Strings and string arrays are printed in full.
+   */
+  /** Ladder level, 1–25 — what the ±2 league-join band is measured on. */
+  managerLevel?: number | null
+  /** The levels this manager can be matched with, e.g. "Level 7–11". */
+  classRange?: string | null
+  /** One line per sport, e.g. "NFL skill 1612 ±48, better than 82% of rated managers, 41 games, 25-16". */
+  skillLines?: string[]
 }
 
 export type LeagueDifficultyContextSlice = {

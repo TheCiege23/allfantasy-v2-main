@@ -38,6 +38,7 @@ const LABEL: Record<ReviewCheck['code'], string> = {
   inactive_manager: 'Inactive manager',
   eliminated_team_dumping: 'Eliminated team dumping',
   deadline_rush: 'Deadline rush',
+  class_gap: 'Experience gap',
 }
 
 const SEVERITY_TONE: Record<ReviewCheck['severity'], string> = {
