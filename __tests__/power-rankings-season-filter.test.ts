@@ -16,7 +16,7 @@
  */
 import { describe, expect, it } from 'vitest'
 
-import { selectLatestSeasonLeagues } from '@/app/power-rankings/latestSeasonLeagues'
+import { selectLatestSeasonLeagues } from '@/components/core-app/rankings/power/latestSeasonLeagues'
 
 const L = (id: string, season: string) => ({ id, season })
 

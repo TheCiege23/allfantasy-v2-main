@@ -117,7 +117,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
         </div>
         {variant === 'dashboard' ? (
           <Link
-            href="/af-rankings"
+            href="/core/rankings?scope=portfolio&panel=legacy"
             className="shrink-0 text-xs font-semibold text-cyan-300/90 hover:text-cyan-200"
           >
             Full rankings page →

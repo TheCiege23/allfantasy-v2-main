@@ -41,7 +41,15 @@ describe('domain-os-refresh → Class rating wiring', () => {
     expect(staticImports('lib/class-rating/run.ts')).toEqual([
       '@/lib/class-rating/engine',
       '@/lib/class-rating/inputs',
+      '@/lib/class-rating/recap',
       '@/lib/class-rating/store',
+    ])
+    // The weekly recap (ported from #1753) loads the notification dispatcher DYNAMICALLY, at send time.
+    expect(staticImports('lib/class-rating/recap.ts')).toEqual([
+      '@/lib/class-rating/engine',
+      '@/lib/class-rating/store',
+      '@/lib/prisma',
+      '@prisma/client',
     ])
     expect(staticImports('lib/class-rating/store.ts')).toEqual([
       '@/lib/class-rating/engine',

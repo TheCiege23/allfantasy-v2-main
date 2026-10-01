@@ -177,7 +177,7 @@ export function resolveToolLaunches(
       push(
         'league_analysis',
         'League hub',
-        ctx.leagueId ? `/app/league/${encodeURIComponent(ctx.leagueId)}` : `/rankings${qs({ sport })}`,
+        ctx.leagueId ? `/app/league/${encodeURIComponent(ctx.leagueId)}` : `/core/rankings${qs({ scope: 'league' })}`,
         'Standings, strength, and competitive context.'
       )
       break

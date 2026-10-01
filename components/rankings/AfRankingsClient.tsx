@@ -105,6 +105,14 @@ interface RankResponse {
   stats?: RankResponse['careerStats']
 }
 
+
+/**
+ * Where this screen lives now: the "Career & legacy" panel of the rankings hub (2026-10-01).
+ * `/af-rankings` redirects here, keeping its query (`?jobId=` from the import flow and email),
+ * and every in-page "go back to the clean URL" lands here rather than on the old path.
+ */
+export const LEGACY_PANEL_HREF = '/core/rankings?scope=portfolio&panel=legacy'
+
 function rankLevelPayloadFromResponse(data: RankResponse): RankLevelApiPayload | null {
   const xp = data.xpTotal ?? (data.rank != null ? Number(data.rank.careerXp) : 0) ?? 0
   const lv = getLevelFromXp(xp)
@@ -587,7 +595,7 @@ function RankImportTimeoutState() {
         </p>
         <button
           type="button"
-          onClick={() => router.push('/af-rankings')}
+          onClick={() => router.push(LEGACY_PANEL_HREF)}
           className="mt-6 rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-100 hover:border-cyan-400/50 hover:text-white"
         >
           Try importing again
@@ -1060,7 +1068,7 @@ function MyRankingsPageInner() {
         await loadRank({ silent: true })
       } finally {
         if (!cancelled) {
-          router.replace('/af-rankings', { scroll: false })
+          router.replace(LEGACY_PANEL_HREF, { scroll: false })
         }
       }
     })()
@@ -1135,7 +1143,7 @@ function MyRankingsPageInner() {
       totalSeasons: jobProgress.totalSeasons ?? 0,
       finalLevel: finalLv,
     })
-    router.replace('/af-rankings', { scroll: false })
+    router.replace(LEGACY_PANEL_HREF, { scroll: false })
     window.setTimeout(() => {
       void loadRank({ silent: false })
       if (
@@ -1239,7 +1247,7 @@ function MyRankingsPageInner() {
               type="button"
               onClick={() => {
                 setImportBannerDismissed(true)
-                router.replace('/af-rankings', { scroll: false })
+                router.replace(LEGACY_PANEL_HREF, { scroll: false })
               }}
               className={`shrink-0 text-xs font-semibold underline-offset-2 hover:underline ${
                 rankFetchError

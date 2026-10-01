@@ -189,7 +189,7 @@ const TOOL_GROUPS = [
         id: 'rankings',
         title: 'Legacy & Rankings',
         description: 'Your AF rank, tier, career record, and championship history.',
-        href: '/af-rankings',
+        href: '/core/rankings',
         icon: Trophy,
         accent: 'from-amber-500/20 to-yellow-500/10 border-amber-500/20',
         sport: 'Multi',
@@ -372,7 +372,7 @@ export default function AIToolsPageClient() {
               AF Legacy
             </Link>
             <Link
-              href="/af-rankings"
+              href="/core/rankings"
               className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-300 transition hover:bg-amber-500/20"
             >
               <Trophy className="h-3.5 w-3.5" />

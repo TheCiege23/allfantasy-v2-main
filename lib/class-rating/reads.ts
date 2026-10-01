@@ -141,3 +141,28 @@ export async function getClassGameLog(userId: string | null | undefined, limit =
     return []
   }
 }
+
+/**
+ * Class division per AF account, ESTABLISHED ratings only — anyone unrated or provisional is simply
+ * absent. For surfaces that need a person's weight class and nothing else: the Community board's
+ * "My division" slice and trade review's `class_gap` (ADR F2.10a). One account can be several rated
+ * people; its established row with the most games represents it, as `getManagerClass` does.
+ */
+export async function getDivisionsForUsers(userIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  const ids = [...new Set(userIds.filter(Boolean))]
+  if (ids.length === 0) return out
+  try {
+    if (!(await classTablesReady())) return out
+    const rows = await prisma.$queryRaw<Array<{ userId: string; division: number }>>`
+      SELECT DISTINCT ON ("userId") "userId", division
+        FROM manager_ratings
+       WHERE "userId" = ANY(${ids}::text[]) AND established AND division IS NOT NULL
+         AND sport = ${CLASS_SPORT} AND "modelVersion" = ${CLASS_MODEL_VERSION}
+       ORDER BY "userId", games DESC, "subjectKey"`
+    for (const r of rows) out.set(r.userId, Number(r.division))
+  } catch (e) {
+    console.warn('[class-rating] division read failed:', e instanceof Error ? e.message : e)
+  }
+  return out
+}

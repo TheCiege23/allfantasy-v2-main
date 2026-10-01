@@ -78,7 +78,7 @@ export default function SleeperImportForm() {
 
       if (!res.ok) throw new Error(getImportErrorMessage(data, data.error || `Import failed (${res.status})`))
       if (data.success === true && typeof (data as { jobId?: string }).jobId === 'string') {
-        router.push(`/af-rankings?jobId=${encodeURIComponent((data as { jobId: string }).jobId)}`)
+        router.push(`/core/rankings?scope=portfolio&panel=legacy&jobId=${encodeURIComponent((data as { jobId: string }).jobId)}`)
         return
       }
       setResult(data)

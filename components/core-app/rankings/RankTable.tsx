@@ -79,8 +79,10 @@ export function RankTable({
   return virtual ? (
     <VirtualTable caption={caption} columns={columns} rows={rows} rowHeaderIndex={rowHeaderIndex} />
   ) : (
+    <>
+    <PhoneSort columns={columns} />
     <div className="af-rk-tablewrap" role="region" aria-label={caption} tabIndex={0}>
-      <table className="af-rk-grid-table" aria-rowcount={rows.length + 1}>
+      <table className="af-rk-grid-table af-rk-cards" aria-rowcount={rows.length + 1}>
         <Caption caption={caption} count={rows.length} />
         <Head columns={columns} />
         <tbody>
@@ -90,6 +92,7 @@ export function RankTable({
         </tbody>
       </table>
     </div>
+    </>
   )
 }
 
@@ -120,6 +123,7 @@ function VirtualTable({
 
   return (
     <>
+      <PhoneSort columns={columns} />
       <div
         ref={scrollRef}
         className="af-rk-tablewrap af-rk-tablewrap--virtual"
@@ -128,7 +132,7 @@ function VirtualTable({
         tabIndex={0}
         style={{ maxHeight: VIEW_HEIGHT }}
       >
-        <table className="af-rk-grid-table" aria-rowcount={rows.length + 1}>
+        <table className="af-rk-grid-table af-rk-cards" aria-rowcount={rows.length + 1}>
           <Caption caption={caption} count={rows.length} />
           <Head columns={columns} sticky />
           <tbody>
@@ -162,6 +166,35 @@ function VirtualTable({
         </p>
       </noscript>
     </>
+  )
+}
+
+/**
+ * Phone only (≤720px, CSS). A row becomes a card there and the header row is
+ * hidden, so the sortable columns are offered as a row of chips instead — the
+ * same links the header carries, nothing new to keep in step.
+ */
+function PhoneSort({ columns }: { columns: RankColumn[] }) {
+  const sortable = columns.filter((c) => c.sortHref)
+  if (sortable.length === 0) return null
+  return (
+    <nav className="af-rk-phonesort" aria-label="Sort">
+      <span className="af-rk-phonesort-label" aria-hidden="true">
+        Sort
+      </span>
+      {sortable.map((c) => (
+        <Link
+          key={c.key}
+          href={c.sortHref!}
+          scroll={false}
+          className="af-rk-tab"
+          aria-current={c.sort && c.sort !== 'none' ? 'true' : undefined}
+        >
+          {c.label === '#' ? 'Rank' : c.label}
+          {c.sort === 'ascending' ? ' ▲' : c.sort === 'descending' ? ' ▼' : ''}
+        </Link>
+      ))}
+    </nav>
   )
 }
 
@@ -240,6 +273,16 @@ function Row({
     >
       {row.cells.map((cell, ci) => {
         const col = columns[ci]
+        /*
+         * The phone card's slot for this cell (CSS reads it at ≤720px): the first cell leads, the
+         * row header is the title, the first other always-visible cell is the headline value, and
+         * everything else — including columns a desktop table hides on phones — becomes a labelled
+         * chip, so a phone sees every number rather than half of them.
+         */
+        const firstValue = columns.findIndex((c, i) => i !== 0 && i !== rowHeaderIndex && !c.hideOnPhone)
+        const card = ci === 0 ? 'lead' : ci === rowHeaderIndex ? 'title' : ci === firstValue ? 'value' : 'detail'
+        // A chip whose text already says what it is ("Why") needs no label in front of it.
+        const label = col?.label === '#' ? 'Rank' : col?.label === cell.text ? '' : col?.label
         const cls =
           [col?.align ? `af-rk-${col.align}` : '', col?.hideOnPhone ? 'af-rk-hide-phone' : '', cell.tone ? `af-rk-tone-${cell.tone}` : '']
             .join(' ')
@@ -257,11 +300,11 @@ function Row({
           </>
         )
         return ci === rowHeaderIndex ? (
-          <th key={col?.key ?? ci} scope="row" className={cls} title={cell.title}>
+          <th key={col?.key ?? ci} scope="row" className={cls} title={cell.title} data-card={card} data-label={label}>
             {body}
           </th>
         ) : (
-          <td key={col?.key ?? ci} className={cls} title={cell.title}>
+          <td key={col?.key ?? ci} className={cls} title={cell.title} data-card={card} data-label={label}>
             {body}
           </td>
         )

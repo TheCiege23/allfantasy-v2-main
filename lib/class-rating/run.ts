@@ -1,5 +1,6 @@
 import { CLASS_MODEL_VERSION, classify, replay } from '@/lib/class-rating/engine'
 import { buildRatingInputs } from '@/lib/class-rating/inputs'
+import { drainClassRecaps, queueClassRecaps } from '@/lib/class-rating/recap'
 import {
   classTablesReady,
   loadFactRows,
@@ -32,11 +33,29 @@ export type ClassRatingCounts = {
   events: number
   ms: number
   failed: number
+  /** Weekly recaps queued after this rebuild, and sent this fire (only with CLASS_RECAP_NOTIFICATIONS=true). */
+  recapQueued: number
+  recapSent: number
+  recapFailed: number
   errors: string[]
 }
 
 export function emptyClassRatingCounts(): ClassRatingCounts {
-  return { date: null, skipped: null, rebuilt: 0, games: 0, people: 0, established: 0, events: 0, ms: 0, failed: 0, errors: [] }
+  return {
+    date: null,
+    skipped: null,
+    rebuilt: 0,
+    games: 0,
+    people: 0,
+    established: 0,
+    events: 0,
+    ms: 0,
+    failed: 0,
+    recapQueued: 0,
+    recapSent: 0,
+    recapFailed: 0,
+    errors: [],
+  }
 }
 
 /** The calendar day in New York — the same day key the rankings snapshot uses. */
@@ -100,10 +119,26 @@ export async function runClassRatingDaily(
     out.people = written.ratings
     out.events = written.events
     out.established = [...classified.values()].filter((c) => c.established).length
+    // After the tables hold the new week, never before; a recap failure must not fail the rating.
+    const queued = await queueClassRecaps(now).catch((e: unknown) => {
+      out.errors.push(`class_recap_queue: ${e instanceof Error ? e.message : String(e)}`)
+      return null
+    })
+    out.recapQueued = queued?.queued ?? 0
   } catch (e) {
     out.failed = 1
     out.errors.push(`class_rating(${CLASS_MODEL_VERSION}): ${e instanceof Error ? e.message : String(e)}`)
   } finally {
+    // Every fire drains a batch of queued recaps — a no-op unless CLASS_RECAP_NOTIFICATIONS=true.
+    const drained = await drainClassRecaps(now).catch((e: unknown) => {
+      out.errors.push(`class_recap_send: ${e instanceof Error ? e.message : String(e)}`)
+      return null
+    })
+    if (drained) {
+      out.recapSent = drained.sent
+      out.recapFailed = drained.failed
+      out.errors.push(...drained.errors.slice(0, 5))
+    }
     out.ms = Date.now() - started
   }
   return out
