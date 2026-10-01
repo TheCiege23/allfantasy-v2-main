@@ -156,7 +156,7 @@ test.describe('@g42 @nfl-redraft communication browser proof', () => {
     await page.getByTestId('g42-chat-send').click()
     await expect(page.getByTestId('g42-chat-system-message').first()).toContainText('Good luck this week.')
 
-    await page.getByRole('button', { name: 'Open' }).click()
+    await page.getByRole('button', { name: 'Open', exact: true }).click()
     await expect(page.getByTestId('g42-active-tab')).toContainText('league_chat')
   })
 

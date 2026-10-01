@@ -243,7 +243,7 @@ test.describe("@find-league click audit", () => {
     expect(params.get("teamCountMax")).toBe("14")
     expect(params.get("q")).toBe("alpha")
 
-    await page.getByRole("button", { name: /next/i }).click()
+    await page.getByRole("button", { name: "Next", exact: true }).click()
     await expect(page.getByText(/page 2 of 2/i)).toBeVisible()
     await expect(page.getByTestId("find-league-card-joinable-gamma")).toBeVisible()
     await page.getByRole("button", { name: /previous/i }).click()
