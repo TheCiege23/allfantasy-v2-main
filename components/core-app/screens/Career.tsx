@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect } from 'react'
 import { buildCareerWidgetSnapshot } from '@/lib/core-app/careerWidgetSnapshot'
+import { publishRailCareerLines, railCareerLines } from '@/lib/core-app/railCareer'
 import { syncCareerWidget } from '@/lib/platform/careerWidgetBridge'
 import { careerHref, type CareerData, type PrestigeComponent } from '@/lib/core-app/careerModel'
 import type { ShareCardData } from '@/lib/core-app/shareCard'
@@ -455,6 +456,15 @@ export function Career({
   useEffect(() => {
     void syncCareerWidget(buildCareerWidgetSnapshot(screen.data, screen.awards, snapshotAt ? new Date(snapshotAt) : new Date()))
   }, [screen.data, screen.awards, snapshotAt])
+
+  /*
+   * Your record in each league, shown under its name in the shell's rail while you are here
+   * (`lib/core-app/railCareer.ts`). Cleared on the way out, so no other screen inherits it.
+   */
+  useEffect(() => {
+    publishRailCareerLines(railCareerLines(screen.data))
+    return () => publishRailCareerLines(null)
+  }, [screen.data])
 
   return (
     <>

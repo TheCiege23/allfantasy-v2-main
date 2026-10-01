@@ -1553,6 +1553,20 @@
   color: var(--warn);
 }
 
+/*
+ * Your record in this league, shown only while the Career screen has published one
+ * (`lib/core-app/railCareerChannel.ts`). Top level on purpose (brace depth 0): it lives inside
+ * `.af-rail-row`, which the collapsed rail already hides, so it needs no state of its own.
+ */
+.af-core .af-rail-row-career {
+  font: 700 11px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .af-core .af-rail-row-name {
   font: 800 12px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--text);
