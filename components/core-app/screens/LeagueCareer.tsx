@@ -7,7 +7,12 @@ import type {
   LeagueGrade,
 } from '@/lib/core-app/leagueCareer'
 import type { SectionState } from '@/lib/core-app/leagueHome'
+import { CareerAskChimmy } from '@/components/core-app/career/CareerAskChimmy'
+import { LegacyStakes } from '@/components/core-app/career/LegacyStakes'
+import { leagueCareerChimmyPrompts } from '@/lib/core-app/careerChimmy'
+import { computeLeagueMilestones } from '@/lib/core-app/careerMilestones'
 import '@/components/core-app/af-league-career.css'
+import '@/components/core-app/af-career-live.css'
 
 /**
  * Screen 38a·6 — your career inside ONE league.
@@ -116,6 +121,23 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
         fixtures and scores, not which weeks were playoffs, and guessing that from week numbers
         would invent the one number people quote.
       </p>
+
+      {/*
+        The live half, one league. Milestones only: a "win it and it is your Nth title here"
+        stake would need the title count the note above refuses to guess.
+      */}
+      <div className="af-crl-pair">
+        <LegacyStakes
+          data={{ stakes: [], milestones: computeLeagueMilestones(data), season: null }}
+          leagueId={league.id}
+          milestonesOnly
+        />
+        <CareerAskChimmy
+          prompts={leagueCareerChimmyPrompts(data)}
+          leagueId={league.id}
+          title={`Ask Chimmy about ${league.name}`}
+        />
+      </div>
 
       {/* ── Grades ──────────────────────────────────────────────────── */}
       <div className="af-lc-grades">

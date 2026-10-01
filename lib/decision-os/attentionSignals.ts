@@ -48,6 +48,12 @@ export type AttentionSignalType =
    * judgment layer. */
   | 'manager_engagement_risk'
   | 'manager_recommendation'
+  /** Live-career plan, phase 4 (`careerSignals.ts`). A league whose synced data is stale, failing
+   * or gone — every other signal and recommendation for it may be built on old rosters. */
+  | 'league_sync_attention'
+  /** Live-career plan, phase 4: what winning a live league would mean for the career — read off
+   * the Career screen's own stakes (`careerMilestones.ts`), never re-derived. */
+  | 'career_title_stake'
 
 export type AttentionSignalSource =
   | 'league_health_engine'
@@ -56,6 +62,8 @@ export type AttentionSignalSource =
   /** Phase OS-C1: `resolveUserOsSnapshot` (`userOs.ts`) — the single-manager, single-league Decision OS
    * composition `deriveManagerAttentionSignals` reads from. */
   | 'user_os'
+  /** Live-career plan, phase 4: the Career Wire's sync read and the Career screen's stakes. */
+  | 'career'
 
 export interface DecisionOsAttentionSignal {
   /** Stable and deterministic — the same underlying condition always produces the same id, so a

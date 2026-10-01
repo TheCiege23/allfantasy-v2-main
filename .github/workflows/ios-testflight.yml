@@ -31,6 +31,11 @@ on:
         type: boolean
         required: false
         default: false
+      career_widget:
+        description: "Ship the 'Your career' home-screen widget. Needs App Groups enabled on ai.allfantasy.app with the group group.ai.allfantasy.app, and an App ID ai.allfantasy.app.CareerWidget with the same group, or the export fails. See docs/app-store/RUNBOOK.md."
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -74,6 +79,14 @@ jobs:
 
       - name: Sync web assets and plugins into the Xcode project
         run: npx cap sync ios
+
+      # The widget target is NOT committed to the Xcode project (see the script's header): with this
+      # input off, the archive is exactly what it was before the widget existed.
+      - name: Add the career widget target
+        if: ${{ inputs.career_widget }}
+        run: |
+          gem list -i xcodeproj >/dev/null || gem install xcodeproj --no-document
+          ruby scripts/add-career-widget-target.rb
 
       - name: Check required secrets are present
         env:
@@ -133,16 +146,27 @@ jobs:
       # shipped only when its input is ticked: a push-only run must not start carrying
       # associated-domains (added 2026-09-29) and fail on a capability nobody enabled.
       - name: Embed requested entitlements in the archive
-        if: ${{ inputs.push_notifications || inputs.universal_links }}
+        if: ${{ inputs.push_notifications || inputs.universal_links || inputs.career_widget }}
         env:
           PUSH: ${{ inputs.push_notifications }}
           LINKS: ${{ inputs.universal_links }}
+          WIDGET: ${{ inputs.career_widget }}
         run: |
           app="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
           ent="$RUNNER_TEMP/App.entitlements"
           cp ios/App/App/App.entitlements "$ent"
           [ "$PUSH" = "true" ] || /usr/libexec/PlistBuddy -c "Delete :aps-environment" "$ent" 2>/dev/null || true
           [ "$LINKS" = "true" ] || /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.associated-domains" "$ent" 2>/dev/null || true
+          if [ "$WIDGET" = "true" ]; then
+            # The App Group is added HERE, not in App.entitlements, so local and default builds
+            # never ask for a capability the App ID may not have.
+            /usr/libexec/PlistBuddy -c "Add :com.apple.security.application-groups array" "$ent"
+            /usr/libexec/PlistBuddy -c "Add :com.apple.security.application-groups:0 string group.ai.allfantasy.app" "$ent"
+            appex="$app/PlugIns/CareerWidget.appex"
+            if [ ! -d "$appex" ]; then echo "::error::career_widget was requested but $appex is not in the archive"; exit 1; fi
+            # Nested code is signed before the bundle that contains it.
+            codesign --force --sign - --entitlements ios/App/CareerWidget/CareerWidget.entitlements "$appex"
+          fi
           if [ -d "$app/Frameworks" ]; then
             for fw in "$app"/Frameworks/*; do codesign --force --sign - "$fw"; done
           fi
@@ -154,6 +178,9 @@ jobs:
           if [ "$LINKS" = "true" ] && ! grep -q com.apple.developer.associated-domains <<<"$signed"; then
             echo "::error::associated-domains is not in the archived app after signing"; exit 1
           fi
+          if [ "$WIDGET" = "true" ] && ! grep -q group.ai.allfantasy.app <<<"$signed"; then
+            echo "::error::the App Group is not in the archived app after signing"; exit 1
+          fi
 
       - name: Export and upload to App Store Connect
         env:
@@ -162,6 +189,7 @@ jobs:
           ISSUER: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           PUSH: ${{ inputs.push_notifications }}
           LINKS: ${{ inputs.universal_links }}
+          WIDGET: ${{ inputs.career_widget }}
         run: |
           run_export() {
             cat > "$RUNNER_TEMP/ExportOptions-$1.plist" <<PLIST
@@ -201,6 +229,13 @@ jobs:
           if [ "$LINKS" = "true" ] && ! grep -q com.apple.developer.associated-domains "$RUNNER_TEMP/entitlements.txt"; then
             echo "::error::universal_links was requested but the signed build has no associated-domains entitlement. Enable Associated Domains on the App ID ai.allfantasy.app and re-run."
             exit 1
+          fi
+          if [ "$WIDGET" = "true" ]; then
+            widget_ent="$(codesign -d --entitlements - "$RUNNER_TEMP/ipa/Payload/App.app/PlugIns/CareerWidget.appex" 2>/dev/null || true)"
+            if ! grep -q group.ai.allfantasy.app "$RUNNER_TEMP/entitlements.txt" || ! grep -q group.ai.allfantasy.app <<<"$widget_ent"; then
+              echo "::error::career_widget was requested but the signed app or widget lacks the App Group. Enable App Groups (group.ai.allfantasy.app) on ai.allfantasy.app and ai.allfantasy.app.CareerWidget and re-run."
+              exit 1
+            fi
           fi
           run_export upload
           echo "Uploaded build ${GITHUB_RUN_NUMBER}. It appears in App Store Connect after processing (~10-30 min)."

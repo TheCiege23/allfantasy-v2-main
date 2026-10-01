@@ -1,6 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect } from 'react'
+import { buildCareerWidgetSnapshot } from '@/lib/core-app/careerWidgetSnapshot'
+import { syncCareerWidget } from '@/lib/platform/careerWidgetBridge'
 import { careerHref, type CareerData, type PrestigeComponent } from '@/lib/core-app/careerModel'
 import type { ShareCardData } from '@/lib/core-app/shareCard'
 import type { CareerAward } from '@/lib/core-app/careerAwards'
@@ -24,8 +27,21 @@ import {
   SeasonTable,
   TimelineView,
 } from '@/components/core-app/career/CareerBriefViews'
+import { CareerAskChimmy } from '@/components/core-app/career/CareerAskChimmy'
+import { LegacyStakes } from '@/components/core-app/career/LegacyStakes'
+import { careerChimmyPrompts } from '@/lib/core-app/careerChimmy'
+import { buildLegacyStakes } from '@/lib/core-app/careerMilestones'
+import type { CareerWireData } from '@/lib/core-app/careerWireModel'
+import { CareerWire } from '@/components/core-app/career/CareerWire'
+import { CareerCompareView } from '@/components/core-app/career/CareerCompareView'
+import { HallLayoutToggle, TrophyWall } from '@/components/core-app/career/TrophyWall'
+import { buildTrophyWall } from '@/lib/core-app/trophyWall'
 import '@/components/core-app/af-career.css'
 import '@/components/core-app/af-career-brief.css'
+import '@/components/core-app/af-career-live.css'
+// Last on purpose: the phone/tablet layer overrides the three sheets above.
+import '@/components/core-app/af-career-devices.css'
+import '@/components/core-app/af-career-wall.css'
 
 /**
  * Career — handoff 13a, desktop frame.
@@ -186,7 +202,15 @@ function MobileArc({ data }: { data: CareerData }) {
  * Brief item 10: the season story is a swipeable rail here, newest first; the
  * full table is still one tap away on Seasons.
  */
-function CareerMobile({ screen }: { screen: CareerScreenData }) {
+function CareerMobile({
+  screen,
+  wire,
+  nowIso,
+}: {
+  screen: CareerScreenData
+  wire: CareerWireData | null
+  nowIso?: string
+}) {
   const data = screen.data
   const titles = data.titles.slice(0, 3)
   const peak = data.seasons
@@ -221,6 +245,8 @@ function CareerMobile({ screen }: { screen: CareerScreenData }) {
       <CareerTabs view="overview" filter={data.filter} />
 
       <div className="af-crm-body">
+        {/* Phase 3: every platform first — the question someone opens the app with. */}
+        {wire && nowIso ? <CareerWire data={wire} nowIso={nowIso} /> : null}
         <CareerFilterBar data={data} view="overview" />
         {data.isEmpty ? (
           <>
@@ -238,6 +264,7 @@ function CareerMobile({ screen }: { screen: CareerScreenData }) {
                 Import past seasons
               </Link>
             ) : null}
+            {data.accountIsEmpty ? <CareerLive data={data} awards={[]} /> : null}
           </>
         ) : (
           <>
@@ -266,6 +293,8 @@ function CareerMobile({ screen }: { screen: CareerScreenData }) {
               Finals:{' '}
               {acc.finals == null ? 'not recorded yet' : `${acc.finals} (${acc.championships} won · ${acc.finalsLost} lost)`}
             </p>
+
+            <CareerLive data={data} awards={screen.awards} />
 
             <SeasonStoryRail data={data} />
 
@@ -385,7 +414,18 @@ function CareerMobile({ screen }: { screen: CareerScreenData }) {
   )
 }
 
-export function Career({ screen, share }: { screen: CareerScreenData; share?: ShareCardData | null }) {
+export function Career({
+  screen,
+  share,
+  wire = null,
+  nowIso,
+}: {
+  screen: CareerScreenData
+  share?: ShareCardData | null
+  /** Career Wire — read on the overview only; null elsewhere or when the read failed. */
+  wire?: CareerWireData | null
+  nowIso?: string
+}) {
   /*
    * `share` is a view but not a tab. 13a puts "Share card" in the header action
    * row, not in the tab set.
@@ -395,10 +435,20 @@ export function Career({ screen, share }: { screen: CareerScreenData; share?: Sh
    * place those views exist.
    */
   const overview = screen.view === 'overview'
+
+  /*
+   * Phase 6: keep the iOS home-screen widget in step with what this screen shows. A no-op outside
+   * the iOS app, under a filter, and when nothing changed since the last send this session.
+   */
+  const snapshotAt = nowIso ?? screen.profile.builtAt
+  useEffect(() => {
+    void syncCareerWidget(buildCareerWidgetSnapshot(screen.data, screen.awards, snapshotAt ? new Date(snapshotAt) : new Date()))
+  }, [screen.data, screen.awards, snapshotAt])
+
   return (
     <>
-      <CareerDesktop screen={screen} share={share ?? null} showOnMobile={!overview} />
-      {overview ? <CareerMobile screen={screen} /> : null}
+      <CareerDesktop screen={screen} share={share ?? null} showOnMobile={!overview} wire={wire} nowIso={nowIso} />
+      {overview ? <CareerMobile screen={screen} wire={wire} nowIso={nowIso} /> : null}
     </>
   )
 }
@@ -490,10 +540,14 @@ function CareerDesktop({
   screen,
   share,
   showOnMobile,
+  wire,
+  nowIso,
 }: {
   screen: CareerScreenData
   share: ShareCardData | null
   showOnMobile: boolean
+  wire: CareerWireData | null
+  nowIso?: string
 }) {
   const { data, view } = screen
 
@@ -533,10 +587,20 @@ function CareerDesktop({
         </div>
       </div>
 
-      {view !== 'share' ? <CareerFilterBar data={data} view={view} /> : null}
+      {/*
+        Phase 3: the Career Wire leads the overview — is every platform current, how is each
+        league going, what moved since the last visit. Above the filter bar because it is
+        account-wide: a platform or era filter does not narrow which platforms need a sync.
+      */}
+      {view === 'overview' && wire && nowIso ? <CareerWire data={wire} nowIso={nowIso} /> : null}
+
+      {/* Compare's sides carry their own filters (`ca`/`cb`), so the page filter would only mislead. */}
+      {view !== 'share' && view !== 'compare' ? <CareerFilterBar data={data} view={view} /> : null}
 
       {view === 'share' ? (
         <SharePreview share={share} isEmpty={data.isEmpty} />
+      ) : view === 'compare' ? (
+        <CareerCompareView compare={screen.compare ?? null} />
       ) : data.isEmpty && view !== 'coverage' ? (
         <EmptyCareer data={data} />
       ) : view === 'timeline' ? (
@@ -552,7 +616,20 @@ function CareerDesktop({
       ) : view === 'awards' ? (
         <AwardsView awards={screen.awards} isEmpty={data.isEmpty} />
       ) : view === 'hall' ? (
-        <CareerHallView data={data} />
+        /*
+         * The trophy wall and the list are both rendered; CSS shows one (af-career-wall.css) —
+         * the wall on a landscape touch tablet or under ?layout=wall, the list otherwise. Decided
+         * in CSS, not JS, so the server-rendered page is already the right one on first paint.
+         */
+        <div className="af-tw-host" data-layout={screen.hallLayout ?? 'auto'}>
+          <HallLayoutToggle filter={data.filter} layout={screen.hallLayout ?? null} />
+          <div className="af-tw-wallpane">
+            <TrophyWall wall={buildTrophyWall(data, screen.awards)} />
+          </div>
+          <div className="af-tw-listpane">
+            <CareerHallView data={data} />
+          </div>
+        </div>
       ) : view === 'coverage' ? (
         <CoverageView data={data} extras={screen.coverage} />
       ) : (
@@ -610,6 +687,21 @@ function EmptyCareer({ data }: { data: CareerData }) {
       <Link href="/import?returnTo=%2Fcore%2Fcareer" className="af-cr-btn af-cr-btn--primary">
         Import past seasons
       </Link>
+      <CareerLive data={data} awards={[]} />
+    </div>
+  )
+}
+
+/**
+ * The live half of the overview — stakes and milestones beside the Chimmy prompts.
+ * Rendered on the desktop overview, the phone overview, and an empty account (a season-1
+ * AF user has live stakes long before they have a finished season).
+ */
+function CareerLive({ data, awards }: { data: CareerData; awards: CareerAward[] }) {
+  return (
+    <div className="af-crl-pair">
+      <LegacyStakes data={buildLegacyStakes(data, awards)} />
+      <CareerAskChimmy prompts={careerChimmyPrompts(data)} />
     </div>
   )
 }
@@ -655,6 +747,9 @@ function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAwar
       {/* ── 1: what you have won, before anything else ───────────────────── */}
       <AccomplishmentStrip data={data} />
       <BestSeasons seasons={data.accomplishments.bestSeasons} filterHref={leagueHref} />
+
+      {/* ── live half: what is still in play, and Chimmy on your own numbers ── */}
+      <CareerLive data={data} awards={awards} />
 
       <div className="af-c13-body">
         {/* ── left column ──────────────────────────────────────────────── */}

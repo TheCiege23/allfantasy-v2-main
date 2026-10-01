@@ -91,7 +91,7 @@ describe('StandingsBoardView — official table', () => {
     const firstRow = container.querySelector('.af-stb-table tbody tr[data-zone]')!
     expect(firstRow.children[0].className).toContain('af-stb-sticky-rank')
     expect(firstRow.children[1].className).toContain('af-stb-sticky-team')
-    expect(container.querySelectorAll('thead .af-stb-sticky')).toHaveLength(2)
+    expect(container.querySelectorAll('[aria-label="League table"] thead .af-stb-sticky')).toHaveLength(2)
   })
 
   it('draws the bye line and the playoff line between the right rows', () => {
@@ -240,9 +240,14 @@ describe('StandingsBoardView — charts and notes', () => {
 describe('standings view state', () => {
   it('parses and serialises, defaults omitted', () => {
     const state = parseStandingsView((k) => ({ st_view: 'power', st_div: 'group', st_layout: 'cards' })[k])
-    expect(state).toEqual({ view: 'power', division: 'group', layout: 'cards' })
+    expect(state).toEqual({ view: 'power', division: 'group', layout: 'cards', sort: { key: 'seed', dir: 'asc' } })
     expect(serializeStandingsView(DEFAULT_STANDINGS_VIEW)).toEqual([])
-    expect(parseStandingsView(() => ['power', 'x'])).toEqual({ view: 'power', division: 'power', layout: 'table' })
+    expect(parseStandingsView(() => ['power', 'x'])).toEqual({
+      view: 'power',
+      division: 'power',
+      layout: 'table',
+      sort: { key: 'seed', dir: 'asc' },
+    })
     expect(parseStandingsView(() => 'nonsense').view).toBe('official')
   })
 })
