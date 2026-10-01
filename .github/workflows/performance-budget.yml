@@ -85,6 +85,12 @@ jobs:
       - name: Build app
         run: npm run build
 
+      # The same gate Railway builds now pass before they may ship or publish a webpack cache
+      # (scripts/next-build.cjs). Here it runs on a plain Linux build, so a Next upgrade that
+      # changes the manifest shape the gate reads fails THIS job first, not a production deploy.
+      - name: Root layout ships its stylesheet
+        run: node scripts/lib/layout-css-gate.cjs
+
       - name: Start app
         run: |
           nohup npm run start -- -p 3000 > /tmp/next-start.log 2>&1 &
