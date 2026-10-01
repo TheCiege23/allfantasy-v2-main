@@ -86,6 +86,8 @@ function resolveCommissionerTabId(sport: string | undefined | null): string {
   return FOOTBALL_SPORTS.has(sport.trim().toUpperCase()) ? 'commissioner' : 'league'
 }
 
+const UNVERIFIED = 'unverified'
+
 export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: string; sport?: string | null }) {
   const [data, setData] = useState<CommissionerRecommendationsApiResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -107,16 +109,21 @@ export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: st
     fetch(`/api/league-hub/context/${encodeURIComponent(canonicalLeagueId)}/commissioner-recommendations`, {
       cache: 'no-store',
     })
-      .then((response) =>
-        response.ok ? response.json() : Promise.reject(new Error('Failed to load commissioner recommendations'))
-      )
+      .then((response) => {
+        // The hub admits whoever `getLeagueRole` calls commissioner, which includes the
+        // importer of any league. This route trusts ownership only on native leagues, so an
+        // importer who never verified as commissioner reaches the hub and gets a 404 here.
+        // That is a missing verification, not a failure — say so instead of showing red.
+        if (response.status === 404) return Promise.reject(new Error(UNVERIFIED))
+        return response.ok ? response.json() : Promise.reject(new Error('Failed to load commissioner recommendations'))
+      })
       .then((payload: CommissionerRecommendationsApiResponse) => {
         if (!active) return
         setData(payload)
       })
-      .catch(() => {
+      .catch((e: unknown) => {
         if (!active) return
-        setError('Could not load Commissioner OS for this league')
+        setError(e instanceof Error && e.message === UNVERIFIED ? UNVERIFIED : 'Could not load Commissioner OS for this league')
       })
       .finally(() => {
         if (!active) return
@@ -158,6 +165,10 @@ export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: st
 
       {isLoading ? (
         <div className="mt-3 h-16 animate-pulse rounded-lg border border-white/10 bg-white/5" aria-busy="true" />
+      ) : error === UNVERIFIED ? (
+        <p className="mt-3 text-sm text-white/50" data-testid="commissioner-os-unverified">
+          Recommendations appear once you are verified as this league&apos;s commissioner on its provider.
+        </p>
       ) : error ? (
         <p className="mt-3 text-sm text-red-300">{error}</p>
       ) : (
@@ -227,7 +238,7 @@ function CommissionerOsBody({
         {domainEntries.map(([domain, status]) => (
           <span
             key={domain}
-            className={`rounded-full border px-2 py-0.5 text-[10px] ${
+            className={`rounded-full border px-2 py-0.5 text-[11px] ${
               status === 'ok' ? 'border-white/10 bg-white/5 text-white/60' : 'border-white/10 bg-white/[0.03] text-white/30'
             }`}
             title={status}
@@ -305,7 +316,7 @@ function CopyReadyCard({
               key={c.channel}
               type="button"
               onClick={() => setChannelIndex(i)}
-              className={`rounded-full border px-2 py-0.5 text-[10px] ${
+              className={`rounded-full border px-2 py-0.5 text-[11px] ${
                 i === channelIndex
                   ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300'
                   : 'border-white/10 bg-white/5 text-white/50'
@@ -316,7 +327,7 @@ function CopyReadyCard({
           ))}
         </div>
       ) : (
-        <p className="mt-2 text-[10px] uppercase tracking-wide text-white/30">
+        <p className="mt-2 text-[11px] uppercase tracking-wide text-white/30">
           {CHANNEL_LABEL[active.channel] ?? active.channel}
         </p>
       )}
@@ -332,7 +343,7 @@ function CopyReadyCard({
       />
 
       <div className="mt-1.5 flex items-center justify-between">
-        <span className={`text-[10px] ${overLimit ? 'text-red-300' : 'text-white/30'}`}>
+        <span className={`text-[11px] ${overLimit ? 'text-red-300' : 'text-white/30'}`}>
           {draft.length}
           {active.characterLimit !== null ? ` / ${active.characterLimit}` : ''}
         </span>
