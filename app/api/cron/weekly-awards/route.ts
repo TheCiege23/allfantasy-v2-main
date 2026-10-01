@@ -17,6 +17,7 @@ import { escapeHtml } from '@/lib/trade-intel/tradeGradeEmail'
 import { getBaseUrl } from '@/lib/get-base-url'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { weeklyRecapAllowed } from '@/lib/core-app/commissioner/recipes'
+import { notifyWeeklyStories } from '@/lib/core-app/weeklyStoryNotify'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -209,7 +210,16 @@ export async function GET(req: NextRequest) {
             errors.push(l.id)
           }
         }
-        return { leagues: leagues.length, posted, emailsSent, skippedForTime, optedOut, errors }
+        /*
+         * The weekly-story push rides this Tuesday fire (the cron registry is full). It runs only
+         * with 30s of budget left, AFTER every league's recap, so it can never cost a recap its
+         * slot; a skipped week is caught by a manual re-run, which its per-user dedupe makes safe.
+         */
+        const stories =
+          Date.now() - startedAt < TIME_BUDGET_MS - 30_000
+            ? await notifyWeeklyStories()
+            : { targeted: 0, sent: 0, skipped: 0, deferred: true as const }
+        return { leagues: leagues.length, posted, emailsSent, skippedForTime, optedOut, errors, stories }
       },
       (r) => ({
         rowsRead: r.leagues,
@@ -217,7 +227,7 @@ export async function GET(req: NextRequest) {
         rowsSkipped: r.skippedForTime,
         errors: r.errors.map((id) => `league ${id}`),
         warnings: r.skippedForTime > 0 ? [`time budget hit — ${r.skippedForTime} league(s) deferred to the next fire`] : [],
-        metadata: { emailsSent: r.emailsSent, optedOut: r.optedOut },
+        metadata: { emailsSent: r.emailsSent, optedOut: r.optedOut, weeklyStoryPush: r.stories },
       }),
     )
     return NextResponse.json({
