@@ -9,9 +9,11 @@ export async function shareCardImage(
   url: string,
   filename: string,
   title: string,
+  /** A card drawn from a POSTed body (the Trade Center's proposal card) passes its request here. */
+  init?: RequestInit,
 ): Promise<'shared' | 'downloaded' | 'failed'> {
   try {
-    const res = await fetch(url, { credentials: 'same-origin' })
+    const res = await fetch(url, { credentials: 'same-origin', ...init })
     if (!res.ok) return 'failed'
     const blob = await res.blob()
     const file = new File([blob], filename, { type: 'image/png' })
