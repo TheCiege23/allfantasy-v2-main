@@ -12,6 +12,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: { platformNotification: { findFirst: mo
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: mocks.dispatchNotification }))
 
 import { notifyCareerMilestones } from '@/lib/core-app/careerMilestoneNotify'
+import { pushTagFor } from '@/lib/notifications/pushTag'
 
 const profile = (rows: CareerRow[]): StoredCareerProfile => ({
   version: 2,
@@ -54,6 +55,14 @@ describe('notifyCareerMilestones', () => {
       'career-milestone:title:L1',
       'career-milestone:title:L2',
     ])
+  })
+
+  it('tags each milestone separately, so the phone shows all three instead of keeping only the last', async () => {
+    const { prev, next } = bigFinish()
+    await notifyCareerMilestones('u1', prev, next)
+    const tags = mocks.dispatchNotification.mock.calls.map((c) => pushTagFor(c[0].category, c[0].meta))
+    expect(new Set(tags).size).toBe(3)
+    expect(tags).toEqual(['career-milestone:title:L0', 'career-milestone:title:L1', 'career-milestone:title:L2'])
   })
 
   it('skips a milestone already sent, and treats a failed lookup as sent', async () => {

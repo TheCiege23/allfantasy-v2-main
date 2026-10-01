@@ -54,7 +54,13 @@ export async function notifyCareerMilestones(
           actionLabel: e.kind === 'award' ? 'See your awards' : 'See your career',
           severity: 'low',
           dedupePrefix: prefix,
-          meta: { milestone: e.key, milestoneKind: e.kind },
+          /*
+           * ⚠ ONE NOTIFICATION PER MILESTONE ON THE DEVICE. Without its own tag every push in a
+           * category shares `notif-career_milestones-global` (pushTagFor), and the service worker
+           * REPLACES a shown notification with the same tag, silently (`renotify: false`) — so of
+           * the up-to-three milestones one rebuild earns, the phone kept only the last.
+           */
+          meta: { milestone: e.key, milestoneKind: e.kind, pushTag: prefix },
         })
         sent += 1
       } finally {
