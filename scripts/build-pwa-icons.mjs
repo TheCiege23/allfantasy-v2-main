@@ -58,7 +58,24 @@ const IOS_SPLASHES = ['', '-1', '-2'].map((s) => `${IOS_ASSETS}/Splash.imageset/
 const SPLASH_BG = '#000000'
 const CREST_SPLASH = 0.214
 
-async function icon(size, fraction, out, bg = BG) {
+/*
+ * Google Play store-listing icon — uploaded by hand in Play Console, never
+ * served, so it lives beside the Play runbook, not in public/.
+ *
+ * ⚠ THE ONE ICON HERE THAT CARRIES AN ALPHA CHANNEL. Play's spec is a 512²
+ * "32-bit PNG" in sRGB; every other icon in this script is deliberately 24-bit
+ * (App Store Connect rejects icon alpha, iOS paints it black). So this is the
+ * same opaque navy tile with an alpha channel ADDED and set fully opaque — it
+ * satisfies the 32-bit rule without introducing a single transparent pixel.
+ *
+ * Play rounds the corners itself at 30% of the size (more than iOS), so the
+ * asset is a full square. At CREST_ANY the crest's nearest pixel sits 77px
+ * inside that mask (measured 2026-10-01, not tested — re-measure if CREST_ANY
+ * grows). The test asserts only the format: 512², colour type 6, alpha min 255.
+ */
+const PLAY_ICON = 'docs/play-store/play-store-icon-512.png'
+
+async function icon(size, fraction, out, bg = BG, { alpha = false } = {}) {
   // Rasterise the vector at the target size directly — never resize a raster up.
   const crest = await sharp(path.join(root, 'public/af-crest.svg'), { density: 600 })
     .resize({ height: Math.round(size * fraction), fit: 'inside' })
@@ -66,7 +83,7 @@ async function icon(size, fraction, out, bg = BG) {
     .toBuffer()
   const meta = await sharp(crest).metadata()
 
-  await sharp({ create: { width: size, height: size, channels: 3, background: bg } })
+  const tile = sharp({ create: { width: size, height: size, channels: 3, background: bg } })
     .composite([
       {
         input: crest,
@@ -75,9 +92,8 @@ async function icon(size, fraction, out, bg = BG) {
       },
     ])
     .flatten({ background: bg })
-    .removeAlpha()
-    .png({ compressionLevel: 9 })
-    .toFile(path.join(root, out))
+  // Flatten first in both cases, so an alpha channel, when asked for, is uniformly opaque.
+  await (alpha ? tile.ensureAlpha(1) : tile.removeAlpha()).png({ compressionLevel: 9 }).toFile(path.join(root, out))
   console.log(out)
 }
 
@@ -86,6 +102,7 @@ async function main() {
   for (const size of MASKABLE_SIZES) await icon(size, CREST_MASKABLE, `public/icons/icon-maskable-${size}.png`)
   await icon(1024, CREST_ANY, IOS_APP_ICON)
   for (const out of IOS_SPLASHES) await icon(2732, CREST_SPLASH, out, SPLASH_BG)
+  await icon(512, CREST_ANY, PLAY_ICON, BG, { alpha: true })
 }
 
 main().catch((err) => {
