@@ -86,7 +86,38 @@ const nextConfig = {
       process.env.RAILWAY_DEPLOYMENT_ID ||
       process.env.RAILWAY_GIT_COMMIT_SHA
     );
-    if (!dev && (isRailwayBuild || process.platform === 'linux')) {
+    //
+    // ⚠ RE-ENABLED ON RAILWAY ONLY, AND ONLY THROUGH scripts/next-build.cjs (2026-10-01).
+    // That wrapper is the sole setter of AF_WEBPACK_CACHE_DIR. It hands each build a
+    // PRIVATE copy of the cache, runs scripts/lib/layout-css-gate.cjs on the output,
+    // publishes the cache back only from a build that passed, and on any failure
+    // rebuilds with the cache off — this branch, exactly as before. So a stale cache
+    // that drops the layout's CSS is caught before it ships and never re-published.
+    //   - cacheDirectory: Next puts it under <distDir>/cache, but Railpack mounts
+    //     /app/.next/cache whatever distDir is, and production's distDir is
+    //     .next-coldtest-0826 — the cache never reached the mount.
+    //   - snapshot hashes: judge "unchanged" by content, never by mtime, which an
+    //     unpacked build archive does not preserve meaningfully.
+    // Everywhere else (CI on Linux, a Railway build not run through the wrapper)
+    // AF_WEBPACK_CACHE_DIR is unset and the cache stays off.
+    const webpackCacheDir = process.env.AF_WEBPACK_CACHE_DIR;
+    if (
+      !dev &&
+      isRailwayBuild &&
+      webpackCacheDir &&
+      config.cache &&
+      typeof config.cache === 'object' &&
+      config.cache.type === 'filesystem'
+    ) {
+      config.cache.cacheDirectory = webpackCacheDir;
+      config.snapshot = {
+        ...config.snapshot,
+        module: { hash: true },
+        resolve: { hash: true },
+        buildDependencies: { hash: true },
+        resolveBuildDependencies: { hash: true },
+      };
+    } else if (!dev && (isRailwayBuild || process.platform === 'linux')) {
       config.cache = false;
     }
 
