@@ -217,12 +217,23 @@ type SideView = {
  * Each side's letter and received values, read off ONE grade taken from side one's view: side one
  * holds `letter` and receives the `get` lines; side two holds the mirror and receives `give`.
  */
+/**
+ * The letter side `index` of a completed two-team trade holds, under the rule above. Exported so the
+ * push card reads the SAME rule rather than a copy of it — a card and an email naming opposite
+ * winners for one trade is exactly what a second implementation would eventually produce.
+ */
+export function completedSideLetter(trade: GradedTrade, grade: TradeGradeView | null, index: number): GradeLetter | null {
+  const g = grade && grade.graded && trade.sides.length === 2 ? grade : null
+  if (!g) return null
+  return index === 0 ? g.letter : g.partnerLetter
+}
+
 function sideViews(trade: GradedTrade, grade: TradeGradeView | null, viewerOwnerId: string | null): SideView[] {
   const g = grade && grade.graded && trade.sides.length === 2 ? grade : null
   const valuesOf = (side: 'give' | 'get') => (g ? g.lines.filter((l) => l.side === side).map((l) => l.leagueValue) : null)
   return trade.sides.map((side, i) => ({
     side,
-    letter: g ? (i === 0 ? g.letter : g.partnerLetter) : null,
+    letter: completedSideLetter(trade, grade, i),
     pct: g ? (i === 0 ? g.percentDiff : -g.percentDiff) : null,
     lines: receivedLines(side, i === 0 ? valuesOf('get') : valuesOf('give')),
     total: g ? (i === 0 ? g.getValue : g.giveValue) : null,
