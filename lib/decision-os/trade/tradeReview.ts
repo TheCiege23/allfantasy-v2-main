@@ -9,6 +9,8 @@
  *   inactive_manager          one side inactive 14+ days                                      medium
  *   eliminated_team_dumping   an eliminated team sends starters to a contender                medium
  *   deadline_rush             within 48 hours of the deadline and a gap over 25%              low
+ *   class_gap                 managers two or more Class divisions apart, and the trade      low
+ *                             leans 10%+ toward the stronger one (ADR F2.10a, 2026-10-01)
  *
  * 🛑 A CHECK WITH NO DATA IS `not_computed`, WITH THE REASON — NEVER A GUESS AND NEVER "CLEAR".
  * "We could not tell whether this manager is inactive" and "this manager is active" are different
@@ -31,6 +33,13 @@ export type ReviewFlagCode =
   | 'inactive_manager'
   | 'eliminated_team_dumping'
   | 'deadline_rush'
+  /**
+   * The two managers are further apart in level than the ±2 band a league join allows, and the value
+   * leans toward the more experienced one — the mismatch the manager-class system exists to prevent.
+   * LOW on purpose: a level gap is context for a commissioner, never grounds for a veto by itself, and
+   * a commissioner may have let the newer manager in deliberately.
+   */
+  | 'class_gap'
 
 export type ReviewSeverity = 'low' | 'medium' | 'high'
 export type ReviewCheckStatus = 'raised' | 'clear' | 'not_computed'
@@ -47,7 +56,7 @@ export type ReviewCheck = {
 export type TradeReview = {
   /** The raised checks — the design's `flags`. */
   flags: Array<{ code: ReviewFlagCode; severity: ReviewSeverity; explanation: string }>
-  /** All six, in a fixed order, including the clear and the not-computed ones. */
+  /** Every check, in a fixed order, including the clear and the not-computed ones. */
   checks: ReviewCheck[]
   recommendation: TradeReviewRecommendation
   model: typeof TRADE_REVIEW_MODEL
@@ -64,6 +73,13 @@ export const REPEAT_PARTNER_TRADES = 3
 export const INACTIVE_DAYS = 14
 /** The even band of the one grade (a C): a trade inside it leans nobody's way. */
 export const LEAN_EVEN_BAND_PCT = 10
+/**
+ * Divisions apart that public matchmaking still pairs — the division band
+ * (`lib/class-rating/divisionGate.ts` DIVISION_BAND, ADR F2.10a). Restated, not imported, so this file
+ * stays free of anything outside the trade engine; `__tests__/decision-os/trade-review.test.ts` pins the
+ * two to the same number.
+ */
+export const CLASS_GAP_DIVISIONS = 1
 /**
  * "Strongly negative lineup impact": starting points fall by at least this share of what they were.
  * ⚠ UNCALIBRATED. The design names the signal, not the number; 10% of a starting lineup is a starter's
@@ -130,6 +146,12 @@ export type TradeReviewFacts = {
    * whether a lineup sold for bench value is tanking or a rebuild. Absent: treated as redraft.
    */
   leagueType?: { type: string; label: string } | null
+  /**
+   * Each side's Class DIVISION (1–5, ADR F2.10a) from an ESTABLISHED rating; null for a side whose
+   * manager is not an AllFantasy user or is still provisional. Never XP level — it measures volume,
+   * not skill, and the owner ruled it out for matchmaking (2026-10-01). Absent: could not run.
+   */
+  managerDivisions?: Known<readonly [number | null, number | null]>
 }
 
 // ─── The checks ──────────────────────────────────────────────────────────────
@@ -253,6 +275,44 @@ function deadlineRush(f: TradeReviewFacts): ReviewCheck {
   return { ...base, status: 'clear', explanation: `Within 48 hours of the deadline, but the gap (${pct(f.gapPct.value)}) is under ${DEADLINE_RUSH_GAP_PCT}%.` }
 }
 
+/**
+ * The mismatch weight classes exist to prevent (ADR F2.10a): a stronger manager gaining from one two or
+ * more Class divisions below. LOW on purpose — context for a commissioner, never grounds for a veto by
+ * itself, and a commissioner may have invited the other manager deliberately.
+ */
+function classGap(f: TradeReviewFacts): ReviewCheck {
+  const base = { code: 'class_gap' as const, severity: 'low' as const }
+  if (!f.managerDivisions) return { ...base, status: 'not_computed', explanation: 'Manager Classes were not read for this review.' }
+  if (!f.managerDivisions.ok) return { ...base, status: 'not_computed', explanation: f.managerDivisions.reason }
+  const [da, db] = f.managerDivisions.value
+  if (da == null || db == null) {
+    return {
+      ...base,
+      status: 'not_computed',
+      explanation: 'Only an AllFantasy manager with an established Class has a division, and one side of this trade does not.',
+    }
+  }
+  const apart = Math.abs(da - db)
+  if (apart <= CLASS_GAP_DIVISIONS) {
+    return { ...base, status: 'clear', explanation: `The managers are Division ${da} and Division ${db} — close enough that a public league would match them.` }
+  }
+  const stronger = da > db ? 0 : 1
+  const pair = `Division ${Math.max(da, db)} and Division ${Math.min(da, db)}, ${apart} divisions apart`
+  if (!f.gapPct.ok) {
+    return { ...base, status: 'not_computed', explanation: `The managers are ${pair}, but the trade is not graded, so which way it leans is unknown.` }
+  }
+  // Signed from side A: + means A receives more.
+  const towardStronger = stronger === 0 ? f.gapPct.value : -f.gapPct.value
+  if (towardStronger >= LEAN_EVEN_BAND_PCT) {
+    return {
+      ...base,
+      status: 'raised',
+      explanation: `${f.sides[stronger]!.name} (the stronger manager by Class) receives ${pct(towardStronger)} more value from a manager ${apart} divisions below — ${pair}. Worth a look if the other manager may not know what they gave up.`,
+    }
+  }
+  return { ...base, status: 'clear', explanation: `The managers are ${pair}, but the trade does not lean toward the stronger one.` }
+}
+
 export function recommendationFor(checks: readonly ReviewCheck[]): TradeReviewRecommendation {
   const raised = checks.filter((c) => c.status === 'raised')
   if (raised.some((c) => c.severity === 'high')) return 'consider_veto'
@@ -261,7 +321,15 @@ export function recommendationFor(checks: readonly ReviewCheck[]): TradeReviewRe
 }
 
 export function buildTradeReview(facts: TradeReviewFacts): TradeReview {
-  const checks = [lopsided(facts), tanking(facts), repeatPartners(facts), inactive(facts), eliminatedDumping(facts), deadlineRush(facts)]
+  const checks = [
+    lopsided(facts),
+    tanking(facts),
+    repeatPartners(facts),
+    inactive(facts),
+    eliminatedDumping(facts),
+    deadlineRush(facts),
+    classGap(facts),
+  ]
   return {
     flags: checks.filter((c) => c.status === 'raised').map(({ code, severity, explanation }) => ({ code, severity, explanation })),
     checks,

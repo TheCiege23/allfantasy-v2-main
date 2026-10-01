@@ -106,9 +106,9 @@ type AdvantageDashboardErrors = Partial<Record<AdvantageSourceKey, string>>
 const TOOL_DESTINATIONS = {
   trendAlerts: '/app/trend-feed',
   coachAdvice: '/app/coach',
-  // Canonical path. `/app/power-rankings` is a deprecated alias that middleware
-  // 307s here (redirectDeprecatedAppRoutes), costing a redirect on every click.
-  powerRankings: '/power-rankings',
+  // Canonical path: power rankings live in the rankings hub since 2026-10-01. `/power-rankings`
+  // and `/app/power-rankings` both redirect here, each costing a redirect on every click.
+  powerRankings: '/core/rankings?scope=league&panel=power',
   simulationInsights: '/app/matchup-simulation',
 } as const
 

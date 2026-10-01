@@ -51,11 +51,12 @@ test.describe('@advantage dashboard click audit', () => {
      * waitForURL(/\/app\/power-rankings/) then waited 15s for a URL the browser had
      * already been redirected away from — reported as a click that went nowhere.
      * The card now links to the canonical path, so there is no redirect to lose.
+     * Since 2026-10-01 that path is the rankings hub's power panel; /power-rankings redirects there.
      */
     const powerCard = page.getByTestId('advantage-card-power-rankings')
-    await expect(powerCard).toHaveAttribute('href', '/power-rankings')
+    await expect(powerCard).toHaveAttribute('href', '/core/rankings?scope=league&panel=power')
     await Promise.all([
-      page.waitForURL(/\/power-rankings/, { timeout: 15_000 }),
+      page.waitForURL(/\/core\/rankings\?scope=league&panel=power/, { timeout: 15_000 }),
       powerCard.click(),
     ])
 

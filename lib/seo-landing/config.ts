@@ -121,7 +121,7 @@ export const SPORT_CONFIG: Record<SportSlug, SportConfig> = {
       { label: 'Waiver Advisor', href: '/waiver-ai' },
       { label: 'Season Strategy', href: '/season-strategy' },
       { label: 'Social Pulse', href: '/social-pulse' },
-      { label: 'Power Rankings', href: '/app/power-rankings' },
+      { label: 'Power Rankings', href: '/core/rankings?scope=league&panel=power' },
       { label: 'Sports App', href: '/discover/leagues' },
     ],
   },

@@ -334,7 +334,7 @@ export function LegacyImportResults({
             Go to my dashboard
           </button>
           <Link
-            href="/af-rankings"
+            href="/core/rankings?scope=portfolio&panel=legacy"
             className="warroom-pressable inline-flex items-center justify-center rounded-2xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-black text-white hover:bg-white/10"
           >
             View rankings

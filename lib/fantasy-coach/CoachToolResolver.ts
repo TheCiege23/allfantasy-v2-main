@@ -6,7 +6,7 @@ type CoachHrefParams = Record<string, string | number | undefined | null>;
 
 const TRADE_ANALYZER = '/trade-evaluator';
 const WAIVER_AI = '/waiver-ai';
-const RANKINGS = '/rankings';
+const RANKINGS = '/core/rankings';
 const PLAYER_PAGE = '/player-comparison';
 const PLAYER_DECISION_TOOL = '/tools/player-decision';
 
@@ -50,9 +50,11 @@ export function getRankingsToolHref(
   leagueId?: string,
   params: CoachHrefParams = {}
 ): string {
+  // /core/rankings reads `scope` and `league` (not `leagueId`); the old /rankings page took neither.
   return withQuery(RANKINGS, {
+    scope: 'league',
+    league: leagueId,
     source: 'coach-mode',
-    leagueId,
     ...params,
   });
 }

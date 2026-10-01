@@ -928,3 +928,215 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   .af-rk-field { min-width: 0; flex: 1 1 140px; }
   .af-rk-bigrank { font-size: 32px; }
 }
+
+/* ── 2026-10-01: a fourth scope tab (Skill) ───────────────────────────────
+ *
+ * Top-level on purpose — see the @media-insertion note above. Four across on a
+ * desktop, two by two on a tablet and a phone: one column of four stacked pills
+ * pushed the content a full screen down at 375px.
+ */
+.af-rk-scopes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+@media (max-width: 1100px) {
+  .af-rk-scopes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .af-rk-scopes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .af-rk-scope-tab { min-height: 44px; }
+}
+
+/* ── 2026-10-01: class toggle and rivals ─────────────────────────────────── */
+.af-rk-classbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line2);
+}
+.af-rk-classnote { color: var(--text2); font-size: 12.5px; flex: 1 1 220px; }
+.af-rk-rivals { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.af-rk-rivals li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+}
+.af-rk-rival-who { min-width: 0; display: flex; flex-direction: column; }
+.af-rk-rival-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-rk-rival-who small, .af-rk-rival-h2h small { color: var(--text2); font-size: 12px; }
+.af-rk-rival-h2h { display: flex; flex-direction: column; align-items: flex-end; text-align: right; }
+
+@media (max-width: 720px) {
+  .af-rk-rivals li { grid-template-columns: minmax(0, 1fr) auto; }
+  .af-rk-rivals li .af-rk-btn { grid-column: 1 / -1; justify-content: center; }
+  .af-rk-classbar .af-rk-tab { min-height: 44px; display: inline-flex; align-items: center; }
+}
+
+/* ── 2026-10-01: phone cards ──────────────────────────────────────────────
+ *
+ * At ≤720px every RankTable row becomes a card instead of a squeezed row that
+ * hid half its columns. The slots come from `data-card` on each cell
+ * (RankTable.tsx): lead (rank) on the left, title, the headline value on the
+ * right, then EVERY other column — including the ones a desktop table hides on
+ * phones — as a labelled chip underneath. The header row is kept for screen
+ * readers but taken off screen, and sorting moves to `.af-rk-phonesort`.
+ *
+ * Block flow, not grid: chips have to wrap like words, and a grid puts each one
+ * on its own line.
+ */
+.af-rk-phonesort { display: none; }
+
+@media (max-width: 720px) {
+  .af-rk-phonesort {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    overflow-x: auto;
+    margin: 0 0 10px;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .af-rk-phonesort .af-rk-tab { min-height: 44px; display: inline-flex; align-items: center; }
+  .af-rk-phonesort-label { color: var(--text2); font-size: 12px; font-weight: 700; flex: none; }
+
+  .af-rk-cards thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .af-rk-cards,
+  .af-rk-cards tbody { display: block; width: 100%; }
+  .af-rk-cards tr {
+    display: block;
+    position: relative;
+    height: auto !important; /* the virtual table sets a desktop row height inline */
+    padding: 11px 12px 11px 46px;
+    border-bottom: 1px solid var(--line2);
+  }
+  .af-rk-cards tr:last-child { border-bottom: 0; }
+  .af-rk-cards tr.af-rk-vspacer { padding: 0; border: 0; }
+  .af-rk-cards tr.af-rk-vspacer td { display: block; padding: 0; border: 0; }
+  .af-rk-cards [data-card] { border: 0; padding: 0; text-align: left; background: none; }
+  .af-rk-cards [data-card='lead'] {
+    position: absolute;
+    left: 12px;
+    top: 11px;
+    width: 28px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .af-rk-cards [data-card='title'] { display: block; padding-right: 6.5rem; min-width: 0; overflow-wrap: anywhere; }
+  .af-rk-cards [data-card='value'] {
+    position: absolute;
+    right: 12px;
+    top: 11px;
+    max-width: 6rem;
+    text-align: right;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+  .af-rk-cards [data-card='value'] .af-rk-cellsub { display: none; }
+  .af-rk-cards [data-card='detail'],
+  .af-rk-cards .af-rk-hide-phone[data-card='detail'] {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    margin: 7px 10px 0 0;
+    font-size: 12.5px;
+  }
+  .af-rk-cards [data-card='detail']::before {
+    content: attr(data-label);
+    color: var(--text2);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .af-rk-cards [data-card='detail'] .af-rk-cellsub { display: none; }
+  .af-rk-cards [data-card='detail'] .af-rk-celllink { min-height: 32px; display: inline-flex; align-items: center; }
+  .af-rk-cards tr.af-rk-row-you { background: var(--accent-soft); }
+}
+
+/* ── 2026-10-01: filter drawer, you bar, explain split ─────────────────── */
+.af-rk-filterdrawer { display: none; }
+.af-rk-youbar { display: none; }
+
+/* Tablet and up: the board and its "why" side by side.
+ * ⚠ NOT `.af-rk-split` — that name is the 9px compare bar higher up this sheet, and reusing it
+ * collapsed this whole block to 9px with overflow hidden. Measured by screenshot, not assumed. */
+@media (min-width: 721px) {
+  .af-rk-explainsplit {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+    gap: 14px;
+    align-items: start;
+  }
+  .af-rk-explainsplit > .af-rk-explain { grid-column: 2; grid-row: 1; position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+  .af-rk-explainsplit > .af-rk-explainsplit-main { grid-column: 1; grid-row: 1; }
+}
+
+@media (max-width: 720px) {
+  .af-rk-filters--wide { display: none; }
+  .af-rk-filterdrawer { display: block; margin-bottom: 10px; }
+  .af-rk-filterdrawer > summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    cursor: pointer;
+  }
+  .af-rk-filterdrawer > summary::-webkit-details-marker { display: none; }
+  .af-rk-filterdrawer > summary::after { content: '▾'; margin-left: 6px; }
+  .af-rk-filterdrawer[open] > summary::after { content: '▴'; }
+  .af-rk-filterdrawer[open] > .af-rk-filters { margin-top: 10px; }
+
+  .af-rk-youbar {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 -4px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    border: 1px solid var(--line2);
+    border-radius: 12px 12px 0 0;
+    background: var(--surface);
+    box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.18);
+  }
+  .af-rk-youbar-label { flex: 1 1 auto; min-width: 0; font-size: 13px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .af-rk-youbar-value { font-variant-numeric: tabular-nums; }
+}
+
+@media (max-width: 720px) {
+  .af-rk-cards caption { display: block; text-align: left; padding: 10px 12px 2px; }
+  .af-rk-cards [data-card='detail'][data-label='']::before { content: none; }
+  /* Inside a card, the bar spans the card's padding so it reads as the card's footer. */
+  .af-rk-card > .af-rk-youbar { margin: 12px -18px -18px; border-left: 0; border-right: 0; border-bottom: 0; }
+  .af-rk-scope-tab { padding: 10px 12px; }
+}
+
+/* ── 2026-10-01: league power (moved in from the retired /rankings page) ── */
+.af-rk-power { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line2); }
+.af-rk-power-notes { display: grid; gap: 6px; margin-top: 10px; font-size: 13.5px; color: var(--text2); }
+.af-rk-power-notes b { margin-right: 6px; }
+
+/* ── 2026-10-01: former pages embedded as hub panels ─────────────────────
+ * /power-rankings and /af-rankings render inside the hub unchanged. Their page shells set
+ * `min-h-screen` (Tailwind) — inside the hub that would push the footer a full viewport down,
+ * so the wrapper neutralises it here instead of editing four shells in each page. */
+.af-rk-paneltabs { margin: 0; }
+.af-rk-powerpanel { border-radius: 16px; overflow: hidden; border: 1px solid var(--line2); }
+.af-rk-powerpanel .min-h-screen { min-height: 0; }
+@media (max-width: 720px) {
+  .af-rk-paneltabs .af-rk-tab { min-height: 44px; display: inline-flex; align-items: center; }
+}

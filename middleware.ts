@@ -756,7 +756,11 @@ function redirectDeprecatedAppRoutes(request: NextRequest): NextResponse | null 
     return NextResponse.redirect(url)
   }
   if (pathname.startsWith("/app/power-rankings")) {
-    url.pathname = pathname.replace(/^\/app/, "")
+    // Straight to the rankings hub's power panel (2026-10-01) — not via /power-rankings, which is
+    // itself a redirect now and would cost a second hop.
+    url.pathname = "/core/rankings"
+    url.searchParams.set("scope", "league")
+    url.searchParams.set("panel", "power")
     return NextResponse.redirect(url)
   }
   const leagueRoot = pathname.match(/^\/app\/league\/([^/]+)$/)
@@ -788,7 +792,8 @@ function redirectDeprecatedDashboardRoutes(request: NextRequest): NextResponse |
   if (pathname.startsWith("/dashboard/admin") || pathname.startsWith("/dashboard/dispersal")) {
     return null
   }
-  url.pathname = "/core"
+  // The old rankings screen has a direct successor, so it lands there rather than on the home screen.
+  url.pathname = pathname === "/dashboard/rankings" || pathname.startsWith("/dashboard/rankings/") ? "/core/rankings" : "/core"
   return NextResponse.redirect(url)
 }
 

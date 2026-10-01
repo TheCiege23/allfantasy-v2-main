@@ -16,12 +16,16 @@ import type {
   RankingsData,
   XpRow,
 } from '@/lib/core-app/rankings'
+import type { ClassView } from '@/lib/class-rating/classView'
+import { GLICKO } from '@/lib/class-rating/engine'
 import '@/components/core-app/af-rankings-screen.css'
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 import { RankTable, type RankColumn, type RankRow } from '@/components/core-app/rankings/RankTable'
 import { TrendLine } from '@/components/core-app/rankings/TrendLine'
 import { RankingsFilterBar } from '@/components/core-app/rankings/RankingsFilterBar'
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
+import PowerRankingsPanel from '@/components/core-app/rankings/power/PowerRankingsPanel'
+import AfRankingsPage from '@/components/rankings/AfRankingsClient'
 
 /**
  * Rankings — handoff 14a, rebuilt around three separate scopes.
@@ -80,12 +84,36 @@ function moveText(n: number | null): { text: string; tone?: 'good' | 'bad' | 'mu
     : { text: `▼${-n}`, tone: 'bad', label: `down ${-n} ${n === -1 ? 'place' : 'places'}` }
 }
 
+/** `/chimmy/chat` types `prompt` into the composer and never sends it. */
+function chimmyHref(prompt: string, sport?: string | null): string {
+  const p = new URLSearchParams({ prompt })
+  if (sport) p.set('sport', sport)
+  return `/chimmy/chat?${p.toString()}`
+}
+
+/**
+ * Phone only (CSS): your place, pinned to the bottom of the screen while you scroll
+ * someone else's part of the board. Wider screens have the "you" strip in view already.
+ */
+function YouBar({ href, label, value, action }: { href: string; label: string; value: string; action: string }) {
+  return (
+    <div className="af-rk-youbar">
+      <span className="af-rk-youbar-label">{label}</span>
+      <b className="af-rk-youbar-value">{value}</b>
+      <Link className="af-rk-btn" href={href} scroll={false}>
+        {action}
+      </Link>
+    </div>
+  )
+}
+
 /* ────────────────────────────── scope tabs ──────────────────────────────── */
 
 const SCOPES = [
   { key: 'global', label: 'Community', hint: 'Every ranked AllFantasy manager' },
   { key: 'portfolio', label: 'My portfolio', hint: 'You, across all your imports' },
   { key: 'league', label: 'One league', hint: 'A single league’s standings' },
+  { key: 'class', label: 'Class', hint: 'Your weight class, rated every week' },
 ] as const
 
 function ScopeTabs({ data, leagueId }: { data: RankingsData; leagueId: string | null }) {
@@ -96,7 +124,7 @@ function ScopeTabs({ data, leagueId }: { data: RankingsData; leagueId: string | 
         const href = `/core/rankings${qs([
           ['scope', s.key === 'global' ? null : s.key],
           ['league', s.key === 'league' ? leagueId : null],
-          ...(s.key === 'league' ? [] : keep),
+          ...(s.key === 'league' || s.key === 'class' ? [] : keep),
         ])}`
         const current = data.scope === s.key
         return (
@@ -311,6 +339,17 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
             <Link className="af-rk-btn" href={`/core/rankings${qs([['scope', 'portfolio'], ...filterParams(data.filters)])}`}>
               My portfolio
             </Link>
+            <a
+              className="af-rk-btn"
+              href={chimmyHref(
+                `I'm #${g.you.rank} of ${g.you.of} on the AllFantasy ${g.label} board (${g.metricLabel}: ${g.you.display})` +
+                  (g.you.movement.sevenDay ? `, ${g.you.movement.sevenDay > 0 ? 'up' : 'down'} ${Math.abs(g.you.movement.sevenDay)} in 7 days` : '') +
+                  (g.rivals[0] ? `. @${g.rivals[0].handle} is right above me at ${g.rivals[0].display}` : '') +
+                  '. What is holding my rank back, and what would move it most?',
+              )}
+            >
+              Ask Chimmy
+            </a>
           </div>
         </section>
       ) : data.signedIn ? (
@@ -320,9 +359,43 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
         </p>
       ) : null}
 
+      {g.rivals.length > 0 ? <RivalsCard g={g} /> : null}
+
+      {/*
+        Tablet and desktop: when a row is being explained, the board and the explanation sit side by
+        side, so "why" never pushes the board off screen. Phone: stacked, explanation first.
+      */}
+      <div className={g.explain ? 'af-rk-explainsplit' : 'af-rk-explainsplit-off'}>
       <ExplainPanel g={g} data={data} />
 
-      <section className="af-rk-card">
+      <section className="af-rk-card af-rk-explainsplit-main">
+        {g.divisionFilter ? (
+          <div className="af-rk-classbar" role="group" aria-label="Who is on this board">
+            {g.divisionFilter.active ? (
+              <Link href={g.divisionFilter.href} className="af-rk-tab" scroll={false}>
+                Everyone
+              </Link>
+            ) : (
+              <span className="af-rk-tab" aria-current="page">
+                Everyone
+              </span>
+            )}
+            {g.divisionFilter.active ? (
+              <span className="af-rk-tab" aria-current="page">
+                {divisionRange(g.divisionFilter.band)}
+              </span>
+            ) : (
+              <Link href={g.divisionFilter.href} className="af-rk-tab" scroll={false}>
+                {divisionRange(g.divisionFilter.band)}
+              </Link>
+            )}
+            <span className="af-rk-classnote">
+              {g.divisionFilter.active
+                ? `Managers in Division ${g.divisionFilter.division} and the ones next to it — who public leagues match you with. Managers without an established Class are not shown.`
+                : `You are in Division ${g.divisionFilter.division}. This shows the managers public leagues would match you with.`}
+            </span>
+          </div>
+        ) : null}
         <nav className="af-rk-tabs" aria-label="Leaderboards">
           {g.tabs.map((t) => (
             <Link key={t.key} href={t.href} className="af-rk-tab" aria-current={t.key === g.board ? 'page' : undefined}>
@@ -371,10 +444,65 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
           {fmtDate(g.freshness.newestImport)} · least recently updated manager {fmtDate(g.freshness.stalestManager)} ·
           calculated {fmtStamp(data.computedAt)}
         </p>
+        {/* Inside the board's card: sticky only while the board is on screen, never over the "you" strip above it. */}
+        {g.you ? (
+          <YouBar
+            href={g.rows.find((r) => r.isYou)?.explainHref ?? '#rk-explain'}
+            label={`You · #${g.you.rank} of ${g.you.of}`}
+            value={g.you.display}
+            action="Why?"
+          />
+        ) : null}
       </section>
+      </div>
 
       <MethodCard />
     </>
+  )
+}
+
+function RivalsCard({ g }: { g: GlobalView }) {
+  return (
+    <section className="af-rk-card" aria-labelledby="rk-rivals-h">
+      <p className="af-rk-eyebrow" id="rk-rivals-h">
+        Next to pass
+        <span className="af-rk-spacer" />
+        <span>{g.divisionFilter?.active ? 'in your divisions' : `on ${g.label}`}</span>
+      </p>
+      <ul className="af-rk-rivals">
+        {g.rivals.map((r) => {
+          const h = r.headToHead
+          return (
+            <li key={r.userId}>
+              <div className="af-rk-rival-who">
+                <b>
+                  #{r.rank} @{r.handle}
+                </b>
+                <small>
+                  Lvl {r.level} · {r.display} vs your {r.yourDisplay}
+                </small>
+              </div>
+              <div className="af-rk-rival-h2h">
+                {h ? (
+                  <>
+                    <b className={h.wins > h.losses ? 'af-rk-tone-good' : h.wins < h.losses ? 'af-rk-tone-bad' : undefined}>
+                      {h.wins}-{h.losses}
+                      {h.ties ? `-${h.ties}` : ''}
+                    </b>
+                    <small>head to head{h.lastSeason ? `, last ${h.lastSeason}` : ''}</small>
+                  </>
+                ) : (
+                  <small>never played</small>
+                )}
+              </div>
+              <Link className="af-rk-btn" href={r.compareHref}>
+                Compare
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }
 
@@ -796,12 +924,414 @@ function LeagueBody({ league }: { league: LeagueView }) {
           />
         </div>
       )}
+      <LeaguePowerCard league={league} />
       <p className="af-rk-fresh">
         <b>Freshness</b> league last synced {fmtStamp(sel.lastSyncedAt)}
         {board?.available && board.week != null ? ` · through week ${board.week}${board.seasonComplete ? ' (season complete)' : ''}` : ''}
       </p>
     </section>
   )
+}
+
+/* ───────────────────────────────── class ─────────────────────────────────── */
+
+function signed(n: number): string {
+  const r = Math.round(n)
+  return r > 0 ? `+${r}` : r < 0 ? `−${-r}` : '0'
+}
+
+function divisionRange([lo, hi]: [number, number]): string {
+  return lo === hi ? `Division ${lo}` : `Divisions ${lo}–${hi}`
+}
+
+/** "Top 12%" from a 0–1 share of established ratings below this one. */
+function topShare(p: number): string {
+  return `Top ${Math.max(1, Math.round((1 - p) * 100))}%`
+}
+
+/**
+ * The Class tab (ADR F2.10a) — ported from PR #1753's Skill tab onto the Class core.
+ *
+ * ⚠ NO WIN PROBABILITIES. #1753 showed "beats an average manager" and a per-game "win chance";
+ * F2.10a policy 6 forbids presenting the rating as a game prediction, so neither survives the port.
+ * ⚠ A HEAD-TO-HEAD WIN CAN LOWER THE RATING, because the rating is all-play. The log says so in
+ * words beside the numbers rather than leaving a manager to think it is broken.
+ */
+function ClassBody({ view, signedIn }: { view: ClassView; signedIn: boolean }) {
+  if (view.empty) {
+    return (
+      <section className="af-rk-card">
+        <p className="af-rk-eyebrow">Class</p>
+        <p className="af-rk-empty">{view.empty}</p>
+        <ClassMethodCard />
+      </section>
+    )
+  }
+  const you = view.you
+  const last = view.log[0]
+  const established = you?.status === 'established' && you.classLevel != null && you.division != null && you.band != null
+  return (
+    <>
+      {you ? (
+        <section className="af-rk-card af-rk-youstrip" aria-label="Your Class">
+          <div>
+            <p className="af-rk-eyebrow">Your Class · {view.sport}</p>
+            {established ? (
+              <>
+                <p className="af-rk-bigrank">
+                  Class {you.classLevel}
+                  <small> · Division {you.division}</small>
+                </p>
+                <p className="af-rk-sub">
+                  Rating <b>{you.rating}</b> ± {you.rd}
+                  {you.percentile != null ? (
+                    <>
+                      {' '}
+                      · <b>{topShare(you.percentile)}</b> of {view.established.toLocaleString()} established managers
+                    </>
+                  ) : null}
+                </p>
+                <p className="af-rk-sub">
+                  Public leagues match you with <b>{divisionRange(you.band!)}</b>. A commissioner can invite you into any
+                  league.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="af-rk-bigrank">
+                  Provisional
+                  <small>
+                    {' '}
+                    · {you.rating} ± {you.rd}
+                  </small>
+                </p>
+                <p className="af-rk-sub">
+                  Your Class is set once the ± narrows to {GLICKO.establishedRd} — {you.rdToEstablish} more points of
+                  certainty, which a few more finished weeks bring. Until then no league turns you away.
+                </p>
+              </>
+            )}
+          </div>
+          <ul className="af-rk-moves" aria-label="Class summary">
+            <li>
+              <span>Head-to-head</span>
+              <b>{you.record}</b>
+            </li>
+            <li>
+              <span>Rated weeks</span>
+              <b>{you.games}</b>
+            </li>
+            <li>
+              <span>On AllFantasy</span>
+              <b>{you.boardRank ? `#${you.boardRank}` : '—'}</b>
+            </li>
+          </ul>
+          <div className="af-rk-headact">
+            <a
+              className="af-rk-btn"
+              href={chimmyHref(
+                (established
+                  ? `My AllFantasy Class is ${you.classLevel} (Division ${you.division}), rating ${you.rating} ±${you.rd}`
+                  : `My AllFantasy Class is still provisional, rating ${you.rating} ±${you.rd}`) +
+                  `, head-to-head ${you.record}` +
+                  (last
+                    ? `. Last rated week (${last.season} week ${last.week}): I beat ${last.allPlayWins} of ${last.allPlayGames} teams in my league` +
+                      (last.result ? `, ${last.result === 'W' ? 'won' : last.result === 'L' ? 'lost' : 'tied'} my matchup` : '') +
+                      `, rating ${signed(last.weekChange)}`
+                    : '') +
+                  '. Why did my Class rating move, and what decisions would raise it?',
+                view.sport,
+              )}
+            >
+              Ask Chimmy why I moved
+            </a>
+          </div>
+        </section>
+      ) : signedIn ? (
+        <p className="af-rk-note">
+          You have no rated weeks yet. Import a league with weekly matchups and your Class appears after the next
+          finished week.
+        </p>
+      ) : (
+        <p className="af-rk-note">Sign in to see your own Class and every week behind it.</p>
+      )}
+
+      {view.log.length > 0 ? (
+        <section className="af-rk-card" id="rk-class-games">
+          <p className="af-rk-eyebrow">
+            Your rated weeks
+            <span className="af-rk-spacer" />
+            <span>newest first</span>
+          </p>
+          <RankTable
+            caption="Your rated weeks and how each moved your Class rating"
+            rowHeaderIndex={0}
+            columns={[
+              { key: 'when', label: 'Week' },
+              { key: 'league', label: 'League', hideOnPhone: true },
+              { key: 'allplay', label: 'Vs the league', srLabel: 'Teams you outscored that week — what moves the rating' },
+              { key: 'h2h', label: 'Matchup', srLabel: 'Your head-to-head game', hideOnPhone: true },
+              { key: 'chg', label: 'Rating', srLabel: 'Rating change that week', align: 'right' },
+            ]}
+            rows={view.log.map((g, i) => ({
+              id: `${g.season}-${g.week}-${g.leagueId}-${i}`,
+              cells: [
+                { text: `${g.season} wk ${g.week}` },
+                { text: g.leagueName?.trim() || 'League' },
+                {
+                  text: `Beat ${g.allPlayWins % 1 === 0 ? g.allPlayWins : g.allPlayWins.toFixed(1)} of ${g.allPlayGames}`,
+                  sub: `${g.pointsFor.toFixed(1)} pts`,
+                },
+                g.result
+                  ? {
+                      text: `${g.result} ${g.pointsFor.toFixed(1)}–${(g.pointsAgainst ?? 0).toFixed(1)}`,
+                      sub: [g.opponentLabel ? `vs ${g.opponentLabel}` : null, g.opponentClassNow != null ? `Class ${g.opponentClassNow} now` : null]
+                        .filter(Boolean)
+                        .join(' · ') || undefined,
+                      tone: g.result === 'W' ? 'good' : g.result === 'L' ? 'bad' : 'muted',
+                    }
+                  : { text: '—', tone: 'muted' },
+                {
+                  text: signed(g.weekChange),
+                  tone: g.weekChange > 0 ? 'good' : g.weekChange < 0 ? 'bad' : 'muted',
+                  sub: Math.abs(g.leagueShare - g.weekChange) >= 0.5 ? `${signed(g.leagueShare)} from this league` : `now ${Math.round(g.ratingAfter)}`,
+                },
+              ],
+            }))}
+            emptyText="No rated weeks yet."
+          />
+          <p className="af-rk-note">
+            Your rating follows how you scored against <b>everyone in your league</b> that week, not only your matchup —
+            so a win while most of the league outscored you can still lower it, and a loss in a high-scoring week can raise
+            it. Every league you played that week folds into one update; each row shows that league&apos;s share.
+          </p>
+        </section>
+      ) : null}
+
+      <section className="af-rk-card">
+        {view.divisionFilter ? (
+          <div className="af-rk-classbar" role="group" aria-label="Who is on this board">
+            {view.divisionFilter.active ? (
+              <Link href={view.divisionFilter.offHref} className="af-rk-tab" scroll={false}>
+                Everyone
+              </Link>
+            ) : (
+              <span className="af-rk-tab" aria-current="page">
+                Everyone
+              </span>
+            )}
+            {view.divisionFilter.active ? (
+              <span className="af-rk-tab" aria-current="page">
+                {divisionRange(view.divisionFilter.band)}
+              </span>
+            ) : (
+              <Link href={view.divisionFilter.href} className="af-rk-tab" scroll={false}>
+                {divisionRange(view.divisionFilter.band)}
+              </Link>
+            )}
+            <span className="af-rk-classnote">
+              {view.divisionFilter.active
+                ? 'The managers public leagues match you with.'
+                : `Show only ${divisionRange(view.divisionFilter.band)} — who public leagues match you with.`}
+            </span>
+          </div>
+        ) : null}
+        <p className="af-rk-eyebrow">
+          Class board
+          <span className="af-rk-spacer" />
+          <span>AllFantasy managers with an established Class</span>
+        </p>
+        <RankTable
+          caption="Class board"
+          columns={[
+            { key: 'rank', label: '#', srLabel: 'Rank', align: 'right' },
+            { key: 'manager', label: 'Manager' },
+            { key: 'class', label: 'Class', srLabel: 'Class and division', align: 'right' },
+            { key: 'rating', label: 'Rating', srLabel: 'Rating and how sure it is', align: 'right', hideOnPhone: true },
+            { key: 'record', label: 'Record', srLabel: 'Head-to-head record', align: 'right', hideOnPhone: true },
+            { key: 'top', label: 'Top', srLabel: 'Share of established managers at or above', align: 'right', hideOnPhone: true },
+          ]}
+          rows={view.board.map((r) => ({
+            id: r.userId,
+            highlight: r.isYou,
+            cells: [
+              { text: String(r.rank), tone: r.isYou ? 'accent' : undefined },
+              { text: `${r.handle}${r.isYou ? ' (you)' : ''}`, sub: r.level != null ? `Lvl ${r.level}` : undefined },
+              { text: String(r.classLevel), sub: `Div ${r.division}`, tone: r.isYou ? 'accent' : undefined },
+              { text: `${r.rating} ± ${r.rd}` },
+              { text: r.record, sub: `${r.games} weeks` },
+              { text: topShare(r.percentile) },
+            ],
+          }))}
+          emptyText={
+            view.divisionFilter?.active
+              ? 'No AllFantasy manager in your divisions has an established Class yet.'
+              : 'No AllFantasy manager has an established Class yet.'
+          }
+        />
+        <p className="af-rk-fresh">
+          <b>Freshness</b> {view.rated.toLocaleString()} managers rated, on AllFantasy or not ·{' '}
+          {view.established.toLocaleString()} established · calculated {fmtStamp(view.computedAt)}
+        </p>
+        {you ? (
+          <YouBar
+            href="#rk-class-games"
+            label="Your Class"
+            value={established ? `Class ${you.classLevel}` : 'Provisional'}
+            action={`${you.rating} ±${you.rd}`}
+          />
+        ) : null}
+      </section>
+
+      <ClassMethodCard />
+    </>
+  )
+}
+
+function ClassMethodCard() {
+  return (
+    <section className="af-rk-card">
+      <p className="af-rk-eyebrow">How Class is rated</p>
+      <ul className="af-rk-method">
+        <li>
+          <b>Every finished week counts</b> — imported history and leagues played here. A week is rated once your league
+          has moved past it, never while it is still being played.
+        </li>
+        <li>
+          <b>You against the whole league.</b> Each week compares your score with every team in the league, so who you
+          happened to be scheduled against does not decide it.
+        </li>
+        <li>
+          <b>The field matters.</b> Outscoring a strong league moves you more than outscoring a weak one.
+        </li>
+        <li>
+          <b>± is how sure we are.</b> It shrinks as you play and grows back over an offseason. The board ranks by the
+          rating minus twice that, so nobody tops it on a lucky few weeks.
+        </li>
+        <li>
+          <b>Class is your weight class.</b> Class 1–25 is where you sit among established managers; every five Classes
+          is a Division. Public leagues match managers within one division of each other. A commissioner can invite anyone,
+          and a provisional manager is never turned away.
+        </li>
+      </ul>
+      <p className="af-rk-note">
+        League-mates who are not on AllFantasy are rated too, from their own weeks. Level, on the other tabs, is how much
+        you have played; Class is how well.
+      </p>
+    </section>
+  )
+}
+
+/**
+ * Power score and trend for one league — what the retired `/rankings` page showed.
+ * Read from the league's stored power ranking only; nothing is computed on view.
+ */
+function LeaguePowerCard({ league }: { league: LeagueView }) {
+  const power = league.power
+  return (
+    <div className="af-rk-power">
+      <p className="af-rk-eyebrow">
+        Power
+        <span className="af-rk-spacer" />
+        <span>{power ? `week ${power.week}, ${power.season} · run ${fmtStamp(power.computedAt)}` : 'not run yet'}</span>
+      </p>
+      {power ? (
+        <>
+          <RankTable
+            caption={`${league.selected?.name ?? 'League'} power ranking`}
+            columns={[
+              { key: 'rank', label: '#', srLabel: 'Power rank', align: 'right' },
+              { key: 'team', label: 'Team' },
+              { key: 'score', label: 'Power', srLabel: 'Power score', align: 'right' },
+              { key: 'move', label: 'Move', srLabel: 'Places moved since the last power ranking', align: 'center' },
+              { key: 'tier', label: 'Tier', hideOnPhone: true },
+              { key: 'record', label: 'Record', align: 'right', hideOnPhone: true },
+            ]}
+            rows={power.rows.map((r) => {
+              const m = moveText(r.move)
+              return {
+                id: `${r.rank}-${r.name}`,
+                highlight: r.isYou,
+                cells: [
+                  { text: String(r.rank), tone: r.isYou ? 'accent' : undefined },
+                  { text: `${r.name}${r.isYou ? ' (you)' : ''}`, sub: r.momentum ?? undefined },
+                  { text: r.powerScore.toFixed(1), tone: r.isYou ? 'accent' : undefined },
+                  { text: m.text, tone: m.tone, title: m.label },
+                  { text: r.tier ?? '—' },
+                  { text: r.record ?? '—' },
+                ],
+              }
+            })}
+            emptyText="No team in this power ranking."
+          />
+          {power.yours ? (
+            <div className="af-rk-power-notes">
+              {power.yours.strengths ? (
+                <p>
+                  <b className="af-rk-tone-good">Strengths</b> {power.yours.strengths}
+                </p>
+              ) : null}
+              {power.yours.risks ? (
+                <p>
+                  <b className="af-rk-tone-bad">Risks</b> {power.yours.risks}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <p className="af-rk-note">
+          Nobody in this league has run a power ranking yet. Run one in Power rankings and it shows here for everyone.
+        </p>
+      )}
+      <div className="af-rk-headact">
+        <Link
+          className="af-rk-btn"
+          href={`/core/rankings?scope=league&panel=power${league.selected ? `&league=${encodeURIComponent(league.selected.id)}` : ''}`}
+        >
+          {power ? 'Luck, odds and win window →' : 'Run power rankings →'}
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The two former standalone pages, now panels of a scope (2026-10-01): /power-rankings under One
+ * league, /af-rankings under My portfolio. A sub-tab row switches between the scope's own view and
+ * its panel; both are plain links, so each is a URL that survives a reload and can be shared.
+ */
+function PanelTabs({
+  label,
+  tabs,
+}: {
+  label: string
+  tabs: Array<{ key: string; label: string; href: string; current: boolean }>
+}) {
+  return (
+    <nav className="af-rk-tabs af-rk-paneltabs" aria-label={label}>
+      {tabs.map((t) => (
+        <Link key={t.key} href={t.href} className="af-rk-tab" aria-current={t.current ? 'page' : undefined}>
+          {t.label}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
+function leagueTabs(data: RankingsData, leagueId: string | null) {
+  const league = leagueId ? `&league=${encodeURIComponent(leagueId)}` : ''
+  return [
+    { key: 'standings', label: 'Standings & power', href: `/core/rankings?scope=league${league}`, current: data.panel !== 'power' },
+    { key: 'power', label: 'Luck, odds & win window', href: `/core/rankings?scope=league&panel=power${league}`, current: data.panel === 'power' },
+  ]
+}
+
+function portfolioTabs(data: RankingsData) {
+  return [
+    { key: 'score', label: 'Score, XP & trends', href: '/core/rankings?scope=portfolio', current: data.panel !== 'legacy' },
+    { key: 'legacy', label: 'Career & legacy import', href: '/core/rankings?scope=portfolio&panel=legacy', current: data.panel === 'legacy' },
+  ]
 }
 
 /* ─────────────────────────────── the screen ─────────────────────────────── */
@@ -841,7 +1371,10 @@ export function Rankings({ data, leagueId = null }: { data: RankingsData; league
 
       <ScopeTabs data={data} leagueId={leagueId} />
 
-      {data.scope !== 'league' ? (
+      {data.scope === 'league' && data.signedIn ? <PanelTabs label="League view" tabs={leagueTabs(data, leagueId)} /> : null}
+      {data.scope === 'portfolio' && data.signedIn ? <PanelTabs label="Portfolio view" tabs={portfolioTabs(data)} /> : null}
+
+      {data.scope !== 'league' && data.scope !== 'class' && data.panel == null ? (
         <RankingsFilterBar
           filters={data.filters}
           options={data.options}
@@ -850,7 +1383,23 @@ export function Rankings({ data, leagueId = null }: { data: RankingsData; league
         />
       ) : null}
 
-      {data.scope === 'global' && data.global ? (
+      {data.panel === 'power' ? (
+        <div className="af-rk-powerpanel">
+          <PowerRankingsPanel initialLeagueId={leagueId} />
+        </div>
+      ) : data.panel === 'legacy' ? (
+        <div className="af-rk-powerpanel">
+          <AfRankingsPage />
+        </div>
+      ) : data.scope === 'class' ? (
+        data.classView ? (
+          <ClassBody view={data.classView} signedIn={data.signedIn} />
+        ) : (
+          <section className="af-rk-card">
+            <p className="af-rk-a">Class ratings could not be read just now.</p>
+          </section>
+        )
+      ) : data.scope === 'global' && data.global ? (
         <CommunityView data={data} g={data.global} />
       ) : data.scope === 'portfolio' ? (
         data.portfolio ? (

@@ -19,7 +19,7 @@ vi.mock('next-auth/react', () => ({
   useSession: () => ({ data: { user: { id: 'viewer-1' } }, status: 'authenticated' }),
 }))
 
-import PowerRankingsPage from '@/app/power-rankings/page'
+import PowerRankingsPage from '@/components/core-app/rankings/power/PowerRankingsPanel'
 
 /** What the retired profile generator used to return — the label a viewer must never see. */
 const LABEL_PAYLOAD = {
