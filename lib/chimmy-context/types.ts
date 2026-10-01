@@ -135,6 +135,7 @@ export type MatchupContextSlice = {
     | "weeklyMatchup"
     | "leagueSettings"
     | "fallback"
+    | "nflCalendar"
     | null
   // ─── Phase 2C Batch 4 Sub-batch B: projection + intelligence (additive) ──
   /** Projected margin = yourProjectedPoints − opponentProjectedPoints. */
