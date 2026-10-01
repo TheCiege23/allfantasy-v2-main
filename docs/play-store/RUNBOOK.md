@@ -131,8 +131,17 @@ bubblewrap build
      tile with a fully opaque alpha channel added. Both come from
      `node scripts/build-pwa-icons.mjs`. Play rounds the corners itself (30%);
      upload the square as-is.
-   - Feature graphic 1024×500: needs creating (screenshot of the /core board
-     with the wordmark works).
+   - Feature graphic 1024×500: **`docs/play-store/feature-graphic-1024x500.png`** ✓
+     (24-bit, no alpha — the opposite of the icon rule). The live homepage
+     headline lifted in its real font, beside the demo "Your leagues" card, on
+     brand navy. Built by `node scripts/build-play-feature-graphic.mjs`; add
+     `--capture` to re-shoot the public homepage first (it records where the
+     h1 and card are, so nothing is hand-positioned). Deliberately NOT used:
+     the crest (Play: no branding similar to the icon), pure black (blends into
+     Play's UI), and the homepage launch countdown (no promo/price content).
+     Alt text for the asset: *"Play fantasy sports. All in one place. An
+     example Your leagues card showing four Sleeper and ESPN leagues with their
+     scores and the one thing each needs: set flex, waivers, trade, or all set."*
    - Phone screenshots (min 2, 1080×1920+): take from a phone or Chrome
      devtools device mode — /core home with triage, Player Finder, live
      matchups, the Legacy profile.
