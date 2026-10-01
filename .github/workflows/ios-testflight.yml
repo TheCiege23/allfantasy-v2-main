@@ -36,6 +36,11 @@ on:
         type: boolean
         required: false
         default: false
+      notification_images:
+        description: "Ship the notification service extension that shows pictures (headshots, trade cards) on push notifications. Needs an App ID ai.allfantasy.app.NotificationService (no capabilities to enable). Only useful together with push_notifications."
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -87,6 +92,13 @@ jobs:
         run: |
           gem list -i xcodeproj >/dev/null || gem install xcodeproj --no-document
           ruby scripts/add-career-widget-target.rb
+
+      # Same build-time-only rule as the widget: with this input off, no extension exists.
+      - name: Add the notification image extension target
+        if: ${{ inputs.notification_images }}
+        run: |
+          gem list -i xcodeproj >/dev/null || gem install xcodeproj --no-document
+          ruby scripts/add-notification-service-target.rb
 
       - name: Check required secrets are present
         env:
@@ -146,11 +158,12 @@ jobs:
       # shipped only when its input is ticked: a push-only run must not start carrying
       # associated-domains (added 2026-09-29) and fail on a capability nobody enabled.
       - name: Embed requested entitlements in the archive
-        if: ${{ inputs.push_notifications || inputs.universal_links || inputs.career_widget }}
+        if: ${{ inputs.push_notifications || inputs.universal_links || inputs.career_widget || inputs.notification_images }}
         env:
           PUSH: ${{ inputs.push_notifications }}
           LINKS: ${{ inputs.universal_links }}
           WIDGET: ${{ inputs.career_widget }}
+          IMAGES: ${{ inputs.notification_images }}
         run: |
           app="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
           ent="$RUNNER_TEMP/App.entitlements"
@@ -166,6 +179,13 @@ jobs:
             if [ ! -d "$appex" ]; then echo "::error::career_widget was requested but $appex is not in the archive"; exit 1; fi
             # Nested code is signed before the bundle that contains it.
             codesign --force --sign - --entitlements ios/App/CareerWidget/CareerWidget.entitlements "$appex"
+          fi
+          if [ "$IMAGES" = "true" ]; then
+            # No entitlements — but the app is signed below without --deep, and codesign refuses a
+            # bundle whose nested code is unsigned, so the extension is ad-hoc signed first.
+            nse="$app/PlugIns/NotificationService.appex"
+            if [ ! -d "$nse" ]; then echo "::error::notification_images was requested but $nse is not in the archive"; exit 1; fi
+            codesign --force --sign - "$nse"
           fi
           if [ -d "$app/Frameworks" ]; then
             for fw in "$app"/Frameworks/*; do codesign --force --sign - "$fw"; done
@@ -190,6 +210,7 @@ jobs:
           PUSH: ${{ inputs.push_notifications }}
           LINKS: ${{ inputs.universal_links }}
           WIDGET: ${{ inputs.career_widget }}
+          IMAGES: ${{ inputs.notification_images }}
         run: |
           run_export() {
             cat > "$RUNNER_TEMP/ExportOptions-$1.plist" <<PLIST
@@ -234,6 +255,13 @@ jobs:
             widget_ent="$(codesign -d --entitlements - "$RUNNER_TEMP/ipa/Payload/App.app/PlugIns/CareerWidget.appex" 2>/dev/null || true)"
             if ! grep -q group.ai.allfantasy.app "$RUNNER_TEMP/entitlements.txt" || ! grep -q group.ai.allfantasy.app <<<"$widget_ent"; then
               echo "::error::career_widget was requested but the signed app or widget lacks the App Group. Enable App Groups (group.ai.allfantasy.app) on ai.allfantasy.app and ai.allfantasy.app.CareerWidget and re-run."
+              exit 1
+            fi
+          fi
+          if [ "$IMAGES" = "true" ]; then
+            nse_ipa="$RUNNER_TEMP/ipa/Payload/App.app/PlugIns/NotificationService.appex"
+            if [ ! -d "$nse_ipa" ] || ! codesign -v "$nse_ipa" 2>/dev/null; then
+              echo "::error::notification_images was requested but the signed build has no valid NotificationService.appex. Create the App ID ai.allfantasy.app.NotificationService and re-run."
               exit 1
             fi
           fi

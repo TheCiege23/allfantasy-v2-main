@@ -54,10 +54,12 @@ all three are done, nothing in the app mentions notifications.
    certificate needed; ignore the "Configure" button.)
 2. **APNs key.** Keys → **+** → name it `AllFantasy Push` → tick **Apple Push
    Notifications service (APNs)** → Continue → Register → **Download** the `.p8`
-   (once only) and note its **Key ID**. Then set these on the Railway service
-   `allfantasy-v2-main` **in one save** (each variable write is a deploy):
-   `APNS_KEY_ID` (the Key ID), `APNS_TEAM_ID` (your 10-character Team ID) and
-   `APNS_PRIVATE_KEY` (the full `.p8` contents, including the BEGIN/END lines).
+   (once only) and note its **Key ID**. Then set these on **both** Railway
+   services, `allfantasy-v2-main` and `allfantasy-v2-worker`, **in one save each**
+   (each variable write is a deploy): `APNS_KEY_ID` (the Key ID), `APNS_TEAM_ID`
+   (your 10-character Team ID) and `APNS_PRIVATE_KEY` (the full `.p8` contents,
+   including the BEGIN/END lines). The worker matters as much as the web service:
+   the crons run there, and they send the trade, injury and game-day alerts.
    Same rules as the App Store Connect key: never in the repo, a chat or a log.
 3. **Build.** Run **ios-testflight** with **push_notifications** ticked. The
    workflow exports the signed app first and refuses to upload if the
@@ -69,6 +71,26 @@ import-done screen, each as a "Game-day alerts → Turn on" card. iOS asks for
 permission only when the user taps it. The web code checks that the installed
 binary contains the push plugin (`iosAppPushBridge`), so builds from before this
 change never see the card.
+
+## Pictures on notifications (optional, ~5 min, after push)
+
+Alerts can carry a picture — a player's headshot on a touchdown or injury, the trade card on an
+offer. iOS shows a remote picture only through a **notification service extension**, which lives
+in `ios-app/ios/App/NotificationService/` and, like the widget, is added to the Xcode project at
+build time only (`ios-app/scripts/add-notification-service-target.rb`). Without it the same alerts
+arrive as text — nothing breaks, they just have no picture.
+
+1. Identifiers → **+** → App IDs → App → Bundle ID `ai.allfantasy.app.NotificationService`
+   (explicit). Tick nothing: the extension uses no capability. (Automatic signing may create this
+   ID itself; creating it by hand removes the guess.)
+2. Run **ios-testflight** with **push_notifications** and **notification_images** ticked (plus
+   `career_widget` if you ship that too — the two extensions build together). The export refuses to
+   upload if the signed build has no valid `NotificationService.appex`.
+
+How it works: the server sets `mutable-content: 1` and an `imageUrl` only on alerts that have a
+picture (`lib/push-notifications/apns.ts`), so only those reach the extension. It downloads the
+image (https only, 2 MB cap, ~20 s), types it by its bytes — Sleeper serves PNGs from `.jpg` URLs —
+and attaches it. On any failure, or when iOS's time runs out, the alert shows as it arrived.
 
 ## Career widget and haptics (optional, ~15 min)
 
@@ -91,9 +113,10 @@ shared App Group, so it needs that group set up first:
 4. Run **ios-testflight** with `career_widget` ticked. The export refuses to upload if either the
    app or the widget comes back without the App Group, and names which.
 
-Every push that touches `ios-app/` also runs **ios-build-check**, which compiles the app with and
-without the widget (unsigned, no secrets), so a Swift error shows up on the push that caused it
-rather than during a release.
+Every push that touches `ios-app/` also runs **ios-build-check**, which compiles the app as
+committed and again with both build-time extensions (the widget and the notification image
+extension; unsigned, no secrets), so a Swift error shows up on the push that caused it rather than
+during a release.
 
 What the widget shows: titles, level, record, the top live title stake and the nearest milestone,
 plus "Updated … ago". It is refreshed whenever the person opens Career in the app; with nothing
