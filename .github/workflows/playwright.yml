@@ -53,11 +53,18 @@ name: Playwright Tests
 # Eleven concurrent Playwright runs were carrying 33 of them, all destined to fail
 # and gate nothing, while the ten required checks -- about 7 minutes of wall-clock
 # in parallel -- waited 33 minutes for a runner. The concurrency block above stops
-# SUPERSEDED runs; this stops running them on PRs at all. They still run on push,
-# nightly, and on demand.
+# SUPERSEDED runs; this stops running them on PRs at all. They still run nightly
+# and on demand.
+#
+# ⚠ AND AS OF 2026-10-01 NOTHING RUNS ON PUSH TO MAIN. Measured that day: 37 push
+# runs on main, ZERO green — 29 `cancelled` (the one-pending-per-group eviction the
+# concurrency comment below describes) and 8 `failure` (the core shards). They spent
+# 1,370 runner-minutes, the largest single consumer of the account's job ceiling,
+# while PR jobs that take 6-15 minutes waited up to 64 minutes for a runner. Every
+# lane a push ran had already run on the PR that produced the push, and the core
+# shards still run on the nightly sweep below. This is the "core lane is a nightly
+# signal on main" option the concurrency comment names.
 on:
-  push:
-    branches: [ main, master ]
   pull_request:
     # No `branches:` filter on purpose. Filtering PR runs to base
     # main/master silently skipped every stacked PR (a PR based on

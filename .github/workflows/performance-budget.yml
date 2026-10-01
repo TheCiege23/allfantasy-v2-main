@@ -5,8 +5,14 @@ on:
     # No `branches:` filter on purpose. Filtering PR runs to base
     # main/master silently skipped every stacked PR (a PR based on
     # another branch), so those merged with no real check coverage.
-  push:
-    branches: [main, master]
+  # The strict profile runs nightly against main, NOT on every push. Measured 2026-10-01: 37
+  # push runs, each a full `next build` plus a browser, 415 runner-minutes, gating nothing
+  # (it is not a required check) while PR jobs waited up to 64 minutes for a runner. A
+  # nightly run still dates a strict-budget regression to one day's merges.
+  schedule:
+    - cron: '23 7 * * *'
+  # So a suspected regression can be checked against main without waiting for the night.
+  workflow_dispatch:
 
 # Cancel this PR's previous run when the branch is updated; never touch a run on main.
 #
@@ -31,7 +37,7 @@ permissions:
 jobs:
   landing-performance-budget-strict:
     name: Landing Perf Budget (strict)
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
