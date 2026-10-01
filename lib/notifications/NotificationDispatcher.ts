@@ -6,6 +6,7 @@ import { getDeliveryMethodAvailability } from "@/lib/notification-settings/Deliv
 import type { NotificationCategoryId, NotificationPreferences } from "@/lib/notification-settings/types"
 import { sendNotificationEmail, sendTemplatedEmail } from "@/lib/resend-client"
 import { sendSms } from "@/lib/twilio-client"
+import { hasSmsConsent } from "@/lib/sms/smsConsent"
 import { reserveSmsToday } from "@/lib/notifications/smsDailyCap"
 import { sendPushToUser } from "@/lib/push-notifications"
 import { decidePush } from "@/lib/notifications/pushGate"
@@ -46,6 +47,13 @@ export type DispatchNotificationParams = {
    * single-user dispatches.
    */
   emailOverride?: { subject: string; html: string }
+  /**
+   * The text to SMS instead of `title` + `body`. Pass it whenever `body` carries words another
+   * user wrote (broadcasts, chat, DMs): the A2P campaign covers notifications, and carriers
+   * treat user-generated content over SMS as its own risk class — so the text says THAT there
+   * is a message and where, and the words stay in-app, email and push.
+   */
+  smsBody?: string
 }
 
 /**
@@ -106,6 +114,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
       const availability = getDeliveryMethodAvailability({
         hasEmail: !!profile.email,
         phoneVerified: !!profile.phoneVerifiedAt,
+        smsConsented: hasSmsConsent(profile.notificationPreferences, profile.phone),
       })
 
       /*
@@ -189,8 +198,8 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         if (!(await reserveSmsToday(userId))) {
           console.warn("[NotificationDispatcher] SMS daily cap reached; text skipped", { userId, category, type })
         } else {
-          const smsBody = body ? `${title}\n${body}` : title
-          const smsSent = await sendSms(profile.phone, smsBody.slice(0, 320))
+          const smsText = params.smsBody ?? (body ? `${title}\n${body}` : title)
+          const smsSent = await sendSms(profile.phone, smsText.slice(0, 320))
           if (!smsSent) {
             console.error("[NotificationDispatcher] SMS send returned false", {
               userId,

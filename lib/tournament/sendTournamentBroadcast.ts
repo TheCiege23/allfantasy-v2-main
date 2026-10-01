@@ -118,6 +118,8 @@ export async function sendTournamentBroadcast(args: {
       type: 'commissioner_broadcast',
       title,
       body: message,
+      // The text says THAT there is a message; the words stay in-app (no user-written text over SMS).
+      smsBody: 'New announcement in your tournament. Open AllFantasy to read it.',
       actionHref: `/tournament-hub/${args.tournamentId}`,
       actionLabel: 'Open tournament',
       meta: { tournamentId: args.tournamentId, audience: audienceKey },

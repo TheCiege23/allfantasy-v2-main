@@ -752,6 +752,8 @@ export const translationsEsParity: Record<string, string> = {
   "settings.hub.desc.account": "Miembro desde, cerrar sesión y eliminación de la cuenta.",
   "settings.notifications.backToProfile": "Volver al perfil",
   "settings.notifications.byCategory": "Por categoría",
+  "settings.notifications.smsNeedsConsent":
+    "Los SMS están desactivados: no tenemos tu autorización de SMS para este teléfono. Vuelve a verificar tu teléfono en Seguridad y marca la casilla de SMS para activarlos.",
   "settings.notifications.deliveryMasters": "Maestros de entrega",
   "settings.notifications.deliveryMixHint":
     "Si las categorías mezclan estados, la casilla queda desmarcada hasta que coincidan todas; al activarla aplica a todas.",

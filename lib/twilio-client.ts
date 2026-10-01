@@ -1,6 +1,7 @@
 import "server-only"
 import twilio from "twilio"
 import { formatProgramSms } from "@/lib/legal/smsProgram"
+import { maskPhonesInText } from "@/lib/sms/maskPhone"
 
 let twilioClient: ReturnType<typeof twilio> | undefined
 
@@ -162,9 +163,10 @@ export function sanitizeTwilioError(error: unknown): SanitizedTwilioError {
           : typeof record.statusCode === "string" || typeof record.statusCode === "number"
             ? record.statusCode
             : undefined,
+      // Twilio quotes the full recipient number in many messages; this object is logged.
       message:
         typeof record.message === "string" && record.message.trim()
-          ? record.message
+          ? maskPhonesInText(record.message)
           : "Twilio request failed.",
       moreInfo:
         typeof record.moreInfo === "string"
@@ -176,7 +178,7 @@ export function sanitizeTwilioError(error: unknown): SanitizedTwilioError {
   }
 
   return {
-    message: error instanceof Error ? error.message : "Twilio request failed.",
+    message: error instanceof Error ? maskPhonesInText(error.message) : "Twilio request failed.",
   }
 }
 
@@ -246,6 +248,18 @@ export async function sendSms(toPhone: string, body: string): Promise<boolean> {
     return true
   } catch (error) {
     console.error("[twilio] SMS send failed", sanitizeTwilioError(error))
+    /*
+     * ⚠ 21610 IS A STOP, NOT A GLITCH. The recipient replied STOP and Twilio blocks the number;
+     * returning false and moving on left their SMS switches on, so every later text failed the
+     * same way. Revoking the consent record stops the program texting them at all.
+     * Loaded lazily so this module does not pull the database client in at import.
+     */
+    try {
+      const { isTwilioOptOutError, recordSmsOptOut } = await import("@/lib/sms/smsOptOut")
+      if (isTwilioOptOutError(error)) await recordSmsOptOut(toPhone)
+    } catch {
+      /* recording the opt-out is best-effort; the send already failed and returned false */
+    }
     return false
   }
 }

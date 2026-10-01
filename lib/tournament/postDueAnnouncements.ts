@@ -126,6 +126,8 @@ export async function postDueTournamentAnnouncements(
         type: 'commissioner_broadcast',
         title: row.title,
         body: row.content,
+        // The commissioner's title and words stay in-app; the text says only that there is one.
+        smsBody: 'New announcement in your tournament. Open AllFantasy to read it.',
         actionHref: `/tournament-hub/${row.tournamentId}`,
         actionLabel: 'Open tournament',
         meta: { tournamentId: row.tournamentId, audience: row.targetAudience, scheduled: true },
