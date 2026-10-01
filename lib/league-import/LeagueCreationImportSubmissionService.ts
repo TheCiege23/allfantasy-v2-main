@@ -37,6 +37,8 @@ export interface FetchPreviewResult {
   status?: number;
   /** True when the provider can't be auto-verified; caller must resubmit with an attestation. */
   requiresAttestation?: boolean;
+  /** The server's failure code, e.g. 'NOT_COMMISSIONER'. Same meaning as `SubmitImportResult.code`. */
+  code?: string;
 }
 
 export interface SubmitImportResult {
@@ -106,8 +108,12 @@ function getImportApiErrorMessage(
   }
   if (data?.error === 'UNAUTHENTICATED' || data?.error === 'Unauthorized') return 'Sign in to import a league.';
   if (data?.error?.includes('Connect Yahoo')) return 'Connect Yahoo in League Sync before importing from Yahoo.';
-  if (data?.error?.includes('Connect ESPN')) return 'Connect ESPN in League Sync before importing private ESPN leagues.';
-  if (data?.error?.includes('saved ESPN cookies')) return 'Reconnect ESPN in League Sync, then try importing again.';
+  /*
+   * ⚠ NO ESPN REWRITE, ON PURPOSE. This used to swap every ESPN gate reason for "Connect ESPN in
+   * League Sync". That dropped the two facts a phone user needs (a desktop browser is needed once;
+   * the saved cookies match no team here) and named a page with no ESPN control. The server's
+   * sentences in `checkEspn` and `EspnLeagueFetchService` already say what to do.
+   */
   if (data?.error?.includes('MFL API key')) return 'Save your MFL API key under Settings → Connected Accounts before importing from MyFantasyLeague.';
   return data?.error ?? fallback;
 }
@@ -241,6 +247,7 @@ export async function fetchImportPreview(
         error: failedResponseMessage(data, res.status, 'Failed to load league'),
         status: res.status,
         requiresAttestation: Boolean((data as { requiresAttestation?: boolean } | null)?.requiresAttestation),
+        code: (data as { code?: string } | null)?.code,
       };
     }
     if (!data) return { ok: false, error: IMPORT_SERVER_FAILURE_MESSAGE, status: res.status };

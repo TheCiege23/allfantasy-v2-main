@@ -167,6 +167,30 @@ describe('LeagueCreationImportSubmissionService', () => {
     })
   })
 
+  /*
+   * The ESPN gate sentences say which device is needed and why the import stopped. A client-side
+   * rewrite to "Connect ESPN in League Sync" dropped both and named a page with no ESPN control.
+   */
+  it.each([
+    'We could read this league, but not prove you have a team in it — that needs your ESPN account connected. Connect ESPN in Settings → Connected Accounts. That step needs a desktop browser once.',
+    'Your saved ESPN cookies no longer unlock this league. Reconnect ESPN in Settings → Connected Accounts and try again — that step needs a desktop browser.',
+  ])('shows the ESPN gate reason unchanged: %s', async (reason) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response(JSON.stringify({ error: reason, code: 'NOT_COMMISSIONER' }), { status: 403 }),
+      ),
+    )
+    const { fetchImportPreview, submitImportCreation } = await import(
+      '@/lib/league-import/LeagueCreationImportSubmissionService'
+    )
+    const preview = await fetchImportPreview('espn', '12345')
+    expect(preview.error).toBe(reason)
+    expect(preview.code).toBe('NOT_COMMISSIONER')
+    const commit = await submitImportCreation('espn', '12345', 'u1')
+    expect(commit.error).toBe(reason)
+  })
+
   it('sends the chosen team as claimSourceTeamId when one is given', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ leagueId: 'l1', name: 'x', sport: 'NFL' }), { status: 200 }),
