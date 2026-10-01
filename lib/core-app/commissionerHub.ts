@@ -11,6 +11,7 @@ import { readViewerPoll } from '@/lib/chat-core/messagePolls'
 import { getBoolean } from '@/lib/feature-toggle'
 import { getBaseUrl } from '@/lib/get-base-url'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
+import { resolveHubHealthScore } from './commissioner/healthScore'
 import { getCommissionerWaiverOversight, type WaiverOversight } from './commissionerWaivers'
 import type { CoreIssue } from './outstandingIssues'
 import type { CoreDepthAccess } from './coreDepthAccess'
@@ -804,24 +805,14 @@ export async function getCommissionerHub(input: {
   const upcoming = nextDeadline(calendar)
 
   // ── Canonical health score ─────────────────────────────────────────────
+  // A stale import is NOT scored — see resolveHubHealthScore for the measured contradiction.
   const snapshot = healthSnapshots.find((s) => s.leagueId === leagueId) ?? null
-  const healthScore: CommissionerHubData['health']['score'] =
-    snapshot && snapshot.source === 'database' && snapshot.dataConfidence !== 'low'
-      ? {
-          available: true,
-          data: {
-            score: snapshot.healthScore,
-            status: snapshot.overallStatus,
-            summary: snapshot.summary,
-            confidencePct: snapshot.confidencePct,
-          },
-        }
-      : {
-          available: false,
-          reason: unread
-            ? 'This league has never synced, so there is nothing to score yet.'
-            : 'There isn’t enough roster and activity data to score this league yet.',
-        }
+  const healthScore: CommissionerHubData['health']['score'] = resolveHubHealthScore({
+    snapshot,
+    unread,
+    activityStale,
+    staleDays,
+  })
 
   // ── Tasks ───────────────────────────────────────────────────────────────
   const tasks = buildTaskCards({
@@ -866,9 +857,8 @@ export async function getCommissionerHub(input: {
             available: true,
             data: {
               value: String(Math.round(healthScore.data.score)),
-              sub: activityStale
-                ? `${humanStatus(healthScore.data.status)} · from data ${staleDays} days old`
-                : `${humanStatus(healthScore.data.status)} · ${Math.round(healthScore.data.confidencePct)}% confidence`,
+              // A stale import never reaches here: resolveHubHealthScore withholds its score.
+              sub: `${humanStatus(healthScore.data.status)} · ${Math.round(healthScore.data.confidencePct)}% confidence`,
             },
           }
         : { available: false, reason: healthScore.reason },
