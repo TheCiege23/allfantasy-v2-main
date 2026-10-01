@@ -4,9 +4,10 @@
  * Commissioner OS League-Specific Intelligence Wiring phase — Parts 16-17.
  *
  * Mounted by the server-gated commissioner hub with an explicit league id.
- * The API independently checks authorization. Reuses the
- * same dark/opacity Tailwind convention as `UserOsActionsSummary.tsx` — no
- * dashboard redesign.
+ * The API independently checks authorization. Styled with `af-ch-os-*` classes
+ * in af-commish-hub.css on the Core theme tokens — never Tailwind white/colour
+ * utilities, which af-core.css forbids in this scope because light mode clamps
+ * them unreadable.
  *
  * Part 17 (copy-ready content workflow): preview/edit/copy/dismiss for any
  * recommendation that carries real `copyReadyContent` (storylines,
@@ -47,13 +48,6 @@ interface CommissionerRecommendationsApiResponse {
 }
 
 const PRIORITY_RANK: Record<string, number> = { critical: 3, high: 2, medium: 1, low: 0 }
-const PRIORITY_DOT: Record<string, string> = {
-  critical: 'bg-red-400',
-  high: 'bg-amber-400',
-  medium: 'bg-sky-400',
-  low: 'bg-white/30',
-}
-
 const DOMAIN_LABEL: Record<string, string> = {
   health: 'League Health',
   engagement: 'Engagement',
@@ -141,22 +135,22 @@ export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: st
 
   return (
     <section
-      className="mt-6 rounded-xl border border-amber-500/20 bg-amber-500/[0.03] p-4"
+      className="af-ch-os"
       data-testid="commissioner-os-actions-summary"
     >
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-amber-200/80">Commissioner OS</h2>
-        <div className="flex items-center gap-3">
+      <div className="af-ch-os-head">
+        <h2 className="af-ch-os-title">Commissioner OS</h2>
+        <div className="af-ch-os-head-actions">
           <button
             type="button"
             onClick={load}
-            className="text-xs text-white/40 underline decoration-dotted hover:text-white/60"
+            className="af-ch-os-textbtn"
           >
             Refresh
           </button>
           <a
             href={`/league/${canonicalLeagueId}?tab=${resolveCommissionerTabId(sport)}`}
-            className="text-xs text-cyan-400 underline"
+            className="af-ch-os-link"
           >
             View all
           </a>
@@ -164,13 +158,13 @@ export function CommissionerOsActionsSummary({ leagueId, sport }: { leagueId: st
       </div>
 
       {isLoading ? (
-        <div className="mt-3 h-16 animate-pulse rounded-lg border border-white/10 bg-white/5" aria-busy="true" />
+        <div className="af-ch-os-skeleton" aria-busy="true" />
       ) : error === UNVERIFIED ? (
-        <p className="mt-3 text-sm text-white/50" data-testid="commissioner-os-unverified">
+        <p className="af-ch-os-note" data-testid="commissioner-os-unverified">
           Recommendations appear once you are verified as this league&apos;s commissioner on its provider.
         </p>
       ) : error ? (
-        <p className="mt-3 text-sm text-red-300">{error}</p>
+        <p className="af-ch-os-note" data-tone="bad" role="alert">{error}</p>
       ) : (
         <CommissionerOsBody data={data} dismissedIds={dismissedIds} onDismiss={(id) => setDismissedIds((prev) => new Set(prev).add(id))} />
       )}
@@ -199,48 +193,47 @@ function CommissionerOsBody({
   const copyReady = recs.filter((r) => r.copyReadyContent && r.copyReadyContent.some((c) => c.available))
 
   return (
-    <div className="mt-3">
+    <div className="af-ch-os-body">
       {top ? (
-        <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className={`h-1.5 w-1.5 rounded-full ${PRIORITY_DOT[top.priority]}`} aria-hidden />
-              <span className="text-[11px] font-medium uppercase tracking-wide text-white/40">
+        <div className="af-ch-os-card">
+          <div className="af-ch-os-card-head">
+            <div className="af-ch-os-card-domain">
+              <span className="af-ch-os-dot" data-priority={top.priority} aria-hidden />
+              <span className="af-label">
                 {DOMAIN_LABEL[top.domain] ?? top.domain}
               </span>
             </div>
             <button
               type="button"
               onClick={() => onDismiss(top.id)}
-              className="text-[11px] text-white/30 hover:text-white/60"
+              className="af-ch-os-textbtn"
             >
               Dismiss
             </button>
           </div>
-          <p className="mt-1 text-sm font-semibold text-white">{top.title}</p>
-          <p className="mt-0.5 text-xs text-white/60">{top.summary}</p>
+          <p className="af-ch-os-card-title">{top.title}</p>
+          <p className="af-ch-os-card-summary">{top.summary}</p>
         </div>
       ) : (
-        <p className="text-sm text-white/50">No commissioner action needed right now.</p>
+        <p className="af-ch-os-note">No commissioner action needed right now.</p>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      <div className="af-ch-os-chips">
         {urgentCount > 0 ? (
-          <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-medium text-red-300">
+          <span className="af-ch-os-chip" data-tone="bad">
             {urgentCount} urgent
           </span>
         ) : null}
         {reviewCount > 0 ? (
-          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+          <span className="af-ch-os-chip" data-tone="warn">
             {reviewCount} review recommended
           </span>
         ) : null}
         {domainEntries.map(([domain, status]) => (
           <span
             key={domain}
-            className={`rounded-full border px-2 py-0.5 text-[11px] ${
-              status === 'ok' ? 'border-white/10 bg-white/5 text-white/60' : 'border-white/10 bg-white/[0.03] text-white/30'
-            }`}
+            className="af-ch-os-chip"
+            data-tone={status === 'ok' ? 'neutral' : 'off'}
             title={status}
           >
             {DOMAIN_LABEL[domain] ?? domain}
@@ -250,7 +243,7 @@ function CommissionerOsBody({
 
       {copyReady.length > 0 ? <CopyReadyPanel recommendations={copyReady} onDismiss={onDismiss} /> : null}
 
-      <p className="mt-2 text-[11px] text-white/35">Updated {new Date(data.generatedAt).toLocaleTimeString()}</p>
+      <p className="af-ch-os-stamp">Updated {new Date(data.generatedAt).toLocaleTimeString()}</p>
     </div>
   )
 }
@@ -263,9 +256,9 @@ function CopyReadyPanel({
   onDismiss: (id: string) => void
 }) {
   return (
-    <div className="mt-3 border-t border-white/10 pt-3">
-      <h3 className="text-[11px] font-medium uppercase tracking-wide text-white/40">Copy-ready content</h3>
-      <div className="mt-2 flex flex-col gap-2">
+    <div className="af-ch-os-copy">
+      <h3 className="af-label">Copy-ready content</h3>
+      <div className="af-ch-os-copy-list">
         {recommendations.map((rec) => (
           <CopyReadyCard key={rec.id} recommendation={rec} onDismiss={onDismiss} />
         ))}
@@ -297,37 +290,35 @@ function CopyReadyCard({
   const overLimit = active.characterLimit !== null && draft.length > active.characterLimit
 
   return (
-    <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-white/70">{recommendation.title}</p>
+    <div className="af-ch-os-card">
+      <div className="af-ch-os-card-head">
+        <p className="af-ch-os-copy-title">{recommendation.title}</p>
         <button
           type="button"
           onClick={() => onDismiss(recommendation.id)}
-          className="text-[11px] text-white/30 hover:text-white/60"
+          className="af-ch-os-textbtn"
         >
           Dismiss
         </button>
       </div>
 
       {available.length > 1 ? (
-        <div className="mt-2 flex flex-wrap gap-1">
+        <div className="af-ch-os-chips">
           {available.map((c, i) => (
             <button
               key={c.channel}
               type="button"
               onClick={() => setChannelIndex(i)}
-              className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                i === channelIndex
-                  ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-300'
-                  : 'border-white/10 bg-white/5 text-white/50'
-              }`}
+              className="af-ch-os-chip"
+              data-tone={i === channelIndex ? 'active' : 'neutral'}
+              aria-pressed={i === channelIndex}
             >
               {CHANNEL_LABEL[c.channel] ?? c.channel}
             </button>
           ))}
         </div>
       ) : (
-        <p className="mt-2 text-[11px] uppercase tracking-wide text-white/30">
+        <p className="af-label af-ch-os-channel">
           {CHANNEL_LABEL[active.channel] ?? active.channel}
         </p>
       )}
@@ -339,23 +330,23 @@ function CopyReadyCard({
           setCopied(false)
         }}
         rows={3}
-        className="mt-2 w-full resize-none rounded-md border border-white/10 bg-black/30 p-2 text-xs text-white/80 focus:border-cyan-400/40 focus:outline-none"
+        className="af-ch-os-draft"
       />
 
-      <div className="mt-1.5 flex items-center justify-between">
-        <span className={`text-[11px] ${overLimit ? 'text-red-300' : 'text-white/30'}`}>
+      <div className="af-ch-os-card-head">
+        <span className="af-ch-os-count" data-tone={overLimit ? 'bad' : undefined}>
           {draft.length}
           {active.characterLimit !== null ? ` / ${active.characterLimit}` : ''}
         </span>
-        <div className="flex items-center gap-2">
-          {copied ? <span className="text-[11px] text-emerald-300">Copied</span> : null}
+        <div className="af-ch-os-head-actions">
+          {copied ? <span className="af-ch-os-copied">Copied</span> : null}
           <button
             type="button"
             onClick={() => {
               navigator.clipboard.writeText(draft).then(() => setCopied(true))
             }}
             disabled={overLimit}
-            className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[11px] text-white/80 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+            className="af-btn af-ch-os-copy-btn"
           >
             Copy
           </button>
