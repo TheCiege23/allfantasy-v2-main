@@ -32,6 +32,12 @@ injuries (`lib/injuries/espnInjuries.ts`), standings (`lib/standings/espnStandin
 (`lib/espn-data.ts`), NFL athlete identities (`lib/espn/`). Bringing any of them under contract
 means probing and committing a fixture for it — not copying shapes out of that code.
 
+## Owner decisions (2026-10-01)
+
+- ESPN headshots may be hotlinked for NCAAB, on the same basis as college football (`GAPS.md` E-05).
+- Phase 2 attaches photos only to existing Rolling Insights rows matched on school + name + jersey;
+  it creates no ESPN-sourced player rows (`GAPS.md` E-06).
+
 ## Rules specific to ESPN
 
 - **No credential exists.** Send `Accept: application/json` and nothing that imitates a browser.
