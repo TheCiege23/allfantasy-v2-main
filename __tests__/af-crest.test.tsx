@@ -85,6 +85,23 @@ describe('the shipped crest raster', () => {
     expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([1024, 1024])
   })
 
+  it('the Play Store listing icon is a 512 32-bit PNG with no transparent pixel', async () => {
+    /*
+     * Play's spec is a 512² 32-bit PNG — the one place an alpha CHANNEL is
+     * required — while every other icon here must have none. So this one is
+     * RGBA (colour type 6) but uniformly opaque: a transparent pixel would show
+     * Play's UI colour through the tile.
+     */
+    const file = path.join(process.cwd(), 'docs', 'play-store', 'play-store-icon-512.png')
+    const buf = fs.readFileSync(file)
+    expect(buf[25]).toBe(6)
+    expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([512, 512])
+    const { default: sharp } = await import('sharp')
+    const stats = await sharp(file).stats()
+    expect(stats.channels).toHaveLength(4)
+    expect(stats.channels[3].min).toBe(255)
+  })
+
   it('declares a DEDICATED maskable icon, not the "any" one reused', () => {
     // Android crops maskable icons to a circle of 80%; the "any" crest is sized
     // for iOS's rounded square and would lose its shoulders.

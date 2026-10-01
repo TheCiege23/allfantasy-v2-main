@@ -125,7 +125,12 @@ bubblewrap build
      been removed).
    - Ads: No (the app itself serves no ads).
 3. **Store listing** assets:
-   - Icon 512×512: `public/icons/icon-512.png` ✓ (already in repo)
+   - Icon 512×512: **`docs/play-store/play-store-icon-512.png`** ✓ — NOT
+     `public/icons/icon-512.png`. Play requires a 32-bit PNG; the web icons are
+     deliberately 24-bit (iOS/App Store reject icon alpha), so this is the same
+     tile with a fully opaque alpha channel added. Both come from
+     `node scripts/build-pwa-icons.mjs`. Play rounds the corners itself (30%);
+     upload the square as-is.
    - Feature graphic 1024×500: needs creating (screenshot of the /core board
      with the wordmark works).
    - Phone screenshots (min 2, 1080×1920+): take from a phone or Chrome
@@ -165,3 +170,28 @@ developer account. iOS has no TWA equivalent; its Capacitor shell lives in
 The TWA is a shell; web deploys need nothing. Rebuild + re-upload the AAB only
 when changing: package id, start URL, icons/colors, or Android-level features
 (notification delegation etc.). Bump `appVersionCode` each upload.
+
+### Refreshing the launcher icon (done for the traced crest, 2026-10-01)
+
+The launcher icon is NOT in this repo's Android project — there isn't one.
+`bubblewrap update` DOWNLOADS `iconUrl` / `maskableIconUrl` from the live site,
+so the order is fixed: deploy the new `public/icons/*` to production FIRST,
+confirm the live files are the new ones, THEN rebuild. Rebuilding before the
+deploy bakes the old icon into the bundle with nothing to warn you.
+
+1. Confirm production serves the new icons (both must be the navy tile):
+   https://www.allfantasy.ai/icons/icon-512.png and
+   https://www.allfantasy.ai/icons/icon-maskable-512.png
+2. In your existing `C:\af-twa`, set `appVersionCode` ABOVE the last bundle you
+   uploaded (Play Console → **App bundle explorer** lists it; Play rejects a
+   reused code). ⚠ The copy of `twa-manifest.json` in this repo still says `1`
+   and is not kept in sync with uploads — do not re-copy it over a project that
+   has already shipped without fixing the code.
+3. `bubblewrap update` then `bubblewrap build`, upload the `.aab` to Internal
+   testing, and check the home-screen icon on a phone.
+4. The **store-listing** icon is separate and needs no build: Play Console →
+   **Grow → Store presence → Main store listing** → upload
+   `docs/play-store/play-store-icon-512.png`.
+
+An installed app keeps the icon from the bundle it was installed from, so phones
+show the new one only after updating to the new release.
