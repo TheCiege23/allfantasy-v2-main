@@ -1258,3 +1258,61 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   /* The bar's length is the column's --bar-height; its inline `height` is the vertical chart's. */
   .af-rk-pfchart .af-workbook-bar { grid-area: bar; width: var(--bar-height) !important; height: 8px !important; border-radius: 4px; }
 }
+
+/*
+ * ── Board controls fold (PhoneFold) ────────────────────────────────────────────
+ *
+ * TOP-LEVEL, appended after every query above: a rule inserted inside a query silently moves
+ * into it. Outside the phone query the toggle and its summary row do not exist and the body is
+ * an ordinary block, so tablet and desktop render the controls exactly as before.
+ */
+.af-rk-fold-toggle,
+.af-rk-fold-summary { display: none; }
+
+@media (max-width: 720px) {
+  /* Visually hidden, still focusable: the label is the tap target, the checkbox the state. */
+  .af-rk-fold-toggle {
+    display: block;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .af-rk-fold { position: relative; margin-bottom: 12px; }
+  .af-rk-fold-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 8px 14px;
+    border: 1px solid var(--line2);
+    border-radius: 12px;
+    background: var(--chip);
+    color: var(--text);
+    font: 700 13px/1.3 var(--font-archivo, Archivo), system-ui, sans-serif;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .af-rk-fold-summary-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .af-rk-fold-chev {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-right: 2px solid var(--muted);
+    border-bottom: 2px solid var(--muted);
+    transform: rotate(45deg) translateY(-2px);
+    transition: transform 0.15s ease;
+  }
+  .af-rk-fold-toggle:checked + .af-rk-fold-summary .af-rk-fold-chev { transform: rotate(225deg) translateY(-2px); }
+  .af-rk-fold-toggle:focus-visible + .af-rk-fold-summary { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .af-rk-fold-toggle:not(:checked) ~ .af-rk-fold-body { display: none; }
+  .af-rk-fold-toggle:checked ~ .af-rk-fold-body { margin-top: 10px; }
+}

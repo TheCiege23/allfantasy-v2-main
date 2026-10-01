@@ -65,6 +65,7 @@ export function RankTable({
   rowHeaderIndex = 1,
   emptyText,
   virtualizeAt = VIRTUALIZE_AT,
+  phoneSort = true,
 }: {
   caption: string
   columns: RankColumn[]
@@ -73,14 +74,19 @@ export function RankTable({
   rowHeaderIndex?: number
   emptyText: string
   virtualizeAt?: number
+  /**
+   * Render the phone sort chips above the table. A screen that folds its board controls
+   * (PhoneFold) passes false and renders <PhoneSort> inside the fold, so the chips appear once.
+   */
+  phoneSort?: boolean
 }) {
   if (rows.length === 0) return <p className="af-rk-empty">{emptyText}</p>
   const virtual = rows.length > virtualizeAt
   return virtual ? (
-    <VirtualTable caption={caption} columns={columns} rows={rows} rowHeaderIndex={rowHeaderIndex} />
+    <VirtualTable caption={caption} columns={columns} rows={rows} rowHeaderIndex={rowHeaderIndex} phoneSort={phoneSort} />
   ) : (
     <>
-    <PhoneSort columns={columns} />
+    {phoneSort ? <PhoneSort columns={columns} /> : null}
     <div className="af-rk-tablewrap" role="region" aria-label={caption} tabIndex={0}>
       <table className="af-rk-grid-table af-rk-cards" aria-rowcount={rows.length + 1}>
         <Caption caption={caption} count={rows.length} />
@@ -101,11 +107,13 @@ function VirtualTable({
   columns,
   rows,
   rowHeaderIndex,
+  phoneSort,
 }: {
   caption: string
   columns: RankColumn[]
   rows: RankRow[]
   rowHeaderIndex: number
+  phoneSort: boolean
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const virtualizer = useVirtualizer({
@@ -123,7 +131,7 @@ function VirtualTable({
 
   return (
     <>
-      <PhoneSort columns={columns} />
+      {phoneSort ? <PhoneSort columns={columns} /> : null}
       <div
         ref={scrollRef}
         className="af-rk-tablewrap af-rk-tablewrap--virtual"
@@ -174,7 +182,7 @@ function VirtualTable({
  * hidden, so the sortable columns are offered as a row of chips instead — the
  * same links the header carries, nothing new to keep in step.
  */
-function PhoneSort({ columns }: { columns: RankColumn[] }) {
+export function PhoneSort({ columns }: { columns: RankColumn[] }) {
   const sortable = columns.filter((c) => c.sortHref)
   if (sortable.length === 0) return null
   return (
