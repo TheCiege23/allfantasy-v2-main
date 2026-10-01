@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { ENGAGEMENT } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import '@/components/core-app/core-welcome-tour.css'
 
 const STORAGE_KEY = 'af-core-welcome-v1'
@@ -108,7 +110,7 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
         </p>
       ) : null}
       <div className="af-welcome-actions">
-        {current.action ? <Link href={current.action.href} onClick={finish}>{current.action.label}</Link> : null}
+        {current.action ? <Link href={current.action.href} onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.CORE_FIRST_WIN_CLICK, { hasLeague: leagueCount > 0, destination: current.action?.href }); finish() }}>{current.action.label}</Link> : null}
         {step > 0 ? <button type="button" onClick={() => setStep((value) => value - 1)}>{spanish ? 'Atrás' : 'Back'}</button> : null}
         {step < steps.length - 1 ? (
           <button type="button" className="af-welcome-next" onClick={() => setStep((value) => value + 1)}>{spanish ? 'Siguiente' : 'Next'}</button>

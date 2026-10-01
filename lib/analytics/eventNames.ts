@@ -66,6 +66,12 @@ export const ENGAGEMENT = {
   COMMISSIONER_SETTINGS: 'engagement.commissioner_settings_save',
   /** User claimed an open team via invite link (`/join/[token]`). */
   JOIN_INVITE_TEAM_CLAIM: 'engagement.join_invite.team_claim',
+  CORE_FIRST_WIN_CLICK: 'engagement.core.first_win_click',
+  WEEKLY_BRIEF_ACTION: 'engagement.core.weekly_brief_action',
+  LEAGUE_RECAP_ACTION: 'engagement.core.league_recap_action',
+  TRADE_READ_SHARED: 'engagement.core.trade_read_shared',
+  ACTIVITY_INVITE_COPIED: 'engagement.core.activity_invite_copied',
+  ACTIVITY_INVITE_JOINED: 'engagement.core.activity_invite_joined',
 } as const
 
 export const AI_USAGE = {

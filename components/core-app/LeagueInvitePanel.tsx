@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { inviteLinkForFocus, type LeagueInviteFocus } from '@/lib/league-invite/engagementInvite'
+import { ENGAGEMENT } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import '@/components/core-app/af-invite.css'
 
 /**
@@ -82,6 +84,7 @@ export function LeagueInvitePanel({
     if (!info) return
     try {
       await navigator.clipboard.writeText(inviteLinkForFocus(info.inviteLink, focus))
+      sendProductAnalyticsBeacon(ENGAGEMENT.ACTIVITY_INVITE_COPIED, { focus, leagueId })
       setCopied(true)
       window.setTimeout(() => setCopied(false), 2400)
     } catch {

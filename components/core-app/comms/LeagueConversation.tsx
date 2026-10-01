@@ -20,6 +20,8 @@ import { isDraftRoomSource, type LeagueDraftLink } from '@/lib/league-chat/draft
 import { CHIMMY_DISPLAY_NAME, isChimmyAuthored } from '@/lib/league-chat/chimmyIdentity'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { ENGAGEMENT } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import '@/components/core-app/af-comms.css'
 
 /**
@@ -800,13 +802,13 @@ export function LeagueConversation({
             <strong>{language === 'es' ? 'Resumen semanal de Chimmy' : 'Chimmy’s weekly recap'}</strong>
             <small>{latestRecap.message.split('\n')[0]}</small>
           </div>
-          <button type="button" onClick={() => setFocusRequest({ id: latestRecap.id, nonce: Date.now() })}>
+          <button type="button" onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.LEAGUE_RECAP_ACTION, { leagueId, action: 'read' }); setFocusRequest({ id: latestRecap.id, nonce: Date.now() }) }}>
             {language === 'es' ? 'Ver' : 'Read'}
           </button>
-          <button type="button" onClick={() => { setReplyTo(latestRecap); setFocusRequest({ id: latestRecap.id, nonce: Date.now() }) }}>
+          <button type="button" onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.LEAGUE_RECAP_ACTION, { leagueId, action: 'discuss' }); setReplyTo(latestRecap); setFocusRequest({ id: latestRecap.id, nonce: Date.now() }) }}>
             {language === 'es' ? 'Responder' : 'Discuss'}
           </button>
-          <button type="button" disabled={reactionBusy === latestRecap.id} onClick={() => void toggleReaction(latestRecap.id, '🔥', reactionOverride[latestRecap.id] ?? readReactions(latestRecap.metadata, viewer))}>
+          <button type="button" disabled={reactionBusy === latestRecap.id} onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.LEAGUE_RECAP_ACTION, { leagueId, action: 'react' }); void toggleReaction(latestRecap.id, '🔥', reactionOverride[latestRecap.id] ?? readReactions(latestRecap.metadata, viewer)) }}>
             {language === 'es' ? 'Reaccionar' : 'React'} 🔥
           </button>
         </div>

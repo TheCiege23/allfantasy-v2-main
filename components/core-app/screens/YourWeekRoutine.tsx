@@ -5,6 +5,8 @@ import Link from 'next/link'
 import type { WeeklyRoutineData } from '@/lib/core-app/weeklyRoutine'
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { ENGAGEMENT } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 
 /**
  * "Your week" — the weekly routine card on the /core home (retention item 7, user decisions
@@ -54,7 +56,7 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
                 <div><strong>{spanish ? ({ results: 'Resultados', waivers: 'Agentes libres', lineups: 'Alineación', gameday: 'Día de partido', recap: 'Resumen' } as const)[s.key] : s.title}</strong>
                   <small>{spanish ? s.state === 'open' ? 'Pendiente esta semana' : 'Consulta los datos disponibles' : s.summary ?? 'Review what is available'}</small>
                 </div>
-                <Link href={s.href}>{spanish ? 'Revisar' : 'Review'} <span aria-hidden>→</span></Link>
+                <Link href={s.href} onClick={() => sendProductAnalyticsBeacon(ENGAGEMENT.WEEKLY_BRIEF_ACTION, { action: s.key, state: s.state })}>{spanish ? 'Revisar' : 'Review'} <span aria-hidden>→</span></Link>
               </li>
             ))}
           </ol>

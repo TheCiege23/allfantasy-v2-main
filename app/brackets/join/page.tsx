@@ -4,6 +4,8 @@ import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, Loader2, Users, Trophy } from "lucide-react"
 import Link from "next/link"
+import { ENGAGEMENT } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 
 type Preview = {
   leagueId: string
@@ -100,6 +102,7 @@ function JoinLeagueForm() {
         setError(data.error ?? "Failed to join pool")
         return
       }
+      sendProductAnalyticsBeacon(ENGAGEMENT.ACTIVITY_INVITE_JOINED, { focus: 'bracket', leagueId: data.leagueId })
       router.push(`/brackets/leagues/${data.leagueId}`)
     } catch {
       setError("Something went wrong. Please try again.")

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { joinedLeagueDestination, readLeagueInviteFocus } from '@/lib/league-invite/engagementInvite'
+import { ENGAGEMENT } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 
 type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean }
 
@@ -72,6 +74,7 @@ export default function JoinByCodePage() {
         .then(async (res) => ({ ...(await res.json()), httpStatus: res.status }))
         .then((data) => {
           if (data.success) {
+            sendProductAnalyticsBeacon(ENGAGEMENT.ACTIVITY_INVITE_JOINED, { focus, leagueId: data.leagueId, alreadyMember: !!data.alreadyMember })
             setStatus('success')
             setJoinedLeagueId(data.leagueId)
             setMessage(data.alreadyMember ? 'You are already in this league.' : 'You joined the league.')

@@ -59,6 +59,8 @@ import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { ENGAGEMENT } from '@/lib/analytics/eventNames'
+import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 
 /**
  * Screen 36a — Trade Center.
@@ -1486,6 +1488,7 @@ export function TradeCenter(props: {
   ].filter(Boolean).join('\n')
   const discussTrade = () => {
     if (!props.league) return
+    sendProductAnalyticsBeacon(ENGAGEMENT.TRADE_READ_SHARED, { leagueId: props.league.id, channel: 'league_chat' })
     window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, {
       detail: { tab: 'league', leagueId: props.league.id, prefill: `${tradeSummary}\n${language === 'es' ? '¿Qué opinan?' : 'What do you think?'}` },
     }))
@@ -1494,9 +1497,11 @@ export function TradeCenter(props: {
     try {
       if (navigator.share) {
         await navigator.share({ title: 'AllFantasy trade read', text: tradeSummary })
+        sendProductAnalyticsBeacon(ENGAGEMENT.TRADE_READ_SHARED, { leagueId: props.league?.id, channel: 'native_share' })
         setShareStatus('shared')
       } else {
         await navigator.clipboard.writeText(tradeSummary)
+        sendProductAnalyticsBeacon(ENGAGEMENT.TRADE_READ_SHARED, { leagueId: props.league?.id, channel: 'clipboard' })
         setShareStatus('copied')
       }
     } catch (error) {
