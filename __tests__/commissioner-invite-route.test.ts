@@ -32,6 +32,16 @@ vi.mock('@/lib/league/permissions', () => ({
   getLeagueRole: getLeagueRoleMock,
 }))
 
+const canManageClassExceptionsMock = vi.fn()
+const decideClassExceptionMock = vi.fn()
+const getClassGateSummaryMock = vi.fn()
+
+vi.mock('@/lib/league-join/classExceptions', () => ({
+  canManageClassExceptions: canManageClassExceptionsMock,
+  decideClassException: decideClassExceptionMock,
+  getClassGateSummary: getClassGateSummaryMock,
+}))
+
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: {
@@ -58,18 +68,7 @@ describe('/api/commissioner/leagues/[leagueId]/invite route', () => {
     redraftLeagueExtendedSettingsFindUniqueMock.mockResolvedValue({ allowMemberInviteRankBypass: false })
   })
 
-  it('commissioner can create bypass invite', async () => {
-    leagueFindUniqueMock.mockResolvedValueOnce({ settings: { inviteCode: 'SPECIAL01' } })
-
-    leagueUpdateMock.mockResolvedValue({
-      id: 'league-1',
-      settings: {
-        inviteCode: 'SPECIAL01',
-        inviteLink: 'https://allfantasy.ai/join?code=SPECIAL01',
-        inviteExpiresAt: '2030-01-01T00:00:00.000Z',
-      },
-    })
-
+  it('refuses the retired shared-code bypass, even for the commissioner', async () => {
     const { POST } = await import('@/app/api/commissioner/leagues/[leagueId]/invite/route')
     const res = await POST(
       new Request('http://localhost/api/commissioner/leagues/league-1/invite', {
@@ -77,75 +76,68 @@ describe('/api/commissioner/leagues/[leagueId]/invite route', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bypassRankGate: true, regenerate: false }),
       }) as any,
-      { params: { leagueId: 'league-1' } }
+      { params: Promise.resolve({ leagueId: 'league-1' }) }
+    )
+
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('SHARED_BYPASS_RETIRED')
+    expect(leagueInviteUpsertMock).not.toHaveBeenCalled()
+    expect(leagueUpdateMock).not.toHaveBeenCalled()
+  })
+
+  it('PATCH lets a commissioner approve one named manager', async () => {
+    canManageClassExceptionsMock.mockResolvedValueOnce(true)
+    decideClassExceptionMock.mockResolvedValueOnce({ ok: true, summary: { range: null, exceptions: [], requests: [] } })
+
+    const { PATCH } = await import('@/app/api/commissioner/leagues/[leagueId]/invite/route')
+    const res = await PATCH(
+      new Request('http://localhost/api/commissioner/leagues/league-1/invite', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve', userId: 'u-outside' }),
+      }) as any,
+      { params: Promise.resolve({ leagueId: 'league-1' }) }
     )
 
     expect(res.status).toBe(200)
-    expect(assertCommissionerMock).not.toHaveBeenCalled()
-    expect(leagueInviteUpsertMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { token: 'SPECIAL01' },
-        update: expect.objectContaining({ bypassRankGate: true, createdByRole: 'COMMISSIONER' }),
-        create: expect.objectContaining({ bypassRankGate: true, createdByRole: 'COMMISSIONER' }),
-      })
+    expect(decideClassExceptionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ leagueId: 'league-1', decidedBy: 'u-commissioner', action: 'approve', userId: 'u-outside' }),
     )
-    const body = await res.json()
-    expect(body.bypassRankGate).toBe(true)
   })
 
-  it('non-commissioner cannot create bypass invite', async () => {
-    getServerSessionMock.mockResolvedValueOnce({ user: { id: 'u-member', role: 'member', email: 'member@test.dev' } })
-    getLeagueRoleMock.mockResolvedValueOnce('member')
-    redraftLeagueExtendedSettingsFindUniqueMock.mockResolvedValueOnce({ allowMemberInviteRankBypass: false })
+  it('PATCH refuses a member', async () => {
+    canManageClassExceptionsMock.mockResolvedValueOnce(false)
 
-    const { POST } = await import('@/app/api/commissioner/leagues/[leagueId]/invite/route')
-    const res = await POST(
+    const { PATCH } = await import('@/app/api/commissioner/leagues/[leagueId]/invite/route')
+    const res = await PATCH(
       new Request('http://localhost/api/commissioner/leagues/league-1/invite', {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bypassRankGate: true }),
+        body: JSON.stringify({ action: 'grant', username: 'someone' }),
       }) as any,
-      { params: { leagueId: 'league-1' } }
+      { params: Promise.resolve({ leagueId: 'league-1' }) }
     )
 
     expect(res.status).toBe(403)
-    expect(leagueInviteUpsertMock).not.toHaveBeenCalled()
+    expect(decideClassExceptionMock).not.toHaveBeenCalled()
   })
 
-  it('member can create bypass invite when allowMemberInviteRankBypass is enabled', async () => {
-    getServerSessionMock.mockResolvedValueOnce({ user: { id: 'u-member', role: 'member', email: 'member@test.dev' } })
-    getLeagueRoleMock.mockResolvedValueOnce('member')
-    redraftLeagueExtendedSettingsFindUniqueMock.mockResolvedValueOnce({ allowMemberInviteRankBypass: true })
-    leagueFindUniqueMock.mockResolvedValueOnce({ settings: { inviteCode: 'MEMBER01' } })
+  it('PATCH rejects an unknown action', async () => {
+    canManageClassExceptionsMock.mockResolvedValueOnce(true)
 
-    leagueUpdateMock.mockResolvedValue({
-      id: 'league-1',
-      settings: {
-        inviteCode: 'MEMBER01',
-        inviteLink: 'https://allfantasy.ai/join?code=MEMBER01',
-        inviteExpiresAt: '2030-01-01T00:00:00.000Z',
-      },
-    })
-
-    const { POST } = await import('@/app/api/commissioner/leagues/[leagueId]/invite/route')
-    const res = await POST(
+    const { PATCH } = await import('@/app/api/commissioner/leagues/[leagueId]/invite/route')
+    const res = await PATCH(
       new Request('http://localhost/api/commissioner/leagues/league-1/invite', {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bypassRankGate: true, regenerate: false }),
+        body: JSON.stringify({ action: 'open_to_everyone' }),
       }) as any,
-      { params: { leagueId: 'league-1' } }
+      { params: Promise.resolve({ leagueId: 'league-1' }) }
     )
 
-    expect(res.status).toBe(200)
-    expect(assertCommissionerMock).not.toHaveBeenCalled()
-    expect(leagueInviteUpsertMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { token: 'MEMBER01' },
-        update: expect.objectContaining({ bypassRankGate: true }),
-        create: expect.objectContaining({ bypassRankGate: true }),
-      })
-    )
+    expect(res.status).toBe(400)
+    expect(decideClassExceptionMock).not.toHaveBeenCalled()
   })
 
   it('normal invite remains bypassRankGate false', async () => {
@@ -167,7 +159,7 @@ describe('/api/commissioner/leagues/[leagueId]/invite route', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ regenerate: false }),
       }) as any,
-      { params: { leagueId: 'league-1' } }
+      { params: Promise.resolve({ leagueId: 'league-1' }) }
     )
 
     expect(res.status).toBe(200)

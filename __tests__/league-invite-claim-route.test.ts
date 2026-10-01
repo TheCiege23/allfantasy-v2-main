@@ -16,7 +16,9 @@ const {
   userProfileFindFirstMock,
   platformIdentityFindManyMock,
   transactionMock,
+  resolveJoinRankGateMock,
 } = vi.hoisted(() => ({
+  resolveJoinRankGateMock: vi.fn(),
   getServerSessionMock: vi.fn(),
   leagueInviteFindFirstMock: vi.fn(),
   leagueTeamFindFirstMock: vi.fn(),
@@ -38,6 +40,12 @@ const {
 }))
 
 vi.mock('@/lib/league/leagueSeats', () => ({ assignLeagueSeat: assignLeagueSeatMock }))
+
+// The ±2 level gate has its own suite (league-join-rank-gate.test.ts); here only its verdict matters.
+vi.mock('@/lib/league-join/resolveJoinRankGate', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/league-join/resolveJoinRankGate')>()),
+  resolveJoinRankGate: resolveJoinRankGateMock,
+}))
 
 vi.mock('next-auth', () => ({
   getServerSession: getServerSessionMock,
@@ -92,6 +100,14 @@ describe('POST /api/league/invite/claim', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getServerSessionMock.mockResolvedValue({ user: { id: 'af-user-1' } })
+    resolveJoinRankGateMock.mockResolvedValue({
+      allowed: true,
+      bypassed: false,
+      userRankLevel: 5,
+      minRankLevel: null,
+      maxRankLevel: null,
+      reason: 'LISTING_MISSING',
+    })
     leagueInviteFindFirstMock.mockResolvedValue({
       id: 'invite-1',
       leagueId: 'league-1',
@@ -232,6 +248,48 @@ describe('POST /api/league/invite/claim', () => {
     })
     // The imported branch's roster lookup by sourceTeamId is not what decides a native claim.
     expect(rosterFindManyMock).not.toHaveBeenCalled()
+  })
+
+  it('refuses a native team to a manager outside the league level range, before any seat is written', async () => {
+    leagueInviteFindFirstMock.mockResolvedValue({
+      id: 'invite-1',
+      leagueId: 'league-1',
+      useCount: 0,
+      maxUses: 50,
+      expiresAt: null,
+      league: { id: 'league-1', platform: 'manual' },
+    })
+    leagueTeamFindFirstMock.mockResolvedValue({
+      id: 'team-row-3',
+      leagueId: 'league-1',
+      externalId: 'roster-3',
+      claimedByUserId: null,
+      isOrphan: true,
+      platformUserId: 'open-slot-league-1-3',
+    })
+    resolveJoinRankGateMock.mockResolvedValue({
+      allowed: false,
+      bypassed: false,
+      userRankLevel: 1,
+      minRankLevel: 8,
+      maxRankLevel: 12,
+      reason: 'OUTSIDE_RANK_RANGE',
+    })
+
+    const { POST } = await import('@/app/api/league/invite/claim/route')
+    const req = new Request('http://localhost/api/league/invite/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: 'invite-token', teamExternalId: 'roster-3' }),
+    })
+
+    const res = await POST(req as any)
+    expect(res.status).toBe(403)
+    const body = await res.json()
+    expect(body).toMatchObject({ code: 'RANK_GATE_BLOCKED', minRankLevel: 8, maxRankLevel: 12, userRankLevel: 1 })
+    expect(resolveJoinRankGateMock).toHaveBeenCalledWith({ leagueId: 'league-1', userId: 'af-user-1' })
+    expect(assignLeagueSeatMock).not.toHaveBeenCalled()
+    expect(transactionMock).not.toHaveBeenCalled()
   })
 
   it('refuses a second team to someone who already holds one', async () => {

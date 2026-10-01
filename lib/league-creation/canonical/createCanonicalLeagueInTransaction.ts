@@ -4,6 +4,7 @@ import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
  * Mirrors redraft shell: League + settings + commissioner + draft + homepage + slots + draft session.
  */
 
+import { classRangeFor } from '@/lib/league-join/managerClass'
 import { resolveGuillotineEndgame } from '@/lib/guillotine/endgameRules'
 import { randomUUID } from 'crypto'
 import { resolveDynastyCreationRoster } from './dynastyCreationRoster'
@@ -259,8 +260,8 @@ export async function createCanonicalLeagueInTransaction(
   })
   const creatorRankLevelRaw = Number(userProfile?.xpLevel ?? userProfile?.legacyCareerLevel ?? 1)
   const creatorRankLevel = Number.isFinite(creatorRankLevelRaw) ? Math.max(1, Math.floor(creatorRankLevelRaw)) : 1
-  const minRankLevel = Math.max(1, creatorRankLevel - 3)
-  const maxRankLevel = creatorRankLevel + 3
+  // The ±2 manager-class band — lib/league-join/managerClass.ts. Was ±3 until 2026-10-01.
+  const { min: minRankLevel, max: maxRankLevel } = classRangeFor(creatorRankLevel)
 
   /*
    * 🛑 NCAAF PLAYOFFS END ON WEEK 13 — see lib/league-defaults/ncaafPlayoffWindow.ts. Every NCAAF

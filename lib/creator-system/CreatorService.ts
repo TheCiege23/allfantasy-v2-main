@@ -404,7 +404,7 @@ function resolveCreatorLeagueTierWindow(
 ) {
   const safeViewerTier = clampCareerTier(viewerTier, 1)
   const safeLeagueTier = clampCareerTier(leagueTier, 1)
-  const inWindow = isLeagueVisibleForCareerTier(safeViewerTier, safeLeagueTier, 1)
+  const inWindow = isLeagueVisibleForCareerTier(safeViewerTier, safeLeagueTier)
   const inviteOverride = options.inviteOverride === true
   const visibilityBypass = options.visibilityBypass === true
 

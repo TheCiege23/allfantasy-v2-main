@@ -298,8 +298,8 @@ describe('createCanonicalLeagueInTransaction contract', () => {
     expect(tx.findLeagueListing.upsert).toHaveBeenCalledTimes(1)
     const listingArg = tx.findLeagueListing.upsert.mock.calls[0]?.[0]
     expect(listingArg.create.creatorRankLevel).toBe(9)
-    expect(listingArg.create.minRankLevel).toBe(6)
-    expect(listingArg.create.maxRankLevel).toBe(12)
+    expect(listingArg.create.minRankLevel).toBe(7)
+    expect(listingArg.create.maxRankLevel).toBe(11)
 
     const listingBody = JSON.parse(String(listingArg.create.body)) as {
       creatorRankLevel: number
@@ -309,8 +309,8 @@ describe('createCanonicalLeagueInTransaction contract', () => {
     }
 
     expect(listingBody.creatorRankLevel).toBe(9)
-    expect(listingBody.minRankLevel).toBe(6)
-    expect(listingBody.maxRankLevel).toBe(12)
+    expect(listingBody.minRankLevel).toBe(7)
+    expect(listingBody.maxRankLevel).toBe(11)
     expect(listingBody.timezone).toBe('America/New_York')
   })
 

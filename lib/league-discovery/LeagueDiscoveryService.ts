@@ -333,7 +333,7 @@ export async function discoverLeagues(input: DiscoverLeaguesInput): Promise<Disc
     const rules = lg.scoringRules as Record<string, unknown>
     if (!matchesLeagueTypeAndFee(rules, resolved)) return false
     const leagueTier = extractLeagueCareerTier(rules, viewerTier)
-    return isLeagueVisibleForCareerTier(viewerTier, leagueTier, 1)
+    return isLeagueVisibleForCareerTier(viewerTier, leagueTier)
   })
   const total = filtered.length
   const leagues = filtered.slice((page - 1) * limit, page * limit)

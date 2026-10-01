@@ -1,6 +1,11 @@
 /**
  * List / unlist a league on public discovery ("League finder") with rank-matched tiers:
- * commissioner’s current career tier ±1 (stored as the league’s `requiredCareerTier`).
+ * commissioner’s current career tier ±2 (stored as the league’s `requiredCareerTier`).
+ *
+ * The listing row carries the same centre and band, so the join gate
+ * (`lib/league-join/resolveJoinRankGate.ts`) enforces what discovery advertises.
+ * A league already created on AllFantasy keeps its creation-time centre: the gate
+ * reads the OLDEST listing that carries a level.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -9,7 +14,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { ensureUserCareerTier, clampCareerTier, getCareerTierName } from '@/lib/ranking/tier-visibility'
-import { RANK_LEVELS } from '@/lib/rank/levels'
+import { classRangeFor } from '@/lib/league-join/managerClass'
 import type { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -93,9 +98,8 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ leagueId:
 
   const profile = await ensureUserCareerTier(prisma, userId)
   const careerTier = clampCareerTier(profile.careerTier)
-  const maxTier = Math.max(1, RANK_LEVELS.length)
-  const bandLow = Math.max(1, careerTier - 1)
-  const bandHigh = Math.min(maxTier, careerTier + 1)
+  // The ±2 manager-class band — lib/league-join/managerClass.ts. Was ±1 until 2026-10-01.
+  const { min: bandLow, max: bandHigh } = classRangeFor(careerTier)
 
   const merged: Record<string, unknown> = {
     ...prev,
@@ -126,12 +130,18 @@ export async function POST(_req: NextRequest, ctx: { params: Promise<{ leagueId:
         body,
         sport: league.sport,
         isActive: true,
+        creatorRankLevel: careerTier,
+        minRankLevel: bandLow,
+        maxRankLevel: bandHigh,
       },
       update: {
         headline,
         body,
         isActive: true,
         sport: league.sport,
+        creatorRankLevel: careerTier,
+        minRankLevel: bandLow,
+        maxRankLevel: bandHigh,
       },
     }),
   ])

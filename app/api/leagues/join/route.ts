@@ -2,7 +2,36 @@
  * POST /api/leagues/join — Join a league by invite code (and optional password).
  * Body: { code: string, password?: string }
  * Creates a Roster for the user if not already a member.
+ *
+ * Body: { action: 'request_class_exception', code?: string, token?: string }
+ * A manager outside the league's ±2 level band asks the commissioner to let them
+ * in (`lib/league-join/classExceptions.ts`). Lives on this path rather than its
+ * own route because of the route ceiling noted on GET below. Either the shared
+ * invite code or a `/join/<token>` token proves the manager was invited — a bare
+ * league id would let anyone queue requests at any league.
  */
+
+async function resolveInvitedLeagueId(code: string | null, token: string | null): Promise<string | null> {
+  if (token) {
+    const invite = await prisma.leagueInvite.findFirst({
+      where: { token, isActive: true },
+      select: { leagueId: true },
+    })
+    if (invite) return invite.leagueId
+  }
+  if (code) {
+    // A tracked invite link (`/invite/accept`) carries its own token, not the league's code.
+    const { getInviteByToken } = await import('@/lib/invite-engine/InviteEngine')
+    const { normalizeToken } = await import('@/lib/invite-engine/tokenGenerator')
+    const tracked = normalizeToken(code)
+    const link = tracked ? await getInviteByToken(tracked).catch(() => null) : null
+    if (link?.type === 'league' && link.targetId) return link.targetId
+    const validation = await validateFantasyInviteCode(code)
+    if (validation.valid) return validation.preview.leagueId
+    return validation.preview?.leagueId ?? null
+  }
+  return null
+}
 
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
@@ -10,7 +39,8 @@ import { getServerSession } from 'next-auth'
 import { getServedOrigin } from '@/lib/http/served-origin'
 import { authOptions } from '@/lib/auth'
 import { validateFantasyInviteCode } from '@/lib/league-invite'
-import { resolveJoinRankGate } from '@/lib/league-join/resolveJoinRankGate'
+import { rankGateBlockedBody, resolveJoinRankGate } from '@/lib/league-join/resolveJoinRankGate'
+import { requestClassException } from '@/lib/league-join/classExceptions'
 import { prisma } from '@/lib/prisma'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
@@ -27,6 +57,15 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const code = typeof body.code === 'string' ? body.code.trim() : null
   const password = typeof body.password === 'string' ? body.password : undefined
+
+  if (body.action === 'request_class_exception') {
+    const token = typeof body.token === 'string' ? body.token.trim() : null
+    const leagueId = await resolveInvitedLeagueId(code, token)
+    if (!leagueId) return NextResponse.json({ error: 'Invite not found' }, { status: 404 })
+    const requested = await requestClassException({ leagueId, userId })
+    if (!requested.ok) return NextResponse.json({ error: requested.error }, { status: requested.status })
+    return NextResponse.json({ success: true, leagueId, requestStatus: requested.status })
+  }
 
   if (!code) return NextResponse.json({ error: 'Missing invite code' }, { status: 400 })
 
@@ -71,18 +110,7 @@ export async function POST(req: NextRequest) {
   })
 
   if (!rankGate.allowed) {
-    const minRankLevel = rankGate.minRankLevel ?? 1
-    const maxRankLevel = rankGate.maxRankLevel ?? 1
-    return NextResponse.json(
-      {
-        error: 'RANK_GATE_BLOCKED',
-        message: `This league is open to users ranked Level ${minRankLevel} through Level ${maxRankLevel}. Ask the commissioner for a special invite.`,
-        minRankLevel,
-        maxRankLevel,
-        userRankLevel: rankGate.userRankLevel,
-      },
-      { status: 403 }
-    )
+    return NextResponse.json(rankGateBlockedBody(rankGate, result.leagueId), { status: 403 })
   }
 
   const joinResult = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {

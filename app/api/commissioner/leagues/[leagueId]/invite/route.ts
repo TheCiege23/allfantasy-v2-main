@@ -4,8 +4,13 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
-import { getLeagueRole } from '@/lib/league/permissions'
 import { isAdminEmailAllowed, isAdminRole } from '@/lib/adminAuth'
+import {
+  canManageClassExceptions,
+  decideClassException,
+  getClassGateSummary,
+  type ClassDecision,
+} from '@/lib/league-join/classExceptions'
 import {
   buildFantasyInviteLink,
   generateInviteToken,
@@ -22,25 +27,6 @@ function resolveCreatedByRole(user: SessionUser): string {
   if (isAdminRole(user.role) || isAdminEmailAllowed(user.email)) return 'ADMIN'
   if (user.role && String(user.role).trim()) return String(user.role).toUpperCase()
   return 'COMMISSIONER'
-}
-
-function isAdminUser(user: SessionUser): boolean {
-  return isAdminRole(user.role) || isAdminEmailAllowed(user.email)
-}
-
-async function canManageInviteBypass(leagueId: string, user: SessionUser): Promise<boolean> {
-  if (!user.id) return false
-  if (isAdminUser(user)) return true
-
-  const role = await getLeagueRole(leagueId, user.id)
-  if (role === 'commissioner' || role === 'co_commissioner') return true
-  if (role !== 'member') return false
-
-  const redraftSettings = await prisma.redraftLeagueExtendedSettings.findUnique({
-    where: { leagueId },
-    select: { allowMemberInviteRankBypass: true },
-  })
-  return Boolean(redraftSettings?.allowMemberInviteRankBypass)
 }
 
 async function upsertLeagueInvite(input: {
@@ -150,12 +136,14 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ leagueId
 
   const settings = (league.settings as Record<string, unknown>) || {}
   const invite = await ensureLeagueInvite(params.leagueId, settings, getBaseUrl())
+  const managerClass = await getClassGateSummary(params.leagueId).catch(() => null)
   return NextResponse.json({
     inviteCode: invite.inviteCode,
     inviteLink: invite.inviteLink,
     joinUrl: invite.joinUrl,
     inviteExpiresAt: invite.inviteExpiresAt,
     inviteExpired: invite.inviteExpired,
+    managerClass,
   })
 }
 
@@ -166,24 +154,32 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json().catch(() => ({}))
-  const bypassRankGate = body?.bypassRankGate === true
   const regenerate = body?.regenerate !== false
   const expiresInDays =
     typeof body?.expiresInDays === 'number' && Number.isFinite(body.expiresInDays)
       ? Math.max(1, Math.min(90, Math.trunc(body.expiresInDays)))
       : undefined
 
-  if (bypassRankGate) {
-    const canBypass = await canManageInviteBypass(params.leagueId, session?.user ?? {})
-    if (!canBypass) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-  } else {
-    try {
-      await assertCommissioner(params.leagueId, userId)
-    } catch {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+  /*
+   * ⚠ RETIRED 2026-10-01: `bypassRankGate` on the SHARED invite code let anyone
+   * holding the code skip the level band. Exceptions are now per manager — see
+   * PATCH below. Refused loudly rather than ignored, so a caller that still sends
+   * it learns the link it shares is not an open door.
+   */
+  if (body?.bypassRankGate === true) {
+    return NextResponse.json(
+      {
+        error: 'SHARED_BYPASS_RETIRED',
+        message: 'Level exceptions are now granted to one manager at a time. Name the manager instead of opening the invite link to everyone.',
+      },
+      { status: 400 },
+    )
+  }
+
+  try {
+    await assertCommissioner(params.leagueId, userId)
+  } catch {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const league = await prisma.league.findUnique({
@@ -217,9 +213,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     leagueId: params.leagueId,
     inviteCode: persistedInviteCode,
     createdByUserId: userId,
-    createdByRole: bypassRankGate ? 'COMMISSIONER' : resolveCreatedByRole(session?.user ?? {}),
+    createdByRole: resolveCreatedByRole(session?.user ?? {}),
     inviteExpiresAt: normalizedExpiresAt,
-    bypassRankGate,
+    bypassRankGate: false,
   })
 
   return NextResponse.json({
@@ -229,6 +225,46 @@ export async function POST(req: NextRequest, props: { params: Promise<{ leagueId
     joinUrl,
     inviteExpiresAt: normalizedExpiresAt,
     inviteExpired: getInviteExpired(normalizedExpiresAt),
-    bypassRankGate,
+    bypassRankGate: false,
   })
+}
+
+const CLASS_ACTIONS: readonly ClassDecision[] = ['grant', 'approve', 'decline', 'revoke']
+
+/**
+ * PATCH: a commissioner decision on the ±2 manager-class band
+ * (`lib/league-join/managerClass.ts`). On this path rather than a new route
+ * because the app sits at the route ceiling (see GET /api/leagues/join).
+ *
+ * Body: { action: 'grant' | 'approve' | 'decline' | 'revoke', userId?: string, username?: string }
+ *   grant    — let one named manager in from outside the band
+ *   approve  — answer a pending request with yes (same effect as grant)
+ *   decline  — answer a pending request with no
+ *   revoke   — withdraw an exception (a manager already seated keeps the seat)
+ *
+ * Head commissioner, co-commissioner or admin. Returns the updated summary.
+ */
+export async function PATCH(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
+  const session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  if (!(await canManageClassExceptions(params.leagueId, session?.user ?? {}))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const body = await req.json().catch(() => ({}))
+  const action = CLASS_ACTIONS.find((a) => a === body?.action)
+  if (!action) return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
+
+  const result = await decideClassException({
+    leagueId: params.leagueId,
+    decidedBy: userId,
+    action,
+    userId: typeof body?.userId === 'string' ? body.userId : null,
+    username: typeof body?.username === 'string' ? body.username : null,
+  })
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status })
+  return NextResponse.json({ status: 'ok', managerClass: result.summary })
 }

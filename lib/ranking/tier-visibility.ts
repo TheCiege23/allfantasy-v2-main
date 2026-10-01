@@ -1,5 +1,6 @@
 import { RANK_LEVELS, getLevelFromXp } from "@/lib/rank/levels"
 import { getTierFromXP, getXPRemainingToNextTier } from "@/lib/xp-progression/TierResolver"
+import { MANAGER_CLASS_BAND } from "@/lib/league-join/managerClass"
 
 const MAX_TIER = RANK_LEVELS.length
 
@@ -8,7 +9,7 @@ export interface ResolvedCareerTierProfile {
   careerTier: number
   tierName: string
   totalXP: number
-  source: "xp_profile" | "legacy_cache" | "seeded_default" | "fallback"
+  source: "user_profile" | "xp_profile" | "legacy_cache" | "seeded_default" | "fallback"
   seededProfile: boolean
 }
 
@@ -37,7 +38,12 @@ export function extractLeagueCareerTier(scoringRules: unknown, fallbackTier: num
   return clampCareerTier(candidate, clampCareerTier(fallbackTier))
 }
 
-export function isLeagueVisibleForCareerTier(userTier: number, leagueTier: number, distance = 1): boolean {
+/**
+ * Discovery shows a league when it sits inside the viewer's manager-class band —
+ * the same ±2 the join gate enforces (`lib/league-join/managerClass.ts`). Was ±1
+ * until 2026-10-01, so discovery hid leagues a manager was allowed to join.
+ */
+export function isLeagueVisibleForCareerTier(userTier: number, leagueTier: number, distance = MANAGER_CLASS_BAND): boolean {
   const safeUserTier = clampCareerTier(userTier)
   const safeLeagueTier = clampCareerTier(leagueTier)
   return Math.abs(safeUserTier - safeLeagueTier) <= Math.max(0, Math.floor(distance))
@@ -61,6 +67,25 @@ export function getMinimumXPForCareerTier(tier: number): number {
   return row?.minXp ?? 0
 }
 
+async function readUserProfileLevel(
+  prismaLike: any,
+  userId: string,
+): Promise<{ level: number; xp: number | null } | null> {
+  if (typeof prismaLike?.userProfile?.findUnique !== "function") return null
+  try {
+    const profile = await prismaLike.userProfile.findUnique({
+      where: { userId },
+      select: { xpLevel: true, legacyCareerLevel: true, xpTotal: true },
+    })
+    const raw = profile?.xpLevel ?? profile?.legacyCareerLevel
+    if (raw == null) return null
+    const xp = profile?.xpTotal == null ? null : Number(profile.xpTotal)
+    return { level: clampCareerTier(raw, 1), xp: xp != null && Number.isFinite(xp) ? xp : null }
+  } catch {
+    return null
+  }
+}
+
 export async function ensureUserCareerTier(
   prismaLike: any,
   userId: string | null | undefined,
@@ -74,6 +99,26 @@ export async function ensureUserCareerTier(
       tierName: getCareerTierName(safeFallback),
       totalXP: getMinimumXPForCareerTier(safeFallback),
       source: "fallback",
+      seededProfile: false,
+    }
+  }
+
+  /*
+   * ⚠ THE LADDER LEVEL FIRST. `UserProfile.xpLevel` is the level the Rankings tab
+   * shows and the join gate checks. `ManagerXPProfile.totalXP` below is a
+   * DIFFERENT XP system (Bronze–Legendary GM, 0–1000) and pushing it through the
+   * 350,000-XP ladder put nearly every manager at Level 1–5 in discovery while the
+   * join gate saw their real level. It stays as the fallback for managers who
+   * have never had a ladder level calculated.
+   */
+  const profileLevel = await readUserProfileLevel(prismaLike, userId)
+  if (profileLevel != null) {
+    return {
+      userId,
+      careerTier: profileLevel.level,
+      tierName: getCareerTierName(profileLevel.level),
+      totalXP: profileLevel.xp ?? getMinimumXPForCareerTier(profileLevel.level),
+      source: "user_profile",
       seededProfile: false,
     }
   }

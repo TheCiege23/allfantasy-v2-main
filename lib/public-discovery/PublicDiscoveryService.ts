@@ -380,7 +380,7 @@ async function applyTierPolicy(
 
   for (const card of cards) {
     const leagueTier = clampCareerTier(card.leagueTier, viewerTier)
-    const inRange = isLeagueVisibleForCareerTier(viewerTier, leagueTier, 1)
+    const inRange = isLeagueVisibleForCareerTier(viewerTier, leagueTier)
 
     if (inRange) {
       const rankingTierDelta = Math.abs(leagueTier - viewerTier)

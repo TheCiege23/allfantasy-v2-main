@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 
     const tierFiltered = filtered.filter((lg: any) => {
       const leagueTier = extractLeagueCareerTier(lg.scoringRules, viewerTier)
-      return isLeagueVisibleForCareerTier(viewerTier, leagueTier, 1)
+      return isLeagueVisibleForCareerTier(viewerTier, leagueTier)
     })
 
     const total = tierFiltered.length

@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     deviceId,
   })
   if (!result.ok) {
+    if (result.rankGate) return NextResponse.json(result.rankGate, { status: 403 })
     const statusByError: Record<string, number> = {
       'Invite expired': 410,
       'Invite limit reached': 409,

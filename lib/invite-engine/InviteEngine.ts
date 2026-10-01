@@ -13,6 +13,7 @@ import { joinByInviteCode } from '@/lib/creator-system'
 import { assessLeagueJoinRisk } from '@/lib/identity/DuplicateManagerRiskService'
 import { createDuplicateManagerFlag } from '@/lib/identity/DuplicateManagerFlagService'
 import { generateInviteToken, normalizeToken } from './tokenGenerator'
+import { rankGateBlockedBody, resolveJoinRankGate } from '@/lib/league-join/resolveJoinRankGate'
 import {
   buildInviteDeepLink,
   buildInviteDestinationHref,
@@ -976,7 +977,7 @@ export async function acceptInvite(
       destinationHref?: string | null
       pendingReview?: boolean
     }
-  | { ok: false; error: string }
+  | { ok: false; error: string; rankGate?: ReturnType<typeof rankGateBlockedBody> }
 > {
   const token = normalizeToken(code)
   if (!token) return { ok: false, error: 'Invalid code' }
@@ -1006,6 +1007,14 @@ export async function acceptInvite(
           context: 'league_join',
           contextId: link.targetId,
         })
+      }
+
+      // ±2 manager-class band — lib/league-join/managerClass.ts. Checked before the
+      // duplicate-manager risk check so a blocked manager never lands in review.
+      const rankGate = await resolveJoinRankGate({ leagueId: link.targetId, userId })
+      if (!rankGate.allowed) {
+        const blocked = rankGateBlockedBody(rankGate, link.targetId)
+        return { ok: false, error: blocked.message, rankGate: blocked }
       }
 
       const result = await createFantasyLeagueRoster(link.targetId, userId, { inviteLinkId: link.id })
@@ -1227,6 +1236,11 @@ export async function acceptInvite(
 
   const fantasyValidation = await validateFantasyInviteCode(token, { userId })
   if (fantasyValidation.valid) {
+    const rankGate = await resolveJoinRankGate({ leagueId: fantasyValidation.preview.leagueId, userId })
+    if (!rankGate.allowed) {
+      const blocked = rankGateBlockedBody(rankGate, fantasyValidation.preview.leagueId)
+      return { ok: false, error: blocked.message, rankGate: blocked }
+    }
     const result = await createFantasyLeagueRoster(fantasyValidation.preview.leagueId, userId)
     if (!result.ok) return { ok: false, error: result.error }
     return {

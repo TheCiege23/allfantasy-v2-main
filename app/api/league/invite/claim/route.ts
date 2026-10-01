@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { getInviteClaimEligibility, resolveLinkedPlatformUserIds } from '@/lib/league-invite/claimIdentity'
 import { assignLeagueSeat } from '@/lib/league/leagueSeats'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { rankGateBlockedBody, resolveJoinRankGate } from '@/lib/league-join/resolveJoinRankGate'
 
 const claimSchema = z.object({
   token: z.string().min(1),
@@ -103,6 +104,14 @@ export async function POST(req: NextRequest) {
   })
   if (heldRoster) {
     return NextResponse.json({ error: 'You already have a team in this league' }, { status: 409 })
+  }
+
+  // The ±2 manager-class band (lib/league-join/managerClass.ts). This is the
+  // `/join/<token>` link league creation hands a commissioner to share, and it
+  // checked nothing until 2026-10-01. Imported leagues carry no class and pass.
+  const rankGate = await resolveJoinRankGate({ leagueId: invite.leagueId, userId })
+  if (!rankGate.allowed) {
+    return NextResponse.json(rankGateBlockedBody(rankGate, invite.leagueId), { status: 403 })
   }
 
   const nextUseCount = invite.useCount + 1

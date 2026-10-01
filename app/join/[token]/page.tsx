@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
 
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
+import { ClassGateNotice, isClassGateBlocked, type ClassGateBlocked } from '@/components/league-join/ClassGateNotice'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 
@@ -65,6 +66,7 @@ export default function JoinLeagueInvitePage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [claiming, setClaiming] = useState(false)
   const [claimError, setClaimError] = useState<string | null>(null)
+  const [classBlocked, setClassBlocked] = useState<ClassGateBlocked | null>(null)
 
   const fetchInvite = useCallback(async () => {
     if (!token) {
@@ -147,6 +149,11 @@ export default function JoinLeagueInvitePage() {
       })
 
       const payload = (await response.json().catch(() => null)) as { error?: string; leagueId?: string } | null
+
+      if (!response.ok && isClassGateBlocked(payload)) {
+        setClassBlocked(payload)
+        return
+      }
 
       if (!response.ok) {
         setClaimError(payload?.error ?? 'Unable to claim this team right now.')
@@ -324,6 +331,11 @@ export default function JoinLeagueInvitePage() {
                   </button>
                 </div>
                 {claimError ? <p className="mt-3 text-sm text-red-300">{claimError}</p> : null}
+                {classBlocked ? (
+                  <div className="mt-3">
+                    <ClassGateNotice blocked={classBlocked} token={token} />
+                  </div>
+                ) : null}
               </div>
             </div>
           )}

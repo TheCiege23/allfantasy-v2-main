@@ -7,6 +7,7 @@ import { useSession } from 'next-auth/react'
 import { InvitePreviewCard } from '@/components/invite'
 import { signupUrlWithIntent } from '@/lib/auth/auth-intent-resolver'
 import { canonicalizeProductRoute } from '@/lib/routing/canonicalizeProductRoute'
+import { ClassGateNotice, isClassGateBlocked, type ClassGateBlocked } from '@/components/league-join/ClassGateNotice'
 
 interface Preview {
   inviteType: string
@@ -42,6 +43,7 @@ export default function AcceptInvitePage() {
     inviteType?: string
     destinationHref?: string | null
     error?: string
+    classBlocked?: ClassGateBlocked
   } | null>(null)
 
   const loadPreview = useCallback(() => {
@@ -101,6 +103,10 @@ export default function AcceptInvitePage() {
             return
           }
         } else {
+          if (isClassGateBlocked(data)) {
+            setResult({ ok: false, classBlocked: data })
+            return
+          }
           setResult({ ok: false, error: data.error ?? 'Could not accept invite' })
           loadPreview()
         }
@@ -189,7 +195,13 @@ export default function AcceptInvitePage() {
           </p>
         ) : null}
 
-        {result && (
+        {result?.classBlocked ? (
+          <div className="mt-4">
+            <ClassGateNotice blocked={result.classBlocked} code={code} tone="theme" />
+          </div>
+        ) : null}
+
+        {result && !result.classBlocked && (
           <div
             className="mt-4 rounded-xl border p-4"
             style={{
