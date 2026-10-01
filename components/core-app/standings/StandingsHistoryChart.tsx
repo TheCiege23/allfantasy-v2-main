@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import type { StandingsBoard } from '@/lib/core-app/standingsModel'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 /**
  * Standings history — every team's position, week by week (a bump chart).
@@ -31,6 +33,8 @@ export function StandingsHistoryChart({
   /** When a division is selected, only its teams are drawn at full weight. */
   focusIds: Set<string> | null
 }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
   const [hoverId, setHoverId] = useState<string | null>(null)
   const [hoverWeek, setHoverWeek] = useState<number | null>(null)
   const teams = board.teams
@@ -41,7 +45,7 @@ export function StandingsHistoryChart({
   const x = (i: number) => PAD_L + (weeks.length === 1 ? 0 : (i / (weeks.length - 1)) * (W - PAD_L - PAD_R))
   const y = (pos: number) => PAD_T + (pos - 1) * rowH
   const you = teams.find((t) => t.isYou) ?? null
-  const label = metric === 'seed' ? 'place in the table' : 'AF Power rank'
+  const label = copy(metric === 'seed' ? 'place in the table' : 'AF Power rank')
 
   const byWeek = useMemo(
     () =>
@@ -58,7 +62,9 @@ export function StandingsHistoryChart({
   if (weeks.length < 2) {
     return (
       <p className="af-stb-empty">
-        The history starts once two weeks are final — there {weeks.length === 1 ? 'is one' : 'are none'} so far.
+        {language === 'es'
+          ? `El historial comienza cuando terminan dos semanas; hasta ahora ${weeks.length === 1 ? 'hay una' : 'no hay ninguna'}.`
+          : `The history starts once two weeks are final — there ${weeks.length === 1 ? 'is one' : 'are none'} so far.`}
       </p>
     )
   }
@@ -85,7 +91,9 @@ export function StandingsHistoryChart({
         <svg
           viewBox={`0 0 ${W} ${H}`}
           role="img"
-          aria-label={`${you ? `Your ${label} by week: ${(board.history[you.rosterId] ?? []).map((p) => `week ${p.week} ${p[metric]}`).join(', ')}. ` : ''}Every team's weekly ${label} is in the table below the chart.`}
+          aria-label={language === 'es'
+            ? `${you ? `Tu ${label} por semana: ${(board.history[you.rosterId] ?? []).map((p) => `semana ${p.week} ${p[metric]}`).join(', ')}. ` : ''}La ${label} semanal de cada equipo aparece en la tabla debajo del gráfico.`
+            : `${you ? `Your ${label} by week: ${(board.history[you.rosterId] ?? []).map((p) => `week ${p.week} ${p[metric]}`).join(', ')}. ` : ''}Every team's weekly ${label} is in the table below the chart.`}
           onPointerMove={onMove}
           onPointerLeave={() => setHoverWeek(null)}
         >
@@ -100,7 +108,7 @@ export function StandingsHistoryChart({
           ))}
           {weeks.map((w, i) => (
             <text key={`x${w}`} className="af-stb-axis" x={x(i)} y={H - 8} textAnchor="middle">
-              W{w}
+              {language === 'es' ? 'S' : 'W'}{w}
             </text>
           ))}
           {hoverIdx >= 0 ? <line className="af-stb-cross" x1={x(hoverIdx)} x2={x(hoverIdx)} y1={PAD_T - 6} y2={H - PAD_B + 6} /> : null}
@@ -145,7 +153,7 @@ export function StandingsHistoryChart({
             role="status"
             style={{ left: `${Math.min(78, Math.max(4, (x(hoverIdx) / W) * 100))}%` }}
           >
-            <strong>Week {weeks[hoverIdx]}</strong>
+            <strong>{copy('Week')} {weeks[hoverIdx]}</strong>
             <ol>
               {byWeek[hoverIdx].slice(0, 12).map((r) => (
                 <li key={r.id} data-you={r.id === you?.rosterId ? 'true' : undefined}>
@@ -153,15 +161,15 @@ export function StandingsHistoryChart({
                 </li>
               ))}
             </ol>
-            {byWeek[hoverIdx].length > 12 ? <small>+{byWeek[hoverIdx].length - 12} more in the table</small> : null}
+            {byWeek[hoverIdx].length > 12 ? <small>+{byWeek[hoverIdx].length - 12} {copy('more in the table')}</small> : null}
           </div>
         ) : null}
       </div>
       <figcaption className="af-stb-chart-cap">
-        Higher is better — first place is the top line.{' '}
-        {you ? 'Your line is highlighted; point at or focus a team to trace theirs.' : 'Point at or focus a team to trace its line.'}
+        {copy('Higher is better — first place is the top line.')} {' '}
+        {copy(you ? 'Your line is highlighted; point at or focus a team to trace theirs.' : 'Point at or focus a team to trace its line.')}
       </figcaption>
-      <ul className="af-stb-keys" aria-label="Trace a team">
+      <ul className="af-stb-keys" aria-label={copy('Trace a team')}>
         {teams.map((t) => (
           <li key={t.rosterId}>
             <button
@@ -179,15 +187,15 @@ export function StandingsHistoryChart({
         ))}
       </ul>
       <details className="af-stb-datatable">
-        <summary>Positions by week, as a table</summary>
-        <div className="af-stb-scroll" role="region" aria-label="Positions by week" tabIndex={0}>
+        <summary>{copy('Positions by week, as a table')}</summary>
+        <div className="af-stb-scroll" role="region" aria-label={copy('Positions by week')} tabIndex={0}>
           <table>
             <thead>
               <tr>
-                <th scope="col">Team</th>
+                <th scope="col">{copy('Team')}</th>
                 {weeks.map((w) => (
                   <th key={w} scope="col" className="af-num">
-                    W{w}
+                    {language === 'es' ? 'S' : 'W'}{w}
                   </th>
                 ))}
               </tr>

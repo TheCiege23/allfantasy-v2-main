@@ -1398,6 +1398,37 @@
 }
 .af-stb-datatable tr[data-you='true'] > * { color: var(--accent); }
 
+.af-stb-chart-data summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  width: fit-content;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-stb-chart-data-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.af-stb-chart-data table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.af-stb-chart-data th,
+.af-stb-chart-data td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+.af-stb-chart-data tbody tr:last-child > * { border-bottom: 0; }
+.af-stb-chart-data tbody tr[data-you='true'] > * { color: var(--accent); font-weight: 800; }
+
 .af-stb-bars {
   display: grid;
   gap: 6px;
@@ -1443,7 +1474,10 @@
   .af-stb-seg button,
   .af-stb-select select,
   .af-stb-why select { min-height: 44px; }
-  .af-stb-keys button { min-height: 36px; }
+  .af-stb-keys button,
+  .af-stb-chart-data summary,
+  .af-stb-datatable summary { min-height: 44px; }
+  .af-stb-datatable summary { width: auto; max-width: 100%; }
 }
 
 /*

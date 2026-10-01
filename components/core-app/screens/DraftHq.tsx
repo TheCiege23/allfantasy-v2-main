@@ -6,7 +6,7 @@ import { draftAfText, draftAfTitle } from '@/lib/core-app/draftAfLabel'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { DraftCompetitiveEdge, type DraftEdgeState } from '@/components/core-app/screens/DraftCompetitiveEdge'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { draftHqUiCopy } from '@/lib/core-app/draftHqUiCopy'
 
 /**
  * Screen 8 — Draft HQ.
@@ -29,7 +29,7 @@ export type DraftHqProps = {
 
 function Unavailable({ reason }: { reason: string }) {
   const language = useOptionalLanguage().language
-  return <p className="af-dh-unavailable">{coreUiCopy(reason, language)}</p>
+  return <p className="af-dh-unavailable">{draftHqUiCopy(reason, language)}</p>
 }
 
 const STATUS_TONE: Record<string, string> = {
@@ -41,13 +41,7 @@ const STATUS_TONE: Record<string, string> = {
 
 export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) {
   const language = useOptionalLanguage().language
-  const copy = (value: string) => coreUiCopy(value, language)
-  const pickTradeNote = (note: string) => {
-    const match = note.match(/^pick trades made on (.+) are not synced into this draft, so a pick shown here may have changed hands there$/)
-    return language === 'es' && match
-      ? `Los intercambios de selecciones hechos en ${match[1]} no se sincronizan con este draft. Una selección mostrada aquí podría haber cambiado de dueño allí.`
-      : copy(note)
-  }
+  const copy = (value: string) => draftHqUiCopy(value, language)
   return (
     <div className="af-dh">
       {/* ── Board settings ──────────────────────────────────────────── */}
@@ -106,7 +100,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
           <h2 className="af-label">{copy('Your picks')}</h2>
           {data.pickSlots.available && data.pickSlots.data.note ? (
             <span className="af-dh-section-note" data-testid="draft-hq-picks-note">
-              {pickTradeNote(data.pickSlots.data.note)}
+              {copy(data.pickSlots.data.note)}
             </span>
           ) : null}
         </header>
