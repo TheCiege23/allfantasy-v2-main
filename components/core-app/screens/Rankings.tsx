@@ -17,6 +17,7 @@ import type {
   XpRow,
 } from '@/lib/core-app/rankings'
 import type { ClassView } from '@/lib/class-rating/classView'
+import { LOG_WEEKS_SHOWN, groupClassWeeks, weekRecord } from '@/lib/class-rating/weekLog'
 import { GLICKO } from '@/lib/class-rating/engine'
 import '@/components/core-app/af-rankings-screen.css'
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
@@ -1083,49 +1084,64 @@ function ClassBody({ view, signedIn }: { view: ClassView; signedIn: boolean }) {
           <p className="af-rk-eyebrow">
             Your rated weeks
             <span className="af-rk-spacer" />
-            <span>newest first</span>
+            <span>last {LOG_WEEKS_SHOWN}, newest first</span>
           </p>
-          <RankTable
-            caption="Your rated weeks and how each moved your Class rating"
-            rowHeaderIndex={0}
-            columns={[
-              { key: 'when', label: 'Week' },
-              { key: 'league', label: 'League', hideOnPhone: true },
-              { key: 'allplay', label: 'Vs the league', srLabel: 'Teams you outscored that week — what moves the rating' },
-              { key: 'h2h', label: 'Matchup', srLabel: 'Your head-to-head game', hideOnPhone: true },
-              { key: 'chg', label: 'Rating', srLabel: 'Rating change that week', align: 'right' },
-            ]}
-            rows={view.log.map((g, i) => ({
-              id: `${g.season}-${g.week}-${g.leagueId}-${i}`,
-              cells: [
-                { text: `${g.season} wk ${g.week}` },
-                { text: g.leagueName?.trim() || 'League' },
-                {
-                  text: `Beat ${g.allPlayWins % 1 === 0 ? g.allPlayWins : g.allPlayWins.toFixed(1)} of ${g.allPlayGames}`,
-                  sub: `${g.pointsFor.toFixed(1)} pts`,
-                },
-                g.result
-                  ? {
-                      text: `${g.result} ${g.pointsFor.toFixed(1)}–${(g.pointsAgainst ?? 0).toFixed(1)}`,
-                      sub: [g.opponentLabel ? `vs ${g.opponentLabel}` : null, g.opponentClassNow != null ? `Class ${g.opponentClassNow} now` : null]
-                        .filter(Boolean)
-                        .join(' · ') || undefined,
-                      tone: g.result === 'W' ? 'good' : g.result === 'L' ? 'bad' : 'muted',
-                    }
-                  : { text: '—', tone: 'muted' },
-                {
-                  text: signed(g.weekChange),
-                  tone: g.weekChange > 0 ? 'good' : g.weekChange < 0 ? 'bad' : 'muted',
-                  sub: Math.abs(g.leagueShare - g.weekChange) >= 0.5 ? `${signed(g.leagueShare)} from this league` : `now ${Math.round(g.ratingAfter)}`,
-                },
-              ],
-            }))}
-            emptyText="No rated weeks yet."
-          />
+          <div className="af-rk-weeklog">
+            <RankTable
+              caption="Your rated weeks and how each moved your Class rating"
+              rowHeaderIndex={0}
+              columns={[
+                { key: 'when', label: 'Week' },
+                { key: 'chg', label: 'Rating', srLabel: 'Rating change that week, and the rating it left', align: 'right' },
+                { key: 'allplay', label: 'Vs the league', srLabel: 'Teams you outscored that week, every league — what moves the rating' },
+                { key: 'h2h', label: 'Matchup', srLabel: 'Your head-to-head result that week' },
+                { key: 'leagues', label: 'Leagues', srLabel: 'Each league’s share of the week’s change' },
+              ]}
+              rows={groupClassWeeks(view.log).map((w) => {
+                const one = w.leagues.length === 1 ? w.leagues[0] : null
+                const record = weekRecord(w)
+                return {
+                  id: w.key,
+                  cells: [
+                    { text: `${w.season} wk ${w.week}` },
+                    {
+                      text: signed(w.change),
+                      // Toned on the ROUNDED move: a −0.3 week printed "0" in red.
+                      tone: Math.round(w.change) > 0 ? 'good' : Math.round(w.change) < 0 ? 'bad' : 'muted',
+                      sub: `now ${Math.round(w.ratingAfter)}`,
+                    },
+                    {
+                      text: `Beat ${w.allPlayWins % 1 === 0 ? w.allPlayWins : w.allPlayWins.toFixed(1)} of ${w.allPlayGames}`,
+                      sub: one ? `${one.pointsFor.toFixed(1)} pts` : `across ${w.leagues.length} leagues`,
+                    },
+                    one?.result
+                      ? {
+                          text: `${one.result} ${one.pointsFor.toFixed(1)}–${(one.pointsAgainst ?? 0).toFixed(1)}`,
+                          sub:
+                            [one.opponentLabel ? `vs ${one.opponentLabel}` : null, one.opponentClassNow != null ? `Class ${one.opponentClassNow} now` : null]
+                              .filter(Boolean)
+                              .join(' · ') || undefined,
+                          tone: one.result === 'W' ? 'good' : one.result === 'L' ? 'bad' : 'muted',
+                        }
+                      : !one && record
+                        ? { text: record, tone: w.wins > w.losses ? 'good' : w.wins < w.losses ? 'bad' : 'muted' }
+                        : { text: '—', tone: 'muted' },
+                    one
+                      ? { text: one.leagueName?.trim() || 'League' }
+                      : {
+                          text: `${w.leagues.length} leagues`,
+                          sub: w.leagues.map((l) => `${l.leagueName?.trim() || 'League'} ${signed(l.leagueShare)}`).join(' · '),
+                        },
+                  ],
+                }
+              })}
+              emptyText="No rated weeks yet."
+            />
+          </div>
           <p className="af-rk-note">
             Your rating follows how you scored against <b>everyone in your league</b> that week, not only your matchup —
             so a win while most of the league outscored you can still lower it, and a loss in a high-scoring week can raise
-            it. Every league you played that week folds into one update; each row shows that league&apos;s share.
+            it. Every league you played that week folds into one update; the Leagues column shows each one&apos;s share.
           </p>
         </section>
       ) : null}
