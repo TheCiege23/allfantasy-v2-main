@@ -1,10 +1,12 @@
 import { prisma } from '@/lib/prisma'
 import {
   decideDivisionGate,
+  divisionGateMessage,
   getLeagueDivision,
   type DivisionGateDecision,
   type JoinPath,
 } from '@/lib/class-rating/divisionGate'
+import { hasClassException } from '@/lib/class-rating/exceptions'
 import { getManagerClass } from '@/lib/class-rating/reads'
 import { isFantasyLeagueDiscoverable } from '@/lib/public-discovery/DiscoveryQueryLayer'
 
@@ -69,7 +71,9 @@ export async function evaluateJoinDivisionGate(args: {
   let path: JoinPath = 'invited'
   try {
     const league = await prisma.league.findUnique({ where: { id: args.leagueId }, select: { settings: true } })
-    path = joinPathFor(league?.settings, args.credential)
+    // A commissioner exception names THIS manager (`lib/class-rating/exceptions.ts`): they arrive invited,
+    // so they are allowed and flagged however the league publishes its code.
+    path = hasClassException(league?.settings, args.userId) ? 'invited' : joinPathFor(league?.settings, args.credential)
     const [user, leagueDivision] = await Promise.all([getManagerClass(args.userId), getLeagueDivision(args.leagueId)])
     decision = decideDivisionGate({ user, leagueDivision, path })
   } catch (e) {
@@ -83,4 +87,24 @@ export async function evaluateJoinDivisionGate(args: {
     console.info('[division-gate]', JSON.stringify({ leagueId: args.leagueId, path, ...decision }))
   }
   return decision
+}
+
+/**
+ * The refusal every self-service seat path returns, so each join page can show the same notice and
+ * offer the same way forward: asking the commissioner (`POST /api/leagues/join`,
+ * `action: 'request_class_exception'`). `code` is the machine-readable discriminator.
+ */
+export function divisionGateRefusal(
+  decision: Extract<DivisionGateDecision, { outcome: 'deny' }>,
+  leagueId: string,
+): { error: string; code: 'DIVISION_GATE_BLOCKED'; leagueId: string; userDivision: number; leagueDivision: number; band: [number, number]; canRequest: true } {
+  return {
+    error: divisionGateMessage(decision),
+    code: 'DIVISION_GATE_BLOCKED',
+    leagueId,
+    userDivision: decision.userDivision,
+    leagueDivision: decision.leagueDivision,
+    band: decision.band,
+    canRequest: true,
+  }
 }
