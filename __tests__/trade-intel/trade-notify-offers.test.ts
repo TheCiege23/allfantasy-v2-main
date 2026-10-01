@@ -271,6 +271,19 @@ describe('🛑 an offer goes only to the managers in it, linked to their own cop
     expect(h.gradeEmail).not.toHaveBeenCalled()
   })
 
+  it('the offer push carries a signed trade-card picture', async () => {
+    const prev = process.env.NEXTAUTH_SECRET
+    try {
+      process.env.NEXTAUTH_SECRET = 'test-secret'
+      h.currentIds.mockResolvedValue([trade('pending')])
+      await detectAndNotifyLeague('SL1')
+      const payload = h.sendPush.mock.calls.find((c: unknown[]) => c[0] === 'uB')?.[1] as { imageUrl?: string | null }
+      expect(payload.imageUrl).toMatch(/^\/api\/push-card\/trade\?d=[\w-]+&s=[\w-]+$/)
+    } finally {
+      process.env.NEXTAUTH_SECRET = prev
+    }
+  })
+
   it('the manager who SENT the offer is not told about it', async () => {
     h.currentIds.mockResolvedValue([trade('pending', 'sl-B')])
     await detectAndNotifyLeague('SL1')
