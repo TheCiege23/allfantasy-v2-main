@@ -1400,6 +1400,20 @@ with it. Count the target's entries before and after and confirm the number is
 unchanged — the same "prove the negative" rule the junction detection above
 already carries.
 
+🛑 **REMOVE A WORKTREE ONLY WITH `npm run wt:remove -- <path> [--force]`.** The rule
+above failed TWICE on 2026-10-01 (~15:44 and ~16:45 UTC): two sessions each ran an
+"is it a junction?" check first, got a wrong "no" (one compared PowerShell output
+ending in `\r`), skipped the `rmdir`, and `git worktree remove` emptied the SHARED
+`node_modules` — breaking every session's local tests and tsc until a reinstall.
+A rule that depends on a detection step being right fails exactly when detection is
+wrong. `scripts/safe-worktree-remove.mjs` never detects: it unlinks `node_modules`
+BY EFFECT (a non-recursive `rmdir`, which removes a junction and refuses a real
+non-empty folder), counts the shared folder before, after unlinking and after git,
+and aborts BEFORE `git worktree remove` if anything shrank. Node built-ins only, so
+it still runs when the shared folder is the thing that is empty. Its test first
+reproduces the wipe with a plain `git worktree remove` (5 → 0); that control is what
+makes the script's 5 → 5 mean something.
+
 ⚠ **AND THE MILD VERSION IS THE COMMON ONE — IT MOVES THE BASELINE.** The
 follow-up commit that repaired the break above carried "148 errors" in its own
 message; its committed tree measures **155**. Both readings were honest. The
