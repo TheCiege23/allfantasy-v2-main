@@ -38,6 +38,18 @@ means probing and committing a fixture for it — not copying shapes out of that
 - Phase 2 attaches photos only to existing Rolling Insights rows matched on school + name + jersey;
   it creates no ESPN-sourced player rows (`GAPS.md` E-06).
 
+## Runtime (phase 2)
+
+| File | Role |
+|---|---|
+| `lib/espn/espnNcaabFetch.ts` | Adapter — the only file that calls these endpoints (DB-first allowlisted by exact path) |
+| `lib/espn/ncaabEspnMatch.ts` | Pure matching: schools (incl. reviewed `SCHOOL_ALIASES`) and same-school name + jersey |
+| `lib/espn/ncaabEspnIngest.ts` | Writer: weekly school map, then a rotating roster pass — identities + verified headshots |
+| `/api/cron/import-players?intel=1` | Caller — its own `cron-espn-ncaab-rosters` heartbeat, Oct–Apr, ≤45s a tick |
+
+School matching measured 361 of 369 RI schools against the 2026-10-01 teams list; the 8 left
+are not D1 or are a duplicate RI row.
+
 ## Rules specific to ESPN
 
 - **No credential exists.** Send `Accept: application/json` and nothing that imitates a browser.

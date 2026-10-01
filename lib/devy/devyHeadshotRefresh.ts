@@ -1,8 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import type { RunBudget } from '@/lib/cron/runBudget'
 import { isPlaceholderHeadshot } from '@/lib/player-assets/apiSportsPlaceholder'
-import { isApiSportsImageUrl } from '@/lib/player-assets/imageUrlHygiene'
-import { PLAYER_IMAGE_TYPE_HEADSHOT, writePrimaryPlayerImage } from '@/lib/player-assets/playerImageStore'
+import { writeCanonicalHeadshot } from '@/lib/player-assets/canonicalHeadshotWrite'
+import { isServedImage } from '@/lib/player-assets/servedImage'
 
 /**
  * Headshots for devy players, derived from the id we already hold.
@@ -37,14 +37,6 @@ import { PLAYER_IMAGE_TYPE_HEADSHOT, writePrimaryPlayerImage } from '@/lib/playe
 const ESPN_CFB_HEADSHOT = (athleteId: string) =>
   `https://a.espncdn.com/i/headshots/college-football/players/full/${athleteId}.png`
 
-/**
- * A 404 from this CDN still returns a body — 1 byte of `text/html`. Requiring a
- * real image content-type AND a plausible size is what separates a photo from an
- * error page; status alone would be enough today and is one CDN change from not
- * being.
- */
-const MIN_IMAGE_BYTES = 2_000
-
 /** Concurrency. Enough to drain 1,718 inside a cron budget, gentle on a CDN. */
 const CONCURRENCY = 8
 const REQUEST_TIMEOUT_MS = 10_000
@@ -63,23 +55,9 @@ export interface DevyHeadshotRefreshResult {
 
 async function resolveHeadshot(athleteId: string): Promise<string | null> {
   const url = ESPN_CFB_HEADSHOT(athleteId)
-  try {
-    const res = await fetch(url, {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    })
-    if (!res.ok) return null
-    const type = res.headers.get('content-type') ?? ''
-    if (!type.startsWith('image/')) return null
-    const length = Number(res.headers.get('content-length') ?? '0')
-    if (!Number.isFinite(length) || length < MIN_IMAGE_BYTES) return null
-    return url
-  } catch {
-    // Network failure is not evidence the player has no photo. Returning null
-    // leaves the row NULL and the next run tries again, which is correct — the
-    // alternative is recording a transient blip as a permanent absence.
-    return null
-  }
+  // A network failure reads as a miss here, which leaves the row as it was and the next
+  // run tries again — a transient blip is not recorded as a permanent absence.
+  return (await isServedImage(url, { timeoutMs: REQUEST_TIMEOUT_MS })) ? url : null
 }
 
 /**
@@ -173,21 +151,13 @@ async function writeCanonicalCollegeHeadshot(
     })
     const playerId = identity?.playerId
     if (!playerId) return
-
-    const player = await prisma.player.findUnique({ where: { id: playerId }, select: { imageUrl: true } })
-    if (!player) return
-    const current = player.imageUrl
-    if (!current || isApiSportsImageUrl(current) || current === previousUrl) {
-      await prisma.player.update({ where: { id: playerId }, data: { imageUrl: url } })
-    }
-
-    await writePrimaryPlayerImage({
+    await writeCanonicalHeadshot({
       playerId,
       sportKey: 'NCAAF',
-      imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
       url,
+      previousUrl,
       provider: 'espn',
-      confidence: 1,
+      logTag: 'devyHeadshotRefresh',
     })
   } catch (err) {
     console.warn('[devyHeadshotRefresh] canonical write failed:', err instanceof Error ? err.message : String(err))
