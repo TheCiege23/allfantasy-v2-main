@@ -1,7 +1,10 @@
+'use client'
+
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import type { WeeklyRoutineData } from '@/lib/core-app/weeklyRoutine'
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * "Your week" — the weekly routine card on the /core home (retention item 7, user decisions
@@ -12,8 +15,15 @@ import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButt
  * week's details, and says plainly that Monday night games may still count.
  */
 export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null; help?: ReactNode }) {
+  const { language } = useOptionalLanguage()
+  const spanish = language === 'es'
   if (!data) return null
   const todayStep = data.steps.find((s) => s.today)
+  const brief = [
+    ...data.steps.filter((s) => s.state === 'open' && s.key !== 'recap'),
+    ...data.steps.filter((s) => s.today && s.state !== 'open'),
+    ...data.steps.filter((s) => !s.today && s.state === 'unknown'),
+  ].filter((s, index, all) => all.findIndex((candidate) => candidate.key === s.key) === index).slice(0, 3)
   const recap = data.today === 'recap' ? data.recap : null
   const awards = data.awards ?? []
   const upsets = data.upsets ?? []
@@ -28,6 +38,28 @@ export function YourWeekRoutine({ data, help }: { data: WeeklyRoutineData | null
           {todayStep ? ` · ${todayStep.title}` : ''}
         </span>
       </header>
+      {brief.length > 0 ? (
+        <div className="af3a-card af3a-decision-brief" aria-label={spanish ? 'Tus próximas decisiones' : 'Your next decisions'}>
+          <div className="af3a-decision-brief-head">
+            <div>
+              <span className="af3a-label">{spanish ? 'TU PLAN SEMANAL' : 'YOUR WEEKLY PLAN'}</span>
+              <p>{spanish ? 'Tres lugares para empezar. Las acciones pendientes aparecen primero.' : 'Three places to start. Open decisions come first.'}</p>
+            </div>
+            <Link href="/alerts/settings">{spanish ? 'Controlar avisos' : 'Control alerts'}</Link>
+          </div>
+          <ol>
+            {brief.map((s) => (
+              <li key={s.key} data-state={s.state}>
+                <span>{s.state === 'open' ? '●' : '○'}</span>
+                <div><strong>{spanish ? ({ results: 'Resultados', waivers: 'Agentes libres', lineups: 'Alineación', gameday: 'Día de partido', recap: 'Resumen' } as const)[s.key] : s.title}</strong>
+                  <small>{spanish ? s.state === 'open' ? 'Pendiente esta semana' : 'Consulta los datos disponibles' : s.summary ?? 'Review what is available'}</small>
+                </div>
+                <Link href={s.href}>{spanish ? 'Revisar' : 'Review'} <span aria-hidden>→</span></Link>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ) : null}
       <ol className="af3a-card af3a-routine-list">
         {data.steps.map((s) => (
           <li

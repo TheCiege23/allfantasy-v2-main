@@ -3,19 +3,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { joinedLeagueDestination, readLeagueInviteFocus } from '@/lib/league-invite/engagementInvite'
 
 type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean }
 
 export default function JoinByCodePage() {
   const searchParams = useSearchParams()
   const codeFromUrl = searchParams?.get('code')?.trim()
+  const focus = readLeagueInviteFocus(searchParams?.get('focus'))
 
   const [code, setCode] = useState(codeFromUrl ?? '')
   const [password, setPassword] = useState('')
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewErrorCode, setPreviewErrorCode] = useState<string | null>(null)
-  const [status, setStatus] = useState<'idle' | 'joining' | 'success' | 'error'>(codeFromUrl ? 'idle' : 'idle')
+  const [status, setStatus] = useState<'idle' | 'joining' | 'success' | 'error' | 'auth'>('idle')
   const [message, setMessage] = useState<string>('')
   const [joinedLeagueId, setJoinedLeagueId] = useState<string | null>(null)
 
@@ -67,7 +69,7 @@ export default function JoinByCodePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-        .then((res) => res.json())
+        .then(async (res) => ({ ...(await res.json()), httpStatus: res.status }))
         .then((data) => {
           if (data.success) {
             setStatus('success')
@@ -75,9 +77,13 @@ export default function JoinByCodePage() {
             setMessage(data.alreadyMember ? 'You are already in this league.' : 'You joined the league.')
             if (data.leagueId && !data.creatorLeagueId) {
               setTimeout(() => {
-                window.location.href = `/league/${data.leagueId}`
+                window.location.href = joinedLeagueDestination(data.leagueId, focus)
               }, 1500)
             }
+            return
+          }
+          if (data.httpStatus === 401) {
+            setStatus('auth')
             return
           }
           return fetch('/api/creator-invites/join', {
@@ -104,8 +110,23 @@ export default function JoinByCodePage() {
           setMessage('Something went wrong')
         })
     },
-    [effectiveCode, password]
+    [effectiveCode, password, focus]
   )
+
+  const returnToInvite = `/join?code=${encodeURIComponent(effectiveCode)}${focus === 'league' ? '' : `&focus=${focus}`}`
+
+  if (status === 'auth') {
+    return <div className="min-h-screen flex items-center justify-center mode-surface mode-readable px-4">
+      <div className="w-full max-w-md rounded-2xl border p-6" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
+        <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>Your league is waiting</h1>
+        <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>Sign in or create an account, then return here to join{focus === 'rivalry' ? ' and explore rivalries' : focus === 'chat' ? ' and open league chat' : ''}.</p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link href={`/signup?callbackUrl=${encodeURIComponent(returnToInvite)}`} className="rounded-lg px-4 py-3 text-sm font-bold" style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}>Create account</Link>
+          <Link href={`/login?callbackUrl=${encodeURIComponent(returnToInvite)}`} className="rounded-lg border px-4 py-3 text-sm font-bold" style={{ borderColor: 'var(--line2)', color: 'var(--text)' }}>Sign in</Link>
+        </div>
+      </div>
+    </div>
+  }
 
 
   if (codeFromUrl && preview && !preview.requiresPassword && status === 'idle' && !previewError) {
@@ -120,6 +141,7 @@ export default function JoinByCodePage() {
               {preview.name} · {preview.sport}
             </p>
           )}
+          {focus !== 'league' ? <p className="mb-4 text-sm" style={{ color: 'var(--muted)' }}>After joining, you’ll open {focus === 'chat' ? 'league chat' : 'Rivalry Radar'}.</p> : null}
           <button
             type="button"
             onClick={() => join(codeFromUrl, '')}

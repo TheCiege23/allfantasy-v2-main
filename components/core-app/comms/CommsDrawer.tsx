@@ -160,6 +160,7 @@ function LeaguePanel({
   chimmyTokenCost,
   chimmyPlanAllowance = null,
   userId,
+  initialDraft,
 }: {
   leagues: CommsLeague[]
   scopeId: string | null
@@ -167,6 +168,7 @@ function LeaguePanel({
   chimmyTokenCost: number | null
   chimmyPlanAllowance?: ChimmyPlanAllowanceView | null
   userId?: string
+  initialDraft?: string | null
 }) {
   const [askChimmy, setAskChimmy] = useState(false)
 
@@ -240,6 +242,7 @@ function LeaguePanel({
       isCommissioner={Boolean(scope?.isCommissioner)}
       leagues={leagues}
       viewerId={userId ?? null}
+      initialDraft={initialDraft}
       surface="drawer"
       onAskChimmy={() => setAskChimmy(true)}
       toolbarLead={
@@ -692,6 +695,7 @@ export function CommsDrawer({
             chimmyTokenCost={chimmyTokenCost}
             chimmyPlanAllowance={chimmyPlanAllowance}
             userId={userId}
+            initialDraft={openRequest?.leagueId === scopeId ? initialDraft : null}
           />
         ) : tab === 'chimmy' ? (
           <ChimmyPanel

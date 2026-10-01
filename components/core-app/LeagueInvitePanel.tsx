@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { inviteLinkForFocus, type LeagueInviteFocus } from '@/lib/league-invite/engagementInvite'
 import '@/components/core-app/af-invite.css'
 
 /**
@@ -32,6 +34,9 @@ export function LeagueInvitePanel({
   const [info, setInfo] = useState<InviteInfo | null>(null)
   const [failed, setFailed] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [focus, setFocus] = useState<LeagueInviteFocus>('league')
+  const { language } = useOptionalLanguage()
+  const spanish = language === 'es'
 
   useEffect(() => {
     let cancelled = false
@@ -63,13 +68,12 @@ export function LeagueInvitePanel({
   if (failed) {
     return (
       <p className="af-inv-failed">
-        We could not load an invite link for this league. That is a read failure on our side, not a
-        sign that invites are closed.
+        {spanish ? 'No pudimos cargar el enlace de esta liga. Inténtalo de nuevo.' : 'We could not load an invite link for this league. Try again.'}
       </p>
     )
   }
 
-  if (!info) return <p className="af-inv-loading">Loading invite…</p>
+  if (!info) return <p className="af-inv-loading">{spanish ? 'Cargando invitación…' : 'Loading invite…'}</p>
 
   const pct = info.teamCount > 0 ? Math.round((info.claimedCount / info.teamCount) * 100) : 0
   const unclaimed = Math.max(0, info.teamCount - info.claimedCount)
@@ -77,7 +81,7 @@ export function LeagueInvitePanel({
   async function copy() {
     if (!info) return
     try {
-      await navigator.clipboard.writeText(info.inviteLink)
+      await navigator.clipboard.writeText(inviteLinkForFocus(info.inviteLink, focus))
       setCopied(true)
       window.setTimeout(() => setCopied(false), 2400)
     } catch {
@@ -92,12 +96,21 @@ export function LeagueInvitePanel({
 
   return (
     <div className="af-inv" data-compact={compact}>
+      {!compact ? (
+        <div className="af-inv-focus" role="group" aria-label={spanish ? 'Destino de la invitación' : 'Invitation destination'}>
+          {(['league', 'rivalry', 'chat'] as const).map((choice) => (
+            <button key={choice} type="button" data-active={focus === choice} onClick={() => { setFocus(choice); setCopied(false) }}>
+              {spanish ? ({ league: 'Liga', rivalry: 'Rivalidades', chat: 'Chat' } as const)[choice] : ({ league: 'League', rivalry: 'Rivalries', chat: 'Chat' } as const)[choice]}
+            </button>
+          ))}
+        </div>
+      ) : null}
       {info.teamCount > 0 ? (
         <div className="af-inv-progress-wrap">
           <div className="af-inv-progress-head">
             <span>
-              <b className="af-num">{info.claimedCount}</b> of{' '}
-              <b className="af-num">{info.teamCount}</b> teams claimed
+              <b className="af-num">{info.claimedCount}</b> {spanish ? 'de' : 'of'}{' '}
+              <b className="af-num">{info.teamCount}</b> {spanish ? 'equipos asignados' : 'teams claimed'}
             </span>
             <span className="af-num">{pct}%</span>
           </div>
@@ -117,10 +130,10 @@ export function LeagueInvitePanel({
           */}
           {unclaimed > 0 ? (
             <p className="af-inv-note">
-              {unclaimed} {unclaimed === 1 ? 'team still needs' : 'teams still need'} a manager.
+              {spanish ? `${unclaimed} ${unclaimed === 1 ? 'equipo necesita' : 'equipos necesitan'} un mánager.` : `${unclaimed} ${unclaimed === 1 ? 'team still needs' : 'teams still need'} a manager.`}
             </p>
           ) : (
-            <p className="af-inv-note af-inv-note--done">Every team is claimed.</p>
+            <p className="af-inv-note af-inv-note--done">{spanish ? 'Todos los equipos están asignados.' : 'Every team is claimed.'}</p>
           )}
         </div>
       ) : null}
@@ -129,12 +142,12 @@ export function LeagueInvitePanel({
         <input
           className="af-inv-link"
           readOnly
-          value={info.inviteLink}
+          value={inviteLinkForFocus(info.inviteLink, focus)}
           onFocus={(e) => e.currentTarget.select()}
-          aria-label="League invite link"
+          aria-label={spanish ? 'Enlace de invitación' : 'League invite link'}
         />
         <button type="button" className="af-inv-btn" onClick={copy} data-testid="league-invite-link">
-          {copied ? 'Copied' : 'Copy link'}
+          {copied ? spanish ? 'Copiado' : 'Copied' : spanish ? 'Copiar enlace' : 'Copy link'}
         </button>
       </div>
     </div>

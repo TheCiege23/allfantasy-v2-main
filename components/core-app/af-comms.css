@@ -1052,6 +1052,13 @@
 }
 
 /* ── Rich message bodies (GIF, media, polls) ───────────────────────── */
+.af-cm-recap-shortcut { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-block: 1px solid var(--line); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.af-cm-recap-shortcut > div { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.af-cm-recap-shortcut strong { color: var(--text); font-size: 12px; }
+.af-cm-recap-shortcut small { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.af-cm-recap-shortcut button { min-height: 44px; padding: 7px 10px; border: 1px solid var(--line2); border-radius: 9px; background: var(--chip); color: var(--text); font-weight: 700; cursor: pointer; }
+.af-cm-recap-shortcut button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 520px) { .af-cm-recap-shortcut { flex-wrap: wrap; } .af-cm-recap-shortcut > div { flex-basis: calc(100% - 40px); } }
 
 .af-cm-rich { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 

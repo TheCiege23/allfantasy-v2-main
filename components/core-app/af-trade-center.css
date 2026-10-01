@@ -2613,3 +2613,7 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-moves-why b { color: var(--text); }
 .af-tc-moves-why[data-dir='up'] b { color: var(--good); }
 .af-tc-moves-why[data-dir='down'] b { color: var(--bad); }
+.af-tc-share-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.af-tc-share-actions button { min-height: 44px; padding: 9px 13px; border: 1px solid var(--accent-line); border-radius: 10px; background: color-mix(in srgb, var(--accent) 9%, var(--surface)); color: var(--text); font: 700 12px/1.2 'Archivo', system-ui, sans-serif; cursor: pointer; }
+.af-tc-share-actions button:hover { border-color: var(--accent); }
+.af-tc-share-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

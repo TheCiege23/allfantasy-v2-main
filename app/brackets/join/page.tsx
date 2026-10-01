@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, Loader2, Users, Trophy } from "lucide-react"
+import Link from "next/link"
 
 type Preview = {
   leagueId: string
@@ -23,6 +24,7 @@ function JoinLeagueForm() {
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [authRequired, setAuthRequired] = useState(false)
   const router = useRouter()
   const sp = useSearchParams()
 
@@ -84,7 +86,7 @@ function JoinLeagueForm() {
       const data = await res.json()
       if (!res.ok) {
         if (data.error === "UNAUTHENTICATED") {
-          router.push(`/login?callbackUrl=${encodeURIComponent(returnTo)}`)
+          setAuthRequired(true)
           return
         }
         if (data.error === "AGE_REQUIRED") {
@@ -139,6 +141,16 @@ function JoinLeagueForm() {
           {error}
         </div>
       )}
+      {authRequired ? (
+        <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}>
+          <h2 className="font-semibold" style={{ color: 'var(--text)' }}>Keep your place in this pool</h2>
+          <p className="mt-1 text-sm mode-muted">Your invite code will be here when you return.</p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <Link href={`/signup?callbackUrl=${encodeURIComponent(`/brackets/join?code=${encodeURIComponent(code.trim().toUpperCase())}`)}`} className="rounded-lg px-4 py-3 text-sm font-bold" style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}>Create account</Link>
+            <Link href={`/login?callbackUrl=${encodeURIComponent(`/brackets/join?code=${encodeURIComponent(code.trim().toUpperCase())}`)}`} className="rounded-lg border px-4 py-3 text-sm font-bold" style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>Sign in</Link>
+          </div>
+        </div>
+      ) : null}
 
       <form onSubmit={handleJoin} className="space-y-4">
         <div>
