@@ -1,8 +1,12 @@
+'use client'
+
 import Link from 'next/link'
 import type { LeagueWeekBoard, LeagueSideline } from '@/lib/core-app/weekBoard'
 import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
 import '@/components/core-app/af-week-league.css'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 /**
  * Screen 38a·3 — Your Week, scoped to one league.
@@ -114,45 +118,48 @@ function recordOf(board: LeagueWeekBoard, rosterId: string | null | undefined): 
 }
 
 export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueProps) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const copy = (english: string) => coreUiCopy(english, language)
   const { yours, sidelines, rivalry } = board
   const proj = yours?.projection ?? null
   const yourRecord = recordOf(board, board.yourRosterId)
   const oppRecord = recordOf(board, yours?.opponent.rosterId)
-  const yourName = board.yourTeamName ?? 'Your team'
+  const yourName = board.yourTeamName ?? copy('Your team')
 
   return (
     <div className="af-wl">
       <header className="af-wl-head">
         <p className="af-label af-wl-eyebrow">
-          {board.leagueName} · Week {board.week}
+          {board.leagueName} · {copy('Week')} {board.week}
         </p>
         <div className="af-wl-title-row">
-          <h1 className="af-display af-wl-title">Your week</h1>
+          <h1 className="af-display af-wl-title">{copy('Your week')}</h1>
           <Link href={allWeeksHref} className="af-wl-allweeks">
-            Every league at once →
+            {copy('Every league at once')} →
           </Link>
         </div>
       </header>
 
       {/* ── Hero ────────────────────────────────────────────────────── */}
       {yours ? (
-        <section className="af-wl-hero" aria-label="Your matchup">
+        <section className="af-wl-hero" aria-label={copy('Your matchup')}>
           <div className="af-wl-hero-top">
-            <span className="af-label af-wl-chip">Your matchup</span>
+            <span className="af-label af-wl-chip">{copy('Your matchup')}</span>
             {yours.elimination ? (
               <span className="af-label af-wl-chip" data-tone="bad">
-                Elimination
+                {copy('Elimination')}
               </span>
             ) : null}
             <span className="af-wl-spacer" />
             <Link href={yours.href} className="af-wl-action">
-              Open the matchup →
+              {copy('Open the matchup')} →
             </Link>
           </div>
 
           <div className="af-wl-sides">
             <div className="af-wl-side" data-you="true">
-              <TeamAvatar url={board.yourAvatarUrl} fallback="YOU" className="af-wl-avatar" px={44} />
+              <TeamAvatar url={board.yourAvatarUrl} fallback={es ? 'TÚ' : 'YOU'} className="af-wl-avatar" px={44} />
               <span className="af-wl-side-id">
                 <span className="af-wl-side-name">{yourName}</span>
                 {yourRecord ? <span className="af-wl-side-rec af-num">{yourRecord}</span> : null}
@@ -161,7 +168,7 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
             </div>
 
             <span className="af-wl-vs af-label" aria-hidden>
-              vs
+              {copy('vs')}
             </span>
 
             <div className="af-wl-side">
@@ -172,7 +179,7 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
                 px={44}
               />
               <span className="af-wl-side-id">
-                <span className="af-wl-side-name">{yours.opponent.name ?? 'Unnamed team'}</span>
+                <span className="af-wl-side-name">{yours.opponent.name ?? copy('Unnamed team')}</span>
                 {oppRecord ? <span className="af-wl-side-rec af-num">{oppRecord}</span> : null}
               </span>
               <span className="af-wl-side-proj af-num">{proj ? n1(proj.them) : '—'}</span>
@@ -188,9 +195,9 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
           {proj ? (
             <div className="af-wl-prob">
               <div className="af-wl-prob-row">
-                <span className="af-label">Win probability</span>
+                <span className="af-label">{copy('Win probability')}</span>
                 <span className="af-wl-prob-read af-num">
-                  You {pct(proj.winProbability)}% · {yours.opponent.name ?? 'Them'}{' '}
+                  {copy('You')} {pct(proj.winProbability)}% · {yours.opponent.name ?? copy('Them')}{' '}
                   {100 - pct(proj.winProbability)}%
                 </span>
               </div>
@@ -198,7 +205,7 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
                 <span className="af-wl-prob-you" style={{ width: `${pct(proj.winProbability)}%` }} />
               </span>
               <div className="af-wl-prob-row">
-                <span className="af-wl-prob-sub">Projected margin</span>
+                <span className="af-wl-prob-sub">{copy('Projected margin')}</span>
                 <span className="af-wl-margin af-num" data-dir={proj.margin >= 0 ? 'up' : 'down'}>
                   {proj.margin >= 0 ? '+' : '−'}
                   {n1(Math.abs(proj.margin))} PTS
@@ -207,13 +214,13 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
             </div>
           ) : (
             <div className="af-wl-prob" data-missing="true">
-              <span className="af-label">Win probability</span>
+              <span className="af-label">{copy('Win probability')}</span>
               <span className="af-wl-prob-why">
                 {yours.yourSampleWeeks === 0
-                  ? 'neither team has a scored week on file yet, so there is nothing to project from'
-                  : `only ${yours.yourSampleWeeks} scored ${
-                      yours.yourSampleWeeks === 1 ? 'week' : 'weeks'
-                    } on file — too thin to price this`}
+                  ? copy('neither team has a scored week on file yet, so there is nothing to project from')
+                  : es
+                    ? `Solo hay ${yours.yourSampleWeeks} ${yours.yourSampleWeeks === 1 ? 'semana puntuada' : 'semanas puntuadas'} registrada${yours.yourSampleWeeks === 1 ? '' : 's'}; no basta para calcular una probabilidad.`
+                    : `only ${yours.yourSampleWeeks} scored ${yours.yourSampleWeeks === 1 ? 'week' : 'weeks'} on file — too thin to price this`}
               </span>
             </div>
           )}
@@ -227,28 +234,25 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
             data-tone={rivalry ? rivalryTone(rivalry.wins, rivalry.losses) : 'none'}
           >
             <span className="af-label af-wl-rivalry-tag">
-              {rivalry ? `All-time ${rivalry.wins}—${rivalry.losses}` : 'All-time'}
+              {rivalry ? `${copy('All-time')} ${rivalry.wins}—${rivalry.losses}` : copy('All-time')}
             </span>
             <p className="af-wl-rivalry-note">
               {rivalry
-                ? describeRivalry(rivalry, yours.opponent.name)
+                ? describeRivalry(rivalry, yours.opponent.name, language)
                 : /*
                      Never met is a real fact, and a different one from 0-0. A
                      first meeting is worth saying out loud rather than
                      rendering as an empty record.
                    */
-                  `You have never played ${
-                    yours.opponent.name ?? 'this team'
-                  } before — first meeting on file.`}
+                  es ? `Nunca has jugado contra ${yours.opponent.name ?? 'este equipo'}; es el primer encuentro registrado.` : `You have never played ${yours.opponent.name ?? 'this team'} before — first meeting on file.`}
             </p>
           </div>
         </section>
       ) : (
         <section className="af-wl-hero" data-empty="true">
-          <h2 className="af-label">Your matchup</h2>
+          <h2 className="af-label">{copy('Your matchup')}</h2>
           <p className="af-wl-hero-why">
-            You have no game on file in week {board.week}. That is either a bye or a week whose
-            schedule has not synced — the rest of the league&apos;s board is below either way.
+            {es ? `No hay partido registrado para ti en la semana ${board.week}. Puede ser una semana de descanso o un calendario aún sin sincronizar. Los demás partidos de la liga aparecen abajo.` : `You have no game on file in week ${board.week}. That is either a bye or a week whose schedule has not synced — the rest of the league's board is below either way.`}
           </p>
         </section>
       )}
@@ -256,12 +260,10 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
       {/* ── The rest of the league ──────────────────────────────────── */}
       <section className="af-wl-rest">
         <header className="af-wl-rest-head">
-          <h2 className="af-label">Rest of {board.leagueName}</h2>
+          <h2 className="af-label">{es ? `Resto de ${board.leagueName}` : `Rest of ${board.leagueName}`}</h2>
           <span className="af-wl-rest-note">
             {sidelines.length > 0
-              ? `${sidelines.length} other ${
-                  sidelines.length === 1 ? 'matchup' : 'matchups'
-                } · closest first`
+              ? es ? `${sidelines.length} ${sidelines.length === 1 ? 'enfrentamiento más' : 'enfrentamientos más'} · más ajustados primero` : `${sidelines.length} other ${sidelines.length === 1 ? 'matchup' : 'matchups'} · closest first`
               : null}
           </span>
         </header>
@@ -274,7 +276,7 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
           </div>
         ) : (
           <p className="af-wl-rest-why">
-            No other matchups are on file for this week in {board.leagueName}.
+            {es ? `No hay más enfrentamientos registrados esta semana en ${board.leagueName}.` : `No other matchups are on file for this week in ${board.leagueName}.`}
           </p>
         )}
       </section>
@@ -286,9 +288,7 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
       */}
       {proj ? (
         <p className="af-wl-basis">
-          Win probability is a normal approximation over each team&apos;s scored weeks in{' '}
-          {board.leagueName}, on this league&apos;s own scoring. It is not a simulation, and it
-          knows nothing about injuries or byes.
+          {es ? `La probabilidad de ganar es una aproximación basada en las semanas puntuadas de cada equipo en ${board.leagueName}, con las reglas de esta liga. No es una simulación ni considera lesiones o descansos.` : `Win probability is a normal approximation over each team's scored weeks in ${board.leagueName}, on this league's own scoring. It is not a simulation, and it knows nothing about injuries or byes.`}
         </p>
       ) : null}
     </div>
@@ -296,6 +296,8 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
 }
 
 function Sideline({ m, board }: { m: LeagueSideline; board: LeagueWeekBoard }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const aLeads = m.aWinProbability != null && m.aWinProbability >= 0.5
   const aRec = recordOf(board, m.a.rosterId)
   const bRec = recordOf(board, m.b.rosterId)
@@ -309,7 +311,7 @@ function Sideline({ m, board }: { m: LeagueSideline; board: LeagueWeekBoard }) {
           className="af-wl-card-avatar"
           px={22}
         />
-        <span className="af-wl-card-name">{m.a.name ?? 'Unnamed team'}</span>
+        <span className="af-wl-card-name">{m.a.name ?? copy('Unnamed team')}</span>
         {aRec ? <span className="af-wl-card-rec af-num">{aRec}</span> : null}
         <span className="af-wl-card-proj af-num">
           {m.a.projected != null ? n1(m.a.projected) : '—'}
@@ -329,7 +331,7 @@ function Sideline({ m, board }: { m: LeagueSideline; board: LeagueWeekBoard }) {
           className="af-wl-card-avatar"
           px={22}
         />
-        <span className="af-wl-card-name">{m.b.name ?? 'Unnamed team'}</span>
+        <span className="af-wl-card-name">{m.b.name ?? copy('Unnamed team')}</span>
         {bRec ? <span className="af-wl-card-rec af-num">{bRec}</span> : null}
         <span className="af-wl-card-proj af-num">
           {m.b.projected != null ? n1(m.b.projected) : '—'}
@@ -337,7 +339,7 @@ function Sideline({ m, board }: { m: LeagueSideline; board: LeagueWeekBoard }) {
       </div>
 
       {m.aWinProbability == null ? (
-        <p className="af-wl-card-why">not projected — too few scored weeks</p>
+        <p className="af-wl-card-why">{copy('not projected — too few scored weeks')}</p>
       ) : null}
     </article>
   )
@@ -361,7 +363,15 @@ function rivalryTone(wins: number, losses: number): 'up' | 'down' | 'even' {
 function describeRivalry(
   r: { wins: number; losses: number; meetings: number; averageMargin: number },
   oppName: string | null,
+  language = 'en',
 ): string {
+  if (language === 'es') {
+    const meetings = `${r.meetings} ${r.meetings === 1 ? 'encuentro' : 'encuentros'}`
+    const margin = Math.abs(r.averageMargin).toFixed(1)
+    if (r.losses > r.wins) return `${oppName ?? 'Tu rival'} lidera la serie tras ${meetings}, por ${margin} puntos de media.`
+    if (r.wins > r.losses) return `Lideras la serie tras ${meetings}, por ${margin} puntos de media.`
+    return `La serie está empatada tras ${meetings}, con ${margin} puntos de diferencia media.`
+  }
   const them = oppName ?? 'They'
   const meetings = `${r.meetings} ${r.meetings === 1 ? 'meeting' : 'meetings'}`
   const margin = Math.abs(r.averageMargin).toFixed(1)

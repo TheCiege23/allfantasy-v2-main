@@ -180,16 +180,17 @@ export const NO_LEAGUE_ACTIONS = [
   { href: '/trade-evaluator', label: 'Grade a trade', primary: false },
 ] as const
 
-export function NoLeaguesYet({ what }: { what: string }) {
+export function NoLeaguesYet({ what, language = 'en' }: { what: string; language?: string }) {
+  const es = language === 'es'
   return (
-    <section className="af-bd-noleagues" data-testid="board-no-leagues" aria-label="No leagues connected yet">
+    <section className="af-bd-noleagues" data-testid="board-no-leagues" aria-label={es ? 'Aún no hay ligas conectadas' : 'No leagues connected yet'}>
       <p className="af-bd-noleagues-lead">
-        <strong>No leagues connected yet.</strong> {what}
+        <strong>{es ? 'Aún no hay ligas conectadas.' : 'No leagues connected yet.'}</strong> {what}
       </p>
       <div className="af-bd-noleagues-actions">
         {NO_LEAGUE_ACTIONS.map((a) => (
           <Link key={a.href} href={a.href} className={a.primary ? 'af-btn' : 'af-btn af-btn--ghost'}>
-            {a.label}
+            {es ? ({ 'Connect a league': 'Conectar una liga', 'Try a mock draft': 'Probar un draft simulado', 'Grade a trade': 'Evaluar un intercambio' } as Record<string, string>)[a.label] ?? a.label : a.label}
           </Link>
         ))}
       </div>

@@ -100,7 +100,7 @@ export function LeagueTabs({
     requires === 'scores' ? hasScoredWeek === false : requires === 'trades' ? !tradeSupported : !draftSupported
 
   const visibleTabs = TABS.filter((tab) => !tab.requires || !hiddenFor(tab.requires))
-  const notes = describeHiddenTabs({ hasScoredWeek, tradeSupported, draftSupported, platform })
+  const notes = describeHiddenTabs({ hasScoredWeek, tradeSupported, draftSupported, platform }, language)
 
   return (
     <nav className="af-lt" aria-label={language === 'es' ? `Secciones de ${leagueName}` : `${leagueName} views`}>
@@ -140,12 +140,13 @@ export function LeagueTabs({
           )
         }
         const restActive = rest.some((t) => t.key === activeKey)
+        const restActiveTab = rest.find((t) => t.key === activeKey)
         return (
           <div className="af-lt-compact">
             <div className="af-lt-compact-row" style={{ gridTemplateColumns: `repeat(${primary.length}, minmax(0, 1fr))` }}>{primary.map((t) => tab(t.key, language === 'es' ? t.labelEs : t.label))}</div>
             {rest.length ? (
-              <details className="af-lt-more" open={restActive || undefined}>
-                <summary className="af-lt-tab" data-active={restActive}>{copy('More')}</summary>
+              <details className="af-lt-more">
+                <summary className="af-lt-tab" data-active={restActive}>{restActiveTab ? `${copy('More')} · ${copy(restActiveTab.label)}` : copy('More')}</summary>
                 <div className="af-lt-more-list">{rest.map((t) => tab(t.key, copy(t.label)))}</div>
               </details>
             ) : null}
@@ -192,7 +193,7 @@ export function LeagueTabs({
         something that is not coming, or to give up on something that is.
       */}
       {notes.length > 0 ? (
-        <ul className="af-lt-absent" aria-label="Views not available for this league">
+        <ul className="af-lt-absent" aria-label={copy('Views not available for this league')}>
           {notes.map((note) => (
             <li key={note}>{note}</li>
           ))}
@@ -219,9 +220,10 @@ export function describeHiddenTabs({
   tradeSupported: boolean
   draftSupported: boolean
   platform?: string | null
-}): string[] {
+}, language = 'en'): string[] {
   const notes: string[] = []
-  const label = (platform ?? '').trim() || 'this platform'
+  const es = language === 'es'
+  const label = (platform ?? '').trim() || (es ? 'esta plataforma' : 'this platform')
 
   /*
    * ⚠ `=== false`, NOT `!hasScoredWeek`. `null` means the signal was not read —
@@ -231,14 +233,14 @@ export function describeHiddenTabs({
    */
   if (hasScoredWeek === false) {
     notes.push(
-      'Matchup, Your week, Standings and Outlook open once this league has a scored week — they are all built from one.',
+      es ? 'Enfrentamiento, Tu semana, Clasificación y Pronóstico se abren cuando esta liga tenga una semana puntuada.' : 'Matchup, Your week, Standings and Outlook open once this league has a scored week — they are all built from one.',
     )
   }
   if (!tradeSupported) {
-    notes.push(`We couldn’t bring across trade history from ${label} for this league yet, so there is no Trades view.`)
+    notes.push(es ? `Aún no pudimos importar el historial de intercambios de ${label} para esta liga; la vista de Intercambios no está disponible.` : `We couldn’t bring across trade history from ${label} for this league yet, so there is no Trades view.`)
   }
   if (!draftSupported) {
-    notes.push(`We couldn’t bring across draft results from ${label} for this league yet, so there is no Draft HQ view.`)
+    notes.push(es ? `Aún no pudimos importar los resultados del draft de ${label} para esta liga; la vista de Draft HQ no está disponible.` : `We couldn’t bring across draft results from ${label} for this league yet, so there is no Draft HQ view.`)
   }
   return notes
 }

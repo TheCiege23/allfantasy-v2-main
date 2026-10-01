@@ -425,6 +425,9 @@
   border-color: var(--accent-line);
   color: var(--accent);
 }
+.af-core .af-lt-more > summary[data-active='true'] {
+  color: var(--accent-ink, #0c121b);
+}
 @media (min-width: 721px) {
   .af-core .af-lt-compact {
     flex-direction: row;
