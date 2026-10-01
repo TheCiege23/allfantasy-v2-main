@@ -183,7 +183,19 @@ describe('G49J NFL redraft provider migration and certification', () => {
     const fantasycalc = read('app/api/fantasycalc/route.ts')
 
     expect(headshot).toMatch(/resolveNflRedraftCanonicalHeadshot/)
-    expect(headshot).toMatch(/const csPlayers = sport === 'NFL' \? \[\] : await fetchClearSportsPlayers\(sport\)/)
+    /*
+     * NFL headshots must not reach ClearSports. This used to pin the line that skipped it for NFL
+     * only (`sport === 'NFL' ? [] : await fetchClearSportsPlayers(sport)`); #280 (9161af1aa,
+     * 2026-07-20) removed ClearSports from the chain for EVERY sport — it publishes no image
+     * product — and the old regex then failed on main for ten weeks. Pin the stronger property
+     * instead: no ClearSports fetch is made at all, and both entry points start from an empty
+     * list. Comments — block, whole-line AND trailing — are stripped so the file's own explanation
+     * of the removal can neither fake a match nor hide a real call. The trailing-comment rule skips
+     * a `//` preceded by `:` so a `https://` inside a string survives.
+     */
+    const headshotCode = headshot.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
+    expect(headshotCode).not.toMatch(/fetchClearSportsPlayers\s*\(/)
+    expect(headshotCode.match(/const csPlayers: ClearSportsPlayerLite\[\] = \[\]/g) ?? []).toHaveLength(2)
     expect(weather).toMatch(/resolveNflRedraftCanonicalWeather/)
     expect(weather).toMatch(/canonical: true/)
     expect(fantasycalc).toMatch(/resolveNflRedraftCanonicalFantasyValuation/)
