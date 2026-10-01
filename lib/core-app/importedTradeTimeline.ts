@@ -51,7 +51,8 @@ export function importedTradeTimelineRows(trades: readonly TradeRecord[]) {
       partnerName: `${first.manager ?? 'Side A'} ↔ ${second.manager ?? 'Side B'}`,
       sideAName: first.manager ?? 'Side A', sideBName: second.manager ?? 'Side B',
       sideAYou: first.isYou, sideBYou: second.isYou,
-      sideALabel: `${first.manager ?? 'Side A'} sent`, sideBLabel: `${second.manager ?? 'Side B'} sent`,
+      // Each column is named for the team that RECEIVED it — the card lists side A's `received` first.
+      sideALabel: `${first.manager ?? 'Side A'} received`, sideBLabel: `${second.manager ?? 'Side B'} received`,
       sent: assets(second), received: assets(first),
       timestamp: Number.isFinite(date.getTime()) ? date.toISOString() : '',
       leagueGrade,
@@ -67,6 +68,16 @@ export function importedTradeTimelineRows(trades: readonly TradeRecord[]) {
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+
+/**
+ * `year:round` for a draft-pick name in any spelling the two sides use — the ledger's
+ * "2027 round 1", the grader's "2027 1st", a chart's "2027 Pick 1.04" — or null when the name is
+ * not a pick.
+ */
+export function pickKey(name: string): string | null {
+  const m = name.match(/\b(\d{4})\b.*?\b(?:round\s*(\d{1,2})|(\d{1,2})(?:st|nd|rd|th)|pick\s*(\d{1,2})\.\d{1,2})\b/i)
+  return m ? `${m[1]}:${Number(m[2] ?? m[3] ?? m[4])}` : null
+}
 
 /** A live completed feed has unresolved picks. Preserve its metadata, but use
  * the graded ledger's resolved assets and values when both describe the same deal. */
@@ -95,10 +106,16 @@ export function mergeImportedTradeTimelineRows<T extends { id: string }>(
 /**
  * The league value the grade priced each asset at, in the assets' own order.
  *
- * Matched by NAME first (a used pick by the player drafted with it), then — only when what is left
- * on the side pairs up one-for-one — by position, which is the order the grader priced them in. An
- * asset nothing matches reads null and renders no number: a guessed value beside a real letter is
- * the thing the grade exists to refuse.
+ * Matched by NAME first (a used pick by the player drafted with it), then an unused pick by YEAR and
+ * ROUND, then — only when what is left on the side pairs up one-for-one — by position, which is the
+ * order the grader priced them in. An asset nothing matches reads null and renders no number: a
+ * guessed value beside a real letter is the thing the grade exists to refuse.
+ *
+ * 🛑 THE PICK PASS IS WHY A 2nd STOPPED SHOWING A 1st's VALUE (HailShiva, 2026-10-01). The ledger
+ * names a pick "2027 round 1" and the grader "2027 1st", so no pick ever matched by name and every
+ * one fell to the positional pass — and the ledger lists picks in a different order from the one the
+ * grader priced them in. The card printed "2027 round 2 — 3,034 / 2027 round 1 — 1,559" under a
+ * sentence calling the 2027 1st the most valuable asset in the deal.
  */
 export function assetValues(
   assets: ReadonlyArray<TimelineAsset>,
@@ -112,6 +129,16 @@ export function assetValues(
     if (!hit) return null
     hit.used = true
     return hit.line.leagueValue
+  })
+  out.forEach((v, i) => {
+    const a = assets[i]!
+    // A used pick is priced as its drafted player, which the name pass already had its chance at.
+    const key = v == null && !a.gradedAs ? pickKey(a.label) : null
+    if (!key) return
+    const hit = pool.find(p => !p.used && pickKey(p.line.name) === key)
+    if (!hit) return
+    hit.used = true
+    out[i] = hit.line.leagueValue
   })
   const openAssets = out.map((v, i) => (v == null ? i : -1)).filter(i => i >= 0)
   const openLines = pool.filter(p => !p.used)

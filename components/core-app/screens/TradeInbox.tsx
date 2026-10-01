@@ -874,9 +874,27 @@ export function TradeInbox(props: {
                       <span className="af-tc-timeline-status">{copy(statusLabel(trade.status))}</span>
                       <time>{localizedWhenLabel(trade.executedAt ?? trade.timestamp ?? null, language) ?? copy('date unavailable')}</time>
                     </div>
+                    {/*
+                      🛑 A COMPLETED TRADE LISTS WHAT EACH TEAM RECEIVED, NOT WHAT IT SENT (2026-10-01).
+                      It used to read "<A> sent" over `sent`, so the A beside A's name sat above the
+                      assets A GAVE AWAY. Checked against KeepTradeCut — whose columns are "Team 1
+                      gets…" — every AF grade read as the opposite verdict, when the two agreed on
+                      both trades reported. Side A's column is now side A's `received`, under the
+                      same name and in the same order as the grade column, so a name, its assets and
+                      its letter line up. An open offer keeps "You send / You receive".
+                    */}
                     <div className="af-tc-timeline-assets">
-                      <div><span>{trade.sideALabel ?? (trade.proposerName ? `${trade.proposerName} ${copy('sent')}` : trade.direction === 'complete' ? copy('Side A sent') : copy('You send'))}</span><TimelineAssetList assets={trade.sent} values={sentValues} language={language} /></div>
-                      <div><span>{trade.sideBLabel ?? (trade.receiverName ? `${trade.receiverName} ${copy('sent')}` : trade.direction === 'complete' ? copy('Side B sent') : copy('You receive'))}</span><TimelineAssetList assets={trade.received} values={receivedValues} language={language} /></div>
+                      {isCompleted ? (
+                        <>
+                          <div><span>{trade.sideALabel ?? `${sideAName} ${copy('received')}`}</span><TimelineAssetList assets={trade.received} values={receivedValues} language={language} /></div>
+                          <div><span>{trade.sideBLabel ?? `${sideBName} ${copy('received')}`}</span><TimelineAssetList assets={trade.sent} values={sentValues} language={language} /></div>
+                        </>
+                      ) : (
+                        <>
+                          <div><span>{trade.sideALabel ?? (trade.proposerName ? `${trade.proposerName} ${copy('sent')}` : trade.direction === 'complete' ? copy('Side A sent') : copy('You send'))}</span><TimelineAssetList assets={trade.sent} values={sentValues} language={language} /></div>
+                          <div><span>{trade.sideBLabel ?? (trade.receiverName ? `${trade.receiverName} ${copy('sent')}` : trade.direction === 'complete' ? copy('Side B sent') : copy('You receive'))}</span><TimelineAssetList assets={trade.received} values={receivedValues} language={language} /></div>
+                        </>
+                      )}
                     </div>
                     {reasons.length > 0 ? (
                       <ul className="af-tc-timeline-why" aria-label={copy('Why it graded this way')}>
