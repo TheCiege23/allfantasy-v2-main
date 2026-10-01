@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { leagueIdentityColumns } from '@/lib/player-identity/externalIdNamespace'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
+import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity'
 
 type Tx = Prisma.TransactionClient
 
@@ -34,13 +35,10 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 export function matchImportedRoster(team: ImportedTeam, rosters: ImportedRoster[]): ImportedRoster {
-  const byTeamId = rosters.filter((roster) => {
-    const data = asRecord(roster.playerData)
-    const metadata = asRecord(data.import)
-    return String(data.source_team_id ?? metadata.sourceTeamId ?? '') === team.externalId
-  })
+  const byTeamId = rosters.filter((roster) => rosterSourceTeamId(roster.playerData) === team.externalId)
   const candidates = byTeamId.length ? byTeamId : rosters.filter((roster) =>
-    Boolean(team.platformUserId) && roster.platformUserId === team.platformUserId,
+    // Older imports can lack a team marker. A marker for another team is never a safe fallback.
+    Boolean(team.platformUserId) && roster.platformUserId === team.platformUserId && !rosterSourceTeamId(roster.playerData),
   )
   if (candidates.length !== 1) {
     refuse(`Cannot identify one current roster for imported team ${team.teamName}. Refresh the import before creating a standalone league.`)
@@ -51,7 +49,7 @@ export function matchImportedRoster(team: ImportedTeam, rosters: ImportedRoster[
 function mapPlayerRows(rows: unknown, idMap: Map<string, string>): unknown {
   if (!Array.isArray(rows)) return rows
   return rows.map((row) => {
-    if (typeof row === 'string') return idMap.get(row) ?? row
+    if (typeof row === 'string' || typeof row === 'number') return idMap.get(String(row)) ?? row
     const obj = asRecord(row)
     if (!Object.keys(obj).length) return row
     const id = String(obj.id ?? obj.player_id ?? '')
@@ -127,7 +125,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     refuse('Team count must match the imported league exactly to carry over every roster.')
   }
   const creatorTeam = teams.find((team) => team.claimedByUserId === args.creatorUserId)
-    ?? teams.find((team) => team.isCommissioner)
+    ?? teams.find((team) => team.isCommissioner && !team.claimedByUserId)
   if (!creatorTeam) refuse('Claim your commissioner team in the import before carrying rosters over.')
   const orderedTeams = [creatorTeam, ...teams.filter((team) => team.id !== creatorTeam.id).sort((a, b) => a.externalId.localeCompare(b.externalId))]
   const sourceRosters = orderedTeams.map((team) => matchImportedRoster(team, rosters))
