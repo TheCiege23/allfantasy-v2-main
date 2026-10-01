@@ -292,16 +292,35 @@ export function injuryAlert(opts: {
   team: string
   status: string
   sport?: string
+  /** The injury itself ("Knee"), when the report names one. */
+  bodyPart?: string | null
+  /** The report's own words ("Did not practice Wednesday"), when it has any. */
+  notes?: string | null
+  /** Player headshot for the push picture. */
+  imageUrl?: string | null
 }): NotificationEvent {
+  const bodyPart = opts.bodyPart?.trim() || null
+  const notes = opts.notes?.trim() || null
+  const listed = `${opts.playerName} has been listed as ${opts.status}${bodyPart ? ` (${bodyPart})` : ''}.`
+  // A phone shows roughly two lines; the report text is the part worth reading, so it is kept
+  // and capped rather than the generic sentence padding it out.
+  const body = notes ? `${listed} ${notes}`.slice(0, 220) : listed
   return {
     type: 'injury_update',
     title: `${opts.playerName} (${opts.team}) — ${opts.status}`,
-    body: `${opts.playerName} has been listed as ${opts.status}.`,
+    body,
     userIds: opts.userIds,
     leagueId: opts.leagueId,
     actionHref: `/player/${encodeURIComponent(opts.playerName.toLowerCase().replace(/\s+/g, '-'))}`,
     actionLabel: 'View Player',
-    meta: { playerName: opts.playerName, team: opts.team, status: opts.status, sport: opts.sport },
+    meta: {
+      playerName: opts.playerName,
+      team: opts.team,
+      status: opts.status,
+      sport: opts.sport,
+      ...(bodyPart ? { bodyPart } : {}),
+      ...(opts.imageUrl ? { imageUrl: opts.imageUrl } : {}),
+    },
     severity: ['out', 'ir', 'suspended'].includes(opts.status.toLowerCase()) ? 'high' : 'medium',
     source: 'injury-importer',
   }

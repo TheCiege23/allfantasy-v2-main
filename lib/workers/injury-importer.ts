@@ -5,7 +5,7 @@ import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { apiChain } from '@/lib/workers/api-chain'
 import { ingest, injuryAlert } from '@/lib/notification-engine'
-import { ownersByPlayerId } from '@/lib/live/bigPlayNotifier'
+import { headshotsByRiId, ownersByPlayerId } from '@/lib/live/bigPlayNotifier'
 
 const UPSERT_BATCH_SIZE = 100
 
@@ -161,9 +161,12 @@ export async function runInjuryImporter(options?: {
       )
       const capped = highSeverity.slice(0, 5)
       if (capped.length > 0) {
-        const owners = await ownersByPlayerId(
-          Array.from(new Set(capped.map((r) => r.playerId).filter(Boolean)))
-        ).catch(() => new Map<string, string[]>())
+        const cappedIds = Array.from(new Set(capped.map((r) => r.playerId).filter(Boolean)))
+        const owners = await ownersByPlayerId(cappedIds).catch(() => new Map<string, string[]>())
+        // Only for players someone rosters, and never at the cost of the alert itself.
+        const headshots = owners.size > 0
+          ? await headshotsByRiId([...owners.keys()]).catch(() => new Map<string, string>())
+          : new Map<string, string>()
         for (const row of capped) {
           const userIds = owners.get(row.playerId)
           if (!userIds || userIds.length === 0) continue
@@ -173,6 +176,9 @@ export async function runInjuryImporter(options?: {
               team: row.team,
               status: row.status,
               sport: row.sport,
+              bodyPart: row.bodyPart,
+              notes: row.notes,
+              imageUrl: headshots.get(row.playerId) ?? null,
               userIds,
             }),
             skipChannels: { email: true, sms: true },
