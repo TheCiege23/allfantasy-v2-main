@@ -1,6 +1,6 @@
 import React from 'react'
 import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 
 import Matchup from '@/components/core-app/screens/Matchup'
 import type { MatchupData } from '@/lib/core-app/matchup'
@@ -79,6 +79,12 @@ function crests(container: HTMLElement): string[] {
 }
 
 describe('Matchup banner — unplayed week', () => {
+  it('shows team initials if a saved manager avatar fails to load', () => {
+    const { container } = render(<Matchup data={data()} />)
+    fireEvent.error(container.querySelector('img.af-mu-crest--img')!)
+    expect(container.querySelectorAll('img.af-mu-crest--img')).toHaveLength(1)
+    expect(container.querySelector('.af-mu-crest:not(.af-mu-crest--img)')?.textContent).toBe('TH')
+  })
   it('still shows both manager crests when nothing has been scored', () => {
     const { container } = render(<Matchup data={data()} />)
     expect(crests(container)).toEqual([CREST_YOU, CREST_THEM])
