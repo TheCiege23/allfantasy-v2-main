@@ -52,6 +52,7 @@ import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import { matchOfferToRosters, screenshotDraftNote, screenshotLoadedLine } from '@/lib/trade-screenshot/matchOffer'
 import type { OfferRead } from '@/lib/trade-screenshot/offerRead'
 import { managerNameBesideLabel } from '@/lib/trade-screenshot/managerHandles'
+import { tradeExplainPrompt } from '@/lib/core-app/tradeExplainPrompt'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -1402,28 +1403,36 @@ export function TradeCenter(props: {
    * a vague answer.
    */
   const askChimmy = useCallback(() => {
-    const side = (label: string, lines: Line[]) =>
-      lines.length > 0 ? `${label}: ${lines.map((l) => l.name).join(', ')}` : null
-
-    const parts = [side('I give', give), side('I get', get)].filter(Boolean).join('. ')
-    const league = props.league?.name ? ` in ${props.league.name}` : ''
+    /* A side's total on screen: the grade's league value when analysed, else market; null if any is unpriced. */
+    const total = (lines: Line[]) =>
+      lines.every((l) => (l.leagueValue ?? l.marketValue) != null)
+        ? lines.reduce((s, l) => s + (l.leagueValue ?? l.marketValue ?? 0), 0)
+        : null
     const verdict = noSignal
-      ? ' The proposal grade is unavailable.'
+      ? 'The proposal grade is unavailable.'
       : result?.labels?.fairnessLabel
-      ? ` The analyzer says: ${result.labels.fairnessLabel}.`
-      : ''
+      ? `The analyzer says: ${result.labels.fairnessLabel}.`
+      : null
 
     window.dispatchEvent(
       new CustomEvent(COMMS_OPEN_EVENT, {
         detail: {
           tab: 'chimmy',
-          prefill: parts
-            ? `Explain this trade${league}. ${parts}.${verdict} What am I missing?`
-            : `Help me think about a trade${league}.`,
+          prefill: tradeExplainPrompt({
+            leagueName: props.league?.name ?? null,
+            give: giveAssets,
+            get: getAssets,
+            myName: myRoster?.ownerHandles?.[0] ?? myRoster?.ownerName ?? null,
+            partnerName: partnerRoster?.ownerHandles?.[0] ?? partnerRoster?.ownerName ?? null,
+            partnerTeamName: partnerRoster?.ownerName ?? null,
+            giveValue: total(give),
+            getValue: total(get),
+            verdict,
+          }),
         },
       }),
     )
-  }, [give, get, props.league?.name, result, noSignal])
+  }, [give, get, giveAssets, getAssets, myRoster, partnerRoster, props.league?.name, result, noSignal])
 
   if (!props.league) {
     return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} />
