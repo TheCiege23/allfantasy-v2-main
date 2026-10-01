@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useRouter } from 'next/navigation'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
@@ -885,17 +886,7 @@ export function Dash3AMatchups({
  * the first screen a new user sees. `leagueCount` 0 says so instead; null (unknown) keeps the
  * old behaviour.
  */
-/**
- * 0 only when the account has nothing connected: no current league AND no past season imported.
- * `dash34` returns `totalLeagues: 0` whenever no league has a unified record, even for an account
- * holding past seasons (`legacyCount`) — that account is not "no leagues connected".
- */
-export function connectedLeagueCount(
-  d: { totalLeagues?: number | null; legacyCount?: number | null } | null | undefined,
-): number | null {
-  if (!d || d.totalLeagues == null) return null
-  return d.totalLeagues + Math.max(0, d.legacyCount ?? 0)
-}
+export { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 
 export function Dash3AChimmy({ openCount, leagueCount = null }: { openCount: number; leagueCount?: number | null }) {
   return (

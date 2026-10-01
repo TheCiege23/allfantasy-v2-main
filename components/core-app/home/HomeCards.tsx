@@ -13,7 +13,6 @@ import { ScopeResetLink } from '@/components/core-app/ScopeSwitcher'
 import Dashboard3A, {
   Dash3ACareer,
   Dash3AChimmy,
-  connectedLeagueCount,
   Dash3AExposure,
   Dash3AFollowing,
   Dash3ALeagues,
@@ -23,6 +22,7 @@ import Dashboard3A, {
   Dash3ARivals,
   Dash3ARoutine,
 } from '@/components/core-app/screens/Dashboard3A'
+import { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { Dash34Carryover, Dash34Coverage } from '@/components/core-app/screens/Dash34Carryover'
 import { DashDraftsBand } from '@/components/core-app/screens/DashDraftsBand'
