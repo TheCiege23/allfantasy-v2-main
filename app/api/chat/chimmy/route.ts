@@ -13,6 +13,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { parseHomeSignals, renderHomeSignalsPrompt } from '@/lib/core-app/homeSignals'
 import { CORE_SURFACE_KEYS, renderCoreSurfacePrompt } from '@/lib/core-app/coreSurface'
+import { loadCareerGroundingBlock } from '@/lib/core-app/careerChimmyGrounding'
 import {
   newQuestionTelemetry,
   questionEntry,
@@ -1405,6 +1406,12 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   })()
   const homeSignals = parseHomeSignals(rawHomeSignals)
   const coreSurfaceBlock = coreSurface ? renderCoreSurfacePrompt(coreSurface) : null
+  /*
+   * Opened from Career: the career record the screen renders, so Chimmy's figures and the
+   * trophy room cannot disagree. Before this the only history Chimmy had was the Sleeper-only
+   * import slice, which undercounts every ESPN, Yahoo, Fantrax, MFL and Fleaflicker season.
+   */
+  const careerGroundingBlock = coreSurface === 'career' && userId ? await loadCareerGroundingBlock(userId) : null
   const selectedAssistantMode = normalizeChimmyAssistantMode(
     mode ?? assistantMode ?? strategyMode ?? riskMode
   )
@@ -2446,6 +2453,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
     memPrompt.contextBlock,
     homeSignalsBlock ?? undefined,
     coreSurfaceBlock ?? undefined,
+    careerGroundingBlock ?? undefined,
     memorySection,
     portfolioPlayerGrounding
       ? `## CROSS-LEAGUE PLAYER LOOKUP\n${portfolioPlayerGrounding}`
@@ -2485,6 +2493,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   if (memPrompt.contextBlock) dataSources.push('working_memory')
   if (homeSignalsBlock) dataSources.push('core_home_signals')
   if (coreSurfaceBlock) dataSources.push('core_surface_context')
+  if (careerGroundingBlock) dataSources.push('career_profile')
   if (leagueSportsGrounding) dataSources.push('league_sports_grounding_packet')
   if (portfolioPlayerGrounding) dataSources.push('cross_league_player_lookup')
   if (myRosterInjuries) dataSources.push('cross_league_roster_injuries')

@@ -1,0 +1,124 @@
+/*
+ * Career, live half — the Ask Chimmy chips and the legacy-stakes card
+ * (`CareerAskChimmy.tsx`, `LegacyStakes.tsx`). Shared by the desktop overview, the
+ * phone overview and the one-league career, so every rule is width-agnostic and the
+ * one breakpoint below only enlarges tap targets.
+ *
+ * ⚠ EVERY @media BLOCK HERE IS TOP-LEVEL — see the note in af-career-brief.css.
+ */
+
+.af-crl-card,
+.af-crl-ask {
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  border-radius: 16px;
+  padding: 16px 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.af-crl-card { border-color: var(--accent-line); }
+
+.af-crl-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-crl-sp { margin-left: auto; }
+.af-crl-mark { color: var(--accent); letter-spacing: 0; }
+.af-crl-tag {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--warn);
+  background: var(--warn-soft);
+  padding: 4px 6px;
+  border-radius: 5px;
+}
+
+.af-crl-list { list-style: none; margin: 0 0 4px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.af-crl-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: var(--accent-soft);
+}
+.af-crl-row[data-tone='streak'] { background: var(--warn-soft); }
+.af-crl-glyph { flex: none; color: var(--warn); font-size: 14px; line-height: 20px; }
+.af-crl-text { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.af-crl-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font: 700 13px/1.35 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  color: var(--text);
+}
+.af-crl-plat {
+  font: 700 9.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--line2);
+  border-radius: 4px;
+  padding: 3px 5px;
+}
+.af-crl-detail { font: 400 12px/1.5 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--muted); }
+.af-crl-track { display: block; height: 5px; border-radius: 3px; background: var(--line2); overflow: hidden; }
+.af-crl-track > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.af-crl-foot { margin: 0; font: 400 11px/1.5 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--faint); }
+
+.af-crl-askbtn {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 1px solid var(--accent-line);
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  cursor: pointer;
+}
+.af-crl-askbtn:hover,
+.af-crl-askbtn:focus-visible { background: var(--accent-soft); }
+
+.af-crl-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.af-crl-chip {
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 13px;
+  font: 600 12px/1.2 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  cursor: pointer;
+  text-align: left;
+}
+.af-crl-chip:hover,
+.af-crl-chip:focus-visible { border-color: var(--accent); }
+
+/* Phones: 44px tap targets, and chips scroll sideways instead of stacking four deep. */
+@media (max-width: 767px) {
+  .af-crl-askbtn { width: 44px; height: 44px; }
+  .af-crl-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+  .af-crl-chip { flex: none; min-height: 44px; }
+}
+
+/*
+ * Stakes beside the prompts on a wide frame; stacked on a tablet in portrait and on a
+ * phone. auto-fit rather than a breakpoint, so the 768–1180px band the desktop frame
+ * squeezes into still gets two readable columns or one full-width one, never two cramped.
+ */
+.af-crl-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.af-cr-empty .af-crl-pair { width: 100%; margin-top: 18px; text-align: left; }
