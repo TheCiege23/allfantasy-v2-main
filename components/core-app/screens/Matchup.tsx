@@ -3,7 +3,7 @@
 import '@/components/core-app/af-matchup.css'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
-import { teamLogoUrl } from '@/lib/media-url'
+import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import { useState } from 'react'
 import type {
@@ -146,7 +146,7 @@ function PlayerHalf({
     )
   }
 
-  const crest = cell.team ? teamLogoUrl(cell.team, cell.sport ?? 'NFL') : ''
+  const crest = cell.team ? teamLogoUrl(cell.sport ?? 'NFL', cell.team) : null
   const imageUrl = cell.imageUrl && cell.imageUrl !== failedImageUrl ? cell.imageUrl : null
   const value = live ? cell.actual : cell.projected
 

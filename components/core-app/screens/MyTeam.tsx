@@ -15,7 +15,7 @@ import type { MatchupSide, NextMatchup } from '@/lib/core-app/nextMatchup'
 import type { RosterGrade } from '@/lib/core-app/rosterGrade'
 import { buildProjectionQuestion } from '@/lib/core-app/scoringNotes'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
-import { teamLogoUrl } from '@/lib/media-url'
+import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -309,7 +309,7 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null)
   const [failedLogoUrls, setFailedLogoUrls] = useState<string[]>([])
   const imageUrl = player.imageUrl && player.imageUrl !== failedImageUrl ? player.imageUrl : null
-  const registryLogoUrl = player.team ? teamLogoUrl(player.team, player.sport ?? 'NFL') : ''
+  const registryLogoUrl = player.team ? teamLogoUrl(player.sport ?? 'NFL', player.team) : null
   const logoUrl = [player.logoUrl, registryLogoUrl].find((url) => url && !failedLogoUrls.includes(url)) || ''
   return (
     <div className="af-mt-player">
