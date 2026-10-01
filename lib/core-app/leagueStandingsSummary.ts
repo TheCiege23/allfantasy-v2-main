@@ -110,7 +110,9 @@ registerScreenSummary<LeagueStandingsResult>({
   // v2 (2026-09-17): the result gained `board` — official, power, history, zones, projections.
   // v3 (2026-10-01): every board team gained `next` and `path`, and the board `showPaths`. A v2 board
   //   has neither, and the table reads `team.path` unguarded — serving one would crash the screen.
-  version: 3,
+  // v4 (2026-10-01): board teams gained `streak` and `split`, and the result an optional `live` board
+  //   ("if scores held"). The renderer guards all three, but a v3 board would silently show no streaks.
+  version: 4,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   /**

@@ -106,7 +106,10 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-const headers = (c: HTMLElement) => [...c.querySelectorAll('.af-stb-table thead th')].map((th) => th.textContent?.trim() ?? '')
+/** The league table's own headings — the head-to-head grid below it is a second table — without sort marks. */
+const leagueTable = (c: HTMLElement) => c.querySelector('[aria-label="League table"]')!
+const headers = (c: HTMLElement) =>
+  [...leagueTable(c).querySelectorAll('thead th')].map((th) => th.textContent?.replace(/[▲▼↕]/g, '').trim() ?? '')
 
 describe('formatOdds', () => {
   it('keeps the ends honest and leaves In/Out to the arithmetic', () => {
@@ -232,14 +235,14 @@ describe('StandingsBoardView — odds, schedule and magic numbers', () => {
     expect(container.querySelector('.af-stb-path')).toBeNull()
     expect([...container.querySelectorAll('.af-stb-notes p')].some((p) => p.textContent?.startsWith('Magic numbers'))).toBe(false)
     // The playoff line still spans the table without the column.
-    const columns = container.querySelectorAll('.af-stb-table thead th').length
+    const columns = leagueTable(container).querySelectorAll('thead th').length
     expect(container.querySelector('tr.af-stb-line td')?.getAttribute('colspan')).toBe(String(columns))
   })
 
   it('runs the playoff line across every column', () => {
     for (const odds of [null, ODDS]) {
       const { container, unmount } = render(<StandingsBoardView board={board()} initial={DEFAULT_STANDINGS_VIEW} odds={odds} />)
-      const columns = container.querySelectorAll('.af-stb-table thead th').length
+      const columns = leagueTable(container).querySelectorAll('thead th').length
       expect(container.querySelector('tr.af-stb-line td')?.getAttribute('colspan')).toBe(String(columns))
       unmount()
     }

@@ -265,6 +265,56 @@ describe('checking against the platform', () => {
     expect(board.recordBasis).toMatch(/including the weekly median game, and match Sleeper/)
   })
 
+  it('counts the week in progress at its current scores when asked to — and says it is not a result', () => {
+    const input = {
+      season: 2026,
+      snapshots: fold([week1, week2Live], IDS),
+      unplayed: [{ week: 2, a: 'b', b: 'd' }],
+      teams: [meta('a', { wins: 1 }), meta('b', { losses: 1 }), meta('c', { wins: 1 }), meta('d', { losses: 1 })],
+      rules: RULES,
+    }
+    const live = buildStandingsBoard({ ...input, asIfFinal: true })
+    expect(live.asIfFinal).toBe(true)
+    expect(live.throughWeek).toBe(2)
+    expect(live.pendingWeeks).toEqual([])
+    // c leads a 30-12 in week two: as it stands, c is 2-0 and a 1-1.
+    const by = (id: string) => live.teams.find((t) => t.rosterId === id)!
+    expect(by('c').record).toEqual({ wins: 2, losses: 0, ties: 0 })
+    expect(by('a').record).toEqual({ wins: 1, losses: 1, ties: 0 })
+    // Movement is measured against last week's final table, which the real board (one final week) cannot have.
+    expect(live.teams[0].rosterId).toBe('c')
+    expect(by('c').seedMove).toBe(0)
+    expect(buildStandingsBoard(input).teams.every((t) => t.seedMove === null)).toBe(true)
+    // b and d have not kicked off, so their game is still ahead of them and nobody else's is.
+    expect(live.gamesRemaining).toBe(1)
+    expect(live.recordBasis).toMatch(/If the scores on the board held: records include week 2 as it stands now/)
+    // The real board is untouched by the option existing.
+    expect(buildStandingsBoard(input).asIfFinal).toBe(false)
+  })
+
+  it('takes a median-league record apart into head-to-head and median games', () => {
+    const medianWeek = [...game(1, 1, ['a', 130], ['b', 125]), ...game(1, 2, ['c', 90], ['d', 70])]
+    const board = buildStandingsBoard({
+      season: 2026,
+      snapshots: fold([medianWeek], IDS),
+      unplayed: [],
+      teams: [
+        meta('a', { wins: 2 }),
+        meta('b', { wins: 1, losses: 1 }),
+        meta('c', { wins: 1, losses: 1 }),
+        meta('d', { losses: 2 }),
+      ],
+      rules: RULES,
+    })
+    const by = (id: string) => board.teams.find((t) => t.rosterId === id)!
+    // b lost head-to-head but finished in the top half; c won head-to-head but did not.
+    expect(by('b').split).toEqual({ headToHead: { wins: 0, losses: 1, ties: 0 }, median: { wins: 1, losses: 0, ties: 0 } })
+    expect(by('c').split).toEqual({ headToHead: { wins: 1, losses: 0, ties: 0 }, median: { wins: 0, losses: 1, ties: 0 } })
+    // A league with no median game has nothing to take apart.
+    const plain = buildStandingsBoard({ season: 2026, snapshots: fold([week1], IDS), unplayed: [], teams: IDS.map((id) => meta(id)), rules: RULES })
+    expect(plain.teams.every((t) => t.split === null)).toBe(true)
+  })
+
   it('falls back to the platform’s records when it counts games we cannot pair', () => {
     const board = buildStandingsBoard({
       season: 2026,
@@ -450,6 +500,13 @@ describe('magic numbers and the next game', () => {
       expect(lossesToElimination === 0).toBe(t.zone === 'eliminated')
       expect(winsToClinch === 0 && lossesToElimination === 0).toBe(false)
     }
+  })
+
+  it('reads the current streak off the end of the results', () => {
+    // a W W W; b L W W; f L L L.
+    expect(by('a').streak).toEqual({ result: 'W', length: 3 })
+    expect(by('b').streak).toEqual({ result: 'W', length: 2 })
+    expect(by('f').streak).toEqual({ result: 'L', length: 3 })
   })
 
   it('names the next opponent from the schedule, earliest week first', () => {

@@ -380,6 +380,11 @@ export type BoardInput = {
   unplayed: RemainingGame[]
   teams: TeamMeta[]
   rules: StandingsRules
+  /**
+   * Count every scored week as final — the week in progress included, at its current scores. For the
+   * "if scores held" view only: the result is a hypothetical, and nothing built this way is stored.
+   */
+  asIfFinal?: boolean
 }
 
 export type Zone = 'bye' | 'playoff' | 'bubble' | 'out' | 'eliminated'
@@ -436,6 +441,14 @@ export type BoardTeam = {
   weeksPlayed: number
   /** Last five head-to-head results, oldest first. */
   form: ResultCode[]
+  /** The current run of identical head-to-head results ("W3"). Null before a first result. */
+  streak: { result: ResultCode; length: number } | null
+  /**
+   * The record taken apart, in a median league: head-to-head games and median games separately. Null
+   * where the league plays no median game, or where the records are the platform's own and the parts
+   * cannot be told apart.
+   */
+  split: { headToHead: Record3; median: Record3 } | null
 
   // Projection — an expectation, kept apart from everything above.
   projected: ProjectedRecord | null
@@ -502,6 +515,8 @@ export type StandingsBoard = {
   /** Why projections are missing, when they are. */
   projectionWithheld: string | null
   powerBasis: string
+  /** True for an "if scores held" board: the week in progress is counted at its current scores. */
+  asIfFinal: boolean
 }
 
 /** Below this many scored weeks a team's scoring is noise rather than a profile. */
@@ -726,7 +741,8 @@ export function buildStandingsBoard(input: BoardInput): StandingsBoard {
   let medianGames = false
   let platformCheck: StandingsBoard['platformCheck'] = 'unavailable'
   if (confirmed) {
-    cut = confirmed.index
+    /* As-if-final keeps everything confirmation decided except where the table stops. */
+    cut = input.asIfFinal ? lastIdx : confirmed.index
     medianGames = confirmed.median
     platformCheck = confirmed.index === lastIdx ? 'matches' : 'platform-behind'
   } else if (hasHeadToHead) {
@@ -900,13 +916,20 @@ export function buildStandingsBoard(input: BoardInput): StandingsBoard {
         .map((snap) => snapTeam(snap, id).res)
         .filter((r): r is ResultCode => r != null)
         .slice(-5),
+      streak: streakOf(snapshots.map((snap) => snapTeam(snap, id).res).filter((r): r is ResultCode => r != null)),
+      split:
+        medianGames && !usePlatform
+          ? { headToHead: { wins: s.w, losses: s.l, ties: s.t }, median: { wins: s.mw, losses: s.ml, ties: s.mt } }
+          : null,
       projected: projection.byId.get(id) ?? null,
     }
   })
 
   const P = rules.platformLabel
   const median = medianGames ? ', including the weekly median game' : ''
-  const recordBasis = !hasHeadToHead
+  const recordBasis = input.asIfFinal
+    ? `If the scores on the board held: records include week ${latest.week} as it stands now${median}. Not results — ${P} has not made that week final.`
+    : !hasHeadToHead
     ? 'This league has no head-to-head games on file, so there are no records — it is ordered by points for.'
     : platformCheck === 'platform-used'
       ? `Records are ${P}'s own. They count games our synced results cannot account for, so the week-by-week history below may not match them.`
@@ -964,7 +987,17 @@ export function buildStandingsBoard(input: BoardInput): StandingsBoard {
     projectionWithheld: projection.withheld,
     powerBasis:
       'AF Power is our analysis, not the league table: all-play winning percentage — every team against every other team, every week — with the last three weeks weighted 30% once four weeks are scored. Ties go to points for.',
+    asIfFinal: input.asIfFinal === true,
   }
+}
+
+/** The run of identical results at the end of a team's head-to-head history. */
+function streakOf(results: ResultCode[]): { result: ResultCode; length: number } | null {
+  const last = results[results.length - 1]
+  if (!last) return null
+  let length = 0
+  for (let i = results.length - 1; i >= 0 && results[i] === last; i -= 1) length += 1
+  return { result: last, length }
 }
 
 /**
