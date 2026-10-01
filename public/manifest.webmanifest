@@ -225,6 +225,19 @@
           "purpose": "any"
         }
       ]
+    },
+    {
+      "name": "Your career",
+      "short_name": "Career",
+      "url": "/core/career",
+      "icons": [
+        {
+          "src": "/icons/icon-96.png",
+          "sizes": "96x96",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
     }
   ]
 }

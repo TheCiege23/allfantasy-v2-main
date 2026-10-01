@@ -34,6 +34,12 @@
       "shortName": "Trades",
       "url": "https://allfantasy.ai/trade-analyzer",
       "chosenIconUrl": "https://allfantasy.ai/icons/icon-96.png"
+    },
+    {
+      "name": "Your career",
+      "shortName": "Career",
+      "url": "https://allfantasy.ai/core/career",
+      "chosenIconUrl": "https://allfantasy.ai/icons/icon-96.png"
     }
   ],
   "generatorApp": "bubblewrap-cli",
