@@ -211,8 +211,10 @@ describe('phase 1 — the seams', () => {
   it('names the actual assets in the question', () => {
     // The drawer does not carry the builder's state, so "explain this trade"
     // would produce a vague answer to a vague question.
-    expect(SRC).toContain("side('I give', give)")
-    expect(SRC).toContain("side('I get', get)")
+    // Built by lib/core-app/tradeExplainPrompt.ts from the builder's own assets, in the "X for Y"
+    // shape Chimmy's trade grader reads (its naming is pinned in __tests__/core-app/trade-explain-prompt).
+    expect(SRC).toContain('prefill: tradeExplainPrompt({')
+    expect(SRC).toMatch(/give: giveAssets,\s*\n\s*get: getAssets,/)
   })
 
   it('⚠ Trade Finder keeps its four refusals apart', () => {
