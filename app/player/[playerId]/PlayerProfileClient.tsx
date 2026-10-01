@@ -37,9 +37,14 @@ type TabId = (typeof TABS)[number]['id']
 export function PlayerProfileClient({ player }: { player: PlayerIdentity }) {
   const [tab, setTab] = useState<TabId>('overview')
 
-  const headshotUrl = player.sleeperId
-    ? `https://sleepercdn.com/content/nfl/players/thumb/${player.sleeperId}.jpg`
-    : null
+  /*
+   * ⚠ NFL ONLY. Sleeper ids are per-sport, and this is the NFL thumbnail path — an NBA or MLB
+   * player's id there is somebody else's face. Initials beat a stranger.
+   */
+  const headshotUrl =
+    player.sleeperId && player.sport?.toUpperCase() === 'NFL'
+      ? `https://sleepercdn.com/content/nfl/players/thumb/${player.sleeperId}.jpg`
+      : null
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#080c18] via-[#0a0e1a] to-[#0f0f1a]">

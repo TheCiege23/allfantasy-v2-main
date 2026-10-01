@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 type Player = {
   name: string
@@ -65,14 +66,16 @@ export function MarketMoverRow({ player, rank }: { player: Player; rank: number 
       {/* Avatar */}
       <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#12192e]">
         {headshotUrl ? (
-          <img
+          /* The fallback is a React node: the old onError wrote innerHTML into a parent React owns. */
+          <FallbackImg
             src={headshotUrl}
             alt=""
             className="h-full w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none'
-              e.currentTarget.parentElement!.innerHTML = `<span class="text-[11px] font-bold text-white/15">${player.name.split(' ').map(w => w[0]).join('').slice(0, 2)}</span>`
-            }}
+            fallback={
+              <span className="text-[11px] font-bold text-white/15">
+                {player.name.split(' ').map((w) => w[0]).join('').slice(0, 2)}
+              </span>
+            }
           />
         ) : (
           <span className="text-[11px] font-bold text-white/15">
