@@ -40,6 +40,12 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
+import {
+  currentRailCareerLines,
+  RAIL_CAREER_EVENT,
+  railLeagueKey,
+  type RailCareerDetail,
+} from '@/lib/core-app/railCareerChannel'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
 
@@ -1378,6 +1384,18 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    *   'open'    chose expanded  desktop 300px,        mobile tray OPEN
    */
   const [railChoice, setRailChoice] = useState<'open' | 'closed' | null>(null)
+  /*
+   * Your record in each league, published by the Career screen while it is open
+   * (`lib/core-app/railCareerChannel.ts`); null everywhere else. Read once on mount — the screen may
+   * have published before this effect ran — then kept current by the event.
+   */
+  const [railCareer, setRailCareer] = useState<Record<string, string> | null>(null)
+  useEffect(() => {
+    setRailCareer(currentRailCareerLines())
+    const onLines = (e: Event) => setRailCareer((e as CustomEvent<RailCareerDetail>).detail?.lines ?? null)
+    window.addEventListener(RAIL_CAREER_EVENT, onLines)
+    return () => window.removeEventListener(RAIL_CAREER_EVENT, onLines)
+  }, [])
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   /* League-first reuses the More sheet (and its focus handling) for two menus: Me and Play. */
   const [mobileSheet, setMobileSheet] = useState<'me' | 'play'>('me')
@@ -1764,6 +1782,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               ? Math.max(0, Math.floor((railClock - mFreshAt) / 60_000))
               : null
             const railName = railLabels.get(l.id) ?? l.name
+            // Keyed on the league's own name, not the rail's disambiguated label: that is Career's identity.
+            const careerLine = railCareer?.[railLeagueKey(l.name)] ?? null
             /* League-first opens a league on its matchup when it has a head-to-head this week —
                the same rule the /core landing uses (resolveLeagueFirstLanding). */
             const leagueHref = props.leagueFirst && m && !m.unpaired
@@ -1804,8 +1824,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 data-active={l.id === props.selectedLeagueId}
                 data-score-changed={railSwings[l.id] != null ? 'true' : undefined}
                 aria-current={l.id === props.selectedLeagueId ? 'true' : undefined}
-                title={`${railName} · ${l.platform}`}
-                aria-label={`${railName} on ${l.platform}`}
+                title={`${railName} · ${l.platform}${careerLine ? ` · your career here ${careerLine}` : ''}`}
+                aria-label={`${railName} on ${l.platform}${careerLine ? `, your career here ${careerLine}` : ''}`}
                 /*
                   ⚠ CLOSES THE TRAY ON SELECTION, ON MOBILE ONLY. The handoff asks
                   for it, and it matters: the tray is full-screen, so navigating
@@ -1860,6 +1880,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       </span>
                     ) : null}
                   </span>
+                  {/* On the Career screen only: your finished-season record and titles in this league. */}
+                  {careerLine ? <span className="af-rail-row-career">{careerLine}</span> : null}
                   {l.platform.toLowerCase() === 'sleeper' && railOpen ? (
                     <span className="af-rail-score-status" data-delayed={!l.syncPaused && delayed || undefined}>
                       {l.syncPaused ? 'Account sync paused' : delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
