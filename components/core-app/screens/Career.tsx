@@ -24,8 +24,13 @@ import {
   SeasonTable,
   TimelineView,
 } from '@/components/core-app/career/CareerBriefViews'
+import { CareerAskChimmy } from '@/components/core-app/career/CareerAskChimmy'
+import { LegacyStakes } from '@/components/core-app/career/LegacyStakes'
+import { careerChimmyPrompts } from '@/lib/core-app/careerChimmy'
+import { buildLegacyStakes } from '@/lib/core-app/careerMilestones'
 import '@/components/core-app/af-career.css'
 import '@/components/core-app/af-career-brief.css'
+import '@/components/core-app/af-career-live.css'
 
 /**
  * Career — handoff 13a, desktop frame.
@@ -238,6 +243,7 @@ function CareerMobile({ screen }: { screen: CareerScreenData }) {
                 Import past seasons
               </Link>
             ) : null}
+            {data.accountIsEmpty ? <CareerLive data={data} awards={[]} /> : null}
           </>
         ) : (
           <>
@@ -266,6 +272,8 @@ function CareerMobile({ screen }: { screen: CareerScreenData }) {
               Finals:{' '}
               {acc.finals == null ? 'not recorded yet' : `${acc.finals} (${acc.championships} won · ${acc.finalsLost} lost)`}
             </p>
+
+            <CareerLive data={data} awards={screen.awards} />
 
             <SeasonStoryRail data={data} />
 
@@ -610,6 +618,21 @@ function EmptyCareer({ data }: { data: CareerData }) {
       <Link href="/import?returnTo=%2Fcore%2Fcareer" className="af-cr-btn af-cr-btn--primary">
         Import past seasons
       </Link>
+      <CareerLive data={data} awards={[]} />
+    </div>
+  )
+}
+
+/**
+ * The live half of the overview — stakes and milestones beside the Chimmy prompts.
+ * Rendered on the desktop overview, the phone overview, and an empty account (a season-1
+ * AF user has live stakes long before they have a finished season).
+ */
+function CareerLive({ data, awards }: { data: CareerData; awards: CareerAward[] }) {
+  return (
+    <div className="af-crl-pair">
+      <LegacyStakes data={buildLegacyStakes(data, awards)} />
+      <CareerAskChimmy prompts={careerChimmyPrompts(data)} />
     </div>
   )
 }
@@ -655,6 +678,9 @@ function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAwar
       {/* ── 1: what you have won, before anything else ───────────────────── */}
       <AccomplishmentStrip data={data} />
       <BestSeasons seasons={data.accomplishments.bestSeasons} filterHref={leagueHref} />
+
+      {/* ── live half: what is still in play, and Chimmy on your own numbers ── */}
+      <CareerLive data={data} awards={awards} />
 
       <div className="af-c13-body">
         {/* ── left column ──────────────────────────────────────────────── */}
