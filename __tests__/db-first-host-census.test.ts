@@ -114,10 +114,20 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * — a runtime font load, deliberately not next/font/google (see the comment at that <link> and
    * af-core.css: this repo's builds have failed for unrelated network/heap reasons before, and a
    * font fetch must not become a new way for the build to break). The browser fetches this CSS and
-   * then the actual font files from fonts.gstatic.com directly; neither is a data read, and the
-   * gstatic host never appears as a literal in this codebase for the census to find.
+   * then the actual font files from fonts.gstatic.com directly; neither is a data read. The
+   * gstatic host now appears as a literal only in lib/security/cspReportOnly.ts's font-src
+   * allowlist, which is why it is matched here too.
    */
-  { name: 'cdn-media', why: 'Google Fonts stylesheet consumed as a <link> href, not a data read', test: /^fonts\.googleapis\.com$/i },
+  { name: 'cdn-media', why: 'Google Fonts stylesheet and font files loaded by the browser, not a data read', test: /^fonts\.(googleapis|gstatic)\.com$/i },
+  /*
+   * Origins named only so lib/security/cspReportOnly.ts can ALLOW them: the Spotify player
+   * SDK and embed, the YouTube highlight iframe, Stripe.js's API calls from the buy button,
+   * and the Google Analytics beacon. The visitor's browser talks to them; our server code
+   * reads nothing from them. Registered in NEVER_FETCHED below, so if code in lib/, app/,
+   * server/ or scripts/ ever starts fetching one, this classification fails rather than
+   * quietly exempting a data read.
+   */
+  { name: 'browser-only', why: 'loaded by the visitor\'s browser (SDK, embed, beacon) and listed in the CSP allowlist; never fetched by our code', test: /^(sdk\.scdn\.co|open\.spotify\.com|www\.youtube-nocookie\.com|api\.stripe\.com|www\.google-analytics\.com)$/i },
   { name: 'share-link', why: 'a URL we hand the user, never fetched', test: /^(twitter\.com|x\.com|www\.reddit\.com|www\.facebook\.com|www\.linkedin\.com|wa\.me|api\.whatsapp\.com|discord\.gg|discord\.new|www\.youtube\.com|fancred\.app)$/i },
   /*
    * Bare sleeper.com is a DEEP LINK, not a feed — href targets like
@@ -407,7 +417,7 @@ describe('DB-first boundary — outbound host census', () => {
      * host in the WRONG category reads as settled, so nobody looks again. This asserts
      * the claim instead of restating it.
      */
-    const NEVER_FETCHED = new Set(['share-link', 'namespace', 'test-fixture'])
+    const NEVER_FETCHED = new Set(['share-link', 'namespace', 'test-fixture', 'browser-only'])
     const monitored = monitoredPatterns()
     const violations: string[] = []
 
