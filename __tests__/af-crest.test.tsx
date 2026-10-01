@@ -48,6 +48,36 @@ describe('the shipped crest raster', () => {
       )
     }
   })
+
+  it('every manifest icon exists and is OPAQUE — iOS paints icon transparency black', () => {
+    /*
+     * IHDR colour type at byte 25: 2 = RGB, 0 = grey; 4 and 6 carry alpha.
+     * Read the icon list from the manifest itself, so a newly added entry is
+     * covered without anyone remembering to extend this test.
+     */
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), 'public', 'manifest.webmanifest'), 'utf8'),
+    ) as { icons: { src: string; sizes: string; purpose?: string }[] }
+    expect(manifest.icons.length).toBeGreaterThan(0)
+    for (const icon of manifest.icons) {
+      const buf = fs.readFileSync(path.join(process.cwd(), 'public', icon.src))
+      expect([0, 2], icon.src).toContain(buf[25])
+      // IHDR width/height are big-endian at bytes 16 and 20; the declared size must be the real one.
+      const [w, h] = icon.sizes.split('x').map(Number)
+      expect([buf.readUInt32BE(16), buf.readUInt32BE(20)], icon.src).toEqual([w, h])
+    }
+  })
+
+  it('declares a DEDICATED maskable icon, not the "any" one reused', () => {
+    // Android crops maskable icons to a circle of 80%; the "any" crest is sized
+    // for iOS's rounded square and would lose its shoulders.
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(process.cwd(), 'public', 'manifest.webmanifest'), 'utf8'),
+    ) as { icons: { src: string; purpose?: string }[] }
+    const maskable = manifest.icons.filter((i) => i.purpose === 'maskable')
+    expect(maskable.length).toBeGreaterThan(0)
+    for (const icon of maskable) expect(icon.src).toMatch(/icon-maskable-/)
+  })
 })
 
 describe('AfCrest', () => {
