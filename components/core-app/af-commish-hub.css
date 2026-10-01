@@ -2027,3 +2027,42 @@ button.af-ch-os-chip {
   white-space: pre-wrap;
   color: var(--text);
 }
+
+/*
+ * ── Phone: three task cards, then "N more"; the section bar stays reachable ──
+ *
+ * TOP-LEVEL, appended after #1808's block and every query above: a rule inserted inside a query
+ * silently moves into it.
+ *
+ * TaskCards renders cards 4–6 twice: in the grid for wide screens (--wide-only) and inside the
+ * "more" disclosure for phones (--phone-only). Exactly one copy is displayed at any width, and
+ * the summary shows the matching count. Desktop looks as it did.
+ */
+.af-ch-tasks--wide-only { margin-top: 10px; }
+.af-ch-tasks--phone-only,
+.af-ch-more-phone { display: none; }
+.af-ch-more[data-wide-empty='true'] { display: none; }
+
+@media (max-width: 720px) {
+  .af-ch-tasks--wide-only,
+  .af-ch-more-wide { display: none; }
+  .af-ch-tasks--phone-only { display: grid; }
+  .af-ch-more-phone { display: inline; }
+  .af-ch-more[data-wide-empty='true'] { display: block; }
+  .af-ch-more .af-ch-tasks + .af-ch-tasks { margin-top: 10px; }
+
+  /*
+   * The hub is ~17,000px on a phone across 19 sections, and the jump chips scrolled away with
+   * the first screen. Sticky, so once reached they stay. The phone shell scrolls its own nav
+   * away; the only fixed thing above is the safe-area strip, so this sits just under it.
+   */
+  .af-ch-nav {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 20;
+    margin-top: 0;
+    padding: 8px 0;
+    background: var(--bg);
+    box-shadow: 0 1px 0 var(--line);
+  }
+}
