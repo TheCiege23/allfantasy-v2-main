@@ -1045,8 +1045,7 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
     font-variant-numeric: tabular-nums;
   }
   .af-rk-cards [data-card='value'] .af-rk-cellsub { display: none; }
-  .af-rk-cards [data-card='detail'],
-  .af-rk-cards .af-rk-hide-phone[data-card='detail'] {
+  .af-rk-cards [data-card='detail'] {
     display: inline-flex;
     align-items: baseline;
     gap: 5px;
@@ -1139,4 +1138,123 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 .af-rk-powerpanel .min-h-screen { min-height: 0; }
 @media (max-width: 720px) {
   .af-rk-paneltabs .af-rk-tab { min-height: 44px; display: inline-flex; align-items: center; }
+}
+
+/* ── 2026-10-01: phone density pass ──────────────────────────────────────
+ *
+ * Measured at 375px on a render of real data before this block: a Community
+ * row was 159px (four to a screen), a portfolio row 149px, and 366px of tabs,
+ * pills and sentences sat between the board's card edge and its first row.
+ *
+ * Top-level on purpose — see the @media-insertion note above.
+ */
+
+/* Rivals: the Compare button became a link inside the name block, so two columns, not three. */
+.af-rk-rivals li { grid-template-columns: minmax(0, 1fr) auto; }
+.af-rk-rival-who b { white-space: normal; overflow-wrap: anywhere; }
+.af-rk-rival-link {
+  align-self: flex-start;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 3px;
+}
+
+/* Tablet and up: the link takes the column the button used to, so a rival row stays one line tall. */
+@media (min-width: 721px) {
+  .af-rk-rival-who { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: center; }
+  .af-rk-rival-who > b,
+  .af-rk-rival-who > small { grid-column: 1; }
+  .af-rk-rival-link { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+}
+
+/* A row's hidden-on-phone columns, behind one toggle. Desktop never shows it (RankTable `PhoneMore`). */
+.af-rk-phonemore { display: none; }
+
+@media (max-width: 720px) {
+  /* Only rows that carry the "More" toggle hide their originals; a lone hidden column stays a chip.
+   * `.af-rk-cards [data-card='detail']` (0,2,0) outranks the plain `.af-rk-hide-phone` rule, so the hide needs this weight. */
+  .af-rk-cards tr[data-phonemore] .af-rk-hide-phone[data-card] { display: none; }
+
+  .af-rk-cards td.af-rk-phonemore { display: inline-block; margin: 7px 0 0; padding: 0; border: 0; vertical-align: baseline; }
+  .af-rk-cards td.af-rk-phonemore:has(details[open]) { display: block; }
+  .af-rk-phonemore summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    color: var(--accent);
+    font-size: 12.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .af-rk-phonemore summary::-webkit-details-marker { display: none; }
+  .af-rk-phonemore summary::after { content: '▾'; margin-left: 5px; }
+  .af-rk-phonemore details[open] > summary::after { content: '▴'; }
+  .af-rk-phonemore-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 12px;
+    margin: 6px 0 2px;
+    font-size: 12.5px;
+  }
+  .af-rk-phonemore-list > div { display: contents; }
+  .af-rk-phonemore-list dt { color: var(--text2); }
+  .af-rk-phonemore-list dd { margin: 0; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .af-rk-phonemore-list .af-rk-cellsub { display: block; font-weight: 400; }
+
+  /* The title's sub-line (level · confidence · date) on one line instead of wrapping to two. */
+  .af-rk-cards [data-card='title'] .af-rk-cellsub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Leaderboard and panel tabs: one swipeable row, not three wrapped rows of pills. */
+  .af-rk-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .af-rk-tabs::-webkit-scrollbar { display: none; }
+  .af-rk-tabs .af-rk-tab { flex: none; white-space: nowrap; }
+
+  /* The division pills stay; the invitation sentence beside them goes. Once the filter is ON its
+   * caveat ("managers without an established Class are not shown") is kept — that one changes how
+   * the board reads. */
+  .af-rk-classbar[data-active='false'] .af-rk-classnote { display: none; }
+  .af-rk-classbar { margin-bottom: 10px; padding-bottom: 10px; }
+
+  .af-rk-rival-who b { font-size: 14px; }
+
+  /* League "Points for": horizontal bars, so every team name is printed in full. */
+  .af-rk-pfchart .af-workbook-plot { height: auto; padding: 4px 0 0; overflow: visible; }
+  .af-rk-pfchart .af-workbook-grid { display: none; }
+  .af-rk-pfchart .af-workbook-bars { flex-direction: column; align-items: stretch; gap: 6px; height: auto; min-width: 0; }
+  .af-rk-pfchart .af-workbook-column {
+    width: auto;
+    height: auto;
+    flex: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'label value' 'bar bar';
+    align-items: baseline;
+    gap: 4px 10px;
+  }
+  .af-rk-pfchart .af-workbook-label {
+    position: static;
+    grid-area: label;
+    text-align: left;
+    white-space: normal;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    color: var(--text2);
+    font-size: 12.5px;
+  }
+  .af-rk-pfchart .af-workbook-value { position: static; grid-area: value; }
+  /* The bar's length is the column's --bar-height; its inline `height` is the vertical chart's. */
+  .af-rk-pfchart .af-workbook-bar { grid-area: bar; width: var(--bar-height) !important; height: 8px !important; border-radius: 4px; }
 }
