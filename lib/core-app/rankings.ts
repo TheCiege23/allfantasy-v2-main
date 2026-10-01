@@ -368,6 +368,11 @@ function qs(pairs: Array<[string, string | null | undefined]>): string {
   return s ? `?${s}` : ''
 }
 
+/** `W-L`, or `W-L-T` when the team has a tie — the same shape the portfolio rows use. */
+export function recordText(t: { wins: number; losses: number; ties?: number }): string {
+  return `${t.wins}-${t.losses}${t.ties ? `-${t.ties}` : ''}`
+}
+
 export function parseScope(raw: string | null, hasLeague: boolean): RankingsScopeKey {
   if (raw === 'global' || raw === 'portfolio' || raw === 'league') return raw
   return hasLeague ? 'league' : 'global'
@@ -711,7 +716,7 @@ export async function getRankingsData(
               rosterId: team.rosterId,
               rank: team.rank,
               name: team.name ?? `Roster ${team.rosterId}`,
-              record: `${team.wins}-${team.losses}`,
+              record: recordText(team),
               pointsFor: team.pointsFor,
               average: team.average,
               movement: team.movement,
@@ -1284,13 +1289,15 @@ export async function getTeamCompareData(userId: string | null, leagueId: string
   const pick = (id: string | null): TeamCompareSide | null => {
     const t = id ? standings.teams.find((x) => x.rosterId === id) : null
     if (!t) return null
-    const games = t.wins + t.losses
+    const ties = t.ties ?? 0
+    const games = t.wins + t.losses + ties
     return {
       rosterId: t.rosterId,
       name: t.name ?? `Roster ${t.rosterId}`,
       isYou: t.isYou,
       facts: [
-        { label: 'Record', value: `${t.wins}-${t.losses}`, raw: games > 0 ? t.wins / games : null, higherIsBetter: true },
+        // A tie is half a win, the same rule the standings board's all-play share uses.
+        { label: 'Record', value: recordText(t), raw: games > 0 ? (t.wins + ties / 2) / games : null, higherIsBetter: true },
         { label: 'Points for', value: Math.round(t.pointsFor).toLocaleString(), raw: t.pointsFor, higherIsBetter: true },
         { label: 'Points per week', value: t.average == null ? '—' : t.average.toFixed(1), raw: t.average, higherIsBetter: true },
         { label: 'Points rank', value: `#${t.rank} of ${standings.teams.length}`, raw: -t.rank, higherIsBetter: true },
