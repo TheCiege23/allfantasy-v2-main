@@ -1,11 +1,15 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect } from 'react'
+import { createContext, useContext, useEffect } from 'react'
+import { DecisionRecordCard } from '@/components/core-app/career/DecisionRecordCard'
+import type { DecisionRecord } from '@/lib/core-app/decisionRecordModel'
+
+type DecisionRecordData = DecisionRecord & { season: number }
 import { buildCareerWidgetSnapshot } from '@/lib/core-app/careerWidgetSnapshot'
 import { publishRailCareerLines, railCareerLines } from '@/lib/core-app/railCareer'
 import { syncCareerWidget } from '@/lib/platform/careerWidgetBridge'
-import { careerHref, type CareerData, type PrestigeComponent } from '@/lib/core-app/careerModel'
+import { careerHref, isUnfiltered, type CareerData, type PrestigeComponent } from '@/lib/core-app/careerModel'
 import type { ShareCardData } from '@/lib/core-app/shareCard'
 import type { CareerAward } from '@/lib/core-app/careerAwards'
 import type { CareerScreenData } from '@/lib/core-app/careerScreen'
@@ -428,11 +432,21 @@ function CareerMobile({
   )
 }
 
+/**
+ * The decision record, handed down to `CareerLive` without threading a prop through every layout
+ * that renders it (phone and desktop, empty and full). Three states, and they mean different things:
+ *   undefined  not read here (another view, a league selected) or the read failed — no card at all
+ *   null       read, nothing resolved yet — the card that says how to start one
+ *   a record   the record
+ */
+const DecisionRecordContext = createContext<DecisionRecordData | null | undefined>(undefined)
+
 export function Career({
   screen,
   share,
   wire = null,
   story = null,
+  decisionRecord,
   nowIso,
 }: {
   screen: CareerScreenData
@@ -441,6 +455,8 @@ export function Career({
   wire?: CareerWireData | null
   /** Last week's story — overview only; null before a week is played or when the read failed. */
   story?: WeeklyStoryData | null
+  /** This season's Chimmy and AutoCoach calls (`lib/core-app/decisionRecord.ts`) — see `DecisionRecordContext`. */
+  decisionRecord?: DecisionRecordData | null
   nowIso?: string
 }) {
   /*
@@ -472,10 +488,10 @@ export function Career({
   }, [screen.data])
 
   return (
-    <>
+    <DecisionRecordContext.Provider value={decisionRecord}>
       <CareerDesktop screen={screen} share={share ?? null} showOnMobile={!overview} wire={wire} story={story} nowIso={nowIso} />
       {overview ? <CareerMobile screen={screen} wire={wire} story={story} nowIso={nowIso} /> : null}
-    </>
+    </DecisionRecordContext.Provider>
   )
 }
 
@@ -728,10 +744,17 @@ function EmptyCareer({ data }: { data: CareerData }) {
  * AF user has live stakes long before they have a finished season).
  */
 function CareerLive({ data, awards }: { data: CareerData; awards: CareerAward[] }) {
+  /*
+   * The decision record sits with the live half: what is in play, what Chimmy can tell you, and how
+   * taking its calls has gone. Whole-season and whole-account, so not under a Career filter — it
+   * would read as "your record in this league" when it is not filtered by league at all.
+   */
+  const record = useContext(DecisionRecordContext)
   return (
     <div className="af-crl-pair">
       <LegacyStakes data={buildLegacyStakes(data, awards)} />
       <CareerAskChimmy prompts={careerChimmyPrompts(data)} />
+      {record !== undefined && isUnfiltered(data.filter) ? <DecisionRecordCard record={record} /> : null}
     </div>
   )
 }
