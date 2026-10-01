@@ -1523,3 +1523,189 @@
 .af-st-lu-none {
   color: var(--faint);
 }
+
+/* ── Playoff odds, schedule, magic numbers (official table) ─────────────── */
+
+.af-stb-odds {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-weight: 700;
+}
+.af-stb-oddsbar {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--chip);
+  overflow: hidden;
+}
+.af-stb-oddsbar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: currentColor;
+}
+.af-stb-odds[data-tone='good'] { color: var(--good); }
+.af-stb-odds[data-tone='warn'] { color: var(--warn); }
+.af-stb-odds[data-tone='bad'] { color: var(--bad); }
+.af-stb-odds abbr { text-decoration: none; cursor: help; }
+
+.af-stb-sos { font-weight: 700; color: var(--text2); }
+.af-stb-sos[data-tone='hard'] { color: var(--bad); }
+.af-stb-sos[data-tone='easy'] { color: var(--good); }
+.af-stb-sos[title] { cursor: help; }
+
+.af-stb-next {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 190px;
+  font-size: 12px;
+}
+.af-stb-nextname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text2);
+}
+.af-stb-live {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.af-stb-path {
+  display: inline-flex;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.af-stb-path > span { cursor: help; white-space: nowrap; }
+.af-stb-path [data-k='clinch'] { color: var(--good); }
+.af-stb-path [data-k='elim'] { color: var(--bad); }
+.af-stb-path [aria-hidden] { opacity: 0.7; font-weight: 800; }
+
+.af-stb-carddl .af-stb-odds,
+.af-stb-carddl .af-stb-path { justify-content: flex-start; }
+
+/* ── What is at stake (per-league screen) ──────────────────────────────── */
+
+.af-st-stakes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-st-stakes .af-label { color: var(--faint); }
+.af-st-stakes-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.af-st-stakes-head h2 { margin: 0; }
+.af-st-stakes-odds {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.af-st-stakes-pct {
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--text);
+}
+.af-st-stakes-oddslabel { font-size: 12px; color: var(--muted); }
+.af-st-stakes-path {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--text);
+}
+.af-st-stakes-why,
+.af-st-stakes-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-st-stakes-basis {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+.af-st-stakes-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 14px;
+  margin-top: 4px;
+}
+.af-st-stakes-game,
+.af-st-stakes-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--chip);
+}
+.af-st-stakes-game h3,
+.af-st-stakes-root h3 { margin: 0; }
+.af-st-stakes-branches { display: flex; gap: 18px; }
+.af-st-stakes-branches > span { display: flex; flex-direction: column; gap: 2px; }
+.af-st-stakes-branches .af-num { font-size: 22px; font-weight: 900; line-height: 1.1; }
+.af-st-stakes-branches [data-tone='good'] .af-num,
+.af-st-stakes-branches [data-tone='good'] .af-label { color: var(--good); }
+.af-st-stakes-branches [data-tone='bad'] .af-num,
+.af-st-stakes-branches [data-tone='bad'] .af-label { color: var(--bad); }
+.af-st-stakes-root ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-st-stakes-root li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.af-st-stakes-pick { min-width: 0; overflow-wrap: anywhere; color: var(--text2); }
+.af-st-stakes-pick strong { color: var(--text); }
+.af-st-stakes-seed,
+.af-st-stakes-over { color: var(--faint); }
+.af-st-stakes-delta {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--good);
+}
+.af-st-stakes-delta [aria-hidden] { color: var(--faint); font-weight: 500; }
+
+@media (max-width: 780px) {
+  .af-st-stakes-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.af-st-stakes a,
+.af-stb-notes a { color: var(--accent); }
+@media (max-width: 560px) {
+  .af-st-stakes-root li { flex-wrap: wrap; row-gap: 2px; }
+}

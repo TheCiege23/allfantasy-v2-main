@@ -1381,3 +1381,8 @@
 .af-core .af-bd-noleagues-actions .af-btn {
   min-height: 44px;
 }
+
+/* Standings board: the week's stakes and the schedule ahead, under "what decides it". */
+.af-core .af-bd-sub3 {
+  color: var(--faint);
+}

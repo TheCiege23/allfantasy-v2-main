@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import {
   explainOrder,
@@ -15,6 +16,7 @@ import {
   type StandingsViewKey,
   type StandingsViewState,
 } from '@/lib/core-app/standingsView'
+import { formatOdds, type StandingsOdds } from '@/lib/core-app/standingsOdds'
 import { StandingsHistoryChart } from './StandingsHistoryChart'
 import { StandingsPointsChart } from './StandingsPointsChart'
 
@@ -143,6 +145,129 @@ function TeamCell({ team, showTiebreak }: { team: BoardTeam; showTiebreak: boole
   )
 }
 
+/** This table's own certainty — never the simulation's, which does not model median games. */
+function boardStatus(t: BoardTeam): 'clinched' | 'eliminated' | null {
+  if (t.clinched) return 'clinched'
+  return t.zone === 'eliminated' ? 'eliminated' : null
+}
+
+/** The same thresholds the cross-league standings board colours its odds by. */
+function oddsTone(pct: number): 'good' | 'warn' | 'bad' {
+  if (pct >= 60) return 'good'
+  if (pct >= 25) return 'warn'
+  return 'bad'
+}
+
+function OddsCell({ team, odds }: { team: BoardTeam; odds: StandingsOdds }) {
+  const o = odds.byRoster[team.rosterId]
+  if (!o) return <span className="af-stb-muted">—</span>
+  const status = boardStatus(team)
+  const fill = status === 'clinched' ? 100 : status === 'eliminated' ? 0 : Math.max(0, Math.min(100, o.playoffPct))
+  const tone = status === 'clinched' ? 'good' : status === 'eliminated' ? 'bad' : oddsTone(o.playoffPct)
+  return (
+    <span className="af-stb-odds" data-tone={tone}>
+      <span className="af-stb-oddsbar" aria-hidden>
+        <i style={{ width: `${fill.toFixed(1)}%` }} />
+      </span>
+      <span className="af-num">
+        {formatOdds(o.playoffPct, status)}
+        {!o.modelled && !status ? (
+          <abbr title="Too few completed weeks to model this team — read the record, not the number">*</abbr>
+        ) : null}
+      </span>
+    </span>
+  )
+}
+
+function sosTone(rank: number, of: number): 'hard' | 'easy' | undefined {
+  if (of < 3) return undefined
+  if (rank <= Math.ceil(of / 3)) return 'hard'
+  if (rank > of - Math.ceil(of / 3)) return 'easy'
+  return undefined
+}
+
+function sosTitle(o: StandingsOdds['byRoster'][string], odds: StandingsOdds): string {
+  if (o.sosRank == null) return 'No modelled opponents left to rank'
+  const avg =
+    o.sosOpponentMu != null && odds.leagueMu != null
+      ? ` Opponents left average ${o.sosOpponentMu.toFixed(1)} a week; the league averages ${odds.leagueMu.toFixed(1)}.`
+      : ''
+  return `${ordinal(o.sosRank)}-hardest remaining schedule of ${odds.sosRanked}.${avg}`
+}
+
+function SosCell({ team, odds }: { team: BoardTeam; odds: StandingsOdds }) {
+  const o = odds.byRoster[team.rosterId]
+  if (!o || o.sosRank == null) return <span className="af-stb-muted">—</span>
+  return (
+    <span className="af-stb-sos af-num" data-tone={sosTone(o.sosRank, odds.sosRanked)} title={sosTitle(o, odds)}>
+      {ordinal(o.sosRank)}
+      <span className="af-sr"> hardest of {odds.sosRanked}</span>
+    </span>
+  )
+}
+
+function NextCell({ team, seedOf }: { team: BoardTeam; seedOf: Map<string, number> }) {
+  const n = team.next
+  if (!n) return <span className="af-stb-muted">—</span>
+  const seed = seedOf.get(n.opponentId)
+  return (
+    <span className="af-stb-next">
+      {n.inProgress ? <span className="af-stb-live">Live</span> : <span className="af-stb-muted af-num">Wk {n.week}</span>}
+      <span className="af-stb-nextname" title={n.opponentName}>
+        {seed != null ? <span className="af-stb-muted af-num">#{seed} </span> : null}
+        {n.opponentName}
+      </span>
+    </span>
+  )
+}
+
+/**
+ * "C 6 · E 2" — more wins that clinch, more losses that eliminate.
+ *
+ * ⚠ A HALF THAT DOES NOT EXIST IS LEFT OUT, NOT DASHED. Early in a season no number of losses guarantees
+ * elimination on its own, and a column of "E —" reads as missing data rather than as "not yet".
+ */
+function PathCell({ team }: { team: BoardTeam }) {
+  const { winsToClinch: w, lossesToElimination: l, gamesLeft } = team.path
+  if (w === 0) return <span className="af-stb-muted">Clinched</span>
+  if (l === 0) return <span className="af-stb-muted">Eliminated</span>
+  if (w == null && l == null) {
+    return (
+      <span className="af-stb-muted" title="Not settled by this team's own results yet — it depends on games elsewhere">
+        —
+      </span>
+    )
+  }
+  return (
+    <span className="af-stb-path">
+      {w != null ? (
+        <span
+          data-k="clinch"
+          title={
+            w === gamesLeft
+              ? 'Winning out guarantees a playoff spot, whatever else happens'
+              : `${w} more ${w === 1 ? 'win' : 'wins'} of ${gamesLeft} guarantee a playoff spot, whatever else happens`
+          }
+        >
+          <span aria-hidden>C </span>
+          <span className="af-sr">Wins to clinch: </span>
+          <span className="af-num">{w}</span>
+        </span>
+      ) : null}
+      {l != null ? (
+        <span
+          data-k="elim"
+          title={`${l} more ${l === 1 ? 'loss' : 'losses'} of ${gamesLeft} eliminate this team, whatever else happens`}
+        >
+          <span aria-hidden>E </span>
+          <span className="af-sr">Losses to elimination: </span>
+          <span className="af-num">{l}</span>
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
 type Group = { key: string; title: string | null; teams: BoardTeam[] }
 
 function groupTeams(teams: BoardTeam[], board: StandingsBoard, division: string): Group[] {
@@ -160,13 +285,35 @@ function groupTeams(teams: BoardTeam[], board: StandingsBoard, division: string)
   return [{ key: 'all', title: null, teams }]
 }
 
-function OfficialTable({ board, groups, plain }: { board: StandingsBoard; groups: Group[]; plain: boolean }) {
+function OfficialTable({
+  board,
+  groups,
+  plain,
+  odds,
+}: {
+  board: StandingsBoard
+  groups: Group[]
+  plain: boolean
+  odds: StandingsOdds | null
+}) {
   const hasDiv = board.divisions.length > 0
   const hasProj = board.teams.some((t) => t.projected)
   const h2h = board.hasHeadToHead
+  const hasNext = board.teams.some((t) => t.next)
+  const hasPath = h2h && board.gamesRemaining > 0
   const field = Math.min(board.rules.playoffTeams, board.teams.length)
   const byes = Math.min(board.rules.byes, field)
-  const cols = 3 + (h2h ? 5 : 1) + (hasDiv ? 1 : 0) + (hasProj ? 2 : 0) + 1
+  const seedOf = new Map(board.teams.map((t) => [t.rosterId, t.seed]))
+  /* W-L, Pct, GB, PA and Last 5 come with head-to-head; PF and Move are always there. */
+  const cols =
+    3 +
+    (h2h ? 5 : 0) +
+    (odds ? 2 : 0) +
+    (hasNext ? 1 : 0) +
+    (hasPath ? 1 : 0) +
+    (hasDiv ? 1 : 0) +
+    (hasProj ? 2 : 0) +
+    2
 
   return (
     <div className="af-stb-scroll" role="region" aria-label="League table" tabIndex={0}>
@@ -196,6 +343,18 @@ function OfficialTable({ board, groups, plain }: { board: StandingsBoard; groups
                 </th>
               </>
             ) : null}
+            {hasPath ? (
+              <th scope="col" className="af-stb-n">
+                <abbr title="C: more wins that guarantee a playoff spot. E: more losses that end the chase. Both hold whatever every other game does.">
+                  Magic #
+                </abbr>
+              </th>
+            ) : null}
+            {odds ? (
+              <th scope="col" className="af-stb-n af-stb-sim">
+                <abbr title="Chance of making the playoffs, from Season Outlook's simulation of the rest of the season">Playoff %</abbr>
+              </th>
+            ) : null}
             <th scope="col" className="af-stb-n">
               <abbr title="Points for">PF</abbr>
             </th>
@@ -208,6 +367,14 @@ function OfficialTable({ board, groups, plain }: { board: StandingsBoard; groups
               Move
             </th>
             {h2h ? <th scope="col">Last 5</th> : null}
+            {hasNext ? <th scope="col">Next</th> : null}
+            {odds ? (
+              <th scope="col" className="af-stb-n">
+                <abbr title="Strength of the schedule still to play: 1st is the hardest in the league, judged by each opponent's average weekly score">
+                  SOS left
+                </abbr>
+              </th>
+            ) : null}
             {hasDiv ? (
               <th scope="col" className="af-stb-n">
                 Div
@@ -261,6 +428,16 @@ function OfficialTable({ board, groups, plain }: { board: StandingsBoard; groups
                         <td className="af-stb-n af-num">{gamesBackText(t.gamesBack)}</td>
                       </>
                     ) : null}
+                    {hasPath ? (
+                      <td className="af-stb-n">
+                        <PathCell team={t} />
+                      </td>
+                    ) : null}
+                    {odds ? (
+                      <td className="af-stb-n af-stb-sim">
+                        <OddsCell team={t} odds={odds} />
+                      </td>
+                    ) : null}
                     <td className="af-stb-n af-num">{pts(t.pointsFor)}</td>
                     {h2h ? <td className="af-stb-n af-num">{pts(t.pointsAgainst)}</td> : null}
                     <td className="af-stb-n">
@@ -269,6 +446,16 @@ function OfficialTable({ board, groups, plain }: { board: StandingsBoard; groups
                     {h2h ? (
                       <td>
                         <Form form={t.form} />
+                      </td>
+                    ) : null}
+                    {hasNext ? (
+                      <td>
+                        <NextCell team={t} seedOf={seedOf} />
+                      </td>
+                    ) : null}
+                    {odds ? (
+                      <td className="af-stb-n">
+                        <SosCell team={t} odds={odds} />
                       </td>
                     ) : null}
                     {hasDiv ? <td className="af-stb-n af-num">{t.divisionRank ?? '—'}</td> : null}
@@ -420,8 +607,20 @@ function PowerTable({ board, groups }: { board: StandingsBoard; groups: Group[] 
   )
 }
 
-function Cards({ board, groups, view }: { board: StandingsBoard; groups: Group[]; view: StandingsViewKey }) {
+function Cards({
+  board,
+  groups,
+  view,
+  odds,
+}: {
+  board: StandingsBoard
+  groups: Group[]
+  view: StandingsViewKey
+  odds: StandingsOdds | null
+}) {
   const h2h = board.hasHeadToHead
+  const hasPath = h2h && board.gamesRemaining > 0
+  const seedOf = new Map(board.teams.map((t) => [t.rosterId, t.seed]))
   return (
     <div className="af-stb-cardwrap">
       {groups.map((g) => (
@@ -505,6 +704,38 @@ function Cards({ board, groups, view }: { board: StandingsBoard; groups: Group[]
                             <div>
                               <dt>Games behind the line</dt>
                               <dd className="af-num">{gamesBackText(t.gamesBack)}</dd>
+                            </div>
+                          ) : null}
+                          {hasPath ? (
+                            <div>
+                              <dt>Magic number</dt>
+                              <dd>
+                                <PathCell team={t} />
+                              </dd>
+                            </div>
+                          ) : null}
+                          {odds ? (
+                            <div>
+                              <dt>Playoff odds</dt>
+                              <dd>
+                                <OddsCell team={t} odds={odds} />
+                              </dd>
+                            </div>
+                          ) : null}
+                          {t.next ? (
+                            <div>
+                              <dt>Next</dt>
+                              <dd>
+                                <NextCell team={t} seedOf={seedOf} />
+                              </dd>
+                            </div>
+                          ) : null}
+                          {odds && odds.byRoster[t.rosterId]?.sosRank != null ? (
+                            <div>
+                              <dt>Schedule left</dt>
+                              <dd>
+                                <SosCell team={t} odds={odds} /> <span className="af-stb-muted">hardest of {odds.sosRanked}</span>
+                              </dd>
                             </div>
                           ) : null}
                           <div>
@@ -615,9 +846,12 @@ function WhyAbove({ board, view }: { board: StandingsBoard; view: StandingsViewK
 export function StandingsBoardView({
   board,
   initial,
+  odds = null,
 }: {
   board: StandingsBoard
   initial: StandingsViewState
+  /** Season Outlook's simulation for this league. Absent draws no odds or schedule columns. */
+  odds?: StandingsOdds | null
 }) {
   const [view, setView] = useState<StandingsViewKey>(initial.view)
   const [division, setDivision] = useState<string>(
@@ -758,11 +992,11 @@ export function StandingsBoardView({
       ) : null}
 
       {layout === 'cards' ? (
-        <Cards board={board} groups={groups} view={view} />
+        <Cards board={board} groups={groups} view={view} odds={odds} />
       ) : view === 'official' ? (
         <>
           <p className="af-stb-cue">Scroll sideways for every column — rank and team stay in place.</p>
-          <OfficialTable board={board} groups={groups} plain={plain} />
+          <OfficialTable board={board} groups={groups} plain={plain} odds={odds} />
         </>
       ) : (
         <>
@@ -782,6 +1016,20 @@ export function StandingsBoardView({
                 : `The league does not report its playoff size, so the line assumes ${field}.`}{' '}
               Clinched and eliminated are certainties: a level record counts against the team, because a points tiebreak can still move.
             </p>
+            {board.hasHeadToHead && board.gamesRemaining > 0 ? (
+              <p>
+                Magic numbers: <strong>C</strong> is how many more wins guarantee a playoff spot, <strong>E</strong> how many more
+                losses end the chase — each whatever every other game does, so help from elsewhere can only lower them.
+              </p>
+            ) : null}
+            {odds ? (
+              <p>
+                Playoff % and schedule strength come from{' '}
+                <Link href={odds.href}>Season Outlook</Link>’s simulation of the rest of the season ({odds.iterations.toLocaleString('en-US')}{' '}
+                runs), which seeds on wins then points for. “In” and “Out” are printed only where this table’s own arithmetic has
+                settled it.
+              </p>
+            ) : null}
             <p className="af-stb-projnote">
               <span className="af-stb-projtag">Model</span> {withheld ?? board.projectionBasis}
             </p>

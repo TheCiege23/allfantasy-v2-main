@@ -388,6 +388,94 @@ describe('playoff line', () => {
   })
 })
 
+describe('magic numbers and the next game', () => {
+  // Six teams, two playoff spots. After three weeks: a 3-0, b 2-1, c 2-1, d 1-2, e 1-2, f 0-3.
+  const ids = ['a', 'b', 'c', 'd', 'e', 'f']
+  const w = (week: number, pairs: Array<[string, number, string, number]>) =>
+    pairs.flatMap(([x, xp, y, yp], i) => game(week, i + 1, [x, xp], [y, yp]))
+  const snaps = fold(
+    [
+      w(1, [['a', 100, 'b', 90], ['c', 100, 'd', 90], ['e', 100, 'f', 90]]),
+      w(2, [['a', 100, 'c', 90], ['b', 100, 'e', 90], ['d', 100, 'f', 90]]),
+      w(3, [['a', 100, 'd', 90], ['b', 100, 'f', 90], ['c', 100, 'e', 90]]),
+    ],
+    ids,
+  )
+  // Three weeks left, nine games: few enough to enumerate.
+  const unplayed: RemainingGame[] = [
+    { week: 4, a: 'a', b: 'f' },
+    { week: 4, a: 'b', b: 'c' },
+    { week: 4, a: 'd', b: 'e' },
+    { week: 5, a: 'a', b: 'b' },
+    { week: 5, a: 'c', b: 'e' },
+    { week: 5, a: 'd', b: 'f' },
+    { week: 6, a: 'a', b: 'c' },
+    { week: 6, a: 'b', b: 'd' },
+    { week: 6, a: 'e', b: 'f' },
+  ]
+  const board = buildStandingsBoard({
+    season: 2026,
+    snapshots: snaps,
+    unplayed,
+    teams: ids.map((id) => meta(id)),
+    rules: { ...RULES, playoffTeams: 2, byes: 0 },
+  })
+  const by = (id: string) => board.teams.find((t) => t.rosterId === id)!
+
+  it('counts the wins that guarantee a spot, crediting that rivals who meet cannot both win', () => {
+    /*
+     * a on 4 (one more win) is not safe: b beats a and c, c beats a and e, and both pass 4. On 5 it is
+     * safe in every outcome, because b and c meet in week 4 and only one of them can also reach 5. The
+     * every-rival-wins-out bound would say 3 here — true, but not the number.
+     */
+    expect(by('a').path.winsToClinch).toBe(2)
+    expect(by('a').path.gamesLeft).toBe(3)
+    // a cannot be knocked out by its own losses alone: at 3-3 some outcomes still leave it second.
+    expect(by('a').path.lossesToElimination).toBeNull()
+  })
+
+  it('counts the losses that end the chase, and says when winning out is not enough', () => {
+    // f at 0-3: one more loss caps it at 2, below a and whichever of b/c wins week 4.
+    expect(by('f').path.lossesToElimination).toBe(1)
+    // Winning out takes f to 3, which a and the b/c winner always reach — it needs help.
+    expect(by('f').path.winsToClinch).toBeNull()
+    expect(by('f').zone).not.toBe('eliminated')
+  })
+
+  it('agrees with the table: settled teams read 0, and nobody is both', () => {
+    for (const t of board.teams) {
+      const { winsToClinch, lossesToElimination } = t.path
+      expect(winsToClinch === 0).toBe(t.clinched != null)
+      expect(lossesToElimination === 0).toBe(t.zone === 'eliminated')
+      expect(winsToClinch === 0 && lossesToElimination === 0).toBe(false)
+    }
+  })
+
+  it('names the next opponent from the schedule, earliest week first', () => {
+    expect(by('a').next).toEqual({ week: 4, opponentId: 'f', opponentName: 'Team F', inProgress: false })
+    expect(by('d').next).toEqual({ week: 4, opponentId: 'e', opponentName: 'Team E', inProgress: false })
+  })
+
+  it('settles the numbers once the season is over', () => {
+    const over = buildStandingsBoard({ season: 2026, snapshots: snaps, unplayed: [], teams: ids.map((id) => meta(id)), rules: RULES })
+    expect(over.teams.map((t) => t.next)).toEqual(ids.map(() => null))
+    expect(over.teams.slice(0, 2).map((t) => t.path)).toEqual([
+      { winsToClinch: 0, lossesToElimination: null, gamesLeft: 0 },
+      { winsToClinch: 0, lossesToElimination: null, gamesLeft: 0 },
+    ])
+    expect(over.teams.slice(2).every((t) => t.path.lossesToElimination === 0)).toBe(true)
+  })
+
+  it('uses a bound that only ever over-states when too many games are left to enumerate', () => {
+    const many: RemainingGame[] = Array.from({ length: 20 }, (_, i) => ({ week: 4 + Math.floor(i / 3), a: ids[i % 6], b: ids[(i + 3) % 6] }))
+    const wide = buildStandingsBoard({ season: 2026, snapshots: snaps, unplayed: many, teams: ids.map((id) => meta(id)), rules: RULES })
+    const a = wide.teams.find((t) => t.rosterId === 'a')!
+    const aLeft = many.filter((g) => g.a === 'a' || g.b === 'a').length
+    // Bound: rivals win out. a's guarantee, if any, needs at least as many wins as the exact answer would.
+    expect(a.path.winsToClinch == null || (a.path.winsToClinch > 0 && a.path.winsToClinch <= aLeft)).toBe(true)
+  })
+})
+
 describe('power, all-play and projections', () => {
   const ids = ['a', 'b', 'c', 'd']
   const weeks = [1, 2, 3, 4].map((wk) => [

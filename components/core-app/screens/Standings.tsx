@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { LeagueStandingsResult, RankTrendPoint, SeasonHistoryRow } from '@/lib/core-app/leagueStandings'
-import { formatRecord, type BoardTeam, type Zone } from '@/lib/core-app/standingsModel'
+import { formatRecord, type BoardTeam, type StandingsBoard, type Zone } from '@/lib/core-app/standingsModel'
 import { DEFAULT_STANDINGS_VIEW, type StandingsViewState } from '@/lib/core-app/standingsView'
 import { StandingsBoardView, Move } from '@/components/core-app/standings/StandingsBoardView'
 import '@/components/core-app/af-standings.css'
@@ -8,6 +8,7 @@ import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { WeekLineupsTable } from '@/components/core-app/standings/WeekLineupsTable'
+import { formatOdds, type StandingsOdds } from '@/lib/core-app/standingsOdds'
 
 /**
  * Screen 38a·7 — Standings: the league table and AllFantasy's power ranking, side by side.
@@ -48,6 +49,11 @@ export type StandingsProps = {
   view?: StandingsViewState
   /** This week's AF and API lineup projections for every team. Optional; absent draws no section. */
   lineups?: StandingsLineups | null
+  /**
+   * Season Outlook's simulation for this league — playoff odds, schedule strength and this week's
+   * stakes. Optional: a league the simulation withholds, or a failed read, draws the table without them.
+   */
+  odds?: StandingsOdds | null
 }
 
 function n1(v: number): string {
@@ -87,6 +93,137 @@ function lineText(t: BoardTeam, field: number): string {
   const abs = Math.abs(t.gamesBack)
   const games = `${Number.isInteger(abs) ? abs : abs.toFixed(1)} ${abs === 1 ? 'game' : 'games'}`
   return t.gamesBack < 0 ? `${games} clear of the line` : `${games} behind the line`
+}
+
+/** The magic numbers, as one sentence about you. */
+function pathSentence(t: BoardTeam): string {
+  const { winsToClinch: w, lossesToElimination: l, gamesLeft } = t.path
+  if (w === 0) return t.clinched === 'bye' ? 'Your first-round bye is clinched.' : 'Your playoff spot is clinched.'
+  if (l === 0) return 'You are eliminated from the playoff race.'
+  const win =
+    w == null
+      ? 'Winning out does not guarantee a spot on its own yet — you need results elsewhere too'
+      : w === gamesLeft
+        ? `Win out — all ${gamesLeft} — and you are in, whatever else happens`
+        : `Win ${w} of your last ${gamesLeft} and you are in, whatever else happens`
+  const lose = l != null ? `lose ${l} more and you are out` : null
+  return lose ? `${win}; ${lose}.` : `${win}.`
+}
+
+/**
+ * What this week means for you: the magic numbers, your own game's swing, and who to root for.
+ *
+ * ⚠ THE MAGIC NUMBERS ARE THIS TABLE'S; THE PERCENTAGES ARE SEASON OUTLOOK'S. The first are arithmetic
+ * guarantees from the table's own rule (median games included); the second are the simulation's, which
+ * seeds on wins then points for. Each is labelled with where it came from so neither reads as the other.
+ *
+ * ⚠ THE SWING WEEK IS THE FIRST ONE NOBODY HAS SCORED IN. While a week is being played, your next game
+ * on the table is the live one, but its outcome is already partly on the board — so the stakes move to
+ * the week after, and the copy says which week it is talking about.
+ */
+function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard; odds: StandingsOdds | null }) {
+  const you = odds?.you && odds.you.rosterId === me.rosterId ? odds.you : null
+  const stakes = you ? (odds?.stakes ?? null) : null
+  const seedOf = new Map(board.teams.map((t) => [t.rosterId, t.seed]))
+  const nameOf = (id: string, fallback: string | null) => fallback ?? board.teams.find((t) => t.rosterId === id)?.name ?? 'Unknown team'
+  const settled = me.path.winsToClinch === 0 || me.path.lossesToElimination === 0
+
+  return (
+    <section className="af-st-stakes" aria-labelledby="af-st-stakes-title">
+      <div className="af-st-stakes-head">
+        <h2 id="af-st-stakes-title" className="af-label">
+          What is at stake
+        </h2>
+        {you && odds ? (
+          <p className="af-st-stakes-odds">
+            <span className="af-num af-st-stakes-pct">
+              {formatOdds(you.playoffPct, me.clinched ? 'clinched' : me.zone === 'eliminated' ? 'eliminated' : null)}
+            </span>
+            <span className="af-st-stakes-oddslabel">
+              playoff odds ·{' '}
+              <Link href={odds.href}>Season Outlook</Link>
+            </span>
+          </p>
+        ) : null}
+      </div>
+
+      <p className="af-st-stakes-path">{pathSentence(me)}</p>
+      {you && !settled ? <p className="af-st-stakes-why">{you.whatDecidesIt}</p> : null}
+
+      {me.next?.inProgress ? (
+        <p className="af-st-stakes-note">
+          Week {me.next.week} against {me.next.opponentName} is still being played; it is not counted above yet.
+        </p>
+      ) : null}
+
+      {stakes ? (
+        <div className="af-st-stakes-grid">
+          <div className="af-st-stakes-game">
+            <h3 className="af-label">
+              Your game · week {stakes.week}
+              {stakes.opponentName ? ` vs ${stakes.opponentName}` : ''}
+            </h3>
+            <div className="af-st-stakes-branches">
+              <span data-tone="good">
+                <span className="af-label">Win</span>
+                <span className="af-num">{formatOdds(stakes.ifWin)}</span>
+              </span>
+              <span data-tone="bad">
+                <span className="af-label">Lose</span>
+                <span className="af-num">{formatOdds(stakes.ifLose)}</span>
+              </span>
+            </div>
+            {stakes.clinchOnWin ? <p className="af-st-stakes-note">Win and you are in, in essentially every simulated season.</p> : null}
+            {stakes.helpIfLose.length > 0 ? (
+              <p className="af-st-stakes-note">If you lose, you most need {stakes.helpIfLose.join(' and ')} to miss the playoffs.</p>
+            ) : null}
+          </div>
+
+          {stakes.rooting ? (
+            <div className="af-st-stakes-root">
+              <h3 className="af-label">Root for · week {stakes.week}</h3>
+              {stakes.rooting.length > 0 ? (
+                <ul>
+                  {stakes.rooting.map((g) => {
+                    const pick = g.rootFor === g.a.id ? g.a : g.b
+                    const other = g.rootFor === g.a.id ? g.b : g.a
+                    const hi = g.rootFor === g.a.id ? g.ifA : g.ifB
+                    const lo = g.rootFor === g.a.id ? g.ifB : g.ifA
+                    const pickSeed = seedOf.get(pick.id)
+                    const otherSeed = seedOf.get(other.id)
+                    return (
+                      <li key={`${g.a.id}-${g.b.id}`}>
+                        <span className="af-st-stakes-pick">
+                          <strong>{nameOf(pick.id, pick.name)}</strong>
+                          {pickSeed != null ? <span className="af-num af-st-stakes-seed"> #{pickSeed}</span> : null}
+                          <span className="af-st-stakes-over"> over </span>
+                          {nameOf(other.id, other.name)}
+                          {otherSeed != null ? <span className="af-num af-st-stakes-seed"> #{otherSeed}</span> : null}
+                        </span>
+                        <span className="af-st-stakes-delta af-num">
+                          {formatOdds(hi)} <span aria-hidden>vs</span>
+                          <span className="af-sr"> for you, against </span> {formatOdds(lo)}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              ) : (
+                <p className="af-st-stakes-note">No other game that week moves your odds by more than a few points either way.</p>
+              )}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {stakes ? (
+        <p className="af-st-stakes-basis">
+          Win and lose are your playoff odds with that result fixed; each rooting pair is your odds in the simulated seasons where
+          that team won. All of it is Season Outlook’s simulation, seeded so it reads the same on every visit.
+        </p>
+      ) : null}
+    </section>
+  )
 }
 
 /**
@@ -151,7 +288,7 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
   )
 }
 
-export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, lineups = null }: StandingsProps) {
+export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, lineups = null, odds = null }: StandingsProps) {
   /*
    * ⚠ THE REFUSAL BRANCH IS LABELLED TOO, AND THAT IS NOT DECORATION. An `available: false` board is
    * cached exactly like an available one, so "we could not read this league's results" can itself be
@@ -247,7 +384,9 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
         </div>
       )}
 
-      <StandingsBoardView board={board} initial={view} />
+      {me && board.hasHeadToHead && board.gamesRemaining > 0 ? <WeekStakes me={me} board={board} odds={odds} /> : null}
+
+      <StandingsBoardView board={board} initial={view} odds={odds} />
 
       {lineups ? (
         <WeekLineupsTable lineups={lineups} caveat="the table above is points already scored." />
