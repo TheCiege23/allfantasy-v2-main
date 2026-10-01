@@ -389,7 +389,7 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
 
       {me && board.hasHeadToHead && board.gamesRemaining > 0 ? <WeekStakes me={me} board={board} odds={odds} /> : null}
 
-      <StandingsBoardView board={board} initial={view} odds={odds} />
+      <StandingsBoardView board={board} initial={view} odds={odds} live={data.live ?? null} />
 
       {lineups ? (
         <WeekLineupsTable lineups={lineups} caveat="the table above is points already scored." />
