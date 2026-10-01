@@ -7,7 +7,7 @@ import {
   MLB_VENUE_COORDS,
 } from '@/lib/weather/weatherService'
 import { resolveVenueForTeam } from '@/lib/weather/venueResolver'
-import { resolveCollegeVenue } from '@/lib/weather/collegeVenue'
+import { resolveCollegeVenue, venueNamesAgree } from '@/lib/weather/collegeVenue'
 import { loadCollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIndexStore'
 import type { CollegeTeamIndex } from '@/lib/sport-teams/collegeTeamIdentity'
 import { requireCronAuth } from '@/app/api/cron/_auth'
@@ -171,10 +171,8 @@ function resolveNcaafCoords(
   const byTeam = resolveCollegeVenue(g.homeTeam, index)
   if (!byTeam) return { kind: 'unknown_team' }
   const venue = g.venue?.trim()
-  if (venue) {
-    const a = venueKey(venue)
-    const b = venueKey(byTeam.label)
-    if (!a.includes(b) && !b.includes(a)) return { kind: 'venue_mismatch', stadium: byTeam.label }
+  if (venue && !venueNamesAgree(venue, byTeam.label)) {
+    return { kind: 'venue_mismatch', stadium: byTeam.label }
   }
   return { kind: 'placed', lat: byTeam.lat, lng: byTeam.lng }
 }

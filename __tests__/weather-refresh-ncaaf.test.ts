@@ -164,6 +164,25 @@ describe('NCAAF weather prewarm', () => {
     expect(body.ncaaf.venueMismatchSamples[0]).toContain('Bryant-Denny Stadium')
   })
 
+  it('places a home game the feed spells differently from CFBD', async () => {
+    // Neither string contains the other; the old whole-string rule reported this as neutral.
+    process.env[FLAG] = 'true'
+    const kickoff = new Date(Date.now() + 30 * HOUR)
+    rowsMock.rows = [game({ homeTeam: 'SMU', venue: 'Gerald Ford Stadium', startTime: kickoff })]
+    const body = await runCron()
+    expect(body.refreshed).toBe(1)
+    expect(body.ncaaf.venueMismatch).toBe(0)
+    expect(await readerKeys('SMU', kickoff)).toEqual([writtenKey()])
+  })
+
+  it('⚠ but Ford Field (Detroit) is not Gerald J. Ford Stadium', async () => {
+    process.env[FLAG] = 'true'
+    rowsMock.rows = [game({ homeTeam: 'SMU', venue: 'Ford Field', startTime: new Date(Date.now() + 30 * HOUR) })]
+    const body = await runCron()
+    expect(getWeatherMock).not.toHaveBeenCalled()
+    expect(body.ncaaf.venueMismatch).toBe(1)
+  })
+
   it('🛑 an NCAAF game at an NFL stadium is flag-gated too, and lands on the reader key', async () => {
     // Miami at Hard Rock used to be placed through the NFL table first, and paid for with the flag off.
     const kickoff = new Date(Date.now() + 30 * HOUR)
