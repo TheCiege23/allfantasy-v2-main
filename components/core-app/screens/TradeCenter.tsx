@@ -2289,10 +2289,10 @@ export function TradeCenter(props: {
                 </span>
               ) : null}
               <strong className="af-tc-score-label">
-                {noSignal ? copy('Grade unavailable') : result.labels?.fairnessLabel ?? copy('No verdict')}
+                {noSignal ? copy('Grade unavailable') : result.labels?.fairnessLabel ? copy(result.labels.fairnessLabel) : copy('No verdict')}
               </strong>
               {!noSignal && result.labels?.confidenceLabel ? (
-                <span className="af-tc-conf">{result.labels.confidenceLabel}</span>
+                <span className="af-tc-conf">{copy(result.labels.confidenceLabel)}</span>
               ) : null}
             </div>
           </div>
@@ -2359,29 +2359,29 @@ export function TradeCenter(props: {
                 </ul>
               ) : null}
               {result.valueBasis?.needGap ? (
-                <p className="af-tc-row-sub">Roster need was not priced: we could not see {result.valueBasis.needGap}.</p>
+                <p className="af-tc-row-sub">{copy('Roster need was not priced: we could not see')} {result.valueBasis.needGap}.</p>
               ) : null}
             </div>
           ) : null}
 
           {!noSignal && (result.counterOffers ?? []).length > 0 ? (
             <div className="af-tc-moves">
-              <div className="af-label">Re-evaluated counteroffers</div>
-              <p className="af-tc-row-sub">Each complete package uses the same league values and roster-need calculation. These grades measure value balance; they do not predict acceptance or wins.</p>
+              <div className="af-label">{copy('Re-evaluated counteroffers')}</div>
+              <p className="af-tc-row-sub">{copy('Each complete package uses the same league values and roster-need calculation. These grades measure value balance; they do not predict acceptance or wins.')}</p>
               <ul>
                 {result.counterOffers!.map(counter => (
                   <li key={`${counter.addTo}-${counter.rosterPlayerId}`}>
-                    <strong>{counter.addTo === 'get' ? 'Ask for' : 'Offer'} {counter.name}</strong>
-                    <span className="af-tc-row-sub">Base value {money(counter.marketValue)} · League value in this package {money(counter.assetLeagueValue)}</span>
+                    <strong>{copy(counter.addTo === 'get' ? 'Ask for' : 'Offer')} {counter.name}</strong>
+                    <span className="af-tc-row-sub">{copy('Base value')} {money(counter.marketValue)} · {copy('League value in this package')} {money(counter.assetLeagueValue)}</span>
                     <span className="af-tc-row-sub">
-                      You {counter.grade.letter} / {theirLabel} {counter.grade.partnerLetter} · {counter.balanced ? 'Within the even-value band' : `${Math.abs(counter.grade.percentDiff)}% apart`} · {money(counter.remainingGap)} value gap remaining
+                      {copy('You')} {counter.grade.letter} / {theirLabel} {counter.grade.partnerLetter} · {counter.balanced ? copy('Within the even-value band') : `${Math.abs(counter.grade.percentDiff)}% ${copy('apart')}`} · {money(counter.remainingGap)} {copy('value gap remaining')}
                     </span>
                     <button type="button" className="af-btn af-btn-ghost" onClick={() => addAsset(counter.addTo, { kind: 'player', name: counter.name,
                       playerId: counter.asset.kind === 'player'
                         ? counter.asset.playerId ?? (counter.asset.providerIdentity ? counter.rosterPlayerId : null) : null,
                       providerIdentity: counter.asset.kind === 'player' ? counter.asset.providerIdentity : undefined,
                       position: counter.position, team: null, value: counter.marketValue })}>
-                      Add to proposal
+                      {copy('Add to proposal')}
                     </button>
                   </li>
                 ))}
@@ -2391,7 +2391,7 @@ export function TradeCenter(props: {
 
           {(result.dataGaps ?? []).length > 0 ? (
             <>
-              <div className="af-label">What we couldn&rsquo;t see</div>
+              <div className="af-label">{copy('What we couldn’t see')}</div>
               <ul className="af-tc-gaps">
                 {(result.dataGaps ?? []).map((g) => (
                   <li key={g}>{g}</li>
@@ -2412,7 +2412,7 @@ export function TradeCenter(props: {
             if (g.key === 'formatNotes' && blocked) return null
             return (
               <div key={g.tone} className="af-tc-note" data-tone={g.tone}>
-                <p className="af-tc-note-title">{g.title}</p>
+                <p className="af-tc-note-title">{copy(g.title)}</p>
                 {notes.map((n) => (
                   <p key={n}>{n}</p>
                 ))}
@@ -2429,44 +2429,44 @@ export function TradeCenter(props: {
       ) : intel ? (
         <section className="af-tc-dos" data-mstep="review">
           {/* Was "Decision OS · this deal" — internal name; the section reads this deal. */}
-          <div className="af-label">This deal</div>
+          <div className="af-label">{copy('This deal')}</div>
           {depthAccess ? <FreeUntilNote access={depthAccess} /> : null}
-          {noSignal ? <p className="af-tc-why">Proposal grade unavailable. Priced assets and roster context alone do not establish that the complete trade is fair.</p> : intel.why ? <p className="af-tc-why">{intel.why}</p> : null}
+          {noSignal ? <p className="af-tc-why">{copy('Proposal grade unavailable. Priced assets and roster context alone do not establish that the complete trade is fair.')}</p> : intel.why ? <p className="af-tc-why">{intel.why}</p> : null}
 
           <div className="af-tc-pairs">
             <div className="af-tc-pair">
-              <div className="af-tc-pair-label">Asset production lean</div>
-              <div className="af-tc-pair-value">{intel.whoWinsNow === 'unknown' ? 'Unavailable' : intel.whoWinsNow ?? '—'}</div>
+              <div className="af-tc-pair-label">{copy('Asset production lean')}</div>
+              <div className="af-tc-pair-value">{intel.whoWinsNow === 'unknown' ? copy('Unavailable') : intel.whoWinsNow ?? '—'}</div>
             </div>
             <div className="af-tc-pair">
-              <div className="af-tc-pair-label">League value lean</div>
-              <div className="af-tc-pair-value">{noSignal || intel.whoWinsLongTerm === 'unknown' ? 'Unavailable' : intel.whoWinsLongTerm ?? '—'}</div>
+              <div className="af-tc-pair-label">{copy('League value lean')}</div>
+              <div className="af-tc-pair-value">{noSignal || intel.whoWinsLongTerm === 'unknown' ? copy('Unavailable') : intel.whoWinsLongTerm ?? '—'}</div>
             </div>
           </div>
 
           <div className="af-tc-incentives">
             <div className="af-tc-incentive" data-side="you">
-              <div className="af-tc-pair-label">Why you may accept</div>
+              <div className="af-tc-pair-label">{copy('Why you may accept')}</div>
               <p>{yourIncentive}</p>
             </div>
             <div className="af-tc-incentive" data-side="them">
-              <div className="af-tc-pair-label">Why {theirLabel} may accept</div>
+              <div className="af-tc-pair-label">{copy('Why')} {theirLabel} {copy('may accept')}</div>
               <p>{theirIncentive}</p>
             </div>
             <div className="af-tc-incentive" data-side="blocker">
-              <div className="af-tc-pair-label">What may stop agreement</div>
+              <div className="af-tc-pair-label">{copy('What may stop agreement')}</div>
               <p>{agreementBlocker}</p>
             </div>
           </div>
 
-          <div className="af-label">How these values become advice</div>
+          <div className="af-label">{copy('How these values become advice')}</div>
           <div className="af-tc-value-layers">
-            <div><span>League value</span><strong>{money(balance?.give)} sent · {money(balance?.get)} received</strong></div>
-            <div><span>Roster need</span><strong>{result?.needNotes?.[0] ?? 'No league-specific roster-need edge was measured.'}</strong></div>
-            <div><span>Consolidation</span><strong>{give.length} assets out · {get.length} assets in{result?.scaleNotes?.[0] ? ` · ${result.scaleNotes[0]}` : ''}</strong></div>
-            <div><span>Team direction</span><strong>{result?.postureNotes?.[0] ?? intel?.rebuilderRecommendation ?? 'Use the contender and rebuilder reads for your current direction.'}</strong></div>
-            <div><span>Data freshness</span><strong>{valueSources.length ? `Latest available ${valueSources.join(' + ')} snapshots` : 'No priced source was returned for this deal.'}</strong></div>
-            <div><span>Source agreement</span><strong>{noSignal ? 'Pricing coverage is incomplete; no source consensus or proposal verdict is available.' : valueSources.length > 1 ? `Pricing methods in this deal: ${valueSources.join(', ')}. Different methods can price different assets; this does not establish independent source agreement.` : valueSources.length === 1 ? `One market source (${valueSources[0]}) priced the deal, so there is no cross-source consensus yet.` : 'No source comparison is possible until the assets are priced.'}</strong></div>
+            <div><span>{copy('League value')}</span><strong>{money(balance?.give)} {copy('sent value')} · {money(balance?.get)} {copy('received value')}</strong></div>
+            <div><span>{copy('Roster need')}</span><strong>{result?.needNotes?.[0] ?? copy('No league-specific roster-need edge was measured.')}</strong></div>
+            <div><span>{copy('Consolidation')}</span><strong>{give.length} {copy('assets out')} · {get.length} {copy('assets in')}{result?.scaleNotes?.[0] ? ` · ${result.scaleNotes[0]}` : ''}</strong></div>
+            <div><span>{copy('Team direction')}</span><strong>{result?.postureNotes?.[0] ?? intel?.rebuilderRecommendation ?? copy('Use the contender and rebuilder reads for your current direction.')}</strong></div>
+            <div><span>{copy('Data freshness')}</span><strong>{valueSources.length ? `${copy('Latest available')} ${valueSources.join(' + ')} ${copy('snapshots')}` : copy('No priced source was returned for this deal.')}</strong></div>
+            <div><span>{copy('Source agreement')}</span><strong>{noSignal ? copy('Pricing coverage is incomplete; no source consensus or proposal verdict is available.') : valueSources.length > 1 ? `${copy('Pricing methods in this deal:')} ${valueSources.join(', ')}. ${copy('Different methods can price different assets; this does not establish independent source agreement.')}` : valueSources.length === 1 ? `${copy('One market source')} (${valueSources[0]}) ${copy('priced the deal, so there is no cross-source consensus yet.')}` : copy('No source comparison is possible until the assets are priced.')}</strong></div>
           </div>
 
           {/*
@@ -2478,13 +2478,13 @@ export function TradeCenter(props: {
             <div className="af-tc-reads">
               {intel.contenderRecommendation ? (
                 <div className="af-tc-read" data-tone="contender">
-                  <div className="af-tc-pair-label">Contender read</div>
+                  <div className="af-tc-pair-label">{copy('Contender read')}</div>
                   <p>{intel.contenderRecommendation}</p>
                 </div>
               ) : null}
               {intel.rebuilderRecommendation ? (
                 <div className="af-tc-read" data-tone="rebuilder">
-                  <div className="af-tc-pair-label">Rebuilder read</div>
+                  <div className="af-tc-pair-label">{copy('Rebuilder read')}</div>
                   <p>{intel.rebuilderRecommendation}</p>
                 </div>
               ) : null}
@@ -2493,7 +2493,7 @@ export function TradeCenter(props: {
 
           {(intel.tradeWarnings ?? []).length > 0 ? (
             <>
-              <div className="af-label">Warnings</div>
+              <div className="af-label">{copy('Warnings')}</div>
               <ul className="af-tc-list af-tc-list--warn">
                 {(intel.tradeWarnings ?? []).map((w) => (
                   <li key={w}>{w}</li>
@@ -2504,7 +2504,7 @@ export function TradeCenter(props: {
 
           {!noSignal && (intel.rebalanceSuggestions ?? []).length > 0 ? (
             <>
-              <div className="af-label">Rebalance ideas</div>
+              <div className="af-label">{copy('Rebalance ideas')}</div>
               <ul className="af-tc-list">
                 {(intel.rebalanceSuggestions ?? []).map((r) => (
                   <li key={r}>{r}</li>
@@ -2515,7 +2515,7 @@ export function TradeCenter(props: {
 
           {(intel.alternateTargets ?? []).length > 0 ? (
             <>
-              <div className="af-label">Counter targets</div>
+              <div className="af-label">{copy('Counter targets')}</div>
               <ul className="af-tc-list">
                 {(intel.alternateTargets ?? []).map((t) => (
                   <li key={t.name}>

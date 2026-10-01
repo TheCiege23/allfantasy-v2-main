@@ -1,11 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ThemeProvider, useThemeMode } from '@/components/theme/ThemeProvider'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 function CurrentMode() {
-  const { mode } = useThemeMode()
-  return <output>{mode}</output>
+  const { mode, cycleMode } = useThemeMode()
+  return <><output>{mode}</output><button onClick={cycleMode}>Cycle mode</button></>
 }
 
 describe('Core preferences', () => {
@@ -32,5 +32,16 @@ describe('Core preferences', () => {
     expect(coreUiCopy('My team', 'es')).toBe('Mi equipo')
     expect(coreUiCopy('League chat', 'es')).toBe('Chat de la liga')
     expect(coreUiCopy('My team', 'en')).toBe('My team')
+  })
+
+  it('applies every mode change to the document without leaving Core', async () => {
+    render(<ThemeProvider><div className="af-core"><CurrentMode /></div></ThemeProvider>)
+    for (const [stored, applied] of [
+      ['legacy', 'legacy'], ['system', 'light'], ['light', 'light'], ['dark', 'dark'],
+    ] as const) {
+      fireEvent.click(screen.getByRole('button', { name: 'Cycle mode' }))
+      await waitFor(() => expect(screen.getByRole('status').textContent).toBe(stored))
+      expect(document.documentElement.dataset.mode).toBe(applied)
+    }
   })
 })
