@@ -22,6 +22,12 @@ copy <repo>\docs\play-store\twa-manifest.json .
 bubblewrap update   # regenerates the Android project from twa-manifest.json
 ```
 
+The long-press shortcuts (My Leagues, Trade Analyzer, and since 2026-10-01 **Your career**) come
+from `shortcuts` in `twa-manifest.json`, so a shortcut change reaches phones only with the next
+Play build. Haptics need no build: the app runs Chrome, and the website calls `navigator.vibrate`
+(`lib/platform/haptics.ts`). A home-screen widget is not possible in a Trusted Web Activity
+without leaving Bubblewrap's generated project, which is why Android has none.
+
 ⚠ **`bubblewrap build` does NOT create the keystore.** This runbook used to say it
 prompts to create `android.keystore` on first run. It does not: it prompts for the
 PASSWORD, builds the unsigned APK, then dies at the signing step with

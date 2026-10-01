@@ -182,7 +182,8 @@ describe('the pieces this depends on', () => {
   it('the TestFlight workflow ships associated-domains only when universal_links is ticked', () => {
     const wf = read('.github/workflows/ios-testflight.yml')
     expect(wf).toMatch(/universal_links:\s*\n\s*description:/)
-    expect(wf).toMatch(/if: \$\{\{ inputs\.push_notifications \|\| inputs\.universal_links \}\}/)
+    // The career widget (phase 6) joined this step's condition; universal links must still be in it.
+    expect(wf).toMatch(/if: \$\{\{ inputs\.push_notifications \|\| inputs\.universal_links( \|\| inputs\.career_widget)? \}\}/)
     expect(wf).toMatch(/\[ "\$LINKS" = "true" \] \|\| \/usr\/libexec\/PlistBuddy -c "Delete :com\.apple\.developer\.associated-domains"/)
     expect(wf).toMatch(/\[ "\$PUSH" = "true" \] \|\| \/usr\/libexec\/PlistBuddy -c "Delete :aps-environment"/)
     expect(wf).toMatch(/universal_links was requested but the signed build has no associated-domains entitlement/)

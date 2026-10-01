@@ -1,6 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect } from 'react'
+import { buildCareerWidgetSnapshot } from '@/lib/core-app/careerWidgetSnapshot'
+import { syncCareerWidget } from '@/lib/platform/careerWidgetBridge'
 import { careerHref, type CareerData, type PrestigeComponent } from '@/lib/core-app/careerModel'
 import type { ShareCardData } from '@/lib/core-app/shareCard'
 import type { CareerAward } from '@/lib/core-app/careerAwards'
@@ -429,6 +432,16 @@ export function Career({
    * place those views exist.
    */
   const overview = screen.view === 'overview'
+
+  /*
+   * Phase 6: keep the iOS home-screen widget in step with what this screen shows. A no-op outside
+   * the iOS app, under a filter, and when nothing changed since the last send this session.
+   */
+  const snapshotAt = nowIso ?? screen.profile.builtAt
+  useEffect(() => {
+    void syncCareerWidget(buildCareerWidgetSnapshot(screen.data, screen.awards, snapshotAt ? new Date(snapshotAt) : new Date()))
+  }, [screen.data, screen.awards, snapshotAt])
+
   return (
     <>
       <CareerDesktop screen={screen} share={share ?? null} showOnMobile={!overview} wire={wire} nowIso={nowIso} />

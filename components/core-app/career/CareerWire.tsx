@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect } from 'react'
+import { hapticOnce } from '@/lib/platform/haptics'
 import { readAgo, type CareerWireData, type PlatformHealth, type WireLeague, type WireStatus } from '@/lib/core-app/careerWireModel'
 import { askChimmyAboutCareer } from './CareerAskChimmy'
 
@@ -44,6 +46,19 @@ function platformLine(p: PlatformHealth, now: Date): string {
 
 export function CareerWire({ data, nowIso }: { data: CareerWireData; nowIso: string }) {
   const now = new Date(nowIso)
+
+  /*
+   * Phase 6: one success haptic when the Wire opens on good news — a win or a climb since the last
+   * Career visit. Once per window (`sinceAt`), so a refresh does not buzz again. Never for a loss:
+   * a phone that celebrates a drop to #7 is worse than one that stays still.
+   */
+  const goodNews = data.changes.some(
+    (c) => c.won > 0 || (c.rank != null && c.previousRank != null && c.rank < c.previousRank),
+  )
+  useEffect(() => {
+    if (goodNews) hapticOnce(`career-wire:${data.sinceAt}`, 'success')
+  }, [goodNews, data.sinceAt])
+
   if (data.leagues.length === 0) return null
 
   const firstProblem = (platform: string): WireLeague | undefined =>
