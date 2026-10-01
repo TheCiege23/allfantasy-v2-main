@@ -71,7 +71,13 @@ export async function notifyWeeklyStories(now: Date = new Date()): Promise<{ tar
         dedupePrefix: prefix,
         // A push and an in-app row, never a weekly email or text (user decision: the push).
         skipChannels: { email: true, sms: true },
-        meta: { weeklyStory: storyWeekKey(now) },
+        /*
+         * Its own device tag. Every `matchup_results` push otherwise shares one
+         * (`notif-matchup_results-global`), and the service worker silently REPLACES a shown
+         * notification with the same tag — the story would erase a "your matchup ended" push, or be
+         * erased by one.
+         */
+        meta: { weeklyStory: storyWeekKey(now), pushTag: prefix },
       })
     }
     return { targeted: userIds.length, sent: todo.length, skipped: userIds.length - todo.length }
