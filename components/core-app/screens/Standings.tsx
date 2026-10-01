@@ -9,6 +9,9 @@ import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import { WeekLineupsTable } from '@/components/core-app/standings/WeekLineupsTable'
 import { formatOdds, type StandingsOdds } from '@/lib/core-app/standingsOdds'
+import type { LineupEfficiency } from '@/lib/core-app/lineupEfficiency'
+import type { DraftOrderPreview } from '@/lib/core-app/standingsDraftOrder'
+import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
 
 /**
  * Screen 38a·7 — Standings: the league table and AllFantasy's power ranking, side by side.
@@ -54,6 +57,10 @@ export type StandingsProps = {
    * stakes. Optional: a league the simulation withholds, or a failed read, draws the table without them.
    */
   odds?: StandingsOdds | null
+  /** Lineup efficiency per team — Sleeper leagues with player scores on file. */
+  efficiency?: LineupEfficiency | null
+  /** Next season's draft order if the season ended today — only for a league that drafts from its standings. */
+  draftOrder?: DraftOrderPreview | null
 }
 
 function n1(v: number): string {
@@ -230,6 +237,50 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
 }
 
 /**
+ * "Draft order if the season ended today" — the picks the teams outside the playoff line would hold.
+ *
+ * ⚠ ONLY DRAWN FOR A LEAGUE THAT DRAFTS FROM ITS STANDINGS (`standingsDraftOrder.ts` decides), so a
+ * redraft league with a randomized draft never sees an order that does not exist.
+ */
+function DraftOrderSection({ order }: { order: DraftOrderPreview }) {
+  const lottery = order.rule === 'lottery'
+  return (
+    <section className="af-st-draft" aria-labelledby="af-st-draft-title">
+      <h2 id="af-st-draft-title" className="af-label">
+        Draft order if the season ended today
+      </h2>
+      <p className="af-st-draft-rule">{order.ruleText}</p>
+      <ol className="af-st-draft-list">
+        {order.picks.map((p) => (
+          <li key={p.rosterId} data-you={p.isYou ? 'true' : undefined}>
+            <span className="af-st-draft-pick af-num">{lottery ? `#${p.pick}` : p.pick}</span>
+            <span className="af-st-draft-name">
+              {p.name}
+              {p.isYou ? <span className="af-stb-you">You</span> : null}
+            </span>
+            <span className="af-st-draft-rec af-num">
+              {p.record} · {p.pointsFor.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} PF
+            </span>
+            {lottery ? (
+              <span className="af-st-draft-odds af-num">
+                {p.firstPickOdds != null ? `${p.firstPickOdds.toFixed(1)}% at #1` : 'not in the lottery'}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+      <p className="af-st-draft-note">
+        The other {order.playoffTeams} picks go to the playoff teams, in an order the playoffs decide.
+        {lottery
+          ? ' The list is the order picks fall to without lottery luck; the percentage is each team’s chance at the first pick.'
+          : ''}{' '}
+        From the table as it stands, not a projection.
+      </p>
+    </section>
+  )
+}
+
+/**
  * Completed seasons, as the import recorded them.
  *
  * ⚠ SEPARATE FROM THE BOARD ABOVE, NOT AN EXTENSION OF IT. The live board is computed week by week —
@@ -291,7 +342,15 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
   )
 }
 
-export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, lineups = null, odds = null }: StandingsProps) {
+export function Standings({
+  data,
+  freshness,
+  view = DEFAULT_STANDINGS_VIEW,
+  lineups = null,
+  odds = null,
+  efficiency = null,
+  draftOrder = null,
+}: StandingsProps) {
   /*
    * ⚠ THE REFUSAL BRANCH IS LABELLED TOO, AND THAT IS NOT DECORATION. An `available: false` board is
    * cached exactly like an available one, so "we could not read this league's results" can itself be
@@ -337,6 +396,18 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
           {seasonComplete ? `season complete after week ${week}` : `results through week ${board.throughWeek}`}.
         </p>
         {chip}
+        <div className="af-st-share">
+          {/*
+            The IMAGE is shared, never the URL: the card route is auth-gated to league members, so a link
+            would open nothing for anyone else.
+          */}
+          <ShareMomentButton
+            url={`/api/share/rivalry-card?kind=standings&leagueId=${encodeURIComponent(league.id)}`}
+            filename={`standings-${season}-week-${board.throughWeek}.png`}
+            title={`${league.name} standings`}
+            label="Share standings"
+          />
+        </div>
       </header>
 
       {me ? (
@@ -389,7 +460,9 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
 
       {me && board.hasHeadToHead && board.gamesRemaining > 0 ? <WeekStakes me={me} board={board} odds={odds} /> : null}
 
-      <StandingsBoardView board={board} initial={view} odds={odds} live={data.live ?? null} />
+      <StandingsBoardView board={board} initial={view} odds={odds} live={data.live ?? null} efficiency={efficiency} />
+
+      {draftOrder ? <DraftOrderSection order={draftOrder} /> : null}
 
       {lineups ? (
         <WeekLineupsTable lineups={lineups} caveat="the table above is points already scored." />

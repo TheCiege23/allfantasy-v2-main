@@ -21,6 +21,7 @@ import {
   type StandingsViewState,
 } from '@/lib/core-app/standingsView'
 import { sortTeams } from '@/lib/core-app/standingsSort'
+import type { LineupEfficiency } from '@/lib/core-app/lineupEfficiency'
 import { formatOdds, type StandingsOdds } from '@/lib/core-app/standingsOdds'
 import { StandingsHistoryChart } from './StandingsHistoryChart'
 import { StandingsPointsChart } from './StandingsPointsChart'
@@ -623,9 +624,33 @@ function FragmentRows({
   )
 }
 
-function PowerTable({ board, groups }: { board: StandingsBoard; groups: Group[] }) {
+/** "92%" — a lineup's points as a share of the best it could have set. */
+function EfficiencyCell({ team, efficiency }: { team: BoardTeam; efficiency: LineupEfficiency }) {
+  const e = efficiency.byRoster[team.rosterId]
+  if (!e) return <span className="af-stb-muted">—</span>
+  const pct = Math.round(e.efficiency * 1000) / 10
+  return (
+    <span
+      className="af-stb-eff af-num"
+      data-tone={pct >= 92 ? 'good' : pct < 85 ? 'bad' : undefined}
+      title={`${e.actual.toFixed(1)} of a possible ${e.best.toFixed(1)} over ${e.weeks} ${e.weeks === 1 ? 'week' : 'weeks'}`}
+    >
+      {pct.toFixed(1)}%
+    </span>
+  )
+}
+
+function PowerTable({
+  board,
+  groups,
+  efficiency,
+}: {
+  board: StandingsBoard
+  groups: Group[]
+  efficiency: LineupEfficiency | null
+}) {
   const h2h = board.hasHeadToHead
-  const cols = 9 + (h2h ? 3 : 0)
+  const cols = 9 + (h2h ? 3 : 0) + (efficiency ? 2 : 0)
   return (
     <div className="af-stb-scroll" role="region" aria-label="AF Power rankings" tabIndex={0}>
       <table className="af-stb-table" data-view="power">
@@ -666,6 +691,16 @@ function PowerTable({ board, groups }: { board: StandingsBoard; groups: Group[] 
             <th scope="col" className="af-stb-n">
               Per wk
             </th>
+            {efficiency ? (
+              <>
+                <th scope="col" className="af-stb-n">
+                  <abbr title="Points scored as a share of the best lineup the team could have set from its own roster">Lineup %</abbr>
+                </th>
+                <th scope="col" className="af-stb-n">
+                  <abbr title="Points left on the bench per week — the best lineup minus the one that was set">Bench/wk</abbr>
+                </th>
+              </>
+            ) : null}
             <th scope="col" className="af-stb-n">
               <abbr title="Rank by points for">PF #</abbr>
             </th>
@@ -708,6 +743,16 @@ function PowerTable({ board, groups }: { board: StandingsBoard; groups: Group[] 
                   ) : null}
                   <td className="af-stb-n af-num">{pts(t.pointsFor)}</td>
                   <td className="af-stb-n af-num">{pts(t.average)}</td>
+                  {efficiency ? (
+                    <>
+                      <td className="af-stb-n">
+                        <EfficiencyCell team={t} efficiency={efficiency} />
+                      </td>
+                      <td className="af-stb-n af-num">
+                        {efficiency.byRoster[t.rosterId] ? efficiency.byRoster[t.rosterId].benchPerWeek.toFixed(1) : '—'}
+                      </td>
+                    </>
+                  ) : null}
                   <td className="af-stb-n af-num">{t.pfRank}</td>
                   <td className="af-stb-n af-num">{t.seed}</td>
                 </tr>
@@ -725,11 +770,13 @@ function Cards({
   groups,
   view,
   odds,
+  efficiency,
 }: {
   board: StandingsBoard
   groups: Group[]
   view: StandingsViewKey
   odds: StandingsOdds | null
+  efficiency: LineupEfficiency | null
 }) {
   const h2h = board.hasHeadToHead
   const hasPath = board.showPaths
@@ -818,6 +865,17 @@ function Cards({
                                 <span className="af-stb-muted">
                                   (luck {t.luck > 0 ? '+' : t.luck < 0 ? '−' : ''}
                                   {Math.abs(t.luck).toFixed(1)})
+                                </span>
+                              </dd>
+                            </div>
+                          ) : null}
+                          {efficiency?.byRoster[t.rosterId] ? (
+                            <div>
+                              <dt>Lineup efficiency</dt>
+                              <dd>
+                                <EfficiencyCell team={t} efficiency={efficiency} />{' '}
+                                <span className="af-stb-muted">
+                                  ({efficiency.byRoster[t.rosterId].benchPerWeek.toFixed(1)} left on the bench a week)
                                 </span>
                               </dd>
                             </div>
@@ -1107,6 +1165,7 @@ export function StandingsBoardView({
   initial,
   odds: finalOdds = null,
   live = null,
+  efficiency = null,
 }: {
   board: StandingsBoard
   initial: StandingsViewState
@@ -1117,6 +1176,8 @@ export function StandingsBoardView({
    * is being played; it adds an "If scores held" switch and nothing else.
    */
   live?: StandingsBoard | null
+  /** Lineup efficiency per team (Sleeper only). Absent draws no efficiency columns. */
+  efficiency?: LineupEfficiency | null
 }) {
   const [view, setView] = useState<StandingsViewKey>(initial.view)
   const [division, setDivision] = useState<string>(
@@ -1328,7 +1389,7 @@ export function StandingsBoardView({
       ) : null}
 
       {layout === 'cards' ? (
-        <Cards board={board} groups={groups} view={view} odds={odds} />
+        <Cards board={board} groups={groups} view={view} odds={odds} efficiency={efficiency} />
       ) : view === 'official' ? (
         <>
           <p className="af-stb-cue">Scroll sideways for every column — rank and team stay in place. Tap a column heading to sort.</p>
@@ -1337,7 +1398,7 @@ export function StandingsBoardView({
       ) : (
         <>
           <p className="af-stb-cue">Scroll sideways for every column — rank and team stay in place.</p>
-          <PowerTable board={board} groups={groups} />
+          <PowerTable board={board} groups={groups} efficiency={efficiency} />
         </>
       )}
 
@@ -1373,10 +1434,13 @@ export function StandingsBoardView({
             </p>
           </>
         ) : (
-          <p>
-            Expected wins count, each week, the share of the league a team outscored. Luck is actual head-to-head wins minus expected
-            wins{board.medianGames ? ' (median games are not part of it)' : ''}.
-          </p>
+          <>
+            <p>
+              Expected wins count, each week, the share of the league a team outscored. Luck is actual head-to-head wins minus expected
+              wins{board.medianGames ? ' (median games are not part of it)' : ''}.
+            </p>
+            {efficiency ? <p>{efficiency.basis}</p> : null}
+          </>
         )}
       </div>
 
