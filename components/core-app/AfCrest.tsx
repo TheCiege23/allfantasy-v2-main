@@ -3,10 +3,11 @@
  *
  * ⚠ WHY NOT `/af-crest.png`. That file is a JPEG with a `.png` extension —
  * verified by its magic bytes — and JPEG has no alpha channel, so it carries a
- * baked-in white background. On the rail's dark ground that is a white square
- * with a crest inside it, which is exactly the "not natural to the page" look.
- * Recompressing it would also mean shipping a second raster of a mark that is
- * three flat colours and two letters.
+ * baked-in BLACK background (a 1024px square; this comment once said white,
+ * which nobody had looked at). On the rail's #0a0c1a that is a near-invisible
+ * box; on any light surface it is a black square around the crest. It is also
+ * an older variant of the mark, with a brighter cyan rim. Where a raster is
+ * unavoidable, use /af-crest-transparent.png (scripts/build-crest-png.mjs).
  *
  * Drawn as SVG it is transparent by construction, crisp at 20px and at 512,
  * costs no network request, and can take the page's own accent when a surface

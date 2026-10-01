@@ -738,9 +738,9 @@ export function CareerShare({
                   {/*
                     ⚠ THE DRAWN CREST, NOT THE "AF" TEXT MARK IT REPLACED, and not
                     `/af-crest.png` either — that file is a JPEG with a .png
-                    extension, so it carries a baked-in white background that
-                    would put a white square on a dark gradient card. See
-                    `AfCrest.tsx`.
+                    extension, so it carries a baked-in black square that the
+                    gradient card would show around it, and it is an older
+                    variant of the mark. See `AfCrest.tsx`.
                   */}
                   <span className="af-cs-card-mark">
                     <AfCrest size={26} />

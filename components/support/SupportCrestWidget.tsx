@@ -114,7 +114,7 @@ export function SupportCrestWidget() {
       >
         <span className="relative inline-flex h-7 w-7 items-center justify-center">
           {/* Plain <img>: matches GlobalTopNav's crest usage. /af-crest.svg is the
-              transparent vector crest — /af-crest.png is a JPEG with a white box baked in. */}
+              transparent vector crest — /af-crest.png is a JPEG with a black box baked in. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/af-crest.svg"

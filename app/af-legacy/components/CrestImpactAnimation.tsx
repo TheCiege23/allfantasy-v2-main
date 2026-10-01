@@ -194,7 +194,7 @@ export default function CrestImpactAnimation() {
             {/*
               Transparent crest, so the glow is a drop-shadow that follows the
               shield's outline. A box-shadow (and the inset ring that used to
-              sit over it) traced the old JPEG's white square instead.
+              sit over it) traced the old JPEG's black square instead.
             */}
             <img
               src="/af-crest.svg"
