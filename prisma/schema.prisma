@@ -18595,15 +18595,6 @@ model RecentPlayerSearch {
   @@map("recent_player_searches")
 }
 
-/// Commissioner Workspace's persisted task store — see
-/// prisma/migrations/20260908120000_commissioner_workspace_tasks for why it exists
-/// and what each column means. The short version: Workspace deliberately shipped
-/// unwired because `status`/`createdAt`/`updatedAt` had nothing behind them, and
-/// this table is what puts something behind them.
-///
-/// Read and written ONLY through lib/commissioner-workspace/. Nothing under
-/// lib/commissioner-ui/ may touch prisma — that boundary is an ESLint rule with a
-/// bounded exemption list, guarded by __tests__/commissioner-os/eslintBoundary.test.ts.
 /// One commissioner-owned group of leagues, independent of player franchises.
 model CommissionerNetwork {
   id          String                      @id @default(cuid())
@@ -18633,6 +18624,15 @@ model CommissionerNetworkMember {
   @@map("commissioner_network_members")
 }
 
+/// Commissioner Workspace's persisted task store — see
+/// prisma/migrations/20260908120000_commissioner_workspace_tasks for why it exists
+/// and what each column means. The short version: Workspace deliberately shipped
+/// unwired because `status`/`createdAt`/`updatedAt` had nothing behind them, and
+/// this table is what puts something behind them.
+///
+/// Read and written ONLY through lib/commissioner-workspace/. Nothing under
+/// lib/commissioner-ui/ may touch prisma — that boundary is an ESLint rule with a
+/// bounded exemption list, guarded by __tests__/commissioner-os/eslintBoundary.test.ts.
 model CommissionerWorkspaceTask {
   id                  String    @id @default(uuid())
   leagueId            String    @map("league_id")
