@@ -219,6 +219,7 @@ import { readSeasonOutlookSummary, seasonOutlookFingerprint } from '@/lib/core-a
 import { getCareerScreen, parseCareerView } from '@/lib/core-app/careerScreen'
 import { getCareerWire } from '@/lib/core-app/careerWire'
 import { getWeeklyStory } from '@/lib/core-app/weeklyStory'
+import { getDecisionRecord } from '@/lib/core-app/decisionRecord'
 import { parseCareerFilter } from '@/lib/core-app/careerModel'
 import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
 import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
@@ -2097,6 +2098,30 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           return null
         })
       : Promise.resolve(null)
+  /*
+   * Decision record: this season's Chimmy and AutoCoach calls, resolved by the Receipts card's own
+   * resolvers (`lib/core-app/decisionRecord.ts`). Same conditions as the story, started beside it.
+   * The season is your newest league's. ⚠ `undefined` on a failed read, NOT null: null renders the
+   * "start one" card, which would tell someone with a record that they have none.
+   */
+  const decisionRecordRead =
+    activeKey === 'career' && careerView === 'overview' && !selectedLeagueId
+      ? (() => {
+          const leagues = playedLeagues.map((l) => ({
+            id: l.id,
+            name: l.name ?? null,
+            platform: l.platform ?? null,
+            platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+            season: (l as { season?: number | string | null }).season ?? null,
+          }))
+          const seasons = leagues.map((l) => Number(l.season)).filter((s) => Number.isInteger(s) && s > 2000)
+          const season = seasons.length > 0 ? Math.max(...seasons) : now.getUTCFullYear()
+          return getDecisionRecord({ userId, leagues, season }).catch((e: unknown) => {
+            console.error('[core/career] decision record read failed', e)
+            return undefined
+          })
+        })()
+      : Promise.resolve(undefined)
   const careerScreen =
     activeKey === 'career'
       ? await getCareerScreen(
@@ -2111,6 +2136,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
   const careerWire = await careerWireRead
   const careerStory = await careerStoryRead
+  const decisionRecord = await decisionRecordRead
 
   /*
    * Rankings, its FAQ and the compare view share one screen key and one data
@@ -4965,7 +4991,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         leagueCareer ? (
           <LeagueCareer data={leagueCareer} allLeaguesHref="/core/career" />
         ) : careerScreen ? (
-          <Career screen={careerScreen} share={shareCard} wire={careerWire} story={careerStory} nowIso={now.toISOString()} />
+          <Career
+            screen={careerScreen}
+            share={shareCard}
+            wire={careerWire}
+            story={careerStory}
+            decisionRecord={decisionRecord}
+            nowIso={now.toISOString()}
+          />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>

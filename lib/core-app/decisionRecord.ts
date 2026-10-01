@@ -12,15 +12,19 @@ import { buildDecisionRecord, type DecisionRecord } from './decisionRecordModel'
  * The current week comes from `resolveCurrentWeek`, the home's own source, so a week still being
  * played is pending here exactly when it is pending on the Receipts card.
  *
- * Null when there is nothing to say, or when either read failed in a way that would make the record
- * understate itself — a missing half reads as "you rarely took advice", which is a claim, not a gap.
+ * THREE ANSWERS, AND THE SCREEN TREATS THEM DIFFERENTLY:
+ *   a record   the record
+ *   null       read fine, nothing resolved yet — the card says how to start one
+ *   undefined  a read FAILED — no card at all. Half a record reads as "you rarely took advice", and
+ *              the "start one" card would tell someone with a record that they have none; both are
+ *              claims, not gaps.
  */
 export async function getDecisionRecord(args: {
   userId: string
   leagues: readonly ReceiptsLeague[]
   /** The season the record covers — the user's newest. */
   season: number
-}): Promise<(DecisionRecord & { season: number }) | null> {
+}): Promise<(DecisionRecord & { season: number }) | null | undefined> {
   const platformIds = args.leagues.map((l) => l.platformLeagueId ?? '').filter(Boolean)
   const currentWeek = await resolveCurrentWeek(platformIds)
     .then((v) => v?.week ?? null)
@@ -39,7 +43,7 @@ export async function getDecisionRecord(args: {
     }).catch(() => undefined),
   ])
   // `undefined` = the read threw; `null` from the receipts = nothing to read (no table, no leagues).
-  if (chimmy === undefined || autocoach === undefined) return null
+  if (chimmy === undefined || autocoach === undefined) return undefined
 
   const inSeason = <T extends { season: number }>(rows: readonly T[]) => rows.filter((r) => r.season === args.season)
   const record = buildDecisionRecord({
