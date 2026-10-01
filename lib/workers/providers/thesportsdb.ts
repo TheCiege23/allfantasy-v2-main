@@ -2,6 +2,7 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { apiChainSportToDbSport, toApiChainSport, type ApiFetchParams, type ApiProvider } from '@/lib/workers/api-config'
 import { getTheSportsDbApiKeyOrFallback } from '@/lib/env/sports-media-keys'
 import { pickHeadshotCandidate } from '@/lib/player-assets/headshotCandidateMatch'
+import { normalizeTheSportsDbImageUrl } from '@/lib/player-assets/imageUrlHygiene'
 
 const THESPORTSDB_LEAGUE_IDS = {
   NFL: '4391',
@@ -89,7 +90,7 @@ function resolvePlayerImage(row: Record<string, unknown>): string | null {
     row.strFanart1,
   ]
   for (const candidate of options) {
-    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+    if (typeof candidate === 'string' && candidate.trim()) return normalizeTheSportsDbImageUrl(candidate)
   }
   return null
 }
@@ -102,7 +103,7 @@ function resolveTeamLogo(row: Record<string, unknown>): string | null {
     row.strLogo,
   ]
   for (const candidate of options) {
-    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+    if (typeof candidate === 'string' && candidate.trim()) return normalizeTheSportsDbImageUrl(candidate)
   }
   return null
 }
