@@ -12,6 +12,7 @@ import 'server-only'
  */
 
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
+import { livePushTier, splitByLivePushBudget } from '@/lib/notifications/liveGamePushBudget'
 import { prisma } from '@/lib/prisma'
 import type { NotificationCategoryId } from '@/lib/notification-settings/types'
 
@@ -245,18 +246,23 @@ export async function ingest(event: NotificationEvent): Promise<IngestResult> {
 
   const severity = event.severity ?? DEFAULT_SEVERITY[event.type] ?? 'low'
 
-  try {
-    await dispatchNotification({
-      userIds,
+  const send = (
+    to: string[],
+    skipChannels: NotificationEvent['skipChannels'],
+    extraMeta: Record<string, unknown>,
+  ) =>
+    dispatchNotification({
+      userIds: to,
       category,
       type: event.type,
       title: event.title,
       body: event.body,
       actionHref: event.actionHref,
       actionLabel: event.actionLabel,
-      skipChannels: event.skipChannels,
+      skipChannels,
       meta: {
         ...event.meta,
+        ...extraMeta,
         source: event.source ?? 'notification-engine',
         sourceKey,
       },
@@ -264,6 +270,25 @@ export async function ingest(event: NotificationEvent): Promise<IngestResult> {
       productType: 'app',
       dedupePrefix: event.meta?.idempotencyKey ? sourceKey : undefined,
     })
+
+  try {
+    /*
+     * GAME DAY: one person's phone may buzz only so often per hour for live plays and swings
+     * (lib/notifications/liveGamePushBudget.ts). Over budget, the alert still lands in the bell —
+     * only the push is held. The in-app row records which it was, which is what the next alert's
+     * budget counts.
+     */
+    if (event.type === 'live_score_swing' && !event.skipChannels?.push) {
+      const pushTier = livePushTier(severity)
+      const { push, held } = await splitByLivePushBudget(userIds, pushTier)
+      if (push.length > 0) await send(push, event.skipChannels, { pushBudget: 'pushed', pushTier })
+      if (held.length > 0) {
+        await send(held, { ...event.skipChannels, push: true }, { pushBudget: 'held', pushTier })
+      }
+      return { dispatched: true, sourceKey }
+    }
+
+    await send(userIds, event.skipChannels, {})
 
     return { dispatched: true, sourceKey }
   } catch (e) {
