@@ -14,6 +14,7 @@ import { ChimmyAnswerRating } from './ChimmyAnswerRating'
 import { ChimmyGroundingLine } from './ChimmyGroundingLine'
 import { ChimmyCopyActions } from './ChimmyCopyActions'
 import { ChimmyFunModeToggle, useChimmyFunMode } from './ChimmyFunMode'
+import { ChimmyGif, readChimmyGif } from './ChimmyGif'
 import { FUN_MODE_TONE } from '@/lib/chimmy/funMode'
 import { PushOptInPrompt } from '@/components/notifications/PushOptInPrompt'
 import {
@@ -201,6 +202,8 @@ type ChatTurn = {
   verdict?: ChimmyVerdict | null
   /** The structured `get_faab_bid_plan` result, rendered as a card. */
   faabPlan?: ChimmyFaabCard | null
+  /** A Fun-mode GIF from `meta.gif`; re-read at render by `readChimmyGif`. */
+  gif?: unknown
   /**
    * `<tool>:<leagueId>` for each whole-league computation the answer ran. Kept on the turn (and so in
    * sessionStorage) so an earlier answer can be marked "Newer answer below" by a later one.
@@ -412,6 +415,8 @@ type ChimmyEnvelope = {
     /** Validated by `readReadyScenario` before anything renders it. */
     screenshotAttachment?: { url: string; name: string } | null
     scenario?: unknown
+    /** A Fun-mode GIF; validated by `readChimmyGif` before it renders. */
+    gif?: unknown
     /** Set only when the route recorded this answer's advice. */
     advice?: { key?: unknown; type?: unknown; playerName?: unknown }
     /** The assistant mode that shaped the answer, when the route says so. */
@@ -922,6 +927,7 @@ export function ChimmyPanel({
             verdict: polish.verdict,
             faabPlan: polish.faabPlan,
             answerKeys: polish.answerKeys.length ? polish.answerKeys : null,
+            gif: payload.meta?.gif ?? null,
           },
         ])
         if (answeredPlan) setPlanStatus(answeredPlan)
@@ -1122,6 +1128,7 @@ export function ChimmyPanel({
               {t.role === 'chimmy' ? (
                 <>
                   <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
+                  {readChimmyGif(t.gif) ? <ChimmyGif gif={readChimmyGif(t.gif)!} /> : null}
                   <ChimmyCopyActions text={t.text} />
                 </>
               ) : (
