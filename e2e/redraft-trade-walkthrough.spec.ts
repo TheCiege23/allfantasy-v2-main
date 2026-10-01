@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
+import { prisma } from '../lib/prisma'
 
 /**
  * TRADE CENTER WALKTHROUGH (@db) — proves the redraft Trade Center end-to-end against the dedicated
@@ -55,10 +56,14 @@ async function loginAs(page: Page, username: string) {
     .toBe(true)
 }
 
-async function rosterPlayerIds(page: Page, rosterId: string): Promise<string[]> {
-  const res = await page.request.get(`/api/redraft/roster?rosterId=${rosterId}&week=6`)
-  const json = (await res.json().catch(() => ({}))) as { roster?: { players?: Array<{ playerId: string }> } }
-  return (json.roster?.players ?? []).map((p) => p.playerId)
+async function rosterPlayerIds(_page: Page, rosterId: string): Promise<string[]> {
+  // The roster API resolves the signed-in manager's roster; inspect any seeded
+  // manager's ownership directly after exercising the real trade routes.
+  const rows = await prisma.redraftRosterPlayer.findMany({
+    where: { rosterId, droppedAt: null },
+    select: { playerId: true },
+  })
+  return rows.map((row) => row.playerId)
 }
 
 async function faabFor(page: Page, leagueId: string, seasonId: string): Promise<Record<string, number>> {
@@ -71,6 +76,16 @@ async function listProposals(page: Page, leagueId: string, seasonId: string) {
   const res = await page.request.get(`/api/redraft/trade-proposals?leagueId=${leagueId}&seasonId=${seasonId}`)
   const json = (await res.json().catch(() => ({}))) as { proposals?: Array<{ id: string; status: string }> }
   return json.proposals ?? []
+}
+
+async function approveAcceptedTrade(page: Page, proposalId: string) {
+  await loginAs(page, seed.commish)
+  const approval = await page.request.post('/api/redraft/trade-votes', {
+    data: { proposalId, action: 'commissioner_approve' },
+  })
+  expect(approval.status(), await approval.text()).toBe(200)
+  const resolution = await approval.json()
+  expect(resolution.resolved, JSON.stringify(resolution)).toBe(true)
 }
 
 test.describe('@db Redraft Trade Center walkthrough', () => {
@@ -97,7 +112,9 @@ test.describe('@db Redraft Trade Center walkthrough', () => {
       data: { proposalId: `${leagueId}-prop-pending`, action: 'accept' },
     })
     expect(res.status()).toBe(200)
-    expect((await res.json()).resolved).toBe(true)
+    const resolution = await res.json()
+    expect(resolution.awaitingReview, JSON.stringify(resolution)).toBe('commissioner')
+    await approveAcceptedTrade(page, `${leagueId}-prop-pending`)
 
     // r1 sent m1-p1 to r2; r2 sent m2-p3 to r1. Verify both rosters reflect the swap.
     const r2players = await rosterPlayerIds(page, r2)
@@ -132,6 +149,8 @@ test.describe('@db Redraft Trade Center walkthrough', () => {
     await loginAs(page, seed.mgr4) // receiver accepts
     const accept = await page.request.post('/api/redraft/trade-votes', { data: { proposalId, action: 'accept' } })
     expect(accept.status()).toBe(200)
+    expect((await accept.json()).awaitingReview).toBe('commissioner')
+    await approveAcceptedTrade(page, proposalId)
 
     const after = await faabFor(page, leagueId, seasonId)
     expect(after[r3]).toBe((before[r3] ?? 0) - 20)
@@ -158,6 +177,8 @@ test.describe('@db Redraft Trade Center walkthrough', () => {
       data: { proposalId: `${leagueId}-prop-pending`, action: 'accept' },
     })
     expect(res.status()).toBe(200)
+    expect((await res.json()).awaitingReview).toBe('commissioner')
+    await approveAcceptedTrade(page, `${leagueId}-prop-pending`)
     expect(await rosterPlayerIds(page, r2)).toContain('tc-ncaaf-m1-p1')
     void r1
   })
@@ -247,9 +268,12 @@ test.describe('@db Redraft Trade Center walkthrough', () => {
     expect(create.status()).toBe(200)
     const proposalId = (await create.json()).proposal.id as string
 
-    // Accept as receiver → proposal_accepted + trade_processed events.
+    // Receiver acceptance queues commissioner review; approval processes the trade.
     await loginAs(page, seed.mgr3)
-    expect((await page.request.post('/api/redraft/trade-votes', { data: { proposalId, action: 'accept' } })).status()).toBe(200)
+    const accept = await page.request.post('/api/redraft/trade-votes', { data: { proposalId, action: 'accept' } })
+    expect(accept.status()).toBe(200)
+    expect((await accept.json()).awaitingReview).toBe('commissioner')
+    await approveAcceptedTrade(page, proposalId)
 
     // Commissioner reads the ledger and sees the captured lifecycle events.
     await loginAs(page, seed.commish)

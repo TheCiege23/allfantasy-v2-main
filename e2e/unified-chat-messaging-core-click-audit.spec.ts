@@ -291,7 +291,7 @@ test.describe("@db @messaging unified chat click audit", () => {
     await expect(page.getByPlaceholder("https://…")).toBeVisible()
     await page.getByRole("button", { name: "Cancel" }).first().click()
 
-    await page.goto("/messages?tab=groups&thread=group-thread-1")
+    await page.goto("/messages?tab=groups&thread=group-thread-1", { waitUntil: "domcontentloaded" })
     await expect(page.getByRole("button", { name: "Group Chats" })).toBeVisible()
     const weekendGroupButton = page.getByRole("button", { name: /Weekend Waiver Group/i }).first()
     await expect(weekendGroupButton).toBeVisible()

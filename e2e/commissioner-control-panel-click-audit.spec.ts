@@ -445,6 +445,14 @@ test.describe('@commissioner commissioner control panel click audit', () => {
 
     await mockLeagueSettingsGetForScoring(page, leagueId, () => scoringState)
 
+    await page.route(`**/api/leagues/${leagueId}/settings/draft`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ options: { draftTypes: ['snake', 'linear', 'auction'] }, current: { executionMode: 'live' } }),
+      })
+    })
+
     await page.route(`**/api/leagues/${leagueId}/draft/settings`, async (route) => {
       if (route.request().method() === 'PATCH') {
         const patch = route.request().postDataJSON() as Record<string, unknown>
@@ -820,13 +828,13 @@ test.describe('@commissioner commissioner control panel click audit', () => {
       })
     })
 
-    await page.route('**/api/shared/chat/threads/**/broadcast', async (route) => {
-      const payload = route.request().postDataJSON() as { announcement?: string }
-      broadcasts.push(String(payload.announcement ?? ''))
+    await page.route('**/api/commissioner/broadcast', async (route) => {
+      const payload = route.request().postDataJSON() as { message?: string }
+      broadcasts.push(String(payload.message ?? ''))
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ status: 'ok' }),
+        body: JSON.stringify({ results: [{ leagueId, sent: true }] }),
       })
     })
 
@@ -851,7 +859,7 @@ test.describe('@commissioner commissioner control panel click audit', () => {
       })
     })
 
-    await page.goto(`/e2e/commissioner-control-panel?leagueId=${leagueId}`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`/e2e/commissioner-control-panel?leagueId=${leagueId}`, { waitUntil: 'load', timeout: 60_000 })
     await expect(page.getByRole('heading', { name: /commissioner control panel harness/i })).toBeVisible()
     await page.addStyleTag({
       content: '[data-sonner-toaster], section[aria-label^="Notifications"] { pointer-events: none !important; }',
@@ -859,14 +867,8 @@ test.describe('@commissioner commissioner control panel click audit', () => {
 
     const openPanelButton = page.getByTestId('commissioner-panel-open')
     const generalEditButton = page.getByTestId('commissioner-general-edit')
-    for (let i = 0; i < 16; i += 1) {
-      if (await generalEditButton.isVisible().catch(() => false)) break
-      if (await openPanelButton.isVisible().catch(() => false)) {
-        await openPanelButton.click().catch(() => {})
-      }
-      await page.waitForTimeout(250)
-    }
-    await expect(generalEditButton).toBeVisible({ timeout: 20_000 })
+    await openPanelButton.click()
+    await expect(generalEditButton).toBeVisible({ timeout: 30_000 })
 
     // General settings
     await generalEditButton.click()
