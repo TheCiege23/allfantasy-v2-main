@@ -26,6 +26,18 @@ describe('the shipped crest raster', () => {
     expect(isJpeg).toBe(true)
   })
 
+  it('/af-crest-transparent.png IS a real PNG with an alpha channel', () => {
+    /*
+     * The raster for consumers that cannot take SVG (email, notifications,
+     * the Organization logo). Its whole reason to exist is transparency, so
+     * assert the bytes, not the name — the name is exactly what lied last time.
+     * IHDR colour type sits at byte 25: 6 = RGBA, 4 = grey+alpha.
+     */
+    const buf = fs.readFileSync(path.join(process.cwd(), 'public', 'af-crest-transparent.png'))
+    expect(buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe(true)
+    expect([4, 6]).toContain(buf[25])
+  })
+
   it('the PWA icons ARE real PNGs, so the install path is sound', () => {
     // iOS requires a home-screen install before push is permitted, and the
     // install uses these — so a mislabelled icon here would cost push.
