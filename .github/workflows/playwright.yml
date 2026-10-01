@@ -131,8 +131,14 @@ jobs:
         # that sees a phone, it takes minutes rather than hours, and a mobile
         # regression that only surfaces on the nightly push run is a regression
         # somebody has already merged.
+        #
+        # `mobile-auth` is nightly and on demand only, as of 2026-10-01. It is not a
+        # required check, and it was the most expensive PR lane: 14 runner-minutes per
+        # PR on average (39 under contention), against 9 for mobile-smoke, while required
+        # lanes queued up to 64 minutes behind it. mobile-smoke stays on PRs as the phone
+        # lane; an auth-only mobile regression now surfaces on the nightly run.
         include: ${{ github.event_name == 'pull_request'
-          && fromJSON('[{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45},{"label":"mobile-auth","lane":"mobile-auth","job-timeout":60}]')
+          && fromJSON('[{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45}]')
           || fromJSON('[{"label":"core 1/3","lane":"core-shard-1","shard":"1/3","job-timeout":180},{"label":"core 2/3","lane":"core-shard-2","shard":"2/3","job-timeout":180},{"label":"core 3/3","lane":"core-shard-3","shard":"3/3","job-timeout":180},{"label":"retention-engagement","lane":"retention-engagement","job-timeout":60},{"label":"onboarding-activation","lane":"onboarding-activation","job-timeout":60},{"label":"referral-growth-db","lane":"referral-growth-db","job-timeout":60},{"label":"mobile-smoke","lane":"mobile-smoke","job-timeout":45},{"label":"mobile-auth","lane":"mobile-auth","job-timeout":60}]') }}
     services:
       postgres:
