@@ -155,7 +155,8 @@ describe('GET /api/cron/reap-sync-runs', () => {
     expect(budgetMs).toBeLessThanOrEqual(240_000)
     expect(mocks.recordSyncJobRun).toHaveBeenCalledWith(
       expect.objectContaining({ jobName: 'cron-trade-calibration' }),
-      expect.objectContaining({ rowsUpdated: 3, warnings: ['drift: boom'] }),
+      // rowsWritten is the COLUMN the health readers see; rowsUpdated only reaches metadata.
+      expect.objectContaining({ rowsWritten: 3, rowsUpdated: 3, warnings: ['drift: boom'] }),
       expect.any(Number),
     )
     expect(await res.json()).toMatchObject({ ok: true, tradeCalibration: { ran: true, outcomesLogged: 3 } })
@@ -213,7 +214,7 @@ describe('GET /api/cron/reap-sync-runs', () => {
     expect(budgetMs).toBeLessThanOrEqual(240_000)
     expect(mocks.recordSyncJobRun).toHaveBeenCalledWith(
       expect.objectContaining({ jobName: 'cron-trade-learning' }),
-      expect.objectContaining({ rowsUpdated: 5 }),
+      expect.objectContaining({ rowsWritten: 5, rowsUpdated: 5 }),
       expect.any(Number),
     )
     expect(await res.json()).toMatchObject({ ok: true, tradeLearning: { valued: 4, refused: 1 } })
@@ -315,10 +316,13 @@ describe('GET /api/cron/reap-sync-runs', () => {
     )
     // The heartbeat row is where anyone reading sync_job_runs will look for the purge.
     const outcome = mocks.recordSyncJobRun.mock.calls[0]![1] as {
+      rowsWritten: number
       rowsUpdated: number
       warnings: string[]
       metadata: Record<string, unknown>
     }
+    // Both: `rows_written` is the only column, and the reaper's count must reach it.
+    expect(outcome.rowsWritten).toBe(2)
     expect(outcome.rowsUpdated).toBe(2)
     expect(outcome.warnings).toEqual([])
     expect(outcome.metadata.cachePurge).toEqual(PURGED)
