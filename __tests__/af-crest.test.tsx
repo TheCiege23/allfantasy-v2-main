@@ -68,6 +68,23 @@ describe('the shipped crest raster', () => {
     }
   })
 
+  it('the native iOS app icon is the 1024 OPAQUE image its asset catalog names', () => {
+    /*
+     * App Store Connect rejects an app icon with an alpha channel — at upload,
+     * i.e. at the end of a manual TestFlight run, the most expensive place to
+     * find out. Read the slot from Contents.json so a renamed file is caught.
+     */
+    const dir = path.join(process.cwd(), 'ios-app', 'ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset')
+    const contents = JSON.parse(fs.readFileSync(path.join(dir, 'Contents.json'), 'utf8')) as {
+      images: { filename?: string; size?: string }[]
+    }
+    const slot = contents.images.find((i) => i.size === '1024x1024')
+    expect(slot?.filename).toBeTruthy()
+    const buf = fs.readFileSync(path.join(dir, slot!.filename!))
+    expect([0, 2]).toContain(buf[25])
+    expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([1024, 1024])
+  })
+
   it('declares a DEDICATED maskable icon, not the "any" one reused', () => {
     // Android crops maskable icons to a circle of 80%; the "any" crest is sized
     // for iOS's rounded square and would lose its shoulders.
