@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Remove a git worktree WITHOUT being able to delete through its node_modules junction.
  *
