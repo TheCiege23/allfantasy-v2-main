@@ -162,9 +162,10 @@ export function DashGameDayBand({
               </span>
               <div className="af-gd-nexttext">
                 <div className="af-gd-matchup">
-                  {row.game?.awayLogo ? <img src={row.game.awayLogo} alt="" width={24} height={24} loading="lazy" /> : null}
+                  {/* A crest that fails to load disappears, like one we never had — never a broken glyph. */}
+                  {row.game?.awayLogo ? <FallbackImg src={row.game.awayLogo} fallback={null} alt="" width={24} height={24} loading="lazy" /> : null}
                   <span>{row.game?.away ?? row.text}</span>
-                  {row.game ? <><span>at</span>{row.game.homeLogo ? <img src={row.game.homeLogo} alt="" width={24} height={24} loading="lazy" /> : null}<span>{row.game.home}</span></> : null}
+                  {row.game ? <><span>at</span>{row.game.homeLogo ? <FallbackImg src={row.game.homeLogo} fallback={null} alt="" width={24} height={24} loading="lazy" /> : null}<span>{row.game.home}</span></> : null}
                 </div>
                 {row.game ? <div className="af-gd-market" title={row.game.oddsAt ? `Odds checked ${row.game.oddsAt}` : undefined}>{row.game.odds}</div> : null}
                 <div className="af-gd-nextsub">{row.sub} · Starts in <Dash34Countdown to={row.time} initial="—" /></div>
