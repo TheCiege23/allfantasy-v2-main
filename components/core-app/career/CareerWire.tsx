@@ -7,6 +7,7 @@ import { buildCareerFeed, type CareerFeedItem } from '@/lib/core-app/careerFeed'
 import type { LegacyStake } from '@/lib/core-app/careerMilestones'
 import { readAgo, type CareerWireData, type PlatformHealth, type WireLeague, type WireStatus } from '@/lib/core-app/careerWireModel'
 import { askChimmyAboutCareer } from './CareerAskChimmy'
+import { PushOptInPrompt } from '@/components/notifications/PushOptInPrompt'
 
 /**
  * Career Wire — what moved since your last Career visit and what to do about it, every platform at
@@ -223,6 +224,11 @@ function CareerFeed({ data, stakes, now }: { data: CareerWireData; stakes: reado
       ) : resultCount === 0 ? (
         <p className="af-crl-foot">No results or standings moves since {readAgo(data.sinceAt, now)}.</p>
       ) : null}
+      {/*
+        The phone-alerts ask, right where "what changed" is on screen. It renders nothing for anyone
+        who has already answered, snoozed it, can't receive web push, or is in the iOS app.
+      */}
+      <PushOptInPrompt variant="career" className="af-crf-pushask" />
     </div>
   )
 }

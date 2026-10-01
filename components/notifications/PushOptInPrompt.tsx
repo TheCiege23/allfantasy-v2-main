@@ -78,6 +78,16 @@ const COPY = {
     ask: "Want this on your phone? I'll ping you before kickoff when a starter is out or your lineup needs a fix.",
     done: "You're set. This device gets my heads-ups before kickoff.",
   },
+  /*
+   * Under the Career feed — right after "since your last visit", the moment the value is on screen.
+   * It promises only what is sent today: career milestones (`career_milestones`) and results
+   * (`matchup_results`). Same hook, same "Not now" snooze as Chimmy's ask: one "Not now" quiets both,
+   * so nobody is asked twice in a visit.
+   */
+  career: {
+    ask: 'Get your career on your phone: results across every league, and a ping the moment you hit a milestone.',
+    done: "You're set. Results and career milestones will land on this device.",
+  },
 } as const
 
 export function PushOptInPrompt({ variant = 'chimmy', className }: { variant?: keyof typeof COPY; className?: string }) {

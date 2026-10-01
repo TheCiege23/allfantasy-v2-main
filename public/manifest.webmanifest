@@ -2,7 +2,7 @@
   "id": "/core",
   "name": "AllFantasy.ai",
   "short_name": "AllFantasy",
-  "description": "AI-powered fantasy sports \u2014 trade analyzer, draft assistant, waiver AI, and more.",
+  "description": "AI-powered fantasy sports — trade analyzer, draft assistant, waiver AI, and more.",
   "start_url": "/core",
   "scope": "/",
   "display": "standalone",
@@ -188,9 +188,9 @@
       ]
     },
     {
-      "name": "Your week",
-      "short_name": "Week",
-      "url": "/core/week",
+      "name": "Your career",
+      "short_name": "Career",
+      "url": "/core/career",
       "icons": [
         {
           "src": "/icons/icon-96.png",
@@ -214,9 +214,9 @@
       ]
     },
     {
-      "name": "Waivers",
-      "short_name": "Waivers",
-      "url": "/core/waivers",
+      "name": "Your week",
+      "short_name": "Week",
+      "url": "/core/week",
       "icons": [
         {
           "src": "/icons/icon-96.png",
@@ -227,9 +227,9 @@
       ]
     },
     {
-      "name": "Your career",
-      "short_name": "Career",
-      "url": "/core/career",
+      "name": "Waivers",
+      "short_name": "Waivers",
+      "url": "/core/waivers",
       "icons": [
         {
           "src": "/icons/icon-96.png",
