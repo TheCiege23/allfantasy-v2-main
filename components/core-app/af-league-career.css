@@ -256,6 +256,24 @@
   color: var(--faint);
 }
 
+/* ── Weekly-score seasons (no-opponent leagues) ──────────────────────────
+ * One row per season, newest first. A list, not bars: a finish is "4.3 of 18", and a bar would
+ * have to invent what full height means. Width-agnostic, so no breakpoint of its own. */
+
+.af-lc-weekly { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.af-lc-weekly-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line2);
+}
+.af-lc-weekly-row:first-child { border-top: 0; padding-top: 2px; }
+.af-lc-weekly-year { flex: none; width: 44px; font-size: 13px; font-weight: 700; color: var(--text2); }
+.af-lc-weekly-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.af-lc-weekly-body strong { font-size: 13px; color: var(--text); }
+.af-lc-weekly-body span { font-size: 12px; line-height: 1.5; color: var(--faint); }
+
 /* ── Season bars ─────────────────────────────────────────────────────── */
 
 .af-lc-bars {
