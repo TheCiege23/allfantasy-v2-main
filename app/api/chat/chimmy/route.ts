@@ -1,4 +1,5 @@
 import { storeChimmyScreenshot, readChimmyScreenshot } from '@/lib/chimmy-chat/privateScreenshot'
+import { FUN_MODE_DIRECTIVE, isFunModeTone } from '@/lib/chimmy/funMode'
 import { parseScreenshotWithVision } from '@/lib/chimmy/screenshotVision'
 import { NextRequest, NextResponse } from 'next/server'
 import { CHIMMY_CURRENT_REQUEST_POLICY } from '@/lib/chimmy/currentRequestFocus'
@@ -931,9 +932,13 @@ function buildUserMessage(input: {
     }
   }
 
-  if (input.tone || input.detailLevel || input.riskMode) {
+  if (isFunModeTone(input.tone)) {
+    parts.push(`RESPONSE STYLE — FUN MODE:\n${FUN_MODE_DIRECTIVE}`)
+  }
+
+  if ((input.tone && !isFunModeTone(input.tone)) || input.detailLevel || input.riskMode) {
     const preferenceContext = [
-      input.tone ? `Tone: ${input.tone}` : null,
+      input.tone && !isFunModeTone(input.tone) ? `Tone: ${input.tone}` : null,
       input.detailLevel ? `Detail Level: ${input.detailLevel}` : null,
       input.riskMode ? `Risk Mode: ${input.riskMode}` : null,
     ]

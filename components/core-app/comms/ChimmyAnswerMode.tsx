@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
 /**
  * Fast / Deep — how much answer you want (Chimmy brief item 5, user decision 2026-09-16).
@@ -69,10 +69,13 @@ export function ChimmyAnswerModeToggle({
   value,
   onChange,
   disabled = false,
+  children,
 }: {
   value: CoreAnswerMode
   onChange: (next: CoreAnswerMode) => void
   disabled?: boolean
+  /** Further answer chips on the same row (Fun mode). */
+  children?: ReactNode
 }) {
   const current = CORE_ANSWER_MODES.find((m) => m.id === value) ?? CORE_ANSWER_MODES[0]
   return (
@@ -95,6 +98,7 @@ export function ChimmyAnswerModeToggle({
             {m.label}
           </button>
         ))}
+        {children}
       </div>
       <p className="af-cm-scope-note">{current.hint} Same price either way.</p>
     </div>
