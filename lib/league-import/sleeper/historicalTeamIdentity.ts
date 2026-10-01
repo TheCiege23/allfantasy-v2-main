@@ -15,15 +15,15 @@
  * team is claimed (see `importedRosterIdentity.ts`). A claimed manager's Sleeper `owner_id` therefore
  * missed, fell back to the old slot, and could land on someone else in exactly the same way. The
  * import's own `source_manager_id` is read first now.
+ *
+ * ⚠ THE MAPPING DEPENDS ON WHO IS IN THE LEAGUE TODAY, SO IT GOES STALE. A season stored while its
+ * manager still held slot 5 says "5"; when they leave and a replacement takes slot 5, that season is
+ * suddenly the replacement's. So the owners each season was stored under are kept with it
+ * (`sleeperRosterOwners`), and every sync re-derives the mapping from them against today's league —
+ * a database read, no provider call — rewriting only the seasons where someone's slot moved.
  */
 
 export const FORMER_SLEEPER_KEY_PREFIX = 'former:sleeper:'
-
-/**
- * Bumped when the mapping changes meaning. A stored season below it is checked once more by the sync
- * (see `SleeperHistoricalMatchupSyncService`), because the completion gate never re-reads settled history.
- */
-export const SLEEPER_TEAM_IDENTITY_VERSION = 2
 
 /** A manager who played that season and holds no team in the league now. */
 export function formerSleeperManagerKey(ownerId: string): string {
@@ -114,6 +114,55 @@ export function canonicalIdsForSeason(args: {
     out.set(rosterId, current ?? (owner ? formerSleeperManagerKey(owner) : formerSleeperSlotKey(args.season, rosterId)))
   }
   return out
+}
+
+/** The owners a season's rosters had, as stored beside it: `r` roster id, `o` owner, `c` co-owners. */
+export type StoredRosterOwner = { r: string; o: string | null; c?: string[] }
+
+export function compactRosterOwners(
+  rosters: ReadonlyArray<{ roster_id: unknown; owner_id?: unknown; co_owners?: unknown }>,
+): StoredRosterOwner[] {
+  const out: StoredRosterOwner[] = []
+  for (const roster of rosters) {
+    const r = str(roster?.roster_id)
+    if (!r) continue
+    const c = Array.isArray(roster.co_owners) ? roster.co_owners.map(str).filter((x): x is string => !!x) : []
+    out.push({ r, o: str(roster.owner_id), ...(c.length ? { c } : {}) })
+  }
+  return out
+}
+
+/** Stored owners back into the shape `canonicalIdsForSeason` reads; null when none were stored. */
+export function readStoredRosterOwners(
+  stored: unknown,
+): Array<{ roster_id: string; owner_id: string | null; co_owners: string[] }> | null {
+  if (!Array.isArray(stored) || stored.length === 0) return null
+  const out: Array<{ roster_id: string; owner_id: string | null; co_owners: string[] }> = []
+  for (const entry of stored) {
+    const b = blob(entry)
+    const r = str(b?.r)
+    if (!r) return null
+    const c = Array.isArray(b?.c) ? (b!.c as unknown[]).map(str).filter((x): x is string => !!x) : []
+    out.push({ roster_id: r, owner_id: str(b?.o), co_owners: c })
+  }
+  return out
+}
+
+/**
+ * The team a draft pick belongs to, from the owner(s) stored on the pick — the draft table's view of
+ * `canonicalIdsForSeason`, for rows that can be re-derived without asking Sleeper. Null when the pick
+ * carries no owner, which is left alone rather than guessed.
+ */
+export function draftTeamForOwners(
+  owners: ReadonlyArray<string | null | undefined>,
+  currentSlotByOwner: ReadonlyMap<string, string>,
+): string | null {
+  // The first entry is the owner. A pick with co-owners but no owner is an ownerless roster, which
+  // the sync stores under a per-season slot key that cannot be rebuilt from the pick — left alone.
+  const owner = str(owners[0])
+  if (!owner) return null
+  const ids = owners.map(str).filter((x): x is string => !!x)
+  return ids.map((o) => currentSlotByOwner.get(o)).find(Boolean) ?? formerSleeperManagerKey(owner)
 }
 
 /** Same historical → canonical mapping, entry for entry. Order-insensitive; values compared as strings. */

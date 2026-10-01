@@ -6,7 +6,13 @@ import {
   SLEEPER_DRAFT_FETCH_CONCURRENCY,
   withSleeperHistoricalRequestLimit,
 } from './SleeperFetchConcurrency'
-import { getSourceTeamIdFromPlayerData } from './SleeperHistoricalMatchupSyncService'
+import {
+  canonicalIdsForSeason,
+  currentSlotBySleeperOwner,
+  draftTeamForOwners,
+  formerSleeperManagerKey,
+  formerSleeperSlotKey,
+} from './historicalTeamIdentity'
 import { getSleeperHistoricalLeagueChain } from './SleeperHistoricalLeagueChain'
 import { shouldSkipImportedSeason } from '../seasonCompletion'
 import { normalizePickNumber, sleeperOwnerByRosterId, sleeperPickOwnerId } from './sleeperDraftPickIdentity'
@@ -26,7 +32,7 @@ interface PendingSleeperDraftFact {
    * is what keeping him cost that season. Written only when true (2026-09-28): the sync fetched the
    * flag for years and discarded it, which left every keeper league with no keeper cost on file.
    */
-  metadata?: { ownerSleeperId?: string; isKeeper?: true }
+  metadata?: { ownerSleeperId?: string; coOwnerSleeperIds?: string[]; isKeeper?: true }
 }
 
 export interface SleeperHistoricalDraftSyncSummary {
@@ -43,6 +49,10 @@ export interface SleeperHistoricalDraftSyncSummary {
   seasonsConsidered?: number
   seasonsSkippedAlreadyComplete?: number
   providerCallsAvoided?: number
+  /** Stored picks moved to another team because who holds which slot changed (no provider call). */
+  picksRemapped?: number
+  /** Seasons whose rosters could not be read: their picks are left as stored rather than written unattributed. */
+  seasonsSkippedNoRosters?: number
 }
 
 function getErrorMessage(error: unknown): string {
@@ -53,20 +63,41 @@ function getErrorMessage(error: unknown): string {
   return 'Unknown error'
 }
 
-function normalizeManagerId(rawPick: any): string | undefined {
-  if (rawPick?.roster_id != null) {
-    return String(rawPick.roster_id)
-  }
+type StoredDraftRow = { draftId: string; managerId: string | null; metadata: unknown }
 
-  if (rawPick?.owner_id != null) {
-    return String(rawPick.owner_id)
+/**
+ * Stored picks whose team no longer matches who holds which slot today — re-derived from the owner
+ * stored on each pick (`ownerSleeperId`, `coOwnerSleeperIds`), so it needs no provider call. A pick
+ * with no stored owner is left alone; `draftOwnerBackfill.ts` fills those in, and the next run maps them.
+ */
+export function planDraftTeamRemap(
+  rows: ReadonlyArray<StoredDraftRow>,
+  currentSlotByOwner: ReadonlyMap<string, string>,
+): Array<{ draftId: string; managerId: string }> {
+  const out: Array<{ draftId: string; managerId: string }> = []
+  for (const row of rows) {
+    const meta = row.metadata && typeof row.metadata === 'object' && !Array.isArray(row.metadata)
+      ? (row.metadata as { ownerSleeperId?: unknown; coOwnerSleeperIds?: unknown })
+      : null
+    const coOwners = Array.isArray(meta?.coOwnerSleeperIds) ? (meta!.coOwnerSleeperIds as unknown[]).map(String) : []
+    const team = draftTeamForOwners([typeof meta?.ownerSleeperId === 'string' ? meta.ownerSleeperId : null, ...coOwners], currentSlotByOwner)
+    if (team && team !== row.managerId) out.push({ draftId: row.draftId, managerId: team })
   }
+  return out
+}
 
-  if (typeof rawPick?.picked_by === 'string' && rawPick.picked_by.trim()) {
-    return rawPick.picked_by.trim()
+async function applyDraftTeamRemap(updates: Array<{ draftId: string; managerId: string }>): Promise<void> {
+  const byTeam = new Map<string, string[]>()
+  for (const u of updates) {
+    const list = byTeam.get(u.managerId)
+    if (list) list.push(u.draftId)
+    else byTeam.set(u.managerId, [u.draftId])
   }
-
-  return undefined
+  await prisma.$transaction(
+    [...byTeam.entries()].map(([managerId, ids]) =>
+      prisma.draftFact.updateMany({ where: { draftId: { in: ids } }, data: { managerId } }),
+    ),
+  )
 }
 
 async function collectSleeperDraftFacts(args: {
@@ -75,6 +106,7 @@ async function collectSleeperDraftFacts(args: {
   startingLeagueId: string
   maxPreviousSeasons: number
   force: boolean
+  currentSlotByOwner: ReadonlyMap<string, string>
 }): Promise<{
   rows: Array<Omit<PendingSleeperDraftFact, 'sourceDraftId'>>
   seasons: number[]
@@ -82,13 +114,15 @@ async function collectSleeperDraftFacts(args: {
   seasonsConsidered: number
   seasonsSkippedAlreadyComplete: number
   providerCallsAvoided: number
+  picksRemapped: number
+  seasonsSkippedNoRosters: number
 }> {
   const historyChain = await getSleeperHistoricalLeagueChain(args.startingLeagueId, args.maxPreviousSeasons)
 
   /*
    * ⚠ WITHOUT THIS, A PICK BELONGS TO WHOEVER HOLDS THAT ROSTER SLOT TODAY.
    *
-   * `normalizeManagerId` returns the pick's raw `roster_id` — a number that identifies
+   * A pick carries its raw `roster_id` — a number that identifies
    * a slot within ONE season, not a person across seasons. Slots get reused: the
    * manager who was roster 4 in 2022 is very often not roster 4 now. Any reader that
    * filters DraftFact by a current team's `externalId` would therefore show one
@@ -99,27 +133,21 @@ async function collectSleeperDraftFacts(args: {
    * holds. This is the same resolution, against the same helper, so the two fact
    * tables agree on what a team id means.
    *
-   * ⚠ NO LONGER QUITE THE SAME. The matchup sync moved to `historicalTeamIdentity.ts`
-   * (2026-10-01): a departed owner gets `former:sleeper:<ownerId>` rather than their old
-   * slot, and owners are looked up by `source_manager_id` rather than `Roster.platformUserId`.
-   * This sync still falls back to the slot, so a departed manager's picks can still show
-   * under that slot's current team. Person-level reads use `ownerId` (sleeperDraftPickIdentity.ts).
+   * 🛑 AND THAT RESOLUTION ITSELF FELL BACK TO THE SLOT FOR A MANAGER WHO HAD LEFT, which put
+   * them straight back on whoever took the slot. Both syncs now share `historicalTeamIdentity.ts`
+   * (2026-10-01): a departed owner is `former:sleeper:<ownerId>`, owners are looked up by
+   * `source_manager_id`, and stored picks are re-derived from the owner stored on each pick
+   * whenever who holds which slot changes.
    */
-  const currentRosters = await prisma.roster.findMany({
-    where: { leagueId: args.internalLeagueId },
-    select: { platformUserId: true, playerData: true },
-  })
-  const canonicalIdByManagerId = new Map<string, string>()
-  for (const roster of currentRosters) {
-    const sourceTeamId = getSourceTeamIdFromPlayerData(roster.playerData)
-    if (sourceTeamId) canonicalIdByManagerId.set(roster.platformUserId, sourceTeamId)
-  }
+  const { currentSlotByOwner } = args
 
   const pendingRows: PendingSleeperDraftFact[] = []
   const seasonsWithDrafts = new Set<number>()
   let importedDraftCount = 0
   let seasonsSkippedAlreadyComplete = 0
   let providerCallsAvoided = 0
+  let picksRemapped = 0
+  let seasonsSkippedNoRosters = 0
 
   for (const seasonLeague of historyChain) {
     /*
@@ -132,6 +160,7 @@ async function collectSleeperDraftFacts(args: {
      * run then skipped it. A user's live draft froze at the moment they imported, while a counter
      * named `seasonsSkippedAlreadyComplete` reported it as finished. See `seasonCompletion.ts`.
      */
+    const isCurrentSeason = seasonLeague.externalLeagueId === args.startingLeagueId
     if (shouldSkipImportedSeason({ force: args.force, league: seasonLeague.league })) {
       const existing = await prisma.draftFact.findFirst({
         where: { leagueId: args.internalLeagueId, season: seasonLeague.season },
@@ -140,6 +169,22 @@ async function collectSleeperDraftFacts(args: {
       if (existing) {
         seasonsSkippedAlreadyComplete += 1
         providerCallsAvoided += 1
+        /*
+         * Finished picks never change, but which team they belong to does — a manager leaves and
+         * someone else takes the slot. Re-derived here from the owner on each pick: a database
+         * read, a write only where a pick moved. The current season's roster ids ARE its teams.
+         */
+        if (!isCurrentSeason) {
+          const stored = await prisma.draftFact.findMany({
+            where: { leagueId: args.internalLeagueId, season: seasonLeague.season },
+            select: { draftId: true, managerId: true, metadata: true },
+          })
+          const updates = planDraftTeamRemap(stored, currentSlotByOwner)
+          if (updates.length > 0) {
+            await applyDraftTeamRemap(updates)
+            picksRemapped += updates.length
+          }
+        }
         continue
       }
     }
@@ -150,29 +195,43 @@ async function collectSleeperDraftFacts(args: {
      * imported still costs no provider call.
      */
     const seasonRosters = await getLeagueRosters(seasonLeague.externalLeagueId).catch(() => null)
-    const canonicalByHistoricalRosterId = new Map<string, string>()
+    const canonicalByHistoricalRosterId = canonicalIdsForSeason({
+      season: seasonLeague.season,
+      rosters: (seasonRosters ?? []) as Array<{ roster_id: unknown; owner_id?: unknown; co_owners?: unknown }>,
+      currentSlotByOwner,
+      isCurrentSeason,
+    })
+    const coOwnersByRosterId = new Map<string, string[]>()
     for (const roster of seasonRosters ?? []) {
-      const raw = (roster as { roster_id?: unknown; owner_id?: unknown } | null) ?? {}
-      const historicalRosterId = raw.roster_id != null ? String(raw.roster_id) : ''
-      if (!historicalRosterId) continue
-      const ownerId = typeof raw.owner_id === 'string' ? raw.owner_id : null
-      canonicalByHistoricalRosterId.set(
-        historicalRosterId,
-        (ownerId ? canonicalIdByManagerId.get(ownerId) : undefined) ?? historicalRosterId,
-      )
+      const raw = (roster as { roster_id?: unknown; co_owners?: unknown } | null) ?? {}
+      const ids = Array.isArray(raw.co_owners) ? raw.co_owners.filter((x): x is string => typeof x === 'string' && !!x) : []
+      if (raw.roster_id != null && ids.length) coOwnersByRosterId.set(String(raw.roster_id), ids)
     }
 
     /*
-     * `normalizeManagerId` may hand back a roster id, an owner id, or `picked_by`.
-     * Try both maps, then fall through to the raw value — an unresolvable manager
-     * keeps its historical id rather than being dropped, so the pick still exists on
-     * the board even when it cannot be attributed to a current team.
+     * The pick's team: its roster, through that season's owner, to the team they hold today.
+     * A roster this season's payload does not list gets a key of its own — never the bare slot
+     * number, which is someone else's team now. With no roster id, the owner the pick names; failing
+     * that `picked_by` as it always was (whoever clicked: never mapped to a team).
      */
-    const canonicalManagerId = (raw: string | undefined): string | undefined => {
-      if (!raw) return undefined
-      return canonicalByHistoricalRosterId.get(raw) ?? canonicalIdByManagerId.get(raw) ?? raw
+    const canonicalManagerId = (pick: any): string | undefined => {
+      const rosterId = pick?.roster_id != null ? String(pick.roster_id) : ''
+      if (rosterId) {
+        return (
+          canonicalByHistoricalRosterId.get(rosterId) ??
+          (isCurrentSeason ? rosterId : formerSleeperSlotKey(seasonLeague.season, rosterId))
+        )
+      }
+      const owner = typeof pick?.owner_id === 'string' && pick.owner_id.trim() ? pick.owner_id.trim() : ''
+      if (owner) return currentSlotByOwner.get(owner) ?? formerSleeperManagerKey(owner)
+      return typeof pick?.picked_by === 'string' && pick.picked_by.trim() ? pick.picked_by.trim() : undefined
     }
     const ownerByRosterId = sleeperOwnerByRosterId(seasonRosters)
+    /*
+     * ⚠ NO ROSTERS, NO WRITE. `getLeagueRosters` answers `[]` for a failed request; without that
+     * season's owners every pick would be stored unattributed — and the write replaces the season.
+     */
+    const rostersUnreadable = !seasonRosters || seasonRosters.length === 0
 
     const drafts = await getLeagueDrafts(seasonLeague.externalLeagueId)
     const sourceDraftIds = Array.from(
@@ -206,6 +265,11 @@ async function collectSleeperDraftFacts(args: {
       },
     )
 
+    if (rostersUnreadable && loadedDrafts.some(({ picks }) => Array.isArray(picks) && picks.length > 0)) {
+      seasonsSkippedNoRosters += 1
+      continue
+    }
+
     for (const { sourceDraftId, picks, tradedPickCount } of loadedDrafts) {
       if (!Array.isArray(picks) || picks.length === 0) {
         continue
@@ -235,9 +299,11 @@ async function collectSleeperDraftFacts(args: {
         }
 
         const ownerSleeperId = sleeperPickOwnerId(pick, ownerByRosterId)
+        const coOwnerSleeperIds = pick?.roster_id != null ? coOwnersByRosterId.get(String(pick.roster_id)) : undefined
         const isKeeper = pick?.is_keeper === true
         const metadata = {
           ...(ownerSleeperId ? { ownerSleeperId } : {}),
+          ...(ownerSleeperId && coOwnerSleeperIds ? { coOwnerSleeperIds } : {}),
           ...(isKeeper ? { isKeeper: true as const } : {}),
         }
         pendingRows.push({
@@ -247,7 +313,7 @@ async function collectSleeperDraftFacts(args: {
           round,
           pickNumber,
           playerId,
-          managerId: canonicalManagerId(normalizeManagerId(pick)),
+          managerId: canonicalManagerId(pick),
           season: seasonLeague.season,
           ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
         })
@@ -289,6 +355,8 @@ async function collectSleeperDraftFacts(args: {
     seasonsConsidered: historyChain.length,
     seasonsSkippedAlreadyComplete,
     providerCallsAvoided,
+    picksRemapped,
+    seasonsSkippedNoRosters,
   }
 }
 
@@ -327,12 +395,34 @@ export async function syncSleeperHistoricalDraftFactsAfterImport(args: {
   }
 
   try {
+    const [currentRosters, currentTeams] = await Promise.all([
+      prisma.roster.findMany({
+        where: { leagueId: league.id },
+        select: { platformUserId: true, playerData: true },
+      }),
+      prisma.leagueTeam.findMany({
+        where: { leagueId: league.id },
+        select: { externalId: true, platformUserId: true },
+      }),
+    ])
+    const currentSlotByOwner = currentSlotBySleeperOwner({ rosters: currentRosters, teams: currentTeams })
+    // ⚠ Nobody to map onto, so do not map: every past pick would read as a departed manager's.
+    if (currentSlotByOwner.size === 0) {
+      return {
+        attempted: false,
+        refreshed: false,
+        skipped: true,
+        reason: 'No current Sleeper managers on file to map draft history onto.',
+      }
+    }
+
     const collected = await collectSleeperDraftFacts({
       internalLeagueId: league.id,
       sport: normalizeSportForWarehouse(league.sport),
       startingLeagueId: league.platformLeagueId,
       maxPreviousSeasons: args.maxPreviousSeasons ?? 10,
       force: args.force ?? false,
+      currentSlotByOwner,
     })
 
     if (!collected.rows.length || !collected.seasons.length) {
@@ -352,6 +442,8 @@ export async function syncSleeperHistoricalDraftFactsAfterImport(args: {
         seasonsConsidered: collected.seasonsConsidered,
         seasonsSkippedAlreadyComplete: collected.seasonsSkippedAlreadyComplete,
         providerCallsAvoided: collected.providerCallsAvoided,
+        picksRemapped: collected.picksRemapped,
+        seasonsSkippedNoRosters: collected.seasonsSkippedNoRosters,
       }
     }
 
@@ -377,6 +469,8 @@ export async function syncSleeperHistoricalDraftFactsAfterImport(args: {
       seasonsConsidered: collected.seasonsConsidered,
       seasonsSkippedAlreadyComplete: collected.seasonsSkippedAlreadyComplete,
       providerCallsAvoided: collected.providerCallsAvoided,
+      picksRemapped: collected.picksRemapped,
+      seasonsSkippedNoRosters: collected.seasonsSkippedNoRosters,
       importedPickCount: collected.rows.length,
     }
   } catch (error) {

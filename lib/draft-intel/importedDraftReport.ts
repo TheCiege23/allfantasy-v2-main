@@ -5,6 +5,7 @@ import { getSeasonStatsBoard, scoreStatLine } from '@/lib/sports-data/sleeperMar
 import { resolveProviderScoringStatKey } from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
 import { gradePicks, type GradablePick } from './gradeDraftPicks'
 import type { DraftReportPayload, DraftReportSeason } from './draftReportService'
+import { parseFormerSleeperKey } from '@/lib/league-import/sleeper/historicalTeamIdentity'
 
 /**
  * Grade a draft we imported, from rows we already hold.
@@ -259,7 +260,7 @@ export async function buildImportedDraftReport(
         playerName: names.get(r.playerId) ?? 'Player',
         position: null,
         byOwnerId: teamKey || null,
-        byName: team?.ownerName?.trim() || 'Manager',
+        byName: team?.ownerName?.trim() || (parseFormerSleeperKey(teamKey) ? 'Former manager' : 'Manager'),
         teamName: team?.teamName?.trim() || null,
         avatar: team?.avatarUrl ?? null,
         initialPoints: points,

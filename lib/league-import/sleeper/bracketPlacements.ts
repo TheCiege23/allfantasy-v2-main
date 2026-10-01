@@ -365,7 +365,7 @@ export function readStoredTitleGame(playoffStructure: unknown): StoredTitleGame 
  * The historical roster id that became `canonicalId` (the current season's team id),
  * from the stored `canonicalRosterIdByHistoricalRosterId`.
  *
- * ⚠ ONLY AN UNAMBIGUOUS MATCH. Rows written before `teamIdentityVersion: 2` mapped a roster
+ * ⚠ ONLY AN UNAMBIGUOUS MATCH. Rows written before `sleeperRosterOwners` was kept mapped a roster
  * whose manager had left to its own historical id, so two historical rosters can share a
  * canonical id there. When they do, this returns null rather than picking one — attributing
  * another manager's final to you is the failure this whole module exists to prevent.

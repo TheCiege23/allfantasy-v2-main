@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   canonicalIdsForSeason,
+  compactRosterOwners,
   currentSlotBySleeperOwner,
+  draftTeamForOwners,
   formerSleeperManagerKey,
   formerSleeperSlotKey,
   parseFormerSleeperKey,
+  readStoredRosterOwners,
   sameCanonicalMap,
 } from '@/lib/league-import/sleeper/historicalTeamIdentity'
 
@@ -72,5 +75,32 @@ describe('former keys', () => {
     expect(sameCanonicalMap({ '1': '1', '2': '2' }, next)).toBe(false)
     expect(sameCanonicalMap({ '1': '1' }, next)).toBe(false)
     expect(sameCanonicalMap(null, next)).toBe(false)
+  })
+})
+
+describe('stored roster owners', () => {
+  it('round-trip into the shape canonicalIdsForSeason reads, giving the same mapping', () => {
+    const rosters = [{ roster_id: 1, owner_id: 'u1' }, { roster_id: 2, owner_id: null, co_owners: ['c'] }, { roster_id: 3, owner_id: 'gone' }]
+    const stored = compactRosterOwners(rosters)
+    expect(stored).toEqual([{ r: '1', o: 'u1' }, { r: '2', o: null, c: ['c'] }, { r: '3', o: 'gone' }])
+    const current = new Map([['u1', '1'], ['c', '5']])
+    const direct = canonicalIdsForSeason({ season: 2022, rosters, currentSlotByOwner: current })
+    const fromStored = canonicalIdsForSeason({ season: 2022, rosters: readStoredRosterOwners(JSON.parse(JSON.stringify(stored)))!, currentSlotByOwner: current })
+    expect(Object.fromEntries(fromStored)).toEqual(Object.fromEntries(direct))
+  })
+})
+
+describe('draftTeamForOwners', () => {
+  const current = new Map([['u1', '1'], ['co', '8']])
+  it('agrees with canonicalIdsForSeason for an owned roster', () => {
+    expect(draftTeamForOwners(['u1'], current)).toBe('1')
+    expect(draftTeamForOwners(['gone', 'co'], current)).toBe('8')
+    expect(draftTeamForOwners(['gone'], current)).toBe('former:sleeper:gone')
+    const viaSeason = canonicalIdsForSeason({ season: 2022, currentSlotByOwner: current, rosters: [{ roster_id: 9, owner_id: 'gone', co_owners: ['co'] }] })
+    expect(viaSeason.get('9')).toBe(draftTeamForOwners(['gone', 'co'], current))
+  })
+  it('leaves an ownerless pick alone, co-owners or not', () => {
+    expect(draftTeamForOwners([null, 'co'], current)).toBeNull()
+    expect(draftTeamForOwners([], current)).toBeNull()
   })
 })
