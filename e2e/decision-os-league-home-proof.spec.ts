@@ -73,68 +73,43 @@ async function openLeagueHome(
   browserEvents: string[],
   mode: 'light' | 'dark',
 ): Promise<void> {
-  await expectSsrModeNavigation(page, `/league/${leagueId}?view=league`, mode)
   /*
-   * ⚠ `league-tab-league` IS NOT A THING, AND HAS NOT BEEN FOR AS LONG AS THIS FAILURE
-   * HAS BEEN ON MAIN. `LeagueShell` renders GROUPS (`league-tab-group-<id>`) with tabs
-   * (`league-tab-<id>`) inside them, and `league` is a group name, not a tab: `?view=league`
-   * selects the group whose tabs are home / matchups / schedule / players / waivers / trades /
-   * standings / league_chat. The diagnostic below proved it — it printed the 14 testids that
-   * ARE in the DOM, `league-tab-group-league` among them, while the body dump showed the page
-   * rendering in full. So anchor on the group this view actually selects.
+   * ⚠ `?view=league` CANNOT REACH A DECISION OS CARD FOR THIS LEAGUE, AND THE GUARD HID IT.
+   *
+   * The seed is an NFL redraft league, so `LeagueShell` uses its `nflRedraftCore` tab list,
+   * which has had no `league` tab since `aed9b1977`. The `?view=` effect only switches to a tab
+   * that `tabDefs` holds, so `?view=league` was ignored and the page stayed on `home`.
+   * `LeagueTab` — the only renderer of `league-pulse-card-league` — never mounted. The old
+   * guard passed anyway, because `league-tab-group-league` is a group that always exists.
+   *
+   * `decide` is the Decision OS surface this league type renders (`DecideHome`). The guard now
+   * asserts that the TAB is selected, not only that a button exists, so a deep link that is
+   * ignored fails here with a clear message instead of as a card timeout.
    */
-  const leagueTab = page.getByTestId('league-tab-group-league')
-  const visible = await leagueTab.isVisible({ timeout: 45_000 }).catch(() => false)
-  if (!visible) {
+  await expectSsrModeNavigation(page, `/league/${leagueId}?view=decide`, mode)
+  const decideTab = page.getByTestId('league-tab-decide')
+  const selected = await expect(decideTab)
+    .toHaveAttribute('aria-selected', 'true', { timeout: 45_000 })
+    .then(() => true)
+    .catch(() => false)
+  if (!selected) {
     const bodyText = await page.locator('body').innerText({ timeout: 5_000 }).catch(() => '')
-    /*
-     * ⚠ "NOT VISIBLE" IS TWO DIFFERENT BUGS AND THIS MESSAGE COULD NOT TELL THEM APART.
-     * `isVisible` is false both when the element is ABSENT (the shell never rendered
-     * that tab — a gating or data bug) and when it is PRESENT BUT HIDDEN (behind an
-     * inactive group, an overlay, or zero-sized — a UI-state bug). Every other
-     * diagnostic here was already wired and already silent: console errors AND
-     * warnings, pageerror, requestfailed, and any response >= 400 all fired nothing,
-     * which rules out a crash and an API failure but says nothing about this fork.
-     *
-     * Measured 2026-09-07 on run 34127164380: the body text proves the page renders
-     * fully — league name, 12 teams, standings, VITALS, COMMISH — so the shell IS
-     * there and only this tab is missing or hidden. Resolving which one needs the DOM,
-     * and the saved error-context carries no page snapshot, only the body text and
-     * this spec's own source. So ask the page directly, at the moment it fails.
-     *
-     * `count()` is deliberate rather than a second `isVisible`: a hidden element still
-     * counts, so count>0 with visible=false IS the discriminator.
-     */
-    const tabCount = await leagueTab.count().catch(() => -1)
-    const groupCount = await page.getByTestId('league-tab-group-league').count().catch(() => -1)
+    const tabCount = await decideTab.count().catch(() => -1)
     const renderedTabIds = await page
       .locator('[data-testid^="league-tab-"]')
-      .evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')).filter(Boolean).slice(0, 30))
-      .catch(() => [] as (string | null)[])
+      .evaluateAll((els) =>
+        els
+          .map((el) => `${el.getAttribute('data-testid')}${el.getAttribute('aria-selected') === 'true' ? '*' : ''}`)
+          .slice(0, 30),
+      )
+      .catch(() => [] as string[])
     throw new Error(
-      `League Home shell did not render. url=${page.url()} ` +
-        `leagueTabInDom=${tabCount} leagueGroupInDom=${groupCount} ` +
-        `renderedTabTestIds=[${renderedTabIds.join(',')}] ` +
+      `?view=decide did not select the Decide tab. url=${page.url()} ` +
+        `decideTabInDom=${tabCount} renderedTabTestIds(*=selected)=[${renderedTabIds.join(',')}] ` +
         `browser=${browserEvents.slice(-12).join(' | ')} body=${bodyText.slice(0, 1200)}`,
     )
   }
-  /*
-   * ⚠ NO CLICK HERE, AND THE MISSING HALF OF THE 2026-09-18 FIX WAS EXACTLY THIS LINE.
-   *
-   * That fix repointed the GUARD above from `league-tab-league` to `league-tab-group-league`
-   * — correctly, since `league` is a GROUP in `LeagueShell`, not a tab — but left this click
-   * on the old id. So the guard passed on the group that does exist, and the test then spent
-   * its whole 480s budget waiting to click a tab that does not, reporting only a timeout.
-   * It was the one change in that batch that could not be verified locally (the league route
-   * would not finish compiling inside the budget), and it is the one that was wrong.
-   *
-   * The click is not needed at all: `openLeagueHome` navigates to `?view=league`, and
-   * `LeagueShell`'s view map sends `league -> 'league'`, which is the case that renders
-   * `LeagueTab` — the component holding this pulse card. Clicking a tab to reach a view the
-   * URL already selected is what created the dependency on a button that has since folded
-   * into a group.
-   */
-  await expect(page.getByTestId('league-pulse-card-league')).toBeVisible({ timeout: 45_000 })
+  await expect(page.getByTestId('decide-home')).toBeVisible({ timeout: 45_000 })
 }
 
 function expectNoRootRuntimeCrashes(browserEvents: string[]): void {
@@ -154,27 +129,21 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   expect(hasOverflow).toBeFalsy()
 }
 
-async function expectDecisionOsCards(page: Page, variant: 'league' | 'commissioner'): Promise<void> {
-  const pulse = page.getByTestId(`league-pulse-card-${variant}`)
-  const manager = page.getByTestId(`manager-dna-card-${variant}`)
-  const moves = page.getByTestId(`decision-recommendations-card-${variant}`)
-
+/*
+ * `DecideHome` renders the Decision OS engines as its own cards, not as `LeaguePulseCard` /
+ * `DecisionRecommendationsCard`, so the "Why am I seeing this?" copy does not apply here. Its
+ * honesty contract does: the pulse shows either a verdict with its confidence or the engine's
+ * insufficient-data state, and the move queue shows either grounded moves or an explicit empty
+ * state. It has no Manager DNA card; the manager-intelligence API check below still covers that
+ * payload.
+ */
+async function expectDecisionOsCards(page: Page): Promise<void> {
+  const pulse = page.getByTestId('decide-league-pulse')
   await expect(pulse).toBeVisible({ timeout: 45_000 })
-  await expect(manager).toBeVisible({ timeout: 45_000 })
-  await expect(moves).toBeVisible({ timeout: 45_000 })
+  await expect(pulse.getByText(/\d+% · /).or(pulse.locator('.bdx-empty')).first()).toBeVisible()
 
-  await expect(pulse.getByText(/confidence/i).first()).toBeVisible()
-  await expect(pulse.getByText('Why am I seeing this?')).toBeVisible()
-  await expect(pulse.getByText('Based on')).toBeVisible()
-  await expect(pulse.getByText('Decision path')).toBeVisible()
-
-  await expect(manager.getByText(/confidence/i).first()).toBeVisible()
-  await expect(manager.getByText('Why am I seeing this?')).toBeVisible()
-  await expect(manager.getByText('Supporting evidence')).toBeVisible()
-
-  await expect(moves.getByText(/confidence/i).first()).toBeVisible()
-  await expect(moves.getByText('Why am I seeing this?')).toBeVisible()
-  await expect(moves.getByText('Evidence checked')).toBeVisible()
+  const moves = page.getByTestId('decide-recommendation').or(page.getByTestId('decide-recommendations-empty'))
+  await expect(moves.first()).toBeVisible({ timeout: 45_000 })
 }
 
 test.describe('G29 Decision OS authenticated theme SSR proof', () => {
@@ -232,7 +201,7 @@ test.describe('G29 Decision OS authenticated theme SSR proof', () => {
 
     await setSsrMode(page, 'light')
     await openLeagueHome(page, seeded.leagueId, browserEvents, 'light')
-    await expectDecisionOsCards(page, 'league')
+    await expectDecisionOsCards(page)
 
     const intelligenceResponse = await page.request.get(
       `/api/decision-os/manager-intelligence?leagueId=${encodeURIComponent(seeded.leagueId)}`,
@@ -247,10 +216,10 @@ test.describe('G29 Decision OS authenticated theme SSR proof', () => {
 
     await setSsrMode(page, 'dark')
     await openLeagueHome(page, seeded.leagueId, browserEvents, 'dark')
-    await expectDecisionOsCards(page, 'league')
+    await expectDecisionOsCards(page)
 
     await page.setViewportSize({ width: 390, height: 844 })
-    await expectDecisionOsCards(page, 'league')
+    await expectDecisionOsCards(page)
     await expectNoHorizontalOverflow(page)
 
     await page.setViewportSize({ width: 1280, height: 900 })
