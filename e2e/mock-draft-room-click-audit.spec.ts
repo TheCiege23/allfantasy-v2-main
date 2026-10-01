@@ -307,23 +307,12 @@ test.describe('@mock-draft-room click audit', () => {
 
     const hint = page.getByTestId('mock-draft-league-roster-loading-hint')
     await page.getByTestId('mock-draft-league-select').click()
-    const selectedAt = Date.now()
     await page.getByRole('option', { name: /E2E NFL League/i }).click()
     await expect.poll(() => rosterConfigHits).toBeGreaterThan(0)
 
-    /*
-     * "Not before the delay" has to be a point-in-time read, never a retrying assertion.
-     * `expect(hint).toHaveCount(0)` retries until the count IS 0, so on a page where the
-     * delay has already elapsed by the time it runs it does not fail — it waits out the
-     * hint's whole lifetime (until the slow roster-config resolves), and the visibility
-     * assertion below then has nothing left to find. Measured 2026-10-01 from a trace:
-     * the hint was in the DOM 610ms after the option click, the retrying count took 4.9s
-     * to pass, and `toBeVisible` timed out. That is the lane's coin flip. Read the count
-     * once, and only while the clock says the hint is not yet due.
-     */
-    if (Date.now() - selectedAt < MOCK_DRAFT_ROSTER_HINT_DELAY_MS - 100) {
-      expect(await hint.count()).toBe(0)
-    }
+    await expect(hint).toHaveCount(0)
+    await page.waitForTimeout(MOCK_DRAFT_ROSTER_HINT_DELAY_MS - 100)
+    await expect(hint).toHaveCount(0)
 
     await expect(hint).toBeVisible({ timeout: ROSTER_CONFIG_SLOW_MS })
 
