@@ -65,6 +65,71 @@ export const COLLEGE_NAME_ALIASES: Record<string, string> = {
   'virginia commonwealth university': 'VCU',
 }
 
+/**
+ * Further spellings the LOGO resolver may try once the name above (or the raw name) has missed.
+ * TheSportsDB's college-basketball rows spell schools their own way ("UNC Greensboro",
+ * "Cal State-Fullerton"), so one name per school cannot serve both sports. Tried only after a miss,
+ * so no team that already has a crest can be moved by an entry here. Each value is a row name read
+ * off the test DB on 2026-10-01 and checked against that row's city — never a guess.
+ */
+export const COLLEGE_LOGO_NAME_ALIASES: Record<string, readonly string[]> = {
+  'university of north carolina at greensboro': ['UNC Greensboro'],
+  'university of north carolina at asheville': ['UNC Asheville'],
+  'university of north carolina at wilmington': ['UNC Wilmington'],
+  'university of south carolina upstate': ['USC Upstate'],
+  'texas a&m university-corpus christi': ['Texas A and M-Corpus Christi'],
+  'university of texas at arlington': ['Texas-Arlington'],
+  'university of texas rio grande valley': ['UT Rio Grande Valley'],
+  'california state university, long beach': ['Long Beach State'],
+  'california state university, fullerton': ['Cal State-Fullerton'],
+  'california state university, northridge': ['Cal State-Northridge'],
+  'california state university, bakersfield': ['Cal State-Bakersfield'],
+  'university of california, santa barbara': ['UC Santa Barbara'],
+  'university of california, riverside': ['UC Riverside'],
+  'university of california, irvine': ['UC Irvine'],
+  // Rolling Insights' own typo, and the spelling it will have once someone fixes it.
+  'university of california, san deigo': ['UC San Diego'],
+  'university of california, san diego': ['UC San Diego'],
+  'university of the pacific': ['Pacific'],
+  'university of louisiana at lafayette': ['Louisiana-Lafayette'],
+  'university of southern mississippi': ['Southern Mississippi'],
+  'university of central florida': ['UCF Knights'],
+  'miami university': ['Miami (Ohio)'],
+  'university of tennessee at martin': ['Tennessee-Martin'],
+  // Saint Francis University is the Loretto, PA school; St. Francis Brooklyn is "St. Francis College".
+  'saint francis university': ['St Francis-Pennsylvania'],
+  // The Division I Gaels (Moraga, CA), the only Saint Mary's College in Rolling Insights' feed.
+  "saint mary's college": ['Saint Marys-California'],
+  'university of detroit mercy': ['Detroit'],
+  'indiana university – purdue university indianapolis': ['IUPUI'],
+  'purdue university fort wayne': ['Purdue Fort Wayne'],
+  'university of maryland, baltimore county': ['UMBC'],
+  'university of illinois at chicago': ['UIC'],
+  'university of arkansas at little rock': ['Arkansas-Little Rock'],
+  'southern illinois university edwardsville': ['Southern Illinois-Edwardsville'],
+  'university of missouri–kansas city': ['UMKC'],
+  'loyola university chicago': ['Loyola-Chicago'],
+  'loyola university maryland': ['Loyola-Maryland'],
+  'new jersey institute of technology': ['NJIT'],
+  // One program since the 2019 merger; TheSportsDB still files it under Brooklyn, as "LIU Sharks".
+  'long island university': ['LIU Sharks'],
+  'queens university of charlotte': ['Queens Royals'],
+  'university of st. thomas': ['St. Thomas (Minnesota)'],
+}
+
+/**
+ * Every name the logo resolver may try for a team, in order: the primary alias (or the raw name),
+ * then CFBD's spelling, then the logo-only spellings. The first is what was always tried; the rest
+ * are reached only on a miss, so adding to them can fill a blank badge but never change a crest.
+ */
+export function collegeLogoNameCandidates(team: string | null | undefined): string[] {
+  const raw = String(team ?? '').trim()
+  if (!raw) return []
+  const k = exactKey(raw)
+  const names = [COLLEGE_NAME_ALIASES[k] ?? raw, CFBD_SCHOOL_ALIASES[k], ...(COLLEGE_LOGO_NAME_ALIASES[k] ?? [])]
+  return [...new Set(names.filter((n): n is string => Boolean(n)))]
+}
+
 export function looseTeamKey(value: string | null | undefined): string {
   return exactKey(value)
     .replace(/&/g, ' and ')
@@ -82,8 +147,10 @@ export function looseTeamKey(value: string | null | undefined): string {
 
 /**
  * Rolling Insights' formal names that CFBD's SCHEDULE spells differently from the logo sources.
- * Consulted before `COLLEGE_NAME_ALIASES`, and only by `cfbdScheduleTeamKeys` — changing the logo
- * table would move logos. Every value is CFBD's own spelling, read off its 2026 schedule rows.
+ * Consulted before `COLLEGE_NAME_ALIASES` by `cfbdScheduleTeamKeys` — moving these into the logo
+ * table would move logos. The logo resolver reaches them only AFTER its own name has missed
+ * (`collegeLogoNameCandidates`), where they match CFBD's crest rows of the same spelling. Every
+ * value is CFBD's own spelling, read off its 2026 schedule rows.
  */
 export const CFBD_SCHOOL_ALIASES: Record<string, string> = {
   'southern methodist university': 'SMU',
