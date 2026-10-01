@@ -10,7 +10,8 @@ import { getServerSession } from 'next-auth'
 import { getServedOrigin } from '@/lib/http/served-origin'
 import { authOptions } from '@/lib/auth'
 import { validateFantasyInviteCode } from '@/lib/league-invite'
-import { resolveJoinRankGate } from '@/lib/league-join/resolveJoinRankGate'
+import { evaluateJoinDivisionGate } from '@/lib/league-join/joinDivisionGate'
+import { divisionGateMessage } from '@/lib/class-rating/divisionGate'
 import { prisma } from '@/lib/prisma'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
@@ -64,24 +65,26 @@ export async function POST(req: NextRequest) {
   }
   const result = validation.preview
 
-  const rankGate = await resolveJoinRankGate({
-    leagueId: result.leagueId,
-    inviteTokenOrCode: code,
+  /*
+   * The division gate (ADR F2.10a), replacing the XP-level gate retired 2026-10-01: career XP
+   * measures volume, not skill, and gating on it is what the owner ruled out. Only an OPEN join
+   * — this league publishes its code — can be refused; a private league's code is an invitation.
+   */
+  const divisionGate = await evaluateJoinDivisionGate({
     userId,
+    leagueId: result.leagueId,
+    credential: { kind: 'league_code' },
   })
-
-  if (!rankGate.allowed) {
-    const minRankLevel = rankGate.minRankLevel ?? 1
-    const maxRankLevel = rankGate.maxRankLevel ?? 1
+  if (divisionGate.outcome === 'deny') {
     return NextResponse.json(
       {
-        error: 'RANK_GATE_BLOCKED',
-        message: `This league is open to users ranked Level ${minRankLevel} through Level ${maxRankLevel}. Ask the commissioner for a special invite.`,
-        minRankLevel,
-        maxRankLevel,
-        userRankLevel: rankGate.userRankLevel,
+        error: divisionGateMessage(divisionGate),
+        code: 'DIVISION_GATE_BLOCKED',
+        userDivision: divisionGate.userDivision,
+        leagueDivision: divisionGate.leagueDivision,
+        band: divisionGate.band,
       },
-      { status: 403 }
+      { status: 403 },
     )
   }
 
@@ -342,7 +345,11 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  return NextResponse.json(joinResult)
+  return NextResponse.json(
+    divisionGate.outcome === 'allow_flagged' && !joinResult.alreadyMember
+      ? { ...joinResult, divisionFlag: { reason: divisionGate.reason, userDivision: divisionGate.userDivision, leagueDivision: divisionGate.leagueDivision } }
+      : joinResult,
+  )
 }
 
 /**
