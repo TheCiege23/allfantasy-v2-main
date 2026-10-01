@@ -169,7 +169,7 @@ function BracketShell({ leagueName, season, playoffTeamCount, children }: { leag
   return (
     <div className="rounded-2xl overflow-hidden relative" style={{ background: 'linear-gradient(135deg, #0a1628 0%, #1a3a5c 50%, #0d2442 100%)' }}>
       <div className="absolute top-4 right-4 z-10">
-        <img src="/af-crest.jpg" alt="AllFantasy Crest" className="w-14 h-14 rounded-lg shadow-lg shadow-blue-500/30 object-cover" />
+        <img src="/af-crest.svg" alt="AllFantasy Crest" className="w-14 h-14 object-contain drop-shadow-[0_4px_12px_rgba(59,130,246,0.35)]" />
       </div>
       <div className="text-center pt-6 pb-4">
         <h3 className="text-2xl sm:text-3xl font-bold text-white tracking-wide">PLAYOFFS</h3>

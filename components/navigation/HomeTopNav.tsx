@@ -53,7 +53,7 @@ export default function HomeTopNav() {
           <div className="flex min-w-0 items-center gap-2">
             <Link href="/" className="flex items-center gap-2 min-w-0" aria-label="AllFantasy home">
               <Image
-                src="/af-crest.png"
+                src="/af-crest.svg"
                 alt="AllFantasy Crest"
                 width={32}
                 height={32}

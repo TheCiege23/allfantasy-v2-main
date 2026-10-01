@@ -23,7 +23,7 @@ const OPTIONS: {
     description: 'Premier League, La Liga, Serie A, Bundesliga, UCL pipeline (Euro data feeds).',
     videoSrc: '/Soccer.mp4',
     posterSrc: '/Soccer.png',
-    fallbackSrc: '/af-crest.png',
+    fallbackSrc: '/af-crest.svg',
   },
   {
     id: 'mls',
@@ -31,7 +31,7 @@ const OPTIONS: {
     description: 'Major League Soccer and NA soccer feeds (aligned with MLS API paths).',
     videoSrc: '/Soccer.mp4',
     posterSrc: '/Soccer.png',
-    fallbackSrc: '/af-crest.png',
+    fallbackSrc: '/af-crest.svg',
   },
 ]
 

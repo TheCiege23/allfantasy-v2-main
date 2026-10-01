@@ -191,23 +191,22 @@ export default function CrestImpactAnimation() {
           opacity: phase === 'waiting' ? 0 : undefined,
         }}>
           <div style={{ position: 'relative' }}>
+            {/*
+              Transparent crest, so the glow is a drop-shadow that follows the
+              shield's outline. A box-shadow (and the inset ring that used to
+              sit over it) traced the old JPEG's white square instead.
+            */}
             <img
-              src="/af-crest.jpg"
+              src="/af-crest.svg"
               alt="AF Crest"
               style={{
                 width: 140,
                 height: 140,
-                borderRadius: 20,
-                boxShadow: '0 0 60px rgba(139,92,246,0.6), 0 0 120px rgba(6,182,212,0.3)',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 0 30px rgba(139,92,246,0.6)) drop-shadow(0 0 60px rgba(6,182,212,0.3))',
                 display: 'block',
               }}
             />
-            <div style={{
-              position: 'absolute',
-              inset: 0,
-              borderRadius: 20,
-              boxShadow: 'inset 0 0 0 2px rgba(6,182,212,0.5)',
-            }} />
           </div>
         </div>
 

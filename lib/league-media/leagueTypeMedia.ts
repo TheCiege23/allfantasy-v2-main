@@ -11,7 +11,7 @@ export type LeagueTypeMedia = {
   thumbnailFallback: string
 }
 
-const FALLBACK_THUMBNAIL = '/af-crest.png'
+const FALLBACK_THUMBNAIL = '/af-crest.svg'
 
 const LEAGUE_TYPE_MEDIA_MAP: Record<string, Omit<LeagueTypeMedia, 'key'>> = {
   redraft: {

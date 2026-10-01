@@ -48,7 +48,7 @@ export function AuthStatusShell({
       >
         <Link href="/" className="flex items-center gap-2.5 no-underline">
           <img
-            src="https://www.allfantasy.ai/af-crest.png"
+            src="/af-crest.svg"
             alt="AllFantasy"
             width={28}
             height={28}
