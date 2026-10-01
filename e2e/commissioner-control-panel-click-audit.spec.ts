@@ -14,6 +14,7 @@ test.describe('@commissioner commissioner control panel click audit', () => {
     const settingsPatches: Array<Record<string, unknown>> = []
     const waiverPuts: Array<Record<string, unknown>> = []
     const draftPatches: Array<Record<string, unknown>> = []
+    const draftExecutionModePatches: Array<Record<string, unknown>> = []
     const aiPatches: Array<Record<string, unknown>> = []
     const privacyPatches: Array<Record<string, unknown>> = []
     const inviteRegenerations: Array<Record<string, unknown>> = []
@@ -495,6 +496,34 @@ test.describe('@commissioner commissioner control panel click audit', () => {
       })
     })
 
+    // DraftSettingsPanel.handleSave awaits this PATCH before the draft/settings
+    // PATCH. Unmocked, it goes to the real dev server and can outlast the poll.
+    let draftExecutionMode: 'live' | 'auto' | 'offline' = 'live'
+    await page.route(`**/api/leagues/${leagueId}/settings/draft`, async (route) => {
+      if (route.request().method() === 'PATCH') {
+        const patch = route.request().postDataJSON() as Record<string, unknown>
+        draftExecutionModePatches.push(patch)
+        const mode = patch.executionMode
+        if (mode === 'live' || mode === 'auto' || mode === 'offline') draftExecutionMode = mode
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ok: true }),
+        })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          leagueId,
+          isCommissioner: true,
+          current: { draftType: draftState.config.draft_type, executionMode: draftExecutionMode },
+          options: { draftTypes: ['snake', 'linear', 'auction'] },
+        }),
+      })
+    })
+
     await page.route(`**/api/leagues/${leagueId}/ai-settings`, async (route) => {
       if (route.request().method() === 'PATCH') {
         const patch = route.request().postDataJSON() as Record<string, unknown>
@@ -931,6 +960,7 @@ test.describe('@commissioner commissioner control panel click audit', () => {
     await page.getByTestId('commissioner-draft-c2c-rounds-input').fill('1, 2')
     await page.getByTestId('commissioner-draft-save').click()
     await expect.poll(() => draftPatches.length).toBeGreaterThan(0)
+    expect(draftExecutionModePatches[draftExecutionModePatches.length - 1]?.executionMode).toBe('live')
     const latestDraftPatch = draftPatches[draftPatches.length - 1] ?? {}
     expect(latestDraftPatch.importEnabled).toBe(false)
     expect(latestDraftPatch.slow_timer_seconds).toBe(240 * 60)
