@@ -13,6 +13,8 @@ import { ChimmyAdviceFollow, type ChimmyAdviceRef } from './ChimmyAdviceFollow'
 import { ChimmyAnswerRating } from './ChimmyAnswerRating'
 import { ChimmyGroundingLine } from './ChimmyGroundingLine'
 import { ChimmyCopyActions } from './ChimmyCopyActions'
+import { ChimmyFunModeToggle, useChimmyFunMode } from './ChimmyFunMode'
+import { FUN_MODE_TONE } from '@/lib/chimmy/funMode'
 import { PushOptInPrompt } from '@/components/notifications/PushOptInPrompt'
 import {
   ChimmyAnswerModeToggle,
@@ -607,6 +609,8 @@ export function ChimmyPanel({
   const [outOfAnswers, setOutOfAnswers] = useState<OutOfAnswers | null>(null)
   /* Fast or Deep, per user. Sent with every question; see ChimmyAnswerMode.tsx. */
   const [answerMode, setAnswerMode] = useChimmyAnswerMode(userId)
+  /* Fun mode: emojis and personality, per user. Sent as tone=fun; see ChimmyFunMode.tsx. */
+  const [funMode, setFunMode] = useChimmyFunMode(userId)
   const endRef = useRef<HTMLDivElement | null>(null)
   const [screenshot, setScreenshot] = useState<File | null>(null)
   const screenshotRef = useRef<HTMLInputElement | null>(null)
@@ -664,7 +668,7 @@ export function ChimmyPanel({
       const question = text.trim()
       /* Captured once: the retry after a consent prompt must send the same file. */
       const attached = screenshot
-      const requestKey = JSON.stringify([question,scopeId,answerMode,publicMode,source,sport])
+      const requestKey = JSON.stringify([question,scopeId,answerMode,funMode,publicMode,source,sport])
       const retained = retryRequestRef.current
       const retryForm = retained?.key === requestKey && retained.file === attached ? retained.form : null
       const requestId = String(retryForm?.get('requestId') ?? crypto.randomUUID())
@@ -713,6 +717,7 @@ export function ChimmyPanel({
           if (source) form.append('source', source)
           if (sport && !scopeId) form.append('sport', sport)
           form.append('assistantMode', answerMode)
+          if (funMode) form.append('tone', FUN_MODE_TONE)
           form.append(
             'conversation',
             JSON.stringify(
@@ -946,7 +951,7 @@ export function ChimmyPanel({
         setBusy(false)
       }
     },
-    [answerMode, busy, connectedMembers.length, homeSignals, includedLeagueIds, leagues, pageSurface, planStatus, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns, source, sport],
+    [answerMode, funMode, busy, connectedMembers.length, homeSignals, includedLeagueIds, leagues, pageSurface, planStatus, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns, source, sport],
   )
 
   useEffect(() => {
@@ -1047,7 +1052,9 @@ export function ChimmyPanel({
             </div>
           </fieldset>
         ) : null}
-        <ChimmyAnswerModeToggle value={answerMode} onChange={setAnswerMode} disabled={busy} />
+        <ChimmyAnswerModeToggle value={answerMode} onChange={setAnswerMode} disabled={busy}>
+          <ChimmyFunModeToggle value={funMode} onChange={setFunMode} disabled={busy} />
+        </ChimmyAnswerModeToggle>
       </div>
 
       <div className="af-cm-thread">
