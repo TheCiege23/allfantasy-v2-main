@@ -49,6 +49,7 @@
 .af-welcome-actions button { min-height: 44px; padding: 10px 13px; border: 1px solid var(--line2); border-radius: 10px; color: var(--text2); background: var(--chip); font: 800 12px/1 var(--font-archivo, Archivo), system-ui, sans-serif; text-decoration: none; cursor: pointer; }
 .af-welcome-actions a,
 .af-welcome-actions .af-welcome-next { color: var(--accent-ink); border-color: var(--accent); background: var(--accent); }
+.af-welcome-actions .af-welcome-secondary { color: var(--text2); border-color: var(--line2); background: var(--chip); }
 
 @media (max-width: 720px) {
   .af-welcome {

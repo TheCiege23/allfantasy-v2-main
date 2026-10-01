@@ -15,6 +15,7 @@ type Step = {
   title: string
   body: string
   action?: { label: string; href: string }
+  secondaryAction?: { label: string; href: string }
 }
 
 export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
@@ -41,6 +42,7 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
         ? 'Abre Ligas para cambiar de liga. AllFantasy muestra tus datos sin modificar tu plataforma original.'
         : `Importa desde ${availableImportPlatformsPhrase()}. AllFantasy lee tu liga sin modificar la plataforma original.`,
       action: leagueCount > 0 ? { label: 'Revisar mi semana', href: '/core/week' } : { label: 'Importar una liga', href: '/import' },
+      secondaryAction: leagueCount > 0 ? undefined : { label: 'Unirme a un grupo de brackets', href: '/brackets/join' },
     },
     {
       kicker: '2 · Elige',
@@ -66,6 +68,7 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
         ? 'Open Leagues to switch between them. AllFantasy shows your data without changing the original platform.'
         : `Import from ${availableImportPlatformsPhrase()}. AllFantasy reads the league and leaves the original platform unchanged.`,
       action: leagueCount > 0 ? { label: 'Review my week', href: '/core/week' } : { label: 'Import a league', href: '/import' },
+      secondaryAction: leagueCount > 0 ? undefined : { label: 'Join a bracket pool', href: '/brackets/join' },
     },
     {
       kicker: '2 · Choose',
@@ -111,6 +114,7 @@ export function CoreWelcomeTour({ leagueCount }: { leagueCount: number }) {
       ) : null}
       <div className="af-welcome-actions">
         {current.action ? <Link href={current.action.href} onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.CORE_FIRST_WIN_CLICK, { hasLeague: leagueCount > 0, destination: current.action?.href }); finish() }}>{current.action.label}</Link> : null}
+        {current.secondaryAction ? <Link className="af-welcome-secondary" href={current.secondaryAction.href} onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.CORE_FIRST_WIN_CLICK, { hasLeague: false, destination: current.secondaryAction?.href }); finish() }}>{current.secondaryAction.label}</Link> : null}
         {step > 0 ? <button type="button" onClick={() => setStep((value) => value - 1)}>{spanish ? 'Atrás' : 'Back'}</button> : null}
         {step < steps.length - 1 ? (
           <button type="button" className="af-welcome-next" onClick={() => setStep((value) => value + 1)}>{spanish ? 'Siguiente' : 'Next'}</button>
