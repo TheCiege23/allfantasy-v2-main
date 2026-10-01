@@ -453,7 +453,8 @@ async function writeMarker(userId: string, marker: VisitMarker, now: Date): Prom
     .catch(() => undefined)
 }
 
-async function snapshotStandings(userId: string, leagueIds: string[]): Promise<Record<string, StandingSnap>> {
+/** Exported for the Career Wire (`careerWire.ts`), which diffs the same claimed-team standings. */
+export async function snapshotStandings(userId: string, leagueIds: string[]): Promise<Record<string, StandingSnap>> {
   if (leagueIds.length === 0) return {}
   const teams = await prisma.leagueTeam
     .findMany({

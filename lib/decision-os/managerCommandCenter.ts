@@ -81,7 +81,20 @@ export interface ManagerCommandCenterSnapshot {
   attentionQueue: DecisionOsAttentionSignal[]
   recommendations: ManagerCommandCenterRecommendation[]
   leagueTrends: DailyBriefLeagueTrend[]
+  /**
+   * Live-career plan, phase 4: the Daily Brief's legacy line ("Win X and it's ring #3. Next up: …"),
+   * composed from the Career screen's own stakes and milestones. Null when nothing is in play or
+   * close, and when the caller supplied no career input. Optional so an older cached payload, or a
+   * caller that never passes career, still type-checks as a snapshot.
+   */
+  legacy?: { line: string; href: string } | null
   warnings: string[]
+}
+
+/** What the caller already read for Career — see `careerSignals.ts`. Absent = no career layer. */
+export interface ManagerCommandCenterCareerInput {
+  signals: readonly DecisionOsAttentionSignal[]
+  legacyLine: string | null
 }
 
 function emptySnapshot(now: Date, warnings: string[]): ManagerCommandCenterSnapshot {
@@ -125,6 +138,8 @@ export async function resolveManagerCommandCenterSnapshot(
   userId: string,
   leagueIds: readonly string[],
   now: Date = new Date(),
+  /** Accepted as a promise so the caller can start the career read beside this one. */
+  careerInput: ManagerCommandCenterCareerInput | Promise<ManagerCommandCenterCareerInput | null> | null = null,
 ): Promise<ManagerCommandCenterSnapshot> {
   if (leagueIds.length === 0) {
     return emptySnapshot(now, ['no_leagues_specified'])
@@ -216,6 +231,12 @@ export async function resolveManagerCommandCenterSnapshot(
   // Highest severity first across ALL leagues together, capped only after the full comparison —
   // matching `platformOs.ts`'s identical rationale (never crowd out a more urgent
   // signal from a later league by capping incrementally).
+  // Career signals join BEFORE the sort and cap, so they compete on severity like every other
+  // signal — a stale league outranks an informational title stake, never the other way round.
+  // Only signals for leagues in this snapshot's own scope are admitted.
+  const career = await Promise.resolve(careerInput).catch(() => null)
+  const scope = new Set(leagueIds)
+  if (career) attentionSignals.push(...career.signals.filter((s) => scope.has(s.leagueId)))
   const attentionQueue = sortAttentionSignals(attentionSignals).slice(0, ATTENTION_QUEUE_CAP)
 
   return {
@@ -229,6 +250,7 @@ export async function resolveManagerCommandCenterSnapshot(
     attentionQueue,
     recommendations: recommendationEntries.slice(0, MANAGER_RECOMMENDATIONS_CAP),
     leagueTrends,
+    legacy: career?.legacyLine ? { line: career.legacyLine, href: '/core/career' } : null,
     warnings: [],
   }
 }

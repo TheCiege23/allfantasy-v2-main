@@ -70,6 +70,35 @@ permission only when the user taps it. The web code checks that the installed
 binary contains the push plugin (`iosAppPushBridge`), so builds from before this
 change never see the card.
 
+## Career widget and haptics (optional, ~15 min)
+
+Haptics need nothing from you: `@capacitor/haptics` is in `ios-app/package.json`, so the next
+TestFlight build has it and the website uses it (`lib/platform/haptics.ts`). An older binary simply
+gets no haptic.
+
+The **"Your career" home-screen widget** is a WidgetKit extension. It is NOT in the committed Xcode
+project, so default builds are unchanged; `ios-app/scripts/add-career-widget-target.rb` adds it at
+build time when the `career_widget` input is ticked. It reads only what the app last wrote to a
+shared App Group, so it needs that group set up first:
+
+1. Apple Developer → Certificates, Identifiers & Profiles → **Identifiers** → **+** → **App Groups**
+   → identifier `group.ai.allfantasy.app`.
+2. Identifiers → `ai.allfantasy.app` → tick **App Groups** → Configure → select
+   `group.ai.allfantasy.app` → Save.
+3. Identifiers → **+** → App IDs → App → Bundle ID `ai.allfantasy.app.CareerWidget` (explicit),
+   tick **App Groups** and select the same group. (Automatic signing may create this ID itself;
+   creating it by hand removes the guess.)
+4. Run **ios-testflight** with `career_widget` ticked. The export refuses to upload if either the
+   app or the widget comes back without the App Group, and names which.
+
+Every push that touches `ios-app/` also runs **ios-build-check**, which compiles the app with and
+without the widget (unsigned, no secrets), so a Swift error shows up on the push that caused it
+rather than during a release.
+
+What the widget shows: titles, level, record, the top live title stake and the nearest milestone,
+plus "Updated … ago". It is refreshed whenever the person opens Career in the app; with nothing
+stored yet it asks them to open the app. Tapping it opens `/core/career`.
+
 ## What the website does inside the app
 
 The app appends `AllFantasyiOS/1.0` to its User-Agent, and

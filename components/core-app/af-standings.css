@@ -1557,3 +1557,303 @@
 .af-st-lu-none {
   color: var(--faint);
 }
+
+/* ── Playoff odds, schedule, magic numbers (official table) ─────────────── */
+
+.af-stb-odds {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  font-weight: 700;
+}
+.af-stb-oddsbar {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--chip);
+  overflow: hidden;
+}
+.af-stb-oddsbar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: currentColor;
+}
+.af-stb-odds[data-tone='good'] { color: var(--good); }
+.af-stb-odds[data-tone='warn'] { color: var(--warn); }
+.af-stb-odds[data-tone='bad'] { color: var(--bad); }
+.af-stb-odds abbr { text-decoration: none; cursor: help; }
+
+.af-stb-sos { font-weight: 700; color: var(--text2); }
+.af-stb-sos[data-tone='hard'] { color: var(--bad); }
+.af-stb-sos[data-tone='easy'] { color: var(--good); }
+.af-stb-sos[title] { cursor: help; }
+
+.af-stb-next {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 190px;
+  font-size: 12px;
+}
+.af-stb-nextname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text2);
+}
+.af-stb-live {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.af-stb-path {
+  display: inline-flex;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.af-stb-path > span { cursor: help; white-space: nowrap; }
+.af-stb-path [data-k='clinch'] { color: var(--good); }
+.af-stb-path [data-k='elim'] { color: var(--bad); }
+.af-stb-path [aria-hidden] { opacity: 0.7; font-weight: 800; }
+
+.af-stb-carddl .af-stb-odds,
+.af-stb-carddl .af-stb-path { justify-content: flex-start; }
+
+/* ── What is at stake (per-league screen) ──────────────────────────────── */
+
+.af-st-stakes {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-st-stakes .af-label { color: var(--faint); }
+.af-st-stakes-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.af-st-stakes-head h2 { margin: 0; }
+.af-st-stakes-odds {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.af-st-stakes-pct {
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--text);
+}
+.af-st-stakes-oddslabel { font-size: 12px; color: var(--muted); }
+.af-st-stakes-path {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--text);
+}
+.af-st-stakes-why,
+.af-st-stakes-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-st-stakes-basis {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+.af-st-stakes-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 14px;
+  margin-top: 4px;
+}
+.af-st-stakes-game,
+.af-st-stakes-root {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--chip);
+}
+.af-st-stakes-game h3,
+.af-st-stakes-root h3 { margin: 0; }
+.af-st-stakes-branches { display: flex; gap: 18px; }
+.af-st-stakes-branches > span { display: flex; flex-direction: column; gap: 2px; }
+.af-st-stakes-branches .af-num { font-size: 22px; font-weight: 900; line-height: 1.1; }
+.af-st-stakes-branches [data-tone='good'] .af-num,
+.af-st-stakes-branches [data-tone='good'] .af-label { color: var(--good); }
+.af-st-stakes-branches [data-tone='bad'] .af-num,
+.af-st-stakes-branches [data-tone='bad'] .af-label { color: var(--bad); }
+.af-st-stakes-root ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-st-stakes-root li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.af-st-stakes-pick { min-width: 0; overflow-wrap: anywhere; color: var(--text2); }
+.af-st-stakes-pick strong { color: var(--text); }
+.af-st-stakes-seed,
+.af-st-stakes-over { color: var(--faint); }
+.af-st-stakes-delta {
+  flex: none;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--good);
+}
+.af-st-stakes-delta [aria-hidden] { color: var(--faint); font-weight: 500; }
+
+@media (max-width: 780px) {
+  .af-st-stakes-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.af-st-stakes a,
+.af-stb-notes a { color: var(--accent); }
+@media (max-width: 560px) {
+  .af-st-stakes-root li { flex-wrap: wrap; row-gap: 2px; }
+}
+
+/* ── Sortable headings ──────────────────────────────────────────────────── */
+
+.af-stb-sortbtn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+.af-stb-sortbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.af-stb-sortbtn:hover,
+.af-stb-sortbtn[data-active] { color: var(--text); }
+.af-stb-sortmark { font-size: 11px; opacity: 0.45; }
+.af-stb-sortbtn[data-active] .af-stb-sortmark { opacity: 1; color: var(--accent); }
+.af-stb-n .af-stb-sortbtn { justify-content: flex-end; }
+.af-stb-sorted {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-stb-sorted button {
+  all: unset;
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 700;
+}
+.af-stb-sorted button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Streak ─────────────────────────────────────────────────────────────── */
+
+.af-stb-streak { font-weight: 800; color: var(--text2); }
+.af-stb-streak[data-r='W'] { color: var(--good); }
+.af-stb-streak[data-r='L'] { color: var(--bad); }
+
+/* ── If scores held ─────────────────────────────────────────────────────── */
+
+.af-stb-asif {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--warn);
+  background: var(--warn-soft);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-stb-asif strong { color: var(--warn); }
+
+/* ── Head to head ───────────────────────────────────────────────────────── */
+
+.af-stb-h2h .af-stb-h2h-col { text-align: center; min-width: 44px; }
+/*
+ * ⚠ FOUR CLASSES DEEP ON PURPOSE. `.af-stb-table tbody tr[data-you='true'] td.af-num` sets your row's text
+ * to plain --text, and at three classes it flattened every win and loss in your own row to white.
+ */
+.af-stb-table.af-stb-h2h tbody td.af-stb-h2h-cell { text-align: center; font-size: 12px; color: var(--text2); }
+.af-stb-table.af-stb-h2h tbody td.af-stb-h2h-cell[data-res='w'] { color: var(--good); background: color-mix(in srgb, var(--good) 10%, var(--surface)); }
+.af-stb-table.af-stb-h2h tbody td.af-stb-h2h-cell[data-res='l'] { color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, var(--surface)); }
+.af-stb-table.af-stb-h2h tbody td.af-stb-h2h-cell[data-self='true'] { color: var(--faint); background: var(--chip); }
+.af-stb-h2h th.af-stb-h2h-col[data-you='true'] { color: var(--accent); }
+
+/* ── Your row, kept in reach ────────────────────────────────────────────── */
+
+.af-stb-pinned {
+  position: sticky;
+  bottom: 12px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--accent-line, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+  font-size: 13px;
+}
+.af-stb-pinned-rank { font-weight: 900; color: var(--text); min-width: 20px; text-align: center; }
+.af-stb-pinned-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-stb-pinned-stats { margin-left: auto; flex: none; font-size: 12px; color: var(--muted); }
+.af-stb-pinned button {
+  flex: none;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.af-stb-pinned button:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+/* Clear the phone tab bar, and the chat launcher that sits above it on the right. */
+@media (max-width: 720px) {
+  .af-stb-pinned {
+    bottom: calc(var(--af-tabbar-height, 56px) + 8px);
+    margin-right: 64px;
+  }
+  .af-stb-pinned-stats { display: none; }
+}

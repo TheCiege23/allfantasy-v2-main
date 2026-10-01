@@ -64,6 +64,11 @@ export type SimRunView = {
   /** Roster ids that made the field in this run. */
   field: ReadonlySet<string>
   finalWins: (rosterId: string) => number
+  /**
+   * Who won one remaining game in this run, by its week and pairing (either order). Null when the game
+   * is not on the schedule or was not played out — a game with an unmodelled team is skipped.
+   */
+  winnerOf: (week: number, a: string, b: string) => string | null
 }
 
 export type SimOptions = {
@@ -164,6 +169,8 @@ type Prepared = {
   adjA: Float64Array
   adjB: Float64Array
   forcedWinner: Int32Array
+  /** `${week}|${a}|${b}` (both orders) → slot, for the real pairings only. */
+  slotOf: Map<string, number>
   playoffAdj: Float64Array
   playoffTeams: number
   byeTeams: number
@@ -241,6 +248,7 @@ function prepare(input: SimInput, opts: Pick<SimOptions, 'adjustments' | 'forced
   const adjA = new Float64Array(count)
   const adjB = new Float64Array(count)
   const forcedWinner = new Int32Array(count).fill(-1)
+  const slotOf = new Map<string, number>()
   const lastWeek = real.reduce((m, g) => Math.max(m, g.week), 0)
 
   const inRange = (a: SimAdjustment, week: number) =>
@@ -258,6 +266,8 @@ function prepare(input: SimInput, opts: Pick<SimOptions, 'adjustments' | 'forced
       if (adj.rosterId === g.idb) adjB[k] += adj.points
     }
     if (!g.forceable) return
+    slotOf.set(`${g.week}|${g.ida}|${g.idb}`, k)
+    slotOf.set(`${g.week}|${g.idb}|${g.ida}`, k)
     for (const f of opts.forced ?? []) {
       if (f.week !== g.week) continue
       const same = (f.a === g.ida && f.b === g.idb) || (f.a === g.idb && f.b === g.ida)
@@ -281,7 +291,7 @@ function prepare(input: SimInput, opts: Pick<SimOptions, 'adjustments' | 'forced
   for (let i = 0; i < size; i += 1) maxWins = Math.max(maxWins, baseWins[i] + gamesLeft[i])
 
   return {
-    ids, index, mu, sigma, n, has, baseWins, basePoints, ga, gb, adjA, adjB, forcedWinner, playoffAdj,
+    ids, index, mu, sigma, n, has, baseWins, basePoints, ga, gb, adjA, adjB, forcedWinner, slotOf, playoffAdj,
     playoffTeams, byeTeams, maxWins,
   }
 }
@@ -360,6 +370,8 @@ function runSeasons(
   const wins = new Float64Array(size)
   const points = new Float64Array(size)
   const order = new Array<number>(size)
+  /* Who won each slot this run; -1 when the slot was skipped. Only kept when someone is watching. */
+  const slotWinner = extra?.onRun ? new Int32Array(p.ga.length) : null
 
   for (let it = 0; it < iterations; it += 1) {
     const rng = createRng(seed + it * 9973)
@@ -371,6 +383,7 @@ function runSeasons(
       const rawB = p.gb[k]
       const a = rawA < 0 ? phantom : rawA
       const b = rawB < 0 ? phantom : rawB
+      if (slotWinner) slotWinner[k] = -1
       if (!p.has[a] || !p.has[b]) continue
       const sa = gaussian(rng, mu[a] + p.adjA[k], p.sigma[a])
       const sb = gaussian(rng, mu[b] + p.adjB[k], p.sigma[b])
@@ -379,6 +392,7 @@ function runSeasons(
       const forced = p.forcedWinner[k]
       const winner = forced >= 0 ? forced : sa >= sb ? a : b
       if (winner !== phantom) wins[winner] += 1
+      if (slotWinner) slotWinner[k] = winner === phantom ? -1 : winner
     }
 
     for (let i = 0; i < size; i += 1) order[i] = i
@@ -411,6 +425,12 @@ function runSeasons(
           finalWins: (id) => {
             const i = p.index.get(id)
             return i == null ? 0 : wins[i]
+          },
+          winnerOf: (week, a, b) => {
+            const k = p.slotOf.get(`${week}|${a}|${b}`)
+            if (k == null || !slotWinner) return null
+            const w = slotWinner[k]
+            return w >= 0 ? p.ids[w] : null
           },
         })
       }
@@ -724,4 +744,76 @@ export function readMilestones(
     currentWins: me.wins,
     maxWins,
   }
+}
+
+// ── Rooting guide ──────────────────────────────────────────────────────
+
+export type RootingGame = {
+  week: number
+  a: string
+  b: string
+  /** Your playoff %, in the runs where `a` won this game. */
+  ifA: number
+  /** Your playoff %, in the runs where `b` won it. */
+  ifB: number
+  /** Whose win helps you more. */
+  rootFor: string
+}
+
+/** Below this many runs on either side of a game, its conditional percentage is noise. */
+const MIN_ROOTING_RUNS = 200
+/** A game whose two outcomes move you by less than this many points is not worth naming. */
+export const MIN_ROOTING_GAP = 3
+
+/**
+ * The other games in one week, ranked by how much their result moves YOUR playoff odds.
+ *
+ * ⚠ CONDITIONAL ON ONE RUN, NOT ONE FORCED RUN PER OUTCOME. Every game is observed inside the same
+ * unforced simulation, so each percentage is P(you make it | that team won) — the other games keep
+ * their real likelihoods rather than being frozen at 50/50. A game with an unmodelled team is never
+ * played out, so it never appears here.
+ *
+ * ⚠ A NAMED GAME CLEARS BOTH A SAMPLE FLOOR AND A GAP FLOOR. With 2,000 runs a lopsided game leaves
+ * one side thin, and sampling noise alone can open a gap of two or three points between outcomes
+ * that do not affect you at all. Below either floor the game is left out rather than shown.
+ */
+export function rootingGuide(
+  input: SimInput,
+  opts: { iterations: number; seed: number; youId: string; week: number; limit?: number },
+): RootingGame[] {
+  const games = input.remaining.filter((g) => g.week === opts.week && g.a !== opts.youId && g.b !== opts.youId)
+  if (games.length === 0) return []
+  const tallies = games.map(() => ({ aRuns: 0, aIn: 0, bRuns: 0, bIn: 0 }))
+
+  simulateSeason(input, {
+    iterations: opts.iterations,
+    seed: opts.seed,
+    onRun: (run) => {
+      const meIn = run.field.has(opts.youId)
+      games.forEach((g, i) => {
+        const winner = run.winnerOf(g.week, g.a, g.b)
+        if (winner == null) return
+        const t = tallies[i]
+        if (winner === g.a) {
+          t.aRuns += 1
+          if (meIn) t.aIn += 1
+        } else {
+          t.bRuns += 1
+          if (meIn) t.bIn += 1
+        }
+      })
+    },
+  })
+
+  return games
+    .flatMap((g, i) => {
+      const t = tallies[i]
+      if (t.aRuns < MIN_ROOTING_RUNS || t.bRuns < MIN_ROOTING_RUNS) return []
+      const ifA = (t.aIn / t.aRuns) * 100
+      const ifB = (t.bIn / t.bRuns) * 100
+      if (Math.abs(ifA - ifB) < MIN_ROOTING_GAP) return []
+      return [{ week: g.week, a: g.a, b: g.b, ifA, ifB, rootFor: ifA >= ifB ? g.a : g.b }]
+    })
+    .sort((x, y) => Math.abs(y.ifA - y.ifB) - Math.abs(x.ifA - x.ifB))
+    .slice(0, opts.limit ?? 4)
 }
