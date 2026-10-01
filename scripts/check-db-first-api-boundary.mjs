@@ -293,6 +293,11 @@ const DATA_API_HOST_PATTERNS = [
  */
 const DATA_API_IDENTIFIERS = [
   'ESPN_SITE_API_BASE',
+  // The URL BUILDER next to that constant in `lib/providers/espnUrls.ts`. A caller of the builder
+  // never names the constant, so it was invisible here — found 2026-10-01 when the NCAAB adapter
+  // (its first caller) passed this guard with its allowlist entry REMOVED. Tracking the function
+  // name is the same move as `CFBD_BASE_URL` below: DRY at the call site must not cost coverage.
+  'espnSiteApiUrl',
   'THE_SPORTS_DB_V1_JSON_BASE',
   'THE_SPORTS_DB_V2_JSON_BASE',
   // The six hardcoded CFBD literals now all resolve to `CFBD_BASE_URL`, exported
