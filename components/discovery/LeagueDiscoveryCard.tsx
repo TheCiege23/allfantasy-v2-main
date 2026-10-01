@@ -54,7 +54,15 @@ export function LeagueDiscoveryCard({ league }: LeagueDiscoveryCardProps) {
               {league.name}
             </h3>
           </div>
-          {league.leagueTier != null ? (
+          {league.classBasis === "skill" && league.skillClass != null ? (
+            <span
+              className="inline-flex items-center rounded-full border px-2.5 sm:px-3 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold"
+              style={{ borderColor: "var(--border)", color: "var(--text)" }}
+              title={`Plays at skill Class ${league.skillClass} — the middle of its rated managers in ${league.sport}.`}
+            >
+              Class {league.skillClass}
+            </span>
+          ) : league.leagueTier != null ? (
             <span
               className="inline-flex items-center rounded-full border px-2.5 sm:px-3 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold"
               style={{ borderColor: "var(--border)", color: "var(--text)" }}
@@ -109,7 +117,11 @@ export function LeagueDiscoveryCard({ league }: LeagueDiscoveryCardProps) {
           {league.inviteOnlyByTier ? (
             <span
               className="inline-flex items-center gap-1 rounded-full px-2 sm:px-2.5 py-0.5 sm:py-1 text-[11px] sm:text-xs font-semibold"
-              title="This league is outside your current rank window and needs a commissioner invite."
+              title={
+                league.classBasis === "skill"
+                  ? "This league plays outside your skill class and needs a commissioner invite."
+                  : "This league is outside your current rank window and needs a commissioner invite."
+              }
               style={{ background: "rgba(251, 146, 60, 0.16)", color: "rgb(251, 146, 60)" }}
             >
               <Lock className="h-3 w-3" />

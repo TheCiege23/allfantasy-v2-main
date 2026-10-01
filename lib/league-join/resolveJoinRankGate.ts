@@ -212,3 +212,38 @@ export async function resolveLeagueClass(leagueId: string, board?: SkillBoard | 
     ? { basis: 'skill', sport, range: classRangeFor(center), ratedMembers: classes.length }
     : { basis: 'level', sport, range: levelRange, ratedMembers: 0 }
 }
+
+/**
+ * Skill class for many leagues at once — for discovery, which lists hundreds of
+ * leagues per read and cannot run `resolveLeagueClass` once each. Two queries
+ * (leagues, members) whatever the count. A league with no rated member in its
+ * sport is absent from the result, and discovery falls back to its level tier,
+ * exactly as the join gate does.
+ */
+export async function leagueSkillClasses(
+  leagueIds: string[],
+  board: SkillBoard | null,
+): Promise<Map<string, { sport: string; skillClass: number; ratedMembers: number }>> {
+  const out = new Map<string, { sport: string; skillClass: number; ratedMembers: number }>()
+  if (!board || leagueIds.length === 0) return out
+  const ids = [...new Set(leagueIds)]
+  const [leagues, members] = await Promise.all([
+    prisma.league.findMany({ where: { id: { in: ids } }, select: { id: true, userId: true, sport: true } }),
+    prisma.redraftLeagueMember.findMany({ where: { leagueId: { in: ids } }, select: { leagueId: true, userId: true } }),
+  ])
+  const byLeague = new Map<string, Set<string>>()
+  for (const m of members) {
+    const set = byLeague.get(m.leagueId) ?? new Set<string>()
+    set.add(m.userId)
+    byLeague.set(m.leagueId, set)
+  }
+  for (const l of leagues) {
+    const sport = String(l.sport).toUpperCase()
+    const people = byLeague.get(l.id) ?? new Set<string>()
+    if (l.userId) people.add(l.userId)
+    const classes = [...people].map((u) => skillClassOf(board, sport, u)).filter((c): c is number => c != null)
+    const center = medianClass(classes)
+    if (center != null) out.set(l.id, { sport, skillClass: center, ratedMembers: classes.length })
+  }
+  return out
+}

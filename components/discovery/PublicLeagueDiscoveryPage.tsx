@@ -140,7 +140,7 @@ export function PublicLeagueDiscoveryPage({
             </h2>
             <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
               {viewerTierName
-                ? `You are currently Tier ${viewerTier} - ${viewerTierName}. You can browse and join leagues within two levels of yours, above or below. A commissioner can still let you into a league outside that range.`
+                ? `You are currently Tier ${viewerTier} - ${viewerTierName}. You can browse and join leagues within two levels of yours — or, in a sport where you and a league are both rated, within two skill classes. A commissioner can still let you into a league outside that range.`
                 : "Your AllFantasy ranking controls which public leagues appear here. Commissioner invites can still unlock leagues outside your normal range."}
             </p>
           </div>

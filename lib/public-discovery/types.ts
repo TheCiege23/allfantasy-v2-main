@@ -75,6 +75,13 @@ export interface DiscoveryCard {
   rankingEffectScore?: number
   /** Absolute tier distance between viewer and league tier. */
   rankingTierDelta?: number
+  /**
+   * What the range check above was measured on: `skill` when the viewer and the league are both
+   * rated in its sport (the join gate's basis since 2026-10-01), `level` otherwise.
+   */
+  classBasis?: 'skill' | 'level'
+  /** The league's skill class (median of its rated members), when `classBasis` is `skill`. */
+  skillClass?: number | null
 }
 
 export interface DiscoverLeaguesInput {

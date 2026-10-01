@@ -5,6 +5,9 @@
 
 import { prisma } from "@/lib/prisma"
 import { getCareerTierName, clampCareerTier, isLeagueVisibleForCareerTier } from "@/lib/ranking/tier-visibility"
+import { MANAGER_CLASS_BAND } from "@/lib/league-join/managerClass"
+import { leagueSkillClasses, skillClassOf } from "@/lib/league-join/resolveJoinRankGate"
+import { readSkillBoard } from "@/lib/rank/skillRating/skillRatingStore"
 import { isSupportedSport } from "@/lib/sport-scope"
 import { searchLeagues } from "@/lib/league-search"
 import { getDiscoverySports } from "./discovery-sports"
@@ -366,7 +369,8 @@ async function getOwnedLeagueSets(viewerUserId: string | null) {
   }
 }
 
-async function applyTierPolicy(
+/** Exported for tests (`__tests__/public-discovery-skill-class.test.ts`); not part of the index's API. */
+export async function applyTierPolicy(
   cards: DiscoveryCard[],
   viewerContext?: DiscoveryViewerContext
 ): Promise<{ cards: DiscoveryCard[]; hiddenCount: number; viewerTier: number }> {
@@ -378,19 +382,47 @@ async function applyTierPolicy(
   const resolved: DiscoveryCard[] = []
   let hiddenCount = 0
 
+  /*
+   * SKILL CLASSES FOR FANTASY LEAGUES (2026-10-01) — the same basis the join gate uses, so a league
+   * discovery shows as joinable is one the gate lets the viewer into. A fantasy league whose members
+   * are rated in its sport, viewed by a manager rated in that sport, is matched on skill class; every
+   * other card (brackets, creator leagues, unrated leagues or viewers) keeps the level tier. One board
+   * read and two batched queries per discovery computation, whatever the number of cards.
+   */
+  const fantasyIds = viewerUserId ? cards.filter((c) => c.source === "fantasy").map((c) => c.id) : []
+  const board = fantasyIds.length ? await readSkillBoard().catch(() => null) : null
+  const leagueSkill = board ? await leagueSkillClasses(fantasyIds, board).catch(() => new Map()) : new Map()
+  const skillPair = (card: DiscoveryCard): { viewer: number; league: number } | null => {
+    if (card.source !== "fantasy" || !viewerUserId) return null
+    const ls = leagueSkill.get(card.id)
+    if (!ls) return null
+    const vs = skillClassOf(board, ls.sport, viewerUserId)
+    return vs == null ? null : { viewer: vs, league: ls.skillClass }
+  }
+
   for (const card of cards) {
     const leagueTier = clampCareerTier(card.leagueTier, viewerTier)
-    const inRange = isLeagueVisibleForCareerTier(viewerTier, leagueTier)
+    const skill = skillPair(card)
+    const inRange = skill
+      ? Math.abs(skill.viewer - skill.league) <= MANAGER_CLASS_BAND
+      : isLeagueVisibleForCareerTier(viewerTier, leagueTier)
+    // Fit is measured on the same basis as the range: skill distance when skill decided it.
+    const fitTier = skill ? skill.league : leagueTier
+    const fitViewer = skill ? skill.viewer : viewerTier
+    const basisFields = skill
+      ? { classBasis: "skill" as const, skillClass: skill.league }
+      : { classBasis: "level" as const, skillClass: null }
 
     if (inRange) {
-      const rankingTierDelta = Math.abs(leagueTier - viewerTier)
+      const rankingTierDelta = Math.abs(fitTier - fitViewer)
       const rankingEffectScore = calculateDiscoveryRankingEffectScore(
-        { leagueTier, canJoinByRanking: true },
-        viewerTier
+        { leagueTier: fitTier, canJoinByRanking: true },
+        fitViewer
       )
       resolved.push({
         ...card,
         leagueTier,
+        ...basisFields,
         inviteOnlyByTier: false,
         canJoinByRanking: true,
         rankingTierDelta,
@@ -405,14 +437,15 @@ async function applyTierPolicy(
       (card.source === "creator" && owned.creatorIds.has(card.id))
 
     if (viewerIsAdmin || ownerBypass) {
-      const rankingTierDelta = Math.abs(leagueTier - viewerTier)
+      const rankingTierDelta = Math.abs(fitTier - fitViewer)
       const rankingEffectScore = calculateDiscoveryRankingEffectScore(
-        { leagueTier, canJoinByRanking: false },
-        viewerTier
+        { leagueTier: fitTier, canJoinByRanking: false },
+        fitViewer
       )
       resolved.push({
         ...card,
         leagueTier,
+        ...basisFields,
         inviteOnlyByTier: true,
         canJoinByRanking: false,
         rankingTierDelta,
