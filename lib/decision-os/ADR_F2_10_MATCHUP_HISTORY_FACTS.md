@@ -1,6 +1,9 @@
 # ADR F2.10 — Matchup History Facts (warehouse `MatchupFact` derived VIEW) + lineup shadow enrichment
 
 **Status:** Approved for build. **Date:** 2026-07-21. **Base:** `2e063823` (post-#316/#317 main).
+**⚠ Amended 2026-10-01 by [ADR F2.10a](./ADR_F2_10A_CLASS_RATING.md)** — policy 6 now sanctions
+exactly one derivation of manager quality (the Class rating), and policies 7 and 8 are narrowed to
+match. The census below is the 2026-07-21 snapshot; F2.10a records the current one.
 **Freeze compliance:** additive read-only port + derived view + shadow-memo enrichment — no frozen
 component redesigned, no flag default changed, no new route.
 

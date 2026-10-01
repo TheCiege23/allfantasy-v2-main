@@ -18912,3 +18912,91 @@ model ChimmyRequestReceipt {
   @@index([status, expiresAt], map: "chimmy_receipts_recovery")
   @@map("chimmy_request_receipts")
 }
+
+/// A manager's Class rating — the ONE sanctioned derivation of manager quality from
+/// `dw_matchup_facts` (ADR F2.10a). All-play Glicko-2, back-tested 2026-10-01.
+///
+/// ⚠ THE SUBJECT IS A PLATFORM PERSON, NOT AN AF ACCOUNT. `subjectKey` is
+/// `${platform}:${LeagueTeam.platformUserId}` — every league-mate is rated, and only a
+/// few are AllFantasy users (32 of 2,455 at back-test). `userId` is filled when an AF
+/// account has claimed a team held by this person, and is the only link to one.
+///
+/// ⚠ DERIVED AND REBUILDABLE. The writer replays the whole matchup history per
+/// `modelVersion`, so a row is never hand-edited; changing the math means a new
+/// `modelVersion`, never an in-place rewrite of an old one.
+model ManagerRating {
+  id                String    @id @default(cuid())
+  subjectKey        String    @db.VarChar(160)
+  platform          String    @db.VarChar(16)
+  platformUserId    String    @db.VarChar(128)
+  /// The AF account that has claimed a team held by this person, when one has.
+  userId            String?   @db.VarChar(64)
+  sport             String    @default("NFL") @db.VarChar(12)
+  modelVersion      String    @db.VarChar(32)
+  /// Glicko-2 on the 1500 display scale.
+  rating            Float
+  /// Rating deviation — the uncertainty. Always shown beside the rating (ADR F2.10a).
+  rd                Float
+  volatility        Float
+  /// Rated league-weeks (one all-play observation each).
+  games             Int
+  /// `rd` at or under the model's establishment threshold. Only established
+  /// ratings define the Class percentiles, and only they are gated by division.
+  established       Boolean   @default(false)
+  /// Share of established ratings below this one, 0–1. Null while provisional.
+  percentile        Float?
+  /// Class 1–25 by percentile. Null while provisional.
+  classLevel        Int?
+  /// Matchmaking division 1–5 (Classes 1–5, 6–10 …). Null while provisional.
+  division          Int?
+  /// Last rating period folded in, as season * 100 + week.
+  lastPeriod        Int?
+  computedAt        DateTime
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([subjectKey, sport, modelVersion])
+  @@index([userId, sport, modelVersion])
+  @@index([sport, modelVersion, established, rating])
+  @@map("manager_ratings")
+}
+
+/// One league-week in a rated person's game log: what they scored, how they did
+/// against the whole league (all-play) and their head-to-head opponent, and what it
+/// did to their rating.
+///
+/// ⚠ A RATING PERIOD IS A WEEK, NOT A GAME. Glicko-2 folds every league a person
+/// played in that week into one update, so `ratingBefore`/`ratingAfter` are the
+/// week's, shared by all of that week's rows. `ratingDelta` is THIS league's share
+/// of the change and the shares sum to the week's move — that is what lets the game
+/// log say "+9 from League A, −3 from League B".
+model ManagerRatingEvent {
+  id                String    @id @default(cuid())
+  subjectKey        String    @db.VarChar(160)
+  sport             String    @default("NFL") @db.VarChar(12)
+  modelVersion      String    @db.VarChar(32)
+  /// Our `League.id` — the canonical row kept when one platform league was imported
+  /// under several AF rows.
+  leagueId          String    @db.VarChar(64)
+  season            Int
+  week              Int
+  pointsFor         Float
+  /// Teams beaten / tied this week across the whole league, and how many there were.
+  allPlayWins       Float
+  allPlayGames      Int
+  /// The head-to-head game, when the week had one for this person.
+  opponentKey       String?   @db.VarChar(160)
+  pointsAgainst     Float?
+  /// 'W' | 'L' | 'T'; null when there was no head-to-head game.
+  result            String?   @db.VarChar(1)
+  ratingBefore      Float
+  ratingAfter       Float
+  rdAfter           Float
+  ratingDelta       Float
+  createdAt         DateTime  @default(now())
+
+  @@unique([subjectKey, sport, modelVersion, leagueId, season, week])
+  @@index([subjectKey, sport, modelVersion, season, week])
+  @@index([leagueId, season, week])
+  @@map("manager_rating_events")
+}
