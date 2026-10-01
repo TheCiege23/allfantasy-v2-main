@@ -7,6 +7,8 @@
  * analysis itself. The figures stay exactly what the tools returned.
  */
 
+import { CHIMMY_GIF_DIRECTIVE } from './chimmyGifMoods'
+
 export const FUN_MODE_TONE = 'fun'
 
 export function isFunModeTone(tone: string | null | undefined): boolean {
@@ -19,4 +21,5 @@ export const FUN_MODE_DIRECTIVE = [
   '- Never put an emoji inside a number, a grade, a value, a player or team name, or a list of assets.',
   '- No emojis at all when you are refusing, saying data is missing, or giving bad news about an injury.',
   '- Keep every fact, number and recommendation exactly as it would be without Fun mode — only the voice changes.',
+  CHIMMY_GIF_DIRECTIVE,
 ].join('\n')
