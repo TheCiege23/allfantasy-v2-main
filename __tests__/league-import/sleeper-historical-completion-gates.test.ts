@@ -3,6 +3,9 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 const draftFactFindFirst = vi.fn()
 const draftFactDeleteMany = vi.fn()
 const draftFactCreateMany = vi.fn()
+const draftFactFindMany = vi.fn(async () => [] as unknown[])
+const draftFactUpdateMany = vi.fn()
+const leagueTeamFindMany = vi.fn(async () => [] as unknown[])
 const rosterSnapshotFindFirst = vi.fn()
 const rosterSnapshotCreate = vi.fn()
 const rosterSnapshotDeleteMany = vi.fn()
@@ -24,11 +27,14 @@ vi.mock('@/lib/prisma', () => ({
      * short of a model is what made it look like a behaviour change.
      */
     roster: { findMany: (...args: unknown[]) => rosterFindMany(...args) },
+    leagueTeam: { findMany: (...args: unknown[]) => leagueTeamFindMany(...args) },
     leagueSeason: { findFirst: (...args: unknown[]) => leagueSeasonFindFirst(...args) },
     draftFact: {
       findFirst: (...args: unknown[]) => draftFactFindFirst(...args),
       deleteMany: (...args: unknown[]) => draftFactDeleteMany(...args),
       createMany: (...args: unknown[]) => draftFactCreateMany(...args),
+      findMany: (...args: unknown[]) => draftFactFindMany(...args),
+      updateMany: (...args: unknown[]) => draftFactUpdateMany(...args),
     },
     /*
      * ⚠ ADDED WHEN THE SEASON-STATE SYNC STARTED READING THE STORED ROW — it needs the stored
@@ -63,7 +69,7 @@ vi.mock('@/lib/dynasty-import/normalize-historical', () => ({
 
 import { getSleeperHistoricalLeagueChain } from '@/lib/league-import/sleeper/SleeperHistoricalLeagueChain'
 import { getDraftPicks, getLeagueDrafts, getLeagueUsers, getLeagueRosters } from '@/lib/sleeper-client'
-import { syncSleeperHistoricalDraftFactsAfterImport } from '@/lib/league-import/sleeper/SleeperHistoricalDraftSyncService'
+import { planDraftTeamRemap, syncSleeperHistoricalDraftFactsAfterImport } from '@/lib/league-import/sleeper/SleeperHistoricalDraftSyncService'
 import { syncSleeperHistoricalSeasonStateAfterImport } from '@/lib/league-import/sleeper/SleeperHistoricalSeasonStateSyncService'
 import { persistDynastySeason } from '@/lib/dynasty-import/normalize-historical'
 
@@ -113,6 +119,11 @@ describe('Sleeper historical draft sync — completion gate', () => {
       sport: 'nfl',
     })
     chainMock.mockResolvedValue(threeSeasonChain())
+    // The draft sync maps history onto today's managers and does nothing without any.
+    rosterFindMany.mockResolvedValue([{ platformUserId: 'u1', playerData: { source_team_id: '1', source_manager_id: 'u1' } }])
+  })
+  afterEach(() => {
+    rosterFindMany.mockResolvedValue([])
   })
 
   it('skips a FINISHED season that already has DraftFact rows, and no others', async () => {
@@ -275,19 +286,27 @@ describe('Sleeper historical roster/season-state sync — completion gate', () =
 
 describe('🛑 Sleeper historical draft sync — each pick records who owned the team that made it', () => {
   /*
-   * `managerId` falls back to the raw roster slot for a manager who has since left, and Sleeper
-   * reuses slots — so it cannot say WHO drafted. `metadata.ownerSleeperId` can, and Competitive
-   * Edge on Draft HQ reads nothing else (lib/competitive-edge/draftEdgeLoader.ts).
+   * `managerId` names a TEAM — the one that holds that manager's slot today — so it cannot say WHO
+   * drafted. `metadata.ownerSleeperId` can, and Competitive Edge on Draft HQ reads nothing else
+   * (lib/competitive-edge/draftEdgeLoader.ts).
    */
   beforeEach(() => {
     vi.clearAllMocks()
     leagueFindUnique.mockResolvedValue({ id: 'league-1', platform: 'sleeper', platformLeagueId: 'lg-current', sport: 'nfl' })
     chainMock.mockResolvedValue([{ season: 2024, externalLeagueId: 'lg-2024', league: { season: '2024', status: 'complete' } }] as never)
     draftFactFindFirst.mockResolvedValue(null)
+    // Today: sl-a holds slot 1, sl-b holds slot 3 (claimed, so the roster is keyed on the AF id).
+    rosterFindMany.mockResolvedValue([
+      { platformUserId: 'sl-a', playerData: { source_team_id: '1', source_manager_id: 'sl-a' } },
+      { platformUserId: 'af-user-b', playerData: { source_team_id: '3', source_manager_id: 'sl-b' } },
+    ])
     // The sync also counts traded picks with a direct fetch; keep it off the network.
     vi.stubGlobal('fetch', vi.fn(async () => new Response('[]', { status: 200 })))
   })
-  afterEach(() => vi.unstubAllGlobals())
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    rosterFindMany.mockResolvedValue([])
+  })
 
   it('writes that season’s roster owner onto each pick — and never `picked_by`, which is whoever clicked', async () => {
     vi.mocked(getLeagueRosters).mockResolvedValueOnce([
@@ -334,5 +353,104 @@ describe('🛑 Sleeper historical draft sync — each pick records who owned the
     expect(rows[0]!.metadata).toEqual({ ownerSleeperId: 'sl-a', isKeeper: true })
     expect(rows[1]!.metadata).toEqual({ ownerSleeperId: 'sl-a' })
     expect(rows[2]!.metadata).toEqual({ isKeeper: true })
+  })
+
+  it("🛑 credits a departed manager's picks to them, not to whoever holds their old slot now", async () => {
+    vi.mocked(getLeagueRosters).mockResolvedValueOnce([
+      { roster_id: 1, owner_id: 'sl-a' },
+      { roster_id: 2, owner_id: 'sl-b' },
+      { roster_id: 3, owner_id: 'sl-gone', co_owners: ['sl-helper'] },
+      { roster_id: 4, owner_id: null },
+    ] as never)
+    vi.mocked(getLeagueDrafts).mockResolvedValueOnce([{ draft_id: 'd-2024' }] as never)
+    vi.mocked(getDraftPicks).mockResolvedValueOnce([
+      { player_id: 'p1', round: 1, pick_no: 1, roster_id: 1 },
+      { player_id: 'p2', round: 1, pick_no: 2, roster_id: 2 },
+      { player_id: 'p3', round: 1, pick_no: 3, roster_id: 3 },
+      { player_id: 'p4', round: 1, pick_no: 4, roster_id: 4 },
+    ] as never)
+
+    await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1' })
+
+    const rows = (draftFactCreateMany.mock.calls[0]![0] as { data: Array<Record<string, unknown>> }).data
+    // sl-b moved from slot 2 to slot 3 and claimed the team; slot 3's 2024 owner has left.
+    expect(rows.map((r) => r.managerId)).toEqual(['1', '3', 'former:sleeper:sl-gone', 'former:sleeper:slot:2024:4'])
+    expect(rows[2]!.metadata).toEqual({ ownerSleeperId: 'sl-gone', coOwnerSleeperIds: ['sl-helper'] })
+  })
+
+  it('⚠ leaves a season alone when its rosters cannot be read', async () => {
+    vi.mocked(getLeagueRosters).mockResolvedValueOnce([] as never)
+    vi.mocked(getLeagueDrafts).mockResolvedValueOnce([{ draft_id: 'd-2024' }] as never)
+    vi.mocked(getDraftPicks).mockResolvedValueOnce([{ player_id: 'p1', round: 1, pick_no: 1, roster_id: 2 }] as never)
+
+    const result = await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1' })
+
+    expect(result).toMatchObject({ seasonsSkippedNoRosters: 1, refreshed: false })
+    expect(draftFactDeleteMany).not.toHaveBeenCalled()
+    expect(draftFactCreateMany).not.toHaveBeenCalled()
+  })
+
+  it('moves stored picks of a finished season from the database alone when a slot changes hands', async () => {
+    draftFactFindFirst.mockResolvedValue({ draftId: 'existing' })
+    draftFactFindMany.mockResolvedValueOnce([
+      // Stored while sl-gone held slot 2; slot 2 is nobody's now and sl-gone has left.
+      { draftId: 'a', managerId: '2', metadata: { ownerSleeperId: 'sl-gone' } },
+      { draftId: 'b', managerId: '2', metadata: { ownerSleeperId: 'sl-gone', isKeeper: true } },
+      // Already right.
+      { draftId: 'c', managerId: '1', metadata: { ownerSleeperId: 'sl-a' } },
+      // sl-b moved to slot 3.
+      { draftId: 'd', managerId: '2', metadata: { ownerSleeperId: 'sl-b' } },
+      // No owner on file: never guessed.
+      { draftId: 'e', managerId: '4', metadata: null },
+    ])
+
+    const result = await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1' })
+
+    expect(result.picksRemapped).toBe(3)
+    expect(getLeagueRosters).not.toHaveBeenCalled()
+    expect(getLeagueDrafts).not.toHaveBeenCalled()
+    const calls = draftFactUpdateMany.mock.calls.map((c) => c[0])
+    expect(calls).toEqual([
+      { where: { draftId: { in: ['a', 'b'] } }, data: { managerId: 'former:sleeper:sl-gone' } },
+      { where: { draftId: { in: ['d'] } }, data: { managerId: '3' } },
+    ])
+  })
+
+  it('never re-derives the CURRENT season: its roster ids are its teams', async () => {
+    chainMock.mockResolvedValue([{ season: 2025, externalLeagueId: 'lg-current', league: { season: '2025', status: 'complete' } }] as never)
+    draftFactFindFirst.mockResolvedValue({ draftId: 'existing' })
+    await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1' })
+    expect(draftFactFindMany).not.toHaveBeenCalled()
+    expect(draftFactUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it('⚠ does not map at all when no current manager is on file', async () => {
+    rosterFindMany.mockResolvedValue([])
+    const result = await syncSleeperHistoricalDraftFactsAfterImport({ leagueId: 'league-1' })
+    expect(result).toMatchObject({ skipped: true, attempted: false })
+    expect(chainMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('planDraftTeamRemap', () => {
+  const current = new Map([['sl-a', '1'], ['sl-help', '7']])
+  it('maps by the stored owner, then a co-owner, else the departed owner; ignores ownerless rows', () => {
+    expect(
+      planDraftTeamRemap(
+        [
+          { draftId: 'x', managerId: '9', metadata: { ownerSleeperId: 'sl-a' } },
+          { draftId: 'y', managerId: '9', metadata: { ownerSleeperId: 'sl-gone', coOwnerSleeperIds: ['sl-help'] } },
+          { draftId: 'z', managerId: '9', metadata: { ownerSleeperId: 'sl-gone' } },
+          { draftId: 'w', managerId: '1', metadata: { ownerSleeperId: 'sl-a' } },
+          { draftId: 'v', managerId: '9', metadata: { coOwnerSleeperIds: ['sl-help'] } },
+          { draftId: 'u', managerId: '9', metadata: 'junk' },
+        ],
+        current,
+      ),
+    ).toEqual([
+      { draftId: 'x', managerId: '1' },
+      { draftId: 'y', managerId: '7' },
+      { draftId: 'z', managerId: 'former:sleeper:sl-gone' },
+    ])
   })
 })
