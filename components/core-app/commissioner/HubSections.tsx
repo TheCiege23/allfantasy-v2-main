@@ -7,6 +7,7 @@ import type { CalendarEvent } from '@/lib/core-app/commissioner/calendar'
 import type { HubChart } from '@/lib/core-app/commissioner/charts'
 import type { HubLink } from '@/lib/core-app/commissioner/areas'
 import { CalendarExportButton } from './CalendarExportButton'
+import { MemberActivityList } from './MemberActivityList'
 
 /**
  * The Commissioner Hub's server-rendered sections. No client state lives here;
@@ -64,6 +65,9 @@ export function HubSection({
 
 const NAV: Array<{ id: string; label: string }> = [
   { id: 'ch-tasks', label: 'Tasks' },
+  { id: 'ch-intelligence', label: 'Intelligence' },
+  { id: 'ch-format-ops', label: 'Format operations' },
+  { id: 'ch-history', label: 'Trades & drafts' },
   { id: 'ch-health', label: 'Health' },
   { id: 'ch-calendar', label: 'Calendar' },
   { id: 'ch-workflows', label: 'Guides' },
@@ -221,8 +225,6 @@ export function HealthPanel({ data }: { data: CommissionerHubData }) {
 
 // ── Member activity (item 1) ────────────────────────────────────────────────
 
-const STATUS_LABEL = { active: 'Active', at_risk: 'Slowing down', inactive: 'Inactive', unknown: 'Can’t tell' } as const
-
 export function MemberActivity({ data }: { data: CommissionerHubData }) {
   const m = data.members
   return (
@@ -233,20 +235,9 @@ export function MemberActivity({ data }: { data: CommissionerHubData }) {
     >
       {m.available ? (
         <>
-          <ul className="af-ch-members">
-            {m.data.rows.slice(0, 8).map((r, i) => (
-              <li key={`${r.name}-${i}`} data-status={r.status}>
-                <span className="af-ch-member-name">{r.name}</span>
-                <span className="af-ch-member-when">{r.detail}</span>
-                <span className="af-ch-member-status af-label" data-status={r.status}>
-                  {STATUS_LABEL[r.status]}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <MemberActivityList rows={m.data.rows} />
           <p className="af-ch-muted">
             Judged by {m.data.basis}.
-            {m.data.rows.length > 8 ? ` Showing the 8 managers most in need of attention, of ${m.data.rows.length}.` : ''}
           </p>
         </>
       ) : (

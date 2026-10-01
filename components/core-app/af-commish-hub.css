@@ -780,6 +780,10 @@
 /* ── Recent changes + members ────────────────────────────────────────── */
 
 .af-ch-recent,
+.af-ch-member-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.af-ch-member-filters button { border: 1px solid rgba(255,255,255,.2); border-radius: 999px; padding: 5px 11px; color: inherit; background: transparent; cursor: pointer; }
+.af-ch-member-filters button[aria-pressed="true"] { border-color: #e8ad61; background: rgba(232,173,97,.14); }
+
 .af-ch-members {
   margin: 0;
   padding: 0;

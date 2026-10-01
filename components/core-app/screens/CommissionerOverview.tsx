@@ -256,16 +256,15 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
       <footer className="afh-foot">
         <p>
           Rulings and settings are applied on each league’s own platform.
-          {data.ownsAny ? ' Health trends, manager intelligence and reports are in Commissioner OS.' : ''}
+          {data.runCount > 0 ? ' Health trends, manager intelligence and reports are in Commissioner OS.' : ''}
           {has && data.partial ? ' Some figures couldn’t be read just now and may be low.' : ''}
         </p>
         <Link className="afh-link" href={`/core/hubs`}>
           Format hubs →
         </Link>
-        {data.ownsAny ? (
-          <Link className="afh-link" href="/commissioner-os">
-            Open Commissioner OS →
-          </Link>
+        {data.runCount > 0 ? (
+          <><Link className="afh-link" href="/commissioner-os">Open Commissioner OS →</Link>
+          <Link className="afh-link" href="/commissioner-os/networks">Manage commissioner networks →</Link></>
         ) : null}
       </footer>
     </div>

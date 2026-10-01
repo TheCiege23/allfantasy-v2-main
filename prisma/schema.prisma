@@ -6476,6 +6476,7 @@ model League {
   devyRights                            DevyRights[]
   discordLeagueChannels                 DiscordLeagueChannel[]
   draftPickAuditLogs                    DraftPickAuditLog[]
+  commissionerNetworkMembers            CommissionerNetworkMember[]
   draftIntroViews                       DraftIntroView[]
   draftRecaps                           DraftRecap[]
   /// Every draft this league has run, oldest to newest. Was `DraftSession?` (one-to-one) until
@@ -18603,6 +18604,35 @@ model RecentPlayerSearch {
 /// Read and written ONLY through lib/commissioner-workspace/. Nothing under
 /// lib/commissioner-ui/ may touch prisma — that boundary is an ESLint rule with a
 /// bounded exemption list, guarded by __tests__/commissioner-os/eslintBoundary.test.ts.
+/// One commissioner-owned group of leagues, independent of player franchises.
+model CommissionerNetwork {
+  id          String                      @id @default(cuid())
+  ownerUserId String
+  name        String
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+  members     CommissionerNetworkMember[]
+
+  @@index([ownerUserId])
+  @@map("commissioner_networks")
+}
+
+/// An owned league in a commissioner network. The owner is rechecked at read and write time.
+model CommissionerNetworkMember {
+  id        String              @id @default(cuid())
+  networkId String
+  leagueId  String
+  role      String              @default("member")
+  label     String?
+  createdAt DateTime            @default(now())
+  network   CommissionerNetwork @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  league    League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([networkId, leagueId])
+  @@unique([leagueId])
+  @@map("commissioner_network_members")
+}
+
 model CommissionerWorkspaceTask {
   id                  String    @id @default(uuid())
   leagueId            String    @map("league_id")

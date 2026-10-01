@@ -30,10 +30,13 @@ import { toast } from 'sonner'
 import { useEntitlement } from '@/hooks/useEntitlement'
 import IntegrityFlagCard, { type IntegrityFlagRow } from '@/components/commish/IntegrityFlagCard'
 import IntegritySettings, { type IntegritySettingsValue } from '@/components/commish/IntegritySettings'
+import type { IntegrityCoverage, IntegrityScanStatus } from '@/lib/integrity/coverage'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-commish.css'
 
 type IntegrityPayload = {
+  canReview?: boolean
+  coverage?: IntegrityCoverage
   settings?: IntegritySettingsValue
   openFlags?: IntegrityFlagRow[]
   recentDismissed?: IntegrityFlagRow[]
@@ -48,6 +51,13 @@ type IntegrityPayload = {
 }
 
 const SEVERITY_RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
+
+function coverageText(status: IntegrityScanStatus, lastScannedAt: string | null): string {
+  if (status === 'unsupported') return 'Unavailable for imported leagues or leagues without a native redraft season.'
+  if (status === 'disabled') return 'Monitoring is off.'
+  if (status === 'never_scanned') return 'Enabled; no completed scan recorded yet.'
+  return `Last scan: ${lastScannedAt ? new Date(lastScannedAt).toLocaleString() : 'time unavailable'}. This does not prove every event was checked.`
+}
 
 /**
  * Most severe first, then most recent. Matches the ranking principle 11a uses
@@ -189,9 +199,9 @@ export default function CommissionerIntegrityPage() {
                 {openCollusion} open collusion &middot; {openTanking} open tanking
               </span>
             ) : (
-              <span className="af-cm-headchip af-num" data-tone="good">
+              <span className="af-cm-headchip af-num">
                 <span className="af-cm-headchip-dot" aria-hidden />
-                No open flags
+                No open flags on file
               </span>
             )}
             <Link href={`/league/${leagueId}`} className="af-cm-sub">
@@ -208,7 +218,7 @@ export default function CommissionerIntegrityPage() {
                 ◆
               </span>
               <span>
-                Signals come from trade values, lineup cards, waivers and on-field data. Chat is never read.
+                Signals come from native trade values and lineup data. Chat is never read. Waiver-drop detection is not available.
               </span>
               <button
                 type="button"
@@ -220,6 +230,15 @@ export default function CommissionerIntegrityPage() {
                 ?
               </button>
             </div>
+
+            {payload?.coverage && (
+              <div className="af-cm-disclosure" data-testid="integrity-coverage" style={{ display: 'block' }}>
+                <strong>Detection coverage</strong>
+                <p>Collusion: {coverageText(payload.coverage.collusion.status, payload.coverage.collusion.lastScannedAt)}</p>
+                <p>Tanking: {coverageText(payload.coverage.tanking.status, payload.coverage.tanking.lastScannedAt)}</p>
+                {payload.canReview === false && <p>Co-commissioners can view flags and settings. The league owner reviews flags and changes settings.</p>}
+              </div>
+            )}
 
             <div className="af-cm-flagcard-tags" style={{ marginBottom: 14 }}>
               <button
@@ -245,7 +264,7 @@ export default function CommissionerIntegrityPage() {
             ) : list.length === 0 ? (
               <p className="af-cm-empty">
                 {tab === 'open'
-                  ? 'No open flags. The engines scan trades as they are accepted and lineups once a week.'
+                  ? 'No open flags on file. Check detection coverage above before treating this as a clean scan.'
                   : 'Nothing dismissed recently.'}
               </p>
             ) : (
@@ -255,8 +274,8 @@ export default function CommissionerIntegrityPage() {
                     key={f.id}
                     flag={f}
                     busy={busy}
-                    onEscalate={tab === 'open' ? (flag) => void patchFlag(flag, 'escalated') : undefined}
-                    onDismiss={tab === 'open' ? (flag) => void patchFlag(flag, 'dismissed') : undefined}
+                    onEscalate={tab === 'open' && payload?.canReview !== false ? (flag) => void patchFlag(flag, 'escalated') : undefined}
+                    onDismiss={tab === 'open' && payload?.canReview !== false ? (flag) => void patchFlag(flag, 'dismissed') : undefined}
                     /*
                      * Messaging is the league chat's job, not a second composer
                      * built here. Routing to it keeps one send path — the same
@@ -281,7 +300,7 @@ export default function CommissionerIntegrityPage() {
 
           <aside className="af-cm-rail">
             {payload?.settings ? (
-              <IntegritySettings value={payload.settings} saving={saving} onSave={saveSettings} />
+              <IntegritySettings value={payload.settings} saving={saving} readOnly={payload.canReview === false} onSave={saveSettings} />
             ) : loading ? (
               <p className="af-cm-sub">Loading settings…</p>
             ) : (

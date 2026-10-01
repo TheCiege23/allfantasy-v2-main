@@ -71,6 +71,19 @@ export interface LeagueWarehouseManagerActivity {
   managerName: string
   currentCount: number
   priorCount: number
+  lastActionAt: Date | null
+}
+
+/** Latest imported trades from the provider-neutral activity warehouse. */
+export async function readRecentImportedTrades(leagueId: string, take = 10): Promise<Array<{
+  id: string; occurredAt: Date; provider: string; providerEventId: string | null
+}>> {
+  const identity = await providerIdentity(leagueId)
+  return prisma.decisionOsImportedActivity.findMany({
+    where: { ...activityWhere(leagueId, identity), activityType: 'trade' },
+    select: { id: true, occurredAt: true, provider: true, providerEventId: true },
+    orderBy: { occurredAt: 'desc' }, take,
+  })
 }
 
 export interface LeagueWarehouseActivityWindow {
@@ -340,7 +353,7 @@ export async function readManagerActivity(
   const priorStart = new Date(now - lookbackDays * 2 * 86_400_000)
 
   const rows = await prisma.decisionOsImportedActivity.findMany({
-    where: { ...activityWhere(leagueId, identity), occurredAt: { gt: priorStart } },
+    where: { ...activityWhere(leagueId, identity), activityType: { in: ['trade', 'waiver', 'roster_move'] } },
     select: { occurredAt: true, normalized: true },
   })
 
@@ -349,7 +362,7 @@ export async function readManagerActivity(
     return userToTeam.get(rawKey) ?? null
   }
 
-  const counts = new Map<string, { current: number; prior: number }>()
+  const counts = new Map<string, { current: number; prior: number; lastActionAt: Date | null }>()
   for (const row of rows) {
     const normalized = row.normalized as { managerKeys?: unknown } | null
     const keys = Array.isArray(normalized?.managerKeys) ? normalized.managerKeys : []
@@ -361,16 +374,17 @@ export async function readManagerActivity(
       if (team) teams.add(team)
     }
     for (const team of teams) {
-      const acc = counts.get(team) ?? { current: 0, prior: 0 }
+      const acc = counts.get(team) ?? { current: 0, prior: 0, lastActionAt: null }
       if (row.occurredAt > windowStart) acc.current += 1
-      else acc.prior += 1
+      else if (row.occurredAt > priorStart) acc.prior += 1
+      if (!acc.lastActionAt || row.occurredAt > acc.lastActionAt) acc.lastActionAt = row.occurredAt
       counts.set(team, acc)
     }
   }
 
   const out: LeagueWarehouseManagerActivity[] = []
   for (const [managerName, acc] of counts) {
-    out.push({ managerName, currentCount: acc.current, priorCount: acc.prior })
+    out.push({ managerName, currentCount: acc.current, priorCount: acc.prior, lastActionAt: acc.lastActionAt })
   }
   /*
    * Name is the tiebreak, not an accident of Map order. Several managers legitimately share a
@@ -513,9 +527,12 @@ export async function readAllTimeRecords(leagueId: string): Promise<LeagueWareho
 }
 
 /** Freshness and all-time totals for a league's imported activity. */
-export async function readActivityWindow(leagueId: string): Promise<LeagueWarehouseActivityWindow> {
+export async function readActivityWindow(leagueId: string, moveOnly = false): Promise<LeagueWarehouseActivityWindow> {
   const identity = await providerIdentity(leagueId)
-  const where = activityWhere(leagueId, identity)
+  const where = {
+    ...activityWhere(leagueId, identity),
+    ...(moveOnly ? { activityType: { in: ['trade', 'waiver', 'roster_move'] } } : {}),
+  }
   const [newest, byType] = await Promise.all([
     prisma.decisionOsImportedActivity.findFirst({
       where,

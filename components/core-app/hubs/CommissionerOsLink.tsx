@@ -12,9 +12,7 @@ import { ACTIVE_LEAGUE_COOKIE_KEY } from '@/lib/commissioner-ui/activeLeague/con
  * from one league's hub lands on THAT league, not on whichever was picked last.
  *
  * ⚠ THE COOKIE IS A PREFERENCE, NOT A GRANT. `resolveActiveLeagueId` only honours
- * it for a league the session owns, so a co-commissioner who is handed this link
- * would still land on their own league (or the access notice). The hub therefore
- * offers it only to the league owner.
+ * it for a league the session owns or co-commissions through a claimed team.
  */
 export function CommissionerOsLink({
   href,

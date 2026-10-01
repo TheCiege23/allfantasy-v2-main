@@ -21,7 +21,7 @@ export async function readMemberActivityInputs(leagueId: string, native: boolean
   }
   const [managers, window] = await Promise.all([
     readManagerActivity(leagueId, MANAGER_INACTIVE_AFTER_DAYS).catch(() => null),
-    readActivityWindow(leagueId).catch(() => null),
+    readActivityWindow(leagueId, true).catch(() => null),
   ])
   return { native: false, managers, window }
 }
