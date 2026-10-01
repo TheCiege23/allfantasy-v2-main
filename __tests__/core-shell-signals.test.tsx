@@ -116,3 +116,21 @@ describe('PublishShellSignals through the real AfCoreShell', () => {
     expect(liveBadge()).toContain('2')
   })
 })
+
+describe('league-first phone bar — the Live tab carries the live count too', () => {
+  const phoneLive = () =>
+    screen.getAllByRole('link').find((a) => a.getAttribute('href') === '/core/live' && a.classList.contains('af-tabbar-item'))
+  it('shows a dot and says how many games, on a screen that is not Live', () => {
+    render(shell(<div />, { leagueFirst: true, liveGameCount: 3 }))
+    const tab = phoneLive()!
+    expect(tab.getAttribute('aria-label')).toBe('Live, 3 games in progress')
+    expect(tab.querySelector('.af-tabbar-dot')).not.toBeNull()
+  })
+  it('says "1 game" for one, and shows nothing when nothing is live', () => {
+    const view = render(shell(<div />, { leagueFirst: true, liveGameCount: 1 }))
+    expect(phoneLive()!.getAttribute('aria-label')).toBe('Live, 1 game in progress')
+    view.rerender(shell(<div />, { leagueFirst: true, liveGameCount: 0 }))
+    expect(phoneLive()!.querySelector('.af-tabbar-dot')).toBeNull()
+    expect(phoneLive()!.getAttribute('aria-label')).toBeNull()
+  })
+})
