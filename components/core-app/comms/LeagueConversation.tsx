@@ -805,7 +805,7 @@ export function LeagueConversation({
           <button type="button" onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.LEAGUE_RECAP_ACTION, { leagueId, action: 'read' }); setFocusRequest({ id: latestRecap.id, nonce: Date.now() }) }}>
             {language === 'es' ? 'Ver' : 'Read'}
           </button>
-          <button type="button" onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.LEAGUE_RECAP_ACTION, { leagueId, action: 'discuss' }); setReplyTo(latestRecap); setFocusRequest({ id: latestRecap.id, nonce: Date.now() }) }}>
+          <button type="button" onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.LEAGUE_RECAP_ACTION, { leagueId, action: 'discuss' }); setReplyTo(latestRecap); window.requestAnimationFrame(() => convoRef.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus()) }}>
             {language === 'es' ? 'Responder' : 'Discuss'}
           </button>
           <button type="button" disabled={reactionBusy === latestRecap.id} onClick={() => { sendProductAnalyticsBeacon(ENGAGEMENT.LEAGUE_RECAP_ACTION, { leagueId, action: 'react' }); void toggleReaction(latestRecap.id, '🔥', reactionOverride[latestRecap.id] ?? readReactions(latestRecap.metadata, viewer)) }}>

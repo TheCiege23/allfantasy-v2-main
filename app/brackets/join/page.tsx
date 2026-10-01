@@ -6,6 +6,7 @@ import { ArrowLeft, Loader2, Users, Trophy } from "lucide-react"
 import Link from "next/link"
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 type Preview = {
   leagueId: string
@@ -20,6 +21,7 @@ type Preview = {
 }
 
 function JoinLeagueForm() {
+  const spanish = useOptionalLanguage().language === 'es'
   const [code, setCode] = useState("")
   const [loading, setLoading] = useState(false)
   const [previewLoading, setPreviewLoading] = useState(true)
@@ -146,11 +148,11 @@ function JoinLeagueForm() {
       )}
       {authRequired ? (
         <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}>
-          <h2 className="font-semibold" style={{ color: 'var(--text)' }}>Keep your place in this pool</h2>
-          <p className="mt-1 text-sm mode-muted">Your invite code will be here when you return.</p>
+          <h2 className="font-semibold" style={{ color: 'var(--text)' }}>{spanish ? 'Tu lugar en este grupo te espera' : 'Keep your place in this pool'}</h2>
+          <p className="mt-1 text-sm mode-muted">{spanish ? 'Tu código de invitación estará aquí cuando regreses.' : 'Your invite code will be here when you return.'}</p>
           <div className="mt-3 flex flex-wrap gap-3">
-            <Link href={`/signup?callbackUrl=${encodeURIComponent(`/brackets/join?code=${encodeURIComponent(code.trim().toUpperCase())}`)}`} className="rounded-lg px-4 py-3 text-sm font-bold" style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}>Create account</Link>
-            <Link href={`/login?callbackUrl=${encodeURIComponent(`/brackets/join?code=${encodeURIComponent(code.trim().toUpperCase())}`)}`} className="rounded-lg border px-4 py-3 text-sm font-bold" style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>Sign in</Link>
+            <Link href={`/signup?callbackUrl=${encodeURIComponent(`/brackets/join?code=${encodeURIComponent(code.trim().toUpperCase())}`)}`} className="rounded-lg px-4 py-3 text-sm font-bold" style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}>{spanish ? 'Crear cuenta' : 'Create account'}</Link>
+            <Link href={`/login?callbackUrl=${encodeURIComponent(`/brackets/join?code=${encodeURIComponent(code.trim().toUpperCase())}`)}`} className="rounded-lg border px-4 py-3 text-sm font-bold" style={{ borderColor: 'var(--border)', color: 'var(--text)' }}>{spanish ? 'Iniciar sesión' : 'Sign in'}</Link>
           </div>
         </div>
       ) : null}

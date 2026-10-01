@@ -1475,6 +1475,7 @@ export function TradeCenter(props: {
   }, [props.league?.id, result, noSignal, myRoster, partnerRoster, theirLabel, give, get, yourGrade, theirGrade])
 
   const [shareStatus, setShareStatus] = useState<'idle' | 'shared' | 'copied' | 'failed'>('idle')
+  useEffect(() => setShareStatus('idle'), [result])
   const tradeSummary = [
     `${props.league?.name ?? (language === 'es' ? 'Liga de fantasía' : 'Fantasy league')} ${language === 'es' ? 'intercambio' : 'trade'}`,
     `${language === 'es' ? 'Entrego' : 'I give'}: ${give.map((line) => line.name).join(', ') || '—'}`,

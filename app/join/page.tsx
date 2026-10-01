@@ -6,10 +6,12 @@ import Link from 'next/link'
 import { joinedLeagueDestination, readLeagueInviteFocus } from '@/lib/league-invite/engagementInvite'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 type Preview = { leagueId: string; name: string | null; sport: string; requiresPassword: boolean }
 
 export default function JoinByCodePage() {
+  const spanish = useOptionalLanguage().language === 'es'
   const searchParams = useSearchParams()
   const codeFromUrl = searchParams?.get('code')?.trim()
   const focus = readLeagueInviteFocus(searchParams?.get('focus'))
@@ -121,11 +123,11 @@ export default function JoinByCodePage() {
   if (status === 'auth') {
     return <div className="min-h-screen flex items-center justify-center mode-surface mode-readable px-4">
       <div className="w-full max-w-md rounded-2xl border p-6" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
-        <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>Your league is waiting</h1>
-        <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>Sign in or create an account, then return here to join{focus === 'rivalry' ? ' and explore rivalries' : focus === 'chat' ? ' and open league chat' : ''}.</p>
+        <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>{spanish ? 'Tu liga te espera' : 'Your league is waiting'}</h1>
+        <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>{spanish ? `Inicia sesión o crea una cuenta para unirte${focus === 'rivalry' ? ' y explorar las rivalidades' : focus === 'chat' ? ' y abrir el chat de la liga' : ''}.` : `Sign in or create an account, then return here to join${focus === 'rivalry' ? ' and explore rivalries' : focus === 'chat' ? ' and open league chat' : ''}.`}</p>
         <div className="mt-5 flex flex-wrap gap-3">
-          <Link href={`/signup?callbackUrl=${encodeURIComponent(returnToInvite)}`} className="rounded-lg px-4 py-3 text-sm font-bold" style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}>Create account</Link>
-          <Link href={`/login?callbackUrl=${encodeURIComponent(returnToInvite)}`} className="rounded-lg border px-4 py-3 text-sm font-bold" style={{ borderColor: 'var(--line2)', color: 'var(--text)' }}>Sign in</Link>
+          <Link href={`/signup?callbackUrl=${encodeURIComponent(returnToInvite)}`} className="rounded-lg px-4 py-3 text-sm font-bold" style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}>{spanish ? 'Crear cuenta' : 'Create account'}</Link>
+          <Link href={`/login?callbackUrl=${encodeURIComponent(returnToInvite)}`} className="rounded-lg border px-4 py-3 text-sm font-bold" style={{ borderColor: 'var(--line2)', color: 'var(--text)' }}>{spanish ? 'Iniciar sesión' : 'Sign in'}</Link>
         </div>
       </div>
     </div>
@@ -144,7 +146,7 @@ export default function JoinByCodePage() {
               {preview.name} · {preview.sport}
             </p>
           )}
-          {focus !== 'league' ? <p className="mb-4 text-sm" style={{ color: 'var(--muted)' }}>After joining, you’ll open {focus === 'chat' ? 'league chat' : 'Rivalry Radar'}.</p> : null}
+          {focus !== 'league' ? <p className="mb-4 text-sm" style={{ color: 'var(--muted)' }}>{spanish ? `Después de unirte, abrirás ${focus === 'chat' ? 'el chat de la liga' : 'Radar de rivalidades'}.` : `After joining, you’ll open ${focus === 'chat' ? 'league chat' : 'Rivalry Radar'}.`}</p> : null}
           <button
             type="button"
             onClick={() => join(codeFromUrl, '')}
