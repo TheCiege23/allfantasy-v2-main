@@ -4,6 +4,7 @@ import { Dash34Time, Dash34Countdown } from '@/components/core-app/screens/Dashb
 import Link from 'next/link'
 import type { PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import type { TodayStripData } from '@/lib/core-app/todayStrip'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 /**
  * Game day — the band that only exists while games are being played.
@@ -133,8 +134,7 @@ export function DashGameDayBand({
             <li key={p.id} className="af-gd-play">
               <span className="af-gd-face" aria-hidden>
                 {p.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.imageUrl} alt="" loading="lazy" />
+                  <FallbackImg src={p.imageUrl} alt="" loading="lazy" fallback={initialsOf(p.playerName)} />
                 ) : (
                   initialsOf(p.playerName)
                 )}

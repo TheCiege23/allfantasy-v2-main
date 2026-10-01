@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useEffect, useId, useRef, useState } from 'react'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 /**
  * Top-bar player search with autocomplete.
@@ -185,8 +186,7 @@ export function PlayerSearch({ leagueCount = null }: { leagueCount?: number | nu
                 >
                   <span className="af-d2-ac-img" aria-hidden>
                     {hit.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={hit.imageUrl} alt="" loading="lazy" />
+                      <FallbackImg src={hit.imageUrl} alt="" loading="lazy" fallback={initialsOf(hit.name)} />
                     ) : (
                       initialsOf(hit.name)
                     )}

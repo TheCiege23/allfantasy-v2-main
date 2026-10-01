@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PickCoverage, RosterPick, RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
 import { FIRST_ROUND_IN_MARKET_UNITS, pickValueByOverall } from '@/lib/pick-curve'
 import { readPickPreviewValue, type TradePickPreviewBook } from '@/lib/trade-value-console/pickPreview'
-import { resolveTeamLogoUrlSync } from '@/lib/draft-sports-models/player-asset-resolver'
+import { teamLogoUrl as knownTeamLogoUrl } from '@/lib/core-app/teamLogo'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { pricedOnAnalysisReason, type UnpricedReason } from '@/lib/trade-value/unpricedReason'
 
 /**
@@ -178,8 +179,12 @@ export function RosterPlayerRow(props: {
       */}
       <span className="af-tc-headshot" aria-hidden="true">
         {p.imageUrl ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={p.imageUrl} alt="" loading="lazy" />
+          <FallbackImg
+            src={p.imageUrl}
+            alt=""
+            loading="lazy"
+            fallback={<span className="af-tc-headshot-fallback">{p.name.slice(0, 1)}</span>}
+          />
         ) : (
           <span className="af-tc-headshot-fallback">{p.name.slice(0, 1)}</span>
         )}
@@ -205,10 +210,7 @@ export function RosterPlayerRow(props: {
           */}
           {p.team ? (
             <span className="af-tc-row-team">
-              {logo ? (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={logo} alt="" loading="lazy" />
-              ) : null}
+              {logo ? <FallbackImg src={logo} alt="" loading="lazy" fallback={null} /> : null}
               {p.team}
             </span>
           ) : null}
@@ -243,12 +245,12 @@ export function RosterPlayerRow(props: {
  * abbreviation is rendered BESIDE the logo rather than replaced by it.
  */
 function teamLogoUrl(team: string | null, sport?: string | null): string | null {
-  if (!team) return null
-  try {
-    return resolveTeamLogoUrlSync(team, sport ?? 'NFL')
-  } catch {
-    return null
-  }
+  /*
+   * ⚠ THIS SAID "NULL FOR AN UNKNOWN TEAM" AND CALLED A RESOLVER THAT GUESSES: it built an ESPN
+   * path for any abbreviation, so a free agent ("FA") got a 404 and a broken image. The core
+   * helper returns a crest only for a club the registry actually knows.
+   */
+  return knownTeamLogoUrl(sport ?? 'NFL', team)
 }
 
 
@@ -425,8 +427,12 @@ export function TradeAssetPicker(props: {
         <div className="af-tc-picker-manager">
           <span className="af-tc-manager-avatar" aria-hidden="true">
             {props.managerAvatarUrl ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={props.managerAvatarUrl} alt="" loading="lazy" />
+              <FallbackImg
+                src={props.managerAvatarUrl}
+                alt=""
+                loading="lazy"
+                fallback={<span className="af-tc-headshot-fallback">{(props.managerName ?? '?').slice(0, 1)}</span>}
+              />
             ) : (
               <span className="af-tc-headshot-fallback">
                 {(props.managerName ?? '?').slice(0, 1)}
@@ -541,8 +547,12 @@ export function TradeAssetPicker(props: {
             >
               {r.headshotUrl ? (
                 <span className="af-tc-headshot" aria-hidden="true">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={r.headshotUrl} alt="" loading="lazy" />
+                  <FallbackImg
+                    src={r.headshotUrl}
+                    alt=""
+                    loading="lazy"
+                    fallback={<span className="af-tc-headshot-fallback">{r.name.slice(0, 1)}</span>}
+                  />
                 </span>
               ) : null}
               <span className="af-tc-row-body">

@@ -710,9 +710,13 @@ describe('🛑 a trade line shows the player, not just his name', () => {
   it('🛑 reuses the picker’s logo resolver instead of adding a sixth', () => {
     /*
      * This repo already carries five team-logo functions. The logo beside a player in the builder
-     * must be the same asset as the logo beside him in the list he was picked from.
+     * must be the same asset as the logo beside him in the list he was picked from — and both read
+     * the safe helper, which returns null for a club it does not know. `resolveTeamLogoUrlSync`
+     * guessed a path for anything, so every free agent ("FA") drew a broken image.
      */
-    expect(code).toContain('resolveTeamLogoUrlSync')
+    expect(code).toContain("from '@/lib/core-app/teamLogo'")
+    expect(code).not.toContain('resolveTeamLogoUrlSync')
+    expect(readFileSync(resolve(process.cwd(), 'components/core-app/screens/TradeAssetPicker.tsx'), 'utf8')).toContain("from '@/lib/core-app/teamLogo'")
     expect(code).not.toMatch(/function\s+\w*[tT]eamLogo\w*\s*\(/)
   })
 
