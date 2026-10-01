@@ -36,6 +36,7 @@ import {
 } from '@/lib/player-assets/playerImageStore'
 import { deriveCanonicalPlayerIdentity } from '@/lib/canonical/canonicalIdentity'
 import { normalizePlayerName } from '@/lib/player-assets/headshotCandidateMatch'
+import { isPlaceholderHeadshot } from '@/lib/player-assets/apiSportsPlaceholder'
 
 export type HeadshotProvider =
   | 'clearsports'
@@ -498,6 +499,11 @@ async function resolveFromProviders(
             ? String((result as { headshotUrl?: unknown }).headshotUrl ?? '')
             : ''
         if (isValidHeadshotUrl(apiUrl)) {
+          // api-sports answers "no photo" with a 200 stock image, so a valid URL is not a
+          // headshot. 58 of 60 sampled NCAAF results were that image. A confirmed placeholder
+          // means api-sports has nothing for this player: stop asking it and fall through.
+          // `null` (could not tell) keeps the URL — a timeout is not evidence it is fake.
+          if ((await isPlaceholderHeadshot(apiUrl)) === true) break
           return {
             imageUrl: apiUrl,
             source: 'apisports',

@@ -30,6 +30,7 @@
 import * as dotenv from 'dotenv'
 import * as path from 'path'
 import { PrismaClient } from '@prisma/client'
+import { normalizeTheSportsDbImageUrl } from '../lib/player-assets/imageUrlHygiene'
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') })
 
@@ -84,7 +85,8 @@ interface TSDBPlayer {
 }
 
 function resolveImage(p: TSDBPlayer): string | null {
-  return p.strCutout?.trim() || p.strRender?.trim() || p.strThumb?.trim() || p.strFanart1?.trim() || null
+  const url = p.strCutout?.trim() || p.strRender?.trim() || p.strThumb?.trim() || p.strFanart1?.trim() || null
+  return normalizeTheSportsDbImageUrl(url)
 }
 
 // Map full team names â†’ NFL abbreviations

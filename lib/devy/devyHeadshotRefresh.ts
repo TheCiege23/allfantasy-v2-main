@@ -1,5 +1,8 @@
 import { prisma } from '@/lib/prisma'
 import type { RunBudget } from '@/lib/cron/runBudget'
+import { isPlaceholderHeadshot } from '@/lib/player-assets/apiSportsPlaceholder'
+import { isApiSportsImageUrl } from '@/lib/player-assets/imageUrlHygiene'
+import { PLAYER_IMAGE_TYPE_HEADSHOT, writePrimaryPlayerImage } from '@/lib/player-assets/playerImageStore'
 
 /**
  * Headshots for devy players, derived from the id we already hold.
@@ -146,6 +149,52 @@ export async function refreshDevyHeadshots(
 }
 
 /**
+ * Carry a verified ESPN headshot onto the canonical player, so
+ * `/api/player/resolve-headshot` stops serving the api-sports picture from its
+ * `PlayerImage` cache (and `Player.imageUrl` stops disagreeing with `SportsPlayer`).
+ *
+ * Linked through `PlayerProviderIdentity` (provider `cfbd`) — the FK-backed identity
+ * row, never a name match, for the reason in the doc comment below.
+ *
+ * `Player.imageUrl` is only overwritten when it is empty, an api-sports URL, or
+ * the exact URL this row held before: a different, non-api-sports image came from
+ * somewhere else and is not ours to replace. Best-effort — the `SportsPlayer` write
+ * already landed, and a failure here must not count that row as an error.
+ */
+async function writeCanonicalCollegeHeadshot(
+  athleteId: string,
+  url: string,
+  previousUrl: string | null,
+): Promise<void> {
+  try {
+    const identity = await prisma.playerProviderIdentity.findFirst({
+      where: { provider: 'cfbd', sportKey: 'NCAAF', providerPlayerId: athleteId, playerId: { not: null } },
+      select: { playerId: true },
+    })
+    const playerId = identity?.playerId
+    if (!playerId) return
+
+    const player = await prisma.player.findUnique({ where: { id: playerId }, select: { imageUrl: true } })
+    if (!player) return
+    const current = player.imageUrl
+    if (!current || isApiSportsImageUrl(current) || current === previousUrl) {
+      await prisma.player.update({ where: { id: playerId }, data: { imageUrl: url } })
+    }
+
+    await writePrimaryPlayerImage({
+      playerId,
+      sportKey: 'NCAAF',
+      imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
+      url,
+      provider: 'espn',
+      confidence: 1,
+    })
+  } catch (err) {
+    console.warn('[devyHeadshotRefresh] canonical write failed:', err instanceof Error ? err.message : String(err))
+  }
+}
+
+/**
  * The same derivation for `SportsPlayer`, which is the table the player cards
  * and search actually read — the devy pool is only 1,718 of 73,883 NCAAF rows.
  *
@@ -178,10 +227,26 @@ export async function refreshCollegeSportsPlayerHeadshots(
     return { ...result, deferred: true, skipped: 'no runway' }
   }
 
+  // ⚠ AN api-sports URL IS A CANDIDATE TOO, NOT A FINISHED ROW. Selecting only
+  // `imageUrl: null` left 4,728 of 5,226 CFBD rows (measured 2026-10-01) holding an
+  // api-sports URL that the headshot cron had mirrored in from a NAME match — and 58
+  // of 60 sampled were api-sports' stock "image not available" picture. Those rows
+  // were never NULL, so this drain never saw them. ESPN keyed by the row's own
+  // athlete id beats a name-matched api-sports image whether or not that image is a
+  // placeholder, so a verified ESPN hit replaces it unconditionally.
+  //
+  // Ordered by `updatedAt`, and every checked row is touched (below), so the batch
+  // ROTATES. Ordered by `fetchedAt` with misses left untouched, the ~10% of players
+  // ESPN has no photo of would sit at the head of the queue forever once they
+  // outnumber `limit` — which 4,728 candidates guarantee.
   const candidates = await prisma.sportsPlayer.findMany({
-    where: { sport: 'NCAAF', source: 'cfbd', imageUrl: null },
-    select: { id: true, externalId: true },
-    orderBy: { fetchedAt: 'asc' },
+    where: {
+      sport: 'NCAAF',
+      source: 'cfbd',
+      OR: [{ imageUrl: null }, { imageUrl: { startsWith: 'https://media.api-sports.io/' } }],
+    },
+    select: { id: true, externalId: true, imageUrl: true },
+    orderBy: { updatedAt: 'asc' },
     take: limit,
   })
 
@@ -201,12 +266,22 @@ export async function refreshCollegeSportsPlayerHeadshots(
 
       result.checked += 1
       const url = await resolveHeadshot(player.externalId)
-      if (!url) {
-        result.missing += 1
-        continue
-      }
       try {
+        if (!url) {
+          result.missing += 1
+          // No ESPN photo. Drop a CONFIRMED placeholder — initials are honest, a stock
+          // picture is not — and otherwise rewrite the same value, which only moves
+          // `updatedAt` so the row goes to the back of the queue. `null` from the
+          // placeholder check means "could not tell": keep the URL.
+          const fake = player.imageUrl ? (await isPlaceholderHeadshot(player.imageUrl)) === true : false
+          await prisma.sportsPlayer.update({
+            where: { id: player.id },
+            data: { imageUrl: fake ? null : player.imageUrl },
+          })
+          continue
+        }
         await prisma.sportsPlayer.update({ where: { id: player.id }, data: { imageUrl: url } })
+        await writeCanonicalCollegeHeadshot(player.externalId, url, player.imageUrl)
         result.written += 1
       } catch {
         result.errors += 1

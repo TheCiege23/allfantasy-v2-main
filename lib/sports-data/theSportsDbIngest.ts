@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getTheSportsDbApiKeyOrFallback } from '@/lib/env/sports-media-keys'
 import { coercePlayerAge } from '@/lib/sports-data/playerAge'
+import { normalizeTheSportsDbImageUrl } from '@/lib/player-assets/imageUrlHygiene'
 import { providerPositionCode } from '@/lib/sports-data/providerPositionCode'
 import { canonicalSeasonLabel, seasonStartYear } from '@/lib/sports-data/seasonLabel'
 
@@ -210,7 +211,7 @@ export async function ingestTeams(sport: IngestSport, opts?: { season?: string }
       city: str(t.strLocation),
       conference: str(t.strLeague),
       division: str(t.strDivision),
-      logo: str(t.strBadge) ?? str(t.strLogo),
+      logo: normalizeTheSportsDbImageUrl(str(t.strBadge) ?? str(t.strLogo)),
       primaryColor: str(t.strColour1),
       fetchedAt: now,
       expiresAt: ttl(now),
@@ -374,7 +375,8 @@ export async function ingestRosters(
         college: str(p.strCollege),
         // Prefer the cutout (transparent background) for lineup cards, then the
         // posed thumb; render/poster are stylised and read badly at small sizes.
-        imageUrl: str(p.strCutout) ?? str(p.strThumb) ?? str(p.strRender),
+        // `www.` image URLs 404 — see `normalizeTheSportsDbImageUrl`.
+        imageUrl: normalizeTheSportsDbImageUrl(str(p.strCutout) ?? str(p.strThumb) ?? str(p.strRender)),
         dob: born,
         status: str(p.strStatus),
         fetchedAt: now,
