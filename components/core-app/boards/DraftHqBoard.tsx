@@ -176,13 +176,13 @@ function LiveDetail({ row, picks }: { row: DraftHqAllRow; picks: LiveDraftPicks 
               <PlayerFace
                 imageUrl={p.imageUrl}
                 name={p.playerName ?? 'Unnamed pick'}
-                teamLogoUrl={teamLogoUrl('NFL', p.team)}
+                teamLogoUrl={teamLogoUrl(p.sport ?? 'NFL', p.team)}
                 size="sm"
               />
               <span className="af-bd-asset-name">
                 {p.playerName ? (
                   <PlayerName
-                    sport="NFL"
+                    sport={p.sport ?? 'NFL'}
                     sleeperId={p.sleeperId}
                     name={p.playerName}
                     position={p.position}

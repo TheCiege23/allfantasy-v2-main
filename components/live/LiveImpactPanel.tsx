@@ -1,6 +1,7 @@
 'use client'
 
 import type { LiveImpact } from '@/lib/live/liveScoresPage'
+import { impactTotalLabel } from '@/lib/live/liveImpact'
 
 /**
  * "Your live impact" — the right-hand rail.
@@ -46,7 +47,7 @@ export function LiveImpactPanel({
             {rosterFailed ? '—' : impact.totalPoints.toFixed(1)}
           </span>
           <span className="live-display text-[13px]" style={{ color: 'var(--muted)' }}>
-            {rosterFailed ? 'we could not read your rosters' : 'fantasy pts scored live right now'}
+            {rosterFailed ? 'we could not read your rosters' : impactTotalLabel(impact, false)}
           </span>
         </p>
         <p className="live-display mt-3 text-[13px] leading-relaxed" style={{ color: 'var(--muted)' }}>

@@ -38,7 +38,7 @@ export function CreateLeagueHeroMedia({
             onError={() => {
               const el = videoRef.current
               if (!el) return
-              if (media.fallback && el.src !== media.fallback) {
+              if (media.fallback && el.src !== new URL(media.fallback, window.location.origin).href) {
                 el.src = media.fallback
                 el.load()
               }

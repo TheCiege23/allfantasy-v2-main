@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { signInAs } from "./helpers/session-cookie"
 
 test.describe("referral system click audit", () => {
   test("copy, share, reload, leaderboard, and claim flows all work", async ({ page }) => {
@@ -122,20 +123,14 @@ test.describe("referral system click audit", () => {
       window.open = () => null
     })
 
-    await page.route("**/api/auth/session", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          user: {
-            id: "qa-referral-user",
-            name: "QA Referral",
-            email: "qa-referral@example.com",
-          },
-          expires: new Date(Date.now() + 60_000).toISOString(),
-        }),
-      })
-    })
+    /*
+     * /referral is gated on `useSession()`. The root layout preloads the server session into
+     * next-auth's SessionProvider, so with no cookie the client starts `unauthenticated` and never
+     * requests /api/auth/session — a route mock of it is never consulted. This spec used to pass
+     * only because the pre-Next-15.5 dev server ran the provider's mount effect twice and the
+     * second pass refetched the session. A real signed cookie is what the other gated specs use.
+     */
+    await signInAs(page, { id: "qa-referral-user", name: "QA Referral", email: "qa-referral@example.com" })
 
     await page.route("**/api/referral/dashboard", async (route) => {
       await route.fulfill({
