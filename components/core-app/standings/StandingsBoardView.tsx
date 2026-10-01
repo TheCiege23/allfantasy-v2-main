@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
   explainOrder,
   formatRecord,
@@ -50,6 +50,8 @@ const ZONE: Record<Zone, { label: string; icon: string }> = {
 }
 
 const LAYOUT_STORAGE_KEY = 'af-standings-layout'
+/** Below this the table cannot show a record without a sideways scroll, so the list is the default. */
+const PHONE_QUERY = '(max-width: 640px)'
 
 function pts(v: number | null): string {
   return v == null ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
@@ -624,20 +626,23 @@ function FragmentRows({
       {line ? (
         <tr className="af-stb-line" data-line={line}>
           <td colSpan={cols}>
-            <span className="af-stb-linetext">
-              {language === 'es'
-                ? line === 'bye'
-                  ? `Línea de descanso en primera ronda: los primeros ${byes}`
-                  : `Línea de playoffs: clasifican los primeros ${field}${board.rules.playoffTeamsSource === 'assumed' ? ' (estimado: la liga no publica cuántos equipos clasifican)' : ''}`
-                : line === 'bye'
-                  ? `First-round bye line — top ${byes}`
-                  : `Playoff line — top ${field} make it${board.rules.playoffTeamsSource === 'assumed' ? ' (assumed: the league does not report its playoff size)' : ''}`}
-            </span>
+            <span className="af-stb-linetext">{lineLabel(line, board, byes, field, language)}</span>
           </td>
         </tr>
       ) : null}
     </>
   )
+}
+
+/** The bye or playoff line's words — one source, so the table and the list cannot disagree. */
+function lineLabel(line: 'bye' | 'playoff', board: StandingsBoard, byes: number, field: number, language: string): string {
+  return language === 'es'
+    ? line === 'bye'
+      ? `Línea de descanso en primera ronda: los primeros ${byes}`
+      : `Línea de playoffs: clasifican los primeros ${field}${board.rules.playoffTeamsSource === 'assumed' ? ' (estimado: la liga no publica cuántos equipos clasifican)' : ''}`
+    : line === 'bye'
+      ? `First-round bye line — top ${byes}`
+      : `Playoff line — top ${field} make it${board.rules.playoffTeamsSource === 'assumed' ? ' (assumed: the league does not report its playoff size)' : ''}`
 }
 
 /** "92%" — a lineup's points as a share of the best it could have set. */
@@ -790,15 +795,20 @@ function Cards({
   view,
   odds,
   efficiency,
+  plain,
 }: {
   board: StandingsBoard
   groups: Group[]
   view: StandingsViewKey
   odds: StandingsOdds | null
   efficiency: LineupEfficiency | null
+  /** Table order, unsorted and undivided — the only order in which the bye and playoff lines mean anything. */
+  plain: boolean
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
+  const field = Math.min(board.rules.playoffTeams, board.teams.length)
+  const byes = Math.min(board.rules.byes, field)
   const h2h = board.hasHeadToHead
   const hasPath = board.showPaths
   const seedOf = new Map(board.teams.map((t) => [t.rosterId, t.seed]))
@@ -808,24 +818,59 @@ function Cards({
         <section key={g.key} aria-label={g.title ?? copy(view === 'power' ? 'AF Power rankings' : 'League table')}>
           {g.title ? <h3 className="af-stb-grouptitle">{g.title}</h3> : null}
           <ol className="af-stb-cards">
-            {g.teams.map((t) => {
+            {g.teams.map((t, i) => {
               const rank = view === 'power' ? t.powerRank : t.seed
+              const line = plain && g.teams[i + 1] ? (t.seed === byes && byes > 0 ? 'bye' : t.seed === field ? 'playoff' : null) : null
               const headingId = `af-stb-card-${view}-${t.rosterId}`
               return (
-                <li key={t.rosterId}>
+                <Fragment key={t.rosterId}>
+                <li>
                   <article className="af-stb-card" data-you={t.isYou ? 'true' : undefined} data-zone={t.zone} aria-labelledby={headingId}>
+                    {/*
+                      ⚠ ONE ROW PER TEAM UNTIL TAPPED. Every card used to open as a full stat sheet, ~800px
+                      tall on a phone, so twelve teams were a 10,000px page and nobody could see the table.
+                      The summary carries what a standings glance needs; everything else is one tap away and
+                      stays in the DOM, so nothing below it was removed. Your own card starts open.
+                    */}
+                    <details className="af-stb-cardfold" open={t.isYou || undefined}>
+                    <summary className="af-stb-cardsum">
                     <header className="af-stb-cardhead">
                       <span className="af-stb-cardrank af-num" aria-hidden>
                         {rank}
                       </span>
-                      <h4 id={headingId}>
-                        <span className="af-sr">
-                          {copy(view === 'power' ? 'AF Power' : 'Position')} {rank}:{' '}
+                      {t.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img className="af-stb-cardav" src={t.avatarUrl} alt="" loading="lazy" />
+                      ) : (
+                        <span className="af-stb-cardav" aria-hidden>
+                          {t.name.slice(0, 1).toUpperCase()}
                         </span>
-                        {t.name}
-                      </h4>
-                      {t.isYou ? <span className="af-stb-you">{copy('You')}</span> : null}
+                      )}
+                      <span className="af-stb-cardid">
+                        <span className="af-stb-cardline">
+                          <h4 id={headingId}>
+                            <span className="af-sr">
+                              {copy(view === 'power' ? 'AF Power' : 'Position')} {rank}:{' '}
+                            </span>
+                            {t.name}
+                          </h4>
+                          {t.isYou ? <span className="af-stb-you">{copy('You')}</span> : null}
+                        </span>
+                        {/* Under the name, not beside it: on a phone the name is what gets squeezed. */}
+                        {h2h && t.form.length > 0 ? <Form form={t.form} /> : null}
+                      </span>
                     </header>
+                    <span className="af-stb-cardglance">
+                      <span className="af-stb-cardkey af-num">
+                        {view === 'power' ? t.powerScore.toFixed(1) : h2h ? formatRecord(t.record) : pts(t.pointsFor)}
+                      </span>
+                      {view !== 'power' && odds?.byRoster[t.rosterId] ? (
+                        <span className="af-stb-cardodds">
+                          <OddsCell team={t} odds={odds} />
+                        </span>
+                      ) : null}
+                    </span>
+                    </summary>
                     <ZoneChip team={t} />
                     <dl className="af-stb-carddl">
                       {h2h ? (
@@ -968,8 +1013,15 @@ function Cards({
                           : `Projected finish ${formatRecord(t.projected)}, ${ordinal(t.projected.seed)} — an expectation, not a result.`}
                       </p>
                     ) : null}
+                    </details>
                   </article>
                 </li>
+                {line ? (
+                  <li className="af-stb-cardsep" data-line={line} aria-hidden>
+                    {lineLabel(line, board, byes, field, language)}
+                  </li>
+                ) : null}
+                </Fragment>
               )
             })}
           </ol>
@@ -1267,11 +1319,27 @@ export function StandingsBoardView({
   const odds = asIf && live ? null : finalOdds
   const explanation = standingsBoardCopy(board, language)
 
+  /*
+   * True while the layout is the phone default rather than a choice — so the URL does not record it,
+   * and a link copied on a phone does not open a desktop in the list.
+   */
+  const autoLayout = useRef(false)
+
   // A remembered layout applies only when the URL did not choose one.
   useEffect(() => {
     try {
       const url = new URL(window.location.href)
-      if (!url.searchParams.has(STANDINGS_VIEW_PARAMS.layout) && window.localStorage.getItem(LAYOUT_STORAGE_KEY) === 'cards') {
+      if (url.searchParams.has(STANDINGS_VIEW_PARAMS.layout)) return
+      const remembered = window.localStorage.getItem(LAYOUT_STORAGE_KEY)
+      if (remembered === 'cards') {
+        setLayout('cards')
+      } else if (remembered == null && window.matchMedia?.(PHONE_QUERY).matches) {
+        /*
+         * ⚠ ON A PHONE THE TABLE IS A 1,480px STRIP IN A 340px WINDOW — rank, team and status, and
+         * everything else a sideways scroll away. The list fits. Only a phone that has never chosen
+         * gets it; a remembered "table" is honoured.
+         */
+        autoLayout.current = true
         setLayout('cards')
       }
     } catch {
@@ -1283,7 +1351,8 @@ export function StandingsBoardView({
     try {
       const url = new URL(window.location.href)
       for (const p of Object.values(STANDINGS_VIEW_PARAMS)) url.searchParams.delete(p)
-      for (const [k, v] of serializeStandingsView({ view, division, layout, sort })) url.searchParams.set(k, v)
+      const urlLayout = autoLayout.current ? 'table' : layout
+      for (const [k, v] of serializeStandingsView({ view, division, layout: urlLayout, sort })) url.searchParams.set(k, v)
       const next = `${url.pathname}${url.search}${url.hash}`
       if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
         window.history.replaceState(window.history.state, '', next)
@@ -1294,6 +1363,7 @@ export function StandingsBoardView({
   }, [view, division, layout, sort])
 
   function chooseLayout(next: StandingsLayout) {
+    autoLayout.current = false
     setLayout(next)
     try {
       window.localStorage.setItem(LAYOUT_STORAGE_KEY, next)
@@ -1458,7 +1528,7 @@ export function StandingsBoardView({
       ) : null}
 
       {layout === 'cards' ? (
-        <Cards board={board} groups={groups} view={view} odds={odds} efficiency={efficiency} />
+        <Cards board={board} groups={groups} view={view} odds={odds} efficiency={efficiency} plain={plain} />
       ) : view === 'official' ? (
         <>
           <p className="af-stb-cue">Scroll sideways for every column — rank and team stay in place. Tap a column heading to sort.</p>
@@ -1473,7 +1543,12 @@ export function StandingsBoardView({
 
       {layout === 'table' && you ? <PinnedYou team={you} view={view} odds={odds} containerRef={containerRef} /> : null}
 
-      <div className="af-stb-notes">
+      {/*
+        The method, one tap away rather than five paragraphs under the table. Nothing is cut: every
+        sentence that was here still is, and stays in the DOM for search and screen readers.
+      */}
+      <details className="af-stb-notes af-stb-how">
+        <summary>{language === 'es' ? 'Cómo funciona esta tabla' : 'How this table works'}</summary>
         {view === 'official' ? (
           <>
             <p>{explanation.record}</p>
@@ -1511,7 +1586,7 @@ export function StandingsBoardView({
             {efficiency ? <p>{efficiency.basis}</p> : null}
           </>
         )}
-      </div>
+      </details>
 
       {board.hasHeadToHead && board.teams.length > 1 ? <WhyAbove board={board} view={view} /> : null}
 

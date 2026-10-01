@@ -1921,3 +1921,151 @@
   .af-st-draft-rec,
   .af-st-draft-odds { grid-column: 2; }
 }
+
+/*
+ * ── Cards fold to one row per team ──────────────────────────────────────────
+ *
+ * TOP-LEVEL, appended after every query above: a rule inserted inside a query silently moves into
+ * it. The card is now a <details>; its <summary> is the glance row and the stat sheet is the body.
+ * A one-column list rather than the auto-fill grid, because a standings glance reads top to bottom.
+ */
+.af-stb-cards:has(.af-stb-cardfold) {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+.af-stb-card:has(.af-stb-cardfold) { padding: 0; gap: 0; height: auto; }
+.af-stb-cardfold { display: block; }
+.af-stb-cardsum {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 12px 8px 12px;
+  list-style: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.af-stb-cardsum::-webkit-details-marker { display: none; }
+.af-stb-cardsum::after {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin-left: 2px;
+  border-right: 2px solid var(--faint);
+  border-bottom: 2px solid var(--faint);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 0.15s ease;
+}
+.af-stb-cardfold[open] > .af-stb-cardsum::after { transform: rotate(225deg) translateY(-2px); }
+.af-stb-cardsum:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 10px; }
+.af-stb-cardsum .af-stb-cardhead {
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+.af-stb-cardsum .af-stb-cardrank {
+  flex: none;
+  width: 22px;
+  font-size: 15px;
+  text-align: center;
+}
+.af-stb-cardid {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-stb-cardline {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+.af-stb-cardsum .af-stb-cardhead h4 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  font-size: 14px;
+}
+.af-stb-cardline .af-stb-you { flex: none; }
+.af-stb-cardline h4 { flex: 0 1 auto; }
+
+/* The bye and playoff lines, drawn between list rows as the table draws them between table rows. */
+.af-stb-cardsep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 2px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--good);
+}
+.af-stb-cardsep::before,
+.af-stb-cardsep::after {
+  content: '';
+  flex: 1;
+  border-top: 2px dashed currentColor;
+  opacity: 0.6;
+}
+.af-stb-cardsep::before { flex: 0 0 10px; }
+.af-stb-cardsep[data-line='bye'] { color: var(--tier-blue); }
+.af-stb-cardav {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--chip);
+  font-size: 12px;
+  font-weight: 900;
+  color: var(--text2);
+}
+.af-stb-cardglance {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-stb-cardkey {
+  min-width: 34px;
+  font-size: 13.5px;
+  font-weight: 800;
+  text-align: right;
+  color: var(--text);
+}
+.af-stb-cardodds .af-stb-odds { gap: 6px; }
+.af-stb-cardodds .af-stb-oddsbar { width: 34px; }
+.af-stb-cardodds .af-num { min-width: 34px; text-align: right; font-size: 12.5px; }
+.af-stb-cardfold > :not(summary) { margin: 0 14px; }
+.af-stb-cardfold > .af-stb-zone { margin-top: 2px; }
+.af-stb-cardfold > :last-child { margin-bottom: 14px; }
+.af-stb-cardfold > .af-stb-carddl { margin-top: 10px; }
+.af-stb-cardfold > .af-stb-cardnote,
+.af-stb-cardfold > .af-stb-cardproj { margin-top: 10px; }
+.af-stb-cardfold[open] > .af-stb-cardsum { border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+
+/* The method behind the table, folded. */
+.af-stb-how > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-stb-how > summary::marker { color: var(--faint); }
+
+.af-stb-cardid .af-stb-form i { width: 16px; height: 16px; font-size: 11px; border-radius: 4px; }
+
+@media (max-width: 640px) {
+  .af-stb-cardodds .af-stb-oddsbar { display: none; }
+}
