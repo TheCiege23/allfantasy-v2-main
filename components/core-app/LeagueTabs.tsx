@@ -145,7 +145,7 @@ export function LeagueTabs({
           <div className="af-lt-compact">
             <div className="af-lt-compact-row" style={{ gridTemplateColumns: `repeat(${primary.length}, minmax(0, 1fr))` }}>{primary.map((t) => tab(t.key, language === 'es' ? t.labelEs : t.label))}</div>
             {rest.length ? (
-              <details className="af-lt-more">
+              <details className="af-lt-more" open={restActive}>
                 <summary className="af-lt-tab" data-active={restActive}>{restActiveTab ? `${copy('More')} · ${copy(restActiveTab.label)}` : copy('More')}</summary>
                 <div className="af-lt-more-list">{rest.map((t) => tab(t.key, copy(t.label)))}</div>
               </details>
