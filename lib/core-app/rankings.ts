@@ -285,8 +285,15 @@ export type Movement = {
   season: number | null
 }
 
+export type RankingsPanel = 'power' | 'legacy'
+
 export type RankingsData = {
   scope: RankingsScopeKey
+  /**
+   * A full former page embedded in the hub (2026-10-01): `power` (was /power-rankings) on the
+   * league scope, `legacy` (was /af-rankings) on the portfolio scope. Null for the normal view.
+   */
+  panel: RankingsPanel | null
   signedIn: boolean
   filters: RankingFilters
   filtersLabel: string
@@ -828,8 +835,13 @@ export async function getRankingsData(
         ? `/api/share/career-card${qs([['design', 'rank'], ['scope', 'portfolio'], ...filterParams(filters)])}`
         : null
 
+  const panelRaw = one(sp, 'panel')
+  const panel: RankingsPanel | null =
+    panelRaw === 'power' && scope === 'league' ? 'power' : panelRaw === 'legacy' && scope === 'portfolio' ? 'legacy' : null
+
   return {
     scope,
+    panel,
     signedIn: userId != null,
     filters,
     filtersLabel: describeFilters(filters),

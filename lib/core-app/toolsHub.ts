@@ -278,12 +278,10 @@ export function buildToolsHub(input: {
           },
           tokenCost: null,
           tier: 'free',
-          // /af-rankings is the career-rank page the old dashboard linked to, and
-          // /power-rankings holds luck, odds and the win window — listed so neither
-          // is orphaned while they are not yet folded into the hub.
+          // Both former standalone pages now live in the hub as panels (2026-10-01).
           alternates: [
-            { label: 'Luck, odds and win window', href: '/power-rankings' },
-            { label: 'AF Rankings (career rank)', href: '/af-rankings' },
+            { label: 'Luck, odds and win window', href: '/core/rankings?scope=league&panel=power' },
+            { label: 'Career & legacy import', href: '/core/rankings?scope=portfolio&panel=legacy' },
           ],
         },
       ],

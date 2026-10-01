@@ -529,7 +529,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
             {/* ⚠ THREE PRODUCTS WERE ALL CALLED "Rankings" on /core: the rail's manager ladder
                 (/core/rankings), this career-rank page, and the tools tile's league power rankings
                 (/rankings). Each label now names which one it opens. Production audit 2026-09-28. */}
-            <Link className="af3a-navitem" href="/af-rankings">
+            <Link className="af3a-navitem" href="/core/rankings">
               <i>↑</i>Career rank
               {career?.level != null ? <em className="af3a-tag">LVL {career.level}</em> : null}
             </Link>
@@ -939,7 +939,7 @@ export function Dash3ACareer({ career, freshness = null }: { career: CareerData 
                   Level comes from the XP engine: championships, win rate, tenure,
                   leagues and playoff appearances.
                 </Help>
-                <Link className="af3a-cardlink" href="/af-rankings">Rankings →</Link>
+                <Link className="af3a-cardlink" href="/core/rankings">Rankings →</Link>
               </header>
 
               {career ? (

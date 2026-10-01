@@ -23,6 +23,8 @@ import { RankTable, type RankColumn, type RankRow } from '@/components/core-app/
 import { TrendLine } from '@/components/core-app/rankings/TrendLine'
 import { RankingsFilterBar } from '@/components/core-app/rankings/RankingsFilterBar'
 import { ShareMomentButton } from '@/components/core-app/screens/ShareMomentButton'
+import PowerRankingsPanel from '@/components/core-app/rankings/power/PowerRankingsPanel'
+import AfRankingsPage from '@/components/rankings/AfRankingsClient'
 
 /**
  * Rankings — handoff 14a, rebuilt around three separate scopes.
@@ -1208,12 +1210,53 @@ function LeaguePowerCard({ league }: { league: LeagueView }) {
         </p>
       )}
       <div className="af-rk-headact">
-        <Link className="af-rk-btn" href="/power-rankings">
+        <Link
+          className="af-rk-btn"
+          href={`/core/rankings?scope=league&panel=power${league.selected ? `&league=${encodeURIComponent(league.selected.id)}` : ''}`}
+        >
           {power ? 'Luck, odds and win window →' : 'Run power rankings →'}
         </Link>
       </div>
     </div>
   )
+}
+
+/**
+ * The two former standalone pages, now panels of a scope (2026-10-01): /power-rankings under One
+ * league, /af-rankings under My portfolio. A sub-tab row switches between the scope's own view and
+ * its panel; both are plain links, so each is a URL that survives a reload and can be shared.
+ */
+function PanelTabs({
+  label,
+  tabs,
+}: {
+  label: string
+  tabs: Array<{ key: string; label: string; href: string; current: boolean }>
+}) {
+  return (
+    <nav className="af-rk-tabs af-rk-paneltabs" aria-label={label}>
+      {tabs.map((t) => (
+        <Link key={t.key} href={t.href} className="af-rk-tab" aria-current={t.current ? 'page' : undefined}>
+          {t.label}
+        </Link>
+      ))}
+    </nav>
+  )
+}
+
+function leagueTabs(data: RankingsData, leagueId: string | null) {
+  const league = leagueId ? `&league=${encodeURIComponent(leagueId)}` : ''
+  return [
+    { key: 'standings', label: 'Standings & power', href: `/core/rankings?scope=league${league}`, current: data.panel !== 'power' },
+    { key: 'power', label: 'Luck, odds & win window', href: `/core/rankings?scope=league&panel=power${league}`, current: data.panel === 'power' },
+  ]
+}
+
+function portfolioTabs(data: RankingsData) {
+  return [
+    { key: 'score', label: 'Score, XP & trends', href: '/core/rankings?scope=portfolio', current: data.panel !== 'legacy' },
+    { key: 'legacy', label: 'Career & legacy import', href: '/core/rankings?scope=portfolio&panel=legacy', current: data.panel === 'legacy' },
+  ]
 }
 
 /* ─────────────────────────────── the screen ─────────────────────────────── */
@@ -1253,7 +1296,10 @@ export function Rankings({ data, leagueId = null }: { data: RankingsData; league
 
       <ScopeTabs data={data} leagueId={leagueId} />
 
-      {data.scope !== 'league' && data.scope !== 'skill' ? (
+      {data.scope === 'league' && data.signedIn ? <PanelTabs label="League view" tabs={leagueTabs(data, leagueId)} /> : null}
+      {data.scope === 'portfolio' && data.signedIn ? <PanelTabs label="Portfolio view" tabs={portfolioTabs(data)} /> : null}
+
+      {data.scope !== 'league' && data.scope !== 'skill' && data.panel == null ? (
         <RankingsFilterBar
           filters={data.filters}
           options={data.options}
@@ -1262,7 +1308,15 @@ export function Rankings({ data, leagueId = null }: { data: RankingsData; league
         />
       ) : null}
 
-      {data.scope === 'skill' ? (
+      {data.panel === 'power' ? (
+        <div className="af-rk-powerpanel">
+          <PowerRankingsPanel initialLeagueId={leagueId} />
+        </div>
+      ) : data.panel === 'legacy' ? (
+        <div className="af-rk-powerpanel">
+          <AfRankingsPage />
+        </div>
+      ) : data.scope === 'skill' ? (
         data.skill ? (
           <SkillBody skill={data.skill} signedIn={data.signedIn} />
         ) : (

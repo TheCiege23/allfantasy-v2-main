@@ -44,7 +44,7 @@ export const LOCKED_FEATURES: Record<string, LockedFeature> = {
   league_rankings: {
     // components/app/power-rankings/AICommentary.tsx
     label: 'power rankings commentary',
-    href: '/af-rankings',
+    href: '/core/rankings?scope=league&panel=power',
   },
   waiver: {
     // components/waivers/AIWaiverRecommendationsPanel.tsx, lib/entitlements/afAccess.ts

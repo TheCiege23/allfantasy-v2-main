@@ -1129,3 +1129,14 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
 .af-rk-power { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line2); }
 .af-rk-power-notes { display: grid; gap: 6px; margin-top: 10px; font-size: 13.5px; color: var(--text2); }
 .af-rk-power-notes b { margin-right: 6px; }
+
+/* ── 2026-10-01: former pages embedded as hub panels ─────────────────────
+ * /power-rankings and /af-rankings render inside the hub unchanged. Their page shells set
+ * `min-h-screen` (Tailwind) — inside the hub that would push the footer a full viewport down,
+ * so the wrapper neutralises it here instead of editing four shells in each page. */
+.af-rk-paneltabs { margin: 0; }
+.af-rk-powerpanel { border-radius: 16px; overflow: hidden; border: 1px solid var(--line2); }
+.af-rk-powerpanel .min-h-screen { min-height: 0; }
+@media (max-width: 720px) {
+  .af-rk-paneltabs .af-rk-tab { min-height: 44px; display: inline-flex; align-items: center; }
+}

@@ -56,6 +56,58 @@ describe('/rankings is retired into the hub', () => {
   })
 })
 
+describe('/power-rankings and /af-rankings are panels of the hub', () => {
+  beforeEach(() => {
+    redirectMock.mockClear()
+  })
+
+  it('/power-rankings redirects to the power panel, carrying a league', async () => {
+    const { default: Page } = await import('@/app/power-rankings/page')
+    await expect(Page({ searchParams: Promise.resolve({ leagueId: 'L9' }) })).rejects.toThrow('NEXT_REDIRECT')
+    expect(redirectMock).toHaveBeenLastCalledWith('/core/rankings?scope=league&panel=power&league=L9')
+    await expect(Page({})).rejects.toThrow('NEXT_REDIRECT')
+    expect(redirectMock).toHaveBeenLastCalledWith('/core/rankings?scope=league&panel=power')
+  })
+
+  it('/af-rankings redirects to the legacy panel and KEEPS the import query (jobId, imported, done)', async () => {
+    const { default: Page } = await import('@/app/af-rankings/page')
+    await expect(Page({ searchParams: Promise.resolve({ jobId: 'job 1', imported: 'true', scope: 'global' }) })).rejects.toThrow('NEXT_REDIRECT')
+    const url = new URL(redirectMock.mock.lastCall![0] as string, 'https://x.test')
+    expect(url.pathname).toBe('/core/rankings')
+    expect(url.searchParams.get('scope')).toBe('portfolio')
+    expect(url.searchParams.get('panel')).toBe('legacy')
+    expect(url.searchParams.get('jobId')).toBe('job 1')
+    expect(url.searchParams.get('imported')).toBe('true')
+  })
+
+  it('the moved screens point their own "clean URL" back at the hub, never the old path', () => {
+    const af = read('components/rankings/AfRankingsClient.tsx')
+    // Navigation and links only — the file's own comment names the old path on purpose.
+    expect(af).not.toMatch(/(?:push|replace)\(\s*['"`]\/af-rankings|href=["'{`]+\/af-rankings/)
+    expect(af).toMatch(/export const LEGACY_PANEL_HREF = '\/core\/rankings\?scope=portfolio&panel=legacy'/)
+    const power = read('components/core-app/rankings/power/PowerRankingsPanel.tsx')
+    expect(power).not.toMatch(/callbackUrl=%2Fpower-rankings/)
+    expect(fs.existsSync(path.resolve(process.cwd(), 'app/power-rankings/KickerValuationBand.tsx'))).toBe(false)
+  })
+
+  it('/app/power-rankings goes straight to the panel, not via a second redirect', () => {
+    const src = read('middleware.ts')
+    const at = src.indexOf('if (pathname.startsWith("/app/power-rankings")) {')
+    expect(at).toBeGreaterThan(0)
+    const block = src.slice(at, at + 400)
+    expect(block).toMatch(/url\.pathname = "\/core\/rankings"/)
+    expect(block).toMatch(/url\.searchParams\.set\("panel", "power"\)/)
+  })
+
+  it('the hub renders each panel only on its own scope', () => {
+    const src = read('lib/core-app/rankings.ts')
+    expect(src).toMatch(/panelRaw === 'power' && scope === 'league' \? 'power' : panelRaw === 'legacy' && scope === 'portfolio' \? 'legacy' : null/)
+    const screen = read('components/core-app/screens/Rankings.tsx')
+    expect(screen).toMatch(/data\.panel === 'power' \? \(\s*<div className="af-rk-powerpanel">\s*<PowerRankingsPanel initialLeagueId=\{leagueId\} \/>/)
+    expect(screen).toMatch(/data\.panel === 'legacy' \? \(\s*<div className="af-rk-powerpanel">\s*<AfRankingsPage \/>/)
+  })
+})
+
 describe('league power on the One-league tab', () => {
   beforeEach(() => {
     snaps.rows = []

@@ -141,7 +141,7 @@ export default function PlatformLegacyLeaderboardPanel() {
             Refresh
           </button>
           <Link
-            href="/power-rankings"
+            href="/core/rankings?scope=league&panel=power"
             className="rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-1.5 text-center text-sm text-cyan-200 hover:bg-cyan-500/25"
           >
             Platform power rankings
