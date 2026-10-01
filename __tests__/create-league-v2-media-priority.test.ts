@@ -48,6 +48,8 @@ describe('resolveCreateLeagueHeroMedia (focus)', () => {
     expect(m.mediaKey).toMatch(/^draft:snake/)
     expect(m.video).toBe('/media/create-league/drafts/videos/Snake Draft.mp4')
     expect(m.badge).toBe('Draft format')
+    expect(m.fallback).toBe(SPORT_MEDIA.NFL.video)
+    expect(m.fallback).toMatch(/\.mp4$/)
   })
 
   it('draft focus falls back to concept when draft asset missing', () => {

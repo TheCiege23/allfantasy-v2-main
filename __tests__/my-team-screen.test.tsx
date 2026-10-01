@@ -1,6 +1,6 @@
 import React from 'react'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { fireEvent, render } from '@testing-library/react'
 
 import { MyTeam } from '@/components/core-app/screens/MyTeam'
 import type { LineupPlayer, MyTeamData } from '@/lib/core-app/myTeam'
@@ -144,6 +144,20 @@ function text(ui: React.ReactElement): string {
 }
 
 describe('My Team — the reported problems', () => {
+  it('falls back to initials when a player headshot fails and removes a broken team crest', () => {
+    const starter = player({ imageUrl: 'https://example.com/broken-player.png', logoUrl: 'https://example.com/broken-team.png' })
+    const { container } = render(<MyTeam data={data({
+      starters: { available: true, data: [{ slotLabel: 'QB', player: starter, empty: false, unresolvedId: null }] },
+      bench: { available: false, reason: 'none' },
+    })} />)
+    const portrait = container.querySelector('.af-mt-portrait')!
+    fireEvent.error(portrait.querySelector('img.af-mt-avatar')!)
+    fireEvent.error(portrait.querySelector('img.af-mt-teamlogo')!)
+    expect(portrait.querySelector('img.af-mt-teamlogo')?.getAttribute('src')).toContain('/den.png')
+    fireEvent.error(portrait.querySelector('img.af-mt-teamlogo')!)
+    expect(portrait.querySelector('.af-mt-avatar--none')?.textContent).toBe('B')
+    expect(portrait.querySelector('img.af-mt-teamlogo')).toBeNull()
+  })
   it.each([{ eliminated: true }, { completed: true }])('does not offer lineup fixes for an inactive team: %j', (status) => {
     const t = text(<MyTeam data={data(status)} />)
     expect(t).not.toContain('Nobody is starting in this slot')

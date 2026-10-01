@@ -19,8 +19,8 @@ export type ResolvedCreateLeagueMedia = MediaAsset & {
   badge?: string
 }
 
-function asMediaFromDraft(base: string): MediaAsset {
-  return { video: base, fallback: '/af-crest.png' }
+function asMediaFromDraft(base: string, fallback: string): MediaAsset {
+  return { video: base, fallback }
 }
 
 function hasPlayableVideo(asset: MediaAsset | undefined): boolean {
@@ -28,9 +28,10 @@ function hasPlayableVideo(asset: MediaAsset | undefined): boolean {
 }
 
 const FALLBACK_MEDIA: ResolvedCreateLeagueMedia = {
-  video: '/af-crest.png',
-  fallback: '/af-crest.png',
-  mediaKey: 'fallback:crest',
+  video: SPORT_MEDIA.NFL.video,
+  poster: SPORT_MEDIA.NFL.poster,
+  fallback: SPORT_MEDIA.NFL.fallback,
+  mediaKey: 'fallback:sport',
 }
 
 const ORDER_BY_FOCUS: Record<HeroMediaFocus, Array<'concept' | 'sport' | 'draft'>> = {
@@ -59,9 +60,8 @@ export function resolveCreateLeagueHeroMedia(args: {
 
   const effective = resolveEffectiveDraftType(args.leagueType, args.draftType)
   const draftRow = getDraftTypeMedia(effective as import('@/lib/league-creation-wizard/types').DraftTypeId)
-  const draftClip = asMediaFromDraft(draftRow.selectionVideo)
-
   const sportBase = SPORT_MEDIA[args.sport] ?? SPORT_MEDIA.NFL
+  const draftClip = asMediaFromDraft(draftRow.selectionVideo, sportBase.video)
 
   const conceptResolved: ResolvedCreateLeagueMedia | null = hasPlayableVideo(conceptBase)
     ? {

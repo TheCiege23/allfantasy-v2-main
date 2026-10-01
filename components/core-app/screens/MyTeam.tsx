@@ -306,6 +306,11 @@ function edge(m: NextMatchup, bestBall: boolean): string | null {
 }
 
 function PlayerCell({ player }: { player: LineupPlayer }) {
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null)
+  const [failedLogoUrls, setFailedLogoUrls] = useState<string[]>([])
+  const imageUrl = player.imageUrl && player.imageUrl !== failedImageUrl ? player.imageUrl : null
+  const registryLogoUrl = player.team ? teamLogoUrl(player.team, player.sport ?? 'NFL') : ''
+  const logoUrl = [player.logoUrl, registryLogoUrl].find((url) => url && !failedLogoUrls.includes(url)) || ''
   return (
     <div className="af-mt-player">
       {/*
@@ -315,23 +320,24 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
         and who he plays for -- which is how every sports app does it.
       */}
       <span className="af-mt-portrait">
-        {player.imageUrl ? (
+        {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img className="af-mt-avatar" src={player.imageUrl} alt="" width={36} height={36} />
+          <img className="af-mt-avatar" src={imageUrl} alt="" width={36} height={36} onError={() => setFailedImageUrl(imageUrl)} />
         ) : (
           <span className="af-mt-avatar af-mt-avatar--none" aria-hidden>
             {player.name.charAt(0)}
           </span>
         )}
-        {player.logoUrl || (player.team && teamLogoUrl(player.team, player.sport ?? 'NFL')) ? (
+        {logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             className="af-mt-teamlogo"
-            src={player.logoUrl ?? teamLogoUrl(player.team ?? '', player.sport ?? 'NFL')}
+            src={logoUrl}
             alt=""
             width={16}
             height={16}
             loading="lazy"
+            onError={() => setFailedLogoUrls((urls) => [...urls, logoUrl])}
           />
         ) : null}
       </span>
