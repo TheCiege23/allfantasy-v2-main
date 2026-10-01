@@ -300,7 +300,7 @@ function OfficialTable({
   const hasProj = board.teams.some((t) => t.projected)
   const h2h = board.hasHeadToHead
   const hasNext = board.teams.some((t) => t.next)
-  const hasPath = h2h && board.gamesRemaining > 0
+  const hasPath = board.showPaths
   const field = Math.min(board.rules.playoffTeams, board.teams.length)
   const byes = Math.min(board.rules.byes, field)
   const seedOf = new Map(board.teams.map((t) => [t.rosterId, t.seed]))
@@ -619,7 +619,7 @@ function Cards({
   odds: StandingsOdds | null
 }) {
   const h2h = board.hasHeadToHead
-  const hasPath = h2h && board.gamesRemaining > 0
+  const hasPath = board.showPaths
   const seedOf = new Map(board.teams.map((t) => [t.rosterId, t.seed]))
   return (
     <div className="af-stb-cardwrap">
@@ -1016,7 +1016,7 @@ export function StandingsBoardView({
                 : `The league does not report its playoff size, so the line assumes ${field}.`}{' '}
               Clinched and eliminated are certainties: a level record counts against the team, because a points tiebreak can still move.
             </p>
-            {board.hasHeadToHead && board.gamesRemaining > 0 ? (
+            {board.showPaths ? (
               <p>
                 Magic numbers: <strong>C</strong> is how many more wins guarantee a playoff spot, <strong>E</strong> how many more
                 losses end the chase — each whatever every other game does, so help from elsewhere can only lower them.

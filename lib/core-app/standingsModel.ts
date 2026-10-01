@@ -493,6 +493,11 @@ export type StandingsBoard = {
   divisions: Array<{ key: string; name: string }>
   rules: StandingsRules
   gamesRemaining: number
+  /**
+   * Whether the magic numbers are worth printing. False in the first half of the regular season unless
+   * some team is already settled — see `showMagicNumbers`.
+   */
+  showPaths: boolean
   projectionBasis: string
   /** Why projections are missing, when they are. */
   projectionWithheld: string | null
@@ -949,11 +954,36 @@ export function buildStandingsBoard(input: BoardInput): StandingsBoard {
     divisions: [...divisionNames.entries()].map(([key, name]) => ({ key, name })),
     rules,
     gamesRemaining: remaining.length,
+    showPaths: showMagicNumbers({
+      hasHeadToHead,
+      playedWeeks: snapshots.length,
+      remainingWeeks: new Set(remaining.map((g) => g.week)).size,
+      anySettled: boardTeams.some((t) => t.clinched != null || t.zone === 'eliminated'),
+    }),
     projectionBasis: projection.basis,
     projectionWithheld: projection.withheld,
     powerBasis:
       'AF Power is our analysis, not the league table: all-play winning percentage — every team against every other team, every week — with the last three weeks weighted 30% once four weeks are scored. Ties go to points for.',
   }
+}
+
+/**
+ * When the magic numbers are worth a column.
+ *
+ * ⚠ HIDDEN EARLY BECAUSE THEY ARE TRUE BUT SAY NOTHING. With eleven weeks left every team reads "C 10" or
+ * "E 11" — win or lose nearly every game — and a column of those is noise beside a playoff percentage.
+ * They earn their place once the second half starts (no more weeks left than played), or as soon as any
+ * team is settled, since a clinch or an elimination is real information whenever it happens. The
+ * in-progress week counts as remaining, as it does everywhere else on this board.
+ */
+export function showMagicNumbers(args: {
+  hasHeadToHead: boolean
+  playedWeeks: number
+  remainingWeeks: number
+  anySettled: boolean
+}): boolean {
+  if (!args.hasHeadToHead || args.remainingWeeks === 0) return false
+  return args.anySettled || args.remainingWeeks <= args.playedWeeks
 }
 
 /** Above this many remaining head-to-head games, outcomes are bounded rather than enumerated. */
