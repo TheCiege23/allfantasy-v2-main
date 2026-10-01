@@ -10,8 +10,8 @@ import '@/components/core-app/af-core-boards.css'
  * the list did not show — plus the two image primitives (league crest, player
  * headshot) that carry the art through all of them.
  *
- * Server components throughout. Nothing here holds state, so no board pays for
- * a client bundle just to draw a row.
+ * Most primitives remain server components. PlayerFace is a small client island
+ * so a failed external headshot or club crest can fall back cleanly.
  */
 
 /* ── monograms ───────────────────────────────────────────────────────────── */
@@ -255,37 +255,7 @@ export function LeagueCrest({
  * that null is deliberate and documented in lib/core-app/teamLogo.ts. Neither
  * absence is an error and neither may render a broken glyph beside a real name.
  */
-export function PlayerFace({
-  imageUrl,
-  name,
-  teamLogoUrl,
-  size = 'md',
-}: {
-  imageUrl?: string | null
-  name: string
-  teamLogoUrl?: string | null
-  size?: 'md' | 'sm'
-}) {
-  const px = size === 'md' ? 34 : 26
-  const faceCls = size === 'md' ? 'af-bd-face' : 'af-bd-face af-bd-face--sm'
-
-  return (
-    <span className="af-bd-facewrap">
-      {imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className={faceCls} src={imageUrl} alt="" width={px} height={px} loading="lazy" />
-      ) : (
-        <span className={`${faceCls} af-bd-face--none`} aria-hidden>
-          {personMark(name)}
-        </span>
-      )}
-      {teamLogoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="af-bd-club" src={teamLogoUrl} alt="" width={15} height={15} loading="lazy" />
-      ) : null}
-    </span>
-  )
-}
+export { PlayerFace } from './PlayerFace'
 
 /* ── row atoms ───────────────────────────────────────────────────────────── */
 
