@@ -45,14 +45,53 @@ async function artwork(file) {
   return sharp(path.join(root, file)).trim({ threshold: 18 }).toBuffer()
 }
 
+/**
+ * The wordmark, re-inked in the crest's rim blue.
+ *
+ * ⚠ WHY. The source lettering is a dark blue bevel: measured against the black
+ * card it runs from 2.15:1 along its bottom edge to 3.97:1 across the middle,
+ * so no part of it reaches 4.5:1. That is a pass for large text on the full
+ * 1200px card, but iMessage, Slack and X show this card at roughly 300px wide,
+ * where the wordmark is small text. #0B8DCB is 5.69:1 on black, and it is the
+ * crest's own rim colour, so crest and wordmark read as one mark.
+ *
+ * HOW. The source is artwork on black, so each pixel's brightest channel is how
+ * much letter it holds. That becomes the alpha of a flat WORDMARK_INK fill:
+ * anti-aliased edges stay soft, and the bevel's shading is replaced by one
+ * colour. INK_FULL is the fraction of the bevel's peak at which coverage reaches
+ * 1. Measured, core contrast from top to bottom of the letters:
+ *   0.80  5.63 … 4.01   the dim bottom band (~70% of peak) only part-fills
+ *   0.65  5.68 … 5.47   solid top to bottom — chosen
+ *   0.55  5.69 … 5.68   also solid, but starts to thicken the strokes
+ */
+const WORDMARK_INK = { r: 0x0b, g: 0x8d, b: 0xcb }
+const INK_FULL = 0.65
+
+async function reink(buffer) {
+  const { data, info } = await sharp(buffer).removeAlpha().raw().toBuffer({ resolveWithObject: true })
+  let peak = 0
+  for (let i = 0; i < data.length; i += 3) peak = Math.max(peak, data[i], data[i + 1], data[i + 2])
+  const out = Buffer.alloc(info.width * info.height * 4)
+  for (let p = 0, q = 0; p < data.length; p += 3, q += 4) {
+    const coverage = Math.min(1, Math.max(data[p], data[p + 1], data[p + 2]) / (peak * INK_FULL))
+    out[q] = WORDMARK_INK.r
+    out[q + 1] = WORDMARK_INK.g
+    out[q + 2] = WORDMARK_INK.b
+    out[q + 3] = Math.round(coverage * 255)
+  }
+  return sharp(out, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer()
+}
+
 async function main() {
   const crest = await sharp(await artwork('public/af-crest-transparent.png'))
     .resize({ height: 300, fit: 'inside' })
     .toBuffer()
 
-  const wordmark = await sharp(await artwork('public/branding/allfantasy-wordmark-logo.png'))
-    .resize({ width: 470, fit: 'inside' })
-    .toBuffer()
+  const wordmark = await reink(
+    await sharp(await artwork('public/branding/allfantasy-wordmark-logo.png'))
+      .resize({ width: 470, fit: 'inside' })
+      .toBuffer(),
+  )
 
   const crestMeta = await sharp(crest).metadata()
   const wordMeta = await sharp(wordmark).metadata()
