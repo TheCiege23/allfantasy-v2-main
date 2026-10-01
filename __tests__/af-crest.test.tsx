@@ -102,6 +102,15 @@ describe('the shipped crest raster', () => {
     expect(stats.channels[3].min).toBe(255)
   })
 
+  it('the Play feature graphic is 1024x500 with NO alpha channel', () => {
+    // The mirror image of the listing icon's rule: Play wants "JPEG or 24-bit PNG
+    // (no alpha)" here, so colour type 2 (RGB) or 0 (grey) — never 4 or 6.
+    const buf = fs.readFileSync(path.join(process.cwd(), 'docs', 'play-store', 'feature-graphic-1024x500.png'))
+    expect(buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe(true)
+    expect([0, 2]).toContain(buf[25])
+    expect([buf.readUInt32BE(16), buf.readUInt32BE(20)]).toEqual([1024, 500])
+  })
+
   it('declares a DEDICATED maskable icon, not the "any" one reused', () => {
     // Android crops maskable icons to a circle of 80%; the "any" crest is sized
     // for iOS's rounded square and would lose its shoulders.
