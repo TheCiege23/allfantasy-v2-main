@@ -1229,8 +1229,15 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   .af-rk-classbar { margin-bottom: 10px; padding-bottom: 10px; }
 
   .af-rk-rival-who b { font-size: 14px; }
+}
 
-  /* League "Points for": horizontal bars, so every team name is printed in full. */
+/* League "Points for": horizontal bars whenever the CHART is narrow, so every team name is
+ * printed in full. A container query, not a viewport one: measured on real data, the chart
+ * truncated 10/10 names on a phone, 9/10 at 768px (a 320px column) and 7/10 at 1280px (476px).
+ * The viewport width never told us how wide the chart was. */
+.af-rk-pfchart { container: af-rk-pf / inline-size; }
+
+@container af-rk-pf (max-width: 639px) {
   .af-rk-pfchart .af-workbook-plot { height: auto; padding: 4px 0 0; overflow: visible; }
   .af-rk-pfchart .af-workbook-grid { display: none; }
   .af-rk-pfchart .af-workbook-bars { flex-direction: column; align-items: stretch; gap: 6px; height: auto; min-width: 0; }
@@ -1315,4 +1322,39 @@ th[aria-sort="descending"] .af-rk-sortlink { color: var(--accent); }
   .af-rk-fold-toggle:focus-visible + .af-rk-fold-summary { outline: 2px solid var(--accent); outline-offset: 2px; }
   .af-rk-fold-toggle:not(:checked) ~ .af-rk-fold-body { display: none; }
   .af-rk-fold-toggle:checked ~ .af-rk-fold-body { margin-top: 10px; }
+}
+
+/* ── Class "rated weeks" log on a phone ────────────────────────────────────────
+ *
+ * One card per WEEK (weekLog.ts). The week is the card's title line, not the 28px rank slot a
+ * lead cell gets elsewhere; the week's change sits top right; "Vs the league" and the matchup are
+ * chips; and the per-league shares stay visible, because on a phone they are the only way to see
+ * which leagues moved you. Top-level, after every query above.
+ */
+@media (max-width: 720px) {
+  .af-rk-weeklog .af-rk-cards tr { padding-left: 12px; }
+  .af-rk-weeklog .af-rk-cards [data-card='lead'] {
+    position: static;
+    display: block;
+    width: auto;
+    padding-right: 6.5rem;
+  }
+  .af-rk-weeklog .af-rk-cards [data-card='detail'][data-label='Leagues'] { display: block; }
+  .af-rk-weeklog .af-rk-cards [data-card='detail'][data-label='Leagues']::before { margin-right: 5px; }
+  /* "Beat 231 of 431" says what it is; without its label it shares a line with the matchup. */
+  .af-rk-weeklog .af-rk-cards [data-card='detail'][data-label='Vs the league']::before { content: none; }
+  .af-rk-weeklog .af-rk-cards [data-card='detail'][data-label='Leagues'] .af-rk-cellsub {
+    margin-top: 3px;
+    color: var(--text2);
+    font-size: 12px;
+    line-height: 1.45;
+    /* Two lines on a phone: one manager had 41 leagues in a single week. The list is sorted by
+     * the size of each move, so the clamp keeps the leagues that mattered; the full text is
+     * still in the DOM for a screen reader, and the desktop table shows all of it. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+  }
 }

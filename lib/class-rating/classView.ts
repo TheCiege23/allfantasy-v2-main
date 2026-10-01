@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { CLASS_MODEL_VERSION, GLICKO } from '@/lib/class-rating/engine'
 import { divisionBand } from '@/lib/class-rating/divisionGate'
 import { CLASS_SPORT, classTablesReady } from '@/lib/class-rating/store'
+import { LOG_WEEKS_SHOWN } from '@/lib/class-rating/weekLog'
 
 export { getDivisionsForUsers } from '@/lib/class-rating/reads'
 
@@ -22,7 +23,14 @@ export { getDivisionsForUsers } from '@/lib/class-rating/reads'
  *   • Uncertainty travels with every number (F2.10a rule 5): a provisional rating has no Class.
  */
 
-export const LOG_SHOWN = 25
+/**
+ * The log is the newest WEEKS, every league in each — never the newest N league-weeks.
+ * ⚠ A row cap cuts a busy week in half: at 25 league-weeks a manager in twelve leagues saw two
+ * weeks, the older one missing some of its leagues, so its total was wrong. The screen groups
+ * the rows by week (weekLog.ts), which is what the rating updates on. `LOG_ROW_CAP` only bounds
+ * the query.
+ */
+const LOG_ROW_CAP = 400
 const BOARD_LIMIT = 200
 
 export type ClassBoardRow = {
@@ -261,8 +269,15 @@ export async function getClassView(userId: string | null, divisionParam: string 
                    ON o."subjectKey" = e."opponentKey" AND o.sport = e.sport AND o."modelVersion" = e."modelVersion"
             LEFT JOIN app_users ou ON ou.id = o."userId"
            WHERE e."subjectKey" = ${mine.subjectKey} AND e.sport = ${CLASS_SPORT} AND e."modelVersion" = ${CLASS_MODEL_VERSION}
-           ORDER BY e.season DESC, e.week DESC, e."leagueId"
-           LIMIT ${LOG_SHOWN}`
+             AND (e.season, e.week) IN (
+                   SELECT w.season, w.week FROM (
+                     SELECT DISTINCT season, week FROM manager_rating_events
+                      WHERE "subjectKey" = ${mine.subjectKey} AND sport = ${CLASS_SPORT} AND "modelVersion" = ${CLASS_MODEL_VERSION}
+                   ) w
+                   ORDER BY w.season DESC, w.week DESC
+                   LIMIT ${LOG_WEEKS_SHOWN})
+           ORDER BY e.season DESC, e.week DESC, e."ratingDelta" DESC, e."leagueId"
+           LIMIT ${LOG_ROW_CAP}`
       ).map((e) => ({
         leagueId: e.leagueId,
         leagueName: e.leagueName,
