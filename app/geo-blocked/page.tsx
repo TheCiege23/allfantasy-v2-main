@@ -19,7 +19,7 @@ export default async function GeoBlockedPage(
   return (
     <main className="min-h-screen bg-gradient-to-b from-neutral-950 via-slate-950 to-neutral-950 px-4 py-12 text-white sm:px-6">
       <div className="mx-auto max-w-xl text-center">
-        <img src="/af-crest.png" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
+        <img src="/af-crest.svg" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
         <h1 className="mb-2 text-2xl font-black sm:text-3xl">🚫 AllFantasy.ai Is Not Available in Washington State</h1>
         <p className="mb-6 text-sm leading-7 text-white/70">
           We&apos;re sorry, but Washington state law (RCW 9.46.240) classifies all fantasy sports — including free contests — as

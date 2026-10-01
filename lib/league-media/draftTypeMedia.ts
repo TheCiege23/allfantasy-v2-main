@@ -9,7 +9,7 @@ export type DraftTypeMedia = {
   defaultDraftImageUrl: string
 }
 
-const FALLBACK = '/af-crest.png'
+const FALLBACK = '/af-crest.svg'
 
 /** Human-readable packaged thumbnails under /media/create-league/drafts/thumbnails/ */
 const DRAFT_PACKAGED_THUMB_LABEL: Record<string, string> = {

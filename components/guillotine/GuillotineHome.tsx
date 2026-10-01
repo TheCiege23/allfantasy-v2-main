@@ -274,7 +274,7 @@ export function GuillotineHome({ leagueId, sport, leagueName }: GuillotineHomePr
               <div className="relative z-10 flex h-9 w-9 items-center justify-center rounded-full border border-[#1E6CFF]/60 bg-[#040915] shadow-[0_0_12px_rgba(30,108,255,0.45)]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src="/af-crest.png"
+                  src="/af-crest.svg"
                   alt=""
                   className="h-6 w-6 object-contain"
                 />

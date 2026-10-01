@@ -86,7 +86,7 @@ export function resolveSportLeagueIntro(input: {
 
   return {
     video,
-    poster: SPORT_INTRO_POSTER[sport] ?? '/af-crest.png',
+    poster: SPORT_INTRO_POSTER[sport] ?? '/af-crest.svg',
     label: SPORT_INTRO_LABEL[sport] ?? sport,
   }
 }

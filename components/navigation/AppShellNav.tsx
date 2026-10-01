@@ -60,7 +60,7 @@ export default function AppShellNav({
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Link href={isAuthenticated ? "/dashboard" : "/"} className="flex shrink-0 items-center gap-2">
             <Image
-              src="/af-crest.png"
+              src="/af-crest.svg"
               alt="AllFantasy crest"
               width={32}
               height={32}
