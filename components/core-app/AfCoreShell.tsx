@@ -2273,8 +2273,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             data-core-nav=""
             data-active={active === 'live' && !mobileMoreOpen}
             aria-current={active === 'live' && !mobileMoreOpen ? 'page' : undefined}
+            /* The same count the desktop rail's Live item carries. A dot alone says nothing to a screen reader. */
+            aria-label={props.liveGameCount && props.liveGameCount > 0 ? `Live, ${props.liveGameCount} ${props.liveGameCount === 1 ? 'game' : 'games'} in progress` : undefined}
           >
-            <span className="af-tabbar-glyph" aria-hidden>●</span>
+            <span className="af-tabbar-glyph" aria-hidden>
+              ●
+              {props.liveGameCount && props.liveGameCount > 0 ? <span className="af-tabbar-dot" data-tone="live" /> : null}
+            </span>
             <span className="af-tabbar-label">{copy('Live')}</span>
           </Link>
           <button

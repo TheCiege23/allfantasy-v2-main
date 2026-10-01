@@ -1,7 +1,9 @@
 import { storeChimmyScreenshot, readChimmyScreenshot } from '@/lib/chimmy-chat/privateScreenshot'
+import { FUN_MODE_DIRECTIVE, isFunModeTone } from '@/lib/chimmy/funMode'
+import { extractChimmyGifMood, resolveChimmyGif } from '@/lib/chimmy/chimmyGif'
 import { parseScreenshotWithVision } from '@/lib/chimmy/screenshotVision'
 import { NextRequest, NextResponse } from 'next/server'
-import { CHIMMY_CURRENT_REQUEST_POLICY } from '@/lib/chimmy/currentRequestFocus'
+import { CHIMMY_CURRENT_REQUEST_POLICY, markEarlierImageTurns } from '@/lib/chimmy/currentRequestFocus'
 import { LINEUP_ACTION_RULES } from '@/lib/chimmy/lineupActionEvidence'
 import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
 import { leagueForbidsTrades } from '@/lib/chimmy/decisionFormatGate'
@@ -931,9 +933,13 @@ function buildUserMessage(input: {
     }
   }
 
-  if (input.tone || input.detailLevel || input.riskMode) {
+  if (isFunModeTone(input.tone)) {
+    parts.push(`RESPONSE STYLE — FUN MODE:\n${FUN_MODE_DIRECTIVE}`)
+  }
+
+  if ((input.tone && !isFunModeTone(input.tone)) || input.detailLevel || input.riskMode) {
     const preferenceContext = [
-      input.tone ? `Tone: ${input.tone}` : null,
+      input.tone && !isFunModeTone(input.tone) ? `Tone: ${input.tone}` : null,
       input.detailLevel ? `Detail Level: ${input.detailLevel}` : null,
       input.riskMode ? `Risk Mode: ${input.riskMode}` : null,
     ]
@@ -1410,7 +1416,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   )
   let leagueId = requestedLeagueId ?? null
   let leagueNameHint = requestedLeagueNameHint ?? null
-  const conversation = parsedConversation.slice(-MAX_CONVERSATION_CONTEXT_TURNS)
+  const conversation = markEarlierImageTurns(parsedConversation.slice(-MAX_CONVERSATION_CONTEXT_TURNS))
   const imageFile = imageValidation.file
 
   const initialIntent = classifyPecrIntent(message)
@@ -3083,7 +3089,15 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      */
     const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[] }
     const loopArgs = {
-      question: message,
+      /*
+       * The screenshot read for THIS request rides with the question, fenced as evidence exactly as
+       * the fallback prompt fences it. The loop answers first and used to get the question alone, so
+       * an image that was not a trade card was answered by a model that never saw what was read
+       * from it — and said so ("I can't see the image"), which then replayed into later answers.
+       */
+      question: screenshotSummary
+        ? `${message}\n\n${fenceScreenshotEvidence(classifyScreenshotEvidence(screenshotSummary))}`
+        : message,
       /*
        * The PECR path has always carried the user's clock; the tool loop — the path that answers
        * first — did not, so "tonight", "this week" and "last Sunday" were resolved against the
@@ -3107,6 +3121,8 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       styleLine: [
         personalizationDirectives,
         renderTrackRecordPromptLine(chimmyTrackRecordFor(await readAdviceLearningSnapshot(), userId ?? null)),
+        /* Fun mode reaches the path that answers first too, not only the fallback prompt. */
+        isFunModeTone(tone) ? `RESPONSE STYLE — FUN MODE:\n${FUN_MODE_DIRECTIVE}` : null,
       ]
         .filter(Boolean)
         .join('\n\n'),
@@ -3165,9 +3181,12 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
        * never applied to this path, and changing that for every surface is a separate decision.
        */
       const loopModeRequested = [mode, assistantMode].some((v) => typeof v === 'string' && v.trim().length > 0)
+      /* A trailing `[gif: mood]` line never reaches the user as text; in Fun mode it becomes a GIF. */
+      const loopGifLine = extractChimmyGifMood(loop.text)
       const loopText = loopModeRequested
-        ? buildChimmyResponseForAssistantMode({ mode: selectedAssistantMode, fullResponse: loop.text })
-        : loop.text
+        ? buildChimmyResponseForAssistantMode({ mode: selectedAssistantMode, fullResponse: loopGifLine.text })
+        : loopGifLine.text
+      const loopGif = isFunModeTone(tone) && loopGifLine.mood ? await resolveChimmyGif(loopGifLine.mood).catch(() => null) : null
       const loopDelivery = judgeChimmyDelivery({ modelOutputs: [{ raw: loop.text }], answer: loopText })
       const settlement = await settleUndeliveredChimmyAnswer({
         delivery: loopDelivery, ledgerId: spendLedger?.id, included: Boolean(planIncluded && userId),
@@ -3243,6 +3262,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       /* Stored like every other path's, so the history row can show the image the question came with. */
       const loopScreenshot = userId && imageFile ? await storeChimmyScreenshot(userId, imageFile) : null
       const loopMeta = {
+          ...(loopGif ? { gif: loopGif } : {}),
           /* The mode that shaped this answer — only when one was asked for and applied. */
           ...(loopModeRequested ? { mode: selectedAssistantMode } : {}),
           /* The spend already happened above; report what it actually cost. */
@@ -4219,10 +4239,12 @@ ${describedTradeCtx}`
       fullResponse: guardedAnswer,
       shortAnswer: guardChangedAnswer ? null : pecrOutput.responseStructure.shortAnswer,
     })
+    /* A trailing `[gif: mood]` line never reaches the user as text; in Fun mode it becomes a GIF. */
+    const fallbackGifLine = extractChimmyGifMood(fastTakeBody)
     const modeAdjustedAnswer =
-      staleness.warning && !fastTakeBody.includes(staleness.warning)
-        ? `${fastTakeBody}\n\nData freshness: ${staleness.warning}`
-        : fastTakeBody
+      staleness.warning && !fallbackGifLine.text.includes(staleness.warning)
+        ? `${fallbackGifLine.text}\n\nData freshness: ${staleness.warning}`
+        : fallbackGifLine.text
 
     const builtInRuleCheck = checkBehaviorRules(modeAdjustedAnswer, {
       input: message,
@@ -4460,6 +4482,10 @@ ${describedTradeCtx}`
 
     const screenshotAttachment = userId && imageFile ? await storeChimmyScreenshot(userId, imageFile) : null
     Object.assign(meta, { screenshotAttachment })
+    if (isFunModeTone(tone) && fallbackGifLine.mood) {
+      const gif = await resolveChimmyGif(fallbackGifLine.mood).catch(() => null)
+      if (gif) Object.assign(meta, { gif })
+    }
     if (userId) {
       const assistantResponse = modeAdjustedAnswer || CHIMMY_GENERIC_ERROR_MESSAGE
       recordAIResponse(sessionId, userId, assistantResponse, 0.6).catch(() => {})

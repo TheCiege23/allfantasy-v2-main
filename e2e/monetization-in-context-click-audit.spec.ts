@@ -102,16 +102,23 @@ test.describe('@monetization in-context click audit', () => {
   })
 
   test('token balance refresh button updates context state', async ({ page }) => {
-    let hit = 0
-    await mockMonetizationContext(page, () => {
-      hit += 1
-      if (hit <= 2) return { hasAccess: false, balance: 3, canSpend: true }
-      return { hasAccess: false, balance: 9, canSpend: true }
-    })
+    /*
+     * The mock answers by PHASE, not by request count. The previous version returned 3 for the
+     * first two requests and 9 from the third, which encoded how many times the card fetched on
+     * mount under the old dev server (React 18 StrictMode ran the mount effect twice). After the
+     * Next 15.5 / React 19.3 upgrade the mount effect runs once — measured: one
+     * /api/monetization/context request on load — so the refresh click was the SECOND request,
+     * still answered 3, and the test failed on "9 tokens" while the button worked. Flipping a flag
+     * right before the click asserts what the test is about: the refresh refetches and the card
+     * shows the new balance, however many requests the mount cost.
+     */
+    let refreshed = false
+    await mockMonetizationContext(page, () => ({ hasAccess: false, balance: refreshed ? 9 : 3, canSpend: true }))
     await mockSpendPreview(page, true, 9)
 
     await page.goto('/e2e/monetization-in-context', { waitUntil: 'domcontentloaded' })
     await expect(page.getByTestId('harness-monetization-token-balance')).toContainText('3 tokens')
+    refreshed = true
     await page.getByTestId('harness-monetization-refresh').click()
     await expect(page.getByTestId('harness-monetization-token-balance')).toContainText('9 tokens')
   })

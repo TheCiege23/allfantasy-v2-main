@@ -246,7 +246,7 @@ test.describe('@player-trend full click audit', () => {
     await page.getByRole('combobox', { name: 'Sport' }).selectOption('SOCCER')
     await page.getByRole('combobox', { name: 'Timeframe' }).selectOption('24h')
     await page.getByRole('button', { name: 'Refresh' }).click()
-    await expect(page.getByRole('link', { name: 'Back to app home' })).toHaveAttribute('href', '/dashboard')
+    await expect(page.getByRole('link', { name: 'Back to app home' })).toHaveAttribute('href', '/core')
 
     /*
      * ⚠ SIGN IN FIRST — /waiver-ai IS NO LONGER A PUBLIC PAGE.
