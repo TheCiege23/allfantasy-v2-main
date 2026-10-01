@@ -11,6 +11,27 @@
   flex-direction: column;
   gap: 18px;
   max-width: 1160px;
+  /* The two-column split below queries THIS width, not the viewport — see `.af-lc-split`. */
+  container: af-lc / inline-size;
+}
+
+/* ── Two-column split (tablet landscape and up) ─────────────────────────
+ * The market (grades, trading journey) on the left, the results (season by season, rival) on the
+ * right. A CONTAINER query, not a viewport one: inside the /core shell the league rail takes a
+ * variable share of the window, so a tablet in landscape and a laptop with the rail expanded can
+ * hand this screen the same width — and a viewport rule would split one and not the other.
+ * Below 820px of its own width the split is the old single column, in the old order. */
+.af-lc-split { display: flex; flex-direction: column; gap: 18px; }
+.af-lc-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+@container af-lc (min-width: 820px) {
+  .af-lc-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+  /* Four award tiles across half a screen are 110px each — two rows of two read. */
+  .af-lc-split .af-lc-awards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* ── Header ──────────────────────────────────────────────────────────── */

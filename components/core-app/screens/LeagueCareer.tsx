@@ -141,80 +141,91 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
         />
       </div>
 
-      {/* ── Grades ──────────────────────────────────────────────────── */}
-      <div className="af-lc-grades">
-        <GradeCard
-          title="Career trade grade"
-          state={tradeGrade}
-          blurb="Graded on realised value per season — what each side of your trades actually went on to do."
-        />
-        <GradeCard
-          title="Career waiver grade"
-          state={waiverGrade}
-          blurb="Claim value against this league's own median winning bid, on the same bands as the trade grade."
-        />
-      </div>
-
-      {tradeStory.available ? <TradeStory story={tradeStory.data} /> : (
-        <section className="af-lc-panel">
-          <h2 className="af-label">Your trading journey</h2>
-          <p className="af-lc-panel-why">{tradeStory.reason}</p>
-        </section>
-      )}
-
-      {/* ── Season by season ────────────────────────────────────────── */}
-      <section className="af-lc-panel">
-        <header className="af-lc-panel-head">
-          <h2 className="af-label">Season by season</h2>
-          <span className="af-lc-panel-note">Bar height is win rate</span>
-        </header>
-
-        <div className="af-lc-bars">
-          {seasons.map((s) => {
-            const rate = winRate(s)
-            return (
-              <div className="af-lc-bar" key={s.season}>
-                <div className="af-lc-bar-track">
-                  <div
-                    className="af-lc-bar-fill"
-                    data-best={best != null && s.season === best.season && seasons.length > 1}
-                    style={{ height: `${Math.max(4, rate * 100)}%` }}
-                  />
-                </div>
-                <span className="af-lc-bar-year af-num">{String(s.season).slice(-2)}</span>
-                <span className="af-lc-bar-rec af-num">
-                  {s.wins}–{s.losses}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* ── Rival ───────────────────────────────────────────────────── */}
-      <section className="af-lc-panel">
-        <h2 className="af-label">Toughest rival</h2>
-        {toughestRival ? (
-          <div className="af-lc-rival">
-            <span className="af-lc-rival-name">{toughestRival.name}</span>
-            <span className="af-lc-rival-rec af-num">
-              {toughestRival.wins}—{toughestRival.losses}
-            </span>
-            <p className="af-lc-rival-note">
-              {toughestRival.meetings} {toughestRival.meetings === 1 ? 'meeting' : 'meetings'}, and
-              they have beaten you {toughestRival.losses}{' '}
-              {toughestRival.losses === 1 ? 'time' : 'times'} — more than anyone else in this
-              league. Average margin {toughestRival.averageMargin >= 0 ? '+' : '−'}
-              {Math.abs(toughestRival.averageMargin).toFixed(1)} to you.
-            </p>
+      {/*
+        Two columns once the screen's OWN width allows (container query, af-league-career.css):
+        the market on the left, the results on the right. Source order is the single-column order,
+        so a phone and a narrow frame read exactly what they did before.
+      */}
+      <div className="af-lc-split">
+        <div className="af-lc-col">
+          {/* ── Grades ──────────────────────────────────────────────── */}
+          <div className="af-lc-grades">
+            <GradeCard
+              title="Career trade grade"
+              state={tradeGrade}
+              blurb="Graded on realised value per season — what each side of your trades actually went on to do."
+            />
+            <GradeCard
+              title="Career waiver grade"
+              state={waiverGrade}
+              blurb="Claim value against this league's own median winning bid, on the same bands as the trade grade."
+            />
           </div>
-        ) : (
-          <p className="af-lc-panel-why">
-            You have not played anyone in this league twice yet, so there is no rivalry to name — one
-            result is a game, not a pattern.
-          </p>
-        )}
-      </section>
+
+          {tradeStory.available ? <TradeStory story={tradeStory.data} /> : (
+            <section className="af-lc-panel">
+              <h2 className="af-label">Your trading journey</h2>
+              <p className="af-lc-panel-why">{tradeStory.reason}</p>
+            </section>
+          )}
+        </div>
+
+        <div className="af-lc-col">
+          {/* ── Season by season ────────────────────────────────────── */}
+          <section className="af-lc-panel">
+            <header className="af-lc-panel-head">
+              <h2 className="af-label">Season by season</h2>
+              <span className="af-lc-panel-note">Bar height is win rate</span>
+            </header>
+
+            <div className="af-lc-bars">
+              {seasons.map((s) => {
+                const rate = winRate(s)
+                return (
+                  <div className="af-lc-bar" key={s.season}>
+                    <div className="af-lc-bar-track">
+                      <div
+                        className="af-lc-bar-fill"
+                        data-best={best != null && s.season === best.season && seasons.length > 1}
+                        style={{ height: `${Math.max(4, rate * 100)}%` }}
+                      />
+                    </div>
+                    <span className="af-lc-bar-year af-num">{String(s.season).slice(-2)}</span>
+                    <span className="af-lc-bar-rec af-num">
+                      {s.wins}–{s.losses}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* ── Rival ───────────────────────────────────────────────── */}
+          <section className="af-lc-panel">
+            <h2 className="af-label">Toughest rival</h2>
+            {toughestRival ? (
+              <div className="af-lc-rival">
+                <span className="af-lc-rival-name">{toughestRival.name}</span>
+                <span className="af-lc-rival-rec af-num">
+                  {toughestRival.wins}—{toughestRival.losses}
+                </span>
+                <p className="af-lc-rival-note">
+                  {toughestRival.meetings} {toughestRival.meetings === 1 ? 'meeting' : 'meetings'}, and
+                  they have beaten you {toughestRival.losses}{' '}
+                  {toughestRival.losses === 1 ? 'time' : 'times'} — more than anyone else in this
+                  league. Average margin {toughestRival.averageMargin >= 0 ? '+' : '−'}
+                  {Math.abs(toughestRival.averageMargin).toFixed(1)} to you.
+                </p>
+              </div>
+            ) : (
+              <p className="af-lc-panel-why">
+                You have not played anyone in this league twice yet, so there is no rivalry to name — one
+                result is a game, not a pattern.
+              </p>
+            )}
+          </section>
+        </div>
+      </div>
     </div>
   )
 }
@@ -307,56 +318,63 @@ function WeeklyLeagueCareer({
         />
       </div>
 
-      <div className="af-lc-grades">
-        <GradeCard
-          title="Career trade grade"
-          state={tradeGrade}
-          blurb="Graded on realised value per season — what each side of your trades actually went on to do."
-        />
-        <GradeCard
-          title="Career waiver grade"
-          state={waiverGrade}
-          blurb="Claim value against this league's own median winning bid, on the same bands as the trade grade."
-        />
+      {/* Same two-column split as the head-to-head view: the market left, the results right. */}
+      <div className="af-lc-split">
+        <div className="af-lc-col">
+          <div className="af-lc-grades">
+            <GradeCard
+              title="Career trade grade"
+              state={tradeGrade}
+              blurb="Graded on realised value per season — what each side of your trades actually went on to do."
+            />
+            <GradeCard
+              title="Career waiver grade"
+              state={waiverGrade}
+              blurb="Claim value against this league's own median winning bid, on the same bands as the trade grade."
+            />
+          </div>
+
+          {tradeStory.available ? (
+            <TradeStory story={tradeStory.data} />
+          ) : (
+            <section className="af-lc-panel">
+              <h2 className="af-label">Your trading journey</h2>
+              <p className="af-lc-panel-why">{tradeStory.reason}</p>
+            </section>
+          )}
+        </div>
+
+        <div className="af-lc-col">
+          <section className="af-lc-panel">
+            <header className="af-lc-panel-head">
+              <h2 className="af-label">Season by season</h2>
+              <span className="af-lc-panel-note">Finish is your weekly rank against the field</span>
+            </header>
+            <ul className="af-lc-weekly">
+              {[...seasons].reverse().map((s) => (
+                <li key={s.season} className="af-lc-weekly-row">
+                  <span className="af-lc-weekly-year af-num">{s.season}</span>
+                  <span className="af-lc-weekly-body">
+                    <strong>
+                      {s.weeks} {s.weeks === 1 ? 'week' : 'weeks'} · avg finish {s.averageFinish.toFixed(1)} of {s.fieldSize}
+                    </strong>
+                    <span>
+                      Best #{s.bestFinish}
+                      {s.topScores > 0 ? ` · ${s.topScores} top ${s.topScores === 1 ? 'score' : 'scores'}` : ''}
+                      {s.bottomScores > 0 && !(elimination && s.choppedAfterWeek != null && s.bottomScores === 1)
+                        ? ` · ${s.bottomScores} lowest ${s.bottomScores === 1 ? 'score' : 'scores'}`
+                        : ''}
+                      {elimination ? (s.choppedAfterWeek != null ? ` · chopped after week ${s.choppedAfterWeek}` : ' · still alive') : ''}
+                      {' · '}
+                      {Math.round(s.pointsFor).toLocaleString()} pts
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
       </div>
-
-      {tradeStory.available ? (
-        <TradeStory story={tradeStory.data} />
-      ) : (
-        <section className="af-lc-panel">
-          <h2 className="af-label">Your trading journey</h2>
-          <p className="af-lc-panel-why">{tradeStory.reason}</p>
-        </section>
-      )}
-
-      <section className="af-lc-panel">
-        <header className="af-lc-panel-head">
-          <h2 className="af-label">Season by season</h2>
-          <span className="af-lc-panel-note">Finish is your weekly rank against the field</span>
-        </header>
-        <ul className="af-lc-weekly">
-          {[...seasons].reverse().map((s) => (
-            <li key={s.season} className="af-lc-weekly-row">
-              <span className="af-lc-weekly-year af-num">{s.season}</span>
-              <span className="af-lc-weekly-body">
-                <strong>
-                  {s.weeks} {s.weeks === 1 ? 'week' : 'weeks'} · avg finish {s.averageFinish.toFixed(1)} of {s.fieldSize}
-                </strong>
-                <span>
-                  Best #{s.bestFinish}
-                  {s.topScores > 0 ? ` · ${s.topScores} top ${s.topScores === 1 ? 'score' : 'scores'}` : ''}
-                  {s.bottomScores > 0 && !(elimination && s.choppedAfterWeek != null && s.bottomScores === 1)
-                    ? ` · ${s.bottomScores} lowest ${s.bottomScores === 1 ? 'score' : 'scores'}`
-                    : ''}
-                  {elimination ? (s.choppedAfterWeek != null ? ` · chopped after week ${s.choppedAfterWeek}` : ' · still alive') : ''}
-                  {' · '}
-                  {Math.round(s.pointsFor).toLocaleString()} pts
-                </span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
     </div>
   )
 }
