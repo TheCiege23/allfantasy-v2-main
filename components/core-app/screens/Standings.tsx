@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import type { LeagueStandingsResult, RankTrendPoint, SeasonHistoryRow } from '@/lib/core-app/leagueStandings'
 import { formatRecord, type BoardTeam, type Zone } from '@/lib/core-app/standingsModel'
@@ -7,6 +9,8 @@ import '@/components/core-app/af-standings.css'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 /**
  * Screen 38a·7 — Standings: the league table and AllFantasy's power ranking, side by side.
@@ -72,7 +76,7 @@ function zoneLine(t: BoardTeam): string {
   return ZONE_WORD[t.zone]
 }
 
-function lineText(t: BoardTeam, field: number): string {
+function lineText(t: BoardTeam, field: number, language: string): string {
   if (t.gamesBack == null) return 'no head-to-head games'
   /*
    * Zero games back is three different places. "On the playoff line" was printed for all of them,
@@ -84,8 +88,10 @@ function lineText(t: BoardTeam, field: number): string {
     return t.seed < field ? 'level with the last playoff spot' : 'level with the last playoff spot, out on the tiebreak'
   }
   const abs = Math.abs(t.gamesBack)
-  const games = `${Number.isInteger(abs) ? abs : abs.toFixed(1)} ${abs === 1 ? 'game' : 'games'}`
-  return t.gamesBack < 0 ? `${games} clear of the line` : `${games} behind the line`
+  const games = `${Number.isInteger(abs) ? abs : abs.toFixed(1)} ${language === 'es' ? (abs === 1 ? 'partido' : 'partidos') : (abs === 1 ? 'game' : 'games')}`
+  return language === 'es'
+    ? t.gamesBack < 0 ? `${games} por encima del límite` : `${games} por debajo del límite`
+    : t.gamesBack < 0 ? `${games} clear of the line` : `${games} behind the line`
 }
 
 /**
@@ -96,6 +102,8 @@ function lineText(t: BoardTeam, field: number): string {
  * recompute, and presenting them in the same table would imply a precision they do not carry.
  */
 function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
   if (rows.length === 0) return null
 
   const bySeason = new Map<number, SeasonHistoryRow[]>()
@@ -108,21 +116,23 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
 
   return (
     <section className="af-st-history">
-      <h2 className="af-label af-st-history-title">Past seasons</h2>
+      <h2 className="af-label af-st-history-title">{copy('Past seasons')}</h2>
       <p className="af-st-history-note">
-        Imported final standings. {seasons.length} {seasons.length === 1 ? 'season' : 'seasons'} on file.
+        {language === 'es'
+          ? `Clasificaciones finales importadas. ${seasons.length} ${seasons.length === 1 ? 'temporada registrada' : 'temporadas registradas'}.`
+          : `Imported final standings. ${seasons.length} ${seasons.length === 1 ? 'season' : 'seasons'} on file.`}
       </p>
       {seasons.map(([season, teams]) => (
         <div key={season} className="af-st-history-season">
           <h3 className="af-st-history-season-title af-num">{season}</h3>
-          <p className="af-st-scroll-cue">Scroll sideways to compare every column.</p>
-          <div className="af-st-history-scroll" role="region" aria-label={`${season} final standings`} tabIndex={0}>
+          <p className="af-st-scroll-cue">{copy('Scroll sideways to compare every column.')}</p>
+          <div className="af-st-history-scroll" role="region" aria-label={language === 'es' ? `Clasificación final de ${season}` : `${season} final standings`} tabIndex={0}>
             <table className="af-st-history-table">
               <thead>
                 <tr>
                   <th scope="col">#</th>
-                  <th scope="col">Team</th>
-                  <th scope="col">Record</th>
+                  <th scope="col">{copy('Team')}</th>
+                  <th scope="col">{copy('Record')}</th>
                   <th scope="col">PF</th>
                   <th scope="col">PA</th>
                 </tr>
@@ -151,6 +161,8 @@ function SeasonHistory({ rows }: { rows: SeasonHistoryRow[] }) {
 }
 
 export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, lineups = null }: StandingsProps) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
   /*
    * ⚠ THE REFUSAL BRANCH IS LABELLED TOO, AND THAT IS NOT DECORATION. An `available: false` board is
    * cached exactly like an available one, so "we could not read this league's results" can itself be
@@ -165,14 +177,14 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
       <div className="af-st">
         <header className="af-st-head">
           <p className="af-label af-st-eyebrow">{data.leagueName}</p>
-          <h1 className="af-display af-st-title">Standings</h1>
+          <h1 className="af-display af-st-title">{copy('Standings')}</h1>
           {chip}
         </header>
         <div className="af-st-blocked">
           <span className="af-st-blocked-mark af-num" aria-hidden>
             —
           </span>
-          <p className="af-st-blocked-body">{data.reason}</p>
+          <p className="af-st-blocked-body">{copy(data.reason)}</p>
         </div>
         {/* The live board cannot be drawn, but the imported seasons still can. */}
         <SeasonHistory rows={data.history} />
@@ -189,11 +201,11 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
     <div className="af-st">
       <header className="af-st-head">
         <p className="af-label af-st-eyebrow">{league.name}</p>
-        <h1 className="af-display af-st-title">Standings</h1>
+        <h1 className="af-display af-st-title">{copy('Standings')}</h1>
         <p className="af-st-sub">
-          {P === 'the platform' ? 'The league table' : `${P}’s table`}, and AllFantasy’s own power ranking beside it — record decides the
-          seeding, all-play says who is actually good. {season} ·{' '}
-          {seasonComplete ? `season complete after week ${week}` : `results through week ${board.throughWeek}`}.
+          {language === 'es'
+            ? `${P === 'the platform' ? 'Tabla de la liga' : `Tabla de ${P}`} y clasificación de rendimiento de AllFantasy. El récord determina los puestos de playoffs; el rendimiento contra todos muestra la fuerza de cada equipo. ${season} · ${seasonComplete ? `temporada terminada tras la semana ${week}` : `resultados hasta la semana ${board.throughWeek}`}.`
+            : `${P === 'the platform' ? 'The league table' : `${P}’s table`}, and AllFantasy’s own power ranking beside it — record decides the seeding, all-play says who is actually good. ${season} · ${seasonComplete ? `season complete after week ${week}` : `results through week ${board.throughWeek}`}.`}
         </p>
         {chip}
       </header>
@@ -201,25 +213,25 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
       {me ? (
         <div className="af-st-tiles">
           <div className="af-st-tile">
-            <span className="af-label">Table position</span>
+            <span className="af-label">{copy('Table position')}</span>
             <span className="af-st-tile-row">
               <span className="af-st-tile-v af-num">{ordinal(me.seed)}</span>
               {/* Null movement is the first final week — no prior position, which is not "no change". */}
               {me.seedMove != null && me.seedMove !== 0 ? <Move value={me.seedMove} /> : null}
             </span>
             <span className="af-st-tile-s">
-              of {n} · {zoneLine(me)}
+              {copy('of')} {n} · {copy(zoneLine(me))}
             </span>
           </div>
 
           <div className="af-st-tile">
-            <span className="af-label">Record</span>
+            <span className="af-label">{copy('Record')}</span>
             <span className="af-st-tile-v af-num">{board.hasHeadToHead ? formatRecord(me.record) : '—'}</span>
-            <span className="af-st-tile-s">{lineText(me, Math.min(board.rules.playoffTeams, n))}</span>
+            <span className="af-st-tile-s">{copy(lineText(me, Math.min(board.rules.playoffTeams, n), language))}</span>
           </div>
 
           <div className="af-st-tile">
-            <span className="af-label">AF Power</span>
+            <span className="af-label">{copy('AF Power')}</span>
             <span className="af-st-tile-row">
               <span className="af-st-tile-v af-num" data-tone="accent">
                 {ordinal(me.powerRank)}
@@ -227,22 +239,22 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
               {me.powerMove != null && me.powerMove !== 0 ? <Move value={me.powerMove} /> : null}
             </span>
             <span className="af-st-tile-s af-num">
-              score {me.powerScore.toFixed(1)} · all-play {formatRecord(me.allPlay)}
+              {copy('score')} {me.powerScore.toFixed(1)} · {copy('all-play')} {formatRecord(me.allPlay)}
             </span>
           </div>
 
           <div className="af-st-tile">
-            <span className="af-label">Points for</span>
+            <span className="af-label">{copy('Points for')}</span>
             <span className="af-st-tile-v af-num">{pts1(me.pointsFor)}</span>
             <span className="af-st-tile-s">
-              {me.average != null ? `${n1(me.average)} a week · ` : ''}
-              {ordinal(me.pfRank)} in the league
+              {me.average != null ? `${n1(me.average)} ${copy('a week')} · ` : ''}
+              {language === 'es' ? `${me.pfRank} de la liga` : `${ordinal(me.pfRank)} in the league`}
             </span>
           </div>
         </div>
       ) : (
         <div className="af-st-noteam">
-          We cannot tell which team in this league is yours, so there are no tiles about you. The full table is still below.
+          {copy('We cannot tell which team in this league is yours, so there are no tiles about you. The full table is still below.')}
         </div>
       )}
 
@@ -254,13 +266,15 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
       {me ? (
         <>
           <section className="af-st-section">
-            <h2 className="af-label af-st-seclabel">Your place in the table, by week</h2>
+            <h2 className="af-label af-st-seclabel">{copy('Your place in the table, by week')}</h2>
             <div className="af-st-panel">
               {trend.length > 1 ? (
                 <RankBars trend={trend} teamCount={n} />
               ) : (
                 <p className="af-st-panel-why">
-                  A trend needs at least two final weeks. There {trend.length === 1 ? 'is one' : 'are none'} so far.
+                  {language === 'es'
+                    ? `La tendencia necesita al menos dos semanas cerradas. Hasta ahora ${trend.length === 1 ? 'hay una' : 'no hay ninguna'}.`
+                    : `A trend needs at least two final weeks. There ${trend.length === 1 ? 'is one' : 'are none'} so far.`}
                 </p>
               )}
             </div>
@@ -268,42 +282,42 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
 
           <div className="af-st-split">
             <section className="af-st-panel">
-              <h2 className="af-label">Recent weeks</h2>
+              <h2 className="af-label">{copy('Recent weeks')}</h2>
               {recent.length > 0 ? (
                 <ul className="af-st-recent">
                   {recent.map((r) => (
                     <li key={r.week}>
-                      <span className="af-st-recent-w af-label">Wk {r.week}</span>
+                      <span className="af-st-recent-w af-label">{copy('Wk')} {r.week}</span>
                       <span className="af-st-recent-p af-num">{n1(r.pointsFor)}</span>
                       {/*
                         Against your OWN average to that point, so the sign means "better than your
                         normal" rather than "better than last week".
                       */}
                       <span className="af-st-recent-d af-num" data-dir={r.delta == null ? 'none' : r.delta >= 0 ? 'up' : 'down'}>
-                        {r.delta == null ? '—' : `${r.delta >= 0 ? '+' : '−'}${n1(Math.abs(r.delta))} vs your avg`}
+                        {r.delta == null ? '—' : `${r.delta >= 0 ? '+' : '−'}${n1(Math.abs(r.delta))} ${copy('vs your avg')}`}
                       </span>
-                      <span className="af-st-recent-r af-num">{ordinal(r.rank)} in points</span>
+                      <span className="af-st-recent-r af-num">{language === 'es' ? `${r.rank} en puntos` : `${ordinal(r.rank)} in points`}</span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="af-st-panel-why">None of your weeks are final yet in this league.</p>
+                <p className="af-st-panel-why">{copy('None of your weeks are final yet in this league.')}</p>
               )}
             </section>
 
             <section className="af-st-projection" data-missing={!projection.available}>
               <h2 className="af-label">
-                <span className="af-stb-projtag">Model</span> Projected final points
+                <span className="af-stb-projtag">{copy('Model')}</span> {copy('Projected final points')}
               </h2>
               {projection.available ? (
                 <>
                   <p className="af-st-proj-v">
                     <span className="af-num">~{Math.round(projection.data.mid).toLocaleString('en-US')}</span>
                     <span className="af-st-proj-range af-num">
-                      {projection.data.weeksRemaining} {projection.data.weeksRemaining === 1 ? 'game' : 'games'} left
+                      {projection.data.weeksRemaining} {copy(projection.data.weeksRemaining === 1 ? 'game' : 'games')} {copy('left')}
                     </span>
                   </p>
-                  <p className="af-st-proj-basis">{projection.data.basis}</p>
+                  <p className="af-st-proj-basis">{copy(projection.data.basis)}</p>
                   {/*
                     ⚠ THE LOADER'S OWN RANGE, NOT WIN-OUT / LOSE-OUT. Points for does not depend on wins
                     and nothing here models a team's scoring off its record, so these rows are the top and
@@ -311,19 +325,19 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
                   */}
                   <div className="af-st-projrows">
                     <div className="af-st-projrow" data-tone="good">
-                      <span className="af-label">High</span>
-                      <span className="af-st-projrow-note">Top of the projected range</span>
+                      <span className="af-label">{copy('High')}</span>
+                      <span className="af-st-projrow-note">{copy('Top of the projected range')}</span>
                       <span className="af-num">{Math.round(projection.data.high).toLocaleString('en-US')}</span>
                     </div>
                     <div className="af-st-projrow" data-tone="bad">
-                      <span className="af-label">Low</span>
-                      <span className="af-st-projrow-note">Bottom of the projected range</span>
+                      <span className="af-label">{copy('Low')}</span>
+                      <span className="af-st-projrow-note">{copy('Bottom of the projected range')}</span>
                       <span className="af-num">{Math.round(projection.data.low).toLocaleString('en-US')}</span>
                     </div>
                   </div>
                 </>
               ) : (
-                <p className="af-st-proj-why">{projection.reason}</p>
+                <p className="af-st-proj-why">{copy(projection.reason)}</p>
               )}
             </section>
           </div>
@@ -331,9 +345,8 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
       ) : null}
 
       <p className="af-st-foot">
-        Projected records on this page are a model’s expectation.{' '}
-        <Link href={`/core/season-outlook?league=${encodeURIComponent(league.id)}`}>Season Outlook</Link> simulates the rest of the
-        season for playoff and title odds.
+        {copy('Projected records on this page are a model’s expectation.')} {' '}
+        <Link href={`/core/season-outlook?league=${encodeURIComponent(league.id)}`}>{copy('Season Outlook')}</Link> {copy('simulates the rest of the season for playoff and title odds.')}
       </p>
       <SeasonHistory rows={history} />
     </div>
@@ -348,6 +361,8 @@ export function Standings({ data, freshness, view = DEFAULT_STANDINGS_VIEW, line
  * from part of a lineup shows its coverage rather than passing for a whole one.
  */
 function WeekLineupsTable({ lineups }: { lineups: StandingsLineups }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
   const cell = (v: number | null, from: number, of: number) =>
     v == null ? (
       <span className="af-st-lu-none">—</span>
@@ -360,17 +375,17 @@ function WeekLineupsTable({ lineups }: { lineups: StandingsLineups }) {
   return (
     <section className="af-st-section af-st-lineups" aria-labelledby="af-st-lu-h">
       <h2 className="af-label af-st-seclabel" id="af-st-lu-h">
-        This week’s lineups, projected · week {lineups.week}
+        {copy('This week’s lineups, projected')} · {copy('week')} {lineups.week}
       </h2>
       <p className="af-st-lu-note">
-        Each team’s lineup as currently set, projected for week {lineups.week} under this league’s scoring. AF is
-        AllFantasy’s own projection engine; API is the provider’s (Sleeper). A forecast of the coming week — the table
-        above is points already scored.
+        {language === 'es'
+          ? `Cada alineación actual proyectada para la semana ${lineups.week} con las reglas de esta liga. AF es la proyección de AllFantasy; API es la del proveedor (Sleeper). Es un pronóstico: la tabla anterior muestra puntos ya anotados.`
+          : `Each team’s lineup as currently set, projected for week ${lineups.week} under this league’s scoring. AF is AllFantasy’s own projection engine; API is the provider’s (Sleeper). A forecast of the coming week — the table above is points already scored.`}
       </p>
       <table className="af-st-lu-table">
         <thead>
           <tr>
-            <th scope="col">Team</th>
+            <th scope="col">{copy('Team')}</th>
             <th scope="col" className="af-num">AF</th>
             <th scope="col" className="af-num">API</th>
           </tr>
@@ -379,8 +394,8 @@ function WeekLineupsTable({ lineups }: { lineups: StandingsLineups }) {
           {lineups.rows.map((r) => (
             <tr key={r.rosterId} data-you={r.isYou ? 'true' : undefined}>
               <th scope="row">
-                {r.name ?? `Team ${r.rosterId}`}
-                {r.isYou ? <span className="af-st-lu-you"> · you</span> : null}
+                {r.name ?? `${copy('Team')} ${r.rosterId}`}
+                {r.isYou ? <span className="af-st-lu-you"> · {copy('you')}</span> : null}
               </th>
               <td className="af-num af-st-lu-af">{cell(r.af, r.afFrom, r.starterCount)}</td>
               <td className="af-num">{cell(r.api, r.apiFrom, r.starterCount)}</td>
@@ -400,6 +415,7 @@ function WeekLineupsTable({ lineups }: { lineups: StandingsLineups }) {
  * so the caption here says what the bars actually do.
  */
 function RankBars({ trend, teamCount }: { trend: RankTrendPoint[]; teamCount: number }) {
+  const language = useOptionalLanguage().language
   const worst = Math.max(teamCount, ...trend.map((p) => p.rank))
   const best = Math.min(...trend.map((p) => p.rank))
   const last = trend[trend.length - 1]
@@ -409,7 +425,7 @@ function RankBars({ trend, teamCount }: { trend: RankTrendPoint[]; teamCount: nu
       <div
         className="af-st-bars-chart"
         role="img"
-        aria-label={`Place in the table by week: ${trend.map((p) => `week ${p.week} ${ordinal(p.rank)}`).join(', ')}`}
+        aria-label={language === 'es' ? `Posición en la tabla por semana: ${trend.map((p) => `semana ${p.week} puesto ${p.rank}`).join(', ')}` : `Place in the table by week: ${trend.map((p) => `week ${p.week} ${ordinal(p.rank)}`).join(', ')}`}
       >
         <div className="af-st-bars-plot">
           {trend.map((p, i) => {
@@ -427,14 +443,15 @@ function RankBars({ trend, teamCount }: { trend: RankTrendPoint[]; teamCount: nu
         <div className="af-st-bars-weeks">
           {trend.map((p) => (
             <span key={p.week} className="af-num">
-              W{p.week}
+              {language === 'es' ? 'S' : 'W'}{p.week}
             </span>
           ))}
         </div>
       </div>
       <figcaption className="af-st-bars-cap">
-        Taller bar = better rank. Best {ordinal(best)} · now {ordinal(last.rank)}. Positions only move on final results, never estimated
-        between weeks.
+        {language === 'es'
+          ? `Una barra más alta indica mejor posición. Mejor: ${best}; ahora: ${last.rank}. Las posiciones solo cambian con resultados finales.`
+          : `Taller bar = better rank. Best ${ordinal(best)} · now ${ordinal(last.rank)}. Positions only move on final results, never estimated between weeks.`}
       </figcaption>
     </figure>
   )

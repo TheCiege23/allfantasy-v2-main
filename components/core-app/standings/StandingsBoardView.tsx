@@ -17,6 +17,8 @@ import {
 } from '@/lib/core-app/standingsView'
 import { StandingsHistoryChart } from './StandingsHistoryChart'
 import { StandingsPointsChart } from './StandingsPointsChart'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 /**
  * The league table, two ways — items 1–8 and 10 of the 2026-09-17 standings brief.
@@ -63,12 +65,13 @@ function gamesBackText(gb: number | null): string {
 }
 
 function ZoneChip({ team }: { team: BoardTeam }) {
+  const language = useOptionalLanguage().language
   const zone = ZONE[team.zone]
   const clinched = team.clinched === 'bye' ? 'Clinched bye' : team.clinched === 'playoff' ? 'Clinched' : null
   return (
     <span className="af-stb-zone" data-zone={team.zone} data-clinched={clinched ? 'true' : undefined}>
       <span aria-hidden>{clinched ? '✓' : zone.icon}</span>
-      {clinched ?? zone.label}
+      {coreUiCopy(clinched ?? zone.label, language)}
     </span>
   )
 }
@@ -118,6 +121,7 @@ function Form({ form }: { form: BoardTeam['form'] }) {
 }
 
 function TeamCell({ team, showTiebreak }: { team: BoardTeam; showTiebreak: boolean }) {
+  const language = useOptionalLanguage().language
   return (
     <span className="af-stb-team">
       {team.avatarUrl ? (
@@ -131,10 +135,10 @@ function TeamCell({ team, showTiebreak }: { team: BoardTeam; showTiebreak: boole
       )}
       <span className="af-stb-teamtext">
         <span className="af-stb-teamname">{team.name}</span>
-        {team.isYou ? <span className="af-stb-you">You</span> : null}
+        {team.isYou ? <span className="af-stb-you">{coreUiCopy('You', language)}</span> : null}
         {showTiebreak && team.tiebreak ? (
           <details className="af-stb-tb">
-            <summary>Tiebreak</summary>
+            <summary>{coreUiCopy('Tiebreak', language)}</summary>
             <p>{team.tiebreak}</p>
           </details>
         ) : null}
@@ -161,6 +165,8 @@ function groupTeams(teams: BoardTeam[], board: StandingsBoard, division: string)
 }
 
 function OfficialTable({ board, groups, plain }: { board: StandingsBoard; groups: Group[]; plain: boolean }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
   const hasDiv = board.divisions.length > 0
   const hasProj = board.teams.some((t) => t.projected)
   const h2h = board.hasHeadToHead
@@ -169,7 +175,7 @@ function OfficialTable({ board, groups, plain }: { board: StandingsBoard; groups
   const cols = 3 + (h2h ? 5 : 1) + (hasDiv ? 1 : 0) + (hasProj ? 2 : 0) + 1
 
   return (
-    <div className="af-stb-scroll" role="region" aria-label="League table" tabIndex={0}>
+    <div className="af-stb-scroll" role="region" aria-label={copy('League table')} tabIndex={0}>
       <table className="af-stb-table">
         <caption className="af-sr">
           Official standings: {board.orderBasis} {board.recordBasis}
@@ -180,9 +186,9 @@ function OfficialTable({ board, groups, plain }: { board: StandingsBoard; groups
               <abbr title="Position">#</abbr>
             </th>
             <th scope="col" className="af-stb-sticky af-stb-sticky-team">
-              Team
+              {copy('Team')}
             </th>
-            <th scope="col">Status</th>
+            <th scope="col">{copy('Status')}</th>
             {h2h ? (
               <>
                 <th scope="col" className="af-stb-n">
@@ -205,9 +211,9 @@ function OfficialTable({ board, groups, plain }: { board: StandingsBoard; groups
               </th>
             ) : null}
             <th scope="col" className="af-stb-n">
-              Move
+              {copy('Move')}
             </th>
-            {h2h ? <th scope="col">Last 5</th> : null}
+            {h2h ? <th scope="col">{copy('Last 5')}</th> : null}
             {hasDiv ? (
               <th scope="col" className="af-stb-n">
                 Div
@@ -216,10 +222,10 @@ function OfficialTable({ board, groups, plain }: { board: StandingsBoard; groups
             {hasProj ? (
               <>
                 <th scope="col" className="af-stb-n af-stb-proj">
-                  <span className="af-stb-projtag">Model</span> Proj. W-L
+                  <span className="af-stb-projtag">{copy('Model')}</span> {copy('Proj. W-L')}
                 </th>
                 <th scope="col" className="af-stb-n af-stb-proj">
-                  <span className="af-stb-projtag">Model</span> Proj. #
+                  <span className="af-stb-projtag">{copy('Model')}</span> {copy('Proj. #')}
                 </th>
               </>
             ) : null}
@@ -324,10 +330,12 @@ function FragmentRows({
 }
 
 function PowerTable({ board, groups }: { board: StandingsBoard; groups: Group[] }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
   const h2h = board.hasHeadToHead
   const cols = 9 + (h2h ? 3 : 0)
   return (
-    <div className="af-stb-scroll" role="region" aria-label="AF Power rankings" tabIndex={0}>
+    <div className="af-stb-scroll" role="region" aria-label={copy('AF Power rankings')} tabIndex={0}>
       <table className="af-stb-table" data-view="power">
         <caption className="af-sr">AF Power rankings. {board.powerBasis}</caption>
         <thead>
@@ -336,13 +344,13 @@ function PowerTable({ board, groups }: { board: StandingsBoard; groups: Group[] 
               <abbr title="AF Power rank">#</abbr>
             </th>
             <th scope="col" className="af-stb-sticky af-stb-sticky-team">
-              Team
+              {copy('Team')}
             </th>
             <th scope="col" className="af-stb-n">
-              Score
+              {copy('Score')}
             </th>
             <th scope="col" className="af-stb-n">
-              Move
+              {copy('Move')}
             </th>
             <th scope="col" className="af-stb-n">
               <abbr title="Record against every team, every week">All-play</abbr>
@@ -364,7 +372,7 @@ function PowerTable({ board, groups }: { board: StandingsBoard; groups: Group[] 
               <abbr title="Points for">PF</abbr>
             </th>
             <th scope="col" className="af-stb-n">
-              Per wk
+              {copy('Per wk')}
             </th>
             <th scope="col" className="af-stb-n">
               <abbr title="Rank by points for">PF #</abbr>
@@ -421,11 +429,13 @@ function PowerTable({ board, groups }: { board: StandingsBoard; groups: Group[] 
 }
 
 function Cards({ board, groups, view }: { board: StandingsBoard; groups: Group[]; view: StandingsViewKey }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
   const h2h = board.hasHeadToHead
   return (
     <div className="af-stb-cardwrap">
       {groups.map((g) => (
-        <section key={g.key} aria-label={g.title ?? (view === 'power' ? 'AF Power rankings' : 'League table')}>
+        <section key={g.key} aria-label={g.title ?? copy(view === 'power' ? 'AF Power rankings' : 'League table')}>
           {g.title ? <h3 className="af-stb-grouptitle">{g.title}</h3> : null}
           <ol className="af-stb-cards">
             {g.teams.map((t) => {
@@ -440,34 +450,34 @@ function Cards({ board, groups, view }: { board: StandingsBoard; groups: Group[]
                       </span>
                       <h4 id={headingId}>
                         <span className="af-sr">
-                          {view === 'power' ? 'AF Power' : 'Position'} {rank}:{' '}
+                          {copy(view === 'power' ? 'AF Power' : 'Position')} {rank}:{' '}
                         </span>
                         {t.name}
                       </h4>
-                      {t.isYou ? <span className="af-stb-you">You</span> : null}
+                      {t.isYou ? <span className="af-stb-you">{copy('You')}</span> : null}
                     </header>
                     <ZoneChip team={t} />
                     <dl className="af-stb-carddl">
                       {h2h ? (
                         <div>
-                          <dt>Record</dt>
+                          <dt>{copy('Record')}</dt>
                           <dd className="af-num">
                             {formatRecord(t.record)} <span className="af-stb-muted">({pct(t.winPct)})</span>
                           </dd>
                         </div>
                       ) : null}
                       <div>
-                        <dt>Points for</dt>
+                        <dt>{copy('Points for')}</dt>
                         <dd className="af-num">{pts(t.pointsFor)}</dd>
                       </div>
                       {h2h ? (
                         <div>
-                          <dt>Points against</dt>
+                          <dt>{copy('Points against')}</dt>
                           <dd className="af-num">{pts(t.pointsAgainst)}</dd>
                         </div>
                       ) : null}
                       <div>
-                        <dt>Since last week</dt>
+                        <dt>{copy('Since last week')}</dt>
                         <dd>
                           <Move value={view === 'power' ? t.powerMove : t.seedMove} />
                         </dd>
@@ -475,27 +485,27 @@ function Cards({ board, groups, view }: { board: StandingsBoard; groups: Group[]
                       {view === 'power' ? (
                         <>
                           <div>
-                            <dt>Power score</dt>
+                            <dt>{copy('Power score')}</dt>
                             <dd className="af-num">{t.powerScore.toFixed(1)}</dd>
                           </div>
                           <div>
-                            <dt>All-play</dt>
+                            <dt>{copy('All-play')}</dt>
                             <dd className="af-num">{formatRecord(t.allPlay)}</dd>
                           </div>
                           {h2h ? (
                             <div>
-                              <dt>Expected wins</dt>
+                              <dt>{copy('Expected wins')}</dt>
                               <dd className="af-num">
                                 {t.expectedWins.toFixed(1)}{' '}
                                 <span className="af-stb-muted">
-                                  (luck {t.luck > 0 ? '+' : t.luck < 0 ? '−' : ''}
+                                  ({copy('luck')} {t.luck > 0 ? '+' : t.luck < 0 ? '−' : ''}
                                   {Math.abs(t.luck).toFixed(1)})
                                 </span>
                               </dd>
                             </div>
                           ) : null}
                           <div>
-                            <dt>Table position</dt>
+                            <dt>{copy('Table position')}</dt>
                             <dd className="af-num">{t.seed}</dd>
                           </div>
                         </>
@@ -503,12 +513,12 @@ function Cards({ board, groups, view }: { board: StandingsBoard; groups: Group[]
                         <>
                           {h2h ? (
                             <div>
-                              <dt>Games behind the line</dt>
+                              <dt>{copy('Games behind the line')}</dt>
                               <dd className="af-num">{gamesBackText(t.gamesBack)}</dd>
                             </div>
                           ) : null}
                           <div>
-                            <dt>AF Power</dt>
+                            <dt>{copy('AF Power')}</dt>
                             <dd className="af-num">{t.powerRank}</dd>
                           </div>
                         </>
@@ -523,8 +533,10 @@ function Cards({ board, groups, view }: { board: StandingsBoard; groups: Group[]
                     {view === 'official' && t.tiebreak ? <p className="af-stb-cardnote">{t.tiebreak}</p> : null}
                     {view === 'official' && t.projected ? (
                       <p className="af-stb-cardproj">
-                        <span className="af-stb-projtag">Model</span> Projected finish {formatRecord(t.projected)}, {ordinal(t.projected.seed)} — an
-                        expectation, not a result.
+                        <span className="af-stb-projtag">{copy('Model')}</span>{' '}
+                        {language === 'es'
+                          ? `Resultado proyectado ${formatRecord(t.projected)}, puesto ${t.projected.seed}; una estimación, no un resultado.`
+                          : `Projected finish ${formatRecord(t.projected)}, ${ordinal(t.projected.seed)} — an expectation, not a result.`}
                       </p>
                     ) : null}
                   </article>
@@ -619,6 +631,8 @@ export function StandingsBoardView({
   board: StandingsBoard
   initial: StandingsViewState
 }) {
+  const language = useOptionalLanguage().language
+  const copy = (value: string) => coreUiCopy(value, language)
   const [view, setView] = useState<StandingsViewKey>(initial.view)
   const [division, setDivision] = useState<string>(
     initial.division === 'all' || initial.division === 'group' || board.divisions.some((d) => d.key === initial.division)
@@ -676,35 +690,35 @@ export function StandingsBoardView({
 
   return (
     <div className="af-stb">
-      <div className="af-stb-controls" role="group" aria-label="Standings view">
-        <div className="af-stb-seg" role="radiogroup" aria-label="Which table">
+      <div className="af-stb-controls" role="group" aria-label={copy('Standings view')}>
+        <div className="af-stb-seg" role="radiogroup" aria-label={copy('Which table')}>
           <button type="button" role="radio" aria-checked={view === 'official'} onClick={() => setView('official')}>
-            League table
+            {copy('League table')}
           </button>
           <button type="button" role="radio" aria-checked={view === 'power'} onClick={() => setView('power')}>
-            AF Power
+            {copy('AF Power')}
           </button>
         </div>
         {board.divisions.length > 0 ? (
           <label className="af-stb-select">
-            <span>Divisions</span>
+            <span>{copy('Divisions')}</span>
             <select value={division} onChange={(e) => setDivision(e.target.value)}>
-              <option value="all">Whole league</option>
-              <option value="group">Grouped by division</option>
+              <option value="all">{copy('Whole league')}</option>
+              <option value="group">{copy('Grouped by division')}</option>
               {board.divisions.map((d) => (
                 <option key={d.key} value={d.key}>
-                  {d.name} only
+                  {d.name} {copy('only')}
                 </option>
               ))}
             </select>
           </label>
         ) : null}
-        <div className="af-stb-seg" role="radiogroup" aria-label="Layout">
+        <div className="af-stb-seg" role="radiogroup" aria-label={copy('Layout')}>
           <button type="button" role="radio" aria-checked={layout === 'table'} onClick={() => chooseLayout('table')}>
-            Table
+            {copy('Table')}
           </button>
           <button type="button" role="radio" aria-checked={layout === 'cards'} onClick={() => chooseLayout('cards')}>
-            Cards
+            {copy('Cards')}
           </button>
         </div>
       </div>
@@ -712,46 +726,46 @@ export function StandingsBoardView({
       <div className="af-stb-kind" data-view={view}>
         {view === 'official' ? (
           <p>
-            <strong>{board.rules.platformLabel === 'the platform' ? 'The league table.' : `${board.rules.platformLabel}’s table.`}</strong>{' '}
-            {board.hasHeadToHead ? 'Record decides the order; this is what seeds the playoffs.' : board.recordBasis}
+            <strong>{board.rules.platformLabel === 'the platform' ? copy('The league table.') : language === 'es' ? `Tabla de ${board.rules.platformLabel}.` : `${board.rules.platformLabel}’s table.`}</strong>{' '}
+            {board.hasHeadToHead ? copy('Record decides the order; this is what seeds the playoffs.') : copy(board.recordBasis)}
           </p>
         ) : (
           <p>
-            <strong>AllFantasy analysis — not the league table.</strong> {board.powerBasis}
+            <strong>{copy('AllFantasy analysis — not the league table.')}</strong> {copy(board.powerBasis)}
           </p>
         )}
       </div>
 
       {board.pendingWeeks.length > 0 ? (
         <p className="af-stb-pending" role="note">
-          Week {board.pendingWeeks.join(', ')} {board.pendingWeeks.length === 1 ? 'is' : 'are'} still being played. The table counts results
-          through week {board.throughWeek}, the last week {board.rules.platformLabel} has made final; those games are still counted as left to
-          play.
+          {language === 'es'
+            ? `La${board.pendingWeeks.length === 1 ? '' : 's'} semana${board.pendingWeeks.length === 1 ? '' : 's'} ${board.pendingWeeks.join(', ')} sigue${board.pendingWeeks.length === 1 ? '' : 'n'} en curso. La tabla incluye los resultados hasta la semana ${board.throughWeek}, la última que ${board.rules.platformLabel} ha confirmado; los partidos pendientes aún cuentan como partidos por jugar.`
+            : `Week ${board.pendingWeeks.join(', ')} ${board.pendingWeeks.length === 1 ? 'is' : 'are'} still being played. The table counts results through week ${board.throughWeek}, the last week ${board.rules.platformLabel} has made final; those games are still counted as left to play.`}
         </p>
       ) : null}
 
       {view === 'official' ? (
-        <ul className="af-stb-legend" aria-label="Status key">
+        <ul className="af-stb-legend" aria-label={copy('Status key')}>
           {byes > 0 ? (
             <li data-zone="bye">
-              <span aria-hidden>★</span> Bye — top {byes}
+              <span aria-hidden>★</span> {copy('Bye')} — {copy('top')} {byes}
             </li>
           ) : null}
           <li data-zone="playoff">
-            <span aria-hidden>●</span> Playoffs — top {field}
+            <span aria-hidden>●</span> {copy('Playoffs')} — {copy('top')} {field}
           </li>
           <li data-zone="bubble">
-            <span aria-hidden>◐</span> Bubble — within a win of the line
+            <span aria-hidden>◐</span> {copy('Bubble — within a win of the line')}
           </li>
           <li data-zone="eliminated">
-            <span aria-hidden>✕</span> Eliminated — cannot reach the line
+            <span aria-hidden>✕</span> {copy('Eliminated — cannot reach the line')}
           </li>
           <li data-zone="clinched">
-            <span aria-hidden>✓</span> Clinched — no result can knock them out
+            <span aria-hidden>✓</span> {copy('Clinched — no result can knock them out')}
           </li>
           {board.teams.some((t) => t.projected) ? (
             <li data-zone="model">
-              <span className="af-stb-projtag">Model</span> Projection, not a result
+              <span className="af-stb-projtag">{copy('Model')}</span> {copy('Projection, not a result')}
             </li>
           ) : null}
         </ul>
@@ -761,12 +775,12 @@ export function StandingsBoardView({
         <Cards board={board} groups={groups} view={view} />
       ) : view === 'official' ? (
         <>
-          <p className="af-stb-cue">Scroll sideways for every column — rank and team stay in place.</p>
+          <p className="af-stb-cue">{copy('Scroll sideways for every column — rank and team stay in place.')}</p>
           <OfficialTable board={board} groups={groups} plain={plain} />
         </>
       ) : (
         <>
-          <p className="af-stb-cue">Scroll sideways for every column — rank and team stay in place.</p>
+          <p className="af-stb-cue">{copy('Scroll sideways for every column — rank and team stay in place.')}</p>
           <PowerTable board={board} groups={groups} />
         </>
       )}
@@ -798,7 +812,7 @@ export function StandingsBoardView({
 
       <section className="af-stb-section" aria-labelledby="af-stb-history-title">
         <h3 id="af-stb-history-title" className="af-label">
-          {view === 'power' ? 'AF Power by week' : 'Standings by week'}
+          {copy(view === 'power' ? 'AF Power by week' : 'Standings by week')}
         </h3>
         <StandingsHistoryChart board={board} metric={view === 'power' ? 'powerRank' : 'seed'} focusIds={focusIds} />
         <p className="af-stb-small">{board.historyBasis}</p>
@@ -806,7 +820,7 @@ export function StandingsBoardView({
 
       <section className="af-stb-section" aria-labelledby="af-stb-points-title">
         <h3 id="af-stb-points-title" className="af-label">
-          The points picture
+          {copy('The points picture')}
         </h3>
         <StandingsPointsChart board={board} teams={board.teams} />
       </section>
