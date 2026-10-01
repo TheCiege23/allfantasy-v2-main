@@ -214,6 +214,7 @@ import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummar
 import { readWeekAllSummary } from '@/lib/core-app/weekAllSummary'
 import { readSeasonOutlookSummary, seasonOutlookFingerprint } from '@/lib/core-app/seasonOutlookSummary'
 import { getCareerScreen, parseCareerView } from '@/lib/core-app/careerScreen'
+import { getCareerWire } from '@/lib/core-app/careerWire'
 import { parseCareerFilter } from '@/lib/core-app/careerModel'
 import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
 import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
@@ -2033,6 +2034,43 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * that one league's own career below.
    */
   const careerView = activeKey === 'career' ? parseCareerView(sp.view) : null
+  /*
+   * Career Wire (live-career plan, phase 3): every platform's sync state, this season's board and
+   * what moved since the last Career visit. Started BEFORE the career read so the two run side by
+   * side. Cross-league overview only — a league's own career has its own Sync screen — and a
+   * prefetch or speculative render reads the Wire without moving the Career visit marker.
+   */
+  const careerWireRead =
+    activeKey === 'career' && careerView === 'overview' && !selectedLeagueId
+      ? (async () =>
+          getCareerWire({
+            userId,
+            leagues: playedLeagues.map((l) => {
+              const row = l as unknown as {
+                platformLeagueId?: string | null
+                season?: number | string | null
+                sport?: string | null
+                lastSyncedAt?: Date | string | null
+              }
+              return {
+                id: l.id,
+                name: l.name ?? null,
+                platform: l.platform ?? null,
+                platformLeagueId: row.platformLeagueId ?? null,
+                // A display year here; `getCareerWire` re-reads `League.season` for the sync key.
+                season: row.season != null && Number.isFinite(Number(row.season)) ? Number(row.season) : null,
+                sport: row.sport ?? null,
+                lastSyncedAt: row.lastSyncedAt ?? null,
+              }
+            }),
+            pausedLeagueIds: pausedSyncLeagueIds ?? new Set<string>(),
+            now,
+            recordVisit: !isSpeculativeRequestHeaders(await headers()),
+          }))().catch((e: unknown) => {
+          console.error('[core/career] wire read failed', e)
+          return null
+        })
+      : Promise.resolve(null)
   const careerScreen =
     activeKey === 'career'
       ? await getCareerScreen(
@@ -2045,6 +2083,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           return null
         })
       : null
+  const careerWire = await careerWireRead
 
   /*
    * Rankings, its FAQ and the compare view share one screen key and one data
@@ -4836,7 +4875,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         leagueCareer ? (
           <LeagueCareer data={leagueCareer} allLeaguesHref="/core/career" />
         ) : careerScreen ? (
-          <Career screen={careerScreen} share={shareCard} />
+          <Career screen={careerScreen} share={shareCard} wire={careerWire} nowIso={now.toISOString()} />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>

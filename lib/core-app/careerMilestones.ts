@@ -204,7 +204,8 @@ export function computeMilestones(data: CareerData, awards: CareerAward[]): Mile
       title: `${a.name} ${TIER_LABEL[a.next.tier]}`,
       detail: `${a.evidence}. ${plural(a.next.remaining, a.unitOne, a.unit)} to go.`,
       remaining: a.next.remaining,
-      progressPct: pct(a.metric - floor, step),
+      // Toward the next tier from zero: a within-step bar reads empty right after a tier is earned.
+      progressPct: pct(a.metric, a.next.threshold),
       ask: `How can I get ${a.name} to ${TIER_LABEL[a.next.tier]}? I need ${plural(a.next.remaining, a.unitOne, a.unit)} more.`,
     })
   }

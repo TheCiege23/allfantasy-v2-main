@@ -102,7 +102,7 @@ describe('computeMilestones', () => {
       row({ season: 2022, isChampion: true, leagueName: 'B' }),
     ])
     const ring = computeMilestones(data, awards).find((m) => m.key === 'award:ring-collector')
-    expect(ring).toMatchObject({ title: 'Ring Collector Silver', remaining: 1, progressPct: 50 })
+    expect(ring).toMatchObject({ title: 'Ring Collector Silver', remaining: 1, progressPct: 67 })
     expect(ring!.detail).toBe('2 titles across 2 leagues. 1 title to go.')
   })
 
