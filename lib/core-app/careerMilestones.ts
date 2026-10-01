@@ -28,6 +28,8 @@ export type LegacyStake = {
   title: string
   detail: string
   tone: StakeTone
+  /** The career ring this title would be — `championships + 1`. */
+  ringNumber: number
   /** An unsent Chimmy question about this league's stakes. */
   ask: string
 }
@@ -41,6 +43,8 @@ export type Milestone = {
   title: string
   /** The number it is measured from, in words — never a restated threshold alone. */
   detail: string
+  /** "1 title to go" — the distance alone, for one-line surfaces (the Daily Brief). */
+  short: string
   /** How many units are left. Always ≥ 1. */
   remaining: number
   /** 0–100, how far along the current step. */
@@ -181,6 +185,7 @@ export function computeLegacyStakes(data: CareerData): LegacyStake[] {
       title: defending ? `Defend ${a.leagueName}` : `Win ${a.leagueName}`,
       detail,
       tone,
+      ringNumber,
       ask: a.record
         ? `I'm ${a.record} in ${a.leagueName} this season. What do I need to do to win the title?`
         : `What would it take for me to win ${a.leagueName} this season?`,
@@ -203,6 +208,7 @@ export function computeMilestones(data: CareerData, awards: CareerAward[]): Mile
       kind: 'award',
       title: `${a.name} ${TIER_LABEL[a.next.tier]}`,
       detail: `${a.evidence}. ${plural(a.next.remaining, a.unitOne, a.unit)} to go.`,
+      short: `${plural(a.next.remaining, a.unitOne, a.unit)} to go`,
       remaining: a.next.remaining,
       // Toward the next tier from zero: a within-step bar reads empty right after a tier is earned.
       progressPct: pct(a.metric, a.next.threshold),
@@ -219,6 +225,7 @@ export function computeMilestones(data: CareerData, awards: CareerAward[]): Mile
         kind: 'wins',
         title: `${mark.toLocaleString('en-US')} career wins`,
         detail: `${plural(data.wins, 'win')} in finished seasons. ${plural(remaining, 'more win')} gets there.`,
+        short: `${plural(remaining, 'win')} to go`,
         remaining,
         progressPct: pct(data.wins - floor, mark - floor),
         ask: `I'm ${remaining} wins from ${mark} career wins. Which of my leagues gives me the best shot at getting there this season?`,
@@ -232,6 +239,7 @@ export function computeMilestones(data: CareerData, awards: CareerAward[]): Mile
       kind: 'level',
       title: `Reach ${data.nextLevelName}`,
       detail: `${data.xp.toNext.toLocaleString('en-US')} XP to the next level${data.level != null ? ` from level ${data.level}` : ''}.`,
+      short: `${data.xp.toNext.toLocaleString('en-US')} XP to go`,
       remaining: data.xp.toNext,
       progressPct: Math.round(data.xp.progressPct ?? 0),
       ask: `What's the fastest way for me to earn XP and reach ${data.nextLevelName} on AllFantasy?`,
@@ -276,6 +284,7 @@ export function computeLeagueMilestones(data: LeagueCareerData): Milestone[] {
         kind: 'league-wins',
         title: `${mark} wins in ${name}`,
         detail: `${plural(wins, 'win')} here since ${data.firstSeason}. ${plural(remaining, 'more win')} gets there.`,
+        short: `${plural(remaining, 'win')} to go`,
         remaining,
         progressPct: pct(wins - floor, mark - floor),
         ask: `I'm ${remaining} wins from ${mark} all-time wins in ${name}. How do I get there this season?`,
@@ -291,6 +300,7 @@ export function computeLeagueMilestones(data: LeagueCareerData): Milestone[] {
       kind: 'league-seasons',
       title: `${ordinal(nextSeason)} season in ${name}`,
       detail: `${plural(seasons, 'season')} played here since ${data.firstSeason}.`,
+      short: 'next season',
       remaining: 1,
       progressPct: pct(seasons, nextSeason),
       ask: `Looking back over my ${seasons} seasons in ${name}, what have I done well and what should I change?`,
@@ -298,4 +308,23 @@ export function computeLeagueMilestones(data: LeagueCareerData): Milestone[] {
   }
 
   return out
+}
+
+/**
+ * One line for surfaces that have room for one line — the Decision OS Daily Brief.
+ * "Win Office League and it's ring #3. Next up: Ring Collector Silver, 1 title to go."
+ *
+ * Built from the same stakes and milestones the Career card shows, so the two cannot disagree.
+ * Null when there is nothing live and nothing close — a brief line saying "no stakes" is noise.
+ */
+export function composeLegacyLine(data: Pick<LegacyStakesData, 'stakes' | 'milestones'>): string | null {
+  const stake = data.stakes.at(0)
+  const next = data.milestones.at(0)
+  const parts: string[] = []
+  if (stake) {
+    const more = data.stakes.length > 1 ? ` (${data.stakes.length - 1} more ${data.stakes.length === 2 ? 'league' : 'leagues'} in play)` : ''
+    parts.push(`${stake.title} and it's ring #${stake.ringNumber}${more}.`)
+  }
+  if (next) parts.push(`${stake ? 'Next up' : 'Within reach'}: ${next.title}, ${next.short}.`)
+  return parts.length ? parts.join(' ') : null
 }

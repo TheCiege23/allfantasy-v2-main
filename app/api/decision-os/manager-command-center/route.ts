@@ -21,6 +21,7 @@ import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-lea
 import { isSportsDataEnabled } from '@/lib/sports-evidence/gates'
 import { CertifiedIntelligenceIntegrationService } from '@/lib/sports-evidence/intelligenceIntegration'
 import { resolveManagerCommandCenterSnapshot } from '@/lib/decision-os/managerCommandCenter'
+import { loadCareerDecisionInput } from '@/lib/core-app/careerDecisionInput'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,10 +31,10 @@ interface DashboardLeagueRow {
   id?: unknown
 }
 
-async function resolveMemberLeagueIds(userId: string): Promise<string[]> {
+async function resolveMemberLeagues(userId: string): Promise<{ ids: string[]; rows: unknown[] }> {
   const payload = await getDashboardLeagueListForUser(userId).catch(() => null)
   const leagues = (payload?.leagues ?? []) as DashboardLeagueRow[]
-  return leagues.filter((l) => typeof l.id === 'string').map((l) => l.id as string)
+  return { ids: leagues.filter((l) => typeof l.id === 'string').map((l) => l.id as string), rows: leagues }
 }
 
 async function countDraftsApproaching(leagueIds: string[], now: Date): Promise<number> {
@@ -61,10 +62,15 @@ export async function GET() {
   }
 
   const now = new Date()
-  const leagueIds = await resolveMemberLeagueIds(userId)
+  const { ids: leagueIds, rows: leagueRows } = await resolveMemberLeagues(userId)
+
+  // Live-career plan, phase 4: sync-trouble and title-stake signals plus the Daily Brief's legacy
+  // line. Read once here from the same rows; null (never a throw) when the career read fails.
+  // Started, not awaited: the snapshot awaits it only after its own per-league reads.
+  const career = loadCareerDecisionInput({ userId, leagueRows, now })
 
   const [snapshot, draftsApproachingCount] = await Promise.all([
-    resolveManagerCommandCenterSnapshot(userId, leagueIds, now),
+    resolveManagerCommandCenterSnapshot(userId, leagueIds, now, career),
     countDraftsApproaching(leagueIds, now),
   ])
 
