@@ -4,6 +4,8 @@ import { FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { resolveCommissionerOsDepth } from '@/lib/commissioner-ui/commissionerOsDepth'
 import { RecommendationsView } from '@/components/commissioner-os/recommendations/RecommendationsView'
 import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
+import { resolveActiveLeagueId } from '@/lib/commissioner-ui/resolveActiveLeagueId'
+import { CommissionerChimmy } from '@/components/core-app/commissioner/CommissionerChimmy'
 
 export default async function RecommendationsPage() {
   const depth = await resolveCommissionerOsDepth()
@@ -11,11 +13,13 @@ export default async function RecommendationsPage() {
 
   const adapter = await getDecisionOSAdapter()
   const response = await adapter.recommendations.getQueue()
+  const leagueId = await resolveActiveLeagueId()
 
   return (
     <CommissionerPageContainer>
       <FreeUntilNote access={depth} />
       <RecommendationsView recommendations={response.data ?? []} dataMode={adapter.mode} />
+      {leagueId && <CommissionerChimmy leagueId={leagueId} />}
     </CommissionerPageContainer>
   )
 }

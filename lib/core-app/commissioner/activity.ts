@@ -32,6 +32,7 @@ export type MemberActivityRow = {
   status: MemberStatus
   /** "3 moves in 14 days", "last move 2d ago" — what the status was judged from. */
   detail: string
+  lastActionAt: string | null
 }
 
 export type LeagueMemberActivity = SectionState<{
@@ -46,7 +47,7 @@ export type LeagueMemberActivity = SectionState<{
 export type ImportedActivityInput = {
   kind: 'imported'
   /** `readManagerActivity(leagueId, windowDays)` — current-window and prior-window move counts per manager. */
-  managers: Array<{ managerName: string; currentCount: number; priorCount: number }>
+  managers: Array<{ managerName: string; currentCount: number; priorCount: number; lastActionAt?: Date | null }>
   /**
    * Every OWNED team's display name. `readManagerActivity` lists only managers with
    * at least one move in the last two windows, so the quietest managers — the ones
@@ -125,17 +126,16 @@ export function resolveMemberActivity(
     const listed = new Set(input.managers.map((m) => m.managerName))
     const silent = (input.teams ?? [])
       .filter((name) => !listed.has(name))
-      .map((managerName) => ({ managerName, currentCount: 0, priorCount: 0 }))
+      .map((managerName) => ({ managerName, currentCount: 0, priorCount: 0, lastActionAt: null }))
     return finish(
       [...input.managers, ...silent].map((m) => ({
         name: m.managerName,
         status: m.currentCount > 0 ? 'active' : 'inactive',
+        lastActionAt: m.lastActionAt?.toISOString() ?? null,
         detail:
-          m.currentCount > 0
-            ? `${plural(m.currentCount, 'move')} in ${windowDays} days`
-            : m.priorCount > 0
-              ? `no moves in ${windowDays} days (${m.priorCount} the ${windowDays} before)`
-              : `no moves in ${windowDays} days`,
+          m.lastActionAt
+            ? `last move ${plural(Math.max(0, Math.floor((now.getTime() - m.lastActionAt.getTime()) / DAY_MS)), 'day')} ago`
+            : 'no qualifying move on file',
       })),
       `trades, waiver claims and roster moves in the last ${windowDays} days`,
     )
@@ -158,8 +158,9 @@ export function resolveMemberActivity(
       return {
         name: (r.teamName || r.managerName) as string,
         status: r.status,
+        lastActionAt: r.lastActionAt,
         detail:
-          days == null ? 'no activity on file' : days <= 0 ? 'active today' : days === 1 ? 'last move yesterday' : `last move ${days}d ago`,
+          days == null ? 'no activity on file' : days <= 0 ? 'active today' : days === 1 ? 'last move yesterday' : `last move ${plural(days, 'day')} ago`,
       }
     }),
     'the last lineup or roster change',

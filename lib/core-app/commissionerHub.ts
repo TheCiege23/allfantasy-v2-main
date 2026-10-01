@@ -54,6 +54,9 @@ import { readReviewSignals } from './commissioner/signalReads'
 import { NO_REVIEW_SIGNALS } from './commissioner/signals'
 import { leagueHubArt, type HubArt } from './commissioner/leagueArt'
 import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
+import { resolveCommissionerLeagueProfile } from '@/lib/commissioner-os/profile/resolveCommissionerLeagueProfile'
+import { commissionerFormatCards, type CommissionerFormatCard } from './commissioner/formatCards'
+import { loadCommissionerHistory, type CommissionerHistory } from './commissioner/history'
 
 /**
  * Commissioner Hub — 38a screen 9.
@@ -147,6 +150,9 @@ export type { MemberActivityRow } from './commissioner/activity'
 
 export type CommissionerHubData = {
   allowed: true
+  formatCards: CommissionerFormatCard[]
+  network: { id: string; name: string; role: string } | null
+  history: CommissionerHistory
   grant: CommissionerGrant
   league: { id: string; name: string; platform: string; sport?: string; season: number | null; native: boolean }
   /** The viewer's own role — drives the co-commissioner boundary note. */
@@ -386,7 +392,11 @@ export async function getCommissionerHub(input: {
       playoffTeams: true,
       leagueType: true,
       leagueVariant: true,
+      keeperCount: true,
+      keeperCostSystem: true,
+      keeperRoundPenalty: true,
       guillotineMode: true,
+      survivorMode: true,
       bestBallMode: true,
       isDynasty: true,
       lifecycleState: true,
@@ -444,6 +454,8 @@ export async function getCommissionerHub(input: {
     sendEnabled,
     activityReads,
     reviewSignals,
+    networkMember,
+    history,
   ] = await Promise.all([
     prisma.leagueTeam
       .findMany({
@@ -528,7 +540,20 @@ export async function getCommissionerHub(input: {
     readReviewSignals([{ id: leagueId, native, status: league.status, lifecycleState: league.lifecycleState }], now)
       .then((r) => r.byLeague.get(leagueId) ?? NO_REVIEW_SIGNALS)
       .catch(() => NO_REVIEW_SIGNALS),
+    Promise.resolve().then(() => prisma.commissionerNetworkMember.findFirst({
+      where: { leagueId, network: { ownerUserId: userId } },
+      select: { role: true, network: { select: { id: true, name: true } } },
+    })).catch(() => null),
+    loadCommissionerHistory(leagueId, native).catch((): CommissionerHistory => ({ tradeAvailable: false, draftAvailable: false, trades: [], drafts: [], tradeNote: 'Trade history could not be read.', draftNote: 'Draft history could not be read.' })),
   ])
+
+  const profile = resolveCommissionerLeagueProfile({
+    league,
+    commissionerRole: role,
+    networkMembership: networkMember
+      ? { networkId: networkMember.network.id, role: networkMember.role === 'host' ? 'host' : 'member', label: networkMember.network.name }
+      : null,
+  })
 
   const teamCount = teams.length || rosters.length
   const settingsJson = league.settings
@@ -926,6 +951,9 @@ export async function getCommissionerHub(input: {
 
   return {
     allowed: true,
+    formatCards: commissionerFormatCards(profile, league.leagueType),
+    network: networkMember ? { id: networkMember.network.id, name: networkMember.network.name, role: networkMember.role } : null,
+    history,
     grant,
     league: { id: leagueId, name: leagueName, platform, sport, season: league.season ?? null, native },
     role,

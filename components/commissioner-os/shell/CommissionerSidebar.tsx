@@ -102,6 +102,7 @@ export function CommissionerSidebar({ activeLeagueId = null }: { activeLeagueId?
               {!sidebarCollapsed ? <span>Commissioner Hub</span> : <span className="sr-only">Commissioner Hub</span>}
             </Link>
           </div>
+          <div className="px-5 py-2 text-sm"><Link href="/commissioner-os/networks" onClick={closeMobileSidebar}>Commissioner networks</Link></div>
           <SidebarList
             items={COMMISSIONER_SECONDARY_NAV_ITEMS}
             activeModuleId={activeModuleId}
