@@ -3,6 +3,7 @@ import { getSessionAndProfile } from "@/lib/auth-guard"
 import { prisma } from "@/lib/prisma"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
 import { SMS_CONSENT_TEXT, SMS_CONSENT_VERSION } from "@/lib/legal/smsProgram"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
 
 export const runtime = "nodejs"
 
@@ -17,11 +18,9 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}))
-  let phone = String(body?.phone || profile?.phone || "").trim()
+  const phone = normalizePhoneE164(String(body?.phone || profile?.phone || ""))
   if (!phone) return NextResponse.json({ error: "MISSING_PHONE" }, { status: 400 })
 
-  phone = phone.replace(/[\s()-]/g, "")
-  if (!phone.startsWith("+")) phone = "+1" + phone
   if (!/^\+\d{10,15}$/.test(phone)) {
     return NextResponse.json({ error: "INVALID_PHONE", message: "Please enter a valid phone number with country code." }, { status: 400 })
   }

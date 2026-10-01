@@ -7,6 +7,7 @@ import { logPasswordResetAudit } from "@/lib/auth/password-reset-audit"
 import { getResendFromEmail } from "@/lib/resend-client"
 import { getServedOrigin } from "@/lib/http/served-origin"
 import { safeInternalPathOr } from "@/lib/auth/auth-intent-resolver"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
 
 export const runtime = "nodejs"
 
@@ -53,8 +54,7 @@ export async function POST(req: Request) {
   const type = String(body?.type || "email").toLowerCase()
   const returnTo = typeof body?.returnTo === "string" ? body.returnTo : null
   const email = String(body?.email || "").toLowerCase().trim()
-  let phone = String(body?.phone || "").trim().replace(/[\s()-]/g, "")
-  if (phone && !phone.startsWith("+")) phone = "+1" + phone
+  const phone = normalizePhoneE164(String(body?.phone || ""))
 
   if (type === "sms") {
     if (!/^\+\d{10,15}$/.test(phone)) {

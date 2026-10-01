@@ -26,6 +26,7 @@ import {
 } from "@/lib/security-settings"
 import type { SettingsProfile } from "./settings-types"
 import { SmsConsentCheckbox } from "@/components/legal/SmsConsentCheckbox"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
 
 export function SecuritySettingsSection({
   profile,
@@ -167,7 +168,7 @@ export function SecuritySettingsSection({
     setPhoneSending(true)
     setPhoneResult(null)
     setPhoneErrorMessage(null)
-    const result = await startPhoneVerification(trimmed.startsWith("+") ? trimmed : `+1${trimmed}`, {
+    const result = await startPhoneVerification(normalizePhoneE164(trimmed), {
       smsConsent: true,
       consentSource: "settings-security",
     })
@@ -183,7 +184,7 @@ export function SecuritySettingsSection({
   const handleVerifyPhoneCode = async () => {
     if (!phoneCode.trim()) return
     const trimmed = phoneInput.replace(/[\s()-]/g, "").trim()
-    const phone = trimmed.startsWith("+") ? trimmed : `+1${trimmed}`
+    const phone = normalizePhoneE164(trimmed)
     setPhoneVerifying(true)
     setPhoneResult(null)
     setPhoneErrorMessage(null)
