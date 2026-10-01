@@ -2,7 +2,7 @@ import { storeChimmyScreenshot, readChimmyScreenshot } from '@/lib/chimmy-chat/p
 import { FUN_MODE_DIRECTIVE, isFunModeTone } from '@/lib/chimmy/funMode'
 import { parseScreenshotWithVision } from '@/lib/chimmy/screenshotVision'
 import { NextRequest, NextResponse } from 'next/server'
-import { CHIMMY_CURRENT_REQUEST_POLICY } from '@/lib/chimmy/currentRequestFocus'
+import { CHIMMY_CURRENT_REQUEST_POLICY, markEarlierImageTurns } from '@/lib/chimmy/currentRequestFocus'
 import { LINEUP_ACTION_RULES } from '@/lib/chimmy/lineupActionEvidence'
 import { prepareChimmyDecisionAnswer } from '@/lib/chimmy/decisionAnswerService'
 import { leagueForbidsTrades } from '@/lib/chimmy/decisionFormatGate'
@@ -1415,7 +1415,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   )
   let leagueId = requestedLeagueId ?? null
   let leagueNameHint = requestedLeagueNameHint ?? null
-  const conversation = parsedConversation.slice(-MAX_CONVERSATION_CONTEXT_TURNS)
+  const conversation = markEarlierImageTurns(parsedConversation.slice(-MAX_CONVERSATION_CONTEXT_TURNS))
   const imageFile = imageValidation.file
 
   const initialIntent = classifyPecrIntent(message)
@@ -3088,7 +3088,15 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
      */
     const toolContext = { leagueId: leagueSnapshot?.id ?? null, userId: userId ?? null, startCalls: [] as ChatStartCall[], actionCards: [] as ChimmyActionCard[], tradeGrades: [] as ChimmyTradeGrade[], faabPlans: [] as ChimmyFaabPlanRun[], toolRuns: [] as ChimmyToolRun[], eliminationSettles: [] as ChimmyEliminationSettleRun[] }
     const loopArgs = {
-      question: message,
+      /*
+       * The screenshot read for THIS request rides with the question, fenced as evidence exactly as
+       * the fallback prompt fences it. The loop answers first and used to get the question alone, so
+       * an image that was not a trade card was answered by a model that never saw what was read
+       * from it — and said so ("I can't see the image"), which then replayed into later answers.
+       */
+      question: screenshotSummary
+        ? `${message}\n\n${fenceScreenshotEvidence(classifyScreenshotEvidence(screenshotSummary))}`
+        : message,
       /*
        * The PECR path has always carried the user's clock; the tool loop — the path that answers
        * first — did not, so "tonight", "this week" and "last Sunday" were resolved against the
