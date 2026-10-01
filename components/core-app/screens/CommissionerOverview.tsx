@@ -113,7 +113,8 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
   const canSend = data.broadcastLeagueIds.length > 0
 
   return (
-    <div className="afh" data-format="all" data-testid="commissioner-overview">
+    // `afh--overview`: on a phone the queue moves above the hero and the league cards (af-format-hubs.css).
+    <div className="afh afh--overview" data-format="all" data-testid="commissioner-overview">
       <HubSwitcher current="all" counts={data.formatCounts} runCount={data.runCount} />
 
       <header className="afh-head">

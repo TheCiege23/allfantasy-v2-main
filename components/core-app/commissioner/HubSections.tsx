@@ -120,8 +120,23 @@ function TaskCardView({ card }: { card: TaskCard }) {
   )
 }
 
+/**
+ * How many task cards a phone shows before "N more". Measured on a 12-team fixture at 375px:
+ * nine cards were 1,309px — the section bar and everything after it sat 2½ screens down.
+ */
+const PHONE_VISIBLE_TASKS = 3
+
 export function TaskCards({ data }: { data: CommissionerHubData }) {
   const { cards, overflow } = data.tasks
+  /*
+   * ⚠ CARDS 4–6 ARE RENDERED TWICE, ONE COPY PER WIDTH. Desktop keeps them in the grid; a phone
+   * shows them inside the "more" disclosure instead. A server component cannot move nodes by
+   * viewport, and CSS cannot put a node into a <details>. Each copy is display:none at the
+   * other width, which also takes it out of the accessibility tree — a reader meets each card
+   * once.
+   */
+  const first = cards.slice(0, PHONE_VISIBLE_TASKS)
+  const rest = cards.slice(PHONE_VISIBLE_TASKS)
   return (
     <HubSection
       id="ch-tasks"
@@ -130,11 +145,20 @@ export function TaskCards({ data }: { data: CommissionerHubData }) {
       className="af-ch-tasks-section"
     >
       {cards.length > 0 ? (
-        <ul className="af-ch-tasks">
-          {cards.map((c) => (
-            <TaskCardView key={c.id} card={c} />
-          ))}
-        </ul>
+        <>
+          <ul className="af-ch-tasks">
+            {first.map((c) => (
+              <TaskCardView key={c.id} card={c} />
+            ))}
+          </ul>
+          {rest.length > 0 ? (
+            <ul className="af-ch-tasks af-ch-tasks--wide-only">
+              {rest.map((c) => (
+                <TaskCardView key={c.id} card={c} />
+              ))}
+            </ul>
+          ) : null}
+        </>
       ) : (
         <div className="af-ch-empty">
           <span className="af-ch-empty-mark af-num" aria-hidden>
@@ -143,16 +167,30 @@ export function TaskCards({ data }: { data: CommissionerHubData }) {
           <p>{data.tasksEmptyReason}</p>
         </div>
       )}
-      {overflow.length > 0 ? (
-        <details className="af-ch-more">
+      {overflow.length > 0 || rest.length > 0 ? (
+        <details className="af-ch-more" data-wide-empty={overflow.length === 0 ? 'true' : undefined}>
           <summary>
-            {overflow.length} more {overflow.length === 1 ? 'task' : 'tasks'}
+            <span className="af-ch-more-wide">
+              {overflow.length} more {overflow.length === 1 ? 'task' : 'tasks'}
+            </span>
+            <span className="af-ch-more-phone">
+              {overflow.length + rest.length} more {overflow.length + rest.length === 1 ? 'task' : 'tasks'}
+            </span>
           </summary>
-          <ul className="af-ch-tasks">
-            {overflow.map((c) => (
-              <TaskCardView key={c.id} card={c} />
-            ))}
-          </ul>
+          {rest.length > 0 ? (
+            <ul className="af-ch-tasks af-ch-tasks--phone-only">
+              {rest.map((c) => (
+                <TaskCardView key={c.id} card={c} />
+              ))}
+            </ul>
+          ) : null}
+          {overflow.length > 0 ? (
+            <ul className="af-ch-tasks">
+              {overflow.map((c) => (
+                <TaskCardView key={c.id} card={c} />
+              ))}
+            </ul>
+          ) : null}
         </details>
       ) : null}
     </HubSection>
