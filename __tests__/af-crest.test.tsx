@@ -55,16 +55,32 @@ describe('AfCrest', () => {
 
   it('keeps brand colour by default — a crest that follows the theme is decoration', () => {
     const { container } = render(<AfCrest />)
-    const path = container.querySelector('path')!
-    expect(path.getAttribute('stroke')).toBe('#2286D4')
-    expect(path.getAttribute('fill')).toBe('#123A7A')
+    const fills = Array.from(container.querySelectorAll('path')).map((p) => p.getAttribute('fill'))
+    // rim ring, navy field, "A", "F" — the colours sampled off the master artwork.
+    expect(fills).toEqual(['#0B8DCB', '#012967', '#FEFDF9', '#FEFDF9'])
+  })
+
+  it('sets the letters as paths, so they cannot reflow with the device font', () => {
+    const { container } = render(<AfCrest />)
+    expect(container.querySelector('text')).toBeNull()
   })
 
   it('takes the surrounding colour when asked to be furniture', () => {
     const { container } = render(<AfCrest tone="inherit" />)
-    const path = container.querySelector('path')!
-    expect(path.getAttribute('stroke')).toBe('currentColor')
-    expect(path.getAttribute('fill')).toBe('transparent')
+    const fills = Array.from(container.querySelectorAll('path')).map((p) => p.getAttribute('fill'))
+    // No field: the rim is a ring, so the crest reads as an outline, not a blob.
+    expect(fills).toEqual(['currentColor', 'currentColor', 'currentColor'])
+  })
+
+  it('/af-crest.svg is the same drawing, for surfaces that need an <img>', () => {
+    // The public file is a hand-copied mirror of this component. Every `d` the
+    // component draws must appear in it verbatim, or the two have drifted.
+    const svg = fs.readFileSync(path.join(process.cwd(), 'public', 'af-crest.svg'), 'utf8')
+    const { container } = render(<AfCrest />)
+    const ds = Array.from(container.querySelectorAll('path')).map((p) => p.getAttribute('d')!)
+    for (const d of ds) expect(svg).toContain(`d="${d}"`)
+    expect(svg).toContain(`viewBox="${container.querySelector('svg')!.getAttribute('viewBox')}"`)
+    expect(svg).not.toMatch(/<rect/)
   })
 
   it('scales without a second asset', () => {
