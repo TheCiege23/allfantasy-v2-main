@@ -51,14 +51,23 @@ function TradeCenterCard({ trade, active, onAsk }: { trade: LeagueTradeHistoryIt
     <p>{trade.status || (active ? 'Open offer' : 'Recorded trade')} · {one
       ? `League grade: you ${one.letter} · ${trade.partnerName} ${one.partnerLetter}`
       : grade ? `Current ${active ? 'proposal' : 'market'} grade ${grade}` : 'Grade unavailable'}</p>
-    <p>{active && viewerIsParty ? 'You send' : 'Sent'}: {sent}</p>
-    <p>{active && viewerIsParty ? 'You receive' : 'Received'}: {received}</p>
+    {/*
+      A completed trade reads as what each team RECEIVED (2026-10-01): `sent` left the viewer's
+      roster, so it is what the partner got. An open offer keeps its send/receive wording.
+    */}
+    {active ? <>
+      <p>{viewerIsParty ? 'You send' : 'Sent'}: {sent}</p>
+      <p>{viewerIsParty ? 'You receive' : 'Received'}: {received}</p>
+    </> : <>
+      <p>You received: {received}</p>
+      <p>{trade.partnerName || 'Trade partner'} received: {sent}</p>
+    </>}
     <p>{active && trade.decisionRecommendation
       ? trade.decisionRecommendation
       : one ? `You got ${one.getValue.toLocaleString()} for ${one.giveValue.toLocaleString()} on this league's values ${gradeMoment(one)}.`
       : grade ? `Repriced using this league's current player values. This is not a realized-points grade.` : 'Verified valuation coverage is incomplete; no letter grade is shown.'}</p>
     {!active && trade.currentUnresolvedAssets?.length ? <p>Unpriced: {trade.currentUnresolvedAssets.join(', ')}</p> : null}
-    <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain ${trade.status || 'recorded'} trade ${trade.id}: ${title}. Recorded sent assets: ${sent}. Recorded received assets: ${received}.${gradeFact('my side', trade.partnerName, one)} Verify which side is mine, then explain the grade and whether it fits my roster and this league's rules.`)}>Ask Chimmy</button>
+    <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain ${trade.status || 'recorded'} trade ${trade.id}: ${title}. ${active ? `Recorded sent assets: ${sent}. Recorded received assets: ${received}.` : `I received: ${received}. ${trade.partnerName || 'My trade partner'} received: ${sent}.`}${gradeFact('my side', trade.partnerName, one)} Verify which side is mine, then explain the grade and whether it fits my roster and this league's rules.`)}>Ask Chimmy</button>
   </article>
 }
 
@@ -80,13 +89,14 @@ function GradedHistoryCard({ row, realized, onAsk }: { row: GradedHistoryRow; re
   return <article>
     <strong>{when} · {a} ↔ {b}</strong>
     <p>{g ? `League grade: ${a} ${g.letter} · ${b} ${g.partnerLetter}` : row.leagueGrade && !row.leagueGrade.graded ? `Not graded: ${row.leagueGrade.reason}` : 'Grade unavailable'}</p>
-    <p>{a} sent: {list(row.sent, sentValues)}</p>
-    <p>{b} sent: {list(row.received, receivedValues)}</p>
+    {/* What each team RECEIVED, under the name its letter is read against — as on the Trade Center card. */}
+    <p>{a} received: {list(row.received, receivedValues)}</p>
+    <p>{b} received: {list(row.sent, sentValues)}</p>
     {g ? gradeReasons(g, a, b).map(line => <p key={line}>{line}</p>) : null}
     {[row.sideAName, row.sideBName].some(name => net(name) != null) ? (
       <p>Realized so far: {[row.sideAName, row.sideBName].filter(name => net(name) != null).map(name => `${name} net ${net(name)!.toFixed(1)} fantasy points`).join(' · ')} while the assets were held.</p>
     ) : null}
-    <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain completed trade ${row.id} (${when}): ${a} sent ${list(row.sent, sentValues)}; ${b} sent ${list(row.received, receivedValues)}.${gradeFact(a, b, g)} Explain why it graded that way and how it affects my team in this league.`)}>Ask Chimmy</button>
+    <button type="button" className="af-cm-quickbtn" onClick={() => onAsk(`Explain completed trade ${row.id} (${when}): ${a} received ${list(row.received, receivedValues)}; ${b} received ${list(row.sent, sentValues)}.${gradeFact(a, b, g)} Explain why it graded that way and how it affects my team in this league.`)}>Ask Chimmy</button>
   </article>
 }
 
