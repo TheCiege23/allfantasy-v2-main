@@ -215,6 +215,53 @@ describe('StandingsBoard', () => {
     expect(container.textContent ?? '').toMatch(/1 league could not be ranked/i)
   })
 
+  it("adds this week's swing, who to root for and the schedule ahead — only from what was simulated", () => {
+    const sched = (rank: number) => ({
+      pastOpponentMu: null,
+      remainingOpponentMu: 110,
+      pastRank: null,
+      remainingRank: rank,
+      leagueMu: 105,
+      pastGames: 0,
+      remainingGames: 3,
+    })
+    const l = outlookLeague()
+    const league = {
+      ...l,
+      you: { ...l.you!, schedule: sched(2) },
+      teams: [1, 2, 3].map((r) => ({ ...l.you!, rosterId: String(r), isYou: r === 1, schedule: sched(r === 1 ? 2 : r === 2 ? 1 : 3) })),
+    } as OutlookLeague
+    const swing = {
+      leagueId: 'l1',
+      leagueName: l.leagueName,
+      week: 9,
+      opponentName: 'Gridiron Ghosts',
+      ifWin: 71.4,
+      ifLose: 38.2,
+      swing: 33.2,
+      clinchOnWin: false,
+      helpIfLose: [],
+      rooting: [{ week: 9, a: '2', b: '3', aName: 'Turf Wars', bName: 'Bench Mob', ifA: 40, ifB: 60, rootFor: '3' }],
+    }
+    const { container } = render(
+      <StandingsBoard
+        outlook={outlook({ leagues: [league], swingByLeague: { l1: swing } })}
+        allHref="/core/standings?all=1"
+        totalLeagues={9}
+      />,
+    )
+    expect(container.querySelector('.af-bd-sub3')?.textContent).toBe(
+      'Wk 9 vs Gridiron Ghosts: 71% with a win, 38% with a loss · root for Bench Mob · 2nd-hardest schedule left of 3',
+    )
+  })
+
+  it('draws no stakes line when there is neither a swing game nor a ranked schedule', () => {
+    const { container } = render(
+      <StandingsBoard outlook={outlook()} allHref="/core/standings?all=1" totalLeagues={9} />,
+    )
+    expect(container.querySelector('.af-bd-sub3')).toBeNull()
+  })
+
   it('states that the odds are simulated, never bare', () => {
     const { container } = render(
       <StandingsBoard outlook={outlook()} allHref="/core/standings?all=1" totalLeagues={9} />,

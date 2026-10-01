@@ -414,6 +414,10 @@ export type BoardTeam = {
   clinched: 'bye' | 'playoff' | null
   /** Regular-season games still to play, including any week held back as in progress. */
   gamesLeft: number
+  /** The earliest game still ahead of the table — the week in progress, if one is held back. */
+  next: NextGame | null
+  /** Clinch and elimination numbers for a playoff spot. */
+  path: PlayoffPath
 
   // Power
   powerRank: number
@@ -435,6 +439,30 @@ export type BoardTeam = {
 
   // Projection — an expectation, kept apart from everything above.
   projected: ProjectedRecord | null
+}
+
+export type NextGame = {
+  week: number
+  opponentId: string
+  opponentName: string
+  /** True when this week is being played now — scored, but not yet final. */
+  inProgress: boolean
+}
+
+/**
+ * How far a team is from settling its playoff place, in its OWN results.
+ *
+ * ⚠ BOTH NUMBERS ARE GUARANTEES, NOT ESTIMATES. "Win N more" means N more wins put the team in
+ * whatever every other game does; "lose N more" means N more losses put it out whatever every other
+ * game does. Neither credits help from elsewhere, so the true number can be lower — never higher.
+ */
+export type PlayoffPath = {
+  /** More wins that guarantee a playoff spot. 0 once clinched; null when even winning out does not guarantee it. */
+  winsToClinch: number | null
+  /** More losses that guarantee elimination. 0 once eliminated; null when clinched or no number of losses does. */
+  lossesToElimination: number | null
+  /** The games both numbers are out of — regular-season games left, median games included. */
+  gamesLeft: number
 }
 
 export type HistoryPoint = { week: number; seed: number; powerRank: number }
@@ -794,6 +822,16 @@ export function buildStandingsBoard(input: BoardInput): StandingsBoard {
   const medianLeft = (id: string) => (medianGames ? remainingWeeks.get(id)?.size ?? 0 : 0)
 
   const zones = computeZones(ordered, rules, hasHeadToHead, remaining, medianLeft)
+  const paths = computePaths(ordered, rules, hasHeadToHead, remaining, medianLeft, zones)
+  const pendingSet = new Set(pending.map((s) => s.week))
+  const nextGame = (id: string): NextGame | null => {
+    const g = remaining
+      .filter((x) => x.a === id || x.b === id)
+      .reduce<RemainingGame | null>((best, x) => (best == null || x.week < best.week ? x : best), null)
+    if (!g) return null
+    const opp = g.a === id ? g.b : g.a
+    return { week: g.week, opponentId: opp, opponentName: nameOf(opp), inProgress: pendingSet.has(g.week) }
+  }
   const projection = projectRecords({ ids, snapshots, remaining, medianGames, rowOf, hasHeadToHead, rules })
 
   // Divisions.
@@ -840,6 +878,8 @@ export function buildStandingsBoard(input: BoardInput): StandingsBoard {
       zone: zones.zone.get(id) ?? 'out',
       clinched: zones.clinched.get(id) ?? null,
       gamesLeft: remaining.filter((g) => g.a === id || g.b === id).length,
+      next: nextGame(id),
+      path: paths.get(id) ?? { winsToClinch: null, lossesToElimination: null, gamesLeft: 0 },
       powerRank: power.rank.get(id)!,
       powerScore: Math.round((power.score.get(id) ?? 0) * 1000) / 10,
       powerMove: move(powerByWeek, id),
@@ -1019,6 +1059,136 @@ function computeZones(
     else zone.set(id, i < field + 2 && nearLine ? 'bubble' : 'out')
   })
   return { zone, clinched }
+}
+
+/**
+ * Clinch and elimination numbers — the standings-page "magic number", per team.
+ *
+ * ⚠ THE SAME CONSERVATIVE RULE AS `computeZones`, SO THE TWO CAN NEVER DISAGREE. A level final record
+ * counts against the team being tested (a points tiebreak can still move), and a median game is free
+ * for everyone else. "Win k more" guarantees a spot when fewer than `field` rivals could still reach
+ * that total; "lose k more" guarantees elimination when `field` rivals already sit above the most the
+ * team could then reach. Both ignore help from other games, so they can over-state, never under-state.
+ *
+ * With few games left every outcome is enumerated (`exactPath`), so the numbers are the true minimums.
+ * Earlier — or in a median league — a bound is used: every rival wins out, which can over-state a
+ * number but never under-state it. In the bound only the win-out case credits head-to-head games
+ * against the team itself (if it wins every remaining game, the rivals it plays cannot win those); with
+ * fewer wins we do not know WHICH games were won, so nothing is credited.
+ */
+function computePaths(
+  ordered: OrderRow[],
+  rules: StandingsRules,
+  hasHeadToHead: boolean,
+  remaining: RemainingGame[],
+  medianLeft: (id: string) => number,
+  zones: { zone: Map<string, Zone>; clinched: Map<string, 'bye' | 'playoff'> },
+): Map<string, PlayoffPath> {
+  const out = new Map<string, PlayoffPath>()
+  if (!hasHeadToHead) return out
+  const field = Math.min(rules.playoffTeams, ordered.length)
+  const ids = ordered.map((r) => r.rosterId)
+  const units = new Map(ordered.map((r) => [r.rosterId, r.record.wins + r.record.ties / 2]))
+  const games = remaining.filter((g) => units.has(g.a) && units.has(g.b))
+  const left = new Map(ids.map((id) => [id, games.filter((g) => g.a === id || g.b === id).length + medianLeft(id)]))
+
+  /*
+   * Exactly as `computeZones` decides it: enumerate every outcome while few games are left, so two rivals
+   * who still play each other are never both counted as winning. Median games make a team's own "win"
+   * ambiguous (head-to-head or median), so a median league always takes the bound.
+   */
+  const whole = ids.every((id) => Number.isInteger(units.get(id)))
+  const exact = whole && games.length <= EXACT_ZONE_GAMES && ids.every((id) => medianLeft(id) === 0)
+
+  for (const id of ids) {
+    const myLeft = left.get(id)!
+    if (zones.zone.get(id) === 'eliminated') {
+      out.set(id, { winsToClinch: null, lossesToElimination: 0, gamesLeft: myLeft })
+      continue
+    }
+    if (zones.clinched.has(id)) {
+      out.set(id, { winsToClinch: 0, lossesToElimination: null, gamesLeft: myLeft })
+      continue
+    }
+    if (exact) {
+      out.set(id, { ...exactPath(id, ids, units, games, field), gamesLeft: myLeft })
+      continue
+    }
+    const mine = units.get(id)!
+    const vsMe = (o: string) => games.filter((g) => (g.a === id && g.b === o) || (g.b === id && g.a === o)).length
+
+    let winsToClinch: number | null = null
+    for (let k = 0; k <= myLeft; k += 1) {
+      const floor = mine + k
+      const winOut = k === myLeft
+      const threats = ids.filter((o) => o !== id && units.get(o)! + left.get(o)! - (winOut ? vsMe(o) : 0) >= floor).length
+      if (threats < field) {
+        winsToClinch = k
+        break
+      }
+    }
+
+    let lossesToElimination: number | null = null
+    for (let k = 0; k <= myLeft; k += 1) {
+      const ceiling = mine + myLeft - k
+      if (ids.filter((o) => o !== id && units.get(o)! > ceiling).length >= field) {
+        lossesToElimination = k
+        break
+      }
+    }
+    out.set(id, { winsToClinch, lossesToElimination, gamesLeft: myLeft })
+  }
+  return out
+}
+
+/**
+ * The magic numbers by enumeration: every win/loss outcome of the remaining games.
+ *
+ * "Win k more" holds when every outcome in which the team wins at least k of its games leaves fewer than
+ * `field` rivals level with or above it. A win can only help the team that earns it, so the outcomes that
+ * fail form a set closed downwards in the team's wins — the answer is one more than the most wins any
+ * failing outcome contains. Elimination is the mirror image, with a level record counted in the team's
+ * favour, exactly as `computeZones` counts it.
+ */
+function exactPath(
+  id: string,
+  ids: string[],
+  units: Map<string, number>,
+  games: RemainingGame[],
+  field: number,
+): Omit<PlayoffPath, 'gamesLeft'> {
+  const mine = games.filter((g) => g.a === id || g.b === id).length
+  const wins = new Map<string, number>()
+  let mostWinsNotIn = -1
+  let mostLossesNotOut = -1
+  const total = 1 << games.length
+  for (let mask = 0; mask < total; mask += 1) {
+    for (const o of ids) wins.set(o, units.get(o)!)
+    let won = 0
+    let lost = 0
+    games.forEach((g, j) => {
+      const winner = mask & (1 << j) ? g.a : g.b
+      wins.set(winner, wins.get(winner)! + 1)
+      if (g.a === id || g.b === id) {
+        if (winner === id) won += 1
+        else lost += 1
+      }
+    })
+    const my = wins.get(id)!
+    let levelOrAbove = 0
+    let strictlyAbove = 0
+    for (const o of ids) {
+      if (o === id) continue
+      if (wins.get(o)! >= my) levelOrAbove += 1
+      if (wins.get(o)! > my) strictlyAbove += 1
+    }
+    if (levelOrAbove >= field && won > mostWinsNotIn) mostWinsNotIn = won
+    if (strictlyAbove < field && lost > mostLossesNotOut) mostLossesNotOut = lost
+  }
+  return {
+    winsToClinch: mostWinsNotIn < 0 ? 0 : mostWinsNotIn + 1 <= mine ? mostWinsNotIn + 1 : null,
+    lossesToElimination: mostLossesNotOut < 0 ? 0 : mostLossesNotOut + 1 <= mine ? mostLossesNotOut + 1 : null,
+  }
 }
 
 /**

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 
-import type { OutlookLeague, SeasonOutlook } from '@/lib/core-app/seasonOutlook'
+import type { OutlookLeague, SeasonOutlook, SwingMatchup } from '@/lib/core-app/seasonOutlook'
 import {
   BoardHead,
   FooterSummary,
@@ -69,12 +69,50 @@ function sevOf(pct: number): 'good' | 'warn' | 'bad' {
  * line with the odds; `whatDecidesIt` gets its own second line rather than being
  * cut to a status word; and IN / OUT sits under the seed.
  */
-function Row({ league }: { league: Ranked }) {
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return n + (s[(v - 20) % 10] || s[v] || s[0])
+}
+
+/**
+ * The row's third line: this week's stakes, then the schedule ahead.
+ *
+ * ⚠ ONLY WHAT THE SIMULATION ALREADY PRODUCED. The swing game exists only for leagues where your odds
+ * are still in play (Season Outlook runs branch simulations for at most eight of them), so a missing
+ * swing means "not contested or not computed", never "nothing matters" — the line falls back to the
+ * schedule, and to nothing at all, rather than inventing a stake.
+ */
+function stakesLine(league: Ranked, swing: SwingMatchup | null): string | null {
+  const parts: string[] = []
+  if (swing) {
+    const opp = swing.opponentName ? ` vs ${swing.opponentName}` : ''
+    parts.push(
+      swing.clinchOnWin
+        ? `Wk ${swing.week}${opp}: win and you are in`
+        : `Wk ${swing.week}${opp}: ${Math.round(swing.ifWin)}% with a win, ${Math.round(swing.ifLose)}% with a loss`,
+    )
+    const top = swing.rooting?.[0]
+    if (top) {
+      const pick = top.rootFor === top.a ? top.aName : top.bName
+      if (pick) parts.push(`root for ${pick}`)
+    }
+  }
+  const sos = league.you.schedule
+  const ranked = league.teams.filter((t) => t.schedule?.remainingRank != null).length
+  if (sos?.remainingRank != null && ranked >= 3) {
+    parts.push(`${ordinal(sos.remainingRank)}-hardest schedule left of ${ranked}`)
+  }
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
+function Row({ league, swing }: { league: Ranked; swing: SwingMatchup | null }) {
   const you = league.you
   const pct = Math.round(you.playoffPct)
   const sev = sevOf(you.playoffPct)
   const record = you.wins === 0 && you.losses === 0 ? null : `${you.wins}-${you.losses}`
   const inField = you.seed <= league.playoffTeams
+  const stakes = stakesLine(league, swing)
 
   return (
     <li>
@@ -108,6 +146,11 @@ function Row({ league }: { league: Ranked }) {
           <span className="af-bd-sub2" title={league.whatDecidesIt}>
             {league.whatDecidesIt}
           </span>
+          {stakes ? (
+            <span className="af-bd-sub2 af-bd-sub3" title={stakes}>
+              {stakes}
+            </span>
+          ) : null}
         </span>
         <span className="af-bd-val af-bd-val--seed" data-sev={sev}>
           <span>
@@ -127,11 +170,13 @@ function Column({
   rows,
   quiet,
   tone,
+  swings,
 }: {
   label: string
   rows: Ranked[]
   quiet: string
   tone: 'good' | 'warn'
+  swings: SeasonOutlook['swingByLeague']
 }) {
   return (
     <section className="af-bd-sec">
@@ -139,7 +184,7 @@ function Column({
       {rows.length > 0 ? (
         <ul className="af-bd-rows af-bd-rows--compact">
           {rows.map((l) => (
-            <Row key={l.leagueId} league={l} />
+            <Row key={l.leagueId} league={l} swing={swings[l.leagueId] ?? null} />
           ))}
         </ul>
       ) : (
@@ -196,12 +241,14 @@ export function StandingsBoard({ outlook, allHref, totalLeagues }: StandingsBoar
               rows={strongest}
               tone="good"
               quiet="No league has a seed we can read yet."
+              swings={outlook.swingByLeague ?? {}}
             />
             <Column
               label="On the bubble · bottom 5"
               rows={bubble}
               tone="warn"
               quiet="Nothing else is close enough to call a bubble."
+              swings={outlook.swingByLeague ?? {}}
             />
           </div>
 

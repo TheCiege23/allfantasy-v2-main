@@ -178,6 +178,7 @@ import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
 import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
 import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
+import { toStandingsOdds } from '@/lib/core-app/standingsOdds'
 import SeasonOutlookLeague from '@/components/core-app/screens/SeasonOutlookLeague'
 import { slimOutlookForBoard } from '@/lib/core-app/outlookCopy'
 import LiveScores from '@/components/core-app/screens/LiveScores'
@@ -3050,6 +3051,34 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     : null
 
   /*
+   * The per-league standings table's playoff odds, schedule strength and "what is at stake" panel.
+   *
+   * ⚠ THE SAME STORED SIMULATION SEASON OUTLOOK PRINTS, NOT A SECOND ONE. Runs are stored per league
+   * and reused until the league's inputs move (`seasonOutlookSims.ts`), and they are seeded, so this
+   * one-league call reads the identical numbers the Season Outlook tab shows — usually without
+   * simulating anything. A one-league call also sits far inside the game budget, so it never runs a
+   * reduced-iteration board.
+   *
+   * ⚠ NO FOCUS LEAGUE, ON PURPOSE. Focus loads rosters, injuries and the scenario model — Season
+   * Outlook's own panel, and the expensive part. The swing game and rooting guide do not need it; they
+   * run for any league where your odds are still in play.
+   *
+   * ⚠ ONLY AFTER THE TABLE ITSELF LOADED. A failed read costs the odds and nothing else.
+   */
+  const standingsOutlookLeague =
+    activeKey === 'standings' && selectedLeagueId && standings?.available
+      ? (outlookLeagues.find((l) => l.id === selectedLeagueId) ?? null)
+      : null
+  const standingsOdds = standingsOutlookLeague
+    ? await getSeasonOutlook(userId, [standingsOutlookLeague], null)
+        .then((o) => {
+          const league = o.leagues.find((l) => l.leagueId === selectedLeagueId)
+          return league ? toStandingsOdds(league, o.swingByLeague[league.leagueId] ?? null, o.basis) : null
+        })
+        .catch(() => null)
+    : null
+
+  /*
    * This week's lineups, projected — AF beside API — for the ONE league whose outlook is on screen.
    * Display only: the simulation above reads the provider's lines and never AF. A failed read costs
    * the section and nothing else.
@@ -4623,7 +4652,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'standings' ? (
         standings ? (
-          <Standings data={standings} freshness={standingsFreshness} view={standingsView} lineups={standingsLineups} />
+          <Standings
+            data={standings}
+            freshness={standingsFreshness}
+            view={standingsView}
+            lineups={standingsLineups}
+            odds={standingsOdds}
+          />
         ) : (
           /* Same split as Commissioner: a read failure is not an unpicked league. */
           selectedLeagueId ? (

@@ -8,10 +8,12 @@ import {
   mathStatus,
   pctOf,
   readMilestones,
+  rootingGuide,
   scheduleStrength,
   seedFromString,
   simulateSeason,
   type Milestones,
+  type RootingGame,
   type ScheduleStrength,
   type SimGame,
   type SimInput,
@@ -216,6 +218,14 @@ export type SwingMatchup = {
    * it means no single result rescues you and the copy says so.
    */
   helpIfLose: string[]
+  /**
+   * The other games that week, ranked by how far their result moves your odds — who to root for.
+   * From one unforced run, so each pair is P(you make it | that side won); see `rootingGuide`.
+   *
+   * ⚠ OPTIONAL BECAUSE STORED BOARDS PREDATE IT. A summary cached before this field existed has no
+   * key at all, and a reader must treat that as "no guide", never as "no game matters".
+   */
+  rooting?: Array<RootingGame & { aName: string | null; bName: string | null }>
 }
 
 export type SeasonOutlook = {
@@ -1011,6 +1021,17 @@ export async function getSeasonOutlook(
       .slice(0, 2)
       .map((r) => r.name)
 
+    const rooting = rootingGuide(p.sim, {
+      iterations: BRANCH_ITERATIONS,
+      seed: p.seed,
+      youId: mineRow.rosterId,
+      week: nextWeek,
+    }).map((g) => ({
+      ...g,
+      aName: nameByRoster.get(`${p.pid}:${g.a}`) ?? null,
+      bName: nameByRoster.get(`${p.pid}:${g.b}`) ?? null,
+    }))
+
     const thisSwing: SwingMatchup = {
       leagueId: league.leagueId,
       leagueName: league.leagueName,
@@ -1021,6 +1042,7 @@ export async function getSeasonOutlook(
       swing: ifWin - ifLose,
       clinchOnWin: ifWin >= 99,
       helpIfLose,
+      rooting,
     }
     swingByLeague[league.leagueId] = thisSwing
     if (!weekThatMatters || thisSwing.swing > weekThatMatters.swing) weekThatMatters = thisSwing
