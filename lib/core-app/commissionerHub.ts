@@ -598,7 +598,7 @@ export async function getCommissionerHub(input: {
       where: { leagueId, network: { ownerUserId: userId } },
       select: { role: true, network: { select: { id: true, name: true } } },
     })).catch(() => null),
-    loadCommissionerHistory(leagueId, native).catch((): CommissionerHistory => ({ tradeAvailable: false, draftAvailable: false, trades: [], drafts: [], tradeNote: 'Trade history could not be read.', draftNote: 'Draft history could not be read.' })),
+    loadCommissionerHistory(leagueId, native, { platform, sport }).catch((): CommissionerHistory => ({ tradeAvailable: false, draftAvailable: false, trades: [], drafts: [], tradeNote: 'Trade history could not be read.', draftNote: 'Draft history could not be read.' })),
   ])
 
   const profile = resolveCommissionerLeagueProfile({
