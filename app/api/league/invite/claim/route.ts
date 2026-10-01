@@ -7,6 +7,8 @@ import { prisma } from '@/lib/prisma'
 import { getInviteClaimEligibility, resolveLinkedPlatformUserIds } from '@/lib/league-invite/claimIdentity'
 import { assignLeagueSeat } from '@/lib/league/leagueSeats'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
+import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 
 const claimSchema = z.object({
   token: z.string().min(1),
@@ -105,6 +107,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'You already have a team in this league' }, { status: 409 })
   }
 
+  /*
+   * 🛑 THE SAME SEAT GATES AS POST /api/leagues/join — this route used to apply neither.
+   *
+   * It is not only a personal-invite path. Canonical create and the commissioner invite route store
+   * the league's PUBLIC join code as a `LeagueInvite.token`, so anyone holding `/join?code=` (posted
+   * on discovery cards and by /api/discover/orphans) can present it here. Before 2026-10-01 that took
+   * a seat in a paid league without dues, and gave a second seat to a person through another of their
+   * accounts — the two refusals POST /api/leagues/join makes. Same functions, not copies.
+   */
+  const priorClaim = await findExistingLeagueClaim({ userId, leagueId: invite.leagueId })
+  if (priorClaim?.viaOtherAccount) {
+    return NextResponse.json(
+      {
+        error:
+          'One of your other AllFantasy accounts already has a team in this league. Sign in with that account to manage it — a league can only be joined once per person.',
+        code: 'DUPLICATE_LEAGUE_CLAIM',
+      },
+      { status: 409 },
+    )
+  }
+  const refusePayment = (gate: { code: string; message: string }) =>
+    NextResponse.json(
+      { error: gate.message, code: gate.code },
+      { status: gate.code === 'LEAGUE_NOT_FOUND' ? 404 : 402 },
+    )
+
   const nextUseCount = invite.useCount + 1
 
   /**
@@ -115,8 +143,12 @@ export async function POST(req: NextRequest) {
    */
   if (isNativePlatform(invite.league.platform)) {
     const result = await prisma.$transaction(async (tx) => {
+      // Inside the seat transaction, as the join route checks it.
+      const paid = await assertPaidJoinAllowed({ leagueId: invite.leagueId, userId, tx })
+      if (!paid.ok) return { ok: false as const, code: paid.code, message: paid.message, payment: true as const }
       const seat = await assignLeagueSeat(tx, { leagueId: invite.leagueId, rosterId: teamExternalId, userId })
       if (!seat.ok) return seat
+      await linkDuesToRoster({ leagueId: invite.leagueId, userId, rosterId: seat.rosterId, tx })
       await tx.leagueManagerClaim.create({
         data: {
           leagueId: invite.leagueId,
@@ -133,11 +165,15 @@ export async function POST(req: NextRequest) {
       return seat
     })
     if (!result.ok) {
+      if ('payment' in result) return refusePayment(result)
       const status = result.code === 'ROSTER_NOT_FOUND' ? 404 : 409
       return NextResponse.json({ error: result.message }, { status })
     }
     return NextResponse.json({ ok: true, leagueId: invite.leagueId })
   }
+
+  const paid = await assertPaidJoinAllowed({ leagueId: invite.leagueId, userId })
+  if (!paid.ok) return refusePayment(paid)
 
   const rosters = await prisma.roster.findMany({
     where: { leagueId: invite.leagueId },
@@ -201,6 +237,7 @@ export async function POST(req: NextRequest) {
       },
     }),
   ])
+  if (rosterToClaim) await linkDuesToRoster({ leagueId: invite.leagueId, userId, rosterId: rosterToClaim.id })
 
   return NextResponse.json({ ok: true, leagueId: invite.leagueId })
 }
