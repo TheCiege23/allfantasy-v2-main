@@ -220,6 +220,10 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           // One tag per category unless the caller names one per event — see pushTagFor.
           tag: pushTagFor(category, meta),
           type,
+          // The service worker builds league-scoped action buttons from this; it was dropped here.
+          leagueId: effectiveLeagueId,
+          // A producer that has a picture (headshot, trade card) names it in meta.imageUrl.
+          imageUrl: typeof meta?.imageUrl === "string" ? meta.imageUrl : null,
         }).catch((e) => console.error("[NotificationDispatcher] push error for user", userId, e))
       }
     } catch (e) {

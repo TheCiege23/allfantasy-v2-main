@@ -26,6 +26,14 @@ export interface PushPayload {
   type?: string
   /** Lets `sw.js` build league-scoped action deep links (trade/draft/score). */
   leagueId?: string | null
+  /**
+   * A picture for the notification — a player headshot, a trade card. Absolute https, or a
+   * path on this site. Web push sends it as `image` (Android shows it large); APNs sends it as
+   * `imageUrl` with `mutable-content: 1`, which the iOS app's notification service extension
+   * downloads and attaches. Without that extension iOS shows the text alone, so a picture is
+   * never the only place information lives.
+   */
+  imageUrl?: string | null
 }
 
 /** Subscription as stored and as needed by web-push. */
