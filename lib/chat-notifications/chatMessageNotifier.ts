@@ -275,6 +275,10 @@ export async function notifyDirectMessageRecipients(input: DirectMessageNotifyIn
         // Push shows this as the notification's title: the sender, as the owner asked.
         title: isGroup ? `${senderName} · ${threadTitle}` : senderName,
         body: preview,
+        // Sender name, thread title and preview are all user-written; none of them goes over SMS.
+        smsBody: isGroup
+          ? 'New message in a group chat. Open AllFantasy to read it.'
+          : 'You have a new direct message. Open AllFantasy to read it.',
         actionHref: href,
         actionLabel: 'Open conversation',
         severity: 'low',
@@ -379,6 +383,8 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
         type: 'league_chat_message',
         title: `${senderName} · ${leagueName}`,
         body: preview,
+        // Sender name and preview are user-written; neither goes over SMS.
+        smsBody: 'New message in your league chat. Open AllFantasy to read it.',
         actionHref: href,
         actionLabel: 'Open league chat',
         leagueId: input.leagueId,

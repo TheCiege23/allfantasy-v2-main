@@ -1888,6 +1888,8 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.notifications.deliveryMixHint":
       "When a mix of categories differs, the checkbox is off until all match; toggling applies to every category.",
     "settings.notifications.byCategory": "By category",
+    "settings.notifications.smsNeedsConsent":
+      "Texts are off: we have no SMS opt-in for your phone. Re-verify your phone in Security settings and tick the SMS box to turn them on.",
     "settings.notifications.remotePending":
       "Saved notification preferences changed in another session. Keep editing or reload the latest saved version.",
     "settings.notifications.reloadSaved": "Reload saved",

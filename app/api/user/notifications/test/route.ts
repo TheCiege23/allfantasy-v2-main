@@ -173,7 +173,9 @@ export async function POST(req: Request) {
       sms: smsSent,
     },
     blockedReasons,
-    twilioRuntimeStatus,
+    // Only what a user can act on. The full status (credential mode, which TWILIO_* vars are set)
+    // is server configuration and stays on the admin-gated /api/test-keys.
+    twilioRuntimeStatus: { canUseRawSms: twilioRuntimeStatus.canUseRawSms },
     attemptedSms,
     smsSent,
     reasonSkipped,

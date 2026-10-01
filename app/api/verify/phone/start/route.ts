@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
 import { SMS_CONSENT_TEXT, SMS_CONSENT_VERSION } from "@/lib/legal/smsProgram"
 import { normalizePhoneE164 } from "@/lib/phone/e164"
+import { maskPhonesInText } from "@/lib/sms/maskPhone"
 
 export const runtime = "nodejs"
 
@@ -93,7 +94,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true })
   } catch (err: any) {
-    console.error("[phone/start] error:", err?.message || err)
+    // Masked: Twilio's error messages quote the full number.
+    console.error("[phone/start] error:", maskPhonesInText(String(err?.message || err)))
     return NextResponse.json({ error: "SEND_FAILED", message: "Failed to send verification code." }, { status: 500 })
   }
 }

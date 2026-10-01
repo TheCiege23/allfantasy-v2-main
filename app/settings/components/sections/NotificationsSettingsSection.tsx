@@ -23,6 +23,7 @@ import { LeagueNotificationOverridesCard } from "@/components/notification-setti
 import type { SettingsProfile } from "./settings-types"
 import { EnableWebPushCard } from "@/components/notifications/EnableWebPushCard"
 import { IosAppPushCard } from "@/components/notifications/IosAppPushCard"
+import { hasSmsConsent } from "@/lib/sms/smsConsent"
 
 const CHIMMY_SHORTCUTS_DISABLED_KEY = "af_chimmy_shortcuts_disabled"
 
@@ -79,9 +80,15 @@ export function NotificationsSettingsSection({
     }
   }, [])
 
+  /*
+   * SMS is offered only where it can actually be sent: a verified phone AND a live opt-in for it
+   * (lib/sms/smsConsent). A verified phone with no opt-in would show switches that send nothing.
+   */
+  const smsConsented = hasSmsConsent(profile?.notificationPreferences, profile?.phone)
   const deliveryAvailability = getDeliveryMethodAvailability({
     hasEmail: !!profile?.email,
     phoneVerified: !!profile?.phoneVerifiedAt,
+    smsConsented,
   })
 
   useEffect(() => {
@@ -462,6 +469,11 @@ export function NotificationsSettingsSection({
 
       <div className="space-y-2">
         <p className="text-sm font-medium text-[var(--muted2)]">{t("settings.notifications.byCategory")}</p>
+        {profile?.phoneVerifiedAt && !smsConsented ? (
+          <p className="text-xs text-[var(--muted2)]" data-testid="sms-needs-consent">
+            {t("settings.notifications.smsNeedsConsent")}
+          </p>
+        ) : null}
         <ul className="space-y-2">
           {VISIBLE_CATEGORY_IDS.map((categoryId) => (
             <li key={categoryId}>

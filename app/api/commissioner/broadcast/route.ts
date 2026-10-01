@@ -86,6 +86,8 @@ export async function POST(req: NextRequest) {
         type: 'commissioner_broadcast',
         title: 'Commissioner announcement',
         body: message,
+        // The text says THAT there is a message; the words stay in-app (no user-written text over SMS).
+        smsBody: 'New commissioner announcement in your league. Open AllFantasy to read it.',
         actionHref: `/league/${leagueId}`,
         actionLabel: 'Open league',
         meta: { leagueId },
