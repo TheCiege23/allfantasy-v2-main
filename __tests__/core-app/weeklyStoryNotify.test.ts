@@ -22,6 +22,7 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/notifications/NotificationDispatcher', () => ({ dispatchNotification: m.dispatch }))
 
 import { notifyWeeklyStories, storyWeekKey } from '@/lib/core-app/weeklyStoryNotify'
+import { pushTagFor } from '@/lib/notifications/pushTag'
 
 const TUESDAY = new Date('2026-09-29T14:05:00Z')
 
@@ -86,5 +87,14 @@ describe('notifyWeeklyStories', () => {
     await notifyWeeklyStories(TUESDAY)
     const call = (m.dispatch.mock.calls[0] as unknown as [{ title: string; body: string }])[0]
     expect(`${call.title} ${call.body}`).not.toMatch(/week \d|wk ?\d/i)
+  })
+
+  it('carries its own device tag, so it neither erases nor is erased by another results push', async () => {
+    m.users = ['u1']
+    await notifyWeeklyStories(TUESDAY)
+    const call = (m.dispatch.mock.calls[0] as unknown as [{ category: string; meta: Record<string, unknown> }])[0]
+    const tag = pushTagFor(call.category, call.meta)
+    expect(tag).toBe('weekly-story:2026-09-28')
+    expect(tag).not.toBe(pushTagFor('matchup_results', {}))
   })
 })
