@@ -520,7 +520,7 @@ test.describe('@monetization checkout click audit', () => {
      * made the whole test red and hid the other four.
      */
     const entryPages = [
-      { url: '/upgrade?plan=pro', returnPath: '/upgrade' },
+      { url: '/upgrade?plan=pro', returnPath: '/upgrade?plan=pro' },
       { url: '/commissioner-upgrade', returnPath: '/commissioner-upgrade' },
       { url: '/pro', returnPath: '/pro' },
       { url: '/all-access', returnPath: '/all-access' },
