@@ -25,6 +25,12 @@ import {
   type RankingsSnapshotCounts,
 } from '@/lib/core-app/rankingsCommunity'
 import {
+  runSkillRatingDaily,
+  skillRatingWrittenToday,
+  emptySkillRatingCounts,
+  type SkillRatingCounts,
+} from '@/lib/rank/skillRating/skillRatingStore'
+import {
   runForecastSweep,
   emptyForecastSweepCounts,
   type ForecastSweepCounts,
@@ -231,6 +237,13 @@ type RefreshCounts = {
    * counts leagues whose rows were rewritten by a sync with the same content — the common case.
    */
   outlook: OutlookPrewarmCounts
+  /**
+   * The per-game skill rating (`sportsDataCache` keys `skill-rating:v1:board` and
+   * `skill-rating:v1:log:<userId>`), an eighth writer: a full Glicko-2 replay of every
+   * head-to-head game, once per Eastern day. `alreadyWritten: 1` is the normal state after the
+   * first fire of the day; `deferred: 1` means this fire did not have the time to start it.
+   */
+  skill: SkillRatingCounts & { deferred: number }
 }
 
 export async function GET(req: NextRequest) {
@@ -264,15 +277,16 @@ export async function GET(req: NextRequest) {
        * because a total nobody can attribute is exactly how three empty tables went unnoticed.
        */
       // ⚠ One line each, on purpose: three wiring tests pin these sums as written.
-      rowsWritten: r.written + r.rankings.written + r.forecast.written + r.odds.written + r.snapshot.written + r.portfolio.written + r.outlook.computed,
+      rowsWritten: r.written + r.rankings.written + r.forecast.written + r.odds.written + r.snapshot.written + r.portfolio.written + r.outlook.computed + r.skill.written,
       rowsSkipped:
         r.skippedForTime + r.unavailable +
         r.rankings.skippedForTime + r.rankings.skipped +
         r.forecast.skippedForTime + r.forecast.pastSeasonEnd +
         r.portfolio.deferred +
         r.outlook.deferred +
+        r.skill.deferred +
         r.odds.skippedForTime,
-      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors, ...r.snapshot.errors, ...r.portfolio.errors, ...r.outlook.errors],
+      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors, ...r.snapshot.errors, ...r.portfolio.errors, ...r.outlook.errors, ...r.skill.errors],
       /*
        * A rankings `failed` is a genuine fault and downgrades the run, the same as a feed failure.
        * `skipped` does NOT: a league whose settings Sleeper will not serve is a normal single-league
@@ -280,7 +294,7 @@ export async function GET(req: NextRequest) {
        */
       status:
         r.failed > 0 || r.writeFailed > 0 || r.rankings.failed > 0 || r.forecast.failed > 0 || r.odds.failed > 0 ||
-        r.snapshot.failed > 0 || r.portfolio.failed > 0 || r.outlook.failed > 0
+        r.snapshot.failed > 0 || r.portfolio.failed > 0 || r.outlook.failed > 0 || r.skill.failed > 0
           ? 'partial'
           : 'success',
       metadata: {
@@ -320,6 +334,22 @@ export async function GET(req: NextRequest) {
          * The community-rankings snapshot, unsummed. Movement on /core/rankings is only ever read
          * from these, so a day with `failed: 1` is a day with no 7-day comparison a week later.
          */
+        /*
+         * The per-game skill rating, unsummed. `ms` is the whole replay; `games` and `rated` say
+         * how much of the matchup history it saw, which is the first thing to check if a manager
+         * reports a rating that has not moved.
+         */
+        skill: {
+          date: r.skill.date,
+          written: r.skill.written,
+          alreadyWritten: r.skill.alreadyWritten,
+          deferred: r.skill.deferred,
+          failed: r.skill.failed,
+          games: r.skill.games,
+          rated: r.skill.rated,
+          afUsers: r.skill.afUsers,
+          ms: r.skill.ms,
+        },
         snapshot: {
           date: r.snapshot.date,
           written: r.snapshot.written,
@@ -488,6 +518,9 @@ async function refreshAppSources(counts: RefreshCounts, budget: ReturnType<typeo
   }
 }
 
+/** The skill-rating replay starts only with this much of the run budget left. */
+const SKILL_RATING_MIN_REMAINING_MS = 120_000
+
 async function run(): Promise<RefreshCounts> {
   const budget = createRunBudget()
   const counts: RefreshCounts = {
@@ -498,6 +531,7 @@ async function run(): Promise<RefreshCounts> {
     snapshot: emptyRankingsSnapshotCounts(),
     portfolio: emptyPortfolioTotalsCounts(),
     outlook: emptyOutlookPrewarmCounts(),
+    skill: { ...emptySkillRatingCounts(), deferred: 0 },
   }
 
   // R3.2 — app-level sources first; see the note on refreshAppSources for why the order matters.
@@ -517,6 +551,30 @@ async function run(): Promise<RefreshCounts> {
     out.errors.push(`rankings_snapshot: ${e instanceof Error ? e.message : String(e)}`)
     return out
   })
+
+  /*
+   * ── THE DAILY SKILL RATING, ALSO BEFORE THE LEAGUE WALK ─────────────────────────────────────
+   *
+   * Same reason as the snapshot: the walk's early return has nothing to do with it. Unlike the
+   * snapshot it is ONE unit of real work on the first fire of the day — every matchup read and
+   * replayed — and the budget cannot interrupt a unit, so it only STARTS with most of the budget
+   * still in hand. A fire that cannot start it defers it; the next fire, thirty minutes later,
+   * tries again, and it only has to succeed once a day.
+   */
+  const skillDone = await skillRatingWrittenToday().catch(() => false)
+  if (skillDone) {
+    counts.skill = { ...emptySkillRatingCounts(), alreadyWritten: 1, deferred: 0 }
+  } else if (budget.remainingMs() >= SKILL_RATING_MIN_REMAINING_MS) {
+    const skill = await runSkillRatingDaily().catch((e: unknown) => {
+      const out = emptySkillRatingCounts()
+      out.failed = 1
+      out.errors.push(`skill_rating: ${e instanceof Error ? e.message : String(e)}`)
+      return out
+    })
+    counts.skill = { ...skill, deferred: 0 }
+  } else {
+    counts.skill = { ...emptySkillRatingCounts(), deferred: 1 }
+  }
 
   const leagues = await prisma.league
     .findMany({

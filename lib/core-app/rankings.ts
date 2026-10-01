@@ -54,6 +54,7 @@ import {
 } from '@/lib/core-app/rankingsEngine'
 import { firstSnapshotDate, readRankSnapshots } from '@/lib/core-app/rankingsSnapshots'
 import { communityEntries, handleOf, levelOf, loadCommunity } from '@/lib/core-app/rankingsCommunity'
+import { getSkillView, type SkillView } from '@/lib/rank/skillRating/skillView'
 
 /**
  * Rankings — the data layer for `/core/rankings` (handoffs 14a ladder and boards,
@@ -219,7 +220,7 @@ export function buildXpRows(xp: CareerXp): XpRow[] {
 
 /* ───────────────────────────── the page payload ─────────────────────────── */
 
-export type RankingsScopeKey = 'global' | 'portfolio' | 'league'
+export type RankingsScopeKey = 'global' | 'portfolio' | 'league' | 'skill'
 
 export type YourRank = {
   handle: string | null
@@ -300,6 +301,8 @@ export type RankingsData = {
   global: GlobalView | null
   portfolio: PortfolioView | null
   league: LeagueView | null
+  /** The per-game skill rating (Glicko-2), on `?scope=skill`. */
+  skill: SkillView | null
 }
 
 export type GlobalView = {
@@ -369,7 +372,7 @@ function qs(pairs: Array<[string, string | null | undefined]>): string {
 }
 
 export function parseScope(raw: string | null, hasLeague: boolean): RankingsScopeKey {
-  if (raw === 'global' || raw === 'portfolio' || raw === 'league') return raw
+  if (raw === 'global' || raw === 'portfolio' || raw === 'league' || raw === 'skill') return raw
   return hasLeague ? 'league' : 'global'
 }
 
@@ -746,6 +749,8 @@ export async function getRankingsData(
     }
   }
 
+  const skill = scope === 'skill' ? await getSkillView(userId, one(sp, 'sport')).catch(() => null) : null
+
   const optionRows = scope === 'portfolio' ? mineRows : base.rows
   const shareable =
     userId != null && scope === 'global' && global?.you != null
@@ -771,6 +776,7 @@ export async function getRankingsData(
     global,
     portfolio,
     league,
+    skill,
   }
 }
 

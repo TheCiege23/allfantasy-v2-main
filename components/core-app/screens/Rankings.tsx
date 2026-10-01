@@ -16,6 +16,7 @@ import type {
   RankingsData,
   XpRow,
 } from '@/lib/core-app/rankings'
+import type { SkillView } from '@/lib/rank/skillRating/skillView'
 import '@/components/core-app/af-rankings-screen.css'
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
 import { RankTable, type RankColumn, type RankRow } from '@/components/core-app/rankings/RankTable'
@@ -86,6 +87,7 @@ const SCOPES = [
   { key: 'global', label: 'Community', hint: 'Every ranked AllFantasy manager' },
   { key: 'portfolio', label: 'My portfolio', hint: 'You, across all your imports' },
   { key: 'league', label: 'One league', hint: 'A single league’s standings' },
+  { key: 'skill', label: 'Skill', hint: 'Rated game by game, by who you beat' },
 ] as const
 
 function ScopeTabs({ data, leagueId }: { data: RankingsData; leagueId: string | null }) {
@@ -96,7 +98,7 @@ function ScopeTabs({ data, leagueId }: { data: RankingsData; leagueId: string | 
         const href = `/core/rankings${qs([
           ['scope', s.key === 'global' ? null : s.key],
           ['league', s.key === 'league' ? leagueId : null],
-          ...(s.key === 'league' ? [] : keep),
+          ...(s.key === 'league' || s.key === 'skill' ? [] : keep),
         ])}`
         const current = data.scope === s.key
         return (
@@ -804,6 +806,198 @@ function LeagueBody({ league }: { league: LeagueView }) {
   )
 }
 
+/* ───────────────────────────────── skill ─────────────────────────────────── */
+
+function pct(n: number): string {
+  return `${Math.round(n * 100)}%`
+}
+
+function signed(n: number): string {
+  return n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0'
+}
+
+function SkillBody({ skill, signedIn }: { skill: SkillView; signedIn: boolean }) {
+  if (skill.empty || !skill.sport) {
+    return (
+      <section className="af-rk-card">
+        <p className="af-rk-eyebrow">Skill rating</p>
+        <p className="af-rk-empty">{skill.empty ?? 'Nothing to show yet.'}</p>
+        <SkillMethodCard />
+      </section>
+    )
+  }
+  const you = skill.you
+  return (
+    <>
+      {skill.sports.length > 1 ? (
+        <nav className="af-rk-tabs" aria-label="Sport">
+          {skill.sports.map((sp) => (
+            <Link
+              key={sp}
+              href={`/core/rankings?scope=skill&sport=${encodeURIComponent(sp)}`}
+              className="af-rk-tab"
+              aria-current={sp === skill.sport ? 'page' : undefined}
+            >
+              {sp}
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+
+      {you ? (
+        <section className="af-rk-card af-rk-youstrip" aria-label={`Your ${skill.sport} skill rating`}>
+          <div>
+            <p className="af-rk-eyebrow">Your {skill.sport} skill</p>
+            <p className="af-rk-bigrank">
+              {you.rating}
+              <small> ± {you.rd}</small>
+            </p>
+            <p className="af-rk-sub">
+              {you.percentile != null ? (
+                <>
+                  Better than <b>{you.percentile}%</b> of {skill.rated.toLocaleString()} rated managers
+                </>
+              ) : (
+                'Not enough rated managers to compare yet'
+              )}
+            </p>
+          </div>
+          <ul className="af-rk-moves" aria-label="Skill summary">
+            <li>
+              <span>Record</span>
+              <b>{you.record}</b>
+            </li>
+            <li>
+              <span>Beats an average manager</span>
+              <b>{pct(you.vsAverage)}</b>
+            </li>
+            <li>
+              <span>{you.boardRank ? 'On AllFantasy' : 'To the board'}</span>
+              <b>{you.boardRank ? `#${you.boardRank}` : `${you.gamesToBoard} games`}</b>
+            </li>
+          </ul>
+        </section>
+      ) : signedIn ? (
+        <p className="af-rk-note">
+          You have no rated {skill.sport} games yet. Import a league with weekly matchups and your rating appears the
+          next day.
+        </p>
+      ) : (
+        <p className="af-rk-note">Sign in to see your own rating and every game behind it.</p>
+      )}
+
+      {skill.log.length > 0 ? (
+        <section className="af-rk-card">
+          <p className="af-rk-eyebrow">
+            Your recent games
+            <span className="af-rk-spacer" />
+            <span>newest first</span>
+          </p>
+          <RankTable
+            caption={`Your recent ${skill.sport} games and how each moved your rating`}
+            rowHeaderIndex={2}
+            columns={[
+              { key: 'when', label: 'Week' },
+              { key: 'league', label: 'League', hideOnPhone: true },
+              { key: 'opp', label: 'Opponent' },
+              { key: 'oppr', label: 'Their rating', srLabel: 'Opponent rating going into the game', align: 'right', hideOnPhone: true },
+              { key: 'score', label: 'Score', align: 'right' },
+              { key: 'exp', label: 'Win chance', srLabel: 'Your chance of winning before the game', align: 'right', hideOnPhone: true },
+              { key: 'chg', label: 'Rating', srLabel: 'Rating change that week', align: 'right' },
+            ]}
+            rows={skill.log.map((g, i) => ({
+              id: `${g.season}-${g.week}-${g.leagueKey}-${i}`,
+              cells: [
+                { text: `${g.season} wk ${g.week}` },
+                { text: g.leagueName?.trim() || 'League' },
+                { text: g.opponentLabel, sub: `rated ${g.opponentRating}` },
+                { text: String(g.opponentRating) },
+                {
+                  text: `${g.result} ${g.myScore.toFixed(1)}–${g.oppScore.toFixed(1)}`,
+                  tone: g.result === 'W' ? 'good' : g.result === 'L' ? 'bad' : 'muted',
+                },
+                { text: pct(g.expected) },
+                { text: signed(g.change), tone: g.change > 0 ? 'good' : g.change < 0 ? 'bad' : 'muted', sub: `now ${g.ratingAfter}` },
+              ],
+            }))}
+            emptyText="No games yet."
+          />
+          <p className="af-rk-note">
+            A win you were given a low chance of moves you most. Games in the same week share one update, so they show
+            the same change.
+          </p>
+        </section>
+      ) : null}
+
+      <section className="af-rk-card">
+        <p className="af-rk-eyebrow">
+          {skill.sport} skill board
+          <span className="af-rk-spacer" />
+          <span>AllFantasy managers with 10+ games</span>
+        </p>
+        <RankTable
+          caption={`${skill.sport} skill board`}
+          columns={[
+            { key: 'rank', label: '#', srLabel: 'Rank', align: 'right' },
+            { key: 'manager', label: 'Manager' },
+            { key: 'skill', label: 'Skill', srLabel: 'Rating minus two deviations', align: 'right' },
+            { key: 'rating', label: 'Rating', srLabel: 'Rating and deviation', align: 'right', hideOnPhone: true },
+            { key: 'record', label: 'Record', align: 'right' },
+            { key: 'top', label: 'Top', srLabel: 'Percentile among every rated manager', align: 'right', hideOnPhone: true },
+          ]}
+          rows={skill.board.map((r) => ({
+            id: r.userId,
+            highlight: r.isYou,
+            cells: [
+              { text: String(r.rank), tone: r.isYou ? 'accent' : undefined },
+              { text: `${r.handle}${r.isYou ? ' (you)' : ''}`, sub: r.level != null ? `Lvl ${r.level}` : undefined },
+              { text: String(r.conservative), tone: r.isYou ? 'accent' : undefined },
+              { text: `${r.rating} ± ${r.rd}` },
+              { text: r.record, sub: `${r.games} games` },
+              { text: r.percentile != null ? `${Math.max(1, 100 - r.percentile)}%` : '—' },
+            ],
+          }))}
+          emptyText={`No AllFantasy manager has ${skill.sport} 10 games rated yet.`}
+        />
+        <p className="af-rk-fresh">
+          <b>Freshness</b> {skill.gamesInSport.toLocaleString()} {skill.sport} games · {skill.rated.toLocaleString()}{' '}
+          managers rated, on AllFantasy or not · calculated {fmtStamp(skill.computedAt)}
+        </p>
+      </section>
+
+      <SkillMethodCard />
+    </>
+  )
+}
+
+function SkillMethodCard() {
+  return (
+    <section className="af-rk-card">
+      <p className="af-rk-eyebrow">How skill is rated</p>
+      <ul className="af-rk-method">
+        <li>
+          <b>Every head-to-head game counts</b> — imported history and leagues played here, one rating per sport.
+        </li>
+        <li>
+          <b>Who you beat matters.</b> Beating a strong manager is worth more than beating a weak one, and losing to a
+          strong one costs less.
+        </li>
+        <li>
+          <b>Wins, losses and ties only.</b> The margin does not count, so a high-scoring format cannot inflate it.
+        </li>
+        <li>
+          <b>± is how sure we are.</b> It shrinks as you play and grows back while you sit out. The board ranks by the
+          rating minus twice that, so nobody tops it on a lucky few weeks.
+        </li>
+      </ul>
+      <p className="af-rk-note">
+        Opponents who are not on AllFantasy are rated too, from their own games, so beating them counts for exactly what
+        they have shown. Level, on the other tabs, is how much you have played; skill is how well.
+      </p>
+    </section>
+  )
+}
+
 /* ─────────────────────────────── the screen ─────────────────────────────── */
 
 export function Rankings({ data, leagueId = null }: { data: RankingsData; leagueId?: string | null }) {
@@ -841,7 +1035,7 @@ export function Rankings({ data, leagueId = null }: { data: RankingsData; league
 
       <ScopeTabs data={data} leagueId={leagueId} />
 
-      {data.scope !== 'league' ? (
+      {data.scope !== 'league' && data.scope !== 'skill' ? (
         <RankingsFilterBar
           filters={data.filters}
           options={data.options}
@@ -850,7 +1044,15 @@ export function Rankings({ data, leagueId = null }: { data: RankingsData; league
         />
       ) : null}
 
-      {data.scope === 'global' && data.global ? (
+      {data.scope === 'skill' ? (
+        data.skill ? (
+          <SkillBody skill={data.skill} signedIn={data.signedIn} />
+        ) : (
+          <section className="af-rk-card">
+            <p className="af-rk-a">Skill ratings could not be read just now.</p>
+          </section>
+        )
+      ) : data.scope === 'global' && data.global ? (
         <CommunityView data={data} g={data.global} />
       ) : data.scope === 'portfolio' ? (
         data.portfolio ? (
