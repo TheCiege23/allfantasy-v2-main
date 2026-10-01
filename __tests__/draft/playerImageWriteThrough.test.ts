@@ -33,7 +33,14 @@ const nflProviderMock = vi.hoisted(() => ({
   resolveNflRedraftCanonicalHeadshot: vi.fn(),
 }))
 
-const sportsDbMock = vi.hoisted(() => ({ theSportsDbProvider: { fetch: vi.fn() } }))
+/*
+ * `supports` is required: the resolver now asks each provider whether it covers the sport before
+ * calling it, and treats a missing/throwing `supports` as "no". A mock without it would silently
+ * skip this tier and every assertion below about reaching TheSportsDB would be measuring nothing.
+ */
+const sportsDbMock = vi.hoisted(() => ({
+  theSportsDbProvider: { supports: vi.fn(() => true), fetch: vi.fn() },
+}))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/nfl-provider/nflRedraftProviderCertification', () => nflProviderMock)
@@ -63,6 +70,7 @@ beforeEach(() => {
   prismaMock.playerImage.updateMany.mockResolvedValue({ count: 0 })
   prismaMock.playerImage.create.mockResolvedValue({ id: 'img-1' })
   prismaMock.playerImage.update.mockResolvedValue({ id: 'img-1' })
+  sportsDbMock.theSportsDbProvider.supports.mockReturnValue(true)
   sportsDbMock.theSportsDbProvider.fetch.mockResolvedValue(null)
 })
 

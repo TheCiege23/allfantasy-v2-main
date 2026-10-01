@@ -24,6 +24,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { theSportsDbProvider } from '@/lib/workers/providers/thesportsdb'
+import type { ApiFetchParams, ApiProvider } from '@/lib/workers/api-config'
 import { apiSportsProvider } from '@/lib/workers/providers/api-sports'
 import { sleeperChainProvider } from '@/lib/workers/providers/sleeper-chain'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
@@ -34,6 +35,7 @@ import {
   writePrimaryPlayerImage,
 } from '@/lib/player-assets/playerImageStore'
 import { deriveCanonicalPlayerIdentity } from '@/lib/canonical/canonicalIdentity'
+import { normalizePlayerName } from '@/lib/player-assets/headshotCandidateMatch'
 
 export type HeadshotProvider =
   | 'clearsports'
@@ -79,22 +81,9 @@ export interface ResolveHeadshotResult {
   servedStale?: boolean
 }
 
-/**
- * Strip punctuation, lowercase, remove suffixes (Jr/Sr/II/III/IV/V),
- * collapse whitespace. Used for safe name comparisons across providers.
- */
-export function normalizePlayerName(name: string | null | undefined): string {
-  if (!name) return ''
-  let s = String(name).trim().toLowerCase()
-  // Strip apostrophes, hyphens, periods entirely.
-  s = s.replace(/['‘’`.,]/g, '')
-  s = s.replace(/-/g, ' ')
-  // Drop common suffixes after the last space.
-  s = s.replace(/\s+(jr|sr|ii|iii|iv|v)$/i, '')
-  // Collapse repeated whitespace, trim.
-  s = s.replace(/\s+/g, ' ').trim()
-  return s
-}
+// Moved to `headshotCandidateMatch.ts` so the providers can share it without importing this
+// module (which imports them). Re-exported so existing importers are unchanged.
+export { normalizePlayerName }
 
 function normalizeTeam(team: string | null | undefined): string {
   return String(team ?? '').trim().toUpperCase()
@@ -455,50 +444,69 @@ async function resolveFromProviders(
   // Per-player headshot search. The provider's name index is unforgiving with
   // apostrophes / periods / hyphens, so we try several variants before giving up.
   const nameCandidates = buildNameSearchVariants(input.name, targetName)
-  for (const candidate of nameCandidates) {
+  // ⚠ Ask each provider whether it covers this sport BEFORE calling it. `api-chain` does; this
+  // resolver called `.fetch` directly and skipped the check, so every NBA/MLB/NHL/NCAAB/soccer
+  // lookup reached api-sports, which only knows American football — 163 players were given a
+  // football player's photo that way. `supports()` throwing is treated as "no".
+  const headshotParams: ApiFetchParams = { sport, dataType: 'player_headshots' }
+  const providerCovers = (provider: ApiProvider) => {
     try {
-      const result = await theSportsDbProvider.fetch({
-        sport,
-        dataType: 'player_headshots',
-        query: { search: candidate, teamCode: input.team ?? undefined },
-      })
-      const sdbUrl =
-        result && typeof result === 'object' && 'headshotUrl' in (result as Record<string, unknown>)
-          ? String((result as { headshotUrl?: unknown }).headshotUrl ?? '')
-          : ''
-      if (isValidHeadshotUrl(sdbUrl)) {
-        return {
-          imageUrl: sdbUrl,
-          source: 'sportsdb',
-          confidence: targetTeam ? 'name_team_position' : 'name_only',
-        }
-      }
+      return provider.supports(headshotParams)
     } catch {
-      /* swallow — try next variant */
+      return false
+    }
+  }
+  const sportsDbCovers = providerCovers(theSportsDbProvider)
+  const apiSportsCovers = providerCovers(apiSportsProvider)
+
+  if (sportsDbCovers) {
+    for (const candidate of nameCandidates) {
+      try {
+        const result = await theSportsDbProvider.fetch({
+          sport,
+          dataType: 'player_headshots',
+          query: { search: candidate, teamCode: input.team ?? undefined },
+        })
+        const sdbUrl =
+          result && typeof result === 'object' && 'headshotUrl' in (result as Record<string, unknown>)
+            ? String((result as { headshotUrl?: unknown }).headshotUrl ?? '')
+            : ''
+        if (isValidHeadshotUrl(sdbUrl)) {
+          return {
+            imageUrl: sdbUrl,
+            source: 'sportsdb',
+            confidence: targetTeam ? 'name_team_position' : 'name_only',
+          }
+        }
+      } catch {
+        /* swallow — try next variant */
+      }
     }
   }
 
-  // ── 3. TheSportsAPI (api-sports) ──
-  for (const candidate of nameCandidates) {
-    try {
-      const result = await apiSportsProvider.fetch({
-        sport,
-        dataType: 'player_headshots',
-        query: { search: candidate, teamCode: input.team ?? undefined },
-      })
-      const apiUrl =
-        result && typeof result === 'object' && 'headshotUrl' in (result as Record<string, unknown>)
-          ? String((result as { headshotUrl?: unknown }).headshotUrl ?? '')
-          : ''
-      if (isValidHeadshotUrl(apiUrl)) {
-        return {
-          imageUrl: apiUrl,
-          source: 'apisports',
-          confidence: targetTeam ? 'name_team_position' : 'name_only',
+  // ── 3. TheSportsAPI (api-sports) ── NFL and NCAAF only; see `providerCovers` above.
+  if (apiSportsCovers) {
+    for (const candidate of nameCandidates) {
+      try {
+        const result = await apiSportsProvider.fetch({
+          sport,
+          dataType: 'player_headshots',
+          query: { search: candidate, teamCode: input.team ?? undefined },
+        })
+        const apiUrl =
+          result && typeof result === 'object' && 'headshotUrl' in (result as Record<string, unknown>)
+            ? String((result as { headshotUrl?: unknown }).headshotUrl ?? '')
+            : ''
+        if (isValidHeadshotUrl(apiUrl)) {
+          return {
+            imageUrl: apiUrl,
+            source: 'apisports',
+            confidence: targetTeam ? 'name_team_position' : 'name_only',
+          }
         }
+      } catch {
+        /* swallow — provider may be down or unconfigured */
       }
-    } catch {
-      /* swallow — provider may be down or unconfigured */
     }
   }
 
