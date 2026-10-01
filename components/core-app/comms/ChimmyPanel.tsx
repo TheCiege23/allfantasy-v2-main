@@ -12,6 +12,10 @@ import { ChimmyScenarioCard } from './ChimmyScenario'
 import { ChimmyAdviceFollow, type ChimmyAdviceRef } from './ChimmyAdviceFollow'
 import { ChimmyAnswerRating } from './ChimmyAnswerRating'
 import { ChimmyGroundingLine } from './ChimmyGroundingLine'
+import { ChimmyCopyActions } from './ChimmyCopyActions'
+import { ChimmyFunModeToggle, useChimmyFunMode } from './ChimmyFunMode'
+import { ChimmyGif, readChimmyGif } from './ChimmyGif'
+import { FUN_MODE_TONE } from '@/lib/chimmy/funMode'
 import { PushOptInPrompt } from '@/components/notifications/PushOptInPrompt'
 import {
   ChimmyAnswerModeToggle,
@@ -198,6 +202,8 @@ type ChatTurn = {
   verdict?: ChimmyVerdict | null
   /** The structured `get_faab_bid_plan` result, rendered as a card. */
   faabPlan?: ChimmyFaabCard | null
+  /** A Fun-mode GIF from `meta.gif`; re-read at render by `readChimmyGif`. */
+  gif?: unknown
   /**
    * `<tool>:<leagueId>` for each whole-league computation the answer ran. Kept on the turn (and so in
    * sessionStorage) so an earlier answer can be marked "Newer answer below" by a later one.
@@ -409,6 +415,8 @@ type ChimmyEnvelope = {
     /** Validated by `readReadyScenario` before anything renders it. */
     screenshotAttachment?: { url: string; name: string } | null
     scenario?: unknown
+    /** A Fun-mode GIF; validated by `readChimmyGif` before it renders. */
+    gif?: unknown
     /** Set only when the route recorded this answer's advice. */
     advice?: { key?: unknown; type?: unknown; playerName?: unknown }
     /** The assistant mode that shaped the answer, when the route says so. */
@@ -606,6 +614,8 @@ export function ChimmyPanel({
   const [outOfAnswers, setOutOfAnswers] = useState<OutOfAnswers | null>(null)
   /* Fast or Deep, per user. Sent with every question; see ChimmyAnswerMode.tsx. */
   const [answerMode, setAnswerMode] = useChimmyAnswerMode(userId)
+  /* Fun mode: emojis and personality, per user. Sent as tone=fun; see ChimmyFunMode.tsx. */
+  const [funMode, setFunMode] = useChimmyFunMode(userId)
   const endRef = useRef<HTMLDivElement | null>(null)
   const [screenshot, setScreenshot] = useState<File | null>(null)
   const screenshotRef = useRef<HTMLInputElement | null>(null)
@@ -663,7 +673,7 @@ export function ChimmyPanel({
       const question = text.trim()
       /* Captured once: the retry after a consent prompt must send the same file. */
       const attached = screenshot
-      const requestKey = JSON.stringify([question,scopeId,answerMode,publicMode,source,sport])
+      const requestKey = JSON.stringify([question,scopeId,answerMode,funMode,publicMode,source,sport])
       const retained = retryRequestRef.current
       const retryForm = retained?.key === requestKey && retained.file === attached ? retained.form : null
       const requestId = String(retryForm?.get('requestId') ?? crypto.randomUUID())
@@ -712,6 +722,7 @@ export function ChimmyPanel({
           if (source) form.append('source', source)
           if (sport && !scopeId) form.append('sport', sport)
           form.append('assistantMode', answerMode)
+          if (funMode) form.append('tone', FUN_MODE_TONE)
           form.append(
             'conversation',
             JSON.stringify(
@@ -916,6 +927,7 @@ export function ChimmyPanel({
             verdict: polish.verdict,
             faabPlan: polish.faabPlan,
             answerKeys: polish.answerKeys.length ? polish.answerKeys : null,
+            gif: payload.meta?.gif ?? null,
           },
         ])
         if (answeredPlan) setPlanStatus(answeredPlan)
@@ -945,7 +957,7 @@ export function ChimmyPanel({
         setBusy(false)
       }
     },
-    [answerMode, busy, connectedMembers.length, homeSignals, includedLeagueIds, leagues, pageSurface, planStatus, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns, source, sport],
+    [answerMode, funMode, busy, connectedMembers.length, homeSignals, includedLeagueIds, leagues, pageSurface, planStatus, publicMode, scope, scopeId, turns, screenshot, setDraft, setTurns, source, sport],
   )
 
   useEffect(() => {
@@ -1046,7 +1058,9 @@ export function ChimmyPanel({
             </div>
           </fieldset>
         ) : null}
-        <ChimmyAnswerModeToggle value={answerMode} onChange={setAnswerMode} disabled={busy} />
+        <ChimmyAnswerModeToggle value={answerMode} onChange={setAnswerMode} disabled={busy}>
+          <ChimmyFunModeToggle value={funMode} onChange={setFunMode} disabled={busy} />
+        </ChimmyAnswerModeToggle>
       </div>
 
       <div className="af-cm-thread">
@@ -1112,7 +1126,11 @@ export function ChimmyPanel({
 
               {t.role === 'chimmy' && t.scenario ? <ChimmyScenarioCard scenario={t.scenario} /> : null}
               {t.role === 'chimmy' ? (
-                <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
+                <>
+                  <ChimmyRichText text={t.text} className="af-cm-turn-text af-cm-rich" />
+                  {readChimmyGif(t.gif) ? <ChimmyGif gif={readChimmyGif(t.gif)!} /> : null}
+                  <ChimmyCopyActions text={t.text} />
+                </>
               ) : (
                 <div><p className="af-cm-turn-text">{t.text}</p>{t.imagePreview ? <ChimmyScreenshot src={t.imagePreview} name={t.imageName} /> : null}</div>
               )}

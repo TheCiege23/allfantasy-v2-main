@@ -52,6 +52,9 @@ import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import { matchOfferToRosters, screenshotDraftNote, screenshotLoadedLine } from '@/lib/trade-screenshot/matchOffer'
 import type { OfferRead } from '@/lib/trade-screenshot/offerRead'
 import { managerNameBesideLabel } from '@/lib/trade-screenshot/managerHandles'
+import { tradeExplainPrompt } from '@/lib/core-app/tradeExplainPrompt'
+import { shareCardImage } from '@/components/decide/shareCard'
+import type { ProposalCardInput } from '@/lib/share/proposalCard'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -1402,28 +1405,66 @@ export function TradeCenter(props: {
    * a vague answer.
    */
   const askChimmy = useCallback(() => {
-    const side = (label: string, lines: Line[]) =>
-      lines.length > 0 ? `${label}: ${lines.map((l) => l.name).join(', ')}` : null
-
-    const parts = [side('I give', give), side('I get', get)].filter(Boolean).join('. ')
-    const league = props.league?.name ? ` in ${props.league.name}` : ''
+    /* A side's total on screen: the grade's league value when analysed, else market; null if any is unpriced. */
+    const total = (lines: Line[]) =>
+      lines.every((l) => (l.leagueValue ?? l.marketValue) != null)
+        ? lines.reduce((s, l) => s + (l.leagueValue ?? l.marketValue ?? 0), 0)
+        : null
     const verdict = noSignal
-      ? ' The proposal grade is unavailable.'
+      ? 'The proposal grade is unavailable.'
       : result?.labels?.fairnessLabel
-      ? ` The analyzer says: ${result.labels.fairnessLabel}.`
-      : ''
+      ? `The analyzer says: ${result.labels.fairnessLabel}.`
+      : null
 
     window.dispatchEvent(
       new CustomEvent(COMMS_OPEN_EVENT, {
         detail: {
           tab: 'chimmy',
-          prefill: parts
-            ? `Explain this trade${league}. ${parts}.${verdict} What am I missing?`
-            : `Help me think about a trade${league}.`,
+          prefill: tradeExplainPrompt({
+            leagueName: props.league?.name ?? null,
+            give: giveAssets,
+            get: getAssets,
+            myName: myRoster?.ownerHandles?.[0] ?? myRoster?.ownerName ?? null,
+            partnerName: partnerRoster?.ownerHandles?.[0] ?? partnerRoster?.ownerName ?? null,
+            partnerTeamName: partnerRoster?.ownerName ?? null,
+            giveValue: total(give),
+            getValue: total(get),
+            verdict,
+          }),
         },
       }),
     )
-  }, [give, get, props.league?.name, result, noSignal])
+  }, [give, get, giveAssets, getAssets, myRoster, partnerRoster, props.league?.name, result, noSignal])
+
+  /*
+   * The share card: this screen's trade, both sides, the grade and the verdict, drawn as an image by
+   * /api/share/proposal-card. Offered only on a graded result — an ungraded card would share a
+   * verdict nobody computed.
+   */
+  const [cardState, setCardState] = useState<'idle' | 'working' | 'shared' | 'downloaded' | 'failed'>('idle')
+  const shareProposalCard = useCallback(() => {
+    if (!props.league?.id || !result || noSignal) return
+    const clip = (s: string) => s.trim().slice(0, 60) || 'Asset'
+    const assets = (lines: Line[]) => lines.slice(0, 8).map((l) => ({ name: clip(l.name), value: l.leagueValue ?? l.marketValue ?? null }))
+    const letter = (v: string | null | undefined) => (v && /^[A-F][+-]?$/.test(v) ? v : null)
+    const body: ProposalCardInput = {
+      leagueId: props.league.id,
+      myLabel: clip(myRoster?.ownerName ?? 'You'),
+      theirLabel: clip(partnerRoster?.ownerName ?? theirLabel),
+      give: assets(give),
+      get: assets(get),
+      myLetter: letter(yourGrade),
+      theirLetter: letter(theirGrade),
+      score: typeof result.fairnessScore === 'number' ? Math.max(0, Math.min(100, result.fairnessScore)) : null,
+      verdict: clip(result.labels?.fairnessLabel ?? 'Graded'),
+    }
+    setCardState('working')
+    void shareCardImage('/api/share/proposal-card', 'trade-check.png', 'Trade check', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(setCardState)
+  }, [props.league?.id, result, noSignal, myRoster, partnerRoster, theirLabel, give, get, yourGrade, theirGrade])
 
   if (!props.league) {
     return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} />
@@ -2615,6 +2656,19 @@ export function TradeCenter(props: {
         <button type="button" className="af-btn af-btn--ghost" onClick={askChimmy}>
           Ask Chimmy to explain
         </button>
+        {result && !noSignal && give.length > 0 && get.length > 0 ? (
+          <button type="button" className="af-btn af-btn--ghost" onClick={shareProposalCard} disabled={cardState === 'working'}>
+            {cardState === 'working'
+              ? 'Building card…'
+              : cardState === 'downloaded'
+                ? 'Card saved ✓'
+                : cardState === 'shared'
+                  ? 'Shared ✓'
+                  : cardState === 'failed'
+                    ? 'Retry share card'
+                    : 'Share card'}
+          </button>
+        ) : null}
       </div>
 
       {/*

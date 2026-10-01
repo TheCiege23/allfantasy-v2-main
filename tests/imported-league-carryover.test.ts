@@ -19,6 +19,16 @@ describe('standalone imported league carryover', () => {
     expect(() => matchImportedRoster(team, [])).toThrow(/one current roster/)
   })
 
+  it('never uses an owner match when that roster is marked for another team', () => {
+    const wrong = { id: 'wrong', platformUserId: team.platformUserId!, playerData: { source_team_id: 'another-seat' }, faabRemaining: null, waiverPriority: null }
+    expect(() => matchImportedRoster(team, [wrong])).toThrow(/one current roster/)
+  })
+
+  it('uses the owner fallback only for a legacy roster without a source team marker', () => {
+    const legacy = { id: 'legacy', platformUserId: team.platformUserId!, playerData: { players: ['one'] }, faabRemaining: null, waiverPriority: null }
+    expect(matchImportedRoster(team, [legacy])).toBe(legacy)
+  })
+
   it('translates every active lineup section and removes provider sync metadata', () => {
     const result = translateImportedRosterData({
       players: ['espn-1', 'espn-2'], starters: ['espn-1'], reserve: ['espn-2'], taxi: [],
@@ -39,6 +49,12 @@ describe('standalone imported league carryover', () => {
     expect(importedOwnedPlayerIds(data)).toEqual(['one', 'two'])
     expect(translateImportedRosterData(data, new Map([['one', 'native-1'], ['two', 'native-2']]), 'source').players)
       .toEqual(['native-1', 'native-2'])
+  })
+
+  it('translates numeric player ids from provider roster arrays', () => {
+    const result = translateImportedRosterData({ players: [123], starters: [123] }, new Map([['123', 'native-123']]), 'source')
+    expect(result.players).toEqual(['native-123'])
+    expect(result.starters).toEqual(['native-123'])
   })
 
   it('rejects lineups that name players outside the team roster', () => {
