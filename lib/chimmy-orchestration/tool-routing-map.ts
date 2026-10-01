@@ -184,11 +184,13 @@ export function resolveToolLaunches(
     case 'manager_psychology':
       push(
         'manager_psychology',
-        'Manager psychology',
+        // The intent id stays `manager_psychology`; the copy says what exists — Competitive Edge,
+        // other managers' RECORDED moves — and never a profile or label (Milestone 32).
+        'Competitive Edge',
         ctx.leagueId
           ? `/app/league/${encodeURIComponent(ctx.leagueId)}/psychological-profiles`
-          : `/chimmy/chat${qs({ prompt: 'Help me read manager behavior in my league', sport })}`,
-        'Behavioral profiles and league psychology.'
+          : `/chimmy/chat${qs({ prompt: 'What have the other managers in my league actually traded, drafted and bid on?', sport })}`,
+        "Other managers' recorded trades, draft picks and waiver bids, beside your decision."
       )
       break
     case 'story_recap':

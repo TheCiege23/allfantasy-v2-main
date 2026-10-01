@@ -4,7 +4,8 @@
  * Direct unit coverage of lib/league-trade-engine/tradeLearningCapture.ts —
  * the "asset-shape adapter" approved in
  * docs/TRADE_LEARNING_CAPTURE_ARCHITECTURE_ADR.md. Proves the status
- * mapping (Decision 2), the asset-valuation fallbacks, idempotency, and
+ * mapping (Decision 2), the refusal of unpriced assets (no flat fallback since
+ * 2026-09-30 — see the note at the top of the module), idempotency, and
  * fail-safe behavior, all against mocked Prisma/FantasyCalc — no live
  * scoring math is exercised beyond what computeTradeDrivers/
  * calibrateAcceptProbability already do (unmodified).
@@ -153,21 +154,26 @@ describe('captureLiveTradeOffer', () => {
     expect(typeof call.verdict).toBe('string')
   })
 
-  it('falls back to the conservative default value for an unresolvable player, without throwing', async () => {
+  it('refuses to capture an offer with an unresolvable player — no flat fallback, nothing written', async () => {
     mockRosterCount.mockResolvedValue(10)
-    mockFetchFantasyCalcValues.mockResolvedValue([]) // nobody resolves
+    mockFetchFantasyCalcValues.mockResolvedValue([makeFcPlayer('sleeper-100', 'Star Receiver', 8000)])
     mockLogTradeOfferEvent.mockResolvedValue('offer-event-2')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const items: CaptureTradeItem[] = [
-      { itemType: 'player', itemReference: 'sleeper-unknown', fromRosterId: PROPOSER, toRosterId: RECEIVER },
+      { itemType: 'player', itemReference: 'sleeper-100', fromRosterId: PROPOSER, toRosterId: RECEIVER },
+      { itemType: 'player', itemReference: 'sleeper-unknown', fromRosterId: RECEIVER, toRosterId: PROPOSER },
     ]
 
-    await captureLiveTradeOffer({
+    const result = await captureLiveTradeOffer({
       tradeId: 'trade-2', leagueId: 'league-1', proposerRosterId: PROPOSER, receiverRosterId: RECEIVER, items, league: makeLeague(),
     })
 
-    const call = mockLogTradeOfferEvent.mock.calls[0][0]
-    expect(call.assetsGiven[0].value).toBe(200) // documented fallback
+    expect(result).toBeNull()
+    expect(mockLogTradeOfferEvent).not.toHaveBeenCalled()
+    // The refusal names the asset, so an operator can see WHY the sample is smaller.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('Player sleeper-unknown'))
+    warn.mockRestore()
   })
 
   it('resolves a pick value from metadata season/round when present', async () => {
@@ -196,20 +202,22 @@ describe('captureLiveTradeOffer', () => {
     expect(call.assetsGiven[0].value).not.toBe(200)
   })
 
-  it('falls back to the conservative default for a pick with no season/round metadata', async () => {
+  it('refuses a pick with no season/round metadata rather than pricing it', async () => {
     mockRosterCount.mockResolvedValue(12)
     mockFetchFantasyCalcValues.mockResolvedValue([])
     mockLogTradeOfferEvent.mockResolvedValue('offer-event-4')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const items: CaptureTradeItem[] = [
       { itemType: 'future_pick', itemReference: 'pick-2', fromRosterId: PROPOSER, toRosterId: RECEIVER },
     ]
 
-    await captureLiveTradeOffer({
+    const result = await captureLiveTradeOffer({
       tradeId: 'trade-4', leagueId: 'league-1', proposerRosterId: PROPOSER, receiverRosterId: RECEIVER, items, league: makeLeague(),
     })
 
-    expect(mockLogTradeOfferEvent.mock.calls[0][0].assetsGiven[0].value).toBe(200)
+    expect(result).toBeNull()
+    expect(mockLogTradeOfferEvent).not.toHaveBeenCalled()
   })
 
   it('treats a FAAB item\'s value as its faabAmount', async () => {
@@ -228,25 +236,45 @@ describe('captureLiveTradeOffer', () => {
     expect(mockLogTradeOfferEvent.mock.calls[0][0].assetsGiven[0].value).toBe(25)
   })
 
-  it('falls back to the conservative default for a specialty_asset item type', async () => {
+  it('refuses a specialty_asset item type, which has no valuation at all', async () => {
     mockRosterCount.mockResolvedValue(12)
     mockFetchFantasyCalcValues.mockResolvedValue([])
     mockLogTradeOfferEvent.mockResolvedValue('offer-event-6')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const items: CaptureTradeItem[] = [
       { itemType: 'specialty_asset', fromRosterId: PROPOSER, toRosterId: RECEIVER },
     ]
 
-    await captureLiveTradeOffer({
+    const result = await captureLiveTradeOffer({
       tradeId: 'trade-6', leagueId: 'league-1', proposerRosterId: PROPOSER, receiverRosterId: RECEIVER, items, league: makeLeague(),
     })
 
-    expect(mockLogTradeOfferEvent.mock.calls[0][0].assetsGiven[0].value).toBe(200)
+    expect(result).toBeNull()
+    expect(mockLogTradeOfferEvent).not.toHaveBeenCalled()
+  })
+
+  it('refuses a FAAB item with no amount — an amount is real, a missing one is not', async () => {
+    mockRosterCount.mockResolvedValue(12)
+    mockFetchFantasyCalcValues.mockResolvedValue([])
+    mockLogTradeOfferEvent.mockResolvedValue('offer-event-faab-missing')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const items: CaptureTradeItem[] = [
+      { itemType: 'faab', fromRosterId: PROPOSER, toRosterId: RECEIVER },
+    ]
+
+    const result = await captureLiveTradeOffer({
+      tradeId: 'trade-7', leagueId: 'league-1', proposerRosterId: PROPOSER, receiverRosterId: RECEIVER, items, league: makeLeague(),
+    })
+
+    expect(result).toBeNull()
+    expect(mockLogTradeOfferEvent).not.toHaveBeenCalled()
   })
 
   it('populates season from League.season (Phase 9 regression — was previously always null, invisible to computeShadowB0\'s season-scoped query)', async () => {
     mockRosterCount.mockResolvedValue(12)
-    mockFetchFantasyCalcValues.mockResolvedValue([])
+    mockFetchFantasyCalcValues.mockResolvedValue([makeFcPlayer('x', 'Priced Player', 3000)])
     mockLogTradeOfferEvent.mockResolvedValue('offer-event-season')
 
     const items: CaptureTradeItem[] = [
@@ -263,7 +291,7 @@ describe('captureLiveTradeOffer', () => {
 
   it('derives isSuperFlex from the league\'s own settings snapshot (provider-agnostic, no Sleeper-specific parsing)', async () => {
     mockRosterCount.mockResolvedValue(12)
-    mockFetchFantasyCalcValues.mockResolvedValue([])
+    mockFetchFantasyCalcValues.mockResolvedValue([makeFcPlayer('x', 'Priced Player', 3000)])
     mockLogTradeOfferEvent.mockResolvedValue('offer-event-7')
 
     const items: CaptureTradeItem[] = [

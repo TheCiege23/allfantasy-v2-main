@@ -13,6 +13,7 @@ export type AddDropErrorCode =
   | 'DROP_REQUIRED'
   | 'INVALID_DROP'
   | 'PLAYER_LOCKED'
+  | 'ROSTER_LOCKED'
   | 'WAIVER_REQUIRED'
   | 'LEAGUE_NOT_ACTIVE'
   | 'UNAUTHORIZED'
@@ -28,6 +29,7 @@ export function mapAddDropErrorCode(message: string, opts: { hasDrop: boolean })
   if (m.includes('already on your roster')) return 'PLAYER_ALREADY_ROSTERED'
   if (m.includes('already on another roster') || m.includes('no longer available') || m.includes('unavailable')) return 'PLAYER_UNAVAILABLE'
   if (m.includes('must go through waivers') || m.includes('waiver required') || m.includes('on waivers')) return 'WAIVER_REQUIRED'
+  if (m.includes('roster is locked by the commissioner')) return 'ROSTER_LOCKED'
   // Drop problems before generic roster-limit so an explicit bad drop is precise.
   if (m.includes('drop player is not on your roster') || m.includes('invalid drop') || m.includes('undroppable')) return 'INVALID_DROP'
   if (
@@ -51,6 +53,7 @@ export function addDropErrorStatus(code: AddDropErrorCode): number {
     case 'UNAUTHORIZED':
       return 401
     case 'PLAYER_LOCKED':
+    case 'ROSTER_LOCKED':
       return 423
     case 'WAIVER_REQUIRED':
       return 409
@@ -71,6 +74,7 @@ export const ADD_DROP_ERROR_COPY: Record<AddDropErrorCode, string> = {
   DROP_REQUIRED: 'Your roster is full — select a player to drop to complete this add.',
   INVALID_DROP: 'That drop is not allowed.',
   PLAYER_LOCKED: 'That player is locked right now and cannot be moved.',
+  ROSTER_LOCKED: 'The commissioner has locked this roster. Ask them to unlock it before making a move.',
   WAIVER_REQUIRED: 'This player must be claimed through waivers.',
   LEAGUE_NOT_ACTIVE: 'Roster moves are not open for this league right now.',
   UNAUTHORIZED: 'You are not allowed to make this move.',

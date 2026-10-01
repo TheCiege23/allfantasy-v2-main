@@ -31,7 +31,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/session", tool: "Legac
     if (!gate.ok) return gate.response
     const sleeperUsername = gate.identity.sleeperUsername
 
-    setUserSessionCookie({
+    await setUserSessionCookie({
       sleeperUsername,
       sleeperId,
     })
@@ -61,7 +61,7 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/session", tool: "Legacy
       return NextResponse.json({ error: 'Invalid origin' }, { status: 403 })
     }
 
-    const session = getUserSessionFromCookie()
+    const session = (await getUserSessionFromCookie())
 
     if (!session) {
       return NextResponse.json({ authenticated: false, user: null })
@@ -88,7 +88,7 @@ export const DELETE = withApiUsage({ endpoint: "/api/legacy/session", tool: "Leg
       return NextResponse.json({ error: 'Invalid origin' }, { status: 403 })
     }
 
-    clearUserSessionCookie()
+    await clearUserSessionCookie()
 
     return NextResponse.json({ success: true })
   } catch (e) {

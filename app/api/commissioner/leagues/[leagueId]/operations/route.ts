@@ -3,12 +3,11 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertCommissioner } from '@/lib/commissioner/permissions'
+import { clientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 
 /** League operations: post to public dashboard, set orphan seeking, ranked visibility, orphan difficulty. */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -37,7 +36,7 @@ export async function POST(
       data: { settings: { ...settings, publicDashboard: value } },
       select: { id: true, settings: true },
     })
-    return NextResponse.json({ status: 'ok', publicDashboard: value, settings: updated.settings })
+    return NextResponse.json({ status: 'ok', publicDashboard: value, settings: clientLeagueSettings(updated.settings) })
   }
 
   if (action === 'set_orphan_seeking' || action === 'orphan_seeking') {
@@ -47,7 +46,7 @@ export async function POST(
       data: { settings: { ...settings, orphanSeeking: value } },
       select: { id: true, settings: true },
     })
-    return NextResponse.json({ status: 'ok', orphanSeeking: value, settings: updated.settings })
+    return NextResponse.json({ status: 'ok', orphanSeeking: value, settings: clientLeagueSettings(updated.settings) })
   }
 
   if (action === 'set_ranked_visibility' || action === 'ranked_visibility') {
@@ -57,7 +56,7 @@ export async function POST(
       data: { settings: { ...settings, rankedVisibility: value } },
       select: { id: true, settings: true },
     })
-    return NextResponse.json({ status: 'ok', rankedVisibility: value, settings: updated.settings })
+    return NextResponse.json({ status: 'ok', rankedVisibility: value, settings: clientLeagueSettings(updated.settings) })
   }
 
   if (action === 'update_orphan_difficulty' || action === 'orphan_difficulty') {
@@ -67,7 +66,7 @@ export async function POST(
       data: { settings: { ...settings, orphanDifficulty: description } },
       select: { id: true, settings: true },
     })
-    return NextResponse.json({ status: 'ok', orphanDifficulty: description, settings: updated.settings })
+    return NextResponse.json({ status: 'ok', orphanDifficulty: description, settings: clientLeagueSettings(updated.settings) })
   }
 
   return NextResponse.json({

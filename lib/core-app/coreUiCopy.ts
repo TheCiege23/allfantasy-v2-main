@@ -1003,6 +1003,10 @@ const spanish: Record<string, string> = {
   LOW: 'CONFIANZA BAJA',
   INSUFFICIENT: 'DATOS INSUFICIENTES',
   Partner: 'Rival',
+  'Build a custom league': 'Crear una liga a tu medida',
+  'projected, week': 'proyectado, semana',
+  'the table above is points already scored.': 'la tabla anterior muestra puntos ya anotados.',
+  'the playoff and title odds above are simulated without AF.': 'las probabilidades de playoffs y título anteriores se simularon sin AF.',
 }
 
 export function coreUiCopy(english: string, language: string): string {

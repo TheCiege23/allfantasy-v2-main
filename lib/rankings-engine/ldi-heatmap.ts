@@ -16,7 +16,6 @@ export type HeatmapCell = {
     ldiByPos: number
     meanPremiumPct: number
     nByPos: number
-    label: "Overpayer" | "Learning"
   }>
   evidence: Array<{ key: string; value: string | number }>
 }
@@ -59,9 +58,20 @@ export async function buildLDIHeatmap(args: {
     const posSample = Number(posTotals?.[pos] ?? 0)
     const tag = tagCell({ ldi, posSample, leagueSample })
 
+    // Facts only, picked field by field: a characterisation label on a named manager is shown to
+    // nobody (Milestone 32), and an explicit pick keeps one out even if an upstream payload still
+    // carries it.
     const topTargets = (meta.proposalTargets ?? [])
       .filter((t) => t.position === pos)
       .slice(0, 3)
+      .map((t) => ({
+        rosterId: t.rosterId,
+        name: t.name,
+        score: t.score,
+        ldiByPos: t.ldiByPos,
+        meanPremiumPct: t.meanPremiumPct,
+        nByPos: t.nByPos,
+      }))
 
     return {
       pos,

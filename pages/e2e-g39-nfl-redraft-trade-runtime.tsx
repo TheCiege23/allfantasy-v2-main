@@ -163,7 +163,14 @@ export default function G39TradeRuntimeHarnessPage() {
       vetoThreshold: 1,
       createdAtIso: '2026-07-02T12:10:00.000Z',
       expiresAtIso: '2026-07-03T12:10:00.000Z',
-      assets: [{ fromRosterId: 'alpha', toRosterId: 'beta', assetType: 'draft_pick', pickSeason: 2027, pickRound: 2 }],
+      // A player-for-player offer. This used to offer a 2027 pick, which the runtime now refuses on
+      // purpose (DRAFT_PICK_NOT_SETTLED: pickInventorySupported is false here and in production, so
+      // nothing could ever move the pick). The refusal is pinned by the unit test; the harness's
+      // "valid manager proposal" must be one the runtime accepts.
+      assets: [
+        { fromRosterId: 'alpha', toRosterId: 'beta', assetType: 'player', playerId: 'a-qb', playerName: 'Alpha QB' },
+        { fromRosterId: 'beta', toRosterId: 'alpha', assetType: 'player', playerId: 'b-te', playerName: 'Beta TE' },
+      ],
     }
     const validation = validateNflRedraftTradeProposal({
       state,

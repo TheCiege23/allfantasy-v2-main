@@ -60,10 +60,11 @@ export function verifyUserSession(token: string): UserSessionPayload | null {
   }
 }
 
-export function setUserSessionCookie(payload: Omit<UserSessionPayload, 'createdAt' | 'expiresAt'>): string {
+export async function setUserSessionCookie(payload: Omit<UserSessionPayload, 'createdAt' | 'expiresAt'>): Promise<string> {
   const token = signUserSession(payload)
   
-  cookies().set(SESSION_COOKIE_NAME, token, {
+  const cookieStore = await cookies()
+  cookieStore.set(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
@@ -74,18 +75,30 @@ export function setUserSessionCookie(payload: Omit<UserSessionPayload, 'createdA
   return token
 }
 
-export function getUserSessionFromCookie(): UserSessionPayload | null {
+export async function getUserSessionFromCookie(): Promise<UserSessionPayload | null> {
+  let token: string | undefined
   try {
-    const token = cookies().get(SESSION_COOKIE_NAME)?.value
-    if (!token) return null
-    return verifyUserSession(token)
-  } catch {
+    token = (await cookies()).get(SESSION_COOKIE_NAME)?.value
+  } catch (error) {
+    // A Next.js control-flow throw (DYNAMIC_SERVER_USAGE during prerender) carries a
+    // digest and must propagate, or Next caches one visitor's render for everyone.
+    if (error && typeof error === 'object' && 'digest' in error) throw error
     return null
   }
+  if (!token) return null
+  return verifyUserSession(token)
 }
 
-export function clearUserSessionCookie(): void {
-  cookies().delete(SESSION_COOKIE_NAME)
+/** Same, read from the request itself: stays synchronous for requireAuth / requireAuthOrOrigin. */
+function getUserSessionFromRequest(req: NextRequest): UserSessionPayload | null {
+  const token = req.cookies.get(SESSION_COOKIE_NAME)?.value
+  if (!token) return null
+  return verifyUserSession(token)
+}
+
+export async function clearUserSessionCookie(): Promise<void> {
+  const cookieStore = await cookies()
+  cookieStore.delete(SESSION_COOKIE_NAME)
 }
 
 const ALLOWED_ORIGINS = [
@@ -131,7 +144,7 @@ export function requireAuth(req: NextRequest): AuthResult {
     }
   }
   
-  const user = getUserSessionFromCookie()
+  const user = getUserSessionFromRequest(req)
   
   if (!user) {
     return {
@@ -156,7 +169,7 @@ export function requireAuthOrOrigin(req: NextRequest): AuthResult {
     }
   }
   
-  const user = getUserSessionFromCookie()
+  const user = getUserSessionFromRequest(req)
   
   return {
     authenticated: true,

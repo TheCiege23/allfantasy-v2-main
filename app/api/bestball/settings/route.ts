@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
+import { withClientLeagueSettings } from '@/lib/league/clientLeagueSettings'
 import type { LeagueSport } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
@@ -137,5 +138,5 @@ export async function PATCH(req: NextRequest) {
     },
   })
 
-  return NextResponse.json({ league })
+  return NextResponse.json({ league: withClientLeagueSettings(league) })
 }

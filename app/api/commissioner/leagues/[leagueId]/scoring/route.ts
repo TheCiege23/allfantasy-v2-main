@@ -15,10 +15,8 @@ type IncomingRule = {
   enabled?: unknown
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as {
     user?: { id?: string }
   } | null
@@ -48,10 +46,8 @@ export async function GET(
   return NextResponse.json(config)
 }
 
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } }
-) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as {
     user?: { id?: string }
   } | null

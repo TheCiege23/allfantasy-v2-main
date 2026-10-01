@@ -4,12 +4,12 @@
  * league/roster/user/player context into the generic `ReplayImportInput`
  * shape (decisionType: 'trade'), per docs/SLEEPER_TRADE_REPLAY_ARCHITECTURE_ADR.md.
  *
- * Reuses the exact same valuation convention already established by
- * lib/league-trade-engine/tradeLearningCapture.ts's resolveItemValue() (a
- * conservative flat fallback for any unresolvable asset) rather than
- * inventing new valuation logic — that function is module-private there and
- * this module intentionally does not modify live trade capture code, so a
- * small, parallel copy is used here instead.
+ * ⚠ Carries a flat fallback for any unresolvable asset (REPLAY_FALLBACK_VALUE). This was
+ * copied from lib/league-trade-engine/tradeLearningCapture.ts's resolveItemValue(), which
+ * no longer has one: since 2026-09-30 (#1710) live capture REFUSES an offer with an
+ * unpriced asset, because a guess in a calibration sample is worse than no sample. Replay
+ * is a deliberate snapshot fed to the engine, not a learning sample, so the fallback stays
+ * here on its own account — but it is now this module's convention, not a shared one.
  */
 import { findPlayerBySleeperId, getPickValue, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import type { LeagueRosterConfig } from '@/lib/vorp-engine'

@@ -23,12 +23,12 @@ const patchSchema = z.object({
 
 export async function GET(
   _request: Request,
-  context: { params: { challengeId: string } }
+  context: { params: Promise<{ challengeId: string }> }
 ) {
   const auth = await requireWorldCupApiUser()
   if (!auth.ok) return auth.response
 
-  const params = worldCupChallengeParamsSchema.safeParse(context.params)
+  const params = worldCupChallengeParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
   }
@@ -46,12 +46,12 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  context: { params: { challengeId: string } }
+  context: { params: Promise<{ challengeId: string }> }
 ) {
   const auth = await requireWorldCupApiUser()
   if (!auth.ok) return auth.response
 
-  const params = worldCupChallengeParamsSchema.safeParse(context.params)
+  const params = worldCupChallengeParamsSchema.safeParse((await context.params))
   if (!params.success) {
     return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
   }

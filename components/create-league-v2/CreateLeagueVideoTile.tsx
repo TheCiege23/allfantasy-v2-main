@@ -60,14 +60,16 @@ export function CreateLeagueVideoTile({
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const prefersReducedMotion = usePrefersReducedMotion()
   const [previewing, setPreviewing] = useState(false)
+  const [playingByChoice, setPlayingByChoice] = useState(false)
   const [activeSrc, setActiveSrc] = useState(media?.video?.trim() || '')
   const [videoFailed, setVideoFailed] = useState(false)
-  const videoDisabled = disabled || locked || prefersReducedMotion || videoFailed || !activeSrc
+  const videoDisabled = disabled || locked || videoFailed || !activeSrc || (prefersReducedMotion && !playingByChoice)
 
   useEffect(() => {
     setActiveSrc(media?.video?.trim() || '')
     setVideoFailed(false)
     setPreviewing(false)
+    setPlayingByChoice(false)
   }, [media?.video])
 
   const resetVideo = () => {
@@ -81,21 +83,35 @@ export function CreateLeagueVideoTile({
     }
   }
 
-  const startPreview = () => {
-    if (videoDisabled) return
+  const startPreview = (withSound = false) => {
+    if (disabled || locked || videoFailed || !activeSrc || (prefersReducedMotion && !withSound)) return
+    if (playingByChoice && !withSound) return
     const video = videoRef.current
     if (!video) return
-    video.muted = true
+    video.muted = !withSound
     video.playsInline = true
     setPreviewing(true)
     void video.play().catch(() => {
       setPreviewing(false)
+      setPlayingByChoice(false)
     })
   }
 
   const stopPreview = () => {
+    if (playingByChoice) return
     setPreviewing(false)
     resetVideo()
+  }
+
+  const togglePlayback = () => {
+    if (playingByChoice) {
+      setPlayingByChoice(false)
+      setPreviewing(false)
+      resetVideo()
+      return
+    }
+    setPlayingByChoice(true)
+    startPreview(true)
   }
 
   const handleVideoError = () => {
@@ -108,15 +124,17 @@ export function CreateLeagueVideoTile({
     }
     setVideoFailed(true)
     setPreviewing(false)
+    setPlayingByChoice(false)
   }
 
   return (
+    <div className="relative">
     <button
       type="button"
       onClick={onSelect}
-      onMouseEnter={startPreview}
+      onMouseEnter={() => startPreview()}
       onMouseLeave={stopPreview}
-      onFocus={startPreview}
+      onFocus={() => startPreview()}
       onBlur={stopPreview}
       onPointerDown={(event) => {
         if (event.pointerType !== 'mouse') startPreview()
@@ -127,7 +145,7 @@ export function CreateLeagueVideoTile({
       data-video-preview={previewing && !videoDisabled ? 'playing' : 'paused'}
       data-video-disabled={videoDisabled ? 'true' : 'false'}
       className={cx(
-        'group relative isolate min-h-24 overflow-hidden rounded-2xl border p-4 text-left shadow-sm outline-none transition duration-200 motion-reduce:transition-none',
+        'group relative isolate min-h-24 w-full overflow-hidden rounded-2xl border p-4 text-left shadow-sm outline-none transition duration-200 motion-reduce:transition-none',
         'focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--surface-app)]',
         disabled
           ? 'cursor-not-allowed opacity-60'
@@ -165,7 +183,7 @@ export function CreateLeagueVideoTile({
           data-testid={testId ? `${testId}-video` : undefined}
           onError={handleVideoError}
           className={cx(
-            'pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-0 transition-opacity duration-200 motion-reduce:hidden',
+            'pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-0 transition-opacity duration-200',
             previewing && !videoDisabled ? 'opacity-45' : 'opacity-0',
             selected && previewing && !videoDisabled ? 'opacity-30' : false,
           )}
@@ -205,5 +223,17 @@ export function CreateLeagueVideoTile({
         {children}
       </span>
     </button>
+    {!disabled && !locked && !videoFailed && activeSrc ? (
+      <button
+        type="button"
+        onClick={togglePlayback}
+        aria-label={`${playingByChoice ? 'Pause' : 'Play'} ${title} video`}
+        aria-pressed={playingByChoice}
+        className="absolute bottom-2 right-2 z-20 rounded-lg bg-black/70 px-2 py-1 text-xs font-bold text-white hover:bg-black/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500"
+      >
+        {playingByChoice ? 'Pause video' : 'Play video'}
+      </button>
+    ) : null}
+    </div>
   )
 }

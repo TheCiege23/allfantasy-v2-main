@@ -2,13 +2,13 @@ import Link from "next/link"
 
 export const dynamic = "force-dynamic"
 
-export default async function GeoBlockedPage({
-  searchParams,
-}: {
-  searchParams?:
-    | Promise<{ state?: string; vpn?: string; reason?: string }>
-    | { state?: string; vpn?: string; reason?: string }
-}) {
+export default async function GeoBlockedPage(
+  props: {
+    searchParams?: Promise<| Promise<{ state?: string; vpn?: string; reason?: string }>
+    | { state?: string; vpn?: string; reason?: string }>
+  }
+) {
+  const searchParams = await props.searchParams
   const sp = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const state = typeof sp.state === "string" ? sp.state.toUpperCase() : "WA"
   const showVpn = sp.vpn === "1"

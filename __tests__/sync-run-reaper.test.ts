@@ -36,6 +36,11 @@ const LEARNING_IDLE = {
   aggregated: false, aggregateSkipped: 'nothing new was valued', error: null,
 }
 
+const calibrationPass = vi.fn()
+const CALIBRATION_RAN = {
+  ran: true, season: 2026, feedbackAdjusted: false, driftSeverity: 'ok', outcomesLogged: 0, errors: [],
+}
+
 const PURGED = {
   available: true,
   deleted: 1200,
@@ -130,6 +135,67 @@ describe('GET /api/cron/reap-sync-runs', () => {
     // The trade-learning writer rides here too (2026-09-30); mocked so these tests touch no trades.
     vi.doMock('@/lib/comprehensive-trade-learning', () => ({ runComprehensiveBackgroundAnalysis: learningPass }))
     learningPass.mockReset().mockResolvedValue(LEARNING_IDLE)
+    // The calibration cycle rides after the writer (2026-09-30); mocked so nothing reads TradeFeedback.
+    vi.doMock('@/lib/trade-engine/calibrationPass', () => ({ runTradeCalibrationPass: calibrationPass }))
+    calibrationPass.mockReset().mockResolvedValue(CALIBRATION_RAN)
+  })
+
+  it('runs the calibration pass only after a learning pass that valued something, with its own telemetry row', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 0, cutoff: '2026-09-05T11:30:00.000Z' })
+    const order: string[] = []
+    learningPass.mockImplementationOnce(async () => (order.push('learning'), { ...LEARNING_IDLE, valued: 3 }))
+    calibrationPass.mockImplementationOnce(async () => (order.push('calibration'), { ...CALIBRATION_RAN, outcomesLogged: 3, errors: ['drift: boom'] }))
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(order).toEqual(['learning', 'calibration'])
+    const budgetMs = calibrationPass.mock.calls[0]![0].budgetMs
+    expect(budgetMs).toBeGreaterThan(10_000)
+    expect(budgetMs).toBeLessThanOrEqual(240_000)
+    expect(mocks.recordSyncJobRun).toHaveBeenCalledWith(
+      expect.objectContaining({ jobName: 'cron-trade-calibration' }),
+      expect.objectContaining({ rowsUpdated: 3, warnings: ['drift: boom'] }),
+      expect.any(Number),
+    )
+    expect(await res.json()).toMatchObject({ ok: true, tradeCalibration: { ran: true, outcomesLogged: 3 } })
+  })
+
+  it('skips the calibration pass when the learning pass valued nothing and did not aggregate', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 0, cutoff: '2026-09-05T11:30:00.000Z' })
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(calibrationPass).not.toHaveBeenCalled()
+    expect(mocks.recordSyncJobRun).not.toHaveBeenCalledWith(
+      expect.objectContaining({ jobName: 'cron-trade-calibration' }),
+      expect.anything(),
+      expect.anything(),
+    )
+    expect(await res.json()).toMatchObject({ ok: true, tradeCalibration: { ran: false } })
+  })
+
+  it('runs the calibration pass after a re-aggregation even when nothing new was valued', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 0, cutoff: '2026-09-05T11:30:00.000Z' })
+    learningPass.mockResolvedValueOnce({ ...LEARNING_IDLE, aggregated: true, aggregateSkipped: null })
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    await GET(request(CRON_SECRET))
+
+    expect(calibrationPass).toHaveBeenCalledTimes(1)
+  })
+
+  it('a failing calibration pass never fails the reap', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({ available: true, reaped: 2, cutoff: '2026-09-05T11:30:00.000Z' })
+    learningPass.mockResolvedValueOnce({ ...LEARNING_IDLE, valued: 1 })
+    calibrationPass.mockRejectedValueOnce(new Error('feedback table missing'))
+    const { GET } = await import('@/app/api/cron/reap-sync-runs/route')
+
+    const res = await GET(request(CRON_SECRET))
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, reaped: 2, tradeCalibration: { ran: false, reason: 'feedback table missing' } })
   })
 
   it('runs the trade-learning pass AFTER the agent, on the budget the agent left, with its own telemetry row', async () => {

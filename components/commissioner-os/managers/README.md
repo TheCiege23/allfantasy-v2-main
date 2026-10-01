@@ -1,13 +1,13 @@
 # Manager Intelligence
 
-Owns behavioral pattern analysis only — DNA archetype, participation,
-reliability, risk, engagement trend, recognition. Never fantasy strategy,
+Owns behavioral pattern analysis only — participation, reliability, risk,
+engagement trend, recognition. Never fantasy strategy,
 player evaluation, or message content.
 
 ## Scope
 
 Built the Manager Directory — the module's landing surface — with each
-manager's archetype, tenure, engagement trend, reliability trait, and
+manager's tenure, engagement trend, reliability trait, and
 Recognition/Risk callouts. Individual manager profile pages (the full
 four-tab depth from the blueprint: Overview/Behavior/Trends &
 History/Guidance) and the League Relationship Graph are deferred; the
@@ -25,8 +25,10 @@ to later.
 - **No message content anywhere** — `riskFlag`/`recognition` are always
   pattern summaries, never quotes or paraphrases of anything a manager
   actually said.
-- **Archetype names are neutral-to-positive**, even for a declining-
-  engagement pattern ("Quiet Participant," not a pejorative).
+- **No archetype or identity label, of any tone.** Milestone 32 shows a
+  characterisation label of a named manager to nobody, commissioners
+  included, so the directory carries facts and continuity signals only.
+  The DNA classifier's `primaryIdentity` is deliberately not read.
 
 ## Data
 

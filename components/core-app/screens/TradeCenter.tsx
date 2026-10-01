@@ -51,6 +51,7 @@ import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import { matchOfferToRosters, screenshotDraftNote, screenshotLoadedLine } from '@/lib/trade-screenshot/matchOffer'
 import type { OfferRead } from '@/lib/trade-screenshot/offerRead'
+import { managerNameBesideLabel } from '@/lib/trade-screenshot/managerHandles'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -1800,6 +1801,10 @@ export function TradeCenter(props: {
                 }}
               >
                 {r.ownerName ?? copy('Another manager')}
+                {(() => {
+                  const manager = managerNameBesideLabel(r.ownerName, r.ownerHandles)
+                  return manager ? <span className="af-tc-partner-chip-manager"> · {manager}</span> : null
+                })()}
               </button>
             ))}
           </div>

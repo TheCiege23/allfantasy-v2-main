@@ -14,7 +14,8 @@ const SUSPEND_DAYS = new Set([1, 7, 30])
  * | { action: "lift" }. Admin-only (requireAdmin — the canonical admin authority). Suspend and ban
  * end every open session at once; see lib/moderation/accountSuspension for how they are enforced.
  */
-export async function POST(req: Request, { params }: { params: { userId: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ userId: string }> }) {
+  const params = await props.params
   const gate = await requireAdmin()
   if (!gate.ok) return gate.res
 

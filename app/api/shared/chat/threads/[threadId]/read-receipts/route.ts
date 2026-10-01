@@ -23,10 +23,8 @@ async function assertVirtualMembership(threadId: string, appUserId: string): Pro
   return canAccessLeagueDraft(leagueId, appUserId)
 }
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { threadId: string } }
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -44,10 +42,8 @@ export async function GET(
   return NextResponse.json({ status: "ok", receipts })
 }
 
-export async function POST(
-  _req: NextRequest,
-  { params }: { params: { threadId: string } }
-) {
+export async function POST(_req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

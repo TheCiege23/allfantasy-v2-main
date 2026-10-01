@@ -116,27 +116,10 @@ Assign ONE primary label:
 - "Best Rebuild Foundation" - young core with highest upside
 - "Aging Out" - window is closing, must act NOW
 
-## AI AS PSYCHOLOGIST - MANAGER ARCHETYPE PROFILING
-
-You profile behavior patterns. This is SHAREABLE content - be playful but insightful.
-
-Pick archetype based on observable patterns:
-- **Builder**: Patient, develops young talent, plays long game, tolerates short-term pain for long-term gain
-- **Trader**: Active deal-maker, cycles value, seeks buy-low/sell-high opportunities constantly
-- **Sniper**: Precise moves, quality over quantity, makes 2-3 big moves per season
-- **Hoarder**: Collects assets, reluctant to trade, stockpiles depth, holds elite players
-- **Balanced**: Solid all-around approach, no extreme tendencies
-
-Include for each manager:
-- behavior_percentile: "You trade more than 91% of managers" style comparisons
-- tendency_insight: What they consistently do
-- playful_roast: One-liner that's funny and shareable
-  Examples:
-  - "You're allergic to patience."
-  - "You rebuild like it's a hobby."
-  - "You trade like you're being paid by volume."
-  - "Your bench is a graveyard of 'what ifs'."
-  - "You hold players like they owe you money."
+## NO MANAGER LABELS
+Never assign the manager a persona, playstyle label or behavioural type, and never
+roast or characterise them. Describe what happened — records, titles, trades, roster makeup —
+not who they are.
 
 ## AI AS HISTORIAN - SEASON AUTOPSY
 
@@ -238,8 +221,7 @@ Based on their data, recommend specific actions:
 Output JSON only:
 {
   "rating": number (0-100, be honest - 70+ is genuinely good),
-  "title": string (e.g., "Dynasty Dominator", "Waiver Wire Wizard", "Perpetual Rebuilder"),
-  "archetype": "Builder" | "Trader" | "Sniper" | "Hoarder" | "Balanced",
+  "title": string (a short headline built ONLY from their record, e.g. "2x Champion · 61% Win Rate" or "5 Playoff Trips in 6 Seasons" — never a persona or playstyle label),
   "window_status": "READY_TO_COMPETE" | "REBUILDING" | "OVEREXTENDED" | "AGING_CORE" | "DIRECTION_NEEDED",
   "window_status_emoji": "🏆" | "🔨" | "⚠️" | "📉" | "🧱",
   "window_status_label": string (human readable: "Ready to Compete (2025)", "Rebuilding (2026+)", etc.),
@@ -280,13 +262,6 @@ Output JSON only:
       "narrative_summary": string
     }
   ],
-
-  "manager_profile": {
-    "behavior_percentile": string ("You trade more than 91% of managers"),
-    "tendency_insight": string,
-    "playful_roast": string,
-    "pattern_memory": string[] (patterns you've observed about them)
-  },
 
   "uncomfortable_truth": string (one honest insight they need to hear),
 
@@ -482,7 +457,6 @@ type LegacyCitation = {
 type NormalizedLegacyResponse = {
   rating: number
   title: string
-  archetype: string
   consistency_score: number
   window_status: string
   window_status_emoji: string
@@ -623,12 +597,11 @@ function normalizeLegacyResponse(
   audit: LegacyAudit,
 ): NormalizedLegacyResponse {
   const insights = (aiResponse.insights as Record<string, unknown> | null) || null
+  // A record, never a label (Milestone 32): the title is shown on the report and the share card.
   const fallbackTitle =
-    snapshot.win_percentage >= 60
-      ? "Dynasty Contender"
-      : snapshot.win_percentage >= 50
-        ? "Competitive Manager"
-        : "Rebuild Candidate"
+    snapshot.championships > 0
+      ? `${snapshot.championships}x Champion · ${snapshot.win_percentage}% Win Rate`
+      : `${snapshot.win_percentage}% Win Rate`
 
   // Honesty (Task 2): every field the model omits is filled by a FORMULA over the snapshot —
   // a derived value, not an observation. The tracker records exactly which fields that
@@ -648,7 +621,6 @@ function normalizeLegacyResponse(
   return {
     rating,
     title: tracker.text("title", aiResponse.title, fallbackTitle),
-    archetype: tracker.text("archetype", aiResponse.archetype, "Balanced"),
     consistency_score: tracker.bounded(
       "consistency_score",
       aiResponse.consistency_score,
@@ -728,7 +700,6 @@ function buildLegacyScreenContracts(args: {
   draftInput?: DraftWarRoomInput
   reportSignal?: {
     title?: string
-    archetype?: string
     window_status?: string
     next_season_advice?: string
     insights?: {
@@ -872,7 +843,6 @@ export const POST = withApiUsage({
       }
       const cachedReportSignal = {
         title: existingReport.title || undefined,
-        archetype: typeof insights?.archetype === "string" ? insights.archetype : undefined,
         window_status: typeof insights?.window_status === "string" ? insights.window_status : undefined,
         next_season_advice:
           typeof insights?.next_season_advice === "string"
@@ -915,7 +885,6 @@ export const POST = withApiUsage({
         report: {
           rating: existingReport.rating,
           title: existingReport.title,
-          archetype: insights?.archetype,
           consistency_score: insights?.consistency_score,
           window_status: insights?.window_status,
           window_status_emoji: insights?.window_status_emoji,
@@ -1045,7 +1014,6 @@ Generate a comprehensive rating and analysis.`
         title: normalized.title,
         summary: normalized.legacy_summary,
         insights: {
-          archetype: normalized.archetype,
           consistency_score: normalized.consistency_score,
           window_status: normalized.window_status,
           window_status_emoji: normalized.window_status_emoji,
@@ -1068,7 +1036,6 @@ Generate a comprehensive rating and analysis.`
 
     const normalizedReportSignal = {
       title: normalized.title,
-      archetype: normalized.archetype,
       window_status: normalized.window_status,
       next_season_advice: normalized.next_season_advice,
       insights: normalized.insights,
@@ -1102,7 +1069,6 @@ Generate a comprehensive rating and analysis.`
       report: {
         rating: normalized.rating,
         title: normalized.title,
-        archetype: normalized.archetype,
         consistency_score: normalized.consistency_score,
         window_status: normalized.window_status,
         window_status_emoji: normalized.window_status_emoji,

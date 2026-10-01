@@ -221,7 +221,6 @@ interface LeagueHistory {
 interface AIReport {
   rating: number
   title: string
-  archetype: string
   consistency_score: number
   legacy_summary: string
   insights: {
@@ -4310,7 +4309,7 @@ function AFLegacyContent() {
     { id: 'waiver' as Tab, label: 'Waiver Engine', icon: <TrendingUp className="w-4 h-4" />, badge: 'Chimmy' },
     { id: 'rankings' as Tab, label: 'Team Direction', icon: <Trophy className="w-4 h-4" /> },
     { id: 'pulse' as Tab, label: 'Market Board', icon: <Radio className="w-4 h-4" />, badge: 'Beta' },
-    { id: 'compare' as Tab, label: 'Opponent Behavior', icon: <Swords className="w-4 h-4" /> },
+    { id: 'compare' as Tab, label: 'Manager Comparison', icon: <Swords className="w-4 h-4" /> },
     { id: 'chat' as Tab, label: 'Chimmy Chat', icon: <MessageCircle className="w-4 h-4" />, badge: 'Chimmy' },
     { id: 'mock-draft' as Tab, label: 'AF Legacy Draft', icon: <LayoutGrid className="w-4 h-4" />, badge: 'Chimmy' },
     { id: 'share' as Tab, label: 'League Fairness', icon: <Share2 className="w-4 h-4" /> },
@@ -6873,7 +6872,7 @@ function AFLegacyContent() {
 
                           <OverviewReportCard
                             profile={compositeProfile}
-                            tierName={rankingPreview?.career?.tier_name || aiReport?.archetype}
+                            tierName={rankingPreview?.career?.tier_name}
                             tierLevel={rankingPreview?.career?.level}
                             careerXp={rankingPreview?.career?.total_xp}
                           />
@@ -7355,9 +7354,6 @@ function AFLegacyContent() {
                               <div>
                                 <h3 className="text-2xl font-bold text-white">Chimmy Analysis</h3>
                                 <p className="text-xs text-white/50 mt-0.5">Your fantasy career decoded by Chimmy</p>
-                                <span className="inline-flex px-3 py-1 mt-1 rounded-full bg-gradient-to-r from-purple-500/30 to-cyan-500/30 border border-purple-400/40 text-sm text-purple-200 font-medium">
-                                  {aiReport.archetype}
-                                </span>
                               </div>
                             </div>
                             <div className="flex gap-2">
@@ -7428,8 +7424,8 @@ function AFLegacyContent() {
                                 </>
                               ) : (
                                 <>
-                                  <div className="text-lg font-bold text-amber-200 mb-1">{aiReport.archetype || 'Balanced'}</div>
-                                  <p className="text-[11px] text-white/60 leading-relaxed line-clamp-3">{aiReport.legacy_summary || 'Your fantasy manager archetype and playstyle.'}</p>
+                                  <div className="text-lg font-bold text-amber-200 mb-1">Not assessed yet</div>
+                                  <p className="text-[11px] text-white/60 leading-relaxed line-clamp-3">{aiReport.legacy_summary || 'Re-run the analysis to assess your contention window.'}</p>
                                 </>
                               )}
                               {aiAnalysisRemaining != null && (
@@ -14366,7 +14362,7 @@ function AFLegacyContent() {
                       </div>
                     </div>
 
-                    <FeatureGate featureId="legacy_manager_compare" featureNameOverride="Opponent Behavior">
+                    <FeatureGate featureId="legacy_manager_compare" featureNameOverride="Manager Comparison">
                     <button
                       onClick={runManagerComparison}
                       disabled={compareLoading || !compareOpponent.trim()}
@@ -17170,21 +17166,13 @@ function AFLegacyContent() {
                     <span className="text-lg">🤖</span>
                     <h4 className="font-semibold text-purple-200">2. Chimmy Processing</h4>
                   </div>
-                  <p className="text-sm text-white/70 leading-relaxed">GPT-4o analyzes your career data to identify patterns — your draft tendencies, trade behavior, roster management style, and how you perform under pressure in playoffs.</p>
-                </div>
-
-                <div className="rounded-2xl bg-amber-500/10 border border-amber-500/20 p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-lg">🏷️</span>
-                    <h4 className="font-semibold text-amber-200">3. Archetype Classification</h4>
-                  </div>
-                  <p className="text-sm text-white/70 leading-relaxed">Based on your patterns, you're assigned a manager archetype (like "Hoarder", "Sniper", or "Rebuilder") that captures your dominant playstyle.</p>
+                  <p className="text-sm text-white/70 leading-relaxed">Chimmy reads your career record — wins, playoff runs, titles, and your current roster — to find what has actually driven your results.</p>
                 </div>
 
                 <div className="rounded-2xl bg-emerald-500/10 border border-emerald-500/20 p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-lg">📈</span>
-                    <h4 className="font-semibold text-emerald-200">4. Scoring & Insights</h4>
+                    <h4 className="font-semibold text-emerald-200">3. Scoring & Insights</h4>
                   </div>
                   <p className="text-sm text-white/70 leading-relaxed">You receive a Consistency Score (how stable your performance is), a Chimmy Rating (overall career grade), a Window Status (contender vs rebuilder), and personalized action items.</p>
                 </div>

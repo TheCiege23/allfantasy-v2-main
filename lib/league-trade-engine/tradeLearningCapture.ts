@@ -27,14 +27,22 @@ import { createLeagueTradeGrader, gradeDeal, loadNativePlayerNames, type LeagueT
 import { gradeInputsFromNativeItems, type GradeInputs } from '@/lib/decision-os/trade/tradeGradeInputs'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 
-/**
- * Conservative flat fallback for any asset whose real value can't be
- * resolved (unmatched player, pick without season/round metadata, or a
- * specialty asset type with no established valuation). Matches the exact
- * fallback convention already used by lib/trade-learning.ts's
- * analyzeHistoricalTrade() (`fcPlayer?.value || 200`), not a new invention.
+/*
+ * 🛑 NO FLAT FALLBACK VALUE. Until 2026-09-30 any asset this file could not price — an
+ * unmatched player, a pick with no season/round, a specialty asset — was priced at a flat
+ * 200, copied from the original lib/trade-learning.ts pipeline (since retired, #1710). The
+ * `resolved: false` flag that marked the guess was dropped by `toAsset`, so the guess reached
+ * `TradeOfferEvent.assetsGiven/Received` and `acceptProb` looking exactly like a real value,
+ * and every calibration reader (auto-recalibration, calibration-metrics, model-metrics-etl)
+ * took it as one. Measured in production 2026-09-30: ONE live capture had ever been written,
+ * and it carried an unknown player at 200 — 100% of the sample was a guess.
+ *
+ * Decision (owner, 2026-09-30, the same ruling as #1703's writer and as this file's own
+ * `priceTradesAtCurrentMarket`): an offer with any unpriced asset is NOT captured. A smaller
+ * honest sample beats a larger one that teaches the calibrator from fiction, and the shadow
+ * rollout's own gate counts samples — reaching 30 with guessed inputs would calibrate b0 on
+ * noise. A refused offer still gets its outcome event (offerEventId null), as before.
  */
-const LIVE_CAPTURE_FALLBACK_VALUE = 200
 
 export interface CaptureTradeItem {
   itemType: string
@@ -118,10 +126,16 @@ export interface CurrentTradeMarketSnapshot {
 
 interface ResolvedAssetValue {
   name: string
-  value: number
+  /** Null when the asset could not be priced; the offer is then refused, never guessed. */
+  value: number | null
   type: 'player' | 'pick' | 'faab' | string
-  /** False when the numeric value is only a conservative fallback. */
   resolved: boolean
+}
+
+type PricedAssetValue = ResolvedAssetValue & { value: number; resolved: true }
+
+function isPriced(asset: ResolvedAssetValue): asset is PricedAssetValue {
+  return asset.resolved && asset.value != null
 }
 
 function resolveItemValue(
@@ -134,7 +148,7 @@ function resolveItemValue(
     const fc = ref ? findPlayerBySleeperId(fcPlayers, ref) : null
     return {
       name: fc?.player.name ?? `Player ${ref || 'unknown'}`,
-      value: fc?.value ?? LIVE_CAPTURE_FALLBACK_VALUE,
+      value: fc?.value ?? null,
       type: 'player',
       resolved: Boolean(fc),
     }
@@ -144,23 +158,20 @@ function resolveItemValue(
     const meta = item.metadata && typeof item.metadata === 'object' ? (item.metadata as Record<string, unknown>) : {}
     const season = Number(meta.season)
     const round = Number(meta.round)
-    const value =
-      Number.isFinite(season) && Number.isFinite(round)
-        ? getPickValue(season, round, isDynasty)
-        : LIVE_CAPTURE_FALLBACK_VALUE
-    return { name: `${item.itemType} pick`, value, type: 'pick', resolved: Number.isFinite(season) && Number.isFinite(round) }
+    const priced = Number.isFinite(season) && Number.isFinite(round)
+    return { name: `${item.itemType} pick`, value: priced ? getPickValue(season, round, isDynasty) : null, type: 'pick', resolved: priced }
   }
 
   if (item.itemType === 'faab') {
-    return { name: 'FAAB', value: item.faabAmount ?? 0, type: 'faab', resolved: false }
+    // A FAAB amount is a real number, not a market guess; only a missing amount is unpriced.
+    return { name: 'FAAB', value: item.faabAmount ?? null, type: 'faab', resolved: item.faabAmount != null }
   }
 
-  // 'specialty_asset' and any future item type: conservative flat fallback,
-  // documented limitation (see the ADR) — not silently invented math.
-  return { name: item.itemType, value: LIVE_CAPTURE_FALLBACK_VALUE, type: item.itemType, resolved: false }
+  // 'specialty_asset' and any future item type: no valuation exists, so the offer is refused.
+  return { name: item.itemType, value: null, type: item.itemType, resolved: false }
 }
 
-function toAsset(resolved: ResolvedAssetValue, id: string): Asset {
+function toAsset(resolved: PricedAssetValue, id: string): Asset {
   return {
     id,
     type: resolved.type === 'player' ? 'PLAYER' : resolved.type === 'faab' ? 'FAAB' : 'PICK',
@@ -302,8 +313,14 @@ export async function captureLiveTradeOffer(input: {
 
     const giveResolved = giveItems.map((item) => resolveItemValue(item, fcPlayers, isDynasty))
     const receiveResolved = receiveItems.map((item) => resolveItemValue(item, fcPlayers, isDynasty))
-    const give: Asset[] = giveResolved.map((item, idx) => toAsset(item, `${input.tradeId}-give-${idx}`))
-    const receive: Asset[] = receiveResolved.map((item, idx) => toAsset(item, `${input.tradeId}-recv-${idx}`))
+    const unpriced = [...giveResolved, ...receiveResolved].filter((a) => !isPriced(a)).map((a) => a.name)
+    if (unpriced.length > 0) {
+      // See the note at the top of this file: a guessed value in the sample is worse than no sample.
+      console.warn(`[TradeLearningCapture] Not capturing offer ${input.tradeId}: unpriced asset(s) ${unpriced.join(', ')}`)
+      return null
+    }
+    const give: Asset[] = giveResolved.filter(isPriced).map((item, idx) => toAsset(item, `${input.tradeId}-give-${idx}`))
+    const receive: Asset[] = receiveResolved.filter(isPriced).map((item, idx) => toAsset(item, `${input.tradeId}-recv-${idx}`))
 
     const calWeights = await getCalibratedWeights(undefined, { isSuperFlex, scoringType: undefined })
     const drivers: TradeDriverData = computeTradeDrivers(

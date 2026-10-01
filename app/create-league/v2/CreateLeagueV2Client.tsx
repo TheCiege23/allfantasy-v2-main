@@ -22,6 +22,9 @@ import { getDefaultScoringPresetId, resolveScoringPresetId } from '@/lib/league-
 
 export interface CreateLeagueV2ClientProps {
   userId: string
+  importTemplate?: CreateLeagueV2State
+  importSourceName?: string
+  importSourceLeagueId?: string
 }
 
 function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State {
@@ -51,22 +54,31 @@ function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State 
   }
 }
 
-export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientProps) {
+export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSourceName, importSourceLeagueId }: CreateLeagueV2ClientProps) {
   const { t } = useLanguage()
   const router = useRouter()
-  const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(DEFAULT_V2_STATE))
+  const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(importTemplate ?? DEFAULT_V2_STATE))
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<CreateLeagueFieldErrors | null>(null)
+  const [createdLeagueHref, setCreatedLeagueHref] = useState<string | null>(null)
+  const [createdLeagueId, setCreatedLeagueId] = useState<string | null>(null)
+  const [creationWarning, setCreationWarning] = useState<string | null>(null)
+  const [retryingFinalization, setRetryingFinalization] = useState(false)
 
   useEffect(() => {
+    if (importTemplate) {
+      setState(normalizeInitialState(importTemplate))
+      setHydrated(true)
+      return
+    }
     const persisted = loadPersistedV2State()
     if (persisted) {
       setState((current) => normalizeInitialState({ ...current, ...persisted }))
     }
     setHydrated(true)
-  }, [])
+  }, [importTemplate])
 
   useEffect(() => {
     if (!hydrated) return
@@ -103,17 +115,39 @@ export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientPr
   const onChange = useCallback((patch: Partial<CreateLeagueV2State>) => {
     setSubmitError(null)
     setFieldErrors(null)
-    setState((prev) => ({ ...prev, ...patch }))
-  }, [])
+    setState((prev) => ({ ...prev, ...patch,
+      ...(importSourceLeagueId && importTemplate ? { sport: importTemplate.sport, teamCount: importTemplate.teamCount } : {}),
+    }))
+  }, [importSourceLeagueId, importTemplate])
 
   const completionIssues = useMemo(() => analyzeCreateLeagueCompletion(state), [state])
+
+  const finishImportedLeague = useCallback(async (leagueId: string, href: string) => {
+    setRetryingFinalization(true)
+    try {
+      const response = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/import-carryover/finalize`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      const result = (await response.json()) as { complete?: boolean; error?: string }
+      if (response.ok && result.complete) {
+        router.push(href)
+      } else {
+        setCreationWarning(result.error ?? 'Your league was created, but roster setup is still pending. Retry setup or open the league to review it.')
+      }
+    } catch {
+      setCreationWarning('Your league was created, but roster setup could not be completed. Please retry setup.')
+    } finally {
+      setRetryingFinalization(false)
+    }
+  }, [router])
 
   const handleSubmit = useCallback(async () => {
     setSubmitting(true)
     setSubmitError(null)
     setFieldErrors(null)
     try {
-      const result = await submitCreateLeagueV2(state)
+      const result = await submitCreateLeagueV2(state, importSourceLeagueId)
       if (!result.ok) {
         setSubmitError(result.error ?? t('createLeague.v2.submitError'))
         if (result.fieldErrors && Object.keys(result.fieldErrors).length > 0) {
@@ -122,13 +156,26 @@ export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientPr
         return
       }
       clearPersistedV2State()
+      if (result.warning) {
+        const href = result.redirectTo ?? (result.leagueId ? `/core?league=${encodeURIComponent(result.leagueId)}` : '/core')
+        setCreatedLeagueId(result.leagueId ?? null)
+        setCreatedLeagueHref(href)
+        setCreationWarning(result.warning)
+        if (result.leagueId) await finishImportedLeague(result.leagueId, href)
+        return
+      }
       router.push(result.redirectTo ?? '/dashboard')
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : t('createLeague.v2.submitError'))
     } finally {
       setSubmitting(false)
     }
-  }, [router, state, t])
+  }, [router, state, t, importSourceLeagueId, finishImportedLeague])
+
+  const retryFinalization = useCallback(async () => {
+    if (!createdLeagueId || retryingFinalization) return
+    await finishImportedLeague(createdLeagueId, createdLeagueHref ?? `/core?league=${encodeURIComponent(createdLeagueId)}`)
+  }, [createdLeagueHref, createdLeagueId, retryingFinalization, finishImportedLeague])
 
   return (
     <CreateLeagueWizard
@@ -138,6 +185,12 @@ export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientPr
       fieldErrors={fieldErrors}
       submitError={submitError}
       submitting={submitting}
+      importSourceName={importSourceName}
+      importCarryover={Boolean(importSourceLeagueId)}
+      createdLeagueHref={createdLeagueHref}
+      creationWarning={creationWarning}
+      retryingFinalization={retryingFinalization}
+      onRetryFinalization={createdLeagueId ? retryFinalization : undefined}
       onSubmit={handleSubmit}
       onCancel={() => router.push('/core')}
     />

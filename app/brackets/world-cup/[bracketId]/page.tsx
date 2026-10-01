@@ -10,7 +10,8 @@ import WorldCupBracketShell from "@/components/brackets/world-cup/WorldCupBracke
 
 export const dynamic = "force-dynamic"
 
-export async function generateMetadata({ params }: { params: { bracketId: string } }): Promise<Metadata> {
+export async function generateMetadata(props: { params: Promise<{ bracketId: string }> }): Promise<Metadata> {
+  const params = await props.params
   try {
     const row = await prisma.worldCupBracketChallenge.findUnique({
       where: { id: params.bracketId },
@@ -42,15 +43,16 @@ export async function generateMetadata({ params }: { params: { bracketId: string
 
 type SessionUser = { id?: string | null; email?: string | null; name?: string | null }
 
-export default async function WorldCupBracketChallengePage({
-  params,
-  searchParams,
-}: {
-  params: { bracketId: string }
-  searchParams?: { tab?: string; guided?: string; entry?: string; welcome?: string }
-}) {
+export default async function WorldCupBracketChallengePage(
+  props: {
+    params: Promise<{ bracketId: string }>
+    searchParams?: Promise<{ tab?: string; guided?: string; entry?: string; welcome?: string }>
+  }
+) {
+  const searchParams = await props.searchParams
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null
-  const isAdmin = hasWorldCupAdminPageSession()
+  const isAdmin = await hasWorldCupAdminPageSession()
   const view = await getWorldCupChallengeView({
     challengeId: params.bracketId,
     user: session?.user ?? null,

@@ -26,10 +26,8 @@ function parseTrigger(raw: unknown): AutomationTrigger {
  * Commissioner override — always runs with `force: true` so idempotency does not block replays,
  * and tags the run for audit.
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { leagueId: string } },
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

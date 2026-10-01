@@ -12,7 +12,8 @@ const DraftRoom = nextDynamic(() => import('../../components/DraftRoom').then((m
 
 export const dynamic = 'force-dynamic'
 
-export default async function MockDraftByDraftIdPage({ params }: { params: { draftId: string } }) {
+export default async function MockDraftByDraftIdPage(props: { params: Promise<{ draftId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as {
     user?: { id?: string; name?: string | null }
   } | null

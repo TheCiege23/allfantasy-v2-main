@@ -1,4 +1,6 @@
 import type { CreateLeagueV2State } from '@/lib/create-league-v2/state'
+import { IMPORT_PROVIDER_UI_OPTIONS } from '@/lib/league-import/provider-ui-config'
+import type { ImportProvider } from '@/lib/league-import/types'
 
 export const UNIVERSAL_CREATE_TEAM_COUNTS: readonly number[] = Array.from(
   { length: 31 },
@@ -19,18 +21,19 @@ export const CREATE_LEAGUE_TIMEZONES: readonly string[] = [
 export type ImportProviderState = 'available' | 'limited_beta' | 'coming_soon'
 
 export type ImportProviderOption = {
-  id: 'sleeper' | 'espn' | 'fantrax' | 'yahoo' | 'mfl' | 'manual'
+  id: ImportProvider | 'manual'
   label: string
   state: ImportProviderState
   route?: string
 }
 
 export const IMPORT_LEAGUE_PROVIDERS: readonly ImportProviderOption[] = [
-  { id: 'sleeper', label: 'Sleeper', state: 'available', route: '/import?provider=sleeper' },
-  { id: 'espn', label: 'ESPN', state: 'limited_beta', route: '/api/import-espn' },
-  { id: 'fantrax', label: 'Fantrax', state: 'limited_beta', route: '/api/league/import/fantrax/preview' },
-  { id: 'yahoo', label: 'Yahoo', state: 'limited_beta', route: '/api/league/yahoo-auth' },
-  { id: 'mfl', label: 'MFL', state: 'limited_beta', route: '/api/mfl/import' },
+  ...IMPORT_PROVIDER_UI_OPTIONS.map(({ provider, label, available }) => ({
+    id: provider,
+    label,
+    state: available ? 'available' as const : 'coming_soon' as const,
+    route: available ? `/import?provider=${provider}` : undefined,
+  })),
   { id: 'manual', label: 'Other/manual', state: 'coming_soon' },
 ]
 

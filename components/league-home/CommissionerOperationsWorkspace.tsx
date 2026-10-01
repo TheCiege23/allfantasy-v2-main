@@ -18,6 +18,8 @@ import {
 } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
 import { CommissionerPulse } from '@/components/decide/CommissionerPulse'
+import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
+import { isNativePlatform } from '@/lib/dashboard/platform-label'
 
 type WorkspaceAction = {
   id: string
@@ -39,6 +41,7 @@ export type CommissionerOperationsWorkspaceProps = {
   league: UserLeague
   leagueId: string
   isCommissioner: boolean
+  isOwner: boolean
   hasActiveRedraftSeason: boolean
   onOpenSettings: (initialPanel?: string | null) => void
   onOpenTab: (tabId: string) => void
@@ -74,6 +77,7 @@ export function CommissionerOperationsWorkspace({
   league,
   leagueId,
   isCommissioner,
+  isOwner,
   hasActiveRedraftSeason,
   onOpenSettings,
   onOpenTab,
@@ -165,13 +169,32 @@ export function CommissionerOperationsWorkspace({
           </div>
           <span className="rounded-full px-3 py-1.5 text-xs font-extrabold text-white" style={{ background: 'linear-gradient(90deg,#ff3d81,#ff8a3d)' }} data-testid="commissioner-league-state">{leagueStateLabel}</span>
         </div>
-        <a
-          href={`/league/${leagueId}/intelligence`}
-          className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3.5 py-2 text-[12px] font-extrabold text-[#ff9ec0] transition hover:bg-[#ff3d81]/20"
-          data-testid="commissioner-open-intelligence-hub"
-        >
-          Open League Intelligence Hub →
-        </a>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <a
+            href={`/league/${leagueId}/intelligence`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3.5 py-2 text-[12px] font-extrabold text-[#ff9ec0] transition hover:bg-[#ff3d81]/20"
+            data-testid="commissioner-open-intelligence-hub"
+          >
+            Open League Intelligence Hub →
+          </a>
+          {isOwner ? (
+            <CommissionerOsLink
+              href="/commissioner-os"
+              leagueId={leagueId}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3.5 py-2 text-[12px] font-extrabold text-[#ff9ec0] transition hover:bg-[#ff3d81]/20"
+            >
+              Open Commissioner OS →
+            </CommissionerOsLink>
+          ) : null}
+          {!isNativePlatform(league.platform) ? (
+            <a
+              href={`/create-league?fromLeague=${encodeURIComponent(leagueId)}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3.5 py-2 text-[12px] font-extrabold text-[#ff9ec0] transition hover:bg-[#ff3d81]/20"
+            >
+              Create standalone AllFantasy league →
+            </a>
+          ) : null}
+        </div>
       </header>
 
       {/* Decision OS commissioner lens — the same live CommissionerPulse engine

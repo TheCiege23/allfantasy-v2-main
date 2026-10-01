@@ -34,11 +34,12 @@ function firstParam(v: string | string[] | undefined): string | undefined {
  *             week itself, and Fast/Deep is the answer mode (the route ranks `assistantMode` above
  *             `strategyMode`, so a URL value could never have applied alongside it).
  */
-export default async function ChimmyChatPage({
-  searchParams,
-}: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>
-}) {
+export default async function ChimmyChatPage(
+  props: {
+    searchParams?: Promise<Record<string, string | string[] | undefined>>
+  }
+) {
+  const searchParams = await props.searchParams
   const sp = searchParams ? await searchParams : {}
 
   const session = (await getServerSession(authOptions as never)) as {

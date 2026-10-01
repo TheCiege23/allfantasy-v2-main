@@ -53,30 +53,15 @@ function directoryUnavailable(): CommissionerErrorContract {
   }
 }
 
-/**
- * Human-readable archetype for each `ManagerIdentityLabel`.
- *
- * Descriptive of behavior in a window, never a characterological judgment — the naming discipline
- * this module's contract carries. `ghost_manager` deliberately renders as "Quiet Participant"
- * (the demo client's own phrasing for a low-engagement manager) rather than anything resembling a
- * verdict on the person, and `unknown` says the profile is still building rather than asserting
- * an absence of character.
+/*
+ * 🛑 THE ROW'S `primaryIdentity` IS NOT READ. It is the DNA classifier's identity label
+ * ("serial_trader", "waiver_hawk", "ghost_manager"…), and this client used to humanise it into an
+ * `archetype` badge on every manager card. Milestone 32 shows a characterisation label of a named
+ * manager to NOBODY, commissioners included, so the directory carries the continuity facts only:
+ * reliability level, trend direction, and a risk flag phrased as what a commissioner might do.
  */
-const ARCHETYPE_LABEL: Record<string, string> = {
-  ghost_manager: 'Quiet Participant',
-  set_and_forget: 'Set and Forget',
-  reactive_manager: 'Reactive Manager',
-  indecisive_tinkerer: 'Frequent Tinkerer',
-  serial_trader: 'Active Trader',
-  waiver_hawk: 'Waiver Hawk',
-  trade_seeker: 'Trade Seeker',
-  committed_grinder: 'Steady Operator',
-  unknown: 'Building Profile',
-}
-
 interface DirectoryRowShape {
   managerId: string
-  primaryIdentity: string
   engagementReliability: 'reliable' | 'inconsistent' | 'unreliable'
   engagementTrend:
     | { available: false; reason: string }
@@ -137,7 +122,6 @@ export const liveManagerIntelligenceClient: ManagerIntelligenceClient = {
         // under-report one name. After the two-source lookup above this is ~5 managers platform-wide,
         // not the 1,137 it was.
         managerName: names.get(row.managerId) ?? UNKNOWN_MANAGER_NAME,
-        archetype: ARCHETYPE_LABEL[row.primaryIdentity] ?? 'Building Profile',
         engagementReliability: row.engagementReliability,
       }
       // Set only when real. An absent trend is unknown, and the view renders nothing for it.

@@ -4,10 +4,8 @@ import { requireVerifiedUser } from "@/lib/auth-guard"
 
 export const runtime = "nodejs"
 
-export async function POST(
-  req: Request,
-  { params }: { params: { leagueId: string } }
-) {
+export async function POST(req: Request, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const auth = await requireVerifiedUser()
   if (!auth.ok) return auth.response
 

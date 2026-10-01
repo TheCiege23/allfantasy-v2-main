@@ -19,7 +19,7 @@ import {
   getDraftTypeUiLabel,
   resolveEffectiveDraftTypeForConcept,
 } from '@/lib/draft-types/draftTypeRegistry'
-import { getCreateLeagueDraftTypes } from '@/lib/league/format-engine'
+import { getAllowedDraftTypesForFormat } from '@/lib/league/format-engine'
 import { getGuillotineSportConfig } from '@/lib/guillotine/sportConfig'
 import { BEST_BALL_DRAFT_MODES } from '@/lib/bestball/rules'
 import { getClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
@@ -184,7 +184,9 @@ export function getDraftTypeOptions(leagueType: LeagueTypeId, sport: SupportedSp
   const catalog = getClientLeagueCreateOptionsCatalog()
   const seeded = catalog?.allowedDraftTypesByConcept?.[leagueType]
 
-  const sportAllowed = getCreateLeagueDraftTypes(sport, leagueType)
+  // The canonical create endpoint validates against the format's full draft matrix.
+  // Keep the wizard in sync so supported Linear and Auction drafts can be chosen at creation.
+  const sportAllowed = getAllowedDraftTypesForFormat(sport, leagueType)
   const seededNormalized = Array.isArray(seeded)
     ? seeded
         .map((dt) => resolveEffectiveDraftTypeForConcept(leagueType, dt))
@@ -238,7 +240,7 @@ export function getDraftTypeOptions(leagueType: LeagueTypeId, sport: SupportedSp
         hint: mode === 'auto' ? 'CPU drafts for everyone' : 'Commissioner records picks manually',
       })
     }
-  } else if (leagueType !== 'big_brother' && leagueType !== 'zombie') {
+  } else if (leagueType !== 'big_brother' && leagueType !== 'zombie' && leagueType !== 'salary_cap') {
     result.push({
       id: 'auto',
       label: 'Auto',

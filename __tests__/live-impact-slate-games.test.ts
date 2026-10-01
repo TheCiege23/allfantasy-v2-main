@@ -125,3 +125,24 @@ describe('liveViewUrl', () => {
     expect(liveViewUrl('https://allfantasy.ai/core/live?sport=NFL', 'NFL', 'all')).toBe('/core/live?sport=NFL&scope=all')
   })
 })
+
+describe('impact total label', () => {
+  const two = [
+    card('g1', 'A', 'B', { tieIns: [{ leagueId: 'L1', playerName: 'Ann', points: 5 }, { leagueId: 'L2', playerName: 'Ann', points: 4 }] }),
+  ]
+  it('counts distinct leagues and sums the points from each', () => {
+    const impact = deriveImpact(two, [], { onlyTheseGamesPlays: false })
+    expect(impact).toMatchObject({ totalPoints: 9, liveLeagues: 2 })
+  })
+  it('says the total spans leagues when it does', async () => {
+    const { impactTotalLabel } = await import('@/lib/live/liveImpact')
+    const impact = deriveImpact(two, [], { onlyTheseGamesPlays: false })
+    expect(impactTotalLabel(impact, false)).toBe('fantasy pts scored live across your 2 leagues right now')
+  })
+  it('says this league when one is held, and stays plain for a single league', async () => {
+    const { impactTotalLabel } = await import('@/lib/live/liveImpact')
+    expect(impactTotalLabel({ liveLeagues: 2 }, true)).toBe('fantasy pts scored live in this league right now')
+    expect(impactTotalLabel({ liveLeagues: 1 }, false)).toBe('fantasy pts scored live right now')
+    expect(impactTotalLabel({}, false)).toBe('fantasy pts scored live right now')
+  })
+})

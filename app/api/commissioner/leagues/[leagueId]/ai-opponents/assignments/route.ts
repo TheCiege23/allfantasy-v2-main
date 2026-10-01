@@ -10,7 +10,8 @@ import type { BotArchetypeId } from "@/lib/ai/opponents/types"
 
 export const dynamic = "force-dynamic"
 
-export async function GET(_req: Request, { params }: { params: { leagueId: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -27,7 +28,8 @@ export async function GET(_req: Request, { params }: { params: { leagueId: strin
   return NextResponse.json({ assignments: rows })
 }
 
-export async function POST(req: Request, { params }: { params: { leagueId: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

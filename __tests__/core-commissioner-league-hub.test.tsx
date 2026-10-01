@@ -186,6 +186,25 @@ describe('<CommissionerHub /> — commissioner depth paywall', () => {
     expect(document.body.textContent).not.toContain('Judged by moves.')
   })
 
+  it('this week’s lineups, AF beside API: a free section with its jump link, drawn only when handed lineups', () => {
+    const lineups = {
+      season: 2026,
+      week: 4,
+      rows: [{ rosterId: '7', name: 'lark', isYou: false, af: 120.5, afFrom: 7, api: 118.9, apiFrom: 9, starterCount: 9 }],
+    }
+    render(<CommissionerHub data={hub({ depth: LOCKED })} lineups={lineups} />)
+    const section = document.getElementById('ch-lineups')!
+    expect(section.className).toContain('af-ch-section')
+    expect(section.textContent).toContain('week 4')
+    expect(section.textContent).toContain('nothing here changes a standing or a ruling')
+    expect(section.querySelector('tbody tr')!.textContent).toBe('lark120.5 7/9118.9')
+    expect(screen.getByRole('link', { name: 'Lineups' }).getAttribute('href')).toBe('#ch-lineups')
+    document.body.innerHTML = ''
+    render(<CommissionerHub data={hub({ depth: LOCKED })} />)
+    expect(document.getElementById('ch-lineups')).toBeNull()
+    expect(screen.queryByRole('link', { name: 'Lineups' })).toBeNull()
+  })
+
   it('locked: the charts read is never started', () => {
     loadActivityCharts.mockClear()
     render(<CommissionerHub data={hub({ depth: LOCKED })} />)

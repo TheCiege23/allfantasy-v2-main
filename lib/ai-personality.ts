@@ -179,7 +179,7 @@ Rules:
     case 'commentator':
       return `
 ## AI MODE: COMMENTATOR
-Used for: League Pulse, Manager Archetypes, Legacy Story Mode
+Used for: League Pulse, Legacy Story Mode
 
 Rules:
 - Most playful mode
@@ -309,7 +309,6 @@ export function getFeatureMode(feature: string): AIMode {
     'waiver-ai': 'scout',
     'stash-board': 'scout',
     'league-pulse': 'commentator',
-    'manager-archetypes': 'commentator',
     'legacy-story': 'commentator',
     'season-autopsy': 'commentator',
   }

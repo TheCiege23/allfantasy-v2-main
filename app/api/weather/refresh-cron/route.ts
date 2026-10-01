@@ -36,17 +36,50 @@ export const maxDuration = 60
 export const WEATHER_REFRESH_BUDGET_MS = 45_000
 export const dynamic = 'force-dynamic'
 
+/*
+ * Tokens that name a KIND of venue rather than a venue. A provider string reduced to nothing but
+ * these ("Stadium", "Field") names no place, and must not be allowed to match a table row.
+ */
+const GENERIC_VENUE_TOKENS = /\b(stadium|field|park|dome|arena|coliseum|bowl|the|at|of)\b/g
+
+/*
+ * 🛑 THIS USED TO MATCH IN BOTH DIRECTIONS, AND THE REVERSE DIRECTION PLACED GAMES IN ARIZONA.
+ *
+ * `name.includes(venue)` let a provider string of just "Stadium" resolve to the FIRST table row
+ * whose name contains it — State Farm Stadium — and write a confident forecast for Glendale onto
+ * the key My Team reads for whatever game that row was. Nothing reported it: the row counted as
+ * refreshed, not unresolved.
+ *
+ * The forward direction (the provider string CONTAINS the table name, "GEHA Field at Arrowhead
+ * Stadium" ⊇ "Arrowhead Stadium") is safe and kept. The reverse is kept only for a provider string
+ * that still says something specific once the generic words are stripped: "Arrowhead" and
+ * "Mile High" match, "Stadium" and "Field" do not. Both sides are folded through `venueKey`, so
+ * punctuation ("Levi's" vs "Levis", "U.S. Bank" vs "US Bank") no longer decides a match.
+ */
+function specificVenueKey(venue: string): string {
+  return venueKey(venue.toLowerCase().replace(GENERIC_VENUE_TOKENS, ' '))
+}
+
+function matchVenueName(venue: string, name: string): boolean {
+  const v = venueKey(venue)
+  const n = venueKey(name)
+  if (!v || !n) return false
+  if (v === n || v.includes(n)) return true
+  const specific = specificVenueKey(venue)
+  return specific.length >= 5 && n.includes(specific)
+}
+
 function resolveVenueCoords(venue: string | null): { lat: number; lng: number } | null {
   if (!venue?.trim()) return null
   const v = venue.trim()
   for (const name of Object.keys(NFL_VENUE_COORDS)) {
-    if (v.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(v.toLowerCase())) {
+    if (matchVenueName(v, name)) {
       const c = NFL_VENUE_COORDS[name]!
       return { lat: c.lat, lng: c.lon }
     }
   }
   for (const name of Object.keys(MLB_VENUE_COORDS)) {
-    if (v.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(v.toLowerCase())) {
+    if (matchVenueName(v, name)) {
       const c = MLB_VENUE_COORDS[name]!
       return { lat: c.lat, lng: c.lng }
     }

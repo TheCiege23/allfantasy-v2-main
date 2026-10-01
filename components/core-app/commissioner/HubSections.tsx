@@ -68,6 +68,7 @@ const NAV: Array<{ id: string; label: string }> = [
   { id: 'ch-calendar', label: 'Calendar' },
   { id: 'ch-workflows', label: 'Guides' },
   { id: 'ch-areas', label: 'League areas' },
+  { id: 'ch-lineups', label: 'Lineups' },
   { id: 'ch-reports', label: 'Charts' },
   { id: 'ch-recipes', label: 'Automations' },
   { id: 'ch-communities', label: 'Connections' },
@@ -75,10 +76,10 @@ const NAV: Array<{ id: string; label: string }> = [
 ]
 
 /** In-page jump links. The hub is long on purpose; nothing on it should be hard to reach. */
-export function HubNav() {
+export function HubNav({ omit = [] }: { omit?: string[] } = {}) {
   return (
     <nav className="af-ch-nav" aria-label="Commissioner hub sections">
-      {NAV.map((n) => (
+      {NAV.filter((n) => !omit.includes(n.id)).map((n) => (
         <a key={n.id} href={`#${n.id}`} className="af-ch-nav-chip">
           {n.label}
         </a>

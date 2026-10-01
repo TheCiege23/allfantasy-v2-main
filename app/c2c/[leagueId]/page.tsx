@@ -51,7 +51,8 @@ const LINKS: HubLink[] = [
   },
 ]
 
-export default function C2CLeagueHubPage({ params }: { params: { leagueId: string } }) {
+export default async function C2CLeagueHubPage(props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const { leagueId } = params
   return (
     <div className="min-h-screen bg-[#040915] px-4 py-8 text-white">

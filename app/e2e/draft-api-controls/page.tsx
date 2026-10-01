@@ -2,11 +2,12 @@ import { notFound } from 'next/navigation'
 
 import E2EDraftApiControlsClient from './E2EDraftApiControlsClient'
 
-export default async function E2EDraftApiControlsPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ leagueId?: string | string[] }>
-}) {
+export default async function E2EDraftApiControlsPage(
+  props: {
+    searchParams?: Promise<{ leagueId?: string | string[] }>
+  }
+) {
+  const searchParams = await props.searchParams
   if (process.env.NODE_ENV === 'production') {
     notFound()
   }

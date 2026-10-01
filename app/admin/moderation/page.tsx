@@ -13,7 +13,8 @@ export const runtime = "nodejs"
  * sheet (league chat, DMs, huddles); this is where somebody acts on it — App
  * Store guideline 1.2 expects objectionable content to be removed promptly.
  */
-export default async function ModerationPage({ searchParams }: { searchParams?: { view?: string } }) {
+export default async function ModerationPage(props: { searchParams?: Promise<{ view?: string }> }) {
+  const searchParams = await props.searchParams
   const gate = await getAdminAccessState()
   if (gate.status === "unauthenticated") redirect("/admin-login?next=/admin/moderation")
   if (gate.status === "forbidden") {

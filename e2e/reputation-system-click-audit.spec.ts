@@ -216,7 +216,7 @@ test.describe('@reputation reputation system click audit', () => {
     await page.getByTestId('reputation-run-engine').click()
     await expect.poll(() => runPosts.length).toBeGreaterThan(0)
 
-    await page.getByRole('button', { name: /ai explain/i }).first().click()
+    await page.getByRole('button', { name: /explain with chimmy/i }).first().click()
     await expect.poll(() => explainPosts.length).toBeGreaterThan(0)
     await expect(page.getByText(/activity and trade fairness are above/i)).toBeVisible()
     await expect(page.getByText(/evidence items loaded: 1/i)).toBeVisible()

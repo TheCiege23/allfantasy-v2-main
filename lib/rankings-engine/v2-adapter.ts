@@ -29,7 +29,6 @@ export type V2RankingsResult = {
       ldiByPos: number
       meanPremiumPct: number
       nByPos: number
-      label: "Overpayer" | "Learning"
     }>
   }
 }

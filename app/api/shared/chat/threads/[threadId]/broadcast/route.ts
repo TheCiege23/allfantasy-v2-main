@@ -46,7 +46,8 @@ async function leaguesOwningThread(threadId: string): Promise<string[]> {
   return linked.filter((league) => isLeagueOwnChatThread(league.id, threadId)).map((league) => league.id)
 }
 
-export async function POST(req: NextRequest, { params }: { params: { threadId: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const userId = user.appUserId

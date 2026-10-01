@@ -7,7 +7,8 @@ import { getPlayerPoolForLeague } from "@/lib/sport-teams/SportPlayerPoolResolve
 import { normalizePoolRowToUnified } from "@/lib/player-data/normalizeProviderPlayer"
 import { serializeUnifiedPlayerForApi } from "@/lib/player-data/serializeUnifiedPlayerForApi"
 
-export async function GET(req: NextRequest, { params }: { params: { leagueId: string } }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

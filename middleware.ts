@@ -329,7 +329,7 @@ async function resolveRequestGeo(request: NextRequest, vpn?: VpnStatus | null) {
  * machine-only and their handlers enforce their own keys — which the middleware
  * cannot check cheaply (/api/v1 keys live in the database).
  *
- *   /api/internal  x-internal-key / x-ingestion-key, server-to-server only
+ *   /api/internal  x-ingestion-key, server-to-server only
  *   /api/v1        the partner Intelligence API, API-key gated. ⚠ A product call:
  *                  a partner's SERVER may sit in Washington (Azure West US 2)
  *                  while its users do not. Remove this line to block it too.

@@ -1,6 +1,7 @@
 import 'server-only'
 
 import type { ReactNode } from 'react'
+import { unstable_rethrow } from 'next/navigation'
 import { getHomeInitialSession } from '@/lib/landing/get-home-initial-session'
 import { resolveLaunchOfferForViewer } from '@/lib/monetization/foundingMemberServer'
 import type { LaunchOfferView } from '@/lib/monetization/foundingMember'
@@ -25,6 +26,9 @@ export async function LaunchOfferLayout({ children }: { children: ReactNode }) {
     const userId = (session?.user as { id?: unknown } | undefined)?.id
     offer = await resolveLaunchOfferForViewer(typeof userId === 'string' ? userId : null)
   } catch (error) {
+    // Let Next's own control-flow errors through: the dynamic-usage signal from headers()/cookies()
+    // (swallowing it lets a prerender pass continue as if the page were static) plus redirect/notFound.
+    unstable_rethrow(error)
     console.error('[launch-offer] viewer lookup failed', error instanceof Error ? error.message : String(error))
     const fallback = await resolveLaunchOfferForViewer(null).catch(() => null)
     offer = fallback ? { ...fallback, founding: null } : null

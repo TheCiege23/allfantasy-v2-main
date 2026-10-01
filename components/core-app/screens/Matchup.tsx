@@ -3,10 +3,11 @@
 import '@/components/core-app/af-matchup.css'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
-import { teamLogoUrl } from '@/lib/media-url'
+import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { useState } from 'react'
 import type {
   MatchupData,
   MatchupPlayerCell,
@@ -75,12 +76,13 @@ function TeamCard({
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null)
   const showing = points ?? projected
   return (
     <div className="af-mu-team" data-align={align} data-you={team.isYou}>
-      {team.avatarUrl ? (
+      {team.avatarUrl && team.avatarUrl !== failedAvatarUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img className="af-mu-crest af-mu-crest--img" src={team.avatarUrl} alt="" width={48} height={48} />
+        <img className="af-mu-crest af-mu-crest--img" src={team.avatarUrl} alt="" width={48} height={48} onError={() => setFailedAvatarUrl(team.avatarUrl!)} />
       ) : (
         <div className="af-mu-crest" aria-hidden>
           {initialsOf(team.teamName)}
@@ -129,6 +131,8 @@ function PlayerHalf({
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null)
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null)
   if (!cell) {
     return <div className="af-mu-half" data-align={align} data-state="none" />
   }
@@ -148,15 +152,16 @@ function PlayerHalf({
     )
   }
 
-  const crest = cell.team ? teamLogoUrl(cell.team, cell.sport ?? 'NFL') : ''
+  const crest = cell.team ? teamLogoUrl(cell.sport ?? 'NFL', cell.team) : null
+  const imageUrl = cell.imageUrl && cell.imageUrl !== failedImageUrl ? cell.imageUrl : null
   const value = live ? cell.actual : cell.projected
 
   return (
     <div className="af-mu-half" data-align={align} data-state="player">
       <span className="af-mu-portrait">
-        {cell.imageUrl ? (
+        {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img className="af-mu-face" src={cell.imageUrl} alt="" width={34} height={34} loading="lazy" />
+          <img className="af-mu-face" src={imageUrl} alt="" width={34} height={34} loading="lazy" onError={() => setFailedImageUrl(imageUrl)} />
         ) : (
           <span className="af-mu-face af-mu-face--none" aria-hidden>
             {(cell.name ?? '?').charAt(0).toUpperCase()}
@@ -167,9 +172,9 @@ function PlayerHalf({
           its own — one object, "the player and who he plays for", which is how
           every sports app renders it and how MyTeam already does.
         */}
-        {crest ? (
+        {crest && crest !== failedLogoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img className="af-mu-club" src={crest} alt="" width={15} height={15} loading="lazy" />
+          <img className="af-mu-club" src={crest} alt="" width={15} height={15} loading="lazy" onError={() => setFailedLogoUrl(crest)} />
         ) : null}
       </span>
       <div className="af-mu-half-text">

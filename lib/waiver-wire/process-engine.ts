@@ -19,6 +19,7 @@ import { assertNonEmptyIdempotencyKey } from '@/lib/engine-testing/hardening/eng
 import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invariantRuntime'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
+import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
 
 type ClaimRow = {
   id: string
@@ -42,6 +43,7 @@ type ClaimRow = {
 
 function outcomeFromFailureMessage(msg: string): WaiverClaimOutcomeCode {
   const m = msg.toLowerCase()
+  if (m.includes('locked by the commissioner')) return 'blocked_by_roster_lock'
   if (m.includes('insufficient faab')) return 'insufficient_faab'
   if (m.includes('no longer available')) return 'player_no_longer_available'
   if (m.includes('frozen')) return 'blocked_by_lineup_lock'
@@ -220,6 +222,10 @@ export async function processWaiverClaimsForLeague(
       })
     }
 
+    if (await isCommissionerRosterLocked(leagueId, claim.rosterId)) {
+      await pushFail('This roster is locked by the commissioner.')
+      continue
+    }
     const waiversFrozen = await isWaiverFrozenForRoster(leagueId, claim.rosterId).catch(() => false)
     if (waiversFrozen) {
       await pushFail("Roster's waiver moves are frozen by an active Survivor idol effect.")

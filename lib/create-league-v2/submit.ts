@@ -46,6 +46,7 @@ export interface CreateLeagueV2Result {
   error?: string
   redirectTo?: string
   fieldErrors?: CreateLeagueFieldErrors
+  warning?: string
 }
 
 // ── Endpoint routing ────────────────────────────────────────────────
@@ -342,7 +343,7 @@ function summarizeSubmittedPayload(payload: unknown): Record<string, unknown> {
 
 // ── Main submit ─────────────────────────────────────────────────────
 
-export async function submitCreateLeagueV2(state: CreateLeagueV2State): Promise<CreateLeagueV2Result> {
+export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLeagueId?: string): Promise<CreateLeagueV2Result> {
   if (!getEffectiveLeagueType(state)) {
     return { ok: false, error: 'Choose a league concept to continue.' }
   }
@@ -351,12 +352,15 @@ export async function submitCreateLeagueV2(state: CreateLeagueV2State): Promise<
   }
 
   const endpoint = getEndpoint(state)
+  if (sourceLeagueId && endpoint !== '/api/leagues') {
+    return { ok: false, error: 'This league concept cannot carry over imported rosters yet.' }
+  }
 
   let payload: unknown
   if (endpoint === '/api/tournament/create') {
     payload = buildTournamentPayload(state)
   } else {
-    payload = buildCanonicalPayload(state)
+    payload = { ...buildCanonicalPayload(state), ...(sourceLeagueId ? { sourceLeagueId } : {}) }
   }
 
   if (process.env.NODE_ENV === 'development') {
@@ -419,7 +423,9 @@ export async function submitCreateLeagueV2(state: CreateLeagueV2State): Promise<
 
   const leagueId = parseLeagueId(json)
   const redirectTo = parseRedirectUrl(state, json)
+  const warnings = Array.isArray(json.warnings) ? json.warnings as Array<{ code?: string; message?: string }> : []
+  const warning = warnings.find((item) => item.code === 'IMPORT_MATERIALIZATION_PENDING')?.message
   trackMetaEventsFromResponse(json)
 
-  return { ok: true, leagueId, redirectTo }
+  return { ok: true, leagueId, redirectTo, warning }
 }

@@ -4,10 +4,7 @@
  * No database — safe for CI and stress loops.
  */
 
-import {
-  COLLEGE_FORMATS_NOT_OPEN_CODE,
-  validateCreatePayload,
-} from '@/lib/league-creation/canonical/validateCreateLeague'
+import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
 import { RETIRED_CONCEPT_REASON_CODES } from '@/lib/league-creation/retiredConcepts'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import {
@@ -84,25 +81,18 @@ export function runExtendedLeagueEngineSimulation(
     ...(String(p.sport).toUpperCase() === 'SOCCER' ? { soccerPipeline: 'mls' as const } : {}),
   })
   /*
-   * Option B launch gate: devy/c2c CREATION is closed as policy. A rejection
-   * carrying ONLY that gate's code means the payload cleared every structural
-   * check, which is what this step verifies — not the launch policy.
-   *
-   * ⚠ RETIRED CONCEPTS ARE THE SAME KIND OF GATE AND WERE NOT LISTED, so the
+   * Retired concepts are a policy gate, so the
    * `tournament` fixture failed this step the day Tournament Mode was retired
    * (2026-07-23, TOURNAMENT_CREATION_DISABLED). Nothing structural was wrong
-   * with that payload — creation is simply closed for the concept, exactly as it
-   * is for devy/c2c — but the step reported it as a broken fixture.
+   * with that payload — creation is simply closed for the concept, but the step
+   * reported it as a broken fixture.
    *
    * Read from RETIRED_CONCEPT_REASON_CODES rather than naming the tournament
    * code here, so retiring a SECOND concept cannot reintroduce this failure. The
    * fixture is deliberately kept: existing tournaments must keep working, so the
    * rest of the simulation still has to run against one.
    */
-  const POLICY_GATE_CODES = new Set<string>([
-    COLLEGE_FORMATS_NOT_OPEN_CODE,
-    ...Object.values(RETIRED_CONCEPT_REASON_CODES),
-  ])
+  const POLICY_GATE_CODES = new Set<string>(Object.values(RETIRED_CONCEPT_REASON_CODES))
   const cpBlockedByLaunchGateOnly =
     !cp.ok && cp.errors.length > 0 && cp.errors.every((e) => POLICY_GATE_CODES.has(String(e.code)))
   const cpStructurallyOk = cp.ok || cpBlockedByLaunchGateOnly

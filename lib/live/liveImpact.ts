@@ -77,10 +77,12 @@ export function deriveImpact(
    */
   let totalPoints = 0
   const livePlayerIds = new Set<string>()
+  const liveLeagueIds = new Set<string>()
   for (const g of liveGames) {
     for (const t of g.tieIns) {
       if (t.points != null) totalPoints += t.points
       livePlayerIds.add(t.playerId)
+      liveLeagueIds.add(t.leagueId)
     }
   }
 
@@ -120,9 +122,22 @@ export function deriveImpact(
   return {
     totalPoints: Math.round(totalPoints * 10) / 10,
     livePlayers: livePlayerIds.size,
+    liveLeagues: liveLeagueIds.size,
     liveGames: liveGames.length,
     biggestMover,
     plays: shownPlays,
     upNext,
   }
+}
+
+/**
+ * What the live-impact total is a total OF. The number is summed per (player, league), so one player in
+ * three leagues adds three scores; unlabelled it reads as one score. With a league held it is that
+ * league's points; otherwise it names how many leagues it spans.
+ */
+export function impactTotalLabel(impact: { liveLeagues?: number }, leagueScoped: boolean): string {
+  if (leagueScoped) return 'fantasy pts scored live in this league right now'
+  const n = impact.liveLeagues ?? 0
+  if (n > 1) return `fantasy pts scored live across your ${n} leagues right now`
+  return 'fantasy pts scored live right now'
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useCallback, useRef, useEffect } from "react"
+import { useMemo, useState, useCallback, useRef, useEffect, type JSX } from "react"
 import { Trophy, Sparkles, Zap, Info, Check, X, ZoomIn, ZoomOut, Maximize2, Clock, Shield, Newspaper } from "lucide-react"
 import { normalizeTeamAbbrev } from "@/lib/team-abbrev"
 import { useBracketLive } from "@/lib/hooks/useBracketLive"

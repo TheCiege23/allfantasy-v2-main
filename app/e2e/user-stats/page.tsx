@@ -1,11 +1,12 @@
 import { notFound } from "next/navigation"
 import UserStatsHarnessClient from "./UserStatsHarnessClient"
 
-export default function E2EUserStatsPage({
-  searchParams,
-}: {
-  searchParams?: { state?: string }
-}) {
+export default async function E2EUserStatsPage(
+  props: {
+    searchParams?: Promise<{ state?: string }>
+  }
+) {
+  const searchParams = await props.searchParams
   if (process.env.NODE_ENV === "production") {
     notFound()
   }

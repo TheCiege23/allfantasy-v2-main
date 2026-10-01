@@ -43,10 +43,8 @@ function getLimit(req: NextRequest): number {
   return Math.max(1, Math.min(50, Math.trunc(raw)))
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { threadId: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ threadId: string }> }) {
+  const params = await props.params
   const user = await resolvePlatformUser()
   if (!user.appUserId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 

@@ -789,7 +789,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
   },
   {
     key: "legacy_manager_compare",
-    title: "Opponent Behavior",
+    title: "Manager Comparison",
     accessType: "subscription_only",
     requiredPlanId: "war_room",
     tokenRuleCode: null,

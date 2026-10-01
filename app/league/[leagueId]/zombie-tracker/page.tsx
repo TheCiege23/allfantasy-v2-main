@@ -9,7 +9,8 @@ export const metadata = {
  * Universe tracker for multi-league Zombie tiers (3- and 6-league setups).
  * Data binds to `ZombieUniverse` + linked `ZombieLeague` rows; single-Gamma universes use the league home summary instead.
  */
-export default function ZombieUniverseTrackerPage({ params }: { params: { leagueId: string } }) {
+export default async function ZombieUniverseTrackerPage(props: { params: Promise<{ leagueId: string }> }) {
+  const params = await props.params
   const { leagueId } = params
   return (
     <div className="min-h-screen bg-[#040915] px-4 py-8 text-white">

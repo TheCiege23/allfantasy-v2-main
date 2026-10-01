@@ -24,7 +24,7 @@ export interface ChimmyVoiceBarProps {
   /** Toggle speech input (start/stop). */
   onSpeechInputToggle?: () => void
   /** Container for transcript sync / highlight (future) */
-  transcriptRef?: React.RefObject<HTMLDivElement>
+  transcriptRef?: React.RefObject<HTMLDivElement | null>
   /** When true, auto-play is active — show volume nudge */
   autoPlay?: boolean
   /** Current volume 0–1 (shown in nudge when autoPlay) */

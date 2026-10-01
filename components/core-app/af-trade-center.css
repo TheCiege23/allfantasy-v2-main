@@ -1324,6 +1324,10 @@ html[data-mode='light'] .af-core .af-tc {
   background: var(--accent-soft);
   color: var(--accent);
 }
+/* The manager's own name beside a team name — the name Sleeper trades and DMs use. */
+.af-tc-partner-chip-manager {
+  opacity: 0.7;
+}
 
 /* A control that reads as prose, for an offer to switch to someone reachable. */
 .af-tc-linklike {

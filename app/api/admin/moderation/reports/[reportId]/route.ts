@@ -10,7 +10,8 @@ export const dynamic = "force-dynamic"
  * Admin-only (requireAdmin — the canonical admin authority). See
  * lib/moderation/AdminReportReview for what each action does.
  */
-export async function POST(req: Request, { params }: { params: { reportId: string } }) {
+export async function POST(req: Request, props: { params: Promise<{ reportId: string }> }) {
+  const params = await props.params
   const gate = await requireAdmin()
   if (!gate.ok) return gate.res
 

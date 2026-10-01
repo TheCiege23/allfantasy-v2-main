@@ -21,11 +21,12 @@ import {
   resolveBracketSportUI,
 } from "@/lib/bracket-challenge"
 
-export default async function EntryBracketPage({
-  params,
-}: {
-  params: { tournamentId: string; entryId: string }
-}) {
+export default async function EntryBracketPage(
+  props: {
+    params: Promise<{ tournamentId: string; entryId: string }>
+  }
+) {
+  const params = await props.params
   const { userId } = await requireVerifiedSession()
 
   const entry = await prisma.bracketEntry.findUnique({

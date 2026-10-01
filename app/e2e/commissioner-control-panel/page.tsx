@@ -2,15 +2,14 @@ import { notFound } from 'next/navigation'
 import { CommissionerControlPanelHarnessClient } from './CommissionerControlPanelHarnessClient'
 
 export default async function E2ECommissionerControlPanelPage(props: {
-  searchParams?:
-    | Promise<{ leagueId?: string }>
-    | { leagueId?: string }
+  searchParams?: Promise<| Promise<{ leagueId?: string }>
+  | { leagueId?: string }>
 }) {
   if (process.env.NODE_ENV === 'production') {
     notFound()
   }
 
-  const sp = props.searchParams ?? {}
+  const sp = (await props.searchParams) ?? {}
   const resolved =
     typeof (sp as Promise<{ leagueId?: string }>).then === 'function'
       ? await (sp as Promise<{ leagueId?: string }>)

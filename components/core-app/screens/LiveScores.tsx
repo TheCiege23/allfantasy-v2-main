@@ -2,12 +2,14 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { LiveMatchupStrip } from '@/components/core-app/screens/LiveMatchupStrip'
+import type { MatchupStrip } from '@/lib/live/matchupStrip'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { gameDetailHref } from '@/lib/live/gameDetailLink'
 import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
-import { deriveImpact } from '@/lib/live/liveImpact'
+import { deriveImpact, impactTotalLabel } from '@/lib/live/liveImpact'
 import { GameHighlight } from '@/components/live/GameHighlight'
 import { formatStarterPoints, groupStartersByPlayer, type StarterGroup } from '@/lib/live/liveTieInGroups'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
@@ -102,6 +104,8 @@ export type LiveScoresProps = {
   /** The league held in the rail, so its tie-ins can be marked. Null on the
    *  cross-league entry, which is the normal case for this screen. */
   selectedLeagueId?: string | null
+  /** Your matchup in the held league, resolved on the server. Null when no league is held. */
+  matchupStrip?: MatchupStrip | null
 }
 
 export function scopeLiveGamesToLeague(
@@ -118,7 +122,7 @@ export function scopeLiveGamesToLeague(
     }))
 }
 
-export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScoresProps) {
+export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null }: LiveScoresProps) {
   const [data, setData] = useState<LivePageData>(initial)
   const [scope, setScope] = useState<'my' | 'all'>(initial.scope)
   const [sport, setSport] = useState(initial.sport)
@@ -465,6 +469,8 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
         </p>
       </header>
 
+      {selectedLeagueId ? <LiveMatchupStrip strip={matchupStrip} leagueId={selectedLeagueId} pollMs={pollIntervalMs} /> : null}
+
       {/* ── Control bar ─────────────────────────────────────────────── */}
       <div className="af-live-bar">
         <div className="af-live-bar-top">
@@ -658,7 +664,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null }: LiveScore
               <>
                 <p className="af-live-impact-total">
                   <span className="af-num">{impact.totalPoints.toFixed(1)}</span>
-                  <span>fantasy pts scored live right now</span>
+                  <span>{impactTotalLabel(impact, leagueFilterId != null)}</span>
                 </p>
                 <p className="af-live-impact-sub">
                   {impact.livePlayers === 0

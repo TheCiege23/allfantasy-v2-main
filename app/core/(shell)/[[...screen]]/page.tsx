@@ -85,6 +85,7 @@ import { getMyTeamData } from '@/lib/core-app/myTeam'
 import MyTeamBoard from '@/components/core-app/MyTeamBoard'
 import { getMyTeamPulse } from '@/lib/core-app/myTeamPulse'
 import { getMatchupData } from '@/lib/core-app/matchup'
+import { buildMatchupStrip } from '@/lib/live/matchupStrip'
 import MatchupPulseBoard from '@/components/core-app/MatchupPulseBoard'
 import { getMatchupPulse } from '@/lib/core-app/matchupPulse'
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
@@ -772,7 +773,7 @@ export default async function AfCorePage({
    */
   const leagueFirst = isLeagueFirstEnabled({
     userId,
-    cookieValue: cookies().get(LEAGUE_FIRST_COOKIE)?.value,
+    cookieValue: (await cookies()).get(LEAGUE_FIRST_COOKIE)?.value,
     rolloutEnv: process.env.AF_LEAGUE_FIRST_ROLLOUT,
   })
   if (leagueFirst && selectedLeagueRow) void rememberLastLeague(userId, selectedLeagueRow.id)
@@ -1355,7 +1356,7 @@ export default async function AfCorePage({
    * ⚠ IT NARROWS `playedLeagues` AND NOTHING ELSE. The league-id authorization check above has
    * already run on the full list; favorites are intersected with that list before use.
    */
-  const cookieJar = cookies()
+  const cookieJar = await cookies()
   const favoriteIds = parseFavoriteIds(
     cookieJar.get(FAVORITES_COOKIE)?.value,
     playedLeagues.map((l) => l.id),
@@ -1908,6 +1909,19 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           Number.isFinite(requestedWeek) ? requestedWeek : null,
           leagueCtx,
         ).catch(() => null)
+      : null
+
+  /*
+   * This week's lineups, projected — AF beside API — as two columns on the Overview's Power board.
+   * Display only: the power rank is all-play over scored weeks and never reads AF. A failed read
+   * costs the columns and nothing else.
+   */
+  const homeLineups =
+    activeKey === 'home' && leagueHome && leagueCtx
+      ? await leagueCtx
+          .league()
+          .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
+          .catch(() => null)
       : null
 
   // Player Finder searches and selects entirely through query params — no client
@@ -2763,6 +2777,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     : null
   const liveDefaultSport = liveHeldLeague ? normalizeToLiveSport(String(liveHeldLeague.sport ?? 'NFL')) : 'NFL'
 
+  /* Your matchup in the held league, through the same loader `/core/matchup` uses. */
+  let liveMatchupFailed = false
+  const liveMatchup =
+    activeKey === 'live' && !liveGameId && selectedLeagueId
+      ? await getMatchupData(selectedLeagueId, userId, null, leagueCtx).catch((e: unknown) => {
+          console.error('[core/live] matchup read failed', e)
+          liveMatchupFailed = true
+          return null
+        })
+      : null
+  const liveMatchupStrip = buildMatchupStrip(liveMatchup, liveMatchupFailed)
+
   const liveScores =
     activeKey === 'live' && !liveGameId
       ? await getLivePageData({
@@ -3023,6 +3049,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : await getSeasonOutlook(userId, outlookLeagues, selectedLeagueId).catch(() => null)
     : null
 
+  /*
+   * This week's lineups, projected — AF beside API — for the ONE league whose outlook is on screen.
+   * Display only: the simulation above reads the provider's lines and never AF. A failed read costs
+   * the section and nothing else.
+   */
+  const outlookLineups =
+    activeKey === 'season-outlook' &&
+    selectedLeagueId &&
+    leagueCtx &&
+    outlook?.leagues.some((l) => l.leagueId === selectedLeagueId)
+      ? await leagueCtx
+          .league()
+          .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
+          .catch(() => null)
+      : null
+
   /* The board's age, for the same chip Standings shows. Null off-cohort, as there. */
   const outlookFreshness = outlookFresh
     ? {
@@ -3134,6 +3176,19 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           now,
           depth: corePaywall?.commissioner_depth ?? null,
         }).catch(() => null)
+      : null
+
+  /*
+   * This week's lineups, projected — AF beside API — as a section on the one-league hub. Display
+   * only, and only once the hub's own gate has admitted the viewer (`commissionerHub` is null
+   * otherwise). A failed read costs the section and nothing else.
+   */
+  const hubLineups =
+    commissionerHub?.allowed && leagueCtx
+      ? await leagueCtx
+          .league()
+          .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
+          .catch(() => null)
       : null
 
   /*
@@ -3698,10 +3753,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * null league list means "unknown", not "zero".
    */
   if (isHome3a) {
+    // Next 15: cookies() is async; read the jar once here so the sync getter can close over it.
+    const activationCookies = await cookies()
     void recordDashboardActivation({
       userId,
       leagueCount: leagueListPayload ? leagueListPayload.leagues.length : null,
-      getCookie: (name) => cookies().get(name)?.value,
+      getCookie: (name) => activationCookies.get(name)?.value,
     })
   }
 
@@ -3966,6 +4023,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         <LeagueHome
           data={leagueHome}
           identityInShell={leagueHeaderShown}
+          lineups={homeLineups}
           /*
            * "What's on file", streamed. Its nine counts wait behind their own boundary so the rest
            * of the Overview never waits on them; the skeleton holds the panel's height.
@@ -4521,7 +4579,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * role check to bypass because there is no client-side role check.
          */
         commissionerHub ? (
-          <CommissionerHub data={commissionerHub} />
+          <CommissionerHub data={commissionerHub} lineups={hubLineups} />
         ) : /*
            * ⚠ TWO DIFFERENT FACTS, TWO DIFFERENT RENDERINGS. "A league is
            * selected and we failed to read it" is a read failure on our side.
@@ -4609,7 +4667,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             backHref={`/core/live?sport=${encodeURIComponent(liveGameSport)}${selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''}`}
           />
         ) : liveScores ? (
-          <LiveScores data={liveScores} selectedLeagueId={selectedLeagueId} />
+          <LiveScores data={liveScores} selectedLeagueId={selectedLeagueId} matchupStrip={liveMatchupStrip} />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
@@ -4636,6 +4694,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               basis={outlook.basis}
               priorities={outlook.priorities}
               freshness={outlookFreshness}
+              lineups={outlookLineups}
             />
           ) : (
             <SeasonOutlook data={slimOutlookForBoard(outlook)} freshness={outlookFreshness} />
@@ -4728,7 +4787,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               /*
                * ⚠ LEAGUES, AND THE FIELD IS NAMED FOR IT. This briefly read
                * `seasonsOnFile: playedLeagues.length`, which put a league count
-               * under the word "seasons" on the Manager Psychology card — a
+               * under the word "seasons" on a Tools card's teaser — a
                * dynasty league running six years is one league and six seasons,
                * so the two are not interchangeable. Career history is a separate
                * read and is not worth paying for to fill a teaser.
@@ -4861,7 +4920,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               pausedSyncLeagueIds,
             )}
             order={orderHomeCards({
-              usage: parseCardUsage(cookies().get(CARD_USE_COOKIE)?.value),
+              usage: parseCardUsage((await cookies()).get(CARD_USE_COOKIE)?.value),
               timeSensitive: timeSensitiveCards({
                 gameDayActive: coreActivity.gameDayActive,
                 draftLive: coreActivity.liveDraftLeagueIds.length > 0,
@@ -4903,5 +4962,5 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         </div>
       )}
     </>
-  )
+  );
 }

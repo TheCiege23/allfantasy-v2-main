@@ -1,5 +1,7 @@
 # Trade Learning Activation Blockers
 
+> **Retired 2026-09-30 (#1710).** `lib/trade-learning.ts` and `POST /api/internal/analyze-trades` no longer exist; references to them below are historical. The calibration cycle that endpoint ran (`runFullCalibration` → `runDriftDetection` → `logAcceptedTradesAsOutcomes`) now runs from `/api/cron/reap-sync-runs` via `lib/trade-engine/calibrationPass.ts`, after the comprehensive trade-learning writer scheduled there by #1703.
+
 **Status:** **RESOLVED — activation implemented (disabled by default).** No production wiring, cron entry, feature flag, or `vercel.json` change was implemented in the *original* session that produced this document. All three items below have since landed. This document is preserved as a historical record of the investigation; see the "Activation complete" update for current state.
 **Branch:** `g15-event-foundation`
 **Scope:** Implementation-readiness review of `docs/DECISION_OS_CLOSED_LOOP_LEARNING_AUDIT.md` §7 Step 0 — "wire `runWeeklyRecalibration()` into a scheduled path."
