@@ -425,6 +425,13 @@ const configWithSentry = hasSentryDsn
       widenClientFileUpload: true,
       // Strip source maps from the deployed bundle (they're in Sentry).
       hideSourceMaps: true,
+      // No auth token, no upload — so do not make the build generate maps at all. Unless
+      // `sourcemaps.disable` is set, the SDK forces `devtool: 'source-map'` on the server
+      // build, and every Railway build logged "No auth token provided. Will not upload
+      // source maps." (2026-10-01): minutes of map generation, then nothing used them.
+      // Error capture is unaffected; it hangs off the DSN, not this. Setting
+      // SENTRY_AUTH_TOKEN turns generation and upload back on together.
+      sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
       // Suppress the Sentry logger in the bundle (saves ~7 kB).
       disableLogger: true,
       // We manage Vercel Cron Monitors separately.
