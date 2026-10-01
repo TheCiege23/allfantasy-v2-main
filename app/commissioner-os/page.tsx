@@ -5,6 +5,7 @@ import { resolveCommissionerOsDepth } from '@/lib/commissioner-ui/commissionerOs
 import { MissionControlView } from '@/components/commissioner-os/mission-control/MissionControlView'
 import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
 import { formatRelativeTime } from '@/lib/commissioner-ui/utils/time'
+import { viewerOwnsActiveLeague } from '@/lib/commissioner-ui/resolveActiveLeagueId'
 
 const LIVE_STATUSES = new Set(['new', 'viewed', 'in_progress', 'deferred', 'automated'])
 const RECENT_ACTIVITY_PREVIEW_COUNT = 5
@@ -44,7 +45,8 @@ export default async function MissionControlPage() {
 
   const adapter = await getDecisionOSAdapter()
 
-  const [activityTrendResponse, leagueHealthResponse, recommendationsResponse, managerHighlightsResponse, kpisResponse, activityResponse, automationSummaryResponse, analyticsSummaryResponse, reportsSummaryResponse, notificationsSummaryResponse] = await Promise.all([
+  const [canInviteCoCommissioner, activityTrendResponse, leagueHealthResponse, recommendationsResponse, managerHighlightsResponse, kpisResponse, activityResponse, automationSummaryResponse, analyticsSummaryResponse, reportsSummaryResponse, notificationsSummaryResponse] = await Promise.all([
+    viewerOwnsActiveLeague(),
     adapter.missionControl.getActivityTrend(),
     adapter.missionControl.getLeagueHealthSummary(),
     adapter.recommendations.getQueue(),
@@ -81,6 +83,7 @@ export default async function MissionControlPage() {
       <FreeUntilNote access={depth} />
       <MissionControlView
         dataMode={adapter.mode}
+        canInviteCoCommissioner={canInviteCoCommissioner}
         leagueHealth={
           leagueHealthResponse.data ?? { score: 0, tier: 'standard', trendLabel: '', trendDirection: 'flat', driver: 'Unavailable' }
         }

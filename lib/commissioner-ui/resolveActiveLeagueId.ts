@@ -41,10 +41,10 @@ function isActiveStatus(league: League | null): league is League {
  * hold a UUID, not evidence about commissioners. The same id-space split is why the old roster
  * query matched so little: only 351 of 3,418 `rosters.platformUserId` values are AF user ids.
  */
-async function getActiveLeaguesForSessionUser(): Promise<League[]> {
+async function getActiveLeaguesForSessionUser(): Promise<{ userId: string | null; leagues: League[] }> {
   const session = await getServerSession(authOptions)
   const userId = session?.user?.id
-  if (!userId) return []
+  if (!userId) return { userId: null, leagues: [] }
 
   const managed = await prisma.league.findMany({
     where: {
@@ -64,12 +64,12 @@ async function getActiveLeaguesForSessionUser(): Promise<League[]> {
     orderBy: { createdAt: 'desc' },
   })
 
-  return managed.filter((league): league is League => isActiveStatus(league))
+  return { userId, leagues: managed.filter((league): league is League => isActiveStatus(league)) }
 }
 
 /** Active leagues this session can manage, for the header's league selector. */
 export async function listActiveLeaguesForUser(): Promise<ActiveLeagueOption[]> {
-  const leagues = await getActiveLeaguesForSessionUser()
+  const { leagues } = await getActiveLeaguesForSessionUser()
   return leagues.map((l) => ({ id: String(l.id), name: l.name ?? 'Untitled league' }))
 }
 
@@ -124,14 +124,32 @@ async function readActiveLeagueCookie(): Promise<string | null> {
  * stale value can only ever select a league the session already commissions.
  */
 export async function resolveActiveLeagueId(): Promise<string | null> {
-  const leagues = await getActiveLeaguesForSessionUser()
-  if (leagues.length === 0) return null
+  const { league } = await resolveActiveLeague()
+  return league ? String(league.id) : null
+}
+
+/** The one place the active league is chosen, so the id and the ownership answer cannot disagree. */
+async function resolveActiveLeague(): Promise<{ userId: string | null; league: League | null }> {
+  const { userId, leagues } = await getActiveLeaguesForSessionUser()
+  if (leagues.length === 0) return { userId, league: null }
 
   const requested = await readActiveLeagueCookie()
   if (requested) {
     const match = leagues.find((l) => String(l.id) === requested)
-    if (match) return String(match.id)
+    if (match) return { userId, league: match }
   }
 
-  return String(leagues[0].id)
+  return { userId, league: leagues[0] }
+}
+
+/**
+ * Whether the session OWNS the active league (`League.userId`), as opposed to co-commissioning it.
+ *
+ * Commissioner OS admits co-commissioners, so anything only an owner may do has to ask this
+ * separately. Measured 2026-10-01 signed in as a co-commissioner: Mission Control offered
+ * "Invite Co-Commissioner", which a co-commissioner cannot do.
+ */
+export async function viewerOwnsActiveLeague(): Promise<boolean> {
+  const { userId, league } = await resolveActiveLeague()
+  return Boolean(userId && league && league.userId === userId)
 }
