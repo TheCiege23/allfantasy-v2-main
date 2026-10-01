@@ -193,6 +193,12 @@ export function getTeamByAbbreviation(
  */
 const NOT_A_TEAM = new Set(['FA', 'F/A', 'FREE AGENT', 'N/A', 'NONE', 'NULL', 'TBD', 'UNK', '—', '-', '--'])
 
+/** True for a team-column value that names no club (free agent, unknown, blank). */
+export function isNotATeam(abbreviation: string | null | undefined): boolean {
+  const abbr = abbreviation?.trim()
+  return !abbr || NOT_A_TEAM.has(abbr.toUpperCase())
+}
+
 /**
  * Primary logo URL for a team (abbreviation + sport). Use for rendering when DB has no logo.
  * If team is not in static list (e.g. Soccer club not in SOCCER_TEAMS), returns ESPN-style URL by sport + abbr so logos can still be attempted.
@@ -208,9 +214,8 @@ export function getPrimaryLogoUrlForTeam(
   const sport = toSportType(typeof sportType === 'string' ? sportType : sportType)
   const team = getTeamByAbbreviation(sport, abbreviation)
   if (team?.primary_logo_url) return team.primary_logo_url
-  const abbr = abbreviation?.trim()
-  if (!abbr || NOT_A_TEAM.has(abbr.toUpperCase())) return null
-  return logoUrlForAbbrev(sport, abbr)
+  if (isNotATeam(abbreviation)) return null
+  return logoUrlForAbbrev(sport, abbreviation.trim())
 }
 
 /**

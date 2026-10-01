@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Sparkles, X } from 'lucide-react'
 import type { RoundOneAnnouncementQueueItem } from '@/lib/draft-room/resolvePickAnnouncementAssets'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 export type RoundOneAnnouncementItem = RoundOneAnnouncementQueueItem
 
@@ -121,8 +122,16 @@ export function DraftRoundOneAnnouncementOverlay({
         <div className="relative flex flex-col gap-4 p-4 sm:flex-row sm:items-start">
           <div className="relative h-[96px] w-[96px] shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black/40 shadow-inner sm:h-[110px] sm:w-[110px]">
             {headshotUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element -- arbitrary CDN URLs from live pool
-              <img src={headshotUrl} alt="" className="h-full w-full object-cover object-top" />
+              <FallbackImg
+                src={headshotUrl}
+                alt=""
+                className="h-full w-full object-cover object-top"
+                fallback={
+                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/10 to-black/40 text-2xl font-black text-white/35">
+                    {pick.playerName.slice(0, 1)}
+                  </div>
+                }
+              />
             ) : (
               <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/10 to-black/40 text-2xl font-black text-white/35">
                 {pick.playerName.slice(0, 1)}
@@ -130,8 +139,7 @@ export function DraftRoundOneAnnouncementOverlay({
             )}
             {teamLogoUrl ? (
               <div className="absolute bottom-1 right-1 h-8 w-8 overflow-hidden rounded-md border border-white/20 bg-black/60 p-0.5 shadow-lg">
-                {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary CDN URLs */}
-                <img src={teamLogoUrl} alt="" className="h-full w-full object-contain" />
+                <FallbackImg src={teamLogoUrl} alt="" className="h-full w-full object-contain" fallback={null} />
               </div>
             ) : pick.team ? (
               <div className="absolute bottom-1 right-1 rounded-md border border-white/15 bg-black/55 px-1.5 py-0.5 font-mono text-[11px] font-bold text-white/80">

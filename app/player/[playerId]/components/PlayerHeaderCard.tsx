@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { TrendingUp, TrendingDown, Minus, AlertTriangle } from 'lucide-react'
 import type { PlayerIdentity } from '../PlayerProfileClient'
 import { getTeamLogoUrl } from '@/lib/player-media-urls'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 type OutlookSnippet = {
   currentValue?: number
@@ -80,21 +81,23 @@ export function PlayerHeaderCard({
     <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-[#0c1025] to-[#0a0e1a]">
       {/* Background team logo */}
       <div className="pointer-events-none absolute -right-8 -top-8 h-40 w-40 opacity-[0.04]">
-        <img src={teamLogoUrl} alt="" className="h-full w-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+        {teamLogoUrl ? <FallbackImg src={teamLogoUrl} alt="" className="h-full w-full object-contain" fallback={null} /> : null}
       </div>
 
       <div className="relative flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:gap-5">
         {/* Headshot */}
         <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-white/[0.08] bg-[#12192e]">
           {headshotUrl ? (
-            <img
+            /* The fallback is a React node: the old onError wrote innerHTML into a parent React owns. */
+            <FallbackImg
               src={headshotUrl}
               alt={player.name}
               className="h-full w-full object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none'
-                e.currentTarget.parentElement!.innerHTML = `<span class="text-2xl font-black text-white/20">${player.name.split(' ').map(w => w[0]).join('').slice(0, 2)}</span>`
-              }}
+              fallback={
+                <span className="text-2xl font-black text-white/20">
+                  {player.name.split(' ').map((w) => w[0]).join('').slice(0, 2)}
+                </span>
+              }
             />
           ) : (
             <span className="text-2xl font-black text-white/20">
