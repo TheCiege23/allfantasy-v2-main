@@ -1386,3 +1386,180 @@
 .af-core .af-bd-sub3 {
   color: var(--faint);
 }
+
+/*
+ * ── Standings board: the account at a glance, and the week's biggest game ──
+ *
+ * TOP-LEVEL on purpose, appended after every query above: a rule inserted inside
+ * a query silently moves into it. The narrow layout keys on the BOARD's width
+ * (`af-board` container), for the reason the block above records.
+ */
+.af-core .af-bd-pulse-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.af-core .af-bd-pulse,
+.af-core .af-bd-mustwin {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-core .af-bd-pulse-lead {
+  margin: 0;
+  font: 900 20px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.af-core .af-bd-pulse-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.af-core .af-bd-pulse-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--chip);
+  border-radius: 9px;
+}
+.af-core .af-bd-pulse-v {
+  font: 900 22px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.af-core .af-bd-pulse-tile[data-sev='good'] .af-bd-pulse-v { color: var(--good); }
+.af-core .af-bd-pulse-tile[data-sev='warn'] .af-bd-pulse-v { color: var(--warn); }
+.af-core .af-bd-pulse-k {
+  font: 600 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+.af-core .af-bd-pulse-s {
+  font: 500 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-core .af-bd-pulse-note {
+  margin: 0;
+  font: 400 11px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--faint);
+}
+
+/* The card is one link — the whole thing is the tap target. */
+.af-core a.af-bd-mustwin {
+  gap: 4px;
+  color: inherit;
+  text-decoration: none;
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
+}
+.af-core a.af-bd-mustwin:hover,
+.af-core a.af-bd-mustwin:focus-visible {
+  background: var(--chip);
+}
+.af-core .af-bd-mustwin-k {
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+.af-core .af-bd-mustwin-title {
+  margin-top: 4px;
+  font: 800 16px/1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text);
+}
+.af-core .af-bd-mustwin-league {
+  font: 500 12px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-core .af-bd-mustwin-branches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.af-core .af-bd-mustwin-branches > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font: 900 18px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+.af-core .af-bd-mustwin-branches > span[data-sev='good'] {
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 11%, transparent);
+}
+.af-core .af-bd-mustwin-branches > span[data-sev='bad'] {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 10%, transparent);
+}
+.af-core .af-bd-mustwin-bk {
+  font: 700 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.af-core .af-bd-mustwin-note {
+  margin-top: 6px;
+  font: 500 12px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+
+/*
+ * Seed meter under "#3 of 12": the field as a track, the playoff places shaded,
+ * your seed as a dot. Decorative — the text beside it carries the fact.
+ */
+.af-core .af-bd-seedbar {
+  position: relative;
+  display: block;
+  width: 64px;
+  height: 4px;
+  margin: 2px 0;
+  border-radius: 2px;
+  background: var(--line);
+}
+.af-core .af-bd-seedbar-in {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--good) 35%, transparent);
+}
+.af-core .af-bd-seedbar-dot {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--muted);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.af-core .af-bd-seedbar-dot[data-sev='good'] { background: var(--good); }
+.af-core .af-bd-seedbar-dot[data-sev='warn'] { background: var(--warn); }
+.af-core .af-bd-seedbar-dot[data-sev='bad'] { background: var(--bad); }
+
+@container af-board (max-width: 760px) {
+  .af-core .af-bd-pulse-row { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .af-core .af-bd-pulse-row { grid-template-columns: minmax(0, 1fr); }
+  .af-core .af-bd-pulse-lead { font-size: 18px; }
+  .af-core .af-bd-pulse-v { font-size: 19px; }
+  .af-core .af-bd-pulse-tiles { gap: 6px; }
+  .af-core .af-bd-pulse-tile { padding: 9px 10px; }
+}

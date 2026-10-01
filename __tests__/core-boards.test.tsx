@@ -268,6 +268,95 @@ describe('StandingsBoard', () => {
     )
     expect(container.textContent ?? '').toMatch(/simulated over each league/i)
   })
+
+  it('leads with the summary Season Outlook computed, over the leagues it could rank', () => {
+    const { container } = render(
+      <StandingsBoard
+        outlook={outlook({
+          leagues: [outlookLeague(), outlookLeague({ leagueId: 'l2', you: null })],
+          summary: { makingPlayoffs: 1, clinched: 1, onTheBubble: 0, onByePace: 0, bestTitle: { pct: 22.4, leagueName: "Chimmy's Champions" } },
+        })}
+        allHref="/core/standings?all=1"
+        totalLeagues={9}
+      />,
+    )
+    const pulse = container.querySelector('.af-bd-pulse')?.textContent ?? ''
+    /* Of the ONE ranked league — not of the two simulated, nor the nine on the account. */
+    expect(pulse).toContain('On playoff pace in 1 of 1 league')
+    expect(pulse).toContain('22%')
+    expect(pulse).toContain('Best title shot')
+  })
+
+  it('draws no summary when there is nothing ranked', () => {
+    const { container } = render(
+      <StandingsBoard
+        outlook={outlook({ leagues: [outlookLeague({ you: null })] })}
+        allHref="/core/standings?all=1"
+        totalLeagues={9}
+      />,
+    )
+    expect(container.querySelector('.af-bd-pulse')).toBeNull()
+  })
+
+  it("names the week's biggest game and links into its league", () => {
+    const swing = {
+      leagueId: 'l1',
+      leagueName: "Chimmy's Champions",
+      week: 9,
+      opponentName: 'Gridiron Ghosts',
+      ifWin: 88.4,
+      ifLose: 12.1,
+      swing: 76.3,
+      clinchOnWin: true,
+      helpIfLose: [],
+      rooting: [{ week: 9, a: '2', b: '3', aName: 'Turf Wars', bName: 'Bench Mob', ifA: 40, ifB: 60, rootFor: '3' }],
+    }
+    const { container } = render(
+      <StandingsBoard outlook={outlook({ weekThatMatters: swing })} allHref="/core/standings?all=1" totalLeagues={9} />,
+    )
+    const card = container.querySelector('a.af-bd-mustwin')
+    expect(card?.getAttribute('href')).toBe('/core/standings?league=l1')
+    expect(card?.textContent).toContain('Wk 9 vs Gridiron Ghosts')
+    expect(card?.textContent).toContain('88%')
+    expect(card?.textContent).toContain('12%')
+    expect(card?.textContent).toContain('Win and you are in. Root for Bench Mob.')
+  })
+
+  it('draws no biggest-game card for a league that is not on the board', () => {
+    const swing = {
+      leagueId: 'elsewhere',
+      leagueName: 'Not ranked',
+      week: 9,
+      opponentName: null,
+      ifWin: 60,
+      ifLose: 20,
+      swing: 40,
+      clinchOnWin: false,
+      helpIfLose: [],
+    }
+    const { container } = render(
+      <StandingsBoard outlook={outlook({ weekThatMatters: swing })} allHref="/core/standings?all=1" totalLeagues={9} />,
+    )
+    expect(container.querySelector('.af-bd-mustwin')).toBeNull()
+  })
+
+  it('marks the seed and the playoff cutoff on the meter', () => {
+    const l = outlookLeague()
+    const { container } = render(
+      <StandingsBoard
+        outlook={outlook({
+          leagues: [{ ...l, playoffTeams: 6, you: { ...l.you!, seed: 9 }, teams: Array.from({ length: 12 }, (_, i) => ({ ...l.you!, rosterId: String(i + 1), seed: i + 1 })) }],
+        })}
+        allHref="/core/standings?all=1"
+        totalLeagues={9}
+      />,
+    )
+    const bar = container.querySelector('.af-bd-seedbar')
+    expect(bar?.getAttribute('aria-hidden')).toBe('true')
+    expect(parseFloat((bar?.querySelector('.af-bd-seedbar-in') as HTMLElement | null)?.style.width ?? '')).toBeCloseTo(50, 1)
+    /* Seed 9 of 12 sits at the centre of the 9th slot: (9 − 0.5) / 12. */
+    expect(parseFloat((bar?.querySelector('.af-bd-seedbar-dot') as HTMLElement | null)?.style.left ?? '')).toBeCloseTo(70.8, 1)
+  })
 })
 
 /* ── Week ────────────────────────────────────────────────────────────────── */
