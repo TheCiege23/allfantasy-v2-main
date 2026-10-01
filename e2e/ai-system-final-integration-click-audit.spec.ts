@@ -372,12 +372,12 @@ test.describe('@ai ai system final integration click audit', () => {
     await mockLeagueChatApis(page, leagueId)
 
     await page.goto('/e2e/league-chat-ai')
-    await clickHydrated(page.getByRole('button', { name: /AI Chat/i }))
+    await clickHydrated(page.getByRole('button', { name: /^Chimmy$/ }))
     await expect(page.getByTestId('chimmy-chat-shell')).toBeVisible()
 
     ai.enabled = false
     await page.reload()
-    await clickHydrated(page.getByRole('button', { name: /AI Chat/i }))
+    await clickHydrated(page.getByRole('button', { name: /^Chimmy$/ }))
     await expect(page.getByTestId('league-chat-ai-fallback')).toBeVisible()
     await expect(page.getByRole('link', { name: /Open waiver planner/i })).toHaveAttribute(
       'href',

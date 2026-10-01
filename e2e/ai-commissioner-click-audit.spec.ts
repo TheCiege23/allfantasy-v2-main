@@ -331,6 +331,20 @@ test.describe('@commissioner ai commissioner click audit', () => {
         body: JSON.stringify(buildOverview()),
       })
     })
+    /*
+     * ⚠ FeatureGate shows "Checking premium access..." until useAccessTier settles. When
+     * signed out, useAccessTier waits on GET /api/guest-mode/status. Unmocked, that request
+     * goes to the dev server and waits behind cold route compiles, so it can outlast the 20s
+     * heading wait below and the panel never mounts. A retry usually passes because the
+     * route is warm by then.
+     */
+    await page.route('**/api/guest-mode/status', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ isGuest: false, sleeperUsername: null, displayName: null }),
+      })
+    })
     await page.route('**/api/subscription/entitlements**', async (route) => {
       const url = new URL(route.request().url())
       const feature = String(url.searchParams.get('feature') ?? '')
