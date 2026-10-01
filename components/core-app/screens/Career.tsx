@@ -34,11 +34,14 @@ import { buildLegacyStakes } from '@/lib/core-app/careerMilestones'
 import type { CareerWireData } from '@/lib/core-app/careerWireModel'
 import { CareerWire } from '@/components/core-app/career/CareerWire'
 import { CareerCompareView } from '@/components/core-app/career/CareerCompareView'
+import { HallLayoutToggle, TrophyWall } from '@/components/core-app/career/TrophyWall'
+import { buildTrophyWall } from '@/lib/core-app/trophyWall'
 import '@/components/core-app/af-career.css'
 import '@/components/core-app/af-career-brief.css'
 import '@/components/core-app/af-career-live.css'
 // Last on purpose: the phone/tablet layer overrides the three sheets above.
 import '@/components/core-app/af-career-devices.css'
+import '@/components/core-app/af-career-wall.css'
 
 /**
  * Career — handoff 13a, desktop frame.
@@ -613,7 +616,20 @@ function CareerDesktop({
       ) : view === 'awards' ? (
         <AwardsView awards={screen.awards} isEmpty={data.isEmpty} />
       ) : view === 'hall' ? (
-        <CareerHallView data={data} />
+        /*
+         * The trophy wall and the list are both rendered; CSS shows one (af-career-wall.css) —
+         * the wall on a landscape touch tablet or under ?layout=wall, the list otherwise. Decided
+         * in CSS, not JS, so the server-rendered page is already the right one on first paint.
+         */
+        <div className="af-tw-host" data-layout={screen.hallLayout ?? 'auto'}>
+          <HallLayoutToggle filter={data.filter} layout={screen.hallLayout ?? null} />
+          <div className="af-tw-wallpane">
+            <TrophyWall wall={buildTrophyWall(data, screen.awards)} />
+          </div>
+          <div className="af-tw-listpane">
+            <CareerHallView data={data} />
+          </div>
+        </div>
       ) : view === 'coverage' ? (
         <CoverageView data={data} extras={screen.coverage} />
       ) : (
