@@ -271,6 +271,11 @@ export type MatchupData = {
    * Null when the lineups could not be read — absent data, never a zero.
    */
   starterCounts?: { upcoming: number; live: number; final: number; unknown: number } | null
+  /** The same tally split by team, so one side's unknown game states never hide the other's. */
+  starterCountsBySide?: {
+    you: { upcoming: number; live: number; final: number; unknown: number }
+    opponent: { upcoming: number; live: number; final: number; unknown: number }
+  } | null
 }
 
 export async function getMatchupData(
@@ -340,6 +345,7 @@ export async function getMatchupData(
       reason: 'no matchup resolved, so there is nothing to project',
     },
     starterCounts: null as MatchupData['starterCounts'],
+    starterCountsBySide: null as MatchupData['starterCountsBySide'],
     yetToPlay: {
       available: false as const,
         reason: 'Starter game states are unavailable until both lineups can be read.',
@@ -590,16 +596,24 @@ export async function getMatchupData(
   }).catch(() => [])
   const states = starterGameStates(identityBy, games)
   const counts = { upcoming: 0, live: 0, final: 0, unknown: 0 }
-  for (const side of sideProjections ? [sideProjections.you, sideProjections.opponent] : []) {
+  const bySide = {
+    you: { upcoming: 0, live: 0, final: 0, unknown: 0 },
+    opponent: { upcoming: 0, live: 0, final: 0, unknown: 0 },
+  }
+  for (const [sideKey, side] of sideProjections
+    ? ([['you', sideProjections.you], ['opponent', sideProjections.opponent]] as const)
+    : []) {
     for (const slot of side.lineup) {
       if (slot.playerId === EMPTY_SLOT) continue
       const state = slot.unavailable ? 'final' : states.get(slot.playerId) ?? 'unknown'
       counts[state]++
+      bySide[sideKey][state]++
       const player = side.starters.find((p) => p.playerId === slot.playerId)
       if (player) player.isFinal = state === 'final'
     }
   }
   if (sideProjections) base.starterCounts = { ...counts }
+  if (sideProjections) base.starterCountsBySide = bySide
   if (sideProjections) base.yetToPlay.reason = `${counts.upcoming} yet to start · ${counts.live} in progress · ${counts.final} finished or unavailable${counts.unknown ? ` · ${counts.unknown} game states unavailable` : ''}`
   const bestBall = league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings)
   const forecastReason = !bestBall && counts.unknown > 0
