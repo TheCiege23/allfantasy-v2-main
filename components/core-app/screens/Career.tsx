@@ -30,9 +30,12 @@ import { careerChimmyPrompts } from '@/lib/core-app/careerChimmy'
 import { buildLegacyStakes } from '@/lib/core-app/careerMilestones'
 import type { CareerWireData } from '@/lib/core-app/careerWireModel'
 import { CareerWire } from '@/components/core-app/career/CareerWire'
+import { CareerCompareView } from '@/components/core-app/career/CareerCompareView'
 import '@/components/core-app/af-career.css'
 import '@/components/core-app/af-career-brief.css'
 import '@/components/core-app/af-career-live.css'
+// Last on purpose: the phone/tablet layer overrides the three sheets above.
+import '@/components/core-app/af-career-devices.css'
 
 /**
  * Career — handoff 13a, desktop frame.
@@ -575,10 +578,13 @@ function CareerDesktop({
       */}
       {view === 'overview' && wire && nowIso ? <CareerWire data={wire} nowIso={nowIso} /> : null}
 
-      {view !== 'share' ? <CareerFilterBar data={data} view={view} /> : null}
+      {/* Compare's sides carry their own filters (`ca`/`cb`), so the page filter would only mislead. */}
+      {view !== 'share' && view !== 'compare' ? <CareerFilterBar data={data} view={view} /> : null}
 
       {view === 'share' ? (
         <SharePreview share={share} isEmpty={data.isEmpty} />
+      ) : view === 'compare' ? (
+        <CareerCompareView compare={screen.compare ?? null} />
       ) : data.isEmpty && view !== 'coverage' ? (
         <EmptyCareer data={data} />
       ) : view === 'timeline' ? (
