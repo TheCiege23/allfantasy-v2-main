@@ -262,7 +262,7 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
         <Link className="afh-link" href={`/core/hubs`}>
           Format hubs →
         </Link>
-        {data.runCount > 0 ? (
+        {data.ownsAny ? (
           <><Link className="afh-link" href="/commissioner-os">Open Commissioner OS →</Link>
           <Link className="afh-link" href="/commissioner-os/networks">Manage commissioner networks →</Link></>
         ) : null}

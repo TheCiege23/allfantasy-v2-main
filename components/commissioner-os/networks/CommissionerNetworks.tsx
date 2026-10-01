@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
+import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
 
 type League = { id: string; name: string; sport: string }
 type Network = {
@@ -81,7 +82,7 @@ export function CommissionerNetworks() {
         <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">{network.name}</h2><div className="flex gap-3 text-sm"><button type="button" onClick={() => { setEditing(network.id); setName(network.name); setSelected(network.members.map((member) => member.leagueId)) }} className="underline">Edit</button><button type="button" disabled={busy} onClick={() => void remove(network.id)} className="text-red-300 underline">Delete</button></div></div>
         <h3 className="mt-4 text-sm font-semibold">Leagues</h3><ul className="mt-2 space-y-1 text-sm">{network.members.map((member) => <li key={member.leagueId}><Link className="underline" href={`/core/commissioner?league=${encodeURIComponent(member.leagueId)}`}>{member.league.name}</Link> <span className="text-white/60">· {member.role}</span></li>)}</ul>
         <div className="mt-5 grid gap-5 md:grid-cols-2"><div><h3 className="text-sm font-semibold">Attention queue</h3>{network.queue.length ? <ul className="mt-2 space-y-2 text-sm">{network.queue.map((task) => <li key={task.id}><Link className="underline" href={`/core/commissioner?league=${encodeURIComponent(task.leagueId)}`}>{leagueName(network, task.leagueId)}: {task.title}</Link> <span className="text-white/55">({task.priority})</span></li>)}</ul> : <p className="mt-2 text-sm text-white/60">No open workspace tasks on file.</p>}</div>
-          <div><h3 className="text-sm font-semibold">Recent history</h3>{network.history.length ? <ul className="mt-2 space-y-2 text-sm">{network.history.map((event) => <li key={event.id}><Link className="underline" href={`/core/commissioner?league=${encodeURIComponent(event.leagueId)}`}>{leagueName(network, event.leagueId)}: {event.summary || event.type}</Link> <span className="text-white/55">· {new Date(event.occurredAt).toLocaleDateString()}</span></li>)}</ul> : <p className="mt-2 text-sm text-white/60">No projected audit history on file.</p>}</div></div>
+          <div><h3 className="text-sm font-semibold">Recent history</h3>{network.history.length ? <ul className="mt-2 space-y-2 text-sm">{network.history.map((event) => <li key={event.id}><Link className="underline" href={`/core/commissioner?league=${encodeURIComponent(event.leagueId)}`}>{leagueName(network, event.leagueId)}: {event.summary || event.type}</Link> <span className="text-white/55">· {shortDate(event.occurredAt)}</span></li>)}</ul> : <p className="mt-2 text-sm text-white/60">No projected audit history on file.</p>}</div></div>
       </section>)}
     </main>
   )
