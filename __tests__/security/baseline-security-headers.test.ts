@@ -27,6 +27,11 @@ describe("baseline security headers", () => {
     const res = await middleware(from(path))
     expect(res.headers.get("x-frame-options")).toBe("DENY")
     expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'none'")
+    // The script-restricting policy ships REPORT-ONLY (lib/security/cspReportOnly.ts).
+    expect(res.headers.get("content-security-policy-report-only")).toContain("script-src 'self'")
+    expect(res.headers.get("content-security-policy-report-only")).toContain("report-uri /api/security/csp-report")
+    // No report-to: with it present Chrome ignores report-uri (see cspReportOnly.ts).
+    expect(res.headers.get("content-security-policy-report-only")).not.toContain("report-to")
     expect(res.headers.get("strict-transport-security")).toBe("max-age=31536000")
     expect(res.headers.get("x-content-type-options")).toBe("nosniff")
     expect(res.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin")
