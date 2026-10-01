@@ -9,7 +9,7 @@ import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { gameDetailHref } from '@/lib/live/gameDetailLink'
 import type { LiveGameCard, LivePageData } from '@/lib/live/liveScoresPage'
 import { matchesLiveGameQuery } from '@/lib/live/liveGameSearch'
-import { deriveImpact } from '@/lib/live/liveImpact'
+import { deriveImpact, impactTotalLabel } from '@/lib/live/liveImpact'
 import { GameHighlight } from '@/components/live/GameHighlight'
 import { formatStarterPoints, groupStartersByPlayer, type StarterGroup } from '@/lib/live/liveTieInGroups'
 import { buildLockAlerts, type LiveLockAlert } from '@/lib/live/lockAlerts'
@@ -664,7 +664,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
               <>
                 <p className="af-live-impact-total">
                   <span className="af-num">{impact.totalPoints.toFixed(1)}</span>
-                  <span>fantasy pts scored live right now</span>
+                  <span>{impactTotalLabel(impact, leagueFilterId != null)}</span>
                 </p>
                 <p className="af-live-impact-sub">
                   {impact.livePlayers === 0
