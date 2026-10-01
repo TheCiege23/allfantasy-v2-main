@@ -3,14 +3,21 @@
 import Link from 'next/link'
 import { useEffect } from 'react'
 import { hapticOnce } from '@/lib/platform/haptics'
+import { buildCareerFeed, type CareerFeedItem } from '@/lib/core-app/careerFeed'
+import type { LegacyStake } from '@/lib/core-app/careerMilestones'
 import { readAgo, type CareerWireData, type PlatformHealth, type WireLeague, type WireStatus } from '@/lib/core-app/careerWireModel'
 import { askChimmyAboutCareer } from './CareerAskChimmy'
 
 /**
- * Career Wire — every platform at a glance, this season's board, and what moved since your last
- * Career visit. Data from `lib/core-app/careerWire.ts`; the shell's own "Sync now" sits in the
- * topbar on this screen, so this card links to a league's Sync screen rather than adding a second
- * button that does the same thing.
+ * Career Wire — what moved since your last Career visit and what to do about it, every platform at
+ * a glance, and this season's board. Data from `lib/core-app/careerWire.ts`; the feed's items come
+ * from `lib/core-app/careerFeed.ts`. The shell's own "Sync now" sits in the topbar on this screen,
+ * so this card links to a league's Sync screen rather than adding a second button that does the
+ * same thing.
+ *
+ * The feed LEADS: it is the reason to open the tab. Each item carries one action into the screen
+ * that acts on it (Sync, My Team, Matchup) and, where Chimmy has something to add, an unsent
+ * question for it.
  *
  * ⚠ `nowIso` COMES FROM THE SERVER. Ages are rendered from the server's clock so the first client
  * paint matches and hydration does not warn; a stale age on a long-open tab is the honest failure.
@@ -44,7 +51,16 @@ function platformLine(p: PlatformHealth, now: Date): string {
   return `${n} · read ${readAgo(p.lastReadAt, now)}`
 }
 
-export function CareerWire({ data, nowIso }: { data: CareerWireData; nowIso: string }) {
+export function CareerWire({
+  data,
+  nowIso,
+  stakes = [],
+}: {
+  data: CareerWireData
+  nowIso: string
+  /** The Career screen's live stakes; empty under a filter, which is when `buildLegacyStakes` returns none. */
+  stakes?: readonly LegacyStake[]
+}) {
   const now = new Date(nowIso)
 
   /*
@@ -82,7 +98,10 @@ export function CareerWire({ data, nowIso }: { data: CareerWireData; nowIso: str
         </p>
       </header>
 
-      {/* ── 1. Is each platform current? ─────────────────────────────── */}
+      {/* ── 1. Since your last visit — what to do about it ──────────── */}
+      <CareerFeed data={data} stakes={stakes} now={now} />
+
+      {/* ── 2. Is each platform current? ─────────────────────────────── */}
       <ul className="af-crw-plats" aria-label="Platform sync">
         {data.platforms.map((p) => {
           const problem = firstProblem(p.platform)
@@ -113,44 +132,6 @@ export function CareerWire({ data, nowIso }: { data: CareerWireData; nowIso: str
           )
         })}
       </ul>
-
-      {/* ── 2. What moved since the last Career visit ────────────────── */}
-      <div className="af-crw-block">
-        <p className="af-crw-label">Since your last Career visit</p>
-        {data.comparisonPending ? (
-          <p className="af-crl-foot">
-            This is your first visit we can compare from. Next time, wins, losses and standings moves across all your
-            leagues show up here.
-          </p>
-        ) : data.changes.length === 0 ? (
-          <p className="af-crl-foot">No results or standings moves since {readAgo(data.sinceAt, now)}.</p>
-        ) : (
-          <ul className="af-crl-list">
-            {data.changes.map((c) => (
-              <li key={c.leagueId} className="af-crl-row">
-                <div className="af-crl-text">
-                  <span className="af-crl-title">
-                    <Link href={standingsHref(c.leagueId)} className="af-crw-link">
-                      {c.leagueName}
-                    </Link>
-                    <span className="af-crl-plat">{c.platform}</span>
-                  </span>
-                  <span className="af-crl-detail">{changeLine(c)}</span>
-                </div>
-                <button
-                  type="button"
-                  className="af-crl-askbtn"
-                  aria-label={`Ask Chimmy about ${c.leagueName}`}
-                  title="Ask Chimmy"
-                  onClick={() => askChimmyAboutCareer(c.ask, c.leagueId)}
-                >
-                  ✦
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
 
       {/* ── 3. This season, every league ─────────────────────────────── */}
       <div className="af-crw-block">
@@ -198,14 +179,87 @@ export function CareerWire({ data, nowIso }: { data: CareerWireData; nowIso: str
   )
 }
 
-function changeLine(c: CareerWireData['changes'][number]): string {
-  const parts: string[] = []
-  if (c.won + c.lost + c.tied > 0) parts.push(`Went ${c.won}-${c.lost}${c.tied ? `-${c.tied}` : ''}`)
-  parts.push(`now ${c.wins}-${c.losses}${c.ties ? `-${c.ties}` : ''}`)
-  if (c.rank != null && c.previousRank != null && c.rank !== c.previousRank) {
-    parts.push(`${c.rank < c.previousRank ? 'up' : 'down'} to #${c.rank} (was #${c.previousRank})`)
-  } else if (c.rank != null) {
-    parts.push(`#${c.rank}`)
-  }
-  return parts.join(', ')
+/** Five fit a phone screen above the fold; the rest fold behind one tap rather than a scroll. */
+const FEED_VISIBLE = 5
+
+function CareerFeed({ data, stakes, now }: { data: CareerWireData; stakes: readonly LegacyStake[]; now: Date }) {
+  const items = buildCareerFeed({ wire: data, stakes, now })
+  const shown = items.slice(0, FEED_VISIBLE)
+  const rest = items.slice(FEED_VISIBLE)
+  const resultCount = items.filter((i) => i.kind === 'result').length
+
+  return (
+    <div className="af-crw-block af-crf">
+      <p className="af-crw-label">
+        Since your last visit
+        {!data.comparisonPending ? <span className="af-crf-since"> · {readAgo(data.sinceAt, now)}</span> : null}
+      </p>
+      {items.length > 0 ? (
+        <>
+          <ul className="af-crf-list">
+            {shown.map((item) => (
+              <FeedRow key={item.key} item={item} />
+            ))}
+          </ul>
+          {rest.length > 0 ? (
+            <details className="af-crf-more">
+              <summary>
+                {rest.length} more {rest.length === 1 ? 'item' : 'items'}
+              </summary>
+              <ul className="af-crf-list">
+                {rest.map((item) => (
+                  <FeedRow key={item.key} item={item} />
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </>
+      ) : null}
+      {data.comparisonPending ? (
+        <p className="af-crl-foot">
+          This is your first visit we can compare from. Next time, wins, losses and standings moves across all your
+          leagues show up here, each with the screen to act on it.
+        </p>
+      ) : resultCount === 0 ? (
+        <p className="af-crl-foot">No results or standings moves since {readAgo(data.sinceAt, now)}.</p>
+      ) : null}
+    </div>
+  )
+}
+
+function FeedRow({ item }: { item: CareerFeedItem }) {
+  return (
+    <li className="af-crf-row" data-tone={item.tone}>
+      <span className="af-crf-dot" aria-hidden />
+      <div className="af-crl-text">
+        <span className="af-crl-title">
+          {item.title}
+          <span className="af-crl-plat">{item.platform}</span>
+        </span>
+        <span className="af-crl-detail">
+          <Link href={standingsHref(item.leagueId)} className="af-crw-link af-crf-league">
+            {item.leagueName}
+          </Link>
+          {' · '}
+          {item.detail}
+        </span>
+      </div>
+      <div className="af-crf-acts">
+        <Link className="af-crf-go" href={item.action.href}>
+          {item.action.label}
+        </Link>
+        {item.ask ? (
+          <button
+            type="button"
+            className="af-crl-askbtn"
+            aria-label={`Ask Chimmy about ${item.leagueName}`}
+            title="Ask Chimmy"
+            onClick={() => askChimmyAboutCareer(item.ask as string, item.leagueId)}
+          >
+            ✦
+          </button>
+        ) : null}
+      </div>
+    </li>
+  )
 }

@@ -246,7 +246,9 @@ function CareerMobile({
 
       <div className="af-crm-body">
         {/* Phase 3: every platform first — the question someone opens the app with. */}
-        {wire && nowIso ? <CareerWire data={wire} nowIso={nowIso} /> : null}
+        {wire && nowIso ? (
+          <CareerWire data={wire} nowIso={nowIso} stakes={buildLegacyStakes(data, screen.awards).stakes} />
+        ) : null}
         <CareerFilterBar data={data} view="overview" />
         {data.isEmpty ? (
           <>
@@ -592,7 +594,9 @@ function CareerDesktop({
         league going, what moved since the last visit. Above the filter bar because it is
         account-wide: a platform or era filter does not narrow which platforms need a sync.
       */}
-      {view === 'overview' && wire && nowIso ? <CareerWire data={wire} nowIso={nowIso} /> : null}
+      {view === 'overview' && wire && nowIso ? (
+        <CareerWire data={wire} nowIso={nowIso} stakes={buildLegacyStakes(data, screen.awards).stakes} />
+      ) : null}
 
       {/* Compare's sides carry their own filters (`ca`/`cb`), so the page filter would only mislead. */}
       {view !== 'share' && view !== 'compare' ? <CareerFilterBar data={data} view={view} /> : null}
