@@ -2209,6 +2209,11 @@
   .af-core .af-tc-stepbar .af-tc-stepbar-primary {
     flex: 0 0 auto;
     min-height: 44px;
+    max-width: 52%;
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.2;
+    text-align: center;
   }
 
   /*
