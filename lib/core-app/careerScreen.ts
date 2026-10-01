@@ -1,4 +1,5 @@
 import 'server-only'
+import { buildCareerCompare, type CareerCompare } from './careerCompare'
 
 import {
   buildCareerData,
@@ -47,6 +48,7 @@ export const CAREER_VIEWS = [
   'seasons',
   'progress',
   'peers',
+  'compare',
   'records',
   'awards',
   'coverage',
@@ -87,6 +89,8 @@ export type CareerScreenData = {
   records: CareerRecordBook | null
   peers: CareerPeers | null
   coverage: CareerCoverageExtras | null
+  /** `?view=compare` only (live-career plan, phase 5): two slices of this career side by side. */
+  compare?: CareerCompare | null
 }
 
 /** Trade counts narrowed the way the rows are. Trades are Sleeper-only. */
@@ -231,7 +235,20 @@ export async function getCareerScreen(
     }
   }
 
-  return { view, data, awards, trades, profile, timeline, records, peers, coverage }
+  /*
+   * Compare reads nothing new: both sides are `buildCareerData` over the source already loaded.
+   * Its sides carry their own filters (`ca`/`cb`), so the page filter does not narrow them.
+   */
+  const compare =
+    view === 'compare'
+      ? buildCareerCompare(
+          source,
+          typeof sp.ca === 'string' ? sp.ca : null,
+          typeof sp.cb === 'string' ? sp.cb : null,
+        )
+      : null
+
+  return { view, data, awards, trades, profile, timeline, records, peers, coverage, compare }
 }
 
 /**

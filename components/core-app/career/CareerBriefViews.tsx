@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import { careerHref, type BestSeason, type CareerData, type CareerSeasonRow } from '@/lib/core-app/careerModel'
 import { TIER_LABEL, type CareerAward } from '@/lib/core-app/careerAwards'
 import { TIMELINE_KINDS, TIMELINE_KIND_LABEL, type CareerTimeline } from '@/lib/core-app/careerTimeline'
@@ -192,6 +193,26 @@ export function AwardsView({ awards, isEmpty }: { awards: CareerAward[]; isEmpty
 
 /* ── 2. timeline ────────────────────────────────────────────────────────── */
 
+/**
+ * Live-career plan, phase 5: the newest years stay open, older ones fold to one line each.
+ * Measured on a ten-season sample career the unfolded timeline ran 3,600px on a phone; the
+ * question someone brings to it is usually about the last few seasons. A kind filter opens
+ * every year, because a filtered list is already short and folding it would hide the answer.
+ */
+const TIMELINE_OPEN_YEARS = 3
+
+function TimelineFold({ fold, count, children }: { fold: boolean; count: number; children: ReactNode }) {
+  if (!fold) return <>{children}</>
+  return (
+    <details className="af-crx-tl-fold">
+      <summary>
+        Show {count} {count === 1 ? 'event' : 'events'}
+      </summary>
+      {children}
+    </details>
+  )
+}
+
 export function TimelineView({ timeline, data }: { timeline: CareerTimeline | null; data: CareerData }) {
   if (!timeline) {
     return (
@@ -222,13 +243,14 @@ export function TimelineView({ timeline, data }: { timeline: CareerTimeline | nu
         </p>
       ) : (
         <ol className="af-crx-tl">
-          {timeline.seasons.map((s) => (
+          {timeline.seasons.map((s, i) => (
             <li key={s.season} className="af-crx-tl-season">
               <div className="af-crx-tl-year">
                 <b>{s.season}</b>
                 {s.record ? <span>{s.record}</span> : null}
                 {s.titles ? <span className="warn">{s.titles === 1 ? '1 title' : `${s.titles} titles`}</span> : null}
               </div>
+              <TimelineFold fold={!timeline.kind && i >= TIMELINE_OPEN_YEARS} count={s.events.length}>
               <ul className="af-crx-tl-events">
                 {s.events.map((e) => (
                   <li key={e.key} className="af-crx-tl-event" data-kind={e.kind} data-tone={e.tone}>
@@ -271,6 +293,7 @@ export function TimelineView({ timeline, data }: { timeline: CareerTimeline | nu
                   </li>
                 ))}
               </ul>
+              </TimelineFold>
             </li>
           ))}
         </ol>

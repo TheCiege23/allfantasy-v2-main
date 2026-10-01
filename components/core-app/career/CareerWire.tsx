@@ -55,6 +55,9 @@ export function CareerWire({ data, nowIso }: { data: CareerWireData; nowIso: str
     .slice(0, MAX_BOARD_ROWS)
 
   return (
+    // The host is the container the two-pane layout queries (af-career-devices.css): it follows
+    // the Wire's OWN width, which inside the /core shell is far narrower than the viewport.
+    <div className="af-crw-host">
     <section className="af-crw" aria-label="Career Wire">
       <header className="af-crw-top">
         <p className="af-crl-head">
@@ -176,6 +179,7 @@ export function CareerWire({ data, nowIso }: { data: CareerWireData; nowIso: str
         </p>
       </div>
     </section>
+    </div>
   )
 }
 

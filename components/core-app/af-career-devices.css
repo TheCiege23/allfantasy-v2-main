@@ -1,0 +1,140 @@
+/*
+ * /core/career — the device layer (live-career plan, phase 5): phone, tablet and the compare view.
+ *
+ * Measured before writing a rule: every view rendered at 390 / 820 / 1024 / 1280px with a
+ * ten-season sample career. Nothing overflowed the page; what failed was density and reach —
+ * a 240px nav block on every phone view, 27px timeline chips, a 3,600px timeline, a cut-off
+ * column in two tables, and the tab strip clipped to "A" on a tablet.
+ *
+ * ⚠ IMPORTED LAST, BUT DOES NOT RELY ON IT. Every override is written one class more specific
+ * than the rule it beats (`.af-c13 …`), the same discipline af-career-brief.css uses, because the
+ * bundler is free to emit the career sheets in either order.
+ *
+ * ⚠ EVERY @media / @container BLOCK IS TOP-LEVEL AND CLOSED BEFORE THE NEXT ONE OPENS.
+ */
+
+/* ── Compare (all widths) ─────────────────────────────────────────────── */
+
+.af-crc-pickers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 10px;
+}
+.af-crc-pick { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.af-crc-picklabel {
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-crc-pick select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 11px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+  color: var(--text);
+  font: 600 13px/1.2 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+}
+.af-crc-swap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 18px;
+}
+.af-crc-swap:hover,
+.af-crc-swap:focus-visible { background: var(--accent-soft); }
+.af-c13 .af-crc-table td[data-better] { color: var(--good); font-weight: 800; background: var(--good-soft); }
+.af-c13 .af-crc-table td { white-space: normal; overflow-wrap: anywhere; }
+.af-crc-cap { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.af-crc-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* Timeline: an older year folded to one line (CareerBriefViews `TimelineFold`). */
+.af-crx-tl-fold > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  cursor: pointer;
+  color: var(--accent);
+  font: 700 12px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+}
+.af-crx-tl-fold[open] > summary { margin-bottom: 8px; }
+
+/* ── Career Wire: two panes once ITS OWN width allows ─────────────────────
+ * A container query, not a viewport one: inside the /core shell the Wire is ~530px narrower
+ * than the window, so a viewport rule would split it into two cramped panes on a laptop and
+ * leave a wide tablet single-column. */
+.af-crw-host { container-type: inline-size; min-width: 0; }
+
+@container (min-width: 720px) {
+  .af-crw {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    column-gap: 18px;
+    align-items: start;
+  }
+  .af-crw > .af-crw-top,
+  .af-crw > .af-crw-plats { grid-column: 1 / -1; }
+}
+
+/* ── Tablet and narrow desktop frames ───────────────────────────────────── */
+@media (max-width: 1180px) {
+  /* The tab strip takes its own row; sharing one with stats and two buttons clipped it to "A". */
+  .af-c13 .af-crx-navrow .af-crx-tabs { flex: 1 1 100%; }
+  .af-c13 .af-crx-navrow .af-crx-navside { margin-left: 0; width: 100%; justify-content: space-between; }
+}
+
+/* ── Phones ─────────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Nav: one compact row of actions instead of two 52px buttons stacked under the stats. */
+  .af-c13 .af-crx-navside { gap: 8px; }
+  .af-c13 .af-crx-navside .af-cr-tabstats { font-size: 11px; gap: 4px 10px; }
+  .af-c13 .af-crx-navside .af-cr-actions { flex-wrap: nowrap; gap: 8px; }
+  .af-c13 .af-crx-navside .af-cr-btn { min-height: 44px; padding: 0 14px; display: inline-flex; align-items: center; font-size: 12px; }
+
+  /* Timeline kinds: one row that scrolls sideways, 44px targets (were 27px, three rows deep). */
+  .af-c13 .af-crx-stack > .af-cr-filter {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .af-c13 .af-crx-stack > .af-cr-filter::-webkit-scrollbar { display: none; }
+  .af-c13 .af-crx-stack > .af-cr-filter .af-cr-filter-opt { flex: none; min-height: 44px; display: inline-flex; align-items: center; }
+
+  /* Wide tables keep their row label in view while the numbers scroll under it. */
+  .af-c13 .af-crx-table th:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--surface);
+    box-shadow: 1px 0 0 var(--line2);
+  }
+
+  /* Record book: two tiles a row, not one 100px card per record. */
+  .af-c13 .af-crx-rsec .af-bd-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+
+  /* Compare: row labels wrap, so the two value columns get the width. */
+  .af-c13 .af-crc-table th[scope='row'] { white-space: normal; position: static; box-shadow: none; }
+
+  /* Compare: pickers stack, swap sits between them. */
+  .af-crc-pickers { grid-template-columns: minmax(0, 1fr); }
+  .af-crc-swap { justify-self: center; }
+
+  /* Inline text links get a thumb-sized hit area without moving the text around them:
+     vertical padding on an inline element grows its box, not the line. */
+  .af-c13 :is(p, li, span) > a:not([class]) { padding-block: 14px; }
+  /* A styled link is inline-flex, where padding WOULD grow the line — cancelled by the margin. */
+  /* `.af-core`, not `.af-c13`: "Details →" also lives in the phone overview (`.af-crm`). */
+  .af-core .af-cr-xplink { padding-block: 14px; margin-block: -14px; }
+  .af-core .af-crw-link { display: inline-block; padding-block: 13px; margin-block: -13px; }
+}
