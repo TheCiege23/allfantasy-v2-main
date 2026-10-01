@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import type { RatedGame } from '@/lib/rank/skillRating/replay'
+import { parseFormerSleeperKey } from '@/lib/league-import/sleeper/historicalTeamIdentity'
 
 /**
  * Every head-to-head game on record, each side resolved to a person — the input
@@ -34,11 +35,11 @@ import type { RatedGame } from '@/lib/rank/skillRating/replay'
  * that is not exactly two sides. A median-score "matchup". Results come from the
  * POINTS, never the stored `win` flag — writers store a tie as a loss for both.
  *
- * ⚠ KNOWN, INHERITED: Sleeper history is remapped to the current season's roster
- * slots by owner id, and a manager who has left falls back to their historical
- * slot, which can collide with a different current owner
- * (SleeperHistoricalMatchupSyncService.ts ~488). Those games can be credited to
- * the wrong person; fixing it belongs in the writer, not here.
+ * Sleeper history is remapped to the current season's slots by owner id. A
+ * manager who has left is stored as `former:sleeper:<ownerId>` (an ownerless
+ * past roster as `former:sleeper:slot:<season>:<rosterId>`) — see
+ * `lib/league-import/sleeper/historicalTeamIdentity.ts`. Those resolve to the
+ * person directly, not through `LeagueTeam`, which has no row for them.
  */
 
 const PAGE = 5000
@@ -82,6 +83,7 @@ async function pagedFacts() {
     teamB: string
     scoreA: number
     scoreB: number
+    createdAt: Date
   }
   const out: Fact[] = []
   let cursor: string | undefined
@@ -100,6 +102,7 @@ async function pagedFacts() {
         teamB: true,
         scoreA: true,
         scoreB: true,
+        createdAt: true,
       },
     })
     out.push(...page)
@@ -217,6 +220,12 @@ export async function loadRatedGames(): Promise<LoadedGames> {
 
   const providerOf = (l: LeagueRow) => l.platformLeagueId || l.id
   const person = (l: LeagueRow, slot: string): { key: string; name: string | null } => {
+    const former = parseFormerSleeperKey(slot)
+    if (former?.kind === 'manager') {
+      const af = afByPlatform.get(`sleeper:${former.ownerId}`)
+      return { key: af ? `af:${af}` : `p:sleeper:${former.ownerId}`, name: null }
+    }
+    if (former) return { key: `r:${providerOf(l)}:${former.season}:${former.rosterId}`, name: null }
     const t = teamBySlot.get(`${l.id}|${slotKey(slot)}`)
     const name = t?.ownerName?.trim() || t?.teamName?.trim() || null
     if (t?.claimedByUserId) return { key: `af:${t.claimedByUserId}`, name }
@@ -232,11 +241,28 @@ export async function loadRatedGames(): Promise<LoadedGames> {
   const seen = new Set<string>()
   const factSeasons = new Set<string>()
   let factCount = 0
+  /*
+   * ⚠ ONE COPY PER PROVIDER SEASON, THE NEWEST. Each importer's League row holds its own copy of a
+   * season, and a copy written before the team mapping was fixed names different teams than one
+   * written after — so the per-game dedupe below cannot see they are the same game, and it would
+   * count twice, once for the wrong person. The sync rewrites a season whole, so the copy with the
+   * latest write is the one on the current mapping.
+   */
+  const newestCopy = new Map<string, { leagueId: string; at: number }>()
+  for (const f of facts) {
+    const l = leagueById.get(f.leagueId)
+    if (!l || f.season == null) continue
+    const k = `${providerOf(l)}|${f.season}`
+    const at = f.createdAt instanceof Date ? f.createdAt.getTime() : 0
+    const cur = newestCopy.get(k)
+    if (!cur || at > cur.at || (at === cur.at && f.leagueId < cur.leagueId)) newestCopy.set(k, { leagueId: f.leagueId, at })
+  }
   for (const f of facts) {
     if (f.season == null || f.scoreA <= 0 || f.scoreB <= 0) continue
     const l = leagueById.get(f.leagueId)
     if (!l) continue
     const prov = providerOf(l)
+    if (newestCopy.get(`${prov}|${f.season}`)?.leagueId !== f.leagueId) continue
     const [s1, s2] = [slotKey(f.teamA), slotKey(f.teamB)].sort()
     // ⚠ One League row per importing user: the same provider game arrives once per mirror.
     const dedupe = `f|${prov}|${f.season}|${f.weekOrPeriod}|${s1}|${s2}`

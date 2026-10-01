@@ -89,6 +89,39 @@ describe('loadRatedGames', () => {
     expect(sources.facts).toBe(1)
   })
 
+  it('rates a departed Sleeper manager as that person, never as whoever holds their old slot now', async () => {
+    db.leagues = [{ id: 'L1', platform: 'sleeper', sport: 'NFL', platformLeagueId: 'S1', name: 'Dynasty' }]
+    // Slot 5 belongs to a newcomer today; the departed manager played 2022 from it.
+    db.teams = [team('L1', '5', { platformUserId: 'sx-newcomer' }), team('L1', '3', { claimedByUserId: 'me' })]
+    db.identities = [{ platform: 'sleeper', platformUserId: 'sx-gone-linked', userId: 'old-friend' }]
+    db.facts = [
+      { matchupId: 'a', leagueId: 'L1', sport: 'NFL', season: 2022, weekOrPeriod: 1, teamA: '3', teamB: 'former:sleeper:sx-gone', scoreA: 110, scoreB: 100 },
+      { matchupId: 'b', leagueId: 'L1', sport: 'NFL', season: 2022, weekOrPeriod: 2, teamA: '3', teamB: 'former:sleeper:sx-gone-linked', scoreA: 90, scoreB: 95 },
+      { matchupId: 'c', leagueId: 'L1', sport: 'NFL', season: 2022, weekOrPeriod: 3, teamA: '3', teamB: 'former:sleeper:slot:2022:5', scoreA: 90, scoreB: 80 },
+    ]
+    const { games } = await loadRatedGames()
+    expect(games.map((g) => g.b)).toEqual(['p:sleeper:sx-gone', 'af:old-friend', 'r:S1:2022:5'])
+    expect(games.some((g) => g.a === 'p:sleeper:sx-newcomer' || g.b === 'p:sleeper:sx-newcomer')).toBe(false)
+  })
+
+  it('takes a provider season from the most recently written copy only', async () => {
+    db.leagues = [
+      { id: 'L1', platform: 'sleeper', sport: 'NFL', platformLeagueId: 'S1', name: 'A' },
+      { id: 'L2', platform: 'sleeper', sport: 'NFL', platformLeagueId: 'S1', name: 'A (mirror)' },
+    ]
+    db.teams = [team('L1', '5', { platformUserId: 'sx-newcomer' }), team('L2', '5', { platformUserId: 'sx-newcomer' })]
+    const old = new Date('2026-01-01T00:00:00Z')
+    const rewritten = new Date('2026-10-01T00:00:00Z')
+    db.facts = [
+      // L1's copy predates the mapping fix and credits the game to slot 5's current owner.
+      { matchupId: 'a', leagueId: 'L1', sport: 'NFL', season: 2022, weekOrPeriod: 1, teamA: '3', teamB: '5', scoreA: 110, scoreB: 100, createdAt: old },
+      { matchupId: 'b', leagueId: 'L2', sport: 'NFL', season: 2022, weekOrPeriod: 1, teamA: '3', teamB: 'former:sleeper:sx-gone', scoreA: 110, scoreB: 100, createdAt: rewritten },
+    ]
+    const { games } = await loadRatedGames()
+    expect(games).toHaveLength(1)
+    expect(games[0].b).toBe('p:sleeper:sx-gone')
+  })
+
   it('uses live weeks only for seasons no fact covers, pairs by matchup, and reads ties from points', async () => {
     db.leagues = [{ id: 'L1', platform: 'mfl', sport: 'NFL', platformLeagueId: 'M1', name: 'MFL' }]
     db.teams = [team('L1', '0001', { claimedByUserId: 'me' }), team('L1', '0002', { platformUserId: 'mfl-b' })]

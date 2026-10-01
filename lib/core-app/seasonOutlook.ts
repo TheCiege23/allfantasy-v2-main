@@ -291,8 +291,9 @@ type FactPair = { leagueId: string; season: number; week: number; a: string; b: 
  *
  * `teamA`/`teamB` are already canonical: the sync resolves each historical roster to the
  * CURRENT season's `source_team_id`, which is what `LeagueTeam.externalId` holds and what
- * this screen keys `rosterId` on. Rosters it could not resolve fall back to the raw
- * historical roster id, which will not parse to a current team and is dropped.
+ * this screen keys `rosterId` on. A manager who has since left is stored as
+ * `former:sleeper:<ownerId>` (see `historicalTeamIdentity.ts`), which does not parse as a
+ * number and is dropped — they are not a team in this league now.
  *
  * ⚠ ONLY FOR LEAGUES THAT ALREADY HAVE LIVE ROWS. A league with history but no current
  * matchups keeps reporting "no matchups synced" rather than simulating a finished season.

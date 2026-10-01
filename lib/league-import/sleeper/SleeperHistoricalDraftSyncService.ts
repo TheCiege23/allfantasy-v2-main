@@ -98,6 +98,12 @@ async function collectSleeperDraftFacts(args: {
    * -> the owner's CURRENT `source_team_id`, which is what `LeagueTeam.externalId`
    * holds. This is the same resolution, against the same helper, so the two fact
    * tables agree on what a team id means.
+   *
+   * ⚠ NO LONGER QUITE THE SAME. The matchup sync moved to `historicalTeamIdentity.ts`
+   * (2026-10-01): a departed owner gets `former:sleeper:<ownerId>` rather than their old
+   * slot, and owners are looked up by `source_manager_id` rather than `Roster.platformUserId`.
+   * This sync still falls back to the slot, so a departed manager's picks can still show
+   * under that slot's current team. Person-level reads use `ownerId` (sleeperDraftPickIdentity.ts).
    */
   const currentRosters = await prisma.roster.findMany({
     where: { leagueId: args.internalLeagueId },
