@@ -791,7 +791,7 @@ function ManagerBlock({
                 <p className="truncate text-[12.5px] font-bold leading-tight text-white">{a.name}</p>
                 {a.meta ? <p className="font-mono text-[11px] text-white/45">{a.meta}</p> : null}
               </div>
-              {a.kind === 'player' && a.team ? <TeamLogo teamAbbr={a.team} sport={sport} size={21} /> : null}
+              {a.kind === 'player' && a.team ? <TeamLogo teamAbbr={a.team} sport={sport} logoUrl={a.teamLogoUrl} size={21} /> : null}
               {values ? (
                 <span className={`font-mono text-[11.5px] font-bold ${v == null ? 'text-white/30' : 'text-[#CBD5E1]'}`}>
                   {a.kind === 'player' ? money(v) : '—'}

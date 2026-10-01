@@ -9,6 +9,8 @@ import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { getTeamLogo } from '@/lib/players/getTeamLogo'
+import { liveLogoOrNull } from '@/lib/sport-teams/knownDeadLogoGuess'
+import { getStoredTeamLogoResolver } from '@/lib/sport-teams/storedTeamLogos'
 import {
   buildUnifiedPlayerProductView,
   type PlayerDataSurface,
@@ -169,6 +171,13 @@ async function batchLoadCanonicalPlayerMedia(
   )]
   const names = [...new Set(seeds.map((seed) => seed.name).filter(Boolean))]
 
+  /*
+   * Stored crests for every sport but the NFL. The NFL's static path works (its team value is an
+   * abbreviation the CDN knows) and is left exactly as it was. Elsewhere the team value is a full
+   * name, a school, or a soccer id, and the static guess 404s — the stored crest is the real one.
+   */
+  const storedTeamLogo = normalizedSport === 'NFL' ? null : getStoredTeamLogoResolver(normalizedSport)
+
   const [sportsPlayerRows, fantasyPlayerRows] = await Promise.all([
     prisma.sportsPlayer
       .findMany({
@@ -206,6 +215,8 @@ async function batchLoadCanonicalPlayerMedia(
       })
       .catch(() => []) ?? Promise.resolve([]),
   ])
+  // Started before the player queries so it overlaps them; it never rejects.
+  const resolveStoredLogo = storedTeamLogo ? await storedTeamLogo : null
 
   const sportsPlayerByExternalId = new Map<string, (typeof sportsPlayerRows)[number]>()
   const sportsPlayerByStrictKey = new Map<string, (typeof sportsPlayerRows)[number]>()
@@ -282,9 +293,12 @@ async function batchLoadCanonicalPlayerMedia(
     const recordHeadshot = pickRecordHeadshot(seed)
     out.set(seed.recordId, {
       headshotUrl: sportsPlayerHeadshot ?? fantasyPlayerHeadshot ?? recordHeadshot,
+      // Order: the record's own logo → the stored crest (non-NFL) → the static guess. A guess the
+      // CDN is known never to serve (college/soccer by name) is dropped at every step.
       teamLogoUrl:
-        (isHttpUrl(seed.recordLogoUrl) ? seed.recordLogoUrl : null) ??
-        getTeamLogo(seed.team, normalizedSport),
+        liveLogoOrNull(isHttpUrl(seed.recordLogoUrl) ? seed.recordLogoUrl : null) ??
+        (resolveStoredLogo ? resolveStoredLogo(seed.team) : null) ??
+        liveLogoOrNull(getTeamLogo(seed.team, normalizedSport)),
     })
   }
 

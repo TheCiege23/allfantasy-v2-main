@@ -14,9 +14,12 @@ type LiveScoreGame = {
   gameId: string
   homeTeam: string
   homeTeamFull: string
+  /** Crest URL resolved server-side (ESPN feed, or the CFBD directory for college). May be ''. */
+  homeLogo?: string | null
   homeScore: number
   awayTeam: string
   awayTeamFull: string
+  awayLogo?: string | null
   awayScore: number
   status: string
   statusDetail: string
@@ -360,7 +363,7 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
                           <div className="space-y-1.5">
                             <div className={`flex items-center justify-between gap-2 ${awayWin ? 'text-white' : 'text-white/75'}`}>
                               <span className="flex min-w-0 items-center gap-2">
-                                <TeamLogo teamAbbr={g.awayTeam} sport={resolved} size={20} />
+                                <TeamLogo teamAbbr={g.awayTeam} sport={resolved} logoUrl={g.awayLogo} size={20} />
                                 <span className="truncate text-[13px] font-semibold">{g.awayTeamFull || g.awayTeam}</span>
                               </span>
                               <span className="shrink-0 text-[15px] font-bold tabular-nums">
@@ -369,7 +372,7 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
                             </div>
                             <div className={`flex items-center justify-between gap-2 ${homeWin ? 'text-white' : 'text-white/75'}`}>
                               <span className="flex min-w-0 items-center gap-2">
-                                <TeamLogo teamAbbr={g.homeTeam} sport={resolved} size={20} />
+                                <TeamLogo teamAbbr={g.homeTeam} sport={resolved} logoUrl={g.homeLogo} size={20} />
                                 <span className="truncate text-[13px] font-semibold">{g.homeTeamFull || g.homeTeam}</span>
                               </span>
                               <span className="shrink-0 text-[15px] font-bold tabular-nums">

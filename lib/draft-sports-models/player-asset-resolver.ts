@@ -6,6 +6,7 @@
 import type { DraftSport } from './types'
 import { getPrimaryLogoUrlForTeam } from '@/lib/sport-teams/SportTeamMetadataRegistry'
 import { buildPlayerMedia } from '@/lib/player-media'
+import { liveLogoOrNull } from '@/lib/sport-teams/knownDeadLogoGuess'
 import type { PlayerAssetModel, TeamDisplayModel } from './types'
 
 const SLEEPER_NFL_HEADSHOT_BASE = 'https://sleepercdn.com/content/nfl/players/thumb'
@@ -48,10 +49,13 @@ export function looksLikeSleeperExternalId(id: string | null | undefined): boole
 
 /**
  * Build team logo URL with static registry fallback (sync).
+ *
+ * A college or soccer path keyed by letters is dropped: ESPN keys those crests by numeric id, so
+ * the guess always 404s, and `null` lets callers show their placeholder instead of a broken image.
  */
 export function resolveTeamLogoUrlSync(teamAbbreviation: string | null, sport: DraftSport | string): string | null {
   if (!teamAbbreviation?.trim()) return null
-  return getPrimaryLogoUrlForTeam(sport, teamAbbreviation.trim())
+  return liveLogoOrNull(getPrimaryLogoUrlForTeam(sport, teamAbbreviation.trim()))
 }
 
 /**
