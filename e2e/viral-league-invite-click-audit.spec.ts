@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -283,7 +284,15 @@ test.describe('@growth viral invite engine click audit', () => {
   })
 
   test('preview loads, accept works, and expired invites show a safe state', async ({ page }) => {
-    await mockAuthSession(page)
+    /*
+     * /invite/accept sends a signed-out visitor to /login on "Accept invite". The root layout
+     * preloads the server session into next-auth's SessionProvider, so with no cookie the client
+     * never requests /api/auth/session and `mockAuthSession` is never consulted. It worked before
+     * the Next 15.5 / React 19.3 upgrade only because the dev server ran the provider's mount
+     * effect twice and the second pass refetched. A real signed cookie is what the other
+     * session-gated specs use; the harness test above stays anonymous on purpose.
+     */
+    await signInAs(page, { id: 'user-e2e', name: 'Invite Auditor', email: 'auditor@example.com' })
 
     await page.route('**/api/invite/preview**', async (route) => {
       const url = new URL(route.request().url())
