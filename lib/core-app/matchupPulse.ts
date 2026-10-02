@@ -1,9 +1,6 @@
 import 'server-only'
 
-import { unstable_cache } from 'next/cache'
-
 import { prisma } from '@/lib/prisma'
-import { getTeamInfo } from '@/lib/team-abbrev'
 import { isLeagueNotStarted } from './leagueNotStarted'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { resolveCurrentWeekFrom, isScored, type WeekScoreRow } from './currentWeek'
@@ -16,6 +13,9 @@ import { leagueWeekFromSettings } from './seasonTimeline'
 import { realManagerName, rosterLabel } from './managerName'
 import { leagueWeekProgress } from './leagueWeekProgress'
 import { loadFinishedNflWeeks } from './finishedNflWeeks'
+import { starterGameStates, type StarterGameState } from './matchupGameState'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { computeWinProbability, type MatchupPlayer } from '@/lib/projections/winProbability'
 
 /**
  * Matchup pulse — the cross-league landing at `/core/matchup`.
@@ -128,6 +128,24 @@ export type PulseRow = {
    * between them — which is the only thing this row renders.
    */
   coverage: { you: { from: number; of: number }; them: { from: number; of: number } } | null
+  /**
+   * Your chance of winning this matchup, 0–1 — the SAME Gaussian model the one-league page uses
+   * (`computeWinProbability`), over each starter's league-scored projection, the points he has
+   * already banked, and whether his game is over.
+   *
+   * ⚠ NULL IS A REFUSAL, NOT 50%. Any starter still to play with no projection, or a live week
+   * whose points we cannot attribute to players, makes the question unanswerable — the model's
+   * own rule, and the page's. A final week is 1 or 0.
+   */
+  pWin: number | null
+  /**
+   * Where the model expects this to END, from your side: banked points plus what each side's
+   * unplayed starters are still projected to add. Null exactly when `pWin` is.
+   *
+   * This is what separates "+30.9 on Friday" from a win: a 28-starter league up 30.9 after
+   * Thursday night was projected to lose 533–571 (production, 2026-10-02).
+   */
+  projectedMargin: number | null
   href: string
 }
 
@@ -148,6 +166,18 @@ export type MatchupPulse = {
   basis: PulseBasis | 'mixed' | null
   /** Every ranked row is `final` — the whole board is results. False when nothing ranked. */
   allFinal: boolean
+  /**
+   * The sum of `pWin` over every row that has one — the record the model expects this week, in
+   * wins. Null when no row has a probability. `withOdds` is how many rows it was built from, so
+   * "23.4 expected wins" can say "of 41".
+   */
+  expectedWins: number | null
+  withOdds: number
+  /**
+   * The matchups nearest a coin flip that are still being played — the ones worth watching, and
+   * exactly the middle the top-5/bottom-5 columns hide. Rows already in either column are left out.
+   */
+  closest: PulseRow[]
   /** Why the rest are absent. Stated on the screen, never silently dropped. */
   notRanked: {
     /** No `WeeklyMatchup` rows at all — the league has never been synced for a schedule. */
@@ -190,59 +220,61 @@ export type MatchupPulse = {
 }
 
 /**
- * Next REGULAR-SEASON kickoff per NFL club.
+ * Where each starter's real-world game stands THIS fantasy week.
  *
- * ⚠ `seasonType: 'regular'` IS LOAD-BEARING, NOT A TIDY-UP. Read without it on
- * 2026-08-29 the next 200 future fixtures were ALL preseason — four near-
- * duplicate rows per game, one per source — so no regular-season club ever
- * entered the map, every lineup failed to place, and "left to play" came back
- * 0 for all 37 leagues. Zero is the one answer that must never be guessed here:
- * it says a manager's week is over before it has started. Preseason is also the
- * wrong measure on its own terms — nobody's lineup scores an exhibition game.
+ * 🛑 THIS REPLACES A "NEXT KICKOFF PER CLUB" MAP, WHICH COULD NOT ANSWER THE QUESTION. That map held
+ * only FUTURE fixtures, so on a Sunday evening a club whose game had finished was looked up, found
+ * its NEXT week's game, and counted as "still to play" — every placed starter read as yet to play,
+ * whatever had happened. It also never consulted the matchup's own week. And live rows skipped the
+ * count altogether, so "0 left to play" could never appear (audit, 2026-10-02).
  *
- * A local, cached copy rather than an import from `dash34.ts`: that module is
- * 1,700 lines behind a different loader's cache key, and reaching into it for
- * fifteen lines would couple this screen's freshness to the home page's.
+ * Read per (season, week) from `SportsGame` under `starterGameStates` — the one-league page's rule:
+ * a kickoff alone never proves a game finished; only a final status does.
+ *
+ * ⚠ ONE WIDENING, FOR A BOARD READ DAYS BEFORE KICKOFF. `starterGameStates` only trusts "scheduled"
+ * from a row fetched in the last hour, which is right on game day and leaves Sunday's starters
+ * `unknown` on a Friday if the schedule writer last ran on Wednesday. A regular-season fixture for
+ * his club in this week, kicking off in the FUTURE and not final, is unambiguous: he has not played.
+ * Anything else that `starterGameStates` could not place stays `unknown`.
  */
-const readNflFixturesCached = unstable_cache(
-  async () => {
-    const rows = await prisma.sportsGame
-      .findMany({
-        where: { sport: 'NFL', seasonType: 'regular', startTime: { gte: new Date() } },
-        orderBy: { startTime: 'asc' },
-        take: 200,
-        select: { startTime: true, homeTeam: true, awayTeam: true },
-      })
-      .catch(() => [])
-    return rows.map((g) => ({ ...g, startTime: g.startTime ? g.startTime.toISOString() : null }))
-  },
-  ['core-matchup-pulse-nfl-regular-fixtures'],
-  { revalidate: 60 },
-)
-
-/**
- * Club (long name, lowercased) → its next kickoff.
- *
- * ⚠ KEYED ON THE LONG FORM. `SportsGame` stores "Atlanta Falcons" while the
- * projection feed stores "ATL", so the lookup runs the short form through
- * `getTeamInfo` first. Club codes are not unique across sports, which is why
- * this map is only ever consulted for an NFL league.
- */
-async function nextKickoffByClub(now: Date): Promise<Map<string, Date>> {
-  const rows = await readNflFixturesCached().catch(() => [])
-  const out = new Map<string, Date>()
-  for (const g of rows) {
-    if (!g.startTime) continue
-    const at = new Date(g.startTime)
-    if (Number.isNaN(at.getTime()) || at.getTime() < now.getTime()) continue
-    for (const club of [g.homeTeam, g.awayTeam]) {
-      const key = club?.trim().toLowerCase()
-      if (!key || out.has(key)) continue
-      out.set(key, at)
+export function weekGameStates(
+  players: ReadonlyMap<string, { team: string | null }>,
+  games: WeekGame[],
+  now: Date,
+): Map<string, StarterGameState> {
+  const states = starterGameStates(players, games, now)
+  const nextKickoff = new Map<string, Date>()
+  for (const g of games) {
+    if (g.seasonType !== 'regular' || !g.startTime) continue
+    if (FINAL_GAME.test(String(g.status ?? '').toLowerCase())) continue
+    for (const team of [g.homeTeam, g.awayTeam]) {
+      const club = normalizeTeamAbbrev(team)
+      if (!club) continue
+      const prior = nextKickoff.get(club)
+      if (!prior || g.startTime < prior) nextKickoff.set(club, g.startTime)
     }
   }
-  return out
+  for (const [id, player] of players) {
+    if (states.get(id) !== 'unknown') continue
+    const at = nextKickoff.get(normalizeTeamAbbrev(player.team) ?? '')
+    if (at && at.getTime() > now.getTime()) states.set(id, 'upcoming')
+  }
+  return states
 }
+
+const FINAL_GAME = /^(final|finished|completed?|status_final|status_final_ot)$/
+
+type WeekGame = {
+  season: number | null
+  week: number | null
+  homeTeam: string
+  awayTeam: string
+  status: string | null
+  startTime: Date | null
+  fetchedAt: Date
+  seasonType: string | null
+}
+
 
 /** Sleeper writes an unfilled starting slot as "0". It is a hole, not a player. */
 const EMPTY_SLOT = '0'
@@ -264,6 +296,9 @@ const EMPTY_PULSE: MatchupPulse = {
   ranked: 0,
   basis: null,
   allFinal: false,
+  expectedWins: null,
+  withOdds: 0,
+  closest: [],
   notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0, notStarted: 0 },
 }
 
@@ -421,6 +456,8 @@ export async function getMatchupPulse(
    */
   type Pending = {
     leagueId: string
+    /** The key `WeeklyMatchup` and `league_player_weekly_scores` both use. */
+    platformLeagueId: string
     leagueName: string
     platform: string
     sport: string | null
@@ -489,6 +526,7 @@ export async function getMatchupPulse(
 
     pending.push({
       leagueId: l.id,
+      platformLeagueId: plid,
       leagueName,
       platform,
       sport: l.sport ?? null,
@@ -542,10 +580,17 @@ export async function getMatchupPulse(
     }
   }
 
-  /* ── 4. Lineups for both sides of every unscored pairing. ──────────────── */
-  const needProjection = pending.filter((p) => !p.scored)
+  /* ── 4. Lineups for both sides of EVERY pairing. ───────────────────────────
+   *
+   * 🛑 LIVE PAIRINGS USED TO BE SKIPPED HERE, AND THAT IS WHY THIS BOARD RANKED BY THE WRONG THING.
+   * With no lineup, a scored row knew only the two team totals, so it ranked by points-so-far: on
+   * the Friday of week 4 a league up 30.9 after Thursday night sat third in "Leading" while both
+   * 28-starter lineups had everyone else still to play and it was projected to lose 533–571
+   * (production, 2026-10-02). A win probability needs to know what each side has LEFT, and that is
+   * a property of the lineup. One more key-scoped read for the scored leagues, not a fan-out.
+   */
   const rosterKeys = [
-    ...new Set(needProjection.flatMap((p) => [...p.yourRosterKeys, ...p.theirRosterKeys])),
+    ...new Set(pending.flatMap((p) => [...p.yourRosterKeys, ...p.theirRosterKeys])),
   ]
 
   const platformByLeague = new Map(pending.map((p) => [p.leagueId, p.platform]))
@@ -577,71 +622,168 @@ export async function getMatchupPulse(
     return []
   }
 
+  const lineups = new Map(
+    pending.map((p) => [
+      p.leagueId,
+      { you: startersFor(p.leagueId, p.yourRosterKeys), them: startersFor(p.leagueId, p.theirRosterKeys) },
+    ]),
+  )
+
   /* ── 5. One projection read for every starter on the board. ────────────── */
-  const everyStarter = [
-    ...new Set(
-      needProjection.flatMap((p) => [
-        ...startersFor(p.leagueId, p.yourRosterKeys),
-        ...startersFor(p.leagueId, p.theirRosterKeys),
-      ]),
-    ),
-  ]
+  const everyStarter = [...new Set([...lineups.values()].flatMap((l) => [...l.you, ...l.them]))]
   const projectionWeek = everyStarter.length ? await latestProjectionWeek() : null
-  const projections = everyStarter.length
-    ? await lookupProjections(everyStarter, projectionWeek).catch(() => new Map())
-    : new Map()
 
-  /* ── 6. Fixtures, only if an NFL league is on the board. ───────────────── */
-  const anyNfl = pending.some((p) => String(p.sport ?? 'NFL').toUpperCase() === 'NFL')
-  const kickoffs = anyNfl ? await nextKickoffByClub(now) : new Map<string, Date>()
-
-  /**
-   * Price one lineup under the league's own rules.
+  /*
+   * ── 6. Per-player points and game states, read alongside the projections. ──
    *
-   * ⚠ FALLS BACK TO THE VENDOR TOTAL RATHER THAN DROPPING THE PLAYER, and says
-   * how many it priced. A total missing a starter reads LOW, and low is the
-   * direction that makes someone believe they are losing when they are not —
-   * which is the single claim this whole screen makes.
+   * Points: one batched read over `league_player_weekly_scores` for the scored league-weeks only,
+   * key-scoped to the starters on the board. Games: one read over this board's NFL (season, week)
+   * pairs. Neither depends on the other or on the projections, so the three run together.
    */
-  function price(ids: string[], scoring: Record<string, unknown> | null) {
+  const scoredPending = pending.filter((p) => p.scored)
+  const nflWeeks = [
+    ...new Map(
+      pending
+        .filter((p) => String(p.sport ?? 'NFL').toUpperCase() === 'NFL')
+        .map((p) => [`${p.season}:${p.week}`, { season: p.season, week: p.week }]),
+    ).values(),
+  ]
+  const [projections, scoreRows, weekGames] = await Promise.all([
+    everyStarter.length
+      ? lookupProjections(everyStarter, projectionWeek).catch(() => new Map<string, never>())
+      : Promise.resolve(new Map<string, never>()),
+    scoredPending.length && everyStarter.length
+      ? Promise.resolve()
+          .then(() =>
+            prisma.leaguePlayerWeeklyScore.findMany({
+              where: {
+                OR: scoredPending.map((p) => ({ leagueId: p.platformLeagueId, seasonYear: p.season, week: p.week })),
+                playerId: { in: everyStarter },
+              },
+              select: { leagueId: true, seasonYear: true, week: true, playerId: true, points: true },
+            }),
+          )
+          .catch(() => [])
+      : Promise.resolve([]),
+    nflWeeks.length
+      ? Promise.resolve()
+          .then(() =>
+            prisma.sportsGame.findMany({
+              where: {
+                sport: 'NFL',
+                season: { in: [...new Set(nflWeeks.map((w) => w.season))] },
+                week: { in: [...new Set(nflWeeks.map((w) => w.week))] },
+                OR: [{ seasonType: 'regular' }, { seasonType: null }],
+              },
+              select: {
+                season: true, week: true, homeTeam: true, awayTeam: true, status: true,
+                startTime: true, fetchedAt: true, seasonType: true,
+              },
+              take: 1000,
+            }),
+          )
+          .catch(() => [])
+      : Promise.resolve([]),
+  ])
+
+  /* `${platformLeagueId}:${season}:${week}` → player → points. Absent = nothing attributable. */
+  const pointsByLeagueWeek = new Map<string, Map<string, number>>()
+  for (const r of scoreRows) {
+    const key = `${r.leagueId}:${r.seasonYear}:${r.week}`
+    let m = pointsByLeagueWeek.get(key)
+    if (!m) pointsByLeagueWeek.set(key, (m = new Map()))
+    m.set(r.playerId, r.points)
+  }
+
+  /*
+   * ⚠ A GAME MISSING ITS WEEK OR SEASON IS DROPPED, NOT GUESSED. Week 4 and preseason week 4 share
+   * a number; the query already excludes typed preseason, and an untyped row is only ever trusted by
+   * `starterGameStates` as a newer reading of a regular fixture.
+   */
+  const gamesByWeek = new Map<string, typeof weekGames>()
+  for (const g of weekGames) {
+    if (g.season == null || g.week == null) continue
+    const key = `${g.season}:${g.week}`
+    const list = gamesByWeek.get(key)
+    if (list) list.push(g)
+    else gamesByWeek.set(key, [g])
+  }
+
+  /** One lineup's per-starter facts: league-scored projection and, for NFL, game state. */
+  function starterFacts(p: Pending, ids: string[]) {
+    const isNfl = String(p.sport ?? 'NFL').toUpperCase() === 'NFL'
+    const players = new Map(ids.map((id) => [id, { team: projections.get(id)?.team ?? null }]))
+    const states = isNfl
+      ? weekGameStates(players, gamesByWeek.get(`${p.season}:${p.week}`) ?? [], now)
+      : new Map<string, StarterGameState>()
+    return ids.map((id) => {
+      const proj = projections.get(id)
+      const league =
+        p.scoringSettings && proj?.componentStats
+          ? computeLeagueProjectedPoints(proj.componentStats, p.scoringSettings)
+          : null
+      /*
+       * ⚠ FALLS BACK TO THE VENDOR TOTAL RATHER THAN DROPPING THE PLAYER. A total missing a starter
+       * reads LOW, and low is the direction that makes someone believe they are losing when they are
+       * not — which is the single claim this whole screen makes.
+       */
+      const projected = league?.points ?? proj?.projectedPoints ?? null
+      return { id, projected: projected ?? null, state: (states.get(id) ?? 'unknown') as StarterGameState }
+    })
+  }
+
+  /** Price one lineup: its projected total, and how many starters that total was built from. */
+  function price(facts: ReturnType<typeof starterFacts>) {
     let total = 0
     let from = 0
-    let yetToPlay = 0
-    /*
-     * Starters we actually placed against a fixture.
-     *
-     * ⚠ WITHOUT THIS, "NOBODY LEFT TO PLAY" AND "WE COULD NOT CHECK" ARE THE
-     * SAME VALUE. `yetToPlay` alone cannot tell them apart — both come out 0 —
-     * and the caller was resolving that ambiguity by suppressing the count
-     * whenever it hit zero, which throws away the true zero along with the
-     * unknown. On Monday night "0 left to play" is the most useful thing this
-     * row can say, and it was the one thing it could not say.
-     */
-    let placed = 0
-    for (const id of ids) {
-      const p = projections.get(id)
-      if (!p) continue
-      const league =
-        scoring && p.componentStats ? computeLeagueProjectedPoints(p.componentStats, scoring) : null
-      const v = league?.points ?? p.projectedPoints
-      if (v != null) {
-        total += v
-        from += 1
-      }
-      /*
-       * ⚠ COUNTED ONLY WHEN A FIXTURE WAS ACTUALLY FOUND. An earlier cut counted
-       * "the club code parsed" instead, which made an empty fixture map look
-       * like a lineup that had finished playing.
-       */
-      const info = getTeamInfo(p.team)
-      if (!info) continue
-      const at = kickoffs.get(info.fullName.trim().toLowerCase())
-      if (!at) continue
-      placed += 1
-      if (at.getTime() > now.getTime()) yetToPlay += 1
+    for (const f of facts) {
+      if (f.projected == null) continue
+      total += f.projected
+      from += 1
     }
-    return { total, from, of: ids.length, yetToPlay, placed }
+    return { total, from, of: facts.length }
   }
+
+  /**
+   * Starters still to play — yet to kick off or playing now.
+   *
+   * ⚠ NULL IS NOT ZERO, AND NOW IT MEANS EXACTLY ONE THING: at least one starter's game could not be
+   * placed in this week's schedule. "Fewer left" from a count that skipped the ones we could not
+   * place would be false; "0 left to play" on a lineup whose games are all final is the most useful
+   * thing this row says on a Monday night, and it could never appear before.
+   */
+  function leftToPlay(facts: ReturnType<typeof starterFacts>): number | null {
+    if (facts.length === 0 || facts.some((f) => f.state === 'unknown')) return null
+    return facts.filter((f) => f.state === 'upcoming' || f.state === 'live').length
+  }
+
+  /**
+   * The model's view of one side: each starter's projection, banked points, and whether his game is
+   * over — the same `MatchupPlayer` the one-league page builds.
+   *
+   * Points the platform scored that no starter row accounts for (a stat correction, a provider id we
+   * did not map) are kept as one final "starter", exactly as `liveSide` does on the league page: they
+   * are banked, just not attributable.
+   */
+  function modelSide(
+    facts: ReturnType<typeof starterFacts>,
+    teamPoints: number,
+    byPlayer: ReadonlyMap<string, number> | null,
+  ): MatchupPlayer[] {
+    const starters: MatchupPlayer[] = facts.map((f) => ({
+      playerId: f.id,
+      projectedPoints: f.projected,
+      actualPoints: byPlayer?.get(f.id) ?? 0,
+      isFinal: f.state === 'final',
+    }))
+    const attributed = starters.reduce((s, x) => s + x.actualPoints, 0)
+    const unattributed = teamPoints - attributed
+    if (unattributed > 0.005) {
+      starters.push({ playerId: '__banked__', projectedPoints: 0, actualPoints: unattributed, isFinal: true })
+    }
+    return starters
+  }
+
 
   /*
    * Which league-weeks are over. A week is final once the league has moved past it — or, for NFL,
@@ -668,10 +810,11 @@ export async function getMatchupPulse(
   const ranked: PulseRow[] = []
 
   for (const p of pending) {
-    const yourIds = startersFor(p.leagueId, p.yourRosterKeys)
-    const theirIds = startersFor(p.leagueId, p.theirRosterKeys)
-    const you = p.scored ? null : price(yourIds, p.scoringSettings)
-    const them = p.scored ? null : price(theirIds, p.scoringSettings)
+    const lineup = lineups.get(p.leagueId) ?? { you: [], them: [] }
+    const yourFacts = starterFacts(p, lineup.you)
+    const theirFacts = starterFacts(p, lineup.them)
+    const you = price(yourFacts)
+    const them = price(theirFacts)
 
     let margin: number
     let basis: PulseBasis
@@ -680,7 +823,7 @@ export async function getMatchupPulse(
     if (p.scored) {
       margin = p.yourPoints - p.theirPoints
       basis = 'scored'
-    } else if (!you || !them || you.from === 0 || them.from === 0) {
+    } else if (you.from === 0 || them.from === 0) {
       notRanked.unpriceable++
       continue
     } else if (you.of !== them.of || you.from !== you.of || them.from !== them.of) {
@@ -703,22 +846,43 @@ export async function getMatchupPulse(
       }
     }
 
+    const final = basis === 'scored' && isFinalWeek(p)
+    const isNfl = String(p.sport ?? 'NFL').toUpperCase() === 'NFL'
+
     /*
-     * Only stated when a real fixture placed at least one starter. A league
-     * whose lineup we could not join to the regular-season schedule at all gets
-     * null — see the field note on `startersLeft`.
+     * ── The win probability ─────────────────────────────────────────────
      *
-     * ⚠ THE GATE IS `placed`, NOT `yetToPlay`. Gating on `yetToPlay > 0` reads
-     * as the same rule and is not: it also suppresses a lineup that HAS been
-     * placed and has genuinely finished, so "0 left to play" — the whole of
-     * Sunday evening — rendered as though we had never looked. That is the
-     * exact "null is not zero" confusion this field's own doc warns about,
-     * running in the opposite direction.
+     * A finished week is a result: 1, 0, or a tie. Otherwise the shared model, fed exactly what the
+     * league page feeds it. Before kickoff nobody has banked anything and nobody is final, so a
+     * projected row is a pure projection; once points exist they must be ATTRIBUTABLE to players —
+     * with only the two team totals, "what is left" is unknowable, and the league page refuses in
+     * the same place for the same reason.
      */
-    const startersLeft =
-      String(p.sport ?? 'NFL').toUpperCase() === 'NFL' && you && you.placed > 0
-        ? you.yetToPlay
-        : null
+    let pWin: number | null = null
+    let projectedMargin: number | null = null
+    if (final) {
+      pWin = margin > 0 ? 1 : margin < 0 ? 0 : 0.5
+      projectedMargin = Math.round(margin * 10) / 10
+    } else {
+      const byPlayer =
+        basis === 'scored' ? pointsByLeagueWeek.get(`${p.platformLeagueId}:${p.season}:${p.week}`) ?? null : null
+      const attributable = basis === 'projected' || byPlayer != null
+      /* Game states are only known for NFL; elsewhere a live row cannot say who has finished. */
+      const statesKnown = basis === 'projected' || isNfl
+      if (attributable && statesKnown && yourFacts.length > 0 && theirFacts.length > 0) {
+        /* Before kickoff nobody is final, whatever a stale schedule row says. */
+        const asOf = (facts: typeof yourFacts) =>
+          basis === 'projected' ? facts.map((f) => ({ ...f, state: 'upcoming' as StarterGameState })) : facts
+        const result = computeWinProbability(
+          { teamId: 'you', starters: modelSide(asOf(yourFacts), basis === 'scored' ? p.yourPoints : 0, byPlayer) },
+          { teamId: 'them', starters: modelSide(asOf(theirFacts), basis === 'scored' ? p.theirPoints : 0, byPlayer) },
+        )
+        if (result.available) {
+          pWin = result.pWin
+          projectedMargin = Math.round(result.projectedMargin * 10) / 10
+        }
+      }
+    }
 
     ranked.push({
       leagueId: p.leagueId,
@@ -734,9 +898,11 @@ export async function getMatchupPulse(
       basis,
       season: p.season,
       week: p.week,
-      final: basis === 'scored' && isFinalWeek(p),
-      startersLeft,
+      final,
+      startersLeft: isNfl ? leftToPlay(yourFacts) : null,
       coverage,
+      pWin,
+      projectedMargin,
       href: `/core/matchup?league=${encodeURIComponent(p.leagueId)}`,
     })
   }
@@ -762,15 +928,48 @@ export async function getMatchupPulse(
   })
 
   /*
-   * Level is neither leading nor trailing, and the design has no column for it.
-   * A 0.0 row goes to `trailing` only if it would otherwise vanish — it does
-   * not, so exact ties are simply excluded from both lists and still counted in
-   * `ranked`, which is what the header renders.
+   * ── Ranking: by WHO WILL WIN, not by who is ahead right now ─────────────
+   *
+   * 🛑 RANKED BY RAW MARGIN, THIS BOARD WAS DECIDED BY THURSDAY NIGHT. A live margin with most of
+   * both lineups still to play says almost nothing, and it sat in the same sort as full-week
+   * projections — so the Friday board led with whichever leagues had a Thursday starter, including
+   * one up 30.9 that was projected to lose by 37 (production, 2026-10-02).
+   *
+   * A row is FAVOURED when the model gives you better than even odds, and ranked by those odds;
+   * the margin breaks ties (two finished wins, both 100%). A row the model refused is placed by its
+   * margin's sign and ranked AFTER every row that has odds — it is still a fact, just a weaker one,
+   * and dropping it would hide a league. A coin flip or a level score sits in neither column.
    */
-  const ahead = deduped.filter((r) => r.margin > 0)
-  const behind = deduped.filter((r) => r.margin < 0)
-  const leading = [...ahead].sort((a, b) => b.margin - a.margin).slice(0, 5)
-  const trailing = [...behind].sort((a, b) => a.margin - b.margin).slice(0, 5)
+  const side = (r: PulseRow): 1 | -1 | 0 => {
+    if (r.pWin != null) return r.pWin > 0.5 ? 1 : r.pWin < 0.5 ? -1 : 0
+    return r.margin > 0 ? 1 : r.margin < 0 ? -1 : 0
+  }
+  const hasOdds = (r: PulseRow) => (r.pWin != null ? 1 : 0)
+  const ahead = deduped.filter((r) => side(r) === 1)
+  const behind = deduped.filter((r) => side(r) === -1)
+  const leading = [...ahead]
+    .sort((a, b) => hasOdds(b) - hasOdds(a) || (b.pWin ?? 0) - (a.pWin ?? 0) || b.margin - a.margin)
+    .slice(0, 5)
+  const trailing = [...behind]
+    .sort((a, b) => hasOdds(b) - hasOdds(a) || (a.pWin ?? 0) - (b.pWin ?? 0) || a.margin - b.margin)
+    .slice(0, 5)
+
+  /*
+   * The closest games still being played, nearest a coin flip first — the middle the two columns
+   * hide, and the leagues worth watching. By odds where there are odds; a row without them sorts
+   * after every row with them, closest margin first.
+   */
+  const shownIds = new Set([...leading, ...trailing].map((r) => r.leagueId))
+  const closeness = (r: PulseRow) => (r.pWin != null ? Math.abs(r.pWin - 0.5) : 1 + Math.abs(r.margin))
+  const closest = deduped
+    .filter((r) => !r.final && !shownIds.has(r.leagueId))
+    .sort((a, b) => closeness(a) - closeness(b))
+    .slice(0, 5)
+
+  const withOddsRows = deduped.filter((r) => r.pWin != null)
+  const expectedWins = withOddsRows.length
+    ? Math.round(withOddsRows.reduce((s, r) => s + (r.pWin ?? 0), 0) * 10) / 10
+    : null
 
   const bases = new Set(ranked.map((r) => r.basis))
 
@@ -783,6 +982,9 @@ export async function getMatchupPulse(
     ranked: ranked.length,
     basis: bases.size === 0 ? null : bases.size > 1 ? 'mixed' : [...bases][0],
     allFinal: deduped.length > 0 && deduped.every((r) => r.final),
+    expectedWins,
+    withOdds: withOddsRows.length,
+    closest,
     notRanked: { ...notRanked, unidentifiedRoster, notStarted },
   }
 }
