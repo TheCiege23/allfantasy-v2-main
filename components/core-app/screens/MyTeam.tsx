@@ -195,6 +195,59 @@ function GameContext({ text }: { text: string | null }) {
 }
 
 /**
+ * Where his game stands, in words a touch screen can read — not a `title` that only a mouse
+ * ever sees.
+ *
+ * "Final" needs a final status; past kickoff with no fresh status says "Kicked off", never
+ * "Final" (see `myTeamGameDay.ts`). Points are the platform's own, and appear only when a score
+ * row is held — an ESPN league reads "Final" with no number rather than a guessed one.
+ */
+function GameDayChip({ day }: { day: NonNullable<LineupPlayer['gameDay']> }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  if (day.state === 'upcoming') return null
+  const label = day.state === 'final' ? copy('Final') : day.state === 'live' ? copy('Live') : copy('Kicked off')
+  const pts = day.points != null ? `${day.points.toFixed(1)} ${copy('pts')}` : null
+  const why =
+    day.points == null
+      ? copy('Points scored are not imported for this league yet.')
+      : copy('Points as your platform scored them. Stat corrections can still move this.')
+  return (
+    <span className="af-mt-gameday" data-state={day.state} title={why}>
+      <span className="af-mt-gameday-state">{label}</span>
+      {pts ? <span className="af-mt-gameday-pts af-num">{pts}</span> : null}
+    </span>
+  )
+}
+
+/**
+ * The week so far, over the starters: who has played and what they put up. The projected
+ * totals above stay projections; this is the line that says some of the week is already in.
+ */
+function StarterGameDayLine({ summary }: { summary: NonNullable<MyTeamData['starterGameDay']> }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const played = summary.final + summary.live + summary.started
+  const parts = [
+    summary.final ? `${summary.final} ${copy('final')}` : null,
+    summary.live ? `${summary.live} ${copy('live')}` : null,
+    summary.started ? `${summary.started} ${copy('kicked off')}` : null,
+    summary.upcoming ? `${summary.upcoming} ${copy('to play')}` : null,
+  ].filter(Boolean)
+  const scored =
+    summary.scored == null
+      ? copy('points scored are not imported for this league yet')
+      : `${summary.scored.toFixed(1)} ${copy('pts scored')}${
+          summary.scoredCount < played ? ` (${summary.scoredCount} ${copy('of')} ${played})` : ''
+        }`
+  return (
+    <p className="af-mt-gameday-line">
+      <span className="af-label">{copy('This week so far')}</span> {parts.join(' · ')} · {scored}
+    </p>
+  )
+}
+
+/**
  * Weather, or the venue when there is no forecast yet.
  *
  * Two different statements, and they must not look alike: "roofed, so weather
@@ -448,7 +501,12 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
         </div>
         <div className="af-mt-player-meta">
           <GameContext text={player.gameContext} />
-          <VenueMark indoors={player.indoors} weather={player.weather} />
+          {/* A forecast for a game already under way or over answers nothing. */}
+          {player.gameDay && player.gameDay.state !== 'upcoming' ? (
+            <GameDayChip day={player.gameDay} />
+          ) : (
+            <VenueMark indoors={player.indoors} weather={player.weather} />
+          )}
           {player.preseason ? (
             <span
               className="af-mt-pre"
@@ -691,7 +749,7 @@ function SlotRow({
       state was already the loudest thing on the row; this is the same problem
       wearing a name.
     */
-    <li id={anchor} className="af-mt-row" data-empty={slot.empty} data-bye={slot.player?.onBye === true}>
+    <li id={anchor} className="af-mt-row" data-empty={slot.empty} data-bye={slot.player?.onBye === true} data-game={slot.player?.gameDay?.state}>
       <span className="af-mt-slot af-num" data-pos={posGroup(slot.slotLabel)}>
         {slot.slotLabel}
       </span>
@@ -754,7 +812,7 @@ function BenchRow({
   trailing?: React.ReactNode
 }) {
   return (
-    <li id={`lineup-player-${player.sleeperId}`} className="af-mt-row">
+    <li id={`lineup-player-${player.sleeperId}`} className="af-mt-row" data-game={player.gameDay?.state}>
       <span
         className="af-mt-slot af-num"
         data-pos={posGroup(player.position ?? slotLabel)}
@@ -1173,6 +1231,8 @@ export function MyTeam({ data }: MyTeamProps) {
           </span>
           <ProjHeader />
         </header>
+
+        {data.starterGameDay ? <StarterGameDayLine summary={data.starterGameDay} /> : null}
 
         {data.starters.available ? (
           <ul className="af-mt-list">

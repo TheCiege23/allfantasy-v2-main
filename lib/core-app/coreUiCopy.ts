@@ -99,6 +99,18 @@ const spanish: Record<string, string> = {
   'Browse history': 'Ver historial',
   Week: 'Semana',
   Final: 'Final',
+  // My Team game-day chip and line (myTeamGameDay.ts).
+  // `Live` and `final` are already defined above/below and read the same here.
+  'Kicked off': 'Comenzó',
+  pts: 'pts',
+  live: 'en vivo',
+  'kicked off': 'comenzados',
+  'to play': 'por jugar',
+  'pts scored': 'pts anotados',
+  'This week so far': 'Esta semana hasta ahora',
+  'points scored are not imported for this league yet': 'los puntos de esta liga aún no se importan',
+  'Points scored are not imported for this league yet.': 'Los puntos de esta liga aún no se importan.',
+  'Points as your platform scored them. Stat corrections can still move this.': 'Puntos según tu plataforma. Las correcciones de estadísticas aún pueden cambiarlos.',
   Upcoming: 'Próximo',
   Opponent: 'Rival',
   'Set lineup in': 'Ajustar alineación en',

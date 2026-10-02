@@ -32,7 +32,8 @@ import { displayPosition, inferSlotLabel } from './positionLabels'
 import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, resolveSourceScreenLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { identityGapNote } from './identityGap'
-import { kickoffClock } from './lineupLock'
+import { kickoffClock, LOCK_ZONE } from './lineupLock'
+import { readLineupGameDay, summariseStarterGameDay, type PlayerGameDay, type StarterGameDaySummary } from './myTeamGameDay'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import {
   BENCH_SWAP_POINTS,
@@ -156,6 +157,12 @@ export type LineupPlayer = {
    */
   weather: GameWeather | null
   /**
+   * Where his game stands this week and what he has scored — see `myTeamGameDay.ts`.
+   * Optional so every other constructor of a LineupPlayer keeps compiling unchanged; absent
+   * reads as "no state known", which renders exactly as the screen did before.
+   */
+  gameDay?: PlayerGameDay
+  /**
    * His team is not playing this week.
    *
    * ⚠ THE MOST PREVENTABLE LOSS IN FANTASY. Starting a player on bye is a
@@ -262,6 +269,11 @@ export type MyTeamData = {
     teamCount: number
   }>
   lineupVerification?: LineupVerification | null
+  /**
+   * The starters' game day so far: how many have played, and the points they put up. Null
+   * before anyone has kicked off, and on the early-return paths.
+   */
+  starterGameDay?: StarterGameDaySummary | null
   starters: SectionState<LineupSlot[]>
   /**
    * Why the roster carries unnamed rows, said ONCE.
@@ -399,9 +411,19 @@ function inSleeperIdSpace(id: string): boolean {
  * labels use, because NFL schedule days are published in Eastern time and a
  * server-rendered string must not depend on the reader's machine.
  */
-function formatKickoff(d: Date | null): string | null {
+export function formatKickoff(d: Date | null): string | null {
   if (!d || Number.isNaN(d.getTime())) return null
-  return kickoffClock(d.toISOString()) || null
+  const clock = kickoffClock(d.toISOString())
+  if (!clock) return null
+  /*
+   * ⚠ AND THE DAY ALONE IS NOT A DATE. "Thu 8:15p ET" on a Friday is either last night's game
+   * or next week's, and the row gave no way to tell — which is how three starters who had
+   * already played (2026-10-01) read as still to come. The month/day goes beside the weekday,
+   * in the same Eastern zone: "Thu 10/1 8:15p ET".
+   */
+  const monthDay = new Intl.DateTimeFormat('en-US', { timeZone: LOCK_ZONE, month: 'numeric', day: 'numeric' }).format(d)
+  const space = clock.indexOf(' ')
+  return space > 0 ? `${clock.slice(0, space)} ${monthDay}${clock.slice(space)}` : clock
 }
 
 
@@ -1130,6 +1152,22 @@ export async function getMyTeamData(
    */
   const byes = await zeroByeWeekPlayers(resolved, sport, sportsWeek)
 
+  /*
+   * ⚠ WHO HAS ALREADY PLAYED, before any row is built. Every row read as a game still to come,
+   * so a starter whose Thursday game was final showed a projection and a forecast beside it.
+   * Attached in place so the starter slots, bench, IR and taxi built below all carry it.
+   */
+  const gameDays = await readLineupGameDay({
+    sport,
+    week: sportsWeek,
+    platformLeagueId: league.platformLeagueId ? String(league.platformLeagueId) : null,
+    players: resolved,
+  }).catch(() => new Map<string, PlayerGameDay>())
+  for (const [id, p] of resolved) {
+    const day = gameDays.get(id)
+    if (day) p.gameDay = day
+  }
+
   // Sleeper encodes an unfilled starting slot as "0" — that is the handoff's
   // "FLEX is empty" state, and it must survive as an empty slot rather than
   // being filtered out into a shorter lineup that looks complete.
@@ -1511,9 +1549,17 @@ export async function getMyTeamData(
       }).catch(() => null)
     : null
 
+  const starterDays = starterSlots
+    .map((s) => s.player?.gameDay)
+    .filter((d): d is PlayerGameDay => d != null)
+  const starterGameDay = starterDays.some((d) => d.state !== 'upcoming')
+    ? summariseStarterGameDay(starterDays)
+    : null
+
   return {
     ...base,
     team,
+    starterGameDay,
     bestBall: base.league.bestBall === true,
     lineupVerification: liveRoster?.verification ?? null,
     projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },
