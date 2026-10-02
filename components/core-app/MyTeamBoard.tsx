@@ -175,6 +175,29 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
   )
 }
 
+/**
+ * `rankTiers` output, written the way a standings table writes a tie.
+ *
+ * ⚠ THE BULLET READ AS A MISSING NUMBER. A tier's first row carried a numeral
+ * and the rows tied with it carried `•`, so a live board read "01, 02, •, 04,
+ * •, •, •…" — which looks like a list that lost its numbering, not one that
+ * says "same as above". Every row in a shared tier now carries the tier's rank
+ * with a T ("T4, T4, T4"); a row alone in its tier keeps its plain numeral.
+ * The all-null case (nothing separated anything) passes through untouched, so
+ * the board still drops the gutter entirely.
+ */
+function tiedRankLabels(ranks: Array<string | null>): Array<string | null> {
+  if (ranks.every((r) => r === null)) return ranks
+  const out: Array<string | null> = []
+  let tierStart = 0
+  for (let i = 0; i < ranks.length; i += 1) {
+    if (ranks[i] !== null) tierStart = i
+    const tied = ranks[i] === null || ranks[i + 1] === null
+    out.push(tied ? `T${tierStart + 1}` : ranks[i])
+  }
+  return out
+}
+
 function Row({
   row,
   rank,
@@ -190,6 +213,13 @@ function Row({
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const tags = tagsOf(row, language)
+  /*
+   * ⚠ THE LABEL CARRIES ITS OWN VALUE. "Next player deadline" used to stand
+   * alone on this line, with the countdown it referred to a row above and a
+   * column away — so every row read as a label with its value missing.
+   * Eastern and pinned, like every kickoff on /core, so it hydrates.
+   */
+  const nextDeadline = row.lockAt && Date.parse(row.lockAt) > now ? kickoffClock(row.lockAt) || null : null
   /*
    * ⚠ THE CTA GOES TO THE PLATFORM, NOT INTO AllFantasy. AllFantasy is
    * read-only; the lineup is changed on Sleeper. `lineupLink` falls back to the
@@ -216,14 +246,14 @@ function Row({
           place. It has not: the section label already says the rows are in no
           particular order, and that sentence carries the whole meaning.
 
-          ⚠ A BULLET, NOT A BLANK, IN THE MIXED CASE. There the column is real —
-          numerals mark where each new lock time starts — so a row that ties with
-          the one above needs a mark saying "same as above". An empty cell
-          between numerals reads as data that failed to load.
+          ⚠ A TIE MARK, NOT A BLANK, IN THE MIXED CASE. There the column is real,
+          so a row that ties another needs to say so. An empty cell between
+          numerals reads as data that failed to load, and a bullet read as a
+          missing number — see `tiedRankLabels`.
         */}
         {showRank ? (
-          <span className="af-bd-rank" data-untiered={rank == null ? '' : undefined} aria-hidden>
-            {rank ?? '•'}
+          <span className="af-bd-rank" data-tied={rank?.startsWith('T') ? '' : undefined} aria-hidden>
+            {rank}
           </span>
         ) : null}
         <LeagueCrest
@@ -275,7 +305,7 @@ function Row({
         )}
       </div>
       <div className="af-mt-board-actions">
-        <span>{row.bestBall ? copy('Provider selects the scoring lineup · review roster depth') : <>{row.started ? language === 'es' ? `${row.started} ${copy(row.started === 1 ? 'starter' : 'starters')} con partido iniciado · ` : `${row.started} ${row.started === 1 ? 'starter' : 'starters'} past kickoff · ` : ''}{copy(row.lockAt ? 'Next player deadline' : 'Check individual locks')}{row.unknownKickoffs ? language === 'es' ? ` · ${row.unknownKickoffs} sin hora de inicio` : ` · ${row.unknownKickoffs} without a kickoff` : ''}</>}</span>
+        <span>{row.bestBall ? copy('Provider selects the scoring lineup · review roster depth') : <>{row.started ? language === 'es' ? `${row.started} ${copy(row.started === 1 ? 'starter' : 'starters')} con partido iniciado · ` : `${row.started} ${row.started === 1 ? 'starter' : 'starters'} past kickoff · ` : ''}{nextDeadline ? `${copy('Next player deadline')} ${nextDeadline}` : copy(row.lockAt ? 'Next player deadline' : 'Check individual locks')}{row.unknownKickoffs ? language === 'es' ? ` · ${row.unknownKickoffs} sin hora de inicio` : ` · ${row.unknownKickoffs} without a kickoff` : ''}</>}</span>
         <LineupIntelligenceActions leagueId={row.leagueId} leagueName={row.leagueName} bestBall={row.bestBall} />
       </div>
     </li>
@@ -306,14 +336,23 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
   const activeTotal = Math.max(0, total - (pulse.paused ?? 0) - (pulse.notChecked.inactive ?? 0))
 
   /*
-   * ⚠ THE TIER KEY MIRRORS THE LOADER'S COMPARATOR, FIELD FOR FIELD, AND NOT
-   * THE RENDERED LOCK. `needs` sorts on (locked, severity, lockAt) and `set` on
-   * lockAt alone with severity pinned at 0, so this one key returns "tied"
-   * exactly when the comparator would have returned 0 in either column. Reading
-   * the DISPLAYED time instead would merge rows an hour apart, because
-   * `formatLockLabel` rounds to the hour past a day.
+   * ⚠ THE TIER KEY MIRRORS THE LOADER'S COMPARATORS, FIELD FOR FIELD, AND NOT
+   * THE RENDERED LOCK. `needs` sorts on (locked, severity, lockAt, questionable)
+   * and `set` on (questionable, lockAt), so each key returns "tied" exactly when
+   * its column's comparator would have returned 0. The N/S prefix keeps the two
+   * columns apart: the last `needs` row and the first `set` row are ordered by
+   * the concatenation itself, so they never tie. Reading the DISPLAYED time
+   * instead would merge rows an hour apart, because `formatLockLabel` rounds to
+   * the hour past a day.
    */
-  const ranks = rankTiers(rows.map((r) => `${(r.actionableSeverity ?? r.severity) === 0 ? 1 : 0}|${r.actionableSeverity ?? r.severity}|${r.lockAt ?? ''}`))
+  const needsShown = Math.min(pulse.needs.length, BOARD_ROWS)
+  const ranks = tiedRankLabels(rankTiers(rows.map((r, i) => {
+    const sev = r.actionableSeverity ?? r.severity
+    return i < needsShown
+      ? `N|${sev === 0 ? 1 : 0}|${sev}|${r.lockAt ?? ''}|${r.questionable}`
+      : `S|${r.questionable}|${r.lockAt ?? ''}`
+  })))
+  const questionableFirst = pulse.needs.length === 0 && rows.some((r) => r.questionable > 0)
   /* Nothing separated any row from any other, so the board is a set, not a ranking. */
   const unordered = ranks.length > 0 && ranks.every((r) => r === null)
 
@@ -380,7 +419,9 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
                 ? language === 'es' ? `${rows.length} visibles · cierran a la vez, sin orden particular` : `${rows.length} shown · all lock together, so in no particular order`
                 : pulse.needs.length > 0
                   ? language === 'es' ? `Primeros ${rows.length} · por urgencia` : `Top ${rows.length} · ranked by urgency`
-                  : language === 'es' ? `Primeros ${rows.length} · sin problemas, ordenados por hora de cierre` : `Top ${rows.length} · nothing is broken, so ranked by lock time`
+                  : questionableFirst
+                    ? language === 'es' ? `Primeros ${rows.length} · dudosos primero, luego por hora de cierre` : `Top ${rows.length} · questionable starters first, then lock time`
+                    : language === 'es' ? `Primeros ${rows.length} · sin problemas, ordenados por hora de cierre` : `Top ${rows.length} · nothing is broken, so ranked by lock time`
           }
           count={language === 'es'
             ? `${pulse.checked.toLocaleString()} de ${activeTotal.toLocaleString()} equipos ${pulse.paused ? 'activos ' : ''}revisados`
@@ -400,10 +441,12 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
                 {pulse.automatic
                   ? copy('No manual lineup problems found in the available data. Best Ball scoring lineups are selected automatically; review those leagues for roster injuries and depth.')
                   : language === 'es'
-                    ? `Las ${pulse.checked.toLocaleString()} alineaciones que pudimos leer están listas: sin posiciones vacías ni jugadores descartados${pulse.byeChecked ? ', y nadie descansa' : ''}. Estas son las que cierran primero.`
+                    ? `Las ${pulse.checked.toLocaleString()} alineaciones que pudimos leer están listas: sin posiciones vacías ni jugadores descartados${pulse.byeChecked ? ', y nadie descansa' : ''}. ${questionableFirst ? 'Primero las que tienen titulares dudosos, luego las que cierran antes.' : 'Estas son las que cierran primero.'}`
                     : <>Every one of the {pulse.checked.toLocaleString()} lineups we could read is set —
                       no empty slots, nobody ruled out
-                      {pulse.byeChecked ? ', nobody on a bye' : ''}. These are the ones locking soonest.</>}
+                      {pulse.byeChecked ? ', nobody on a bye' : ''}. {questionableFirst
+                        ? 'Lineups with questionable starters come first, then the ones locking soonest.'
+                        : 'These are the ones locking soonest.'}</>}
               </p>
             ) : null}
             <ul className="af-bd-rows">

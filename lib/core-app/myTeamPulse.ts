@@ -609,10 +609,22 @@ export async function getMyTeamPulse(
     .sort(
       (a, b) => Number(a.actionableSeverity === 0) - Number(b.actionableSeverity === 0)
         || (b.actionableSeverity ?? b.severity) - (a.actionableSeverity ?? a.severity)
-        || byLock(a, b),
+        || byLock(a, b)
+        || b.questionable - a.questionable,
     )
 
-  const setAll = rows.filter((r) => r.severity === 0).sort(byLock)
+  /*
+   * ⚠ QUESTIONABLE FIRST, THEN THE CLOCK. This sorted on lock time alone, so a
+   * lineup with four questionable starters tied a lineup with nothing wrong —
+   * observed live 2026-10-02, where "4 questionable" and "SET · nothing missing"
+   * shared one tier and the set league sat at #7 of a list headed "ranked by
+   * urgency". A questionable starter is a risk, not a certain loss, which is why
+   * it stays out of `severity` and below every row in `needs`; but among lineups
+   * with no certain loss it is the only thing left to check.
+   */
+  const setAll = rows
+    .filter((r) => r.severity === 0)
+    .sort((a, b) => b.questionable - a.questionable || byLock(a, b))
 
   return {
     needs: needsAll.slice(0, NEEDS_CAP),

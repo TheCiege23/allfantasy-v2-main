@@ -157,9 +157,15 @@
 }
 
 /*
- * A row that ties with the one above it carries a bullet instead of a numeral.
- * It keeps the column's width so the league names stay aligned, and drops the
- * weight — a bullet as bold as a rank would read as a rank.
+ * A row in a shared tier carries "T4" — the tier's rank with a T, as a standings
+ * table writes a tie (see `tiedRankLabels` in MyTeamBoard). It replaced a bullet,
+ * which on a live board read "01, 02, •, 04, •, •" — a list that had lost its
+ * numbering. The tie label is a real rank, so it keeps the numerals' weight and
+ * colour; it only drops a pixel so "T10" still fits the 20px column and the
+ * league names stay aligned.
+ *
+ * The history below is the bullet's, kept because its two rules still hold for
+ * anything in this column: no opacity, and no gutter on a board with one tier.
  *
  * 🛑 NO OPACITY. This shipped at `opacity: 0.45` and had to be corrected on the
  * production screen: `--faint` #7d84a8 at 45% over the board's #0b0d17 resolves
@@ -188,8 +194,9 @@
  * MIXED board, where numerals sit beside it and give it context. The glyph is
  * U+2022 BULLET, roughly 2.5x the ink of the middot it replaced.
  */
-.af-core .af-bd-rank[data-untiered] {
-  font-weight: 400;
+.af-core .af-bd-rank[data-tied] {
+  font-size: 11px;
+  letter-spacing: -0.03em;
 }
 
 /* league identity block — name over platform · detail */

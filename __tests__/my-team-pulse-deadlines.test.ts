@@ -66,3 +66,24 @@ it('CONTROL: the same lineup in a Sleeper league IS read, and its OUT starter fl
  expect(pulse.needsTotal).toBe(1)
  expect(pulse.needs[0]).toMatchObject({leagueId:'L0',out:1})
 })
+/*
+ * A questionable starter was invisible to the order: `set` sorted on lock time alone, so
+ * "4 questionable" tied "SET · nothing missing" (observed live 2026-10-02). L0 is first in
+ * query order, so a lock-only sort leaves it first — the assertion fails without the fix.
+ */
+it('puts a lineup with a questionable starter ahead of a clean one locking at the same time', async () => {
+ const league = (i: number) => ({leagueId:`L${i}`,externalId:'4',platformUserId:'su',teamName:'Mine',league:{id:`L${i}`,name:`League ${i}`,sport:'NFL',platform:'sleeper',platformLeagueId:`${1000+i}`,userId:'user',season:2026,updatedAt:new Date()}})
+ db.leagueTeam.findMany.mockResolvedValueOnce([league(0), league(1)] as any)
+ db.roster.findMany.mockResolvedValueOnce([
+  {leagueId:'L0',platformUserId:'su',playerData:{players:['healthy'],starters:['healthy']}},
+  {leagueId:'L1',platformUserId:'su',playerData:{players:['healthy','qp'],starters:['healthy','qp']}},
+ ] as any)
+ db.sportsPlayer.findMany.mockResolvedValueOnce([{sleeperId:'healthy',name:'Healthy Player',team:'ATL'},{sleeperId:'qp',name:'Quinn Maybe',team:'NYJ'}] as any)
+ db.sportsInjury.findMany.mockResolvedValueOnce([{sport:'NFL',playerName:'Quinn Maybe',status:'Questionable',team:'NYJ'}] as any)
+ const pulse=await getMyTeamPulse('user',new Date('2026-09-24T12:00:00Z'))
+ expect(pulse.needsTotal).toBe(0)
+ expect(pulse.set.map(row=>[row.leagueId,row.questionable,row.lockAt])).toEqual([
+  ['L1',1,'2026-09-25T00:15:00.000Z'],
+  ['L0',0,'2026-09-25T00:15:00.000Z'],
+ ])
+})
