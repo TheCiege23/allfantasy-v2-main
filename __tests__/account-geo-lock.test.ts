@@ -255,6 +255,8 @@ describe("middleware enforces the lock wherever the request appears to be", () =
     ["GET", "/api/auth/session"],
     ["POST", "/api/auth/signout"],
     ["GET", "/api/subscription/billing-portal"],
+    // The /paid-restricted cancel button: stopping a charge must never depend on the lock.
+    ["POST", "/api/account/cancel-subscription"],
   ] as const) {
     it(`still lets a locked account reach ${method} ${path}`, async () => {
       lockedToken()
