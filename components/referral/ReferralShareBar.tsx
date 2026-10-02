@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { buildInviteShareUrl } from "@/lib/invite-engine/shareUrls"
 import type { InviteShareChannel } from "@/lib/invite-engine/types"
+import { copyText } from "@/lib/clipboard/copyText"
 
 const DEFAULT_MESSAGE = "Join me on AllFantasy for smarter fantasy tools, league intel, and coaching from Chimmy."
 
@@ -33,14 +34,6 @@ export interface ReferralShareBarProps {
   testIdPrefix?: string
 }
 
-async function copyText(value: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(value)
-    return true
-  } catch {
-    return false
-  }
-}
 
 export function ReferralShareBar({
   referralLink,
@@ -50,6 +43,13 @@ export function ReferralShareBar({
   testIdPrefix = "referral-share",
 }: ReferralShareBarProps) {
   const [copiedChannel, setCopiedChannel] = useState<InviteShareChannel | null>(null)
+  /*
+   * Copy link and Discord used to RETURN on a failed copy — no message, no fallback, the button
+   * simply did nothing, and in-app browsers (where invite links get opened) refuse the clipboard.
+   * lib/clipboard/copyText now tries a second mechanism first; if that fails too, the link is shown
+   * as tap-to-select text so it can still be copied by hand.
+   */
+  const [copyFailed, setCopyFailed] = useState(false)
 
   const logShare = (channel: InviteShareChannel) => {
     onShare?.(channel)
@@ -63,6 +63,7 @@ export function ReferralShareBar({
   const handleShare = async (channel: InviteShareChannel, action: "copy" | "external" | "manual_copy") => {
     if (action === "copy" || action === "manual_copy") {
       const copied = await copyText(referralLink)
+      setCopyFailed(!copied)
       if (!copied) return
       setCopiedChannel(channel)
       logShare(channel)
@@ -102,6 +103,14 @@ export function ReferralShareBar({
           </button>
         )
       })}
+      {copyFailed ? (
+        <p className="basis-full text-xs" role="status" style={{ color: "var(--muted)" }} data-testid={`${testIdPrefix}-copy-fallback`}>
+          Couldn&apos;t copy automatically. Press and hold (or select) the link to copy it:{" "}
+          <span className="select-all break-all font-mono" style={{ color: "var(--text)" }}>
+            {referralLink}
+          </span>
+        </p>
+      ) : null}
     </div>
   )
 }

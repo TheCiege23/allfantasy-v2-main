@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Copy, Check, Users, UserPlus, Gift, Loader2 } from "lucide-react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { ReferralShareBar } from "@/components/referral/ReferralShareBar"
+import { copyText, selectField } from "@/lib/clipboard/copyText"
 
 type Stats = { clicks: number; signups: number; pendingRewards: number; redeemedRewards: number }
 type Reward = {
@@ -65,26 +66,22 @@ export function ReferralSection() {
   }, [])
 
   /*
-   * `navigator.clipboard` is missing outside a secure context and refused by some in-app
-   * browsers, and the old `.then()` had no rejection path — the button simply did nothing.
-   * On failure the text is selected in its field so a long-press copy is one step away.
+   * lib/clipboard/copyText tries the async clipboard API, then the legacy copy command, which still
+   * works in the in-app browsers and older iOS Safari that refuse the first. Only when BOTH fail is
+   * the text selected in its field (iOS needs the explicit range selectField sets) with a message —
+   * the old `.then()` had no rejection path and the button simply did nothing.
    */
-  const copyText = async (text: string, input: HTMLInputElement | null): Promise<boolean> => {
+  const copyFromField = async (text: string, input: HTMLInputElement | null): Promise<boolean> => {
     setCopyError(null)
-    try {
-      await navigator.clipboard.writeText(text)
-      return true
-    } catch {
-      input?.focus()
-      input?.select()
-      setCopyError("Couldn't copy automatically — the text is selected, so copy it from the field.")
-      return false
-    }
+    if (await copyText(text)) return true
+    selectField(input)
+    setCopyError("Couldn't copy automatically — the text is selected, so copy it from the field.")
+    return false
   }
 
   const copyLink = async () => {
     if (!link) return
-    if (await copyText(link, linkInputRef.current)) {
+    if (await copyFromField(link, linkInputRef.current)) {
       setCopiedLink(true)
       setTimeout(() => setCopiedLink(false), 2000)
     }
@@ -92,7 +89,7 @@ export function ReferralSection() {
 
   const copyCode = async () => {
     if (!code) return
-    if (await copyText(code, codeInputRef.current)) {
+    if (await copyFromField(code, codeInputRef.current)) {
       setCopiedCode(true)
       setTimeout(() => setCopiedCode(false), 2000)
     }
