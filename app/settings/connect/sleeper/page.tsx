@@ -2,6 +2,7 @@ import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
 import ConnectSleeperForm from "./ConnectSleeperForm"
 
 export default async function ConnectSleeperPage() {
@@ -12,6 +13,17 @@ export default async function ConnectSleeperPage() {
   if (!session?.user?.id) {
     redirect("/login?callbackUrl=/settings/connect/sleeper")
   }
+
+  // An existing link is shown, not overwritten: discovery never replaces one (first-write-wins).
+  const linked = await prisma.userProfile
+    .findUnique({
+      where: { userId: session!.user!.id! },
+      select: { sleeperUserId: true, sleeperUsername: true },
+    })
+    .catch(() => null)
+  const currentLink = linked?.sleeperUserId
+    ? { sleeperUserId: linked.sleeperUserId, sleeperUsername: linked.sleeperUsername ?? null }
+    : null
 
   return (
     <div className="min-h-screen bg-[#07071a] px-4 py-8 text-white">
@@ -33,7 +45,7 @@ export default async function ConnectSleeperPage() {
           that circle: it validates the handle against Sleeper and stamps the
           profile in one step.
         */}
-        <ConnectSleeperForm />
+        <ConnectSleeperForm currentLink={currentLink} />
       </div>
     </div>
   )

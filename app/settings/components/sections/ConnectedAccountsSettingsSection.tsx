@@ -509,6 +509,7 @@ export function ConnectedAccountsSettingsSection({
           <ConnectedPlatforms
             sleeperUsername={profile?.sleeperUsername ?? null}
             onDisconnectSleeper={() => void handleDisconnectSleeper()}
+            sleeperBusy={disconnecting === "sleeper"}
           />
           <div className="mt-4 space-y-4">
             <EspnCookieConnection />
