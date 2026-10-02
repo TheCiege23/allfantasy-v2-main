@@ -23,20 +23,23 @@ import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken"
 import { applyAttributionCapture } from "@/lib/analytics/attributionCookies"
 import {
   IOS_APP_PLANS_PATH,
+  isIosAppClosedPage,
   isIosAppPurchaseApi,
-  isIosAppPurchasePage,
   isIosAppUserAgent,
 } from "@/lib/platform/iosApp"
 import { isSessionRevoked } from "@/lib/auth/sessionRevocation"
 
 /**
- * Inside the iOS app nothing is for sale (App Store guideline 3.1.1 — see
- * lib/platform/iosApp). Checked ahead of every geo gate: it is a UA read with
- * no network call, and it only ever refuses, so running first cannot let
- * anything through that a later gate would have stopped.
+ * Inside the iOS app nothing is sold except through Apple (App Store guideline
+ * 3.1.1 — see lib/platform/iosApp). Stripe checkout APIs are refused in every
+ * build; plan and token pages reopen only for builds with the StoreKit bridge.
+ * Checked ahead of every geo gate: it is a UA read with no network call, and it
+ * only ever refuses, so running first cannot let anything through that a later
+ * gate would have stopped.
  */
 function iosAppPurchaseRefusal(request: NextRequest, pathname: string): NextResponse | null {
-  if (!isIosAppUserAgent(request.headers.get("user-agent"))) return null
+  const userAgent = request.headers.get("user-agent")
+  if (!isIosAppUserAgent(userAgent)) return null
   if (isApiPath(pathname)) {
     if (!isIosAppPurchaseApi(pathname)) return null
     return NextResponse.json(
@@ -44,7 +47,7 @@ function iosAppPurchaseRefusal(request: NextRequest, pathname: string): NextResp
       { status: 403, headers: { "cache-control": "no-store" } },
     )
   }
-  if (!isIosAppPurchasePage(pathname)) return null
+  if (!isIosAppClosedPage(pathname, userAgent)) return null
   return NextResponse.redirect(new URL(IOS_APP_PLANS_PATH, request.url), 307)
 }
 

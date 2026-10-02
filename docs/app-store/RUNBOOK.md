@@ -124,14 +124,23 @@ stored yet it asks them to open the app. Tapping it opens `/core/career`.
 
 ## What the website does inside the app
 
-The app appends `AllFantasyiOS/1.0` to its User-Agent, and
-`lib/platform/iosApp.ts` keys off that marker:
+The app appends `AllFantasyiOS/1.1 AFIAP/1` to its User-Agent (1.0 builds sent
+`AllFantasyiOS/1.0`), and `lib/platform/iosApp.ts` keys off those markers:
 
-- **Guideline 3.1.1, no purchases.** Purchase pages redirect to
-  `/ios-app/plans`, checkout APIs answer 403 `not_available_in_ios_app`, and
-  links to purchase pages are hidden (`html[data-ios-app]` in `globals.css`).
-  Anything an account has already bought still works. Adding a new purchase
-  page or checkout route means adding it to the lists in `iosApp.ts`.
+- **Guideline 3.1.1, purchases through Apple only.** Builds carrying `AFIAP`
+  sell plans and token packs with Apple In-App Purchase
+  (`ios-app/ios/App/App/AppleIAPHandler.swift`; setup in
+  `docs/APPLE_IN_APP_PURCHASE_SETUP.md`): `/upgrade`, `/pricing`,
+  `/commissioner-upgrade` and `/tokens` open and check out through StoreKit.
+  Everything else that takes money — Stripe checkout APIs (403
+  `not_available_in_ios_app`), the Stripe billing portal, donations, the
+  marketplace, league dues, the Survivor exile shop — stays closed in every
+  build, and a build without `AFIAP` keeps the old rule: every purchase page
+  redirects to `/ios-app/plans` and its links are hidden. Adding a new purchase
+  page or checkout route means adding it to the lists in `iosApp.ts`; adding a
+  page that should sell through Apple means adding it to
+  `IOS_APP_IAP_PAGE_PREFIXES` AND making it check out through
+  `lib/monetization/checkout-client.ts`.
 - **Guideline 4.8, sign-in.** Sign in with Apple is not live, so the
   Google/Facebook/X/Discord/Spotify buttons are hidden and email sign-in
   remains. Google also refuses sign-in inside embedded WebViews, so its button
@@ -160,10 +169,12 @@ The app appends `AllFantasyiOS/1.0` to its User-Agent, and
   SIGN-IN: use the demo account above (email and password). The demo account
   already has imported leagues, so every tab has real data.
 
-  PURCHASES: nothing is sold in the app. Subscriptions and tokens are sold only
-  on our website; an account that already bought them there keeps that access in
-  the app (guideline 3.1.3(b)). Purchase pages and checkout are unavailable
-  inside the app.
+  PURCHASES: subscriptions (AF Pro, AF Commissioner, AF Supreme, AF Legacy)
+  and token packs are sold in the app with Apple In-App Purchase: Tools >
+  Account > Plans, or Tools > Account > Tokens. Prices shown are Apple's. The
+  same products are sold on our website through Stripe; either purchase unlocks
+  the same signed-in account (guideline 3.1.3(b)). Restore Purchases and Manage
+  Subscriptions are on the Plans screen.
 
   ACCOUNT DELETION: More (bottom bar) > Settings > Account > "Start account
   deletion". Deletion is immediate and permanent after typing DELETE to confirm.

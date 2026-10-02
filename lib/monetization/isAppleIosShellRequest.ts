@@ -1,7 +1,11 @@
-/** A defense in depth gate for the PWABuilder iOS app's Stripe routes. */
+import { isIosAppUserAgent } from "@/lib/platform/iosApp"
+
+/**
+ * A defense in depth gate for the Stripe checkout routes: a request from the iOS
+ * app (ios-app/, any build) must buy through Apple, never Stripe. Middleware
+ * already refuses /api/monetization/checkout for the app's User-Agent; this keeps
+ * the routes safe if that prefix list ever drifts.
+ */
 export function isAppleIosShellRequest(request: Request): boolean {
-  const agent = request.headers.get("user-agent") ?? ""
-  if (/\bPWAShell\b/.test(agent) && /iPhone|iPad|iPod/.test(agent)) return true
-  const cookie = request.headers.get("cookie") ?? ""
-  return /(?:^|;\s*)app-platform=iOS(?:%20|\+)App(?:%20|\+)Store(?:;|$)/i.test(cookie)
+  return isIosAppUserAgent(request.headers.get("user-agent"))
 }

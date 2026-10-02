@@ -3212,24 +3212,32 @@ select, option {
  *  - 4.8: third-party sign-in requires Sign in with Apple, which is not live,
  *    so anything marked data-hide-in-ios-app (the social sign-in rows) goes.
  * Keep the hrefs in step with IOS_APP_PURCHASE_PAGE_PREFIXES.
+ *
+ * Builds with the StoreKit bridge also get `html[data-ios-iap]` and sell plans
+ * and tokens through Apple, so links to those pages, and copy marked
+ * `data-ios-purchase`, are hidden only in a build WITHOUT it. Donations, the
+ * Stripe billing portal and anything marked data-hide-in-ios-app stay hidden in
+ * every build. Keep those four hrefs in step with IOS_APP_IAP_PAGE_PREFIXES.
  */
 html[data-ios-app] [data-hide-in-ios-app],
-html[data-ios-app] a[href^='/upgrade'],
-html[data-ios-app] a[href^='/pricing'],
-html[data-ios-app] a[href^='/commissioner-upgrade'],
-html[data-ios-app] a[href^='/tokens'],
+html[data-ios-app]:not([data-ios-iap]) [data-ios-purchase],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/upgrade'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/pricing'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/commissioner-upgrade'],
+html[data-ios-app]:not([data-ios-iap]) a[href^='/tokens'],
+html[data-ios-app]:not([data-ios-iap]) a[href*='allfantasy.ai/upgrade'],
+html[data-ios-app]:not([data-ios-iap]) a[href*='allfantasy.ai/pricing'],
 html[data-ios-app] a[href^='/donate'],
 html[data-ios-app] a[href='/support'],
 html[data-ios-app] a[href^='/support?'],
 html[data-ios-app] a[href^='/support/'],
-html[data-ios-app] a[href*='allfantasy.ai/upgrade'],
-html[data-ios-app] a[href*='allfantasy.ai/pricing'],
 html[data-ios-app] a[href^='/api/subscription/billing-portal'] {
   display: none !important;
 }
 /* ↑ The last selector: "Manage billing" (the Settings hub and the Billing tab)
    is an <a> straight to an API that IOS_APP_PURCHASE_API_PREFIXES refuses in
-   the app, so a subscriber who tapped it got a raw 403 body. */
+   the app, so a subscriber who tapped it got a raw 403 body. An Apple
+   subscriber manages it through "Manage Subscriptions" on the plan pages. */
 
 /*
  * The other half: copy that exists ONLY in the app, for a spot where hiding
@@ -3241,5 +3249,15 @@ html[data-ios-app] a[href^='/api/subscription/billing-portal'] {
  * <html> before first paint, so the website never shows the app line.
  */
 html:not([data-ios-app]) [data-only-in-ios-app] {
+  display: none !important;
+}
+/*
+ * The same pair for purchase wording, which an IAP build can show as-is:
+ *   <span data-ios-purchase>Upgrade to see the rest.</span>
+ *   <span data-ios-purchase-alt>This isn't included with your account.</span>
+ * The alt line shows only in an app build that sells nothing.
+ */
+html:not([data-ios-app]) [data-ios-purchase-alt],
+html[data-ios-iap] [data-ios-purchase-alt] {
   display: none !important;
 }
