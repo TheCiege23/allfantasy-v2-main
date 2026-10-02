@@ -58,6 +58,7 @@ import { leagueHubArt, type HubArt } from './commissioner/leagueArt'
 import { MANAGER_INACTIVE_AFTER_DAYS } from '@/lib/decision-os/behavioral/manager-intelligence'
 import { resolveCommissionerLeagueProfile } from '@/lib/commissioner-os/profile/resolveCommissionerLeagueProfile'
 import { commissionerFormatCards, type CommissionerFormatCard } from './commissioner/formatCards'
+import { applicableTemplates } from '@/lib/commissioner-os/profile/templateOffers'
 import { loadCommissionerHistory, type CommissionerHistory } from './commissioner/history'
 
 /**
@@ -225,9 +226,26 @@ export type CommissionerGrant = {
 
 export type { MemberActivityRow } from './commissioner/activity'
 
+/**
+ * The league's Commissioner OS format template, and what the viewer may do about it.
+ *
+ * A platform cannot publish "this league promotes and relegates" — Sleeper has no such setting — so
+ * a template is the owner's statement of how the league is really run. See
+ * app/api/leagues/[leagueId]/commissioner-template/handler.ts for the write and its rules.
+ */
+export type CommissionerFormatTemplate = {
+  /** The pinned template. `resolved: false` is a pin to a version that is not published. */
+  applied: { id: string; version: string; label: string; resolved: boolean } | null
+  /** Templates the OWNER may apply here. Empty for anyone else, and while one is applied. */
+  offers: Array<{ id: string; label: string; description: string }>
+  /** Only the league's owner may apply or remove a template. */
+  canChange: boolean
+}
+
 export type CommissionerHubData = {
   allowed: true
   formatCards: CommissionerFormatCard[]
+  formatTemplate: CommissionerFormatTemplate
   network: { id: string; name: string; role: string } | null
   history: CommissionerHistory
   grant: CommissionerGrant
@@ -1018,6 +1036,24 @@ export async function getCommissionerHub(input: {
   return {
     allowed: true,
     formatCards: commissionerFormatCards(profile, league.leagueType),
+    formatTemplate: {
+      applied: profile.template
+        ? {
+            id: profile.template.id,
+            version: profile.template.version,
+            label: profile.template.definition?.label ?? profile.template.key,
+            resolved: Boolean(profile.template.definition),
+          }
+        : null,
+      // The same rule the write enforces, so the screen never offers what the server would refuse.
+      offers:
+        viewerIsOwner && !profile.template
+          ? applicableTemplates({ sport: league.sport, canonicalFormatId: profile.canonicalFormatId, teamCount: teams.length }).map(
+              (t) => ({ id: t.id, label: t.label, description: t.description }),
+            )
+          : [],
+      canChange: viewerIsOwner,
+    },
     network: networkMember ? { id: networkMember.network.id, name: networkMember.network.name, role: networkMember.role } : null,
     history,
     grant,

@@ -32,6 +32,7 @@ import {
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
+import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
@@ -234,6 +235,8 @@ export function CommissionerHub({ data, lineups = null }: CommissionerHubProps) 
             </li>)}
           </ul>
         ) : <p className="af-ch-muted">No specialty mechanics were resolved for this league. Review league settings before applying format-specific rules.</p>}
+        {/* The owner's statement of how the league is really run, which no platform publishes. */}
+        {data.formatTemplate ? <FormatTemplateControl leagueId={league.id} template={data.formatTemplate} /> : null}
       </HubSection>
 
       <HubSection id="ch-history" title="Trades and draft archive">
