@@ -215,7 +215,7 @@ export async function loadSideProjections(args: {
   )
   /* Spread, not a key set to null: a starter the engine never wrote carries no `afEngine` at all. */
   const engineFor = (id: string, generic: number | null, league: number | null): { afEngine?: number } => {
-    const v = afEngineForLeague(afEngineRows.get(lookupOf(id) ?? '')?.projectedPoints, generic, league)
+    const v = afEngineForLeague(afEngineRows.get(lookupOf(id) ?? ''), generic, league)
     return v == null ? {} : { afEngine: v }
   }
 

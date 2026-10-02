@@ -211,7 +211,7 @@ export async function buildPlayerProjectionContext(args: {
             const engine = await lookupAfEngineProjections([candidate!.playerId], { season: targetSeason, week: targetWeek })
               .catch((): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map())
             const afInLeague = afEngineForLeague(
-              engine.get(candidate!.playerId)?.projectedPoints,
+              engine.get(candidate!.playerId),
               projections.get(candidate!.playerId)?.projectedPoints ?? null,
               leaguePoints.points,
             )

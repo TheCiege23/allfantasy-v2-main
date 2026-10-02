@@ -3,6 +3,8 @@
 import Link from 'next/link'
 
 import { formatLockLabel } from '@/lib/core-app/lockLabel'
+import { kickoffClock } from '@/lib/core-app/lineupLock'
+import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import { lineupLink } from '@/lib/core-app/platformLinks'
 import type { MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
 import { FOREIGN_IDS_UNREADABLE_CLAUSE } from '@/lib/core-app/foreignIdSpaceCopy'
@@ -138,7 +140,8 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
 
   const atMs = new Date(row.lockAt).getTime()
   const label = formatLockLabel(atMs, now)
-  const kickoff = `${new Date(atMs).toUTCString().slice(0, 22)} UTC`
+  /* Eastern, like every other kickoff on /core — UTC moved night games to the next day. Pinned, so it hydrates. */
+  const kickoff = `${kickoffClock(row.lockAt)} (${kickoffDayLabel(row.lockAt) ?? ''})`
 
   /*
    * ⚠ A DATE, NOT A COUNTDOWN, PAST `DISTANT_LOCK_DAYS`. The next kickoff we

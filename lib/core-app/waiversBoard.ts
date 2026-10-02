@@ -721,7 +721,7 @@ export async function attachAfEngine(
   for (const r of rows) {
     for (const p of [r.add, r.drop]) {
       if (!p) continue
-      const v = afEngineForLeague(engine.get(p.playerId)?.projectedPoints, genericOf(p.playerId), p.projected)
+      const v = afEngineForLeague(engine.get(p.playerId), genericOf(p.playerId), p.projected)
       if (v != null) p.afProjected = v
     }
     if (r.add.afProjected != null && (!r.drop || r.drop.afProjected != null)) {
