@@ -167,7 +167,7 @@ function posGroup(label: string | null | undefined): string {
   if (['DL', 'DE', 'DT'].includes(p)) return 'dl'
   if (['LB', 'ILB', 'OLB', 'MLB'].includes(p)) return 'lb'
   if (['DB', 'CB', 'S', 'SS', 'FS'].includes(p)) return 'db'
-  if (p.includes('FLEX') || p === 'WRT' || p === 'WRTQ') return 'flex'
+  if (p.includes('FLEX') || p === 'WRT' || p === 'WRTQ' || p === 'W/R') return 'flex'
   return 'other'
 }
 
@@ -1252,7 +1252,15 @@ export function MyTeam({ data }: MyTeamProps) {
       ) : null}
 
       {/* ── Coverage footnote ───────────────────────────────────────── */}
-      {data.projections.available ? (
+      {/*
+        ⚠ NO STANDARD-COVERAGE LINE WHERE THERE IS NO STANDARD TOTAL. In an IDP
+        league the standard tile reads "—" and explains why, but this footnote
+        still said "Standard total built from 7 of 16 starters … so it reads low"
+        — a total the page had just declined to show, and a count inflated by
+        every defender standard scoring cannot price. The tile carries the
+        explanation; the footnote stays out of it.
+      */}
+      {data.projections.available && !data.projections.data.standardComparable && data.projections.data.unprojected > 0 ? null : data.projections.available ? (
         <p className="af-mt-footnote">
           {data.projections.data.unprojected === 0
             ? language === 'es' ? `Los ${data.projections.data.projected} titulares tienen proyección · ${data.projections.data.season}, semana ${data.projections.data.week}` : `All ${data.projections.data.projected} starters projected · ${data.projections.data.season} week ${data.projections.data.week}`

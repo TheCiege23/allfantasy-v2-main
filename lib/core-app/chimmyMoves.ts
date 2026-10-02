@@ -99,6 +99,34 @@ export function composeMyTeamMoves(args: {
   leagueName: string
   starters: LineupPlayer[]
   nowIso: string
+  /**
+   * Starting slots with nobody in them, by lineup index. A certain zero, so each one leads the card.
+   *
+   * ⚠ THE CARD USED TO BE BLIND TO THESE. It was handed `slot.player` only, so an empty slot never
+   * became a move — and with nothing else flagged the card said "No remaining flagged starters"
+   * over a hole in the lineup. Optional so a caller with no slot list keeps its old behaviour.
+   */
+  emptySlots?: ReadonlyArray<{ index: number; slotLabel: string }>
+}): ChimmyMoves {
+  const league = encodeURIComponent(args.leagueId)
+  const emptyMoves: ChimmyMove[] = (args.emptySlots ?? []).map(({ index, slotLabel }) => ({
+    key: `empty-slot-${index}`,
+    tone: 'bad',
+    title: `Fill your empty ${slotLabel} slot`,
+    detail: 'Empty starting slot — it scores zero',
+    href: `/core/my-team?league=${league}#lineup-slot-${index}`,
+    actionLabel: 'Fix lineup',
+    ask: `My ${slotLabel} slot in ${args.leagueName} is empty. Who should I start there?`,
+  }))
+  const triaged = composeMyTeamPlayerMoves(args)
+  return { ...triaged, moves: [...emptyMoves, ...triaged.moves].slice(0, MAX_MOVES) }
+}
+
+function composeMyTeamPlayerMoves(args: {
+  leagueId: string
+  leagueName: string
+  starters: LineupPlayer[]
+  nowIso: string
 }): ChimmyMoves {
   const rows: TriageRow[] = args.starters
     .filter((player) => player.ruledOut || player.onBye || isAtRisk(player.injuryStatus))

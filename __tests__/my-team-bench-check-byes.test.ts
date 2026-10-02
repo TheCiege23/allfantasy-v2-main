@@ -62,6 +62,13 @@ vi.mock('@/lib/core-app/currentSleeperRoster', () => ({
   })),
 }))
 
+/* The app-wide own/start board. Null (the default) means "not enough leagues", as before. */
+const market = vi.hoisted(() => ({ value: null as null | { leaguesCounted: number; byPlayerId: Map<string, { ownPct: number; startPct: number | null }> } }))
+vi.mock('@/lib/core-app/rosteredMarket', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/core-app/rosteredMarket')>()),
+  getRosteredMarket: vi.fn(async () => market.value),
+}))
+
 vi.mock('@/lib/core-app/currentWeek', () => ({
   resolveCurrentWeekForLeague: vi.fn(async () => ({ seasonYear: 2026, week: 3 })),
 }))
@@ -85,6 +92,7 @@ const state = vi.hoisted(() => ({
   position: {} as Record<string, string>,
   kickoff: {} as Record<string, Date>,
   bestBall: false,
+  bestBallMode: false,
 }))
 const nameOf = (id: string) => `Player ${id}`
 
@@ -130,6 +138,7 @@ function context() {
       isDynasty: false,
       starters: null,
       settings: { scoring_settings: { rec: 1 }, roster_positions: ['QB', 'WR', 'BN'] },
+      bestBallMode: state.bestBallMode,
     })),
     claimedTeam: vi.fn(async () => ({
       id: 'lt-4', externalId: '4', platformUserId: 'su4', teamName: 'Mine', ownerName: 'me', avatarUrl: null,
@@ -158,6 +167,8 @@ describe('My Team — the bench check sees byes', () => {
   beforeEach(() => {
     state.kickoff = {}
     state.bestBall = false
+    state.bestBallMode = false
+    market.value = null
     state.receptions = { qb1: 20, wrStart: 12, wrBench: 25 }
     state.club = { qb1: 'NYJ', wrStart: 'MIA', wrBench: 'NE' }
     state.position = { qb1: 'QB', wrStart: 'WR', wrBench: 'WR' }
@@ -183,6 +194,35 @@ describe('My Team — the bench check sees byes', () => {
   it('does not offer manual swaps in a provider-confirmed Best Ball league', async () => {
     state.bestBall = true
     expect((await wrSlot()).benchCheck).toBeNull()
+  })
+
+  /*
+   * Best Ball was decided by three sources in four places: the page's Chimmy card read
+   * `league.bestBall`, the screen read `liveRoster.bestBall || league.bestBallMode`. A league
+   * flagged only by `bestBallMode` got start/sit moves above a Best Ball banner.
+   */
+  it('🛑 a league flagged Best Ball only by bestBallMode is Best Ball everywhere', async () => {
+    state.bestBallMode = true // live Sleeper says false, and there is no best_ball setting
+    const { getMyTeamData } = await import('@/lib/core-app/myTeam')
+    const data = await getMyTeamData(LEAGUE_ID, USER_ID, context() as any)
+    expect(data?.league.bestBall).toBe(true)
+    expect(data?.bestBall).toBe(true)
+    expect((await wrSlot()).benchCheck).toBeNull()
+  })
+
+  /*
+   * The board is keyed by Sleeper ids. These fixture ids ('qb1', 'wrStart') are not in that
+   * space, so absence from the board says nothing about ownership — it used to print "0%".
+   */
+  it('🛑 an id the market board could never hold reads unknown, not 0% owned', async () => {
+    const { MIN_LEAGUES_FOR_MARKET } = await import('@/lib/core-app/rosteredMarket')
+    market.value = { leaguesCounted: MIN_LEAGUES_FOR_MARKET, byPlayerId: new Map([['qb1', { ownPct: 0.9, startPct: 0.8 }]]) }
+    const { getMyTeamData } = await import('@/lib/core-app/myTeam')
+    const data = await getMyTeamData(LEAGUE_ID, USER_ID, context() as any)
+    if (!data?.starters.available) throw new Error('no starters')
+    const byId = new Map(data.starters.data.map((s) => [s.player?.sleeperId, s.player]))
+    expect(byId.get('qb1')?.market).toEqual({ ownPct: 0.9, startPct: 0.8 })
+    expect(byId.get('wrStart')?.market).toBeNull()
   })
 
   it('opens the verified lineup screen for a manual league', async () => {

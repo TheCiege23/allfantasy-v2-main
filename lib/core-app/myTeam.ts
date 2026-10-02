@@ -376,6 +376,15 @@ export type MyTeamData = {
 /** Slot labels in the order fantasy lineups conventionally read. */
 
 /**
+ * A Sleeper player id (numeric) or a Sleeper team-defense id ("KC") — the only ids
+ * the rostered-market board can hold. Anything else (`name:…`, an untranslated
+ * provider id) is absent from it by construction, not because nobody owns him.
+ */
+function inSleeperIdSpace(id: string): boolean {
+  return /^\d+$/.test(id) || /^[A-Z]{2,4}$/.test(id)
+}
+
+/**
  * "Sun 4:05p ET".
  *
  * ⚠ THE DAY IS NOT DECORATION. Without it every row on the screen read as a
@@ -1016,6 +1025,15 @@ export async function getMyTeamData(
     ? await currentSleeperRoster(league.platformLeagueId, myTeamRow)
     : null
   if (liveRoster && typeof liveRoster.bestBall === 'boolean') base.league.bestBall = liveRoster.bestBall
+  /*
+   * ⚠ ONE BEST-BALL ANSWER, DECIDED HERE, READ EVERYWHERE. Four places used to ask
+   * three sources: the page's Chimmy card and the bench-check skip read
+   * `league.bestBall`, while the screen and the bench-check null-out read
+   * `liveRoster.bestBall || league.bestBallMode`. A league with `bestBallMode` set
+   * and no `best_ball` setting got "Bench X" start/sit moves above a "Best Ball ·
+   * automatic lineup" banner. Any source saying Best Ball means Best Ball.
+   */
+  if (league.bestBallMode === true) base.league.bestBall = true
   if (typeof liveRoster?.leagueStatus === 'string') {
     base.preDraft = ['pre_draft', 'setup', 'drafting'].includes(liveRoster.leagueStatus.toLowerCase())
     base.completed = ['complete', 'completed'].includes(liveRoster.leagueStatus.toLowerCase())
@@ -1257,7 +1275,7 @@ export async function getMyTeamData(
 
   const starters: LineupSlot[] = starterSlots.map((slot, i) => ({
     ...slot,
-    benchCheck: liveRoster?.bestBall === true || league.bestBallMode === true ? null : checkBySlot.get(i) ?? null,
+    benchCheck: base.league.bestBall ? null : checkBySlot.get(i) ?? null,
   }))
 
   const kickoffs = starters
@@ -1351,10 +1369,16 @@ export async function getMyTeamData(
       /*
        * Absent from the board means nobody rosters him — genuinely 0% owned,
        * and an undefined start rate. That is a real reading, not a gap.
+       *
+       * ⚠ BUT ONLY FOR AN ID THE BOARD COULD HAVE HELD. The board counts only
+       * leagues in Sleeper's id space (`isForeignIdSpace` filters the rest), so a
+       * `name:` id or a provider id the crosswalk did not translate is absent by
+       * construction — and printed "0%" OWN, a confident claim about a player we
+       * never looked up. Those stay null and render as a dash.
        */
       p.market = row
         ? { ownPct: row.ownPct, startPct: row.startPct }
-        : { ownPct: 0, startPct: null }
+        : inSleeperIdSpace(p.sleeperId) ? { ownPct: 0, startPct: null } : null
     }
   }
 
@@ -1490,7 +1514,7 @@ export async function getMyTeamData(
   return {
     ...base,
     team,
-    bestBall: liveRoster?.bestBall === true || league.bestBallMode === true,
+    bestBall: base.league.bestBall === true,
     lineupVerification: liveRoster?.verification ?? null,
     projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },
     upcomingByes,

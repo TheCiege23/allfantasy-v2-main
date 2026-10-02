@@ -718,6 +718,32 @@ describe('My Team — the reported problems', () => {
     expect(one(null).textContent).toContain('no game found for this week')
   })
 
+  /*
+   * In an IDP league the standard tile reads "—" and explains why, but the footnote still
+   * said "Standard total built from 7 of 16 starters … so it reads low" (live, 2026-10-02).
+   */
+  it('drops the standard-coverage footnote in an IDP league, where no standard total is shown', () => {
+    const idp = (standardComparable: boolean) =>
+      render(
+        <MyTeam
+          data={data({
+            projections: {
+              available: true,
+              data: {
+                total: 80, projected: 7, unprojected: 9, season: '2026', week: 4,
+                afTotal: 165.7, afEngineTotal: 138.6, afProjected: 15, standardComparable,
+              },
+            },
+          })}
+        />,
+      ).container.textContent ?? ''
+    const withheld = idp(false)
+    expect(withheld).toContain('Standard scoring does not price defenders')
+    expect(withheld).not.toContain('Standard total built from')
+    // Control: the same coverage in a league with a standard total keeps its footnote.
+    expect(idp(true)).toContain('Standard total built from 7 of 16 starters')
+  })
+
   it('shows an unfamiliar designation as-is rather than inventing a letter', () => {
     // A wrong abbreviation is worse than a long one.
     const c = render(
