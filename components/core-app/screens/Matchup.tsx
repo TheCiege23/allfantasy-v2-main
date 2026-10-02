@@ -1,6 +1,9 @@
 'use client'
 
 import '@/components/core-app/af-matchup.css'
+// The refresh control's own styles (`.af-mp-live*`) live with the all-leagues board it came from.
+import '@/components/core-app/af-matchup-pulse.css'
+import { MatchupPulseRefresh } from '@/components/core-app/MatchupPulseRefresh'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
@@ -65,6 +68,7 @@ function TeamCard({
   points,
   projected,
   afProjected = null,
+  leftToPlay = null,
   align,
 }: {
   team: MatchupTeam
@@ -72,6 +76,11 @@ function TeamCard({
   projected: number | null
   /** AllFantasy's own engine total for this lineup. Shown only before a point is scored. */
   afProjected?: number | null
+  /**
+   * Starters still to play or playing now — live weeks only. Null when it is not known for EVERY
+   * starter: a count that silently skipped the ones we could not place would read as "fewer left".
+   */
+  leftToPlay?: number | null
   align: 'left' | 'right'
 }) {
   const { language } = useOptionalLanguage()
@@ -107,9 +116,20 @@ function TeamCard({
             AF {afProjected.toFixed(1)}
           </span>
         ) : null}
+        {leftToPlay != null ? (
+          <span className="af-mu-left af-num" data-none={leftToPlay === 0 || undefined}>
+            {leftToPlay === 0 ? copy('All played') : `${leftToPlay} ${copy('left to play')}`}
+          </span>
+        ) : null}
       </div>
     </div>
   )
+}
+
+/** Starters still to play for one side, or null when any of their game states is unknown. */
+function leftFor(side: { upcoming: number; live: number; unknown: number } | undefined): number | null {
+  if (!side || side.unknown > 0) return null
+  return side.upcoming + side.live
 }
 
 /**
@@ -212,6 +232,23 @@ function PlayerHalf({
         the name truncates, and this column never does.
       */}
       <div className="af-mu-half-pts af-num" data-unpriced={value == null}>
+        {/*
+          ⚠ WHY A MARKER AND NOT HIS PROJECTION. Mid-week a starter who has not played reads "—",
+          the same as one we could not price, and "who is still to play" is the question this
+          board exists to answer. His projection would answer it too, but in a column headed PTS
+          — the one thing this screen must never render. So the number stays honest and the
+          marker says why it is empty. Live weeks only: before kickoff every starter is yet to
+          play, and a dot on all of them says nothing.
+        */}
+        {live && (cell.gameState === 'live' || cell.gameState === 'upcoming') ? (
+          <span
+            className="af-mu-gs"
+            data-state={cell.gameState}
+            role="img"
+            aria-label={copy(cell.gameState === 'live' ? 'Playing now' : 'Yet to play')}
+            title={copy(cell.gameState === 'live' ? 'Playing now' : 'Yet to play')}
+          />
+        ) : null}
         {cell.unavailable ? (
           <span
             className="af-mu-flag"
@@ -315,6 +352,13 @@ function LineupBoard({ data }: { data: MatchupData }) {
           ? language === 'es' ? `Puntos en vivo según ${data.playerScoring.data.source} — ${data.playerScoring.data.playersScored} jugadores registrados.` : `Live points as ${data.playerScoring.data.source} scored them — ${data.playerScoring.data.playersScored} players on file.`
           : data.playerScoring.reason}
       </p>
+      {/* The key for the per-player markers — only when one is on the board. */}
+      {live && slots.some((s) => [s.you, s.opponent].some((c) => c?.gameState === 'live' || c?.gameState === 'upcoming')) ? (
+        <p className="af-mu-gs-key">
+          <span><span className="af-mu-gs" data-state="live" aria-hidden /> {copy('playing now')}</span>
+          <span><span className="af-mu-gs" data-state="upcoming" aria-hidden /> {copy('yet to play')}</span>
+        </p>
+      ) : null}
       {data.league.bestBall ? <p className="af-mu-note">{copy('Best Ball scores your eligible full roster automatically. This board shows provider-listed starters; eligible bench players can also contribute.')}</p> : null}
 
       <div className="af-mu-board" role="table" aria-label={copy('Head to head, slot by slot')}>
@@ -403,6 +447,21 @@ export function Matchup({ data }: MatchupProps) {
         ? 'live'
         : 'upcoming'
 
+  /* Who still has starters to play — the live banner's "N left to play" under each score. */
+  const bySide = data.starterCountsBySide ?? null
+  const yourLeft = weekState === 'live' ? leftFor(bySide?.you) : null
+  const theirLeft = weekState === 'live' ? leftFor(bySide?.opponent) : null
+  /*
+   * Can anything on this page still move? The same test the all-leagues board applies: points on
+   * the board and a starter left — where an unknown game state counts as "maybe", because
+   * freezing the page on the leagues we read worst would be the wrong way round.
+   */
+  const inPlay =
+    weekState === 'live' &&
+    (bySide == null ||
+      bySide.you.upcoming + bySide.you.live + bySide.you.unknown +
+        bySide.opponent.upcoming + bySide.opponent.live + bySide.opponent.unknown > 0)
+
   const leader =
     compared && compared.you !== compared.opponent
       ? compared.you > compared.opponent
@@ -468,6 +527,15 @@ export function Matchup({ data }: MatchupProps) {
             >
               {copy(weekState === 'final' ? 'Final' : weekState === 'live' ? 'Live' : 'Upcoming')}
             </span>
+            {/*
+              ⚠ THIS PAGE USED TO BE A SNAPSHOT ON GAME DAY. The all-leagues board refreshed itself;
+              the one-league board — the page someone actually watches during their game — sat on
+              whatever it read at load until they pulled to reload. Same control, same cadence, same
+              hidden-tab rule. A finished week has nothing left to move, so it gets none.
+            */}
+            {weekState !== 'final' ? (
+              <MatchupPulseRefresh inPlay={inPlay} label={copy('Refresh this matchup')} />
+            ) : null}
           </>
         ) : (
           <span className="af-mu-unavailable">{data.week.reason}</span>
@@ -525,6 +593,7 @@ export function Matchup({ data }: MatchupProps) {
               points={scored?.you ?? null}
               projected={projected?.you ?? null}
               afProjected={afTotals?.you ?? null}
+              leftToPlay={yourLeft}
               align="left"
             />
 
@@ -593,6 +662,7 @@ export function Matchup({ data }: MatchupProps) {
               points={scored?.opponent ?? null}
               projected={projected?.opponent ?? null}
               afProjected={afTotals?.opponent ?? null}
+              leftToPlay={theirLeft}
               align="right"
             />
 

@@ -652,6 +652,15 @@
     flex-direction: column;
     gap: 2px;
   }
+  /*
+   * ⚠ THE 240px BASIS ON THESE IS A WIDTH IN THE ROW LAYOUT, AND A HEIGHT IN THIS ONE. Flipping
+   * the item to a column turned `flex: 1 1 240px` into a 240px-tall box under one line of text:
+   * measured 261px per item at 375px and at 768px, ~440px of empty card on every phone and tablet.
+   */
+  .af-mu-missing-why,
+  .af-mu-missing-value {
+    flex: 0 0 auto;
+  }
 }
 
 @media (max-width: 560px) {
@@ -840,4 +849,87 @@
   font-weight: 800;
   letter-spacing: 0.07em;
   vertical-align: 2px;
+}
+
+/* ── Game day (components/core-app/screens/Matchup.tsx) ──────────────────────
+ *
+ * Top-level rules and one sibling @media at end of file, for the reason the
+ * 720px block above gives: nothing here can be carried into a narrower band by
+ * an early-closed outer query.
+ */
+
+/* Each starter whose game is on or still to come, beside his (empty) points. */
+.af-mu-gs {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+.af-mu-gs[data-state='live'] {
+  background: var(--good);
+  box-shadow: 0 0 0 2px var(--good-soft);
+}
+.af-mu-gs[data-state='upcoming'] {
+  border: 1.5px solid var(--faint);
+}
+.af-mu-gs-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: -2px 0 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* "3 left to play" under each live score — warn-toned like the LIVE chip: still moving. */
+.af-mu-left {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--warn);
+  white-space: nowrap;
+}
+.af-mu-left[data-none] {
+  color: var(--faint);
+}
+
+/*
+ * ⚠ THE PROVIDER BUTTON CARRIES THE LEAGUE'S NAME, AND `.af-btn` NEVER WRAPS. The label is
+ * "View Matchup in <league>", so a real league name ran past the 260px pill and spilled out
+ * of it; in the phone league-first layout, where the button goes full width, it grew to
+ * 473px inside a 343px row and the whole page scrolled sideways. Wrapping inside the pill
+ * keeps the full name, which is the point of naming it. `.af-btn` raises specificity so this
+ * holds whichever stylesheet the bundle orders first.
+ */
+.af-core .af-btn.af-mu-source {
+  min-width: 0;
+  /* Room for a typical league name on one or two lines, rather than three in 260px. */
+  max-width: min(100%, 420px);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+  line-height: 1.25;
+  padding-block: 6px;
+}
+/* A wrapped label must not stretch the short "Set lineup" button beside it to its height. */
+.af-mu-handoff {
+  align-items: center;
+}
+
+@media (max-width: 780px) {
+  /*
+   * Both team names truncated on a 375px phone ("Purdy Good Situat…", "Gibbs Me The
+   * Ball…") — the only place on the page that names the two sides. Two lines, clamped.
+   */
+  .af-mu-team-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.2;
+  }
 }
