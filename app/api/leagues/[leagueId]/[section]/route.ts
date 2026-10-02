@@ -63,6 +63,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'matchup-center': () => import('../matchup-center/handler'),
   'matchups': () => import('../matchups/handler'),
   'media': () => import('../media/handler'),
+  'my-team': () => import('../my-team/handler'),
   'orphaned-teams': () => import('../orphaned-teams/handler'),
   'partner-profiles': () => import('../partner-profiles/handler'),
   'power-rankings': () => import('../power-rankings/handler'),

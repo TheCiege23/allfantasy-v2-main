@@ -48,6 +48,9 @@ import { IDPDisplayPanel } from '@/app/idp/components/settings/IDPDisplayPanel'
 import { IDPAIPanel } from '@/app/idp/components/settings/IDPAIPanel'
 import { DeleteLeagueFromAfPanel } from './DeleteLeagueFromAfPanel'
 import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { checkTeamName, MAX_TEAM_NAME_LENGTH } from '@/lib/league/myTeamEdit'
+import { importedPlatformLabel } from '@/lib/dashboard/platform-label'
+import { useRouter } from 'next/navigation'
 import { NflScoringSettingsPanel } from '@/components/league-settings/NflScoringSettingsPanel'
 import { NbaScoringSettingsPanel } from '@/components/league-settings/NbaScoringSettingsPanel'
 import { NcaabScoringSettingsPanel } from '@/components/league-settings/NcaabScoringSettingsPanel'
@@ -938,58 +941,145 @@ export function SettingsSubPanelBody({
   }
 }
 
+/**
+ * Edit your own team — name and avatar.
+ *
+ * Until 2026-10-02 this panel's Save had no handler and its avatar went to `/api/chat/upload` and
+ * was attached to nothing; the copy blamed a disabled Supabase table. It now posts to
+ * `POST /api/leagues/[leagueId]/my-team`, which writes the claimed team (and the current redraft
+ * season's roster) and stores the avatar in the public profile-image store.
+ *
+ * Imported leagues are read-only: the host platform owns the name and the next sync would undo a
+ * local rename, so the panel says where to change it instead of offering a Save that reverts.
+ */
 function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
-  const [teamName, setTeamName] = useState(ctx.userTeam?.teamName ?? '')
-  const [uploading, setUploading] = useState(false)
-  const onAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
+  const router = useRouter()
+  const native = isNativePlatform(ctx.league.platform)
+  const savedName = ctx.userTeam?.teamName ?? ''
+  const [teamName, setTeamName] = useState(savedName)
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // The staged image's object URL, released when it is replaced or the panel closes.
+  useEffect(() => {
+    if (!file) {
+      setPreview(null)
+      return
+    }
+    const url = URL.createObjectURL(file)
+    setPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+
+  const nameCheck = checkTeamName(teamName)
+  const nameChanged = teamName.trim() !== savedName.trim()
+  const dirty = Boolean(file) || nameChanged
+  const avatarSrc = preview ?? (ctx.userTeam?.avatarUrl ? sleeperAvatarUrl(ctx.userTeam.avatarUrl) : null)
+
+  if (!ctx.userTeam) {
+    return <p className="text-[13px] text-white/55">You don&apos;t have a team in this league yet.</p>
+  }
+
+  const save = async () => {
+    if (!dirty || saving) return
+    if (nameChanged && !nameCheck.ok) {
+      setError(nameCheck.message)
+      return
+    }
+    setSaving(true)
+    setError(null)
     try {
       const fd = new FormData()
-      fd.set('file', file)
-      fd.set('type', 'image')
-      fd.set('leagueId', ctx.league.id)
-      const res = await fetch('/api/chat/upload', { method: 'POST', body: fd })
-      await res.json().catch(() => ({}))
+      if (nameChanged && nameCheck.ok) fd.set('teamName', nameCheck.teamName)
+      if (file) fd.set('file', file)
+      const res = await fetch(`/api/leagues/${encodeURIComponent(ctx.league.id)}/my-team`, { method: 'POST', body: fd })
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
+      if (!res.ok) {
+        setError(data.message ?? data.error ?? 'Could not save your team. Try again.')
+        return
+      }
+      setFile(null)
+      toast.success('Team updated')
+      // `userTeam` is read on the server; refresh so the shell, standings and this panel all agree.
+      router.refresh()
+    } catch {
+      setError("Couldn't reach AllFantasy. Check your connection and try again.")
     } finally {
-      setUploading(false)
+      setSaving(false)
     }
   }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <div className="relative h-16 w-16 overflow-hidden rounded-full border border-white/15 bg-white/10">
-          {ctx.userTeam?.avatarUrl ? (
-            <img src={sleeperAvatarUrl(ctx.userTeam.avatarUrl) ?? ''} alt="" className="h-full w-full object-cover" />
+          {avatarSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarSrc} alt="" className="h-full w-full object-cover" />
           ) : (
             <span className="flex h-full w-full items-center justify-center text-sm font-bold text-white/70">
-              {initialsFromName(teamName || ctx.userTeam?.ownerName || 'TM')}
+              {initialsFromName(teamName || ctx.userTeam.ownerName || 'TM')}
             </span>
           )}
         </div>
-        <label className="cursor-pointer rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 py-1.5 text-[12px] font-semibold text-[#ffb8d1] hover:bg-[#ff3d81]/20">
-          {uploading ? 'Uploading…' : 'Upload avatar'}
-          <input type="file" accept="image/*" className="hidden" onChange={onAvatar} />
-        </label>
+        {native ? (
+          <label className="inline-flex min-h-[44px] cursor-pointer items-center rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 text-[12px] font-semibold text-[#ffb8d1] hover:bg-[#ff3d81]/20">
+            {file ? 'Change image' : 'Upload avatar'}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              className="sr-only"
+              onChange={(e) => {
+                setError(null)
+                setFile(e.target.files?.[0] ?? null)
+                e.target.value = ''
+              }}
+            />
+          </label>
+        ) : null}
       </div>
+
       <div>
-        <label className="text-[11px] font-semibold text-white/45">Team name</label>
+        <label htmlFor="my-team-name" className="text-[11px] font-semibold text-white/45">
+          Team name
+        </label>
         <input
+          id="my-team-name"
           value={teamName}
-          onChange={(e) => setTeamName(e.target.value)}
-          className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[13px] text-white outline-none focus:border-[#ff3d81]/40"
+          maxLength={MAX_TEAM_NAME_LENGTH}
+          readOnly={!native}
+          aria-describedby="my-team-name-hint"
+          onChange={(e) => {
+            setError(null)
+            setTeamName(e.target.value)
+          }}
+          className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[16px] text-white outline-none focus:border-[#ff3d81]/40 read-only:opacity-70 sm:text-[13px]"
         />
+        <p id="my-team-name-hint" className="mt-1 text-[11px] text-white/40">
+          {native
+            ? `${teamName.trim().length}/${MAX_TEAM_NAME_LENGTH} — everyone in the league sees this.`
+            : `This league is imported, so your team name and avatar come from ${importedPlatformLabel(ctx.league.platform) ?? 'the platform it lives on'}. Change them there and they update here on the next sync.`}
+        </p>
       </div>
-      <p className="text-[11px] text-white/40">
-        Player nicknames and persisted team settings use Supabase when `user_team_settings` is enabled.
-      </p>
-      <button
-        type="button"
-        className="w-full rounded-xl bg-[#ff3d81]/20 py-2.5 text-[13px] font-bold text-[#ffd7e5] hover:bg-[#ff3d81]/30"
-      >
-        Save
-      </button>
+
+      {error ? (
+        <p role="alert" className="text-[12px] text-[#fda4af]">
+          {error}
+        </p>
+      ) : null}
+
+      {native ? (
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={!dirty || saving}
+          className="min-h-[44px] w-full rounded-xl bg-[#ff3d81]/20 py-2.5 text-[13px] font-bold text-[#ffd7e5] hover:bg-[#ff3d81]/30 disabled:cursor-default disabled:opacity-50"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      ) : null}
     </div>
   )
 }
