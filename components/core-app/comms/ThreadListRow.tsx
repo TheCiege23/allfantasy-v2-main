@@ -18,6 +18,8 @@ export type ThreadRowPerson = { id: string; name: string; avatarUrl: string | nu
 export type ThreadRowContext = {
   lastMessagePreview?: string | null
   lastMessageMine?: boolean
+  /** Your last message has been opened by the other person — drives ✓ (sent) vs ✓✓ (seen). */
+  lastMessageSeen?: boolean
   lastMessageCreatedAt?: string | null
   members?: ThreadRowPerson[]
   isMuted?: boolean
@@ -60,6 +62,33 @@ export function threadRowPreview(context: ThreadRowContext | null | undefined): 
   return context?.lastMessageMine ? `You: ${preview}` : preview
 }
 
+/**
+ * ✓ sent, ✓✓ seen — only ever on your OWN last message. One tick is "it is there for them", never
+ * "they ignored you": a recipient with no read on record has simply not opened it yet.
+ */
+export function ReadTicks({
+  seen,
+  className = 'af-cm-ticks',
+  announce = true,
+}: {
+  seen: boolean
+  className?: string
+  /** False when visible text beside the ticks already says it ("Seen by Jordan"). */
+  announce?: boolean
+}) {
+  return (
+    <span className={className} data-seen={seen || undefined} title={seen ? 'Seen' : 'Sent'}>
+      <svg viewBox="0 0 18 12" width="16" height="11" aria-hidden="true" focusable="false">
+        <path d="M1 6.5l3.5 3.5L11 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        {seen ? (
+          <path d="M7.5 10L14 3" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        ) : null}
+      </svg>
+      {announce ? <span className="af-cm-sr">{seen ? 'Seen' : 'Sent'}</span> : null}
+    </span>
+  )
+}
+
 function Avatar({ person }: { person: ThreadRowPerson }) {
   const safe = safeAvatarUrl(person.avatarUrl)
   const [failed, setFailed] = useState(false)
@@ -95,6 +124,8 @@ export function ThreadListRow({
   const unread = thread.unreadCount > 0
   const time = formatThreadTime(ctx?.lastMessageCreatedAt || thread.lastMessageAt, now)
   const preview = threadRowPreview(ctx)
+  const showTicks =
+    Boolean(ctx?.lastMessageMine) && typeof ctx?.lastMessagePreview === 'string' && ctx.lastMessagePreview.trim() !== ''
 
   return (
     <button
@@ -114,6 +145,7 @@ export function ThreadListRow({
           {time ? <span className="af-cm-dmrow-time">{time}</span> : null}
         </span>
         <span className="af-cm-dmrow-bottom">
+          {showTicks ? <ReadTicks seen={Boolean(ctx?.lastMessageSeen)} /> : null}
           <span className="af-cm-dmrow-preview">{preview}</span>
           {unread ? (
             <span className="af-cm-threadrow-unread">
