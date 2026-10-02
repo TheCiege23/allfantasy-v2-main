@@ -842,6 +842,7 @@ export async function GET(
         afEngine.get(p.id),
         projection?.projectedPoints ?? null,
         leagueProjection,
+        scoring,
       )
       if (afProjection != null) p.afProjection = afProjection
       p.unpricedReason =

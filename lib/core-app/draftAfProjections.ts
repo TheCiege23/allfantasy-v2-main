@@ -103,7 +103,7 @@ export async function loadDraftAfProjections(args: {
         scoring && provider?.componentStats ? computeLeagueProjectedPoints(provider.componentStats, scoring) : null
       const season = e.canonicalPlayerId ? rosByCanonical.get(e.canonicalPlayerId) : undefined
       byPlayerId.set(id, {
-        af: afEngineForLeague(e, provider?.projectedPoints ?? null, league?.points ?? null),
+        af: afEngineForLeague(e, provider?.projectedPoints ?? null, league?.points ?? null, scoring),
         ros: season?.ros ?? null,
         rosWeeks: season?.weeks ?? null,
         week: when.week,
