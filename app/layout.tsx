@@ -8,6 +8,7 @@ import { SpotifyMiniPlayer } from '@/components/spotify/SpotifyMiniPlayer';
 import { FloatingMusicWidget } from '@/components/MusicWidget';
 import { DefaultJsonLd } from '@/components/seo/JsonLd';
 import { SafeGlobalChrome } from '@/components/shell/SafeGlobalChrome';
+import { IosAppPushRegistrar } from '@/components/notifications/IosAppPushRegistrar';
 import { IosAppLinkHandler } from '@/components/platform/IosAppLinkHandler';
 import { MetaPixelPageViewTracker } from '@/components/meta/MetaPixelPageViewTracker';
 import { ErrorBoundaryClient } from '@/components/error-handling/ErrorBoundaryClient';
@@ -544,6 +545,12 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
             <Suspense fallback={null}>
               {isVisualQaMode ? null : <MetaPixelPageViewTracker pixelId={metaPixelId} />}
               <SafeGlobalChrome fbAppId={fbAppId} />
+              {/*
+                iOS app only, renders nothing: re-stores this phone's push token and opens a tapped
+                notification's screen. It lived in the /core shell, so a tap while the app was on a
+                league, player or settings page was ignored — the app just reopened where it was.
+              */}
+              <IosAppPushRegistrar />
             </Suspense>
           </ErrorBoundaryClient>
 

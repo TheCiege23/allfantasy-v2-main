@@ -9,7 +9,6 @@ import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
-import { IosAppPushRegistrar } from '@/components/notifications/IosAppPushRegistrar'
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
@@ -2226,8 +2225,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
           {active === 'home' ? <GameDayAlertsBanner /> : null}
-          {/* iOS app only, renders nothing: re-stores this phone's push token and opens tapped notifications. */}
-          <IosAppPushRegistrar />
+          {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
           <CoreWelcomeTour leagueCount={leagues.length} />
           {/*
             The VISIBLE button, on the /core home screen: a real action row
