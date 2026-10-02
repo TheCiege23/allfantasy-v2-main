@@ -810,6 +810,22 @@
   .af-ml-card[data-view='list'] {
     flex-direction: column;
     align-items: stretch;
+    /*
+     * ⚠ A WRAPPING COLUMN SIZES EACH LINE TO ITS WIDEST ITEM, not to the card. The row layout
+     * wraps on purpose; carried into this column it let the top row (tile + nowrap name +
+     * COMMISH) set its own 436px line inside a 315px card.
+     */
+    flex-wrap: nowrap;
+  }
+
+  /*
+   * ⚠ THE BASES ABOVE ARE WIDTHS IN THE ROW, AND HEIGHTS IN THIS COLUMN. `1 1 240px` and
+   * `2 1 260px` made the top 240px and the body 260px tall under ~40px and ~74px of content:
+   * measured 602px per list card at 375px, against 208px for the same league in grid view.
+   */
+  .af-ml-card[data-view='list'] .af-ml-card-top,
+  .af-ml-card[data-view='list'] .af-ml-card-body {
+    flex: 0 0 auto;
   }
 
   .af-ml-card[data-view='list'] .af-ml-open {
@@ -885,4 +901,16 @@
   .af-ml-controls { padding: 10px; }
   .af-ml-search { flex-basis: 100%; }
   .af-ml-grid[data-view='grid'][data-tier='quiet'] { grid-template-columns: 1fr; }
+}
+
+/*
+ * ⚠ A LONG LEAGUE NAME PUSHED THE WHOLE PAGE SIDEWAYS ON A PHONE, IN BOTH VIEWS (2026-10-01).
+ * The phone grid is `1fr` = `minmax(auto, 1fr)`, and a grid item's `auto` minimum is its
+ * min-content width — here the nowrap name plus tile and COMMISH badge. "The Gridiron Dynasty
+ * League — 2026 Superflex" made a 468px column in a 315px grid: a 498px page on a 375px screen.
+ * `min-width: 0` lets the track shrink to the screen, and the name's own ellipsis takes over.
+ * Top level and unscoped on purpose: wider grids never needed the minimum either.
+ */
+.af-ml-card {
+  min-width: 0;
 }
