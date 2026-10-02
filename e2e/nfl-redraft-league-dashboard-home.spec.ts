@@ -6,6 +6,13 @@ test.describe.configure({ timeout: 180_000 })
 const HARNESS_PATH = '/e2e/nfl-redraft-league-dashboard'
 
 /*
+ * The shell's internal fetches 404 in dev and can keep the network busy. An unbounded
+ * networkidle wait used the whole 180s test budget, so bound it and rely on the test-id
+ * waits for readiness.
+ */
+const NETWORK_IDLE_TIMEOUT_MS = 10_000
+
+/*
  * ⚠ THIS SPEC USED TO WAIT FOR A SCREEN THIS HARNESS CANNOT REACH.
  *
  * Every id it asserted — league-draftboard-card, league-invite-copy,
@@ -33,7 +40,7 @@ const HARNESS_PATH = '/e2e/nfl-redraft-league-dashboard'
 async function gotoHarnessReady(page: Page): Promise<void> {
   await page.goto(HARNESS_PATH, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await page.getByTestId('nfl-redraft-league-dashboard-harness').waitFor({ state: 'visible', timeout: 120_000 })
-  await page.waitForLoadState('networkidle').catch(() => null)
+  await page.waitForLoadState('networkidle', { timeout: NETWORK_IDLE_TIMEOUT_MS }).catch(() => null)
   await page.getByTestId('g32-nfl-redraft-home').waitFor({ state: 'visible', timeout: 30_000 })
 }
 
@@ -43,7 +50,13 @@ test.describe('@nfl-redraft @league-shell pre-draft-home', () => {
 
     // Landing on Home must not bounce the user anywhere — the whole point of the
     // predraft-landing opt-out is that a pre-draft league still opens on its dashboard.
-    await expect(page).toHaveURL(new RegExp(`${HARNESS_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`))
+    // The shell mirrors the active tab into ?view=, so Home reads as ?view=home.
+    await expect
+      .poll(() => {
+        const url = new URL(page.url())
+        return { path: url.pathname, view: url.searchParams.get('view') ?? 'home' }
+      })
+      .toEqual({ path: HARNESS_PATH, view: 'home' })
     await expect(page.getByTestId('g32-nfl-redraft-home')).toBeVisible()
 
     // The Draft group's first tab is `draft`, which in a pre-draft league is the setup card.
