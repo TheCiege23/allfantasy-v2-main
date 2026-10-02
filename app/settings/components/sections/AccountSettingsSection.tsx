@@ -246,7 +246,12 @@ export function AccountSettingsSection({
             ) : null}
             <input
               type="text"
+              id="delete-account-confirm"
+              /* The name matches the visible sentence's opening words ("Type DELETE to confirm"), so
+                 voice control can target it by what is on screen; the full sentence, including that
+                 data is erased immediately, is read as its description when focus lands here. */
               aria-label="Type DELETE to confirm"
+              aria-describedby="delete-account-desc"
               autoFocus
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value)}
