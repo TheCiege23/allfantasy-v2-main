@@ -188,3 +188,20 @@
   font-size: 11px;
   color: var(--muted);
 }
+
+/*
+ * ⚠ ON A PHONE THE PLAY WAS THE PART THAT GOT CUT (2026-10-01). Each scoring line is one nowrap
+ * row, so at 375px every play read like "Jaxon Smith-Njigba (WR) 34-yard receiving TD …" — the
+ * player survived and the play, the passer and the club did not, on a card whose whole job is
+ * the play. Two lines, clamped, so one long play cannot run a row away. Desktop keeps one line.
+ */
+@media (max-width: 640px) {
+  .af-gd-line {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.35;
+  }
+}

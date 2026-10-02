@@ -640,10 +640,15 @@
  * this surfaces is by looking at the page. Measured on production 2026-08-20:
  * `[data-help]` computed to `display:block; width:1051px` inside the topbar.
  *
- * Authored on the token layer like the rest of this file. The body is hidden by
- * visibility (not `display:none`) so it stays in the accessibility tree — the
- * explanation is real content, and it is the only place these numbers are
- * defined.
+ * Authored on the token layer like the rest of this file.
+ *
+ * ⚠ HIDDEN WITH `display: none` NOW, AND THE OLD REASON FOR NOT DOING SO WAS WRONG (2026-10-01).
+ * This said the body was hidden by visibility "so it stays in the accessibility tree" — but
+ * `visibility: hidden` removes an element from the accessibility tree too, so that bought
+ * nothing. What it did cost: a hidden 264px box is still laid out, and it still counts as
+ * scrollable overflow. On a 375px phone the "?" on the weekly routine card sits at x≈154, its
+ * popover's right edge at 410, and the whole home page scrolled 36px sideways with nothing
+ * visible to explain why. A box that is not displayed cannot widen the page.
  */
 [data-help] {
   position: relative;
@@ -667,7 +672,7 @@
   top: calc(100% + 8px);
   left: -8px;
   z-index: 30;
-  display: block;
+  display: none;
   width: 264px;
   padding: 10px 12px;
   border-radius: 10px;
@@ -687,8 +692,14 @@
 /* Right-aligned for badges that sit in the 360px side column, where a
    left-anchored popover would run off the edge of the viewport. */
 [data-help-left] [data-help-body] { left: auto; right: -8px; }
+/*
+ * `:focus` as well as `:focus-visible`: a TAP focuses the badge (it carries tabindex) but does
+ * not match `:focus-visible` — browsers reserve that for keyboard focus — so on a phone, where
+ * there is no hover either, the explanation could not be opened at all.
+ */
 [data-help]:hover [data-help-body],
-[data-help]:focus-visible [data-help-body] { opacity: 1; visibility: visible; }
+[data-help]:focus [data-help-body],
+[data-help]:focus-visible [data-help-body] { display: block; opacity: 1; visibility: visible; }
 [data-help-body] b {
   display: block;
   margin-bottom: 4px;
@@ -804,5 +815,35 @@
 .af-connect-note[data-tone='bad'] { color: var(--warn, #f59e0b); }
 @media (max-width: 560px) {
   .af-connect-actions, .af-connect-go { width: 100%; }
+}
+
+/*
+ * ── Help popover on a phone (2026-10-01) ─────────────────────────────────────
+ *
+ * A 264px popover anchored on a 16px badge cannot fit beside every badge on a 375px screen:
+ * opened from the routine card's "?" (x≈154) it ran to x≈410, past the edge. CSS cannot measure
+ * where the badge is, so on a phone the explanation stops pretending to be anchored and opens as a
+ * full-width card pinned near the bottom of the screen — always inside it, whichever badge opened
+ * it, and the same place every time. Top-level block at end of file, so it cannot be carried into
+ * another band.
+ *
+ * ⚠ ABOVE THE TAB BAR, NOT BEHIND IT. The phone tab bar is fixed at the bottom at z-index 40; a
+ * card at `bottom: 16px` would open underneath it. The offset is the one the league chat bar
+ * already measured (af-core-shell.css: the tab bar is ~67px with its labels, taller than the 56px
+ * token, so `+18px`), and the z-index sits above both the tab bar (40) and that chat bar (39).
+ */
+@media (max-width: 560px) {
+  [data-help-body],
+  [data-help-left] [data-help-body] {
+    position: fixed;
+    top: auto;
+    right: 16px;
+    bottom: calc(var(--af-tabbar-height, calc(56px + env(safe-area-inset-bottom, 0px))) + 18px);
+    left: 16px;
+    z-index: 45;
+    width: auto;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
 }
 
