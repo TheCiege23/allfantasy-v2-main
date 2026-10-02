@@ -450,13 +450,13 @@ export function SecuritySettingsSection({
                     value={emailCurrentPassword}
                     onChange={(e) => setEmailCurrentPassword(e.target.value)}
                     autoComplete="current-password"
-                    className="w-full rounded-lg border px-3 py-2 pr-10 text-sm"
+                    className="w-full rounded-lg border px-3 py-2 pr-12 text-sm"
                     style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
                   />
                   <button
                     type="button"
                     onClick={() => setShowEmailCurrentPassword((s) => !s)}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-2"
+                    className="absolute right-0 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md"
                     aria-label={showEmailCurrentPassword ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}
                     style={{ color: "var(--muted)" }}
                   >
@@ -674,11 +674,11 @@ export function SecuritySettingsSection({
                   type={showCurrent ? "text" : "password"}
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2 pr-10 text-sm"
+                  className="w-full rounded-lg border px-3 py-2 pr-12 text-sm"
                   style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
                   autoComplete="current-password"
                 />
-                <button type="button" onClick={() => setShowCurrent((s) => !s)} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-2 text-xs" style={{ color: "var(--muted)" }} aria-label={showCurrent ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
+                <button type="button" onClick={() => setShowCurrent((s) => !s)} className="absolute right-0 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-xs" style={{ color: "var(--muted)" }} aria-label={showCurrent ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
                   {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
@@ -690,11 +690,11 @@ export function SecuritySettingsSection({
                   type={showNew ? "text" : "password"}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2 pr-10 text-sm"
+                  className="w-full rounded-lg border px-3 py-2 pr-12 text-sm"
                   style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
                   autoComplete="new-password"
                 />
-                <button type="button" onClick={() => setShowNew((s) => !s)} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-2 text-xs" style={{ color: "var(--muted)" }} aria-label={showNew ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
+                <button type="button" onClick={() => setShowNew((s) => !s)} className="absolute right-0 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-xs" style={{ color: "var(--muted)" }} aria-label={showNew ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
                   {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
@@ -706,11 +706,11 @@ export function SecuritySettingsSection({
                   type={showConfirm ? "text" : "password"}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full rounded-lg border px-3 py-2 pr-10 text-sm"
+                  className="w-full rounded-lg border px-3 py-2 pr-12 text-sm"
                   style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
                   autoComplete="new-password"
                 />
-                <button type="button" onClick={() => setShowConfirm((s) => !s)} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-2 text-xs" style={{ color: "var(--muted)" }} aria-label={showConfirm ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
+                <button type="button" onClick={() => setShowConfirm((s) => !s)} className="absolute right-0 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-md text-xs" style={{ color: "var(--muted)" }} aria-label={showConfirm ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
                   {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
