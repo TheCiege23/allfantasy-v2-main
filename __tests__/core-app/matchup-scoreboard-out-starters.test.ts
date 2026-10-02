@@ -228,3 +228,27 @@ describe('Matchup scoreboard — the live lineup', () => {
     expect(sides?.opponent.lineup.map((s) => s.playerId)).toEqual(['c', 'd'])
   })
 })
+
+/*
+ * 🛑 "ACTIVE" IS NOT AN INJURY. Every non-empty status used to become a tag, so nearly every healthy
+ * starter on the production board wore an amber "ACTI" chip (2026-10-02). Only a real designation
+ * may reach `atRiskBySleeperId`.
+ */
+describe('Matchup scoreboard — the injury tag', () => {
+  it('🛑 a healthy designation (Active, ACT, NA) carries no tag', async () => {
+    db.injuries = [
+      { playerName: 'Player a', status: 'Active' },
+      { playerName: 'Player b', status: 'ACT' },
+      { playerName: 'Player c', status: 'NA' },
+    ]
+    const sides = await load()
+    expect(sides?.atRiskBySleeperId).toEqual({})
+  })
+
+  it('control: Questionable still carries one, and does not change the price', async () => {
+    db.injuries = [{ playerName: 'Player a', status: 'Questionable' }]
+    const sides = await load()
+    expect(sides?.atRiskBySleeperId).toEqual({ a: 'Questionable' })
+    expect(sides?.you.projectedRemaining).toBe(16)
+  })
+})

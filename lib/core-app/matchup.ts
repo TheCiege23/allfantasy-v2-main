@@ -23,6 +23,7 @@ import { isBestBallSettings } from './lineupMode'
 import { starterGameStates, type StarterGameState } from './matchupGameState'
 import { bestBallProjectedFinal } from './bestBallForecast'
 import { realManagerName, rosterLabel } from './managerName'
+import { eliminationFormat, type EliminationFormat } from './railMatchupMode'
 
 /*
  * The opposing side's two name lines. The importer stores an unowned Sleeper roster as team
@@ -227,6 +228,12 @@ export type MatchupData = {
      * unclaimed team — never a guessed URL, never the league page under a lineup label.
      */
     lineupLink: PlatformLink | null
+    /**
+     * Set for a guillotine or survivor-guillotine league. Such a league has no weekly opponent —
+     * the lowest score goes home — so this screen draws no head-to-head for it, even where the
+     * provider published matchup ids. See `eliminationFormat`.
+     */
+    elimination?: EliminationFormat | null
   }
   week: SectionState<{ week: number; season: number; isFinal: boolean }>
   /**
@@ -379,6 +386,7 @@ export async function getMatchupData(
       }),
       /* Set once the user's team is known, below. */
       lineupLink: null as PlatformLink | null,
+      elimination: eliminationFormat(league),
     },
     /*
      * The default for every early-return path. Overridden the moment both
@@ -454,6 +462,20 @@ export async function getMatchupData(
         'lineup',
       )
     : null
+
+  /*
+   * 🛑 AN ELIMINATION LEAGUE HAS NO OPPONENT, WHATEVER THE PROVIDER'S MATCHUP IDS SAY. Pairing on
+   * them drew "Survivor All-Stars Guillotine" as a head-to-head with a win probability (production,
+   * 2026-10-02) while the rail beside it correctly showed an elimination row. Returned after the
+   * lineup link so "Set lineup" still works; the screen explains the format instead of a versus.
+   */
+  if (base.league.elimination) {
+    const noOpponent = {
+      available: false as const,
+      reason: 'a guillotine league is scored against the whole field each week, so there is no single opponent',
+    }
+    return { ...base, week: noOpponent, teams: noOpponent, sides: noOpponent }
+  }
 
   /*
    * ⚠ THE EARLIEST UNPLAYED WEEK, NOT `max(week)`. This screen named your

@@ -805,6 +805,10 @@ export function Matchup({ data }: MatchupProps) {
               <MatchupPulseRefresh inPlay={inPlay} label={copy('Refresh this matchup')} />
             ) : null}
           </>
+        ) : data.league.elimination ? (
+          <span className="af-label af-mu-week-label">
+            {copy(data.league.elimination === 'survivor_guillotine' ? 'Survivor Guillotine' : 'Guillotine')}
+          </span>
         ) : (
           <span className="af-mu-unavailable">{data.week.reason}</span>
         )}
@@ -852,6 +856,36 @@ export function Matchup({ data }: MatchupProps) {
         </div>
       ) : null}
 
+      {data.league.elimination ? (
+        /*
+          🛑 NO VERSUS FOR AN ELIMINATION LEAGUE. The lowest score each week goes home, so the
+          question is "am I above the chop line", which is a standings question — not "am I beating
+          the roster a provider happened to pair me with". This page drew exactly that fake
+          head-to-head, with a win probability, until 2026-10-02.
+        */
+        <section className="af-frame af-mu-section" aria-labelledby="af-mu-elim">
+          <header className="af-mu-section-head">
+            <h2 className="af-label" id="af-mu-elim">
+              {copy('No head-to-head in this league')}
+            </h2>
+          </header>
+          <p className="af-mu-basis">
+            {language === 'es'
+              ? 'En una liga guillotina compites contra toda la liga: cada semana se elimina la puntuación más baja, así que no hay un único rival.'
+              : 'In a guillotine league you play the whole field: the lowest score each week is eliminated, so there is no single opponent to face.'}
+          </p>
+          <p className="af-mu-basis">
+            <Link href={`/core/standings?league=${encodeURIComponent(data.league.id)}`} prefetch={false}>
+              {copy('See where you stand against the chop line')} →
+            </Link>
+            {' · '}
+            <Link href={`/core/my-team?league=${encodeURIComponent(data.league.id)}`} prefetch={false}>
+              {copy('Check your lineup')} →
+            </Link>
+          </p>
+        </section>
+      ) : (
+      <>
       {/* ── Head to head ────────────────────────────────────────────── */}
       <section className="af-frame af-mu-h2h" data-leader={leader ?? undefined} ref={bannerRef}>
         {data.teams.available ? (
@@ -1036,6 +1070,8 @@ export function Matchup({ data }: MatchupProps) {
           </li>
         </ul>
       </section>
+      </>
+      )}
     </div>
     </PlayerCardLeagueScope>
   )
