@@ -439,6 +439,46 @@
   .af-core .af-lt-compact-row { flex: 0 1 385px; }
   .af-core .af-lt-more > summary { min-width: 86px; }
 }
+/*
+ * ⚠ ON A PHONE, "MORE" SITS ON THE SAME ROW AS THE FIVE TABS, AND ITS LIST DROPS DOWN.
+ * The compact block stacked as a column, so "More" took a full-width row of its own (298px
+ * wide at 375, 44px tall plus a 6px gap) and read as an empty text field under the tabs.
+ * Measured on the live page at 375px with this rule: one 44px row, the five tabs at 53px each
+ * with no label truncated, "More" at 60px, and the list 180px wide inside the right edge.
+ *
+ * The active secondary view ("More · Standings") drops its suffix here, or the summary would
+ * take the width the five tabs need; the summary still carries `data-active`, the list still
+ * marks the view, and the page's own title names it.
+ *
+ * Its own top-level block, and BEFORE the 360px block below, so that block's smaller font still
+ * wins on the narrowest phones (same specificity, later wins).
+ */
+@media (max-width: 720px) {
+  .af-core .af-lt-compact {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 4px;
+  }
+  .af-core .af-lt-compact-row .af-lt-tab { font-size: 13px; }
+  .af-core .af-lt-compact .af-lt-more { position: relative; }
+  .af-core .af-lt-compact .af-lt-more > summary { padding-inline: 12px; }
+  .af-core .af-lt-compact .af-lt-more-active { display: none; }
+  .af-core .af-lt-compact .af-lt-more-list {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 30;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    min-width: 180px;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--line2);
+    border-radius: 12px;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+  }
+}
 @media (max-width: 360px) {
   .af-core .af-lt-compact-row .af-lt-tab { font-size: 11px; letter-spacing: -0.02em; }
 }

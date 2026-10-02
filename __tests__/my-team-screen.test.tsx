@@ -688,6 +688,36 @@ describe('My Team — the reported problems', () => {
     }
   })
 
+  /*
+   * On a phone the game line never fits on one line, and it wrapped mid-phrase —
+   * "WAS vs IND · Sun / 9:30a ET". The matchup and the kickoff are now separate
+   * whole pieces, so af-my-team.css can put the break between them.
+   */
+  it('splits the game line into matchup and kickoff, keeping the full text', () => {
+    const c = render(<MyTeam data={data()} />).container
+    const meta = c.querySelector('.af-mt-player-meta')!
+    expect(meta.querySelector('.af-mt-opp')?.textContent).toBe('DEN vs MIA')
+    expect(meta.querySelector('.af-mt-sep')?.textContent).toBe(' · ')
+    expect(meta.querySelector('.af-mt-when')?.textContent).toBe('Sun 9:05p')
+    expect(meta.textContent).toContain('DEN vs MIA · Sun 9:05p')
+  })
+
+  it('keeps a game line with no kickoff, and the no-game note, as plain text', () => {
+    const one = (gameContext: string | null) =>
+      render(
+        <MyTeam
+          data={data({
+            starters: { available: true, data: [{ slotLabel: 'QB', player: player({ gameContext }), empty: false, unresolvedId: null }] },
+            bench: { available: false, reason: 'none' },
+          })}
+        />,
+      ).container.querySelector('.af-mt-player-meta')!
+    const bare = one('DEN vs MIA')
+    expect(bare.querySelector('.af-mt-opp')).toBeNull()
+    expect(bare.textContent).toContain('DEN vs MIA')
+    expect(one(null).textContent).toContain('no game found for this week')
+  })
+
   it('shows an unfamiliar designation as-is rather than inventing a letter', () => {
     // A wrong abbreviation is worse than a long one.
     const c = render(

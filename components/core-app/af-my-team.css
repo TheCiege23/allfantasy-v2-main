@@ -1510,3 +1510,23 @@ a.af-mt-lock-fix:focus-visible {
     min-width: 0;
   }
 }
+
+/*
+ * The game line in two whole pieces — see `GameContext` in MyTeam.tsx. Each piece
+ * never breaks inside itself; on a phone the matchup takes its own line and the
+ * separator goes, so the break lands between "WAS vs IND" and "Sun 9:30a ET"
+ * instead of between "Sun" and "9:30a". Top level, depth 0, its own @media.
+ */
+.af-mt-opp,
+.af-mt-when {
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .af-mt-sep {
+    display: none;
+  }
+  .af-mt-opp {
+    display: block;
+  }
+}
