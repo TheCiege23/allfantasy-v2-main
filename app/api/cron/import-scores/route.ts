@@ -11,6 +11,11 @@
  *   sport   — "NFL" or "NCAAF". OMITTED MEANS BOTH — see below.
  *   season  — 4-digit year string (defaults to current season)
  *   force   — "true" to skip the 90-second gate (admin/manual use)
+ *   postseason — "only" (NCAAF, with an explicit `season`): fetch that college season's CFBD
+ *             postseason and NOT its regular slate — a one-off backfill. Pair it with
+ *             `force=true`, or the CFBD throttle may skip the call and the backfill writes nothing
+ *             (it says so in `bySource.cfbd.error`). Without it, the postseason is added
+ *             automatically in December and January (cfbPostseasonSeason).
  *
  * ⚠ OMITTING `sport` NOW RUNS EVERY SPORT, AND THAT IS THE POINT. This used to
  * default to NFL, so covering NCAAF took a SECOND cron entry pointing at the same
@@ -36,7 +41,12 @@ import {
   getAPISportsDiagnostics,
 } from "@/lib/api-sports"
 import { prisma } from "@/lib/prisma"
-import { fetchGamesForSport, normalizeGameStatus, type ProviderGame } from "@/lib/scores/gameScoreProviders"
+import {
+  cfbPostseasonSeason,
+  fetchGamesForSport,
+  normalizeGameStatus,
+  type ProviderGame,
+} from "@/lib/scores/gameScoreProviders"
 import { recordCfbdAttempt, shouldFetchCfbdNow } from "@/lib/scores/cfbdThrottle"
 import { createRunBudget } from "@/lib/cron/runBudget"
 
@@ -373,11 +383,30 @@ async function runOneSport(url: URL, sport: Sport, budget: ReturnType<typeof cre
       else skip = { cfbd: decision.reason }
     }
 
+    /*
+     * Bowls and the College Football Playoff. In December and January CFBD's postseason slate is
+     * asked for as well, under the SAME throttle decision — one extra call per throttled run, only
+     * in those two months. Its season is the college season, not `seasonYear`: in January the
+     * calendar says 2027 and the title game belongs to 2026.
+     *
+     * `postseason=only` with an explicit `season` is a one-off backfill of a past postseason (e.g.
+     * last season's real bracket, to test the playoff sync against). It skips the regular slate so
+     * a backfill does not also write a whole past regular season.
+     */
+    const postseasonOnly =
+      sport === "NCAAF" && url.searchParams.get("postseason") === "only" && season != null && Number.isFinite(seasonYear)
+    const cfbd =
+      sport === "NCAAF"
+        ? postseasonOnly
+          ? { postseasonSeason: seasonYear, regular: false }
+          : { postseasonSeason: cfbPostseasonSeason(new Date()) }
+        : undefined
+
     const attempts = await fetchGamesForSport(
       sport,
       Number.isFinite(seasonYear) ? seasonYear : new Date().getFullYear(),
       toWeek(url.searchParams.get("week")),
-      { deadlineAt: Date.now() + Math.max(0, budget.remainingMs() - 20_000), skip },
+      { deadlineAt: Date.now() + Math.max(0, budget.remainingMs() - 20_000), skip, cfbd },
     )
 
     const bySource: Record<

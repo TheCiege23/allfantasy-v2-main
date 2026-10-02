@@ -340,3 +340,59 @@ describe('import-scores CFBD throttle + cfbdAsked telemetry', () => {
     expect(outcomeMeta()?.cfbdAsked).toBe(false)
   })
 })
+
+/*
+ * CFP Phase 2 (2026-10-02): CFBD's postseason slate rides the NCAAF tick in December and January.
+ * The fetch itself is pinned in cfbd-postseason-writer.test.ts; these pin what the ROUTE passes.
+ */
+describe('import-scores CFBD postseason wiring', () => {
+  beforeEach(async () => {
+    const { __resetCfbdThrottleForTests } = await import('@/lib/scores/cfbdThrottle')
+    __resetCfbdThrottleForTests()
+    prismaMock.sportsGame.findFirst.mockResolvedValue({ fetchedAt: new Date(Date.now() - 3_600_000), id: 'g' })
+    prismaMock.sportsGame.findMany.mockResolvedValue([])
+    syncAPISportsGamesToDbMock.mockResolvedValue(0)
+    fetchGamesForSportMock.mockResolvedValue([{ source: 'cfbd', games: [], error: null }])
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const optsFor = (sport: string) => fetchGamesForSportMock.mock.calls.find((c) => c[0] === sport)?.[3]
+
+  it('in December asks for that season’s postseason, for NCAAF only', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-12-20T18:00:00Z'))
+    await importScoresGET(req('/api/cron/import-scores'))
+    expect(optsFor('NCAAF')?.cfbd).toEqual({ postseasonSeason: 2026 })
+    expect(optsFor('NFL')?.cfbd).toBeUndefined()
+  })
+
+  it('in January asks for the PREVIOUS season’s postseason', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2027-01-12T18:00:00Z'))
+    await importScoresGET(req('/api/cron/import-scores?sport=NCAAF'))
+    expect(optsFor('NCAAF')?.cfbd).toEqual({ postseasonSeason: 2026 })
+  })
+
+  it('in the regular season asks for no postseason', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-17T18:00:00Z'))
+    await importScoresGET(req('/api/cron/import-scores?sport=NCAAF'))
+    expect(optsFor('NCAAF')?.cfbd).toEqual({ postseasonSeason: null })
+  })
+
+  it('postseason=only with a season is a backfill of that postseason, without its regular slate', async () => {
+    await importScoresGET(req('/api/cron/import-scores?sport=NCAAF&season=2025&postseason=only&force=true'))
+    expect(optsFor('NCAAF')?.cfbd).toEqual({ postseasonSeason: 2025, regular: false })
+    expect(optsFor('NCAAF')?.skip).toBeUndefined()
+  })
+
+  it('postseason=only WITHOUT a season is ignored rather than guessing one', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-17T18:00:00Z'))
+    await importScoresGET(req('/api/cron/import-scores?sport=NCAAF&postseason=only'))
+    expect(optsFor('NCAAF')?.cfbd).toEqual({ postseasonSeason: null })
+  })
+})
