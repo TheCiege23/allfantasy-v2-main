@@ -1596,3 +1596,237 @@ a.af-mt-lock-fix:focus-visible {
     margin-top: 2px;
   }
 }
+
+/*
+ * ── Layout pass (2026-10-02) ─────────────────────────────────────────────────
+ *
+ * Appended at depth 0, every block below opens and closes on its own. Measured on the live KBFL
+ * roster before this block existed:
+ *
+ *   375px phone   first starter at 2,323px — tabs, league card, Chimmy moves, the Sleeper check
+ *                 (195), the lock banner, a 546px header, the matchup, byes (203) and the
+ *                 scoring basis (276) all came first.
+ *   768px tablet  .af-mt was 429px wide (the shell keeps its 288px rail + nav to 1080px), yet
+ *                 the row rules key on the VIEWPORT, so it got the desktop four-number block and
+ *                 a 70px name column: "Jayden Da", "Isaiah Willi", "Carson Scl".
+ *   1600px        .af-mt was 1,017px of one column; 480px of nothing between each name and
+ *                 its numbers.
+ *
+ * So the page measures ITSELF (`container: af-mt`) for the rules this pass needs, instead of
+ * guessing from the viewport. The older viewport rules above are left alone: on a phone the
+ * two agree, and the container copies below only add the narrow treatment where the viewport
+ * rules miss it.
+ */
+.af-mt {
+  container: af-mt / inline-size;
+}
+
+/* Narrow: the column wrappers vanish and the page is one flex column, as before. */
+.af-mt-body,
+.af-mt-aside,
+.af-mt-main {
+  display: contents;
+}
+/* …except that byes and the scoring basis come AFTER the roster. They explain the week; the
+   lineup is the week. The matchup stays above the starters. */
+.af-mt-byes,
+.af-mt-basis {
+  order: 1;
+}
+
+/* Wide: roster left, matchup + byes + basis in a 320px column beside it. */
+@container af-mt (min-width: 900px) {
+  .af-mt-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-areas: 'main aside';
+    gap: 12px;
+    align-items: start;
+  }
+  .af-mt-main,
+  .af-mt-aside {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+  }
+  .af-mt-main {
+    grid-area: main;
+  }
+  .af-mt-aside {
+    grid-area: aside;
+  }
+  /* 320px holds one team per row, not a three-column scoreboard — the 560px phone treatment. */
+  .af-mt-aside .af-mt-mu-body {
+    grid-template-columns: 1fr;
+  }
+  .af-mt-aside .af-mt-mu-body > .af-mt-mu-side:last-child {
+    flex-direction: row;
+    text-align: left;
+  }
+  .af-mt-aside .af-mt-mu-body > .af-mt-mu-side:last-child .af-mt-mu-pts {
+    margin-left: auto;
+    margin-right: 0;
+  }
+  /* Name on its own line, numbers under it: side by side in 320px the names cut to "(F) …". */
+  .af-mt-aside .af-mt-mu-side {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .af-mt-aside .af-mt-mu-who {
+    flex: 1 1 100%;
+  }
+  .af-mt-aside .af-mt-basis {
+    flex-direction: column;
+  }
+  .af-mt-aside .af-mt-basis-text {
+    flex: 0 0 auto;
+    align-self: stretch;
+  }
+}
+
+/*
+ * Narrow PAGE, whatever the viewport: the same two-number block and two-line name the phone
+ * rules (≤720 / ≤560 viewport, above) give a phone. Tablet portrait is the case they missed.
+ */
+@container af-mt (max-width: 500px) {
+  .af-mt-projpair,
+  .af-mt-projhead {
+    grid-template-columns: 50px 46px;
+  }
+  .af-mt-share,
+  .af-mt-projhead > *:nth-child(3),
+  .af-mt-projhead > *:nth-child(4) {
+    display: none;
+  }
+  .af-core .af-mt-player-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    overflow: visible;
+  }
+  .af-core .af-mt-player-name > .af-pc-trigger {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    -webkit-box-pack: center;
+    min-width: 0;
+    overflow: hidden;
+    white-space: normal;
+    line-height: 1.22;
+    text-align: left;
+  }
+  .af-core .af-mt-player-name > .af-pc-trigger::after {
+    content: none;
+  }
+  .af-core .af-mt-player-name > .af-mt-bye,
+  .af-core .af-mt-player-name > .af-mt-pre {
+    flex: 0 0 auto;
+  }
+
+  /*
+   * The header was 546px on a phone. The crest, the name and the source link each took a
+   * row of their own because the name (22px, ~280px wide) could not shrink beside a 52px crest.
+   */
+  .af-mt-head {
+    gap: 12px;
+    padding: 14px;
+  }
+  .af-mt-crest {
+    width: 40px;
+    height: 40px;
+    font-size: 15px;
+    border-radius: 11px;
+  }
+  .af-mt-head-text {
+    flex: 1 1 0;
+  }
+  .af-mt-team-name {
+    font-size: 19px;
+  }
+  /* The source link gets its own full row; beside the name it squeezed "BroVengers!" to "BroVeng / ers!". */
+  .af-core .af-mt-source {
+    flex: 1 1 100%;
+    max-width: none;
+    justify-content: center;
+  }
+  /*
+   * The standard total, when the league makes it incomparable (IDP), is an em dash with three
+   * lines under it saying why — 120px. The scoring basis below the roster says the same thing
+   * ("…which the generic number does not count at all"), so on a narrow page the dash goes.
+   */
+  .af-mt-projgroup > .af-mt-tile--proj:not(.af-mt-tile--af)[data-missing='true'] {
+    display: none;
+  }
+}
+
+/*
+ * The projected-matchup scoreboard stacks one team per row on a narrow PAGE. Its own phone
+ * rule keys on a 560px viewport, so a 768px tablet — a 429px page — kept three columns and ran
+ * "165.7 AF 138.6 from 15 of 16 AF 139.1 173.2" together with the opponent cut off.
+ */
+@container af-mt (max-width: 600px) {
+  .af-mt-mu-body {
+    grid-template-columns: 1fr;
+  }
+  .af-mt-mu-body > .af-mt-mu-side:last-child {
+    flex-direction: row;
+    text-align: left;
+  }
+  .af-mt-mu-body > .af-mt-mu-side:last-child .af-mt-mu-pts {
+    margin-left: auto;
+    margin-right: 0;
+  }
+}
+
+/* ── The Sleeper check: one compact strip, not a 195px card ── */
+.af-lv {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 10px 14px;
+}
+.af-lv-title {
+  flex: 1 1 auto;
+  font-size: 13px;
+}
+.af-lv-status {
+  margin: 0;
+  order: 2;
+  flex: 1 0 100%;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text2);
+}
+.af-lv-note {
+  margin: 0;
+  flex: 1 0 100%;
+  order: 3;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-lv-refresh {
+  margin-left: auto;
+}
+
+/*
+ * ── Touch: 44px targets by POINTER, not by width ──
+ * The 44px rules above stop at 720px, so an iPad got 36px buttons. The back-to-top button is
+ * already hidden on a phone here (af-core-shell.css); on a touch tablet it sat on the START column.
+ */
+@media (pointer: coarse) {
+  .af-mt .af-btn,
+  .af-lv-refresh,
+  a.af-mt-lock-fix {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  body:has(.af-mt) [data-af-back-to-top] {
+    display: none !important;
+  }
+}
