@@ -255,6 +255,8 @@ export async function getTradeReceipts(args: {
   /** Your Sleeper user id — the only way to tell which side of a trade was yours. */
   ownerSleeperId: string | null
   currentWeek: number | null
+  /** Rows returned; the home card's five unless a caller (the Career decision record) needs all. */
+  limit?: number
 }): Promise<DecisionReceiptsData | null> {
   if (!args.ownerSleeperId) return null
 
@@ -313,7 +315,7 @@ export async function getTradeReceipts(args: {
   }
 
   receipts.sort((a, b) => b.createdIso.localeCompare(a.createdIso))
-  return { trades: receipts.slice(0, MAX_TRADE_RECEIPTS), tooEarly: early, uncoveredLeagues }
+  return { trades: receipts.slice(0, args.limit ?? MAX_TRADE_RECEIPTS), tooEarly: early, uncoveredLeagues }
 }
 
 /* ── Waiver adds ──────────────────────────────────────────────────────────────── */
@@ -525,6 +527,8 @@ export async function getWaiverReceipts(args: {
   userId: string
   leagues: readonly ReceiptsLeague[]
   currentWeek: number | null
+  /** Rows returned; the home card's five unless a caller (the Career decision record) needs all. */
+  limit?: number
 }): Promise<{ waivers: WaiverReceipt[]; tooEarly: number; unscored: number } | null> {
   const loaded = await loadSeasonAdds(args)
   if (!loaded) return null
@@ -567,7 +571,7 @@ export async function getWaiverReceipts(args: {
   }
 
   receipts.sort((x, y) => y.week - x.week || y.points - x.points)
-  return { waivers: receipts.slice(0, MAX_WAIVER_RECEIPTS), tooEarly: early, unscored }
+  return { waivers: receipts.slice(0, args.limit ?? MAX_WAIVER_RECEIPTS), tooEarly: early, unscored }
 }
 
 /* ── Lineups (start/sit) ──────────────────────────────────────────────────────── */

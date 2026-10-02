@@ -44,6 +44,16 @@
 }
 .af-cdr-v { flex: 1 1 220px; min-width: 0; font: 400 13px/1.5 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--text); }
 
+/* "Your moves" — trades and waiver adds, a section of their own under the advice rows. */
+.af-cdr-sub {
+  margin: 4px 0 -4px;
+  font: 700 11px/1.6 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-cdr-note { color: var(--muted); }
+
 .af-cdr-foot { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 
 @media (max-width: 767px) {
