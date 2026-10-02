@@ -46,7 +46,7 @@ export default function SettingsApp({
   const [activeTab, setActiveTab] = useState<SettingsTabId | null>(
     isSettingsTabId(tabFromQuery) ? tabFromQuery : null,
   )
-  const { profile, loading, saving, error, updateProfile, fetchProfile } = useSettingsProfile()
+  const { profile, loading, saving, error, sessionExpired, updateProfile, fetchProfile } = useSettingsProfile()
 
   /*
    * Follows the URL only when the URL changes. Keyed on `activeTab` too, a local
@@ -113,7 +113,26 @@ export default function SettingsApp({
       profile={profile}
       planLabel={planLabel}
     >
-      {error && (
+      {/*
+        A refetch that finds the session gone keeps the page (useSettingsProfile) and says so here,
+        with the one action that fixes it — retrying cannot. Sign-in returns to the same tab.
+      */}
+      {error && sessionExpired ? (
+        <div
+          className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3"
+          role="alert"
+          data-testid="settings-session-expired"
+        >
+          <p className="min-w-0 flex-1 text-sm font-semibold text-amber-50">{error}</p>
+          <a
+            href={`/login?callbackUrl=${encodeURIComponent(`${pathname}${searchParams?.toString() ? `?${searchParams.toString()}` : ""}`)}`}
+            className="rounded-lg border border-amber-300/45 bg-amber-500/15 px-3 py-2 text-xs font-bold text-amber-100"
+            data-testid="settings-session-expired-signin"
+          >
+            Sign in again
+          </a>
+        </div>
+      ) : error && (
         <div className="mb-4">
           <ErrorStateRenderer
             compact
