@@ -31,7 +31,8 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   leagueTeam: { findMany: async () => [{
     leagueId: 'lg', externalId: '1', platformUserId: 'me',
-    league: { id: 'lg', name: 'Test League', platform: 'sleeper', sport: 'NFL', settings: {}, platformLeagueId: 'SL', leagueType: 'redraft', scoring: 'ppr', logoUrl: null, avatarUrl: null },
+    /* A QB slot nobody on the roster fills, so the board's lineup-gain rule has a seat for 9228. */
+    league: { id: 'lg', name: 'Test League', platform: 'sleeper', sport: 'NFL', settings: { roster_positions: ['QB', 'RB', 'WR', 'BN'] }, platformLeagueId: 'SL', leagueType: 'redraft', scoring: 'ppr', logoUrl: null, avatarUrl: null },
   }] },
   roster: { findMany: async () => [{ leagueId: 'lg', platformUserId: 'me', faabRemaining: 100, playerData: { players: ['bench1', 'starter1'], starters: ['starter1'] } }] },
   leagueWaiverSettings: { findMany: async () => [] },

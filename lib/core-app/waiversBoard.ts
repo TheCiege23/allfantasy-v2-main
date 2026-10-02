@@ -18,6 +18,9 @@ import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import type { WaiverValueBasis } from '@/lib/waivers/waiverSportBasis'
 import { faabRemainingOf, formatOf, runsAtLabel } from './waiverRowMeta'
 import { buildWaiverSportSections } from './waiversBoardSports'
+import { pickLineupSwap, rosterCapacity, swapReasoning, type SwapCandidate, type SwapRosterPlayer } from './waiverSwap'
+import { valueBookFor, valueBookKey, type ValueBook } from './valueBook'
+import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
 
 /**
  * Waivers, across every league — "the single best add on each wire, ranked by
@@ -27,11 +30,17 @@ import { buildWaiverSportSections } from './waiversBoardSports'
  *
  * ── The ranking rule ────────────────────────────────────────────────────────
  *
- * NET GAIN: the league-scored projection of the best available player, minus
- * the league-scored projection of the weakest player you would drop for him.
- * That is the only cross-league comparable quantity on this screen — a FAAB bid
- * is not comparable between leagues, and neither is a raw projection, because
- * the same player is worth different points under different scoring.
+ * NET GAIN: what the add does to your best starting lineup, in league-scored
+ * projected points (`waiverSwap.ts`, the league screen's own rule). That is the
+ * only cross-league comparable quantity on this screen — a FAAB bid is not
+ * comparable between leagues, and neither is a raw projection, because the same
+ * player is worth different points under different scoring.
+ *
+ * 🛑 IT WAS "BEST AVAILABLE MINUS WEAKEST BENCH PLAYER" UNTIL 2026-10-02, and that
+ * never asked whether the add would start: in a one-QB league it named a backup
+ * quarterback as the top add while the league screen said nobody on that wire
+ * improved the lineup. The drop is now chosen separately — by market value on a
+ * dynasty-chart league, by projection elsewhere.
  *
  * ── Every number here is computed, and none of it is generated ──────────────
  *
@@ -104,8 +113,21 @@ export type WaiverBoardRow = {
   logoUrl: string | null
   /** "Dynasty · Superflex", from the league's own ingested settings. Null when absent. */
   format: string | null
-  /** Best available minus weakest droppable, in this league's points. */
+  /**
+   * What the add does to your best starting lineup, in this league's points — the ranking key.
+   * Never "best available minus weakest bench player": that ranked adds who would never start.
+   * See `waiverSwap.ts`.
+   */
   netGain: number
+  /**
+   * The starter the add would take the place of; null when he fills an empty slot. `playerId` is
+   * the same id space as `add.playerId`, so the AF engine can price this side of the swap too.
+   */
+  startsOver?: { playerId: string; name: string; projected: number; afProjected?: number } | null
+  /** Why this drop: lowest dynasty market value on the bench, or lowest projection (redraft). */
+  dropBasis?: 'market_value' | 'projection' | null
+  /** The roster has an empty spot, so no drop is needed — why `drop` is null when it is. */
+  openRosterSpot?: boolean
   /**
    * The same swap on AllFantasy's own engine. Present only when the engine priced the add AND
    * (when there is one) the drop — half a swap is not a gain.
@@ -164,6 +186,8 @@ export type WaiversBoardData = {
     idSpace: number
     noScoring: number
     noCandidate: number
+    /** A wire was priced and nobody on it would start for you — a finding, not a failure. */
+    noUpgrade: number
   }
   /** Leagues the market percentages were computed over, for the honesty gate. */
   marketLeagues: number
@@ -195,7 +219,7 @@ export type WaiversBoardData = {
 const EMPTY: WaiversBoardData = {
   rows: [],
   considered: 0,
-  withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
+  withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 },
   marketLeagues: 0,
   at: null,
   weekKickoffs: null,
@@ -219,10 +243,12 @@ const ROW_CAP = 10
  */
 const ID_SPACE_FLOOR = 0.5
 
-function rosterIds(playerData: unknown): { all: string[]; starters: Set<string> } {
+function rosterIds(playerData: unknown): { all: string[]; starters: Set<string>; stashed: Set<string> } {
   const out: string[] = []
   const starters = new Set<string>()
-  if (!playerData || typeof playerData !== 'object') return { all: out, starters }
+  /* IR and taxi: rostered, so off the wire, but neither seated in a lineup nor offered as a drop. */
+  const stashed = new Set<string>()
+  if (!playerData || typeof playerData !== 'object') return { all: out, starters, stashed }
   const d = playerData as Record<string, unknown>
   for (const key of ['players', 'starters', 'taxi', 'reserve']) {
     const raw = d[key]
@@ -233,9 +259,10 @@ function rosterIds(playerData: unknown): { all: string[]; starters: Set<string> 
       if (!v || v === '0') continue
       out.push(v)
       if (key === 'starters') starters.add(v)
+      if (key === 'taxi' || key === 'reserve') stashed.add(v)
     }
   }
-  return { all: [...new Set(out)], starters }
+  return { all: [...new Set(out)], starters, stashed }
 }
 
 /** Every team this account has claimed, with the league fields both halves of the board read. */
@@ -516,16 +543,56 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
     }
   }
 
-  const withheld = { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 }
+  const withheld = { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 }
   const rows: WaiverBoardRow[] = []
+
+  const myRosterIn = (c: ClaimedTeam) => {
+    const leaguePool = rostersByLeague.get(c.leagueId) ?? []
+    return myRosterCandidates(c, userId)
+      .map((k) => leaguePool.find((r) => r.platformUserId === k))
+      .find((r) => r != null)
+  }
+
+  /*
+   * 🛑 A DYNASTY DROP IS CHOSEN BY MARKET VALUE, SO THE VALUES ARE READ BEFORE THE LOOP — one query
+   * per dynasty book in play (at most two: 1QB and superflex), for the bench players of the leagues
+   * that need them. The book comes from `valueBookFor`, the one derivation every value surface uses,
+   * so a keeper league that keeps a sliver of its roster drops on redraft logic like it prices on
+   * the redraft chart (see `pricesOnDynastyChart`). A failed read names no dynasty drop rather than
+   * falling back to the weekly projection, which is the rule this exists to replace there.
+   */
+  const bookByLeague = new Map<string, ValueBook>()
+  const dynastyIdsByBook = new Map<string, { book: ValueBook; ids: Set<string> }>()
+  for (const c of mine) {
+    const book = valueBookFor(c.league!.settings, c.league!.leagueType ?? null)
+    bookByLeague.set(c.leagueId, book)
+    if (book.format !== 'DYNASTY') continue
+    const roster = myRosterIn(c)
+    if (!roster) continue
+    const { all, starters, stashed } = rosterIds(roster.playerData)
+    const k = `${book.format}:${book.qbFormat}`
+    const entry = dynastyIdsByBook.get(k) ?? { book, ids: new Set<string>() }
+    for (const id of all) if (!starters.has(id) && !stashed.has(id)) entry.ids.add(id)
+    dynastyIdsByBook.set(k, entry)
+  }
+  const marketValue = new Map<string, number>()
+  await Promise.all(
+    [...dynastyIdsByBook.values()].map(({ book, ids }) =>
+      loadLatestPlayerValueSnapshots({ sleeperIds: ids, source: book.source, format: book.format, qbFormat: book.qbFormat })
+        .then((snaps) => {
+          for (const s of snaps) {
+            const v = Number(s.value)
+            if (s.sleeperId && Number.isFinite(v)) marketValue.set(valueBookKey(book, s.sleeperId), v)
+          }
+        })
+        .catch(() => undefined),
+    ),
+  )
 
   for (const c of mine) {
     const l = c.league!
     const leaguePool = rostersByLeague.get(c.leagueId) ?? []
-    const candidates = myRosterCandidates(c, userId)
-    const myRoster = candidates
-      .map((k) => leaguePool.find((r) => r.platformUserId === k))
-      .find((r) => r != null)
+    const myRoster = myRosterIn(c)
 
     if (!myRoster) {
       withheld.noRoster++
@@ -538,12 +605,22 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
       continue
     }
 
-    const { all: mineIds, starters } = rosterIds(myRoster.playerData)
+    const { all: mineIds, starters, stashed } = rosterIds(myRoster.playerData)
 
     /* Gate 1 — is this roster even in the projection id space? See ID_SPACE_FLOOR. */
     const resolvable = mineIds.filter((id) => metaById.get(id)?.sleeperId != null).length
     if (mineIds.length === 0 || resolvable / mineIds.length < ID_SPACE_FLOOR) {
       withheld.idSpace++
+      continue
+    }
+
+    /*
+     * No starting slots, no lineup to improve — counted with the scoring gate, whose note names
+     * both, because both mean "this league did not publish what we need to price an add".
+     */
+    const slots = startingSlots(l.settings)
+    if (!slots || slots.length === 0) {
+      withheld.noScoring++
       continue
     }
 
@@ -559,13 +636,12 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
     }
 
     /*
-     * Best available: highest league-scored projection nobody in the league holds — among players
-     * this league could actually START. Without that check the board named an offensive tackle
-     * (see isStartableIn).
+     * The wire: league-scored projections nobody in the league holds, among players this league
+     * could actually START (without that check the board named an offensive tackle — see
+     * isStartableIn), and never a player the injury feed rules out (see the IR note above).
      */
-    const slots = startingSlots(l.settings)
-    let bestId: string | null = null
-    let bestPts = -Infinity
+    const wire: SwapCandidate[] = []
+    const pointsById = new Map<string, number>()
     for (const p of pool) {
       if (takenIds.has(p.playerId)) continue
       const meta = metaById.get(p.playerId)
@@ -574,66 +650,73 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
       if (ruledOut.has(p.playerId)) continue
       const pts = scoreOf(p)
       if (pts == null) continue
-      if (pts > bestPts) {
-        bestPts = pts
-        bestId = p.playerId
-      }
+      wire.push({ id: p.playerId, position: meta.position, points: pts })
+      pointsById.set(p.playerId, pts)
     }
 
-    if (!bestId) {
+    if (wire.length === 0) {
       withheld.noCandidate++
       continue
     }
 
     /*
-     * Weakest droppable: the lowest league-scored projection among YOUR
-     * non-starters.
+     * Your side of the lineup. IR and taxi sit out of it entirely. A player the injury feed rules
+     * out is on the roster but cannot be seated, so he carries no points this week.
      *
-     * ⚠ NON-STARTERS ONLY. Naming a starter as the drop turns a bench upgrade
-     * into a lineup change the manager did not ask for, and on a bye week the
-     * lowest projection on a roster is very often somebody's RB1.
-     *
-     * ⚠ AND A BENCH PLAYER WE CANNOT PRICE IS NOT THE WEAKEST. A missing
-     * projection means no data, not zero points — sorting nulls to the bottom
-     * would recommend dropping whoever the feed happens not to cover.
+     * ⚠ A PLAYER WE CANNOT PRICE IS NOT THE WEAKEST. A missing projection means no data, not zero
+     * points — `waiverSwap` never names him as the drop, in either rule.
      */
-    let dropId: string | null = null
-    let dropPts = Infinity
+    const book = bookByLeague.get(c.leagueId) ?? valueBookFor(l.settings, l.leagueType ?? null)
+    const dynasty = book.format === 'DYNASTY'
+    const roster: SwapRosterPlayer[] = []
     for (const id of mineIds) {
-      if (starters.has(id)) continue
+      if (stashed.has(id)) continue
       const p = poolById.get(id)
-      if (!p) continue
-      const pts = scoreOf(p)
-      if (pts == null) continue
-      if (pts < dropPts) {
-        dropPts = pts
-        dropId = id
-      }
+      const pts = p && !ruledOut.has(id) ? scoreOf(p) : null
+      if (pts != null) pointsById.set(id, pts)
+      roster.push({
+        id,
+        position: metaById.get(id)?.position ?? null,
+        points: pts,
+        marketValue: dynasty ? (marketValue.get(valueBookKey(book, id)) ?? null) : null,
+      })
     }
 
-    const add = toPlayer(bestId, bestPts)
+    const swap = pickLineupSwap({
+      roster,
+      starterIds: starters,
+      candidates: wire,
+      slots,
+      dynasty,
+      held: mineIds.filter((id) => !stashed.has(id)).length,
+      capacity: rosterCapacity(l.settings),
+    })
+    if (!swap) {
+      withheld.noUpgrade++
+      continue
+    }
+
+    const add = toPlayer(swap.addId, pointsById.get(swap.addId)!)
     if (!add) {
       withheld.noCandidate++
       continue
     }
-    const drop = dropId ? toPlayer(dropId, dropPts) : null
+    const drop = swap.dropId != null ? toPlayer(swap.dropId, pointsById.get(swap.dropId)!) : null
+    const over = swap.displacesId != null ? toPlayer(swap.displacesId, pointsById.get(swap.displacesId)!) : null
 
     const w = waiverByLeague.get(c.leagueId)
-    const runsAt = runsAtLabel(w)
+    const runsAt = runsAtLabel(w, l.platform)
 
-    const netGain = drop ? add.projected - drop.projected : add.projected
-
-    const bits: string[] = []
-    bits.push(
-      `${add.name}${add.position ? ` (${add.position})` : ''} projects ${add.projected.toFixed(1)} under this league's own scoring`,
-    )
-    if (drop) {
-      bits.push(
-        `against ${drop.projected.toFixed(1)} for ${drop.name}, the weakest bench player we can price — a net ${netGain >= 0 ? '+' : ''}${netGain.toFixed(1)}`,
-      )
-    } else {
-      bits.push('and no bench player here could be priced, so this is a gross figure, not a swap')
-    }
+    const netGain = swap.gain
+    const reasoning = swapReasoning({
+      addLead: `${add.name}${add.position ? ` (${add.position})` : ''} projects ${add.projected.toFixed(1)} under this league's own scoring`,
+      over,
+      drop,
+      dropBasis: swap.dropBasis,
+      openRosterSpot: swap.openRosterSpot,
+      gain: netGain,
+      unit: '',
+    })
     // Its own sentence: tacked on with a comma it read as part of the swap ("…not a swap, rostered in 88%…").
     const ownership =
       add.ownPct != null ? ` Rostered in ${Math.round(add.ownPct * 100)}% of the leagues we can see.` : ''
@@ -650,12 +733,15 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
       }),
       format: formatOf(l.leagueType, l.scoring),
       netGain,
+      startsOver: over ? { playerId: over.playerId, name: over.name, projected: over.projected } : null,
+      dropBasis: swap.dropBasis,
+      openRosterSpot: swap.openRosterSpot,
       add,
       drop,
       faabRemaining: faabRemainingOf(w, myRoster),
       runsAt,
       href: `/core/waivers?league=${encodeURIComponent(c.leagueId)}`,
-      reasoning: `${bits.join(', ')}.${ownership}`,
+      reasoning: `${reasoning}${ownership}`,
     })
   }
 
@@ -715,17 +801,31 @@ export async function attachAfEngine(
   at: { season: string; week: number },
   genericOf: (playerId: string) => number | null,
 ): Promise<void> {
-  const ids = [...new Set(rows.flatMap((r) => [r.add.playerId, ...(r.drop ? [r.drop.playerId] : [])]))]
+  const ids = [
+    ...new Set(
+      rows.flatMap((r) => [
+        r.add.playerId,
+        ...(r.drop ? [r.drop.playerId] : []),
+        ...(r.startsOver ? [r.startsOver.playerId] : []),
+      ]),
+    ),
+  ]
   if (ids.length === 0) return
   const engine = await lookupAfEngineProjections(ids, at)
   for (const r of rows) {
-    for (const p of [r.add, r.drop]) {
+    for (const p of [r.add, r.drop, r.startsOver]) {
       if (!p) continue
       const v = afEngineForLeague(engine.get(p.playerId), genericOf(p.playerId), p.projected)
       if (v != null) p.afProjected = v
     }
-    if (r.add.afProjected != null && (!r.drop || r.drop.afProjected != null)) {
-      r.afNetGain = Math.round((r.add.afProjected - (r.drop?.afProjected ?? 0)) * 100) / 100
+    /*
+     * ⚠ THE SAME SWAP AS THE PILL BESIDE IT: the add against the starter he displaces, or the whole
+     * add when he fills an empty slot. This was add minus DROP, which matched the old ranking rule
+     * and stopped matching the moment the pill became the lineup gain — two numbers side by side,
+     * measuring different swaps. The drop is a bench player; he never scored for you.
+     */
+    if (r.add.afProjected != null && (!r.startsOver || r.startsOver.afProjected != null)) {
+      r.afNetGain = Math.round((r.add.afProjected - (r.startsOver?.afProjected ?? 0)) * 100) / 100
     }
   }
 }

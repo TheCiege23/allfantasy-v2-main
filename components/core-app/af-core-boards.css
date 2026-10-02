@@ -763,8 +763,14 @@
  *
  * Rides the rich card. Net gain as a tinted pill, the add and the drop as two
  * tinted panels with an arrow between, the reasoning in its own box.
+ *
+ * 🛑 `.af-bd-gain`, NOT `.af-bd-pill`. This block used to be `.af-bd-pill`, and so is the filter
+ * chip further down this file — same specificity, later in the cascade, so the chip's
+ * `font: 700 11px Archivo`, padding and border silently won. The loudest number on every Waivers
+ * card, the ranking key, rendered as an 11px filter chip. Brace balance, lint and tests were all
+ * clean; only the computed style showed it. A distinct name cannot collide.
  */
-.af-core .af-bd-pill {
+.af-core .af-bd-gain {
   flex: none;
   display: inline-flex;
   align-items: baseline;
@@ -778,9 +784,16 @@
   white-space: nowrap;
 }
 /* Tinted from the token, not `currentColor` — Chromium resolved that mix grey. */
-.af-core .af-bd-pill[data-sev='good'] { color: var(--good); background: color-mix(in srgb, var(--good) 13%, transparent); }
-.af-core .af-bd-pill[data-sev='bad'] { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); }
-.af-core .af-bd-pill-unit { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.af-core .af-bd-gain[data-sev='good'] { color: var(--good); background: color-mix(in srgb, var(--good) 13%, transparent); }
+.af-core .af-bd-gain[data-sev='bad'] { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); }
+.af-core .af-bd-gain-unit { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* Under a swap side: who the add starts over, or why this player is the drop. */
+.af-core .af-bd-swap .af-bd-side-note {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text2);
+}
 
 .af-core .af-bd-cards--rich .af-bd-swap {
   display: grid;

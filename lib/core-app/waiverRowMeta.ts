@@ -16,12 +16,26 @@ export function formatOf(leagueType: string | null, scoringType: string | null):
   return parts.length > 0 ? parts.join(' · ') : null
 }
 
-/** "Wednesday 09:00 UTC", when the league publishes a processing day and time. */
+/**
+ * Whether a stored processing day/time can be trusted for this platform.
+ *
+ * 🛑 NOT FOR SLEEPER. The Sleeper mapper imports the waiver type and budget but not the schedule,
+ * so `LeagueWaiverSettings` holds AllFantasy's bootstrap defaults there — a schedule nobody set.
+ * The league screen (`waivers.ts`) already refused to print it; the cross-league board did not, so
+ * the same league read "not imported" on one screen and a confident day and hour on the other.
+ */
+export function waiverScheduleIsImported(platform: string | null | undefined): boolean {
+  return String(platform ?? '').trim().toLowerCase() !== 'sleeper'
+}
+
+/** "Wednesday 09:00 UTC", when the league publishes a processing day and time we actually imported. */
 export function runsAtLabel(
   w: { processingDayOfWeek: number | null; processingTimeUtc: string | null } | null | undefined,
+  platform: string | null | undefined,
 ): string | null {
-  return w && w.processingDayOfWeek != null && w.processingTimeUtc
-    ? `${DAY_LABEL[w.processingDayOfWeek] ?? 'Unknown day'} ${w.processingTimeUtc} UTC`
+  if (!waiverScheduleIsImported(platform)) return null
+  return w && w.processingDayOfWeek != null && w.processingDayOfWeek >= 0 && w.processingDayOfWeek <= 6 && w.processingTimeUtc?.trim()
+    ? `${DAY_LABEL[w.processingDayOfWeek]} ${w.processingTimeUtc.trim()} UTC`
     : null
 }
 

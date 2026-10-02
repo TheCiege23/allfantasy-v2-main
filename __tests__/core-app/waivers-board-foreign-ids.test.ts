@@ -43,7 +43,8 @@ function claimed(platform: string) {
         name: 'The League',
         platform,
         sport: 'NFL',
-        settings: { scoring_settings: { rec: 1 } },
+        /* One WR slot: Free Agent Guy (10) replaces your starter (9); the bench WR is the drop. */
+        settings: { scoring_settings: { rec: 1 }, roster_positions: ['WR', 'BN'] },
         platformLeagueId: 'P1',
         leagueType: 'redraft',
         scoring: null,

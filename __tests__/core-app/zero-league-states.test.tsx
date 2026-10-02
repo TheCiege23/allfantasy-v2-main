@@ -25,7 +25,7 @@ import { Dash3AChimmy, connectedLeagueCount } from '@/components/core-app/screen
 
 const trades = { pending: [], windows: [], considered: 0, deadlineUnknown: 0, currentWeek: null } as never
 const waivers = {
-  rows: [], considered: 0, withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 }, marketLeagues: 0, at: null,
+  rows: [], considered: 0, withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 }, marketLeagues: 0, at: null,
 } as never
 const drafts = { rows: [], counts: { live: 0, upcoming: 0, done: 0, unknown: 0 }, withoutDraft: 0 } as never
 const week = {

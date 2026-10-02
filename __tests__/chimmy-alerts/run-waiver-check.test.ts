@@ -57,7 +57,7 @@ const row = (leagueId: string, netGain: number, over: Partial<WaiverBoardRow> = 
 const board = (rows: WaiverBoardRow[], at: WaiversBoardData['at'] = { season: '2026', week: 4 }): WaiversBoardData => ({
   rows,
   considered: rows.length,
-  withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
+  withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 },
   marketLeagues: 0,
   at,
 })
@@ -281,7 +281,7 @@ describe('runWaiverCheck', () => {
       season: 2026,
       rows: [row('B1', 6, { sport: 'NBA' })],
       considered: 1,
-      withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
+      withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 },
     }
     deps.loadAudience = vi.fn(async () => new Map([['u1', [league('L1'), league('B1')]]]))
     deps.board = vi.fn(async () => ({ ...board([]), sports: [nbaSection] }))

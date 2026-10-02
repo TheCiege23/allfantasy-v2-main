@@ -771,7 +771,7 @@ function waiversData(over: Partial<WaiversBoardData> = {}): WaiversBoardData {
       },
     ],
     considered: 40,
-    withheld: { noRoster: 1, idSpace: 6, noScoring: 3, noCandidate: 0 },
+    withheld: { noRoster: 1, idSpace: 6, noScoring: 3, noCandidate: 0, noUpgrade: 0 },
     marketLeagues: 120,
     at: { season: '2026', week: 3 },
     ...over,
@@ -834,7 +834,7 @@ describe('WaiversBoard', () => {
     const text = container.textContent ?? ''
     expect(text).toMatch(/10 leagues are not on this board/i)
     expect(text).toMatch(/6 store player ids the projection feed does not use/i)
-    expect(text).toMatch(/3 have never published their scoring settings/i)
+    expect(text).toMatch(/3 have never published their scoring or lineup settings/i)
     expect(text).toMatch(/1 has no roster of yours imported/i)
   })
 

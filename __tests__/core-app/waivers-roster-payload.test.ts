@@ -115,7 +115,9 @@ describe('the Waivers read stops pulling every roster blob', () => {
 
     expect(data?.rosterLoad).toMatchObject({
       available: true,
-      data: { playersHeld: 3, starters: 2, bench: 1, reserve: 1 },
+      /* Sleeper's `players` already holds the reserve player: 3 held = 2 starting + 0 bench + 1 IR.
+         This read `bench: 1` until 2026-10-02, counting p3 as bench AND as IR. */
+      data: { playersHeld: 3, starters: 2, bench: 0, reserve: 1 },
     })
   })
 

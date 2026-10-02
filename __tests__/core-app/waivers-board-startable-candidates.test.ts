@@ -54,9 +54,15 @@ beforeEach(() => {
 })
 
 describe('waiver board: only a player this league could start', () => {
-  it('never names an offensive tackle, even with no roster slots on file', async () => {
-    // No roster_positions: the kicker is still a fantasy position, the tackle is not.
-    expect(await add()).toBe('Kay Kicker')
+  it('withholds a league with no roster slots on file — and so still never names an offensive tackle', async () => {
+    /*
+     * No roster_positions: there is no lineup to improve, so the league is withheld and counted,
+     * the league screen's own `no_slots` answer. This used to name the kicker on the strength of
+     * "some fantasy slot somewhere accepts a K" — a gain against a lineup nobody could describe.
+     */
+    const board = await getWaiversBoard('me')
+    expect(board.rows).toEqual([])
+    expect(board.withheld.noScoring).toBe(1)
   })
 
   it('skips a kicker in a league with no K slot', async () => {
