@@ -1,6 +1,13 @@
-#!/usr/bin/env node
 /**
  * Turn real phone screenshots of the app into Google Play phone screenshots.
+ *
+ * ⚠ NO `#!` SHEBANG, ON PURPOSE. __tests__/play-screenshot-crop.test.ts imports
+ * this file, and Vite's SSR transform hoists imports above line 1. With a
+ * shebang there, a CRLF checkout (this repo's Windows autocrlf) parsed as
+ * `…["fileURLToPath"];#!/usr/bin/env node` and the suite failed to LOAD:
+ * "Test Files 1 failed" over "Tests 95 passed", which reads as green at a
+ * glance. An LF checkout passed, so it would have depended on the machine.
+ * It is always run as `node scripts/…`, so the shebang bought nothing.
  *
  *   node scripts/prepare-play-screenshots.mjs <folder-of-phone-screenshots>
  *   → docs/play-store/screenshots/phone-1.png, phone-2.png, … (in filename order)
