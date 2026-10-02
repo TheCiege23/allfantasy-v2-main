@@ -962,3 +962,19 @@
   }
 }
 
+
+/* ── Back to top, phone/tablet: not on Settings ───────────────────────────
+   Its own top-level @media, appended — never nested inside an earlier block.
+
+   The global BackToTop (components/BackToTop.tsx) is fixed to the bottom-right
+   corner, and on a phone every Settings tab puts its controls on that edge: the
+   switches, Preview, Disconnect. Measured 2026-10-02 at 375x812 on Preferences:
+   the purple button sat on the "Enable voice playback" switch. The stacked layout
+   is ≤860px, so that is the band it leaves; on a touch tablet the right edge is the
+   same control column. Same `body:has(...)` match the league-first core shell uses
+   (af-core-shell.css), because the button renders outside this subtree. */
+@media (max-width: 860px), (pointer: coarse) {
+  body:has(.nocturne-settings) [data-af-back-to-top] {
+    display: none !important;
+  }
+}

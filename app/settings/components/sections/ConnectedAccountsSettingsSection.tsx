@@ -375,7 +375,13 @@ export function ConnectedAccountsSettingsSection({
           <p className="text-sm" style={{ color: "var(--muted)" }}>{t("settings.connected.loading")}</p>
         ) : (
           <ul className="space-y-3">
-            {providers.map((provider) => (
+            {/*
+              A provider this deployment has no OAuth credentials for cannot be linked — its Connect
+              button only ever printed a "not available" note. Measured live 2026-10-02: Apple,
+              Facebook, Instagram, X and TikTok all rendered an enabled Connect beside "Not configured".
+              Unlinked + unconfigured rows are dropped; a LINKED one stays so it can still be managed.
+            */}
+            {providers.filter((provider) => provider.configured || provider.linked).map((provider) => (
               <li key={provider.id} className="flex flex-wrap items-center justify-between gap-2">
                 <ConnectedIdentityRenderer provider={provider} size="md" />
                 {!provider.linked ? (
