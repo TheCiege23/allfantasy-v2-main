@@ -425,13 +425,54 @@ async function resolveNext24(
     return stored(team) ?? liveLogoOrNull(getTeamLogoUrl(key, sport))
   }
 
-  const seenFixtures = new Set<string>()
+  const keyFor = (sport: string, team: string | null) =>
+    sport.toUpperCase() === 'NFL' ? normalizeTeamAbbrev(team) : String(team ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+  /*
+   * 🛑 ONE GAME FROM TWO FEEDS IS ONE ROW. The feeds spell teams differently — CFBD writes
+   * "Pittsburgh", ESPN's live feed "PIT" — so an exact name key listed "PIT at VIRGINIA TECH" and
+   * "Pittsburgh at Virginia Tech" as two games (2026-10-01). Two rows are the same fixture when
+   * they share a sport and kickoff and ANY team matches, either way round: a team cannot play two
+   * games at one kickoff. A team matches by its name key, or by resolving to the same stored crest
+   * (so "PIT at VT" still meets "Pittsburgh at Virginia Tech" wherever both resolve). Placeholder
+   * names never match — two "TBD" games at one kickoff are two games.
+   */
+  type Game = (typeof games)[number]
+  const PLACEHOLDER = /^(tbd|tba|bye|-+|—)?$/i
+  const sameTeam = (sport: string, a: string | null, b: string | null): boolean => {
+    const ka = keyFor(sport, a)
+    const kb = keyFor(sport, b)
+    if (!ka || !kb || PLACEHOLDER.test(ka) || PLACEHOLDER.test(kb)) return false
+    if (ka === kb) return true
+    const stored = storedLogoBySport.get(sport.toUpperCase())
+    const ca = stored?.(a) ?? null
+    return ca != null && ca === (stored?.(b) ?? null)
+  }
+  const sameFixture = (x: Game, y: Game): boolean =>
+    x.sport === y.sport &&
+    x.startTime?.getTime() === y.startTime?.getTime() &&
+    [x.homeTeam, x.awayTeam].some((t) => sameTeam(x.sport, t, y.homeTeam) || sameTeam(x.sport, t, y.awayTeam))
+  const fixtures: Game[][] = []
   for (const g of games) {
     if (!g.startTime) continue
-    const teamKey = (team: string | null) => g.sport.toUpperCase() === 'NFL' ? normalizeTeamAbbrev(team) : String(team ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
-    const key = `${g.sport}:${g.startTime.toISOString()}:${teamKey(g.awayTeam)}:${teamKey(g.homeTeam)}`
-    if (seenFixtures.has(key)) continue
-    seenFixtures.add(key)
+    const group = fixtures.find((f) => sameFixture(f[0]!, g))
+    if (group) group.push(g)
+    else fixtures.push([g])
+  }
+  /*
+   * The copy shown is the one that names the teams best: most crests resolved, then (outside the
+   * NFL, whose names are expanded from the code anyway) the fuller spelling. Ties keep the first.
+   */
+  const shownScore = (g: Game): number =>
+    (logoFor(g.homeTeam, g.sport, keyFor(g.sport, g.homeTeam)) ? 1000 : 0) +
+    (logoFor(g.awayTeam, g.sport, keyFor(g.sport, g.awayTeam)) ? 1000 : 0) +
+    (g.sport.toUpperCase() === 'NFL' ? 0 : g.homeTeam.length + g.awayTeam.length)
+
+  for (const fixture of fixtures) {
+    const g = fixture.reduce((best, x) => (shownScore(x) > shownScore(best) ? x : best))
+    if (!g.startTime) continue
+    const teamKey = (team: string | null) => keyFor(g.sport, team)
+    const espnCopy = fixture.find((x) => x.source === 'espn')
     rows.push({
       kind: 'game',
       text: `${g.awayTeam} at ${g.homeTeam}`,
@@ -439,13 +480,13 @@ async function resolveNext24(
       time: g.startTime.toISOString(),
       tone: 'accent',
       game: (() => {
-        const peers = games.filter(peer => peer.sport === g.sport && peer.startTime?.getTime() === g.startTime?.getTime() && teamKey(peer.homeTeam) === teamKey(g.homeTeam) && teamKey(peer.awayTeam) === teamKey(g.awayTeam))
-        const market = odds.find(o => peers.some(peer => o.sport === peer.sport && o.gameExternalId === peer.externalId && o.source === peer.source))
+        // Every feed's copy of this game may hold the line, not only the copy shown.
+        const market = odds.find(o => fixture.some(peer => o.sport === peer.sport && o.gameExternalId === peer.externalId && o.source === peer.source))
         const spread = market?.spreadHome
         const favorite = spread == null ? null : spread === 0 ? 'Pick’em' : `${spread < 0 ? g.homeTeam : g.awayTeam} favored by ${Math.abs(spread)}`
         return { home: g.sport === 'NFL' ? getTeamInfo(g.homeTeam)?.fullName ?? g.homeTeam : g.homeTeam, away: g.sport === 'NFL' ? getTeamInfo(g.awayTeam)?.fullName ?? g.awayTeam : g.awayTeam,
           homeLogo: logoFor(g.homeTeam, g.sport, teamKey(g.homeTeam)), awayLogo: logoFor(g.awayTeam, g.sport, teamKey(g.awayTeam)),
-          href: `/core/live?sport=${encodeURIComponent(g.sport)}${g.source === 'espn' ? `&game=${encodeURIComponent(g.externalId)}` : ''}`,
+          href: `/core/live?sport=${encodeURIComponent(g.sport)}${espnCopy ? `&game=${encodeURIComponent(espnCopy.externalId)}` : ''}`,
           odds: [
             favorite,
             market?.totalPoints != null ? `O/U ${market.totalPoints}` : null,
