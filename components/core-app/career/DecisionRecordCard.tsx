@@ -41,10 +41,23 @@ export function DecisionRecordCard({ record }: { record: (DecisionRecord & { sea
     )
   }
 
-  const { calls, followed, passed, adds, best } = record
-  const ask = `This season I followed ${plural(followed.count, 'call')} from Chimmy and AutoCoach (${signedPoints(
-    followed.netPoints,
-  )} pts vs the players they benched) and passed on ${passed.count}. Where am I leaving points?`
+  const { calls, followed, passed, adds, best, trades, waivers } = record
+  const hasTrades = trades != null && trades.called + trades.tooEarly > 0
+  const hasWaivers = waivers != null && waivers.scored + waivers.tooEarly + waivers.unscored > 0
+  const hasAdvice = calls.total > 0 || adds.advised > 0
+  const movesLine = [
+    hasTrades && trades && trades.called > 0
+      ? `my trades are ${signedPoints(trades.netPoints)} pts net (${trades.ahead} ahead, ${trades.behind} behind)`
+      : null,
+    hasWaivers && waivers && waivers.scored > 0 ? `my waiver adds have scored ${waivers.points.toFixed(1)} pts for me` : null,
+  ]
+    .filter(Boolean)
+    .join(' and ')
+  const ask = hasAdvice
+    ? `This season I followed ${plural(followed.count, 'call')} from Chimmy and AutoCoach (${signedPoints(
+        followed.netPoints,
+      )} pts vs the players they benched) and passed on ${passed.count}.${movesLine ? ` Also, ${movesLine}.` : ''} Where am I leaving points?`
+    : `This season ${movesLine || 'my moves are too recent to call'}. Where am I leaving points?`
 
   return (
     <section className="af-cdr" aria-label="Your decision record">
@@ -105,10 +118,80 @@ export function DecisionRecordCard({ record }: { record: (DecisionRecord & { sea
         ) : null}
       </ul>
 
+      {hasTrades || hasWaivers ? (
+        <>
+          <p className="af-cdr-sub">Your moves</p>
+          <ul className="af-cdr-rows">
+            {hasTrades && trades ? (
+              <li>
+                <span className="af-cdr-k">Trades</span>
+                <span className="af-cdr-v">
+                  {trades.called > 0 ? (
+                    <>
+                      {plural(trades.called, 'trade')} · {trades.ahead} ahead, {trades.behind} behind, {trades.even} even ·{' '}
+                      <strong className="af-num">{signedPoints(trades.netPoints)} pts</strong> net
+                    </>
+                  ) : null}
+                  {trades.tooEarly > 0 ? (
+                    <span className="af-cdr-note">
+                      {trades.called > 0 ? ' · ' : ''}
+                      {plural(trades.tooEarly, 'trade')} too early to call
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            ) : null}
+            {trades?.best ? (
+              <li>
+                <span className="af-cdr-k">Best trade</span>
+                <span className="af-cdr-v">
+                  got {trades.best.got.slice(0, 2).join(', ')}
+                  {trades.best.got.length > 2 ? ` +${trades.best.got.length - 2}` : ''} · {trades.best.leagueName} ·{' '}
+                  <strong className="af-num">{signedPoints(trades.best.netPoints)}</strong>
+                </span>
+              </li>
+            ) : null}
+            {hasWaivers && waivers ? (
+              <li>
+                <span className="af-cdr-k">Waiver adds</span>
+                <span className="af-cdr-v">
+                  {waivers.scored > 0 ? (
+                    <>
+                      {plural(waivers.scored, 'add')} · {waivers.points.toFixed(1)} pts on your roster ·{' '}
+                      {plural(waivers.starts, 'start')}
+                    </>
+                  ) : null}
+                  {waivers.tooEarly + waivers.unscored > 0 ? (
+                    <span className="af-cdr-note">
+                      {waivers.scored > 0 ? ' · ' : ''}
+                      {waivers.tooEarly > 0 ? `${plural(waivers.tooEarly, 'add')} too recent` : ''}
+                      {waivers.tooEarly > 0 && waivers.unscored > 0 ? ', ' : ''}
+                      {waivers.unscored > 0 ? `${waivers.unscored} not scored yet` : ''}
+                    </span>
+                  ) : null}
+                </span>
+              </li>
+            ) : null}
+            {waivers?.best ? (
+              <li>
+                <span className="af-cdr-k">Best add</span>
+                <span className="af-cdr-v">
+                  {waivers.best.playerName} · {waivers.best.leagueName}, week {waivers.best.week} ·{' '}
+                  <strong className="af-num">{waivers.best.points.toFixed(1)} pts</strong>
+                </span>
+              </li>
+            ) : null}
+          </ul>
+        </>
+      ) : null}
+
       <div className="af-cdr-foot">
         <p className="af-crl-foot">
           Counts Chimmy and AutoCoach advice once its week is final, graded on the platform’s own scores. My Team’s
           suggestions are not recorded yet, so they are not in this.
+          {hasTrades || hasWaivers
+            ? ' Your trades are net points since each one, and your adds what they scored while yours — Sleeper leagues only for now.'
+            : ''}
         </p>
         <button type="button" className="af-crl-chip" onClick={() => askChimmyAboutCareer(ask)}>
           ✦ Where am I leaving points?

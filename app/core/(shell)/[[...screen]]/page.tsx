@@ -2116,7 +2116,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           }))
           const seasons = leagues.map((l) => Number(l.season)).filter((s) => Number.isInteger(s) && s > 2000)
           const season = seasons.length > 0 ? Math.max(...seasons) : now.getUTCFullYear()
-          return getDecisionRecord({ userId, leagues, season }).catch((e: unknown) => {
+          return getDecisionRecord({
+            userId,
+            leagues,
+            season,
+            ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
+          }).catch((e: unknown) => {
             console.error('[core/career] decision record read failed', e)
             return undefined
           })
