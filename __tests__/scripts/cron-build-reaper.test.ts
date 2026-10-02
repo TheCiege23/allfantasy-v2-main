@@ -12,9 +12,39 @@ const dep = (id: string, status: string, min: number) => ({ id, status, createdA
 const ids = (d: ReturnType<typeof pickSuperseded>) => d.map((x: { id: string }) => x.id)
 
 describe('pickSuperseded', () => {
-  it('five parallel builds (the 2026-10-02 00:16 picture): cancels all but the newest', () => {
+  it('five parallel builds (the 2026-10-02 00:16 picture): keeps the oldest running and the newest', () => {
     const d = [dep('a', 'BUILDING', 0), dep('b', 'BUILDING', 8), dep('c', 'BUILDING', 9), dep('d', 'BUILDING', 11), dep('e', 'BUILDING', 16)]
-    expect(ids(pickSuperseded(d))).toEqual(['a', 'b', 'c', 'd'])
+    expect(ids(pickSuperseded(d))).toEqual(['b', 'c', 'd'])
+  })
+
+  it('two builds in flight: cancels neither — the older one is the one about to ship', () => {
+    expect(pickSuperseded([dep('old', 'BUILDING', 0), dep('new', 'BUILDING', 5)])).toEqual([])
+  })
+
+  /*
+   * 2026-10-02 01:44–02:35 UTC: pushes every 3–15 min against a 15-min build, and the first rule
+   * cancelled each build as soon as the next one started. Nothing shipped for over an hour.
+   * Replays a push every 4 minutes for an hour and requires that builds keep FINISHING.
+   */
+  it('keeps shipping while pushes arrive faster than a build takes (no starvation)', () => {
+    const BUILD_MIN = 15
+    type D = { id: string; status: string; createdAt: string; commitHash: string; startedAt: number }
+    const deps: D[] = []
+    let shipped = 0
+    for (let minute = 0; minute <= 60; minute++) {
+      if (minute % 4 === 0) deps.push({ ...dep(`p${minute}`, 'BUILDING', minute), startedAt: minute })
+      for (const d of deps) {
+        if (d.status === 'BUILDING' && minute - d.startedAt >= BUILD_MIN) {
+          d.status = 'SUCCESS'
+          shipped++
+        }
+      }
+      const cancel = new Set(ids(pickSuperseded(deps)))
+      for (const d of deps) if (cancel.has(d.id)) d.status = 'REMOVED'
+    }
+    expect(shipped).toBeGreaterThanOrEqual(3)
+    // And the newest push is always still on its way.
+    expect(deps[deps.length - 1].status).not.toBe('REMOVED')
   })
 
   it('never cancels the newest in-flight build', () => {
@@ -37,9 +67,14 @@ describe('pickSuperseded', () => {
     expect(pickSuperseded(d)).toEqual([])
   })
 
-  it('cancels QUEUED and INITIALIZING too, and orders by createdAt not by input order', () => {
+  it('orders by createdAt, and protects a build that has STARTED over one only queued', () => {
     const d = [dep('new', 'BUILDING', 9), dep('q', 'QUEUED', 1), dep('i', 'INITIALIZING', 2)]
-    expect(ids(pickSuperseded(d)).sort()).toEqual(['i', 'q'])
+    expect(ids(pickSuperseded(d))).toEqual(['q'])
+  })
+
+  it('a queued-only middle is cancelled even with nothing older running', () => {
+    const d = [dep('q1', 'QUEUED', 1), dep('q2', 'QUEUED', 2), dep('new', 'QUEUED', 3)]
+    expect(ids(pickSuperseded(d))).toEqual(['q1', 'q2'])
   })
 })
 
@@ -57,6 +92,7 @@ describe('reapOnce', () => {
       deployments: {
         edges: [
           { node: { id: 'old', status: 'BUILDING', createdAt: at(0), meta: { commitHash: 'aaaaaaaaa1' } } },
+          { node: { id: 'mid', status: 'BUILDING', createdAt: at(3), meta: { commitHash: 'ccccccccc3' } } },
           { node: { id: 'new', status: 'BUILDING', createdAt: at(5), meta: { commitHash: 'bbbbbbbbb2' } } },
         ],
       },
@@ -79,7 +115,7 @@ describe('reapOnce', () => {
     const lines: string[] = []
     await reapOnce({ env, log: (l: string) => lines.push(l) })
     expect(calls.some((c) => c.body.query.includes('deploymentCancel'))).toBe(false)
-    expect(lines.join('\n')).toMatch(/would cancel old \(aaaaaaaaa\), superseded by new/)
+    expect(lines.join('\n')).toMatch(/would cancel mid \(ccccccccc\), superseded by new/)
     // The one line that proves the token works even when nothing needs cancelling.
     expect(lines.join('\n')).toMatch(/\[reaper\] watching 1\/1 service\(s\), dry-run/)
   })
@@ -88,7 +124,7 @@ describe('reapOnce', () => {
     const calls = fakeFetch()
     await reapOnce({ env: { ...env, BUILD_REAPER_LIVE: '1' }, log: () => {} })
     const cancels = calls.filter((c) => c.body.query.includes('deploymentCancel'))
-    expect(cancels.map((c) => c.body.variables.id)).toEqual(['old'])
+    expect(cancels.map((c) => c.body.variables.id)).toEqual(['mid'])
     expect(calls[0].headers['Project-Access-Token']).toBe('tok-SECRET-123')
     expect(calls[0].body.variables).toMatchObject({ input: { projectId: 'p', environmentId: 'e', serviceId: 'svc1' } })
   })
