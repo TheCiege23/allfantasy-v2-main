@@ -5,7 +5,8 @@ import type {
   TradeSideGrade,
 } from '@/lib/trade-intel/sleeperTradeGradeService'
 // Type-only: the grade is computed by the caller, never here. This module renders.
-import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import type { TradeGradeLine, TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { assetValues, type DisplayedAsset } from '@/lib/decision-os/trade/gradeLineValues'
 import { giveawaySide } from '@/lib/trade-intel/tradeGiveaway'
 import {
   LEAGUE_TYPE_DECIDES_GRADES,
@@ -161,17 +162,36 @@ function faabName(amount: number): string {
 
 type Line = { name: string; detail: string | null; value: number | null }
 
-/** One side's received assets, in the order the grader priced them (players, then picks). */
-function receivedLines(side: TradeSideGrade, values: ReadonlyArray<number | null> | null): Line[] {
+/**
+ * The value THE grade priced each displayed asset at, matched by name, then pick year + round, then
+ * place (`assetValues`) — and only when the counts agree; a mismatch prints names without values.
+ *
+ * 🛑 NOT BY PLACE ALONE (2026-10-01). A completed trade's letter is its FROZEN original, whose lines are
+ * in the order of whichever surface froze it, so pairing by place could print a 1st's value beside
+ * the 2nd it was traded with.
+ */
+function withGradeValues(lines: Line[], shown: DisplayedAsset[], gradeLines: ReadonlyArray<TradeGradeLine> | null, side: 'give' | 'get'): Line[] {
+  if (!gradeLines || gradeLines.filter((l) => l.side === side).length !== lines.length) return lines
+  const values = assetValues(shown, gradeLines, side)
+  lines.forEach((l, i) => (l.value = values[i] ?? null))
+  return lines
+}
+
+/** One side's received assets (players, then picks, then FAAB), each with the value the grade gave it. */
+function receivedLines(side: TradeSideGrade, gradeLines: ReadonlyArray<TradeGradeLine> | null, gradeSide: 'give' | 'get'): Line[] {
   const lines: Line[] = [
     ...side.playersIn.map((p) => ({ name: p.name, detail: p.position, value: null as number | null })),
     ...side.picksIn.map((p) => ({ name: pickName(p), detail: pickDetail(p), value: null as number | null })),
     // Last, matching `completedTradeInputs`, which prices FAAB after players and picks.
     ...(side.faabIn != null && side.faabIn > 0 ? [{ name: faabName(side.faabIn), detail: 'FAAB', value: null as number | null }] : []),
   ]
-  // Index-aligned only when the counts agree; a mismatch prints names without values, never shifted ones.
-  if (values && values.length === lines.length) lines.forEach((l, i) => (l.value = values[i] ?? null))
-  return lines
+  // A used pick was priced as the player drafted with it — match it under that name.
+  const shown: DisplayedAsset[] = [
+    ...side.playersIn.map((p) => ({ label: p.name })),
+    ...side.picksIn.map((p) => ({ label: pickName(p), gradedAs: p.resolved?.name?.trim() || null })),
+    ...(side.faabIn != null && side.faabIn > 0 ? [{ label: faabName(side.faabIn) }] : []),
+  ]
+  return withGradeValues(lines, shown, gradeLines, gradeSide)
 }
 
 function chip(letter: GradeLetter | null, size = 40): string {
@@ -230,12 +250,11 @@ export function completedSideLetter(trade: GradedTrade, grade: TradeGradeView | 
 
 function sideViews(trade: GradedTrade, grade: TradeGradeView | null, viewerOwnerId: string | null): SideView[] {
   const g = grade && grade.graded && trade.sides.length === 2 ? grade : null
-  const valuesOf = (side: 'give' | 'get') => (g ? g.lines.filter((l) => l.side === side).map((l) => l.leagueValue) : null)
   return trade.sides.map((side, i) => ({
     side,
     letter: completedSideLetter(trade, grade, i),
     pct: g ? (i === 0 ? g.percentDiff : -g.percentDiff) : null,
-    lines: receivedLines(side, i === 0 ? valuesOf('get') : valuesOf('give')),
+    lines: receivedLines(side, g ? g.lines : null, i === 0 ? 'get' : 'give'),
     total: g ? (i === 0 ? g.getValue : g.giveValue) : null,
     isViewer: Boolean(viewerOwnerId) && side.ownerId != null && String(side.ownerId) === String(viewerOwnerId),
   }))
@@ -616,14 +635,12 @@ export function buildPendingTradeOfferEmail(params: {
   const subject = `Trade offer in ${leagueName} — ${g ? `${g.letter} for you: ` : ''}you get ${names(params.youGet)} for ${names(params.youGive)}`
 
   const linesOf = (assets: PendingTradeAsset[], side: 'give' | 'get'): Line[] => {
-    const values = g ? g.lines.filter((l) => l.side === side).map((l) => l.leagueValue) : null
     const lines = assets.map((a) => ({
       name: a.playerName,
       detail: a.isPick ? 'Draft pick' : a.faabAmount != null ? 'FAAB' : [a.position, a.team].filter((v) => v && v !== '—').join(' · ') || null,
       value: null as number | null,
     }))
-    if (values && values.length === lines.length) lines.forEach((l, i) => (l.value = values[i] ?? null))
-    return lines
+    return withGradeValues(lines, assets.map((a) => ({ label: a.playerName })), g ? g.lines : null, side)
   }
   const cell = (label: string, accent: string, lines: Line[], total: number | null, divider: boolean) =>
     `<td width="50%" valign="top" style="padding:16px;${divider ? `border-right:1px solid ${BORDER};` : ''}">${eyebrow(label, accent)}${assetTable(lines, total)}</td>`
