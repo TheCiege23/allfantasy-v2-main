@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -213,6 +214,10 @@ test.describe('@dynasty full click audit', () => {
       })
     })
 
+    // /leagues/<id> shows a sign-in wall to a settled-unauthenticated session since
+    // 1f5105f6 (every fetch on that page is session-gated). The mocked league APIs
+    // still answer; the visitor just has to be signed in to reach the tab.
+    await signInAs(page, { id: 'e2e-dynasty-user' })
     await page.goto('/leagues/league_dyn_1?tab=Standings%2FPlayoffs')
     await page.getByRole('button', { name: 'Standings/Playoffs' }).click()
     await expect(page.getByRole('heading', { name: 'Dynasty projections' })).toBeVisible()
