@@ -2,7 +2,6 @@ import Link from "next/link"
 import Image from "next/image"
 import {
   ArrowRight,
-  CheckCircle2,
   ClipboardCheck,
   Globe2,
   Layers,
@@ -22,15 +21,20 @@ import LanguageToggle from "@/components/i18n/LanguageToggle"
 export const dynamic = "force-dynamic"
 
 /**
- * Premium AllFantasy Bracket Pools hub — Phase 7 v2 (centered AF World
- * Cup Bracket Challenge hero).
+ * Premium AllFantasy Bracket Pools hub — v3 (AF Playoff Bracket Challenge
+ * hero, 2026-10-01).
  *
- * Hero matches the product reference: centered dark-teal stage with a
- * subtle grid overlay, top "Registration Open" badge, trophy lockup in
- * a glowing rounded square, two-line title (white + cyan→purple
- * gradient on line 2), tight subtitle, four feature dots, three CTAs
- * (cyan / dark / amber), and a country-codes + fan-line pill at the
- * bottom of the hero.
+ * v2 led with the World Cup: a hard-coded "2026 FIFA World Cup ·
+ * Registration Open" badge, "Pick every game before kickoff", and Create /
+ * Join buttons — still live in October, three months after the final, when
+ * picks had been locked since the first kickoff. v3, per the owner's call:
+ * the World Cup is switched off as a destination, MLB and NHL lead (pools are
+ * creatable now, and picks lock per series, so mid-postseason is fine), and
+ * the College Football Playoff (December) and NFL playoffs (January) are
+ * shown as up next, not as links — no playoff template exists for either.
+ *
+ * Same stage as v2 (dark-teal wash, grid overlay, trophy lockup, two-line
+ * gradient title); the badge, CTAs and the up-next row are what changed.
  *
  * Server component only (no `"use client"`, no useSession, no Prisma,
  * no useState). The original emergency hardening (commit `4bd1caf45`)
@@ -60,10 +64,9 @@ export const dynamic = "force-dynamic"
  *     so SSR HTML matches first CSR. No locale-formatted dates render
  *     here.
  *
- * Below the dramatic hero the page keeps the existing How-it-works,
- * Sports grid (8 sport cards, World Cup live + 7 coming soon), AI
- * features strip (6 cards), and trust footer — they remain useful
- * supporting content but the hero is now the headline visual.
+ * Below the hero: Quick actions, How-it-works, the Sports grid (8 cards —
+ * see SPORT_CARDS for which are open, up next, and ended), the AI features
+ * strip, and the trust footer. The v2 World Cup spotlight card is removed.
  */
 type SportCard = {
   key:
@@ -75,10 +78,16 @@ type SportCard = {
     | "marchMadness"
     | "collegeFootball"
     | "soccer"
-  /** Where to send the user; only "/brackets/world-cup" is wired. */
+  /** Where to send the user; null for anything not open. */
   href: string | null
-  /** "live" → has a real bracket hub; "soon" → renders Coming Soon. */
-  status: "live" | "soon"
+  /**
+   * "live" → creatable now (must be a link); "soon" → not yet, never a link;
+   * "ended" → its event is over, never a link. `brackets-hub.test.tsx` checks
+   * that only "live" cards carry an href.
+   */
+  status: "live" | "soon" | "ended"
+  /** For "soon": a month label key ("December") instead of a vague "Coming soon". */
+  soonLabelKey?: string
   Icon: typeof Trophy
 }
 
@@ -100,15 +109,22 @@ type SportCard = {
 const playoffPoolHref = (sport: "NBA" | "NHL" | "MLB") =>
   `/brackets/leagues/new?sport=${sport}&challengeType=playoff_challenge`
 
+/*
+ * Order is the season, as of the 2026-10-01 owner call: MLB and NHL are open
+ * now; the College Football Playoff is up next in December and the NFL
+ * playoffs in January (no playoff template exists for either yet, so they are
+ * not links); the World Cup ended in July and is switched off as a destination.
+ * When the calendar moves, move these — a card's status is a claim about today.
+ */
 const SPORT_CARDS: SportCard[] = [
-  { key: "worldCup", href: "/brackets/world-cup", status: "live", Icon: Globe2 },
-  { key: "nbaPlayoffs", href: playoffPoolHref("NBA"), status: "live", Icon: Trophy },
-  { key: "nhlPlayoffs", href: playoffPoolHref("NHL"), status: "live", Icon: Trophy },
-  { key: "nflPlayoffs", href: null, status: "soon", Icon: Trophy },
   { key: "mlbPostseason", href: playoffPoolHref("MLB"), status: "live", Icon: Trophy },
+  { key: "nhlPlayoffs", href: playoffPoolHref("NHL"), status: "live", Icon: Trophy },
+  { key: "collegeFootball", href: null, status: "soon", soonLabelKey: "brk.hub.sports.statusDecember", Icon: Trophy },
+  { key: "nflPlayoffs", href: null, status: "soon", soonLabelKey: "brk.hub.sports.statusJanuary", Icon: Trophy },
+  { key: "nbaPlayoffs", href: playoffPoolHref("NBA"), status: "live", Icon: Trophy },
   { key: "marchMadness", href: null, status: "soon", Icon: Trophy },
-  { key: "collegeFootball", href: null, status: "soon", Icon: Trophy },
   { key: "soccer", href: null, status: "soon", Icon: Globe2 },
+  { key: "worldCup", href: null, status: "ended", Icon: Globe2 },
 ]
 
 type AiFeature = {
@@ -131,43 +147,25 @@ const AI_FEATURES: AiFeature[] = [
   { key: "leaderboards", Icon: ListOrdered },
 ]
 
-/**
- * Feature keys used in the WC Spotlight card — static order, each maps
- * to `brk.hub.spotlight.feature.<key>` in all 5 language dictionaries.
- */
-const SPOTLIGHT_FEATURE_KEYS = [
-  "groupStage",
-  "knockoutBracket",
-  "aiReport",
-  "dangerZones",
-  "commissionerTools",
-  "inviteShare",
-  "fiveLanguages",
-] as const
-
 type QuickAction = {
   /** Must match a key in `brk.hub.quickActions.*` and `brk.hub.quickActions.*Desc` */
-  key: "create" | "join" | "continue" | "browse"
+  key: "create" | "join" | "browse"
   href: string
   Icon: typeof Plus
 }
 
+/*
+ * None of these lead into the World Cup any more. "Create" preselects MLB
+ * because /brackets/leagues/new with no sport defaults to NCAAB — March
+ * Madness, months away. "Continue My Bracket" is dropped: it pointed at the
+ * World Cup, and there is no cross-sport "my brackets" page to send it to.
+ */
 const QUICK_ACTIONS: QuickAction[] = [
-  { key: "create",   href: "/brackets/world-cup/create",   Icon: Plus   },
-  { key: "join",     href: "/brackets/join",                Icon: Users  },
-  { key: "continue", href: "/brackets/world-cup",           Icon: Trophy },
-  { key: "browse",   href: "/brackets/world-cup/discover",  Icon: Globe2 },
+  { key: "create", href: playoffPoolHref("MLB"), Icon: Plus },
+  { key: "join", href: "/brackets/join", Icon: Users },
+  { key: "browse", href: "/brackets/discover", Icon: Globe2 },
 ]
 
-/**
- * Country codes shown in the bottom "join thousands of fans" pill.
- * These are static ISO codes — language-invariant by definition, so
- * no i18n key is needed. Four representative powerhouse nations from
- * different continents: Brazil, France, Germany, Argentina.
- */
-const FAN_COUNTRY_CODES = ["BR", "FR", "DE", "AR"] as const
-
-const WC_LOGO_SRC = "/images/brackets/world-cup/af-world-cup-logo.png"
 /*
  * ⚠ `/branding/allfantasy-wordmark-logo.png` HAS NO ALPHA CHANNEL — 1024x682,
  * three channels, fully opaque — so on this page's `bg-[#05070b]` canvas it
@@ -227,92 +225,71 @@ export default async function BracketsHomePage() {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          CENTERED HERO — AF World Cup Bracket Challenge
+      {/* ─────────────────────────────────────────────────────────────
+          CENTERED HERO — AF Playoff Bracket Challenge
+          Owner call 2026-10-01: the World Cup is over and switched off as
+          a destination; MLB and NHL brackets are open now; the College
+          Football Playoff (December) and NFL playoffs (January) are up
+          next. Every claim here is about TODAY — when the season moves,
+          move the copy with it, or it goes as stale as the World Cup
+          "Registration Open" badge this replaced (still live in October,
+          three months after the final).
           ───────────────────────────────────────────────────────── */}
       <section
         data-testid="brackets-hub-hero"
         className="relative z-10 mx-auto flex max-w-4xl flex-col items-center px-4 pb-12 pt-10 text-center sm:px-6 sm:pt-16 sm:pb-20"
       >
-        {/* Top registration badge */}
-        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-500/[0.08] px-3.5 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-300 sm:text-xs">
+        {/* Open-now badge — only sports a pool can actually be created for. */}
+        <div
+          data-testid="brackets-hub-open-badge"
+          className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-500/[0.08] px-3.5 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-300 sm:text-xs"
+        >
           <span className="relative inline-flex h-1.5 w-1.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-300" />
           </span>
-          {t("brk.hub.v2.regBadge")}
+          {t("brk.hub.v3.openBadge")}
         </div>
 
-        {/* Trophy glow card */}
+        {/* Trophy glow card — a sport-neutral mark, not the World Cup logo */}
         <div className="relative mt-8 flex h-24 w-24 items-center justify-center rounded-2xl border border-cyan-300/30 bg-cyan-300/[0.08] p-3 backdrop-blur shadow-[0_0_60px_-10px_rgba(34,211,238,0.55)] sm:h-28 sm:w-28">
           <div
             aria-hidden
             className="absolute inset-0 -z-10 rounded-2xl bg-[radial-gradient(circle,rgba(34,211,238,0.35),transparent_70%)] blur-xl"
           />
-          <Image
-            src={WC_LOGO_SRC}
-            alt={t("brk.hub.wcLogoAlt")}
-            width={96}
-            height={96}
-            className="h-full w-full object-contain drop-shadow-[0_6px_20px_rgba(34,211,238,0.45)]"
-            priority
-          />
+          <Trophy className="h-12 w-12 text-cyan-200 drop-shadow-[0_6px_20px_rgba(34,211,238,0.45)] sm:h-14 sm:w-14" aria-hidden />
         </div>
 
         {/* Two-line title — white on top, cyan→purple gradient below */}
         <h1 className="mt-8 max-w-3xl text-4xl font-black leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
-          <span className="block text-white">{t("brk.hub.v2.titleLine1")}</span>
+          <span className="block text-white">{t("brk.hub.v3.titleLine1")}</span>
           <span className="mt-1 block bg-gradient-to-r from-cyan-300 via-cyan-200 to-purple-300 bg-clip-text text-transparent">
-            {t("brk.hub.v2.titleLine2")}
+            {t("brk.hub.v3.titleLine2")}
           </span>
         </h1>
 
         {/* Subtitle */}
         <p className="mt-6 max-w-xl text-sm leading-7 text-white/65 sm:text-base">
-          {t("brk.hub.v2.subtitle")}
+          {t("brk.hub.v3.subtitle")}
         </p>
 
-        {/* Feature dots */}
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-white/70 sm:text-sm">
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
-            {t("brk.hub.v2.feature.teams")}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
-            {t("brk.hub.v2.feature.matches")}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
-            {t("brk.hub.v2.feature.format")}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-cyan-400" />
-            {t("brk.hub.v2.feature.free")}
-          </span>
-        </div>
-
-        {/* Three CTAs — primary cyan / neutral dark / amber accent */}
+        {/* Open-now CTAs — one per creatable sport, plus the generic join */}
         <div className="mt-10 flex flex-wrap justify-center gap-3">
           <Link
-            href="/brackets/world-cup"
+            href={playoffPoolHref("MLB")}
+            data-testid="brackets-hub-cta-mlb"
             className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-cyan-300 to-cyan-400 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_10px_40px_-10px_rgba(34,211,238,0.65)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
           >
-            <Globe2 className="h-4 w-4" />
-            {t("brk.hub.v2.cta.openBracket")}
+            <Trophy className="h-4 w-4" />
+            {t("brk.hub.v3.cta.mlb")}
           </Link>
           <Link
-            href="/brackets/world-cup/create"
-            className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-white/15 bg-white/[0.05] px-6 py-3 text-sm font-bold text-white transition-colors hover:border-white/30 hover:bg-white/[0.10]"
-          >
-            <Plus className="h-4 w-4" />
-            {t("brk.hub.v2.cta.createPool")}
-          </Link>
-          <Link
-            href="/brackets/world-cup/discover"
-            className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-amber-400/35 bg-amber-500/[0.06] px-6 py-3 text-sm font-bold text-amber-200 transition-colors hover:border-amber-400/55 hover:bg-amber-500/[0.10] hover:text-amber-100"
+            href={playoffPoolHref("NHL")}
+            data-testid="brackets-hub-cta-nhl"
+            className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-gradient-to-b from-cyan-300 to-cyan-400 px-6 py-3 text-sm font-black text-slate-950 shadow-[0_10px_40px_-10px_rgba(34,211,238,0.65)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
           >
             <Trophy className="h-4 w-4" />
-            {t("brk.hub.v2.cta.discoverPools")}
+            {t("brk.hub.v3.cta.nhl")}
           </Link>
           <Link
             href="/brackets/join"
@@ -323,22 +300,14 @@ export default async function BracketsHomePage() {
           </Link>
         </div>
 
-        {/* Country-code + fan-line pill */}
+        {/* Up next — NOT links: neither sport has a playoff template yet. */}
         <div
-          data-testid="brackets-hub-fan-pill"
-          className="mt-10 inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-white/55 backdrop-blur sm:text-xs"
+          data-testid="brackets-hub-up-next"
+          className="mt-10 inline-flex flex-wrap items-center justify-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-white/60 backdrop-blur sm:text-xs"
         >
-          <div className="flex items-center gap-1">
-            {FAN_COUNTRY_CODES.map((code) => (
-              <span
-                key={code}
-                className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-white/75 sm:text-[11px]"
-              >
-                {code}
-              </span>
-            ))}
-          </div>
-          <span className="text-white/60">{t("brk.hub.v2.fanLine")}</span>
+          <span className="font-black uppercase tracking-wider text-white/75">{t("brk.hub.v3.upNext.title")}</span>
+          <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white/75">{t("brk.hub.v3.upNext.ncaaf")}</span>
+          <span className="rounded bg-white/10 px-2 py-0.5 font-bold text-white/75">{t("brk.hub.v3.upNext.nfl")}</span>
         </div>
       </section>
 
@@ -349,59 +318,6 @@ export default async function BracketsHomePage() {
           earlier validation covered.
           ───────────────────────────────────────────────────────── */}
       <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 pb-12 sm:gap-14 sm:px-6 sm:pb-16">
-        {/* ── WC Spotlight card ─────────────────────────────────── */}
-        <section data-testid="brackets-hub-wc-spotlight">
-          <div className="relative overflow-hidden rounded-2xl border border-cyan-300/25 bg-gradient-to-br from-cyan-300/[0.08] via-transparent to-purple-500/[0.06] p-5 backdrop-blur sm:p-7">
-            {/* decorative ambient glow */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-[radial-gradient(circle,rgba(34,211,238,0.18),transparent_70%)] blur-2xl"
-            />
-
-            {/* eyebrow badge */}
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-500/[0.08] px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-300">
-              <span className="relative inline-flex h-1.5 w-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-300" />
-              </span>
-              {t("brk.hub.spotlight.eyebrow")}
-            </div>
-
-            {/* title + subtitle */}
-            <h2 className="mt-4 text-2xl font-black tracking-tight text-white sm:text-3xl">
-              {t("brk.hub.spotlight.title")}
-            </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/60">
-              {t("brk.hub.spotlight.subtitle")}
-            </p>
-
-            {/* feature pills */}
-            <ul className="mt-5 flex flex-wrap gap-2" aria-label="Included features">
-              {SPOTLIGHT_FEATURE_KEYS.map((fk) => (
-                <li
-                  key={fk}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-cyan-300/20 bg-cyan-300/[0.06] px-3 py-1 text-[11px] font-bold text-cyan-200"
-                >
-                  <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
-                  {t(`brk.hub.spotlight.feature.${fk}`)}
-                </li>
-              ))}
-            </ul>
-
-            {/* CTA */}
-            <div className="mt-6">
-              <Link
-                href="/brackets/world-cup"
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-b from-cyan-300 to-cyan-400 px-6 py-2.5 text-sm font-black text-slate-950 shadow-[0_6px_30px_-8px_rgba(34,211,238,0.55)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
-              >
-                <Globe2 className="h-4 w-4" />
-                {t("brk.hub.v2.cta.openBracket")}
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </div>
-        </section>
-
         {/* ── Quick Actions row ─────────────────────────────────── */}
         <section data-testid="brackets-hub-quick-actions" className="space-y-4">
           <h2 className="text-xl font-black tracking-tight text-white sm:text-2xl">
@@ -486,8 +402,13 @@ export default async function BracketsHomePage() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {SPORT_CARDS.map(({ key, href, status, Icon }) => {
+            {SPORT_CARDS.map(({ key, href, status, soonLabelKey, Icon }) => {
               const isLive = status === "live"
+              const statusLabel = isLive
+                ? t("brk.hub.sports.statusLive")
+                : status === "ended"
+                  ? t("brk.hub.sports.statusEnded")
+                  : t(soonLabelKey ?? "brk.hub.sports.statusComingSoon")
               const titleKey = `brk.hub.sports.sport.${key}`
               const descKey = `brk.hub.sports.sport.${key}.desc`
               const cardClasses = [
@@ -519,7 +440,7 @@ export default async function BracketsHomePage() {
                       }
                     >
                       {isLive && <Radio className="h-2.5 w-2.5 animate-pulse" />}
-                      {isLive ? t("brk.hub.sports.statusLive") : t("brk.hub.sports.statusComingSoon")}
+                      {statusLabel}
                     </span>
                   </div>
                   <p className="text-xs leading-5 text-white/55">{t(descKey)}</p>
