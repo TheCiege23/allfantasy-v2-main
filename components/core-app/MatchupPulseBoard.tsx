@@ -116,13 +116,38 @@ function metaOf(row: PulseRow, language: string): string {
   return parts.join(' · ')
 }
 
-function Row({ row, tone, tagFinal }: { row: PulseRow; tone: 'good' | 'bad'; tagFinal: boolean }) {
+function Row({
+  row,
+  tone,
+  tagFinal,
+  scale,
+}: {
+  row: PulseRow
+  tone: 'good' | 'bad'
+  tagFinal: boolean
+  /** The largest |margin| on the board — each row's bar is drawn against it. */
+  scale: number
+}) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const abs = Math.abs(row.margin).toFixed(1)
+  /*
+   * How big this margin is next to the others, as a bar along the row's foot. Ten numbers in a
+   * column are read one at a time; ten bars are seen at once — "two blowouts and three coin flips".
+   * Floored at 4% so a 0.4-point margin still shows a sliver rather than nothing.
+   */
+  const width = scale > 0 ? Math.max(4, Math.min(100, (Math.abs(row.margin) / scale) * 100)) : 0
   return (
     <li>
-      <Link className="af-mp-row" href={row.href}>
+      <Link
+        className="af-mp-row"
+        href={row.href}
+        data-tone={tone}
+        data-basis={row.basis}
+        /* Replaces the row's text for a screen reader, so it carries the meta line as well as the margin. */
+        aria-label={`${row.leagueName}, ${metaOf(row, language)}: ${tone === 'good' ? copy('ahead by') : copy('behind by')} ${abs}${row.basis === 'projected' ? ` (${copy('projected')})` : ''}${tagFinal && row.final ? `, ${copy('final')}` : ''}`}
+      >
+        <span className="af-mp-bar" aria-hidden style={{ width: `${width}%` }} />
         <Face row={row} />
         <Crest row={row} />
         <span className="af-mp-text">
@@ -250,6 +275,10 @@ export function MatchupPulseBoard({
 
   const shown = pulse.leading.length + pulse.trailing.length
   const hidden = Math.max(0, totalLeagues - shown)
+  const scale = Math.max(0, ...[...pulse.leading, ...pulse.trailing].map((r) => Math.abs(r.margin)))
+  const ahead = pulse.leadingTotal ?? pulse.leading.length
+  const behind = pulse.trailingTotal ?? pulse.trailing.length
+  const decided = ahead + behind
 
   return (
     <div className="af-bd">
@@ -276,6 +305,31 @@ export function MatchupPulseBoard({
           {pulse.ranked > 0 ? <MatchupPulseRefresh inPlay={inPlay} /> : null}
         </header>
 
+        {/*
+          The week as one scoreboard: how many leagues you are ahead in against how many you are
+          behind in, as two numbers and one split bar. This is the line a manager with twenty
+          leagues opens the screen for, and it used to be 11px text at the end of a rule.
+        */}
+        {pulse.ranked > 0 && decided > 0 ? (
+          <div className="af-mp-score" data-done={done || undefined}>
+            <div className="af-mp-score-side" data-tone="good">
+              <span className="af-mp-score-n af-num">{ahead}</span>
+              <span className="af-mp-score-word">{copy(aheadWord)}</span>
+            </div>
+            <div
+              className="af-mp-split"
+              role="img"
+              aria-label={`${ahead} ${copy(aheadWord)}, ${behind} ${copy(behindWord)}`}
+            >
+              <span className="af-mp-split-good" style={{ width: `${(ahead / decided) * 100}%` }} />
+            </div>
+            <div className="af-mp-score-side" data-tone="bad">
+              <span className="af-mp-score-n af-num">{behind}</span>
+              <span className="af-mp-score-word">{copy(behindWord)}</span>
+            </div>
+          </div>
+        ) : null}
+
         {note ? <p className="af-mp-basis">{note}</p> : null}
 
         {pulse.ranked > 0 ? (
@@ -297,7 +351,7 @@ export function MatchupPulseBoard({
               {pulse.leading.length > 0 ? (
                 <ul className="af-mp-rows">
                   {pulse.leading.map((r) => (
-                    <Row key={r.leagueId} row={r} tone="good" tagFinal={!done} />
+                    <Row key={r.leagueId} row={r} tone="good" tagFinal={!done} scale={scale} />
                   ))}
                 </ul>
               ) : (
@@ -312,7 +366,7 @@ export function MatchupPulseBoard({
               {pulse.trailing.length > 0 ? (
                 <ul className="af-mp-rows">
                   {pulse.trailing.map((r) => (
-                    <Row key={r.leagueId} row={r} tone="bad" tagFinal={!done} />
+                    <Row key={r.leagueId} row={r} tone="bad" tagFinal={!done} scale={scale} />
                   ))}
                 </ul>
               ) : (

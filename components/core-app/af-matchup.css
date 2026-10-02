@@ -930,3 +930,178 @@
     line-height: 1.2;
   }
 }
+
+/* ── 2026-10-02 visual pass (components/core-app/screens/Matchup.tsx) ─────────
+ *
+ * Top-level rules and sibling @media blocks only, appended at end of file — the
+ * nested-@media incident this file is named for cannot reach anything below.
+ *
+ * Three ideas, all driven by data attributes the screen already knows:
+ *   1. The banner takes the colour of whoever is ahead (`data-leader`).
+ *   2. Win probability is a bar as well as a number.
+ *   3. Every slot row is tinted on the side that is winning it (`data-edge`),
+ *      so the board reads as a scoreboard before a single number is parsed.
+ */
+
+/* 1 — the banner */
+.af-mu-h2h {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.af-mu-h2h::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.af-mu-h2h[data-leader='you']::before {
+  opacity: 1;
+  background: radial-gradient(120% 140% at 0% 50%, var(--good-soft), transparent 55%);
+}
+.af-mu-h2h[data-leader='opponent']::before {
+  opacity: 1;
+  background: radial-gradient(120% 140% at 100% 50%, var(--bad-soft), transparent 55%);
+}
+.af-mu-h2h[data-leader='you'] .af-mu-team[data-you='true'] .af-mu-score[data-basis='scored'] {
+  color: var(--good);
+}
+.af-mu-h2h[data-leader='opponent'] .af-mu-team[data-you='false'] .af-mu-score[data-basis='scored'] {
+  color: var(--bad);
+}
+/* The leader's crest gets a ring — one more cue that does not depend on reading a number. */
+.af-mu-h2h[data-leader='you'] .af-mu-team[data-you='true'] .af-mu-crest {
+  box-shadow: 0 0 0 2px var(--good);
+}
+.af-mu-h2h[data-leader='opponent'] .af-mu-team[data-you='false'] .af-mu-crest {
+  box-shadow: 0 0 0 2px var(--bad);
+}
+
+/* LIVE breathes. A finished or unplayed week holds still. */
+.af-mu-week-state[data-state='live'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-mu-week-state[data-state='live']::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: af-mu-breathe 1.6s ease-in-out infinite;
+}
+@keyframes af-mu-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+/* 2 — win probability as a bar */
+.af-mu-centre-value[data-tone='good'] {
+  color: var(--good);
+}
+.af-mu-centre-value[data-tone='bad'] {
+  color: var(--bad);
+}
+.af-mu-wp {
+  position: relative;
+  width: 100%;
+  max-width: 180px;
+  height: 8px;
+  margin: 6px 0 2px;
+  border-radius: 999px;
+  background: var(--bad-soft);
+  box-shadow: inset 0 0 0 1px var(--line);
+  overflow: hidden;
+}
+.af-mu-wp-you {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--good), var(--accent));
+  transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* 3 — the slot board */
+.af-mu-board-row {
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.af-mu-board-row[data-edge='ahead'] {
+  background-image: linear-gradient(90deg, var(--good-soft), transparent 48%);
+}
+.af-mu-board-row[data-edge='behind'] {
+  background-image: linear-gradient(270deg, var(--bad-soft), transparent 48%);
+}
+.af-mu-half[data-edge='ahead'] .af-mu-half-pts {
+  color: var(--good);
+}
+.af-mu-half[data-edge='behind'] .af-mu-half-pts {
+  color: var(--muted);
+  font-weight: 700;
+}
+@media (hover: hover) {
+  .af-mu-board-row:hover {
+    border-color: var(--line2);
+  }
+}
+
+/* What an unplayed starter is still expected to add — labelled, quiet, never in the PTS figure. */
+.af-mu-half-proj {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* "7 slots winning · 5 losing" */
+.af-mu-tally {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-mu-tally-n {
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-mu-tally[data-leader='you'] .af-mu-tally-n {
+  color: var(--good);
+}
+.af-mu-tally[data-leader='opponent'] .af-mu-tally-n {
+  color: var(--bad);
+}
+.af-mu-tally-of {
+  color: var(--faint);
+}
+
+/* Desktop gets a scoreboard-sized score; the phone keeps the size its layout was measured at. */
+@media (min-width: 1024px) {
+  .af-mu-score {
+    font-size: 36px;
+  }
+  .af-mu-h2h {
+    padding: 22px 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-mu-week-state[data-state='live']::before {
+    animation: none;
+  }
+  .af-mu-wp-you,
+  .af-mu-h2h::before,
+  .af-mu-board-row {
+    transition: none;
+  }
+}
