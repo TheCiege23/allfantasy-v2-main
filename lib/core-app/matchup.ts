@@ -19,7 +19,7 @@ import { resolveSourceLink, type SourceLink } from '@/lib/league-links/sourceLin
 import { verifiedHandoff, type PlatformLink } from './platformLinks'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { isBestBallSettings } from './lineupMode'
-import { starterGameStates } from './matchupGameState'
+import { starterGameStates, type StarterGameState } from './matchupGameState'
 import { bestBallProjectedFinal } from './bestBallForecast'
 import { realManagerName, rosterLabel } from './managerName'
 
@@ -175,6 +175,13 @@ export type MatchupPlayerCell = {
    * everyone else, including a starter we merely could not price (that is `projected: null`).
    */
   unavailable: Unavailable | null
+  /**
+   * Where this starter's own game stands: `upcoming`, `live`, `final`, or `unknown` when his club
+   * could not be placed against this week's fixtures. The same per-starter read that builds
+   * `starterCounts`, kept per player so a live board can say WHICH starters are still to play
+   * rather than only how many. A starter ruled out or on bye counts as `final` — nothing is left.
+   */
+  gameState?: StarterGameState | null
 }
 
 export type MatchupSlot = {
@@ -685,6 +692,10 @@ export async function getMatchupData(
         reason: 'we could not match both sides of this matchup to an imported roster',
       }
 
+  /* The same rule the starter counts above use, so a marker and a count can never disagree. */
+  const gameStateOf = (entry: { playerId: string; unavailable?: Unavailable | null }): StarterGameState =>
+    entry.unavailable ? 'final' : states.get(entry.playerId) ?? 'unknown'
+
   const cellFor = (
     entry: { playerId: string; projected: number | null; unavailable?: Unavailable | null; afEngine?: number | null } | undefined,
   ): MatchupPlayerCell | null => {
@@ -726,6 +737,7 @@ export async function getMatchupData(
         actual: actualBy.get(entry.playerId) ?? null,
         empty: false,
         unavailable: entry.unavailable ?? null,
+        gameState: gameStateOf(entry),
       }
     }
     const identity = identityBy.get(entry.playerId)
@@ -755,6 +767,7 @@ export async function getMatchupData(
       actual: actualBy.get(entry.playerId) ?? null,
       empty: false,
       unavailable: entry.unavailable ?? null,
+      gameState: gameStateOf(entry),
     }
   }
 

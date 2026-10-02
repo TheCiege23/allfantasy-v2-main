@@ -1,6 +1,12 @@
 import React from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+
+// The week banner's refresh control calls useRouter, which needs an app router outside one.
+vi.mock('next/navigation', async (orig) => ({
+  ...(await orig<typeof import('next/navigation')>()),
+  useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {}, back() {}, forward() {} }),
+}))
 
 import Matchup from '@/components/core-app/screens/Matchup'
 import type { MatchupData } from '@/lib/core-app/matchup'
