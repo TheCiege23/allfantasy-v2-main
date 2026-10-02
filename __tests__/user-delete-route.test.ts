@@ -13,6 +13,7 @@ const {
   identityDeleteMany,
   teamUpdateMany,
   pushDeleteMany,
+  cancelSubsMock,
 } = vi.hoisted(() => ({
   getServerSessionMock: vi.fn(),
   authAccountDeleteMany: vi.fn(),
@@ -23,10 +24,13 @@ const {
   identityDeleteMany: vi.fn(),
   teamUpdateMany: vi.fn(),
   pushDeleteMany: vi.fn(),
+  cancelSubsMock: vi.fn(),
 }))
 
 vi.mock("next-auth", () => ({ getServerSession: getServerSessionMock }))
 vi.mock("@/lib/auth", () => ({ authOptions: {} }))
+vi.mock("@/lib/account/cancelSubscriptionsOnDelete", () => ({ cancelSubscriptionsOnDelete: cancelSubsMock }))
+vi.mock("@/lib/stripe-client", () => ({ getStripeClient: vi.fn() }))
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
@@ -64,6 +68,37 @@ describe("POST /api/user/delete", () => {
     identityDeleteMany.mockResolvedValue({ count: 2 })
     teamUpdateMany.mockResolvedValue({ count: 3 })
     pushDeleteMany.mockResolvedValue({ count: 2 })
+    cancelSubsMock.mockResolvedValue({ cancelled: [], hasAppleSubscription: false })
+  })
+
+  /*
+   * Owner's call, 2026-10-02: deleting an account cancels its subscription. Before, the route never
+   * called Stripe and a subscriber kept being charged for an account that no longer existed.
+   */
+  it("cancels billing BEFORE erasing anything", async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: "u1" } })
+    cancelSubsMock.mockResolvedValue({ cancelled: ["sub_1"], hasAppleSubscription: false })
+    const res = await POST(req({ confirm: true }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ ok: true, cancelledSubscriptions: 1, appleSubscriptionActive: false })
+    expect(cancelSubsMock.mock.calls[0][0]).toBe("u1")
+    expect(cancelSubsMock.mock.invocationCallOrder[0]).toBeLessThan(appUserUpdate.mock.invocationCallOrder[0])
+  })
+
+  it("erases NOTHING when the subscription could not be cancelled", async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: "u1" } })
+    cancelSubsMock.mockRejectedValue(new Error("stripe down"))
+    const res = await POST(req({ confirm: true }))
+    expect(res.status).toBe(502)
+    expect(await res.json()).toMatchObject({ code: "subscription_cancel_failed" })
+    expect(appUserUpdate).not.toHaveBeenCalled()
+    expect(authAccountDeleteMany).not.toHaveBeenCalled()
+  })
+
+  it("does not cancel anything for an unconfirmed request", async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: "u1" } })
+    expect((await POST(req({}))).status).toBe(400)
+    expect(cancelSubsMock).not.toHaveBeenCalled()
   })
 
   /*

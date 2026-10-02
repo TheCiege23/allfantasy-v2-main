@@ -22,9 +22,10 @@ export function AccountSettingsSection({
   // showing "Free" regardless of the user's actual subscription.
   const ents = useEntitlements()
   /*
-   * ⚠ /api/user/delete anonymizes the account but never calls Stripe, so a live subscription keeps
-   * billing an account that no longer exists. Until deletion cancels it server-side, the dialog
-   * says so and points at the billing portal first. Same portal gate as BillingSettingsSection.
+   * /api/user/delete cancels Stripe billing before it erases anything (lib/account/
+   * cancelSubscriptionsOnDelete) — immediately, with no refund for the rest of the period — so the
+   * dialog says so. An App Store subscription is the one we cannot cancel: Apple only lets the
+   * user do that. Same paid gate as BillingSettingsSection.
    */
   const hasLiveSubscription = ents.hasAnyPaid && !ents.isAdminBypassAccount
 
@@ -75,7 +76,12 @@ export function AccountSettingsSection({
         body: JSON.stringify({ confirm: true }),
       })
       if (!res.ok) {
-        setDeleteError("Account deletion failed. Please try again.")
+        // The route explains a refused deletion (e.g. billing could not be cancelled, so nothing
+        // was deleted); show that rather than a generic failure.
+        const data = (await res.json().catch(() => ({}))) as { error?: unknown }
+        setDeleteError(
+          typeof data.error === "string" && data.error ? data.error : "Account deletion failed. Please try again.",
+        )
         return
       }
       // PII is erased and auth is revoked — sign the user out and leave.
@@ -181,11 +187,9 @@ export function AccountSettingsSection({
                 style={{ borderColor: "color-mix(in srgb, #fbbf24 45%, transparent)", color: "#fbbf24" }}
                 data-testid="settings-account-delete-subscription-warning"
               >
-                Deleting your account does not cancel your subscription.{" "}
-                <a href="/api/subscription/billing-portal" className="font-semibold underline">
-                  Cancel it in the billing portal
-                </a>{" "}
-                first, or you will keep being charged.
+                Deleting your account cancels your AllFantasy subscription right away, with no refund for the
+                rest of the billing period. If you subscribed in the iPhone app, cancel it in your iPhone
+                Settings → your name → Subscriptions — Apple doesn&apos;t let us cancel it for you.
               </p>
             ) : null}
             <input
