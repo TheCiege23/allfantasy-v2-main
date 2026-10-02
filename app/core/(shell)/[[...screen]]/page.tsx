@@ -4613,6 +4613,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                     ? `/core/war-room?view=plan&league=${encodeURIComponent(selectedLeagueId)}`
                     : '/core/war-room?view=plan'
                 }
+                matchupHref={`/core/matchup?league=${encodeURIComponent(scout.league.id)}`}
+                tradesHref={`/core/trades?league=${encodeURIComponent(scout.league.id)}`}
               />
             ) : scoutLoadFailed ? (
               /*

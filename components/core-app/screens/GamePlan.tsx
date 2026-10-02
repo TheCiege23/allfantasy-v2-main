@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import type { GameDayTriage, TriageLeague, TriageRow } from '@/lib/core-app/gameDayTriage'
 import { lockState } from '@/lib/core-app/lineupLock'
 import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
+import { relativeAge } from '@/lib/core-app/cardFreshness'
 import '@/components/core-app/af-game-plan.css'
 
 /**
@@ -137,6 +138,60 @@ function LeagueLineupLink({ league }: { league: TriageLeague }) {
   )
 }
 
+/**
+ * The week in one line: how much there is to fix, across how many leagues, and when the first of it
+ * locks — what a manager wants before reading a single row.
+ *
+ * ⚠ COUNTED FROM THE ROWS BELOW, NEVER FROM A SEPARATE READ, so the strip and the list cannot
+ * disagree. Locked rows are left out of "to fix": nothing can move them now.
+ *
+ * ⚠ AND IT SAYS WHAT IT DID NOT READ. Best-ball leagues, leagues on a platform we cannot translate,
+ * and the age of the oldest lineup were all returned by the loader and printed nowhere — so an
+ * all-zero strip could not be told apart from "we skipped your leagues".
+ */
+function Summary({ data, actionable, nowIso }: { data: GameDayTriage; actionable: TriageRow[]; nowIso: string }) {
+  const empty = data.emptySlots ?? []
+  const emptyCount = empty.reduce((n, l) => n + l.count, 0)
+  const leagues = new Set([...actionable.flatMap((r) => r.leagues.map((l) => l.leagueId)), ...empty.map((l) => l.leagueId)])
+  const firstKickoff = actionable
+    .map((r) => r.kickoff)
+    .filter((k): k is string => Boolean(k))
+    .sort()[0]
+  const skipped = [
+    data.bestBallLeagues ? `${data.bestBallLeagues} best-ball ${data.bestBallLeagues === 1 ? 'league' : 'leagues'} skipped — the platform sets those lineups` : null,
+    data.unsupportedLeagues ? `${data.unsupportedLeagues} on a platform we can’t read yet` : null,
+    data.leaguesNotRead ? `${data.leaguesNotRead} not read — more than this list checks at once` : null,
+  ].filter(Boolean)
+  const asOfMs = data.rostersAsOf ? new Date(data.rostersAsOf).getTime() : NaN
+
+  return (
+    <section className="af-gp-summary" aria-label="This week at a glance">
+      <dl className="af-gp-stats">
+        <div data-tone={actionable.length > 0 ? 'warn' : undefined}>
+          <dt>Flagged starters</dt>
+          <dd className="af-num">{actionable.length}</dd>
+        </div>
+        <div data-tone={emptyCount > 0 ? 'bad' : undefined}>
+          <dt>Empty slots</dt>
+          <dd className="af-num">{emptyCount}</dd>
+        </div>
+        <div>
+          <dt>Leagues affected</dt>
+          <dd className="af-num">{leagues.size}</dd>
+        </div>
+        <div>
+          <dt>First lock</dt>
+          <dd>{firstKickoff ? <Lock kickoff={firstKickoff} nowIso={nowIso} /> : <span className="af-gp-lock">—</span>}</dd>
+        </div>
+      </dl>
+      <p className="af-gp-summary-note">
+        {Number.isFinite(asOfMs) ? `Lineups as of the last sync, ${relativeAge(asOfMs, new Date(nowIso).getTime())}.` : 'No lineup sync time on file.'}
+        {skipped.length > 0 ? ` ${skipped.join(' · ')}.` : ''}
+      </p>
+    </section>
+  )
+}
+
 function Row({ row, nowIso }: { row: TriageRow; nowIso: string }) {
   const locked = row.kickoff ? lockState(row.kickoff, nowIso).state === 'locked' : false
 
@@ -250,6 +305,8 @@ export function GamePlan({
         "we read nothing" render almost identically and mean opposite things, so
         the count of what was actually inspected is stated either way.
       */}
+      {data.startersRead > 0 || emptySlots.length > 0 ? <Summary data={data} actionable={actionable} nowIso={nowIso} /> : null}
+
       <p className="af-gp-coverage">
         <span className="af-num">{data.startersRead}</span> starters checked across{' '}
         <span className="af-num">{data.leaguesRead}</span>{' '}
