@@ -18,6 +18,7 @@ import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import { platformLabel } from '@/lib/core-app/platformLinks'
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -42,6 +43,7 @@ function LockCountdown({
   at,
   anyEmptySlot,
   platform,
+  fixHref = null,
   week,
   daysAway,
   next = false,
@@ -50,6 +52,8 @@ function LockCountdown({
   at: Date
   anyEmptySlot: boolean
   platform: string
+  /** The provider's lineup screen, when the loader resolved one. Null renders the line as text. */
+  fixHref?: string | null
   week: number | null
   daysAway: number
   next?: boolean
@@ -58,6 +62,29 @@ function LockCountdown({
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const [now, setNow] = useState<number>(() => asOf ?? Date.now())
+  /*
+   * ⚠ THE LOCK TIME WAS ALWAYS PRINTED IN UTC — a Sunday 1pm Eastern kickoff read "17:00 UTC".
+   * UTC is the one zone server and browser agree on, so it is what the server renders and what
+   * hydration matches; the reader's own zone replaces it after mount, when it is knowable.
+   */
+  const [localTime, setLocalTime] = useState<string | null>(null)
+  const atMs = at.getTime()
+  useEffect(() => {
+    try {
+      setLocalTime(
+        new Intl.DateTimeFormat(language === 'es' ? 'es' : undefined, {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short',
+        }).format(new Date(atMs)),
+      )
+    } catch {
+      setLocalTime(null)
+    }
+  }, [atMs, language])
 
   useEffect(() => {
     setNow(Date.now())
@@ -100,12 +127,22 @@ function LockCountdown({
       </span>
       <span className="af-num af-mt-lock-time">{label}</span>
       <span className="af-mt-lock-note">
-        {at.toUTCString().slice(0, 22)} UTC
+        {localTime ?? `${at.toUTCString().slice(0, 22)} UTC`}
         {` · ${copy('confirm individual locks and AutoSubs on your platform')}`}
         {anyEmptySlot ? ` · ${copy('a starting slot is still empty')}` : null}
       </span>
+      {/*
+        ⚠ IT LOOKED LIKE A LINK AND WAS A SPAN. Accent caps under an urgent banner read as a
+        control; tapping it did nothing. Now it IS the provider's lineup screen when we have one.
+      */}
       {anyEmptySlot && !locked ? (
-        <span className="af-mt-lock-fix">{copy('Fix it in')} {platform}</span>
+        fixHref ? (
+          <a className="af-mt-lock-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
+            {copy('Fix it in')} {platform} <span aria-hidden>↗</span>
+          </a>
+        ) : (
+          <span className="af-mt-lock-fix">{copy('Fix it in')} {platform}</span>
+        )
       ) : null}
     </div>
   )
@@ -650,15 +687,21 @@ function SlotRow({
         </div>
       ) : (
         <>
+          {/*
+            ⚠ THE BUTTON BELONGS INSIDE THIS CELL — af-my-team.css is written for exactly that ("a
+            flex row holding the 'Empty' text block and this button"). Rendered as the cell's
+            SIBLING it became a loose grid item, auto-placed into the 34–46px slot-badge column:
+            measured 34px wide with its label overflowing by 26px at 375, 23 at 768, 20 at 1280.
+          */}
           <div className="af-mt-player af-mt-empty-text">
             <div>
               <div className="af-mt-player-name">Empty</div>
               <div className="af-mt-player-meta">Nobody is starting in this slot</div>
             </div>
+            {!automatic ? <Link href={sourceHref ?? "/core/sync"} className="af-btn af-mt-fix">
+              Fix in {platform}
+            </Link> : null}
           </div>
-          {!automatic ? <Link href={sourceHref ?? "/core/sync"} className="af-btn af-mt-fix">
-            Fix in {platform}
-          </Link> : null}
         </>
       )}
 
@@ -754,7 +797,8 @@ export function MyTeam({ data }: MyTeamProps) {
     }
   }, [data.league.id])
 
-  const platform = data.league.platform === 'manual' ? copy('your platform') : data.league.platform
+  // "Sleeper", not "sleeper": the raw id read as a typo in "Fix in sleeper" and "Lineup from sleeper".
+  const platform = data.league.platform === 'manual' ? copy('your platform') : platformLabel(data.league.platform)
   const bestBall = data.bestBall === true || data.league.bestBall === true
 
   if (data.preDraft || data.eliminated || data.completed) return <div className="af-mt">
@@ -824,6 +868,7 @@ export function MyTeam({ data }: MyTeamProps) {
             at={new Date(data.lock.data.at)}
             anyEmptySlot={data.lock.data.anyEmptySlot}
             platform={platform}
+            fixHref={data.league.sourceLink?.href ?? null}
             week={data.lock.data.week}
             daysAway={data.lock.data.daysAway}
             next={data.lock.data.next}
