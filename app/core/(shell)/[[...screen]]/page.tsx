@@ -4268,6 +4268,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               leagueId: myTeam.league.id,
               leagueName: myTeam.league.name,
               starters: myTeam.starters.available ? myTeam.starters.data.flatMap((slot) => slot.player ? [slot.player] : []) : [],
+              emptySlots: myTeam.starters.available ? myTeam.starters.data.flatMap((slot, index) => slot.empty && !slot.player ? [{ index, slotLabel: slot.slotLabel }] : []) : [],
               nowIso: new Date().toISOString(),
             })} />}
             <MyTeam data={myTeam} />
