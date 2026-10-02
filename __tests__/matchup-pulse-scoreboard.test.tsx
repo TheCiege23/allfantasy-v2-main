@@ -68,3 +68,56 @@ describe('margin bars', () => {
     expect(rows[2].getAttribute('aria-label')).toMatch(/behind by 20\.0 \(projected\)/)
   })
 })
+
+/*
+ * Ranked by win probability (matchupPulse.ts). The board must name the columns for what they now
+ * measure, keep a margin's OWN sign when it disagrees with its column, and show the odds.
+ */
+describe('odds on the board', () => {
+  const friday = () =>
+    pulse({
+      leading: [row({ leagueId: 'fav', margin: 4, basis: 'projected', pWin: 0.71, projectedMargin: 4 })],
+      /* Up 30.9 on Friday, projected to lose: an underdog with a positive margin. */
+      trailing: [row({ leagueId: 'dog', margin: 30.9, basis: 'scored', pWin: 0.2, projectedMargin: -37.5 })],
+      closest: [row({ leagueId: 'flip', margin: -0.4, basis: 'projected', pWin: 0.49, projectedMargin: -0.4 })],
+      leadingTotal: 1, trailingTotal: 1, ranked: 3, withOdds: 3, expectedWins: 1.4,
+    } as Partial<MatchupPulse>)
+
+  it('names the columns Favoured / Underdog when the board has odds', () => {
+    const { container } = board(friday())
+    expect([...container.querySelectorAll('.af-mp-col-head')].map((n) => n.textContent)).toEqual([
+      'Favoured · top 5', 'Underdog · bottom 5', 'Closest games · worth watching',
+    ])
+  })
+
+  it('🛑 keeps a +30.9 positive and green under Underdog, and says where it is heading', () => {
+    const { container } = board(friday())
+    const dog = container.querySelector('a[href="/core/matchup?league=l1"][data-tone="bad"]')!
+    expect(dog.querySelector('.af-mp-diff')?.textContent).toBe('+30.9')
+    expect(dog.querySelector('.af-mp-diff')?.getAttribute('data-tone')).toBe('good')
+    expect(dog.querySelector('.af-mp-meta')?.textContent).toMatch(/proj final −37\.5/)
+    expect(dog.querySelector('.af-mp-ring-n')?.textContent).toBe('20')
+  })
+
+  it('states the expected record', () => {
+    const { container } = board(friday())
+    expect(container.querySelector('.af-mp-expected-n')?.textContent).toBe('1.4–1.6')
+  })
+
+  it('lists the closest games under the columns', () => {
+    const { container } = board(friday())
+    expect(container.querySelectorAll('.af-mp-closest a.af-mp-row')).toHaveLength(1)
+    expect(container.querySelector('.af-mp-closest .af-mp-diff')?.textContent).toBe('−0.4')
+  })
+
+  it('shows no ring on a finished row — it is a result, not odds', () => {
+    const { container } = board(pulse({ leading: [row({ final: true, pWin: 1, projectedMargin: 12 })], withOdds: 1, expectedWins: 1 } as Partial<MatchupPulse>))
+    expect(container.querySelector('.af-mp-ring')).toBeNull()
+  })
+
+  it('CONTROL: a board with no odds keeps the margin words', () => {
+    const { container } = board(pulse({ leading: [row()], trailing: [row({ leagueId: 'c', margin: -3 })] }))
+    expect(container.querySelector('.af-mp-col-head')?.textContent).toBe('Leading · top 5')
+    expect(container.querySelector('.af-mp-expected')).toBeNull()
+  })
+})

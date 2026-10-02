@@ -569,3 +569,94 @@
     transition: none;
   }
 }
+
+/* ── Win probability on the cross-league board (2026-10-02) ──────────────────
+ *
+ * Top-level rules appended at end of file. The columns are now chosen by odds,
+ * so a row's margin can disagree with its column: the bar takes the MARGIN's
+ * colour (it measures the margin), the inset edge keeps the column's.
+ */
+.af-mp-row[data-margin='good'] .af-mp-bar {
+  background: var(--good);
+}
+.af-mp-row[data-margin='bad'] .af-mp-bar {
+  background: var(--bad);
+}
+.af-mp-diff[data-tone='even'] {
+  color: var(--muted);
+}
+
+/* The odds ring — 36px, number inside, arc is the probability. */
+.af-mp-ring {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+}
+.af-mp-ring svg {
+  position: absolute;
+  inset: 0;
+}
+.af-mp-ring-track {
+  stroke: var(--line);
+}
+.af-mp-ring-arc {
+  stroke: var(--muted);
+  transition: stroke-dasharray 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.af-mp-ring[data-tone='good'] .af-mp-ring-arc {
+  stroke: var(--good);
+}
+.af-mp-ring[data-tone='bad'] .af-mp-ring-arc {
+  stroke: var(--bad);
+}
+.af-mp-ring-n {
+  position: relative;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Expected record 23.4–19.6 · across 43 matchups with odds" */
+.af-mp-expected {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-mp-expected-label {
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-mp-expected-n {
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-mp-expected-of {
+  color: var(--faint);
+}
+
+/* Closest games — a full-width list under the two columns. */
+.af-mp-closest {
+  margin-top: 4px;
+}
+.af-mp-col-head[data-tone='even'] {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-mp-ring-arc {
+    transition: none;
+  }
+}

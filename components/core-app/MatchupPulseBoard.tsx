@@ -109,6 +109,15 @@ function metaOf(row: PulseRow, language: string): string {
     parts.push(language === 'es' ? `${row.startersLeft} por jugar` : `${row.startersLeft} left to play`)
   }
   /*
+   * Where a LIVE row is heading. The number on the right is the score right now; this says where
+   * the model expects it to end — the line that explains why a +30.9 can sit under "Underdog".
+   * Not on a projected row (its margin already is the projection) or a final one (it is the result).
+   */
+  if (row.basis === 'scored' && !row.final && row.projectedMargin != null) {
+    const pm = `${row.projectedMargin > 0 ? '+' : row.projectedMargin < 0 ? '−' : ''}${Math.abs(row.projectedMargin).toFixed(1)}`
+    parts.push(language === 'es' ? `final proy. ${pm}` : `proj final ${pm}`)
+  }
+  /*
    * No coverage clause: the loader refuses to RANK a projected row unless both
    * lineups are the same size and fully priced, so a row that reaches here is
    * already like-for-like. Leagues that are not are counted in `notRanked`.
@@ -132,20 +141,29 @@ function Row({
   const copy = (english: string) => coreUiCopy(english, language)
   const abs = Math.abs(row.margin).toFixed(1)
   /*
+   * ⚠ THE MARGIN'S SIGN IS ITS OWN, NOT THE COLUMN'S. The columns are now chosen by win probability,
+   * so a row up 30.9 on Friday can sit under "Underdog". Printing it as −30.9 to match its column
+   * would be a false score; it reads +30.9 in green, and the ring beside it says 20%.
+   */
+  const marginTone = row.margin > 0 ? 'good' : row.margin < 0 ? 'bad' : 'even'
+  const sign = row.margin > 0 ? '+' : row.margin < 0 ? '−' : ''
+  /*
    * How big this margin is next to the others, as a bar along the row's foot. Ten numbers in a
    * column are read one at a time; ten bars are seen at once — "two blowouts and three coin flips".
    * Floored at 4% so a 0.4-point margin still shows a sliver rather than nothing.
    */
   const width = scale > 0 ? Math.max(4, Math.min(100, (Math.abs(row.margin) / scale) * 100)) : 0
+  const odds = row.pWin != null && !row.final ? `${Math.round(row.pWin * 100)}% ${copy('to win')}` : null
   return (
     <li>
       <Link
         className="af-mp-row"
         href={row.href}
         data-tone={tone}
+        data-margin={marginTone}
         data-basis={row.basis}
         /* Replaces the row's text for a screen reader, so it carries the meta line as well as the margin. */
-        aria-label={`${row.leagueName}, ${metaOf(row, language)}: ${tone === 'good' ? copy('ahead by') : copy('behind by')} ${abs}${row.basis === 'projected' ? ` (${copy('projected')})` : ''}${tagFinal && row.final ? `, ${copy('final')}` : ''}`}
+        aria-label={`${row.leagueName}, ${metaOf(row, language)}: ${row.margin >= 0 ? copy('ahead by') : copy('behind by')} ${abs}${row.basis === 'projected' ? ` (${copy('projected')})` : ''}${odds ? `, ${odds}` : ''}${tagFinal && row.final ? `, ${copy('final')}` : ''}`}
       >
         <span className="af-mp-bar" aria-hidden style={{ width: `${width}%` }} />
         <Face row={row} />
@@ -167,12 +185,43 @@ function Row({
           board says won/lost instead, and a tag on each row would repeat it.
         */}
         {tagFinal && row.final ? <span className="af-mp-tag" data-kind="final">{copy('FINAL')}</span> : null}
-        <span className="af-mp-diff af-num" data-tone={tone}>
-          {tone === 'good' ? '+' : '−'}
+        <span className="af-mp-diff af-num" data-tone={marginTone}>
+          {sign}
           {abs}
         </span>
+        {/* The odds, as a ring — absent on a finished row (it is a result) and when the model refused. */}
+        {row.pWin != null && !row.final ? <WinRing p={row.pWin} /> : null}
       </Link>
     </li>
+  )
+}
+
+/**
+ * Your chance of winning, as a ring with the number inside. Green above even, red below, and the
+ * arc is the probability itself — read at a glance before the digits are.
+ */
+function WinRing({ p }: { p: number }) {
+  const pct = Math.round(p * 100)
+  const r = 15
+  const c = 2 * Math.PI * r
+  return (
+    <span className="af-mp-ring" data-tone={p > 0.5 ? 'good' : p < 0.5 ? 'bad' : 'even'} aria-hidden>
+      <svg viewBox="0 0 36 36" width="36" height="36">
+        <circle className="af-mp-ring-track" cx="18" cy="18" r={r} fill="none" strokeWidth="3" />
+        <circle
+          className="af-mp-ring-arc"
+          cx="18"
+          cy="18"
+          r={r}
+          fill="none"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray={`${(c * Math.min(1, Math.max(0, p))).toFixed(2)} ${c.toFixed(2)}`}
+          transform="rotate(-90 18 18)"
+        />
+      </svg>
+      <span className="af-mp-ring-n af-num">{pct}</span>
+    </span>
   )
 }
 
@@ -264,7 +313,16 @@ export function MatchupPulseBoard({
    * won/lost; a mixed board keeps leading/trailing and tags the finished rows FINAL.
    */
   const done = pulse.allFinal === true
-  const [aheadWord, behindWord] = done ? ['won', 'lost'] : ['leading', 'trailing']
+  /*
+   * The columns are chosen by WIN PROBABILITY whenever any row has one (`matchupPulse.ts`), so they
+   * are named for what they measure. "Leading" over a row that is up 30.9 but projected to lose is
+   * the exact claim the ranking change exists to stop; "Favoured" is true of it. A board where the
+   * model priced nothing keeps the margin's own words.
+   */
+  const byOdds = (pulse.withOdds ?? 0) > 0
+  const [aheadWord, behindWord] = done ? ['won', 'lost'] : byOdds ? ['favoured', 'underdog'] : ['leading', 'trailing']
+  const [aheadHead, behindHead] = done ? ['Won', 'Lost'] : byOdds ? ['Favoured', 'Underdog'] : ['Leading', 'Trailing']
+  const closest = pulse.closest ?? []
   const gap = gapNote(pulse, language)
   const inPlay = anyInPlay(pulse)
 
@@ -275,7 +333,7 @@ export function MatchupPulseBoard({
 
   const shown = pulse.leading.length + pulse.trailing.length
   const hidden = Math.max(0, totalLeagues - shown)
-  const scale = Math.max(0, ...[...pulse.leading, ...pulse.trailing].map((r) => Math.abs(r.margin)))
+  const scale = Math.max(0, ...[...pulse.leading, ...pulse.trailing, ...(pulse.closest ?? [])].map((r) => Math.abs(r.margin)))
   const ahead = pulse.leadingTotal ?? pulse.leading.length
   const behind = pulse.trailingTotal ?? pulse.trailing.length
   const decided = ahead + behind
@@ -285,7 +343,11 @@ export function MatchupPulseBoard({
       <BoardHead
         eyebrow={`Core · ${copy('Matchup')}`}
         title={copy('Matchup')}
-        blurb={copy('Every league with a head-to-head this week, ranked by margin. Open one for the full box score.')}
+        blurb={copy(
+          byOdds
+            ? 'Every league with a head-to-head this week, ranked by your chance of winning. Open one for the full box score.'
+            : 'Every league with a head-to-head this week, ranked by margin. Open one for the full box score.',
+        )}
       />
 
       <section className="af-mp" aria-labelledby="af-mp-head">
@@ -330,6 +392,24 @@ export function MatchupPulseBoard({
           </div>
         ) : null}
 
+        {/*
+          The week's expected record: the model's odds summed. "You should win about 23 of these 41"
+          is the number a twenty-league manager actually wants, and it moves all weekend.
+        */}
+        {!done && pulse.expectedWins != null && (pulse.withOdds ?? 0) > 0 ? (
+          <p className="af-mp-expected">
+            <span className="af-mp-expected-label">{copy('Expected record')}</span>{' '}
+            <span className="af-num af-mp-expected-n">
+              {pulse.expectedWins.toFixed(1)}–{Math.max(0, pulse.withOdds - pulse.expectedWins).toFixed(1)}
+            </span>{' '}
+            <span className="af-mp-expected-of">
+              {language === 'es'
+                ? `· de ${pulse.withOdds} enfrentamientos con probabilidades`
+                : `· across ${pulse.withOdds} matchups with odds`}
+            </span>
+          </p>
+        ) : null}
+
         {note ? <p className="af-mp-basis">{note}</p> : null}
 
         {pulse.ranked > 0 ? (
@@ -346,7 +426,7 @@ export function MatchupPulseBoard({
           >
             <div className="af-mp-col">
               <h3 className="af-label af-mp-col-head" data-tone="good">
-                {copy(done ? 'Won' : 'Leading')} · {copy('top 5')}
+                {copy(aheadHead)} · {copy('top 5')}
               </h3>
               {pulse.leading.length > 0 ? (
                 <ul className="af-mp-rows">
@@ -355,13 +435,13 @@ export function MatchupPulseBoard({
                   ))}
                 </ul>
               ) : (
-                <p className="af-mp-quiet">{copy(done ? 'You did not win a league this week.' : 'You are not ahead in any league right now.')}</p>
+                <p className="af-mp-quiet">{copy(done ? 'You did not win a league this week.' : byOdds ? 'You are not favoured in any league right now.' : 'You are not ahead in any league right now.')}</p>
               )}
             </div>
 
             <div className="af-mp-col">
               <h3 className="af-label af-mp-col-head" data-tone="bad">
-                {copy(done ? 'Lost' : 'Trailing')} · {copy('bottom 5')}
+                {copy(behindHead)} · {copy('bottom 5')}
               </h3>
               {pulse.trailing.length > 0 ? (
                 <ul className="af-mp-rows">
@@ -370,7 +450,7 @@ export function MatchupPulseBoard({
                   ))}
                 </ul>
               ) : (
-                <p className="af-mp-quiet">{copy(done ? 'You did not lose a league this week.' : 'You are not behind in any league right now.')}</p>
+                <p className="af-mp-quiet">{copy(done ? 'You did not lose a league this week.' : byOdds ? 'You are not the underdog in any league right now.' : 'You are not behind in any league right now.')}</p>
               )}
             </div>
           </div>
@@ -390,6 +470,29 @@ export function MatchupPulseBoard({
               : copy('No claimed team yet, so there is no head-to-head to stand in.')}
           </p>
         )}
+
+        {/*
+          The coin flips — the matchups the top-5/bottom-5 columns hide, and the ones worth watching.
+          Only rows not already shown above, so nothing is listed twice.
+        */}
+        {closest.length > 0 ? (
+          <div className="af-mp-col af-mp-closest">
+            <h3 className="af-label af-mp-col-head" data-tone="even">
+              {copy('Closest games')} · {copy('worth watching')}
+            </h3>
+            <ul className="af-mp-rows">
+              {closest.map((r) => (
+                <Row
+                  key={r.leagueId}
+                  row={r}
+                  tone={(r.pWin ?? (r.margin >= 0 ? 1 : 0)) >= 0.5 ? 'good' : 'bad'}
+                  tagFinal={!done}
+                  scale={scale}
+                />
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         {gap ? <p className="af-mp-gap">{gap}</p> : null}
       </section>
