@@ -8,6 +8,7 @@ export {
   getImportStatusLabel,
   getProviderStatus,
   getLegacyProviderPrimaryAction,
+  SLEEPER_CONNECT_HREF,
   getLegacyProviderHelpHref,
   isImportStatusActive,
   shouldShowRetryImport,

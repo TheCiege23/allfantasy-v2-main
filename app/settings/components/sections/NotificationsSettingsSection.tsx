@@ -6,7 +6,6 @@ import ChimmyAlertPreferencesPanel from "@/components/chimmy-surfaces/ChimmyAler
 import {
   resolveNotificationPreferences,
   getNotificationPreferencesFingerprint,
-  getDefaultNotificationPreferences,
   getDeliveryMethodAvailability,
   updateNotificationPreferences,
   sendTestNotification,
@@ -18,6 +17,7 @@ import {
   type NotificationPreferences,
   type NotificationCategoryId,
 } from "@/lib/notification-settings"
+import { buildResetNotificationPreferences } from "@/lib/notification-settings/resetNotificationPreferences"
 import { NotificationCategoryRenderer } from "@/components/notification-settings/NotificationCategoryRenderer"
 import { LeagueNotificationOverridesCard } from "@/components/notification-settings/LeagueNotificationOverridesCard"
 import type { SettingsProfile } from "./settings-types"
@@ -187,8 +187,8 @@ export function NotificationsSettingsSection({
   }
 
   const handleReset = () => {
-    const defaults = getDefaultNotificationPreferences()
-    setPrefs(defaults)
+    // Not bare defaults — the server merge would keep quiet hours and league mutes. See the helper.
+    setPrefs(buildResetNotificationPreferences(prefs))
     setDirty(true)
     setSaveError(null)
     setRemoteUpdatePending(false)

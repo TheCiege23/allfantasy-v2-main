@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { RefreshCw, ExternalLink, Search } from "lucide-react"
 import { RetryNotice } from "./RetryNotice"
+import { isImportProviderAvailable } from "@/lib/league-import/provider-ui-config"
+import type { ImportProvider } from "@/lib/league-import/types"
 
 /**
  * The real per-league list for the "League Imports" tab.
@@ -179,9 +181,14 @@ export function ImportedLeaguesPanel() {
   // snapshots (from /api/league/list) carry a platformLeagueId but no navigation/unified
   // record — resyncing those would re-import and materialize a native league from what the
   // user sees as read-only history, so they're excluded.
+  //
+  // ⚠ AND ONLY ON A PROVIDER THAT IS CURRENTLY AVAILABLE. The resync route refuses anything
+  // `isImportProviderAvailable` rejects ("Import from yahoo is not available."), so a Yahoo league
+  // showed a Resync button that failed every time. Same predicate as the route, so they cannot drift.
   const canResync = (l: LeagueRow) =>
     Boolean(l.platformLeagueId) &&
     IMPORT_PLATFORMS.has((l.platform ?? "").toLowerCase()) &&
+    isImportProviderAvailable((l.platform ?? "").toLowerCase() as ImportProvider) &&
     (Boolean(l.navigationLeagueId) || l.hasUnifiedRecord === true)
 
   return (

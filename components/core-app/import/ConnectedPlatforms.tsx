@@ -26,6 +26,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useConfirm } from '@/app/settings/components/sections/ConfirmDialog'
 
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-connected.css'
@@ -93,6 +94,9 @@ function statusFor(platform: string, row: AuthRow | undefined, available: boolea
   return 'not-connected'
 }
 
+/** Import by league id alone — there is no account to connect, so no "connected" state exists. */
+const CREDENTIAL_FREE_PLATFORMS = new Set<string>(['fleaflicker'])
+
 const YAHOO_CONNECT_HREF = `/api/auth/yahoo?returnTo=${encodeURIComponent('/settings')}`
 
 export type ConnectedPlatformsProps = {
@@ -108,6 +112,11 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
   const [rows, setRows] = useState<AuthRow[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ tone: 'good' | 'error'; text: string } | null>(null)
+  /*
+   * Not window.confirm: some embedded webviews (the iOS app among them) suppress it and return
+   * false, so Disconnect silently did nothing there. Same dialog the Sleeper/Discord rows use.
+   */
+  const [askConfirm, confirmDialog] = useConfirm()
 
   const load = useCallback(async () => {
     try {
@@ -132,14 +141,18 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
      * Handoff rule 3: the confirmation must say what disconnecting costs. The card
      * below promises it; this is the step that has to keep that promise.
      */
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm(
-        `Disconnect ${label}? This removes our read-only copy of that platform's leagues from AllFantasy. Your leagues and history stay on ${label} itself, untouched.`,
-      )
-    ) {
-      return
-    }
+    /*
+     * ⚠ WHAT IT COSTS IS THE SAVED CREDENTIAL, NOT THE LEAGUES. `DELETE /api/league/auth` runs
+     * `leagueAuth.deleteMany` and nothing else; imported leagues stay. This copy used to say it
+     * removed "our read-only copy of that platform's leagues" — a promise the server never kept,
+     * on the one screen a user reads before deciding.
+     */
+    const ok = await askConfirm({
+      title: `Disconnect ${label}?`,
+      body: `This removes the ${label} login AllFantasy saved for you, so new ${label} leagues can't be imported or re-synced until you reconnect. Leagues you already imported stay in AllFantasy, and nothing on ${label} itself changes.`,
+      confirmLabel: 'Disconnect',
+    })
+    if (!ok) return
     setBusy(platform)
     setMessage(null)
     try {
@@ -176,7 +189,14 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
    * Sleeper is counted from the profile rather than from LeagueAuth, because that
    * is where its link lives — the same asymmetry the rows below already handle.
    */
-  const livePlatforms = IMPORT_PROVIDER_UI_OPTIONS.filter((o) => o.available)
+  /*
+   * ⚠ A PLATFORM WITH NOTHING TO CONNECT IS NOT IN THE DENOMINATOR. Fleaflicker imports by league
+   * id with no credential, so `statusFor` can never call it connected — counting it capped the bar
+   * at 4 of 5 (80%) for a user who had connected everything there is to connect.
+   */
+  const livePlatforms = IMPORT_PROVIDER_UI_OPTIONS.filter(
+    (o) => o.available && !CREDENTIAL_FREE_PLATFORMS.has(o.provider),
+  )
   const connectedCount = livePlatforms.filter((o) => {
     if (o.provider === 'sleeper') return Boolean(sleeperUsername)
     return statusFor(o.provider, byPlatform.get(o.provider), true) === 'connected'
@@ -243,8 +263,13 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
                 since={row?.updatedAt ?? null}
                 busy={busy === opt.provider}
                 reauthorizeHref={opt.provider === 'yahoo' ? YAHOO_CONNECT_HREF : undefined}
+                /*
+                 * A stored row can always be removed, even on a platform now marked unavailable:
+                 * Yahoo tokens saved in its 2026-09-13 window had no way out of Settings, because
+                 * `coming-soon` offered no Disconnect.
+                 */
                 onDisconnect={
-                  status === 'connected' || status === 'action-needed'
+                  status === 'connected' || status === 'action-needed' || (row && status === 'coming-soon')
                     ? () => void disconnect(opt.provider, getImportProviderLabel(opt.provider))
                     : undefined
                 }
@@ -270,8 +295,8 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
           <DataHint />
         </p>
         <p className="af-ca-data-body">
-          Disconnecting a platform removes its leagues and our read-only copy of their data. Your
-          history stays on the platform itself, untouched.
+          Disconnecting a platform removes the login we saved for it, so it can&rsquo;t re-sync.
+          Leagues you already imported stay, and nothing changes on the platform itself.
         </p>
         <div className="af-ca-data-actions">
           {/*
@@ -290,6 +315,7 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
           */}
         </div>
       </div>
+      {confirmDialog}
     </div>
   )
 }

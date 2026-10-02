@@ -43,19 +43,58 @@ export function PreferencesSettingsSection({
     return isSupportedSport(first) ? first : DEFAULT_SPORT
   })
 
+  /*
+   * The device's IANA zone, read after mount (Intl is client-only). Login already writes it to the
+   * profile (SharedSessionBootstrapService), so it is often a zone the curated signup list does
+   * not carry — see `timezoneOptions` below.
+   */
+  const [deviceTimezone, setDeviceTimezone] = useState<string | null>(null)
+  useEffect(() => {
+    try {
+      setDeviceTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || null)
+    } catch {
+      setDeviceTimezone(null)
+    }
+  }, [])
+
+  /*
+   * Keyed on the sports' CONTENT, not the array's identity: every profile refetch hands back a new
+   * array, which re-ran this effect and wiped unsaved edits to every field here. Profile settled
+   * the same problem with its own `sportsKey`.
+   */
+  const sportsKey = (profile?.preferredSports ?? []).join(",")
   useEffect(() => {
     setTimezone(profile?.timezone ?? "")
     setLang(profile?.preferredLanguage ?? language)
     setTheme(normalizeStoredTheme(profile?.themePreference ?? DEFAULT_THEME))
     const first = profile?.preferredSports?.[0]
     setDefaultSport(isSupportedSport(first) ? first : DEFAULT_SPORT)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sportsKey stands in for preferredSports
   }, [
     profile?.timezone,
     profile?.preferredLanguage,
     profile?.themePreference,
-    profile?.preferredSports,
+    sportsKey,
     language,
   ])
+
+  /*
+   * ⚠ THE CURATED LIST IS 17 NORTH AMERICAN ZONES, BUT THE STORED VALUE CAN BE ANY ZONE. Login
+   * saves the browser's zone, so a user in Europe/London had a value the <select> had no option
+   * for: it rendered "Select timezone" while the local-time line under it showed London, and the
+   * zone could never be picked again once changed. Any zone in play — the saved one, the one being
+   * edited, the device's — gets an option of its own.
+   */
+  const timezoneOptions = (() => {
+    const listed = new Set(SIGNUP_TIMEZONES.map((z) => z.value))
+    const extra = [profile?.timezone, timezone, deviceTimezone].filter(
+      (z, i, all): z is string => Boolean(z) && !listed.has(z as string) && all.indexOf(z) === i,
+    )
+    return [
+      ...extra.map((value) => ({ value, label: `${value.split("/").pop()!.replace(/_/g, " ")} (${value})` })),
+      ...SIGNUP_TIMEZONES.map(({ value, label }) => ({ value, label })),
+    ]
+  })()
 
   const resetDraft = () => {
     savedFlash.clear()
@@ -148,8 +187,9 @@ export function PreferencesSettingsSection({
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium" style={{ color: "var(--muted)" }}>{t("settings.preferences.timezone")}</label>
+        <label htmlFor="settings-timezone" className="mb-1 block text-sm font-medium" style={{ color: "var(--muted)" }}>{t("settings.preferences.timezone")}</label>
         <select
+          id="settings-timezone"
           value={timezone}
           onChange={(e) => {
             savedFlash.clear()
@@ -163,10 +203,24 @@ export function PreferencesSettingsSection({
           }}
         >
           <option value="">{t("settings.preferences.timezonePlaceholder")}</option>
-          {SIGNUP_TIMEZONES.map((t) => (
-            <option key={t.value} value={t.value}>{t.label}</option>
+          {timezoneOptions.map((z) => (
+            <option key={z.value} value={z.value}>{z.label}</option>
           ))}
         </select>
+        {deviceTimezone && deviceTimezone !== timezone ? (
+          <button
+            type="button"
+            onClick={() => {
+              savedFlash.clear()
+              setTimezone(deviceTimezone)
+            }}
+            className="mt-2 rounded-lg border px-3 py-1.5 text-xs font-medium"
+            style={{ borderColor: "var(--border)", color: "var(--text)" }}
+            data-testid="settings-use-device-timezone"
+          >
+            {tInterpolate("settings.preferences.useDeviceTimezone", { zone: deviceTimezone })}
+          </button>
+        ) : null}
         {timezone && (
           <p className="mt-1.5 text-xs" style={{ color: "var(--muted2)" }}>
             {tInterpolate("settings.preferences.localTime", {
@@ -177,8 +231,9 @@ export function PreferencesSettingsSection({
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium" style={{ color: "var(--muted)" }}>{t("settings.preferences.defaultSport")}</label>
+        <label htmlFor="settings-default-sport" className="mb-1 block text-sm font-medium" style={{ color: "var(--muted)" }}>{t("settings.preferences.defaultSport")}</label>
         <select
+          id="settings-default-sport"
           value={defaultSport}
           onChange={(e) => {
             savedFlash.clear()

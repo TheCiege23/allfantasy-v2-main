@@ -1702,6 +1702,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.preferences.languageToggleAria": "Language toggle",
     "settings.preferences.timezone": "Timezone",
     "settings.preferences.timezonePlaceholder": "Select timezone",
+    "settings.preferences.useDeviceTimezone": "Use this device's timezone ({{zone}})",
     "settings.preferences.localTime": "Your local time: {{time}}",
     "settings.preferences.defaultSport": "Default sport",
     "settings.preferences.theme": "Theme",
@@ -1922,7 +1923,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.legacy.activeImportNote":
       "Active import detected. This tab refreshes automatically every 15 seconds.",
     "settings.legacy.openApp": "Open Legacy app",
-    "settings.legacy.dashboardLinkSleeper": "Dashboard (link Sleeper)",
+    "settings.legacy.dashboardLinkSleeper": "Link Sleeper",
     "settings.legacy.importInstructions": "Import instructions",
     "settings.legacy.linkedImport": "Linked · Import: {{status}}",
 
