@@ -3308,6 +3308,8 @@
 .af-cm-ticks[data-seen='true'] { color: var(--accent); }
 .af-cm-seenby { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
 .af-cm-seenby .af-cm-ticks { margin-right: 0; }
+/* The phone-alerts ask in an open DM: inset like the Sent/Seen line above it. */
+.af-cm-convo > .af-cm-pushask { margin: 8px 16px 0; font-size: 12.5px; }
 
 /* Unread: the name and the line under it go bold and bright, and the time takes the accent. */
 .af-cm-dmrow[data-unread='true'] .af-cm-threadrow-title { font-weight: 800; }
