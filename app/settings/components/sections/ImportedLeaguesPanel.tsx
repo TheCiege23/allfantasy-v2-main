@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { RefreshCw, ExternalLink, Search } from "lucide-react"
+import { RetryNotice } from "./RetryNotice"
 
 /**
  * The real per-league list for the "League Imports" tab.
@@ -86,25 +87,35 @@ export function ImportedLeaguesPanel() {
   const [platform, setPlatform] = useState("all")
   const [resyncing, setResyncing] = useState<Record<string, ResyncState>>({})
 
+  // Set true on mount (not only at init) so a StrictMode remount does not leave it false.
+  const mounted = useRef(true)
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const data = await fetch("/api/league/list", { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null)
-      if (cancelled) return
-      if (data && Array.isArray(data.leagues)) setLeagues(data.leagues as LeagueRow[])
-      else {
-        // Not "No leagues imported yet" — the list did not load; that is a different message.
-        setLeagues([])
-        setFailed(true)
-      }
-      setLoading(false)
-    })()
+    mounted.current = true
     return () => {
-      cancelled = true
+      mounted.current = false
     }
   }, [])
+
+  /* A loader the "Try again" button can call — this was a one-shot effect whose only recovery was a reload. */
+  const loadLeagues = useCallback(async () => {
+    setLoading(true)
+    setFailed(false)
+    const data = await fetch("/api/league/list", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+    if (!mounted.current) return
+    if (data && Array.isArray(data.leagues)) setLeagues(data.leagues as LeagueRow[])
+    else {
+      // Not "No leagues imported yet" — the list did not load; that is a different message.
+      setLeagues([])
+      setFailed(true)
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    void loadLeagues()
+  }, [loadLeagues])
 
   const platforms = useMemo(() => {
     const set = new Set<string>()
@@ -203,11 +214,17 @@ export function ImportedLeaguesPanel() {
 
       {loading ? (
         <p className="py-4 text-sm" style={{ color: "var(--muted)" }}>Loading your leagues…</p>
+      ) : failed ? (
+        <div className="py-2">
+          <RetryNotice
+            message="Couldn't load your leagues right now."
+            onRetry={() => void loadLeagues()}
+            testId="imported-leagues-retry"
+          />
+        </div>
       ) : filtered.length === 0 ? (
         <p className="py-4 text-sm" style={{ color: "var(--muted)" }}>
-          {failed
-            ? "Couldn't load your leagues right now. Refresh the page to try again."
-            : (leagues ?? []).length === 0
+          {(leagues ?? []).length === 0
               ? "No leagues imported yet."
               : "No leagues match your filters."}
         </p>
