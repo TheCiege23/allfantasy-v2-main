@@ -20,6 +20,7 @@ import { EspnCookieConnection } from "@/components/settings/EspnCookieConnection
 import { MflApiKeyConnection } from "@/components/settings/MflApiKeyConnection"
 import { ConnectedPlatforms } from "@/components/core-app/import/ConnectedPlatforms"
 import type { SettingsProfile } from "./settings-types"
+import { useConfirm } from "./ConfirmDialog"
 
 /*
  * ⚠ THE HARDCODED PLATFORM LIST IS GONE, NOT MOVED. It named five platforms as
@@ -54,6 +55,7 @@ export function ConnectedAccountsSettingsSection({
   const [busyProviderId, setBusyProviderId] = useState<SignInProviderId | null>(null)
   const [linkingProvider, setLinkingProvider] = useState<"discord" | "spotify" | null>(null)
   const [disconnecting, setDisconnecting] = useState<"sleeper" | "discord" | "spotify" | null>(null)
+  const [askConfirm, confirmDialog] = useConfirm()
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<"info" | "error" | "success" | null>(null)
 
@@ -179,18 +181,19 @@ export function ConnectedAccountsSettingsSection({
   }
 
   /*
-   * One path for every disconnect: a confirmation (Discord's also unlinks the league bot's
-   * server), a busy state so a second tap cannot fire a second request, and a message on BOTH
-   * outcomes. Sleeper used to fail silently, and Discord and Spotify went in a single tap.
+   * One path for every disconnect: an in-app confirmation saying what disconnecting does
+   * (ConfirmDialog — not window.confirm, which some webviews suppress), a busy state so a second
+   * tap cannot fire a second request, and a message on BOTH outcomes. Sleeper used to fail
+   * silently, and Discord and Spotify went in a single tap.
    */
   const runDisconnect = async (
     which: "sleeper" | "discord" | "spotify",
-    confirmText: string,
+    confirm: { title: string; body?: string },
     request: () => Promise<Response>,
     label: string,
   ) => {
     if (disconnecting) return
-    if (typeof window !== "undefined" && !window.confirm(confirmText)) return
+    if (!(await askConfirm({ ...confirm, confirmLabel: `Disconnect ${label}` }))) return
     setDisconnecting(which)
     setStatusMessage(null)
     setStatusTone(null)
@@ -212,7 +215,10 @@ export function ConnectedAccountsSettingsSection({
   const handleDisconnectSleeper = () =>
     runDisconnect(
       "sleeper",
-      t("settings.connected.confirmDisconnectSleeper"),
+      {
+        title: t("settings.connected.confirmDisconnectSleeper"),
+        body: "Imports and league sync stop finding your Sleeper teams until you link it again. Your imported leagues stay.",
+      },
       () =>
         fetch("/api/user/profile", {
           method: "PUT",
@@ -225,7 +231,10 @@ export function ConnectedAccountsSettingsSection({
   const handleDisconnectDiscord = () =>
     runDisconnect(
       "discord",
-      "Disconnect Discord? This also unlinks the AllFantasy bot from your Discord server.",
+      {
+        title: "Disconnect Discord?",
+        body: "This also unlinks the AllFantasy bot from your Discord server. You can reconnect any time.",
+      },
       () => fetch("/api/auth/discord/disconnect", { method: "POST" }),
       "Discord",
     )
@@ -233,7 +242,7 @@ export function ConnectedAccountsSettingsSection({
   const handleDisconnectSpotify = () =>
     runDisconnect(
       "spotify",
-      "Disconnect Spotify?",
+      { title: "Disconnect Spotify?", body: "You can reconnect any time." },
       () => fetch("/api/auth/spotify/disconnect", { method: "POST" }),
       "Spotify",
     )
@@ -264,14 +273,12 @@ export function ConnectedAccountsSettingsSection({
       )
       return
     }
-    if (typeof window !== "undefined") {
-      const shouldDisconnect = window.confirm(
-        tInterpolate("settings.connected.confirmDisconnectProvider", {
-          provider: provider.name,
-        }),
-      )
-      if (!shouldDisconnect) return
-    }
+    const shouldDisconnect = await askConfirm({
+      title: tInterpolate("settings.connected.confirmDisconnectProvider", { provider: provider.name }),
+      body: `You will no longer be able to sign in with ${provider.name}. Your other sign-in methods keep working.`,
+      confirmLabel: `Disconnect ${provider.name}`,
+    })
+    if (!shouldDisconnect) return
     setBusyProviderId(provider.id)
     setStatusMessage(null)
     setStatusTone(null)
@@ -533,6 +540,7 @@ export function ConnectedAccountsSettingsSection({
           </Link>
         </div>
       </div>
+      {confirmDialog}
     </div>
   )
 }
