@@ -35,6 +35,7 @@ import { identityGapNote } from './identityGap'
 import { kickoffClock, LOCK_ZONE } from './lineupLock'
 import { readLineupGameDay, summariseStarterGameDay, type PlayerGameDay, type StarterGameDaySummary } from './myTeamGameDay'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
+import { isGuillotineLeague, isTeamEliminated } from './teamElimination'
 import {
   BENCH_SWAP_POINTS,
   isEligibleForSlot,
@@ -274,6 +275,8 @@ export type MyTeamData = {
    * before anyone has kicked off, and on the early-return paths.
    */
   starterGameDay?: StarterGameDaySummary | null
+  /** Roster ids in each non-starting section that resolve to no player we hold. Absent on early returns. */
+  unidentified?: { bench: number; ir: number; taxi: number }
   starters: SectionState<LineupSlot[]>
   /**
    * Why the roster carries unnamed rows, said ONCE.
@@ -1099,10 +1102,28 @@ export async function getMyTeamData(
   }
 
   const pd = (roster.playerData ?? {}) as Record<string, unknown>
-  base.eliminated = pd.eliminated === true || (!base.preDraft && !base.completed &&
-    ['in_season', 'active'].includes(String(liveRoster?.leagueStatus ?? league.status ?? league.lifecycleState).toLowerCase()) &&
-    (league.guillotineMode === true || ['guillotine', 'survivor_guillotine'].includes(String(league.leagueVariant))) &&
-    Array.isArray(pd.players) && pd.players.length === 0)
+  /*
+   * ⚠ ONE RULE WITH THE CROSS-LEAGUE BOARD (teamElimination.ts). This view used to skip the
+   * `GuillotineElimination` table the board reads, so a team the board had already dropped as
+   * eliminated still got a lineup and swap advice here. The empty-roster signal keeps its
+   * in-season gate: an emptied roster before or after the season is not a chop.
+   */
+  const eliminationRecorded = isGuillotineLeague(league)
+    ? await prisma.guillotineElimination
+        .findMany({
+          where: { leagueId, eliminatedOwnerId: { in: [userId, myTeamRow.platformUserId].filter((id): id is string => Boolean(id)) } },
+          select: { season: { select: { season: true } } },
+        })
+        .then((rows) => rows.some((r) => String(r.season.season) === String(league.season)))
+        .catch(() => false)
+    : false
+  const inSeason = !base.preDraft && !base.completed &&
+    ['in_season', 'active'].includes(String(liveRoster?.leagueStatus ?? league.status ?? league.lifecycleState).toLowerCase())
+  base.eliminated = isTeamEliminated({
+    playerData: inSeason ? pd : { eliminated: pd.eliminated },
+    league,
+    eliminationRecorded,
+  })
   const asIds = (v: unknown): string[] =>
     Array.isArray(v) ? v.map((x) => (x == null ? '' : String(x))).filter(Boolean) : []
 
@@ -1633,6 +1654,17 @@ export async function getMyTeamData(
        */
       priced: starters.filter((sl) => !sl.empty && sl.player?.afProjectedPoints != null).length,
     }),
+    /*
+     * ⚠ AN ID WE CANNOT NAME IS STILL A PLAYER ON THE ROSTER. The three lists below drop
+     * unresolved ids, which on an ESPN or manual league could render a bench as an empty,
+     * "available" list with nothing saying why — read as "nobody on your bench". The identity
+     * note above counts starters only. These counts say it for the other three sections.
+     */
+    unidentified: {
+      bench: benchIds.filter((id) => !resolved.get(id)).length,
+      ir: reserveIds.filter((id) => !resolved.get(id)).length,
+      taxi: taxiIds.filter((id) => !resolved.get(id)).length,
+    },
     bench:
       benchIds.length > 0
         ? { available: true, data: benchIds.map((id) => resolved.get(id)).filter(Boolean) as LineupPlayer[] }

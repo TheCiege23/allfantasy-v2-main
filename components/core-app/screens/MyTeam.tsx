@@ -29,6 +29,22 @@ function Unavailable({ reason }: { reason: string }) {
 }
 
 /**
+ * Players on this list whose ids match nobody we hold. They are dropped from the rows (there is
+ * no name to print), so without this line an ESPN bench of unmatched ids read as an empty bench.
+ */
+function UnidentifiedNote({ count }: { count: number }) {
+  const { language } = useOptionalLanguage()
+  if (count <= 0) return null
+  return (
+    <p className="af-mt-footnote af-mt-unidentified">
+      {language === 'es'
+        ? `${count} ${count === 1 ? 'jugador más' : 'jugadores más'} en esta lista no ${count === 1 ? 'coincide' : 'coinciden'} con nadie en nuestros datos, así que no se muestra${count === 1 ? '' : 'n'}. Siguen en tu plantilla.`
+        : `${count} more ${count === 1 ? 'player' : 'players'} on this list could not be matched to anyone we hold, so ${count === 1 ? 'is' : 'are'} not shown. ${count === 1 ? 'He is' : 'They are'} still on your roster.`}
+    </p>
+  )
+}
+
+/**
  * Live countdown to the lineup lock.
  *
  * ⚠ IT USED TO PRINT "2321:15:08". Hours were the largest unit, so a lock 97
@@ -782,9 +798,18 @@ function SlotRow({
               <div className="af-mt-player-name">Empty</div>
               <div className="af-mt-player-meta">Nobody is starting in this slot</div>
             </div>
-            {!automatic ? <Link href={sourceHref ?? "/core/sync"} className="af-btn af-mt-fix">
-              Fix in {platform}
-            </Link> : null}
+            {/*
+              ⚠ NO LINK IS BETTER THAN THE WRONG ONE. With no platform link on file (a native
+              league) this fell back to /core/sync, which re-imports a league and fixes nothing
+              about an empty slot. Said in words instead, as the lock banner already does.
+            */}
+            {automatic ? null : sourceHref ? (
+              <Link href={sourceHref} className="af-btn af-mt-fix">
+                Fix in {platform}
+              </Link>
+            ) : (
+              <span className="af-mt-player-meta af-mt-fix-none">Fill it where your league sets lineups — there is no platform link on file.</span>
+            )}
           </div>
         </>
       )}
@@ -989,7 +1014,12 @@ export function MyTeam({ data }: MyTeamProps) {
               <div className="af-mt-head-meta">
                 {/* The manager's name was imported from day one and never shown. */}
                 {data.team.data.ownerName} · {data.league.name}
-                {data.team.data.rank != null
+                {/*
+                  ⚠ A RANK BEFORE A SCORED GAME IS IMPORT ORDER. Every team is 0-0, so "3 of 12"
+                  in preseason (or a guillotine week 1) printed the importer's row order as a
+                  standing. Shown only once the record is.
+                */}
+                {data.team.data.rank != null && data.team.data.recordKnown
                   ? ` · ${data.team.data.rank} of ${data.team.data.teamCount}`
                   : ` · ${data.team.data.teamCount} teams`}
               </div>
@@ -1272,11 +1302,14 @@ export function MyTeam({ data }: MyTeamProps) {
           <ProjHeader />
         </header>
         {data.bench.available ? (
-          <ul className="af-mt-list">
-            {data.bench.data.map((p) => (
-              <BenchRow key={p.sleeperId} player={p} slotLabel="BN" />
-            ))}
-          </ul>
+          <>
+            <ul className="af-mt-list">
+              {data.bench.data.map((p) => (
+                <BenchRow key={p.sleeperId} player={p} slotLabel="BN" />
+              ))}
+            </ul>
+            <UnidentifiedNote count={data.unidentified?.bench ?? 0} />
+          </>
         ) : (
           <Unavailable reason={data.bench.reason} />
         )}
@@ -1293,6 +1326,7 @@ export function MyTeam({ data }: MyTeamProps) {
               <BenchRow key={p.sleeperId} player={p} slotLabel="IR" />
             ))}
           </ul>
+          <UnidentifiedNote count={data.unidentified?.ir ?? 0} />
         </section>
       ) : null}
 
@@ -1319,6 +1353,7 @@ export function MyTeam({ data }: MyTeamProps) {
               />
             ))}
           </ul>
+          <UnidentifiedNote count={data.unidentified?.taxi ?? 0} />
         </section>
       ) : null}
 

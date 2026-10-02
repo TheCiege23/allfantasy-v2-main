@@ -495,6 +495,38 @@ describe('/core with an unknown segment', () => {
 })
 
 /*
+ * A failed league-list read is not "this league is not yours". It used to leave the list empty,
+ * fail the membership check, and redirect a valid ?league= to the bare screen — a transient DB
+ * error silently dropped the user onto the cross-league board.
+ */
+describe('/core when the league list cannot be read', () => {
+  it('fails into the error boundary for a requested league instead of redirecting', { timeout: 180_000 }, async () => {
+    h.gated = false
+    h.osGate.resolve()
+    const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
+    const AfCorePage = await loadPage()
+
+    vi.mocked(getDashboardLeagueListForUser).mockRejectedValueOnce(new Error('db down'))
+    const err = await AfCorePage(pageArgs(['my-team'], { league: 'L1' })).then(() => null, (e: unknown) => e)
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).message).not.toMatch(/^NEXT_REDIRECT/)
+    expect((err as Error).message).toContain('League list could not be read')
+
+    // Positive control: the same request with a readable list renders.
+    await expect(AfCorePage(pageArgs(['my-team'], { league: 'L1' }))).resolves.toBeTruthy()
+  })
+
+  it('still renders a screen with no league requested', { timeout: 180_000 }, async () => {
+    h.gated = false
+    h.osGate.resolve()
+    const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
+    const AfCorePage = await loadPage()
+    vi.mocked(getDashboardLeagueListForUser).mockRejectedValueOnce(new Error('db down'))
+    await expect(AfCorePage(pageArgs(['my-team'], {}))).resolves.toBeTruthy()
+  })
+})
+
+/*
  * 🛑 GATED LIKE EVERY OTHER SHELL READ, AND THAT IS THE POINT. Both were serial stages in front of
  * (hubs) or behind (plan allowance) the shell's parallel wave, and a mock that resolved instantly
  * could not see it — the "starts every shell read before any resolves" case above passed over two

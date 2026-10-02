@@ -750,6 +750,17 @@ export default async function AfCorePage({
     ? (playedLeagues.find((league) => league.id === selectedLeagueId) ?? null)
     : null
 
+  /*
+   * ⚠ A FAILED READ IS NOT "NOT YOUR LEAGUE". `.catch(() => null)` above leaves the list empty, and
+   * the membership check below then redirected a perfectly valid ?league= to the bare screen — a
+   * transient DB error silently dropped the user onto the cross-league board with no sign anything
+   * failed. With a league requested, fail into this segment's error.tsx instead: same URL, core
+   * chrome, a retry. Nothing is authorised by this — the check below still runs on success.
+   */
+  if (selectedLeagueId && leagueListPayload == null) {
+    throw new Error('League list could not be read, so the requested league could not be checked.')
+  }
+
   // A league query is also an authorization boundary. Do not let a stale,
   // deleted, or hand-written id reach any provider-backed loader below.
   if (selectedLeagueId && !selectedLeagueRow) {

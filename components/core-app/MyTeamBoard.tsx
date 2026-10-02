@@ -388,7 +388,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
       <BoardHead
         eyebrow={`Core · ${copy('My team')}`}
         title={copy('My team')}
-        blurb={copy('Review remaining lineup problems across your leagues. Deadlines follow individual players; confirm locks and AutoSubs on your platform.')}
+        blurb={copy('Review remaining lineup problems across your leagues, as of your last sync — opening a league checks its live lineup. Deadlines follow individual players; confirm locks and AutoSubs on your platform.')}
       />
 
       <section className="af-bd-sec" aria-labelledby="af-mt-board">
