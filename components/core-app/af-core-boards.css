@@ -1563,3 +1563,35 @@
   .af-core .af-bd-pulse-tiles { gap: 6px; }
   .af-core .af-bd-pulse-tile { padding: 9px 10px; }
 }
+
+/*
+ * ── Waivers board on a phone: Add and Drop side by side (2026-10-01 audit) ──
+ *
+ * The shared 720px rule stacks the two panels with a rotated arrow between, which made each
+ * Waivers card ~562px on a 375px phone — a top five ran to ~3.5 screens. Side by side, the
+ * add-for-drop reads as the one decision it is, and a card is ~467px (board 4,865px -> 4,128px).
+ * Trades and Draft HQ use the same swap and keep the stack: `--waivers` scopes this, and the
+ * extra class out-ranks the shared rule however the bundle orders the files. Hiding the faces as
+ * well would buy only 18px more, so the headshots stay.
+ */
+@media (max-width: 720px) {
+  .af-core .af-bd-cards--rich.af-bd-cards--waivers .af-bd-swap {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+  .af-core .af-bd-cards--waivers .af-bd-swap-arrow {
+    display: none;
+  }
+  .af-core .af-bd-cards--waivers .af-bd-swap .af-bd-side {
+    padding: 10px 12px;
+  }
+  .af-core .af-bd-cards--rich.af-bd-cards--waivers .af-bd-swap .af-bd-kvrow {
+    flex-wrap: wrap;
+    gap: 2px 10px;
+  }
+  /* "13.1 PROJ PTS AF 13.7" measured 131px in a 125px half; it wraps rather than crowding the padding. */
+  .af-core .af-bd-cards--waivers .af-bd-swap .af-bd-proj {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+}

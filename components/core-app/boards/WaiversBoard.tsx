@@ -306,7 +306,7 @@ function SportSection({ section }: { section: WaiverSportSection }) {
       {section.state !== 'ok' ? (
         <p className="af-bd-note">{section.reason}</p>
       ) : section.rows.length > 0 ? (
-        <ul className="af-bd-cards af-bd-cards--rich">
+        <ul className="af-bd-cards af-bd-cards--rich af-bd-cards--waivers">
           {section.rows.map((r) => (
             <Card key={r.leagueId} row={r} />
           ))}
@@ -382,7 +382,7 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
               data.at ? `week ${data.at.week}, ${data.at.season}` : null
             }
           />
-          <ul className="af-bd-cards af-bd-cards--rich">
+          <ul className="af-bd-cards af-bd-cards--rich af-bd-cards--waivers">
             {data.rows.map((r) => (
               <Card key={r.leagueId} row={r} />
             ))}

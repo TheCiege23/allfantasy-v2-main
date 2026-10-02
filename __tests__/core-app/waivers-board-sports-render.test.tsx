@@ -112,4 +112,13 @@ describe('WaiversBoard — sport sections', () => {
     expect(container.textContent).toContain('NFL · Top 1 · ranked by net gain')
     expect(container.textContent).toContain('+5.0 pts/wk')
   })
+
+  it('marks every card list as the Waivers board, so its phone layout cannot reach Trades or Draft HQ', () => {
+    const nflRow: WaiverBoardRow = { ...nbaRow, leagueId: 'N1', sport: undefined, netGain: 5 }
+    const data: WaiversBoardData = { ...onlyOtherSports([section({})]), rows: [nflRow], considered: 1 }
+    const { container } = render(<WaiversBoard data={data} allHref="/x" totalLeagues={2} />)
+    const lists = [...container.querySelectorAll('ul.af-bd-cards')]
+    expect(lists.length).toBe(2) // the NFL list and the basketball section
+    for (const ul of lists) expect(ul.classList.contains('af-bd-cards--waivers')).toBe(true)
+  })
 })

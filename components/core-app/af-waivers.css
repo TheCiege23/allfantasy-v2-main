@@ -187,6 +187,16 @@
     flex-direction: column;
     gap: 2px;
   }
+  /*
+   * ⚠ THE 240px BASIS ON THESE IS A WIDTH IN THE ROW, AND A HEIGHT IN THIS COLUMN. Measured at
+   * 375px: every rule 261px tall under one line of text — four of them, ~1,000px of empty card.
+   * The lineup board's footnotes below hit the same trap and got their own classes (see
+   * `.af-wlb-why`); the rules list itself never did.
+   */
+  .af-wv-rule-why,
+  .af-wv-rule-value {
+    flex: 0 0 auto;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -349,4 +359,15 @@
   font-size: 12px;
   line-height: 1.4;
   color: var(--text2);
+}
+
+/*
+ * The four header tiles, two by two on a phone (2026-10-01 audit). `minmax(190px, 1fr)` fits
+ * one column in a 343px row, so four small figures took four full-width rows (~380px).
+ * Its own top-level block at end of file — nothing here can be carried into another band.
+ */
+@media (max-width: 560px) {
+  .af-wv-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
