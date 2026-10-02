@@ -32,6 +32,7 @@ import { displayPosition, inferSlotLabel } from './positionLabels'
 import { lookupProviderIdentityNames } from './providerIdentityNames'
 import { resolveSourceLink, resolveSourceScreenLink, type SourceLink } from '@/lib/league-links/sourceLinkResolver'
 import { identityGapNote } from './identityGap'
+import { kickoffClock } from './lineupLock'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import {
   BENCH_SWAP_POINTS,
@@ -374,23 +375,24 @@ export type MyTeamData = {
 
 /** Slot labels in the order fantasy lineups conventionally read. */
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
 /**
- * "Sun 4:05p".
+ * "Sun 4:05p ET".
  *
  * ⚠ THE DAY IS NOT DECORATION. Without it every row on the screen read as a
  * time of day with no date attached, so a game three months away looked
  * exactly like a game this weekend — which is precisely how a November
  * kickoff sat on the roster for weeks without anyone being able to see it.
+ *
+ * ⚠ AND THE DAY HAS TO BE THE SCHEDULE'S DAY. This printed UTC, so every
+ * night game moved to the next day: Sunday night read "Mon 12:20a UTC" and
+ * Monday night "Tue 12:15a UTC", on the same screen where the lock banner and
+ * Chimmy's card said ET. Eastern, through the same `kickoffClock` the lock
+ * labels use, because NFL schedule days are published in Eastern time and a
+ * server-rendered string must not depend on the reader's machine.
  */
 function formatKickoff(d: Date | null): string | null {
-  if (!d) return null
-  const hours = d.getUTCHours()
-  const mins = d.getUTCMinutes()
-  const ampm = hours >= 12 ? 'p' : 'a'
-  const h12 = hours % 12 === 0 ? 12 : hours % 12
-  return `${DAYS[d.getUTCDay()]} ${h12}:${String(mins).padStart(2, '0')}${ampm} UTC`
+  if (!d || Number.isNaN(d.getTime())) return null
+  return kickoffClock(d.toISOString()) || null
 }
 
 
@@ -673,7 +675,7 @@ async function resolvePlayers(
       afProjectedPoints: ruledOut ? 0 : leagueScored?.points ?? null,
       afEngineProjectedPoints: ruledOut
         ? 0
-        : afEngineForLeague(afEngine.get(sleeperId)?.projectedPoints, feedProjection, leagueScored?.points ?? null),
+        : afEngineForLeague(afEngine.get(sleeperId), feedProjection, leagueScored?.points ?? null),
       indoors: venueInfo.kind === 'coords' ? venueInfo.dome : null,
       // All filled in by the caller: byes need the week's full slate, the
       // forecast is one batched cache read, and the market is app-wide.

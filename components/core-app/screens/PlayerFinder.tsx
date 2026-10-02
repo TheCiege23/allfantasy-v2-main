@@ -566,7 +566,11 @@ export function PlayerFinder({
   const afPpr = detail?.afProjection?.available ? detail.afProjection.data.points : null
   const providerGeneric = detail?.projection.available ? detail.projection.data.points : null
   const afIn = (leaguePoints: number | null | undefined): number | null =>
-    afEngineForLeague(afPpr, providerGeneric, leaguePoints ?? null)
+    afEngineForLeague(
+      afPpr == null ? null : { projectedPoints: afPpr, position: detail?.player.position ?? null },
+      providerGeneric,
+      leaguePoints ?? null,
+    )
   const afTile =
     afPpr == null
       ? null

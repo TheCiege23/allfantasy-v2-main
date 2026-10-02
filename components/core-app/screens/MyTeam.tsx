@@ -460,6 +460,9 @@ function abbreviate(status: string): { short: string; tone: string; full: string
   if (t.includes('question')) return { short: 'Q', tone: 'warn', full: status }
   if (t.includes('out')) return { short: 'O', tone: 'bad', full: status }
   if (t.includes('probable')) return { short: 'P', tone: 'ok', full: status }
+  /* ⚠ BEFORE 'active', WHICH IT CONTAINS. "Inactive" used to fall through to the
+     line below and render as a green H for Healthy. */
+  if (t.includes('inactive')) return { short: 'INA', tone: 'bad', full: status }
   if (t.includes('active') || t.includes('healthy')) return { short: 'H', tone: 'ok', full: 'Healthy' }
   /* An unfamiliar designation is shown as-is rather than given an invented
      letter, because a wrong abbreviation is worse than a long one. */

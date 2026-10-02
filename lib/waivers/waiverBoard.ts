@@ -442,7 +442,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
     for (const c of shown) {
       if (c.sleeperId) {
         const v = afEngineForLeague(
-          engine.get(c.sleeperId)?.projectedPoints,
+          engine.get(c.sleeperId),
           c.basis === 'projection' ? genericOf(c.sleeperId) : null,
           c.basis === 'projection' ? c.projectedPoints : null,
         )
@@ -450,7 +450,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
       }
       const d = c.displaces
       if (d?.sleeperId) {
-        const v = afEngineForLeague(engine.get(d.sleeperId)?.projectedPoints, genericOf(d.sleeperId), d.projectedPoints)
+        const v = afEngineForLeague(engine.get(d.sleeperId), genericOf(d.sleeperId), d.projectedPoints)
         if (v != null) d.afProjectedPoints = v
       }
     }

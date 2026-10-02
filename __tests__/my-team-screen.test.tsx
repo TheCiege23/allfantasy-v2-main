@@ -662,6 +662,8 @@ describe('My Team — the reported problems', () => {
       ['Injured Reserve', 'IR'],
       ['Did Not Practice', 'DNP'],
       ['Active', 'H'],
+      // "Inactive" contains "active" and used to render as a green H.
+      ['Inactive', 'INA'],
     ]
     for (const [full, short] of cases) {
       const c = render(
