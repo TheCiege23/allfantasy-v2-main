@@ -38,9 +38,19 @@ export function generateEngagementRecommendations(
 ): LeagueRecommendation[] {
   const recommendations: LeagueRecommendation[] = []
 
+  /*
+   * 🛑 `league_requires_review` items are excluded because they are the SAME advice as the
+   * Mission Control actions mapped below. `CommissionerAttentionService` feeds
+   * `missionControl.recommendedActions` into `deriveLeagueAttentionSignals`, which turns each one
+   * into a signal titled only "Recommended review" / "Requires immediate review", with the actual
+   * advice in `explanation` (here: `evidence`) and no `recommendedAction`. Mapped here, every
+   * action became a card reading "Recommended review" twice — title, then the title again as the
+   * summary — beside a second card carrying the real text. Seen 2026-10-01 in a signed-in check.
+   */
   const leagueWideItems = context.attentionItems.filter(
     (item) =>
       item.reasonCode !== 'lineup_attention_carryover' &&
+      item.category !== 'league_requires_review' &&
       !(context.isSnapshotOnly && item.category === 'manager_engagement_risk')
   )
   for (const item of leagueWideItems) {
@@ -84,7 +94,11 @@ export function generateEngagementRecommendations(
         key: action.message,
         priority,
         title: action.message,
-        summary: action.message,
+        // Not the title again: the card prints both, one under the other.
+        summary:
+          action.priority === 'urgent'
+            ? 'Flagged as urgent from this league’s health check.'
+            : 'Suggested from this league’s health check.',
         rationale: [`Mission Control priority: ${action.priority}.`],
         evidence: [{ label: 'Source', detail: 'resolveMissionControlSnapshot', source: 'lib/decision-os/missionControl.ts' }],
         sourceFreshness: context.syncFreshness,

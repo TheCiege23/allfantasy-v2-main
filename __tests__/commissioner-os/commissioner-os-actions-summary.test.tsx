@@ -40,4 +40,38 @@ describe('CommissionerOsActionsSummary', () => {
     expect(await screen.findByText('Could not load Commissioner OS for this league')).toBeTruthy()
     expect(screen.queryByTestId('commissioner-os-unverified')).toBeNull()
   })
+
+  /*
+   * Seen 2026-10-01: the top card read "COMMISSIONER" over "Recommended review" over "Recommended
+   * review". `domain` is the OS a recommendation belongs to — always 'commissioner' here — so the
+   * area label must come from `type`, and a summary that repeats the title must not print.
+   */
+  const ok = (rec: Record<string, unknown>) => ({
+    bundle: { commissioner: [{ id: 'r1', domain: 'commissioner', priority: 'high', ...rec }], totalCount: 1 },
+    domainStatus: { health: 'ok' },
+    generatedAt: '2026-10-01T00:00:00.000Z',
+  })
+
+  it('names the area from the recommendation type, never the raw domain', async () => {
+    mockFetch(200, ok({ type: 'trade_activity_recap', title: '3 trade(s) this period', summary: 'Review the grades.' }))
+    render(<CommissionerOsActionsSummary leagueId="league-1" sport="NFL" />)
+    expect(await screen.findByText('3 trade(s) this period')).toBeTruthy()
+    expect(screen.getByText('Trades')).toBeTruthy()
+    expect(screen.queryByText(/^commissioner$/i)).toBeNull()
+  })
+
+  it('falls back to a neutral label for a type it does not know', async () => {
+    mockFetch(200, ok({ type: 'something_new', title: 'A new kind of card', summary: 'Details.' }))
+    render(<CommissionerOsActionsSummary leagueId="league-1" sport="NFL" />)
+    expect(await screen.findByText('A new kind of card')).toBeTruthy()
+    expect(screen.getByText('Commissioner action')).toBeTruthy()
+    expect(screen.queryByText(/^commissioner$/i)).toBeNull()
+  })
+
+  it('does not print a summary that only repeats the title', async () => {
+    mockFetch(200, ok({ type: 'storyline_rivalry', title: 'A rivalry heats up', summary: 'A rivalry heats up' }))
+    render(<CommissionerOsActionsSummary leagueId="league-1" sport="NFL" />)
+    expect(await screen.findByText('A rivalry heats up')).toBeTruthy()
+    expect(screen.getAllByText('A rivalry heats up')).toHaveLength(1)
+  })
 })
