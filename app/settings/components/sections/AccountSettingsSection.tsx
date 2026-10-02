@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { signOutAndPurge } from "@/lib/pwa/signOutAndPurge"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
@@ -29,13 +29,62 @@ export function AccountSettingsSection({
    */
   const hasLiveSubscription = ents.hasAnyPaid && !ents.isAdminBypassAccount
 
+  /*
+   * The delete dialog is modal, so it behaves like one: Escape closes it (never mid-deletion),
+   * Tab / Shift+Tab cycle INSIDE it rather than walking out into the page behind, the page does
+   * not scroll under it on a phone, and closing hands focus back to "Start deletion" instead of
+   * dropping it on <body>. Focus enters on the confirm input (autoFocus below).
+   */
+  const openerRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const wasOpen = useRef(false)
+
   useEffect(() => {
-    if (!deleteOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !deleteBusy) setDeleteOpen(false)
+    if (!deleteOpen) {
+      if (wasOpen.current) {
+        wasOpen.current = false
+        openerRef.current?.focus()
+      }
+      return
     }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    wasOpen.current = true
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (!deleteBusy) {
+          e.preventDefault()
+          setDeleteOpen(false)
+        }
+        return
+      }
+      if (e.key !== "Tab") return
+      const panel = dialogRef.current
+      if (!panel) return
+      const items = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), a[href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+      if (items.length === 0) return
+      const first = items[0]!
+      const last = items[items.length - 1]!
+      const active = document.activeElement
+      if (e.shiftKey && (active === first || !panel.contains(active))) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (active === last || !panel.contains(active))) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener("keydown", onKey)
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      document.body.style.overflow = previousOverflow
+    }
   }, [deleteOpen, deleteBusy])
 
   const createdLabel = accountCreatedAt
@@ -145,6 +194,7 @@ export function AccountSettingsSection({
         </p>
         <p className="text-xs" style={{ color: "var(--muted)" }}>{t("settings.account.deleteIntro")}</p>
         <button
+          ref={openerRef}
           type="button"
           onClick={() => {
             setDeleteOpen(true)
@@ -168,15 +218,17 @@ export function AccountSettingsSection({
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-account-title"
+          aria-describedby="delete-account-desc"
         >
           <div
+            ref={dialogRef}
             className="w-full max-w-md rounded-2xl border p-5 shadow-xl"
             style={{ borderColor: "var(--border)", background: "var(--panel)" }}
           >
             <h3 id="delete-account-title" className="text-lg font-semibold" style={{ color: "var(--text)" }}>
               {t("settings.account.confirmDeletionTitle")}
             </h3>
-            <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
+            <p id="delete-account-desc" className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
               {t("settings.account.confirmDeletionBeforeWord")}{" "}
               <span className="font-mono font-semibold text-white">DELETE</span>{" "}
               {t("settings.account.confirmDeletionAfterWord")}
@@ -226,6 +278,8 @@ export function AccountSettingsSection({
               <button
                 type="button"
                 onClick={() => setDeleteOpen(false)}
+                disabled={deleteBusy}
+                data-testid="settings-account-delete-cancel"
                 className="rounded-xl border px-4 py-2 text-sm font-semibold"
                 style={{ borderColor: "var(--border)", color: "var(--text)" }}
               >
