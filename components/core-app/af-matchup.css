@@ -1273,7 +1273,7 @@
   background: var(--warn-soft);
   border: 1px solid var(--warn);
   color: var(--warn);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1.35;
   letter-spacing: 0.04em;
@@ -1334,6 +1334,6 @@
 @media (max-width: 560px) {
   /* The game line sits in the two-row phone grid with the name, under it. */
   .af-mu-board-row .af-mu-half > .af-mu-half-text .af-mu-half-game {
-    font-size: 10.5px;
+    font-size: 11px;
   }
 }
