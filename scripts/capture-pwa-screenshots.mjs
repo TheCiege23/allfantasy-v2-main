@@ -33,6 +33,8 @@ import path from 'node:path';
 const BASE_URL = (process.env.PWA_SCREENSHOT_BASE_URL || 'https://allfantasy.ai').replace(/\/+$/, '');
 const OUT_DIR = path.join(process.cwd(), 'public', 'screenshots');
 const EMIT_MANIFEST = process.argv.includes('--emit-manifest');
+/** `--only=tools` captures one route — for re-shooting a single page, or checking the guards on it. */
+const ONLY = process.argv.find((a) => a.startsWith('--only='))?.slice('--only='.length);
 
 /*
  * Chrome rejects a screenshot set whose members disagree on aspect ratio, and
@@ -69,17 +71,25 @@ const ROUTES = [
   { slug: 'home', path: '/', label: 'Every league you play on one screen, with what needs you first' },
   { slug: 'tools', path: '/tools-hub', label: 'Trade analyzer, mock drafts, waiver advisor and power rankings in one hub' },
   { slug: 'pricing', path: '/pricing', label: 'Free forever for players, with paid tiers for deeper tools' },
-  { slug: 'bracket', path: '/bracket', label: 'Bracket challenge pools with AI analysis on every matchup' },
+  /*
+   * `/bracket` was dropped 2026-10-01: it still leads with "2026 FIFA World Cup ·
+   * Registration open" after the tournament ended, so it is out-of-date content
+   * on the live site, not just in a screenshot. Put it back once that page
+   * shows a current competition.
+   */
 ];
 
 /*
- * The only fixed-position chrome on these pages is the theme toggle, which is a
- * site control rather than product surface and reads as a bug in a store
- * listing. Animations are stilled so two runs of this script produce the same
- * bytes for an unchanged page.
+ * Fixed-position chrome is a site control, not product surface, and reads as a
+ * bug in a store listing. Hidden by the hooks the components carry ON PURPOSE,
+ * never by layout classes: this used to be `.fixed.right-4.z-40`, which went
+ * stale when GlobalModeToggle gained a layout without `right-4`, and the
+ * 2026-10-01 capture photographed the toggle on two of four pages with nothing
+ * failing. Animations are stilled so two runs produce the same bytes for an
+ * unchanged page.
  */
 const SCREENSHOT_CSS = `
-  .fixed.right-4.z-40 { display: none !important; }
+  [data-af-mode-toggle], [aria-label="Back to top"] { display: none !important; }
   *, *::before, *::after {
     animation-duration: 0s !important;
     animation-delay: 0s !important;
@@ -95,7 +105,7 @@ async function main() {
 
   try {
     for (const factor of FORM_FACTORS) {
-      for (const route of ROUTES) {
+      for (const route of ROUTES.filter((r) => !ONLY || r.slug === ONLY)) {
         /*
          * ⚠ A FRESH CONTEXT PER SHOT, AND NOT FOR TIDINESS. Sharing one context
          * across the four routes produced a Spanish screenshot set from an
@@ -154,6 +164,38 @@ async function main() {
         const lang = await page.evaluate(() => document.documentElement.lang);
         if (lang && !lang.toLowerCase().startsWith('en')) {
           throw new Error(`${url} rendered lang="${lang}" from an en-US browser — see the af_lang note above`);
+        }
+
+        /*
+         * Two more failures that photograph cleanly and exit green:
+         *
+         * 1. A launch countdown ("free until Oct 15"). Time-limited promo goes
+         *    stale within days and is exactly what store listings forbid. Before
+         *    launch it leads the home AND pricing first screens, so this refuses
+         *    to capture until launch has passed rather than shipping a set that
+         *    is wrong two weeks later. Matched on the component's own testid and
+         *    the banner/strip classes, not on its wording.
+         * 2. Floating chrome still on screen after SCREENSHOT_CSS — any fixed
+         *    element whose whole text is a theme label. Catches the next
+         *    selector drift the way the old `.fixed.right-4.z-40` one was NOT.
+         */
+        const leaks = await page.evaluate(() => {
+          const visible = (el) => {
+            const r = el.getBoundingClientRect();
+            const cs = getComputedStyle(el);
+            return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden';
+          };
+          const promo = [...document.querySelectorAll('[data-testid="launch-countdown"], .af-launch-banner, .af-launch-strip-main')].filter(visible);
+          const chrome = [...document.querySelectorAll('body *')].filter(
+            (el) => getComputedStyle(el).position === 'fixed' && /^(dark|light|system)$/i.test((el.textContent || '').trim()) && visible(el),
+          );
+          return { promo: promo.length, chrome: chrome.length };
+        });
+        if (leaks.promo > 0) {
+          throw new Error(`${url} shows a launch countdown/offer (${leaks.promo}) — time-limited promo; re-run after launch`);
+        }
+        if (leaks.chrome > 0) {
+          throw new Error(`${url} still shows ${leaks.chrome} floating theme control(s) after SCREENSHOT_CSS — the hiding selector has drifted`);
         }
 
         const file = `${route.slug}-${factor.formFactor}.png`;
