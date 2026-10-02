@@ -208,7 +208,7 @@ export function LeagueNotificationOverridesCard({
                     <button
                       type="button"
                       onClick={() => setExpanded(isExpanded ? null : league.id)}
-                      className="mt-2 text-xs text-[var(--accent-cyan)] underline-offset-2 hover:underline"
+                      className="mt-1 inline-flex min-h-[44px] items-center text-xs text-[var(--accent-cyan)] underline-offset-2 hover:underline"
                       data-testid={`league-override-expand-${league.id}`}
                     >
                       {isExpanded ? "Hide categories" : "Mute individual categories"}
