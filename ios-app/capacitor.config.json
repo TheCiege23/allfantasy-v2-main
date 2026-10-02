@@ -11,7 +11,7 @@
     "errorPath": "offline.html"
   },
   "ios": {
-    "appendUserAgent": "AllFantasyiOS/1.0",
+    "appendUserAgent": "AllFantasyiOS/1.1 AFIAP/1",
     "contentInset": "never",
     "backgroundColor": "#020617",
     "limitsNavigationsToAppBoundDomains": false
