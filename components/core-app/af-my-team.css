@@ -1530,3 +1530,69 @@ a.af-mt-lock-fix:focus-visible {
     display: block;
   }
 }
+
+/*
+ * ── Game day: a row whose game has kicked off ───────────────────────────────
+ *
+ * Appended at depth 0 on purpose — every block above closes before this one.
+ *
+ * The chip REPLACES the weather mark rather than sitting beside it: a forecast
+ * for a game already under way answers nothing. Text, not a glyph, because a
+ * touch screen never sees a `title`. 12px, above the app's 11px floor, because
+ * on a Sunday it is the most-read thing on the row.
+ */
+.af-mt-gameday {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.af-mt-gameday-state {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+  font-weight: 800;
+}
+.af-mt-gameday[data-state='live'] {
+  border-color: var(--good);
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-mt-gameday-pts {
+  color: var(--text);
+}
+
+/*
+ * A played row's projections are the forecast that WAS — still worth reading
+ * against the score, but no longer the number to act on. Muted with a colour
+ * token, not opacity: opacity on --faint text is what failed contrast above.
+ */
+.af-mt-row[data-game='final'] .af-mt-proj,
+.af-mt-row[data-game='started'] .af-mt-proj {
+  color: var(--muted);
+}
+
+.af-mt-gameday-line {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.af-mt-gameday-line .af-label {
+  margin-right: 6px;
+}
+
+@media (max-width: 720px) {
+  /* The meta line already wraps here; the chip starts its own line cleanly. */
+  .af-mt-gameday {
+    margin-left: 0;
+    margin-top: 2px;
+  }
+}
