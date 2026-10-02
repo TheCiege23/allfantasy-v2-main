@@ -9,14 +9,21 @@
  *
  * Runs inside scripts/cron-scheduler.mjs, once a minute.
  *
- * THE RULE (pickSuperseded): cancel a deployment that is still QUEUED / INITIALIZING / BUILDING when
- * a NEWER deployment of the same service exists that is QUEUED / INITIALIZING / BUILDING /
- * DEPLOYING / SUCCESS. Two consequences worth saying out loud:
- *   - a newer build that FAILED (or crashed, or was removed/skipped) does NOT supersede anything,
- *     so an older good build still ships rather than leaving nothing in flight;
- *   - a newer one that is already live DOES, which stops an older commit's slow build from
- *     finishing last and replacing newer code in production.
- * DEPLOYING is never cancelled: it has already built and is seconds from serving.
+ * THE RULE (pickSuperseded), for builds still QUEUED / INITIALIZING / BUILDING:
+ *   - one with a NEWER deployment already DEPLOYING or SUCCESS is cancelled — newer code is live,
+ *     so it must not finish last and replace it;
+ *   - of the rest, the NEWEST is kept, and so is the OLDEST one that has started building;
+ *     everything between them is cancelled. At most two builds run, and one always finishes.
+ * A newer build that FAILED (or crashed, or was removed/skipped) supersedes nothing, so an older
+ * good build still ships. DEPLOYING is never cancelled: it is seconds from serving.
+ *
+ * 🛑 THE FIRST VERSION CANCELLED EVERY BUILD THAT HAD ANY NEWER BUILD, AND IT FROZE PRODUCTION.
+ * Live from 01:44 UTC on 2026-10-02, sessions pushed every 3–15 minutes against a ~15-minute
+ * build, so each build was cancelled by the next push before it could finish: twelve in a row,
+ * one of them 16 minutes in, and allfantasy.ai served a 01:18 build for over an hour while 15
+ * commits (counted 02:40) and a rotated APNs key waited. "Cancel the older one" is a debounce, and a
+ * debounce never fires while input keeps arriving faster than its window. Keeping the oldest
+ * running build is what guarantees progress; the newest then becomes the oldest and ships next.
  *
  * DRY-RUN BY DEFAULT. Unless BUILD_REAPER_LIVE=1 it logs "would cancel" and calls nothing.
  * Disabled (one log line) without RAILWAY_TOKEN or BUILD_REAPER_SERVICE_IDS.
@@ -29,7 +36,10 @@
 const API = 'https://backboard.railway.com/graphql/v2'
 
 const IN_FLIGHT = new Set(['QUEUED', 'INITIALIZING', 'BUILDING'])
-const SUPERSEDES = new Set(['QUEUED', 'INITIALIZING', 'BUILDING', 'DEPLOYING', 'SUCCESS'])
+/** Started building — the in-flight states with progress worth protecting. */
+const PROGRESSING = new Set(['INITIALIZING', 'BUILDING'])
+/** Newer code that is serving, or seconds from serving. */
+const LIVE = new Set(['DEPLOYING', 'SUCCESS'])
 
 /**
  * Pure. Given one service's deployments, the ids to cancel and why.
@@ -37,12 +47,28 @@ const SUPERSEDES = new Set(['QUEUED', 'INITIALIZING', 'BUILDING', 'DEPLOYING', '
  */
 export function pickSuperseded(deployments) {
   const byAge = [...deployments].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+  const t = (d) => Date.parse(d.createdAt)
+  const newerLive = (d) => byAge.find((n) => LIVE.has(n.status) && t(n) > t(d))
   const out = []
-  byAge.forEach((d, i) => {
-    if (!IN_FLIGHT.has(d.status)) return
-    const newer = byAge.slice(i + 1).find((n) => SUPERSEDES.has(n.status) && Date.parse(n.createdAt) > Date.parse(d.createdAt))
-    if (newer) out.push({ id: d.id, commitHash: d.commitHash, supersededBy: newer.id, newerStatus: newer.status })
-  })
+
+  // In flight and not already beaten by newer code that is live or about to be.
+  const contenders = []
+  for (const d of byAge) {
+    if (!IN_FLIGHT.has(d.status)) continue
+    const live = newerLive(d)
+    if (live) out.push({ id: d.id, commitHash: d.commitHash, supersededBy: live.id, newerStatus: live.status })
+    else contenders.push(d)
+  }
+  if (contenders.length < 2) return out
+
+  // Keep the NEWEST, and keep the oldest one that is actually building: it is the one closest to
+  // shipping, and cancelling it on every push is what froze production (see the header).
+  const newest = contenders[contenders.length - 1]
+  const runner = contenders.find((d) => d !== newest && PROGRESSING.has(d.status))
+  for (const d of contenders) {
+    if (d === newest || d === runner) continue
+    out.push({ id: d.id, commitHash: d.commitHash, supersededBy: newest.id, newerStatus: newest.status })
+  }
   return out
 }
 
