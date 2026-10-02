@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
-import { isRuledOut } from './injuryStatus'
+import { isAtRisk, isRuledOut } from './injuryStatus'
 import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { getByeWeeks } from './byeWeeks'
 import { afEngineForLeague, lookupAfEngineProjections } from './playerProjections'
@@ -260,7 +260,13 @@ export async function loadSideProjections(args: {
       ])
       for (const [sleeperId, status] of statuses) {
         if (isRuledOut(status)) unavailableBySleeperId.set(sleeperId, 'out')
-        else if (status && status.trim()) atRiskBySleeperId[sleeperId] = status.trim()
+        /*
+         * 🛑 `isAtRisk`, NOT "ANY NON-EMPTY STATUS". "Active" is the feed's second most common
+         * value, and the non-empty test turned it into an amber "ACTI" chip beside nearly every
+         * healthy starter on the matchup board (production, 2026-10-02) — the exact mistake
+         * `isHealthyDesignation` documents.
+         */
+        else if (status && isAtRisk(status)) atRiskBySleeperId[sleeperId] = status.trim()
       }
       // A bye is the stronger fact — no game at all — so it wins over any status he also carries.
       for (const sleeperId of byes?.byWeek.get(week) ?? []) unavailableBySleeperId.set(sleeperId, 'bye')

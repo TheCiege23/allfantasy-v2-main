@@ -592,3 +592,71 @@ describe('MatchupPulseBoard — a finished week', () => {
     expect(container.querySelector('.af-mp-live')?.getAttribute('data-inplay')).toBe('false')
   })
 })
+
+/* Production 2026-10-02, a 65-league account: four claims the board made that did not add up. */
+describe('MatchupPulseBoard — counts that must add up', () => {
+  const many = (prefix: string, n: number, over: Partial<PulseRow> = {}) =>
+    Array.from({ length: n }, (_, i) => row({ leagueId: `${prefix}${i}`, href: `/core/matchup?league=${prefix}${i}`, ...over }))
+
+  it('🛑 the footer counts the closest-games rows as shown — 50 more, not 55', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={65}
+        pulse={pulse({ ranked: 15, leading: many('a', 5), trailing: many('b', 5, { margin: -4 }), closest: many('c', 5, { margin: 0.5 }) })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('50 more')
+    expect(text).not.toContain('55 more')
+  })
+
+  it('names guillotine leagues as a format, not a gap', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({ leading: [row()], notRanked: { elimination: 2, noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0 } })}
+      />,
+    )
+    expect(container.textContent ?? '').toContain('2 are guillotine leagues, scored against the whole field')
+  })
+
+  it('🛑 the expected record says "of N" when some ranked rows carry no odds', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={65}
+        pulse={pulse({ ranked: 43, leading: [row({ pWin: 0.7 })], leadingTotal: 19, trailingTotal: 24, expectedWins: 18.1, withOdds: 38 })}
+      />,
+    )
+    expect(container.textContent ?? '').toContain('across 38 of 43 matchups with odds')
+  })
+
+  it('CONTROL: every ranked row has odds — no "of N"', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={65}
+        pulse={pulse({ ranked: 43, leading: [row({ pWin: 0.7 })], leadingTotal: 19, trailingTotal: 24, expectedWins: 20.5, withOdds: 43 })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('across 43 matchups with odds')
+    expect(text).not.toContain(' of 43 matchups')
+  })
+
+  it('🛑 a live game among the closest rows keeps the board live', () => {
+    const { container } = render(
+      <MatchupPulseBoard
+        allHref={ALL_HREF}
+        totalLeagues={TOTAL}
+        pulse={pulse({
+          leading: [row({ basis: 'projected', startersLeft: 9 })],
+          closest: [row({ leagueId: 'c1', basis: 'scored', startersLeft: 3, margin: 0.4 })],
+        })}
+      />,
+    )
+    expect(container.querySelector('.af-mp-live')?.getAttribute('data-inplay')).toBe('true')
+  })
+})

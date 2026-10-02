@@ -240,9 +240,14 @@ function basisNote(pulse: MatchupPulse, language: string): string | null {
 function gapNote(pulse: MatchupPulse, language: string): string | null {
   const { noSchedule, noOpponent, unpriceable, uncomparable, unidentifiedRoster } = pulse.notRanked
   const notStarted = pulse.notRanked.notStarted ?? 0
+  const elimination = pulse.notRanked.elimination ?? 0
   const parts: string[] = []
   /* The league's own state, not ours: there is no schedule until it drafts. */
   if (notStarted > 0) parts.push(`${notStarted} ${notStarted === 1 ? 'has' : 'have'} not started yet`)
+  /* Not a gap at all — the format plays the whole field, so there is no one opponent to rank against. */
+  if (elimination > 0) {
+    parts.push(`${elimination} ${elimination === 1 ? 'is a guillotine league' : 'are guillotine leagues'}, scored against the whole field`)
+  }
   if (noSchedule > 0) parts.push(`${noSchedule} carry no schedule`)
   if (noOpponent > 0) parts.push(`${noOpponent} have no game this week`)
   if (unpriceable > 0) parts.push(`${unpriceable} could not be scored or priced`)
@@ -265,6 +270,7 @@ function gapNote(pulse: MatchupPulse, language: string): string | null {
   if (language === 'es') {
     const reasons: string[] = []
     if (notStarted > 0) reasons.push(`${notStarted} aún sin comenzar`)
+    if (elimination > 0) reasons.push(`${elimination} de eliminación (guillotina), contra toda la liga`)
     if (noSchedule > 0) reasons.push(`${noSchedule} sin calendario`)
     if (noOpponent > 0) reasons.push(`${noOpponent} sin partido esta semana`)
     if (unpriceable > 0) reasons.push(`${unpriceable} sin puntuación o proyección`)
@@ -290,7 +296,8 @@ function gapNote(pulse: MatchupPulse, language: string): string | null {
  * at, which is the wrong way round.
  */
 function anyInPlay(pulse: MatchupPulse): boolean {
-  return [...pulse.leading, ...pulse.trailing].some(
+  /* The closest games are on screen too, and the likeliest to be the ones still moving. */
+  return [...pulse.leading, ...pulse.trailing, ...(pulse.closest ?? [])].some(
     (r) => r.basis === 'scored' && !r.final && (r.startersLeft == null || r.startersLeft > 0),
   )
 }
@@ -331,7 +338,11 @@ export function MatchupPulseBoard({
     .sort((a, b) => (ISSUE_RANK[a.severity] ?? 9) - (ISSUE_RANK[b.severity] ?? 9))
     .slice(0, 5)
 
-  const shown = pulse.leading.length + pulse.trailing.length
+  /*
+   * The closest-games rows are on screen as well. Leaving them out told a 65-league account that
+   * "55 more leagues" sat off screen when 50 did (production, 2026-10-02).
+   */
+  const shown = pulse.leading.length + pulse.trailing.length + closest.length
   const hidden = Math.max(0, totalLeagues - shown)
   const scale = Math.max(0, ...[...pulse.leading, ...pulse.trailing, ...(pulse.closest ?? [])].map((r) => Math.abs(r.margin)))
   const ahead = pulse.leadingTotal ?? pulse.leading.length
@@ -403,9 +414,18 @@ export function MatchupPulseBoard({
               {pulse.expectedWins.toFixed(1)}–{Math.max(0, pulse.withOdds - pulse.expectedWins).toFixed(1)}
             </span>{' '}
             <span className="af-mp-expected-of">
-              {language === 'es'
-                ? `· de ${pulse.withOdds} enfrentamientos con probabilidades`
-                : `· across ${pulse.withOdds} matchups with odds`}
+              {/*
+                "of N" whenever some ranked rows carry no odds. "19 favoured · 24 underdog" above an
+                expected record "across 38 matchups" read as two boards that disagreed; the five
+                rows ranked by margin alone were the difference (production, 2026-10-02).
+              */}
+              {pulse.withOdds < decided
+                ? language === 'es'
+                  ? `· en ${pulse.withOdds} de ${decided} enfrentamientos con probabilidades`
+                  : `· across ${pulse.withOdds} of ${decided} matchups with odds`
+                : language === 'es'
+                  ? `· de ${pulse.withOdds} enfrentamientos con probabilidades`
+                  : `· across ${pulse.withOdds} matchups with odds`}
             </span>
           </p>
         ) : null}

@@ -14,6 +14,7 @@ import { realManagerName, rosterLabel } from './managerName'
 import { leagueWeekProgress } from './leagueWeekProgress'
 import { loadFinishedNflWeeks } from './finishedNflWeeks'
 import { starterGameStates, type StarterGameState } from './matchupGameState'
+import { eliminationFormat } from './railMatchupMode'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { computeWinProbability, type MatchupPlayer } from '@/lib/projections/winProbability'
 
@@ -180,6 +181,12 @@ export type MatchupPulse = {
   closest: PulseRow[]
   /** Why the rest are absent. Stated on the screen, never silently dropped. */
   notRanked: {
+    /**
+     * A guillotine or survivor-guillotine league: scored against the whole field, so there is no
+     * opponent to rank against — even when the provider published a matchup id. See
+     * `eliminationFormat`. Optional so a cached pulse from before this field still reads.
+     */
+    elimination?: number
     /** No `WeeklyMatchup` rows at all — the league has never been synced for a schedule. */
     noSchedule: number
     /** A week on file, but this roster has no game in it (bye, or unpaired). */
@@ -301,7 +308,7 @@ const EMPTY_PULSE: MatchupPulse = {
   expectedWins: null,
   withOdds: 0,
   closest: [],
-  notRanked: { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0, notStarted: 0 },
+  notRanked: { elimination: 0, noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0, unidentifiedRoster: 0, notStarted: 0 },
 }
 
 export async function getMatchupPulse(
@@ -328,11 +335,19 @@ export async function getMatchupPulse(
             settings: true,
             status: true,
             lifecycleState: true,
+            leagueType: true,
+            guillotineMode: true,
           },
         },
       },
     })
-    .catch(() => [])
+  /*
+   * 🛑 NO `.catch(() => [])` ON THIS READ OR THE TWO SCHEDULE READS BELOW. Each one is the board's
+   * whole input, and swallowing a failure turned "we could not read" into a confident claim —
+   * "No claimed team yet", or every league "carries no schedule". A throw reaches the page, which
+   * says the board failed to load (audit, 2026-10-02). The enrichment reads further down still
+   * degrade on their own, because each of them only costs a row its price, not the board its truth.
+   */
 
   const mine = claimed.filter(
     (c) => c.league?.platformLeagueId && Number.isFinite(Number(c.externalId)),
@@ -373,7 +388,6 @@ export async function getMatchupPulse(
       where: { leagueId: { in: plids }, seasonYear: { gte: now.getUTCFullYear() - 1 } },
       _max: { pointsFor: true, pointsAgainst: true },
     })
-    .catch(() => [])
 
   /*
    * `_max` per league-week is exactly what `isScored` asks of a whole week: one
@@ -424,7 +438,6 @@ export async function getMatchupPulse(
             pointsAgainst: true,
           },
         })
-        .catch(() => [])
     : []
 
   const rowsByPlid = new Map<string, typeof currentRows>()
@@ -491,10 +504,18 @@ export async function getMatchupPulse(
   }
 
   const pending: Pending[] = []
-  const notRanked = { noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0 }
+  const notRanked = { elimination: 0, noSchedule: 0, noOpponent: 0, unpriceable: 0, uncomparable: 0 }
 
   for (const c of mine) {
     const l = c.league!
+    /*
+     * Format before pairing: a guillotine league can carry provider matchup ids, and pairing on them
+     * drew a fake opponent and a win probability. The rail has always refused it; so does this now.
+     */
+    if (eliminationFormat(l)) {
+      notRanked.elimination++
+      continue
+    }
     const plid = l.platformLeagueId as string
     const resolved = weekByPlid.get(plid)
     const weekRows = rowsByPlid.get(plid)

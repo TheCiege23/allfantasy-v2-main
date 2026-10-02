@@ -2596,10 +2596,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * exactly like "no games this week", so a silent catch made a broken read invisible (audit,
    * 2026-10-02).
    */
+  let matchupPulseFailed = false
   const matchupPulse =
     activeKey === 'matchup' && !selectedLeagueId && sp.all !== '1' && sp.all !== 'true'
       ? await getMatchupPulse(userId).catch((error: unknown) => {
           console.error('[core/matchup] pulse read failed', error)
+          matchupPulseFailed = true
           return null
         })
       : null
@@ -4327,11 +4329,30 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : matchupLoadFailed ? (
           <ScreenLoadError screen="Matchup" retryHref={retryHref} />
         ) : showAllLeagues || !matchupPulse ? (
-          /* A failed pulse read is not "no games" — fall back to the picker. */
+          /*
+           * A failed pulse read is not "no games" — fall back to the picker, and SAY it failed.
+           * ⚠ The picker alone read exactly like a quiet week, under a blurb promising a ranking it
+           * does not draw; only the server log knew (audit, 2026-10-02).
+           */
           <PickALeague
             tabKey="matchup"
             title="Matchup"
-            blurb="Every league with a head-to-head this week, ranked by margin. Pick one below for the full box score."
+            blurb="Pick a league for its full box score."
+            above={
+              matchupPulseFailed ? (
+                <div className="af-card" role="alert" style={{ padding: 16, marginBottom: 12 }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
+                    The all-leagues board did not load.
+                  </p>
+                  <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+                    Something failed on our side — your leagues are untouched. Open one below, or{' '}
+                    <a href="/core/matchup">try again</a>.
+                  </p>
+                </div>
+              ) : showAllLeagues ? (
+                <p><Link href="/core/matchup">Back to where you stand</Link></p>
+              ) : undefined
+            }
             issues={issues}
             leagues={rail}
           />

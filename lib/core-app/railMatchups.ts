@@ -9,7 +9,7 @@ import { isRuledOut } from './injuryStatus'
 import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { getByeWeeks } from './byeWeeks'
-import { resolveRailMatchupMode } from './railMatchupMode'
+import { eliminationFormat, resolveRailMatchupMode } from './railMatchupMode'
 import { isForeignIdSpace } from './rosterIdSpace'
 
 /**
@@ -835,16 +835,20 @@ export async function loadRailProjections(args: {
         yahoo_settings: l.yahoo_settings,
       }),
     )
-    const type = (l.confirmedType ?? l.leagueType ?? '').toLowerCase()
     /*
      * ⚠ `survivor_guillotine` IS AN ELIMINATION FORMAT TOO. The confirmation is read
      * first, and a confirmed Survivor Guillotine league's confirmation says
      * `survivor_guillotine` (only its column says `guillotine`), so matching the
-     * one word alone would drop its elimination flag.
+     * one word alone would drop its elimination flag. The rule lives in
+     * `eliminationFormat` so the matchup screens cannot read it differently.
      */
     eliminationByLeague.set(
       l.id,
-      Boolean(l.guillotineMode) || type === 'guillotine' || type === 'survivor_guillotine',
+      eliminationFormat({
+        confirmedType: l.confirmedType,
+        leagueType: l.leagueType,
+        guillotineMode: l.guillotineMode,
+      }) != null,
     )
   }
 

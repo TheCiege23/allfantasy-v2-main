@@ -233,3 +233,58 @@ describe('getMatchupPulse finished week', () => {
     expect(pulse.allFinal).toBe(false)
   })
 })
+
+/*
+ * 🛑 A GUILLOTINE LEAGUE IS NOT A HEAD-TO-HEAD, EVEN WITH MATCHUP IDS ON ITS ROWS. Production
+ * 2026-10-02: "Survivor All-Stars Guillotine" and "2026 BB Guilly League!" were ranked with a win
+ * probability against a provider-paired "opponent" while the rail showed them as elimination rows.
+ */
+describe('getMatchupPulse — elimination formats', () => {
+  const pairedOpponent = () => {
+    db.teams[1] = { ...db.teams[1], platformUserId: 'them-sleeper' }
+    db.rosters[1] = { leagueId: 'L1', platformUserId: 'them-sleeper', playerData: { starters: ['c', 'd'] } }
+  }
+
+  it('🛑 a guillotine league is counted as elimination, never ranked', async () => {
+    pairedOpponent()
+    db.claimed = [{ externalId: '1', platformUserId: 'me-sleeper', league: { ...LEAGUE, leagueType: 'guillotine' } }]
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.ranked).toBe(0)
+    expect(pulse.leading).toHaveLength(0)
+    expect(pulse.notRanked.elimination).toBe(1)
+  })
+
+  it('🛑 a BEST-BALL guillotine (type best_ball, guillotineMode on) is elimination too', async () => {
+    pairedOpponent()
+    db.claimed = [{ externalId: '1', platformUserId: 'me-sleeper', league: { ...LEAGUE, leagueType: 'best_ball', guillotineMode: true } }]
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.ranked).toBe(0)
+    expect(pulse.notRanked.elimination).toBe(1)
+  })
+
+  it('CONTROL: the same paired league without the format is ranked', async () => {
+    pairedOpponent()
+    db.claimed = [{ externalId: '1', platformUserId: 'me-sleeper', league: { ...LEAGUE, leagueType: 'redraft', guillotineMode: false } }]
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.ranked).toBe(1)
+    expect(pulse.notRanked.elimination).toBe(0)
+  })
+})
+
+/*
+ * 🛑 A FAILED CORE READ IS A FAILURE, NOT AN EMPTY BOARD. Swallowed, these turned "we could not read"
+ * into "No claimed team yet" or every league "carries no schedule". They now reach the page.
+ */
+describe('getMatchupPulse — core reads that fail', () => {
+  it('🛑 a failed claimed-teams read rejects', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    vi.mocked(prisma.leagueTeam.findMany).mockRejectedValueOnce(new Error('db down'))
+    await expect(getMatchupPulse(USER, NOW)).rejects.toThrow('db down')
+  })
+
+  it('🛑 a failed schedule read rejects', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    vi.mocked(prisma.weeklyMatchup.groupBy).mockRejectedValueOnce(new Error('timeout') as never)
+    await expect(getMatchupPulse(USER, NOW)).rejects.toThrow('timeout')
+  })
+})
