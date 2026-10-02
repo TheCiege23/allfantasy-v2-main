@@ -260,7 +260,11 @@ export function ImportedLeaguesPanel() {
                 {l.lastSyncedAt ? (
                   <span className="shrink-0 text-[11px]" style={{ color: "var(--muted)" }}>{relTime(l.lastSyncedAt)}</span>
                 ) : null}
-                <div className="flex shrink-0 gap-1.5">
+                {/*
+                  12px between Open and Resync on touch: at the 6px used for a mouse, a thumb that
+                  lands just left of Resync hits Open — which navigates away from Settings.
+                */}
+                <div className="flex shrink-0 gap-1.5 [@media(pointer:coarse)]:gap-3">
                   <Link
                     href={openHref}
                     className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-medium"
