@@ -75,6 +75,9 @@ export function getLegacyProviderHelpHref(providerId: LegacyProviderId): string 
   return "/import"
 }
 
+/** The one page that links a Sleeper account to this profile. */
+export const SLEEPER_CONNECT_HREF = "/settings/connect/sleeper"
+
 export function getLegacyProviderPrimaryAction(params: {
   providerId: LegacyProviderId
   status: LegacyProviderStatus | null
@@ -83,9 +86,14 @@ export function getLegacyProviderPrimaryAction(params: {
   if (!status) return null
   if (!status.available) return null
 
+  /*
+   * ⚠ "Connect first" went to /dashboard, which redirects to /core — where there is no linker. The
+   * Sleeper linker is /settings/connect/sleeper (no inbound link anywhere before 2026-10-02); every
+   * other platform connects from Settings › Connected Accounts.
+   */
   if (providerId === "sleeper") {
     if (!status.linked) {
-      return { label: "Connect first", href: "/dashboard" }
+      return { label: "Connect first", href: SLEEPER_CONNECT_HREF }
     }
     if (shouldShowRetryImport(status)) {
       return { label: "Retry import", href: "/af-legacy?retry=1&provider=sleeper" }
@@ -97,7 +105,7 @@ export function getLegacyProviderPrimaryAction(params: {
   }
 
   if (!status.linked) {
-    return { label: "Connect first", href: "/dashboard" }
+    return { label: "Connect first", href: "/settings?tab=connected" }
   }
   if (shouldShowRetryImport(status)) {
     return { label: "Retry import", href: "/af-legacy?retry=1&provider=" + providerId }

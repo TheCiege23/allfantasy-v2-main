@@ -674,7 +674,7 @@ export const translationsEsParity: Record<string, string> = {
   "settings.legacy.activeImportNote":
     "Importación activa detectada. Esta pestaña se actualiza sola cada 15 segundos.",
   "settings.legacy.comingSoon": "Próximamente",
-  "settings.legacy.dashboardLinkSleeper": "Panel (vincular Sleeper)",
+  "settings.legacy.dashboardLinkSleeper": "Vincular Sleeper",
   "settings.legacy.help": "Ayuda",
   "settings.legacy.importInstructions": "Instrucciones de importación",
   "settings.legacy.importProviders": "Proveedores de importación",
@@ -792,6 +792,7 @@ export const translationsEsParity: Record<string, string> = {
   "settings.preferences.theme": "Tema",
   "settings.preferences.timezone": "Zona horaria",
   "settings.preferences.timezonePlaceholder": "Seleccionar zona horaria",
+  "settings.preferences.useDeviceTimezone": "Usar la zona horaria de este dispositivo ({{zone}})",
   "settings.preferences.title": "Preferencias",
   "settings.profile.avatarPicker": "Avatar (20 opciones)",
   "settings.profile.displayName": "Nombre para mostrar",
