@@ -145,13 +145,6 @@
       "label": "Free forever for players, with paid tiers for deeper tools"
     },
     {
-      "src": "/screenshots/bracket-wide.png",
-      "sizes": "1280x800",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Bracket challenge pools with AI analysis on every matchup"
-    },
-    {
       "src": "/screenshots/home-narrow.png",
       "sizes": "412x824",
       "type": "image/png",
@@ -171,13 +164,6 @@
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Free forever for players, with paid tiers for deeper tools"
-    },
-    {
-      "src": "/screenshots/bracket-narrow.png",
-      "sizes": "412x824",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Bracket challenge pools with AI analysis on every matchup"
     }
   ],
   "shortcuts": [

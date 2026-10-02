@@ -142,9 +142,26 @@ bubblewrap build
      Alt text for the asset: *"Play fantasy sports. All in one place. An
      example Your leagues card showing four Sleeper and ESPN leagues with their
      scores and the one thing each needs: set flex, waivers, trade, or all set."*
-   - Phone screenshots (min 2, 1080×1920+): take from a phone or Chrome
-     devtools device mode — /core home with triage, Player Finder, live
-     matchups, the Legacy profile.
+   - Phone screenshots (min 2 to publish; **4+ at 1080×1920 for promotion**):
+     taken BY HAND on a phone, then made compliant by a script. Why by hand:
+     they should show the app (`/core`), which needs a sign-in, and the public
+     pages a script can reach gave only two usable shots on 2026-10-01.
+     1. Sign in as the **demo account** — never a real league: other managers'
+        names would end up in a public listing.
+     2. Take them **after Oct 15**. Before launch, /core shows the "free until
+        Oct 15" countdown, and Play forbids price/promo content and anything
+        time-sensitive.
+     3. Shot list, in this order (dark mode, no notifications pending):
+        `/core` home (what needs you), `/core/my-team`, `/core/matchup`,
+        `/core/players` (Player Finder), `/core/trades`, `/core/career`.
+     4. Put the files in one folder, named in the order you want, then:
+        `node scripts/prepare-play-screenshots.mjs <folder>`
+        → `docs/play-store/screenshots/phone-N.png`. A modern phone shoots
+        20:9 (1080×2400), which Play REJECTS (longest side over 2× the
+        shortest); the script crops to 9:16 below the status bar, outputs
+        exactly 1080×1920 and strips alpha. It warns if a shot is soft.
+     No device frames, no added captions over 20% of the image, no
+     "download"/"install" call-to-action (Play rules).
 4. **Release** → Internal testing → upload the `.aab` → enroll in
    **Play App Signing** when prompted (always yes).
 
