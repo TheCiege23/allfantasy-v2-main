@@ -172,6 +172,29 @@ function posGroup(label: string | null | undefined): string {
 }
 
 /**
+ * "DEN @ SF · Sun 4:25p ET", as two pieces that each stay whole.
+ *
+ * ⚠ ON A PHONE THIS LINE NEVER FITS, SO THE QUESTION IS ONLY WHERE IT BREAKS. The
+ * player column is ~112px at 375 and the whole line with weather is ~170, so it
+ * wrapped wherever the text ran out — "WAS vs IND · Sun / 9:30a ET", the day
+ * stranded from its time. Measured on the live page with this split: every row
+ * reads "WAS vs IND" over "Sun 9:30a ET ☁ 61°" at the same 31px height, with no
+ * overflow. Desktop keeps the one line and its separator (af-my-team.css).
+ */
+function GameContext({ text }: { text: string | null }) {
+  if (!text) return <>no game found for this week</>
+  const at = text.indexOf(' · ')
+  if (at < 0) return <>{text}</>
+  return (
+    <>
+      <span className="af-mt-opp">{text.slice(0, at)}</span>
+      <span className="af-mt-sep"> · </span>
+      <span className="af-mt-when">{text.slice(at + 3)}</span>
+    </>
+  )
+}
+
+/**
  * Weather, or the venue when there is no forecast yet.
  *
  * Two different statements, and they must not look alike: "roofed, so weather
@@ -424,7 +447,7 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
           ) : null}
         </div>
         <div className="af-mt-player-meta">
-          {player.gameContext ?? 'no game found for this week'}
+          <GameContext text={player.gameContext} />
           <VenueMark indoors={player.indoors} weather={player.weather} />
           {player.preseason ? (
             <span

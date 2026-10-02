@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { LeagueTabs } from '@/components/core-app/LeagueTabs'
@@ -29,6 +29,44 @@ describe('league-first compact league tabs', () => {
     )
     expect(container.querySelector('details.af-lt-more')!.hasAttribute('open')).toBe(false)
     expect(container.querySelector('details.af-lt-more summary')).toHaveTextContent('More · Standings')
+  })
+
+  /*
+   * On a phone the More list is a dropdown over the page (af-league-tabs.css), so it
+   * must close like a menu. A bare <details> closes only on its own summary.
+   */
+  it('closes the More menu on an outside tap, on Escape, and on picking a view', () => {
+    const { container } = render(
+      <div>
+        <p data-testid="outside">page</p>
+        <LeagueTabs leagueId="L1" leagueName="Sunday Sweat" activeKey="matchup" hasScoredWeek tradeSupported draftSupported compact />
+      </div>,
+    )
+    const more = container.querySelector('details.af-lt-more') as HTMLDetailsElement
+    const list = container.querySelector('.af-lt-more-list') as HTMLElement
+
+    more.open = true
+    fireEvent.pointerDown(list)
+    expect(more.open).toBe(true)
+    fireEvent.pointerDown(screen.getByTestId('outside'))
+    expect(more.open).toBe(false)
+
+    more.open = true
+    fireEvent.keyDown(document, { key: 'Enter' })
+    expect(more.open).toBe(true)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(more.open).toBe(false)
+
+    more.open = true
+    fireEvent.click(screen.getByRole('link', { name: 'Standings' }))
+    expect(more.open).toBe(false)
+  })
+
+  it('keeps the active view in its own span, so a phone can drop it and keep More one tab wide', () => {
+    const { container } = render(
+      <LeagueTabs leagueId="L1" leagueName="Sunday Sweat" activeKey="standings" hasScoredWeek tradeSupported draftSupported compact />,
+    )
+    expect(container.querySelector('summary .af-lt-more-active')).toHaveTextContent('· Standings')
   })
 
   it('drops a primary tab the league cannot show rather than linking to nothing', () => {

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useRef } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { LeagueTabsPrewarm } from '@/components/core-app/LeagueTabsPrewarm'
@@ -96,6 +97,26 @@ export function LeagueTabs({
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const q = `?league=${encodeURIComponent(leagueId)}`
+  const moreRef = useRef<HTMLDetailsElement>(null)
+  /*
+   * ⚠ ON A PHONE THE MORE LIST IS A DROPDOWN OVER THE PAGE, so it has to close
+   * the way a menu does: a tap outside it, Escape, or picking a view. A bare
+   * <details> closes only when its own summary is tapped again, which left the
+   * list covering Chimmy's moves until the reader found the word "More".
+   */
+  useEffect(() => {
+    const close = (event: Event) => {
+      const el = moreRef.current
+      if (!el?.open) return
+      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !el.contains(event.target as Node)) el.open = false
+    }
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('keydown', close)
+    return () => {
+      document.removeEventListener('pointerdown', close)
+      document.removeEventListener('keydown', close)
+    }
+  }, [])
   const hiddenFor = (requires: TabRequirement): boolean =>
     requires === 'scores' ? hasScoredWeek === false : requires === 'trades' ? !tradeSupported : !draftSupported
 
@@ -145,9 +166,10 @@ export function LeagueTabs({
           <div className="af-lt-compact">
             <div className="af-lt-compact-row" style={{ gridTemplateColumns: `repeat(${primary.length}, minmax(0, 1fr))` }}>{primary.map((t) => tab(t.key, language === 'es' ? t.labelEs : t.label))}</div>
             {rest.length ? (
-              <details className="af-lt-more">
-                <summary className="af-lt-tab" data-active={restActive}>{restActiveTab ? `${copy('More')} · ${copy(restActiveTab.label)}` : copy('More')}</summary>
-                <div className="af-lt-more-list">{rest.map((t) => tab(t.key, copy(t.label)))}</div>
+              <details className="af-lt-more" ref={moreRef}>
+                {/* The active view is its own span so a phone can drop it and keep "More" one tab wide — see af-league-tabs.css. */}
+                <summary className="af-lt-tab" data-active={restActive}>{copy('More')}{restActiveTab ? <span className="af-lt-more-active"> · {copy(restActiveTab.label)}</span> : null}</summary>
+                <div className="af-lt-more-list" onClick={() => { if (moreRef.current) moreRef.current.open = false }}>{rest.map((t) => tab(t.key, copy(t.label)))}</div>
               </details>
             ) : null}
           </div>

@@ -3140,3 +3140,25 @@ html[data-mode='light'] .af-core {
     background: var(--accent-soft);
   }
 }
+
+/* ── League-first, phone: two gaps measured on the live shell, 2026-10-02 ────
+ *
+ * Its own top-level @media, appended — never nested inside an earlier block.
+ *
+ * - Back to top. Phase 1.5 cleared every other floating control off this shell ("nothing
+ *   floating") but missed this one: it is a Tailwind component outside the shell, so it is matched
+ *   through `body:has(...)` like the theme pill. It was the only purple thing on the screen and sat
+ *   on the roster's AF column. Owner's call, 2026-10-02: finish league-first's no-floating rule.
+ * - The content reserve. The comment above the chat bar says its top sits inside the reserve; at
+ *   the true document end the last line ("Standard total built from …") ended 3px above the bar,
+ *   touching it. The reserve now counts the bar itself: tab bar + the bar's 18px offset + its
+ *   ~68px measured height + 20px of air.
+ */
+@media (max-width: 720px) {
+  body:has(.af-core.af-shell[data-league-first='true']) [data-af-back-to-top] {
+    display: none !important;
+  }
+  .af-core.af-shell[data-league-first='true'] .af-content {
+    padding-bottom: calc(var(--af-tabbar-height, calc(56px + env(safe-area-inset-bottom, 0px))) + 18px + 68px + 20px);
+  }
+}
