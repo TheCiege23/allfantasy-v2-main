@@ -10,7 +10,7 @@ import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import { useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import type {
   MatchupData,
   MatchupPlayerCell,
@@ -123,6 +123,77 @@ function TeamCard({
         ) : null}
       </div>
     </div>
+  )
+}
+
+/**
+ * The score, pinned to the top of a phone or tablet once the banner has scrolled away.
+ *
+ * ⚠ WHY THIS EXISTS. On a 375px phone the banner starts ~570px down and a 28-starter board runs
+ * thousands of pixels below it — measured 2026-10-02, about three slot rows fit on a screen. Scrolling
+ * the board to see who is playing meant losing the score, which is the one number the manager is
+ * watching. Tapping the bar returns to the banner.
+ *
+ * Rendered only while the banner is OUT of view (an IntersectionObserver, no scroll listener), and
+ * hidden above 1024px by CSS — a desktop shows both at once. It repeats what the banner already
+ * says, so a screen reader is not read it twice: it is a plain button labelled for its action.
+ */
+function StickyScore({
+  target,
+  you,
+  them,
+  basis,
+  pWin,
+  leader,
+}: {
+  target: RefObject<HTMLElement | null>
+  you: { name: string; value: number | null }
+  them: { name: string; value: number | null }
+  basis: 'scored' | 'projected'
+  pWin: number | null
+  leader: 'you' | 'opponent' | null
+}) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const [show, setShow] = useState(false)
+  useEffect(() => {
+    const el = target.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(([entry]) => setShow(!entry.isIntersecting && entry.boundingClientRect.top < 0), {
+      threshold: 0,
+    })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [target])
+  if (!show) return null
+  const fmt = (v: number | null) => (v == null ? '—' : v.toFixed(1))
+  return (
+    <button
+      type="button"
+      className="af-mu-sticky"
+      data-leader={leader ?? undefined}
+      data-basis={basis}
+      onClick={() => target.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+      aria-label={copy('Back to the score')}
+    >
+      <span className="af-mu-sticky-side" data-side="you">
+        <span className="af-mu-sticky-name">{you.name}</span>
+        <span className="af-mu-sticky-n af-num">{fmt(you.value)}</span>
+      </span>
+      <span className="af-mu-sticky-mid">
+        {pWin != null ? (
+          <span className="af-mu-sticky-wp af-num" data-tone={pWin >= 0.5 ? 'good' : 'bad'}>
+            {Math.round(pWin * 100)}%
+          </span>
+        ) : (
+          <span className="af-mu-sticky-wp af-num">{basis === 'projected' ? copy('proj') : copy('vs')}</span>
+        )}
+      </span>
+      <span className="af-mu-sticky-side" data-side="them">
+        <span className="af-mu-sticky-n af-num">{fmt(them.value)}</span>
+        <span className="af-mu-sticky-name">{them.name}</span>
+      </span>
+    </button>
   )
 }
 
@@ -573,6 +644,8 @@ export function Matchup({ data }: MatchupProps) {
         : 'opponent'
       : null
 
+  const bannerRef = useRef<HTMLElement | null>(null)
+
   return (
     /*
       Every name in this lineup belongs to THIS league, so the card opens in
@@ -581,6 +654,16 @@ export function Matchup({ data }: MatchupProps) {
     */
     <PlayerCardLeagueScope leagueId={data.league.id}>
     <div className="af-mu">
+      {data.teams.available ? (
+        <StickyScore
+          target={bannerRef}
+          you={{ name: data.teams.data.you.teamName, value: scored?.you ?? projected?.you ?? null }}
+          them={{ name: data.teams.data.opponent.teamName, value: scored?.opponent ?? projected?.opponent ?? null }}
+          basis={scored ? 'scored' : 'projected'}
+          pWin={data.winProbability.available ? data.winProbability.data.pWin : null}
+          leader={leader}
+        />
+      ) : null}
       {/* ── Week banner ─────────────────────────────────────────────── */}
       <header className="af-mu-week">
         {/*
@@ -689,7 +772,7 @@ export function Matchup({ data }: MatchupProps) {
       ) : null}
 
       {/* ── Head to head ────────────────────────────────────────────── */}
-      <section className="af-frame af-mu-h2h" data-leader={leader ?? undefined}>
+      <section className="af-frame af-mu-h2h" data-leader={leader ?? undefined} ref={bannerRef}>
         {data.teams.available ? (
           <>
             <TeamCard

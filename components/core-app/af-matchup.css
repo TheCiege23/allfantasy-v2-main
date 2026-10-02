@@ -1105,3 +1105,156 @@
     transition: none;
   }
 }
+
+/* ── Phone layout pass (components/core-app/screens/Matchup.tsx), 2026-10-02 ──
+ *
+ * Top-level rules and sibling @media blocks, appended at end of file.
+ */
+
+/*
+ * One bright button, not two. "Set lineup" is the action that changes a result; "View Matchup in
+ * <league>" is a hand-off to read the same thing on the platform. Both were filled accent pills of
+ * equal weight, side by side. The hand-off becomes an outline — every width.
+ */
+.af-core .af-btn.af-mu-source:not([data-handoff='lineup']) {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  box-shadow: none;
+}
+
+/* The sticky scorebar is a phone control; hidden everywhere else. */
+.af-mu-sticky {
+  display: none;
+}
+
+@media (max-width: 780px) {
+  .af-mu-sticky {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 38;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 14px 8px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    animation: af-mu-drop 0.18s ease-out;
+  }
+  .af-mu-sticky-side {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+  .af-mu-sticky-side[data-side='them'] {
+    justify-content: flex-end;
+  }
+  .af-mu-sticky-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .af-mu-sticky-n {
+    flex: none;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .af-mu-sticky[data-basis='projected'] .af-mu-sticky-n {
+    color: var(--text2);
+  }
+  .af-mu-sticky[data-leader='you'] [data-side='you'] .af-mu-sticky-n {
+    color: var(--good);
+  }
+  .af-mu-sticky[data-leader='opponent'] [data-side='them'] .af-mu-sticky-n {
+    color: var(--bad);
+  }
+  .af-mu-sticky-wp {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--chip);
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--muted);
+  }
+  .af-mu-sticky-wp[data-tone='good'] {
+    background: var(--good-soft);
+    color: var(--good);
+  }
+  .af-mu-sticky-wp[data-tone='bad'] {
+    background: var(--bad-soft);
+    color: var(--bad);
+  }
+
+  /*
+   * Score first, hand-offs last. The two provider buttons sat between the week banner and the
+   * score — measured at 375px, the score started 570px down. They read as the end of the page's
+   * job ("now go and fix it"), so they go after the board.
+   */
+  .af-mu > .af-mu-handoff {
+    order: 10;
+    justify-content: stretch;
+  }
+  .af-mu > .af-mu-handoff > * {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  /*
+   * The league is already named, with its crest, in the league card directly above this screen —
+   * on a phone it was printed four times before the score. Hidden from sight, NOT from the
+   * accessibility tree: it is still the page's h1.
+   */
+  .af-mu-week > .af-mu-league-crest {
+    display: none;
+  }
+  .af-mu-week > .af-mu-league-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* The league pill and chat launcher float over the last rows; leave room to scroll past them. */
+  .af-mu {
+    padding-bottom: 76px;
+  }
+}
+
+@keyframes af-mu-drop {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-mu-sticky {
+    animation: none;
+  }
+}
