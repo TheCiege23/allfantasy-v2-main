@@ -76,6 +76,13 @@ export type SideProjections = {
   you: SideProjection
   opponent: SideProjection
   leagueScoring: { available: true } | { available: false; reason: string }
+  /**
+   * A starter's injury designation when it is an UNCERTAINTY — questionable, doubtful, day-to-day —
+   * keyed by Sleeper id. A designation of absence is already `unavailable: 'out'` on the lineup and
+   * is not repeated here. Read in the same pass as the absences, so the two cannot disagree; the
+   * board shows it as a Q / D tag beside the name. Absent (not empty) when nothing was read.
+   */
+  atRiskBySleeperId?: Record<string, string>
   bestBall?: {
     slots: string[] | null
     you: BestBallCandidate[]
@@ -233,6 +240,7 @@ export async function loadSideProjections(args: {
    */
   const canScore = hasScoringRules(scoring)
   const unavailableBySleeperId = new Map<string, Unavailable>()
+  const atRiskBySleeperId: Record<string, string> = {}
   if (canScore && lookupIds.length > 0) {
     const sport = String(league?.sport ?? 'NFL')
     try {
@@ -252,6 +260,7 @@ export async function loadSideProjections(args: {
       ])
       for (const [sleeperId, status] of statuses) {
         if (isRuledOut(status)) unavailableBySleeperId.set(sleeperId, 'out')
+        else if (status && status.trim()) atRiskBySleeperId[sleeperId] = status.trim()
       }
       // A bye is the stronger fact — no game at all — so it wins over any status he also carries.
       for (const sleeperId of byes?.byWeek.get(week) ?? []) unavailableBySleeperId.set(sleeperId, 'bye')
@@ -352,6 +361,7 @@ export async function loadSideProjections(args: {
       you: candidates(yourPlayers, args.yourPlatformUserId),
       opponent: candidates(oppPlayers, args.opponentPlatformUserId),
     } } : {}),
+    atRiskBySleeperId,
     // A metadata-only settings object is "no rules" too — see `hasScoringRules`. Without this the
     // eight label-only leagues read "N starters could not be priced", blaming the feed.
     leagueScoring: hasScoringRules(scoring)
