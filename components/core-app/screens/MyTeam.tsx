@@ -1111,6 +1111,15 @@ export function MyTeam({ data }: MyTeamProps) {
         )}
       </header>
 
+      {/*
+        ⚠ TWO COLUMNS FROM ONE DOM, NOT TWO LAYOUTS. Wide: the roster is the main column and
+        the matchup, byes and scoring basis sit beside it, so a 1000px screen stops putting 480px
+        between a name and its numbers. Narrow: both wrappers are display:contents, the page is
+        one column again, and byes + basis move BELOW the roster (CSS order) — on a 375px phone they
+        were 479px standing between the lock banner and the first starter. af-my-team.css, "Layout pass".
+      */}
+      <div className="af-mt-body">
+      <div className="af-mt-aside">
       {/* ── Who you play, projected ─────────────────────────────────── */}
       {/*
         ⚠ THIS IS WHERE "POINTS FOR / AGAINST" USED TO BE. Those were the
@@ -1220,6 +1229,8 @@ export function MyTeam({ data }: MyTeamProps) {
         </section>
       ) : null}
 
+      </div>
+      <div className="af-mt-main">
       {/* ── Starters ────────────────────────────────────────────────── */}
       <section className="af-frame af-mt-section">
         <header className="af-mt-section-head">
@@ -1335,6 +1346,8 @@ export function MyTeam({ data }: MyTeamProps) {
           {copy('Projections are not shown because')} {data.projections.reason}.
         </p>
       )}
+      </div>
+      </div>
     </div>
     </PlayerCardLeagueScope>
   )
