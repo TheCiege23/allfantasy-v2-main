@@ -265,7 +265,8 @@ function isUsernameGateExempt(pathname: string): boolean {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Cancelling a subscription from /paid-restricted (owner's call, 2026-10-02). It is deliberately NOT
+ * Cancelling a subscription from /paid-restricted and /geo-blocked (owner's calls, 2026-10-02). Also
+ * exempt from the FULL-state block in apiGeoRefusal, so a fully blocked state can cancel. It is deliberately NOT
  * under /api/subscription/cancel — that prefix is in PAID_GEO_PREFIXES below, which would refuse it
  * in exactly the states it exists for. Exempt wherever the billing portal is: cancelling must never
  * depend on a VPN being off or an account lock being lifted.
@@ -706,7 +707,10 @@ async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<Ne
 
   const { country, region } = await resolveRequestGeo(request, vpn)
   if (country !== "US" || !region) return null
-  const fullBlock = isFullyBlocked(region) && !isFullBlockApiExempt(pathname)
+  // The cancel button on /geo-blocked must work FROM a fully blocked state — owner's call, 2026-10-02.
+  // It only ever removes billing; the billing portal itself stays refused (its plan changes are a purchase).
+  const fullBlock =
+    isFullyBlocked(region) && !isFullBlockApiExempt(pathname) && !isPaidPrefix(CANCEL_SUBSCRIPTION_API, pathname)
   const paidBlock = !fullBlock && isPaidRoute(pathname) && (isPaidBlocked(region) || isFullyBlocked(region))
   if (!fullBlock && !paidBlock) return null
 
@@ -717,7 +721,7 @@ async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<Ne
   }
 
   const body = fullBlock
-    ? { error: "GEO_BLOCKED", message: "AllFantasy.ai is not available in your state.", stateCode: region, redirectTo: "/geo-blocked" }
+    ? { error: "GEO_BLOCKED", message: "AllFantasy.ai is not available in your state.", stateCode: region, redirectTo: `/geo-blocked?state=${encodeURIComponent(region)}` }
     : {
         error: "PAID_GEO_BLOCKED",
         message: "Paid features are not available in your state.",

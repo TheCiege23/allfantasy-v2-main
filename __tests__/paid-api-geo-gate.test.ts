@@ -171,5 +171,26 @@ describe("the /paid-restricted cancel button's API", () => {
     const res = await middleware(fromState("/api/account/cancel-subscription", "NV"))
     expect([451, 403]).not.toContain(res.status)
   })
+
+  // Owner's call, 2026-10-02: a FULLY blocked state can cancel too (from /geo-blocked).
+  it("is reachable from a fully blocked state", async () => {
+    const res = await middleware(fromState("/api/account/cancel-subscription", "WA"))
+    expect([451, 403]).not.toContain(res.status)
+  })
+
+  it("control: every other API is still refused there", async () => {
+    for (const path of ["/api/leagues", "/api/subscription/billing-portal", "/api/user/profile"]) {
+      expect((await middleware(fromState(path, "WA"))).status, path).toBe(403)
+    }
+  })
+
+  it("sends a fully blocked page load of the billing portal to /geo-blocked, where the button is", async () => {
+    const req = new NextRequest(new URL("https://www.allfantasy.ai/api/subscription/billing-portal"), {
+      method: "GET",
+      headers: { "cf-ipcountry": "US", "cf-connecting-ip": "198.51.100.40", "cf-region-code": "WA", "sec-fetch-mode": "navigate" },
+    })
+    const loc = new URL((await middleware(req)).headers.get("location")!)
+    expect(loc.pathname + loc.search).toBe("/geo-blocked?state=WA")
+  })
 })
 
