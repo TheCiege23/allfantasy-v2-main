@@ -16,7 +16,7 @@ vi.mock('@/lib/stripe-client', () => ({ getStripeClient: vi.fn() }))
 vi.mock('@/lib/account/cancelSubscriptionsOnDelete', () => ({ cancelSubscriptionsOnDelete: cancelMock }))
 
 import { POST } from '@/app/api/account/cancel-subscription/route'
-import { CancelSubscriptionPanel } from '@/app/paid-restricted/CancelSubscriptionPanel'
+import { CancelSubscriptionPanel } from '@/components/billing/CancelSubscriptionPanel'
 
 const post = (body?: unknown) =>
   POST(new Request('http://localhost/api/account/cancel-subscription', {

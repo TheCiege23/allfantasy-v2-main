@@ -3,8 +3,9 @@
 import { useState } from "react"
 
 /**
- * "Cancel my subscription" for a subscriber who reached /paid-restricted — owner's call, 2026-10-02.
- * The billing portal is refused in their state, so before this they had no way to stop a charge.
+ * "Cancel my subscription" on the block pages — /paid-restricted (owner's call, 2026-10-02) and
+ * /geo-blocked (fully blocked states, same day). The billing portal is refused there, so before this a
+ * subscriber had no way to stop a charge.
  * Two steps (button, then confirm) because cancelling is immediate; see
  * app/api/account/cancel-subscription for the terms and why it has no geo check.
  */
@@ -57,8 +58,8 @@ export function CancelSubscriptionPanel({ hasStripe, hasApple }: { hasStripe: bo
       ) : hasStripe ? (
         <>
           <p className="mb-4 text-amber-50/80">
-            Paid features aren&apos;t available where you are, so you can cancel it here. Cancelling is immediate,
-            with no refund for the rest of the current billing period.
+            You can&apos;t use it from where you are, so you can cancel it here. Cancelling is immediate, with no
+            refund for the rest of the current billing period.
           </p>
           {step === "confirm" || step === "busy" ? (
             <div className="flex flex-wrap gap-2">
