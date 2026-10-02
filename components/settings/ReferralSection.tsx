@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { Copy, Check, Users, UserPlus, Gift, Loader2 } from "lucide-react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
@@ -28,6 +28,10 @@ export function ReferralSection() {
   const [copiedLink, setCopiedLink] = useState(false)
   const [copiedCode, setCopiedCode] = useState(false)
   const [redeemingId, setRedeemingId] = useState<string | null>(null)
+  const [redeemError, setRedeemError] = useState<string | null>(null)
+  const [copyError, setCopyError] = useState<string | null>(null)
+  const codeInputRef = useRef<HTMLInputElement>(null)
+  const linkInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -60,31 +64,54 @@ export function ReferralSection() {
     return () => { cancelled = true }
   }, [])
 
-  const copyLink = () => {
-    if (!link) return
-    navigator.clipboard.writeText(link).then(() => {
-      setCopiedLink(true)
-      setTimeout(() => setCopiedLink(false), 2000)
-    })
+  /*
+   * `navigator.clipboard` is missing outside a secure context and refused by some in-app
+   * browsers, and the old `.then()` had no rejection path — the button simply did nothing.
+   * On failure the text is selected in its field so a long-press copy is one step away.
+   */
+  const copyText = async (text: string, input: HTMLInputElement | null): Promise<boolean> => {
+    setCopyError(null)
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      input?.focus()
+      input?.select()
+      setCopyError("Couldn't copy automatically — the text is selected, so copy it from the field.")
+      return false
+    }
   }
 
-  const copyCode = () => {
+  const copyLink = async () => {
+    if (!link) return
+    if (await copyText(link, linkInputRef.current)) {
+      setCopiedLink(true)
+      setTimeout(() => setCopiedLink(false), 2000)
+    }
+  }
+
+  const copyCode = async () => {
     if (!code) return
-    navigator.clipboard.writeText(code).then(() => {
+    if (await copyText(code, codeInputRef.current)) {
       setCopiedCode(true)
       setTimeout(() => setCopiedCode(false), 2000)
-    })
+    }
   }
 
   const redeem = async (rewardId: string) => {
     setRedeemingId(rewardId)
+    setRedeemError(null)
     try {
       const res = await fetch("/api/referral/rewards/redeem", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rewardId }),
       })
-      const data = await res.json()
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
+      // A refused redeem used to vanish: the route's 400 message was read and dropped.
+      if (!res.ok || !data.ok) {
+        setRedeemError(typeof data.error === "string" && data.error ? data.error : "Couldn't redeem that reward. Please try again.")
+      }
       if (res.ok && data.ok) {
         setRewards((prev) =>
           prev.map((r) => (r.id === rewardId ? { ...r, status: "redeemed" as const, redeemedAt: new Date().toISOString() } : r))
@@ -99,6 +126,8 @@ export function ReferralSection() {
             : null
         )
       }
+    } catch {
+      setRedeemError("Couldn't redeem that reward. Check your connection and try again.")
     } finally {
       setRedeemingId(null)
     }
@@ -127,11 +156,13 @@ export function ReferralSection() {
         <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--panel2) 60%, transparent)" }}>
           {code && (
             <>
-              <label className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+              <label htmlFor="referral-code-input" className="text-xs font-medium" style={{ color: "var(--muted)" }}>
                 {t("settings.referral.yourCode")}
               </label>
               <div className="mt-2 flex flex-wrap items-center gap-2 mb-4">
                 <input
+                  id="referral-code-input"
+                  ref={codeInputRef}
                   type="text"
                   readOnly
                   value={code}
@@ -151,11 +182,13 @@ export function ReferralSection() {
               </div>
             </>
           )}
-          <label className="text-xs font-medium" style={{ color: "var(--muted)" }}>
+          <label htmlFor="referral-link-input" className="text-xs font-medium" style={{ color: "var(--muted)" }}>
             {t("settings.referral.yourLink")}
           </label>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <input
+              id="referral-link-input"
+              ref={linkInputRef}
               type="text"
               readOnly
               value={link ?? ""}
@@ -173,6 +206,11 @@ export function ReferralSection() {
               {copiedLink ? t("settings.referral.copied") : t("settings.referral.copyLink")}
             </button>
           </div>
+          {copyError ? (
+            <p className="mt-2 text-xs" role="status" style={{ color: "var(--muted2)" }}>
+              {copyError}
+            </p>
+          ) : null}
           {link && (
             <div className="mt-3 pt-3 border-t" style={{ borderColor: "var(--border)" }}>
               <ReferralShareBar referralLink={link} testIdPrefix="referral-share" />
@@ -216,6 +254,11 @@ export function ReferralSection() {
           <h3 className="text-sm font-semibold mb-3" style={{ color: "var(--text)" }}>
             {t("settings.referral.rewardsHeading")}
           </h3>
+          {redeemError ? (
+            <p className="mb-2 text-xs text-red-600" role="alert" data-testid="referral-redeem-error">
+              {redeemError}
+            </p>
+          ) : null}
           <ul className="space-y-2">
             {rewards.map((r) => (
               <li

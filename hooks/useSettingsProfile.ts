@@ -47,7 +47,12 @@ export function useSettingsProfile() {
         cache: "no-store",
       })
       if (!profileResult.ok) {
-        setProfile(null)
+        /*
+         * The profile is deliberately NOT cleared here. On a first load it is already null, so the
+         * error screen still shows; on a REFETCH it is the last good copy. Connected Accounts
+         * refetches on every window focus, and clearing it meant one dropped request on a phone
+         * swapped the whole settings page for an error screen. The message below still shows inline.
+         */
         if (!settingsResult.ok) {
           const msg =
             typeof profileResult.data?.error === "string"

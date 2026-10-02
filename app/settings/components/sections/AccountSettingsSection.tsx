@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { signOutAndPurge } from "@/lib/pwa/signOutAndPurge"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
@@ -21,6 +21,21 @@ export function AccountSettingsSection({
   // a real plan before. Fall back to a live client-side entitlement check rather than always
   // showing "Free" regardless of the user's actual subscription.
   const ents = useEntitlements()
+  /*
+   * ⚠ /api/user/delete anonymizes the account but never calls Stripe, so a live subscription keeps
+   * billing an account that no longer exists. Until deletion cancels it server-side, the dialog
+   * says so and points at the billing portal first. Same portal gate as BillingSettingsSection.
+   */
+  const hasLiveSubscription = ents.hasAnyPaid && !ents.isAdminBypassAccount
+
+  useEffect(() => {
+    if (!deleteOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !deleteBusy) setDeleteOpen(false)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [deleteOpen, deleteBusy])
 
   const createdLabel = accountCreatedAt
     ? new Date(accountCreatedAt).toLocaleDateString(undefined, {
@@ -160,8 +175,23 @@ export function AccountSettingsSection({
               <span className="font-mono font-semibold text-white">DELETE</span>{" "}
               {t("settings.account.confirmDeletionAfterWord")}
             </p>
+            {hasLiveSubscription ? (
+              <p
+                className="mt-3 rounded-lg border px-3 py-2 text-xs"
+                style={{ borderColor: "color-mix(in srgb, #fbbf24 45%, transparent)", color: "#fbbf24" }}
+                data-testid="settings-account-delete-subscription-warning"
+              >
+                Deleting your account does not cancel your subscription.{" "}
+                <a href="/api/subscription/billing-portal" className="font-semibold underline">
+                  Cancel it in the billing portal
+                </a>{" "}
+                first, or you will keep being charged.
+              </p>
+            ) : null}
             <input
               type="text"
+              aria-label="Type DELETE to confirm"
+              autoFocus
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value)}
               className="mt-3 w-full rounded-lg border px-3 py-2 text-sm outline-none"

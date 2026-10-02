@@ -756,7 +756,7 @@ export const translationsEsParity: Record<string, string> = {
     "Los SMS están desactivados: no tenemos tu autorización de SMS para este teléfono. Vuelve a verificar tu teléfono en Seguridad y marca la casilla de SMS para activarlos.",
   "settings.notifications.deliveryMasters": "Maestros de entrega",
   "settings.notifications.deliveryMixHint":
-    "Si las categorías mezclan estados, la casilla queda desmarcada hasta que coincidan todas; al activarla aplica a todas.",
+    "Si las categorías mezclan estados, el interruptor queda apagado hasta que coincidan todas; al cambiarlo aplica a todas.",
   "settings.notifications.emailAll": "Correo (todas las categorías)",
   "settings.notifications.globalHint":
     "Si está desactivado, se pausan notificaciones no críticas. Correos de cuenta y seguridad siguen aplicando.",

@@ -15,6 +15,15 @@ function appOrigin(): string {
   return "http://localhost:3000"
 }
 
+/*
+ * Every caller opens this as a page (an <a href>, never fetch), so an error answered as JSON put
+ * {"error":"…"} on screen in place of the app. Failures now land back on the Billing tab, which
+ * reads `?billing=portal_error` and says what happened; a signed-out visit goes to sign-in.
+ */
+function backToBilling(reason: "portal_error"): NextResponse {
+  return NextResponse.redirect(new URL(`/settings?tab=billing&billing=${reason}`, appOrigin()))
+}
+
 export async function GET(req: Request) {
   try {
     // The portal is where subscriptions are cancelled; a VPN must never block that.
@@ -23,7 +32,9 @@ export async function GET(req: Request) {
 
     const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.redirect(
+        new URL(`/login?callbackUrl=${encodeURIComponent("/settings?tab=billing")}`, appOrigin()),
+      )
     }
 
     const row = await prisma.userSubscription.findFirst({
@@ -46,12 +57,12 @@ export async function GET(req: Request) {
     })
 
     if (!portal.url) {
-      return NextResponse.json({ error: "Billing portal unavailable" }, { status: 500 })
+      return backToBilling("portal_error")
     }
 
     return NextResponse.redirect(portal.url)
   } catch (e) {
     console.error("[subscription/billing-portal]", e instanceof Error ? e.message : e)
-    return NextResponse.json({ error: "Failed to open billing portal" }, { status: 500 })
+    return backToBilling("portal_error")
   }
 }

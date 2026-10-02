@@ -1,7 +1,7 @@
 'use client'
 
 import type { ComponentType, ReactNode } from 'react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
@@ -464,6 +464,20 @@ export function SettingsChrome({
    */
   const badges = useMemo(() => settingsNavBadges(profile), [profile])
 
+  /*
+   * Below 860px the nav is one horizontally scrolling row (nocturne-settings.css). Opened
+   * on a tab near the end — Account, Legal — the row still started at Profile, so the
+   * active tab was off-screen. Centre it in the row; only the row scrolls, never the page.
+   */
+  const navRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const nav = navRef.current
+    if (!nav || nav.scrollWidth <= nav.clientWidth) return
+    const item = nav.querySelector<HTMLElement>('.ns-nav-item.is-active')
+    if (!item) return
+    nav.scrollLeft = item.offsetLeft - (nav.clientWidth - item.offsetWidth) / 2
+  }, [activeTab])
+
   const filteredNav = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return NAV_DEFS
@@ -522,7 +536,7 @@ export function SettingsChrome({
           ) : null}
           <SidebarProfileCard profile={profile} planLabel={planLabel} />
 
-          <nav className="ns-nav" aria-label={t('settings.aria.sections')}>
+          <nav ref={navRef} className="ns-nav" aria-label={t('settings.aria.sections')}>
             {filteredNav.map((tab) => {
               const Icon = tab.icon
               const active = activeTab === tab.id

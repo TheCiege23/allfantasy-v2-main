@@ -192,6 +192,7 @@ export default function ChimmyVoiceSettingsCard() {
         </div>
         <input
           type="checkbox"
+          role="switch"
           checked={voiceConfig.enabled}
           onChange={(event) => applyVoiceConfig({ enabled: event.target.checked })}
           className="h-4 w-4 rounded"
@@ -208,6 +209,7 @@ export default function ChimmyVoiceSettingsCard() {
         </div>
         <input
           type="checkbox"
+          role="switch"
           checked={voiceConfig.autoPlay}
           onChange={(event) => applyVoiceConfig({ autoPlay: event.target.checked })}
           className="h-4 w-4 rounded"
