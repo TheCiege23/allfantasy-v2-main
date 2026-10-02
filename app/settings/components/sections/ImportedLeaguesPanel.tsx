@@ -51,6 +51,21 @@ function syncPill(status?: string | null): { label: string; color: string; bg: s
   return { label: "Active", color: "#7ee081", bg: "color-mix(in srgb, #7ee081 15%, transparent)" }
 }
 
+/**
+ * What the Resync button shows. The route answers 200 only once the refresh has COMPLETED and
+ * advanced the league's freshness — it never queues — so success is "Synced", not the "Queued" this
+ * used to say. Every refusal carries a sentence saying why (already refreshing, data preserved but
+ * the refresh did not finish, not authorized), which used to collapse into a bare "Failed".
+ */
+type ResyncState = { kind: "busy" } | { kind: "done" } | { kind: "locked" } | { kind: "error"; message: string }
+
+const RESYNC_LABEL: Record<ResyncState["kind"], string> = {
+  busy: "Syncing…",
+  done: "Synced ✓",
+  locked: "Already syncing",
+  error: "Retry",
+}
+
 function relTime(iso?: string | null): string {
   if (!iso) return ""
   const t = new Date(iso).getTime()
@@ -69,7 +84,7 @@ export function ImportedLeaguesPanel() {
   const [failed, setFailed] = useState(false)
   const [query, setQuery] = useState("")
   const [platform, setPlatform] = useState("all")
-  const [resyncing, setResyncing] = useState<Record<string, "busy" | "done" | "error">>({})
+  const [resyncing, setResyncing] = useState<Record<string, ResyncState>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -108,17 +123,45 @@ export function ImportedLeaguesPanel() {
 
   async function resync(l: LeagueRow) {
     if (!l.platformLeagueId || !l.platform) return
-    setResyncing((r) => ({ ...r, [l.id]: "busy" }))
+    const set = (state: ResyncState | null) =>
+      setResyncing((r) => {
+        const next = { ...r }
+        if (state) next[l.id] = state
+        else delete next[l.id]
+        return next
+      })
+    set({ kind: "busy" })
+    let outcome: ResyncState
     try {
       const res = await fetch("/api/leagues/import/resync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider: l.platform, sourceId: l.platformLeagueId }),
       })
-      setResyncing((r) => ({ ...r, [l.id]: res.ok ? "done" : "error" }))
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: unknown }
+      if (res.ok && data.ok !== false) {
+        outcome = { kind: "done" }
+        // The refresh finished, so the row is current now — not whatever the list said on load.
+        setLeagues((prev) =>
+          (prev ?? []).map((row) =>
+            row.id === l.id ? { ...row, syncStatus: "active", lastSyncedAt: new Date().toISOString() } : row,
+          ),
+        )
+      } else if (res.status === 409) {
+        outcome = { kind: "locked" }
+      } else {
+        outcome = {
+          kind: "error",
+          message:
+            typeof data.error === "string" && data.error ? data.error : "The sync didn't finish. Please try again.",
+        }
+      }
     } catch {
-      setResyncing((r) => ({ ...r, [l.id]: "error" }))
+      outcome = { kind: "error", message: "Couldn't reach AllFantasy. Check your connection and try again." }
     }
+    set(outcome)
+    // A success or "already syncing" settles back to the plain button; an error stays until retried.
+    if (outcome.kind !== "error") window.setTimeout(() => set(null), 4000)
   }
 
   // Only leagues with a live native backing are resyncable. Historical career-board
@@ -212,15 +255,29 @@ export function ImportedLeaguesPanel() {
                     <button
                       type="button"
                       onClick={() => void resync(l)}
-                      disabled={rs === "busy"}
+                      disabled={rs?.kind === "busy"}
+                      aria-live="polite"
                       className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-medium disabled:opacity-50"
-                      style={{ borderColor: "var(--border)", color: rs === "error" ? "var(--accent-red-strong)" : "var(--muted2)" }}
+                      style={{
+                        borderColor: "var(--border)",
+                        color:
+                          rs?.kind === "error"
+                            ? "var(--accent-red-strong)"
+                            : rs?.kind === "done"
+                              ? "#34d399"
+                              : "var(--muted2)",
+                      }}
                     >
-                      <RefreshCw className={`h-3.5 w-3.5 ${rs === "busy" ? "animate-spin" : ""}`} />
-                      {rs === "busy" ? "Resyncing…" : rs === "done" ? "Queued" : rs === "error" ? "Failed" : "Resync"}
+                      <RefreshCw className={`h-3.5 w-3.5 ${rs?.kind === "busy" ? "animate-spin" : ""}`} />
+                      {rs ? RESYNC_LABEL[rs.kind] : "Resync"}
                     </button>
                   ) : null}
                 </div>
+                {rs?.kind === "error" ? (
+                  <p className="basis-full text-xs text-red-600" role="alert" data-testid={`resync-error-${l.id}`}>
+                    {rs.message}
+                  </p>
+                ) : null}
               </li>
             )
           })}
