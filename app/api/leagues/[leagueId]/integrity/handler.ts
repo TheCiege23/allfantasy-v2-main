@@ -3,8 +3,10 @@ import { getServerSession } from "next-auth"
 
 import { authOptions } from "@/lib/auth"
 import { assertCommissioner } from "@/lib/commissioner/permissions"
+import { getLeagueRole } from "@/lib/league/permissions"
 import { prisma } from "@/lib/prisma"
 import { requireEntitlement } from "@/lib/subscription/requireEntitlement"
+import { buildIntegrityCoverage } from "@/lib/integrity/coverage"
 
 export const dynamic = "force-dynamic"
 
@@ -16,12 +18,13 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
   const { leagueId } = await ctx.params
   if (!leagueId) return NextResponse.json({ error: "Missing leagueId" }, { status: 400 })
 
-  try {
-    await assertCommissioner(leagueId, userId)
-  } catch (e) {
-    const st = (e as Error & { status?: number }).status ?? 403
-    return NextResponse.json({ error: "Forbidden" }, { status: st })
+  const role = await getLeagueRole(leagueId, userId)
+  if (role !== 'commissioner' && role !== 'co_commissioner') {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
+
+  const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true, platform: true } })
+  if (!league) return NextResponse.json({ error: "League not found" }, { status: 404 })
 
   const settings = await prisma.leagueIntegritySettings.upsert({
     where: { leagueId },
@@ -29,7 +32,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     update: {},
   })
 
-  const [openFlags, recentDismissed, totalFlags, openCollusion, openTanking] = await Promise.all([
+  const [openFlags, recentDismissed, totalFlags, openCollusion, openTanking, nativeSeason] = await Promise.all([
     prisma.integrityFlag.findMany({
       where: { leagueId, status: "open" },
       orderBy: { createdAt: "desc" },
@@ -42,12 +45,23 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ leagueId: 
     prisma.integrityFlag.count({ where: { leagueId } }),
     prisma.integrityFlag.count({ where: { leagueId, status: "open", flagType: "collusion" } }),
     prisma.integrityFlag.count({ where: { leagueId, status: "open", flagType: "tanking" } }),
+    prisma.redraftSeason.findFirst({ where: { leagueId }, select: { id: true } }),
   ])
+
+  const coverage = buildIntegrityCoverage({
+    platform: league.platform,
+    hasNativeRedraftSeason: Boolean(nativeSeason),
+    tankingEnabled: settings.tankingMonitorEnabled,
+    lastCollusionScanAt: settings.lastCollusionScanAt,
+    lastTankingScanAt: settings.lastTankingScanAt,
+  })
 
   return NextResponse.json({
     settings,
     openFlags,
     recentDismissed,
+    canReview: league.userId === userId,
+    coverage,
     stats: {
       totalFlagsAllTime: totalFlags,
       openCollusion,

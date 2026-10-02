@@ -780,6 +780,10 @@
 /* ── Recent changes + members ────────────────────────────────────────── */
 
 .af-ch-recent,
+.af-ch-member-filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.af-ch-member-filters button { border: 1px solid rgba(255,255,255,.2); border-radius: 999px; padding: 5px 11px; color: inherit; background: transparent; cursor: pointer; }
+.af-ch-member-filters button[aria-pressed="true"] { border-color: #e8ad61; background: rgba(232,173,97,.14); }
+
 .af-ch-members {
   margin: 0;
   padding: 0;
@@ -1725,4 +1729,340 @@
 
 .af-ch-depth-lock {
   min-width: 0;
+}
+
+/* ── Commissioner OS summary + Chimmy entry ("Commissioner intelligence") ──
+ *
+ * CommissionerOsActionsSummary.tsx and CommissionerChimmy.tsx were written with
+ * Tailwind white/amber/cyan utilities — the pattern the note in af-core.css (the
+ * light-mode readability clamp) forbids in .af-core, because light mode renders
+ * them unreadable. Everything below is on the Core tokens, which every theme
+ * (dark, light, af) redefines. State is a data attribute, never a colour class.
+ */
+.af-ch-os,
+.af-ch-chimmy {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.af-ch-os-head,
+.af-ch-os-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.af-ch-os-head-actions,
+.af-ch-os-card-domain {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.af-ch-os-title,
+.af-ch-chimmy-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-ch-chimmy-title {
+  margin-bottom: 4px;
+}
+
+.af-ch-os-textbtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+
+.af-ch-os-textbtn:hover,
+.af-ch-os-textbtn:focus-visible {
+  color: var(--text);
+}
+
+.af-ch-os-link {
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.af-ch-os-skeleton {
+  height: 64px;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface2);
+  animation: af-ch-os-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes af-ch-os-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-ch-os-skeleton {
+    animation: none;
+  }
+}
+
+.af-ch-os-note {
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-ch-os-note[data-tone='bad'] {
+  color: var(--bad);
+}
+
+.af-ch-os-body {
+  margin-top: 12px;
+}
+
+.af-ch-os-card {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface2);
+}
+
+.af-ch-os-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--faint);
+}
+
+.af-ch-os-dot[data-priority='critical'] {
+  background: var(--bad);
+}
+
+.af-ch-os-dot[data-priority='high'] {
+  background: var(--warn);
+}
+
+.af-ch-os-dot[data-priority='medium'] {
+  background: var(--accent);
+}
+
+.af-ch-os-card-title {
+  margin: 6px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-ch-os-card-summary {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+.af-ch-os-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.af-ch-os-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--chip-line);
+  border-radius: 999px;
+  background: var(--chip);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+button.af-ch-os-chip {
+  cursor: pointer;
+}
+
+.af-ch-os-chip[data-tone='bad'] {
+  border-color: transparent;
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.af-ch-os-chip[data-tone='warn'] {
+  border-color: transparent;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.af-ch-os-chip[data-tone='active'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.af-ch-os-chip[data-tone='off'] {
+  background: transparent;
+  color: var(--faint);
+}
+
+.af-ch-os-stamp {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.af-ch-os-copy {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.af-ch-os-copy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.af-ch-os-copy-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.af-ch-os-channel {
+  display: block;
+  margin-top: 8px;
+}
+
+.af-ch-os-draft {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+  resize: vertical;
+}
+
+.af-ch-os-draft:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* iOS Safari zooms the page on focus for any field under 16px. */
+@media (max-width: 720px) {
+  .af-ch-os-draft {
+    font-size: 16px;
+  }
+}
+
+.af-ch-os-card-head + .af-ch-os-chips,
+.af-ch-os-draft + .af-ch-os-card-head {
+  margin-top: 8px;
+}
+
+.af-ch-os-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+}
+
+.af-ch-os-count[data-tone='bad'] {
+  color: var(--bad);
+}
+
+.af-ch-os-copied {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--good);
+}
+
+.af-core .af-btn.af-ch-os-copy-btn {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.af-ch-chimmy-field {
+  display: block;
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.af-core .af-btn.af-ch-chimmy-ask {
+  margin-top: 12px;
+}
+
+.af-ch-chimmy-answer {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: var(--text);
+}
+
+/*
+ * ── Phone: three task cards, then "N more"; the section bar stays reachable ──
+ *
+ * TOP-LEVEL, appended after #1808's block and every query above: a rule inserted inside a query
+ * silently moves into it.
+ *
+ * TaskCards renders cards 4–6 twice: in the grid for wide screens (--wide-only) and inside the
+ * "more" disclosure for phones (--phone-only). Exactly one copy is displayed at any width, and
+ * the summary shows the matching count. Desktop looks as it did.
+ */
+.af-ch-tasks--wide-only { margin-top: 10px; }
+.af-ch-tasks--phone-only,
+.af-ch-more-phone { display: none; }
+.af-ch-more[data-wide-empty='true'] { display: none; }
+
+@media (max-width: 720px) {
+  .af-ch-tasks--wide-only,
+  .af-ch-more-wide { display: none; }
+  .af-ch-tasks--phone-only { display: grid; }
+  .af-ch-more-phone { display: inline; }
+  .af-ch-more[data-wide-empty='true'] { display: block; }
+  .af-ch-more .af-ch-tasks + .af-ch-tasks { margin-top: 10px; }
+
+  /*
+   * The hub is ~17,000px on a phone across 19 sections, and the jump chips scrolled away with
+   * the first screen. Sticky, so once reached they stay. The phone shell scrolls its own nav
+   * away; the only fixed thing above is the safe-area strip, so this sits just under it.
+   */
+  .af-ch-nav {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 20;
+    margin-top: 0;
+    padding: 8px 0;
+    background: var(--bg);
+    box-shadow: 0 1px 0 var(--line);
+  }
 }

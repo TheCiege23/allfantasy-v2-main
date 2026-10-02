@@ -92,10 +92,12 @@ export function IntegritySettings({
   value,
   onSave,
   saving = false,
+  readOnly = false,
 }: {
   value: IntegritySettingsValue
   onSave: (next: Draft) => void | Promise<void>
   saving?: boolean
+  readOnly?: boolean
 }) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(value))
 
@@ -134,7 +136,7 @@ export function IntegritySettings({
             name="Collusion"
             value={draft.collusionSensitivity}
             onChange={(v) => set('collusionSensitivity', v)}
-            disabled={saving}
+            disabled={saving || readOnly}
           />
           <p className="af-cm-threshold">{describeCollusionSensitivity(draft.collusionSensitivity)}</p>
         </div>
@@ -151,7 +153,7 @@ export function IntegritySettings({
               type="button"
               className="af-cm-toggle af-num"
               aria-pressed={draft.tankingMonitorEnabled}
-              disabled={saving}
+              disabled={saving || readOnly}
               onClick={() => set('tankingMonitorEnabled', !draft.tankingMonitorEnabled)}
             >
               {draft.tankingMonitorEnabled ? 'On' : 'Off'}
@@ -163,7 +165,7 @@ export function IntegritySettings({
               <input
                 type="checkbox"
                 checked={draft.tankingIllegalLineupCheck}
-                disabled={saving || !draft.tankingMonitorEnabled}
+                disabled={saving || readOnly || !draft.tankingMonitorEnabled}
                 onChange={(e) => set('tankingIllegalLineupCheck', e.target.checked)}
               />
               <span>Starting OUT / IR / doubtful when alternatives exist</span>
@@ -172,7 +174,7 @@ export function IntegritySettings({
               <input
                 type="checkbox"
                 checked={draft.tankingBenchPatternCheck}
-                disabled={saving || !draft.tankingMonitorEnabled}
+                disabled={saving || readOnly || !draft.tankingMonitorEnabled}
                 onChange={(e) => set('tankingBenchPatternCheck', e.target.checked)}
               />
               <span>Benching significantly better projections</span>
@@ -202,7 +204,7 @@ export function IntegritySettings({
               min={1}
               max={18}
               inputMode="numeric"
-              disabled={saving || !draft.tankingMonitorEnabled}
+              disabled={saving || readOnly || !draft.tankingMonitorEnabled}
               value={draft.tankingStartWeek ?? ''}
               placeholder="—"
               aria-label="Start monitoring at week"
@@ -227,20 +229,20 @@ export function IntegritySettings({
             name="Tanking"
             value={draft.tankingSensitivity}
             onChange={(v) => set('tankingSensitivity', v)}
-            disabled={saving || !draft.tankingMonitorEnabled}
+            disabled={saving || readOnly || !draft.tankingMonitorEnabled}
           />
           <p className="af-cm-threshold">{describeTankingSensitivity(draft.tankingSensitivity)}</p>
         </div>
       </div>
 
-      <button
+      {!readOnly && <button
         type="button"
         className="af-cm-save"
         disabled={saving || !dirty}
         onClick={() => void onSave(draft)}
       >
         {saving ? 'Saving…' : dirty ? 'Save integrity settings' : 'Saved'}
-      </button>
+      </button>}
 
       <p className="af-cm-rail-foot">
         Flags are private to commissioners until you act on one. Dismissals are logged. Every settled trade is checked

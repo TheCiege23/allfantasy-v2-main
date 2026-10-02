@@ -39,6 +39,9 @@ import { decideCoreDepth } from '@/lib/core-app/coreDepthAccess'
 function hub(over: Partial<CommissionerHubData> = {}): CommissionerHubData {
   return {
     allowed: true,
+    formatCards: [],
+    network: null,
+    history: { tradeAvailable: true, draftAvailable: true, trades: [], drafts: [], tradeNote: 'No trade history', draftNote: 'No draft history' },
     grant: {} as CommissionerHubData['grant'],
     league: { id: 'L1', name: 'Dynasty Dragons', platform: 'sleeper', season: 2026, native: false },
     role: 'commissioner',
@@ -56,8 +59,8 @@ function hub(over: Partial<CommissionerHubData> = {}): CommissionerHubData {
       available: true,
       data: {
         rows: [
-          { name: 'quiet-owl', status: 'inactive', detail: 'no moves in 14 days' },
-          { name: 'lark', status: 'active', detail: '3 moves' },
+          { name: 'quiet-owl', status: 'inactive', detail: 'no moves in 14 days', lastActionAt: null },
+          { name: 'lark', status: 'active', detail: '3 moves', lastActionAt: null },
         ],
         total: 2,
         active: 1,
@@ -134,7 +137,7 @@ describe('<CommissionerHub /> in the hub dress', () => {
     expect(screen.getByRole('button', { name: 'Send @everyone' })).toBeTruthy()
   })
 
-  it('opens Commissioner OS on this league for the owner, and not at all for a co-commissioner', () => {
+  it('opens Commissioner OS on this league for the owner and co-commissioner', () => {
     const { unmount } = render(<CommissionerHub data={hub()} />)
     const os = screen.getByRole('link', { name: 'Health trends in Commissioner OS →' })
     expect(os.getAttribute('href')).toBe('/commissioner-os/league-health')
@@ -145,7 +148,7 @@ describe('<CommissionerHub /> in the hub dress', () => {
     unmount()
 
     render(<CommissionerHub data={hub({ viewerIsOwner: false, role: 'co_commissioner' })} />)
-    expect(screen.queryByRole('link', { name: /Commissioner OS/ })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Health trends in Commissioner OS →' })).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Open league chat →' })).toBeTruthy()
   })
 

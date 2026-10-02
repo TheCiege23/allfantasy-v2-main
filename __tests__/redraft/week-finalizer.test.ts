@@ -201,6 +201,25 @@ describe('finalizeRedraftWeek', () => {
     expect(updated?.data).toEqual({ isFinalized: true })
   })
 
+  it('queues a tanking scan only after every matchup is final, scoped to the season', async () => {
+    const enqueueTankingScan = vi.fn(async () => {})
+    const finished = makePrisma({ matchupsAfter: [{ status: 'final' }, { status: 'final' }] })
+    await finalizeRedraftWeek(
+      { seasonId: 'season-1', week: 2 },
+      { prisma: finished.prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc as any, enqueueTankingScan },
+    )
+    expect(enqueueTankingScan).toHaveBeenCalledOnce()
+    expect(enqueueTankingScan).toHaveBeenCalledWith('league-1', 2, 'season-1')
+
+    enqueueTankingScan.mockClear()
+    const incomplete = makePrisma({ matchupsAfter: [{ status: 'final' }, { status: 'scheduled' }] })
+    await finalizeRedraftWeek(
+      { seasonId: 'season-1', week: 2 },
+      { prisma: incomplete.prisma, now: () => AFTER_GRACE, recalculateMatchups: recalc as any, enqueueTankingScan },
+    )
+    expect(enqueueTankingScan).not.toHaveBeenCalled()
+  })
+
   it('best ball: the bench scores too, so it is sealed with the starters (IR and taxi are not)', async () => {
     const { prisma, calls } = makePrisma({
       league: { bestBallMode: true, leagueType: 'best_ball', leagueVariant: null },

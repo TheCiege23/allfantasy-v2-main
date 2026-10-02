@@ -37,6 +37,8 @@ export interface MissionControlViewProps {
   /** The behavioural snapshot series — Mission Control's one chart. Null when it could not be read. */
   activityTrend: LeagueActivityTrend | null
   dataMode: CommissionerDataMode
+  /** Only a league's owner can add a co-commissioner, and Commissioner OS also admits co-commissioners. */
+  canInviteCoCommissioner?: boolean
 }
 
 /**
@@ -48,7 +50,7 @@ export interface MissionControlViewProps {
  * job is arranging it per the Mission Control Blueprint's layout and
  * Decision Hierarchy.
  */
-export function MissionControlView({ leagueHealth, recommendations, managerHighlights, kpis, recentActivity, automationSummary, analyticsSummary, reportsSummary, notificationsSummary, activityTrend, dataMode }: MissionControlViewProps) {
+export function MissionControlView({ leagueHealth, recommendations, managerHighlights, kpis, recentActivity, automationSummary, analyticsSummary, reportsSummary, notificationsSummary, activityTrend, dataMode, canInviteCoCommissioner = false }: MissionControlViewProps) {
   const trendPoints = activityTrend?.points ?? []
   return (
     <div>
@@ -77,9 +79,11 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
         <Button size="sm" variant="outline" className="h-11 min-h-11 sm:h-9 sm:min-h-[36px]">
           <ListChecks size={14} aria-hidden /> Review Pending Trades
         </Button>
-        <Button size="sm" variant="outline" className="h-11 min-h-11 sm:h-9 sm:min-h-[36px]">
-          <UserPlus size={14} aria-hidden /> Invite Co-Commissioner
-        </Button>
+        {canInviteCoCommissioner && (
+          <Button size="sm" variant="outline" className="h-11 min-h-11 sm:h-9 sm:min-h-[36px]">
+            <UserPlus size={14} aria-hidden /> Invite Co-Commissioner
+          </Button>
+        )}
       </div>
 
       {/*

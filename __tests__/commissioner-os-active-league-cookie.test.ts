@@ -40,7 +40,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }))
 const cookiesMock = vi.hoisted(() => vi.fn())
 vi.mock("next/headers", () => ({ cookies: cookiesMock }))
 
-import { resolveActiveLeagueId } from "@/lib/commissioner-ui/resolveActiveLeagueId"
+import { resolveActiveLeagueId, viewerOwnsActiveLeague } from "@/lib/commissioner-ui/resolveActiveLeagueId"
 import { ACTIVE_LEAGUE_COOKIE_KEY } from "@/lib/commissioner-ui/activeLeague/constants"
 
 /**
@@ -77,6 +77,31 @@ describe("resolveActiveLeagueId — cookie override", () => {
     cookieJar("lg-older")
     // Not the newest league — proving the cookie actually decided it.
     await expect(resolveActiveLeagueId()).resolves.toBe("lg-older")
+  })
+
+  it("includes claimed co-commissioner leagues while excluding ordinary members and viewers", async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
+    prismaMock.league.findMany.mockResolvedValue([{ id: "lg-co", status: "active", name: "Co league" }])
+    cookieJar("lg-co")
+
+    await expect(resolveActiveLeagueId()).resolves.toBe("lg-co")
+    expect(prismaMock.league.findMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { userId: "user-1" },
+          {
+            teams: {
+              some: {
+                claimedByUserId: "user-1",
+                role: { not: "viewer" },
+                OR: [{ isCommissioner: true }, { isCoCommissioner: true }],
+              },
+            },
+          },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+    })
   })
 
   it("falls back to the most recently created league when no cookie is set", async () => {
@@ -134,5 +159,48 @@ describe("resolveActiveLeagueId — what cookies() throws", () => {
     await expect(resolveActiveLeagueId()).resolves.toBeNull()
     // The early return runs first, so a scopeless context cannot even be reached here.
     expect(cookiesMock).not.toHaveBeenCalled()
+  })
+})
+
+/*
+ * Commissioner OS admits co-commissioners, so an owner-only action has to ask who owns the ACTIVE
+ * league — the same league `resolveActiveLeagueId` picks, cookie included. Measured 2026-10-01: a
+ * co-commissioner was offered "Invite Co-Commissioner" in Mission Control.
+ */
+describe("viewerOwnsActiveLeague", () => {
+  function withLeagues() {
+    getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
+    prismaMock.league.findMany.mockResolvedValue([
+      { id: "lg-owned", status: "active", name: "Owned", userId: "user-1" },
+      { id: "lg-co", status: "active", name: "Co-commissioned", userId: "someone-else" },
+    ])
+  }
+
+  it("is true when the active league is one the viewer owns", async () => {
+    withLeagues()
+    cookieJar("lg-owned")
+    await expect(viewerOwnsActiveLeague()).resolves.toBe(true)
+  })
+
+  it("is false when the active league is one the viewer only co-commissions", async () => {
+    withLeagues()
+    cookieJar("lg-co")
+    await expect(viewerOwnsActiveLeague()).resolves.toBe(false)
+  })
+
+  it("follows the same default league as resolveActiveLeagueId when there is no cookie", async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: "user-1" } })
+    prismaMock.league.findMany.mockResolvedValue([
+      { id: "lg-co", status: "active", name: "Co-commissioned", userId: "someone-else" },
+      { id: "lg-owned", status: "active", name: "Owned", userId: "user-1" },
+    ])
+    cookieJar(undefined)
+    await expect(resolveActiveLeagueId()).resolves.toBe("lg-co")
+    await expect(viewerOwnsActiveLeague()).resolves.toBe(false)
+  })
+
+  it("is false with no session", async () => {
+    getServerSessionMock.mockResolvedValue(null)
+    await expect(viewerOwnsActiveLeague()).resolves.toBe(false)
   })
 })
