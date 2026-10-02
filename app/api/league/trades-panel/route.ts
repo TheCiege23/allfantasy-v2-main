@@ -310,6 +310,10 @@ async function buildNativeActiveTrades(
           assets: t.items
             .filter((item) => item.fromRosterId === rosterId)
             .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo), accent: rosterId === viewRosterId ? 'blue' as const : 'teal' as const })),
+          // What this manager GETS — the side a trade card lists under their name and letter.
+          received: t.items
+            .filter((item) => item.toRosterId === rosterId)
+            .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo), accent: item.fromRosterId === viewRosterId ? 'blue' as const : 'teal' as const })),
           grade: frozen?.grade ?? null,
           reason: frozen?.reason ?? null,
         }
@@ -573,6 +577,9 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
           assets: trade.items
             .filter((item) => item.fromRosterId === rosterId)
             .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo), accent: rosterId === trade.proposerRosterId ? 'blue' as const : 'teal' as const })),
+          received: trade.items
+            .filter((item) => item.toRosterId === rosterId)
+            .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo), accent: item.fromRosterId === trade.proposerRosterId ? 'blue' as const : 'teal' as const })),
           grade: frozen?.grade ?? null,
           reason: frozen?.reason ?? null,
         }
@@ -697,6 +704,9 @@ async function buildNativeExecutedTrades(
         assets: t.items
           .filter((item) => item.fromRosterId === rosterId)
           .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo), accent: rosterId === t.proposerRosterId ? 'blue' as const : 'teal' as const })),
+        received: t.items
+          .filter((item) => item.toRosterId === rosterId)
+          .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo), accent: item.fromRosterId === t.proposerRosterId ? 'blue' as const : 'teal' as const })),
         grade: null,
         reason: null,
       })),

@@ -97,6 +97,17 @@ describe('TradeCardView', () => {
     expect(screen.getByText("League value, on this league's chart.")).toBeTruthy()
   })
 
+  it('names each side for the team that received it, in the grade line’s order', () => {
+    const { container } = render(<TradeCardView card={{ ...base, grade: graded(), valueGave: 6100, valueGot: 5200, valueBasis: 'league' }} />)
+    const sides = [...container.querySelectorAll('.af-cm-trade-side')]
+    // Casey's D sits over what Casey GOT (Chase, 5,200), not over Kelce, whom Casey gave away.
+    expect(sides[0].querySelector('.af-cm-trade-label')!.textContent).toBe('Casey got · 5,200')
+    expect(sides[0].textContent).toContain("Ja'Marr Chase")
+    expect(sides[1].querySelector('.af-cm-trade-label')!.textContent).toBe('Jordan got · 6,100')
+    expect(sides[1].textContent).toContain('Travis Kelce')
+    expect(container.textContent).not.toMatch(/\bGave\b/)
+  })
+
   it('a withheld grade says why with no letter', () => {
     render(<TradeCardView card={{ ...base, grade: { graded: false, reason: 'only two-team trades are graded' } }} />)
     expect(screen.getByTestId('trade-card-grade-withheld').textContent).toBe('Not graded: only two-team trades are graded')

@@ -121,26 +121,30 @@ function CompletedTradeView({ card }: { card: TradeCard }) {
         {when ? <span className="af-cm-trade-when"> · {when}</span> : null}
       </p>
 
+      {/*
+        Each side is named for the team that RECEIVED it (2026-10-01), in the order the grade line
+        below names them — `manager` first. What `manager` gave is what the partner got.
+      */}
       <div className="af-cm-trade-sides">
         <div className="af-cm-trade-side">
           <span className="af-cm-trade-label">
-            Gave
-            {valued ? <span className="af-cm-trade-value" data-testid="trade-value-gave"> · {fmtValue(card.valueGave!)}</span> : null}
-          </span>
-          <ul className="af-cm-trade-list">
-            {side(card.gave, card.picksGave, card.extrasGave).map((t, i) => (
-              <li key={`gave-${i}`}>{t}</li>
-            ))}
-          </ul>
-        </div>
-        <div className="af-cm-trade-side">
-          <span className="af-cm-trade-label">
-            Got
+            {card.manager} got
             {valued ? <span className="af-cm-trade-value" data-testid="trade-value-got"> · {fmtValue(card.valueGot!)}</span> : null}
           </span>
           <ul className="af-cm-trade-list">
             {side(card.got, card.picksGot, card.extrasGot).map((t, i) => (
               <li key={`got-${i}`}>{t}</li>
+            ))}
+          </ul>
+        </div>
+        <div className="af-cm-trade-side">
+          <span className="af-cm-trade-label">
+            {card.partner ? `${card.partner} got` : 'The other side got'}
+            {valued ? <span className="af-cm-trade-value" data-testid="trade-value-gave"> · {fmtValue(card.valueGave!)}</span> : null}
+          </span>
+          <ul className="af-cm-trade-list">
+            {side(card.gave, card.picksGave, card.extrasGave).map((t, i) => (
+              <li key={`gave-${i}`}>{t}</li>
             ))}
           </ul>
         </div>

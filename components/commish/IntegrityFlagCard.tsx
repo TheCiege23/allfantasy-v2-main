@@ -139,17 +139,22 @@ function TradeSides({ ev }: { ev: CollusionEvidenceLike }) {
   const aValue = fmtValue(ev.team1TotalValue)
   const bValue = fmtValue(ev.team2TotalValue)
 
+  /*
+   * Each team over what it RECEIVED (2026-10-01), the reading every other trade card uses: side A
+   * got what side B gave, at side B's total — so a lopsided trade shows the winner over the bigger
+   * number.
+   */
   return (
     <div className="af-cm-sides">
       <div className="af-cm-side">
-        <div className="af-cm-side-who af-num">{aName ? `${aName} gave` : 'Side A gave'}</div>
-        <p className="af-cm-side-assets">{aAssets}</p>
-        {aValue ? <div className="af-cm-side-value af-num">value {aValue}</div> : null}
-      </div>
-      <div className="af-cm-side">
-        <div className="af-cm-side-who af-num">{bName ? `${bName} gave` : 'Side B gave'}</div>
+        <div className="af-cm-side-who af-num">{aName ? `${aName} received` : 'Side A received'}</div>
         <p className="af-cm-side-assets">{bAssets}</p>
         {bValue ? <div className="af-cm-side-value af-num">value {bValue}</div> : null}
+      </div>
+      <div className="af-cm-side">
+        <div className="af-cm-side-who af-num">{bName ? `${bName} received` : 'Side B received'}</div>
+        <p className="af-cm-side-assets">{aAssets}</p>
+        {aValue ? <div className="af-cm-side-value af-num">value {aValue}</div> : null}
       </div>
     </div>
   )
