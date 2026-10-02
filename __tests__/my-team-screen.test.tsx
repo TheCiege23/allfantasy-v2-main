@@ -161,14 +161,15 @@ describe('My Team — the reported problems', () => {
   it.each([{ eliminated: true }, { completed: true }])('does not offer lineup fixes for an inactive team: %j', (status) => {
     const t = text(<MyTeam data={data(status)} />)
     expect(t).not.toContain('Nobody is starting in this slot')
-    expect(t).not.toContain('Fix in sleeper')
+    // Case-insensitive: the platform is "Sleeper" now, and a lowercase-only check would pass vacuously.
+    expect(t).not.toMatch(/Fix in sleeper/i)
     expect(t).not.toContain('Lineup lock')
   })
   it('shows draft preparation rather than empty-slot lineup fixes before the draft', () => {
     const t = text(<MyTeam data={data({ preDraft: true })} />)
     expect(t).toContain('Draft pending')
     expect(t).not.toContain('Nobody is starting in this slot')
-    expect(t).not.toContain('Fix in sleeper')
+    expect(t).not.toMatch(/Fix in sleeper/i)
   })
   it('⚠ prices BENCH players, not only starters', () => {
     // The bench rendered a name and a status chip and nothing else, so half the
