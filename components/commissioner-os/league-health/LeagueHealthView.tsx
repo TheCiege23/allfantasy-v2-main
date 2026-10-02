@@ -10,6 +10,7 @@ import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/const
 import type { CommissionerRecommendationContract } from '@/lib/commissioner-ui/contracts'
 import type { LeagueHealthDetail, LeagueHealthRisk, LeagueHealthEvidencePoint } from '@/lib/commissioner-ui/league-health/decision-os-client'
 import { ShieldCheck } from 'lucide-react'
+import { allClearCopy } from '@/lib/commissioner-ui/allClear'
 
 export interface LeagueHealthViewProps {
   detail: LeagueHealthDetail
@@ -17,6 +18,14 @@ export interface LeagueHealthViewProps {
   evidence: LeagueHealthEvidencePoint[]
   recommendations: CommissionerRecommendationContract[]
   dataMode: CommissionerDataMode
+  /**
+   * Whether `detail` is a real reading or the page's nothing-loaded fallback, and whether each list
+   * was read. A failed read arrives as `[]`, so without these an outage reads as "in good shape".
+   * Default true for direct renders; the page always passes them.
+   */
+  detailAvailable?: boolean
+  risksRead?: boolean
+  recommendationsRead?: boolean
 }
 
 /**
@@ -24,8 +33,11 @@ export interface LeagueHealthViewProps {
  * renders it, it never computes it. Every value arrives already computed
  * as props from the League Health Decision OS client.
  */
-export function LeagueHealthView({ detail, risks, evidence, recommendations, dataMode }: LeagueHealthViewProps) {
+export function LeagueHealthView({ detail, risks, evidence, recommendations, dataMode, detailAvailable = true, risksRead = true, recommendationsRead = true }: LeagueHealthViewProps) {
   const scoreStyle = getSeverityStyle(detail.tier)
+  const healthTier = detailAvailable ? detail.tier : null
+  const noRisks = allClearCopy({ emptyTitle: 'No active risks.', healthyDescription: 'The league is in good shape.', listName: 'risks', listRead: risksRead, healthTier })
+  const noRecommendations = allClearCopy({ emptyTitle: 'No open recommendations.', healthyDescription: 'The league is in good shape.', listName: 'recommendations', listRead: recommendationsRead, healthTier })
   // Only worth a column if at least one risk carries it — see the header comment below.
   const showRiskAge = risks.some((risk) => risk.ageInDays != null)
   const participation = participationSlices(detail.participation)
@@ -103,7 +115,7 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
               Risk Analysis
             </h2>
             {risks.length === 0 ? (
-              <EmptyState icon={ShieldCheck} title="No active risks." description="The league is in good shape." />
+              <EmptyState icon={ShieldCheck} title={noRisks.title} description={noRisks.description} />
             ) : (
               <Table>
                 <TableHeader>
@@ -144,7 +156,7 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
               Recommendations
             </h2>
             {recommendations.length === 0 ? (
-              <EmptyState title="No open recommendations." description="The league is in good shape." />
+              <EmptyState title={noRecommendations.title} description={noRecommendations.description} />
             ) : (
               <div className="space-y-3">
                 {recommendations.map((rec) => (

@@ -84,6 +84,10 @@ export default async function MissionControlPage() {
       <MissionControlView
         dataMode={adapter.mode}
         canInviteCoCommissioner={canInviteCoCommissioner}
+        // A failed read arrives as data: null and becomes the fallback below, so the view is told
+        // which readings are real — an outage must not render as "Your league is in good shape".
+        leagueHealthAvailable={leagueHealthResponse.error === null && leagueHealthResponse.data !== null}
+        recommendationsRead={recommendationsResponse.error === null && recommendationsResponse.data !== null}
         leagueHealth={
           leagueHealthResponse.data ?? { score: 0, tier: 'standard', trendLabel: '', trendDirection: 'flat', driver: 'Unavailable' }
         }

@@ -23,6 +23,10 @@ export default async function LeagueHealthPage() {
       <FreeUntilNote access={depth} />
       <LeagueHealthView
         dataMode={adapter.mode}
+        // Each fallback below stands in for a failed read; the view must not call that "good shape".
+        detailAvailable={detailResponse.error === null && detailResponse.data !== null}
+        risksRead={risksResponse.error === null && risksResponse.data !== null}
+        recommendationsRead={recommendationsResponse.error === null && recommendationsResponse.data !== null}
         detail={
           detailResponse.data ?? {
             /*
