@@ -3,9 +3,9 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 
-import type { GameDayTriage, TriageRow } from '@/lib/core-app/gameDayTriage'
+import type { GameDayTriage, TriageLeague, TriageRow } from '@/lib/core-app/gameDayTriage'
 import { lockState } from '@/lib/core-app/lineupLock'
-import { platformLabel } from '@/lib/core-app/platformLinks'
+import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
 import '@/components/core-app/af-game-plan.css'
 
 /**
@@ -91,6 +91,52 @@ function Lock({ kickoff, nowIso }: { kickoff: string; nowIso: string }) {
   )
 }
 
+/**
+ * One league chip, opening the screen where that league's lineup is CHANGED.
+ *
+ * 🛑 THIS WENT TO `/core/my-team`, WHICH CANNOT CHANGE A LINEUP. My Team reads one and
+ * nothing under /core writes a roster (platformLinks.lineupLink says so in as many words),
+ * so a flagged starter's only call to action landed on a page where the fix was impossible.
+ * `lineupLink` is the Player Finder's own destination for this exact list: the provider's
+ * lineup screen, or a native league's in-app team tab.
+ */
+function LeagueLineupLink({ league }: { league: TriageLeague }) {
+  const link = lineupLink({
+    id: league.leagueId,
+    platform: league.platform,
+    platformLeagueId: league.platformLeagueId ?? null,
+    season: league.season ?? null,
+    name: league.leagueName,
+    teamId: league.teamId ?? null,
+  })
+  const body = (
+    <>
+      <span className="af-gp-league-name">{league.leagueName}</span>
+      <span className="af-gp-plat" data-platform={league.platform ?? undefined}>
+        {platformLabel(league.platform).toUpperCase()}
+        {link?.external ? ' ↗' : ''}
+      </span>
+    </>
+  )
+  if (!link) return <span className="af-gp-league">{body}</span>
+  const lands = link.screen === 'Lineup' ? 'lineup' : link.screen.toLowerCase()
+  return link.external ? (
+    <a
+      className="af-gp-league"
+      href={link.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`${league.leagueName} — open the ${lands} on ${link.platformLabel}`}
+    >
+      {body}
+    </a>
+  ) : (
+    <Link className="af-gp-league" href={link.href} aria-label={`${league.leagueName} — open the ${lands}`}>
+      {body}
+    </Link>
+  )
+}
+
 function Row({ row, nowIso }: { row: TriageRow; nowIso: string }) {
   const locked = row.kickoff ? lockState(row.kickoff, nowIso).state === 'locked' : false
 
@@ -154,16 +200,7 @@ function Row({ row, nowIso }: { row: TriageRow; nowIso: string }) {
         */}
         <span className="af-gp-leagues">
           {row.leagues.map((l) => (
-            <Link
-              key={l.leagueId}
-              className="af-gp-league"
-              href={`/core/my-team?league=${encodeURIComponent(l.leagueId)}`}
-            >
-              <span className="af-gp-league-name">{l.leagueName}</span>
-              <span className="af-gp-plat" data-platform={l.platform ?? undefined}>
-                {platformLabel(l.platform).toUpperCase()}
-              </span>
-            </Link>
+            <LeagueLineupLink key={l.leagueId} league={l} />
           ))}
         </span>
 
@@ -181,6 +218,7 @@ export function GamePlan({
   showHead = true,
 }: GamePlanProps) {
   const rows = data.rows
+  const emptySlots = data.emptySlots ?? []
   const actionable = rows.filter((r) => !r.kickoff || lockState(r.kickoff, nowIso).state !== 'locked')
   const locked = rows.length - actionable.length
 
@@ -225,13 +263,51 @@ export function GamePlan({
         .
       </p>
 
+      {/*
+        Empty slots first: a hole in a lineup is a certain zero, where a Questionable tag
+        is only a risk. One row per league — there is no player to name, only a slot to fill.
+      */}
+      {emptySlots.length > 0 ? (
+        <ul className="af-gp-list" aria-label="Lineups with an empty starting slot">
+          {emptySlots.map((l) => (
+            <li key={`empty:${l.leagueId}`}>
+              <article className="af-gp-row" data-tone="bad">
+                <span className="af-gp-face af-gp-face--none" aria-hidden>
+                  –
+                </span>
+                <span className="af-gp-who">
+                  <span className="af-gp-name">
+                    {l.count} empty starting {l.count === 1 ? 'slot' : 'slots'}
+                  </span>
+                  <span className="af-gp-meta">an empty slot scores zero</span>
+                </span>
+                <span className="af-gp-state">
+                  <span className="af-gp-chip" data-tone="bad">
+                    EMPTY
+                  </span>
+                </span>
+                <span className="af-gp-when">
+                  <span className="af-gp-lock af-num" data-state="none">
+                    fill before your league locks
+                  </span>
+                </span>
+                <span className="af-gp-leagues">
+                  <LeagueLineupLink league={l} />
+                </span>
+              </article>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {rows.length > 0 ? (
         <ul className="af-gp-list">
           {rows.map((r) => (
-            <Row key={r.player.sleeperId} row={r} nowIso={nowIso} />
+            /* Sport in the key: a Sleeper id can exist in two sports, and the list now holds both. */
+            <Row key={`${r.player.sport}:${r.player.sleeperId}`} row={r} nowIso={nowIso} />
           ))}
         </ul>
-      ) : (
+      ) : emptySlots.length > 0 ? null : (
         <section className="af-frame af-gp-empty">
           <p className="af-gp-clear">
             {data.startersRead > 0

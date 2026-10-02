@@ -34,6 +34,25 @@ export type ConnectedFranchiseWarRoomSide = {
   }
 }
 
+/*
+ * ⚠ A PINNED LOCALE AND ZONE, NOT A BARE `toLocaleString()`. This is a client component that also
+ * renders on the server, and Railway runs in UTC with its own locale — a bare call printed one
+ * string on the server and another in the browser on every render, which is a hydration mismatch.
+ * Eastern, labelled, as the lineup locks are (lineupLock.ts).
+ */
+const SYNC_TIME = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  month: 'short',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+})
+
+export function syncedAtLabel(at: Date | string): string {
+  const d = new Date(at)
+  return Number.isNaN(d.getTime()) ? 'at an unknown time' : `${SYNC_TIME.format(d)} ET`
+}
+
 function leagueHref(screen: string, leagueId: string) {
   return `/core/${screen}?league=${encodeURIComponent(leagueId)}`
 }
@@ -257,7 +276,7 @@ export function ConnectedFranchiseWarRoom({
 
                 {side.unavailableReason ? <p className="af-cwr-warning">{side.unavailableReason}</p> : null}
                 <div className="af-cwr-sync" data-stale={side.sync.stale || undefined}>
-                  <div><strong>{side.sync.stale ? 'Refresh recommended' : 'Data up to date'}</strong><span>{side.sync.lastSyncedAt ? `Synced ${new Date(side.sync.lastSyncedAt).toLocaleString()}` : 'No sync time recorded'}</span></div>
+                  <div><strong>{side.sync.stale ? 'Refresh recommended' : 'Data up to date'}</strong><span>{side.sync.lastSyncedAt ? `Synced ${syncedAtLabel(side.sync.lastSyncedAt)}` : 'No sync time recorded'}</span></div>
                   {side.sync.refreshHref ? <Link href={side.sync.refreshHref}>{side.platform === 'fantrax' ? 'Re-import' : 'Refresh'}</Link> : null}
                   <small>{side.sync.detail}</small>
                 </div>
