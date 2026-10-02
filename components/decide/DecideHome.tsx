@@ -322,7 +322,7 @@ export function DecideHome({
             ))}
 
             {/* League Pulse — the Decision OS verdict for this league */}
-            <div className={`bdx-card c-${pulseSev(pulse.status)}`}>
+            <div className={`bdx-card c-${pulseSev(pulse.status)}`} data-testid="decide-league-pulse">
               <div className="bdx-head">
                 <span className="bdx-kind">{pulse.eyebrow || 'League pulse'}</span>
                 <SevChip sev={pulseSev(pulse.status)}>{pulse.statusLabel}</SevChip>
@@ -384,7 +384,7 @@ export function DecideHome({
             {/* Recommended moves — Decision OS action queue */}
             {recs.status === 'ready' ? (
               recs.recommendations.map((r) => (
-                <div className={`bdx-card c-${recSev(r.priority)}`} key={r.title}>
+                <div className={`bdx-card c-${recSev(r.priority)}`} key={r.title} data-testid="decide-recommendation">
                   <div className="bdx-head">
                     <span className="bdx-kind">Recommended move</span>
                     <SevChip sev={recSev(r.priority)}>{r.priority}</SevChip>
@@ -410,7 +410,7 @@ export function DecideHome({
                 </div>
               ))
             ) : (
-              <div className="bdx-empty">
+              <div className="bdx-empty" data-testid="decide-recommendations-empty">
                 <div className="t">{recs.insufficientData?.title ?? 'No grounded recommendations yet'}</div>
                 <div className="m">
                   {recs.insufficientData?.message ??
