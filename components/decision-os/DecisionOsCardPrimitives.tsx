@@ -36,15 +36,29 @@ const evidenceColumnClass: Record<1 | 2 | 3, string> = {
 export const decisionOsCardClassName =
   'card-premium overflow-hidden p-0 transition duration-200 hover:border-brand-primary/25 hover:shadow-popover motion-reduce:transition-none'
 
+/*
+ * 🛑 THE ZONE IS PINNED, NOT THE READER'S. `UserOsCard` is a client component rendered on the /core
+ * home, so this string is printed once on the server (UTC) and again in the browser during
+ * hydration. Unpinned, a reader in Eastern time got "1:00 AM" from the server and "9:00 PM" from
+ * their browser: React #425, then #422 as the card's boundary fell back to a client render. Same
+ * rule as components/commissioner-os/primitives/pinnedTime.ts — US Eastern, with the zone named on
+ * a time so it is not read as the reader's own clock.
+ */
+const UPDATED_ZONE = 'America/New_York'
+const UPDATED_DATE = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: UPDATED_ZONE })
+const UPDATED_TIME = new Intl.DateTimeFormat('en-US', {
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZone: UPDATED_ZONE,
+  timeZoneName: 'short',
+})
+
 export function formatDecisionOsUpdated(value: string, includeTime = false) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'Updated just now'
-  const datePart = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const datePart = UPDATED_DATE.format(date)
   if (!includeTime) return `Updated ${datePart}`
-  return `Updated ${datePart} at ${date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  })}`
+  return `Updated ${datePart} at ${UPDATED_TIME.format(date)}`
 }
 
 export function DecisionOsBadge({
