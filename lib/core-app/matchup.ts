@@ -11,7 +11,8 @@ import { resolveCurrentWeekForLeague } from './currentWeek'
 import { leagueWeekProgress } from './leagueWeekProgress'
 import { loadFinishedNflWeeks } from './finishedNflWeeks'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
-import { projectedFinalFor, winProbabilityFor, type Unavailable } from './matchupProjections'
+import { forecastSidesFor, projectedFinalFor, winProbabilityFor, type Unavailable } from './matchupProjections'
+import { BEST_BALL_REASON, matchupStarted, STATES_UNKNOWN_REASON } from './matchupForecast'
 import { loadMatchupSides, matchupLivePoints } from './matchupWinInputs'
 import { normalizePositionForSport, normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { startingSlotTemplate } from './rosterSlots'
@@ -756,9 +757,6 @@ export async function getMatchupData(
   if (sideProjections) base.starterCountsBySide = bySide
   if (sideProjections) base.yetToPlay.reason = `${counts.upcoming} yet to start · ${counts.live} in progress · ${counts.final} finished or unavailable${counts.unknown ? ` · ${counts.unknown} game states unavailable` : ''}`
   const bestBall = league.bestBallMode === true || league.leagueVariant === 'best_ball' || isBestBallSettings(league.settings)
-  const forecastReason = !bestBall && counts.unknown > 0
-      ? 'Some starter game states are unavailable, so remaining points and win probability cannot be verified.'
-      : null
 
   /*
    * ── Projected final and win probability, from what is on the board ─────
@@ -773,6 +771,15 @@ export async function getMatchupData(
    * rather than guess.
    */
   const live = matchupLivePoints(mine, opponentRow, scoreRows.length ? actualBy : null)
+
+  /*
+   * ⚠ AN UNKNOWN GAME STATE ONLY MATTERS ONCE THE MATCHUP HAS STARTED. Before then nothing is banked
+   * and nobody is final, so a schedule row fetched more than an hour ago (`starterGameStates`) has
+   * nothing to get wrong — yet it refused the forecast here while the all-leagues board, rightly,
+   * priced the same game. `matchupStarted` is the shared test (`matchupForecast.ts`).
+   */
+  const started = sideProjections ? matchupStarted(...forecastSidesFor(sideProjections, live, states)) : true
+  const forecastReason = !bestBall && started && counts.unknown > 0 ? STATES_UNKNOWN_REASON : null
 
   const bestBallFinal = bestBall && sideProjections?.bestBall
     ? (() => {
@@ -812,18 +819,19 @@ export async function getMatchupData(
         }
       })()
 
-  const winProbability: MatchupData['winProbability'] = bestBall
-    ? { available: false, reason: 'Best Ball win probability needs a full-roster outcome model; a probability from one projected optimal lineup would overstate certainty.' }
-    : forecastReason ? { available: false, reason: forecastReason } : sideProjections
+  /* Every refusal — best ball, unknown states after kickoff, unattributed points, unpriced starters — is the shared rule's. */
+  const winProbability: MatchupData['winProbability'] = sideProjections
     ? (() => {
-        const result = winProbabilityFor(sideProjections, live)
+        const result = winProbabilityFor(sideProjections, live, { states, bestBall })
         if (result.available) result.data.detail = `${base.yetToPlay.reason} · ${result.data.detail.replace(/starters? still to play/, 'starters with scoring remaining')}`
         return result
       })()
-    : {
-        available: false,
-        reason: 'we could not match both sides of this matchup to an imported roster',
-      }
+    : bestBall
+      ? { available: false, reason: BEST_BALL_REASON }
+      : {
+          available: false,
+          reason: 'we could not match both sides of this matchup to an imported roster',
+        }
 
   /* The same rule the starter counts above use, so a marker and a count can never disagree. */
   const gameStateOf = (entry: { playerId: string; unavailable?: Unavailable | null }): StarterGameState =>

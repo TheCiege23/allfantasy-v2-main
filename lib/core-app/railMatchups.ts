@@ -5,11 +5,8 @@ import { resolveCurrentWeekFrom } from './currentWeek'
 import { managerArtUrl } from './leagueArt'
 import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
-import { isRuledOut } from './injuryStatus'
-import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
-import { composePlayerIdentities } from './playerIdentityCompose'
-import { getByeWeeks } from './byeWeeks'
 import { eliminationFormat, resolveRailMatchupMode } from './railMatchupMode'
+import { loadUnavailableBySport } from './unavailableStarters'
 import { isForeignIdSpace } from './rosterIdSpace'
 
 /**
@@ -803,25 +800,15 @@ export async function loadRailProjections(args: {
 
   // A current injury cannot be applied to a fallback projection from another week.
   // All roster ids share one identity read and one availability read per sport.
-  const unavailableBySport = new Map<string, Set<string>>()
+  // `loadUnavailableBySport` is shared with the all-leagues matchup board.
+  let unavailableBySport = new Map<string, Set<string>>()
   if (projectionWeek?.season === asked.season && projectionWeek.week === asked.week) {
-    const sports = [...new Set(leagueMeta.map((l) => String(l.sport ?? 'NFL').toUpperCase()))]
-    const playerRows = await prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: wanted }, sport: { in: sports } },
-      select: { sleeperId: true, name: true, team: true, sport: true },
-    }).catch(() => [])
-    await Promise.all(sports.map(async (sport) => {
-      const players = playerRows.filter((p) => String(p.sport).toUpperCase() === sport)
-      const teams = new Map([...composePlayerIdentities(players)].map(([id, p]) => [id, p.team]))
-      const [statuses, byes] = await Promise.all([
-        readInjuryStatusById(sport, namesBySleeperId(players), teams),
-        getByeWeeks({ sport, season: args.season, playerTeams: teams, fromWeek: args.week, horizon: 0 }).catch(() => null),
-      ])
-      unavailableBySport.set(sport, new Set([
-        ...[...statuses].filter(([, status]) => isRuledOut(status)).map(([id]) => id),
-        ...(byes?.byWeek.get(args.week) ?? []),
-      ]))
-    }))
+    unavailableBySport = await loadUnavailableBySport({
+      sleeperIds: wanted,
+      sports: leagueMeta.map((l) => String(l.sport ?? 'NFL')),
+      season: args.season,
+      week: args.week,
+    })
   }
   const sportByLeague = new Map(leagueMeta.map((l) => [l.id, String(l.sport ?? 'NFL').toUpperCase()]))
   const scoringByLeague = new Map<string, Record<string, unknown> | null>()
