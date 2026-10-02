@@ -2079,3 +2079,22 @@ button.af-ch-os-chip {
     box-shadow: 0 1px 0 var(--line);
   }
 }
+
+/* Format operations: the owner applies or removes a format template (FormatTemplateControl). */
+.af-ch-template {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.af-ch-template-offer p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text2);
+}
+.af-ch-template-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
