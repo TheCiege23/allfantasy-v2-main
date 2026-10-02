@@ -878,10 +878,16 @@ export function ImportV4({
    * login cannot follow — so the list says what actually works before anyone presses Import.
    */
   const [handleLinkedElsewhere, setHandleLinkedElsewhere] = useState(false)
+  /* The profile's linked Sleeper account (which the gate checks) is not the one just discovered. */
+  const [sleeperMismatch, setSleeperMismatch] = useState<{
+    linkedUsername: string | null
+    discoveredHandle: string
+  } | null>(null)
 
   const reset = useCallback(() => {
     setLeagues([])
     setHandleLinkedElsewhere(false)
+    setSleeperMismatch(null)
     setAccountLabel(null)
     setPhase({ k: 'idle' })
     setError(null)
@@ -905,12 +911,16 @@ export function ImportV4({
   }, [])
 
   const runDiscover = useCallback(
-    async (identifier: string) => {
+    async (identifier: string, opts?: { relinkSleeper?: boolean }) => {
       setError(null)
       setLeagues([])
       setHandleLinkedElsewhere(false)
+      setSleeperMismatch(null)
       setPhase({ k: 'discovering' })
-      const res = await discoverProviderLeagues(provider, identifier, { sport: 'nfl' })
+      const res = await discoverProviderLeagues(provider, identifier, {
+        sport: 'nfl',
+        relinkSleeper: opts?.relinkSleeper,
+      })
       if (!res.ok) {
         // The service already translates the gate's codes into sentences a person
         // can act on ("Connect Yahoo in League Sync…"), so it is surfaced as-is.
@@ -955,10 +965,20 @@ export function ImportV4({
         leagues?: DiscoveredLeague[]
         accountLabel?: string
         handleLinkedElsewhere?: boolean
+        sleeperAccountMismatch?: { linkedUsername?: string | null }
+        account?: { accountIdentifier?: string }
       }
       const found = payload?.leagues ?? []
       setLeagues(found)
       setHandleLinkedElsewhere(provider === 'sleeper' && payload?.handleLinkedElsewhere === true)
+      setSleeperMismatch(
+        provider === 'sleeper' && payload?.sleeperAccountMismatch
+          ? {
+              linkedUsername: payload.sleeperAccountMismatch.linkedUsername ?? null,
+              discoveredHandle: payload.account?.accountIdentifier ?? identifier,
+            }
+          : null,
+      )
       setExcluded(defaultExclusionsFor(found))
       setAccountLabel(payload?.accountLabel ?? null)
       /*
@@ -2460,6 +2480,28 @@ export function ImportV4({
               This Sleeper account is already linked to a different AllFantasy login. Sign in with that
               account to import these leagues.
             </p>
+          ) : null}
+
+          {sleeperMismatch ? (
+            <div className="af-im-field-help" role="status" data-testid="import-sleeper-account-mismatch">
+              <p>
+                Your AllFantasy login is linked to{' '}
+                {sleeperMismatch.linkedUsername
+                  ? `the Sleeper account ${sleeperMismatch.linkedUsername}`
+                  : 'a different Sleeper account'}
+                , not {sleeperMismatch.discoveredHandle}. Import checks each league against the linked
+                account, so a league that the linked account is not in will fail.
+              </p>
+              <button
+                type="button"
+                className="af-btn"
+                data-testid="import-sleeper-relink"
+                disabled={phase.k === 'discovering'}
+                onClick={() => void runDiscover(sleeperMismatch.discoveredHandle, { relinkSleeper: true })}
+              >
+                Link {sleeperMismatch.discoveredHandle} instead
+              </button>
+            </div>
           ) : null}
 
           {/*

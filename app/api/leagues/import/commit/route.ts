@@ -25,7 +25,11 @@ import {
   OPEN_READ_PROVIDERS,
   recordImportAttestation,
 } from '@/lib/league-import/commissionerGate'
-import { commissionerGateFailureResponse } from '@/lib/league-import/commissionerGateResponse'
+import {
+  commissionerGateFailureCode,
+  commissionerGateFailureResponse,
+} from '@/lib/league-import/commissionerGateResponse'
+import { getPostHogClient } from '@/lib/posthog-server'
 import { importerManagerIdForRosters } from '@/lib/league-import/importerManagerId'
 import { redactAndCap } from '@/lib/security/redactSecrets'
 
@@ -143,6 +147,25 @@ async function handleImportCommit(req: NextRequest): Promise<Response> {
       : undefined,
   })
   if (!gate.ok) {
+    // Best-effort: there was no count of gate refusals, so a refusal that blocks every league was invisible.
+    try {
+      const posthog = getPostHogClient()
+      if (posthog) {
+        posthog.capture({
+          distinctId: auth.userId,
+          event: 'league_import_gate_failed',
+          properties: {
+            provider,
+            code: commissionerGateFailureCode(gate),
+            provider_status: gate.status ?? null,
+            not_member: gate.notMember === true,
+          },
+        })
+        await posthog.flush()
+      }
+    } catch {
+      // Analytics must never change the import response.
+    }
     return commissionerGateFailureResponse(gate)
   }
 
