@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -217,6 +218,10 @@ test.describe('@warehouse full click audit', () => {
       })
     })
 
+    // /leagues/<id> shows a sign-in wall to a settled-unauthenticated session since
+    // 1f5105f6 (every fetch on that page is session-gated). The mocked league APIs
+    // still answer; the visitor just has to be signed in to reach the tab.
+    await signInAs(page, { id: 'e2e-warehouse-user' })
     await page.goto('/leagues/league_warehouse_1?tab=Previous%20Leagues')
     await expect(page.getByRole('heading', { name: 'Previous Leagues' })).toBeVisible({ timeout: 45_000 })
     await expect(page.getByLabel('Warehouse view')).toHaveValue('summary')
