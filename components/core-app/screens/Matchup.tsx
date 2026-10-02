@@ -144,10 +144,13 @@ function PlayerHalf({
   cell,
   align,
   live,
+  edge = null,
 }: {
   cell: MatchupPlayerCell | null
   align: 'left' | 'right'
   live: boolean
+  /** Which side of this slot is ahead — tints the half so the board reads at a glance. */
+  edge?: SlotEdge | null
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -174,10 +177,18 @@ function PlayerHalf({
 
   const crest = cell.team ? teamLogoUrl(cell.sport ?? 'NFL', cell.team) : null
   const imageUrl = cell.imageUrl && cell.imageUrl !== failedImageUrl ? cell.imageUrl : null
-  const value = live ? cell.actual : cell.projected
+  /*
+   * 🛑 A STARTER WHOSE GAME HAS NOT KICKED OFF HAS NO POINTS, NOT ZERO POINTS. Sleeper writes a 0
+   * into `players_points` for every starter the moment the week opens, so on a Friday of week 4
+   * (measured 2026-10-02, a 28-starter league) every one of the manager's unplayed starters read
+   * "○ 0.0" — a yet-to-play marker beside what looks like a bust. A 0 on an upcoming game is the
+   * platform's placeholder, so it renders as the absence it is.
+   */
+  const notYetPlayed = live && cell.gameState === 'upcoming' && (cell.actual == null || cell.actual === 0)
+  const value = live ? (notYetPlayed ? null : cell.actual) : cell.projected
 
   return (
-    <div className="af-mu-half" data-align={align} data-state="player">
+    <div className="af-mu-half" data-align={align} data-state="player" data-edge={edge ?? undefined}>
       <span className="af-mu-portrait">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -271,6 +282,16 @@ function PlayerHalf({
             AF {cell.afEngine.toFixed(1)}
           </span>
         ) : null}
+        {/*
+          What an unplayed starter is still expected to add — on its own line and LABELLED, so it is
+          never read as points in the PTS column above it. "Who is still to play, and for how much"
+          is the question a manager opens this board mid-week to answer.
+        */}
+        {notYetPlayed && cell.projected != null && !cell.unavailable ? (
+          <span className="af-mu-half-proj" title={copy("Projected points still to come, under this league's scoring")}>
+            {copy('proj')} {cell.projected.toFixed(1)}
+          </span>
+        ) : null}
       </div>
     </div>
   )
@@ -297,6 +318,31 @@ export function afEngineColumnTotal(slots: MatchupSlot[], key: 'you' | 'opponent
   return rows > 0 ? Math.round(total * 10) / 10 : null
 }
 
+export type SlotEdge = 'ahead' | 'behind' | 'even'
+
+/**
+ * Who is winning ONE slot — scored points on a live board, projections before kickoff.
+ *
+ * Null when either side has no number to compare (an empty slot, an unpriced player, a starter
+ * still to play on a live board): a tint over an unknown would claim a result that does not exist.
+ */
+export function slotEdges(
+  slot: MatchupSlot,
+  live: boolean,
+): { you: SlotEdge; opponent: SlotEdge } | null {
+  const valueOf = (c: MatchupPlayerCell | null): number | null => {
+    if (!c || c.empty) return null
+    if (!live) return c.projected
+    if (c.gameState === 'upcoming' && (c.actual == null || c.actual === 0)) return null
+    return c.actual
+  }
+  const a = valueOf(slot.you)
+  const b = valueOf(slot.opponent)
+  if (a == null || b == null) return null
+  if (Math.abs(a - b) < 0.05) return { you: 'even', opponent: 'even' }
+  return a > b ? { you: 'ahead', opponent: 'behind' } : { you: 'behind', opponent: 'ahead' }
+}
+
 /** Sum of a column, and how many of its cells it was built from. */
 function columnTotal(slots: MatchupSlot[], key: 'you' | 'opponent', live: boolean) {
   let total = 0
@@ -305,6 +351,12 @@ function columnTotal(slots: MatchupSlot[], key: 'you' | 'opponent', live: boolea
   for (const s of slots) {
     const cell = s[key]
     if (!cell || cell.empty) continue
+    /*
+     * A live starter still to kick off is not a gap in our data — nobody has points for him yet.
+     * Counting him in `of` made a Friday board say "built from 2 of your 28 starters, so both
+     * totals read low" about a week that simply had not been played.
+     */
+    if (live && cell.gameState === 'upcoming' && (cell.actual == null || cell.actual === 0)) continue
     of += 1
     const v = live ? cell.actual : cell.projected
     if (v == null) continue
@@ -329,6 +381,16 @@ function LineupBoard({ data }: { data: MatchupData }) {
   const theirsAf = afEngineColumnTotal(slots, 'opponent')
   // Before kickoff each cell carries two projections: the provider's (API) and AllFantasy's (AF).
   const heading = live ? 'PTS' : 'API · AF'
+  /* Slot-by-slot tally — only slots where both sides have a number count. */
+  const tally = { you: 0, opponent: 0, even: 0 }
+  for (const s of slots) {
+    const e = slotEdges(s, live)
+    if (!e) continue
+    if (e.you === 'ahead') tally.you += 1
+    else if (e.you === 'behind') tally.opponent += 1
+    else tally.even += 1
+  }
+  const tallied = tally.you + tally.opponent + tally.even
 
   return (
     <>
@@ -361,6 +423,22 @@ function LineupBoard({ data }: { data: MatchupData }) {
       ) : null}
       {data.league.bestBall ? <p className="af-mu-note">{copy('Best Ball scores your eligible full roster automatically. This board shows provider-listed starters; eligible bench players can also contribute.')}</p> : null}
 
+      {tallied > 0 ? (
+        <p className="af-mu-tally" data-leader={tally.you > tally.opponent ? 'you' : tally.you < tally.opponent ? 'opponent' : 'tied'}>
+          <span className="af-mu-tally-n af-num" data-side="you">{tally.you}</span>
+          <span className="af-mu-tally-label">
+            {language === 'es'
+              ? `posiciones ${live ? 'ganando' : 'proyectadas a favor'} · ${tally.opponent} en contra${tally.even ? ` · ${tally.even} igualadas` : ''}`
+              : `${live ? 'slots winning' : 'slots projected to win'} · ${tally.opponent} losing${tally.even ? ` · ${tally.even} even` : ''}`}
+          </span>
+          {tallied < slots.length ? (
+            <span className="af-mu-tally-of">
+              {language === 'es' ? `de ${tallied} comparables` : `of ${tallied} comparable`}
+            </span>
+          ) : null}
+        </p>
+      ) : null}
+
       <div className="af-mu-board" role="table" aria-label={copy('Head to head, slot by slot')}>
         <div className="af-mu-board-head" role="row">
           <span className="af-label af-mu-board-side" role="columnheader">
@@ -374,21 +452,25 @@ function LineupBoard({ data }: { data: MatchupData }) {
           </span>
         </div>
 
-        {slots.map((slot, i) => (
-          <div className="af-mu-board-row" role="row" key={`${slot.slotLabel}-${i}`}>
-            <PlayerHalf cell={slot.you} align="left" live={live} />
-            <span className="af-mu-slot" role="cell">
-              {slot.slotLabel}
-            </span>
-            <PlayerHalf cell={slot.opponent} align="right" live={live} />
-          </div>
-        ))}
+        {slots.map((slot, i) => {
+          const edge = slotEdges(slot, live)
+          return (
+            <div className="af-mu-board-row" role="row" key={`${slot.slotLabel}-${i}`} data-edge={edge?.you}>
+              <PlayerHalf cell={slot.you} align="left" live={live} edge={edge?.you ?? null} />
+              <span className="af-mu-slot" role="cell">
+                {slot.slotLabel}
+              </span>
+              <PlayerHalf cell={slot.opponent} align="right" live={live} edge={edge?.opponent ?? null} />
+            </div>
+          )
+        })}
 
         <div className="af-mu-board-foot" role="row">
-          <span className="af-mu-foot-total af-num">{yours.total.toFixed(1)}</span>
+          {/* "—" when not one cell on that side had a number: a 0.0 total is a claim. */}
+          <span className="af-mu-foot-total af-num">{yours.from === 0 ? '—' : yours.total.toFixed(1)}</span>
           <span className="af-mu-foot-label af-label">{copy(data.league.bestBall ? 'listed total' : live ? 'total' : 'projected')}</span>
           <span className="af-mu-foot-total af-mu-foot-total--right af-num">
-            {theirs.total.toFixed(1)}
+            {theirs.from === 0 ? '—' : theirs.total.toFixed(1)}
           </span>
         </div>
         {/* AllFantasy's own engine, totalled the same way, before kickoff only. */}
@@ -428,9 +510,31 @@ export function Matchup({ data }: MatchupProps) {
    * been scored, and the projected finals when it has not. Kept as one pair so
    * the margin chip below cannot end up comparing a score against a projection.
    */
-  const scored = data.sides.available
+  const scoredRaw = data.sides.available
     ? { you: data.sides.data.you.points, opponent: data.sides.data.opponent.points }
     : null
+  /*
+   * 🛑 0–0 BEFORE ANYONE HAS PLAYED IS NOT A SCORE. Once the NFL week opens on Thursday, the
+   * platform publishes a matchup row at 0–0 for every league — including ones none of whose
+   * starters play until Sunday. Treated as scored, that banner read "0.0 – 0.0 · Level" directly
+   * under "Win probability 99%" (measured 2026-10-02, tablet, a 187–113 projected matchup). Until
+   * a starter on either side has actually played, the banner compares the projections instead.
+   */
+  const anyStarterPlayed = data.lineups.available
+    ? data.lineups.data.some((s) =>
+        [s.you, s.opponent].some(
+          (c) =>
+            c != null &&
+            !c.empty &&
+            (c.gameState === 'live' || (c.gameState === 'final' && !c.unavailable) || (c.actual ?? 0) !== 0),
+        ),
+      )
+    : data.starterCountsBySide != null
+      ? data.starterCountsBySide.you.live + data.starterCountsBySide.you.final +
+          data.starterCountsBySide.opponent.live + data.starterCountsBySide.opponent.final > 0
+      : true
+  const scored =
+    scoredRaw && scoredRaw.you === 0 && scoredRaw.opponent === 0 && !anyStarterPlayed ? null : scoredRaw
   const projected = data.projectedFinal.available
     ? { you: data.projectedFinal.data.you, opponent: data.projectedFinal.data.opponent }
     : null
@@ -585,7 +689,7 @@ export function Matchup({ data }: MatchupProps) {
       ) : null}
 
       {/* ── Head to head ────────────────────────────────────────────── */}
-      <section className="af-frame af-mu-h2h">
+      <section className="af-frame af-mu-h2h" data-leader={leader ?? undefined}>
         {data.teams.available ? (
           <>
             <TeamCard
@@ -601,8 +705,26 @@ export function Matchup({ data }: MatchupProps) {
               <div className="af-label af-mu-centre-label">{copy('Win probability')}</div>
               {data.winProbability.available ? (
                 <>
-                  <div className="af-mu-centre-value af-num">
+                  <div
+                    className="af-mu-centre-value af-num"
+                    data-tone={data.winProbability.data.pWin >= 0.5 ? 'good' : 'bad'}
+                  >
                     {Math.round(data.winProbability.data.pWin * 100)}%
+                  </div>
+                  {/*
+                    The same number as a bar — your share on the left, theirs on the right, matching
+                    the two team cards either side of it. A percentage is read; a bar is SEEN, which
+                    is what a glance at a phone mid-game needs.
+                  */}
+                  <div
+                    className="af-mu-wp"
+                    role="img"
+                    aria-label={`${copy('Win probability')} ${Math.round(data.winProbability.data.pWin * 100)}%`}
+                  >
+                    <span
+                      className="af-mu-wp-you"
+                      style={{ width: `${Math.min(100, Math.max(0, data.winProbability.data.pWin * 100))}%` }}
+                    />
                   </div>
                   {/*
                     ⚠ THE CONFIDENCE AND THE MODEL'S OWN SENTENCE STAY ATTACHED TO

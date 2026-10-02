@@ -435,3 +435,137 @@
     background: transparent;
   }
 }
+
+/* ── 2026-10-02 visual pass (components/core-app/MatchupPulseBoard.tsx) ──────
+ *
+ * Top-level rules and sibling @media blocks, appended at end of file.
+ */
+
+/* The week as one scoreboard — "21 leading ▬▬▬▬▬▬▬▬ 22 trailing". */
+.af-mp-score {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(90% 160% at 0% 50%, var(--good-soft), transparent 50%),
+    radial-gradient(90% 160% at 100% 50%, var(--bad-soft), transparent 50%),
+    var(--surface);
+}
+.af-mp-score-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.af-mp-score-side[data-tone='bad'] {
+  align-items: flex-end;
+}
+.af-mp-score-n {
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.af-mp-score-side[data-tone='good'] .af-mp-score-n {
+  color: var(--good);
+}
+.af-mp-score-side[data-tone='bad'] .af-mp-score-n {
+  color: var(--bad);
+}
+.af-mp-score-word {
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-mp-split {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--bad);
+  opacity: 0.9;
+  overflow: hidden;
+}
+.af-mp-split-good {
+  display: block;
+  height: 100%;
+  background: var(--good);
+  box-shadow: 2px 0 0 0 var(--surface);
+  transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Each row's margin, drawn against the biggest on the board, along the row's foot. */
+.af-core .af-mp-row {
+  position: relative;
+  overflow: hidden;
+}
+.af-mp-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  border-radius: 0 3px 3px 0;
+  pointer-events: none;
+}
+.af-mp-row[data-tone='good'] .af-mp-bar {
+  background: var(--good);
+}
+.af-mp-row[data-tone='bad'] .af-mp-bar {
+  background: var(--bad);
+}
+/* A projected margin is a forecast — its bar is hatched rather than solid. */
+.af-mp-row[data-basis='projected'] .af-mp-bar {
+  opacity: 0.55;
+  background-image: repeating-linear-gradient(90deg, transparent 0 4px, var(--surface) 4px 6px);
+}
+.af-mp-row[data-tone='good'] {
+  box-shadow: inset 3px 0 0 0 var(--good);
+}
+.af-mp-row[data-tone='bad'] {
+  box-shadow: inset 3px 0 0 0 var(--bad);
+}
+
+/* Readability: the line that says whether the numbers are points or projections, and each row's
+   opponent line, were 11px — under the 12px floor this app uses for body text on a phone. */
+.af-mp-basis,
+.af-mp-meta,
+.af-mp-gap {
+  font-size: 12px;
+}
+
+/* The refresh button's 44px hit area applied only at ≤720px; a touch tablet got 20px. */
+@media (pointer: coarse) {
+  .af-mp-live-btn {
+    position: relative;
+  }
+  .af-mp-live-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+    background: transparent;
+  }
+}
+
+@media (max-width: 560px) {
+  .af-mp-score {
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .af-mp-score-n {
+    font-size: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-mp-split-good {
+    transition: none;
+  }
+}
