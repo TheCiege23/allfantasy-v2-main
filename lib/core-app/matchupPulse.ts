@@ -7,7 +7,7 @@ import { resolveCurrentWeekFrom, isScored, type WeekScoreRow } from './currentWe
 import { leagueDisplayName } from './leagueHome'
 import { importedOrphanOwnerKey } from '@/lib/league-import/importedRosterIdentity'
 import { myRosterCandidates } from './myRoster'
-import { latestProjectionWeek, lookupProjections } from './playerProjections'
+import { latestProjectionWeek, lookupProjections, type PlayerProjection } from './playerProjections'
 import { sleeperReadableRosters } from './rosterIdSpace'
 import { leagueWeekFromSettings } from './seasonTimeline'
 import { realManagerName, rosterLabel } from './managerName'
@@ -261,6 +261,8 @@ export function weekGameStates(
   }
   return states
 }
+
+type LiveScoreRow = { leagueId: string; seasonYear: number; week: number; playerId: string; points: number }
 
 const FINAL_GAME = /^(final|finished|completed?|status_final|status_final_ot)$/
 
@@ -650,8 +652,8 @@ export async function getMatchupPulse(
   ]
   const [projections, scoreRows, weekGames] = await Promise.all([
     everyStarter.length
-      ? lookupProjections(everyStarter, projectionWeek).catch(() => new Map<string, never>())
-      : Promise.resolve(new Map<string, never>()),
+      ? lookupProjections(everyStarter, projectionWeek).catch(() => new Map<string, PlayerProjection>())
+      : Promise.resolve(new Map<string, PlayerProjection>()),
     scoredPending.length && everyStarter.length
       ? Promise.resolve()
           .then(() =>
@@ -664,7 +666,7 @@ export async function getMatchupPulse(
             }),
           )
           .catch(() => [])
-      : Promise.resolve([]),
+      : Promise.resolve([] as LiveScoreRow[]),
     nflWeeks.length
       ? Promise.resolve()
           .then(() =>
@@ -683,7 +685,7 @@ export async function getMatchupPulse(
             }),
           )
           .catch(() => [])
-      : Promise.resolve([]),
+      : Promise.resolve([] as WeekGame[]),
   ])
 
   /* `${platformLeagueId}:${season}:${week}` → player → points. Absent = nothing attributable. */
@@ -700,7 +702,7 @@ export async function getMatchupPulse(
    * a number; the query already excludes typed preseason, and an untyped row is only ever trusted by
    * `starterGameStates` as a newer reading of a regular fixture.
    */
-  const gamesByWeek = new Map<string, typeof weekGames>()
+  const gamesByWeek = new Map<string, WeekGame[]>()
   for (const g of weekGames) {
     if (g.season == null || g.week == null) continue
     const key = `${g.season}:${g.week}`
