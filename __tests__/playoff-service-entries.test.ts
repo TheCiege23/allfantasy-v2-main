@@ -338,6 +338,9 @@ describe("playoff entry service", () => {
     const { getPlayoffSportTitle } = await import("@/lib/playoffs/playoffService")
     expect(getPlayoffSportTitle("nba")).toBe("NBA Playoff Pool")
     expect(getPlayoffSportTitle("nhl")).toBe("NHL Playoff Pool")
+    // MLB used to fall through to the World Cup title (fixed 2026-10-01).
+    expect(getPlayoffSportTitle("mlb")).toBe("MLB Postseason Pool")
+    expect(getPlayoffSportTitle("ncaaf")).toBe("College Football Playoff Pool")
     expect(getPlayoffSportTitle("fifa")).toBe("FIFA World Cup Pool")
   })
 

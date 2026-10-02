@@ -4,8 +4,15 @@
  * deliberately: an MLB pool has no seeding source and no scheduled writer to
  * advance it, so opening creation first would ship a bracket that can never
  * resolve. Widen the API in the same change that lands those two, not before.
+ *
+ * ⚠ `ncaaf` (the College Football Playoff) IS IN THE SAME STATE, ON PURPOSE.
+ * Its template, round keys and single-game wording are modelled; the create
+ * API does not accept it yet. Its seeds come from an ADMIN entry after
+ * Selection Sunday (owner call, 2026-10-01: no feed carries the committee's
+ * seeds) and its results from a scheduled DB-first writer — open creation in
+ * the change that lands both.
  */
-export type PlayoffSport = "nba" | "nhl" | "mlb"
+export type PlayoffSport = "nba" | "nhl" | "mlb" | "ncaaf"
 
 export type PlayoffChallengeConfig = {
   visibility: "private" | "public"
@@ -90,6 +97,11 @@ export type PlayoffRoundKey =
   | "division_series"
   | "league_championship"
   | "world_series"
+  // College Football Playoff — every round is a single game (bestOf 1).
+  | "cfp_first_round"
+  | "cfp_quarterfinals"
+  | "cfp_semifinals"
+  | "cfp_championship"
 
 export type PlayoffSeriesStatus = "scheduled" | "in_progress" | "final"
 
@@ -101,8 +113,12 @@ export type PlayoffSeriesSlot = "home" | "away"
  * ⚠ `finals` IS THE FINAL'S HALF, NOT A SPORT'S NAME FOR IT. It marks the one
  * series both halves feed into; what it is CALLED is resolved from the round
  * ("Cup Finals" vs "World Series"), so nothing here needs a sport.
+ *
+ * `upper` / `lower` are the College Football Playoff's halves. The CFP has no
+ * conferences in its draw — seeds are national — so its halves are named by
+ * position: the 1/4 side (`upper`) and the 2/3 side (`lower`).
  */
-export type PlayoffConference = "east" | "west" | "al" | "nl" | "finals"
+export type PlayoffConference = "east" | "west" | "al" | "nl" | "upper" | "lower" | "finals"
 
 export type PlayoffChallengeView = {
   challenge: {
