@@ -8,7 +8,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * the season-rate sports (NBA, NHL, MLB, NCAAB, NCAAF) adds a second path beside the NFL one, and
  * the one thing that path must never do is perturb a row the NFL path already prints.
  *
- * `GOLDEN` below was written by THIS test against the pre-change loader (origin/main 812d99199) and
+ * ⚠ RE-CAPTURED 2026-10-02, DELIBERATELY: the board now ranks by LINEUP gain (`waiverSwap.ts`), so
+ * L1's row changed by design — Free Agent One fills an empty slot (+16.0, was "+11.0 over Bench
+ * One"), the roster has open spots so no drop is named, and `runsAt` is null because a Sleeper
+ * league's stored schedule is a bootstrap default (`waiverScheduleIsImported`). Every withheld
+ * count, the dedupe and the kickoffs are unchanged. Re-captured by this test and pasted unchanged.
+ *
+ * `GOLDEN` below was first written by THIS test against the pre-change loader (origin/main 812d99199) and
  * pasted in unchanged — so a match here is a byte-for-byte comparison against what production
  * served before, not against itself. It lives in the test as a template literal rather than a
  * snapshot file because this repo checks out with `core.autocrlf=true`: a `.json` golden would come
@@ -171,7 +177,10 @@ const GOLDEN = `{
       "platformLeagueId": "P-L1",
       "logoUrl": "https://sleepercdn.com/avatars/thumbs/av-L1",
       "format": "Redraft · Ppr",
-      "netGain": 11,
+      "netGain": 16,
+      "startsOver": null,
+      "dropBasis": null,
+      "openRosterSpot": true,
       "add": {
         "playerId": "fa1",
         "name": "Free Agent One",
@@ -182,20 +191,11 @@ const GOLDEN = `{
         "ownPct": 0.25,
         "startPct": 0.5
       },
-      "drop": {
-        "playerId": "b1",
-        "name": "Bench One",
-        "position": "WR",
-        "team": "MIA",
-        "imageUrl": null,
-        "projected": 5,
-        "ownPct": null,
-        "startPct": null
-      },
+      "drop": null,
       "faabRemaining": 87,
-      "runsAt": "Wednesday 09:00 UTC",
+      "runsAt": null,
       "href": "/core/waivers?league=L1",
-      "reasoning": "Free Agent One (WR) projects 16.0 under this league's own scoring, against 5.0 for Bench One, the weakest bench player we can price — a net +11.0. Rostered in 25% of the leagues we can see."
+      "reasoning": "Free Agent One (WR) projects 16.0 under this league's own scoring, and would fill an empty starting slot — +16.0 to your starting lineup. You have an open roster spot, so nothing needs to go. Rostered in 25% of the leagues we can see."
     }
   ],
   "considered": 4,
@@ -203,7 +203,8 @@ const GOLDEN = `{
     "noRoster": 1,
     "idSpace": 1,
     "noScoring": 1,
-    "noCandidate": 0
+    "noCandidate": 0,
+    "noUpgrade": 0
   },
   "marketLeagues": 40,
   "at": {

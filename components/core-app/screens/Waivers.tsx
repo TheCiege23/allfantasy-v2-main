@@ -8,7 +8,7 @@ import AIWaiverRecommendationsPanel from '@/components/waivers/AIWaiverRecommend
 import type { WaiversData } from '@/lib/core-app/waivers'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
-import { platformLabel } from '@/lib/core-app/platformLinks'
+import { platformLabel, verifiedHandoff } from '@/lib/core-app/platformLinks'
 import { WaiverCompetitiveEdge, type WaiverEdgeState } from '@/components/core-app/screens/WaiverCompetitiveEdge'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -79,6 +79,10 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
   const { language } = useOptionalLanguage()
   const es = language === 'es'
   const copy = (english: string) => coreUiCopy(english, language)
+  const providerClaim = verifiedHandoff(
+    { id: data.league.id, platform: data.league.platform, platformLeagueId: data.league.platformLeagueId ?? null, name: data.league.name },
+    'waivers',
+  )
   return (
     <div className="af-wv">
       <h1 className="af-display">{copy('Waivers')}</h1>
@@ -86,7 +90,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
       <div className="af-wv-context">
         <span className="af-label">{copy('Priced for this league')}</span>
         <p className="af-wv-context-body">
-          {es ? 'Las ofertas y recomendaciones se calculan para ' : 'Bids and targets would be priced against '}<strong>{data.league.name}</strong>
+          {es ? 'Las ofertas y recomendaciones se calculan para ' : 'Bids and targets are priced against '}<strong>{data.league.name}</strong>
           {data.league.format ? ` — ${data.league.format}` : ''}. {es ? 'Un mismo jugador puede valer distinto en otra liga.' : 'The same player is worth a different amount in a different league.'}
         </p>
       </div>
@@ -269,6 +273,19 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
       <Link className="af-btn af-wv-browse" href={`/waiver-wire?leagueId=${encodeURIComponent(data.league.id)}`}>
         {copy('Browse every available player')}
       </Link>
+
+      {/*
+        An imported league's claims are made on its platform, so the screen hands over to the
+        provider's own player page rather than only saying where to go. `verifiedHandoff`, not
+        `claimLink`: it returns null unless the link lands on that league's player page — never the
+        provider's homepage, which is what the cross-league board's button used to reach. A native
+        league gets nothing here; "Browse every available player" above IS its claim flow.
+      */}
+      {providerClaim ? (
+        <a className="af-btn af-wv-browse" href={providerClaim.href} target="_blank" rel="noopener noreferrer">
+          {es ? `Reclamar en ${providerClaim.platformLabel}` : `Claim on ${providerClaim.platformLabel}`} ↗
+        </a>
+      ) : null}
 
       {/* A league AllFantasy runs takes its claims here; an imported one is only read. */}
       <p className="af-wv-footnote">

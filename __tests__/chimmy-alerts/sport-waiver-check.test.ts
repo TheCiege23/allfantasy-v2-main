@@ -71,7 +71,7 @@ const section = (sport: string, rows: WaiverBoardRow[], over: Partial<WaiverSpor
   season: 2026,
   rows,
   considered: rows.length,
-  withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
+  withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 },
   ...over,
 })
 

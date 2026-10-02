@@ -300,6 +300,23 @@
   font-weight: 700;
 }
 
+/* "Worth adding" while its fetch is in flight — three rows' height, so the page does not jump. */
+.af-core .af-wlb-skel {
+  height: 34px;
+  border-radius: 8px;
+  background: var(--surface2, rgba(255, 255, 255, 0.04));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .af-core .af-wlb-skel {
+    animation: af-wlb-pulse 1.4s ease-in-out infinite;
+  }
+}
+@keyframes af-wlb-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
 .af-core .af-wlb-chip {
   margin-left: 6px;
   padding: 2px 5px;

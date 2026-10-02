@@ -542,6 +542,11 @@ const spanish: Record<string, string> = {
   'Standard waiver priority': 'Prioridad de reclamo estándar',
   'No waivers — free agents are instant': 'Sin reclamos: agentes libres inmediatos',
   'Highest FAAB bid': 'Oferta FAAB más alta',
+  'Highest bid wins': 'Gana la oferta más alta',
+  'equal bids go to waiver priority': 'las ofertas iguales se deciden por prioridad de reclamo',
+  'highest bid wins — how two equal bids are split was not published':
+    'gana la oferta más alta; no se publicó cómo se desempatan dos ofertas iguales',
+  'waiver claims could not be read for this league': 'no se pudieron leer los reclamos de esta liga',
   'Reverse standings order': 'Orden inverso a la clasificación',
   'Random draw': 'Sorteo aleatorio',
   Sunday: 'Domingo', Monday: 'Lunes', Tuesday: 'Martes', Wednesday: 'Miércoles', Thursday: 'Jueves', Friday: 'Viernes', Saturday: 'Sábado',

@@ -58,7 +58,25 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
    * A panel that cannot form an opinion removes itself. The rest of this screen is the real
    * surface; a broken card sitting above working panels is worse than no card.
    */
-  if (failed || !board) return null
+  if (failed) return null
+  /*
+   * ⚠ LOADING HOLDS ITS PLACE. This used to return null until the fetch landed, so the card
+   * appeared afterwards and pushed the bid pricing and everything below it down the page — on a
+   * phone, mid-scroll. A placeholder of the same shape keeps the layout still; a failure still
+   * removes the card entirely, per the rule above.
+   */
+  if (!board) {
+    return (
+      <section className="af-card af-wv-section af-wlb" data-testid="waiver-lineup-board-loading" aria-busy="true">
+        <div className="af-wv-section-head">
+          <h2 className="af-label">Worth adding</h2>
+        </div>
+        <div className="af-wlb-skel" aria-hidden />
+        <div className="af-wlb-skel" aria-hidden />
+        <div className="af-wlb-skel" aria-hidden />
+      </section>
+    )
+  }
 
   /*
    * ⚠ OUTSIDE THE NFL EVERY NUMBER IS PER GAME, FROM A SEASON RATE — never "this week". The header,

@@ -297,3 +297,19 @@
   --bdx-crit: var(--bad, #ff6b8b);
   --bdx-info: var(--accent, #7fb3ff);
 }
+
+/* ── Waiver intelligence: targets beside the room's bid history ─────────────
+   Its own top-level blocks at end of file, so nothing can be carried into another query.
+   The wide variant out-ranks `.bdx .bdx-support` (one more class), so it needs its own phone
+   rule — the deck's 960px collapse alone would lose to it. */
+.bdx .bdx-support.bdx-support--wide { grid-template-columns: 1.4fr 1fr; }
+@media (max-width: 960px) {
+  .bdx .bdx-support.bdx-support--wide { grid-template-columns: minmax(0, 1fr); }
+}
+.bdx .bdx-reason {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--bdx-ink-faint);
+}

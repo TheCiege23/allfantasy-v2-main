@@ -22,7 +22,8 @@ import '@/components/core-app/af-core-boards.css'
  *
  * 2026-09-07 handoff (`AF Core Waivers.dc.html`).
  *
- * ⚠ RANKED BY NET GAIN, AND THE SECTION LABEL SAYS SO. Net gain is the one
+ * ⚠ RANKED BY LINEUP GAIN (what the add does to your best starting lineup — see
+ * `lib/core-app/waiverSwap.ts`), AND THE SECTION LABEL SAYS SO. That gain is the one
  * quantity on this screen that is comparable between leagues: a FAAB bid is not
  * (budgets differ), and a raw projection is not (scoring differs). See the
  * loader's header for the full argument.
@@ -59,11 +60,14 @@ function Side({
   emptyNote,
   leagueId,
   sport,
+  note,
 }: {
   label: string
   player: WaiverPlayer | null
   tone: 'good' | 'bad'
   emptyNote?: string
+  /** One short line under the player: who the add starts over, or why this is the drop. */
+  note?: string
   leagueId: string
   /** Set on a season-rate row only: its figures are per game and its `playerId` is not a Sleeper id. */
   sport?: string
@@ -137,6 +141,7 @@ function Side({
             <StatPair k="Rostered" v={pct(player.ownPct)} />
             <StatPair k="Started" v={pct(player.startPct)} />
           </span>
+          {note ? <span className="af-bd-side-note">{note}</span> : null}
         </>
       ) : (
         <span className="af-bd-asset af-bd-asset--empty">
@@ -148,7 +153,18 @@ function Side({
 }
 
 function Card({ row }: { row: WaiverBoardRow }) {
-  const claim = claimLink({ id: row.leagueId, platform: row.platform })
+  /*
+   * 🛑 THE PROVIDER'S LEAGUE ID HAS TO TRAVEL WITH THE LINK. Without it the resolver has nothing to
+   * build `sleeper.com/leagues/{id}/players` from and falls back to the provider's HOMEPAGE — so
+   * "Open in Sleeper ↗" on every card landed on sleeper.com's front page, one tap from the claim
+   * it promised and no closer. The row has always carried the id; it was simply never passed.
+   */
+  const claim = claimLink({
+    id: row.leagueId,
+    platform: row.platform,
+    platformLeagueId: row.platformLeagueId,
+    name: row.leagueName,
+  })
   const gain = `${row.netGain >= 0 ? '+' : ''}${row.netGain.toFixed(1)}`
   /* A season-rate row's gain is per GAME; saying "this week" of it would be a forecast it never made. */
   const perGame = row.sport != null
@@ -186,11 +202,11 @@ function Card({ row }: { row: WaiverBoardRow }) {
             The words live in the accessible name; the pill shows the figure.
           */}
           <span
-            className="af-bd-pill"
+            className="af-bd-gain"
             data-sev={row.netGain >= 0 ? 'good' : 'bad'}
-            aria-label={perGame ? `Net gain ${gain} projected points per game` : `Net gain ${gain} projected points this week`}
+            aria-label={perGame ? `Lineup gain ${gain} projected points per game` : `Lineup gain ${gain} projected points this week`}
           >
-            {gain} <span className="af-bd-pill-unit">{perGame ? PER_GAME_UNIT : 'pts/wk'}</span>
+            {gain} <span className="af-bd-gain-unit">{perGame ? PER_GAME_UNIT : 'pts/wk'}</span>
           </span>
           {/* The same swap on AllFantasy's own engine. The pill above is the ranking key; this is not. */}
           {!perGame && row.afNetGain != null ? (
@@ -210,7 +226,20 @@ function Card({ row }: { row: WaiverBoardRow }) {
         </header>
 
         <div className="af-bd-card-body af-bd-swap">
-          <Side label="Add" player={row.add} tone="good" leagueId={row.leagueId} sport={row.sport} />
+          <Side
+            label="Add"
+            player={row.add}
+            tone="good"
+            leagueId={row.leagueId}
+            sport={row.sport}
+            note={
+              row.startsOver
+                ? `Starts over ${row.startsOver.name} (${row.startsOver.projected.toFixed(1)})`
+                : row.startsOver === null
+                  ? 'Fills an empty starting slot'
+                  : undefined
+            }
+          />
           <span className="af-bd-swap-arrow" aria-hidden>
             →
           </span>
@@ -218,9 +247,14 @@ function Card({ row }: { row: WaiverBoardRow }) {
             label="Drop"
             player={row.drop}
             tone="bad"
-            emptyNote="No bench player here could be priced, so no drop is named."
+            emptyNote={
+              row.openRosterSpot
+                ? 'You have an open roster spot — nothing needs to go.'
+                : 'No bench player here could be priced, so no drop is named.'
+            }
             leagueId={row.leagueId}
             sport={row.sport}
+            note={row.dropBasis === 'market_value' ? 'Lowest dynasty market value on your bench' : undefined}
           />
         </div>
 
@@ -261,7 +295,8 @@ function Card({ row }: { row: WaiverBoardRow }) {
  * the same way.
  */
 function ExcludedNote({ withheld }: { withheld: WaiversBoardData['withheld'] }) {
-  const excluded = withheld.noRoster + withheld.idSpace + withheld.noScoring + withheld.noCandidate
+  const noUpgrade = withheld.noUpgrade ?? 0
+  const excluded = withheld.noRoster + withheld.idSpace + withheld.noScoring + withheld.noCandidate + noUpgrade
   if (excluded <= 0) return null
   return (
     <p className="af-bd-note">
@@ -272,13 +307,16 @@ function ExcludedNote({ withheld }: { withheld: WaiversBoardData['withheld'] }) 
         ? `${withheld.idSpace} ${withheld.idSpace === 1 ? 'stores' : 'store'} player ids the projection feed does not use, so we cannot tell a free agent from a rostered player there. `
         : ''}
       {withheld.noScoring > 0
-        ? `${withheld.noScoring} ${withheld.noScoring === 1 ? 'has' : 'have'} never published their scoring settings, and a projection scored under someone else's rules is not this league's number. `
+        ? `${withheld.noScoring} ${withheld.noScoring === 1 ? 'has' : 'have'} never published their scoring or lineup settings, and a projection scored under someone else's rules is not this league's number. `
         : ''}
       {withheld.noRoster > 0
         ? `${withheld.noRoster} ${withheld.noRoster === 1 ? 'has' : 'have'} no roster of yours imported. `
         : ''}
       {withheld.noCandidate > 0
-        ? `${withheld.noCandidate} had nobody on the wire we could price.`
+        ? `${withheld.noCandidate} had nobody on the wire we could price. `
+        : ''}
+      {noUpgrade > 0
+        ? `${noUpgrade} ${noUpgrade === 1 ? 'has' : 'have'} nobody on the wire who would crack your starting lineup — nothing to claim there.`
         : ''}
     </p>
   )
@@ -298,7 +336,7 @@ function SportSection({ section }: { section: WaiverSportSection }) {
         id={id}
         label={
           section.rows.length > 0
-            ? `${label} · top ${section.rows.length} · ranked by net gain per game`
+            ? `${label} · top ${section.rows.length} · ranked by lineup gain per game`
             : label
         }
         count={section.season != null ? `season rate, ${section.season}` : leagues}
@@ -342,7 +380,7 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
   if (totalLeagues === 0) {
     return (
       <div className="af-bd">
-        <BoardHead eyebrow="Core · Waivers" title="Waivers" blurb="The single best available player on each of your wires, ranked by how many points the add actually gains you over the player you would drop." />
+        <BoardHead eyebrow="Core · Waivers" title="Waivers" blurb="The free agent on each of your wires who would add the most to your starting lineup, ranked by that gain." />
         <NoLeaguesYet what="Once one is, this board finds the best available player on each of your wires and ranks the adds by the points they gain you." />
       </div>
     )
@@ -353,7 +391,7 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
       <BoardHead
         eyebrow="Core · Waivers"
         title="Waivers"
-        blurb="The single best available player on each of your wires, ranked by how many points the add actually gains you over the player you would drop."
+        blurb="The free agent on each of your wires who would add the most to your starting lineup, ranked by that gain."
       />
 
       {/*
@@ -377,7 +415,7 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
         <section className="af-bd-sec" aria-labelledby="af-wv-board">
           <SectionHead
             id="af-wv-board"
-            label={`${sports.length > 0 ? 'NFL · ' : ''}Top ${data.rows.length} · ranked by net gain`}
+            label={`${sports.length > 0 ? 'NFL · ' : ''}Top ${data.rows.length} · ranked by lineup gain`}
             count={
               data.at ? `week ${data.at.week}, ${data.at.season}` : null
             }
@@ -400,7 +438,7 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
         <p className="af-bd-note af-bd-note--plain">
           Every projection here is re-scored under that league&apos;s own scoring settings
           {data.at ? ` for week ${data.at.week} of ${data.at.season}` : ''}, which is what makes
-          the net-gain column comparable between leagues.
+          the lineup-gain column comparable between leagues.
           {data.marketLeagues > 0
             ? ` Rostered and started rates are measured across ${data.marketLeagues.toLocaleString()} leagues on AllFantasy.`
             : ' Rostered and started rates are withheld — too few leagues to measure them over.'}

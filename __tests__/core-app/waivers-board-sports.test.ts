@@ -164,9 +164,17 @@ describe('getWaiversBoard — every sport gets a section, and a sport with no pr
     const row = nba!.rows[0]!
     expect(row).toMatchObject({ leagueId: 'B1', sport: 'NBA', netGain: 32, faabRemaining: 64, runsAt: 'Monday 08:00 UTC' })
     expect(row.add).toMatchObject({ name: 'Free Centre', projected: 44, team: 'DEN', ownPct: null, startPct: null })
-    expect(row.drop).toMatchObject({ name: 'Me Bench', projected: 12 })
+    /*
+     * Lineup gain: Free Centre takes the UTIL seat Me Bench was filling. The league lists four
+     * roster spots (C, PG, UTIL, BN) and you hold three, so nobody has to go — no drop is named.
+     * This named Me Bench as the drop until 2026-10-02, cutting a player to fill an empty spot.
+     */
+    expect(row.drop).toBeNull()
+    expect(row.openRosterSpot).toBe(true)
     expect(row.reasoning).toContain("projects 44.0 per game on AllFantasy's default scoring")
-    expect(row.reasoning).toContain('a net +32.0 per game')
+    expect(row.reasoning).toContain('+32.0 to your starting lineup per game')
+    expect(row.reasoning).toContain('open roster spot')
+    expect(row.startsOver).toMatchObject({ name: 'Me Bench', projected: 12 })
   })
 
   it('never names a rostered, an unprovable or a ruled-out player as the add', async () => {
@@ -179,7 +187,7 @@ describe('getWaiversBoard — every sport gets a section, and a sport with no pr
   it('names why each NBA league is off the section, separately', async () => {
     const nba = await sectionOf('NBA')
     expect(nba?.considered).toBe(3)
-    expect(nba?.withheld).toEqual({ noRoster: 1, idSpace: 1, noScoring: 0, noCandidate: 0 })
+    expect(nba?.withheld).toEqual({ noRoster: 1, idSpace: 1, noScoring: 0, noCandidate: 0, noUpgrade: 0 })
   })
 
   it('says the basis in one sentence: per game, a season rate, not the league rules', async () => {

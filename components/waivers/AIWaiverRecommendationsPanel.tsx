@@ -149,7 +149,7 @@ export default function AIWaiverRecommendationsPanel({ leagueId }: { leagueId: s
                     <span className="rounded bg-sky-500/15 px-1.5 py-0.5 text-sky-100">Confidence: {rec.confidence}</span>
                     <span className="rounded bg-white/10 px-1.5 py-0.5 text-white/80">Risk: {rec.risk}</span>
                     {rec.suggestedFaabBid != null ? (
-                      <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-200">FAAB: {rec.suggestedFaabBid}</span>
+                      <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-200">Chimmy&apos;s bid · FAAB: {rec.suggestedFaabBid}</span>
                     ) : null}
                   </div>
                 </div>
