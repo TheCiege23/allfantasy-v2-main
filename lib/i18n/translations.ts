@@ -1886,7 +1886,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.notifications.emailAll": "Email notifications (all categories)",
     "settings.notifications.pushAll": "Push / in-app (all categories)",
     "settings.notifications.deliveryMixHint":
-      "When a mix of categories differs, the checkbox is off until all match; toggling applies to every category.",
+      "If some categories are on and some off, the switch shows off until they all match; flipping it applies to every category.",
     "settings.notifications.byCategory": "By category",
     "settings.notifications.smsNeedsConsent":
       "Texts are off: we have no SMS opt-in for your phone. Re-verify your phone in Security settings and tick the SMS box to turn them on.",

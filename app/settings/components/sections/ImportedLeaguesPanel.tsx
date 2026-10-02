@@ -66,6 +66,7 @@ function relTime(iso?: string | null): string {
 export function ImportedLeaguesPanel() {
   const [leagues, setLeagues] = useState<LeagueRow[] | null>(null)
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
   const [query, setQuery] = useState("")
   const [platform, setPlatform] = useState("all")
   const [resyncing, setResyncing] = useState<Record<string, "busy" | "done" | "error">>({})
@@ -78,7 +79,11 @@ export function ImportedLeaguesPanel() {
         .catch(() => null)
       if (cancelled) return
       if (data && Array.isArray(data.leagues)) setLeagues(data.leagues as LeagueRow[])
-      else setLeagues([])
+      else {
+        // Not "No leagues imported yet" — the list did not load; that is a different message.
+        setLeagues([])
+        setFailed(true)
+      }
       setLoading(false)
     })()
     return () => {
@@ -157,7 +162,11 @@ export function ImportedLeaguesPanel() {
         <p className="py-4 text-sm" style={{ color: "var(--muted)" }}>Loading your leagues…</p>
       ) : filtered.length === 0 ? (
         <p className="py-4 text-sm" style={{ color: "var(--muted)" }}>
-          {(leagues ?? []).length === 0 ? "No leagues imported yet." : "No leagues match your filters."}
+          {failed
+            ? "Couldn't load your leagues right now. Refresh the page to try again."
+            : (leagues ?? []).length === 0
+              ? "No leagues imported yet."
+              : "No leagues match your filters."}
         </p>
       ) : (
         <ul className="space-y-2">

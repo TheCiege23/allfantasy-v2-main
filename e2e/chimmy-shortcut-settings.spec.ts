@@ -4,7 +4,7 @@ import { registerAndLoginTo } from "./helpers/auth-flow"
 function getShortcutToggle(page: Parameters<typeof test>[0]['page']) {
   return page
     .getByTestId("chimmy-shortcuts-toggle")
-    .or(page.getByRole("checkbox", { name: /enable chimmy global keyboard shortcuts/i }))
+    .or(page.getByRole("switch", { name: /enable chimmy global keyboard shortcuts/i }))
     .first()
 }
 

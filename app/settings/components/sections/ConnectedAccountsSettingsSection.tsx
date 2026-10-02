@@ -53,6 +53,7 @@ export function ConnectedAccountsSettingsSection({
   const [refreshing, setRefreshing] = useState(false)
   const [busyProviderId, setBusyProviderId] = useState<SignInProviderId | null>(null)
   const [linkingProvider, setLinkingProvider] = useState<"discord" | "spotify" | null>(null)
+  const [disconnecting, setDisconnecting] = useState<"sleeper" | "discord" | "spotify" | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<"info" | "error" | "success" | null>(null)
 
@@ -163,10 +164,9 @@ export function ConnectedAccountsSettingsSection({
         // does a hard redirect so we never reach this branch on success.
         if (result?.error) {
           setStatusTone("error")
-          setStatusMessage(
-            t("settings.connected.connectError") ||
-              `Could not connect ${providerId}. Please try again.`
-          )
+          // There is no settings.connected.connectError string, and t() returns the KEY for a
+          // missing one — so the old `t(...) || fallback` showed the raw key and never the fallback.
+          setStatusMessage(`Could not connect ${providerId}. Please try again.`)
         }
       })
       .catch(() => {
@@ -178,31 +178,65 @@ export function ConnectedAccountsSettingsSection({
       })
   }
 
-  const handleDisconnectSleeper = async () => {
-    if (typeof window !== "undefined" && !window.confirm(t("settings.connected.confirmDisconnectSleeper"))) return
-    const res = await fetch("/api/user/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ disconnectSleeper: true }),
-    })
-    if (res.ok) {
-      onRefetchProfile()
-      await loadProviders(true)
-    }
-  }
-
-  const handleDisconnectDiscord = async () => {
-    const res = await fetch("/api/auth/discord/disconnect", { method: "POST" })
-    if (res.ok) {
+  /*
+   * One path for every disconnect: a confirmation (Discord's also unlinks the league bot's
+   * server), a busy state so a second tap cannot fire a second request, and a message on BOTH
+   * outcomes. Sleeper used to fail silently, and Discord and Spotify went in a single tap.
+   */
+  const runDisconnect = async (
+    which: "sleeper" | "discord" | "spotify",
+    confirmText: string,
+    request: () => Promise<Response>,
+    label: string,
+  ) => {
+    if (disconnecting) return
+    if (typeof window !== "undefined" && !window.confirm(confirmText)) return
+    setDisconnecting(which)
+    setStatusMessage(null)
+    setStatusTone(null)
+    try {
+      const res = await request()
+      if (!res.ok) throw new Error(String(res.status))
       onRefetchProfile()
       await loadProviders(true)
       setStatusTone("success")
-      setStatusMessage("Discord disconnected.")
-    } else {
+      setStatusMessage(`${label} disconnected.`)
+    } catch {
       setStatusTone("error")
-      setStatusMessage("Discord could not be disconnected. Please try again.")
+      setStatusMessage(`${label} could not be disconnected. Please try again.`)
+    } finally {
+      setDisconnecting(null)
     }
   }
+
+  const handleDisconnectSleeper = () =>
+    runDisconnect(
+      "sleeper",
+      t("settings.connected.confirmDisconnectSleeper"),
+      () =>
+        fetch("/api/user/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ disconnectSleeper: true }),
+        }),
+      "Sleeper",
+    )
+
+  const handleDisconnectDiscord = () =>
+    runDisconnect(
+      "discord",
+      "Disconnect Discord? This also unlinks the AllFantasy bot from your Discord server.",
+      () => fetch("/api/auth/discord/disconnect", { method: "POST" }),
+      "Discord",
+    )
+
+  const handleDisconnectSpotify = () =>
+    runDisconnect(
+      "spotify",
+      "Disconnect Spotify?",
+      () => fetch("/api/auth/spotify/disconnect", { method: "POST" }),
+      "Spotify",
+    )
 
   const handleLinkIdentity = async (provider: "discord" | "spotify") => {
     setStatusMessage(null)
@@ -387,10 +421,11 @@ export function ConnectedAccountsSettingsSection({
               type="button"
               data-testid="settings-disconnect-discord"
               onClick={() => void handleDisconnectDiscord()}
+              disabled={disconnecting === "discord"}
               className="rounded-lg border px-3 py-2 text-xs font-medium"
               style={{ borderColor: "var(--accent-red)", color: "var(--accent-red-strong)" }}
             >
-              {t("settings.connected.disconnect")}
+              {disconnecting === "discord" ? "Disconnecting…" : t("settings.connected.disconnect")}
             </button>
           </div>
         )}
@@ -437,22 +472,12 @@ export function ConnectedAccountsSettingsSection({
             </div>
             <button
               type="button"
-              onClick={async () => {
-                const res = await fetch("/api/auth/spotify/disconnect", { method: "POST" })
-                if (res.ok) {
-                  onRefetchProfile()
-                  await loadProviders(true)
-                  setStatusTone("success")
-                  setStatusMessage("Spotify disconnected.")
-                } else {
-                  setStatusTone("error")
-                  setStatusMessage("Spotify could not be disconnected. Please try again.")
-                }
-              }}
+              onClick={() => void handleDisconnectSpotify()}
+              disabled={disconnecting === "spotify"}
               className="rounded-lg border px-3 py-2 text-xs font-medium"
               style={{ borderColor: "var(--accent-red)", color: "var(--accent-red-strong)" }}
             >
-              Disconnect
+              {disconnecting === "spotify" ? "Disconnecting…" : "Disconnect"}
             </button>
           </div>
         )}

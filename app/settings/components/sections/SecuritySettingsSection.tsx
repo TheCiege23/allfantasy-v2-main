@@ -28,6 +28,18 @@ import type { SettingsProfile } from "./settings-types"
 import { SmsConsentCheckbox } from "@/components/legal/SmsConsentCheckbox"
 import { normalizePhoneE164 } from "@/lib/phone/e164"
 
+/**
+ * A rejected fetch (offline, a dropped phone connection) becomes an ordinary failed result.
+ * The services below only handle HTTP errors, and none of these handlers had a catch — so a
+ * network failure left its button spinning on "Saving…" forever with no message.
+ */
+function networkFailure<F extends (...args: never[]) => Promise<{ ok: boolean; error?: string }>>(): Awaited<ReturnType<F>> {
+  return {
+    ok: false,
+    error: "Couldn't reach AllFantasy. Check your connection and try again.",
+  } as Awaited<ReturnType<F>>
+}
+
 export function SecuritySettingsSection({
   profile,
   onRefetch,
@@ -115,7 +127,7 @@ export function SecuritySettingsSection({
       email: nextEmail,
       currentPassword: status.hasPassword ? emailCurrentPassword : undefined,
       returnTo: "/settings?tab=security",
-    })
+    }).catch(() => networkFailure<typeof updateContactEmail>())
     setEmailSaving(false)
 
     if (result.ok) {
@@ -137,7 +149,9 @@ export function SecuritySettingsSection({
     setEmailSending(true)
     setEmailResult(null)
     setEmailSaveResult(null)
-    const result = await sendVerificationEmail("/settings?tab=security")
+    const result = await sendVerificationEmail("/settings?tab=security").catch(() =>
+      networkFailure<typeof sendVerificationEmail>(),
+    )
     setEmailSending(false)
     if (result.ok && result.alreadyVerified) setEmailResult("already")
     else if (result.ok) setEmailResult("sent")
@@ -171,7 +185,7 @@ export function SecuritySettingsSection({
     const result = await startPhoneVerification(normalizePhoneE164(trimmed), {
       smsConsent: true,
       consentSource: "settings-security",
-    })
+    }).catch(() => networkFailure<typeof startPhoneVerification>())
     setPhoneSending(false)
     if (result.ok) setPhoneCodeSent(true)
     else if (result.rateLimited) setPhoneResult("rate_limited")
@@ -188,7 +202,7 @@ export function SecuritySettingsSection({
     setPhoneVerifying(true)
     setPhoneResult(null)
     setPhoneErrorMessage(null)
-    const result = await checkPhoneCode(phone, phoneCode)
+    const result = await checkPhoneCode(phone, phoneCode).catch(() => networkFailure<typeof checkPhoneCode>())
     setPhoneVerifying(false)
     if (result.ok) {
       setPhoneResult("verified")
@@ -217,7 +231,9 @@ export function SecuritySettingsSection({
       return
     }
     setPasswordChanging(true)
-    const result = await changePassword(currentPassword, newPassword)
+    const result = await changePassword(currentPassword, newPassword).catch(() =>
+      networkFailure<typeof changePassword>(),
+    )
     setPasswordChanging(false)
     if (result.ok) {
       setPasswordSuccess(true)
@@ -270,6 +286,8 @@ export function SecuritySettingsSection({
         window.dispatchEvent(new Event("af-session-idle-updated"))
       }
       onRefetch()
+    } catch {
+      setIdleError(t("settings.security.idleSaveFailed"))
     } finally {
       setIdleSaving(false)
     }
@@ -438,7 +456,7 @@ export function SecuritySettingsSection({
                   <button
                     type="button"
                     onClick={() => setShowEmailCurrentPassword((s) => !s)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-2"
                     aria-label={showEmailCurrentPassword ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}
                     style={{ color: "var(--muted)" }}
                   >
@@ -580,14 +598,19 @@ export function SecuritySettingsSection({
                     {phoneSending ? <Loader2 className="h-4 w-4 animate-spin inline" /> : null} {t("settings.security.resendCode")}
                   </button>
                 </div>
-                {phoneResult === "verified" && <p className="text-xs text-emerald-600">{t("settings.security.phoneVerifiedUpdating")}</p>}
-                {phoneResult === "invalid" && <p className="text-xs text-red-600">{t("settings.security.invalidCode")}</p>}
-                {phoneResult === "rate_limited" && <p className="text-xs text-amber-600">{t("settings.security.rateLimitedMinutes")}</p>}
-                {phoneResult === "error" && <p className="text-xs text-red-600">{phoneErrorMessage ?? t("settings.security.phoneError.generic")}</p>}
               </>
             )}
           </div>
         )}
+        {/*
+          Outside both the edit panel and the code-sent branch on purpose. Inside them, a failed
+          FIRST send (code never sent) showed nothing, and a successful verify closed the panel
+          that held its own "verified" message.
+        */}
+        {phoneResult === "verified" && <p className="text-xs text-emerald-600">{t("settings.security.phoneVerifiedUpdating")}</p>}
+        {phoneResult === "invalid" && <p className="text-xs text-red-600">{t("settings.security.invalidCode")}</p>}
+        {phoneResult === "rate_limited" && <p className="text-xs text-amber-600">{t("settings.security.rateLimitedMinutes")}</p>}
+        {phoneResult === "error" && <p className="text-xs text-red-600">{phoneErrorMessage ?? t("settings.security.phoneError.generic")}</p>}
       </div>
 
       {/* Password */}
@@ -597,8 +620,23 @@ export function SecuritySettingsSection({
             <Lock className="h-4 w-4" />
             {t("settings.security.passwordHeading")}
           </p>
-          {!passwordFormOpen ? (
-            <div className="flex gap-2">
+          {/*
+            A Google / Apple / Discord sign-in has no password, and "Change password" asks for the
+            current one — the route answers NO_PASSWORD, so the form could only ever fail. The reset
+            flow sets a password on any account (api/auth/password/reset/confirm writes passwordHash),
+            so that is the way in for them.
+          */}
+          {!status.hasPassword ? (
+            <Link
+              href="/forgot-password"
+              className="rounded-lg border px-3 py-2 text-sm font-medium"
+              style={{ borderColor: "var(--border)", color: "var(--text)" }}
+              data-testid="settings-set-password-link"
+            >
+              Set a password
+            </Link>
+          ) : !passwordFormOpen ? (
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setPasswordFormOpen(true)}
@@ -621,7 +659,13 @@ export function SecuritySettingsSection({
             </button>
           )}
         </div>
-        {passwordFormOpen && (
+        {!status.hasPassword ? (
+          <p className="text-xs" style={{ color: "var(--muted)" }}>
+            You sign in with a connected account, so there is no password on this one yet. Set one to
+            also sign in with your email.
+          </p>
+        ) : null}
+        {passwordFormOpen && status.hasPassword && (
           <form onSubmit={handleChangePassword} className="pt-2 border-t space-y-3" style={{ borderColor: "var(--border)" }}>
             <div>
               <label className="block text-xs font-medium mb-1" style={{ color: "var(--muted2)" }}>{t("settings.security.currentPassword")}</label>
@@ -634,7 +678,7 @@ export function SecuritySettingsSection({
                   style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
                   autoComplete="current-password"
                 />
-                <button type="button" onClick={() => setShowCurrent((s) => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{ color: "var(--muted)" }} aria-label={showCurrent ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
+                <button type="button" onClick={() => setShowCurrent((s) => !s)} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-2 text-xs" style={{ color: "var(--muted)" }} aria-label={showCurrent ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
                   {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
@@ -650,7 +694,7 @@ export function SecuritySettingsSection({
                   style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
                   autoComplete="new-password"
                 />
-                <button type="button" onClick={() => setShowNew((s) => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{ color: "var(--muted)" }} aria-label={showNew ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
+                <button type="button" onClick={() => setShowNew((s) => !s)} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-2 text-xs" style={{ color: "var(--muted)" }} aria-label={showNew ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
                   {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
@@ -666,7 +710,7 @@ export function SecuritySettingsSection({
                   style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
                   autoComplete="new-password"
                 />
-                <button type="button" onClick={() => setShowConfirm((s) => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs" style={{ color: "var(--muted)" }} aria-label={showConfirm ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
+                <button type="button" onClick={() => setShowConfirm((s) => !s)} className="absolute right-1 top-1/2 -translate-y-1/2 rounded-md p-2 text-xs" style={{ color: "var(--muted)" }} aria-label={showConfirm ? t("settings.security.ariaHide") : t("settings.security.ariaShow")}>
                   {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>

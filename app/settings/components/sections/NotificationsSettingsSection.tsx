@@ -61,6 +61,7 @@ export function NotificationsSettingsSection({
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
+  const [savedFlash, setSavedFlash] = useState(false)
   const [remoteUpdatePending, setRemoteUpdatePending] = useState(false)
   const [testCategory, setTestCategory] = useState<NotificationCategoryId>("matchup_results")
   const [testing, setTesting] = useState(false)
@@ -159,12 +160,25 @@ export function NotificationsSettingsSection({
     return (c?.push ?? c?.inApp) === true
   })
 
+  // The "saved" confirmation clears itself, and the moment anything changes again.
+  useEffect(() => {
+    if (!savedFlash) return
+    if (dirty) {
+      setSavedFlash(false)
+      return
+    }
+    const id = window.setTimeout(() => setSavedFlash(false), 4000)
+    return () => window.clearTimeout(id)
+  }, [savedFlash, dirty])
+
   const handleSave = async () => {
     setSaving(true)
     setSaveError(null)
+    setSavedFlash(false)
     const result = await updateNotificationPreferences(prefs)
     setSaving(false)
     if (result.ok) {
+      setSavedFlash(true)
       setDirty(false)
       setRemoteUpdatePending(false)
       setLastLoadedFingerprint(getNotificationPreferencesFingerprint(prefs))
@@ -284,6 +298,7 @@ export function NotificationsSettingsSection({
             </span>
             <input
               type="checkbox"
+              role="switch"
               checked={prefs.globalEnabled !== false}
               onChange={(e) => {
                 setDirty(true)
@@ -323,6 +338,7 @@ export function NotificationsSettingsSection({
           <span className="text-sm font-medium text-[var(--text)]">Quiet hours</span>
           <input
             type="checkbox"
+            role="switch"
             checked={prefs.quietHours?.enabled === true}
             onChange={(e) => {
               setDirty(true)
@@ -442,7 +458,7 @@ export function NotificationsSettingsSection({
         <p className="text-xs text-[var(--muted)]">{t("settings.notifications.pushHint")}</p>
       </div>
 
-      <div className="rounded-xl border border-white/[0.08] bg-[#1a1f3a]/90 p-4 space-y-3">
+      <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--panel2)] p-4">
         <p className="text-sm font-medium text-[var(--text)]">
           {t("settings.notifications.deliveryMasters")}
         </p>
@@ -450,6 +466,7 @@ export function NotificationsSettingsSection({
           <span className="text-[var(--muted)]">{t("settings.notifications.emailAll")}</span>
           <input
             type="checkbox"
+            role="switch"
             checked={allEmailOn}
             onChange={(e) => setAllEmailChannels(e.target.checked)}
             className="h-4 w-4 rounded accent-[var(--accent-cyan)]"
@@ -459,6 +476,7 @@ export function NotificationsSettingsSection({
           <span className="text-[var(--muted)]">{t("settings.notifications.pushAll")}</span>
           <input
             type="checkbox"
+            role="switch"
             checked={allPushOn}
             onChange={(e) => setAllPushChannels(e.target.checked)}
             className="h-4 w-4 rounded accent-[var(--accent-cyan)]"
@@ -511,7 +529,7 @@ export function NotificationsSettingsSection({
             aria-label="Notification test category"
             value={testCategory}
             onChange={(e) => setTestCategory(e.target.value as NotificationCategoryId)}
-            className="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)]"
+            className="w-full min-w-0 max-w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)] sm:w-auto"
           >
             {VISIBLE_CATEGORY_IDS.map((id) => (
               <option key={id} value={id}>{NOTIFICATION_CATEGORY_LABELS[id]}</option>
@@ -556,6 +574,7 @@ export function NotificationsSettingsSection({
             <span className="text-[var(--text)]">Enable Chimmy global keyboard shortcuts</span>
             <input
               type="checkbox"
+              role="switch"
               checked={chimmyShortcutsEnabled}
               onChange={(e) => handleChimmyShortcutToggle(e.target.checked)}
               className="h-4 w-4 rounded accent-[var(--accent-cyan)]"
@@ -566,24 +585,44 @@ export function NotificationsSettingsSection({
         </div>
       </div>
 
-      {saveError && (
-        <p className="text-sm text-[var(--accent-red-strong)]">{saveError}</p>
-      )}
-
-      <div className="flex flex-wrap gap-2">
+      {/*
+        The save bar. Every switch above is a DRAFT until this saves, and on a phone this tab is
+        about four screens tall — so while anything is unsaved the bar sticks to the bottom of the
+        screen and says so (nocturne-settings.css `.ns-savebar`), and a save says it worked.
+        Before 2026-10-02 the only signal was this button changing colour, at the foot of the page.
+      */}
+      <div className="ns-savebar" data-pinned={dirty || savedFlash ? "true" : undefined} data-testid="notifications-savebar">
+        <p
+          className="ns-savebar-msg"
+          role="status"
+          aria-live="polite"
+          data-tone={saveError ? "error" : savedFlash && !dirty ? "saved" : undefined}
+        >
+          {saveError ?? (dirty ? "You have unsaved changes." : savedFlash ? "✓ Notification settings saved." : "")}
+        </p>
+        {dirty ? (
+          <button
+            type="button"
+            onClick={handleReloadSaved}
+            disabled={saving}
+            className="ns-btn-ghost"
+            data-testid="notifications-discard-button"
+          >
+            Discard
+          </button>
+        ) : null}
         <button
           type="button"
           disabled={saving || !dirty}
           onClick={handleSave}
           data-testid="notifications-save-button"
-          className={
-            dirty && !saving
-              ? "ns-btn-primary"
-              : "rounded-xl border border-[var(--border)] bg-[var(--panel2)] px-4 py-2 text-sm font-semibold text-[var(--muted)]"
-          }
+          className={dirty ? "ns-btn-primary" : "ns-btn-ghost"}
         >
           {saving ? t("settings.actions.saving") : t("settings.notifications.save")}
         </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={handleReset}

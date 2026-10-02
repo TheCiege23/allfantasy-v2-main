@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
 import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget"
@@ -8,6 +9,8 @@ import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget"
 export function BillingSettingsSection() {
   const { t, tInterpolate } = useLanguage()
   const ents = useEntitlements()
+  // Set by /api/subscription/billing-portal when Stripe could not open a portal session.
+  const portalError = useSearchParams()?.get("billing") === "portal_error"
 
   if (ents.loading) {
     return <div className="animate-pulse h-20 rounded-xl bg-white/[0.05]" data-testid="settings-billing-loading" />
@@ -110,6 +113,13 @@ export function BillingSettingsSection() {
           </Link>
         </div>
       </div>
+
+      {portalError && (
+        <p className="text-xs text-red-600" role="alert" data-testid="settings-billing-portal-error">
+          We couldn&apos;t open the billing portal just now. Please try again in a minute — if it keeps
+          failing, contact support and we&apos;ll make the change for you.
+        </p>
+      )}
 
       {ents.error && (
         <p className="text-xs text-red-400" data-testid="settings-billing-error">

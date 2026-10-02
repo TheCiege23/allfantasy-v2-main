@@ -42,7 +42,8 @@ function SegmentButton<T extends string>({
     <button
       type="button"
       onClick={onClick}
-      className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition ${
+      aria-pressed={active}
+      className={`min-h-[40px] flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition ${
         active
           ? 'border-cyan-400/60 bg-cyan-500/20 text-cyan-200'
           : 'border-white/15 bg-white/5 text-white/55 hover:bg-white/10'
@@ -63,19 +64,21 @@ function Toggle({
   label: string
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-3">
+    <label className="flex min-h-[40px] cursor-pointer items-center justify-between gap-3">
       <span className="text-sm text-white/80">{label}</span>
       <button
         type="button"
+        role="switch"
+        aria-checked={checked}
         aria-label={label}
         onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border transition-colors ${
+        className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border transition-colors ${
           checked ? 'border-cyan-400/50 bg-cyan-500' : 'border-white/20 bg-white/10'
         }`}
       >
         <span
-          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
-            checked ? 'translate-x-4' : 'translate-x-0.5'
+          className={`absolute top-px h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+            checked ? 'translate-x-5' : 'translate-x-px'
           }`}
         />
       </button>

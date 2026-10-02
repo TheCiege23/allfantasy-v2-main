@@ -53,6 +53,9 @@ export function LegacyRankSettingsSection() {
   const [rank, setRank] = useState<RankData | null>(null)
   const [achievements, setAchievements] = useState<Achievement[] | null>(null)
   const [loading, setLoading] = useState(true)
+  /* A failed fetch is not "no rank yet" — say which one it is. */
+  const [rankFailed, setRankFailed] = useState(false)
+  const [achievementsFailed, setAchievementsFailed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -63,7 +66,9 @@ export function LegacyRankSettingsSection() {
       ])
       if (cancelled) return
       if (rankRes && typeof rankRes === "object") setRank(rankRes as RankData)
+      else setRankFailed(true)
       if (achRes && Array.isArray(achRes.achievements)) setAchievements(achRes.achievements as Achievement[])
+      else setAchievementsFailed(true)
       setLoading(false)
     })()
     return () => {
@@ -101,7 +106,9 @@ export function LegacyRankSettingsSection() {
           <p className="text-sm" style={{ color: "var(--muted)" }}>Loading your rank…</p>
         ) : level == null && xpTotal == null ? (
           <div className="text-sm" style={{ color: "var(--muted)" }}>
-            {rank?.rankProcessing
+            {rankFailed
+              ? "Couldn't load your rank right now. Refresh the page to try again."
+              : rank?.rankProcessing
               ? "Your rank is being calculated — check back after your next synced game."
               : "No rank yet. Import or play a league to start earning XP."}
           </div>
@@ -168,14 +175,18 @@ export function LegacyRankSettingsSection() {
       <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
         <div className="mb-4 flex items-center justify-between">
           <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--muted2)" }}>Achievements</p>
-          <Link href="/af-legacy" className="text-xs font-medium" style={{ color: "var(--accent-cyan-strong)" }}>
+          <Link href="/af-legacy" className="-mr-2 inline-flex min-h-[44px] items-center px-2 text-xs font-medium" style={{ color: "var(--accent-cyan-strong)" }}>
             View all
           </Link>
         </div>
         {loading ? (
           <p className="text-sm" style={{ color: "var(--muted)" }}>Loading…</p>
         ) : !achievements || achievements.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }}>No achievements available yet.</p>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            {achievementsFailed
+              ? "Couldn't load your achievements right now. Refresh the page to try again."
+              : "No achievements available yet."}
+          </p>
         ) : (
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
             {achievements.map((a) => {

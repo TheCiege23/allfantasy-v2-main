@@ -46,6 +46,7 @@ export function CommandCenterSettingsSection() {
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [loading, setLoading] = useState(false)
   const [started, setStarted] = useState(false)
+  const [failed, setFailed] = useState(false)
 
   // Load-on-demand: composing the brief fans out across every league the user
   // belongs to, so it only runs on an explicit click — never automatically on
@@ -53,10 +54,14 @@ export function CommandCenterSettingsSection() {
   const load = useCallback(async () => {
     setStarted(true)
     setLoading(true)
+    setFailed(false)
     const data = await fetch("/api/decision-os/manager-command-center", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)
+    // A failed load used to fall through to "No leagues yet", which reads as a fact about the
+    // account rather than a request that did not come back.
     if (data && typeof data === "object") setSnap(data as Snapshot)
+    else setFailed(true)
     setLoading(false)
   }, [])
 
@@ -97,6 +102,21 @@ export function CommandCenterSettingsSection() {
         </div>
       ) : loading ? (
         <p className="text-sm" style={{ color: "var(--muted)" }}>Building your brief…</p>
+      ) : failed ? (
+        <div className="rounded-xl border p-6 text-center" style={{ borderColor: "var(--border)", background: "var(--panel2)" }} role="alert">
+          <p className="text-sm font-medium" style={{ color: "var(--text)" }}>Couldn&apos;t load your brief</p>
+          <p className="mx-auto mt-1 max-w-sm text-xs" style={{ color: "var(--muted)" }}>
+            Something went wrong building it. Your leagues are fine — try again in a moment.
+          </p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="mt-4 inline-flex rounded-lg border px-3 py-2 text-sm font-medium"
+            style={{ borderColor: "var(--accent-cyan)", color: "var(--text)" }}
+          >
+            Try again
+          </button>
+        </div>
       ) : total === 0 ? (
         <div className="rounded-xl border p-6 text-center" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
           <p className="text-sm font-medium" style={{ color: "var(--text)" }}>No leagues yet</p>
