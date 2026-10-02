@@ -100,9 +100,11 @@ export type ConnectedPlatformsProps = {
   sleeperUsername?: string | null
   /** Settings owns the Sleeper disconnect; reuse it rather than duplicating. */
   onDisconnectSleeper?: () => void
+  /** True while Settings is disconnecting Sleeper, so the row shows it and a second tap does nothing. */
+  sleeperBusy?: boolean
 }
 
-export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper }: ConnectedPlatformsProps) {
+export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleeperBusy = false }: ConnectedPlatformsProps) {
   const [rows, setRows] = useState<AuthRow[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ tone: 'good' | 'error'; text: string } | null>(null)
@@ -223,7 +225,7 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper }: Con
             handle={sleeperUsername ?? null}
             status={sleeperUsername ? 'connected' : 'not-connected'}
             method={methodFor('sleeper', undefined, sleeperUsername ? 'connected' : 'not-connected')}
-            busy={false}
+            busy={sleeperBusy}
             onDisconnect={sleeperUsername && onDisconnectSleeper ? onDisconnectSleeper : undefined}
           />
 
