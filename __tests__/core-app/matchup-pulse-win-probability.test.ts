@@ -52,12 +52,42 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-/* id → [projection, NFL club]. */
+/*
+ * id → [projection, NFL club]. Each player carries a component line the league's rules price at
+ * exactly his projection (`rec: 1` against `rec: P`): the odds use only league-rescored prices since
+ * the forecast became shared with the league page (`matchupForecast.ts`). A `GENERIC_ONLY` player
+ * carries the vendor total and nothing the rules can score.
+ */
 const PLAYERS: Record<string, [number, string]> = {}
+const GENERIC_ONLY = new Set<string>()
+/* Ruled out or on bye this week, by Sleeper id. */
+const OUT = new Set<string>()
+const lookups = vi.hoisted(() => [] as Array<{ at: unknown; sport: unknown }>)
+/* When set, the feed holds nothing for week 4 — only its newest week, 5. */
+const feed = vi.hoisted(() => ({ missingWeek4: false }))
 vi.mock('@/lib/core-app/playerProjections', () => ({
-  latestProjectionWeek: vi.fn(async () => ({ season: '2026', week: 4 })),
-  lookupProjections: vi.fn(async (ids: string[]) =>
-    new Map(ids.filter((id) => PLAYERS[id]).map((id) => [id, { projectedPoints: PLAYERS[id][0], team: PLAYERS[id][1] }])),
+  /* The feed's NEWEST week is week 5 — a week AHEAD of the matchups, as production's usually is. */
+  latestProjectionWeek: vi.fn(async () => ({ season: '2026', week: 5 })),
+  lookupProjections: vi.fn(async (ids: string[], at: unknown, _idp: unknown, sport: unknown) => {
+    lookups.push({ at, sport })
+    if (feed.missingWeek4 && (at as { week?: number } | null)?.week === 4) return new Map()
+    return new Map(
+      ids
+        .filter((id) => PLAYERS[id])
+        .map((id) => [
+          id,
+          {
+            projectedPoints: PLAYERS[id][0],
+            team: PLAYERS[id][1],
+            componentStats: GENERIC_ONLY.has(id) ? null : { rec: PLAYERS[id][0] },
+          },
+        ]),
+    )
+  }),
+}))
+vi.mock('@/lib/core-app/unavailableStarters', () => ({
+  loadUnavailableBySport: vi.fn(async ({ sleeperIds }: { sleeperIds: string[] }) =>
+    new Map([['NFL', new Set(sleeperIds.filter((id) => OUT.has(id)))]]),
   ),
 }))
 
@@ -80,7 +110,7 @@ function league(id: string, mine: string[], theirs: string[], points: [number, n
   const plid = `p-${id}`
   db.claimed.push({ externalId: '1', platformUserId: `me-${id}`, league: {
     id, name: `League ${id}`, platform: 'sleeper', platformLeagueId: plid, season: '2026', sport: 'NFL',
-    logoUrl: null, avatarUrl: null, settings: { leg: 4 }, status: 'in_season',
+    logoUrl: null, avatarUrl: null, settings: { leg: 4, scoring_settings: { rec: 1 } }, status: 'in_season',
   } })
   db.weekRows.push(
     { leagueId: plid, seasonYear: 2026, week: 4, rosterId: '1', matchupId: 1, pointsFor: points[0], pointsAgainst: points[1] },
@@ -102,6 +132,10 @@ beforeEach(() => {
   db.claimed = []; db.weekRows = []; db.teams = []; db.rosters = []; db.scores = []
   db.games = [game('CIN', 'MIA', 'final', THU), game('KC', 'BUF', 'scheduled', SUN), game('SF', 'LAR', 'scheduled', SUN)]
   for (const k of Object.keys(PLAYERS)) delete PLAYERS[k]
+  GENERIC_ONLY.clear()
+  OUT.clear()
+  lookups.length = 0
+  feed.missingWeek4 = false
 })
 
 describe('🛑 ranked by win probability, not by Thursday night', () => {
@@ -222,5 +256,75 @@ describe('🛑 left to play, from THIS week’s game states', () => {
     league('A', ['sun', 'lost'], ['o1', 'o2'])
     const pulse = await getMatchupPulse(USER, NOW)
     expect([...pulse.leading, ...pulse.trailing, ...pulse.closest][0]?.startersLeft).toBeNull()
+  })
+})
+
+/*
+ * 🛑 THE BOARD'S ODDS ARE THE LEAGUE PAGE'S ODDS. Production 2026-10-02: 98% here, "—" on the
+ * league page, for the same game. Both now go through `forecastMatchup` with the same inputs.
+ */
+describe('🛑 one win probability, shared with the league page', () => {
+  it('prices each league for ITS OWN week, not the feed’s newest one', async () => {
+    Object.assign(PLAYERS, { a: [10, 'KC'], c: [5, 'SF'] })
+    league('W', ['a'], ['c'])
+    await getMatchupPulse(USER, NOW)
+    expect(lookups).toContainEqual({ at: { season: '2026', week: 4 }, sport: 'NFL' })
+    expect(lookups.some((l) => (l.at as { week: number }).week === 5)).toBe(false)
+  })
+
+  it('a week the feed does not hold keeps a margin from the newest week, but no odds', async () => {
+    feed.missingWeek4 = true
+    Object.assign(PLAYERS, { a: [10, 'KC'], c: [5, 'SF'] })
+    league('W', ['a'], ['c'])
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.leading[0]).toMatchObject({ leagueId: 'W', margin: 5, pWin: null })
+  })
+
+  it('🛑 a vendor-only price gives a margin but never odds — a PPR total is not this league’s number', async () => {
+    Object.assign(PLAYERS, { a: [10, 'KC'], c: [5, 'SF'] })
+    GENERIC_ONLY.add('a')
+    league('V', ['a'], ['c'])
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.leading[0]).toMatchObject({ leagueId: 'V', margin: 5, pWin: null })
+  })
+
+  it('🛑 a ruled-out starter is a zero in the margin and the odds, as on the league page', async () => {
+    Object.assign(PLAYERS, { a: [10, 'KC'], stud: [25, 'SF'] })
+    league('O', ['a'], ['stud'])
+    const before = await getMatchupPulse(USER, NOW)
+    expect(before.trailing[0]?.leagueId).toBe('O')
+
+    db.claimed = []; db.weekRows = []; db.teams = []; db.rosters = []
+    OUT.add('stud')
+    league('O', ['a'], ['stud'])
+    const after = await getMatchupPulse(USER, NOW)
+    expect(after.leading[0]).toMatchObject({ leagueId: 'O', margin: 10 })
+    expect(after.leading[0]?.pWin).toBeGreaterThan(0.9)
+  })
+
+  it('🛑 an empty slot is a certain zero — the league is ranked, not "cannot compare"', async () => {
+    Object.assign(PLAYERS, { a: [10, 'KC'], b: [8, 'SF'], c: [12, 'BUF'] })
+    league('E', ['a', 'b'], ['c', '0'])
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.notRanked.uncomparable).toBe(0)
+    expect(pulse.leading[0]).toMatchObject({ leagueId: 'E', margin: 6 })
+    expect(pulse.leading[0]?.pWin).not.toBeNull()
+    /* The hole is nobody, so it is not "to play" either. */
+    expect(pulse.leading[0]?.startersLeft).toBe(2)
+  })
+
+  it('the number on the board IS the shared function’s number for the same lineup', async () => {
+    Object.assign(PLAYERS, { a: [14, 'KC'], b: [9, 'SF'], c: [11, 'BUF'], d: [10, 'LAR'] })
+    league('P', ['a', 'b'], ['c', 'd'])
+    const pulse = await getMatchupPulse(USER, NOW)
+    const { forecastMatchup } = await import('@/lib/core-app/matchupForecast')
+    const side = (ids: string[]) => ({
+      teamPoints: 0,
+      hasPlayerPoints: false,
+      starters: ids.map((id) => ({ playerId: id, projected: PLAYERS[id][0], actual: 0, state: 'upcoming' as const })),
+    })
+    const shared = forecastMatchup(side(['a', 'b']), side(['c', 'd']))
+    expect(shared.available).toBe(true)
+    expect(pulse.leading[0]?.pWin).toBe(shared.available ? shared.pWin : NaN)
   })
 })
