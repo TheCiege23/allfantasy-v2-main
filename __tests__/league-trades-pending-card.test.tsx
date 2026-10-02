@@ -12,7 +12,24 @@
 import { describe, expect, it, vi } from 'vitest'
 import { render } from '@testing-library/react'
 import React from 'react'
-import { PendingTradeCard, toAnalyzeAssets } from '@/app/league/[leagueId]/tabs/TradesTab'
+import { PendingTradeCard, pendingVerdictFromGrade, toAnalyzeAssets } from '@/app/league/[leagueId]/tabs/TradesTab'
+import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+
+describe('pendingVerdictFromGrade — per-asset values', () => {
+  const grade = {
+    graded: true, letter: 'B', partnerLetter: 'D', percentDiff: 12, label: 'x', basis: 'b', giveValue: 4100, getValue: 4600,
+    lines: [
+      { side: 'give', name: 'Kenneth Walker III', marketValue: 4100, leagueValue: 4100 },
+      { side: 'get', name: '2027 1st', marketValue: 3034, leagueValue: 3034 },
+      { side: 'get', name: '2027 2nd', marketValue: 1559, leagueValue: 1559 },
+    ],
+  } as unknown as TradeGradeView
+
+  it('matches a pick by its year and round, not by its place in the list', () => {
+    const v = pendingVerdictFromGrade(grade, ['Kenneth Walker'], ['2027 round 2', '2027 round 1'])
+    expect(v && v.kind === 'ok' ? v.values : null).toEqual({ 'kenneth walker': 4100, '2027 round 2': 1559, '2027 round 1': 3034 })
+  })
+})
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
 
 vi.mock('next-auth/react', () => ({ useSession: () => ({ data: { user: { id: 'user-a' } } }) }))

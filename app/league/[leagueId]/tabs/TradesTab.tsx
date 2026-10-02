@@ -638,9 +638,10 @@ export type PendingVerdict =
  * at six) — so one offer could carry a different letter here than in the Trade Center or the
  * inbox. The server now grades every open offer with the one grader and this only reshapes it.
  *
- * Per-asset values are matched by POSITION, not by name: the grader prices the sides in the order
- * the row lists them, and a pricer's canonical spelling ("Kenneth Walker III") need not match the
- * label on the card.
+ * Per-asset values are matched by name, then pick year + round, and only then by POSITION — the
+ * grader prices the sides in the order the row lists them, and a pricer's canonical spelling
+ * ("Kenneth Walker III") need not match the label on the card, so position still settles what
+ * names cannot. It no longer overrides a name that matches outright (2026-10-01).
  */
 export function pendingVerdictFromGrade(
   grade: TradeGradeView | null | undefined,
@@ -650,10 +651,14 @@ export function pendingVerdictFromGrade(
   if (!grade) return undefined
   if (!grade.graded) return { kind: 'skipped', why: grade.reason }
   const values: Record<string, number | null> = {}
-  const give = grade.lines.filter((l) => l.side === 'give')
-  const get = grade.lines.filter((l) => l.side === 'get')
-  giveNames.forEach((n, i) => { values[n.toLowerCase()] = give[i]?.leagueValue ?? null })
-  getNames.forEach((n, i) => { values[n.toLowerCase()] = get[i]?.leagueValue ?? null })
+  /*
+   * Name, then pick year + round, then place (`assetValues`) — place stays the fallback for a
+   * pricer's canonical spelling, but no longer decides a pick or a name that matches outright.
+   */
+  const giveValues = assetValues(giveNames.map((label) => ({ label })), grade.lines, 'give')
+  const getValues = assetValues(getNames.map((label) => ({ label })), grade.lines, 'get')
+  giveNames.forEach((n, i) => { values[n.toLowerCase()] = giveValues[i] ?? null })
+  getNames.forEach((n, i) => { values[n.toLowerCase()] = getValues[i] ?? null })
   return {
     kind: 'ok',
     fairnessScore: null,
