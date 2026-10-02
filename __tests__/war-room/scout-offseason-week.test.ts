@@ -17,7 +17,7 @@ const h = vi.hoisted(() => ({
   teamFindMany: vi.fn(),
   matchupFindMany: vi.fn(),
   resolveAccess: vi.fn(),
-  loadProfiles: vi.fn(),
+  standings: vi.fn(),
   resolveWeek: vi.fn(),
 }))
 
@@ -28,10 +28,8 @@ vi.mock('@/lib/prisma', () => ({
     weeklyMatchup: { findMany: h.matchupFindMany },
   },
 }))
-vi.mock('@/lib/psychological-profiles/ProfileAccess', () => ({ resolveProfileAccessForUser: h.resolveAccess }))
-vi.mock('@/lib/decision-os/psychology-os', () => ({
-  createPsychologyOsLoaders: () => ({ loadProfiles: h.loadProfiles, drainOutcomes: () => ({}) }),
-}))
+vi.mock('@/lib/league-access', () => ({ resolveLeagueMembership: h.resolveAccess }))
+vi.mock('@/lib/core-app/leagueStandings', () => ({ getLeagueStandings: h.standings }))
 vi.mock('@/lib/core-app/currentWeek', () => ({
   resolveCurrentWeekForLeague: h.resolveWeek,
   resolveCurrentWeek: vi.fn(async () => null),
@@ -59,14 +57,14 @@ function league(over: Record<string, unknown>) {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  h.resolveAccess.mockResolvedValue({ ok: true, userId: ME, ownManagerIds: new Set(['mine']), canSeeOpponents: false })
+  h.resolveAccess.mockResolvedValue({ ok: true, access: { leagueId: 'lg1', leagueSport: 'NFL', isCommissioner: false, isMember: true, isOwner: false, via: 'claim' } })
+  h.standings.mockResolvedValue({ available: false, reason: 'no table in this test', leagueName: 'x', history: [] })
   h.teamFindMany.mockResolvedValue([team('mine', { claimedByUserId: ME }), team('rival'), team('other')])
   h.matchupFindMany.mockResolvedValue([
     { rosterId: 'mine', matchupId: 4 },
     { rosterId: 'rival', matchupId: 4 },
     { rosterId: 'other', matchupId: 5 },
   ])
-  h.loadProfiles.mockResolvedValue([])
 })
 
 const tagged = (data: Awaited<ReturnType<typeof getScoutData>>) =>

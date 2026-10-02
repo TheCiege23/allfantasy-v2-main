@@ -46,6 +46,70 @@
   color: var(--muted);
 }
 
+/* ── Summary strip ───────────────────────────────────────────────────── */
+
+.af-core .af-gp-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.af-core .af-gp-stats {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.af-core .af-gp-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface, transparent);
+}
+
+.af-core .af-gp-stats > div[data-tone='warn'] {
+  border-color: var(--warn);
+}
+
+.af-core .af-gp-stats > div[data-tone='bad'] {
+  border-color: var(--bad);
+}
+
+.af-core .af-gp-stats dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-core .af-gp-stats dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The first-lock tile holds a sentence ("locks in 2h 10m"), not a number. */
+.af-core .af-gp-stats dd .af-gp-lock {
+  font-size: 13px;
+}
+
+.af-core .af-gp-summary-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 /* ── Rows ────────────────────────────────────────────────────────────── */
 
 .af-core .af-gp-list {
@@ -292,6 +356,11 @@
 
   .af-core .af-gp-title {
     font-size: 18px;
+  }
+
+  /* Four tiles in a row are 80px each on a phone; two by two keeps the numbers legible. */
+  .af-core .af-gp-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

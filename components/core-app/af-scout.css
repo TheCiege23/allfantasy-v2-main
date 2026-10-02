@@ -11,12 +11,17 @@
  * one: brace balance stayed 0, nothing threw, no lint could see it, and four
  * rules silently moved into the narrower band. Keeping the file's only query
  * last means an appended rule cannot land inside one by accident.
+ *
+ * The meter, label, trajectory and locked-profile rules that lived here went with
+ * the psychology read they drew (2026-09-30 ruling: every psychology leftover retired).
  */
 
 .af-core .af-sc {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  /* The width Matchup and Trades cap at — past it, a card's facts sit a screen apart. */
+  max-width: 1020px;
 }
 
 /* ── Header ──────────────────────────────────────────────────────────── */
@@ -29,10 +34,19 @@
   gap: 16px;
 }
 
-/* The link to the War Room's other room. */
+/*
+ * The link to the War Room's other room. On a phone it is the ONLY way there, so it is a
+ * 44px target rather than a bare 12px link.
+ */
 .af-core .af-sc-switch {
   flex: 0 0 auto;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--accent);
   text-decoration: none;
@@ -40,7 +54,7 @@
 }
 
 .af-core .af-sc-switch:hover {
-  text-decoration: underline;
+  border-color: var(--accent);
 }
 
 .af-core .af-sc-title {
@@ -56,13 +70,78 @@
   max-width: 62ch;
 }
 
-/* ── Coverage line ───────────────────────────────────────────────────── */
+/* ── This week's opponent ────────────────────────────────────────────── */
 
-/*
- * Deliberately loud when partial and quiet when complete. It sits above the
- * cards because it changes how they should be read.
- */
-.af-core .af-sc-coverage {
+.af-core .af-sc-vs {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-color: var(--bad);
+}
+
+.af-core .af-sc-vs-label {
+  margin: 0;
+  color: var(--bad);
+}
+
+.af-core .af-sc-vs-sides {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.af-core .af-sc-vs-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.af-core .af-sc-vs-side[data-side='them'] {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.af-core .af-sc-vs-name {
+  font-weight: 800;
+  font-size: 16px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-sc-vs-meta {
+  font-size: 12.5px;
+  color: var(--text2);
+}
+
+.af-core .af-sc-vs-v {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-core .af-sc-vs-h2h {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.af-core .af-sc-vs-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ── Basis line ──────────────────────────────────────────────────────── */
+
+/* Loud when the table is missing, quiet when it is there. Sits above the cards because it changes how they read. */
+.af-core .af-sc-basis {
   margin: 0;
   padding: 10px 14px;
   border-radius: 10px;
@@ -71,9 +150,10 @@
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--text2);
+  max-width: 90ch;
 }
 
-.af-core .af-sc-coverage[data-complete] {
+.af-core .af-sc-basis[data-available] {
   border-color: var(--line);
   background: var(--chip, transparent);
   color: var(--muted);
@@ -86,7 +166,7 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 12px;
 }
 
@@ -104,8 +184,9 @@
   box-shadow: 0 0 0 1px var(--bad) inset;
 }
 
+/* Your own card is marked by its edge, not faded — opacity took already-faint text below contrast. */
 .af-core .af-sc-card[data-you] {
-  opacity: 0.82;
+  border-style: dashed;
 }
 
 .af-core .af-sc-card-head {
@@ -149,7 +230,7 @@
 }
 
 .af-core .af-sc-owner {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--faint);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -172,107 +253,127 @@
   color: var(--bad);
 }
 
-/* ── Labels ──────────────────────────────────────────────────────────── */
+/* ── Facts ───────────────────────────────────────────────────────────── */
 
-.af-core .af-sc-labels {
-  list-style: none;
+.af-core .af-sc-facts {
   margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.af-core .af-sc-label {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-}
-
-/* ── Meters ──────────────────────────────────────────────────────────── */
-
-.af-core .af-sc-meters {
+.af-core .af-sc-facts > div {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
+  min-width: 0;
 }
 
-.af-core .af-sc-meter {
-  display: grid;
-  grid-template-columns: 76px 1fr 30px;
-  grid-template-areas: 'label track value' 'hint hint hint';
+.af-core .af-sc-facts dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-core .af-sc-facts dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-core .af-sc-line {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 2px 8px;
-}
-
-.af-core .af-sc-meter-label {
-  grid-area: label;
-}
-
-.af-core .af-sc-meter-track {
-  grid-area: track;
-  height: 5px;
-  border-radius: 3px;
-  background: var(--chip);
-  overflow: hidden;
-}
-
-.af-core .af-sc-meter-fill {
-  display: block;
-  height: 100%;
-  border-radius: 3px;
-  background: var(--accent);
-}
-
-.af-core .af-sc-meter-value {
-  grid-area: value;
-  font-size: 11px;
-  text-align: right;
-  color: var(--text2);
-}
-
-/*
- * The hint only earns a line when the reading is unmeasured — otherwise it is
- * noise on every row of every card.
- */
-.af-core .af-sc-meter-hint {
-  grid-area: hint;
-  font-size: 11px;
-  color: var(--faint);
-  display: none;
-}
-
-.af-core .af-sc-meter[data-unmeasured='true'] .af-sc-meter-hint {
-  display: block;
-}
-
-.af-core .af-sc-meter[data-unmeasured='true'] .af-sc-meter-value {
-  color: var(--faint);
-}
-
-/* ── Trajectory, evidence, refusals ──────────────────────────────────── */
-
-.af-core .af-sc-traj {
-  margin: 0;
+  gap: 6px 10px;
   font-size: 12px;
-  line-height: 1.45;
-  color: var(--muted);
-  padding-left: 9px;
-  border-left: 2px solid var(--line);
-}
-
-.af-core .af-sc-traj[data-has='true'] {
-  border-left-color: var(--accent);
   color: var(--text2);
 }
 
-.af-core .af-sc-evidence {
-  margin: 0;
+.af-core .af-sc-zone {
   font-size: 11px;
-  color: var(--faint);
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--text2);
 }
 
-.af-core .af-sc-none,
+.af-core .af-sc-zone[data-tone='good'] {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.af-core .af-sc-zone[data-tone='warn'] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.af-core .af-sc-zone[data-tone='bad'] {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.af-core .af-sc-form {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.af-core .af-sc-form-r {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--chip);
+  color: var(--text2);
+}
+
+.af-core .af-sc-form-r[data-r='W'] {
+  background: color-mix(in srgb, var(--good) 22%, transparent);
+  color: var(--good);
+}
+
+.af-core .af-sc-form-r[data-r='L'] {
+  background: color-mix(in srgb, var(--bad) 18%, transparent);
+  color: var(--bad);
+}
+
+.af-core .af-sc-card-foot {
+  margin-top: auto;
+  display: flex;
+}
+
+/* Links read as buttons and are thumb-sized: a 44px target, iOS's floor. */
+.af-core .af-sc-cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.af-core .af-sc-cta:hover {
+  border-color: var(--accent);
+}
+
+.af-core .af-sc-cta--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
 .af-core .af-sc-unavailable {
   margin: 0;
   font-size: 12px;
@@ -282,29 +383,6 @@
 
 .af-core .af-sc-section {
   padding: 16px 18px;
-}
-
-/* ── Locked ──────────────────────────────────────────────────────────── */
-
-/*
- * A locked card reads as withheld, not as empty. The dashed edge is the tell —
- * a card with no border at all looks like a card whose data failed to load.
- */
-.af-core .af-sc-locked {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px dashed var(--line);
-  border-radius: 10px;
-  background: var(--chip, transparent);
-}
-
-.af-core .af-sc-locked-reason {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text2);
 }
 
 /* ── Narrow ──────────────────────────────────────────────────────────── */
@@ -319,7 +397,17 @@
     font-size: 18px;
   }
 
-  .af-core .af-sc-meter {
-    grid-template-columns: 64px 1fr 26px;
+  /* The switch drops under the title rather than squeezing it. */
+  .af-core .af-sc-head {
+    flex-direction: column;
+  }
+
+  .af-core .af-sc-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .af-core .af-sc-cta {
+    flex: 1 1 auto;
+    justify-content: center;
   }
 }

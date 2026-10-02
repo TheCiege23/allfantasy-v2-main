@@ -1,57 +1,113 @@
 import Link from 'next/link'
 
 import '@/components/core-app/af-scout.css'
-import type { ScoutData, ScoutedManager } from '@/lib/core-app/scout'
+import type { ScoutData, ScoutedManager, ScoutStanding } from '@/lib/core-app/scout'
+import type { Record3, Zone } from '@/lib/core-app/standingsModel'
 
 /**
  * Scout — the first room of the War Room.
  *
- * Every manager in the league read through the psychological-profile engine,
- * with the one you play this week pinned to the top.
+ * Every manager in the league, where they stand and how they have played lately, with the one you
+ * play this week pinned above the rest and your head-to-head record against them.
  *
  * ── 🛑 WHAT THIS SCREEN REFUSES TO DO ───────────────────────────────────────
  *
- * ❌ IT DOES NOT RENDER A NULL SCORE AS A ZERO. `psychology-os` gates every
- *    score behind an evidence floor and returns null for a dimension that does
- *    not clear it. A zero on a bar reads as a measured certainty that the
- *    manager is passive; null means "we cannot say", and the bar says so in
- *    words instead of drawing a stub.
+ * ❌ IT DOES NOT CHARACTERISE A MANAGER. Every line is a fact from the Standings screen's own table —
+ *    seed, record, points, last five results, playoff zone. No label, no score, no "type". See the
+ *    loader's header (lib/core-app/scout.ts) for why.
  *
- * ❌ IT DOES NOT HIDE THE DENOMINATOR. The coverage line is rendered before the
- *    managers, always, because "3 of 12 managers profiled" changes how you read
- *    every card under it — and a reader who sees the cards first has already
- *    formed the belief the caveat corrects. Same rule Draft HQ applies to its
- *    grade caveat.
+ * ❌ IT DOES NOT COMPUTE A PROJECTION. The matchup's projected score and win odds live on Matchup,
+ *    priced through My Team's own lineup rules; a second, simpler number here would disagree with
+ *    them. The banner links there instead.
  *
- * ❌ IT DOES NOT SAY "NO TENDENCIES" FOR A MANAGER WE NEVER LOOKED AT. An
- *    unprofiled manager and a profiled-but-unremarkable one get different copy;
- *    the loader keeps them as different states for exactly this reason.
+ * ❌ IT DOES NOT HIDE THE BASIS. "Through week 3" is printed before the cards, because it changes how
+ *    every record under it reads — the same rule the old coverage line followed.
  */
 
 export type ScoutProps = {
   data: ScoutData
   /**
-   * The War Room's other room, on the same screen key behind `?view=plan`.
+   * The War Room's other room, and the two screens the opponent banner hands off to.
    *
    * Passed in rather than built here: the league query param belongs to the
    * router, and a screen that assembles its own sibling's href is a screen that
    * can silently disagree with it.
    */
   gamePlanHref: string
+  matchupHref: string
+  tradesHref: string
 }
 
-function Unavailable({ reason }: { reason: string }) {
-  return <p className="af-sc-unavailable">{reason}</p>
+const ZONE_LABEL: Record<Zone, string> = {
+  bye: 'Bye spot',
+  playoff: 'Playoff spot',
+  bubble: 'On the bubble',
+  out: 'Outside the playoffs',
+  eliminated: 'Eliminated',
 }
 
-/**
- * The five gated dimensions, in the order the engine names them.
- *
- * ⚠ `key` IS TYPED AGAINST THE SCORES OBJECT, NOT LOOSELY. A cast here would let
- * a misspelled dimension compile and render a permanent em dash that reads as
- * "not enough evidence" — our typo presented as a fact about a manager.
- */
-function ManagerCard({ m }: { m: ScoutedManager }) {
+const ZONE_TONE: Record<Zone, 'good' | 'warn' | 'bad' | 'info'> = {
+  bye: 'good',
+  playoff: 'good',
+  bubble: 'warn',
+  out: 'info',
+  eliminated: 'bad',
+}
+
+function recordText(r: Record3): string {
+  return `${r.wins}-${r.losses}${r.ties > 0 ? `-${r.ties}` : ''}`
+}
+
+/** Points with one decimal, pinned to en-US so the server and any client agree on the separator. */
+function points(n: number): string {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+}
+
+function gamesBackText(gb: number): string {
+  if (gb > 0) return `${gb} GB`
+  if (gb < 0) return `${-gb} clear of the cut`
+  return 'on the playoff line'
+}
+
+/** Last five head-to-head results as chips — the letters carry the meaning, the colour only repeats it. */
+function Form({ form }: { form: ScoutStanding['form'] }) {
+  if (form.length === 0) return null
+  return (
+    <span className="af-sc-form" aria-label={`Last ${form.length}: ${form.join(' ')}`}>
+      {form.map((r, i) => (
+        <span key={i} className="af-sc-form-r" data-r={r} aria-hidden>
+          {r}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function Facts({ s }: { s: ScoutStanding }) {
+  return (
+    <dl className="af-sc-facts">
+      <div>
+        <dt>Seed</dt>
+        <dd className="af-num">#{s.seed}</dd>
+      </div>
+      <div>
+        <dt>Record</dt>
+        <dd className="af-num">{recordText(s.record)}</dd>
+      </div>
+      <div>
+        <dt>Points for</dt>
+        <dd className="af-num">{points(s.pointsFor)}</dd>
+      </div>
+      <div>
+        <dt>Power</dt>
+        <dd className="af-num">#{s.powerRank}</dd>
+      </div>
+    </dl>
+  )
+}
+
+function ManagerCard({ m, tradesHref }: { m: ScoutedManager; tradesHref: string }) {
+  const s = m.standing
   return (
     <li>
       <article
@@ -71,16 +127,7 @@ function ManagerCard({ m }: { m: ScoutedManager }) {
 
           <span className="af-sc-who">
             <span className="af-sc-team">{m.teamName}</span>
-            <span className="af-sc-owner">
-              {m.ownerName ?? 'Manager not named'}
-              {m.record ? (
-                <span className="af-num">
-                  {' · '}
-                  {m.record.wins}-{m.record.losses}
-                  {m.record.ties > 0 ? `-${m.record.ties}` : ''}
-                </span>
-              ) : null}
-            </span>
+            <span className="af-sc-owner">{m.ownerName ?? 'Manager not named'}</span>
           </span>
 
           {m.isNextOpponent ? (
@@ -94,42 +141,96 @@ function ManagerCard({ m }: { m: ScoutedManager }) {
           ) : null}
         </header>
 
-        {m.profile.available ? (
-          <p className="af-sc-unavailable">Open a league decision for Competitive Edge guidance.</p>
-        ) : m.profile.locked ? (
-          /*
-           * ⚠ LOCKED IS NOT EMPTY, AND IT SAYS SO. The profile exists and we say
-           * how much was observed — the same split `redactForLock` makes on the
-           * API. Rendering a paywall as "no data yet" would tell a manager their
-           * league is unprofiled when it is fully profiled.
-           */
-          <div className="af-sc-locked">
-            <p className="af-sc-locked-reason">{m.profile.reason}</p>
-            <p className="af-sc-evidence af-num">
-              {m.profile.evidenceCount} observation
-              {m.profile.evidenceCount === 1 ? '' : 's'} on file
+        {s ? (
+          <>
+            <Facts s={s} />
+            <p className="af-sc-line">
+              <span className="af-sc-zone" data-tone={ZONE_TONE[s.zone]}>
+                {ZONE_LABEL[s.zone]}
+              </span>
+              {s.gamesBack != null ? <span className="af-num">{gamesBackText(s.gamesBack)}</span> : null}
+              <Form form={s.form} />
             </p>
-          </div>
+          </>
         ) : (
-          <Unavailable reason={m.profile.reason} />
+          <p className="af-sc-unavailable">Not on the standings table yet.</p>
+        )}
+
+        {m.isYou ? null : (
+          <footer className="af-sc-card-foot">
+            {/*
+              The Trade Center is where Competitive Edge shows this manager's own trade record, inside
+              the deal it bears on — the paid depth stays in the decision, not on this free screen.
+            */}
+            <Link className="af-sc-cta" href={tradesHref}>
+              Build a trade &rarr;
+            </Link>
+          </footer>
         )}
       </article>
     </li>
   )
 }
 
-export function Scout({ data, gamePlanHref }: ScoutProps) {
-  const { coverage } = data
-  const complete = coverage.profiledCount === coverage.teamCount && coverage.teamCount > 0
+function OpponentBanner({ data, matchupHref, tradesHref }: { data: ScoutData; matchupHref: string; tradesHref: string }) {
+  const opp = data.opponent
+  if (!opp) return null
+  const them = data.managers.available ? data.managers.data.find((m) => m.managerId === opp.managerId) ?? null : null
+  const youStanding = data.you?.standing ?? null
+  const h2h = opp.headToHead
 
+  return (
+    <section className="af-frame af-sc-vs" aria-labelledby="af-sc-vs-h">
+      <h2 className="af-label af-sc-vs-label" id="af-sc-vs-h">
+        This week{data.week ? ` · week ${data.week.week}` : ''}
+      </h2>
+      <div className="af-sc-vs-sides">
+        <div className="af-sc-vs-side" data-side="you">
+          <span className="af-sc-vs-name">{data.you?.teamName ?? 'You'}</span>
+          <span className="af-sc-vs-meta af-num">
+            {youStanding ? `#${youStanding.seed} · ${recordText(youStanding.record)}` : 'not on the table yet'}
+          </span>
+        </div>
+        <span className="af-sc-vs-v" aria-hidden>
+          vs
+        </span>
+        <div className="af-sc-vs-side" data-side="them">
+          <span className="af-sc-vs-name">{opp.teamName}</span>
+          <span className="af-sc-vs-meta af-num">
+            {them?.standing ? `#${them.standing.seed} · ${recordText(them.standing.record)}` : 'not on the table yet'}
+          </span>
+          {them?.standing ? <Form form={them.standing.form} /> : null}
+        </div>
+      </div>
+      <p className="af-sc-vs-h2h">
+        {h2h ? (
+          <>
+            You are <span className="af-num">{recordText(h2h)}</span> against them this season.
+          </>
+        ) : (
+          'You have not played them yet this season.'
+        )}
+      </p>
+      <div className="af-sc-vs-links">
+        <Link className="af-sc-cta af-sc-cta--primary" href={matchupHref}>
+          Projected score &amp; win odds &rarr;
+        </Link>
+        <Link className="af-sc-cta" href={tradesHref}>
+          Build a trade &rarr;
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+export function Scout({ data, gamePlanHref, matchupHref, tradesHref }: ScoutProps) {
   return (
     <div className="af-sc">
       <header className="af-frame af-sc-head">
         <div className="af-sc-head-text">
           <h1 className="af-display af-sc-title">Scout · {data.league.name}</h1>
           <p className="af-sc-blurb">
-            How every manager in this league actually plays, read from seasons of their trades,
-            waiver claims and drafts.
+            Where every manager in this league stands, and how they have played lately.
             {data.week ? ` Week ${data.week.week} of ${data.week.seasonYear}.` : ''}
           </p>
         </div>
@@ -143,64 +244,36 @@ export function Scout({ data, gamePlanHref }: ScoutProps) {
         </Link>
       </header>
 
-      {/*
-        ⚠ BEFORE THE CARDS, ALWAYS. See the header note — a denominator read
-        after the evidence is a caveat that arrives too late to do its job.
-      */}
-      <p className="af-sc-coverage" data-complete={complete || undefined}>
-        <span className="af-num">
-          {coverage.profiledCount} of {coverage.teamCount}
-        </span>{' '}
-        {coverage.teamCount === 1 ? 'manager' : 'managers'} profiled
-        {/*
-          🛑 THIS SAID "last updated", AND IT WAS READ AS THE LEAGUE'S SYNC TIME. It is the newest
-          PROFILE rebuild, which runs on its own rotation — a league synced 20 minutes ago showed
-          "last updated 9/19" and looked broken, or worse, a fresh sync made week-old profiles look
-          current. Name what it measures, and give the range so the oldest profile is not hidden.
-        */}
-        {coverage.lastRefreshedAt ? (
-          <span title="Manager profiles are rebuilt on their own schedule, separately from league sync.">
-            {' · profiles rebuilt '}
-            {profileRange(coverage.oldestRefreshedAt, coverage.lastRefreshedAt)}
-          </span>
-        ) : null}
-        {coverage.profiledCount === 0
-          ? ' — the profiler runs on a schedule and has not reached this league yet.'
-          : complete
-            ? '.'
-            : ' — the rest have not been profiled yet, so this is a partial read of the room.'}
-        {/*
-          ⚠ SAID SEPARATELY FROM THE GAP. A withheld profile is not missing data, and
-          folding the two together would report the profiler as incomplete on a league
-          it has fully covered.
+      <OpponentBanner data={data} matchupHref={matchupHref} tradesHref={tradesHref} />
 
-          🛑 AND THIS LINE USED TO SAY "locked on your plan — your own profile is always
-          free." BOTH HALVES BECAME FALSE when the characterisation was withheld from
-          every viewer: it is not a plan boundary any more, and your own profile is not
-          free any more. A privacy change that leaves the old sentence standing tells the
-          reader the opposite of what the code now does — and nothing type-checks copy,
-          so this is the kind of defect only reading the rendered words catches.
-        */}
-        {coverage.lockedCount > 0 ? (
-          <>
-            {' '}
-            <span className="af-num">{coverage.lockedCount}</span>{' '}
-            {coverage.lockedCount === 1 ? 'has a profile' : 'have profiles'} on file, held
-            internally and not shown. Competitive Edge shows each manager&apos;s own trade record
-            when you analyze a trade with them.
-          </>
-        ) : null}
-      </p>
+      {/*
+        ⚠ BEFORE THE CARDS, ALWAYS. What the records are measured over changes how every one of them
+        reads; a basis printed after the evidence is a caveat that arrives too late.
+      */}
+      {/* Only beside a list: with no managers the list's own reason is the whole story, said once. */}
+      {data.managers.available ? (
+        <p className="af-sc-basis" data-available={data.basis.available || undefined}>
+          {data.basis.available ? (
+            <>
+              Standings through week <span className="af-num">{data.basis.data.throughWeek}</span> of{' '}
+              <span className="af-num">{data.basis.data.season}</span>
+              {data.basis.data.seasonComplete ? ' — final' : ''}. {data.basis.data.orderBasis}
+            </>
+          ) : (
+            <>No standings yet: {data.basis.reason.replace(/\.$/, '')}.</>
+          )}
+        </p>
+      ) : null}
 
       {data.managers.available ? (
         <ul className="af-sc-list">
           {data.managers.data.map((m) => (
-            <ManagerCard key={m.managerId} m={m} />
+            <ManagerCard key={m.managerId} m={m} tradesHref={tradesHref} />
           ))}
         </ul>
       ) : (
         <section className="af-frame af-sc-section">
-          <Unavailable reason={data.managers.reason} />
+          <p className="af-sc-unavailable">{data.managers.reason}</p>
         </section>
       )}
     </div>
@@ -208,11 +281,3 @@ export function Scout({ data, gamePlanHref }: ScoutProps) {
 }
 
 export default Scout
-
-/** "9/19", or "9/12–9/19" when the league's profiles were rebuilt on different days. */
-function profileRange(oldest: string | null, newest: string): string {
-  const fmt = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })
-  const to = fmt(newest)
-  const from = oldest ? fmt(oldest) : to
-  return from === to ? to : `${from}–${to}`
-}
