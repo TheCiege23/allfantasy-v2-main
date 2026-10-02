@@ -242,6 +242,8 @@ describe("what stays open over a VPN", () => {
     ["POST", "/api/internal/ingest"],
     // Cancelling must never depend on turning a VPN off.
     ["GET", "/api/subscription/billing-portal"],
+    // ...and the /paid-restricted cancel button that stands in for the portal there.
+    ["POST", "/api/account/cancel-subscription"],
   ]
   for (const [method, path] of OPEN_APIS) {
     it(`does not VPN-refuse ${method} ${path}`, async () => {

@@ -1,4 +1,9 @@
 import Link from "next/link"
+import { getServerSession } from "next-auth"
+
+import { authOptions } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
+import { CancelSubscriptionPanel } from "./CancelSubscriptionPanel"
 
 import { CARD_PAID_LOCK_MESSAGE } from "@/lib/geo/cardLockCopy"
 import { RESTRICTED_STATES } from "@/lib/geo/restrictedStates"
@@ -7,6 +12,30 @@ export const dynamic = "force-dynamic"
 
 type PaidRestrictedParams = { state?: string; reason?: string }
 
+/**
+ * Whether the signed-in visitor still has a live subscription — they get a way to cancel it here,
+ * because the billing portal is refused where they are (owner's call, 2026-10-02). Read from our
+ * rows, never by calling Stripe on a page load. Fails closed to "nothing to show".
+ */
+async function liveSubscriptions(): Promise<{ hasStripe: boolean; hasApple: boolean }> {
+  const none = { hasStripe: false, hasApple: false }
+  try {
+    const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+    const userId = session?.user?.id
+    if (!userId) return none
+    const rows = await prisma.userSubscription.findMany({
+      where: { userId, status: { notIn: ["canceled", "expired"] } },
+      select: { source: true, stripeSubscriptionId: true, stripeCustomerId: true },
+    })
+    return {
+      hasStripe: rows.some((r) => r.source !== "apple" && Boolean(r.stripeSubscriptionId || r.stripeCustomerId)),
+      hasApple: rows.some((r) => r.source === "apple"),
+    }
+  } catch {
+    return none
+  }
+}
+
 export default async function PaidRestrictedPage(
   props: {
     searchParams?: Promise<Promise<PaidRestrictedParams> | PaidRestrictedParams>
@@ -14,6 +43,9 @@ export default async function PaidRestrictedPage(
 ) {
   const searchParams = await props.searchParams
   const sp = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
+  const subs = await liveSubscriptions()
+  const cancelPanel =
+    subs.hasStripe || subs.hasApple ? <CancelSubscriptionPanel hasStripe={subs.hasStripe} hasApple={subs.hasApple} /> : null
 
   /*
    * The card lock (lib/subscription/paidStateRefusal): this ACCOUNT, not this
@@ -28,6 +60,7 @@ export default async function PaidRestrictedPage(
           <img src="/af-crest.svg" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
           <h1 className="mb-3 text-center text-2xl font-black sm:text-3xl">🟡 Paid Features Aren&apos;t Available on This Account</h1>
           <p className="mb-8 text-center text-sm leading-7 text-white/70">{CARD_PAID_LOCK_MESSAGE}</p>
+          {cancelPanel}
           <div className="mb-8 text-center">
             <Link href="/core" className="inline-flex rounded-xl bg-cyan-500/90 px-6 py-3 text-sm font-semibold text-slate-950">
               Keep using AllFantasy.ai for free →
@@ -61,6 +94,8 @@ export default async function PaidRestrictedPage(
           You can use AllFantasy.ai for free — but due to {stateName} state law, we cannot allow participation in paid leagues,
           paid subscriptions, or any contest involving real money from your location.
         </p>
+
+        {cancelPanel}
 
         <div className="mb-8 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5 text-sm">
           <p className="mb-3 font-semibold text-emerald-200">What you CAN do:</p>

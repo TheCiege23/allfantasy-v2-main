@@ -54,6 +54,9 @@ export type CancelSubscriptionsResult = {
 export async function cancelSubscriptionsOnDelete(
   userId: string,
   deps: CancelSubscriptionsDeps,
+  /** Recorded on the Stripe cancellation, so the dashboard says why. Also used by the
+   *  /paid-restricted cancel button (app/api/account/cancel-subscription). */
+  options: { comment?: string } = {},
 ): Promise<CancelSubscriptionsResult> {
   const rows = await deps.findSubscriptions(userId)
 
@@ -87,7 +90,7 @@ export async function cancelSubscriptionsOnDelete(
     await stripe.subscriptions.cancel(id, {
       invoice_now: false,
       prorate: false,
-      cancellation_details: { comment: "AllFantasy account deleted by its owner" },
+      cancellation_details: { comment: options.comment ?? "AllFantasy account deleted by its owner" },
     })
     cancelled.push(id)
   }

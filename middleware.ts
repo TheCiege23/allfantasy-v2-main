@@ -264,6 +264,14 @@ function isUsernameGateExempt(pathname: string): boolean {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Cancelling a subscription from /paid-restricted (owner's call, 2026-10-02). It is deliberately NOT
+ * under /api/subscription/cancel — that prefix is in PAID_GEO_PREFIXES below, which would refuse it
+ * in exactly the states it exists for. Exempt wherever the billing portal is: cancelling must never
+ * depend on a VPN being off or an account lock being lifted.
+ */
+const CANCEL_SUBSCRIPTION_API = "/api/account/cancel-subscription"
+
 /** Paid API surfaces in paid_block states (cron/webhooks like sync-profiles stay open). */
 const PAID_GEO_PREFIXES = [
   "/api/subscription/checkout",
@@ -379,6 +387,8 @@ const VPN_EXEMPT_API_PREFIXES = [
   ...GEO_EXEMPT_PREFIXES.filter((p) => p.startsWith("/api/") && p !== "/api/auth"),
   ...FULL_BLOCK_API_EXEMPT_PREFIXES,
   "/api/subscription/billing-portal",
+  // Same reason: the cancel button on /paid-restricted (owner's call, 2026-10-02).
+  CANCEL_SUBSCRIPTION_API,
   "/api/auth/session",
   "/api/auth/csrf",
   "/api/auth/providers",
@@ -567,7 +577,7 @@ async function pageVpnRedirect(
  * the paid surfaces only (isPaidRoute) — the same surfaces a paid-block state's
  * IP is kept off, from anywhere. Free features stay open.
  */
-const ACCOUNT_LOCK_EXEMPT_API_PREFIXES = ["/api/subscription/billing-portal"]
+const ACCOUNT_LOCK_EXEMPT_API_PREFIXES = ["/api/subscription/billing-portal", CANCEL_SUBSCRIPTION_API]
 
 function hasSessionCookie(request: NextRequest): boolean {
   return request.cookies
@@ -655,6 +665,34 @@ async function pageAccountLockRedirect(request: NextRequest, pathname: string): 
  * The session is decoded only for a request that would be refused, to honour
  * the same owner bypass the page gate has.
  */
+/**
+ * 🛑 AN API URL A PERSON OPENS AS A PAGE GOT ITS REFUSAL'S JSON PRINTED RAW. "Manage billing" is a
+ * plain link to /api/subscription/billing-portal, so from a paid-block state the screen read
+ * {"error":"PAID_GEO_BLOCKED",…}. Every refusal body names its block page in `redirectTo`; a
+ * browser NAVIGATION is sent there instead. fetch() callers (no `Sec-Fetch-Mode: navigate`) keep
+ * the status and JSON they parse — the refusal itself is unchanged, only its shape for a page load.
+ */
+function isDocumentNavigation(request: NextRequest): boolean {
+  if (request.method !== "GET") return false
+  const mode = request.headers.get("sec-fetch-mode")
+  if (mode) return mode === "navigate"
+  // Browsers without Fetch Metadata: a page load asks for HTML first.
+  return (request.headers.get("accept") ?? "").split(",").some((t) => t.trim().startsWith("text/html"))
+}
+
+async function refusalAsPageIfNavigation(request: NextRequest, refusal: NextResponse): Promise<NextResponse> {
+  if (!isDocumentNavigation(request)) return refusal
+  const body = (await refusal.clone().json().catch(() => null)) as { redirectTo?: unknown } | null
+  const to = body?.redirectTo
+  // Same-site paths only — never an absolute or protocol-relative URL out of a body.
+  if (typeof to !== "string" || !to.startsWith("/") || to.startsWith("//")) return refusal
+  const target = new URL(to, "http://same-site.invalid")
+  const url = request.nextUrl.clone()
+  url.pathname = target.pathname
+  url.search = target.search
+  return NextResponse.redirect(url)
+}
+
 async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
   if (hasMachineCredential(request.headers)) return null
   // Before the geo exemptions and the `country !== "US"` early return below: a
@@ -679,13 +717,14 @@ async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<Ne
   }
 
   const body = fullBlock
-    ? { error: "GEO_BLOCKED", message: "AllFantasy.ai is not available in your state.", stateCode: region }
+    ? { error: "GEO_BLOCKED", message: "AllFantasy.ai is not available in your state.", stateCode: region, redirectTo: "/geo-blocked" }
     : {
         error: "PAID_GEO_BLOCKED",
         message: "Paid features are not available in your state.",
         stateCode: region,
         allowFree: true,
-        redirectTo: "/paid-restricted",
+        // With the state, so the page names it — it defaults to Hawaii without one.
+        redirectTo: `/paid-restricted?state=${encodeURIComponent(region)}`,
       }
   return new NextResponse(JSON.stringify(body), {
     status: fullBlock ? 403 : 451,
@@ -1050,7 +1089,7 @@ async function routeMiddleware(request: NextRequest) {
   // only stamps standard security headers on API responses.
   if (isApiPath(pathname)) {
     const geoRefusal = await apiGeoRefusal(request, pathname)
-    if (geoRefusal) return geoRefusal
+    if (geoRefusal) return refusalAsPageIfNavigation(request, geoRefusal)
     return applyApiSecurityHeaders(pathname, nextWithRouteHeaders(request, pathname))
   }
 
