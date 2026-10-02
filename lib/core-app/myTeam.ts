@@ -706,7 +706,7 @@ async function resolvePlayers(
       afProjectedPoints: ruledOut ? 0 : leagueScored?.points ?? null,
       afEngineProjectedPoints: ruledOut
         ? 0
-        : afEngineForLeague(afEngine.get(sleeperId), feedProjection, leagueScored?.points ?? null),
+        : afEngineForLeague(afEngine.get(sleeperId), feedProjection, leagueScored?.points ?? null, scoringSettings),
       indoors: venueInfo.kind === 'coords' ? venueInfo.dome : null,
       // All filled in by the caller: byes need the week's full slate, the
       // forecast is one batched cache read, and the market is app-wide.

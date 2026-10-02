@@ -214,6 +214,7 @@ export async function buildPlayerProjectionContext(args: {
               engine.get(candidate!.playerId),
               projections.get(candidate!.playerId)?.projectedPoints ?? null,
               leaguePoints.points,
+              scoring,
             )
             if (afInLeague != null) {
               lines.push(

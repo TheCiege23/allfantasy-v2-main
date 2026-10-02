@@ -930,7 +930,7 @@ export async function loadRailProjections(args: {
         af += league.points
         afFrom += 1
       }
-      const engineHere = afEngineForLeague(engineRow, p.projectedPoints, league?.points ?? null)
+      const engineHere = afEngineForLeague(engineRow, p.projectedPoints, league?.points ?? null, scoring)
       if (engineHere != null) {
         engine += engineHere
         engineFrom += 1

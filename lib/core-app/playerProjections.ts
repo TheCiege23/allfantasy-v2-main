@@ -6,6 +6,8 @@ import type { IdpProjectionSuccess } from '@/lib/idp-projections/types'
 import { computeLeagueProjectedPoints, hasScoringRules, NO_LEAGUE_SCORING_REASON } from '@/lib/projections/leagueScoring'
 import { hasIdpScoring, isIdpPosition } from './scoringNotes'
 import { lookupNcaafProjections } from './ncaafProjections'
+import { isIdpEligiblePosition } from '@/lib/af-projections/idpScoring'
+import type { StoredProjectionFactors } from '@/lib/af-projections/rescoreForLeague'
 
 /**
  * Weekly player projections, shared by My Team and Player Finder.
@@ -261,6 +263,8 @@ async function enrichWithIdpProjections(
  *
  * ⚠ THE AF NUMBER IS A SCALAR UNDER GENERIC PPR. The mirror row says so itself — "no per-stat
  * component line exists for this source" — so it cannot be re-scored the way the provider line is.
+ * (Defenders are the exception: their stored component amounts are read from the engine snapshot
+ * into `idpFactors` below, and rescored under the league's rules.)
  * `afEngineForLeague` below carries it into a league's rules; a surface that renders
  * `projectedPoints` raw is showing a PPR number in whatever league it sits in.
  */
@@ -282,6 +286,13 @@ export type AfEngineProjection = {
    * defender's number is IDP-scored rather than PPR. Optional for the same reason as above.
    */
   position?: string | null
+  /**
+   * For a defender: the engine snapshot's stored IDP block (`AFProjectionSnapshot.adjustmentFactors`),
+   * whose component AMOUNTS `afEngineForLeague` rescores under a league's own rules. The mirror row
+   * carries only the scalar, scored under the engine's canonical `balanced` preset — a
+   * balanced-league number in every league. Absent for offence, older rows, or a failed read.
+   */
+  idpFactors?: StoredProjectionFactors | null
 }
 
 export async function lookupAfEngineProjections(
@@ -310,6 +321,39 @@ export async function lookupAfEngineProjections(
       canonicalPlayerId: typeof s.canonicalPlayerId === 'string' && s.canonicalPlayerId ? s.canonicalPlayerId : null,
       position: typeof s.position === 'string' && s.position ? s.position : null,
     })
+  }
+
+  /*
+   * ⚠ DEFENDERS ONLY, AND ONE QUERY. The stored component amounts live on the engine snapshot,
+   * not on the mirror row, keyed by the engine's own player id. Offence never needs them (its
+   * carry is the provider ratio), so a lineup with no defenders costs nothing extra. A failed read
+   * leaves `idpFactors` absent and the defender at the engine's preset — the previous behaviour.
+   */
+  const defenders = [...out.values()].filter(
+    (r) => r.canonicalPlayerId && (String(r.basis ?? '').includes('idp') || isIdpEligiblePosition(r.position)),
+  )
+  const season = Number(when.season)
+  if (defenders.length > 0 && Number.isFinite(season)) {
+    // Inside `.then` so a client without the delegate rejects into the catch instead of throwing.
+    const snaps = await Promise.resolve()
+      .then(() =>
+        prisma.aFProjectionSnapshot.findMany({
+          where: { playerId: { in: defenders.map((d) => d.canonicalPlayerId!) }, season, week: when.week },
+          orderBy: { computedAt: 'desc' },
+          select: { playerId: true, adjustmentFactors: true },
+        }),
+      )
+      .catch(() => [])
+    const newest = new Map<string, StoredProjectionFactors>()
+    for (const s of snaps) {
+      if (!newest.has(s.playerId) && s.adjustmentFactors && typeof s.adjustmentFactors === 'object') {
+        newest.set(s.playerId, s.adjustmentFactors as StoredProjectionFactors)
+      }
+    }
+    for (const d of defenders) {
+      const f = newest.get(d.canonicalPlayerId!)
+      if (f?.idp?.componentAmounts) d.idpFactors = f
+    }
   }
   return out
 }
@@ -450,7 +494,7 @@ export function afEngineLineupTotal(
       scoringSettings && provider?.componentStats
         ? computeLeagueProjectedPoints(provider.componentStats, scoringSettings)
         : null
-    const v = afEngineForLeague(row, provider?.projectedPoints ?? null, league?.points ?? null)
+    const v = afEngineForLeague(row, provider?.projectedPoints ?? null, league?.points ?? null, scoringSettings)
     if (v == null) continue
     total += v
     from += 1
