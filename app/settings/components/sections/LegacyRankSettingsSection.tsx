@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { Trophy, Medal, Crown, Users, CalendarDays } from "lucide-react"
+import { RetryNotice } from "./RetryNotice"
 
 /**
  * Legacy (rank / XP / career / achievements) — READ-ONLY.
@@ -52,29 +53,53 @@ const num = (v: unknown): number | null =>
 export function LegacyRankSettingsSection() {
   const [rank, setRank] = useState<RankData | null>(null)
   const [achievements, setAchievements] = useState<Achievement[] | null>(null)
-  const [loading, setLoading] = useState(true)
-  /* A failed fetch is not "no rank yet" — say which one it is. */
+  const [rankLoading, setRankLoading] = useState(true)
+  const [achievementsLoading, setAchievementsLoading] = useState(true)
+  /* A failed fetch is not "no rank yet" — say which one it is, and offer the retry right there. */
   const [rankFailed, setRankFailed] = useState(false)
   const [achievementsFailed, setAchievementsFailed] = useState(false)
 
+  // Set true on mount (not only at init) so a StrictMode remount does not leave it false.
+  const mounted = useRef(true)
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const [rankRes, achRes] = await Promise.all([
-        fetch("/api/user/rank", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-        fetch("/api/achievements", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      ])
-      if (cancelled) return
-      if (rankRes && typeof rankRes === "object") setRank(rankRes as RankData)
-      else setRankFailed(true)
-      if (achRes && Array.isArray(achRes.achievements)) setAchievements(achRes.achievements as Achievement[])
-      else setAchievementsFailed(true)
-      setLoading(false)
-    })()
+    mounted.current = true
     return () => {
-      cancelled = true
+      mounted.current = false
     }
   }, [])
+
+  /*
+   * One loader per card, so "Try again" on the rank card does not refetch achievements (or blank
+   * a list that loaded fine). Each was a one-shot effect whose only recovery was a page reload.
+   */
+  const loadRank = useCallback(async () => {
+    setRankLoading(true)
+    setRankFailed(false)
+    const res = await fetch("/api/user/rank", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+    if (!mounted.current) return
+    if (res && typeof res === "object") setRank(res as RankData)
+    else setRankFailed(true)
+    setRankLoading(false)
+  }, [])
+
+  const loadAchievements = useCallback(async () => {
+    setAchievementsLoading(true)
+    setAchievementsFailed(false)
+    const res = await fetch("/api/achievements", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+    if (!mounted.current) return
+    if (res && Array.isArray(res.achievements)) setAchievements(res.achievements as Achievement[])
+    else setAchievementsFailed(true)
+    setAchievementsLoading(false)
+  }, [])
+
+  useEffect(() => {
+    void loadRank()
+    void loadAchievements()
+  }, [loadRank, loadAchievements])
 
   const level = num(rank?.level) ?? num(rank ? (rank as Record<string, unknown>).xpLevel : null)
   const pct = Math.max(0, Math.min(100, num(rank?.progressPct) ?? 0))
@@ -102,13 +127,17 @@ export function LegacyRankSettingsSection() {
 
       {/* Rank card */}
       <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
-        {loading ? (
+        {rankLoading ? (
           <p className="text-sm" style={{ color: "var(--muted)" }}>Loading your rank…</p>
+        ) : rankFailed ? (
+          <RetryNotice
+            message="Couldn't load your rank right now."
+            onRetry={() => void loadRank()}
+            testId="legacy-rank-retry"
+          />
         ) : level == null && xpTotal == null ? (
           <div className="text-sm" style={{ color: "var(--muted)" }}>
-            {rankFailed
-              ? "Couldn't load your rank right now. Refresh the page to try again."
-              : rank?.rankProcessing
+            {rank?.rankProcessing
               ? "Your rank is being calculated — check back after your next synced game."
               : "No rank yet. Import or play a league to start earning XP."}
           </div>
@@ -179,14 +208,16 @@ export function LegacyRankSettingsSection() {
             View all
           </Link>
         </div>
-        {loading ? (
+        {achievementsLoading ? (
           <p className="text-sm" style={{ color: "var(--muted)" }}>Loading…</p>
+        ) : achievementsFailed ? (
+          <RetryNotice
+            message="Couldn't load your achievements right now."
+            onRetry={() => void loadAchievements()}
+            testId="legacy-achievements-retry"
+          />
         ) : !achievements || achievements.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }}>
-            {achievementsFailed
-              ? "Couldn't load your achievements right now. Refresh the page to try again."
-              : "No achievements available yet."}
-          </p>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>No achievements available yet.</p>
         ) : (
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
             {achievements.map((a) => {
@@ -230,3 +261,4 @@ function winLoss(rank: RankData | null): string {
   if (w == null && l == null) return "—"
   return `${w ?? 0}-${l ?? 0}`
 }
+
