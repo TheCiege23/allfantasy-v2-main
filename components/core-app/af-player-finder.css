@@ -4354,3 +4354,59 @@
     transition: none;
   }
 }
+
+/* Player Finder audit, 2026-10-01. Measured on static renders at 375/768/1280.
+   Own @media block at EOF, per the warning at the top of this file. */
+
+/* The trade-value card sits in a narrow column on desktop (~166px a side),
+   so a nowrap name cut "Amon-Ra St. Brown" to "Amon-Ra St…". Two lines,
+   then clamp. */
+.af-core .af-pf-tv-asset-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  /* The chip carries max-width: 100%, but its LI is a content-sized flex
+     item, so 100% resolved against the chip itself and a long league name
+     pushed the page to 518px on a 375px phone. Cap the LI instead. */
+  .af-core .af-pf-strip-list > li {
+    max-width: 100%;
+    min-width: 0;
+  }
+  /* "auto" handed the slot cell its whole max-content (252px of
+     "W/R/T · slot unconfirmed · locks in 42 min"), leaving the league name
+     a 19px column. fit-content caps the slot side so it wraps instead. */
+  .af-core .af-pf-table tr {
+    grid-template-columns: minmax(0, 1fr) fit-content(55%);
+  }
+  /* The CTA shrank to "Trade for…" while the league name kept its width.
+     The action is the part that must read in full; the context truncates.
+     66% (was 58%) gives it room; on a 320px phone it wraps to a second
+     line rather than cutting the label. */
+  .af-core .af-pf-stickybar-btn {
+    flex-shrink: 0;
+    max-width: 66%;
+    white-space: normal;
+    text-align: center;
+  }
+  /* These two sit at flex-basis 100% but kept the .af-btn nowrap, so a long
+     label ("Copy the pitch to @mikeDeLaCruz2009") set their min-content
+     wider than the row and pushed a 320px phone to 328px. Let them wrap. */
+  .af-core .af-btn.af-pf-gameday-btn,
+  .af-core .af-btn.af-pf-tw-btn {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+  }
+  /* Same shape on the landing triage: the nowrap lock chip ("bench him
+     before your leagues lock") pushed a 320px phone to 330px. Scoped to the
+     triage list; the lock chips in the table rows fit and stay on one line. */
+  .af-core .af-pf-triage-lock .af-pf-lock {
+    max-width: 100%;
+    white-space: normal;
+  }
+}
