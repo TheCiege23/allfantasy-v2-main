@@ -1258,3 +1258,82 @@
     animation: none;
   }
 }
+
+/* ── Kickoffs, injury tags, week picker (components/core-app/screens/Matchup.tsx), 2026-10-02 ──
+ *
+ * Top-level rules and sibling @media blocks, appended at end of file.
+ */
+
+/* "Q" / "D" beside a starter's name — an uncertainty, so warn-toned, never the red of OUT. */
+.af-mu-inj {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
+
+/* "Sun 1:00 PM @ BUF" under an unplayed starter. Shown at every width — the phone hides the
+   position line, but when he plays is what a phone user checks. */
+.af-mu-half-game {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ‹ Week 4 · 2026 › */
+.af-mu-weeknav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-core .af-mu-weeknav-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+}
+.af-core .af-mu-weeknav-btn:hover,
+.af-core .af-mu-weeknav-btn:focus-visible {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+/* A 44px hit area on touch without moving the 24px paint. */
+@media (pointer: coarse) {
+  .af-core .af-mu-weeknav-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@media (max-width: 560px) {
+  /* The game line sits in the two-row phone grid with the name, under it. */
+  .af-mu-board-row .af-mu-half > .af-mu-half-text .af-mu-half-game {
+    font-size: 10.5px;
+  }
+}

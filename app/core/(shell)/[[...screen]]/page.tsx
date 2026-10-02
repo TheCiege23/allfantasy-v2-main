@@ -2564,9 +2564,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   /* Same split as my-team above: a failed read must not read as "no league". */
   let matchupLoadFailed = false
+  /*
+   * `?week=N` — the week picker. The loader has always honoured an explicit week ("an explicit
+   * ?week= still wins"); the page simply never passed one. A non-integer or out-of-range value is
+   * ignored rather than trusted, so a hand-edited URL falls back to the current week.
+   */
+  const matchupWeekParam = (() => {
+    const n = typeof sp.week === 'string' ? Number(sp.week) : NaN
+    return Number.isInteger(n) && n >= 1 && n <= 30 ? n : null
+  })()
   const matchup =
     activeKey === 'matchup' && selectedLeagueId
-      ? await getMatchupData(selectedLeagueId, userId, null, leagueCtx).catch((e: unknown) => {
+      ? await getMatchupData(selectedLeagueId, userId, matchupWeekParam, leagueCtx).catch((e: unknown) => {
           console.error('[core/matchup] read failed', e)
           matchupLoadFailed = true
           return null
@@ -2581,9 +2590,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * would put that whole board on the critical path of a screen that never
    * renders it.
    */
+  /*
+   * ⚠ NOT ON `?all=1`, where the picker renders and this result is thrown away — the my-team pulse
+   * above already skips that case. And a failure is LOGGED: it falls back to the picker, which reads
+   * exactly like "no games this week", so a silent catch made a broken read invisible (audit,
+   * 2026-10-02).
+   */
   const matchupPulse =
-    activeKey === 'matchup' && !selectedLeagueId
-      ? await getMatchupPulse(userId).catch(() => null)
+    activeKey === 'matchup' && !selectedLeagueId && sp.all !== '1' && sp.all !== 'true'
+      ? await getMatchupPulse(userId).catch((error: unknown) => {
+          console.error('[core/matchup] pulse read failed', error)
+          return null
+        })
       : null
 
   /*

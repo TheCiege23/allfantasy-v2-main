@@ -4,6 +4,7 @@ import '@/components/core-app/af-matchup.css'
 // The refresh control's own styles (`.af-mp-live*`) live with the all-leagues board it came from.
 import '@/components/core-app/af-matchup-pulse.css'
 import { MatchupPulseRefresh } from '@/components/core-app/MatchupPulseRefresh'
+import Link from 'next/link'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
@@ -197,6 +198,39 @@ function StickyScore({
   )
 }
 
+/**
+ * "Q", "D", "DTD" — the injury feed's word for an UNCERTAINTY, shortened the way every fantasy app
+ * prints it. Anything unrecognised keeps its first word rather than being dropped.
+ */
+export function injuryTag(status: string): string {
+  const s = status.trim().toLowerCase()
+  if (s.startsWith('quest')) return 'Q'
+  if (s.startsWith('doubt')) return 'D'
+  if (s.startsWith('prob')) return 'P'
+  if (s.replace(/[^a-z]/g, '') === 'daytoday' || s === 'dtd') return 'DTD'
+  return status.trim().split(/\s+/)[0].slice(0, 4).toUpperCase()
+}
+
+/**
+ * "Sun 1:00 PM" — in the VIEWER's timezone.
+ *
+ * 🛑 FORMATTED AFTER MOUNT, ON PURPOSE. The server renders in UTC; a kickoff formatted there reads
+ * "Sun 5:00 PM" to a manager in New York for a 1:00 PM game — the bug My Team shipped and fixed in
+ * ae6425fc8. Formatting during render would also make server and client HTML disagree. So the
+ * server sends the instant, and the browser names it.
+ */
+function Kickoff({ iso }: { iso: string }) {
+  const [label, setLabel] = useState<string | null>(null)
+  useEffect(() => {
+    const at = new Date(iso)
+    if (Number.isNaN(at.getTime())) return
+    setLabel(
+      at.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }),
+    )
+  }, [iso])
+  return label ? <time dateTime={iso}>{label}</time> : null
+}
+
 /** Starters still to play for one side, or null when any of their game states is unknown. */
 function leftFor(side: { upcoming: number; live: number; unknown: number } | undefined): number | null {
   if (!side || side.unknown > 0) return null
@@ -299,12 +333,32 @@ function PlayerHalf({
           ) : (
             <span className="af-mu-half-unresolved">{copy('Unresolved player')}</span>
           )}
+          {cell.injury ? (
+            <span className="af-mu-inj" title={cell.injury}>
+              {injuryTag(cell.injury)}
+            </span>
+          ) : null}
         </div>
         <div className="af-mu-half-sub">
           {cell.name
             ? [cell.position, cell.team].filter(Boolean).join(' · ') || copy('no position on file')
             : `id ${cell.playerId}`}
         </div>
+        {/*
+          When and against whom — for a starter whose game is still to come. Once he has played, the
+          number beside him is the story; before, "Sun 1:00 PM @ BUF" is what a manager checks.
+        */}
+        {(cell.gameState === 'upcoming' || (!live && cell.gameState !== 'final')) && (cell.kickoff || cell.opponentClub) && !cell.unavailable ? (
+          <div className="af-mu-half-game">
+            {cell.kickoff ? <Kickoff iso={cell.kickoff} /> : null}
+            {cell.opponentClub ? (
+              <span>
+                {cell.kickoff ? ' ' : ''}
+                {cell.home ? 'vs' : '@'} {cell.opponentClub}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       {/*
         ⚠ "—" IS NOT 0.0. A player we could not price has no number. A 0.0 is a
@@ -699,8 +753,35 @@ export function Matchup({ data }: MatchupProps) {
 
         {data.week.available ? (
           <>
-            <span className="af-label af-mu-week-label">
-              {copy('Week')} {data.week.data.week} · {data.week.data.season}
+            {/*
+              ‹ Week 4 › — last week's result and next week's matchup, one tap each. Links only to a
+              week this league has results stored for (`weekNav`), so neither arrow can open a page
+              that says "no weekly results stored".
+            */}
+            <span className="af-mu-weeknav">
+              {data.weekNav?.prev != null ? (
+                <Link
+                  className="af-mu-weeknav-btn"
+                  href={`/core/matchup?league=${encodeURIComponent(data.league.id)}&week=${data.weekNav.prev}`}
+                  aria-label={`${copy('Week')} ${data.weekNav.prev}`}
+                  prefetch={false}
+                >
+                  ‹
+                </Link>
+              ) : null}
+              <span className="af-label af-mu-week-label">
+                {copy('Week')} {data.week.data.week} · {data.week.data.season}
+              </span>
+              {data.weekNav?.next != null ? (
+                <Link
+                  className="af-mu-weeknav-btn"
+                  href={`/core/matchup?league=${encodeURIComponent(data.league.id)}&week=${data.weekNav.next}`}
+                  aria-label={`${copy('Week')} ${data.weekNav.next}`}
+                  prefetch={false}
+                >
+                  ›
+                </Link>
+              ) : null}
             </span>
             {/*
               ⚠ "NOT SCORED" READ AS BROKEN. Before kickoff nothing is wrong: the
@@ -900,6 +981,25 @@ export function Matchup({ data }: MatchupProps) {
           <h2 className="af-label">{copy('What decides it')}</h2>
         </header>
         <ul className="af-mu-missing">
+          {/*
+            The series with this manager. "Meetings on file", never "all-time": a Sleeper league gets a
+            new id every season, so what is on file is this season's league.
+          */}
+          {data.headToHead && data.headToHead.meetings.length > 0 ? (
+            <li>
+              <span className="af-mu-missing-key">{copy('Head to head')}</span>
+              <span className="af-mu-missing-value af-num">
+                {data.headToHead.wins}–{data.headToHead.losses}
+                {data.headToHead.ties ? `–${data.headToHead.ties}` : ''}
+                <em className="af-mu-missing-caveat">
+                  {' '}
+                  — {language === 'es'
+                    ? `enfrentamientos registrados; último: ${data.headToHead.meetings[0].you.toFixed(1)}–${data.headToHead.meetings[0].them.toFixed(1)} (sem. ${data.headToHead.meetings[0].week})`
+                    : `meetings on file; last: ${data.headToHead.meetings[0].you > data.headToHead.meetings[0].them ? 'W' : data.headToHead.meetings[0].you < data.headToHead.meetings[0].them ? 'L' : 'T'} ${data.headToHead.meetings[0].you.toFixed(1)}–${data.headToHead.meetings[0].them.toFixed(1)} (wk ${data.headToHead.meetings[0].week})`}
+                </em>
+              </span>
+            </li>
+          ) : null}
           <li>
             <span className="af-mu-missing-key">{copy('Players yet to play')}</span>
             <span className="af-mu-missing-why">{data.yetToPlay.reason}</span>
