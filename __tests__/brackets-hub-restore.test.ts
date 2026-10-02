@@ -2,8 +2,9 @@
  * Coverage for the Phase 7 premium /brackets hub restoration.
  *
  * Verifies:
- *  - The page source contains every major section (hero, World Cup
- *    spotlight, how-it-works, sports grid, AI features strip, footer).
+ *  - The page source contains every major section (the v3 playoff hero,
+ *    how-it-works, sports grid, AI features strip, footer), and the World
+ *    Cup is switched off as a destination (owner call, 2026-10-01).
  *  - All visible static labels are routed through `t("brk.hub.*")` —
  *    no pre-restoration hardcoded English literals remain.
  *  - Every new `brk.hub.*` key exists in every supported locale, with
@@ -49,45 +50,47 @@ const HUB_SRC = readSource("app/brackets/page.tsx")
 // ── Section presence ──────────────────────────────────────────────────────
 
 describe("brackets hub restore: section coverage", () => {
-  it("v2 centered hero renders registration badge, two-line title, subtitle, feature dots, three CTAs, and fan pill", () => {
+  it("v3 playoff hero renders open-now badge, two-line title, subtitle, sport CTAs, and the up-next row", () => {
     // Stable test ID for smoke targeting.
     expect(HUB_SRC).toContain('data-testid="brackets-hub-hero"')
-    // Top "Registration Open" emerald badge.
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.regBadge")`)
+    // Open-now emerald badge (MLB & NHL).
+    expect(HUB_SRC).toContain('data-testid="brackets-hub-open-badge"')
+    expect(HUB_SRC).toContain(`t("brk.hub.v3.openBadge")`)
     // Two-line title (white line 1, cyan→purple gradient line 2).
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.titleLine1")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.titleLine2")`)
-    // Tight subtitle.
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.subtitle")`)
-    // Four feature dots.
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.feature.teams")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.feature.matches")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.feature.format")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.feature.free")`)
-    // Three CTAs (cyan / dark / amber).
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.cta.openBracket")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.cta.createPool")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.cta.discoverPools")`)
-    // Bottom fan pill.
-    expect(HUB_SRC).toContain('data-testid="brackets-hub-fan-pill"')
-    expect(HUB_SRC).toContain(`t("brk.hub.v2.fanLine")`)
+    expect(HUB_SRC).toContain(`t("brk.hub.v3.titleLine1")`)
+    expect(HUB_SRC).toContain(`t("brk.hub.v3.titleLine2")`)
+    expect(HUB_SRC).toContain(`t("brk.hub.v3.subtitle")`)
+    // One CTA per sport that is creatable now, plus the generic join.
+    expect(HUB_SRC).toContain(`t("brk.hub.v3.cta.mlb")`)
+    expect(HUB_SRC).toContain(`t("brk.hub.v3.cta.nhl")`)
+    expect(HUB_SRC).toContain(`t("brk.hub.v2.cta.joinWithCode")`)
+    // Up next: College Football Playoff (December), NFL (January).
+    expect(HUB_SRC).toContain('data-testid="brackets-hub-up-next"')
+    expect(HUB_SRC).toContain(`t("brk.hub.v3.upNext.ncaaf")`)
+    expect(HUB_SRC).toContain(`t("brk.hub.v3.upNext.nfl")`)
     // Top wordmark + Dashboard pill.
     expect(HUB_SRC).toContain(`t("brk.hub.logoAlt")`)
     expect(HUB_SRC).toContain(`t("brk.hub.heroDashboard")`)
   })
 
-  it("hero links the three CTAs to the right WC routes", () => {
-    expect(HUB_SRC).toContain(`href="/brackets/world-cup"`)
-    expect(HUB_SRC).toContain(`href="/brackets/world-cup/create"`)
-    expect(HUB_SRC).toContain(`href="/brackets/world-cup/discover"`)
+  it("hero CTAs open the MLB and NHL playoff pools and the generic join", () => {
+    expect(HUB_SRC).toContain(`href={playoffPoolHref("MLB")}`)
+    expect(HUB_SRC).toContain(`href={playoffPoolHref("NHL")}`)
+    expect(HUB_SRC).toContain(`href="/brackets/join"`)
   })
 
-  it("hero country-code badges (BR/FR/DE/AR) are language-invariant ISO codes", () => {
-    // Brazil / France / Germany / Argentina — four representative
-    // World Cup powerhouse nations from different continents. ISO
-    // codes by definition don't translate.
-    expect(HUB_SRC).toContain(`FAN_COUNTRY_CODES`)
-    expect(HUB_SRC).toContain(`["BR", "FR", "DE", "AR"]`)
+  it("the World Cup is switched off as a destination (owner call, 2026-10-01)", () => {
+    // The v2 hero kept "2026 FIFA World Cup · Registration Open" live three
+    // months after the final. Nothing on the hub may lead into the World Cup
+    // flows now: not the hero, not the quick actions, not the sports grid.
+    for (const route of [`"/brackets/world-cup"`, `"/brackets/world-cup/create"`, `"/brackets/world-cup/discover"`]) {
+      expect(HUB_SRC, `hub still links ${route}`).not.toContain(`href=${route}`)
+      expect(HUB_SRC, `hub still links ${route}`).not.toContain(`href: ${route}`)
+    }
+    expect(HUB_SRC).not.toContain(`t("brk.hub.v2.regBadge")`)
+    expect(HUB_SRC).not.toContain('data-testid="brackets-hub-wc-spotlight"')
+    // The grid keeps the card, marked ended and not a link.
+    expect(HUB_SRC).toContain(`{ key: "worldCup", href: null, status: "ended"`)
   })
 
   it("how-it-works 3-step section renders", () => {
@@ -128,12 +131,16 @@ describe("brackets hub restore: section coverage", () => {
     // confirms the dictionary actually has the resolved keys.
     expect(HUB_SRC).toContain("brk.hub.sports.sport.${key}")
     expect(HUB_SRC).toContain("brk.hub.sports.sport.${key}.desc")
-    // The live World Cup card links to the WC hub. The href is set
-    // via the SPORT_CARDS data table, then passed to <Link href={href}>.
-    expect(HUB_SRC).toContain(`href: "/brackets/world-cup"`)
+    // Live cards link via the SPORT_CARDS data table, then <Link href={href}>.
+    expect(HUB_SRC).toContain(`href: playoffPoolHref("MLB")`)
+    expect(HUB_SRC).toContain(`href: playoffPoolHref("NHL")`)
     expect(HUB_SRC).toContain(`<Link key={key} href={href}`)
+    // Status labels: live / ended / a month for up-next / generic coming soon.
     expect(HUB_SRC).toContain(`t("brk.hub.sports.statusLive")`)
-    expect(HUB_SRC).toContain(`t("brk.hub.sports.statusComingSoon")`)
+    expect(HUB_SRC).toContain(`t("brk.hub.sports.statusEnded")`)
+    expect(HUB_SRC).toContain(`t(soonLabelKey ?? "brk.hub.sports.statusComingSoon")`)
+    expect(HUB_SRC).toContain(`soonLabelKey: "brk.hub.sports.statusDecember"`)
+    expect(HUB_SRC).toContain(`soonLabelKey: "brk.hub.sports.statusJanuary"`)
   })
 
   it("AI features strip renders all 6 features", () => {
@@ -202,6 +209,12 @@ describe("brackets hub restore: pre-restoration literals removed", () => {
       ">Create Pool<",
       ">Discover Pools<",
       "Join thousands of fans competing worldwide",
+      // v3 hero copy — same rule.
+      ">AF Playoff<",
+      ">MLB Postseason Bracket<",
+      ">NHL Playoff Bracket<",
+      ">Up next<",
+      "MLB & NHL brackets open now",
     ]
     for (const phrase of banned) {
       expect(
@@ -216,7 +229,20 @@ describe("brackets hub restore: pre-restoration literals removed", () => {
 
 describe("brackets hub restore: i18n parity", () => {
   const newKeys = [
-    // v2 hero (the active hero design — image-matched WC challenge)
+    // v3 hero (the active design — playoff-led, 2026-10-01)
+    "brk.hub.v3.openBadge",
+    "brk.hub.v3.titleLine1",
+    "brk.hub.v3.titleLine2",
+    "brk.hub.v3.subtitle",
+    "brk.hub.v3.cta.mlb",
+    "brk.hub.v3.cta.nhl",
+    "brk.hub.v3.upNext.title",
+    "brk.hub.v3.upNext.ncaaf",
+    "brk.hub.v3.upNext.nfl",
+    "brk.hub.sports.statusEnded",
+    "brk.hub.sports.statusDecember",
+    "brk.hub.sports.statusJanuary",
+    // v2 hero (World Cup) — no longer rendered; kept in the dictionary
     "brk.hub.v2.regBadge",
     "brk.hub.v2.titleLine1",
     "brk.hub.v2.titleLine2",
@@ -336,6 +362,15 @@ describe("brackets hub restore: i18n parity", () => {
     ["es", "brk.hub.v2.feature.teams", "48 selecciones"],
     ["zh", "brk.hub.v2.feature.format", "12 個小組 + 淘汰賽"],
     ["vi", "brk.hub.v2.feature.free", "Miễn phí 100%"],
+    // v3 hero spot checks — one or two per locale.
+    ["en", "brk.hub.v3.openBadge", "MLB & NHL brackets open now"],
+    ["en", "brk.hub.v3.upNext.nfl", "NFL Playoffs · January"],
+    ["es", "brk.hub.v3.titleLine2", "Desafío de Brackets"],
+    ["es", "brk.hub.sports.statusEnded", "Finalizado"],
+    ["zh", "brk.hub.v3.titleLine1", "AF 季後賽"],
+    ["zh", "brk.hub.sports.statusJanuary", "1 月"],
+    ["fil", "brk.hub.v3.upNext.title", "Susunod"],
+    ["vi", "brk.hub.sports.statusDecember", "Tháng 12"],
     // Supporting sections still need their existing translations.
     ["en", "brk.hub.sports.statusLive", "Live now"],
     ["es", "brk.hub.sports.statusLive", "En vivo"],
@@ -347,24 +382,23 @@ describe("brackets hub restore: i18n parity", () => {
   })
 
   it("unsupported locale falls back to English", () => {
-    expect(bracketsT("xx", "brk.hub.v2.titleLine1")).toBe("AF World Cup")
-    expect(bracketsT("xx", "brk.hub.v2.titleLine2")).toBe("Bracket Challenge")
-    expect(bracketsT("xx", "brk.hub.v2.regBadge")).toBe(
-      "2026 FIFA World Cup · Registration Open"
-    )
+    expect(bracketsT("xx", "brk.hub.v3.titleLine1")).toBe("AF Playoff")
+    expect(bracketsT("xx", "brk.hub.v3.titleLine2")).toBe("Bracket Challenge")
+    expect(bracketsT("xx", "brk.hub.v3.openBadge")).toBe("MLB & NHL brackets open now")
   })
 })
 
 // ── Asset fallback ───────────────────────────────────────────────────────
 
 describe("brackets hub restore: asset paths exist in public/", () => {
-  // v2 hero uses the AF wordmark and the WC trophy logo only — the
-  // mascot + ambient video were dropped in favor of the centered
-  // WC-focused trophy lockup that matches the product reference.
-  const assets = [
-    "public/branding/allfantasy-wordmark-logo.png",
-    "public/images/brackets/world-cup/af-world-cup-logo.png",
-  ]
+  // v3 uses one image: the transparent AF wordmark. The trophy lockup is a
+  // lucide icon now, not the World Cup logo.
+  //
+  // ⚠ This used to check `/branding/allfantasy-wordmark-logo.png`, and it
+  // PASSED — but only because that path appears in a COMMENT in the page
+  // explaining why it was replaced. The image the page actually renders is
+  // `/brand/allfantasy-wordmark-transparent.png`, which nothing checked.
+  const assets = ["public/brand/allfantasy-wordmark-transparent.png"]
 
   for (const asset of assets) {
     it(`asset present: ${asset}`, () => {
@@ -375,9 +409,9 @@ describe("brackets hub restore: asset paths exist in public/", () => {
     })
   }
 
-  it("hub source references each asset path verbatim", () => {
-    expect(HUB_SRC).toContain("/branding/allfantasy-wordmark-logo.png")
-    expect(HUB_SRC).toContain("/images/brackets/world-cup/af-world-cup-logo.png")
+  it("hub renders the asset it checks — assigned in code, not merely mentioned", () => {
+    expect(HUB_SRC).toContain(`const AF_WORDMARK_SRC = "/brand/allfantasy-wordmark-transparent.png"`)
+    expect(HUB_SRC).toContain("src={AF_WORDMARK_SRC}")
   })
 })
 
