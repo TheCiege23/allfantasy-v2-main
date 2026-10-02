@@ -56,6 +56,18 @@ export type PickALeagueProps = {
   above?: ReactNode
   /** Inventory-only views do not compute a decision queue or claim that it is clear. */
   showQueue?: boolean
+  /**
+   * Where an issue row goes. Defaults to this tab in the issue's league — right for a tab that
+   * is where the issue lives (Waivers, Draft HQ). A tab that is NOT (War Room: its league view is
+   * Scout, which fixes neither a stale sync nor a draft) passes the issue's own destination.
+   */
+  issueHref?: (issue: CoreIssue & { leagueId: string }) => string
+  /**
+   * The queue's all-clear sentence, when the default overclaims. The queue only knows what
+   * `deriveOutstandingIssues` detects (stale syncs and drafts), so on a screen that shows other
+   * urgent work above it, "Nothing … is waiting on a decision" contradicts the screen.
+   */
+  queueClearText?: string
 }
 
 /** Most severe first, and only rows that name a league — a row we cannot route is noise here. */
@@ -69,9 +81,13 @@ export function PickALeague({
   leagues,
   above,
   showQueue = true,
+  issueHref,
+  queueClearText,
 }: PickALeagueProps) {
+  const hrefFor = (i: CoreIssue & { leagueId: string }) =>
+    issueHref ? issueHref(i) : `/core/${tabKey}?league=${encodeURIComponent(i.leagueId)}`
   const routable = issues
-    .filter((i) => i.leagueId != null)
+    .filter((i): i is CoreIssue & { leagueId: string } => i.leagueId != null)
     .sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9))
     .slice(0, 10)
 
@@ -121,10 +137,7 @@ export function PickALeague({
           <ul className="af-pl-rows">
             {routable.map((i) => (
               <li key={i.id}>
-                <Link
-                  className="af-pl-row"
-                  href={`/core/${tabKey}?league=${encodeURIComponent(i.leagueId as string)}`}
-                >
+                <Link className="af-pl-row" href={hrefFor(i)}>
                   <span className="af-pl-sev" data-sev={i.severity} aria-hidden>
                     {i.glyph}
                   </span>
@@ -151,8 +164,8 @@ export function PickALeague({
             the first: the queue ran and came back empty.
           */}
           <p className="af-pl-quiet">
-            Nothing in your leagues is waiting on a decision right now. Pick one below to look
-            around anyway.
+            {queueClearText ??
+              'Nothing in your leagues is waiting on a decision right now. Pick one below to look around anyway.'}
           </p>
         </section>
       ) : null}

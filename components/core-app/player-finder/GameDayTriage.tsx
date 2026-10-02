@@ -70,7 +70,7 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
             const detail = chipDetail(r.status?.label ?? null, r.description)
             const count = r.leagues.length
             return (
-              <li key={r.player.sleeperId} className="af-pf-triage-row" data-tone={r.status?.tone ?? 'none'} data-nogame={r.noGame ? 'true' : undefined} data-locked={locked ? 'true' : undefined}>
+              <li key={`${r.player.sport}:${r.player.sleeperId}`} className="af-pf-triage-row" data-tone={r.status?.tone ?? 'none'} data-nogame={r.noGame ? 'true' : undefined} data-locked={locked ? 'true' : undefined}>
                 <Link href={href} className="af-pf-triage-link">
                   <PlayerAvatar src={r.player.imageUrl} name={r.player.name} size={40} />
                   <span className="af-pf-triage-text">

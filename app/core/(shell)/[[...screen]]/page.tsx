@@ -209,6 +209,7 @@ import Standings from '@/components/core-app/screens/Standings'
 import StandingsBoard from '@/components/core-app/boards/StandingsBoard'
 import { parseStandingsView } from '@/lib/core-app/standingsView'
 import PickALeague from '@/components/core-app/PickALeague'
+import { warRoomIssueHref } from '@/lib/core-app/warRoomIssueHref'
 import LeagueTabs from '@/components/core-app/LeagueTabs'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
@@ -4545,6 +4546,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   : 'No starting lineups could be read, so there is nothing to plan against yet.'
               }
               issues={issues}
+              issueHref={warRoomIssueHref}
               leagues={rail}
             />
           )
@@ -4619,6 +4621,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 : 'Scouting a room means scouting one room — pick the league whose managers you want read.'
             }
             issues={issues}
+            issueHref={warRoomIssueHref}
+            /*
+              🛑 THE DEFAULT ALL-CLEAR CONTRADICTED THE SECTION ABOVE IT. The queue detects only
+              stale syncs and upcoming drafts, so "Nothing in your leagues is waiting on a
+              decision" printed directly under a list of hurt starters and empty slots. Say
+              what the queue actually checked.
+            */
+            queueClearText={
+              gamePlan?.available && (gamePlan.data.rows.length > 0 || (gamePlan.data.emptySlots?.length ?? 0) > 0)
+                ? 'No stale syncs or upcoming drafts in your leagues. The lineup problems above are this week’s work.'
+                : 'No stale syncs or upcoming drafts in your leagues right now. Pick one below to scout its managers.'
+            }
             leagues={rail}
             /*
               The slot `PickALeague` has carried unused since it was written:

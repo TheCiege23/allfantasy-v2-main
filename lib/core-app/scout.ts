@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { createPsychologyOsLoaders } from '@/lib/decision-os/psychology-os'
 import type { PsychologyProfileFact } from '@/lib/decision-os/psychology-os'
 import { resolveProfileAccessForUser } from '@/lib/psychological-profiles/ProfileAccess'
+import { resolveLeagueStage } from '@/lib/league-stage/leagueStage'
+import { currentFantasySeason } from './connectLeague'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
@@ -180,6 +182,24 @@ function scoutOrder(a: ScoutedManager, b: ScoutedManager): number {
   return a.teamName.localeCompare(b.teamName)
 }
 
+/** The stages `portfolioClassify.stageOf` reads as 'complete'. */
+const SEASON_OVER_STAGES = new Set(['complete', 'completed', 'season_over', 'archived'])
+
+/**
+ * True when the resolved week cannot be "this week" — see the note where it is used.
+ * Exported for the test; pure.
+ */
+export function weekIsBehindLeague(
+  week: { seasonYear: number },
+  league: { sport?: string | null; season?: number | null; status?: string | null; lifecycleState?: string | null },
+  now: Date,
+): boolean {
+  if (SEASON_OVER_STAGES.has(resolveLeagueStage(league) ?? '')) return true
+  if (league.season != null && week.seasonYear < league.season) return true
+  if (String(league.sport ?? 'NFL').toUpperCase() === 'NFL' && week.seasonYear < currentFantasySeason(now)) return true
+  return false
+}
+
 export async function getScoutData(
   leagueId: string,
   userId: string,
@@ -264,9 +284,19 @@ export async function getScoutData(
    * returns nothing, which reads as "no game this week" for every league in the
    * product. `nextMatchup.ts` carries the same warning on its own arguments.
    */
-  const week = league.platformLeagueId
+  const resolvedWeek = league.platformLeagueId
     ? await resolveCurrentWeekForLeague(league.platformLeagueId).catch(() => null)
     : null
+  /*
+   * 🛑 A FINISHED SEASON HAS NO "THIS WEEK". When every week is scored the resolver answers
+   * with the LAST week — honest for a standings table, wrong here: all off-season Scout read
+   * "Week 17 of 2025" and tagged last season's final opponent THIS WEEK. So the week is
+   * dropped, and no opponent is named, when the league says its season is over, when the
+   * rows on file are an older season than the league's own, or (NFL, whose season year we
+   * can date) when they belong to a fantasy season that has already ended.
+   */
+  const week =
+    resolvedWeek && !weekIsBehindLeague(resolvedWeek, league, new Date()) ? resolvedWeek : null
 
   let opponentManagerId: string | null = null
   if (week && league.platformLeagueId && mine?.externalId) {
