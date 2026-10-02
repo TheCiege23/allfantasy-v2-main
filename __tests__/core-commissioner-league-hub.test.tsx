@@ -152,6 +152,41 @@ describe('<CommissionerHub /> in the hub dress', () => {
     expect(screen.getByRole('link', { name: 'Open league chat →' })).toBeTruthy()
   })
 
+  /*
+   * An imported league has two authorities — AllFantasy's owner runs the hub, the platform publishes
+   * its own commissioner. Seen 2026-10-01: the importer running this hub was missing from the panel.
+   */
+  it('names where each person runs an imported league, and explains the two authorities', () => {
+    render(
+      <CommissionerHub
+        data={hub({
+          access: [
+            { handle: 'Layes23', initials: 'L', role: 'commissioner', isYou: true, basis: 'allfantasy' },
+            { handle: 'Altoidman', initials: 'A', role: 'commissioner', isYou: false, basis: 'platform' },
+          ],
+        })}
+      />,
+    )
+    expect(screen.getByText('Layes23')).toBeTruthy()
+    expect(screen.getByText('Here on AllFantasy')).toBeTruthy()
+    expect(screen.getByText('On Sleeper')).toBeTruthy()
+    expect(screen.getByText(/Whoever imported this league runs it here on AllFantasy/)).toBeTruthy()
+  })
+
+  it('a native league has one authority: no per-row label and no explanation', () => {
+    render(
+      <CommissionerHub
+        data={hub({
+          league: { id: 'L1', name: 'Dynasty Dragons', platform: 'allfantasy', season: 2026, native: true } as CommissionerHubData['league'],
+          access: [{ handle: 'Owner', initials: 'O', role: 'commissioner', isYou: true, basis: 'allfantasy' }],
+        })}
+      />,
+    )
+    expect(screen.getByText('Owner')).toBeTruthy()
+    expect(screen.queryByText('Here on AllFantasy')).toBeNull()
+    expect(screen.queryByText(/Whoever imported this league/)).toBeNull()
+  })
+
   it('keeps the blocked state for someone who does not run the league, with the way back', () => {
     render(
       <CommissionerHub

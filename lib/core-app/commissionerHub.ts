@@ -126,6 +126,13 @@ export type CommissionerAccessRow = {
   initials: string
   role: 'commissioner' | 'co_commissioner'
   isYou: boolean
+  /**
+   * WHERE this person runs the league. An imported league has two authorities: AllFantasy gives
+   * its owner (`League.userId`, the importer) the commissioner tools here, and the platform
+   * publishes its own commissioner. `both` is one person holding both; a native league is always
+   * `allfantasy`, because there is no second platform.
+   */
+  basis: 'allfantasy' | 'platform' | 'both'
 }
 
 type AccessTeam = {
@@ -144,34 +151,56 @@ type AccessTeam = {
  * adapters ever set one — those three providers publish commissioners, the others do not. So the
  * commissioner looking at the panel was told nobody runs their league.
  *
- * When no team carries a flag, the viewer is listed with the role `getLeagueRole` already proved
- * for them — the same answer that let them onto this screen. Display only: it grants nothing and
- * reads no new predicate (see the note above on why this module does not add a fifth one). Where
- * any flag exists the flags stay the whole answer, exactly as before.
+ * 🛑 AND WHERE A FLAG EXISTED IT LEFT OUT THE PERSON RUNNING THE LEAGUE HERE. `getLeagueRole` makes
+ * the AllFantasy owner the head commissioner "regardless of imported Sleeper flags", so an importer
+ * who is not the platform's commissioner opens this hub as its commissioner — and the panel listed
+ * only the platform's flags. Seen 2026-10-01: Layes23 imported "EFL Dynasty League" and ran its
+ * hub; the panel named only Altoidman, Sleeper's commissioner. The flags are still listed exactly as
+ * published; the owner is added beside them, and `basis` says which authority each row is.
+ *
+ * Display only: it grants nothing and reads no new predicate. The owner row repeats what
+ * `getLeagueRole` already decided, and a viewer the gate admitted on no other basis is listed with
+ * the role it proved — the same answer that let them onto this screen.
  */
 export function buildCommissionerAccessRows(
   teams: readonly AccessTeam[],
   userId: string,
   viewerRole: LeagueRole,
+  league: { ownerUserId?: string | null; native?: boolean } = {},
 ): CommissionerAccessRow[] {
+  const { ownerUserId = null, native = false } = league
+  const handleOf = (t: AccessTeam | undefined, fallback: string) => t?.ownerName?.trim() || t?.teamName?.trim() || fallback
+
   const flagged: CommissionerAccessRow[] = teams
     .filter((t) => t.isCommissioner || t.isCoCommissioner)
     .map((t) => {
-      const handle = t.ownerName?.trim() || t.teamName?.trim() || 'Unknown manager'
+      const handle = handleOf(t, 'Unknown manager')
+      const isOwner = Boolean(ownerUserId) && t.claimedByUserId === ownerUserId
       return {
         handle,
         initials: initialsOf(handle),
-        role: t.isCommissioner ? ('commissioner' as const) : ('co_commissioner' as const),
+        role: t.isCommissioner || isOwner ? ('commissioner' as const) : ('co_commissioner' as const),
         isYou: t.claimedByUserId === userId,
+        basis: native ? ('allfantasy' as const) : isOwner ? ('both' as const) : ('platform' as const),
       }
     })
-    .sort((a, b) => (a.role === b.role ? 0 : a.role === 'commissioner' ? -1 : 1))
-  if (flagged.length > 0) return flagged
-  if (viewerRole !== 'commissioner' && viewerRole !== 'co_commissioner') return []
 
-  const mine = teams.find((t) => t.claimedByUserId === userId)
-  const handle = mine?.ownerName?.trim() || mine?.teamName?.trim() || 'You'
-  return [{ handle, initials: initialsOf(handle), role: viewerRole, isYou: true }]
+  const rows = [...flagged]
+  const listed = (id: string) => teams.some((t) => t.claimedByUserId === id && (t.isCommissioner || t.isCoCommissioner))
+
+  if (ownerUserId && !listed(ownerUserId)) {
+    const handle = handleOf(teams.find((t) => t.claimedByUserId === ownerUserId), ownerUserId === userId ? 'You' : 'League owner')
+    rows.push({ handle, initials: initialsOf(handle), role: 'commissioner', isYou: ownerUserId === userId, basis: 'allfantasy' })
+  }
+
+  if ((viewerRole === 'commissioner' || viewerRole === 'co_commissioner') && !rows.some((r) => r.isYou)) {
+    const handle = handleOf(teams.find((t) => t.claimedByUserId === userId), 'You')
+    rows.push({ handle, initials: initialsOf(handle), role: viewerRole, isYou: true, basis: 'allfantasy' })
+  }
+
+  // Commissioners before co-commissioners; within a role, whoever runs it here comes first.
+  const rank = (r: CommissionerAccessRow) => (r.role === 'commissioner' ? 0 : 2) + (r.basis === 'platform' ? 1 : 0)
+  return rows.sort((a, b) => rank(a) - rank(b))
 }
 
 /**
@@ -970,7 +999,7 @@ export async function getCommissionerHub(input: {
     },
   ]
 
-  const access = buildCommissionerAccessRows(teams, userId, role)
+  const access = buildCommissionerAccessRows(teams, userId, role, { ownerUserId: league.userId, native })
 
   const recipeSettings = readRecipeSettings(settingsJson, platform)
   const viewerIsOwner = league.userId === userId
