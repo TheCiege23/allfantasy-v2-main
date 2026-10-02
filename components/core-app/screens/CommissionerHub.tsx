@@ -335,13 +335,26 @@ export function CommissionerHub({ data, lineups = null }: CommissionerHubProps) 
           {access.length > 0 ? (
             <ul className="af-ch-access">
               {access.map((a) => (
-                <li key={`${a.role}-${a.handle}`}>
+                <li key={`${a.role}-${a.basis}-${a.handle}`}>
                   <span className="af-ch-access-mark af-num" aria-hidden>
                     {a.initials}
                   </span>
                   <span className="af-ch-access-name">
                     {a.handle}
                     {a.isYou ? <span className="af-ch-access-you"> · you</span> : null}
+                    {/*
+                      An imported league has two authorities, and the row says which one this is:
+                      AllFantasy's owner runs it here, the platform publishes its own commissioner.
+                    */}
+                    {league.native ? null : (
+                      <span className="af-ch-access-basis">
+                        {a.basis === 'platform'
+                          ? `On ${platformName}`
+                          : a.basis === 'both'
+                            ? `Here and on ${platformName}`
+                            : 'Here on AllFantasy'}
+                      </span>
+                    )}
                   </span>
                   <span className="af-ch-access-role af-label" data-role={a.role}>
                     {a.role === 'commissioner' ? 'Commissioner' : 'Co-commissioner'}
@@ -360,6 +373,12 @@ export function CommissionerHub({ data, lineups = null }: CommissionerHubProps) 
               </p>
             </div>
           )}
+          {!league.native && access.some((a) => a.basis === 'platform') && access.some((a) => a.basis === 'allfantasy') ? (
+            <p className="af-ch-access-note">
+              Whoever imported this league runs it here on AllFantasy. {platformName}&apos;s own commissioner is listed as{' '}
+              {platformName} publishes it — rulings are still applied there.
+            </p>
+          ) : null}
 
           {/*
             The boundary the handoff asks to be stated. Worth saying plainly to a

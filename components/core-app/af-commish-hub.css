@@ -387,6 +387,19 @@
   color: var(--faint);
   font-weight: 500;
 }
+/* Where this person runs the league — AllFantasy, the platform, or both. Imported leagues only. */
+.af-ch-access-basis {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: normal;
+}
+.af-ch-access-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
 .af-ch-access-role {
   flex: none;
   padding: 4px 7px;
