@@ -9,6 +9,7 @@
  * server cannot send to Apple — see `useIosAppPush`.
  */
 
+import { SendTestPushButton } from '@/components/notifications/SendTestPushButton'
 import { useIosAppPush } from '@/lib/push-notifications/useIosAppPush'
 
 export function IosAppPushCard({ className }: { className?: string }) {
@@ -53,6 +54,8 @@ export function IosAppPushCard({ className }: { className?: string }) {
           → AllFantasy.
         </p>
       ) : null}
+
+      {on ? <SendTestPushButton /> : null}
     </div>
   )
 }

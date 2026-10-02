@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from 'react'
 
+import { SendTestPushButton } from '@/components/notifications/SendTestPushButton'
 import { useWebPushSubscription } from '@/lib/push-notifications/useWebPushSubscription'
 
 function isIosSafariWithoutStandalone(): boolean {
@@ -158,6 +159,8 @@ export function EnableWebPushCard({ className }: { className?: string }) {
       {subscribed && !error && (
         <p className="mt-2 text-xs text-emerald-400">Alerts are on for this device.</p>
       )}
+
+      {subscribed && <SendTestPushButton />}
     </div>
   )
 }
