@@ -5,9 +5,11 @@
  *
  * 1. "What decides it": `flex: 1 1 240px` is a WIDTH while the item is a row, and became a 240px
  *    HEIGHT when the 780px band turns the item into a column — 261px per one-line item.
- * 2. The provider button names the league ("View Matchup in <league>") and `.af-btn` never
- *    wraps, so a real league name spilled out of the pill, and in the phone league-first layout
- *    the button grew to 473px in a 343px row and the page scrolled sideways.
+ * 2. The provider button names the league ("View Matchup in <league>"). Its `truncate` span
+ *    clips the name with an ellipsis, but a flex item's minimum width is its min-content width —
+ *    the whole name — so in the phone league-first layout the button grew to 463px in a 343px
+ *    row and the page scrolled sideways. `min-width: 0` is the fix; measured with Tailwind's real
+ *    `.truncate` applied, since a render without it shows the label spilling instead.
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -46,8 +48,8 @@ describe('"What decides it" on a phone', () => {
 })
 
 describe('the provider button with a long league name', () => {
-  it('wraps inside itself at every width, and can shrink below its text', () => {
+  it('can shrink below the width of its label at every width, so the ellipsis applies', () => {
     const btn = rules('.af-core .af-btn.af-mu-source').find((r) => r.media === '')
-    expect(btn?.decls).toMatchObject({ 'white-space': 'normal', 'min-width': '0' })
+    expect(btn?.decls['min-width']).toBe('0')
   })
 })
