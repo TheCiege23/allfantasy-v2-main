@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
@@ -21,6 +21,9 @@ import { MflApiKeyConnection } from "@/components/settings/MflApiKeyConnection"
 import { ConnectedPlatforms } from "@/components/core-app/import/ConnectedPlatforms"
 import type { SettingsProfile } from "./settings-types"
 import { useConfirm } from "./ConfirmDialog"
+
+/** Window-focus refreshes of providers + profile are at most this frequent. */
+const FOCUS_REFRESH_MIN_MS = 30_000
 
 /*
  * ⚠ THE HARDCODED PLATFORM LIST IS GONE, NOT MOVED. It named five platforms as
@@ -138,8 +141,19 @@ export function ConnectedAccountsSettingsSection({
     }
   }, [searchParams])
 
+  /*
+   * Refresh when the user comes back to the tab (e.g. from an OAuth window), but at most once per
+   * 30s and only when the page is actually visible. Unthrottled, every app switch on a phone
+   * refetched the whole profile — and each refetch was another chance for a dropped request to
+   * blank the page (useSettingsProfile now keeps the last good profile either way).
+   */
+  const lastFocusRefresh = useRef(0)
   useEffect(() => {
     const onFocus = () => {
+      if (document.visibilityState === "hidden") return
+      const now = Date.now()
+      if (now - lastFocusRefresh.current < FOCUS_REFRESH_MIN_MS) return
+      lastFocusRefresh.current = now
       void loadProviders(true)
     }
     if (typeof window !== "undefined") {
