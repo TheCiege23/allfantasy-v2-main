@@ -12,6 +12,7 @@ import { lineupDeadlines } from './lineupDeadlines'
 import { injuryNameKey, injuryNameVariants } from './injuryNames'
 import { isBestBallSettings } from './lineupMode'
 import { sleeperReadablePlayerDataOf, rosterIdSpaceOf } from './rosterIdSpace'
+import { isTeamEliminated } from './teamElimination'
 
 /**
  * My team pulse — the cross-league landing at `/core/my-team`.
@@ -404,7 +405,9 @@ export async function getMyTeamPulse(
     }
 
     const pd = roster.playerData && typeof roster.playerData === 'object' ? roster.playerData as Record<string, unknown> : {}
-    if (pd.eliminated === true || l.guillotineMode && Array.isArray(pd.players) && pd.players.length === 0) { notChecked.inactive++; continue }
+    // The recorded-elimination signal was checked above, with the inactive states. One rule with
+    // the league view now — this copy used to miss a league marked guillotine by `leagueVariant`.
+    if (isTeamEliminated({ playerData: pd, league: l, eliminationRecorded: false })) { notChecked.inactive++; continue }
     /* In Sleeper ids: an ESPN lineup translated, a Fleaflicker/MFL/Fantrax/Yahoo one unread — its
        starter ids (and an untranslatable ESPN one: 12483 is Stafford there, Jack Bech in Sleeper's
        space) collide with real Sleeper ids. The raw roster above still decides guillotine status. */
