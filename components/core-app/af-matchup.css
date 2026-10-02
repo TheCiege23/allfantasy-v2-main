@@ -896,26 +896,23 @@
 }
 
 /*
- * ⚠ THE PROVIDER BUTTON CARRIES THE LEAGUE'S NAME, AND `.af-btn` NEVER WRAPS. The label is
- * "View Matchup in <league>", so a real league name ran past the 260px pill and spilled out
- * of it; in the phone league-first layout, where the button goes full width, it grew to
- * 473px inside a 343px row and the whole page scrolled sideways. Wrapping inside the pill
- * keeps the full name, which is the point of naming it. `.af-btn` raises specificity so this
- * holds whichever stylesheet the bundle orders first.
+ * ⚠ THE PROVIDER BUTTON CARRIES THE LEAGUE'S NAME, AND ITS MINIMUM WIDTH IS THAT WHOLE NAME.
+ * "View Matchup in <league>" sits in SourceActionLink's `truncate` span, which clips it with an
+ * ellipsis inside the pill — that part always worked. What did not: a flex item's automatic
+ * minimum width is its min-content width, and a nowrap label's min-content is the entire name.
+ * In the phone league-first layout, where the button goes full width, it grew to 463px in a
+ * 343px row and the page scrolled sideways (479px document on a 375px screen). `min-width: 0`
+ * lets it shrink, so the ellipsis can do its job. `.af-btn` raises specificity so this holds
+ * whichever stylesheet the bundle orders first.
+ *
+ * ⚠ MEASURE WITH TAILWIND'S REAL `.truncate`. A static render that loads only the preflight
+ * leaves that span unstyled, and the label then spills OUT of the pill — an artefact this
+ * comment first described as the bug, and a wrapping rule that the span's own nowrap overrides.
  */
 .af-core .af-btn.af-mu-source {
   min-width: 0;
-  /* Room for a typical league name on one or two lines, rather than three in 260px. */
+  /* More of the name before the ellipsis on a wide screen than the shared 260px allows. */
   max-width: min(100%, 420px);
-  white-space: normal;
-  overflow-wrap: anywhere;
-  text-align: center;
-  line-height: 1.25;
-  padding-block: 6px;
-}
-/* A wrapped label must not stretch the short "Set lineup" button beside it to its height. */
-.af-mu-handoff {
-  align-items: center;
 }
 
 @media (max-width: 780px) {
