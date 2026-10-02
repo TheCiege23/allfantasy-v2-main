@@ -938,3 +938,27 @@
 .nocturne-settings .af-ca-hint-btn { position: relative; }
 .nocturne-settings .af-ca-hint-btn::after { content: ''; position: absolute; inset: -14px; }
 .nocturne-settings input[type='range'] { min-height: 32px; accent-color: var(--ns-accent); cursor: pointer; }
+
+/* ── Touch floor, by POINTER not by width ─────────────────────────────────
+   The 44px floors above key on max-width: 560px, which leaves a touch TABLET
+   (iPad / Android at 768px+) with 36–40px controls — measured on League Imports
+   at 768px: Open / Resync / Refresh status / Help at 36–38px, the league search
+   and platform select at 40px (also 40px on a phone). Touch is the reason for the
+   floor, so ask about touch. A mouse at the same width keeps the compact sizes. */
+@media (max-width: 560px), (pointer: coarse) {
+  .nocturne-settings[data-view='tab'] .ns-content-card :is(button, a):is(.rounded-md, .rounded-lg, .rounded-xl).border,
+  .nocturne-settings[data-view='tab'] .ns-content-card :is(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']), select),
+  .nocturne-settings .ns-btn-primary,
+  .nocturne-settings .ns-btn-ghost,
+  .nocturne-settings .ns-back {
+    min-height: 44px;
+  }
+  /* The Chimmy voice volume slider: the whole 44px band takes the drag, not a 32px strip. */
+  .nocturne-settings input[type='range'] { min-height: 44px; }
+  /* A short link styled as a pill ("Open") would otherwise grow tall but stay narrow. */
+  .nocturne-settings[data-view='tab'] .ns-content-card :is(button, a):is(.rounded-md, .rounded-lg, .rounded-xl).border {
+    min-width: 44px;
+    justify-content: center;
+  }
+}
+
