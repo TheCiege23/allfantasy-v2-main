@@ -28,7 +28,20 @@ export async function GET(req: Request) {
   try {
     // The portal is where subscriptions are cancelled; a VPN must never block that.
     const geoBlock = await enforcePaidSubscriptionGeo(req, { blockVpnOrProxy: false })
-    if (geoBlock) return geoBlock
+    if (geoBlock) {
+      /*
+       * The geo gate answers 451 JSON — right for the fetch() callers it was written for, but this
+       * route is opened as a PAGE, so that body was printed raw ({"error":"PAID_GEO_BLOCKED",…}).
+       * The body already names where a browser belongs (`redirectTo`); send it there. Only a
+       * same-site path is followed, never an absolute URL from the body.
+       */
+      const body = (await geoBlock.clone().json().catch(() => ({}))) as { redirectTo?: unknown }
+      const target =
+        typeof body.redirectTo === "string" && body.redirectTo.startsWith("/") && !body.redirectTo.startsWith("//")
+          ? body.redirectTo
+          : "/paid-restricted"
+      return NextResponse.redirect(new URL(target, appOrigin()))
+    }
 
     const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
     if (!session?.user?.id) {
