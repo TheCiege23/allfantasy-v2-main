@@ -461,6 +461,21 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
               ))}
             </ul>
           </>
+        ) : pulse.checked === 0 && unreadable === 0 ? (
+          /*
+            ⚠ NOTHING TO READ IS NOT A FAILURE TO READ. Every team here is
+            pre-draft, finished, archived or paused — the off-season, for every
+            user, from January to the draft. The branch below used to catch this
+            too and print "We could not read a single lineup", a data-gap warning
+            over an account with no gap. The counts that say which teams sit out
+            are the notes under this section; this line only says there is
+            nothing to set. It still makes no claim that any lineup is fine.
+          */
+          <p className="af-bd-note af-bd-note--plain">
+            {language === 'es'
+              ? 'No hay alineaciones que ajustar ahora: cada equipo está antes del draft, terminado o en pausa. Las líneas de abajo dicen cuáles.'
+              : 'No lineups to set right now — every team is pre-draft, finished or paused. The lines below say which.'}
+          </p>
         ) : pulse.checked === 0 ? (
           /*
             🛑 THE MOST IMPORTANT BRANCH ON THIS SCREEN, AND THE FIRST VERSION GOT

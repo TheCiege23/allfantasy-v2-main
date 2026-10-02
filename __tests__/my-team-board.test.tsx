@@ -360,6 +360,39 @@ describe('MyTeamBoard', () => {
     expect(text).toContain('12 have no roster imported')
   })
 
+  /*
+   * The off-season: every team pre-draft, finished or paused, nothing unreadable. This used to
+   * print "We could not read a single lineup" — a data-gap warning over an account with no gap.
+   */
+  it('says there is nothing to set — not that it could not read — when every team sits out', () => {
+    const { container } = render(
+      <MyTeamBoard
+        allHref={ALL_HREF}
+        now={NOW}
+        pulse={pulse({ considered: 9, checked: 0, paused: 1, notChecked: { noRoster: 0, noLineup: 0, idsUnreadable: 0, inactive: 8 } })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('No lineups to set right now')
+    expect(text).not.toContain('We could not read a single lineup')
+    expect(text).toContain('8 pre-draft, completed, or inactive teams are excluded')
+    // Never a verdict that the lineups are fine.
+    expect(text).not.toContain('is set')
+  })
+
+  it('still warns when even one team could not be read, alongside teams that sit out', () => {
+    const { container } = render(
+      <MyTeamBoard
+        allHref={ALL_HREF}
+        now={NOW}
+        pulse={pulse({ considered: 9, checked: 0, notChecked: { noRoster: 1, noLineup: 0, inactive: 8 } })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('We could not read a single lineup')
+    expect(text).not.toContain('No lineups to set right now')
+  })
+
   it('links the league name into that league own my-team screen', () => {
     const { container } = render(
       <MyTeamBoard allHref={ALL_HREF} now={NOW} pulse={pulse({ needs: [row()], needsTotal: 1 })} />,
