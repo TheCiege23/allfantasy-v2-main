@@ -283,6 +283,7 @@ const spanish: Record<string, string> = {
   'You are not the underdog in any league right now.': 'No estás en desventaja en ninguna liga ahora mismo.',
   'Every league with a head-to-head this week, ranked by your chance of winning. Open one for the full box score.': 'Cada liga con un enfrentamiento esta semana, ordenada por tu probabilidad de ganar. Abre una para ver el marcador completo.',
   'Expected record': 'Récord esperado',
+  'Back to the score': 'Volver al marcador',
   'Closest games': 'Partidos más reñidos',
   'worth watching': 'para seguir',
   'ahead by': 'por delante por',
