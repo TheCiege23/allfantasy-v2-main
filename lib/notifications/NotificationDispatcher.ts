@@ -233,6 +233,8 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           leagueId: effectiveLeagueId,
           // A producer that has a picture (headshot, trade card) names it in meta.imageUrl.
           imageUrl: typeof meta?.imageUrl === "string" ? meta.imageUrl : null,
+          // A producer with a face for it (a DM's sender) names it in meta.iconUrl.
+          iconUrl: typeof meta?.iconUrl === "string" ? meta.iconUrl : null,
         }).catch((e) => console.error("[NotificationDispatcher] push error for user", userId, e))
       }
     } catch (e) {

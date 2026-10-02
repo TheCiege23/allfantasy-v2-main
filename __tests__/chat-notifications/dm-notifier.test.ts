@@ -19,6 +19,7 @@ const h = vi.hoisted(() => ({
   cacheBroken: false,
   leagueMembers: [] as string[],
   profiles: [] as Array<{ userId: string; notificationPreferences: unknown }>,
+  senderAvatar: null as string | null,
 }))
 
 vi.mock('server-only', () => ({}))
@@ -34,7 +35,7 @@ vi.mock('@/lib/prisma', () => {
       appUser: {
         findUnique: async ({ where }: { where: { id: string } }) =>
           where.id === 'sender'
-            ? { displayName: 'dana@example.org', username: 'DanaDynasty' }
+            ? { displayName: 'dana@example.org', username: 'DanaDynasty', avatarUrl: h.senderAvatar }
             : null,
         findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
           where.id.in.map((id) => ({ id, email: `${id}@example.org` })),
@@ -109,6 +110,7 @@ beforeEach(() => {
   h.dispatch.mockResolvedValue(undefined)
   h.leagueMembers = []
   h.profiles = []
+  h.senderAvatar = null
   dm()
 })
 
@@ -128,6 +130,22 @@ describe('a DM alerts the other person — bell, push, email, SMS through the di
       meta: expect.objectContaining({ pushTag: 'dm-thread-1', threadId: 'thread-1' }),
     })
     expect(call.userIds).not.toContain('sender')
+  })
+
+  it("the push carries the sender's profile picture as its icon", async () => {
+    h.senderAvatar = 'https://blob.test/avatars/dana.png'
+    await send()
+    expect(h.dispatch.mock.calls[0][0].meta).toMatchObject({ iconUrl: 'https://blob.test/avatars/dana.png' })
+  })
+
+  it('a sender with no picture, or one a phone cannot fetch, leaves the crest in place', async () => {
+    for (const avatar of [null, '', 'data:image/png;base64,AAAA', 'http://insecure.test/a.png', '//evil.test/a.png']) {
+      h.dispatch.mockClear()
+      h.cache.clear()
+      h.senderAvatar = avatar
+      await send()
+      expect(h.dispatch.mock.calls[0][0].meta, String(avatar)).not.toHaveProperty('iconUrl')
+    }
   })
 
   it('🛑 the title is the sender — and never their email address', async () => {

@@ -127,6 +127,8 @@ async function sendToSubscription(
     leagueId: payload.leagueId ?? null,
     // public/sw.js already passes `payload.image` to showNotification; Android shows it large.
     image: payload.imageUrl ?? undefined,
+    // public/sw.js reads `payload.icon` (falling back to the crest): the sender's face on a DM.
+    icon: payload.iconUrl ?? undefined,
   })
 
   const pushSubscription = {
@@ -160,7 +162,11 @@ export async function sendPushToUser(
   const all = await getPushSubscriptions(userId)
   if (all.length === 0) return []
   // Resolved once here so the APNs and web-push halves see the same, already-vetted picture.
-  const payload: PushPayload = { ...input, imageUrl: absolutePushImageUrl(input.imageUrl) }
+  const payload: PushPayload = {
+    ...input,
+    imageUrl: absolutePushImageUrl(input.imageUrl),
+    iconUrl: absolutePushImageUrl(input.iconUrl),
+  }
 
   /*
    * iPhones (endpoint `apns:<token>`, registered by the iOS app) go to Apple's push service;
@@ -175,7 +181,8 @@ export async function sendPushToUser(
   if (ios.length > 0) {
     const sent = await sendApns(
       ios.map((s) => s.endpoint.slice(IOS_ENDPOINT_PREFIX.length)),
-      payload,
+      // iOS has no remote icon slot: a face with no other picture rides the attachment instead.
+      { ...payload, imageUrl: payload.imageUrl ?? payload.iconUrl ?? null },
     )
     for (let i = 0; i < ios.length; i += 1) {
       const r = sent[i]

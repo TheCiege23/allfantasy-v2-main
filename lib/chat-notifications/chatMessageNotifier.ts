@@ -100,11 +100,20 @@ function toDate(v: string | Date | null | undefined, fallback: Date): Date {
   return Number.isFinite(d.getTime()) ? d : fallback
 }
 
-async function senderNameOf(senderUserId: string): Promise<string> {
+/**
+ * The sender as a notification shows them: a name, and their profile picture for the push icon.
+ * The picture goes out only as an https URL or a path on this site (push-service makes it absolute
+ * and drops anything else) — a `data:` avatar or an emoji preset simply leaves the crest in place.
+ */
+async function senderOf(senderUserId: string): Promise<{ name: string; avatarUrl: string | null }> {
   const sender = await prisma.appUser
-    .findUnique({ where: { id: senderUserId }, select: { displayName: true, username: true } })
+    .findUnique({ where: { id: senderUserId }, select: { displayName: true, username: true, avatarUrl: true } })
     .catch(() => null)
-  return safeDisplayName([sender?.displayName, sender?.username], 'Someone')
+  const avatar = typeof sender?.avatarUrl === 'string' ? sender.avatarUrl.trim() : ''
+  return {
+    name: safeDisplayName([sender?.displayName, sender?.username], 'Someone'),
+    avatarUrl: avatar.startsWith('https://') || (avatar.startsWith('/') && !avatar.startsWith('//')) ? avatar : null,
+  }
 }
 
 /** Recipients who blocked the sender. */
@@ -216,7 +225,7 @@ export async function notifyDirectMessageRecipients(input: DirectMessageNotifyIn
   if (others.length === 0) return { recipients: [] }
 
   const blockers = await blockersOf(input.senderUserId, others.map((m) => m.userId))
-  const senderName = await senderNameOf(input.senderUserId)
+  const { name: senderName, avatarUrl: senderAvatarUrl } = await senderOf(input.senderUserId)
   const isGroup = thread.threadType === 'group'
   const threadTitle = isGroup ? safeDisplayName([thread.title], 'your huddle', 60) : null
   const preview = buildMessagePreview({
@@ -291,6 +300,8 @@ export async function notifyDirectMessageRecipients(input: DirectMessageNotifyIn
           senderUserId: input.senderUserId,
           // One device notification per conversation: a burst replaces itself instead of stacking.
           pushTag: `dm-${thread.id}`,
+          // The sender's face on the phone: the push icon (web), the attachment (iPhone).
+          ...(senderAvatarUrl ? { iconUrl: senderAvatarUrl } : {}),
         },
         skipChannels: sendEmail ? undefined : { email: true },
         emailOverride,
@@ -338,8 +349,8 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
 
   const recipients = [...optedIn]
   const blockers = await blockersOf(input.senderUserId, recipients)
-  const [senderName, league, users] = await Promise.all([
-    senderNameOf(input.senderUserId),
+  const [{ name: senderName, avatarUrl: senderAvatarUrl }, league, users] = await Promise.all([
+    senderOf(input.senderUserId),
     prisma.league.findUnique({ where: { id: input.leagueId }, select: { name: true } }).catch(() => null),
     prisma.appUser
       .findMany({ where: { id: { in: recipients } }, select: { id: true, email: true } })
@@ -395,6 +406,7 @@ export async function notifyLeagueChatRecipients(input: LeagueChatNotifyInput): 
           messageId: input.messageId,
           senderUserId: input.senderUserId,
           pushTag: `league-chat-${input.leagueId}`,
+          ...(senderAvatarUrl ? { iconUrl: senderAvatarUrl } : {}),
         },
         skipChannels: sendEmail ? undefined : { email: true },
         emailOverride: sendEmail
