@@ -158,6 +158,14 @@ export function ConnectedAccountsSettingsSection({
     setStatusMessage(null)
     setStatusTone(null)
     setBusyProviderId(providerId)
+    /*
+     * ⚠ `settings.connected.connectError` did not EXIST until 2026-10-02, and t() returns the KEY for
+     * a missing string — so the old `t(...) || fallback` put the raw key on screen and its fallback
+     * was dead code. The string now exists in en and es, and names the provider by its label
+     * ("Google"), not its id ("google").
+     */
+    const connectError = () =>
+      tInterpolate("settings.connected.connectError", { provider: signInProviderLabel(providerId, t) })
     // signIn() for OAuth providers does a full-page redirect — the .finally() fires
     // only if the redirect does NOT happen (e.g. the provider is missing on the server).
     void signIn(providerId, { callbackUrl: "/settings?tab=connected" })
@@ -166,14 +174,12 @@ export function ConnectedAccountsSettingsSection({
         // does a hard redirect so we never reach this branch on success.
         if (result?.error) {
           setStatusTone("error")
-          // There is no settings.connected.connectError string, and t() returns the KEY for a
-          // missing one — so the old `t(...) || fallback` showed the raw key and never the fallback.
-          setStatusMessage(`Could not connect ${providerId}. Please try again.`)
+          setStatusMessage(connectError())
         }
       })
       .catch(() => {
         setStatusTone("error")
-        setStatusMessage(`Could not connect ${providerId}. Please try again.`)
+        setStatusMessage(connectError())
       })
       .finally(() => {
         setBusyProviderId(null)

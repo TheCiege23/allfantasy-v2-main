@@ -1977,6 +1977,8 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.connected.disconnectBlocked":
       "You cannot disconnect {{provider}} yet because it is your only sign-in method. Add another provider or set a password first.",
     "settings.connected.signInProvider.google": "Google",
+    "settings.connected.signInProvider.spotify": "Spotify",
+    "settings.connected.connectError": "Could not connect {{provider}}. Please try again.",
     "settings.connected.signInProvider.apple": "Apple",
     "settings.connected.signInProvider.facebook": "Facebook",
     "settings.connected.signInProvider.instagram": "Instagram",
@@ -4228,6 +4230,8 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.connected.disconnectBlocked":
       "Aún no puedes desvincular {{provider}} porque es tu único método de inicio de sesión. Añade otro proveedor o configura una contraseña primero.",
     "settings.connected.signInProvider.google": "Google",
+    "settings.connected.signInProvider.spotify": "Spotify",
+    "settings.connected.connectError": "No se pudo conectar {{provider}}. Inténtalo de nuevo.",
     "settings.connected.signInProvider.apple": "Apple",
     "settings.connected.signInProvider.facebook": "Facebook",
     "settings.connected.signInProvider.instagram": "Instagram",
