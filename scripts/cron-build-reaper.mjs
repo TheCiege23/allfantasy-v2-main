@@ -65,6 +65,13 @@ const LIST = `query($input: DeploymentListInput!, $first: Int) {
 const CANCEL = `mutation($id: String!) { deploymentCancel(id: $id) }`
 
 let warnedDisabled = false
+let announcedReady = false
+
+/** Tests only: the one-time log lines are per process, so each test starts from a fresh one. */
+export function resetReaperState() {
+  warnedDisabled = false
+  announcedReady = false
+}
 
 /** One pass over every configured service. Never throws: a reaper failure must not touch the crons. */
 export async function reapOnce({ env = process.env, log = console.log } = {}) {
@@ -80,9 +87,11 @@ export async function reapOnce({ env = process.env, log = console.log } = {}) {
     return
   }
   const live = env.BUILD_REAPER_LIVE === '1'
+  let listed = 0
   for (const serviceId of services) {
     try {
       const data = await gql(token, LIST, { input: { projectId, environmentId, serviceId }, first: 15 })
+      listed++
       const deployments = (data?.deployments?.edges ?? []).map(({ node }) => ({
         id: node.id,
         status: node.status,
@@ -101,5 +110,11 @@ export async function reapOnce({ env = process.env, log = console.log } = {}) {
     } catch (e) {
       log(`[reaper] service ${serviceId}: ${e?.message ?? e}`)
     }
+  }
+  // Silence is the normal state (nothing superseded), so say once that the API answered —
+  // otherwise "working" and "never ran" read the same in the logs.
+  if (!announcedReady && listed > 0) {
+    log(`[reaper] watching ${listed}/${services.length} service(s), ${live ? 'LIVE' : 'dry-run'}`)
+    announcedReady = true
   }
 }

@@ -1,6 +1,6 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { pickSuperseded, reapOnce } from '../../scripts/cron-build-reaper.mjs'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { pickSuperseded, reapOnce, resetReaperState } from '../../scripts/cron-build-reaper.mjs'
 
 /*
  * The reaper cancels production builds, so every case below is a way it could cancel the WRONG one
@@ -44,6 +44,7 @@ describe('pickSuperseded', () => {
 })
 
 describe('reapOnce', () => {
+  beforeEach(() => resetReaperState())
   afterEach(() => vi.unstubAllGlobals())
   const env = {
     RAILWAY_TOKEN: 'tok-SECRET-123',
@@ -79,6 +80,8 @@ describe('reapOnce', () => {
     await reapOnce({ env, log: (l: string) => lines.push(l) })
     expect(calls.some((c) => c.body.query.includes('deploymentCancel'))).toBe(false)
     expect(lines.join('\n')).toMatch(/would cancel old \(aaaaaaaaa\), superseded by new/)
+    // The one line that proves the token works even when nothing needs cancelling.
+    expect(lines.join('\n')).toMatch(/\[reaper\] watching 1\/1 service\(s\), dry-run/)
   })
 
   it('BUILD_REAPER_LIVE=1 cancels exactly the superseded build, authenticating by header', async () => {
@@ -96,6 +99,8 @@ describe('reapOnce', () => {
     await reapOnce({ env: { ...env, BUILD_REAPER_LIVE: '1' }, log: (l: string) => lines.push(l) })
     expect(lines.join('\n')).toMatch(/HTTP 401/)
     expect(lines.join('\n')).not.toContain('SECRET')
+    // A rejected token must NOT announce itself as watching.
+    expect(lines.join('\n')).not.toMatch(/watching/)
   })
 
   it('without a token it does nothing and never throws', async () => {
