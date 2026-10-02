@@ -125,9 +125,16 @@ export async function GET(request: NextRequest) {
   // Recorded AFTER the `available` guard above, so an unreachable telemetry model cannot write a
   // clean-looking heartbeat for a sweep that never swept. The 503 path deliberately records
   // nothing: if the model is unreachable, this insert would fail anyway.
+  //
+  // ⚠ `rowsWritten` AND `rowsUpdated`, on this row and the two passes below. SyncJobRun has a
+  // `rows_written` column and no `rows_updated` one; `rowsUpdated` is carried in metadata only
+  // (syncJobRunTelemetry.ts header). Every health reader — productionHealthCore's `lastRows.written`,
+  // the cron-freshness probes — reads the COLUMN, so a pass that reported its work only as
+  // `rowsUpdated` showed `rows_written 0` on every run. Measured on the first two
+  // cron-trade-learning rows in production, 2026-09-30: rows_written 0, metadata.rowsUpdated 500.
   await recordSyncJobRun(
     { jobName: JOB, trigger: 'cron' },
-    { rowsUpdated: reaped, warnings: purgeWarnings, metadata: { cutoff, cachePurge, privateRelay } },
+    { rowsWritten: reaped, rowsUpdated: reaped, warnings: purgeWarnings, metadata: { cutoff, cachePurge, privateRelay } },
     Date.now() - startedAt,
   )
 
@@ -162,6 +169,8 @@ export async function GET(request: NextRequest) {
       await recordSyncJobRun(
         { jobName: 'cron-trade-learning', trigger: 'cron' },
         {
+          // Every examined trade is written back (valued, or marked analyzed without values).
+          rowsWritten: tradeLearning.valued + tradeLearning.refused,
           rowsUpdated: tradeLearning.valued + tradeLearning.refused,
           warnings: tradeLearning.error ? [tradeLearning.error] : [],
           metadata: { ...tradeLearning },
@@ -196,6 +205,8 @@ export async function GET(request: NextRequest) {
       await recordSyncJobRun(
         { jobName: 'cron-trade-calibration', trigger: 'cron' },
         {
+          // The outcome backfill inserts one TradeOutcomeEvent per newly valued trade.
+          rowsWritten: tradeCalibration.outcomesLogged ?? 0,
           rowsUpdated: tradeCalibration.outcomesLogged ?? 0,
           warnings: tradeCalibration.errors,
           metadata: { ...tradeCalibration },
