@@ -2,6 +2,8 @@
 import { Suspense, isValidElement, type ReactElement, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import ScreenLoadError from '@/components/core-app/ScreenLoadError'
+
 /**
  * /core renders its shell first and streams the screen behind it.
  *
@@ -168,6 +170,17 @@ function findElement(node: ReactNode, match: (el: AnyElement) => boolean): AnyEl
 
 async function loadPage() {
   return (await import('@/app/core/(shell)/[[...screen]]/page')).default
+}
+
+async function redirectTarget(run: Promise<unknown>): Promise<string | null> {
+  try {
+    await run
+    return null
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    if (!message.startsWith('NEXT_REDIRECT ')) throw e
+    return message.slice('NEXT_REDIRECT '.length)
+  }
 }
 
 const pageArgs = (screen: string[], searchParams: Record<string, string>) => ({
@@ -429,17 +442,6 @@ describe('/core renders the shell first', () => {
  * `af.screen: other`. The redirect must happen before the session read, so it costs nothing.
  */
 describe('/core with an unknown segment', () => {
-  const redirectTarget = async (run: Promise<unknown>): Promise<string | null> => {
-    try {
-      await run
-      return null
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      if (!message.startsWith('NEXT_REDIRECT ')) throw e
-      return message.slice('NEXT_REDIRECT '.length)
-    }
-  }
-
   beforeEach(async () => {
     const { getServerSession } = await import('next-auth')
     const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
@@ -491,6 +493,48 @@ describe('/core with an unknown segment', () => {
     const AfCorePage = await loadPage()
     await AfCorePage(pageArgs(['trades'], { league: 'L1' }))
     expect(getDashboardLeagueListForUser).toHaveBeenCalledWith(expect.any(String), { rosterDetail: 'count' })
+  })
+})
+
+/*
+ * 🛑 A FAILED MEMBERSHIP READ MUST NOT REDIRECT THE VIEWER OUT OF THEIR LEAGUE. The gate used to
+ * read the empty list of a failed read as "not your league" and redirect without `?league=`, and
+ * that redirect reached the browser as React #419. The last case is the positive control: the
+ * same empty list from a read that succeeded still redirects.
+ */
+describe('/core when the league list read fails', () => {
+  beforeEach(() => {
+    h.gated = false
+    h.osGate.resolve()
+  })
+
+  it('keeps ?league= and renders the retry panel when a membership query failed', { timeout: 180_000 }, async () => {
+    const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
+    vi.mocked(getDashboardLeagueListForUser).mockResolvedValueOnce({ leagues: [], sleeperUserId: null, membershipReadFailed: true })
+    const AfCorePage = await loadPage()
+    const page = await AfCorePage(pageArgs(['waivers'], { league: 'L1', week: '3' }))
+    expect(findElement(page, (el) => el.type === ScreenLoadError)?.props).toMatchObject({
+      screen: 'Waivers',
+      retryHref: '/core/waivers?league=L1&week=3',
+    })
+  })
+
+  it('keeps ?league= and renders the retry panel when the whole read threw', { timeout: 180_000 }, async () => {
+    const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
+    vi.mocked(getDashboardLeagueListForUser).mockRejectedValueOnce(new Error('pool timeout'))
+    const AfCorePage = await loadPage()
+    const page = await AfCorePage(pageArgs([], { league: 'L1' }))
+    expect(findElement(page, (el) => el.type === ScreenLoadError)?.props).toMatchObject({
+      screen: 'Your leagues',
+      retryHref: '/core?league=L1',
+    })
+  })
+
+  it('still redirects a league the viewer does not play when the read succeeded', { timeout: 180_000 }, async () => {
+    const { getDashboardLeagueListForUser } = await import('@/lib/dashboard/get-dashboard-league-list')
+    vi.mocked(getDashboardLeagueListForUser).mockResolvedValueOnce({ leagues: [], sleeperUserId: null })
+    const AfCorePage = await loadPage()
+    expect(await redirectTarget(AfCorePage(pageArgs(['waivers'], { league: 'L1', week: '3' })))).toBe('/core/waivers?week=3')
   })
 })
 

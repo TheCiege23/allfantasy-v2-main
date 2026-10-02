@@ -747,6 +747,32 @@ export default async function AfCorePage({
     ? (playedLeagues.find((league) => league.id === selectedLeagueId) ?? null)
     : null
 
+  /*
+   * ⚠ A FAILED MEMBERSHIP READ IS NOT "NOT YOUR LEAGUE". A thrown list read and a failed query
+   * inside it (`membershipReadFailed`) both give an empty list, and the gate below used to read
+   * that as proof and redirect the viewer out of their own league. The redirect fires inside
+   * `app/core/loading.tsx`'s streamed boundary, so it also reached the browser as React #419 (the
+   * digest is NEXT_REDIRECT, and Next 14 reports it).
+   * Measured 2026-09-29: about half of the week's #419 events on /core were followed within a
+   * second by a pageview of the same screen without `?league=`, for leagues that the same person
+   * had opened a minute earlier. (The other half are the signed-out redirect to /login above.)
+   *
+   * Rendered, never thrown: a throw here reaches the browser as #419 the same way. The retry
+   * keeps `?league=`, so a fresh request can pass the gate once the read recovers.
+   */
+  if (selectedLeagueId && !selectedLeagueRow && (!leagueListPayload || leagueListPayload.membershipReadFailed)) {
+    const retryParams = new URLSearchParams()
+    for (const [key, value] of Object.entries(sp)) {
+      if (typeof value === 'string') retryParams.set(key, value)
+    }
+    return (
+      <ScreenLoadError
+        screen={TAB_META[segment]?.title ?? 'This screen'}
+        retryHref={`/core${segment ? `/${segment}` : ''}?${retryParams.toString()}`}
+      />
+    )
+  }
+
   // A league query is also an authorization boundary. Do not let a stale,
   // deleted, or hand-written id reach any provider-backed loader below.
   if (selectedLeagueId && !selectedLeagueRow) {
