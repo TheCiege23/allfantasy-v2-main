@@ -106,6 +106,13 @@ describe('trades-panel executedTrades', () => {
     })
     expect(body.executedTrades[0].sent.map((a: { label: string }) => a.label)).toEqual(['CeeDee Lamb'])
     expect(body.executedTrades[0].received.map((a: { label: string }) => a.label)).toEqual(['Bijan Robinson'])
+    // Each participant carries what it RECEIVED as well as what it sent — what a card lists under its name.
+    const sides = body.executedTrades[0].participantSides as Array<{ rosterId: string; assets: Array<{ label: string }>; received: Array<{ label: string }> }>
+    const r1 = sides.find((s) => s.rosterId === 'r1')!
+    const r2 = sides.find((s) => s.rosterId === 'r2')!
+    expect(r1.assets.map((a) => a.label)).toEqual(['CeeDee Lamb'])
+    expect(r1.received.map((a) => a.label)).toEqual(['Bijan Robinson'])
+    expect(r2.received.map((a) => a.label)).toEqual(['CeeDee Lamb'])
   })
 
   it('🛑 gives a non-commissioner no executed trades, and does not even ask for them', async () => {

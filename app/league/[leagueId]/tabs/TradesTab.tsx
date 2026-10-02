@@ -149,7 +149,8 @@ type LogSide = {
   name: string
   avatarUrl?: string | null
   you: boolean
-  sends: string
+  /** What this side RECEIVED — each column is named for the team that got it, beside its own letter. */
+  gets: string
   /** Realized result in the trade's first scored season. */
   initialGrade: GradeLetter | null
   initialLabel: 'Then' | 'First'
@@ -318,8 +319,8 @@ function rowFromActive(t: LeagueTradeHistoryItem): LogRow {
       when: whenLabel(t.timestamp),
       sortKey: Date.parse(t.timestamp) || 0,
       season: tradeSeasonFromIso(t.timestamp),
-      a: { name: 'You', you: true, sends: sent, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
-      b: { name: t.partnerName, you: false, sends: received, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
+      a: { name: 'You', you: true, gets: received, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
+      b: { name: t.partnerName, you: false, gets: sent, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
       extraSides: 0,
       status: statusOf(t),
       mine: true,
@@ -334,8 +335,8 @@ function rowFromActive(t: LeagueTradeHistoryItem): LogRow {
     season: tradeSeasonFromIso(t.timestamp),
     when: whenLabel(t.timestamp),
     sortKey: Date.parse(t.timestamp) || 0,
-    a: { name: t.partnerName, you: false, sends: sent, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
-    b: { name: 'Receiving team', you: false, sends: received, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
+    a: { name: t.partnerName, you: false, gets: received, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
+    b: { name: 'Receiving team', you: false, gets: sent, initialGrade: null, initialLabel: 'Then', grade: null, gradeWhy: why },
     extraSides: 0,
     status: statusOf(t),
     mine: false,
@@ -393,7 +394,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
       name: providerRow ? 'You' : t.proposerName ?? (viewerIsA ? 'You' : t.partnerName),
       avatarUrl: t.proposerAvatarUrl ?? (viewerIsA ? t.viewerAvatarUrl : t.partnerAvatarUrl) ?? null,
       you: viewerIsA,
-      sends: joinNames(t.sent),
+      gets: joinNames(t.received),
       initialGrade: (frozenProposer?.grade as GradeLetter | null | undefined) ?? proposalGrade,
       initialLabel: 'Then',
       initialWhy: frozenProposer?.reason ?? t.proposalGradeReason ?? null,
@@ -404,7 +405,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
       name: providerRow ? t.partnerName : t.receiverName ?? (viewerIsB ? 'You' : t.partnerName),
       avatarUrl: t.receiverAvatarUrl ?? (viewerIsB ? t.viewerAvatarUrl : t.partnerAvatarUrl) ?? null,
       you: viewerIsB,
-      sends: joinNames(t.received),
+      gets: joinNames(t.sent),
       initialGrade: receiverProposalGrade,
       initialLabel: 'Then',
       initialWhy: frozenReceiver?.reason ?? t.proposalGradeReason ?? null,
@@ -422,7 +423,7 @@ function rowFromNativeHistory(t: LeagueTradeHistoryItem): LogRow {
 }
 
 /** "Woody Marks · 1,240, 2027 round 3 · 610" — each asset with the league value THE grade priced it at. */
-function sendsWithValues(assets: TimelineAsset[], values: Array<number | null>): string {
+function assetsWithValues(assets: TimelineAsset[], values: Array<number | null>): string {
   if (assets.length === 0) return '—'
   return assets
     .map((a, i) => {
@@ -461,7 +462,7 @@ function rowFromImportedTimeline(t: ImportedHistoryRow): LogRow {
     a: {
       name: aYou ? 'You' : t.sideAName,
       you: aYou,
-      sends: sendsWithValues(t.sent, sentValues),
+      gets: assetsWithValues(t.received, receivedValues),
       initialGrade: null,
       initialLabel: 'Then',
       initialWhy: noThen,
@@ -471,7 +472,7 @@ function rowFromImportedTimeline(t: ImportedHistoryRow): LogRow {
     b: {
       name: bYou ? 'You' : t.sideBName,
       you: bYou,
-      sends: sendsWithValues(t.received, receivedValues),
+      gets: assetsWithValues(t.sent, sentValues),
       initialGrade: null,
       initialLabel: 'Then',
       initialWhy: noThen,
@@ -755,6 +756,7 @@ function ManagerBlock({
   sport,
   avatarUrl,
   gradeReason,
+  verb = 'gets',
 }: {
   name: string
   isYou: boolean
@@ -765,6 +767,8 @@ function ManagerBlock({
   sport: string
   avatarUrl?: string | null
   gradeReason?: string | null
+  /** What the listed assets are to this manager: what they get (the default) or, on a legacy multi-team row, send. */
+  verb?: 'gets' | 'sends'
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -774,7 +778,7 @@ function ManagerBlock({
         )}
         <span className="text-[13px] font-extrabold text-white">{name}</span>
         {isYou ? <YouPill /> : null}
-        <span className={`${EYEBROW} text-[11px] text-white/35`}>sends</span>
+        <span className={`${EYEBROW} text-[11px] text-white/35`}>{verb}</span>
         <span className="flex-1" />
         {grade ? <GradeTile letter={grade} why={null} size="sm" /> : null}
         {values ? <span className="font-mono text-[11px] font-bold text-[#CBD5E1]">{money(total)}</span> : null}
@@ -834,9 +838,24 @@ export function PendingTradeCard(props: {
     return index === 0 ? t.partnerName : index === 1 ? 'You' : `Team ${index + 1}`
   }
 
-  /* The viewer's side is `sent`; the partner's is `received`. Proposer goes first, like the provider's card. */
-  const youAssets = offer ? cardAssetsFromOffer(offer.give, 'g') : cardAssetsFromPanel(t.sent)
-  const themAssets = offer ? cardAssetsFromOffer(offer.get, 'k') : cardAssetsFromPanel(t.received)
+  /*
+   * Each block lists what that manager GETS (2026-10-01), under the letter graded for them — the
+   * KeepTradeCut "Team 1 gets…" reading. `sent` left the viewer's roster, so it is what the partner
+   * gets; `received` is what the viewer gets. Proposer goes first, like the provider's card.
+   */
+  const youAssets = offer ? cardAssetsFromOffer(offer.get, 'k') : cardAssetsFromPanel(t.received)
+  const themAssets = offer ? cardAssetsFromOffer(offer.give, 'g') : cardAssetsFromPanel(t.sent)
+  /*
+   * A participant's own `received`, or — on a two-team row without it — the other side's assets. A
+   * three-team row without `received` cannot say who got what, so that card keeps the old "sends"
+   * framing whole rather than print "gets: Nothing" under every manager.
+   */
+  const sides = t.participantSides ?? []
+  const framing: 'gets' | 'sends' = sides.length > 2 && !sides.every((side) => side.received) ? 'sends' : 'gets'
+  const participantGets = (side: NonNullable<LeagueTradeHistoryItem['participantSides']>[number]) =>
+    framing === 'sends'
+      ? side.assets
+      : side.received ?? sides.find((other) => other.rosterId !== side.rosterId)?.assets ?? []
 
   const you = { name: commissionerView ? (t.proposerName ?? 'Proposer') : 'You', isYou: !commissionerView, assets: youAssets, avatarUrl: t.viewerAvatarUrl ?? t.proposerAvatarUrl ?? null, viewerSide: true }
   const them = { name: t.partnerName, isYou: false, assets: themAssets, avatarUrl: t.partnerAvatarUrl ?? null, viewerSide: false }
@@ -844,7 +863,7 @@ export function PendingTradeCard(props: {
     ? t.participantSides.map((side) => ({
         name: side.name,
         isYou: side.isViewer,
-        assets: cardAssetsFromPanel(side.assets),
+        assets: cardAssetsFromPanel(participantGets(side)),
         avatarUrl: side.avatarUrl,
         viewerSide: side.isViewer,
         rosterId: side.rosterId,
@@ -864,7 +883,9 @@ export function PendingTradeCard(props: {
    * proposer's (listed first) when a commissioner is looking at someone else's.
    */
   const gradeFor = (gradedSide: boolean) => (ok ? (gradedSide ? ok.giveGrade : ok.getGrade) : null)
-  const totalFor = (gradedSide: boolean) => (ok ? (gradedSide ? ok.giveTotal : ok.getTotal) : null)
+  // A "gets" block totals the value coming in (the graded side's `get`); a "sends" block, going out.
+  const totalFor = (gradedSide: boolean) =>
+    ok ? ((gradedSide === (framing === 'gets')) ? ok.getTotal : ok.giveTotal) : null
 
   const headline = commissionerView
     ? `${t.proposerName ?? 'A manager'} has proposed a trade`
@@ -924,6 +945,7 @@ export function PendingTradeCard(props: {
             grade={gradeFor(gradedSide)}
             sport={props.sport}
             avatarUrl={side.avatarUrl}
+            verb={framing}
             gradeReason={('gradeReason' in side ? side.gradeReason : null) ?? frozen?.reason ?? null}
           />
           )
@@ -1532,12 +1554,13 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                   {participants ? participants.map((side) => (
                     <p key={side.rosterId} className="mt-1 flex items-center gap-1.5 text-white/55">
                       {side.avatarUrl ? <PlayerHeadshot src={side.avatarUrl} alt={side.name} size={20} /> : null}
-                      <span>{side.name} sent {side.assets.map((asset) => asset.label).join(', ') || '—'}</span>
+                      <span>{side.name} received {(side.received ?? (participants.length === 2 ? participants.find((other) => other.rosterId !== side.rosterId)?.assets ?? [] : [])).map((asset) => asset.label).join(', ') || '—'}</span>
                     </p>
                   )) : (
                     <>
-                      <p className="mt-1 text-white/55">{proposer} sent {t.sent.map((a) => a.label).join(', ') || '—'}</p>
-                      <p className="text-white/55">{receiver} sent {t.received.map((a) => a.label).join(', ') || '—'}</p>
+                      {/* `sent` is the proposer's outgoing assets, so it is what the receiver got. */}
+                      <p className="mt-1 text-white/55">{proposer} received {t.received.map((a) => a.label).join(', ') || '—'}</p>
+                      <p className="text-white/55">{receiver} received {t.sent.map((a) => a.label).join(', ') || '—'}</p>
                     </>
                   )}
                   {t.viewerIsCommissioner ? (
@@ -1672,13 +1695,14 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                       </span>
                       <span className="font-mono text-[11px] text-white/35">{r.when}</span>
                     </div>
+                    {/* What each team RECEIVED, yours first — the letters beside are read against these. */}
                     <div className="min-w-0">
-                      <p className={`${EYEBROW} text-[11px] text-rose-300`}>You send</p>
-                      <p className="mt-0.5 text-[12px] leading-snug text-[#CBD5E1]">{you.sends}</p>
+                      <p className={`${EYEBROW} text-[11px] text-emerald-300`}>You got</p>
+                      <p className="mt-0.5 text-[12px] leading-snug text-[#CBD5E1]">{you.gets}</p>
                     </div>
                     <div className="min-w-0">
-                      <p className={`${EYEBROW} truncate text-[11px] text-emerald-300`}>You get · {them.name}</p>
-                      <p className="mt-0.5 text-[12px] leading-snug text-[#CBD5E1]">{them.sends}</p>
+                      <p className={`${EYEBROW} truncate text-[11px] text-rose-300`}>{them.name} got</p>
+                      <p className="mt-0.5 text-[12px] leading-snug text-[#CBD5E1]">{them.gets}</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="flex items-center gap-1" title="Realized result in the first scored season">
@@ -1796,7 +1820,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           </div>
           <div className="overflow-hidden rounded-2xl border border-[#1E2A42] bg-[#131929]">
             <div className="hidden grid-cols-[56px_1.15fr_1.15fr_140px_120px] gap-3 border-b border-white/[0.06] px-4 py-2 md:grid">
-              {['When', 'Side A sends', 'Side B sends', 'Earlier / now · A and B', 'Status'].map((h, i) => (
+              {['When', 'Side A gets', 'Side B gets', 'Earlier / now · A and B', 'Status'].map((h, i) => (
                 <span key={h} className={`${EYEBROW} text-[11px] text-white/35 ${i === 4 ? 'text-right' : ''}`}>
                   {h}
                 </span>
@@ -1828,7 +1852,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                           <span className="text-[11px] text-white/40">+{r.extraSides} more</span>
                         ) : null}
                       </div>
-                      <p className="mt-0.5 text-[11.5px] leading-snug text-[#CBD5E1]">{s.sends}</p>
+                      <p className="mt-0.5 text-[11.5px] leading-snug text-[#CBD5E1]">{s.gets}</p>
                     </div>
                   ))}
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
