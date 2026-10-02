@@ -59,6 +59,32 @@ const DOMAIN_LABEL: Record<string, string> = {
   integrity: 'Integrity',
 }
 
+/**
+ * The area a recommendation belongs to, from its `type`.
+ *
+ * 🛑 NOT FROM `domain`. On a commissioner recommendation `domain` names the OS it belongs to —
+ * every generator sets `'commissioner'` — so `DOMAIN_LABEL[top.domain]` never matched and the
+ * card printed the raw word, upper-cased by `.af-label`: "COMMISSIONER" on every card. Seen
+ * 2026-10-01 in a signed-in check. Each generator's `type` starts with its area instead.
+ */
+const TYPE_AREA: ReadonlyArray<[prefix: string, area: string]> = [
+  ['league_health', 'health'],
+  ['engagement_', 'engagement'],
+  ['mission_control_action', 'health'],
+  ['power_rankings', 'rankings'],
+  ['storyline_', 'storylines'],
+  ['rivalry_', 'rivalries'],
+  ['draft_', 'draft'],
+  ['trade_', 'trades'],
+  ['integrity_', 'integrity'],
+]
+
+export function recommendationAreaLabel(rec: { type: string }): string {
+  const area = TYPE_AREA.find(([prefix]) => rec.type.startsWith(prefix))?.[1]
+  // An unknown type gets a neutral label, never a raw internal value.
+  return (area && DOMAIN_LABEL[area]) || 'Commissioner action'
+}
+
 const CHANNEL_LABEL: Record<string, string> = {
   league_chat: 'League chat',
   discord: 'Discord',
@@ -199,9 +225,7 @@ function CommissionerOsBody({
           <div className="af-ch-os-card-head">
             <div className="af-ch-os-card-domain">
               <span className="af-ch-os-dot" data-priority={top.priority} aria-hidden />
-              <span className="af-label">
-                {DOMAIN_LABEL[top.domain] ?? top.domain}
-              </span>
+              <span className="af-label">{recommendationAreaLabel(top)}</span>
             </div>
             <button
               type="button"
@@ -212,7 +236,8 @@ function CommissionerOsBody({
             </button>
           </div>
           <p className="af-ch-os-card-title">{top.title}</p>
-          <p className="af-ch-os-card-summary">{top.summary}</p>
+          {/* A summary that only repeats the title says nothing; it read "Recommended review" twice. */}
+          {top.summary && top.summary.trim() !== top.title.trim() ? <p className="af-ch-os-card-summary">{top.summary}</p> : null}
         </div>
       ) : (
         <p className="af-ch-os-note">No commissioner action needed right now.</p>
