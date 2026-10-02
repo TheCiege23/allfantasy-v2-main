@@ -17,8 +17,10 @@
  */
 
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
-test.describe.configure({ timeout: 180_000 })
+// The harness can take ~120 s cold and the settings chunk can take as long again on first click.
+test.describe.configure({ timeout: 300_000 })
 
 const HARNESS_PATH = '/e2e/nfl-redraft-league-dashboard'
 
@@ -30,27 +32,22 @@ async function gotoHarnessReady(page: Page): Promise<void> {
   // dependency tree (~5500 modules). Subsequent runs are cached and fast.
   await page.goto(HARNESS_PATH, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await page.getByTestId('nfl-redraft-league-dashboard-harness').waitFor({ state: 'visible', timeout: 120_000 })
-  // LeagueShell mounts portal content via a useEffect; the gear's click handler
-  // only fully wires up post-hydration. Wait for networkidle (settles the
-  // background fetches the shell triggers on mount) and the tab strip to be
-  // interactive before any user-driven click.
-  await page.waitForLoadState('networkidle').catch(() => null)
+  // Bounded: the shell's background fetches can keep the network busy past the
+  // whole test budget, and the swallowed timeout then fails the NEXT line.
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => null)
   await page.getByRole('tab', { name: 'Home' }).waitFor({ state: 'visible', timeout: 30_000 })
 }
 
-async function openSettingsModalWithRetry(page: Page): Promise<void> {
-  // First click after hydration occasionally loses; retry if the modal doesn't
-  // appear within 2s. Two attempts is enough — if the second fails, the test
-  // fails legitimately.
-  const gear = page.getByTestId('league-header-settings')
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    await gear.click()
-    const dialog = page.locator('[role="dialog"]')
-    const opened = await dialog.waitFor({ state: 'visible', timeout: 4_000 }).then(() => true).catch(() => false)
-    if (opened) return
-  }
-  // Final attempt — let the assertion in the test catch the failure with a clear message.
-  await page.locator('[role="dialog"]').waitFor({ state: 'visible', timeout: 4_000 })
+async function openSettingsModal(page: Page): Promise<void> {
+  // LeagueSettingsModal mounts on the FIRST gear click, so that click starts the
+  // download and compile of the whole commissioner-settings chunk. On a loaded CI
+  // dev server that takes far longer than a dialog normally needs. A failed load
+  // closes the modal and shows a toast, so watch for both and fail on the toast.
+  await clickHydrated(page.getByTestId('league-header-settings'))
+  const dialog = page.locator('[role="dialog"]')
+  const loadFailed = page.getByText('Settings didn’t load')
+  await expect(dialog.or(loadFailed).first()).toBeVisible({ timeout: 130_000 })
+  await expect(loadFailed, 'the settings chunk failed to load').toHaveCount(0)
 }
 
 test.describe('@nfl-redraft @league-shell settings-gear consolidation', () => {
@@ -81,7 +78,7 @@ test.describe('@nfl-redraft @league-shell settings-gear consolidation', () => {
     await expect(gear).toBeVisible()
 
     // 4 — clicking gear opens the settings modal
-    await openSettingsModalWithRetry(page)
+    await openSettingsModal(page)
     const dialog = page.locator('[role="dialog"]')
     await expect(dialog).toBeVisible()
     await expect(dialog.locator('#league-settings-modal-title')).toContainText('E2E NFL Redraft')
