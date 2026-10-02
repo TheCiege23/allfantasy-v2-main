@@ -10,6 +10,7 @@ import { notifyMentions } from '@/lib/chat-core/notifyMentions'
 import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { censorProfanity } from '@/lib/chat-core/censorProfanity'
 import { SeenBy } from './SeenBy'
+import { PushOptInPrompt } from '@/components/notifications/PushOptInPrompt'
 import { readReactions, toggleReactionLocally, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { useSession } from 'next-auth/react'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
@@ -868,6 +869,13 @@ export function ThreadPanel({
           wonders about is the most recent thing they said.
         */}
         <SeenBy messages={messages} receipts={receipts} viewerUserId={viewerId} />
+
+        {/*
+          "Get a ping when someone messages you" — the phone-alerts ask, in the one place its
+          reason is on screen: a conversation you are in. Shown only to someone who has never
+          answered (and not in the two weeks after "Not now"); all of that lives in the prompt.
+        */}
+        {messages.length > 0 ? <PushOptInPrompt variant="messages" className="af-cm-pushask" /> : null}
 
         {/*
           ⚠ HONEST ABOUT BEING LATE. Chat refreshes every 4-8s, so this can
