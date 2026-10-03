@@ -13,6 +13,8 @@
 
 import type { ImportProvider } from './types';
 
+export type ImportSupportedSport = 'NFL' | 'NCAAF' | 'MLB';
+
 export const IMPORT_PROVIDER_UI_OPTIONS: {
   provider: ImportProvider;
   label: string;
@@ -21,7 +23,7 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
   /** True if the import UI can discover leagues from an account identifier. */
   supportsDiscovery?: boolean;
   /** Sports proven by the provider fetch/normalization source path. */
-  supportedSports: readonly ('NFL' | 'NCAAF' | 'MLB')[];
+  supportedSports: readonly ImportSupportedSport[];
 }[] = [
   { provider: 'sleeper', label: 'Sleeper', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
   { provider: 'espn', label: 'ESPN', available: true, supportedSports: ['NFL'] },
@@ -136,6 +138,6 @@ export function supportsImportProviderDiscovery(provider: ImportProvider): boole
   );
 }
 
-export function getImportProviderSupportedSports(provider: ImportProvider): readonly ('NFL' | 'NCAAF' | 'MLB')[] {
+export function getImportProviderSupportedSports(provider: ImportProvider): readonly ImportSupportedSport[] {
   return IMPORT_PROVIDER_UI_OPTIONS.find((option) => option.provider === provider)?.supportedSports ?? [];
 }

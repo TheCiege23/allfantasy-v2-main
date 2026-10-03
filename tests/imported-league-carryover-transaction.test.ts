@@ -50,6 +50,21 @@ function transaction() {
 }
 
 describe('standalone carryover transaction', () => {
+  it('preserves source starter and bench placement without retaining the source draft marker', async () => {
+    const tx = transaction()
+    const sourceRosters = await tx.roster.findMany()
+    tx.roster.findMany.mockResolvedValue(sourceRosters.map((roster, index) => ({ ...roster, playerData: {
+      ...roster.playerData,
+      starters: index === 0 ? ['sleeper-1'] : [],
+      reserve: index === 1 ? ['sleeper-2'] : [],
+      lineup_draft_session_id: 'source-draft',
+    } })))
+    await carryOverImportedLeague(tx as never, { sourceLeagueId: 'source', targetLeagueId: 'native', creatorUserId: 'creator', sport: 'NFL', teamCount: 2 })
+    const carried = tx.roster.update.mock.calls.map(([args]) => args.data.playerData)
+    expect(carried[0].starters).toEqual(['sleeper-1'])
+    expect(carried[1].reserve).toEqual(['sleeper-2'])
+    expect(carried.every(data => !('lineup_draft_session_id' in data))).toBe(true)
+  })
   it('preserves MLB rules and history while translating owned players into native IDs', async () => {
     const tx = transaction()
     tx.league.findUnique.mockImplementation(({ where }) => where.id === 'source' ? {

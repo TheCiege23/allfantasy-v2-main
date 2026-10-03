@@ -4965,6 +4965,11 @@ export function DraftRoomPageClient({
               </span>
             </div>
           ) : null}
+          {session.draftModeLabel === 'imported_rosters' ? (
+            <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100">
+              Imported roster snapshot. No new draft was run. Historical drafts remain in league history.
+            </div>
+          ) : null}
           <DraftTopBar
             leagueName={leagueName}
             leagueLogoUrl={leagueLogoUrl ?? null}

@@ -4,6 +4,9 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
+import { importedMlbScoring } from '@/lib/league-creation/canonical/importedMlbScoring'
+import type { Prisma } from '@prisma/client'
 import {
   getMlbScoringPreset,
   detectMlbPresetMatch,
@@ -57,7 +60,19 @@ export async function saveLeagueMlbScoringConfig(leagueId: string, config: { pre
   const preset = getMlbScoringPreset(config.presetKey)
   const warningFlags: string[] = []
   if (preset.warning) warningFlags.push('external_preset')
-  await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...currentSettings, [`${PREFIX}config`]: { presetKey: config.presetKey, source: config.source ?? (config.presetKey === 'af_default' ? 'AF_DEFAULT' : config.presetKey === 'custom' ? 'CUSTOM' : 'PLATFORM_PRESET'), rules: config.rules, matchesPreset: detectMlbPresetMatch(config.rules) === config.presetKey, premiumFeaturesUsed: config.premiumFeaturesUsed ?? false, lastUpdatedAt: new Date().toISOString(), lastUpdatedBy: config.userId ?? null, warningFlags } } } })
+  const nextSettings = { ...currentSettings, [`${PREFIX}config`]: { presetKey: config.presetKey, source: config.source ?? (config.presetKey === 'af_default' ? 'AF_DEFAULT' : config.presetKey === 'custom' ? 'CUSTOM' : 'PLATFORM_PRESET'), rules: config.rules, matchesPreset: detectMlbPresetMatch(config.rules) === config.presetKey, premiumFeaturesUsed: config.premiumFeaturesUsed ?? false, lastUpdatedAt: new Date().toISOString(), lastUpdatedBy: config.userId ?? null, warningFlags } }
+  if (currentSettings.importCarryover) {
+    const points = bridgeSportUiScoringStore('MLB', nextSettings) ?? {}
+    const resolved = importedMlbScoring({ scoringSettings: { format: 'points', source: 'allfantasy', rules: points } })
+    const sportConfig = currentSettings.sportConfig && typeof currentSettings.sportConfig === 'object' ? currentSettings.sportConfig as Record<string, unknown> : {}
+    await prisma.$transaction(async tx => {
+      await tx.league.update({ where: { id: leagueId }, data: { settings: { ...nextSettings, scoringSettings: resolved.scoringSettings, sportConfig: { ...sportConfig, categoryPoints: resolved.categoryPoints } } as Prisma.InputJsonValue } })
+      await tx.leagueScoringOverride.deleteMany({ where: { leagueId } })
+      await tx.leagueScoringOverride.createMany({ data: Object.entries(resolved.templatePoints).map(([statKey, pointsValue]) => ({ leagueId, statKey, pointsValue, enabled: true })) })
+    })
+    return
+  }
+  await prisma.league.update({ where: { id: leagueId }, data: { settings: nextSettings as Prisma.InputJsonValue } })
 }
 
 export async function applyDefaultMlbScoringOnCreate(leagueId: string): Promise<void> {

@@ -27,7 +27,7 @@ import {
 import { finalizeSeasonAndEnterOffseason } from '@/lib/redraft/offseason/finalizeSeasonAndEnterOffseason'
 import { REDRAFT_SEASON_STATUS, engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { resolveRegularSeasonEndWeek } from './leagueSeasonWeek'
-import { resolveDailySportSeasonStart } from './dailySportSeasonStarts'
+import { activateImportedMlbSeasons } from './activateImportedMlbSeasons'
 import { resolveSeasonWeekForRedraftSeason } from './seasonWeekService'
 import type { LeagueSeasonWeekResolution } from './types'
 
@@ -172,6 +172,7 @@ export async function rollSeasonWeeks(
 ): Promise<WeekRollSummary> {
   const db = options.prisma ?? defaultPrisma
   const now = options.now ?? new Date()
+  if (!options.dryRun) await activateImportedMlbSeasons(db, now, options.limit ?? 200)
 
   const seasons = await db.redraftSeason.findMany({
     where: engineSeasonScope({ includeShadowLeagues: options.includeShadowLeagues }),
@@ -194,12 +195,6 @@ export async function rollSeasonWeeks(
   let failed = 0
 
   for (const season of seasons) {
-    if (!options.dryRun && season.sport === 'MLB' && season.league.lifecycleState === 'post_draft') {
-      const opener = resolveDailySportSeasonStart(season.sport, season.season)
-      if (opener && now.getTime() >= Date.parse(opener)) {
-        await db.league.updateMany({ where: { id: season.leagueId, lifecycleState: 'post_draft' }, data: { lifecycleState: 'in_season' } })
-      }
-    }
     if (isNativeTournamentLeague(season.league)) {
       held += 1
       outcomes.push({ ...seasonFields(season), plan: { action: 'hold', reason: 'FORMAT_NOT_SUPPORTED', detail: 'contest_advancement_owns_season' } })

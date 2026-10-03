@@ -41,4 +41,7 @@ describe('public Fantrax baseball contract and native carryover', () => {
     expect(allowedPositionsForSlot('MLB', 'CI')).toEqual(['1B', '3B'])
     expect(allowedPositionsForSlot('MLB', 'MI')).toEqual(['2B', 'SS'])
   })
+  it('refuses a source slot that the native roster editor cannot represent', () => {
+    expect(() => importedMlbRoster({ fantrax_settings: { rosterInfo: { positionConstraints: { LF: { maxActive: 1 } }, maxTotalReservePlayers: 0 } } })).toThrow('roster slot LF cannot be reproduced')
+  })
 })

@@ -17,7 +17,7 @@ Baseball points imports use a complete zero-based rule set in engine, commission
 
 ## Season behavior
 
-The existing MLB creation calendar chooses the upcoming season after the regular-season end. Imported roster ownership is recorded as an imported-rosters snapshot; historical draft facts retain their source seasons. The league remains post_draft before its recorded opener, with archived history separate from the upcoming native season. The week roller transitions that phase at the opener. Unknown opening dates never activate the league. Creating a new annual draft remains an explicit commissioner action; conversion itself preserves the imported rosters.
+The existing MLB creation calendar chooses the upcoming season after the regular-season end. Imported roster ownership is recorded as an imported-rosters snapshot; historical draft facts retain their source seasons. The league remains post_draft and the native season stays in setup before its recorded opener, allowing the commissioner to create an annual draft. Archived history remains separate. The week roller activates completed carried rosters at the opener and leaves a new unfinished draft alone. Unknown opening dates never activate the league. Creating a new annual draft remains an explicit commissioner action; conversion itself preserves the imported rosters. Subsequent commissioner scoring and roster edits update the live engine configuration.
 
 ## Verified provider scope
 

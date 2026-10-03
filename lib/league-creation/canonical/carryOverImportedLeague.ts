@@ -24,6 +24,7 @@ type ImportedTeam = {
   ownerName: string
   avatarUrl: string | null
   isCommissioner: boolean
+  isCoCommissioner?: boolean
 }
 type ImportedRoster = {
   id: string
@@ -89,7 +90,9 @@ export function translateImportedRosterData(data: unknown, idMap: Map<string, st
   const sections = asRecord(raw.lineup_sections)
   const { source_provider: _provider, source_league_id: _sourceId, source_team_id: _teamId,
     source_manager_id: _managerId, source_season_id: _seasonId, import_batch_id: _batchId,
-    imported_at: _importedAt, import: _import, ...rest } = raw
+    imported_at: _importedAt, import: _import,
+    // A source draft's marker must not make native finalization rebuild the carried lineup.
+    lineup_draft_session_id: _sourceDraftSession, ...rest } = raw
   return {
     ...rest,
     players: mapPlayerRows(players, idMap) ?? [],
@@ -112,10 +115,10 @@ export async function carryOverImportedLeague(tx: Tx, args: {
 }): Promise<number> {
   const [source, target, teams, rosters, slots, session] = await Promise.all([
     tx.league.findUnique({ where: { id: args.sourceLeagueId }, select: { platform: true, sport: true, settings: true, season: true } }),
-    tx.league.findUnique({ where: { id: args.targetLeagueId }, select: { settings: true } }),
+    tx.league.findUnique({ where: { id: args.targetLeagueId }, select: { settings: true, season: true } }),
     tx.leagueTeam.findMany({
       where: { leagueId: args.sourceLeagueId, lifecycleState: { not: 'ARCHIVED' } },
-      select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true, teamName: true, ownerName: true, avatarUrl: true, isCommissioner: true },
+      select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true, teamName: true, ownerName: true, avatarUrl: true, isCommissioner: true, isCoCommissioner: true },
     }),
     tx.roster.findMany({ where: { leagueId: args.sourceLeagueId }, select: { id: true, platformUserId: true, playerData: true, faabRemaining: true, waiverPriority: true } }),
     tx.leagueEntrySlot.findMany({ where: { leagueId: args.targetLeagueId }, orderBy: { slotNumber: 'asc' }, select: { slotNumber: true, rosterId: true } }),
@@ -217,7 +220,8 @@ export async function carryOverImportedLeague(tx: Tx, args: {
         platformUserId,
         isOrphan: !claimedUserId,
         isCommissioner: i === 0,
-        role: i === 0 ? 'commissioner' : 'member',
+        isCoCommissioner: i > 0 && Boolean(team.isCoCommissioner),
+        role: i === 0 ? 'commissioner' : team.isCoCommissioner ? 'co_commissioner' : 'member',
       },
     })
     teamIds.set(team.id, nativeTeam.id)
@@ -246,7 +250,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
         slot: slots[i]!.slotNumber, rosterId: slots[i]!.rosterId!, displayName: orderedTeams[i]!.teamName,
         playerId: player.nativeId, playerName: player.name, position: player.position, team: player.team,
         source: 'import', sportType: args.sport, pickedAt: new Date(),
-        pickMetadata: { importedRosterSnapshot: true, sourceLeagueId: args.sourceLeagueId },
+        pickMetadata: { importedRosterSnapshot: true, sourceLeagueId: args.sourceLeagueId, sourceSeason: source.season, carriedIntoSeason: target.season },
       })
     }
   }

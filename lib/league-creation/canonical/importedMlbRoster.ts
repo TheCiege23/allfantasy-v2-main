@@ -6,7 +6,7 @@ export function importedMlbRoster(settings: unknown) {
   const info = record(record(record(settings).fantrax_settings).rosterInfo)
   const constraints = record(info.positionConstraints)
   const slots: Record<string, number> = {}
-  const supported = new Set(['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'SP', 'RP', 'P', 'UT', 'UTIL', 'CI', 'MI'])
+  const supported = new Set(['C', '1B', '2B', '3B', 'SS', 'OF', 'SP', 'RP', 'P', 'UT', 'UTIL', 'CI', 'MI'])
   for (const [position, raw] of Object.entries(constraints)) {
     const count = record(raw).maxActive
     if (count === 0) continue
