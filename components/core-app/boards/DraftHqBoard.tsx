@@ -16,6 +16,7 @@ import {
   NoLeaguesYet,
 } from '@/components/core-app/boards/BoardKit'
 import { DraftClock } from '@/components/core-app/boards/DraftClock'
+import { ContextHelp } from '@/components/core-app/ContextHelp'
 import '@/components/core-app/af-core-boards.css'
 
 /**
@@ -89,6 +90,7 @@ function urgency(r: DraftHqAllRow): number {
 }
 
 function statusOf(r: DraftHqAllRow): { label: string; sev: 'bad' | 'warn' | 'good' | 'info' } {
+  if (r.rawStatus === 'paused') return { label: 'PAUSED', sev: 'info' }
   if (r.yoursOnClock) return { label: 'YOU ARE ON THE CLOCK', sev: 'bad' }
   if (r.phase === 'live') {
     return {
@@ -121,7 +123,9 @@ function statusOf(r: DraftHqAllRow): { label: string; sev: 'bad' | 'warn' | 'goo
 function reasoningOf(r: DraftHqAllRow): string {
   const bits: string[] = []
 
-  if (r.yoursOnClock) {
+  if (r.rawStatus === 'paused') {
+    bits.push('This draft is paused; the pick countdown is stopped.')
+  } else if (r.yoursOnClock) {
     bits.push('It is your pick right now.')
   } else if (r.phase === 'live' && r.onClockName) {
     bits.push(`${r.onClockName} is on the clock.`)
@@ -132,8 +136,8 @@ function reasoningOf(r: DraftHqAllRow): string {
   if (r.yourSlot != null && r.teamCount != null) {
     const early = r.yourSlot <= Math.max(1, Math.round(r.teamCount / 4))
     const late = r.yourSlot >= r.teamCount - Math.max(0, Math.round(r.teamCount / 4) - 1)
-    if (early) bits.push(`You pick ${r.yourSlot} of ${r.teamCount} — an early slot, so the board comes to you first each round.`)
-    else if (late) bits.push(`You pick ${r.yourSlot} of ${r.teamCount} — back of the order, so your picks come in pairs.`)
+    if (early) bits.push(`Your original draft slot is ${r.yourSlot} of ${r.teamCount} — near the front of the opening round.`)
+    else if (late) bits.push(`Your original draft slot is ${r.yourSlot} of ${r.teamCount} — near the end of the opening round.`)
     else bits.push(`You pick ${r.yourSlot} of ${r.teamCount}.`)
   }
 
@@ -338,6 +342,7 @@ function Card({ row, picks }: { row: DraftHqAllRow; picks?: LiveDraftPicks }) {
             sev={row.queuedCount > 0 ? 'accent' : undefined}
           />
         </div>
+        <p className="af-bd-note"><ContextHelp title="Draft card details" body="Your slot is your original order position. Picks made counts every team’s recorded selections. Round and on-clock owner follow the stored next-pick cursor and recorded trades. Queued here counts targets saved in AllFantasy, which may differ from your host platform’s queue. A paused draft has no running countdown." /></p>
 
         {/*
           The live tail, only for a draft that is actually running and only when
@@ -376,6 +381,7 @@ export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoar
         title="Draft HQ"
         blurb="Every draft you are in, ranked by the clock — the one on you first, then the ones running, then the ones still to come."
       />
+      <p className="af-bd-note">Latest draft per league <ContextHelp title="Draft HQ scope" body="This overview shows the newest stored draft for each league, matching the board opened by its link. Live drafts come first. Earlier drafts and imported season history will have a dedicated archive selector." /></p>
 
       {rows.length > 0 ? (
         <section className="af-bd-sec" aria-labelledby="af-dh-board">
