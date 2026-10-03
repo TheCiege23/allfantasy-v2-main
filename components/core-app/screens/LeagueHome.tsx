@@ -523,6 +523,30 @@ export function LeagueHome({
         </div>
       </header>
 
+      <section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
+        <div className="af-lh-week-summary-head">
+          <div><span className="af-label">{copy('Your next steps')}</span><h2 id="af-lh-week-summary-title">{copy('This week')}</h2></div>
+          <span className="af-lh-week-summary-fresh" data-stale={data.syncAge.stale}>{data.syncAge.label}</span>
+        </div>
+        <div className="af-lh-week-summary-grid">
+          <Link href={`/core/my-team?league=${league.id}`}>
+            <span className="af-label">{copy('Lineup')}</span>
+            <strong>{urgent ? urgent.title : copy('Review your starters')}</strong>
+            <span>{urgent ? urgent.meta : copy('Check before the first kickoff')} →</span>
+          </Link>
+          <Link href={`/core/matchup?league=${league.id}`}>
+            <span className="af-label">{copy('Matchup')}</span>
+            <strong>{data.matchup?.available ? `${data.matchup.data.you.name} vs ${data.matchup.data.opponent.name}` : copy('Open matchup')}</strong>
+            <span>{data.matchup?.available ? `Week ${data.matchup.data.week} · ${copy('league scoring')}` : copy('Matchup data is not ready')} →</span>
+          </Link>
+          <div className="af-lh-week-summary-moves">
+            <span className="af-label">{copy('Moves')}</span>
+            <strong>{copy('Plan your next move')}</strong>
+            <span><Link href={`/core/trades?league=${league.id}`}>{copy('Trades')} →</Link><Link href={`/core/waivers?league=${league.id}`}>{copy('Waivers')} →</Link></span>
+          </div>
+        </div>
+      </section>
+
       {/*
         ── What this import could not bring across ───────────────────
         Top of the screen, above everything, because it changes how to read every

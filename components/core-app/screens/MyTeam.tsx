@@ -1598,6 +1598,19 @@ export function MyTeam({ data }: MyTeamProps) {
 
 
   const proj = data.projections.available ? data.projections.data : null
+  const decisionSlot = data.starters.available
+    ? data.starters.data.find((slot) => slot.empty || slot.player?.ruledOut || slot.player?.onBye)
+      ?? data.starters.data.find((slot) => slot.benchCheck?.verdict === 'swap')
+      ?? null
+    : null
+  const suggestedBench = decisionSlot?.benchCheck && data.bench.available
+    ? data.bench.data.find((player) => player.name === decisionSlot.benchCheck?.benchName) ?? null
+    : null
+  const leagueDelta = decisionSlot?.player?.afProjectedPoints != null && suggestedBench?.afProjectedPoints != null
+    ? suggestedBench.afProjectedPoints - decisionSlot.player.afProjectedPoints
+    : null
+
+
 
   /*
    * The per-lineup "share" helper lived here and has been DELETED, not merely
@@ -1668,6 +1681,43 @@ export function MyTeam({ data }: MyTeamProps) {
           <span className="af-mt-lock-note">{data.lock.reason}</span>
         </div>
       )}
+
+      {!bestBall ? (
+        <section className="af-frame af-mt-decision" aria-labelledby="af-mt-decision-title">
+          <div>
+            <span className="af-label">{copy('Lineup decision')}</span>
+            <h2 id="af-mt-decision-title">
+              {decisionSlot?.empty
+                ? `Fill your ${decisionSlot.slotLabel} slot`
+                : decisionSlot?.player?.ruledOut
+                  ? `Replace ${decisionSlot.player.name}`
+                  : decisionSlot?.player?.onBye
+                    ? `Cover ${decisionSlot.player.name}'s bye`
+                    : decisionSlot?.benchCheck?.verdict === 'swap'
+                      ? `Review ${decisionSlot.benchCheck.starterName} vs ${decisionSlot.benchCheck.benchName}`
+                      : copy('Review your starting lineup')}
+            </h2>
+            <p>
+              {decisionSlot?.empty
+                ? copy('An empty starting slot is a certain zero. Check eligibility and the player lock on your platform.')
+                : decisionSlot?.player?.ruledOut || decisionSlot?.player?.onBye
+                  ? `${decisionSlot.player.name} is ${decisionSlot.player.onBye ? 'on a bye' : 'ruled out'}. Check an eligible replacement before that player locks.`
+                  : decisionSlot?.benchCheck?.verdict === 'swap'
+                    ? leagueDelta != null && leagueDelta > 0
+                      ? `${decisionSlot.benchCheck.benchName} projects ${leagueDelta.toFixed(1)} more points under this league's scoring. Confirm injury status and eligibility first.`
+                      : copy('The standard projection favors the bench option. A reliable league-scored difference is unavailable, so review before swapping.')
+                    : data.starters.available
+                      ? copy('No certain empty, out, or bye slot was found in the lineup we could read. Check late injury news before lock.')
+                      : data.starters.reason}
+            </p>
+            <small>{proj ? `Week ${proj.week} · ${proj.afProjected} of ${proj.projected} projected starters priced for this league` : copy('Projection coverage unavailable')}</small>
+          </div>
+          <div className="af-mt-decision-actions">
+            <a className="af-btn af-btn--ghost" href="#af-mt-starters">{copy('Review starters')}</a>
+            {data.league.sourceLink ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
+          </div>
+        </section>
+      ) : null}
 
       {/* ── Team header ─────────────────────────────────────────────── */}
       <header className="af-frame af-mt-head">
@@ -1933,7 +1983,7 @@ export function MyTeam({ data }: MyTeamProps) {
         />
       ) : null}
       {/* ── Starters ────────────────────────────────────────────────── */}
-      <section className="af-frame af-mt-section">
+      <section id="af-mt-starters" className="af-frame af-mt-section">
         <header className="af-mt-section-head">
           <h2 className="af-label">{copy('Starters')}</h2>
           <span className="af-mt-section-note">
