@@ -1538,9 +1538,9 @@
 .af-lh-week-summary-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
 .af-lh-week-summary-head h2 { margin:4px 0 0; font-size:clamp(20px,2vw,26px); }
 .af-lh-week-summary-fresh { color:var(--muted); font-size:12px; }
-.af-lh-week-summary-fresh[data-stale='true'] { color:var(--warning); }
+.af-lh-week-summary-fresh[data-stale='true'] { color:var(--warn); }
 .af-lh-week-summary-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
-.af-lh-week-summary-grid > a,.af-lh-week-summary-moves { display:flex; flex-direction:column; min-width:0; gap:7px; padding:13px; border:1px solid var(--border); border-radius:12px; text-decoration:none; }
+.af-lh-week-summary-grid > a,.af-lh-week-summary-moves { display:flex; flex-direction:column; min-width:0; gap:7px; padding:13px; border:1px solid var(--line); border-radius:12px; text-decoration:none; }
 .af-lh-week-summary-grid strong { line-height:1.3; }
 .af-lh-week-summary-grid > a > span:last-child { color:var(--accent); font-size:12px; }
 .af-lh-week-summary-moves > span:last-child { display:flex; flex-wrap:wrap; gap:14px; }
