@@ -16,7 +16,7 @@ import {
   NoLeaguesYet,
 } from '@/components/core-app/boards/BoardKit'
 import { DraftClock } from '@/components/core-app/boards/DraftClock'
-import { ContextHelp } from '@/components/core-app/ContextHelp'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-core-boards.css'
 
 /**
@@ -342,7 +342,7 @@ function Card({ row, picks }: { row: DraftHqAllRow; picks?: LiveDraftPicks }) {
             sev={row.queuedCount > 0 ? 'accent' : undefined}
           />
         </div>
-        <p className="af-bd-note"><ContextHelp title="Draft card details" body="Your slot is your original order position. Picks made counts every team’s recorded selections. Round and on-clock owner follow the stored next-pick cursor and recorded trades. Queued here counts targets saved in AllFantasy, which may differ from your host platform’s queue. A paused draft has no running countdown." /></p>
+        <p className="af-bd-note"><TopicTip topic="draftCardStats" /></p>
 
         {/*
           The live tail, only for a draft that is actually running and only when
@@ -381,7 +381,7 @@ export function DraftHqBoard({ data, allHref, totalLeagues, picks }: DraftHqBoar
         title="Draft HQ"
         blurb="Every draft you are in, ranked by the clock — the one on you first, then the ones running, then the ones still to come."
       />
-      <p className="af-bd-note">Latest draft per league <ContextHelp title="Draft HQ scope" body="This overview shows the newest stored draft for each league, matching the board opened by its link. Live drafts come first. Earlier drafts and imported season history will have a dedicated archive selector." /></p>
+      <p className="af-bd-note">Latest draft per league <TopicTip topic="draftHqScope" /></p>
 
       {rows.length > 0 ? (
         <section className="af-bd-sec" aria-labelledby="af-dh-board">

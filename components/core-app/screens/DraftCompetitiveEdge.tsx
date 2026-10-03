@@ -6,6 +6,7 @@ import type { DraftEdge } from '@/lib/competitive-edge/draftEdge'
 import type { EdgeFact } from '@/lib/competitive-edge/tradeEdge'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /*
  * Competitive Edge on Draft HQ: what each other manager has actually taken in this league's past
@@ -70,6 +71,7 @@ export function DraftCompetitiveEdge({
   const head = (
     <header className="af-dh-section-head">
       <h2 className="af-label">{copy('Competitive Edge · how the others draft')}</h2>
+      <TopicTip topic="competitiveEdgeDraft" />
       {access ? <FreeUntilNote access={access} /> : null}
     </header>
   )

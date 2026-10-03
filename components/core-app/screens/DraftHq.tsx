@@ -1,7 +1,7 @@
 'use client'
 
 import '@/components/core-app/af-draft-hq.css'
-import { ContextHelp } from '../ContextHelp'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import type { DraftHqData } from '@/lib/core-app/draftHq'
 import { draftAfText, draftAfTitle } from '@/lib/core-app/draftAfLabel'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
@@ -62,7 +62,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
             <div className="af-dh-facts">
               <div className="af-dh-fact">
                 <div className="af-dh-fact-value af-num">{data.session.data.draftType}</div>
-                <div className="af-label">{copy('Format')} <ContextHelp title="Draft format" body="Snake reverses the selection order each round. Linear keeps the same order. Third-round reversal repeats round two’s direction in round three. Auction drafts select players through bidding." /></div>
+                <div className="af-label">{copy('Format')} <TopicTip topic="draftFormat" /></div>
               </div>
               <div className="af-dh-fact">
                 <div className="af-dh-fact-value af-num">{data.session.data.rounds}</div>
@@ -76,7 +76,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
                 <div className="af-dh-fact-value af-num">
                   {data.session.data.yourSlot != null ? `#${data.session.data.yourSlot}` : '—'}
                 </div>
-                <div className="af-label">{copy('Your slot')} <ContextHelp title="Your draft slot" body="Your original position in the draft order. Traded picks change who owns a selection without changing this original slot." /></div>
+                <div className="af-label">{copy('Your slot')} <TopicTip topic="draftSlot" /></div>
               </div>
             </div>
           </>
@@ -98,7 +98,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
       data.pickSlots.reason === data.session.reason ? null : (
       <section className="af-frame af-dh-section">
         <header className="af-dh-section-head">
-          <h2 className="af-label">{copy('Your picks')} <ContextHelp title="Pick ownership" body="Owned picks belong to your team in the stored draft state. Acquired picks came from another original slot. Traded-away picks remain visible for reference but no longer belong to you. Imported history may have incomplete trade coverage." /></h2>
+          <h2 className="af-label">{copy('Your picks')} <TopicTip topic="pickOwnership" /></h2>
           {data.pickSlots.available && data.pickSlots.data.note ? (
             <span className="af-dh-section-note" data-testid="draft-hq-picks-note">
               {copy(data.pickSlots.data.note)}
@@ -146,7 +146,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
       {/* ── What you drafted ────────────────────────────────────────── */}
       <section className="af-frame af-dh-section">
         <header className="af-dh-section-head">
-          <h2 className="af-label">{copy('What you drafted')} <ContextHelp title="Your drafted players" body="Selections recorded for your team in this draft. A later player trade can change today’s roster without changing the draft record." /></h2>
+          <h2 className="af-label">{copy('What you drafted')} <TopicTip topic="draftedPlayers" /></h2>
           {data.madePicks.available ? (
             <span className="af-chip af-num">{data.madePicks.data.length}</span>
           ) : null}
@@ -200,7 +200,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
       {/* -- Draft grades, one card per team ------------------------- */}
       <section className="af-frame af-dh-section af-dh-grades">
         <header className="af-dh-section-head">
-          <h2 className="af-label">{copy('Draft grades')} <ContextHelp title="Results grade" body="This grade uses actual season scoring versus the median selection in the same round. It is a results comparison, not a draft-day forecast. Review scoring coverage and sample size before comparing teams." /></h2>
+          <h2 className="af-label">{copy('Draft grades')} <TopicTip topic="draftGrades" /></h2>
           {data.grades.available ? (
             <span className="af-dh-board-meta af-num">
               {data.grades.data.season} &middot; {data.grades.data.gradedPicks}/
@@ -280,7 +280,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
 
       <section className="af-frame af-dh-section af-dh-boardfull">
         <header className="af-dh-section-head">
-          <h2 className="af-label">{copy('Draft board')} <ContextHelp title="Recorded draft board" body="These are recorded selections, organized by round. Historical results may come from the latest imported season while the live board follows the current native session; explicit archive selection is planned." /></h2>
+          <h2 className="af-label">{copy('Draft board')} <TopicTip topic="recordedDraftBoard" /></h2>
           {data.board.available ? (
             <span className="af-dh-board-meta af-num">
               {data.board.data.season} &middot; {data.board.data.teams.length} {copy('teams')} &middot;{' '}
@@ -350,7 +350,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
       {/* -- Lottery -------------------------------------------------- */}
       <section className="af-frame af-dh-section">
         <header className="af-dh-section-head">
-          <h2 className="af-label">{copy('Weighted lottery')} <ContextHelp title="Weighted lottery" body="Lottery odds follow the league’s configured rules. Review eligibility and recorded results before using the order." /></h2>
+          <h2 className="af-label">{copy('Weighted lottery')} <TopicTip topic="draftLottery" /></h2>
         </header>
         {/*
           Odds from the lottery engine's read-only preview for THIS league's settings
@@ -425,7 +425,7 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
           )}
         </section>
         <section className="af-card af-dh-section">
-          <h2 className="af-label">{copy('Keepers')} <ContextHelp title="Keepers" body="Players retained from a previous season. Depending on league rules, each keeper may consume a draft pick or auction budget. This view must load keeper declarations before it can show their costs." /></h2>
+          <h2 className="af-label">{copy('Keepers')} <TopicTip topic="keepers" /></h2>
           {data.keepers.available ? (
             <>
               <p className="af-dh-unavailable">
