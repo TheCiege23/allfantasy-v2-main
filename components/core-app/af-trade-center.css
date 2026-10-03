@@ -1417,6 +1417,21 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-tiles::-webkit-scrollbar {
   display: none;
 }
+.af-tc-strip-more {
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-tc-strip-more:hover,
+.af-tc-strip-more:focus-visible { border-color: var(--accent-line); }
 .af-tc-tile {
   flex: 0 0 224px;
   display: flex;

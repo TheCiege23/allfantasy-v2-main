@@ -19,10 +19,9 @@ import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch
  * Sleeper league says "Nothing waiting"; an ESPN league says it was not read,
  * and why.
  *
- * ⚠ ONE PANEL READ PER LEAGUE, IN PARALLEL, CAPPED. Each read may scan the
- * provider's pending transactions, which is what the league Trades tab already
- * costs per open. Ten leagues at once is ten of those; the cap keeps a manager
- * with thirty leagues from turning a page load into a provider sweep.
+ * ⚠ ONE PANEL READ PER VISIBLE LEAGUE, BATCHED. Each read may scan the
+ * provider's pending transactions. The first eight load on entry; managers can
+ * reveal further batches without turning a many-league page load into a sweep.
  *
  * ⚠ NO NEW API ROUTE. Reads the existing `/api/league/trades-panel`.
  */
@@ -142,7 +141,8 @@ function statusLine(s: TileState, platform: string): { text: string; tone: strin
 }
 
 export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId: string | null }) {
-  const leagues = props.leagues.slice(0, MAX_LEAGUES_READ)
+  const [visibleCount, setVisibleCount] = useState(MAX_LEAGUES_READ)
+  const leagues = props.leagues.slice(0, visibleCount)
   const [states, setStates] = useState<Record<string, TileState>>({})
 
   useEffect(() => {
@@ -150,7 +150,8 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
     /* Cancels whichever deferral won — idle callback or timer — on unmount. */
     let cleanupDeferred: () => void = () => {}
     const ids = leagues.map((l) => l.id)
-    setStates(Object.fromEntries(ids.map((id) => [id, { kind: 'checking' as const }])))
+    const idsToRead = ids.filter((id) => !states[id] || states[id].kind === 'checking')
+    setStates((previous) => Object.fromEntries(ids.map((id) => [id, previous[id] ?? { kind: 'checking' as const }])))
 
     /*
      * 🛑 EACH TILE SETTLES ON ITS OWN. This used to be one `Promise.allSettled(...).then()` that
@@ -200,13 +201,13 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
     const start = () => {
       let cursor = 0
       const worker = async (): Promise<void> => {
-        while (!cancelled && cursor < ids.length) {
-          const id = ids[cursor]
+        while (!cancelled && cursor < idsToRead.length) {
+          const id = idsToRead[cursor]
           cursor += 1
           if (id) await runOne(id)
         }
       }
-      void Promise.all(Array.from({ length: STRIP_CONCURRENCY }, () => worker()))
+      void Promise.all(Array.from({ length: Math.min(STRIP_CONCURRENCY, idsToRead.length) }, () => worker()))
     }
 
     /*
@@ -250,7 +251,7 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
         <span className="af-tc-rule" aria-hidden />
         <span className="af-tc-strip-note">
           Sleeper and Yahoo are read · other platforms are not, and say so
-          {beyond > 0 ? ` · ${beyond} more not read here` : ''}
+          {beyond > 0 ? ` · ${beyond} more available below` : ''}
         </span>
       </div>
       <div className="af-tc-tiles">
@@ -287,6 +288,11 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
           )
         })}
       </div>
+      {beyond > 0 ? (
+        <button type="button" className="af-tc-strip-more" onClick={() => setVisibleCount((count) => count + MAX_LEAGUES_READ)}>
+          Show {Math.min(beyond, MAX_LEAGUES_READ)} more {beyond === 1 ? 'league' : 'leagues'}
+        </button>
+      ) : null}
     </section>
   )
 }

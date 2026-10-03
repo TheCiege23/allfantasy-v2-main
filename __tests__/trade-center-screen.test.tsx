@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { TradeLeagueStrip, stateOf } from '@/components/core-app/screens/TradeLeagueStrip'
 import { __resetTradesPanelShare } from '@/components/core-app/screens/tradesPanelFetch'
 import React from 'react'
@@ -490,6 +490,16 @@ describe('core visual upgrade — design-refs/trade-center-handoff', () => {
   it('caps how many leagues it reads at once', () => {
     // Each read may sweep a provider's pending transactions.
     expect(STRIP).toContain('MAX_LEAGUES_READ')
+  })
+
+  it('lets a manager inspect leagues beyond the first eight on demand', () => {
+    render(<TradeLeagueStrip leagues={Array.from({ length: 10 }, (_, index) => ({
+      id: `league-${index + 1}`, name: `League ${index + 1}`, platform: 'espn', mark: 'E',
+    }))} activeLeagueId={null} />)
+    expect(screen.queryByText('League 9')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show 2 more leagues' }))
+    expect(screen.getByText('League 9')).toBeTruthy()
+    expect(screen.getByText('League 10')).toBeTruthy()
   })
 
   /*
