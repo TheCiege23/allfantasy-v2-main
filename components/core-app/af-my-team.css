@@ -2207,3 +2207,58 @@ li[data-kind='questionable'] .af-mt-check-tag {
   font-size: 12px;
   color: var(--muted);
 }
+
+/*
+ * ── Offseason view (2026-10-03) ─────────────────────────────────────────────
+ * Appended at depth 0. Pre-draft, season complete and eliminated: a hero with the team's final
+ * line and next steps, then the same cards the in-season screen uses (main + aside on a wide page).
+ */
+.af-mt-off-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+}
+.af-mt-off-title {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.af-mt-off-lead {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text2);
+}
+.af-mt-off-team {
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--text2);
+}
+.af-mt-off-team-name {
+  font-weight: 800;
+  color: var(--text);
+}
+.af-mt-off-team-meta {
+  color: var(--muted);
+}
+.af-mt-off-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+@media (pointer: coarse) {
+  .af-mt-off-actions .af-btn {
+    min-height: 44px;
+  }
+}
+@container af-mt (max-width: 500px) {
+  .af-mt-off-actions .af-btn {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+  .af-mt-off-title {
+    font-size: 22px;
+  }
+}

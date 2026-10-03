@@ -1273,6 +1273,83 @@ function TaxiYears({ tenure }: { tenure: TaxiTenure | null }) {
   )
 }
 
+/**
+ * My Team between seasons: pre-draft, season complete, or eliminated.
+ *
+ * WHY. These three states used to end on a bare page — an unstyled league name, one sentence and a
+ * link — while the loader had already computed the team's record, its roster value against the
+ * league, its draft capital and its recent moves. A dynasty manager spends half the year here, and
+ * the page had nothing to say to them. Same loader, same cards as the in-season screen; only the
+ * weekly lineup machinery (lock, matchup, starters) is left out, because there is no week.
+ *
+ * The headline and sentence are unchanged (their Spanish copy already exists).
+ */
+function OffseasonView({ data }: MyTeamProps) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const es = language === 'es'
+  const id = encodeURIComponent(data.league.id)
+  const dynasty = data.dynasty != null || String(data.league.format ?? '').toLowerCase() === 'dynasty'
+  const phase = data.preDraft ? 'predraft' : data.eliminated ? 'eliminated' : 'complete'
+  const team = data.team.available ? data.team.data : null
+  /*
+   * Rank only with a record behind it — before a scored game it is import order (see the in-season
+   * header). A finished season's rank is the final standing, which is worth saying.
+   */
+  const standing = team && team.recordKnown
+    ? `${team.record}${team.rank != null && phase === 'complete' ? (es ? ` · terminó ${ordinal(team.rank)} de ${team.teamCount}` : ` · finished ${ordinal(team.rank)} of ${team.teamCount}`) : ''}`
+    : null
+  const actions: Array<{ href: string; label: string; primary?: boolean }> = []
+  if (phase === 'predraft') actions.push({ href: `/core/draft-hq?league=${id}`, label: es ? 'Abrir Draft HQ' : 'Open Draft HQ', primary: true })
+  if (phase !== 'predraft' && dynasty) {
+    actions.push({ href: `/core/draft-hq?league=${id}`, label: es ? 'Planear el draft de novatos' : 'Plan your rookie draft', primary: true })
+    actions.push({ href: `/core/trades?league=${id}`, label: es ? 'Centro de intercambios' : 'Trade center' })
+  }
+  actions.push({ href: `/core?league=${id}`, label: copy('Open league overview'), primary: actions.length === 0 })
+  const showStrength = data.rosterGrade.available && (data.rosterGrade.data.positions?.length ?? 0) > 1
+  return (
+    <div className="af-mt af-mt-off" data-phase={phase}>
+      <section className="af-frame af-mt-off-hero">
+        <span className="af-label">{data.league.name}</span>
+        <h1 className="af-display af-mt-off-title">
+          {copy(data.preDraft ? 'Draft pending' : data.eliminated ? 'Team eliminated' : 'Season complete')}
+        </h1>
+        <p className="af-mt-off-lead">
+          {copy(data.preDraft ? 'This league has not finished its draft. Empty roster slots do not need a lineup fix yet.' : data.eliminated ? 'This team is no longer competing. Empty roster slots do not need a lineup fix.' : 'This season has finished. There are no active weekly lineup tasks.')}
+        </p>
+        {team ? (
+          <p className="af-mt-off-team">
+            <span className="af-mt-off-team-name">{team.teamName}</span>
+            {standing ? <span className="af-mt-off-team-meta af-num"> · {standing}</span> : null}
+            {data.rosterGrade.available ? (
+              <span className="af-mt-off-team-meta">
+                {' · '}
+                {es ? 'valor de plantilla' : 'roster value'} {ordinal(data.rosterGrade.data.rank)} {es ? 'de' : 'of'} {data.rosterGrade.data.outOf}
+              </span>
+            ) : null}
+          </p>
+        ) : null}
+        <nav className="af-mt-off-actions" aria-label={es ? 'Siguientes pasos' : 'Next steps'}>
+          {actions.map((a) => (
+            <a key={a.href + a.label} className={a.primary ? 'af-btn' : 'af-btn af-btn--ghost'} href={a.href}>
+              {a.label}
+            </a>
+          ))}
+        </nav>
+      </section>
+      <div className="af-mt-body">
+        <div className="af-mt-main">
+          {data.dynasty ? <DynastyCard outlook={data.dynasty} /> : null}
+          {showStrength && data.rosterGrade.available ? <PositionStrengthCard grade={data.rosterGrade.data} /> : null}
+        </div>
+        <div className="af-mt-aside">
+          {data.teamActivity ? <TeamActivityCard activity={data.teamActivity} myTeamName={team?.teamName ?? null} /> : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function MyTeam({ data }: MyTeamProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -1303,14 +1380,8 @@ export function MyTeam({ data }: MyTeamProps) {
   const platform = data.league.platform === 'manual' ? copy('your platform') : platformLabel(data.league.platform)
   const bestBall = data.bestBall === true || data.league.bestBall === true
 
-  if (data.preDraft || data.eliminated || data.completed) return <div className="af-mt">
-    <h1>{data.league.name}</h1>
-    <section className="af-frame af-mt-section">
-      <h2>{copy(data.preDraft ? 'Draft pending' : data.eliminated ? 'Team eliminated' : 'Season complete')}</h2>
-      <p>{copy(data.preDraft ? 'This league has not finished its draft. Empty roster slots do not need a lineup fix yet.' : data.eliminated ? 'This team is no longer competing. Empty roster slots do not need a lineup fix.' : 'This season has finished. There are no active weekly lineup tasks.')}</p>
-      <a className="af-btn" href={`/core?league=${encodeURIComponent(data.league.id)}`}>{copy('Open league overview')}</a>
-    </section>
-  </div>
+  if (data.preDraft || data.eliminated || data.completed) return <OffseasonView data={data} />
+
 
   const proj = data.projections.available ? data.projections.data : null
 
