@@ -22,6 +22,7 @@ import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import { InfoTip } from '@/components/core-app/InfoTip'
+import { myTeamCardReasonText } from '@/lib/core-app/myTeamReasonText'
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -509,7 +510,7 @@ function WinForecast({ forecast }: { forecast: NonNullable<NextMatchup['forecast
   if (!forecast.available) {
     return (
       <p className="af-mt-mu-win" data-available="false">
-        {es ? 'Sin probabilidad de victoria' : 'No win probability'} — {forecast.reason}.
+        {es ? 'Sin probabilidad de victoria' : 'No win probability'} — {myTeamCardReasonText(forecast.reason, language)}.
       </p>
     )
   }
@@ -1911,13 +1912,13 @@ export function MyTeam({ data }: MyTeamProps) {
           ) : data.nextMatchup.data.unpricedReason ? (
             // Two dashes and nothing else read as a broken screen; say why, where the read goes.
             <p className="af-mt-mu-edge">
-              {copy('No projected totals')} — {data.nextMatchup.data.unpricedReason}.
+              {copy('No projected totals')} — {myTeamCardReasonText(data.nextMatchup.data.unpricedReason, language)}.
             </p>
           ) : null}
           {data.nextMatchup.data.forecast ? <WinForecast forecast={data.nextMatchup.data.forecast} /> : null}
         </section>
       ) : (
-        <p className="af-mt-footnote">{data.nextMatchup.reason}</p>
+        <p className="af-mt-footnote">{myTeamCardReasonText(data.nextMatchup.reason, language)}</p>
       )}
 
       {/* ── Byes forming ────────────────────────────────────────────── */}
