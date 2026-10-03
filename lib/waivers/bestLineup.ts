@@ -36,6 +36,8 @@ export function bestLineup(
 ): {
   total: number
   used: Set<string>
+  /** Starting slots nobody could fill — a bye, an injury, or a position you do not roster. */
+  unfilled: string[]
 } {
   const positions = [...new Set(players.map((p) => (p.position ?? '').toUpperCase()))]
   const breadth = (slot: string) => positions.filter((pos) => fits(slot, pos)).length
@@ -43,13 +45,17 @@ export function bestLineup(
 
   const pool = [...players].sort((a, b) => b.points - a.points)
   const used = new Set<string>()
+  const unfilled: string[] = []
   let total = 0
 
   for (const slot of ordered) {
     const pick = pool.find((p) => !used.has(p.sleeperId) && fits(slot, p.position))
-    if (!pick) continue
+    if (!pick) {
+      unfilled.push(slot)
+      continue
+    }
     used.add(pick.sleeperId)
     total += pick.points
   }
-  return { total: Math.round(total * 100) / 100, used }
+  return { total: Math.round(total * 100) / 100, used, unfilled }
 }

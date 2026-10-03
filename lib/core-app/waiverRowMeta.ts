@@ -39,6 +39,21 @@ export function runsAtLabel(
     : null
 }
 
+/**
+ * The same schedule as `runsAtLabel`, as data — for a countdown the CLIENT renders in the viewer's
+ * own timezone. Same gate, so a Sleeper bootstrap default can never reach a clock either.
+ *
+ * ⚠ STRUCTURED, NOT AN INSTANT. The board is served from a clock-free cache (see
+ * `waiversBoardSummary.ts`); "the next run" depends on now, so the component derives it.
+ */
+export function runsAtSchedule(
+  w: { processingDayOfWeek: number | null; processingTimeUtc: string | null } | null | undefined,
+  platform: string | null | undefined,
+): { dayOfWeek: number; timeUtc: string } | null {
+  if (!runsAtLabel(w, platform)) return null
+  return { dayOfWeek: w!.processingDayOfWeek!, timeUtc: w!.processingTimeUtc!.trim() }
+}
+
 /** FAAB left, only when the league runs FAAB. */
 export function faabRemainingOf(
   w: { waiverType: string | null } | null | undefined,

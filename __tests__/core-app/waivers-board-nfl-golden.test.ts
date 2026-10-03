@@ -13,6 +13,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * One"), the roster has open spots so no drop is named, and `runsAt` is null because a Sleeper
  * league's stored schedule is a bootstrap default (`waiverScheduleIsImported`). Every withheld
  * count, the dedupe and the kickoffs are unchanged. Re-captured by this test and pasted unchanged.
+ * Then again for cache v5: the row gains `runsAtUtc` (null — a Sleeper schedule is not imported)
+ * and `alternatives` (Free Agent Two, +10.0, fills a slot). Nothing previously pinned moved.
  *
  * `GOLDEN` below was first written by THIS test against the pre-change loader (origin/main 812d99199) and
  * pasted in unchanged — so a match here is a byte-for-byte comparison against what production
@@ -194,6 +196,23 @@ const GOLDEN = `{
       "drop": null,
       "faabRemaining": 87,
       "runsAt": null,
+      "runsAtUtc": null,
+      "alternatives": [
+        {
+          "add": {
+            "playerId": "fa2",
+            "name": "Free Agent Two",
+            "position": "RB",
+            "team": "BUF",
+            "imageUrl": null,
+            "projected": 10,
+            "ownPct": null,
+            "startPct": null
+          },
+          "gain": 10,
+          "startsOver": null
+        }
+      ],
       "href": "/core/waivers?league=L1",
       "reasoning": "Free Agent One (WR) projects 16.0 under this league's own scoring, and would fill an empty starting slot — +16.0 to your starting lineup. You have an open roster spot, so nothing needs to go. Rostered in 25% of the leagues we can see."
     }

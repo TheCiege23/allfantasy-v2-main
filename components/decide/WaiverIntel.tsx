@@ -6,14 +6,9 @@
  * players, needs-tagged. Every formula renders verbatim from the payload.
  */
 
-import { useEffect, useState } from 'react'
-import type { WaiverIntelPayload } from '@/lib/waiver-intel/waiverIntelService'
 import { sleeperPlayerHeadshot } from '@/lib/sports-data/headshots'
+import { useWaiverIntel } from './useWaiverIntel'
 import './broadcast-deck.css'
-
-type ApiResponse =
-  | { supported: false; platform: string }
-  | { supported: true; intel: WaiverIntelPayload | null; error?: string }
 
 /**
  * `surface="core"` when mounted on the /core Waivers screen. Every rule in broadcast-deck.css is
@@ -22,30 +17,8 @@ type ApiResponse =
  * without the deck's full-page ground and maps its palette onto /core's own tokens.
  */
 export function WaiverIntel({ leagueId, surface = 'deck' }: { leagueId: string; surface?: 'deck' | 'core' }) {
-  const [data, setData] = useState<ApiResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    void fetch(`/api/league/waiver-intel?leagueId=${encodeURIComponent(leagueId)}`, {
-      credentials: 'same-origin',
-      cache: 'no-store',
-    })
-      .then((res) => res.json() as Promise<ApiResponse>)
-      .then((payload) => {
-        if (!cancelled) setData(payload)
-      })
-      .catch(() => {
-        if (!cancelled) setData({ supported: true, intel: null, error: 'Request failed' })
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [leagueId])
+  /* Shared with the lineup list on the same screen — one request between them (useWaiverIntel). */
+  const { data, loading } = useWaiverIntel(leagueId)
 
   if (data && !data.supported) return null
   const intel = data && data.supported ? data.intel : null

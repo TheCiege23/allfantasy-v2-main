@@ -34,7 +34,7 @@ import { countRealLeagues, keepBestPerRealLeague } from './realLeague'
 import { canFillSlotForSport, isStartableInSport } from './sportSlotEligibility'
 import { pickLineupSwap, rosterCapacity, swapReasoning, type SwapCandidate, type SwapRosterPlayer } from './waiverSwap'
 import { startingSlots } from './slotEligibility'
-import { faabRemainingOf, formatOf, runsAtLabel } from './waiverRowMeta'
+import { faabRemainingOf, formatOf, runsAtLabel, runsAtSchedule } from './waiverRowMeta'
 import type { ClaimedTeam, WaiverBoardRow, WaiverPlayer, WaiverSportSection } from './waiversBoard'
 
 /**
@@ -332,6 +332,14 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       unit: ' per game',
     })
 
+    /* The next-best adds, scored against the lineup as it stands — the NFL rows' rule. */
+    const alternatives = swap.ranked.slice(1, 4).flatMap((r) => {
+      const p = playerFor(r.id)
+      if (!p) return []
+      const o = playerFor(r.displacesId)
+      return [{ add: p, gain: r.gain, startsOver: o ? { playerId: o.playerId, name: o.name, projected: o.projected } : null }]
+    })
+
     const w = waiverByLeague.get(c.leagueId)
     rows.push({
       leagueId: c.leagueId,
@@ -348,6 +356,8 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       drop: dropPlayer,
       faabRemaining: faabRemainingOf(w, myRoster),
       runsAt: runsAtLabel(w, l.platform),
+      runsAtUtc: runsAtSchedule(w, l.platform),
+      alternatives,
       href: `/core/waivers?league=${encodeURIComponent(c.leagueId)}`,
       reasoning,
       sport,
