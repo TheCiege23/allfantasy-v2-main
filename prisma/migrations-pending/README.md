@@ -29,6 +29,41 @@ writes a `finished_at IS NULL` row into `_prisma_migrations`, and every later
 A well-guarded refusal still blocks everyone. Parking it here means the guard
 never has to fire.
 
+## 2026-10-03: four moved to `prisma/migrations/` — and why the other seventeen stay
+
+Moved, because each is **applied and recorded** in production with a `_prisma_migrations`
+checksum equal to the sha256 of its committed LF `migration.sql`, **and** `schema.prisma` already
+models everything it creates — so `migrate deploy` matches and skips it, and `migrate dev` gains
+nothing to undo:
+
+| moved | ledger checksum = LF file |
+|---|---|
+| `20260902000000_draft_fact_metadata` | `db0fe2033d…` |
+| `20260902020000_yahoo_connection_identity` | `4b82763bc5…` |
+| `20260904040000_deleted_league_tombstones` | `87cacb1cf8…` |
+| `20260912020000_import_run_attempt` | `babd02fa75…` |
+
+**Measured, not argued.** The full history was replayed into an empty throwaway Postgres 18
+(`prisma migrate diff --from-migrations … --to-schema-datamodel …`) before and after the move.
+With these four in, the replay still succeeds and the history-vs-schema diff **loses 60 lines and
+gains 0** — the lines it loses are exactly these four migrations' objects. Positive control: a
+planted migration creating an unmodelled table appeared in the same diff as `DROP TABLE`.
+
+🛑 **The seven Commissioner OS migrations (`t101` … `t201`) are applied and checksum-match, but
+CANNOT move.** Replayed on an empty database, `t101` aborts — `database roles not provisioned
+(missing: commish_app, commish_migrate, commish_platform, commish_purge). Land T-001 first` — and
+the other six depend on it. The roles are provisioned outside the migration history, so in
+`prisma/migrations/` they would make every `prisma migrate dev` fail with P3006 and break any
+database built from history. Parking is load-bearing for them, not housekeeping.
+
+⚠ `20260830190000_devy_head_coach_context` is applied, but its ledger checksum (`ed157f6d5e…`)
+does not match this file (`f06fd2fa23…`) — see its `PROVENANCE.md`. Moving it would show as a
+modified applied migration. The other nine have **no** ledger row, so moving any of them would make
+the next `migrate deploy` RUN it: `t101b` (do not apply yet), `fact_table_uniqueness` (deletes
+duplicate rows), `league_max_pf_freeze`, the three `manager_psych_*`, `league_last_viewed_at`, and
+the two applied by hand but never recorded — `domain_os_facts` and
+`weekly_matchup_roster_id_text`.
+
 ## ✅ ALL SEVEN ARE APPLIED TO PRODUCTION (2026-08-31)
 
 Of the seven, `t101b` below is still parked. The three added 2026-09-02 are in
@@ -53,8 +88,9 @@ leave no trace in the mainline history, and nothing in the tooling notices.
 
 `yahoo_connection_identity` is recorded by hand with the real `sha256` of its
 `migration.sql` (`4b82763b…`), so a later `migrate deploy` matches and skips.
-Its directory deliberately stays here rather than moving to `prisma/migrations/`,
-per the note on that migration below. Everything else in this directory has been
+It stayed here while `schema.prisma` lagged production (the note on that migration
+below); the schema has since caught up, and it moved to `prisma/migrations/` on
+2026-10-03 — see the section above. Everything else in this directory has been
 applied and recorded in `_prisma_migrations` with the real `sha256` of its
 `migration.sql`, so a later `migrate deploy` matches and skips rather than
 re-running:
@@ -412,6 +448,10 @@ production, not by the record: all three token columns read `is_nullable=YES`,
 `userId` exists, `YahooConnection_userId_key` exists, and
 `YahooConnection_userId_fkey` exists. It is the most recent row in
 `_prisma_migrations` (169 rows).
+
+✅ **RESOLVED BY 2026-10-03 — `schema.prisma` now declares the three token columns nullable
+and `userId String? @unique`, and the migration moved to `prisma/migrations/`.** The paragraph
+below is the risk as it stood:
 
 🛑 **`schema.prisma` HAS NOT CAUGHT UP, AND THAT IS THE LIVE RISK.** The model still
 declares `accessToken`/`refreshToken` as `String` and `tokenExpiresAt` as
