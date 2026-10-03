@@ -18,13 +18,13 @@ import { registerAndLogin } from './helpers/auth-flow'
 const ENABLED = process.env.RUN_INTEL_HUB === '1'
 const E2E = { 'x-allfantasy-e2e': '1' }
 
-type Seeded = { leagueId: string; season: number; seededScoreIds: string[] }
+type Seeded = { leagueId: string; season: number; seededScoreIds: string[]; seededPlayerIds: string[] }
 let seeded: Seeded | null = null
 
 async function cleanup(request: APIRequestContext) {
   if (!seeded) return
   await request
-    .delete('/api/e2e/seed-g8-league', { headers: E2E, data: { leagueId: seeded.leagueId, season: seeded.season, seededScoreIds: seeded.seededScoreIds } })
+    .delete('/api/e2e/decision-os-proof-league', { headers: E2E, data: seeded })
     .catch(() => undefined)
   seeded = null
 }
@@ -45,7 +45,7 @@ test.describe('Commissioner Intelligence Hub @intel-hub', () => {
 
     let leagueId = ''
     await test.step('2. Self-seed a commissioner league (emits events)', async () => {
-      const res = await page.request.post('/api/e2e/seed-g8-league', { headers: E2E, data: { team: 'KC' } })
+      const res = await page.request.post('/api/e2e/decision-os-proof-league', { headers: E2E, data: { team: 'KC' } })
       expect(res.ok(), `seed failed (${res.status()})`).toBeTruthy()
       const body = (await res.json()) as Seeded
       seeded = body
