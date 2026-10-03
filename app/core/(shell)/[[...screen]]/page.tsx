@@ -93,6 +93,7 @@ import { getLineupReminderStatus } from '@/lib/core-app/lineupReminderStatus'
 import { getMatchupData } from '@/lib/core-app/matchup'
 import { buildMatchupStrip } from '@/lib/live/matchupStrip'
 import MatchupPulseBoard from '@/components/core-app/MatchupPulseBoard'
+import { MatchupPickerBlurb, MatchupPickerNotice } from '@/components/core-app/MatchupPickerCopy'
 import { getMatchupPulse } from '@/lib/core-app/matchupPulse'
 import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { getTradesData } from '@/lib/core-app/trades'
@@ -4440,22 +4441,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           <PickALeague
             tabKey="matchup"
             title="Matchup"
-            blurb="Pick a league for its full box score."
-            above={
-              matchupPulseFailed ? (
-                <div className="af-card" role="alert" style={{ padding: 16, marginBottom: 12 }}>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
-                    The all-leagues board did not load.
-                  </p>
-                  <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-                    Something failed on our side — your leagues are untouched. Open one below, or{' '}
-                    <a href="/core/matchup">try again</a>.
-                  </p>
-                </div>
-              ) : showAllLeagues ? (
-                <p><Link href="/core/matchup">Back to where you stand</Link></p>
-              ) : undefined
-            }
+            blurb={<MatchupPickerBlurb />}
+            above={matchupPulseFailed || showAllLeagues ? <MatchupPickerNotice failed={matchupPulseFailed} /> : undefined}
             issues={issues}
             leagues={rail}
           />

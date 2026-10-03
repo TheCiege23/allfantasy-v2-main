@@ -27,8 +27,11 @@ export type PickALeagueProps = {
   /** The /core segment this screen renders, e.g. 'waivers'. Rows link back to it. */
   tabKey: string
   title: string
-  /** Why this screen is per-league. Kept from the old empty state — it was correct. */
-  blurb: string
+  /**
+   * Why this screen is per-league. Kept from the old empty state — it was correct. A node, not only a
+   * string, so a caller can pass client copy that follows the language switch (see `MatchupPickerCopy`).
+   */
+  blurb: ReactNode
   issues: CoreIssue[]
   /**
    * `imageUrl` and `mark` are the rail's already-resolved crest and letter

@@ -12,6 +12,7 @@ import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { matchupConfidenceText, matchupReasonText } from '@/lib/core-app/matchupReasonText'
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { InfoTip } from '@/components/core-app/InfoTip'
 import type {
@@ -604,7 +605,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   if (!data.lineups.available) {
-    return <p className="af-mu-unavailable">{data.lineups.reason}</p>
+    return <p className="af-mu-unavailable">{matchupReasonText(data.lineups.reason, language)}</p>
   }
 
   const live = data.playerScoring.available
@@ -647,7 +648,7 @@ function LineupBoard({ data }: { data: MatchupData }) {
       <p className="af-mu-note af-mu-note--lead">
         {live
           ? language === 'es' ? `Puntos en vivo según ${data.playerScoring.data.source} — ${data.playerScoring.data.playersScored} jugadores registrados.` : `Live points as ${data.playerScoring.data.source} scored them — ${data.playerScoring.data.playersScored} players on file.`
-          : data.playerScoring.reason}
+          : matchupReasonText(data.playerScoring.reason, language)}
       </p>
       {/* The key for the per-player markers — only when one is on the board. */}
       {live && slots.some((s) => [s.you, s.opponent].some((c) => c?.gameState === 'live' || c?.gameState === 'upcoming')) ? (
@@ -934,7 +935,7 @@ export function Matchup({ data }: MatchupProps) {
             {copy(data.league.elimination === 'survivor_guillotine' ? 'Survivor Guillotine' : 'Guillotine')}
           </span>
         ) : (
-          <span className="af-mu-unavailable">{data.week.reason}</span>
+          <span className="af-mu-unavailable">{matchupReasonText(data.week.reason, language)}</span>
         )}
 
       </header>
@@ -1058,8 +1059,8 @@ export function Matchup({ data }: MatchupProps) {
                     what stops it being mistaken for a count of simulated seasons.
                   */}
                   <p className="af-mu-centre-why">
-                    {data.winProbability.data.detail} · {data.winProbability.data.confidence}{' '}
-                    {copy('confidence')}
+                    {matchupReasonText(data.winProbability.data.detail, language)} ·{' '}
+                    {matchupConfidenceText(data.winProbability.data.confidence, language)}
                   </p>
                 </>
               ) : (
@@ -1072,7 +1073,7 @@ export function Matchup({ data }: MatchupProps) {
                   <div className="af-mu-centre-dash af-num" aria-hidden>
                     —
                   </div>
-                  <p className="af-mu-centre-why">{data.winProbability.reason}</p>
+                  <p className="af-mu-centre-why">{matchupReasonText(data.winProbability.reason, language)}</p>
                 </>
               )}
 
@@ -1120,11 +1121,11 @@ export function Matchup({ data }: MatchupProps) {
               not in place of both crests.
             */}
             {data.sides.available ? null : (
-              <p className="af-mu-basis">{data.sides.reason}</p>
+              <p className="af-mu-basis">{matchupReasonText(data.sides.reason, language)}</p>
             )}
           </>
         ) : (
-          <p className="af-mu-unavailable af-mu-unavailable--block">{data.teams.reason}</p>
+          <p className="af-mu-unavailable af-mu-unavailable--block">{matchupReasonText(data.teams.reason, language)}</p>
         )}
       </section>
 
@@ -1165,7 +1166,7 @@ export function Matchup({ data }: MatchupProps) {
           ) : null}
           <li>
             <span className="af-mu-missing-key">{copy('Players yet to play')}</span>
-            <span className="af-mu-missing-why">{data.yetToPlay.reason}</span>
+            <span className="af-mu-missing-why">{matchupReasonText(data.yetToPlay.reason, language)}</span>
           </li>
           <li>
             <span className="af-mu-missing-key">{copy(data.projectedFinal.available && data.projectedFinal.data.model === 'best_ball_full_roster' ? 'Projected Best Ball final' : 'Projected final')}</span>
@@ -1194,7 +1195,7 @@ export function Matchup({ data }: MatchupProps) {
                 ) : null}
               </span>
             ) : (
-              <span className="af-mu-missing-why">{data.projectedFinal.reason}</span>
+              <span className="af-mu-missing-why">{matchupReasonText(data.projectedFinal.reason, language)}</span>
             )}
           </li>
         </ul>
