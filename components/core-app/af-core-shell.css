@@ -3170,3 +3170,213 @@ html[data-mode='light'] .af-core {
     padding-bottom: calc(var(--af-tabbar-height, calc(56px + env(safe-area-inset-bottom, 0px))) + 18px + 68px + 20px);
   }
 }
+
+/*
+ * ── Tablet PORTRAIT (721–900px): the phone's bottom bar instead of the side menu ─
+ *
+ * User's decision, 2026-10-03. Measured on the live site at 768×1024: rail 68px + nav 208px +
+ * gutters left My Team 429px of a 768px screen (56%), with names wrapping and the board's rows
+ * twice their landscape height. With the nav folded into the bar the page gets ~650px.
+ *
+ * 🛑 EVERY SCREEN MUST STAY REACHABLE — THAT IS WHY THE 2026-09-25 TABLET BLOCK ABOVE EXISTS.
+ * Between 721 and 1080 a tablet once had no nav at all: nav hidden at ≤1080, bar only at ≤720.
+ * This band hides the nav ONLY where it also shows the bar, and the bar's "More" opens the same
+ * sheet the phone uses, which lists every nav section. Landscape tablets (and anything above 900)
+ * keep the side menu, unchanged.
+ *
+ * ⚠ A NEW BLOCK, NOT A WIDENED ONE. The phone blocks that carry the bar and its sheet also carry
+ * the top-bar crest, the strip nav and the league-first bar; widening their queries would have
+ * leaked all of those onto tablets. These rules are copies of the bar's and the sheet's own, and
+ * every selector is scoped to the standard shell — league-first keeps its own layout.
+ *
+ * ⚠ `(orientation: portrait)` is what keeps a narrow DESKTOP window out of this: a browser
+ * dragged to 800px is still landscape and keeps its menu.
+ *
+ * Its own top-level block at end of file, per this stylesheet's convention.
+ */
+@media (min-width: 721px) and (max-width: 900px) and (orientation: portrait) {
+  :root:has(.af-core.af-shell:not([data-league-first='true'])) {
+    --af-fab-bottom: var(--af-fab-inset-phone);
+  }
+
+  .af-core.af-shell:not([data-league-first='true']):not([data-rail-open='true']) {
+    grid-template-columns: 68px minmax(0, 1fr);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-nav {
+    display: none;
+  }
+
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    background: color-mix(in srgb, var(--surface2) 92%, transparent);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--line);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-item {
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 5px 2px;
+    border-radius: 10px;
+    text-decoration: none;
+    color: var(--faint);
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-item[data-active='true'] {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-item:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-glyph {
+    position: relative;
+    font-size: 15px;
+    line-height: 1;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-dot {
+    position: absolute;
+    top: -3px;
+    right: -5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--bad);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-dot[data-tone='count'] {
+    background: var(--accent);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-tabbar-label {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.1;
+    text-align: center;
+  }
+
+  /* The last thing on every screen must clear the bar AND the chat button riding above it —
+     the phone block's reasoning, same arithmetic. */
+  .af-core.af-shell:not([data-league-first='true']) .af-content {
+    padding-bottom: calc(var(--af-fab-inset-phone, 102px) + 56px + 16px);
+  }
+
+  /* The "More" sheet — a bounded, centred card on a tablet rather than edge to edge. */
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 64;
+    border: 0;
+    background: rgba(2, 4, 12, 0.72);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more {
+    position: fixed;
+    left: 50%;
+    width: min(520px, calc(100vw - 20px));
+    transform: translateX(-50%);
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+    z-index: 65;
+    max-height: min(70dvh, 720px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--accent-line);
+    border-radius: 18px;
+    background: var(--surface2);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.58);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 14px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-head > span { min-width: 0; }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-head strong {
+    display: block;
+    margin-top: 4px;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-head button {
+    width: 44px;
+    height: 44px;
+    flex: none;
+    border: 1px solid var(--line2);
+    border-radius: 50%;
+    background: var(--chip);
+    color: var(--text);
+    font-size: 24px;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-list {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 10px;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-group + .af-mobile-more-group { margin-top: 14px; }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-group > .af-label {
+    display: block;
+    padding: 0 8px 6px;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-link {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0 12px;
+    border-radius: 11px;
+    color: var(--text2);
+    font-size: 14px;
+    font-weight: 750;
+    text-decoration: none;
+  }
+  .af-core.af-shell:not([data-league-first='true']) button.af-mobile-more-link {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-link[data-active='true'] {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-link b {
+    color: var(--accent);
+    font: 800 11px/1 var(--font-jetbrains-mono, ui-monospace, monospace);
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-icon {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    opacity: 0.75;
+  }
+  .af-core.af-shell:not([data-league-first='true']) .af-mobile-more-link[data-active='true'] .af-mobile-more-icon {
+    opacity: 1;
+  }
+}
