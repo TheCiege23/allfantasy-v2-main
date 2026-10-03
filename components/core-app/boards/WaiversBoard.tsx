@@ -510,7 +510,9 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
             id="af-wv-board"
             label={`${sports.length > 0 ? 'NFL · ' : ''}${data.rows.length} ${data.rows.length === 1 ? 'league' : 'leagues'} · ranked by lineup gain`}
             count={
-              data.at ? `week ${data.at.week}, ${data.at.season}` : null
+              data.at
+                ? `week ${data.at.week}, ${data.at.season}${data.pricedOn === 'next_week' ? ' · next week' : ''}`
+                : null
             }
           />
           <WaiversDueSoon
@@ -544,6 +546,13 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
           Every projection here is re-scored under that league&apos;s own scoring settings
           {data.at ? ` for week ${data.at.week} of ${data.at.season}` : ''}, which is what makes
           the lineup-gain column comparable between leagues.
+          {/*
+            Next week's board is said in words, not only in the header: it is published days ahead,
+            and a reader should know these numbers will move before kickoff.
+          */}
+          {data.pricedOn === 'next_week' && data.at
+            ? ` A claim made now is for week ${data.at.week}, so these are Sleeper's week ${data.at.week} projections — published ahead, and they move as injuries and depth charts settle.`
+            : ''}
           {data.marketLeagues > 0
             ? ` Rostered and started rates are measured across ${data.marketLeagues.toLocaleString()} leagues on AllFantasy.`
             : ' Rostered and started rates are withheld — too few leagues to measure them over.'}

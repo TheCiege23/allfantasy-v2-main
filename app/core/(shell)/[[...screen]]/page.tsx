@@ -103,6 +103,7 @@ import { loadWaiverEdgeForScreen } from '@/lib/competitive-edge/waiverEdgeLoader
 import { loadScoutEdgeForScreen } from '@/lib/competitive-edge/scoutEdgeLoader'
 import { getWaiversBoard } from '@/lib/core-app/waiversBoard'
 import { readWaiversBoardSummary } from '@/lib/core-app/waiversBoardSummary'
+import { resolveWaiverClaimWeek } from '@/lib/core-app/waiverClaimWeek'
 import { readPortfolioSummary } from '@/lib/core-app/portfolioSummary'
 import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
@@ -2747,15 +2748,23 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const waiversBoardOnSummary = isEnabled('sports-os.screen-summaries', userId, DEFAULT_ROLLOUTS)
 
+  /*
+   * The week a claim made NOW is for. Once most of the week being played has kicked off, that is
+   * next week — and the board prices next week's projections if they are on file. Only the NEXT
+   * week is passed: the current week keeps the board's original cache key.
+   */
+  const waiversClaim = wantsWaiversBoard ? await resolveWaiverClaimWeek(Date.now()).catch(() => null) : null
+  const waiversClaimWeek = waiversClaim?.basis === 'next' ? waiversClaim.week : null
+
   const waiversBoardFresh =
     wantsWaiversBoard && waiversBoardOnSummary
-      ? await readWaiversBoardSummary(userId, leagues as unknown as Dash34LeagueRow[]).catch(() => null)
+      ? await readWaiversBoardSummary(userId, leagues as unknown as Dash34LeagueRow[], waiversClaimWeek).catch(() => null)
       : null
 
   const waiversBoard = wantsWaiversBoard
     ? waiversBoardOnSummary
       ? (waiversBoardFresh?.data ?? null)
-      : await getWaiversBoard(userId).catch(() => null)
+      : await getWaiversBoard(userId, { week: waiversClaimWeek }).catch(() => null)
     : null
 
   /*
