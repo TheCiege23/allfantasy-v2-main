@@ -21,6 +21,7 @@ describe('recorded regular-season openers', () => {
     ['NHL', 2026, '2026-09-29T00:00:00.000Z'],
     ['NBA', 2026, '2026-10-20T00:00:00.000Z'],
     ['MLB', 2026, '2026-03-25T00:00:00.000Z'],
+    ['MLB', 2027, '2027-03-24T00:00:00.000Z'],
   ])('%s %i opens on %s', (sport, season, expected) => {
     expect(resolveDailySportSeasonStart(sport, season)).toBe(expected)
   })
@@ -34,7 +35,7 @@ describe('recorded regular-season openers', () => {
     // mis-assigns every game in the season.
     expect(resolveDailySportSeasonStart('NHL', 2027)).toBeNull()
     expect(resolveDailySportSeasonStart('NBA', 2030)).toBeNull()
-    expect(resolveDailySportSeasonStart('MLB', 2027)).toBeNull()
+    expect(resolveDailySportSeasonStart('MLB', 2028)).toBeNull()
     expect(resolveDailySportSeasonStart('NFL', 2026)).toBeNull()
     expect(resolveDailySportSeasonStart(null, 2026)).toBeNull()
     expect(resolveDailySportSeasonStart('NHL', null)).toBeNull()
@@ -43,7 +44,7 @@ describe('recorded regular-season openers', () => {
   it('can report what it does know', () => {
     expect(knownDailySportSeasons('NHL')).toEqual([2026])
     expect(knownDailySportSeasons('NCAAB')).toEqual([2026])
-    expect(knownDailySportSeasons('MLB')).toEqual([2026])
+    expect(knownDailySportSeasons('MLB')).toEqual([2026, 2027])
     expect(knownDailySportSeasons('NFL')).toEqual([])
   })
 })

@@ -130,6 +130,36 @@ describe('syncRiSeasonSchedule', () => {
     expect(db.sportsDataCache.upsert).not.toHaveBeenCalled()
   })
 
+  it('does not publish a partial MLB season as a complete weekly slate', async () => {
+    h.riFetchRows.mockResolvedValue(ok([
+      { game_ID: '20270325-1-2', game_time: '2027-03-25T23:00:00Z', season_type: 'Regular Season', status: 'scheduled' },
+    ]))
+    const { db } = memoryCache()
+    const result = await syncRiSeasonSchedule({ sport: 'MLB', season: 2027, db: db as never })
+    expect(result.error).toMatch(/expected at least 2430/)
+    expect(db.sportsDataCache.upsert).not.toHaveBeenCalled()
+    expect(db.sportsDataCache.deleteMany).not.toHaveBeenCalled()
+  })
+
+  it('publishes a complete MLB season for the week finalizer without reading SportsGame', async () => {
+    const mlbRows = Array.from({ length: 2430 }, (_, i) => ({
+      game_ID: `20270325-${i + 1}-2`, game_time: '2027-03-25T23:00:00Z',
+      season_type: 'Regular Season', status: 'scheduled',
+      home_team: 'New York Yankees', away_team: 'Boston Red Sox',
+    }))
+    h.riFetchRows.mockResolvedValue(ok(mlbRows))
+    const { db } = memoryCache()
+    const synced = await syncRiSeasonSchedule({ sport: 'MLB', season: 2027, db: db as never })
+    expect(synced).toMatchObject({ fetched: true, games: 2430, days: 1 })
+    const sportsGame = { findMany: vi.fn() }
+    const slate = await readWeekSlate({ ...db, sportsGame } as never, {
+      sport: 'MLB', season: 2027, week: 1, seasonType: 'regular',
+      dateWindow: { start: new Date('2027-03-24T00:00:00Z'), end: new Date('2027-03-31T00:00:00Z') },
+    })
+    expect(slate).toMatchObject({ games: 2430, unfinished: 2430, source: 'rolling_insights_schedule' })
+    expect(sportsGame.findMany).not.toHaveBeenCalled()
+  })
+
   it('fetches the season that started this autumn, or last year before August', () => {
     expect(currentScheduleSeason(new Date('2026-09-24T12:00:00Z'))).toBe(2026)
     expect(currentScheduleSeason(new Date('2027-02-10T12:00:00Z'))).toBe(2026)

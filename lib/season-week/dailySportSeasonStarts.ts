@@ -48,22 +48,19 @@ const REGULAR_SEASON_START_UTC: Readonly<Record<string, Readonly<Record<number, 
     2026: '2026-10-20T00:00:00.000Z',
   },
   // MLB's published 2026 Opening Night was March 25 (US Eastern). Production SportsGame has
-  // one game on that Eastern day, followed by the March 26 slate. This anchors historical
-  // scoring windows; it does not by itself certify MLB as season-capable. The first week of
-  // player_game_stats still needs a March 25–31 backfill before that gate can be widened.
+  // one game on that Eastern day, followed by the March 26 slate. The March 25–31 player stats
+  // were backfilled in production. MLB announced March 24 as 2027 Opening Night; the matchup
+  // is still TBD, so the current game feed starts March 25. Anchor on the announced opener so
+  // the eventual Opening Night game lands in week 1 when the feed publishes it.
   MLB: {
     2026: '2026-03-25T00:00:00.000Z',
+    2027: '2027-03-24T00:00:00.000Z',
   },
   // The first 2026-27 NCAAB game in SportsGame (espn_live; measured 2026-09-24). Opening day is
   // the first Monday of November. Weeks run Monday-to-Sunday from here.
   NCAAB: {
     2026: '2026-11-02T00:00:00.000Z',
   },
-  /*
-   * MLB is keyed by its calendar year. Add the 2027 regular-season opener only after the published
-   * schedule is corroborated by production game rows. Until then 2027 weeks decline with
-   * `season_start_unknown` rather than borrowing 2026's anchor.
-   */
   // SOCCER (EPL + La Liga + Serie A, one pool): the Friday of the first weekend — La Liga opened Sat
   // 15 Aug 2026, the Premier League Fri 21 Aug, Serie A Sat 22 Aug (Rolling Insights season schedules,
   // fixtures/schedule-season.SOCCER.*.json; TheSportsDB's EPL rows in SportsGame agree on the 21st).
