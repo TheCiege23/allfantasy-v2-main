@@ -1590,7 +1590,7 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
 export function MyTeam({ data }: MyTeamProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
-  const [decisionNow, setDecisionNow] = useState(() => data.lock.available ? data.lock.data.asOf ?? Date.now() : Date.now())
+  const [decisionNow, setDecisionNow] = useState(() => data.lock?.available ? data.lock.data.asOf ?? Date.now() : Date.now())
   useEffect(() => {
     setDecisionNow(Date.now())
     const timer = setInterval(() => setDecisionNow(Date.now()), 30_000)
