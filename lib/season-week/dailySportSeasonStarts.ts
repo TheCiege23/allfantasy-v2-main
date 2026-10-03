@@ -1,5 +1,5 @@
 /**
- * Day-level regular-season start dates for the DAILY sports (NBA, NHL).
+ * Day-level regular-season start dates for the DAILY sports.
  *
  * ── Why this file exists rather than a table ────────────────────────────────
  *
@@ -47,16 +47,22 @@ const REGULAR_SEASON_START_UTC: Readonly<Record<string, Readonly<Record<number, 
   NBA: {
     2026: '2026-10-20T00:00:00.000Z',
   },
+  // MLB's published 2026 Opening Night was March 25 (US Eastern). Production SportsGame has
+  // one game on that Eastern day, followed by the March 26 slate. This anchors historical
+  // scoring windows; it does not by itself certify MLB as season-capable. The first week of
+  // player_game_stats still needs a March 25–31 backfill before that gate can be widened.
+  MLB: {
+    2026: '2026-03-25T00:00:00.000Z',
+  },
   // The first 2026-27 NCAAB game in SportsGame (espn_live; measured 2026-09-24). Opening day is
   // the first Monday of November. Weeks run Monday-to-Sunday from here.
   NCAAB: {
     2026: '2026-11-02T00:00:00.000Z',
   },
   /*
-   * MLB: NOTHING RECORDED ON PURPOSE. MLB's season is keyed by its own calendar year (2027 = the
-   * 2027 season). Add the 2027 regular-season opener here once MLB publishes it, checked against
-   * the schedule rows the same two-source way as the dates above — never guessed. Until then every
-   * MLB week declines with `season_start_unknown`, which is the safe failure.
+   * MLB is keyed by its calendar year. Add the 2027 regular-season opener only after the published
+   * schedule is corroborated by production game rows. Until then 2027 weeks decline with
+   * `season_start_unknown` rather than borrowing 2026's anchor.
    */
   // SOCCER (EPL + La Liga + Serie A, one pool): the Friday of the first weekend — La Liga opened Sat
   // 15 Aug 2026, the Premier League Fri 21 Aug, Serie A Sat 22 Aug (Rolling Insights season schedules,
