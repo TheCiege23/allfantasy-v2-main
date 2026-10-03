@@ -538,8 +538,9 @@ function LineupBoard({ data }: { data: MatchupData }) {
   const theirs = columnTotal(slots, 'opponent', live)
   const yoursAf = afEngineColumnTotal(slots, 'you')
   const theirsAf = afEngineColumnTotal(slots, 'opponent')
-  // Before kickoff each cell carries two projections: the provider's (API) and AllFantasy's (AF).
-  const heading = live ? 'PTS' : 'API · AF'
+  // Before kickoff each cell carries two projections: Sleeper's (SLPR) and AllFantasy's (AF).
+  // "SLPR/AF", not "API · AF" (2026-10-03): named for who made it, and short enough for the 62px column.
+  const heading = live ? 'PTS' : 'SLPR/AF'
   /* Slot-by-slot tally — only slots where both sides have a number count. */
   const tally = { you: 0, opponent: 0, even: 0 }
   for (const s of slots) {

@@ -145,7 +145,7 @@ function lineupSentence(season: number, week: number, pair: LineupProjectionPair
   if (elimination || pair.unpaired) {
     const parts = [
       afYou ? `AF (AllFantasy's own engine) ${afYou}` : null,
-      apiYou ? `API (the provider's, Sleeper) ${apiYou}` : null,
+      apiYou ? `Sleeper (Sleeper's own projection) ${apiYou}` : null,
     ].filter(Boolean)
     return ` This week's lineup projection for their team (player projections summed over the lineup as set, under this league's rules): ${parts.join('; ')}.`
   }
@@ -153,7 +153,7 @@ function lineupSentence(season: number, week: number, pair: LineupProjectionPair
   const apiThem = sideTotal(pair.them, 'api')
   const parts = [
     afYou || afThem ? `AF (AllFantasy's own engine) them ${afYou ?? 'not available'} vs opponent ${afThem ?? 'not available'}` : null,
-    apiYou || apiThem ? `API (the provider's, Sleeper) them ${apiYou ?? 'not available'} vs opponent ${apiThem ?? 'not available'}` : null,
+    apiYou || apiThem ? `Sleeper (Sleeper's own projection) them ${apiYou ?? 'not available'} vs opponent ${apiThem ?? 'not available'}` : null,
   ].filter(Boolean)
   return (
     ` This week's LINEUP projections (player projections summed over the lineups as set, under this league's rules — a different measure from the team averages above): ${parts.join('; ')}.` +

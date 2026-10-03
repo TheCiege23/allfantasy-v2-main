@@ -234,7 +234,7 @@ describe('buildMatchupPreviewContext — AF and API lineup projections', () => {
   it('gives both sources, labelled, for the league in scope — and says not to average them', async () => {
     const out = await buildMatchupPreviewContext({ leagueId: 'L1', userId: 'u1' }, withLineups(pair()))
     expect(out).toContain("AF (AllFantasy's own engine) them 121.5 vs opponent 115.0")
-    expect(out).toContain("API (the provider's, Sleeper) them 118.2 vs opponent 112.4")
+    expect(out).toContain("Sleeper (Sleeper's own projection) them 118.2 vs opponent 112.4")
     expect(out).toContain('a different measure from the team averages above')
     expect(out).toContain('do not average them or turn them into a win probability')
     // The week model's own line is still there, first.

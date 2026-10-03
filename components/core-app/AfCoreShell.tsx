@@ -38,6 +38,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 import {
@@ -1145,7 +1146,7 @@ function RailSide({
       data-side={them ? 'them' : undefined}
       data-partial={partial ? 'true' : undefined}
       title={projection
-        ? `Weekly baseline projection — API: provider (Sleeper) from ${projection.pricedFrom} of ${projection.starterCount} starters${
+        ? `Weekly baseline projection — ${PROJECTION_PROVIDER_LABEL} (SLPR): ${PROJECTION_PROVIDER_LABEL}’s projection from ${projection.pricedFrom} of ${projection.starterCount} starters${
             projection.afProjected == null
               ? ', generic PPR because this league’s scoring could not be re-scored'
               : ', re-scored with this league’s settings'
@@ -1919,7 +1920,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       <span className="af-rail-row-labels" aria-hidden>
                         <span />
                         <span>{m.source === 'history_fallback' ? 'LAST' : 'SCORE'}</span>
-                        <span title="Provider (Sleeper) projection">API</span>
+                        {/*
+                          "SLPR", not "API" (2026-10-03) and not "SLEEPER": the column is 38px of
+                          11px monospace, where the full word measures ~52px. The tooltip spells it.
+                        */}
+                        <span title={`${PROJECTION_PROVIDER_LABEL} projection`}>SLPR</span>
                         <span title="AllFantasy engine projection">AF</span>
                       </span>
                       <RailSide
