@@ -136,10 +136,17 @@ function points(n: number): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
 
+/*
+ * ⚠ "ON THE PLAYOFF LINE" READ AS A CONTRADICTION beside "Outside the playoffs" on the live page: the
+ * zone is where the tiebreak puts the team, games-back is the record alone, and a team level on record
+ * with the last playoff spot can sit either side of it. Say what the number is — tied, behind, ahead —
+ * in games, so the two lines read as two facts.
+ */
 function gamesBackText(gb: number): string {
-  if (gb > 0) return `${gb} GB`
-  if (gb < 0) return `${-gb} clear of the cut`
-  return 'on the playoff line'
+  const games = (n: number) => `${n} ${n === 1 ? 'game' : 'games'}`
+  if (gb > 0) return `${games(gb)} back of a playoff spot`
+  if (gb < 0) return `${games(-gb)} clear of the cut`
+  return 'tied on record with the last playoff spot'
 }
 
 /** Last five head-to-head results as chips — the letters carry the meaning, the colour only repeats it. */

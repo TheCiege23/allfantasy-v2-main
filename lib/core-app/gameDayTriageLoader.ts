@@ -166,12 +166,11 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
    * teams_rosters scope updates every row it writes), so it is when we last saw the lineup.
    */
   let oldestRosterMs: number | null = null
+  const rosterAges: Array<{ leagueId: string; leagueName: string; asOf: string }> = []
   const emptyByLeague = new Map<string, number>()
   for (const r of readable) {
     if (startersByLeague.has(r.leagueId)) continue
     if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
-    const at = r.updatedAt ? new Date(r.updatedAt).getTime() : NaN
-    if (Number.isFinite(at) && (oldestRosterMs === null || at < oldestRosterMs)) oldestRosterMs = at
     const pd = (r.playerData ?? {}) as Record<string, unknown>
     const league = leagueById.get(r.leagueId)
     if (!league) continue
@@ -210,12 +209,24 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     const isEspn = rosterIdSpaceOf(platformOf.get(r.leagueId)) === 'espn'
     const starters = isEspn ? raw.map((id) => espnMap.get(id) ?? '').filter(Boolean) : raw
     startersByLeague.set(r.leagueId, starters)
+    /*
+     * 🛑 THE AGE IS TAKEN HERE, AFTER EVERY SKIP — IT WAS TAKEN BEFORE THEM. A league skipped as complete,
+     * pre-draft, best ball or chopped still set "Lineups as of …", so a finished season's roster made the
+     * stamp read "Lineups as of 101d ago" over a list of lineups synced minutes earlier (War Room, live,
+     * 2026-10-03). The stamp describes the lineups READ, and only those.
+     */
+    const at = r.updatedAt ? new Date(r.updatedAt).getTime() : NaN
+    if (Number.isFinite(at)) {
+      if (oldestRosterMs === null || at < oldestRosterMs) oldestRosterMs = at
+      rosterAges.push({ leagueId: r.leagueId, leagueName: league.name ?? 'League', asOf: new Date(at).toISOString() })
+    }
   }
   const coverage = {
     leaguesNotRead,
     bestBallLeagues: bestBall.size,
     unsupportedLeagues: otherLeagues.size,
     rostersAsOf: oldestRosterMs === null ? null : new Date(oldestRosterMs).toISOString(),
+    rosterAges,
   }
   const leagueRef = (leagueId: string): TriageLeague => {
     const league = leagueById.get(leagueId)

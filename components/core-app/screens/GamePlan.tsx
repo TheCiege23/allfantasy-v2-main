@@ -144,6 +144,14 @@ function LeagueLineupLink({ league }: { league: TriageLeague }) {
   )
 }
 
+/** A league whose lineup is older than this is named on its own rather than dating the list. */
+const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000
+
+function daysAgo(nowMs: number, iso: string): string {
+  const d = Math.floor((nowMs - new Date(iso).getTime()) / 86_400_000)
+  return `${d}d ago`
+}
+
 /**
  * The week in one line: how much there is to fix, across how many leagues, and when the first of it
  * locks — what a manager wants before reading a single row.
@@ -180,6 +188,18 @@ function Summary({
     data.leaguesNotRead ? `${data.leaguesNotRead} not read — more than this list checks at once` : null,
   ].filter(Boolean)
   const asOfMs = data.rostersAsOf ? new Date(data.rostersAsOf).getTime() : NaN
+  /*
+   * ⚠ ONE STALE LEAGUE MUST NOT DATE THE WHOLE LIST. The stamp is the oldest lineup read, by design (a
+   * newest-first stamp would say "just now" over a league last seen at 9am). But a single league that
+   * stopped syncing made all fifty read "as of 101d ago". So a league past STALE_AFTER_MS is NAMED, with
+   * its age, and the stamp describes the rest.
+   */
+  const nowMs = new Date(nowIso).getTime()
+  const ages = data.rosterAges ?? []
+  const stale = ages.filter((a) => nowMs - new Date(a.asOf).getTime() > STALE_AFTER_MS).sort((a, b) => a.asOf.localeCompare(b.asOf))
+  const fresh = ages.filter((a) => !stale.includes(a))
+  const freshOldest = fresh.length > 0 ? fresh.map((a) => a.asOf).sort()[0]! : null
+  const stampAsOf = stale.length > 0 && freshOldest ? freshOldest : (data.rostersAsOf ?? null)
 
   return (
     <section className="af-gp-summary" aria-label="This week at a glance">
@@ -200,7 +220,7 @@ function Summary({
         )}
         <div>
           <dt>First lock</dt>
-          <dd>{firstKickoff ? <Lock kickoff={firstKickoff} nowIso={nowIso} /> : <span className="af-gp-lock">—</span>}</dd>
+          <dd className="af-gp-stat-text">{firstKickoff ? <Lock kickoff={firstKickoff} nowIso={nowIso} /> : <span className="af-gp-lock">—</span>}</dd>
         </div>
       </dl>
       {/*
@@ -208,7 +228,20 @@ function Summary({
         claimed league through the collector and reloads. A lineup fixed on Sleeper a minute ago stops
         being flagged here — before, the only way was to wait for the next sync.
       */}
-      <RefreshLineups asOf={data.rostersAsOf ?? null} nowIso={nowIso} />
+      <RefreshLineups asOf={stampAsOf} nowIso={nowIso} />
+      {stale.length > 0 && fresh.length > 0 ? (
+        <p className="af-gp-summary-note af-gp-stale" role="note">
+          Not synced in over 3 days, so flags there may be out of date:{' '}
+          {stale.map((a, i) => (
+            <span key={a.leagueId}>
+              {i > 0 ? ', ' : ''}
+              <Link href={`/core/sync?league=${encodeURIComponent(a.leagueId)}`}>{a.leagueName}</Link>{' '}
+              <span className="af-num">({daysAgo(nowMs, a.asOf)})</span>
+            </span>
+          ))}
+          .
+        </p>
+      ) : null}
       {!Number.isFinite(asOfMs) || skipped.length > 0 ? (
         <p className="af-gp-summary-note">
           {!Number.isFinite(asOfMs) ? 'No lineup sync time on file.' : ''}

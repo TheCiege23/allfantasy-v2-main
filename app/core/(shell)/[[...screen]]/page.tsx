@@ -1876,12 +1876,20 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * ⚠ THE LOADERS BELOW SKIP WHAT A LOCKED VIEWER MAY NOT SEE. A lock card over data the page
    * already sent is a client-only gate; the screens' own locks only decide what is drawn.
    */
+  /*
+   * 🛑 'war-room' WAS MISSING, AND SCOUT'S COMPETITIVE EDGE NEVER LOADED FOR ANYONE. Scout's edge
+   * access is `corePaywall?.competitive_edge`; with no read here that is null for every viewer, so
+   * loadScoutEdgeForScreen returned null and Scout drew neither the counts nor a lock — a plan holder
+   * got nothing and no error. Found on the live page (2026-10-03), not by a test: the tests handed
+   * the access in directly. war-room-visual-guards now pins this list.
+   */
   const corePaywallRead =
     activeKey === 'players' ||
     activeKey === 'trades' ||
     activeKey === 'commissioner' ||
     activeKey === 'waivers' ||
-    activeKey === 'draft-hq'
+    activeKey === 'draft-hq' ||
+    activeKey === 'war-room'
       ? resolveCorePaywall(userId, { email: viewerEmail, now })
       : Promise.resolve(null)
 

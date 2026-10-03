@@ -111,6 +111,16 @@
   font-size: 13px;
 }
 
+/*
+ * ⚠ AND A SENTENCE WRAPS. The tile inherited the numbers' nowrap + ellipsis, and on the live page at an
+ * ~800px desktop pane it read "locks Sun 9:30a…" — the one fact the tile exists to give, cut off.
+ */
+.af-core .af-gp-stats dd.af-gp-stat-text,
+.af-core .af-gp-stats dd.af-gp-stat-text .af-gp-lock {
+  white-space: normal;
+  overflow: visible;
+}
+
 .af-core .af-gp-summary-note {
   margin: 0;
   font-size: 12px;
@@ -478,4 +488,9 @@
    * through it, which is a scroll trap. The cap stays; the trap goes.
    */
   overscroll-behavior: auto;
+}
+
+/* Stale leagues named under the stamp — each links to its Sync page, where a re-sync starts. */
+.af-core .af-gp-stale a {
+  color: var(--accent);
 }

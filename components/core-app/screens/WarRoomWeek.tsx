@@ -2,7 +2,7 @@ import Link from 'next/link'
 
 import '@/components/core-app/af-wr-week.css'
 import type { RailMatchup } from '@/lib/core-app/railMatchups'
-import type { WeekLineups } from '@/lib/core-app/weekLineups'
+import { lineupProjectionFor, type WeekLineups } from '@/lib/core-app/weekLineups'
 import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
 
 /**
@@ -27,14 +27,28 @@ export type WarRoomWeekLeague = { id: string; name: string }
 
 type Row = { league: WarRoomWeekLeague; m: RailMatchup; margin: number | null }
 
-/** You minus them: the live/final score once played, else the AF lineup projection, else the provider's. */
-function marginOf(m: RailMatchup): number | null {
+/**
+ * You minus them: the live/final score once played, else the AF lineup projection, else the provider's.
+ *
+ * 🛑 PROJECTIONS ONLY FOR THIS ROW'S OWN WEEK, through `lineupProjectionFor`. This read the rail's
+ * projections directly, and the rail's feed can hold a DIFFERENT week from a league's matchup — on the
+ * live page (2026-10-03) a league already on week 5 was ranked by week-4 projections, sorted to the top
+ * as the matchup you were losing worst, beside a "Not started" status. The helper refuses a total for
+ * the wrong week; WeekLineupLine already used it, so the line and the sort now agree.
+ */
+function marginOf(m: RailMatchup, lineups: WeekLineups): number | null {
   if (m.unpaired) return null
   if (m.scored) return m.yourScore - m.opponentScore
-  const pick = (p: RailMatchup['yourProjection']) => p?.afEngine ?? p?.afProjected ?? null
-  const you = pick(m.yourProjection)
-  const them = pick(m.opponentProjection)
-  return you != null && them != null ? you - them : null
+  const v = lineupProjectionFor(lineups, m.leagueId, m.season, m.week)
+  const pair = v?.af && v.af.you != null && v.af.them != null ? v.af : v?.api && v.api.you != null && v.api.them != null ? v.api : null
+  return pair ? pair.you! - pair.them! : null
+}
+
+/** The week most of your leagues are on — leagues can number their weeks differently. */
+function commonWeek(rows: ReadonlyArray<{ m: RailMatchup }>): number {
+  const counts = new Map<number, number>()
+  for (const r of rows) counts.set(r.m.week, (counts.get(r.m.week) ?? 0) + 1)
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]![0]
 }
 
 const pts = (n: number) => n.toFixed(1)
@@ -80,7 +94,7 @@ export function WarRoomWeek({
   const rows: Row[] = leagues
     .flatMap((league) => {
       const m = lineups.byLeague[league.id]
-      return m ? [{ league, m, margin: marginOf(m) }] : []
+      return m ? [{ league, m, margin: marginOf(m, lineups) }] : []
     })
     /*
      * Most behind first: this is the War Room, and the matchup you are losing is the one to look at.
@@ -92,7 +106,13 @@ export function WarRoomWeek({
     })
   if (rows.length === 0) return null
 
-  const week = rows[0]!.m.week
+  /*
+   * 🛑 THE HEADER TOOK `rows[0].m.week` — whichever league sorted first. On the live page that printed
+   * "Week 5 across your leagues" under Game Plan's "Week 4", with Your Week also saying week 4. It now
+   * names the week most leagues are on, and a league on another week says so on its own row.
+   */
+  const week = commonWeek(rows)
+  const otherWeek = rows.filter((r) => r.m.week !== week).length
   const behind = rows.filter((r) => r.margin != null && r.margin < -0.05).length
   const ahead = rows.filter((r) => r.margin != null && r.margin > 0.05).length
 
@@ -105,13 +125,17 @@ export function WarRoomWeek({
         <span className="af-wrw-note af-num">
           {rows.length} {rows.length === 1 ? 'matchup' : 'matchups'}
           {ahead + behind > 0 ? ` · ahead in ${ahead}, behind in ${behind}` : ''}
+          {otherWeek > 0 ? ` · ${otherWeek} on another week` : ''}
         </span>
       </header>
       <ul className="af-wrw-list">
         {rows.map(({ league, m, margin }) => (
           <li key={league.id}>
             <Link className="af-wrw-row" href={`${boardHref}?league=${encodeURIComponent(league.id)}`}>
-              <span className="af-wrw-league">{league.name}</span>
+              <span className="af-wrw-league">
+                {league.name}
+                {m.week !== week ? <span className="af-wrw-weektag af-num"> · week {m.week}</span> : null}
+              </span>
               <span className="af-wrw-vs">
                 {m.unpaired ? (m.yourTeam ?? 'Your team') : `${m.yourTeam ?? 'You'} vs ${m.opponentTeam ?? 'an unnamed team'}`}
               </span>
