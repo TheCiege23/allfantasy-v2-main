@@ -1788,3 +1788,8 @@
   color: var(--warn);
   font-weight: 700;
 }
+
+/* This week's score on each row (2026-10-03). Tone only on the word and the numbers; level stays quiet. */
+.af-core .af-bd-score { font-variant-numeric: tabular-nums; }
+.af-core .af-bd-score[data-lead='ahead'] { color: var(--good); font-weight: 700; }
+.af-core .af-bd-score[data-lead='behind'] { color: var(--bad); font-weight: 700; }
