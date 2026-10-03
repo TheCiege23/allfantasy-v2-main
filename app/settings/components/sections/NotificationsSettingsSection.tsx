@@ -54,7 +54,7 @@ export function NotificationsSettingsSection({
   profile: SettingsProfile
   onRefetch: () => void
 }) {
-  const { t } = useLanguage()
+  const { t, tInterpolate } = useLanguage()
   const resolved = resolveNotificationPreferences(profile?.notificationPreferences as NotificationPreferences | null)
   const [prefs, setPrefs] = useState<NotificationPreferences>(resolved)
   const [expandedCategory, setExpandedCategory] = useState<NotificationCategoryId | null>("matchup_results")
@@ -174,7 +174,7 @@ export function NotificationsSettingsSection({
   const handleSave = async () => {
     // A zero-width quiet-hours window is "off" server-side; refuse to save one that looks on.
     if (prefs.quietHours?.enabled && (prefs.quietHours.startHour ?? 22) === (prefs.quietHours.endHour ?? 7)) {
-      setSaveError("Quiet hours need two different hours.")
+      setSaveError(t("settings.notifications.quietHoursSameHourError"))
       return
     }
     setSaving(true)
@@ -188,7 +188,7 @@ export function NotificationsSettingsSection({
       setRemoteUpdatePending(false)
       setLastLoadedFingerprint(getNotificationPreferencesFingerprint(prefs))
       onRefetch()
-    } else setSaveError(result.error ?? "Failed to save")
+    } else setSaveError(result.error ?? t("settings.notifications.saveFailed"))
   }
 
   const handleReset = () => {
@@ -235,16 +235,18 @@ export function NotificationsSettingsSection({
     if (!result.ok) {
       if (result.rateLimited) {
         setTestResultTone("error")
-        setTestResultMessage("Rate limited. Please wait before sending another test.")
+        setTestResultMessage(t("settings.notifications.testRateLimited"))
         return
       }
       if ((result.blockedReasons?.length ?? 0) > 0) {
         setTestResultTone("info")
-        setTestResultMessage(`No test sent. Blocked by: ${(result.blockedReasons ?? []).join(", ")}.`)
+        setTestResultMessage(
+          tInterpolate("settings.notifications.testBlocked", { reasons: (result.blockedReasons ?? []).join(", ") }),
+        )
         return
       }
       setTestResultTone("error")
-      setTestResultMessage(result.error ?? "Failed to send test notification.")
+      setTestResultMessage(result.error ?? t("settings.notifications.testFailed"))
       return
     }
 
@@ -340,7 +342,7 @@ export function NotificationsSettingsSection({
         data-testid="notifications-quiet-hours-card"
       >
         <label className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-sm font-medium text-[var(--text)]">Quiet hours</span>
+          <span className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.quietHours")}</span>
           <input
             type="checkbox"
             role="switch"
@@ -364,14 +366,15 @@ export function NotificationsSettingsSection({
           />
         </label>
         <p className="text-xs text-[var(--muted)]">
-          Hold back phone alerts overnight. Anything that arrives still shows up in
-          Notifications — this only stops it buzzing.
+          {t("settings.notifications.quietHoursHint")}
         </p>
         {prefs.quietHours?.enabled ? (
           <div className="flex flex-wrap items-center gap-3 pt-1">
             {(["startHour", "endHour"] as const).map((field) => (
               <label key={field} className="flex items-center gap-2 text-xs text-[var(--muted)]">
-                {field === "startHour" ? "From" : "Until"}
+                {field === "startHour"
+                  ? t("settings.notifications.quietHoursFrom")
+                  : t("settings.notifications.quietHoursUntil")}
                 <select
                   value={prefs.quietHours?.[field] ?? (field === "startHour" ? 22 : 7)}
                   onChange={(e) => {
@@ -417,7 +420,7 @@ export function NotificationsSettingsSection({
                 }}
                 className="h-3.5 w-3.5 rounded accent-[var(--accent-cyan)]"
               />
-              Still allow urgent alerts
+              {t("settings.notifications.quietHoursAllowUrgent")}
             </label>
           </div>
         ) : null}
@@ -430,14 +433,14 @@ export function NotificationsSettingsSection({
             */}
             {(prefs.quietHours.startHour ?? 22) === (prefs.quietHours.endHour ?? 7) ? (
               <p role="alert" className="text-xs text-[#fb7185]" data-testid="quiet-hours-same-hour">
-                From and Until are the same hour, so quiet hours would never run. Pick two different hours.
+                {t("settings.notifications.quietHoursSameHour")}
               </p>
             ) : null}
             {/* The window runs in the profile timezone; with none set the server falls back to its own clock. */}
             <p className="text-xs text-[var(--muted)]" data-testid="quiet-hours-zone">
               {profile?.timezone
-                ? `Times are in ${profile.timezone.replace(/_/g, " ")}. Change it in Preferences.`
-                : "No timezone set, so these hours run on server time (UTC). Set your timezone in Preferences."}
+                ? tInterpolate("settings.notifications.quietHoursZone", { zone: profile.timezone.replace(/_/g, " ") })
+                : t("settings.notifications.quietHoursNoZone")}
             </p>
           </>
         ) : null}
@@ -551,7 +554,7 @@ export function NotificationsSettingsSection({
         <p className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.testTitle")}</p>
         <div className="flex flex-wrap items-center gap-2">
           <select
-            aria-label="Notification test category"
+            aria-label={t("settings.notifications.testCategoryAria")}
             value={testCategory}
             onChange={(e) => setTestCategory(e.target.value as NotificationCategoryId)}
             className="w-full min-w-0 max-w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)] sm:w-auto"
@@ -588,15 +591,15 @@ export function NotificationsSettingsSection({
 
       <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--panel2)] p-4">
         <div>
-          <p className="text-sm font-medium text-[var(--text)]">Chimmy alert controls</p>
+          <p className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.chimmyTitle")}</p>
           <p className="mt-1 text-xs text-[var(--muted)]">
-            Tune Chimmy alert frequency, muted categories, and channel-level delivery without leaving settings.
+            {t("settings.notifications.chimmyHint")}
           </p>
         </div>
         <ChimmyAlertPreferencesPanel />
         <div className="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2">
           <label className="flex flex-wrap items-center justify-between gap-2 text-sm">
-            <span className="text-[var(--text)]">Enable Chimmy global keyboard shortcuts</span>
+            <span className="text-[var(--text)]">{t("settings.notifications.chimmyShortcuts")}</span>
             <input
               type="checkbox"
               role="switch"
@@ -606,7 +609,12 @@ export function NotificationsSettingsSection({
               data-testid="chimmy-shortcuts-toggle"
             />
           </label>
-          <p className="mt-1 text-xs text-[var(--muted)]">Shortcuts: <kbd className="rounded border border-[var(--border)] px-1 py-0.5">/</kbd> and <kbd className="rounded border border-[var(--border)] px-1 py-0.5">Ctrl/Cmd+Shift+K</kbd></p>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            {t("settings.notifications.shortcutsLabel")}{" "}
+            <kbd className="rounded border border-[var(--border)] px-1 py-0.5">/</kbd>{" "}
+            {t("settings.notifications.shortcutsAnd")}{" "}
+            <kbd className="rounded border border-[var(--border)] px-1 py-0.5">Ctrl/Cmd+Shift+K</kbd>
+          </p>
         </div>
       </div>
 
@@ -623,7 +631,12 @@ export function NotificationsSettingsSection({
           aria-live="polite"
           data-tone={saveError ? "error" : savedFlash && !dirty ? "saved" : undefined}
         >
-          {saveError ?? (dirty ? "You have unsaved changes." : savedFlash ? "✓ Notification settings saved." : "")}
+          {saveError ??
+            (dirty
+              ? t("settings.notifications.unsavedChanges")
+              : savedFlash
+                ? t("settings.notifications.savedFlash")
+                : "")}
         </p>
         {dirty ? (
           <button
@@ -633,7 +646,7 @@ export function NotificationsSettingsSection({
             className="ns-btn-ghost"
             data-testid="notifications-discard-button"
           >
-            Discard
+            {t("settings.notifications.discard")}
           </button>
         ) : null}
         <button

@@ -1,7 +1,10 @@
 "use client"
 
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+
 /** A load failure with its own way out: the message and a button that refetches just that card. */
 export function RetryNotice({ message, onRetry, testId }: { message: string; onRetry: () => void; testId: string }) {
+  const { t } = useOptionalLanguage()
   return (
     <div className="flex flex-wrap items-center gap-3" role="alert">
       <p className="text-sm" style={{ color: "var(--muted)" }}>
@@ -14,7 +17,7 @@ export function RetryNotice({ message, onRetry, testId }: { message: string; onR
         style={{ borderColor: "var(--accent-cyan)", color: "var(--text)" }}
         data-testid={testId}
       >
-        Try again
+        {t("settings.tryAgain")}
       </button>
     </div>
   )

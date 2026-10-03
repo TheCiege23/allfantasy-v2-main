@@ -19,6 +19,11 @@ export type ConfirmRequest = {
   title: string
   body?: ReactNode
   confirmLabel: string
+  /**
+   * The caller's translated "Cancel". Passed in rather than read from useLanguage here, because
+   * `components/core-app/import/ConnectedPlatforms` opens this dialog outside Settings too.
+   */
+  cancelLabel?: string
   /** Defaults to "danger": every current use removes a connection. */
   tone?: "danger" | "default"
 }
@@ -149,7 +154,7 @@ function ConfirmDialog({
             className="ns-btn-ghost"
             data-testid="settings-confirm-cancel"
           >
-            Cancel
+            {request.cancelLabel ?? "Cancel"}
           </button>
           <button
             type="button"

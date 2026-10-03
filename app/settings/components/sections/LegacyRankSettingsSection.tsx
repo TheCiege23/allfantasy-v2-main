@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { Trophy, Medal, Crown, Users, CalendarDays } from "lucide-react"
 import { RetryNotice } from "./RetryNotice"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 
 /**
  * Legacy (rank / XP / career / achievements) — READ-ONLY.
@@ -51,6 +52,8 @@ const num = (v: unknown): number | null =>
   v == null ? null : Number.isFinite(Number(v)) ? Number(v) : null
 
 export function LegacyRankSettingsSection() {
+  // Optional: this section is rendered on its own in tests, outside any LanguageProviderClient.
+  const { t, tInterpolate } = useOptionalLanguage()
   const [rank, setRank] = useState<RankData | null>(null)
   const [achievements, setAchievements] = useState<Achievement[] | null>(null)
   const [rankLoading, setRankLoading] = useState(true)
@@ -108,38 +111,36 @@ export function LegacyRankSettingsSection() {
   const xpTotal = num(rank?.xpTotal)
 
   const careerTiles = [
-    { key: "record", label: "Record", icon: Trophy, value: winLoss(rank) },
-    { key: "titles", label: "Titles", icon: Crown, value: fmt(rank?.careerChampionships) },
-    { key: "playoffs", label: "Playoffs", icon: Medal, value: fmt(rank?.careerPlayoffAppearances) },
-    { key: "seasons", label: "Seasons", icon: CalendarDays, value: fmt(rank?.careerSeasonsPlayed) },
-    { key: "leagues", label: "Leagues", icon: Users, value: fmt(rank?.careerLeaguesPlayed) },
+    { key: "record", label: t("settings.rank.tileRecord"), icon: Trophy, value: winLoss(rank) },
+    { key: "titles", label: t("settings.rank.tileTitles"), icon: Crown, value: fmt(rank?.careerChampionships) },
+    { key: "playoffs", label: t("settings.rank.tilePlayoffs"), icon: Medal, value: fmt(rank?.careerPlayoffAppearances) },
+    { key: "seasons", label: t("settings.rank.tileSeasons"), icon: CalendarDays, value: fmt(rank?.careerSeasonsPlayed) },
+    { key: "leagues", label: t("settings.rank.tileLeagues"), icon: Users, value: fmt(rank?.careerLeaguesPlayed) },
   ]
-  const hasCareer = careerTiles.some((t) => t.value !== "—")
+  const hasCareer = careerTiles.some((tile) => tile.value !== "—")
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>Legacy</h2>
+        <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>{t("settings.nav.rank")}</h2>
         <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
-          Your rank, XP, and career across every AllFantasy league.
+          {t("settings.rank.subtitle")}
         </p>
       </div>
 
       {/* Rank card */}
       <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
         {rankLoading ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }}>Loading your rank…</p>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>{t("settings.rank.loading")}</p>
         ) : rankFailed ? (
           <RetryNotice
-            message="Couldn't load your rank right now."
+            message={t("settings.rank.loadFailed")}
             onRetry={() => void loadRank()}
             testId="legacy-rank-retry"
           />
         ) : level == null && xpTotal == null ? (
           <div className="text-sm" style={{ color: "var(--muted)" }}>
-            {rank?.rankProcessing
-              ? "Your rank is being calculated — check back after your next synced game."
-              : "No rank yet. Import or play a league to start earning XP."}
+            {rank?.rankProcessing ? t("settings.rank.processing") : t("settings.rank.empty")}
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-6">
@@ -148,14 +149,16 @@ export function LegacyRankSettingsSection() {
               style={{ background: `conic-gradient(var(--accent-cyan) ${pct}%, var(--border) ${pct}% 100%)` }}
               /* Was aria-hidden — on the element that holds the level number, so it was never read out. */
               role="img"
-              aria-label={level != null ? `Level ${level}` : "Level not set yet"}
+              aria-label={
+                level != null ? tInterpolate("settings.rank.levelAria", { level }) : t("settings.rank.levelUnsetAria")
+              }
             >
               <div
                 className="flex h-[76px] w-[76px] flex-col items-center justify-center rounded-full"
                 style={{ background: "var(--panel2)" }}
               >
                 <span className="text-xl font-bold" style={{ color: "var(--text)" }}>{level ?? "—"}</span>
-                <span className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>Level</span>
+                <span className="text-[11px] uppercase tracking-wide" style={{ color: "var(--muted)" }}>{t("settings.rank.level")}</span>
               </div>
             </div>
             <div className="min-w-0 flex-1">
@@ -172,17 +175,20 @@ export function LegacyRankSettingsSection() {
               ) : null}
               <div className="mt-1.5 text-xs" style={{ color: "var(--muted)" }}>
                 {xpInto != null && xpFor != null
-                  ? `${xpInto.toLocaleString()} / ${xpFor.toLocaleString()} XP`
+                  ? tInterpolate("settings.rank.xpProgress", {
+                      into: xpInto.toLocaleString(),
+                      needed: xpFor.toLocaleString(),
+                    })
                   : xpTotal != null
-                    ? `${xpTotal.toLocaleString()} XP total`
+                    ? tInterpolate("settings.rank.xpTotal", { total: xpTotal.toLocaleString() })
                     : ""}
-                {rank?.nextLevelName ? ` · next: ${rank.nextLevelName}` : ""}
+                {rank?.nextLevelName ? tInterpolate("settings.rank.nextLevel", { name: rank.nextLevelName }) : ""}
               </div>
               <div
                 className="mt-2 h-1.5 max-w-sm overflow-hidden rounded-full"
                 style={{ background: "var(--border)" }}
                 role="progressbar"
-                aria-label="Progress to the next level"
+                aria-label={t("settings.rank.progressAria")}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={Math.round(pct)}
@@ -197,7 +203,7 @@ export function LegacyRankSettingsSection() {
       {/* Career grid */}
       {hasCareer ? (
         <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
-          <p className="mb-4 text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--muted2)" }}>Career</p>
+          <p className="mb-4 text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--muted2)" }}>{t("settings.rank.career")}</p>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
             {careerTiles.map(({ key, label, icon: Icon, value }) => (
               <div key={key} className="flex flex-col gap-1">
@@ -213,21 +219,21 @@ export function LegacyRankSettingsSection() {
       {/* Achievements */}
       <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
         <div className="mb-4 flex items-center justify-between">
-          <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--muted2)" }}>Achievements</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--muted2)" }}>{t("settings.rank.achievements")}</p>
           <Link href="/af-legacy" className="-mr-2 inline-flex min-h-[44px] items-center px-2 text-xs font-medium" style={{ color: "var(--accent-cyan-strong)" }}>
-            View all
+            {t("settings.rank.viewAll")}
           </Link>
         </div>
         {achievementsLoading ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }}>Loading…</p>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>{t("settings.rank.achievementsLoading")}</p>
         ) : achievementsFailed ? (
           <RetryNotice
-            message="Couldn't load your achievements right now."
+            message={t("settings.rank.achievementsFailed")}
             onRetry={() => void loadAchievements()}
             testId="legacy-achievements-retry"
           />
         ) : !achievements || achievements.length === 0 ? (
-          <p className="text-sm" style={{ color: "var(--muted)" }}>No achievements available yet.</p>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>{t("settings.rank.achievementsEmpty")}</p>
         ) : (
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
             {achievements.map((a) => {
@@ -247,7 +253,7 @@ export function LegacyRankSettingsSection() {
                   <div className="min-w-0">
                     <div className="truncate text-xs font-semibold" style={{ color: "var(--text)" }}>{a.name}</div>
                     <div className="text-[11px]" style={{ color: "var(--muted)" }}>
-                      {earned ? "Unlocked" : "Locked"}
+                      {earned ? t("settings.rank.unlocked") : t("settings.rank.locked")}
                     </div>
                     {/* The description lived only in `title` — invisible on touch and unreliable for screen readers. */}
                     {a.description ? (

@@ -101,7 +101,7 @@ export function AccountSettingsSection({
   // leaves hasSupreme/etc. at their last-known (false, on a first-load failure) value rather than
   // proving "free," so this checks ents.error explicitly instead of trusting those booleans alone.
   const derivedPlanDisplay = ents.error
-    ? "Unable to verify"
+    ? t("settings.billing.unableToVerify")
     : ents.hasSupreme
       ? "AF Supreme"
       : ents.hasCommissioner
@@ -131,14 +131,14 @@ export function AccountSettingsSection({
         // was deleted); show that rather than a generic failure.
         const data = (await res.json().catch(() => ({}))) as { error?: unknown }
         setDeleteError(
-          typeof data.error === "string" && data.error ? data.error : "Account deletion failed. Please try again.",
+          typeof data.error === "string" && data.error ? data.error : t("settings.account.deleteFailed"),
         )
         return
       }
       // PII is erased and auth is revoked — sign the user out and leave.
       await signOutAndPurge({ callbackUrl: "/" })
     } catch {
-      setDeleteError("Account deletion failed. Please try again.")
+      setDeleteError(t("settings.account.deleteFailed"))
     } finally {
       setDeleteBusy(false)
     }
@@ -212,7 +212,7 @@ export function AccountSettingsSection({
         </div>
         {ents.isAdminBypassAccount && (
           <p className="text-xs italic" style={{ color: "var(--muted)" }} data-testid="settings-account-bypass-notice">
-            Admin bypass — not a real Stripe subscription.
+            {t("settings.account.bypassNotice")}
           </p>
         )}
         {createdLabel && (
@@ -328,9 +328,7 @@ export function AccountSettingsSection({
                 style={{ borderColor: "color-mix(in srgb, #fbbf24 45%, transparent)", color: "#fbbf24" }}
                 data-testid="settings-account-delete-subscription-warning"
               >
-                Deleting your account cancels your AllFantasy subscription right away, with no refund for the
-                rest of the billing period. If you subscribed in the iPhone app, cancel it in your iPhone
-                Settings → your name → Subscriptions — Apple doesn&apos;t let us cancel it for you.
+                {t("settings.account.deleteSubscriptionWarning")}
               </p>
             ) : null}
             <input
@@ -339,7 +337,7 @@ export function AccountSettingsSection({
               /* The name matches the visible sentence's opening words ("Type DELETE to confirm"), so
                  voice control can target it by what is on screen; the full sentence, including that
                  data is erased immediately, is read as its description when focus lands here. */
-              aria-label="Type DELETE to confirm"
+              aria-label={t("settings.account.deleteConfirmAria")}
               aria-describedby="delete-account-desc"
               autoFocus
               value={deleteConfirm}

@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useState } from "react"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 
 /**
  * The actual Sleeper linker. The page this replaces was a circular dead-end:
@@ -31,7 +32,29 @@ type State =
 
 const CONNECTED_ACCOUNTS = "/settings?tab=connected"
 
+/**
+ * The page header (back link, title, intro). It lives here rather than in page.tsx because the page
+ * is a server component, and the language is only known in the client (LanguageProviderClient).
+ */
+export function ConnectSleeperIntro() {
+  const { t } = useOptionalLanguage()
+  return (
+    <>
+      <Link
+        href="/settings"
+        className="mb-6 inline-block text-sm text-cyan-400/90 hover:text-cyan-300"
+      >
+        {t("settings.sleeperConnect.back")}
+      </Link>
+      <h1 className="text-xl font-bold">{t("settings.connected.connectSleeper")}</h1>
+      <p className="mt-3 text-sm leading-relaxed text-white/55">{t("settings.sleeperConnect.intro")}</p>
+    </>
+  )
+}
+
 export default function ConnectSleeperForm({ currentLink = null }: { currentLink?: CurrentLink }) {
+  // Optional: the form is rendered on its own in tests, outside any LanguageProviderClient.
+  const { t, tInterpolate } = useOptionalLanguage()
   const [username, setUsername] = useState("")
   const [state, setState] = useState<State>({ kind: "idle" })
 
@@ -39,7 +62,7 @@ export default function ConnectSleeperForm({ currentLink = null }: { currentLink
     e.preventDefault()
     const handle = username.trim()
     if (handle.length < 2) {
-      setState({ kind: "error", message: "Enter your Sleeper username." })
+      setState({ kind: "error", message: t("settings.sleeperConnect.errorEnterUsername") })
       return
     }
     setState({ kind: "loading" })
@@ -61,7 +84,7 @@ export default function ConnectSleeperForm({ currentLink = null }: { currentLink
           message:
             typeof data.error === "string" && data.error
               ? data.error
-              : "We couldn't reach Sleeper. Try again shortly.",
+              : t("settings.sleeperConnect.errorUnreachable"),
         })
         return
       }
@@ -89,15 +112,18 @@ export default function ConnectSleeperForm({ currentLink = null }: { currentLink
           already: currentLink?.sleeperUserId === foundId,
         })
       } else if (savedId && foundId && savedId !== foundId) {
-        setState({ kind: "linked-to-other", current: profile.sleeperUsername || "another Sleeper account" })
+        setState({
+          kind: "linked-to-other",
+          current: profile.sleeperUsername || t("settings.sleeperConnect.anotherAccount"),
+        })
       } else {
         setState({
           kind: "error",
-          message: `We found ${displayName} on Sleeper but couldn't save the link. Please try again.`,
+          message: tInterpolate("settings.sleeperConnect.errorSaveFailed", { name: displayName }),
         })
       }
     } catch {
-      setState({ kind: "error", message: "Something went wrong. Check your connection and try again." })
+      setState({ kind: "error", message: t("settings.sleeperConnect.errorGeneric") })
     }
   }
 
@@ -105,18 +131,26 @@ export default function ConnectSleeperForm({ currentLink = null }: { currentLink
     return (
       <div className="mt-6 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 p-5" role="status">
         <p className="text-sm font-semibold text-emerald-300">
-          {state.already ? `Already linked as ${state.displayName}` : `Linked as ${state.displayName}`}
+          {tInterpolate(
+            state.already ? "settings.sleeperConnect.alreadyLinkedAs" : "settings.sleeperConnect.linkedAs",
+            { name: state.displayName },
+          )}
         </p>
         <p className="mt-1 text-sm text-white/60">
           {state.leagueCount > 0
-            ? `Found ${state.leagueCount} league${state.leagueCount === 1 ? "" : "s"} on this account this season.`
-            : "No leagues found for the current season yet — the link is saved."}
+            ? tInterpolate(
+                state.leagueCount === 1
+                  ? "settings.sleeperConnect.foundLeaguesOne"
+                  : "settings.sleeperConnect.foundLeaguesMany",
+                { count: state.leagueCount },
+              )
+            : t("settings.sleeperConnect.noLeagues")}
         </p>
         <Link
           href="/import?provider=sleeper"
           className="mt-4 inline-flex min-h-[44px] items-center rounded-xl bg-cyan-500/20 px-4 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/30"
         >
-          Import your leagues
+          {t("settings.sleeperConnect.importLeagues")}
         </Link>
       </div>
     )
@@ -127,23 +161,25 @@ export default function ConnectSleeperForm({ currentLink = null }: { currentLink
     return (
       <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5" data-testid="sleeper-current-link">
         <p className="text-sm font-semibold text-white">
-          Linked to Sleeper{currentLink.sleeperUsername ? ` as ${currentLink.sleeperUsername}` : ""}
+          {currentLink.sleeperUsername
+            ? tInterpolate("settings.sleeperConnect.linkedToSleeperAs", { name: currentLink.sleeperUsername })
+            : t("settings.sleeperConnect.linkedToSleeper")}
         </p>
         <p className="mt-1 text-sm text-white/60">
-          To link a different Sleeper account, disconnect this one in Connected Accounts first.
+          {t("settings.sleeperConnect.switchHint")}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Link
             href="/import?provider=sleeper"
             className="inline-flex min-h-[44px] items-center rounded-xl bg-cyan-500/20 px-4 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/30"
           >
-            Import your leagues
+            {t("settings.sleeperConnect.importLeagues")}
           </Link>
           <Link
             href={CONNECTED_ACCOUNTS}
             className="inline-flex min-h-[44px] items-center rounded-xl border border-white/10 px-4 text-sm font-semibold text-white/80 hover:bg-white/5"
           >
-            Connected Accounts
+            {t("settings.nav.connected")}
           </Link>
         </div>
       </div>
@@ -154,13 +190,13 @@ export default function ConnectSleeperForm({ currentLink = null }: { currentLink
     <form onSubmit={onSubmit} className="mt-6 space-y-3">
       <label className="block">
         <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-white/45">
-          Sleeper username
+          {t("settings.sleeperConnect.usernameLabel")}
         </span>
         <input
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="your_sleeper_username"
+          placeholder={t("settings.sleeperConnect.usernamePlaceholder")}
           autoComplete="off"
           autoCapitalize="none"
           spellCheck={false}
@@ -174,17 +210,16 @@ export default function ConnectSleeperForm({ currentLink = null }: { currentLink
       ) : null}
       {state.kind === "handle-elsewhere" ? (
         <p className="text-sm text-rose-300" role="alert" data-testid="sleeper-handle-elsewhere">
-          {state.handle} is already linked to a different AllFantasy login. Sign in with that account to
-          use it, or disconnect Sleeper there first.
+          {tInterpolate("settings.sleeperConnect.handleElsewhere", { handle: state.handle })}
         </p>
       ) : null}
       {state.kind === "linked-to-other" ? (
         <p className="text-sm text-amber-300" role="alert" data-testid="sleeper-linked-to-other">
-          Your account is already linked to {state.current}, so it wasn&apos;t changed. To switch,{" "}
+          {tInterpolate("settings.sleeperConnect.linkedToOtherBefore", { current: state.current })}{" "}
           <Link href={CONNECTED_ACCOUNTS} className="font-semibold underline">
-            disconnect it in Connected Accounts
+            {t("settings.sleeperConnect.linkedToOtherLink")}
           </Link>{" "}
-          first.
+          {t("settings.sleeperConnect.linkedToOtherAfter")}
         </p>
       ) : null}
       <button
@@ -192,10 +227,10 @@ export default function ConnectSleeperForm({ currentLink = null }: { currentLink
         disabled={state.kind === "loading"}
         className="min-h-[44px] rounded-xl bg-cyan-500/20 px-4 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/30 disabled:opacity-50"
       >
-        {state.kind === "loading" ? "Checking Sleeper…" : "Link Sleeper account"}
+        {state.kind === "loading" ? t("settings.sleeperConnect.checking") : t("settings.sleeperConnect.linkButton")}
       </button>
       <p className="text-xs text-white/40">
-        Read-only. We never post, change rosters, or ask for your Sleeper password.
+        {t("settings.sleeperConnect.readOnly")}
       </p>
     </form>
   )

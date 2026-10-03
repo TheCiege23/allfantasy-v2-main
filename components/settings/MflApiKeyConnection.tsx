@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 
 /**
  * Save a MyFantasyLeague API key, so MFL leagues can be imported.
@@ -43,6 +44,7 @@ async function fetchMflAuthStatus(): Promise<MflAuthStatus> {
 }
 
 export function MflApiKeyConnection() {
+  const { t, tInterpolate } = useLanguage()
   const [status, setStatus] = useState<MflAuthStatus | null>(null)
   const [apiKey, setApiKey] = useState("")
   const [busy, setBusy] = useState(false)
@@ -61,7 +63,7 @@ export function MflApiKeyConnection() {
   async function save() {
     const trimmed = apiKey.trim()
     if (!trimmed) {
-      setMessage({ tone: "error", text: "Paste your MFL API key first." })
+      setMessage({ tone: "error", text: t("settings.mfl.pasteFirst") })
       return
     }
     setBusy(true)
@@ -75,7 +77,7 @@ export function MflApiKeyConnection() {
       const data = await res.json().catch(() => null)
       if (!res.ok) {
         /* The endpoint's own words — it knows why better than this screen does. */
-        setMessage({ tone: "error", text: data?.error || "Could not save the MFL API key." })
+        setMessage({ tone: "error", text: data?.error || t("settings.mfl.saveFailed") })
         return
       }
       /*
@@ -85,9 +87,9 @@ export function MflApiKeyConnection() {
        */
       setApiKey("")
       setStatus(await fetchMflAuthStatus())
-      setMessage({ tone: "ok", text: "Saved. You can import MFL leagues now." })
+      setMessage({ tone: "ok", text: t("settings.mfl.saved") })
     } catch {
-      setMessage({ tone: "error", text: "Could not reach your account to save the key." })
+      setMessage({ tone: "error", text: t("settings.mfl.saveUnreachable") })
     } finally {
       setBusy(false)
     }
@@ -103,17 +105,17 @@ export function MflApiKeyConnection() {
         body: JSON.stringify({ platform: "mfl" }),
       })
       if (!res.ok) {
-        setMessage({ tone: "error", text: "Could not remove the key." })
+        setMessage({ tone: "error", text: t("settings.mfl.removeFailed") })
         return
       }
       setStatus(await fetchMflAuthStatus())
       setMessage({
         tone: "ok",
         /* Says what it did NOT do: leagues already imported are unaffected. */
-        text: "Key removed. Leagues you already imported stay where they are.",
+        text: t("settings.mfl.removed"),
       })
     } catch {
-      setMessage({ tone: "error", text: "Could not reach your account." })
+      setMessage({ tone: "error", text: t("settings.mfl.removeUnreachable") })
     } finally {
       setBusy(false)
     }
@@ -124,22 +126,23 @@ export function MflApiKeyConnection() {
       className="mt-2 rounded-lg border p-3 text-xs"
       style={{ borderColor: "var(--border)", color: "var(--muted)" }}
     >
-      <p style={{ color: "var(--text)", fontWeight: 600 }}>MyFantasyLeague API key</p>
+      <p style={{ color: "var(--text)", fontWeight: 600 }}>{t("settings.mfl.title")}</p>
 
       <p className="mt-1">
-        MFL requires a key to read league data &mdash; every league, not only private ones. It is
-        issued by MyFantasyLeague from your account&rsquo;s API settings, and it is{" "}
-        <strong style={{ color: "var(--text)" }}>not your password</strong>. We store it encrypted
-        and use it only to read the leagues you choose to import.
+        {t("settings.mfl.bodyBefore")}{" "}
+        <strong style={{ color: "var(--text)" }}>{t("settings.mfl.bodyStrong")}</strong>
+        {t("settings.mfl.bodyAfter")}
       </p>
 
       {status === null ? (
-        <p className="mt-2">Checking&hellip;</p>
+        <p className="mt-2">{t("settings.mfl.checking")}</p>
       ) : status.connected ? (
         <>
           <p className="mt-2" style={{ color: "var(--text)" }}>
-            Connected
-            {status.updatedAt ? ` · saved ${new Date(status.updatedAt).toLocaleDateString()}` : ""}
+            {t("settings.connected.connectedLabel")}
+            {status.updatedAt
+              ? tInterpolate("settings.mfl.savedOn", { date: new Date(status.updatedAt).toLocaleDateString() })
+              : ""}
           </p>
           <button
             type="button"
@@ -148,7 +151,7 @@ export function MflApiKeyConnection() {
             className="mt-2 rounded-lg border px-3 py-2 text-xs font-medium"
             style={{ borderColor: "var(--border)", color: "var(--text)" }}
           >
-            {busy ? "Removing…" : "Remove key"}
+            {busy ? t("settings.mfl.removing") : t("settings.mfl.removeKey")}
           </button>
         </>
       ) : (
@@ -156,7 +159,7 @@ export function MflApiKeyConnection() {
           <input
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Your MFL API key"
+            placeholder={t("settings.mfl.placeholder")}
             /*
              * A password field, because it is a credential and shoulder-surfing
              * is real — even though it is not an account password.
@@ -174,7 +177,7 @@ export function MflApiKeyConnection() {
             className="rounded-lg border px-3 py-2 text-xs font-medium"
             style={{ borderColor: "var(--border)", color: "var(--text)" }}
           >
-            {busy ? "Saving…" : "Save key"}
+            {busy ? t("settings.actions.saving") : t("settings.mfl.saveKey")}
           </button>
         </div>
       )}

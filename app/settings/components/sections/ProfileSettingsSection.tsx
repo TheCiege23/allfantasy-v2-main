@@ -109,7 +109,7 @@ export function ProfileSettingsSection({
       return null
     })
     if (result.ok) onRefetch()
-    else setUploadError(result.error ?? "Upload failed")
+    else setUploadError(result.error ?? t("settings.profile.uploadFailed"))
     return result.ok
   }
 
@@ -137,7 +137,7 @@ export function ProfileSettingsSection({
     setUploadError(null)
     const result = await setProfileAvatarUrl(null)
     if (result.ok) onRefetch()
-    else setUploadError(result.error ?? "Failed to remove image")
+    else setUploadError(result.error ?? t("settings.profile.removeFailed"))
   }
 
   return (
@@ -186,7 +186,7 @@ export function ProfileSettingsSection({
               style={{ borderColor: "var(--border)", color: "var(--text)" }}
             >
               <Upload className="h-3.5 w-3.5" />
-              {uploading ? "Uploading…" : "Upload image"}
+              {uploading ? t("settings.profile.uploading") : t("settings.profile.uploadImage")}
             </button>
             {profile?.profileImageUrl && (
               <button
@@ -283,7 +283,7 @@ export function ProfileSettingsSection({
           className="mb-1 block text-sm font-medium"
           style={{ color: "var(--muted2)" }}
         >
-          Bio
+          {t("settings.profile.bio")}
         </label>
         <textarea
           id="settings-profile-bio"
@@ -296,7 +296,7 @@ export function ProfileSettingsSection({
           }}
           className="block w-full max-w-md resize-y rounded-xl border px-3 py-2 text-sm outline-none"
           style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
-          placeholder="A line about you — your leagues, your team, your trash talk."
+          placeholder={t("settings.profile.bioPlaceholder")}
           data-testid="settings-profile-bio"
         />
         <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
@@ -306,7 +306,7 @@ export function ProfileSettingsSection({
 
       <div>
         <span className="ns-field-label mb-2 block text-sm font-medium" style={{ color: "var(--muted2)" }} id="settings-profile-sports-label">
-          Sports you play
+          {t("settings.profile.sports")}
         </span>
         <div className="flex flex-wrap gap-2" role="group" aria-labelledby="settings-profile-sports-label">
           {SUPPORTED_SPORTS.map((sport) => {
@@ -328,7 +328,7 @@ export function ProfileSettingsSection({
           })}
         </div>
         <p className="mt-1.5 text-xs" style={{ color: "var(--muted)" }}>
-          The first one you picked is your default sport — change it under Preferences.
+          {t("settings.profile.sportsHint")}
         </p>
       </div>
 
@@ -349,7 +349,7 @@ export function ProfileSettingsSection({
           {t("settings.actions.cancelChanges")}
         </button>
         <p role="status" aria-live="polite" className="text-sm font-semibold" style={{ color: "#34d399" }}>
-          {savedFlash.saved ? "✓ Profile saved" : ""}
+          {savedFlash.saved ? t("settings.profile.saved") : ""}
         </p>
       </div>
     </form>

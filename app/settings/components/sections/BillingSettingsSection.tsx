@@ -1,16 +1,37 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
 import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget"
+import { isAppleApp, manageAppleSubscriptions } from "@/lib/monetization/apple-iap-client"
+
+/** Status-chip copy per EntitlementStatus; an unlisted status still renders its raw value. */
+const BILLING_STATUS_KEYS: Record<string, string> = {
+  active: "settings.billing.statusActive",
+  grace: "settings.billing.statusGrace",
+  past_due: "settings.billing.statusPastDue",
+  expired: "settings.billing.statusExpired",
+}
 
 export function BillingSettingsSection() {
   const { t, tInterpolate } = useLanguage()
   const ents = useEntitlements()
   // Set by /api/subscription/billing-portal when Stripe could not open a portal session.
   const portalError = useSearchParams()?.get("billing") === "portal_error"
+  /*
+   * Inside the iOS app, "Manage billing" opens Apple's own subscription sheet (StoreKit, through the
+   * same bridge /pricing's "Manage Subscriptions" uses) — a subscription bought in the app can only
+   * be changed or cancelled there, and the app does not hand Stripe pages to Apple's reviewers.
+   * Read after mount: the bridge exists only in the client, so the server render is the web button.
+   */
+  const [appleApp, setAppleApp] = useState(false)
+  const [appleManageError, setAppleManageError] = useState<string | null>(null)
+  useEffect(() => {
+    setAppleApp(isAppleApp())
+  }, [])
 
   if (ents.loading) {
     return <div className="animate-pulse h-20 rounded-xl bg-white/[0.05]" data-testid="settings-billing-loading" />
@@ -48,7 +69,7 @@ export function BillingSettingsSection() {
                * verify". Same words as those two now.
                */
               <p className="text-sm font-semibold text-white" data-testid="settings-billing-unverified">
-                Unable to verify
+                {t("settings.billing.unableToVerify")}
               </p>
             ) : (
               <p className="text-sm font-semibold text-white">{t("settings.billing.afFree")}</p>
@@ -67,7 +88,13 @@ export function BillingSettingsSection() {
                     : "border-white/[0.1] bg-white/[0.03] text-white/40",
             ].join(" ")}
           >
-            {status === "none" ? (ents.error ? "Unknown" : t("settings.billing.statusFree")) : status.replace(/_/g, " ")}
+            {status === "none"
+              ? ents.error
+                ? t("settings.billing.statusUnknown")
+                : t("settings.billing.statusFree")
+              : BILLING_STATUS_KEYS[status]
+                ? t(BILLING_STATUS_KEYS[status])
+                : status.replace(/_/g, " ")}
           </span>
         </div>
 
@@ -94,7 +121,7 @@ export function BillingSettingsSection() {
 
         {ents.isAdminBypassAccount && (
           <p className="mt-3 text-[11px] italic" style={{ color: "var(--muted2)" }} data-testid="settings-billing-bypass-notice">
-            Admin bypass — this plan is not a real Stripe subscription.
+            {t("settings.billing.bypassNotice")}
           </p>
         )}
       </div>
@@ -126,8 +153,13 @@ export function BillingSettingsSection() {
 
       {portalError && (
         <p className="text-xs text-red-600" role="alert" data-testid="settings-billing-portal-error">
-          We couldn&apos;t open the billing portal just now. Please try again in a minute — if it keeps
-          failing, contact support and we&apos;ll make the change for you.
+          {t("settings.billing.portalError")}
+        </p>
+      )}
+
+      {appleManageError && (
+        <p className="text-xs text-red-600" role="alert" data-testid="settings-billing-apple-error">
+          {appleManageError}
         </p>
       )}
 
@@ -138,7 +170,20 @@ export function BillingSettingsSection() {
       )}
 
       <div className="flex flex-wrap gap-2">
-        {hasAnySub && !ents.isAdminBypassAccount ? (
+        {hasAnySub && !ents.isAdminBypassAccount && appleApp ? (
+          <button
+            type="button"
+            onClick={() => {
+              setAppleManageError(null)
+              void manageAppleSubscriptions().catch(() => setAppleManageError(t("settings.billing.appleManageError")))
+            }}
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border px-4 py-2 text-sm font-semibold transition hover:opacity-90"
+            style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
+            data-testid="settings-billing-manage-apple"
+          >
+            {t("settings.billing.manageInAppStore")}
+          </button>
+        ) : hasAnySub && !ents.isAdminBypassAccount ? (
           <a
             href="/api/subscription/billing-portal"
             className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border px-4 py-2 text-sm font-semibold transition hover:opacity-90"
