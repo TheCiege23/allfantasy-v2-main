@@ -1,7 +1,10 @@
 /** Guarded cache fixtures for seven-sport native draft browser verification. */
 async function main() {
-  const host = new URL(process.env.DATABASE_URL ?? '').hostname
-  if (!host.startsWith('ep-muddy-leaf-') || !host.endsWith('.neon.tech')) throw new Error('KNOWN_TEST_DATABASE_REQUIRED')
+  const databaseUrl = new URL(process.env.DATABASE_URL ?? '')
+  const knownNeonTestDb = databaseUrl.hostname.startsWith('ep-muddy-leaf-') && databaseUrl.hostname.endsWith('.neon.tech')
+  const isolatedLocalDb = process.env.AF_LOCAL_LEAGUE_RUNTIME === '1' && databaseUrl.hostname === '127.0.0.1' &&
+    databaseUrl.port === '54327' && databaseUrl.pathname === '/allfantasy_staging'
+  if (!knownNeonTestDb && !isolatedLocalDb) throw new Error('KNOWN_TEST_DATABASE_REQUIRED')
   globalThis.fetch = async () => { throw new Error('EXTERNAL_HTTP_DISABLED') }
   const { prisma } = await import('../lib/prisma')
   const { getEffectiveLeagueRosterTemplate, starterEligiblePlayerPositionsFromTemplate } = await import('../lib/league/getEffectiveLeagueRosterTemplate')
@@ -38,4 +41,4 @@ async function main() {
   console.log(JSON.stringify({ position, entries }))
   await prisma.$disconnect()
 }
-main().catch(() => { process.exitCode = 1 })
+main().catch((error) => { console.error(error); process.exitCode = 1 })

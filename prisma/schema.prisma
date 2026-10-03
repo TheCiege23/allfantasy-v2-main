@@ -11978,7 +11978,7 @@ model StatIngestionJob {
 /// Player Trend Detection Engine: platform-wide trend metrics per player/sport
 model PlayerMetaTrend {
   id                 String   @id @default(cuid())
-  playerId           String   @db.VarChar(32)
+  playerId           String   @db.VarChar(128)
   sport              String   @db.VarChar(12)
   trendScore         Float    @default(0)
   addRate            Float    @default(0)
@@ -12002,7 +12002,7 @@ model PlayerMetaTrend {
 /// Raw trend signal events (waiver add/drop, trade, draft, lineup start)
 model TrendSignalEvent {
   id         String   @id @default(cuid())
-  playerId   String   @db.VarChar(32)
+  playerId   String   @db.VarChar(128)
   sport      String   @db.VarChar(12)
   signalType String   @db.VarChar(24)
   value      Float    @default(1)

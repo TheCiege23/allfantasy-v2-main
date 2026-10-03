@@ -15,8 +15,11 @@ for (const sport of ['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as 
   test(`${sport}: real login, creation, queue, chat, draft picks and finalization @db`, async ({ page, request }) => {
     test.skip(process.env.AF_SEVEN_SPORT_DRAFT_TEST_DB !== '1', 'Explicit guarded test database run required')
     test.setTimeout(1_800_000)
-    const host = new URL(process.env.DATABASE_URL ?? '').hostname
-    if (!host.startsWith('ep-muddy-leaf-') || !host.endsWith('.neon.tech')) throw new Error('KNOWN_TEST_DATABASE_REQUIRED')
+    const databaseUrl = new URL(process.env.DATABASE_URL ?? '')
+    const knownNeonTestDb = databaseUrl.hostname.startsWith('ep-muddy-leaf-') && databaseUrl.hostname.endsWith('.neon.tech')
+    const isolatedLocalDb = process.env.AF_LOCAL_LEAGUE_RUNTIME === '1' && databaseUrl.hostname === '127.0.0.1' &&
+      databaseUrl.port === '54327' && databaseUrl.pathname === '/allfantasy_staging'
+    if (!knownNeonTestDb && !isolatedLocalDb) throw new Error('KNOWN_TEST_DATABASE_REQUIRED')
     const marker = 'seven-sport-browser-' + randomUUID(), password = randomUUID()
     const fullDepth = process.env.AF_SEVEN_SPORT_FULL_DEPTH === '1'
     const uiJourney = process.env.AF_SEVEN_SPORT_UI_JOURNEY === '1'
