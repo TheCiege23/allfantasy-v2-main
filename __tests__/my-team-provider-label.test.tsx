@@ -54,7 +54,7 @@ describe('the provider projection is named for who made it', () => {
     lang.language = 'en'
     const { container } = render(<MyTeam data={page(false, 'espn')} />)
     expect(PROJECTION_PROVIDER_LABEL).toBe('Sleeper')
-    expect(container.querySelector('.af-mt-projhead--af')?.textContent).toBe('Sleeper?')
+    expect(container.querySelector('.af-mt-projhead--af')?.firstChild?.textContent).toBe('Sleeper')
     expect(leadLabel(container)).toBe('Projected · Sleeper · your league')
     expect(container.textContent).not.toMatch(/\bAPI\b/)
   })
@@ -63,7 +63,7 @@ describe('the provider projection is named for who made it', () => {
     lang.language = 'en'
     const { container } = render(<MyTeam data={page(true)} />)
     expect(leadLabel(container)).toBe('Projected · Sleeper + AF IDP · your league')
-    const pop = container.querySelector('.af-mt-info-pop')!.textContent!
+    const pop = container.querySelector('.af-mt-projhead .af-info-pop')!.textContent!
     expect(pop).toContain('Sleeper projects no defensive stats')
     expect(pop).toContain('AllFantasy’s IDP model')
   })
@@ -72,8 +72,8 @@ describe('the provider projection is named for who made it', () => {
     lang.language = 'es'
     const { container } = render(<MyTeam data={page(true)} />)
     expect(leadLabel(container)).toBe('Proyección · Sleeper + IDP de AF · tu liga')
-    expect(container.querySelector('.af-mt-info-pop strong')?.textContent).toBe('Sleeper y AF')
-    expect(container.querySelector('.af-mt-info-pop p')?.textContent).toContain('modelo IDP de AllFantasy')
+    expect(container.querySelector('.af-mt-projhead .af-info-pop strong')?.textContent).toBe('Qué significan estas columnas')
+    expect(container.querySelector('.af-mt-projhead .af-info-para')?.textContent).toContain('modelo IDP de AllFantasy')
     lang.language = 'en'
   })
 })

@@ -935,23 +935,6 @@
   color: var(--bad);
 }
 
-/* ── The AF PTS explainer ────────────────────────────────────────────── */
-.af-mt-info {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-  margin-left: 3px;
-  border-radius: 50%;
-  border: 1px solid currentColor;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
-  cursor: help;
-  opacity: 0.8;
-}
-
 /* The bye chip now sits beside the name, so it needs to sit on that baseline. */
 .af-mt-player-name {
   display: flex;
@@ -2454,53 +2437,6 @@ li[data-kind='questionable'] .af-mt-check-tag {
 }
 .af-core .af-mt-projgroup > .af-mt-tile--proj:not(.af-mt-tile--af)[data-missing='true'] {
   display: none;
-}
-
-/* "?" beside API — a button that opens a native popover (`ProjHeader` in MyTeam.tsx). The circle
-   stays 12px; the pseudo-element gives it a 28px hit area without moving the heading. */
-.af-core button.af-mt-info {
-  position: relative;
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  font-family: inherit;
-  line-height: 1;
-  cursor: pointer;
-}
-.af-core button.af-mt-info::after {
-  content: '';
-  position: absolute;
-  inset: -8px;
-}
-.af-core button.af-mt-info:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-/* In the top layer once open, but it still inherits from the heading it sits in — so the
-   heading's right alignment, 11px size and caps are undone here. */
-.af-core .af-mt-info-pop {
-  max-width: min(360px, calc(100vw - 32px));
-  padding: 14px 16px;
-  border: 1px solid var(--accent-line);
-  border-radius: 14px;
-  background: var(--surface2);
-  color: var(--text2);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.5;
-  letter-spacing: normal;
-  text-align: left;
-  text-transform: none;
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
-}
-.af-core .af-mt-info-pop strong {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--text);
-  font-size: 14px;
-}
-.af-core .af-mt-info-pop p {
-  margin: 0;
 }
 
 /* "Fix it in Sleeper ↗" is a real button now (`af-btn`); the banner's caps styling stays off it. */
