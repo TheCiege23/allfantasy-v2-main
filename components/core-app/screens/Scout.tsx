@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 
 import '@/components/core-app/af-scout.css'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
@@ -46,6 +47,12 @@ export type ScoutProps = {
    */
   edge?: SectionState<ScoutEdge> | null
   edgeAccess?: CoreDepthAccess | null
+  /**
+   * THIS league's game plan (War Room step 4c), rendered after the opponent banner: who you play,
+   * then what you must fix before it locks, then everyone else. A node rather than data so Scout
+   * stays a reader of standings and the page decides what Game Plan shows.
+   */
+  leaguePlan?: ReactNode
 }
 
 /** "Sep 21, 2025" — pinned to en-US and Eastern so the server paint is the only paint. */
@@ -284,7 +291,7 @@ function OpponentBanner({ data, matchupHref, tradesHref }: { data: ScoutData; ma
   )
 }
 
-export function Scout({ data, gamePlanHref, matchupHref, tradesHref, edge = null, edgeAccess = null }: ScoutProps) {
+export function Scout({ data, gamePlanHref, matchupHref, tradesHref, edge = null, edgeAccess = null, leaguePlan = null }: ScoutProps) {
   const edgeBy = edge?.available ? edge.data.byManager : null
   return (
     <div className="af-sc">
@@ -301,12 +308,15 @@ export function Scout({ data, gamePlanHref, matchupHref, tradesHref, edge = null
           Plan is about what you must do before kickoff — different questions,
           so they are two rooms rather than one crowded screen.
         */}
+        {/* This league's plan is on this page now (step 4c); the link is to every league's. */}
         <Link className="af-sc-switch" href={gamePlanHref}>
-          Game plan &rarr;
+          Every league&apos;s game plan &rarr;
         </Link>
       </header>
 
       <OpponentBanner data={data} matchupHref={matchupHref} tradesHref={tradesHref} />
+
+      {leaguePlan}
 
       {/*
         ⚠ BEFORE THE CARDS, ALWAYS. What the records are measured over changes how every one of them

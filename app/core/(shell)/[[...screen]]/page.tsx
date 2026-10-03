@@ -2791,7 +2791,16 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const scoutEdgeAccess =
     activeKey === 'war-room' && !gamePlanView && selectedLeagueId ? (corePaywall?.competitive_edge ?? null) : null
-  const [scout, connectedFranchise, scoutEdge] = await Promise.all([
+  /*
+   * THIS league's game plan, inline in Scout (War Room step 4c) — the same loader as the cross-league
+   * room, handed one id. Before this the league view only LINKED to Game Plan, and that link ignored
+   * the league: `?view=plan&league=X` read every league.
+   *
+   * ⚠ SAFE ON A URL ID: the loader reads only the viewer's OWN claimed teams (`claimedByUserId`), so
+   * a league they have no team in returns `available: false`, never somebody else's lineup.
+   */
+  const wantsLeaguePlan = activeKey === 'war-room' && !gamePlanView && Boolean(selectedLeagueId) && Boolean(userId)
+  const [scout, connectedFranchise, scoutEdge, leagueGamePlan] = await Promise.all([
     activeKey === 'war-room' && !gamePlanView && selectedLeagueId
       ? getScoutData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
           console.error('[core/war-room] scout read failed', e)
@@ -2806,6 +2815,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         }).catch(() => null)
       : Promise.resolve(null),
     loadScoutEdgeForScreen({ leagueId: scoutEdgeAccess ? selectedLeagueId : null, access: scoutEdgeAccess, userId }),
+    wantsLeaguePlan && selectedLeagueId ? loadGameDayTriage(userId, [selectedLeagueId]).catch(() => null) : Promise.resolve(null),
   ])
 
   /*
@@ -4628,6 +4638,22 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 tradesHref={`/core/trades?league=${encodeURIComponent(scout.league.id)}`}
                 edge={scoutEdge}
                 edgeAccess={scoutEdgeAccess}
+                /*
+                  This league's plan, inline (step 4c). A failed or unavailable read shows nothing
+                  here — "Every league's game plan →" in Scout's header still reaches the full room.
+                */
+                leaguePlan={
+                  leagueGamePlan?.available ? (
+                    <GamePlan
+                      data={leagueGamePlan.data}
+                      nowIso={new Date().toISOString()}
+                      weekHref={`/core/week?league=${encodeURIComponent(scout.league.id)}`}
+                      waiversHref={`/core/waivers?league=${encodeURIComponent(scout.league.id)}`}
+                      showHead={false}
+                      scope="league"
+                    />
+                  ) : null
+                }
               />
             ) : scoutLoadFailed ? (
               /*

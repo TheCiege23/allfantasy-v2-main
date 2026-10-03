@@ -70,6 +70,11 @@ export type GamePlanProps = {
    * needs it more than a standalone one, not less.
    */
   showHead?: boolean
+  /**
+   * 'league' when this is ONE league's plan, inline on Scout (War Room step 4c). Words that only make
+   * sense across leagues — "any of your leagues", a leagues-affected tile — change or drop out.
+   */
+  scope?: 'all' | 'league'
 }
 
 /** Live countdown to a kickoff, re-derived each minute. */
@@ -150,7 +155,18 @@ function LeagueLineupLink({ league }: { league: TriageLeague }) {
  * and the age of the oldest lineup were all returned by the loader and printed nowhere — so an
  * all-zero strip could not be told apart from "we skipped your leagues".
  */
-function Summary({ data, actionable, nowIso }: { data: GameDayTriage; actionable: TriageRow[]; nowIso: string }) {
+function Summary({
+  data,
+  actionable,
+  nowIso,
+  oneLeague = false,
+}: {
+  data: GameDayTriage
+  actionable: TriageRow[]
+  nowIso: string
+  /** League scope: a "leagues affected" tile can only read 0 or 1 there, so it is left out. */
+  oneLeague?: boolean
+}) {
   const empty = data.emptySlots ?? []
   const emptyCount = empty.reduce((n, l) => n + l.count, 0)
   const leagues = new Set([...actionable.flatMap((r) => r.leagues.map((l) => l.leagueId)), ...empty.map((l) => l.leagueId)])
@@ -176,10 +192,12 @@ function Summary({ data, actionable, nowIso }: { data: GameDayTriage; actionable
           <dt>Empty slots</dt>
           <dd className="af-num">{emptyCount}</dd>
         </div>
-        <div>
-          <dt>Leagues affected</dt>
-          <dd className="af-num">{leagues.size}</dd>
-        </div>
+        {oneLeague ? null : (
+          <div>
+            <dt>Leagues affected</dt>
+            <dd className="af-num">{leagues.size}</dd>
+          </div>
+        )}
         <div>
           <dt>First lock</dt>
           <dd>{firstKickoff ? <Lock kickoff={firstKickoff} nowIso={nowIso} /> : <span className="af-gp-lock">—</span>}</dd>
@@ -304,7 +322,9 @@ export function GamePlan({
   weekHref,
   waiversHref,
   showHead = true,
+  scope = 'all',
 }: GamePlanProps) {
+  const oneLeague = scope === 'league'
   const rows = data.rows
   const emptySlots = data.emptySlots ?? []
   const actionable = rows.filter((r) => !r.kickoff || lockState(r.kickoff, nowIso).state !== 'locked')
@@ -328,7 +348,9 @@ export function GamePlan({
          * which an unlabelled `<div>` would not be.
          */
         <h2 className="af-label af-gp-embedhead">
-          Flagged starters in active manual lineups · soonest deadline first
+          {oneLeague
+            ? 'Your lineup in this league · what to fix before it locks'
+            : 'Flagged starters in active manual lineups · soonest deadline first'}
           {data.week ? ` · week ${data.week.week}` : ''}
         </h2>
       )}
@@ -338,7 +360,7 @@ export function GamePlan({
         "we read nothing" render almost identically and mean opposite things, so
         the count of what was actually inspected is stated either way.
       */}
-      {data.startersRead > 0 || emptySlots.length > 0 ? <Summary data={data} actionable={actionable} nowIso={nowIso} /> : null}
+      {data.startersRead > 0 || emptySlots.length > 0 ? <Summary data={data} actionable={actionable} nowIso={nowIso} oneLeague={oneLeague} /> : null}
 
       <p className="af-gp-coverage">
         <span className="af-num">{data.startersRead}</span> starters checked across{' '}
@@ -401,7 +423,9 @@ export function GamePlan({
         <section className="af-frame af-gp-empty">
           <p className="af-gp-clear">
             {data.startersRead > 0
-              ? 'No starter in any of your leagues is flagged this week.'
+              ? oneLeague
+                ? 'No starter in this lineup is flagged this week.'
+                : 'No starter in any of your leagues is flagged this week.'
               : 'No starting lineups could be read, so nothing here has been checked.'}
           </p>
         </section>
