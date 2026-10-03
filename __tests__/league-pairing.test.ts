@@ -72,7 +72,7 @@ beforeEach(() => {
   fantraxFindMany.mockResolvedValue([])
   memberFindMany.mockResolvedValue([])
   draftHqAll.mockResolvedValue({ rows: [], counts: {}, withoutDraft: 0 })
-  leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0 })
+  leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0, countWindow: { capped: false, oldest: null } })
   memberFindFirst.mockResolvedValue(null)
   teamFindFirst.mockResolvedValue(null)
   teamFindMany.mockResolvedValue([])
@@ -566,12 +566,18 @@ describe('resolving the other half from a league', () => {
     leagueFindFirst.mockResolvedValue({ id: 'lg-fx' })
     teamFindMany.mockResolvedValue([{ teamName: 'T', ownerName: null, externalId: '4', platformUserId: 'sleeper-77', claimedByUserId: USER }])
     rosterFindFirst.mockResolvedValue({ playerData: { players: [1, 2, 3] } })
-    leagueActivity.mockResolvedValue({ items: [], counts: { trade: 2, waiver: 44, rosterMove: 14 }, newest: new Date('2026-08-19'), unattributed: 0 })
+    leagueActivity.mockResolvedValue({
+      items: [], counts: { trade: 2, waiver: 44, rosterMove: 14 }, newest: new Date('2026-08-19'), unattributed: 0,
+      countWindow: { capped: true, oldest: new Date('2026-07-01') },
+    })
 
     const out = await resolvePairedHalf('lg-1', USER)
 
-    /* The Sleeper half carries real counts. */
-    expect(out?.self?.activity).toMatchObject({ available: true, trades: 2, waivers: 44 })
+    /* The Sleeper half carries real counts — and says they stop at the newest rows read, so the
+       war room never presents them as a season total. */
+    expect(out?.self?.activity).toMatchObject({
+      available: true, trades: 2, waivers: 44, capped: true, since: new Date('2026-07-01'),
+    })
     /* The Fantrax half carries a reason, and never a zero that reads as a fact
        about the manager. */
     expect(out?.other?.activity?.available).toBe(false)
@@ -618,7 +624,7 @@ describe('resolving the other half from a league', () => {
     }])
     teamFindFirst.mockResolvedValue({ avatarUrl: 'https://example.com/cream.png' })
     rosterFindFirst.mockResolvedValue({ playerData: { players: [1, 2, 3] } })
-    leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0 })
+    leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0, countWindow: { capped: false, oldest: null } })
 
     const out = await resolvePairedHalf('lg-1', USER)
 
@@ -652,7 +658,7 @@ describe('resolving the other half from a league', () => {
     fantraxFindUnique.mockResolvedValue({ id: 'fx-1', leagueName: 'C', season: 2026, userTeam: 'Ciege82', roster: [{ name: 'A' }] })
     leagueFindFirst.mockResolvedValue({ id: 'lg-fx' })
     teamFindMany.mockResolvedValue([])
-    leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0 })
+    leagueActivity.mockResolvedValue({ items: [], counts: { trade: 0, waiver: 0, rosterMove: 0 }, newest: null, unattributed: 0, countWindow: { capped: false, oldest: null } })
 
     const out = await resolvePairedHalf('lg-1', USER)
 

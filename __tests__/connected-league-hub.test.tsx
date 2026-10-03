@@ -104,6 +104,20 @@ describe('connected league hub', () => {
     expect(screen.getByRole('link', { name: 'Open combined roster →' })).toHaveAttribute('href', '/core?league=league-0')
   })
 
+  it('presents the summed move counts as a recent window, never as a season total', () => {
+    const withActivity = [
+      { ...sides[0], activity: { available: true as const, trades: 1, waivers: 4, rosterMoves: 2, newest: '2026-09-30T12:00:00Z', capped: true, since: '2026-09-02T16:00:00Z' } },
+      { ...sides[1], activity: { available: true as const, trades: 0, waivers: 1, rosterMoves: 0, newest: '2026-09-28T12:00:00Z', capped: false, since: '2026-09-10T16:00:00Z' } },
+    ]
+    render(<ConnectedFranchiseWarRoom linkId="hub-1" franchiseName="F" primaryMemberId="member-0" selectedLeagueId="league-0" sides={withActivity} />)
+    const tile = screen.getByText('recent league moves').parentElement!
+    // 7 + 1, and a "+" because one league's read stopped at its cap.
+    expect(tile.querySelector('strong')!.textContent).toBe('8+')
+    expect(screen.queryByText('recorded roster moves')).toBeNull()
+    expect(screen.getByText('1 trades · 4 waivers · 2 roster moves since Sep 2')).toBeTruthy()
+    expect(screen.getByText('0 trades · 1 waivers · 0 roster moves since Sep 10')).toBeTruthy()
+  })
+
   it('saves a corrected team identity for one league without reconnecting the hub', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
     vi.stubGlobal('fetch', fetchMock)
