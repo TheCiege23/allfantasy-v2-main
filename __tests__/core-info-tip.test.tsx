@@ -145,6 +145,8 @@ describe('its CSS, shared by every /core screen', () => {
   it('undoes what the popover inherits from the label it sits in', () => {
     expect(ruleDecls('af-core.css', '.af-core .af-info-pop')).toMatchObject({
       'text-transform': 'none', 'text-align': 'left', 'letter-spacing': 'normal', 'white-space': 'normal',
+      /* Without preflight, content-box put the padding on top of max-width: 390px wide at 390. */
+      'box-sizing': 'border-box',
     })
     expect(ruleDecls('af-core.css', '.af-core .af-info-para').display).toBe('block')
   })
@@ -152,7 +154,7 @@ describe('its CSS, shared by every /core screen', () => {
   it('⚠ uses no `font` shorthand carrying a keyword — `inherit` there voids the whole declaration', () => {
     const tip = ruleDecls('af-core.css', '.af-core .af-info-tip')
     expect(tip.font).toBeUndefined()
-    expect(tip).toMatchObject({ 'font-size': '10px', 'font-weight': '800', 'font-family': 'inherit' })
+    expect(tip).toMatchObject({ 'font-size': '11px', 'font-weight': '800', 'font-family': 'inherit' })
   })
 
   it('leaves no My Team-only copy of it behind', () => {
