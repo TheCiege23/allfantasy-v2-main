@@ -195,7 +195,7 @@ export const CAREER_TOPICS = {
     },
     es: {
       title: 'Tarjetas de managers',
-      body: 'Seed es el orden de la tabla de la liga; Power es la posición del equipo según AF Power: el % de victorias all-play, con las últimas tres semanas pesando un 30% cuando ya hay cuatro semanas puntuadas. En la burbuja significa a una victoria o menos del último puesto de playoffs y cerca de él en la tabla; Eliminado significa que ni ganándolo todo puede llegar a playoffs. Los partidos de diferencia cuentan solo el récord, así que un equipo empatado con el corte puede quedar a cualquier lado. Las letras son los últimos cinco resultados cara a cara.',
+      body: '«Posición» es el orden de la tabla de la liga; «Poder» es la posición del equipo según AF Power: el % de victorias all-play, con las últimas tres semanas pesando un 30% cuando ya hay cuatro semanas puntuadas. «En el límite» significa a una victoria o menos del último puesto de playoffs y cerca de él en la tabla; «Eliminado» significa que ni ganándolo todo puede llegar a playoffs. Los partidos de diferencia cuentan solo el récord, así que un equipo empatado con el corte puede quedar a cualquier lado. Las letras son los últimos cinco resultados cara a cara.',
     },
   },
   competitiveEdge: {
@@ -215,7 +215,7 @@ export const CAREER_TOPICS = {
     },
     es: {
       title: 'Posición de eliminación',
-      body: 'Tu posición según los puntos de esta semana entre los equipos que siguen vivos; “sobre el corte” es cuánto estás por encima de la puntuación más baja. Hasta que más de la mitad de los equipos tenga puntos, la posición usa proyecciones: la proyección del proveedor recalculada con las reglas de esta liga, no el motor propio de AllFantasy. Si algún equipo no tiene proyección, se ordena por puntos.',
+      body: 'Tu posición según los puntos de esta semana entre los equipos que siguen vivos; «por encima del corte» es cuánto estás por encima de la puntuación más baja. Hasta que más de la mitad de los equipos tenga puntos, la posición usa proyecciones: la proyección del proveedor recalculada con las reglas de esta liga, no el motor propio de AllFantasy. Si algún equipo no tiene proyección, se ordena por puntos.',
     },
   },
   leagueTableColumns: {
