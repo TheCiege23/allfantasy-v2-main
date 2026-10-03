@@ -1834,3 +1834,54 @@
 @media (pointer: coarse) {
   .af-core .af-bd-chip { min-height: 36px; }
 }
+
+/*
+ * ── My Team board on a phone: two lines per league, not four (2026-10-03) ─────
+ *
+ * Measured on the live board at 375px before this: each row was 218–235px — identity, then the
+ * tags on their own line, then "Open in ESPN ↗" on its own line, then the deadline line, then a
+ * full-width "✦ Ask Chimmy · lineup check" button on ten rows in a row. After: 165px, ten rows
+ * 2,283px → 1,649px. The tags share a line with the platform link, and the Chimmy button is the
+ * ✦ alone beside the deadline (its aria-label still names the action; the words are hidden only
+ * here, scoped by `.af-mt-board-row`, because `.af-bd-row` is every board's row).
+ *
+ * ⚠ THE LEAGUE NAME NEEDS AN EXPLICIT BASIS, AND THAT IS NOT DECORATION. The viewport rules give it
+ * `flex: 1`, a basis of ZERO — so the line-breaker sees an empty first line and pulls the tags up
+ * beside it. Measured that way: the league name squeezed to 9px. Basis `100% - 120px` fills line
+ * one (rank, crest, name, countdown); the tags' basis is too wide to join it and narrow enough to
+ * sit beside the 86px link on line two.
+ *
+ * Its own top-level block at end of file, per this stylesheet's convention.
+ */
+@container af-board (max-width: 500px) {
+  .af-core .af-mt-board-row .af-bd-league { flex: 1 1 calc(100% - 120px); }
+  .af-core .af-mt-board-row .af-bd-mid { flex: 1 1 calc(100% - 140px); min-width: 0; }
+  .af-core .af-mt-board-row .af-mt-board-actions {
+    flex-wrap: nowrap;
+    gap: 8px;
+    font-size: 12px;
+    padding-top: 0;
+  }
+  .af-core .af-mt-board-row .af-mt-board-actions > span:first-child { flex: 1 1 auto; min-width: 0; }
+  .af-core .af-mt-board-row .af-mt-intelligence {
+    flex: none;
+    width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+  .af-core .af-mt-board-row .af-mt-intelligence-label { display: none; }
+}
+
+/* "+9 more" in the cross-league strip — inline, so the list reads as one sentence when opened. */
+.af-core .af-bd-xl-more { display: inline; }
+.af-core .af-bd-xl-more > summary {
+  display: inline;
+  margin-left: 4px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--accent);
+  font-weight: 700;
+}
+.af-core .af-bd-xl-more > summary::-webkit-details-marker { display: none; }
+.af-core .af-bd-xl-more[open] > summary { display: none; }
+.af-core .af-bd-xl-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

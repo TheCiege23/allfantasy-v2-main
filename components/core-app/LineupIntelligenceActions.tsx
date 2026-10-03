@@ -20,5 +20,6 @@ export function LineupIntelligenceActions({ leagueId, leagueName, bestBall = fal
     }
     window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail }))
   }
-  return <button type="button" className="af-btn af-mt-intelligence" onClick={ask} aria-label={`Ask Chimmy to check ${leagueName}'s ${bestBall ? 'Best Ball roster' : 'lineup'}`}>✦ Ask Chimmy · {bestBall ? 'roster check' : 'lineup check'}</button>
+  /* The words sit in their own span so a narrow board can show only the ✦ (the aria-label carries the full name). */
+  return <button type="button" className="af-btn af-mt-intelligence" onClick={ask} aria-label={`Ask Chimmy to check ${leagueName}'s ${bestBall ? 'Best Ball roster' : 'lineup'}`}>✦<span className="af-mt-intelligence-label"> Ask Chimmy · {bestBall ? 'roster check' : 'lineup check'}</span></button>
 }

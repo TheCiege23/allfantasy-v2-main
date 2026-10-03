@@ -356,7 +356,8 @@ function Row({
   })
 
   return (
-    <li>
+    /* `af-mt-board-row` scopes this board's phone layout — `.af-bd-row` is shared by every board. */
+    <li className="af-mt-board-row">
       <div className="af-bd-row">
         {/*
           🛑 NO GUTTER AT ALL WHEN NOTHING IS ORDERED. This drew a column of ten
@@ -440,6 +441,14 @@ function Row({
  * to his row on that league's page. Built from the same status the rows counted (myTeamPulse.ts),
  * so a player here is always also counted on his rows.
  */
+/**
+ * League links shown per player before "+N more". Measured on the live board at 375px
+ * (2026-10-03): six questionable players listing every league made the strip 739px tall and put
+ * the first lineup at 1,190px — one player alone carried twelve links. The rest stay in the DOM
+ * inside a `<details>`, so nothing is unreachable and every link is still one tap away.
+ */
+const XL_LEAGUES_SHOWN = 3
+
 function CrossLeagueStrip({ flags }: { flags: CrossLeagueFlag[] }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
@@ -455,12 +464,25 @@ function CrossLeagueStrip({ flags }: { flags: CrossLeagueFlag[] }) {
               {es ? `en ${f.leagues.length} alineaciones:` : `in ${f.leagues.length} lineups:`}
             </span>
             <span className="af-bd-xl-leagues">
-              {f.leagues.map((l, i) => (
+              {f.leagues.slice(0, XL_LEAGUES_SHOWN).map((l, i) => (
                 <span key={l.leagueId}>
                   {i > 0 ? ', ' : ''}
                   <Link href={l.href} prefetch={false}>{l.leagueName}</Link>
                 </span>
               ))}
+              {f.leagues.length > XL_LEAGUES_SHOWN ? (
+                <details className="af-bd-xl-more">
+                  <summary>
+                    {es ? `+${f.leagues.length - XL_LEAGUES_SHOWN} más` : `+${f.leagues.length - XL_LEAGUES_SHOWN} more`}
+                  </summary>
+                  {f.leagues.slice(XL_LEAGUES_SHOWN).map((l, i) => (
+                    <span key={l.leagueId}>
+                      {i > 0 ? ', ' : ''}
+                      <Link href={l.href} prefetch={false}>{l.leagueName}</Link>
+                    </span>
+                  ))}
+                </details>
+              ) : null}
             </span>
           </li>
         ))}
