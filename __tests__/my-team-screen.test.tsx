@@ -518,16 +518,15 @@ describe('My Team — the reported problems', () => {
     const t = text(<MyTeam data={data()} />)
     expect(t).toContain('API')
     expect(t).toContain('AF')
-    const explainer = render(<MyTeam data={data()} />).container
-      .querySelector('.af-mt-info')?.getAttribute('aria-label') ?? ''
+    /* The "?" is a button now (2026-10-03); the explainer is the popover it opens, not its label. */
+    const c = render(<MyTeam data={data()} />).container
+    const info = c.querySelector('button.af-mt-info')
+    expect(info).toBeTruthy()
+    const explainer = c.querySelector(`[id="${info?.getAttribute('popovertarget')}"]`)?.textContent ?? ''
     expect(explainer).toContain('provider')
     expect(explainer).toContain('AllFantasy')
     // Two numbers side by side with no explanation read as a bug, not a feature.
-    const c = render(<MyTeam data={data()} />).container
-    expect(c.querySelector('.af-mt-info')).toBeTruthy()
-    expect(c.querySelector('.af-mt-info')?.getAttribute('aria-label')?.toLowerCase()).toContain(
-      'your league',
-    )
+    expect(explainer.toLowerCase()).toContain('your league')
   })
 
   it('prints an em dash when the sample is too small to publish a rate', () => {

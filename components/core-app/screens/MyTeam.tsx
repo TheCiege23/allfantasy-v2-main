@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { LineupVerification } from '@/components/core-app/LineupVerification'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import '@/components/core-app/af-my-team.css'
 import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
 import { summariseLineupCheck, type LineupCheck, type LineupCheckItem } from '@/lib/core-app/lineupCheck'
@@ -154,7 +154,8 @@ function LockCountdown({
       */}
       {anyEmptySlot && !locked ? (
         fixHref ? (
-          <a className="af-mt-lock-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
+          /* A real button now: the most urgent action on the page was 11px caps (audit 2026-10-02). */
+          <a className="af-btn af-mt-lock-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
             {copy('Fix it in')} {platform} <span aria-hidden>↗</span>
           </a>
         ) : (
@@ -813,6 +814,8 @@ const AF_PTS_EXPLAINER =
 function ProjHeader() {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  /* Two headers render (Starters, Bench), so each popover needs its own id. */
+  const popId = useId()
   return (
     <div className="af-mt-projhead">
       <span className="af-label af-mt-projhead--af" title={copy(AF_PTS_EXPLAINER)}>
@@ -820,10 +823,15 @@ function ProjHeader() {
         {/*
           The question mark is the point: two numbers sitting side by side with
           no explanation reads as a bug, not a feature.
+
+          ⚠ IT WAS A `span role="img"` WITH A TOOLTIP — the one explanation of the page's two
+          numbers, and nothing could OPEN it but a mouse hovering a 12px circle. Not focusable,
+          not tappable (audit 2026-10-02). Now a button driving a native popover: focus, Enter,
+          Escape and click-away come from the platform rather than from state this file keeps.
         */}
-        <span className="af-mt-info" role="img" aria-label={copy(AF_PTS_EXPLAINER)}>
+        <button type="button" className="af-mt-info" popoverTarget={popId} aria-label={copy('What API and AF mean')}>
           ?
-        </span>
+        </button>
       </span>
       <span className="af-label af-mt-projhead--engine" title={copy("AllFantasy's own projection engine, adjusted to your league's scoring")}>
         AF
@@ -837,6 +845,15 @@ function ProjHeader() {
       >
         START
       </span>
+      {/*
+        LAST ON PURPOSE: the narrow-page rules hide the 3rd and 4th headings by `nth-child`, so a
+        popover placed earlier would shift them and hide AF instead of START. Hidden until opened,
+        and in the top layer once it is, so it never takes a grid cell.
+      */}
+      <div id={popId} popover="auto" className="af-mt-info-pop" role="note">
+        <strong>{copy('API and AF')}</strong>
+        <p>{copy(AF_PTS_EXPLAINER)}</p>
+      </div>
     </div>
   )
 }
