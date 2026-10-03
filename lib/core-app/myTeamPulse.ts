@@ -13,6 +13,8 @@ import { injuryNameKey, injuryNameVariants } from './injuryNames'
 import { isBestBallSettings } from './lineupMode'
 import { sleeperReadablePlayerDataOf, rosterIdSpaceOf } from './rosterIdSpace'
 import { isTeamEliminated } from './teamElimination'
+import { getLeagueTypeMedia, resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
+import { availableFilter, boardFilterOptions, matchesBoardFilter, type BoardFilter, type BoardFilterOption } from './myTeamBoardFilter'
 
 /**
  * My team pulse — the cross-league landing at `/core/my-team`.
@@ -177,6 +179,11 @@ export type MyTeamRow = {
   syncedAt?: string | null
   /** The last sync attempt failed (`League.syncStatus`), so the row may describe an older lineup. */
   syncFailed?: boolean
+  /** `NFL`, `NBA`… — the board's sport filter. */
+  sport?: string
+  /** The league card's format key (`redraft`, `dynasty`, `guillotine`…) and its label — the format filter. */
+  format?: string
+  formatLabel?: string
 }
 
 /**
@@ -198,6 +205,17 @@ export type MyTeamPulse = {
   needs: MyTeamRow[]
   /** Lineups with nothing wrong we can see, soonest lock first. */
   set: MyTeamRow[]
+  /**
+   * The board's chips, counted over EVERY readable row before any filter or cap — see
+   * `myTeamBoardFilter.ts` for why this cannot be done in the component.
+   */
+  filters?: BoardFilterOption[]
+  /** The chip in force, or null. A requested chip that names nothing on this board is null. */
+  filter?: BoardFilter | null
+  /** Readable rows the chip hides. `needs`/`set` and their totals are AFTER the filter. */
+  filteredOut?: number
+  /** Every league in view, uncapped — the weekend record counts them all, not the ten drawn. */
+  inViewLeagueIds?: string[]
   /** Totals before the display cap, so a truncated column can say so. */
   needsTotal: number
   setTotal: number
@@ -304,6 +322,8 @@ export async function getMyTeamPulse(
   userId: string,
   now: Date = new Date(),
   pausedLeagueIds?: ReadonlySet<string>,
+  /** `?format=` / `?sport=` / `?platform=` from the URL; ignored unless it names a chip here. */
+  requestedFilter: BoardFilter | null = null,
 ): Promise<MyTeamPulse> {
   /* ── 1. Every team this user has claimed, with its league. ─────────────── */
   const claimed = await prisma.leagueTeam
@@ -326,6 +346,8 @@ export async function getMyTeamPulse(
             platformLeagueId: true,
             season: true,
             status: true, lifecycleState: true, bestBallMode: true, guillotineMode: true, leagueVariant: true,
+            /* The board's format filter, through the same resolver as the league cards. */
+            leagueType: true, isDynasty: true,
             /* Read only to collapse duplicate copies — see `realLeague.ts`. */
             userId: true,
             updatedAt: true,
@@ -390,6 +412,8 @@ export async function getMyTeamPulse(
     leagueName: string
     platform: string
     sport: string
+    format: string
+    formatLabel: string
     logoUrl: string | null
     leagueBadge: string
     teamName: string | null
@@ -447,6 +471,17 @@ export async function getMyTeamPulse(
 
     const leagueName = leagueDisplayName(l.name)
     const platform = String(l.platform ?? 'manual').toLowerCase()
+    /*
+     * ⚠ THE CANONICAL KEY, NOT A SECOND RULE. The `leagueType` column wins over `isDynasty` in this
+     * resolver, so a league with the flag set but the column left at its `redraft` default reads
+     * Redraft — 4 of 560 in production on 2026-10-03. That is how every league card labels them
+     * too; a filter that disagreed with the card a click away would be the worse bug.
+     */
+    const format = resolveLeagueCardTypeKey({
+      leagueType: l.leagueType, leagueVariant: l.leagueVariant, isDynasty: l.isDynasty,
+      guillotineMode: l.guillotineMode, bestBallMode: l.bestBallMode,
+      settings: l.settings && typeof l.settings === 'object' && !Array.isArray(l.settings) ? (l.settings as Record<string, unknown>) : undefined,
+    })
 
     pending.push({
       bestBall,
@@ -454,6 +489,8 @@ export async function getMyTeamPulse(
       leagueName,
       platform,
       sport: String(l.sport ?? 'NFL').toUpperCase(),
+      format,
+      formatLabel: getLeagueTypeMedia(format).label,
       logoUrl: asImageUrl(l.logoUrl, platform) ?? asImageUrl(l.avatarUrl, platform),
       leagueBadge: initialsOf(leagueName),
       teamName: c.teamName?.trim() || null,
@@ -649,6 +686,9 @@ export async function getMyTeamPulse(
       teamId: p.teamId,
       syncedAt: p.syncedAt,
       syncFailed: p.syncFailed,
+      sport: p.sport,
+      format: p.format,
+      formatLabel: p.formatLabel,
     })
   }
 
@@ -666,7 +706,12 @@ export async function getMyTeamPulse(
     return a.lockAt.localeCompare(b.lockAt)
   }
 
-  const needsAll = rows
+  /* Chips over everything readable; the filter, then the cap. Never the other way round. */
+  const filters = boardFilterOptions(rows)
+  const filter = availableFilter(requestedFilter, filters)
+  const inView = filter ? rows.filter((r) => matchesBoardFilter(r, filter)) : rows
+
+  const needsAll = inView
     .filter((r) => r.severity > 0)
     /*
      * Remaining problems lead. Already-started losses remain visible, without
@@ -688,7 +733,7 @@ export async function getMyTeamPulse(
    * it stays out of `severity` and below every row in `needs`; but among lineups
    * with no certain loss it is the only thing left to check.
    */
-  const setAll = rows
+  const setAll = inView
     .filter((r) => r.severity === 0)
     .sort((a, b) => b.questionable - a.questionable || byLock(a, b))
 
@@ -703,6 +748,10 @@ export async function getMyTeamPulse(
     set: setAll.slice(0, SET_CAP),
     needsTotal: needsAll.length,
     setTotal: setAll.length,
+    filters,
+    filter,
+    filteredOut: rows.length - inView.length,
+    inViewLeagueIds: inView.map((r) => r.leagueId),
     considered: mine.length,
     checked: rows.length,
     automatic: rows.filter((row) => row.bestBall).length,

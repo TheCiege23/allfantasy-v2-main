@@ -86,6 +86,7 @@ import ScreenLoadError from '@/components/core-app/ScreenLoadError'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
 import MyTeamBoard from '@/components/core-app/MyTeamBoard'
 import { getMyTeamPulse } from '@/lib/core-app/myTeamPulse'
+import { boardFilterFromParams } from '@/lib/core-app/myTeamBoardFilter'
 import { getMatchupData } from '@/lib/core-app/matchup'
 import { buildMatchupStrip } from '@/lib/live/matchupStrip'
 import MatchupPulseBoard from '@/components/core-app/MatchupPulseBoard'
@@ -2598,7 +2599,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    */
   const myTeamPulse =
     activeKey === 'my-team' && !selectedLeagueId && sp.all !== '1' && sp.all !== 'true'
-      ? await getMyTeamPulse(userId, new Date(), pausedSyncLeagueIds ?? undefined).catch((error: unknown) => {
+      /* `?format=` / `?sport=` / `?platform=` — the board's filter chips, applied before the cap. */
+      ? await getMyTeamPulse(userId, new Date(), pausedSyncLeagueIds ?? undefined, boardFilterFromParams(sp)).catch((error: unknown) => {
           console.error('[core/my-team] pulse read failed', error)
           myTeamLoadFailed = true
           return null
