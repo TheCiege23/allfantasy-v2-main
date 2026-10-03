@@ -102,7 +102,7 @@ describe('the "?" is a control now', () => {
   it('puts the popover LAST — the narrow page hides the 3rd and 4th headings by nth-child', () => {
     const { container } = render(<MyTeam data={page()} />)
     const head = container.querySelector('.af-mt-projhead')!
-    expect([...head.children].map((c) => c.textContent?.trim().slice(0, 5))).toEqual(['API?', 'AF', 'OWN', 'START', 'API a'])
+    expect([...head.children].slice(0, 4).map((c) => c.textContent?.trim())).toEqual(['Sleeper?', 'AF', 'OWN', 'START'])
     expect(head.lastElementChild?.hasAttribute('popover')).toBe(true)
   })
 })
