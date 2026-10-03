@@ -23,14 +23,16 @@ function text(ui: React.ReactElement): string {
 }
 
 describe('Trade Center renders and is reachable', () => {
-  it('shows the league context and the full asset vocabulary', () => {
+  it('shows the league context and only asset kinds the builder can add', () => {
     const t = text(<TradeCenter league={LEAGUE} />)
     expect(t).toContain('Trade Center')
     expect(t).toContain('Last League Left')
-    /* The legend documents every asset class regardless of this deal's contents. */
-    expect(t).toContain('Idol · Survivor')
-    expect(t).toContain('Weapon · Zombie')
-    expect(t).toContain('Serum · Zombie')
+    expect(t).toContain('Player · any position, incl. IDP')
+    expect(t).toContain('Pick')
+    expect(t).toContain('FAAB')
+    expect(t).not.toContain('Idol · Survivor')
+    expect(t).not.toContain('Weapon · Zombie')
+    expect(t).not.toContain('Serum · Zombie')
   })
 
   it('⚠ is wired into /core/trades and does not replace the history', () => {
@@ -445,29 +447,30 @@ describe('core visual upgrade — design-refs/trade-center-handoff', () => {
     'utf8',
   ).replace(/\r\n/g, '\n')
 
-  it('scopes the asset legend to what this league can trade, once the type is known', () => {
+  it('scopes the supported asset legend to the known format', () => {
     /*
      * A redraft league has no future draft to send a pick into — the format
      * banner refuses one — so the legend must not advertise it. Keyed on the
      * resolved type key, never on a display string.
      */
     const redraft = text(<TradeCenter league={LEAGUE} leagueType="redraft" />)
-    expect(redraft).toContain('Asset types in this league')
+    expect(redraft).toContain('Available in this builder for this format')
     expect(redraft).toContain('FAAB')
+    expect(redraft).not.toContain('DPick')
     expect(redraft).not.toContain('Idol · Survivor')
     expect(redraft).not.toContain('Weapon · Zombie')
 
     const zombie = text(<TradeCenter league={LEAGUE} leagueType="redraft" leagueVariant="zombie" />)
-    expect(zombie).toContain('Weapon · Zombie')
-    expect(zombie).toContain('Serum · Zombie')
+    expect(zombie).not.toContain('Weapon · Zombie')
+    expect(zombie).not.toContain('Serum · Zombie')
     expect(zombie).not.toContain('Idol · Survivor')
   })
 
-  it('⚠ keeps the full vocabulary when the league type is unknown', () => {
-    // "We do not know" must not read as "this league forbids picks".
+  it('shows builder-supported types without claiming unknown league rules', () => {
     const t = text(<TradeCenter league={LEAGUE} />)
-    expect(t).toContain('Asset types supported')
-    expect(t).toContain('Idol · Survivor')
+    expect(t).toContain('Supported by this builder')
+    expect(t).toContain('DPick')
+    expect(t).not.toContain('Idol · Survivor')
   })
 
   it('⚠ the cross-league strip never renders "nothing waiting" for a league it did not read', () => {

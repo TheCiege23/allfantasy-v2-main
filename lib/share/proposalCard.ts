@@ -27,6 +27,9 @@ export const ProposalCardInput = z.object({
   theirLetter: letter,
   score: z.number().finite().min(0).max(100).nullable(),
   verdict: z.string().trim().min(1).max(60),
+  basis: z.string().trim().min(1).max(100).optional(),
+  asOf: z.string().datetime().optional(),
+  uncertainty: z.string().trim().min(1).max(100).optional(),
 })
 
 export type ProposalCardInput = z.infer<typeof ProposalCardInput>

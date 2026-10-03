@@ -542,7 +542,7 @@ export default async function AfCorePage({
 }) {
   const { screen } = await params
   const sp = await searchParams
-  const selectedLeagueId = typeof sp.league === 'string' ? sp.league : null
+  const selectedLeagueId = typeof sp.league === 'string' ? sp.league.trim() || null : null
   const playerQuery = typeof sp.q === 'string' ? sp.q : ''
   const selectedPlayerId = typeof sp.player === 'string' ? sp.player : null
   const segment = (screen?.[0] ?? '').toLowerCase()
@@ -919,6 +919,12 @@ export default async function AfCorePage({
     platform: String(l.platform ?? 'manual').toLowerCase(),
     mark: PLATFORM_MARK[String(l.platform ?? '').toLowerCase()] ?? l.name.charAt(0).toUpperCase(),
     meta: [l.sport, l.teamCount ? `${l.teamCount} teams` : null].filter(Boolean).join(' · ') || null,
+    syncAge: (() => {
+      if (!l.lastSyncedAt) return 'unknown' as const
+      const timestamp = new Date(l.lastSyncedAt).getTime()
+      if (!Number.isFinite(timestamp)) return 'unknown' as const
+      return Date.now() - timestamp > 24 * 60 * 60 * 1000 ? 'over-day' as const : 'recent' as const
+    })(),
   }))
 
   /*
@@ -4468,8 +4474,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               platform={trades.league.platform}
               sourceLink={trades.league.sourceLink}
               leagueType={tradeLeagueTypeKey}
+              sport={tradeLeagueRow?.sport ?? null}
               leagueVariant={tradeLeagueRow?.leagueVariant ?? null}
-              leagues={tradeStripLeagues.filter((league) => league.id === selectedLeagueId)}
+              leagues={tradeStripLeagues}
               valueActions={tradeValueActions}
               depthAccess={corePaywall?.trade_depth ?? null}
               history={<Trades data={trades} hidePending />}
@@ -4480,15 +4487,12 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           </>
         ) : tradesLoadFailed ? (
           <ScreenLoadError screen="Trade Center" retryHref={retryHref} />
-        ) : !showAllLeagues && tradesBoard ? (
-          <TradesBoard data={tradesBoard} allHref="/core/trades?all=1" totalLeagues={playedLeagues.length} />
         ) : (
-          <PickALeague
-            tabKey="trades"
-            title="Trades"
-            blurb="Every trade grade is scored against one league's own scoring and roster rules, so a grade only means something inside a league."
-            issues={issues}
-            leagues={rail}
+          <TradeCenter
+            viewerId={userId}
+            league={null}
+            leagues={tradeStripLeagues}
+            board={!showAllLeagues && tradesBoard ? <TradesBoard data={tradesBoard} allHref="/core/trades?all=1" totalLeagues={playedLeagues.length} /> : null}
           />
         )
       ) : activeKey === 'waivers' ? (

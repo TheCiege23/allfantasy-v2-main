@@ -33,6 +33,7 @@ import {
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
 import { TradeProposePanel } from '@/components/core-app/screens/TradeProposePanel'
+import { GenericTradeAnalyzer } from '@/components/core-app/screens/GenericTradeAnalyzer'
 import { useLeagueRosters } from '@/components/core-app/screens/useLeagueRosters'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
@@ -98,36 +99,19 @@ const ASSET_TYPES: Array<{ key: string; label: string; glyph: string; color: str
   { key: 'player', label: 'Player · any position, incl. IDP', glyph: 'P', color: '#22d3ee' },
   { key: 'pick', label: 'Pick', glyph: 'D', color: '#8f97bd' },
   { key: 'faab', label: 'FAAB', glyph: '$', color: '#34d399' },
-  { key: 'idol', label: 'Idol · Survivor', glyph: 'I', color: '#fbbf24' },
-  { key: 'weapon', label: 'Weapon · Zombie', glyph: 'W', color: '#fb5b78' },
-  { key: 'serum', label: 'Serum · Zombie', glyph: 'S', color: '#a78bfa' },
 ]
 
 /**
- * Which of those classes THIS league can trade.
- *
- * The legend used to list all six everywhere, so a redraft league advertised
- * future picks — the very asset the format banner then refuses. Keyed on the
- * resolved league type (`resolveLeagueCardTypeKey`) and the raw variant, never
- * on a display string. Unknown type → the full vocabulary, because "we do not
- * know" must not read as "this league forbids picks".
+ * Only show asset classes supported by this builder for the known league type.
+ * Specialty assets stay hidden until the picker and evaluator support them.
  */
-function assetTypesFor(
-  leagueType: string | null | undefined,
-  leagueVariant: string | null | undefined,
-): { types: typeof ASSET_TYPES; scoped: boolean } {
+function assetTypesFor(leagueType: string | null | undefined): { types: typeof ASSET_TYPES; scoped: boolean } {
   const type = (leagueType ?? '').toLowerCase()
-  const variant = (leagueVariant ?? '').toLowerCase()
-  if (!type && !variant) return { types: ASSET_TYPES, scoped: false }
+  if (!type) return { types: ASSET_TYPES, scoped: false }
 
   const keys = new Set<string>(['player', 'faab'])
   /* Picks exist only where there is a future draft to send them into. */
   if (type === 'dynasty' || type === 'keeper') keys.add('pick')
-  if (variant === 'zombie') {
-    keys.add('weapon')
-    keys.add('serum')
-  }
-  if (variant === 'survivor') keys.add('idol')
   return { types: ASSET_TYPES.filter((a) => keys.has(a.key)), scoped: true }
 }
 
@@ -246,6 +230,7 @@ function playerEngineLine(asset: Extract<PickedAsset, { kind: 'player' }>, lines
 }
 
 type AnalyzeResult = {
+  lastUpdated?: string
   evaluationReceipt?: ({ status: 'saved' } & import('@/lib/decision-os/trade/evaluationReceipt').SavedTradeEvaluation) | { status: 'unavailable' } | null
   salaryCap?: import('@/lib/trade-value-console/proposalCap').ProposalCapResult
   counterOffers?: import('@/lib/trade-value-console/counterOffers').EvaluatedCounterOffer[]
@@ -386,6 +371,8 @@ const NOTE_GROUPS: Array<{ key: keyof AnalyzeResult; tone: string; title: string
 function AllLeaguesTradeHub(props: {
   leagues: StripLeague[]
   valueActions: CrossLeagueValueAction[]
+  board?: ReactNode
+  viewerId?: string | null
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
@@ -404,6 +391,9 @@ function AllLeaguesTradeHub(props: {
       </header>
 
       <TradeLeagueStrip leagues={props.leagues} activeLeagueId={null} />
+
+      <GenericTradeAnalyzer viewerId={props.viewerId} />
+      {props.board ? <div className="af-tc-hub-board">{props.board}</div> : null}
 
       {props.valueActions.length > 0 ? (
         <section className="af-tc-hub-actions">
@@ -449,7 +439,7 @@ function AllLeaguesTradeHub(props: {
           {visibleLeagues.map((league) => (
             <Link key={league.id} href={`/core/trades?league=${encodeURIComponent(league.id)}`} className="af-tc-hub-league">
               <span className="af-tc-mark af-platform" data-platform={league.platform.toLowerCase()} aria-hidden>{league.mark}</span>
-              <span><strong>{league.name}</strong><small>{league.platform}{league.meta ? ` · ${league.meta}` : ''}</small></span>
+              <span><strong>{league.name}</strong><small>{league.platform}{league.meta ? ` · ${league.meta}` : ''}</small>{league.syncAge === 'over-day' ? <small>Last sync over 24 hours ago</small> : null}{league.syncAge === 'unknown' ? <small>Sync time unavailable</small> : null}</span>
               <b aria-hidden>→</b>
             </Link>
           ))}
@@ -545,12 +535,14 @@ export function TradeCenter(props: {
   platform?: string | null
   /** Resolved league type key (redraft, dynasty, keeper, …) — scopes the asset legend. */
   leagueType?: string | null
+  sport?: string | null
   /** Raw `League.leagueVariant` (zombie, survivor, …) — adds that format's asset classes. */
   leagueVariant?: string | null
   /** Every connected league, for the cross-league offers strip. Omit to hide the strip. */
   leagues?: StripLeague[] | null
   /** Portfolio-wide value changes, already scoped to rosters owned by this manager. */
   valueActions?: CrossLeagueValueAction[] | null
+  board?: ReactNode
   /**
    * Where to actually send the finished trade — the platform's own trade page.
    * Null for a native league, or when the resolver could not verify a host.
@@ -585,6 +577,7 @@ export function TradeCenter(props: {
   const depthAccess = props.depthAccess ?? null
   const depthLocked = depthAccess?.unlocked === false
   const [result, setResult] = useState<AnalyzeResult | null>(null)
+  const [analyzedAt, setAnalyzedAt] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -1160,6 +1153,7 @@ export function TradeCenter(props: {
         return
       }
       setResult(j)
+      setAnalyzedAt(new Date().toISOString())
     } catch {
       if (proposalFingerprintRef.current !== analyzedProposal) return
       setError('Network error.')
@@ -1384,7 +1378,7 @@ export function TradeCenter(props: {
   /* The rows this league moved off their market price — listed under the verdict with each reason. */
   const movedLines = [...give, ...get].filter((l) => (l.adjustments ?? []).length > 0 && l.leagueValue != null)
 
-  const legend = assetTypesFor(props.leagueType, props.leagueVariant)
+  const legend = assetTypesFor(props.leagueType)
 
   const valueSources = Array.from(
     new Set(
@@ -1476,6 +1470,9 @@ export function TradeCenter(props: {
       theirLetter: letter(theirGrade),
       score: typeof result.fairnessScore === 'number' ? Math.max(0, Math.min(100, result.fairnessScore)) : null,
       verdict: clip(result.labels?.fairnessLabel ?? 'Graded'),
+      basis: (result.valueBasis?.label ?? result.grade?.basis ?? 'League value').slice(0, 100),
+      asOf: result.evaluationReceipt?.status === 'saved' ? result.evaluationReceipt.evaluatedAt : analyzedAt ?? new Date().toISOString(),
+      uncertainty: result.dataGaps?.length ? `${result.dataGaps.length} data gap${result.dataGaps.length === 1 ? '' : 's'}` : result.grade?.graded && result.grade.lines.some((line) => line.leagueValue == null) ? 'Some assets unpriced' : result.labels?.confidenceLabel?.slice(0, 100) ?? 'Value estimate',
     }
     setCardState('working')
     void shareCardImage('/api/share/proposal-card', 'trade-check.png', 'Trade check', {
@@ -1483,10 +1480,10 @@ export function TradeCenter(props: {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     }).then(setCardState)
-  }, [props.league?.id, result, noSignal, myRoster, partnerRoster, theirLabel, give, get, yourGrade, theirGrade])
+  }, [props.league?.id, result, noSignal, myRoster, partnerRoster, theirLabel, give, get, yourGrade, theirGrade, analyzedAt])
 
   if (!props.league) {
-    return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} />
+    return <AllLeaguesTradeHub leagues={props.leagues ?? []} valueActions={valueActions} board={props.board} viewerId={props.viewerId} />
   }
 
   const hasAssets = giveAssets.length > 0 || getAssets.length > 0
@@ -1657,10 +1654,10 @@ export function TradeCenter(props: {
         full six otherwise, because an unknown type must not read as a rule.
       */}
       <details className="af-tc-disclosure" data-mstep="offers">
-        <summary>{legend.types.length} {copy('tradeable asset types')} <span>{copy('View league rules')}</span></summary>
+        <summary>{legend.types.length} {copy('asset types you can add here')} <span>{copy('View supported assets')}</span></summary>
         <div className="af-tc-legend">
           <span className="af-tc-legend-label">
-            {copy(legend.scoped ? 'Asset types in this league' : 'Asset types supported')}
+            {copy(legend.scoped ? 'Available in this builder for this format' : 'Supported by this builder')}
           </span>
           {legend.types.map((a) => (
             <span key={a.key} className="af-tc-asset-pill">
@@ -2281,6 +2278,13 @@ export function TradeCenter(props: {
               <span>{result.valueBasis.label}</span>
             </p>
           ) : null}
+          <details className="af-tc-grade-method">
+            <summary>How this was graded</summary>
+            <p>{result.grade?.basis ?? result.valueBasis?.label ?? 'Current available market values.'}</p>
+            <p>The grade compares trade value. Roster fit, acceptance, and realized production are separate.</p>
+            {analyzedAt ? <p>Evaluated {new Date(analyzedAt).toLocaleString()}.</p> : null}
+            {serverGrade?.graded ? <ul>{serverGrade.lines.map((line, index) => <li key={`${line.side}-${line.name}-${index}`}>{line.side === 'give' ? 'You send' : 'You receive'} {line.name}: {line.leagueValue == null ? 'unpriced' : money(line.leagueValue)}</li>)}</ul> : null}
+          </details>
           {/*
             Which league type that chart is for, and whether anyone confirmed it. The league-type
             control sits in this page's header (CoreLeagueContextBar, `#league-type`).
@@ -2402,6 +2406,29 @@ export function TradeCenter(props: {
             )
           ) : null}
 
+          {props.sourceLink ? <div className="af-tc-handoff af-tc-handoff--verdict">
+            <SourceActionLink link={props.sourceLink} className="af-tc-handoff-link" />
+            <span className="af-tc-handoff-note">Build here, then send the offer on your league platform.</span>
+          </div> : null}
+
+          {!noSignal && serverGrade?.graded ? <div className="af-tc-partner-summary">
+            <div><strong>Why {theirLabel} might accept</strong><p>{theirIncentive}</p></div>
+            <p>{agreementBlocker}</p>
+            <small>Value fairness and acceptance are separate. Manager preference and roster needs can change the answer.</small>
+            {!depthLocked && result.counterOffers?.[0] ? <div className="af-tc-partner-counter">
+              <strong>Closer value package: {result.counterOffers[0].addTo === 'get' ? 'ask for' : 'offer'} {result.counterOffers[0].name}</strong>
+              <span>{result.counterOffers[0].balanced ? 'Within the even-value band' : `${Math.abs(result.counterOffers[0].grade.percentDiff)}% apart`} after regrading the package.</span>
+              <button type="button" className="af-btn af-btn-ghost" onClick={() => {
+                const counter = result.counterOffers?.[0]
+                if (!counter) return
+                addAsset(counter.addTo, { kind: 'player', name: counter.name,
+                  playerId: counter.asset.kind === 'player' ? counter.asset.playerId ?? (counter.asset.providerIdentity ? counter.rosterPlayerId : null) : null,
+                  providerIdentity: counter.asset.kind === 'player' ? counter.asset.providerIdentity : undefined,
+                  position: counter.position, team: null, value: counter.marketValue })
+              }}>Try this package</button>
+            </div> : null}
+          </div> : null}
+
           {movedLines.length > 0 || result.valueBasis?.needGap ? (
             <div className="af-tc-moves">
               <div className="af-label">{copy('Why the values moved')}</div>
@@ -2466,9 +2493,45 @@ export function TradeCenter(props: {
         </section>
       ) : null}
 
+      {/*
+        The proposal sits AFTER the verdict, not beside the builder. Sending a
+        deal is the last thing you do, and putting the button next to the assets
+        invites sending one before it has been priced.
+      */}
+      {/*
+        Wrapped rather than tagged: the panel owns its own root element. `display: contents` on the
+        wrapper (stylesheet) keeps it out of the page's flex gap on every width.
+      */}
+      <div className="af-tc-mstep-wrap" data-mstep="review">
+      <TradeProposePanel
+        leagueId={props.league?.id ?? null}
+        give={giveAssets}
+        get={getAssets}
+        rosters={rosterData?.rosters ?? null}
+        viewerRosterId={rosterData?.viewerRosterId ?? null}
+        partnerRosterId={partnerRosterId}
+        onChoosePartner={setPartnerRosterId}
+        counteringTradeId={countering?.tradeId ?? null}
+        counteringLabel={countering?.label ?? null}
+        onCancelCounter={() => setCountering(null)}
+        onSent={() => {
+          /*
+           * Counter mode is armed for ONE send. Leaving it armed after a successful
+           * counter would point the next send at a trade the engine has already
+           * closed, and the second attempt would fail with a message about a trade
+           * the manager thinks they are done with.
+           */
+          setCountering(null)
+          setInboxReloadToken((n) => n + 1)
+        }}
+      />
+      </div>
+
       {/* Additive context. Never merged with the verdict above. */}
       {result ? (
-        <div className="af-tc-notes" data-mstep="review">
+        <details className="af-tc-analysis-fold" data-mstep="review">
+          <summary>Schedule, roster, and format notes</summary>
+          <div className="af-tc-notes">
           {NOTE_GROUPS.map((g) => {
             const notes = (result[g.key] as string[] | undefined) ?? []
             if (notes.length === 0) return null
@@ -2483,7 +2546,8 @@ export function TradeCenter(props: {
               </div>
             )
           })}
-        </div>
+          </div>
+        </details>
       ) : null}
 
       {result && depthAccess && depthLocked ? (
@@ -2491,6 +2555,8 @@ export function TradeCenter(props: {
           <CoreDepthLock access={depthAccess} what="The full trade breakdown" />
         </div>
       ) : intel ? (
+        <details className="af-tc-analysis-fold" data-mstep="review">
+        <summary>Deeper trade strategy and partner context</summary>
         <section className="af-tc-dos" data-mstep="review">
           {/* Was "Decision OS · this deal" — internal name; the section reads this deal. */}
           <div className="af-label">{copy('This deal')}</div>
@@ -2594,6 +2660,7 @@ export function TradeCenter(props: {
             <p className="af-tc-row-sub">{intel.alternateTargetsNote}</p>
           ) : null}
         </section>
+        </details>
       ) : null}
 
       {/* Competitive Edge: the partner's own trade record, once there is a deal with them to read it against. */}
@@ -2606,40 +2673,6 @@ export function TradeCenter(props: {
           />
         </div>
       ) : null}
-
-      {/*
-        The proposal sits AFTER the verdict, not beside the builder. Sending a
-        deal is the last thing you do, and putting the button next to the assets
-        invites sending one before it has been priced.
-      */}
-      {/*
-        Wrapped rather than tagged: the panel owns its own root element. `display: contents` on the
-        wrapper (stylesheet) keeps it out of the page's flex gap on every width.
-      */}
-      <div className="af-tc-mstep-wrap" data-mstep="review">
-      <TradeProposePanel
-        leagueId={props.league?.id ?? null}
-        give={giveAssets}
-        get={getAssets}
-        rosters={rosterData?.rosters ?? null}
-        viewerRosterId={rosterData?.viewerRosterId ?? null}
-        partnerRosterId={partnerRosterId}
-        onChoosePartner={setPartnerRosterId}
-        counteringTradeId={countering?.tradeId ?? null}
-        counteringLabel={countering?.label ?? null}
-        onCancelCounter={() => setCountering(null)}
-        onSent={() => {
-          /*
-           * Counter mode is armed for ONE send. Leaving it armed after a successful
-           * counter would point the next send at a trade the engine has already
-           * closed, and the second attempt would fail with a message about a trade
-           * the manager thinks they are done with.
-           */
-          setCountering(null)
-          setInboxReloadToken((n) => n + 1)
-        }}
-      />
-      </div>
 
       {/*
         The finder answers "who should I trade with", which is the question of the "You get" step.

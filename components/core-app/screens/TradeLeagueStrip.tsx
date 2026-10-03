@@ -35,6 +35,7 @@ export type StripLeague = {
   mark: string
   /** "NFL · 12 teams" — whatever the caller can say cheaply. */
   meta?: string | null
+  syncAge?: 'recent' | 'over-day' | 'unknown'
 }
 
 type PanelLite = {
@@ -232,6 +233,8 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
                 <span className="af-tc-tile-body">
                   <span className="af-tc-tile-name">{l.name}</span>
                   {l.meta ? <span className="af-tc-tile-meta">{l.meta}</span> : null}
+                  {l.syncAge === 'over-day' ? <span className="af-tc-tile-sync">Last sync over 24 hours ago</span> : null}
+                  {l.syncAge === 'unknown' ? <span className="af-tc-tile-sync">Sync time unavailable</span> : null}
                 </span>
               </span>
               <span className="af-tc-tile-status af-num" data-tone={line.tone}>
