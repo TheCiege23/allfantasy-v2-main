@@ -235,7 +235,8 @@ async function collectSleeperDraftFacts(args: {
      */
     const rostersUnreadable = !seasonRosters || seasonRosters.length === 0
 
-    const drafts = await getLeagueDrafts(seasonLeague.externalLeagueId)
+    const drafts = await getLeagueDrafts(seasonLeague.externalLeagueId, { strict: true })
+    if (!Array.isArray(drafts)) throw new Error('Sleeper draft history returned an invalid payload')
     const sourceDraftIds = Array.from(
       new Set(
         (drafts ?? [])
@@ -249,7 +250,11 @@ async function collectSleeperDraftFacts(args: {
       sourceDraftIds,
       SLEEPER_DRAFT_FETCH_CONCURRENCY,
       async (sourceDraftId) => {
-        const picks = await withSleeperHistoricalRequestLimit(() => getDraftPicks(sourceDraftId))
+        const picks = await withSleeperHistoricalRequestLimit(() => getDraftPicks(sourceDraftId, { strict: true }))
+        const sourceDraft = drafts.find((draft) => draft?.draft_id === sourceDraftId)
+        if (!Array.isArray(picks) || (sourceDraft?.status === 'complete' && picks.length === 0)) {
+          throw new Error('Sleeper selections unavailable for draft ' + sourceDraftId)
+        }
         const tradedPicks = Array.isArray(picks) && picks.length > 0
           ? await withSleeperHistoricalRequestLimit(() =>
               fetch(`https://api.sleeper.app/v1/draft/${sourceDraftId}/traded_picks`, {
