@@ -276,8 +276,10 @@ export function TradeProposePanel(props: {
 
       <div className="af-tc-review" aria-label={copy('Review this trade before sending')}>
         <h3>{copy('Review this deal')}</h3>
-        <p><strong>{copy('Roster impact')}:</strong> {playersOut.length} {copy('players out')}, {playersIn.length} {copy('players in')}
-          {mine ? ` · ${mine.players.length} players now, ${mine.players.length - playersOut.length + playersIn.length} if completed` : ''}.
+        <p><strong>{copy('Roster impact')}:</strong> {playersOut.length} {playersOut.length === 1 ? copy('player out') : copy('players out')}, {playersIn.length} {playersIn.length === 1 ? copy('player in') : copy('players in')}
+          {mine && reconciled && reconciled.blocked.length === 0
+            ? ` · ${mine.players.length} players now, ${mine.players.length - playersOut.length + playersIn.length} if completed`
+            : ` · ${copy('Roster size estimate waits for asset validation')}`}.
         </p>
         <p><strong>{copy('Value coverage')}:</strong> {unpriced.length === 0
           ? copy('Every selected player or pick has a market value on file. Values are estimates, not a guarantee of league approval.')
