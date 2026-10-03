@@ -29,6 +29,7 @@ import { fetchIpApi, fetchProxycheck } from "./geoIpFetch"
 import { isPublicIp } from "./geoIpCache"
 import {
   combineAnonymizerDetail,
+  logAnonymizerBlock,
   parseIpApiPayload,
   parseProxycheckPayload,
   type AnonymizerDetail,
@@ -112,7 +113,10 @@ async function lookupUncached(ip: string): Promise<AnonymizerDetail> {
       : null
     const ipapi =
       ipapiKey && !proxycheck?.anonymized ? parseIpApiPayload(await fetchIpApi(ip, ipapiKey, controller.signal)) : null
-    return combineAnonymizerDetail({ tor: false, proxycheck, ipapi })
+    const detail = combineAnonymizerDetail({ tor: false, proxycheck, ipapi })
+    // Which vendor said yes, and in what words — never the address. See describeAnonymizerBlock.
+    if (detail.anonymized === true) logAnonymizerBlock("middleware", detail, { proxycheck, ipapi })
+    return detail
   } finally {
     clearTimeout(timer)
   }
@@ -158,14 +162,17 @@ export async function resolveAnonymizerDetailByIp(
 
   const now = Date.now()
   const hit = cache.get(ip)
+  /** The cached block a forced re-check replaced, if any — to report a block that did not hold. */
+  let forcedFrom: Entry | null = null
   if (hit && hit.expiresAt > now) {
     const mayForce =
       opts.fresh === true &&
       hit.anonymized !== false &&
       now - (lastForcedAt.get(ip) ?? 0) >= FORCED_RECHECK_MIN_INTERVAL_MS
-    if (!mayForce) return { anonymized: hit.anonymized, kind: hit.kind }
+    if (!mayForce) return { anonymized: hit.anonymized, kind: hit.kind, decidedBy: hit.decidedBy ?? null }
     lastForcedAt.set(ip, now)
     cache.delete(ip)
+    forcedFrom = hit
   }
 
   if (now < breakerOpenUntil) return UNKNOWN
@@ -198,7 +205,20 @@ export async function resolveAnonymizerDetailByIp(
   }
 
   const pending = lookupUncached(ip)
-    .then(settle, () => settle(UNKNOWN))
+    .then((detail) => {
+      /*
+       * ⚠ A BLOCK THAT CLEARS ON "TRY AGAIN" IS THE FALSE-POSITIVE SIGNATURE. A real VPN user who
+       * presses the button without disconnecting stays blocked; a residential line a vendor
+       * mislabelled for a few minutes clears. Say which vendor it was, so the pattern can be counted.
+       */
+      if (forcedFrom?.anonymized === true && detail.anonymized === false) {
+        console.warn(
+          `[geo] forced re-check cleared a block: was decidedBy=${forcedFrom.decidedBy ?? "unknown"} ` +
+            `kind=${forcedFrom.kind ?? "unknown"}, now clear`,
+        )
+      }
+      return settle(detail)
+    }, () => settle(UNKNOWN))
     .finally(() => {
       inFlight.delete(ip)
     })
