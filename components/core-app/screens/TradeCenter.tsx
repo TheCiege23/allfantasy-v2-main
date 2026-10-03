@@ -600,7 +600,7 @@ export function TradeCenter(props: {
     if (!asset || asset.kind !== 'player') return null
     const line = playerEngineLine(asset, result?.players?.[side] ?? [])
     const sleeperId = asset.providerIdentity?.provider === 'sleeper' ? asset.providerIdentity.id : line?.enrichmentPlayerId
-    const sport = asset.sportHint ?? props.league?.sport ?? line?.sport ?? 'NFL'
+    const sport = asset.sportHint ?? props.sport ?? line?.sport ?? 'NFL'
     return sleeperId && String(sport).toUpperCase() === 'NFL' ? {sport:'NFL',sleeperId,name:asset.name,position:asset.position,leagueId:props.league?.id} : null
   }
   const [picking, setPicking] = useState<'give' | 'get' | null>(null)

@@ -5,10 +5,13 @@
 .track {height:18px;border-radius:5px;background:rgba(148,163,184,.12);overflow:hidden}
 .bar {height:100%;background:#38bdf8;border-radius:5px;min-width:2px}
 .row:nth-child(odd) .bar {background:#a78bfa}
-.controls {display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;align-items:center}
+.controls {display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;align-items:center;min-height:44px}
+.controls label {display:inline-flex;align-items:center;gap:6px;min-height:44px}
 .controls button,.controls select,.button {color:inherit;background:rgba(148,163,184,.1);border:1px solid var(--border,#475569);border-radius:9px;min-height:44px;padding:8px 12px;cursor:pointer}
 .controls button[aria-pressed=true] {border-color:#38bdf8;background:rgba(56,189,248,.15)}
 .chart {width:100%;height:auto;max-height:240px;color:#38bdf8;display:block}
+.axis {display:flex;justify-content:space-between;gap:12px;font-size:.75rem;color:var(--muted,#94a3b8)}
+.axis span:last-child {text-align:right}
 .table {overflow:auto;max-height:220px;font-size:.8rem}
 .table table {width:100%;border-collapse:collapse}
 .table th,.table td {padding:7px;text-align:left;border-bottom:1px solid rgba(148,163,184,.15)}

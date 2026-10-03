@@ -20,6 +20,6 @@ describe('trade graphs and optional reactions',()=>{
     const view=render(<PlayerValueHistoryChart sleeperId="1" sport="NBA" unlocked/>);expect(fetch).not.toHaveBeenCalled()
     view.rerender(<PlayerValueHistoryChart sleeperId="1" sport="NFL" unlocked={false}/>);expect(fetch).not.toHaveBeenCalled()
     view.rerender(<PlayerValueHistoryChart sleeperId="1" sport="NFL" unlocked/>);await waitFor(()=>expect(screen.getByText(/capture week; these are calendar/)).toBeTruthy())
-    expect(screen.getByText('Unavailable')).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'By season'}));expect(screen.getByText(/Current season is incomplete/)).toBeTruthy()
+    expect(screen.getByText('Unavailable')).toBeTruthy();fireEvent.change(screen.getByRole('slider',{name:'Inspect capture period'}),{target:{value:'1'}});expect(screen.getByText(/No recorded quote/)).toBeTruthy();fireEvent.click(screen.getByRole('button',{name:'By season'}));expect(screen.getByText(/Current season is incomplete/)).toBeTruthy()
   })
 })
