@@ -29,7 +29,7 @@ import { middleware } from "@/middleware"
 const mockedGetToken = vi.mocked(getToken)
 
 /** The owner account hardcoded in MIDDLEWARE_ADMIN_USER_IDS. */
-const OWNER_ID = "3a7ffd10-b1a5-4a40-8d07-232364596735"
+const OWNER_ID = "9791bae0-e47f-418a-ae40-285f6a2e7887" // TheCiege26 — the owner account in MIDDLEWARE_ADMIN_USER_IDS
 
 function fromState(path: string, region: string | null, country = "US", method = "POST") {
   const headers: Record<string, string> = { "cf-ipcountry": country, "cf-connecting-ip": "198.51.100.40" }

@@ -854,13 +854,18 @@ function redirectLegacyMarketingRoutes(request: NextRequest): NextResponse | nul
 }
 
 /**
- * Permanent app-owner / developer accounts that bypass geo-restrictions.
- * Mirror of STATIC_ADMIN_USER_IDS in lib/dev-admin/access.ts.
- * Keep in sync manually — this lives here to stay Edge-runtime-safe.
+ * Permanent app-owner / developer accounts that bypass geo-restrictions and the VPN gate.
+ * Mirror of STATIC_ADMIN_USER_IDS in lib/dev-admin/access.ts — kept identical by
+ * __tests__/admin-id-lists-in-sync.test.ts. This copy lives here to stay Edge-runtime-safe.
+ *
+ * 🛑 EVERY ID HERE MUST BE A ROW IN PRODUCTION `app_users`. The two IDs this list held until
+ * 2026-10-02 (theciege24 `944bb9f1-…`, TheCiege24 `3a7ffd10-…`) were checked against production
+ * and exist nowhere, so the owner bypass matched no account at all: the owner, signed in as
+ * TheCiege26 and shown as admin everywhere in the app (that check also reads ADMIN_EMAILS and the
+ * admin role), was sent to /vpn-blocked when his home IP was flagged. Check the row before adding.
  */
 const MIDDLEWARE_ADMIN_USER_IDS = new Set<string>([
-  '944bb9f1-7a25-455b-8ef2-66146dbf3553', // theciege24 — app owner
-  '3a7ffd10-b1a5-4a40-8d07-232364596735', // TheCiege24 — current app owner account
+  '9791bae0-e47f-418a-ae40-285f6a2e7887', // TheCiege26 — app owner (verified in app_users 2026-10-02)
 ])
 
 function parseMiddlewareAdminIds(rawValue: string | undefined): Set<string> {
