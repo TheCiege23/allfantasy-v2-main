@@ -2797,7 +2797,9 @@
 .af-live-matchup {
   margin: 0 0 14px;
   padding: 12px 14px;
-  border: 1px solid var(--af-border, rgba(255, 255, 255, 0.12));
+  /* `--af-border` and `--af-good` are defined nowhere, so their dark-only fallbacks always won —
+     an invisible border and a ~2:1 green on a light page. The core tokens instead. */
+  border: 1px solid var(--line);
   border-radius: 12px;
 }
 .af-live-matchup-row {
@@ -2819,9 +2821,14 @@
   font-size: 22px;
   font-weight: 700;
 }
-.af-live-matchup[data-lead='lead'] .af-live-matchup-score:nth-of-type(1),
-.af-live-matchup[data-lead='trail'] .af-live-matchup-score:nth-of-type(2) {
-  color: var(--af-good, #3ecf8e);
+/*
+ * The leader's score is green. 🛑 THIS WAS `:nth-of-type(1)` / `(2)`, WHICH COUNTS SPANS, NOT SCORES:
+ * every child of the row is a span (team, score, –, score, team), so the "lead" rule matched nothing
+ * and the "trail" rule matched YOUR score — green exactly when you were losing.
+ */
+.af-live-matchup[data-lead='lead'] .af-live-matchup-score[data-side='you'],
+.af-live-matchup[data-lead='trail'] .af-live-matchup-score[data-side='them'] {
+  color: var(--good);
 }
 .af-live-matchup-meta,
 .af-live-matchup-note {

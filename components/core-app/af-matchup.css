@@ -8,6 +8,9 @@
   flex-direction: column;
   gap: 12px;
   max-width: 1020px;
+  /* The narrow-screen rules key on THIS box as well as the viewport — see the
+     @container blocks at the end of this file. */
+  container: af-mu / inline-size;
 }
 
 /* ── Week banner ─────────────────────────────────────────────────────── */
@@ -342,7 +345,8 @@
   font-size: 26px;
   font-weight: 800;
   line-height: 1;
-  color: var(--ink);
+  /* `--ink` is defined nowhere, so this used to fall through to inheritance. */
+  color: var(--text);
 }
 
 .af-mu-missing-value {
@@ -350,7 +354,7 @@
   font-size: 13.5px;
   font-weight: 700;
   line-height: 1.5;
-  color: var(--ink);
+  color: var(--text);
 }
 /*
   The coverage caveat is quieter than the total but NOT hidden — it qualifies the
@@ -626,8 +630,9 @@
   .af-mu-half-sub {
     display: none;
   }
+  /* 12px, the app's floor for phone body text (see af-matchup-pulse.css). Was 11.5px. */
   .af-mu-half-name {
-    font-size: 11.5px;
+    font-size: 12px;
   }
   .af-mu-half-pts {
     font-size: 12.5px;
@@ -1085,8 +1090,16 @@
   color: var(--faint);
 }
 
-/* Desktop gets a scoreboard-sized score; the phone keeps the size its layout was measured at. */
-@media (min-width: 1024px) {
+/*
+ * A scoreboard-sized score where the team columns have room for it; elsewhere the size the layout
+ * was measured at.
+ *
+ * ⚠ KEYED ON THE MATCHUP'S OWN WIDTH, NOT THE VIEWPORT. This was `min-width: 1024px`, but at 1024 the
+ * shell's rail and nav leave the matchup ~700px, and a 36px score then left each team name ~30px.
+ * Each team column needs crest 48 + score ~110 + gaps 24 + a readable name — about 860px of
+ * matchup for all three columns.
+ */
+@container af-mu (min-width: 860px) {
   .af-mu-score {
     font-size: 36px;
   }
@@ -1335,5 +1348,238 @@
   /* The game line sits in the two-row phone grid with the name, under it. */
   .af-mu-board-row .af-mu-half > .af-mu-half-text .af-mu-half-game {
     font-size: 11px;
+  }
+}
+
+/* ── Narrow MATCHUP, wide viewport (2026-10-02 layout pass) ───────────────────
+ *
+ * Top-level rules and sibling blocks only, appended at end of file — the nested-@media incident
+ * this file is named for cannot reach anything below.
+ *
+ * 🛑 THE PHONE RULES ABOVE KEY ON THE VIEWPORT, BUT THE SPACE THE MATCHUP GETS IS THE VIEWPORT MINUS
+ * THE SHELL'S RAIL AND NAV. From 781 to ~1080 (every iPad in portrait, and a 1024 landscape) the
+ * matchup measured ~500–760px while the viewport rules stayed off, so it drew the full desktop
+ * three-column banner in it: at 834 each team column got ~115px for a 48px crest, a ~86px score and
+ * a name — the name collapsed to an ellipsis and the score ran into the centre card. And 721–780 got
+ * the opposite: the phone layout under a desktop shell, with a full-width fixed scorebar over the rail.
+ *
+ * The same rules, keyed on the matchup's own width (`container: af-mu` on `.af-mu`) — the pattern
+ * af-core-boards.css already uses for the boards. The viewport blocks stay as they are: they are the
+ * fallback for a browser without container queries (iOS before 16), and on a phone both fire
+ * identically. Thresholds are the viewport ones less the phone shell's padding: 780 → 760,
+ * 720 → 700, 560 → 540.
+ */
+@container af-mu (max-width: 760px) {
+  .af-mu-h2h {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-mu-board-head,
+  .af-mu-board-row,
+  .af-mu-board-foot {
+    grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
+    gap: 5px;
+  }
+  .af-mu-slot {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+  }
+  .af-mu-portrait,
+  .af-mu-face,
+  .af-mu-portrait--empty {
+    width: 26px;
+    height: 26px;
+  }
+  .af-mu-club {
+    width: 12px;
+    height: 12px;
+  }
+  .af-mu-half-sub {
+    display: none;
+  }
+  .af-mu-half-name {
+    font-size: 12px;
+  }
+  .af-mu-half-pts {
+    font-size: 12.5px;
+  }
+  .af-mu-team[data-align='right'] {
+    flex-direction: row;
+    text-align: left;
+  }
+  .af-mu-centre {
+    order: 3;
+  }
+  .af-mu-basis {
+    order: 4;
+  }
+  .af-mu-missing li {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .af-mu-missing-why,
+  .af-mu-missing-value {
+    flex: 0 0 auto;
+  }
+  .af-mu-team-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.2;
+  }
+
+  /*
+   * The scorebar, on a tablet too — the Matchup.tsx note always said "phone or tablet", and the
+   * viewport rule only ever gave it to ≤780.
+   *
+   * ⚠ POSITIONED OVER THE MATCHUP, NOT THE WINDOW. `left: 0; right: 0` under a desktop shell painted
+   * it across the rail and nav at z-index 38 and took their taps. `StickyScore` measures the
+   * matchup's own box into these two variables; the phone rule below restores full-bleed.
+   */
+  .af-mu-sticky {
+    position: fixed;
+    top: 0;
+    left: var(--af-mu-sticky-left, 0px);
+    right: auto;
+    width: var(--af-mu-sticky-width, 100%);
+    z-index: 38;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 14px 8px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0 0 12px 12px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    animation: af-mu-drop 0.18s ease-out;
+  }
+  .af-mu-sticky-side {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+  .af-mu-sticky-side[data-side='them'] {
+    justify-content: flex-end;
+  }
+  .af-mu-sticky-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .af-mu-sticky-n {
+    flex: none;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .af-mu-sticky[data-basis='projected'] .af-mu-sticky-n {
+    color: var(--text2);
+  }
+  .af-mu-sticky[data-leader='you'] [data-side='you'] .af-mu-sticky-n {
+    color: var(--good);
+  }
+  .af-mu-sticky[data-leader='opponent'] [data-side='them'] .af-mu-sticky-n {
+    color: var(--bad);
+  }
+  .af-mu-sticky-wp {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--chip);
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--muted);
+  }
+  .af-mu-sticky-wp[data-tone='good'] {
+    background: var(--good-soft);
+    color: var(--good);
+  }
+  .af-mu-sticky-wp[data-tone='bad'] {
+    background: var(--bad-soft);
+    color: var(--bad);
+  }
+}
+
+/* On a phone the shell is one column, so the scorebar is full-bleed again, square-cornered. */
+@media (max-width: 720px) {
+  .af-mu-sticky {
+    left: 0;
+    right: 0;
+    width: auto;
+    border-radius: 0;
+  }
+}
+
+@container af-mu (max-width: 700px) {
+  .af-mu-board-row .af-mu-half-name {
+    padding-block: 11px;
+    margin-block: -11px;
+  }
+}
+
+@container af-mu (max-width: 540px) {
+  .af-mu-board-row .af-mu-half {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 1px;
+  }
+  .af-mu-board-row .af-mu-half > .af-mu-portrait {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+  .af-mu-board-row .af-mu-half > .af-mu-half-text {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .af-mu-board-row .af-mu-half > .af-mu-half-pts {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .af-mu-board-row .af-mu-half[data-align='right'] {
+    grid-template-columns: minmax(0, 1fr) 26px;
+    justify-items: end;
+  }
+  .af-mu-board-row .af-mu-half[data-align='right'] > .af-mu-portrait {
+    grid-column: 2;
+  }
+  .af-mu-board-row .af-mu-half[data-align='right'] > .af-mu-half-text,
+  .af-mu-board-row .af-mu-half[data-align='right'] > .af-mu-half-pts {
+    grid-column: 1;
+  }
+  .af-mu-board-row .af-mu-half-name {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.2;
+  }
+}
+
+/*
+ * The provider buttons are `.af-btn`, 36px tall, and nothing raised them for touch — not even at
+ * full width on a phone. 44px wherever the pointer is a finger.
+ */
+@media (pointer: coarse) {
+  .af-core .af-btn.af-mu-source {
+    min-height: 44px;
   }
 }
