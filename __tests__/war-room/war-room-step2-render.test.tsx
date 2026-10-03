@@ -195,7 +195,9 @@ describe('Game Plan — the summary strip', () => {
 
   it('says what it skipped and how old the lineups are', () => {
     const html = plan({ rows, bestBallLeagues: 2, unsupportedLeagues: 1, rostersAsOf: '2026-09-27T12:40:00.000Z' })
-    expect(html).toContain('Lineups as of the last sync, 3h ago.')
+    // Step 4b: the Player Finder's refresh control carries the stamp (12:40Z is 8:40a ET), with its button.
+    expect(html).toContain('Lineups as of 8:40a ET · 3h 0m ago')
+    expect(html).toContain('Refresh my lineups')
     expect(html).toContain('2 best-ball leagues skipped')
     expect(html).toContain('1 on a platform we can’t read yet')
   })

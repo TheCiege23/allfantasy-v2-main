@@ -53,9 +53,19 @@ function plan(data: Partial<GameDayTriage>): string {
 const hrefs = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, '&'))
 
 describe('Game Plan league chips open a lineup that can be changed', () => {
-  it('never links to /core/my-team', () => {
+  /*
+   * Narrowed in step 4b, and narrowed to what it always guarded: the LINEUP buttons. My Team cannot
+   * change a lineup, so a league chip must never go there. A separate, labelled "Who to start instead"
+   * link to My Team is now correct (it holds the bench-swap answer) — so the check reads the chips
+   * themselves, and the only My Team links allowed are those labelled ones.
+   */
+  it('never sends a lineup button to /core/my-team', () => {
     const html = plan({ rows: [row([sleeperLeague, nativeLeague])] })
-    expect(hrefs(html).filter((h) => h.startsWith('/core/my-team'))).toEqual([])
+    const chips = [...html.matchAll(/<a[^>]*class="af-gp-league"[^>]*href="([^"]+)"|<a[^>]*href="([^"]+)"[^>]*class="af-gp-league"/g)].map((m) => m[1] ?? m[2])
+    expect(chips.length).toBe(2)
+    expect(chips.filter((h) => h!.startsWith('/core/my-team'))).toEqual([])
+    const toMyTeam = [...html.matchAll(/<a[^>]*href="(\/core\/my-team[^"]*)"[^>]*>([^<]*)/g)].map((m) => m[2])
+    expect(toMyTeam.every((label) => /Who to start instead/.test(label))).toBe(true)
   })
 
   it('sends a native league to its in-app team tab', () => {
