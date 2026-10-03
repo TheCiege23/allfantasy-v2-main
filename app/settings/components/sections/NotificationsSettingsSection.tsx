@@ -172,6 +172,11 @@ export function NotificationsSettingsSection({
   }, [savedFlash, dirty])
 
   const handleSave = async () => {
+    // A zero-width quiet-hours window is "off" server-side; refuse to save one that looks on.
+    if (prefs.quietHours?.enabled && (prefs.quietHours.startHour ?? 22) === (prefs.quietHours.endHour ?? 7)) {
+      setSaveError("Quiet hours need two different hours.")
+      return
+    }
     setSaving(true)
     setSaveError(null)
     setSavedFlash(false)
@@ -415,6 +420,26 @@ export function NotificationsSettingsSection({
               Still allow urgent alerts
             </label>
           </div>
+        ) : null}
+        {prefs.quietHours?.enabled ? (
+          <>
+            {/*
+              ⚠ SAME HOUR = OFF. quietHours.ts treats a zero-width window as disabled (the other
+              reading, "always on", would silence everything), so From == Until saved cleanly and
+              then never ran. Say so here, and handleSave refuses it.
+            */}
+            {(prefs.quietHours.startHour ?? 22) === (prefs.quietHours.endHour ?? 7) ? (
+              <p role="alert" className="text-xs text-[#fb7185]" data-testid="quiet-hours-same-hour">
+                From and Until are the same hour, so quiet hours would never run. Pick two different hours.
+              </p>
+            ) : null}
+            {/* The window runs in the profile timezone; with none set the server falls back to its own clock. */}
+            <p className="text-xs text-[var(--muted)]" data-testid="quiet-hours-zone">
+              {profile?.timezone
+                ? `Times are in ${profile.timezone.replace(/_/g, " ")}. Change it in Preferences.`
+                : "No timezone set, so these hours run on server time (UTC). Set your timezone in Preferences."}
+            </p>
+          </>
         ) : null}
       </div>
 

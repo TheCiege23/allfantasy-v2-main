@@ -9,6 +9,7 @@ import { AvatarCropDialog, shouldCropBeforeUpload } from "@/components/identity/
 import { AVATAR_PRESETS, AVATAR_PRESET_LABELS, type AvatarPresetId } from "@/lib/signup/avatar-presets"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import type { SettingsOnSave, SettingsProfile } from "./settings-types"
+import { MAX_DISPLAY_NAME_LENGTH } from "@/lib/user-settings/types"
 import { useSavedFlash } from "./useSavedFlash"
 
 /** The server keeps 160 characters (app/api/user/profile handleProfileWrite); say so before it truncates. */
@@ -259,6 +260,7 @@ export function ProfileSettingsSection({
         <input
           id="settings-profile-display-name"
           type="text"
+          maxLength={MAX_DISPLAY_NAME_LENGTH}
           value={displayName}
           onChange={(e) => {
             savedFlash.clear()

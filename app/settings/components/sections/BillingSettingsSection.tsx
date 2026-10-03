@@ -40,6 +40,16 @@ export function BillingSettingsSection() {
                 {!ents.hasSupreme && ents.hasPro && <span className="ns-hub-chip">AF Pro</span>}
                 {!ents.hasSupreme && ents.hasWarRoom && <span className="ns-hub-chip">AF Legacy</span>}
               </div>
+            ) : ents.error ? (
+              /*
+               * ⚠ A FAILED LOOKUP IS NOT A FREE PLAN. The hook keeps its booleans at their last-known
+               * value (false on a first-load failure), so this read "AF Free" to a paying subscriber
+               * whenever entitlements failed to load — while Account and the hub said "Unable to
+               * verify". Same words as those two now.
+               */
+              <p className="text-sm font-semibold text-white" data-testid="settings-billing-unverified">
+                Unable to verify
+              </p>
             ) : (
               <p className="text-sm font-semibold text-white">{t("settings.billing.afFree")}</p>
             )}
@@ -57,7 +67,7 @@ export function BillingSettingsSection() {
                     : "border-white/[0.1] bg-white/[0.03] text-white/40",
             ].join(" ")}
           >
-            {status === "none" ? t("settings.billing.statusFree") : status.replace(/_/g, " ")}
+            {status === "none" ? (ents.error ? "Unknown" : t("settings.billing.statusFree")) : status.replace(/_/g, " ")}
           </span>
         </div>
 
