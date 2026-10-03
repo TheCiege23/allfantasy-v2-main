@@ -161,6 +161,7 @@ export async function buildUserDataExport(db: Db, userId: string, now: Date = ne
     notifications,
     tradeComparisons,
     pushDevices,
+    legalAcceptances,
   ] = await Promise.all([
     section("profile", () =>
       db.userProfile.findUnique({
@@ -622,6 +623,15 @@ export async function buildUserDataExport(db: Db, userId: string, now: Date = ne
     section("pushDevices", () =>
       db.webPushSubscription.findMany({ where: { userId }, select: { userAgent: true, createdAt: true } }),
     ),
+    // What you agreed to, at which version, and when (lib/legal/recordLegalAcceptance). Recorded from
+    // 2026-10-03; an account older than that agreed at sign-up but no record of it was kept.
+    section("legalAcceptances", () =>
+      db.legalAcceptance.findMany({
+        where: { userId },
+        orderBy: { acceptedAt: "asc" },
+        select: { document: true, documentVersion: true, source: true, acceptedAt: true },
+      }),
+    ),
   ])
 
   return {
@@ -652,6 +662,7 @@ export async function buildUserDataExport(db: Db, userId: string, now: Date = ne
     notifications,
     tradeComparisons,
     pushDevices,
+    legalAcceptances,
   }
 }
 
