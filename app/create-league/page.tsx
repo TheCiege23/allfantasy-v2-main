@@ -59,7 +59,7 @@ export default async function CreateLeaguePage(
         <h2 className="text-lg font-bold">Bring your league to AllFantasy</h2>
         <p className="mt-2 text-sm">Import from a supported platform, then review the rules and make the league native.</p>
         <a className="mt-3 inline-block font-bold underline" href="/import">Import a league</a>
-        {imports.length > 0 && <details className="mt-4 rounded-xl border p-4">
+        {imports.length > 0 && <details id="imported-leagues" className="mt-4 rounded-xl border p-4">
           <summary className="cursor-pointer font-bold">Make an already imported league native</summary>
           <ul className="mt-3 space-y-3">{imports.map(league => <li key={league.id}>
             <a className="underline" href={`/create-league?fromLeague=${encodeURIComponent(league.id)}`}>{league.name || 'Imported league'} · {String(league.sport)}</a>
