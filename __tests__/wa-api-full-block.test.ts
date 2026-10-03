@@ -43,7 +43,7 @@ import { middleware } from "@/middleware"
 const mockedGetToken = vi.mocked(getToken)
 const mockedIpApi = vi.mocked(fetchIpApi)
 
-const OWNER_ID = "3a7ffd10-b1a5-4a40-8d07-232364596735"
+const OWNER_ID = "9791bae0-e47f-418a-ae40-285f6a2e7887" // TheCiege26 — the owner account in MIDDLEWARE_ADMIN_USER_IDS
 const CRON = "test-cron-secret-not-a-real-credential-000000000001"
 const WORKER = "test-import-worker-secret-not-real-000000000002"
 

@@ -60,10 +60,14 @@ type DevAdminTokenLedgerEntryView = {
 /**
  * Permanent app-owner / developer accounts that always get admin access
  * regardless of the DEV_ADMIN_USER_IDS environment variable.
+ *
+ * Mirrored by MIDDLEWARE_ADMIN_USER_IDS in middleware.ts and kept identical by
+ * __tests__/admin-id-lists-in-sync.test.ts. 🛑 Every ID must be a row in production `app_users`:
+ * the two this held until 2026-10-02 existed nowhere, so the middleware's owner bypass matched
+ * no account — see the note there.
  */
 const STATIC_ADMIN_USER_IDS = new Set<string>([
-  '944bb9f1-7a25-455b-8ef2-66146dbf3553', // theciege24 — app owner (supabase)
-  '3a7ffd10-b1a5-4a40-8d07-232364596735', // TheCiege24 — current app owner account
+  '9791bae0-e47f-418a-ae40-285f6a2e7887', // TheCiege26 — app owner (verified in app_users 2026-10-02)
 ])
 
 function parseDevAdminUserIds(rawValue: string | undefined): Set<string> {

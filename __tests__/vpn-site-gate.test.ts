@@ -50,7 +50,7 @@ const DATACENTRE_IP = "198.51.100.64"
 const RELAY_BY_ASN_IP = "198.51.100.65"
 const RELAY_BY_NAME_IP = "198.51.100.66"
 
-const OWNER_ID = "3a7ffd10-b1a5-4a40-8d07-232364596735"
+const OWNER_ID = "9791bae0-e47f-418a-ae40-285f6a2e7887" // TheCiege26 — the owner account in MIDDLEWARE_ADMIN_USER_IDS
 const AUTH_SECRET = "test-nextauth-secret-not-a-real-credential"
 const CRON_SECRET = "test-cron-secret-not-a-real-credential-0001"
 const PROXYCHECK_KEY = "test-proxycheck-key-not-real"
