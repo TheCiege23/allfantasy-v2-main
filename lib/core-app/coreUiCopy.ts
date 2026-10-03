@@ -510,6 +510,7 @@ const spanish: Record<string, string> = {
   'Closest ever': 'El más ajustado',
   'you won by': 'ganaste por',
   'you lost by': 'perdiste por',
+  'a tie': 'empate',
   'Not on your schedule this week.': 'No está en tu calendario esta semana.',
   'Playing this week — not enough completed weeks on either side to project it.': 'Juegan esta semana, pero faltan semanas completas para pronosticar el resultado.',
   'No head-to-head history is on file yet.': 'Aún no hay historial entre estos equipos.',

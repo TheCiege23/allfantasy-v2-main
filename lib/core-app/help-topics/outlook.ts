@@ -173,11 +173,11 @@ export const OUTLOOK_TOPICS = {
   rivalrySeries: {
     en: {
       title: 'Series record',
-      body: 'Every completed meeting on file with that team in that league, across seasons. On Rivalry Radar, a series of one meeting or a tied series sits in the middle tier, and so does a series whose leader is projected to lose this week.',
+      body: 'Every completed meeting on file with that team in that league, across seasons, as wins–losses — plus a third number for ties when a meeting finished level. On Rivalry Radar, a series of one meeting or with equal wins and losses sits in the middle tier, and so does a series whose leader is projected to lose this week.',
     },
     es: {
       title: 'Historial de la serie',
-      body: 'Cada enfrentamiento completado que tenemos contra ese equipo en esa liga, a lo largo de las temporadas. En Rivales, una serie de un solo partido o empatada va en el grupo del medio, igual que una serie cuyo líder tiene proyectada una derrota esta semana.',
+      body: 'Cada enfrentamiento completado que tenemos contra ese equipo en esa liga, a lo largo de las temporadas, como victorias–derrotas, y un tercer número para los empates cuando algún partido terminó igualado. En Rivales, una serie de un solo partido o con tantas victorias como derrotas va en el grupo del medio, igual que una serie cuyo líder tiene proyectada una derrota esta semana.',
     },
   },
   weekWinProbability: {
