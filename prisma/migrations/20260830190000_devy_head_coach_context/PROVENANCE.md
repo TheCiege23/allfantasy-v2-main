@@ -1,9 +1,10 @@
 # `20260830190000_devy_head_coach_context` — applied to production, never committed
 
 This migration **is already applied to production** (2026-08-31 04:51:19 UTC,
-`applied_steps_count = 1`). It is filed here rather than in `prisma/migrations/`
-because this directory is outside the deploy path — see the README one level up.
-Nothing about this file changes the database.
+`applied_steps_count = 1`). It sat in `prisma/migrations-pending/` (outside the deploy
+path) until 2026-10-03, when its ledger checksum was corrected to match this file and
+it moved here. `migrate deploy` matches the recorded checksum and skips it; nothing
+about this file changes the database.
 
 ## Why it was missing
 
