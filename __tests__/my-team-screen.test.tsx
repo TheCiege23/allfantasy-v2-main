@@ -303,7 +303,7 @@ describe('My Team — the reported problems', () => {
     expect(t).toContain('118.4')
     expect(t).toContain('131.7')
     expect(t).toContain('127.3')
-    expect(t).toContain('Projected · API · your league')
+    expect(t).toContain('Projected · Sleeper · your league')
     expect(t).toContain('Projected · AF · your league')
   })
 
@@ -514,16 +514,17 @@ describe('My Team — the reported problems', () => {
     expect(bench.textContent).toMatch(/\d+%/)
   })
 
-  it('⚠ labels the columns API and AF, with an explainer naming both sources', () => {
-    const t = text(<MyTeam data={data()} />)
-    expect(t).toContain('API')
-    expect(t).toContain('AF')
+  it('⚠ labels the columns Sleeper and AF, with an explainer naming both sources', () => {
+    /* "Sleeper", not "API" (2026-10-03): the column is named for who made the projection. */
+    const c0 = render(<MyTeam data={data()} />).container
+    expect(c0.querySelector('.af-mt-projhead--af')?.textContent).toContain('Sleeper')
+    expect(c0.querySelector('.af-mt-projhead--engine')?.textContent).toBe('AF')
     /* The "?" is a button now (2026-10-03); the explainer is the popover it opens, not its label. */
     const c = render(<MyTeam data={data()} />).container
     const info = c.querySelector('button.af-mt-info')
     expect(info).toBeTruthy()
     const explainer = c.querySelector(`[id="${info?.getAttribute('popovertarget')}"]`)?.textContent ?? ''
-    expect(explainer).toContain('provider')
+    expect(explainer).toContain('Sleeper’s own projection')
     expect(explainer).toContain('AllFantasy')
     // Two numbers side by side with no explanation read as a bug, not a feature.
     expect(explainer.toLowerCase()).toContain('your league')

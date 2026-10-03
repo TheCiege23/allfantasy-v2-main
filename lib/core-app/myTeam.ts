@@ -366,6 +366,13 @@ export type MyTeamData = {
      * and says why instead.
      */
     standardComparable: boolean
+    /**
+     * The league scores IDP, so `afTotal` is Sleeper's projection for the offence PLUS
+     * AllFantasy's IDP model for the defenders — Sleeper publishes no defensive line. The label
+     * names both rather than calling the whole total Sleeper's (see `projectionProvider.ts`).
+     * Optional so a producer that predates it still type-checks; absent reads as false.
+     */
+    defendersModelled?: boolean
   }>
   /**
    * Why the two totals differ, in the league's own terms — the answer to the
@@ -1695,6 +1702,9 @@ export async function getMyTeamData(
               // Comparable only when both totals were built from the same
               // players. IDP suppression is what breaks that.
               standardComparable: !hasIdpScoring(scoringSettings),
+              // Sleeper's line has no defensive stats; in an IDP league defenders are priced by
+              // AllFantasy's IDP model (`enrichWithIdpProjections`), so the label must say so.
+              defendersModelled: hasIdpScoring(scoringSettings),
             },
           }
         : {

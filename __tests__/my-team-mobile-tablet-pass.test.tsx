@@ -116,7 +116,7 @@ describe('the abbreviation key — a touch screen never shows a title', () => {
   it('spells out every mark the roster draws, in visible text', () => {
     const { container } = render(<MyTeam data={page()} />)
     const terms = [...container.querySelectorAll('.af-mt-key dt')].map((d) => d.textContent)
-    expect(terms).toEqual(['H', 'Q', 'D', 'O', 'IR', 'DNP', '—', '⌂', '☀ ☁', 'API · AF', 'OWN · START'])
+    expect(terms).toEqual(['H', 'Q', 'D', 'O', 'IR', 'DNP', '—', '⌂', '☀ ☁', 'Sleeper · AF', 'OWN · START'])
     const text = container.querySelector('.af-mt-key')!.textContent!
     expect(text).toContain('not the same as confirmed healthy')
     /* The same explainer the column heading's tooltip carries — the key cannot drift from it. */
