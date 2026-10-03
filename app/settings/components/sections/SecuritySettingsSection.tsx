@@ -278,10 +278,20 @@ export function SecuritySettingsSection({
         return
       }
       if (typeof window !== "undefined") {
-        if (minutes == null || minutes === 0) {
-          localStorage.removeItem("af_session_idle_minutes")
-        } else {
-          localStorage.setItem("af_session_idle_minutes", String(minutes))
+        /*
+         * Its own try: the server has ALREADY saved. Storage can throw (Safari private mode, blocked
+         * site data), and inside the outer try that reported "save failed" over a successful save and
+         * skipped onRefetch. The local copy is a convenience the idle monitor re-syncs from the
+         * profile anyway.
+         */
+        try {
+          if (minutes == null || minutes === 0) {
+            localStorage.removeItem("af_session_idle_minutes")
+          } else {
+            localStorage.setItem("af_session_idle_minutes", String(minutes))
+          }
+        } catch {
+          /* storage unavailable — the profile value is the source of truth */
         }
         window.dispatchEvent(new Event("af-session-idle-updated"))
       }

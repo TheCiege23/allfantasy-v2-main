@@ -2,7 +2,8 @@
 
 import type { ComponentType, ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
 import {
   AlertTriangle,
   Archive,
@@ -503,6 +504,17 @@ export function SettingsChrome({
     nav.scrollLeft = item.offsetLeft - (nav.clientWidth - item.offsetWidth) / 2
   }, [activeTab])
 
+  /*
+   * Where Settings was opened from. Home always went to /core, so a member who opened Settings from
+   * a league's gear was dropped on the dashboard. A caller passes `?returnTo=<path>` (the app's
+   * existing convention, see ImportV4); it is validated as an on-site path (open-redirect safe) and
+   * survives tab switches because handleTabSelect keeps the query string.
+   */
+  const searchParams = useSearchParams()
+  const rawReturnTo = searchParams?.get('returnTo')
+  const returnTo = rawReturnTo ? safeInternalPathOr(rawReturnTo, '') : ''
+  const backTo = returnTo && !returnTo.startsWith('/settings') ? returnTo : null
+
   const filteredNav = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return NAV_DEFS
@@ -534,11 +546,11 @@ export function SettingsChrome({
         <button
           type="button"
           className="ns-home"
-          onClick={() => router.push('/core')}
+          onClick={() => router.push(backTo ?? '/core')}
           data-testid="settings-home"
         >
-          <Home strokeWidth={2} />
-          {t('settings.home')}
+          {backTo ? <ArrowLeft strokeWidth={2} /> : <Home strokeWidth={2} />}
+          {backTo ? t('settings.back') : t('settings.home')}
         </button>
       </header>
 

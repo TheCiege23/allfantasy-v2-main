@@ -332,6 +332,8 @@ export function ConnectedAccountsSettingsSection({
       </div>
       {statusMessage && (
         <div
+          /* Announced: connect/disconnect results were silent to a screen reader. */
+          role={statusTone === "error" ? "alert" : "status"}
           className="rounded-xl border px-3 py-2 text-sm"
           style={{
             borderColor: statusTone === "error" ? "var(--accent-red)" : "var(--accent-cyan)",

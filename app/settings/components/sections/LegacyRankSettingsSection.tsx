@@ -146,7 +146,9 @@ export function LegacyRankSettingsSection() {
             <div
               className="grid h-24 w-24 shrink-0 place-items-center rounded-full"
               style={{ background: `conic-gradient(var(--accent-cyan) ${pct}%, var(--border) ${pct}% 100%)` }}
-              aria-hidden="true"
+              /* Was aria-hidden — on the element that holds the level number, so it was never read out. */
+              role="img"
+              aria-label={level != null ? `Level ${level}` : "Level not set yet"}
             >
               <div
                 className="flex h-[76px] w-[76px] flex-col items-center justify-center rounded-full"
@@ -176,7 +178,15 @@ export function LegacyRankSettingsSection() {
                     : ""}
                 {rank?.nextLevelName ? ` · next: ${rank.nextLevelName}` : ""}
               </div>
-              <div className="mt-2 h-1.5 max-w-sm overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+              <div
+                className="mt-2 h-1.5 max-w-sm overflow-hidden rounded-full"
+                style={{ background: "var(--border)" }}
+                role="progressbar"
+                aria-label="Progress to the next level"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(pct)}
+              >
                 <div className="h-full rounded-full" style={{ width: `${pct}%`, background: "var(--accent-cyan)" }} />
               </div>
             </div>
@@ -239,6 +249,12 @@ export function LegacyRankSettingsSection() {
                     <div className="text-[11px]" style={{ color: "var(--muted)" }}>
                       {earned ? "Unlocked" : "Locked"}
                     </div>
+                    {/* The description lived only in `title` — invisible on touch and unreliable for screen readers. */}
+                    {a.description ? (
+                      <div className="mt-0.5 line-clamp-2 text-[11px]" style={{ color: "var(--muted)" }}>
+                        {a.description}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )

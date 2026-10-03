@@ -102,7 +102,9 @@ export function ImportedLeaguesPanel() {
   const loadLeagues = useCallback(async () => {
     setLoading(true)
     setFailed(false)
-    const data = await fetch("/api/league/list", { cache: "no-store" })
+    // `?summary=1` drops only `settings` and `rosters` (≈94% of a 5.28 MB response for 557 leagues,
+    // measured in the route) — neither is read here.
+    const data = await fetch("/api/league/list?summary=1", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)
     if (!mounted.current) return
@@ -200,12 +202,15 @@ export function ImportedLeaguesPanel() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search your leagues…"
+            aria-label="Search your leagues"
+            type="search"
             className="w-full rounded-lg border py-2 pl-8 pr-3 text-sm outline-none"
             style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
           />
         </div>
         {platforms.length > 1 ? (
           <select
+            aria-label="Filter by platform"
             value={platform}
             onChange={(e) => setPlatform(e.target.value)}
             className="rounded-lg border py-2 px-3 text-sm outline-none"
@@ -238,7 +243,10 @@ export function ImportedLeaguesPanel() {
       ) : (
         <ul className="space-y-2">
           {filtered.map((l) => {
-            const pill = syncPill(l.syncStatus)
+            // A sync status only means something for an IMPORTED league. A native AllFantasy league has
+            // nothing to sync, and the pill's "Active" default read as an import that was fine.
+            const imported = IMPORT_PLATFORMS.has((l.platform ?? "").toLowerCase())
+            const pill = imported ? syncPill(l.syncStatus) : null
             const managers = l.teamCount ?? l.leagueSize
             const meta = [platformLabel(l.platform), managers ? `${managers} managers` : null, l.leagueType || l.scoring, l.season]
               .filter(Boolean)
@@ -261,9 +269,11 @@ export function ImportedLeaguesPanel() {
                   <div className="truncate text-sm font-medium" style={{ color: "var(--text)" }}>{l.name ?? "Untitled league"}</div>
                   <div className="truncate text-[11.5px]" style={{ color: "var(--muted)" }}>{meta}</div>
                 </div>
-                <span className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: pill.bg, color: pill.color }}>
-                  {pill.label}
-                </span>
+                {pill ? (
+                  <span className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: pill.bg, color: pill.color }}>
+                    {pill.label}
+                  </span>
+                ) : null}
                 {l.lastSyncedAt ? (
                   <span className="shrink-0 text-[11px]" style={{ color: "var(--muted)" }}>{relTime(l.lastSyncedAt)}</span>
                 ) : null}

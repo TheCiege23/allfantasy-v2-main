@@ -33,6 +33,8 @@ type Snapshot = {
   draftsApproachingCount?: number
   attentionQueue?: AttentionSignal[]
   recommendations?: Array<{ leagueId?: string }>
+  /** Row id → navigable league id (manager-command-center route). Absent on an older response. */
+  leagueLinks?: Record<string, string>
 }
 
 function severityColor(sev?: string): string {
@@ -153,14 +155,16 @@ export function CommandCenterSettingsSection() {
               <p className="text-sm" style={{ color: "var(--muted)" }}>You&apos;re all caught up — nothing needs a decision right now.</p>
             ) : (
               <ul className="space-y-3">
-                {attention.map((s) => (
-                  <li key={s.id} className="flex gap-3">
-                    <span
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                      style={{ background: severityColor(s.severity) }}
-                      aria-hidden="true"
-                    />
+                {attention.map((s) => {
+                  /*
+                   * Each item opens its league. They were plain text before 2026-10-02 — a list of
+                   * things needing a decision with no way to go and make it.
+                   */
+                  const navId = s.leagueId ? snap?.leagueLinks?.[s.leagueId] : undefined
+                  const body = (
                     <div className="min-w-0">
+                      {/* The dot's colour is the only other severity cue; say it for screen readers. */}
+                      {s.severity ? <span className="sr-only">{s.severity} priority: </span> : null}
                       {s.title ? (
                         <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{s.title}</div>
                       ) : null}
@@ -173,8 +177,28 @@ export function CommandCenterSettingsSection() {
                         </div>
                       ) : null}
                     </div>
-                  </li>
-                ))}
+                  )
+                  return (
+                    <li key={s.id} className="flex gap-3">
+                      <span
+                        className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                        style={{ background: severityColor(s.severity) }}
+                        aria-hidden="true"
+                      />
+                      {navId ? (
+                        <Link
+                          href={`/league/${encodeURIComponent(navId)}`}
+                          className="min-w-0 flex-1 rounded-md hover:underline"
+                          data-testid={`command-center-item-${s.id}`}
+                        >
+                          {body}
+                        </Link>
+                      ) : (
+                        body
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>

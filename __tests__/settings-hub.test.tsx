@@ -13,7 +13,11 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 
 const ents = vi.hoisted(() => ({ value: {} as Record<string, unknown> }))
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  // SettingsChrome reads ?returnTo= (2026-10-02).
+  useSearchParams: () => new URLSearchParams(),
+}))
 vi.mock('@/hooks/useEntitlements', () => ({ useEntitlements: () => ents.value }))
 vi.mock('@/components/i18n/LanguageProviderClient', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/components/i18n/LanguageProviderClient')>()
