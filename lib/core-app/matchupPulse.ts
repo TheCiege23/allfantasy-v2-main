@@ -1,5 +1,6 @@
 import 'server-only'
 
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { isLeagueNotStarted } from './leagueNotStarted'
 import {
@@ -326,7 +327,7 @@ export async function getMatchupPulse(
   now: Date = new Date(),
 ): Promise<MatchupPulse> {
   /* ── 1. Every team this user has claimed, with its league. ─────────────── */
-  const claimed = await prisma.leagueTeam
+  const claimedRows = await prisma.leagueTeam
     .findMany({
       where: { claimedByUserId: userId },
       select: {
@@ -342,7 +343,6 @@ export async function getMatchupPulse(
             sport: true,
             logoUrl: true,
             avatarUrl: true,
-            settings: true,
             status: true,
             lifecycleState: true,
             leagueType: true,
@@ -354,12 +354,56 @@ export async function getMatchupPulse(
       },
     })
   /*
-   * 🛑 NO `.catch(() => [])` ON THIS READ OR THE TWO SCHEDULE READS BELOW. Each one is the board's
-   * whole input, and swallowing a failure turned "we could not read" into a confident claim —
-   * "No claimed team yet", or every league "carries no schedule". A throw reaches the page, which
-   * says the board failed to load (audit, 2026-10-02). The enrichment reads further down still
-   * degrade on their own, because each of them only costs a row its price, not the board its truth.
+   * 🛑 NO `.catch(() => [])` ON THIS READ, THE SETTINGS READ OR THE TWO SCHEDULE READS BELOW. Each
+   * one is the board's whole input, and swallowing a failure turned "we could not read" into a
+   * confident claim — "No claimed team yet", or every league "carries no schedule". A throw reaches
+   * the page, which says the board failed to load (audit, 2026-10-02). The enrichment reads further
+   * down still degrade on their own, because each of them only costs a row its price, not the board
+   * its truth.
    */
+
+  /*
+   * The leagues' settings, without the keys this board never reads.
+   *
+   * 🛑 `settings: true` SENT ~5 MB PER RENDER ON A 95-LEAGUE ACCOUNT, AND 4 MB OF IT WAS ONE KEY.
+   * Measured on production 2026-10-03: `identity_mappings` (the importer's id crosswalk) was 4.07 MB
+   * of the 4.98 MB of settings text, read on every render and every 20-second refresh to answer five
+   * questions none of which touch it. Dropped in SQL, the read is ~0.95 MB.
+   *
+   * ⚠ EXCLUDE, DO NOT INCLUDE. This board reads settings only through `leagueWeekFromSettings`,
+   * `extractScoringSettings`, `isBestBallSettings`, `leagueWeekProgress` and `eliminationFormat`;
+   * none reads any key below (checked 2026-10-03). Listing the keys they DO read instead would drop
+   * one silently the day one of them starts reading another — and nothing would fail, the week or
+   * the scoring would just quietly change. An unknown new key stays in. Adding a key to this list
+   * needs the same check against those five readers.
+   *
+   * One row per league, where the select above repeats a league for every team claimed in it.
+   */
+  const leagueIdsForSettings = [...new Set(claimedRows.flatMap((c) => (c.league ? [c.league.id] : [])))]
+  const settingsRows = leagueIdsForSettings.length
+    ? await prisma.$queryRawUnsafe<Array<{ id: string; settings: Prisma.JsonValue | null }>>(
+        /* `jsonb - key` throws on a scalar. Every row is an object or NULL today (2026-10-03,
+           542 / 18); anything else passes through untouched rather than failing the board. */
+        `SELECT id,
+                CASE WHEN jsonb_typeof(settings::jsonb) = 'object'
+                     THEN settings::jsonb
+                            - 'identity_mappings'
+                            - 'foundation_defaults'
+                            - 'import_coverage'
+                            - 'importCanonical'
+                            - 'source_tracking'
+                     ELSE settings::jsonb
+                END AS settings
+           FROM leagues
+          WHERE id = ANY($1::text[])`,
+        leagueIdsForSettings,
+      )
+    : []
+  const settingsById = new Map(settingsRows.map((r) => [r.id, r.settings]))
+  const claimed = claimedRows.map((c) => ({
+    ...c,
+    league: c.league ? { ...c.league, settings: settingsById.get(c.league.id) ?? null } : null,
+  }))
 
   const mine = claimed.filter(
     (c) => c.league?.platformLeagueId && Number.isFinite(Number(c.externalId)),

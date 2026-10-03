@@ -29,6 +29,13 @@ const db = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    /* The slimmed settings read — one row per league, from the claimed fixture's own settings. */
+    $queryRawUnsafe: vi.fn(async (_sql: string, ids: string[]) =>
+      db.claimed.flatMap((c) => {
+        const l = c.league as { id?: string; settings?: unknown } | undefined
+        return l?.id && ids.includes(l.id) ? [{ id: l.id, settings: l.settings ?? null }] : []
+      }),
+    ),
     leagueTeam: {
       findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
         where.claimedByUserId ? db.claimed : db.teams,
@@ -286,5 +293,41 @@ describe('getMatchupPulse — core reads that fail', () => {
     const { prisma } = await import('@/lib/prisma')
     vi.mocked(prisma.weeklyMatchup.groupBy).mockRejectedValueOnce(new Error('timeout') as never)
     await expect(getMatchupPulse(USER, NOW)).rejects.toThrow('timeout')
+  })
+})
+
+/*
+ * 🛑 THE SETTINGS READ LEAVES OUT THE KEYS THIS BOARD NEVER READS (2026-10-03). `settings: true` sent
+ * ~5 MB per render on a 95-league account, 4.07 MB of it `identity_mappings`. Measured on production:
+ * the five settings readers give identical answers for all 95 leagues on the slim read.
+ */
+describe('getMatchupPulse — the settings read', () => {
+  it('🛑 the claimed-teams query no longer selects settings at all', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    await getMatchupPulse(USER, NOW)
+    const claimCall = vi.mocked(prisma.leagueTeam.findMany).mock.calls.find(([a]) => (a as { where: Record<string, unknown> }).where.claimedByUserId)
+    const leagueSelect = (claimCall?.[0] as { select: { league: { select: Record<string, unknown> } } }).select.league.select
+    expect(leagueSelect.settings).toBeUndefined()
+  })
+
+  it('🛑 settings come from one SQL read per league, with identity_mappings dropped', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    /* Two claimed teams in the same league: the read still asks for it once. */
+    db.claimed = [db.claimed[0], { ...db.claimed[0], externalId: '3' }]
+    await getMatchupPulse(USER, NOW)
+    const raw = vi.mocked(prisma.$queryRawUnsafe).mock.calls
+    expect(raw).toHaveLength(1)
+    const [sql, ids] = raw[0] as [string, string[]]
+    expect(sql).toMatch(/- 'identity_mappings'/)
+    expect(sql).toMatch(/jsonb_typeof\(settings::jsonb\) = 'object'/)
+    expect(ids).toEqual(['L1'])
+  })
+
+  it('CONTROL: the slim settings still drive the board — the league is priced under its rules', async () => {
+    db.teams[1] = { ...db.teams[1], platformUserId: 'them-sleeper' }
+    db.rosters[1] = { leagueId: 'L1', platformUserId: 'them-sleeper', playerData: { starters: ['c', 'd'] } }
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.ranked).toBe(1)
+    expect(pulse.leading[0]?.margin).toBe(8)
   })
 })
