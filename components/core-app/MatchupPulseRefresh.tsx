@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * Keeps "Where you stand" current while games are being played.
@@ -53,8 +54,12 @@ const KICKOFF_GRACE_MS = 45_000
 /** A kickoff further out than this is left to the idle cadence — no timer is held that long. */
 const KICKOFF_TIMER_MAX_MS = 6 * 60 * 60 * 1000
 
-export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label = 'Refresh where you stand' }: MatchupPulseRefreshProps) {
+export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label }: MatchupPulseRefreshProps) {
   const router = useRouter()
+  /* Status words in the reader's language — this sits on both matchup screens (2026-10-03). */
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const buttonLabel = label ?? (es ? 'Actualizar tu posición' : 'Refresh where you stand')
   const [pending, startTransition] = useTransition()
 
   /*
@@ -189,14 +194,14 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label = 'Ref
       <span className="af-mp-live-dot" aria-hidden />
       <span className="af-mp-live-text af-num">
         {pending
-          ? 'updating'
+          ? es ? 'actualizando' : 'updating'
           : age == null
             ? inPlay
-              ? 'live'
-              : 'not started'
+              ? es ? 'en vivo' : 'live'
+              : es ? 'sin comenzar' : 'not started'
             : age < 60
-              ? `${age}s ago`
-              : `${Math.floor(age / 60)}m ago`}
+              ? es ? `hace ${age} s` : `${age}s ago`
+              : es ? `hace ${Math.floor(age / 60)} min` : `${Math.floor(age / 60)}m ago`}
       </span>
       {/*
         The manual control is not decoration. The automatic cadence is two
@@ -208,7 +213,7 @@ export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label = 'Ref
         className="af-mp-live-btn"
         onClick={refresh}
         disabled={pending}
-        aria-label={label}
+        aria-label={buttonLabel}
       >
         ↻
       </button>
