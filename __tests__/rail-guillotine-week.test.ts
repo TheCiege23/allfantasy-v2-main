@@ -65,7 +65,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-import { choppedBefore, getRailMatchups } from '@/lib/core-app/railMatchups'
+import { choppedBefore, getRailMatchups, mostHavePlayed, standingIn } from '@/lib/core-app/railMatchups'
 
 beforeEach(() => {
   db.rows = [...guillotineRows(), ...h2hRows()]
@@ -108,6 +108,8 @@ describe('the rail in a guillotine league', () => {
     // Every live team at 0 this week has simply not played yet; the cut line is still 0, but no
     // chopped team is in the field to make it so.
     expect(standing?.rank).toBe(1)
+    // 9 of the 15 have points on the board — most have played, so this is the points reading.
+    expect(standing?.basis).toBe('points')
   })
 
   it('falls back to the row rule when the provider states no week (the old behaviour, unchanged)', async () => {
@@ -175,5 +177,59 @@ describe('the rail in a head-to-head league, mid-week', () => {
       { id: 'AF-H-old', platformLeagueId: 'H', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: '2' } },
     ])
     expect((await hOnly()).byLeague['AF-H']?.week).toBe(4)
+  })
+})
+
+/*
+ * 🛑 PROJECTIONS UNTIL MOST TEAMS HAVE PLAYED (user's ruling, 2026-10-03). A live team that has not
+ * kicked off sits at 0, so ranking on points all Sunday morning put every such team — and you, if
+ * yours had not played — "at the cut". Measured live the same day: several guillotine leagues read
+ * "#3 of 15 · at the cut" on a Saturday.
+ */
+describe('standingIn: the basis follows how much of the field has played', () => {
+  const side = (v: number | null) => ({ projected: v, afProjected: v, pricedFrom: 9, starterCount: 9 })
+  /** Five live teams; you are 'a'. Projections: a 130 (best), b 120, c 110, d 100, e 90. */
+  const proj = new Map([['a', side(130)], ['b', side(120)], ['c', side(110)], ['d', side(100)], ['e', side(90)]])
+  const field = (points: Record<string, number>) => ['a', 'b', 'c', 'd', 'e'].map((id) => ({ rosterId: id, pointsFor: points[id] ?? 0 }))
+
+  it('a Saturday — two of five have played, you have not — ranks you on projection, clear of the cut', () => {
+    const s = standingIn({ field: field({ d: 40, e: 35 }), yourRosterId: 'a', sides: proj, elimination: true })
+    expect(s?.basis).toBe('projected')
+    expect(s?.rank).toBe(1)
+    expect(s?.overCut).toBe(40) // 130 over the lowest projection, 90 — not "at the cut" on a 0
+  })
+
+  it('switches to points once MOST of the field has played (three of five)', () => {
+    const s = standingIn({ field: field({ c: 80, d: 40, e: 35 }), yourRosterId: 'a', sides: proj, elimination: true })
+    expect(s?.basis).toBe('points')
+    expect(s?.overCut).toBeNull() // you are at 0 with most of the field in — that IS the cut now
+  })
+
+  it('exactly half is not most: two of four stays on projection', () => {
+    expect(mostHavePlayed(2, 4)).toBe(false)
+    expect(mostHavePlayed(3, 4)).toBe(true)
+    expect(mostHavePlayed(8, 15)).toBe(true)
+    expect(mostHavePlayed(7, 15)).toBe(false)
+  })
+
+  it('never ranks a half-priced field on projection: falls back to points, labelled points', () => {
+    const partial = new Map(proj)
+    partial.set('e', side(null))
+    const s = standingIn({ field: field({ a: 50, d: 40 }), yourRosterId: 'a', sides: partial, elimination: true })
+    expect(s?.basis).toBe('points')
+    expect(s?.rank).toBe(1)
+  })
+
+  it('before any snap with an unpriced side, says nothing rather than rank 0s', () => {
+    const partial = new Map(proj)
+    partial.delete('c')
+    expect(standingIn({ field: field({}), yourRosterId: 'a', sides: partial, elimination: true })).toBeNull()
+  })
+
+  it('before any snap with the field priced, ranks on projection (unchanged)', () => {
+    const s = standingIn({ field: field({}), yourRosterId: 'e', sides: proj, elimination: true })
+    expect(s?.basis).toBe('projected')
+    expect(s?.overCut).toBeNull()
+    expect(s?.rank).toBe(5)
   })
 })

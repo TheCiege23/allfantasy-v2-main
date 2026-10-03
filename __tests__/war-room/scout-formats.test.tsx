@@ -186,7 +186,7 @@ describe('Scout draws each format', () => {
     )
     expect(html).toContain('Elimination week · week 5')
     expect(html).toContain('<strong>#11</strong> of 12 — 3.2 over the cut.')
-    expect(html).toContain('Projected: no snap has been played yet.')
+    expect(html).toContain('Projected: most teams have not played yet.')
     expect(html).not.toContain('You have not played them')
   })
 
