@@ -237,6 +237,7 @@ describe("what stays open over a VPN", () => {
     ["GET", "/api/auth/csrf"],
     ["POST", "/api/auth/signout"],
     ["POST", "/api/stripe/webhook"],
+    ["POST", "/api/monetization/apple/notifications"],
     ["POST", "/api/webhooks/resend"],
     ["GET", "/api/v1/players"],
     ["POST", "/api/internal/ingest"],

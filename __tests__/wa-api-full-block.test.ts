@@ -155,7 +155,15 @@ describe("machine surfaces exempt by prefix — their handlers enforce their own
   })
 
   it("the paths that were already exempt stay exempt", async () => {
-    for (const p of ["/api/health", "/api/auth/session", "/api/geo/check", "/api/cron/import-players", "/api/stripe/webhook"]) {
+    for (const p of [
+      "/api/health",
+      "/api/auth/session",
+      "/api/geo/check",
+      "/api/cron/import-players",
+      "/api/stripe/webhook",
+      // Apple's purchase notifications: a refund or renewal refused at the gate is silently lost.
+      "/api/monetization/apple/notifications",
+    ]) {
       expect(refused((await middleware(fromWA(p))).status)).toBe(false)
     }
   })
