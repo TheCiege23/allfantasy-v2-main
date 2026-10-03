@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
 
   const league = await prisma.league.findFirst({
     where: { id: card.leagueId, OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
-    select: { name: true },
+    select: { name: true, sport: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', fontSize: 40, fontWeight: 900, fontStyle: 'italic', color: '#f0f2ff' }}>TRADE CHECK</div>
-              <div style={{ display: 'flex', fontSize: 18, color: '#8b93cf' }}>{league.name ?? 'Fantasy league'}</div>
+              <div style={{ display: 'flex', fontSize: 18, color: '#8b93cf' }}>{league.name ?? 'Fantasy league'} · {league.sport?.toUpperCase() ?? 'FANTASY'}</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
               {card.score != null ? (
@@ -88,8 +88,9 @@ export async function POST(req: NextRequest) {
             <Side title={card.theirLabel} letter={card.theirLetter} assets={card.give} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16, alignItems: 'center' }}>
-            <div style={{ display: 'flex', fontSize: 15, color: '#5d64a3' }}>
-              Proposed trade · graded on league value today, not a result
+            <div style={{ display: 'flex', flexDirection: 'column', fontSize: 14, color: '#9ba8cf' }}>
+              <span style={{ display: 'flex' }}>Proposed trade · {(card.basis ?? 'League value').slice(0, 65)} · {card.uncertainty ?? 'Value estimate'}</span>
+              <span style={{ display: 'flex' }}>As of {card.asOf ? new Date(card.asOf).toLocaleString('en-US', { timeZone: 'UTC' }) + ' UTC' : 'time unavailable'} · Projected value, not a result or acceptance prediction</span>
             </div>
             <div style={{ display: 'flex', fontSize: 18, fontWeight: 800, color: '#c6cbf5' }}>AllFantasy.ai</div>
           </div>

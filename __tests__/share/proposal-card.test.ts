@@ -51,6 +51,8 @@ describe('proposal card input', () => {
     expect(ProposalCardInput.safeParse({ ...CARD, give: Array(9).fill(CARD.give[0]) }).success).toBe(false)
     expect(ProposalCardInput.safeParse({ ...CARD, myLetter: 'Z' }).success).toBe(false)
     expect(ProposalCardInput.safeParse({ ...CARD, score: 101 }).success).toBe(false)
+    expect(ProposalCardInput.safeParse({ ...CARD, basis: 'Dynasty · Superflex', asOf: '2026-10-03T10:00:00.000Z', uncertainty: 'Some assets unpriced' }).success).toBe(true)
+    expect(ProposalCardInput.safeParse({ ...CARD, asOf: 'yesterday' }).success).toBe(false)
   })
 
   it('a side with an unpriced asset has no total, not a smaller one', () => {
