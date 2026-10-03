@@ -7,6 +7,7 @@ import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerC
 import { useEffect, useState } from 'react'
 import '@/components/core-app/af-my-team.css'
 import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
+import { summariseLineupCheck, type LineupCheck, type LineupCheckItem } from '@/lib/core-app/lineupCheck'
 import { DISTANT_LOCK_DAYS } from '@/lib/core-app/lockLabel'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import type { BenchCheck, LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
@@ -700,6 +701,76 @@ function ProjHeader() {
  * different and much weaker statement than "we checked and he is the play".
  * Saying so out loud is the whole value of running the check every week.
  */
+const CHECK_TAG: Record<LineupCheckItem['kind'], string> = { out: 'OUT', bye: 'BYE', empty: 'EMPTY', swap: 'SWAP', questionable: 'Q' }
+
+function checkLine(item: LineupCheckItem, es: boolean): string {
+  const r = item.replacement
+  const pts = (n: number) => n.toFixed(1)
+  const start = r ? (es ? ` — alinea a ${r.name} (${pts(r.projected)})` : ` — start ${r.name} (${pts(r.projected)})`) : es ? ' — busca un reemplazo' : ' — find a replacement'
+  switch (item.kind) {
+    case 'out':
+      return (es ? `${item.name} está descartado` : `${item.name} is ruled out`) + start
+    case 'bye':
+      return (es ? `${item.name} descansa esta semana` : `${item.name} is on bye`) + start
+    case 'empty':
+      return es ? `El puesto ${item.slotLabel} está vacío` : `${item.slotLabel} is empty`
+    case 'swap':
+      return es
+        ? `Alinea a ${r!.name} en lugar de ${item.name} (+${pts(r!.gain ?? 0)})`
+        : `Start ${r!.name} over ${item.name} (+${pts(r!.gain ?? 0)})`
+    case 'questionable':
+      return es ? `${item.name} es duda — ten un suplente listo` : `${item.name} is questionable — have a backup ready`
+  }
+}
+
+/**
+ * The roster's verdict, above the roster. Every line links to its row; the rows keep their own
+ * detail (and the bench check strip keeps its Chimmy question). See `lineupCheck.ts`.
+ */
+function LineupCheckCard({ check, platform, fixHref }: { check: LineupCheck; platform: string; fixHref: string | null }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const certain = check.items.some((i) => i.kind !== 'questionable')
+  const lockedNote = check.locked
+    ? es
+      ? ` ${check.locked} ${check.locked === 1 ? 'titular ya está bloqueado' : 'titulares ya están bloqueados'}.`
+      : ` ${check.locked} ${check.locked === 1 ? 'starter is' : 'starters are'} already locked.`
+    : ''
+  return (
+    <section className="af-frame af-mt-check" aria-label={es ? 'Revisión de alineación' : 'Lineup check'} data-clear={check.items.length === 0}>
+      <h2 className="af-label">{es ? 'Revisión de alineación' : 'Lineup check'}</h2>
+      {check.items.length === 0 ? (
+        <p className="af-mt-check-clear">
+          {es
+            ? `Nada que cambiar: ningún titular está descartado, en descanso o superado por más de ${BENCH_SWAP_POINTS} pts por un suplente.`
+            : `Nothing to change — no starter is out, on bye, or beaten by a bench player by more than ${BENCH_SWAP_POINTS} pts.`}
+          {lockedNote}
+        </p>
+      ) : (
+        <>
+          <ul className="af-mt-check-list">
+            {check.items.map((item) => (
+              <li key={`${item.kind}-${item.anchor}`} data-kind={item.kind}>
+                <a href={`#${item.anchor}`} className="af-mt-check-item">
+                  <span className="af-mt-check-tag">{CHECK_TAG[item.kind]}</span>
+                  <span className="af-mt-check-slot af-num">{item.slotLabel}</span>
+                  <span className="af-mt-check-text">{checkLine(item, es)}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+          {lockedNote ? <p className="af-mt-check-locked">{lockedNote.trim()}</p> : null}
+          {certain && fixHref ? (
+            <a className="af-btn af-mt-check-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
+              {es ? `Corregir en ${platform}` : `Fix in ${platform}`}
+            </a>
+          ) : null}
+        </>
+      )}
+    </section>
+  )
+}
+
 function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: string }) {
   const gap = check.benchProjected - check.starterProjected
   return (
@@ -1261,6 +1332,14 @@ export function MyTeam({ data }: MyTeamProps) {
 
       </div>
       <div className="af-mt-main">
+      {/* ── Lineup check: the whole roster's verdict in one place ─────── */}
+      {!bestBall && data.starters.available ? (
+        <LineupCheckCard
+          check={summariseLineupCheck(data.starters.data)}
+          platform={platform}
+          fixHref={data.league.sourceLink?.href ?? null}
+        />
+      ) : null}
       {/* ── Starters ────────────────────────────────────────────────── */}
       <section className="af-frame af-mt-section">
         <header className="af-mt-section-head">
