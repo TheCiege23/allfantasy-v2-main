@@ -19,4 +19,3 @@
 .control { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-block: .5rem; }
 .control select { min-height: 44px; padding: .5rem; border: 1px solid var(--af-line, #39465a); border-radius: 8px; background: var(--af-surface, #182235); color: inherit; }
 .panel summary:focus-visible, .control select:focus-visible { outline: 2px solid #71c9ec; outline-offset: 3px; }
-

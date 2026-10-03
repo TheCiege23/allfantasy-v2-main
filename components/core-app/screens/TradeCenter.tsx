@@ -49,6 +49,7 @@ import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-a
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
+import { TradeEvidencePanel } from './TradeEvidencePanel'
 import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import { TradeEvidencePanel } from './TradeEvidencePanel'
 import { TradeValueChart, LineupImpactChart } from './TradeImpactCharts'

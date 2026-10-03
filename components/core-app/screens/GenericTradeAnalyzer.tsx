@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { TradeEvidencePanel } from './TradeEvidencePanel'
 import { TradeComparisonSnapshots } from './TradeComparisonSnapshots'
 import { TradeEvidencePanel } from './TradeEvidencePanel'
 import { TradeValueChart } from './TradeImpactCharts'

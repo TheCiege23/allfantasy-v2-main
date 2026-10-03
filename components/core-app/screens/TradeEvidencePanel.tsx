@@ -39,4 +39,3 @@ export function TradeEvidencePanel({ grade, evaluatedAt, gaps = [], generic = fa
     </aside>
   )
 }
-

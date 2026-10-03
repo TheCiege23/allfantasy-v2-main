@@ -84,4 +84,3 @@ export function tradeValueSensitivity(give: number, get: number, swingPct = 10):
   }
   return { low: gap(give * (1 + swing), get * (1 - swing)), high: gap(give * (1 - swing), get * (1 + swing)) }
 }
-

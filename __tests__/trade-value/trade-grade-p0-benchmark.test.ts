@@ -56,4 +56,3 @@ describe('P0 shared grade benchmark', () => {
     }
   })
 })
-

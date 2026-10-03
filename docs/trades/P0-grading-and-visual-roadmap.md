@@ -31,4 +31,3 @@ Preserve the original saved evaluation and its capture date. The existing frozen
 Accepted trade: brief first-party Chimmy reaction or optional licensed GIF. Team grades: labeled emoji badges and short deterministic captions, such as “Deal sealed 🤝”, “Championship swing 🚀”, “Future loading 🌱”, and “Needs a closer look 🔍”. Use “Championship swing” only when measured lineup impact supports it.
 
 Keep reactions optional, respect reduced motion, and allow league administrators to disable them on shared feeds. Celebrate a completed deal without publicly shaming a manager. Evidence limits must be visible before decorative reactions.
-

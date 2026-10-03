@@ -26,4 +26,3 @@ describe('trade evidence panel', () => {
     expect(screen.getByText(/not a forecast, confidence interval/)).toBeTruthy()
   })
 })
-

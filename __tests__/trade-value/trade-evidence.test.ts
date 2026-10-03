@@ -58,4 +58,3 @@ describe('explicit sensitivity scenarios', () => {
     expect(tradeValueSensitivity(1000, 1000, 0)).toEqual({ low: 0, high: 0 })
   })
 })
-
