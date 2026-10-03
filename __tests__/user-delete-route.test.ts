@@ -13,6 +13,7 @@ const {
   identityDeleteMany,
   teamUpdateMany,
   pushDeleteMany,
+  comparisonDeleteMany,
   cancelSubsMock,
 } = vi.hoisted(() => ({
   getServerSessionMock: vi.fn(),
@@ -24,6 +25,7 @@ const {
   identityDeleteMany: vi.fn(),
   teamUpdateMany: vi.fn(),
   pushDeleteMany: vi.fn(),
+  comparisonDeleteMany: vi.fn(),
   cancelSubsMock: vi.fn(),
 }))
 
@@ -43,6 +45,7 @@ vi.mock("@/lib/prisma", () => ({
         platformIdentity: { deleteMany: identityDeleteMany },
         leagueTeam: { updateMany: teamUpdateMany },
         webPushSubscription: { deleteMany: pushDeleteMany },
+        genericTradeComparison: { deleteMany: comparisonDeleteMany },
       }),
   },
 }))
@@ -68,6 +71,7 @@ describe("POST /api/user/delete", () => {
     identityDeleteMany.mockResolvedValue({ count: 2 })
     teamUpdateMany.mockResolvedValue({ count: 3 })
     pushDeleteMany.mockResolvedValue({ count: 2 })
+    comparisonDeleteMany.mockResolvedValue({ count: 1 })
     cancelSubsMock.mockResolvedValue({ cancelled: [], hasAppleSubscription: false })
   })
 
@@ -149,6 +153,7 @@ describe("POST /api/user/delete", () => {
     expect(await res.json()).toMatchObject({ ok: true, deleted: true })
 
     expect(authAccountDeleteMany).toHaveBeenCalledWith({ where: { userId: "u1" } })
+    expect(comparisonDeleteMany).toHaveBeenCalledWith({ where: { userId: "u1" } })
     const update = appUserUpdate.mock.calls[0][0]
     expect(update.where).toEqual({ id: "u1" })
     expect(update.data.passwordHash).toBeNull()

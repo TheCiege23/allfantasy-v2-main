@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { render, screen, waitFor } from '@testing-library/react'
-import { TradeLeagueStrip } from '@/components/core-app/screens/TradeLeagueStrip'
+import { TradeLeagueStrip, stateOf } from '@/components/core-app/screens/TradeLeagueStrip'
 import { __resetTradesPanelShare } from '@/components/core-app/screens/tradesPanelFetch'
 import React from 'react'
 
@@ -476,7 +476,8 @@ describe('core visual upgrade — design-refs/trade-center-handoff', () => {
   it('⚠ the cross-league strip never renders "nothing waiting" for a league it did not read', () => {
     // The same rule TradeInbox carries, for the same reason.
     expect(STRIP).toContain('NOT SCANNED IS CHECKED BEFORE EMPTY')
-    expect(STRIP).toContain("if (panel.pending && !panel.pending.scanned)")
+    expect(stateOf({ pending: { scanned: false, reason: 'Source unavailable', platform: 'espn' } }))
+      .toMatchObject({ kind: 'unread', reason: 'Source unavailable' })
     /*
      * ⚠ ASSERTS THAT IT READS THE PANEL, NOT WHERE THE URL LITERAL LIVES. This used to pin
      * '/api/league/trades-panel?leagueId=' in this file; the literal moved into the shared

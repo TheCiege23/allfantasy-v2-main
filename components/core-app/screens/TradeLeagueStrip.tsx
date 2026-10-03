@@ -108,7 +108,7 @@ function lastOfferLine(last: LastOffer | null): string {
 
 function nextAction(state: TileState, platform: string): string {
   if (state.kind === 'waiting') return `Review ${state.count === 1 ? 'offer' : 'offers'}`
-  if (state.kind === 'checking') return 'Checking offers'
+  if (state.kind === 'checking') return 'Open league trades'
   if (state.kind === 'failed') return 'Open league · retry'
   if (state.kind === 'unread' || platform.toLowerCase() === 'sleeper') return 'Check source offers'
   return 'Build a trade'
