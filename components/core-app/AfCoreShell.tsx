@@ -184,6 +184,7 @@ export type CoreNavKey =
   | 'live-scores'
   | 'my-leagues'
   | 'settings'
+  | 'plans'
   /*
    * 38a. `live` is the league-dashboard entry to the cross-league live slate
    * that /live already serves — same data layer, inside the shell. `standings`
@@ -452,7 +453,7 @@ const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
   },
   {
     label: 'You',
-    keys: ['career', 'rankings', 'notifications', 'commissioner', 'tools', 'settings'],
+    keys: ['career', 'rankings', 'notifications', 'commissioner', 'tools', 'settings', 'plans'],
   },
 ]
 
@@ -795,6 +796,16 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     // unreachable from Core: the nav skipped straight past it, and the redesign
     // read as "Settings did not change". Preferences is one card away.
     { key: 'settings', label: 'Settings', glyph: '◧', href: '/settings' },
+    /*
+     * Plans and token packs. Until 2026-10-03 the only way to buy was More → Tools → scroll to
+     * the bottom → Account → Plans, and the owner could not find it; neither, App Review warned,
+     * would a reviewer. Points at /pricing, which also lists the token packs.
+     *
+     * ⚠ KEEP IT A PLAIN /pricing HREF. In an iOS build that cannot sell (no AFIAP marker),
+     * globals.css hides every `a[href^='/pricing']` and middleware redirects the page — App
+     * Store 3.1.1. A tracking param or an absolute URL here would slip past that rule.
+     */
+    { key: 'plans', label: 'Plans & tokens', glyph: '✦', href: '/pricing' },
     /* Admins only — see the CoreNavKey note. Another full page outside /core. */
     ...(props.isAdmin
       ? [{ key: 'admin' as const, label: 'Admin', glyph: '⬢', href: '/admin' }]
@@ -829,7 +840,7 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
      * used to sit beside is retired — see the rail note above — so this is now
      * the only sync entry, and it answers a per-league question only.
      */
-    keys: ['commissioner', 'notifications', 'sync', 'my-leagues', 'settings', 'tools', 'admin'],
+    keys: ['commissioner', 'notifications', 'sync', 'my-leagues', 'settings', 'plans', 'tools', 'admin'],
   },
 ]
 
