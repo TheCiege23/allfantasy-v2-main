@@ -842,6 +842,57 @@ function ProjHeader() {
 }
 
 /**
+ * What every abbreviation on the roster means, in visible text.
+ *
+ * ⚠ A TOUCH SCREEN NEVER SHOWS A `title`. The status letters (H, Q, D, O, IR, DNP), the em dash,
+ * the venue marks and the API / AF / OWN / START headings were each explained only by a hover
+ * tooltip — which is to say, on a phone and an iPad, not at all (audit 2026-10-02). Collapsed by
+ * default so it costs one line; the definitions reuse this file's own explainer strings, so the
+ * key cannot drift from the tooltips it stands in for.
+ */
+function RosterKey() {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const es = language === 'es'
+  const items: Array<[string, string]> = es
+    ? [
+        ['H', 'sano'], ['Q', 'dudoso'], ['D', 'poco probable'], ['O', 'fuera'], ['IR', 'reserva de lesionados'],
+        ['DNP', 'no entrenó'], ['—', 'sin designación reportada, que no es lo mismo que confirmado sano'],
+        ['⌂', 'estadio techado: el clima no cuenta'], ['☀ ☁', 'pronóstico al inicio del partido'],
+      ]
+    : [
+        ['H', 'healthy'], ['Q', 'questionable'], ['D', 'doubtful'], ['O', 'out'], ['IR', 'injured reserve'],
+        ['DNP', 'did not practice'], ['—', 'no designation reported, which is not the same as confirmed healthy'],
+        ['⌂', 'roofed stadium: weather is not a factor'], ['☀ ☁', 'forecast at kickoff'],
+      ]
+  return (
+    <details className="af-mt-key">
+      <summary>{es ? 'Qué significan las abreviaturas' : 'What the abbreviations mean'}</summary>
+      <dl>
+        {items.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+        <div>
+          <dt>API · AF</dt>
+          <dd>{copy(AF_PTS_EXPLAINER)}</dd>
+        </div>
+        <div>
+          <dt>OWN · START</dt>
+          <dd>
+            {es
+              ? 'cuántas ligas de AllFantasy lo tienen, y de esas cuántas lo alinean esta semana (en pantallas anchas)'
+              : 'how many AllFantasy leagues roster him, and of those how many start him this week (wide screens)'}
+          </dd>
+        </div>
+      </dl>
+    </details>
+  )
+}
+
+/**
  * The bench check, joined under the starter it is about.
  *
  * ⚠ IT RENDERS FOR BOTH VERDICTS ON PURPOSE. A strip that only ever appears
@@ -1774,6 +1825,7 @@ export function MyTeam({ data }: MyTeamProps) {
           </span>
           <ProjHeader />
         </header>
+        <RosterKey />
 
         {data.starterGameDay ? <StarterGameDayLine summary={data.starterGameDay} /> : null}
 

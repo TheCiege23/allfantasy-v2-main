@@ -2262,3 +2262,131 @@ li[data-kind='questionable'] .af-mt-check-tag {
     font-size: 22px;
   }
 }
+
+/*
+ * ── Phone rows: the game line gets the row's full width (2026-10-03) ─────────
+ *
+ * Measured on the live KBFL roster at 375px before this: a starter row was 109px tall. The grid
+ * gave the player cell 150px beside a 101px number column, so the name had 112px and the game
+ * line under it ("DEN @ SF · Sun 10/4 4:25p ET ☀ 94°") wrapped onto THREE lines in the same
+ * 112px — while the number column used 18px of height. After (with the 12px floor below): 85px,
+ * the game line on one line in 30 of 35 rows (the five that wrap are finished games, whose
+ * "Final 12.0 pts" chip is longer), starters 2,162px → 1,855px, bench 1,477px → 1,268px.
+ *
+ * How: the player cell and its text wrapper become `display: contents`, so the portrait, the name
+ * and the game line are grid items of the ROW and can be placed independently. Both wrappers are
+ * plain `div`s — the tap target is the name's own button inside, which keeps its box — so
+ * flattening them changes no role and no focus order.
+ *
+ * ⚠ THE `:not()` GUARDS ARE LOAD-BEARING, as in the ≤860 block: an empty or unresolved slot
+ * carries `.af-mt-player` too, and it must keep its `2 / -1` span rather than be flattened.
+ *
+ * ⚠ THE SEPARATOR COMES BACK HERE. The ≤720 rule hides it and makes the matchup a block so the
+ * break lands between whole pieces in a 112px column. With the full width the line fits; each
+ * piece is still `nowrap`, so when it does not, it still breaks between pieces.
+ *
+ * Its own top-level block at end of file, per this file's convention.
+ */
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt-row:not([data-empty='true']) {
+    grid-template-columns: 34px 30px minmax(0, 1fr) auto;
+    column-gap: 8px;
+    row-gap: 2px;
+    align-items: center;
+  }
+  .af-core .af-mt-row > .af-mt-player:not(.af-mt-empty-text):not(.af-mt-unresolved),
+  .af-core .af-mt-row > .af-mt-player:not(.af-mt-empty-text):not(.af-mt-unresolved) > .af-mt-player-text {
+    display: contents;
+  }
+  .af-core .af-mt-row > .af-mt-slot { grid-row: 1; grid-column: 1; align-self: center; }
+  .af-core .af-mt-row > .af-mt-status { grid-row: 2; grid-column: 1; align-self: start; }
+  .af-core .af-mt-row .af-mt-portrait { grid-row: 1; grid-column: 2; align-self: center; }
+  .af-core .af-mt-row .af-mt-player-name { grid-row: 1; grid-column: 3; min-height: 0; }
+  .af-core .af-mt-row > .af-mt-projpair { grid-row: 1; grid-column: 4; align-self: center; }
+  .af-core .af-mt-row .af-mt-player-meta {
+    grid-row: 2;
+    grid-column: 2 / -1;
+    align-self: start;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .af-core .af-mt-row .af-mt-player-meta .af-mt-opp,
+  .af-core .af-mt-row .af-mt-player-meta .af-mt-sep {
+    display: inline;
+  }
+  .af-core .af-mt-row > .af-mt-taxi-years,
+  .af-core .af-mt-row > .af-mt-bench-check {
+    grid-row: auto;
+    grid-column: 2 / -1;
+  }
+}
+
+/*
+ * ── 12px floor for the roster's reading text on a narrow page (2026-10-03) ────
+ *
+ * 143 visible text elements on the live KBFL roster at 375px were 11–11.5px. These are the ones a
+ * manager READS — designations, temperatures, notes, the matchup card's sub-lines. Two kinds stay
+ * at 11px on purpose: the position badge (`FLEX` must fit a 34px badge) and `.af-label`, the
+ * app-wide uppercase eyebrow, whose size is a design-system decision rather than this screen's.
+ */
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt-status,
+  .af-core .af-mt-temp,
+  .af-core .af-mt-gameday-state,
+  .af-core .af-mt-taxi-years,
+  .af-core .af-mt-section-note,
+  .af-core .af-mt-tile-why,
+  .af-core .af-mt-mu-sub,
+  .af-core .af-mt-mu-cov,
+  .af-core .af-mt-mu-v,
+  .af-core .af-mt-bench-check-text,
+  .af-core .af-mt-bench-caveat,
+  .af-core .af-mt-check-tag,
+  .af-core .af-mt-moves-tag {
+    font-size: 12px;
+  }
+}
+
+/* ── The abbreviation key (`RosterKey` in MyTeam.tsx) ─────────────────────── */
+.af-mt-key {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.af-mt-key > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 700;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+}
+.af-mt-key > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-mt-key dl {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 0;
+}
+.af-mt-key dl > div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+}
+.af-mt-key dt {
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.af-mt-key dd {
+  margin: 0;
+  line-height: 1.4;
+}
+@media (pointer: coarse) {
+  .af-mt-key > summary {
+    min-height: 44px;
+  }
+}
