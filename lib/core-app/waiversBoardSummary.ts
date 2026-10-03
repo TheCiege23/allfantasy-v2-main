@@ -83,8 +83,9 @@ registerScreenSummary<WaiversBoardData | null>({
    * 4: ranked by lineup gain, with `withheld.noUpgrade`, `startsOver` and `dropBasis`. A v3 entry
    * would keep serving backup-QB adds for up to the stale window after deploy.
    * 5: `alternatives`, `runsAtUtc`, `multiLeague`, and up to 40 rows (was 10).
+   * 6: `runsAtUtc` -> `runsSchedule` (a zoned schedule), and Sleeper rows gain an OBSERVED schedule.
    */
-  version: 5,
+  version: 6,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a user-scoped key carries no league id, so a league sweep would match nothing.

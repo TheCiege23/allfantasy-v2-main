@@ -62,9 +62,9 @@ describe('WaiversDueSoon', () => {
     render(
       <WaiversDueSoon
         leagues={[
-          { key: 'far', leagueName: 'Runs Sunday', href: '/a', schedule: { dayOfWeek: 0, timeUtc: '09:00' } },
-          { key: 'soon', leagueName: 'Runs in 3h', href: '/b', schedule: { dayOfWeek: 3, timeUtc: '09:00' } },
-          { key: 'later', leagueName: 'Runs tomorrow', href: '/c', schedule: { dayOfWeek: 4, timeUtc: '02:00' } },
+          { key: 'far', leagueName: 'Runs Sunday', href: '/a', schedule: { dayOfWeek: 0, time: '09:00', timeZone: 'UTC' } },
+          { key: 'soon', leagueName: 'Runs in 3h', href: '/b', schedule: { dayOfWeek: 3, time: '09:00', timeZone: 'UTC' } },
+          { key: 'later', leagueName: 'Runs tomorrow', href: '/c', schedule: { dayOfWeek: 4, time: '02:00', timeZone: 'UTC' } },
         ]}
       />,
     )
@@ -78,7 +78,7 @@ describe('WaiversDueSoon', () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(Date.UTC(2026, 8, 30, 6, 0)))
     const { container } = render(
-      <WaiversDueSoon leagues={[{ key: 'far', leagueName: 'Runs Sunday', href: '/a', schedule: { dayOfWeek: 0, timeUtc: '09:00' } }]} />,
+      <WaiversDueSoon leagues={[{ key: 'far', leagueName: 'Runs Sunday', href: '/a', schedule: { dayOfWeek: 0, time: '09:00', timeZone: 'UTC' } }]} />,
     )
     await waitFor(() => expect(container.innerHTML).toBe(''))
   })

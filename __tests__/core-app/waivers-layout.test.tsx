@@ -80,7 +80,7 @@ describe('Waivers screen layout', () => {
       rosterLoad: { available: false, reason: 'x' },
       claimsQueued: { available: false, reason: 'x' },
       waiverType: { available: true, data: { kind: 'rolling', label: 'Rolling waiver priority', budget: null } },
-      processTime: { available: true, data: { dayOfWeek: 3, dayLabel: 'Wednesday', timeUtc: '09:00' } },
+      processTime: { available: true, data: { schedule: { dayOfWeek: 3, time: '09:00', timeZone: 'UTC' }, dayLabel: 'Wednesday', timeLabel: '09:00 UTC', observedRuns: null } },
       tiebreak: { available: true, data: 'Waiver priority order' },
       claimLimits: { available: false, reason: 'x' },
     }

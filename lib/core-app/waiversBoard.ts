@@ -16,7 +16,9 @@ import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import type { WaiverValueBasis } from '@/lib/waivers/waiverSportBasis'
-import { faabRemainingOf, formatOf, runsAtLabel, runsAtSchedule } from './waiverRowMeta'
+import { faabRemainingOf, formatOf, rowWaiverSchedule } from './waiverRowMeta'
+import type { WaiverSchedule } from './waiverRunClock'
+import { loadObservedWaiverSchedules, type ObservedWaiverSchedule } from '@/lib/waivers/observedWaiverSchedule'
 import { buildWaiverSportSections } from './waiversBoardSports'
 import { pickLineupSwap, rosterCapacity, swapReasoning, type SwapCandidate, type SwapRosterPlayer } from './waiverSwap'
 import { valueBookFor, valueBookKey, type ValueBook } from './valueBook'
@@ -139,8 +141,11 @@ export type WaiverBoardRow = {
   faabRemaining: number | null
   /** "Wednesday 09:00 UTC", when the league publishes a processing time. */
   runsAt: string | null
-  /** The same schedule as data, for a countdown rendered in the viewer's timezone. */
-  runsAtUtc?: { dayOfWeek: number; timeUtc: string } | null
+  /**
+   * The same schedule as data, for a countdown rendered in the viewer's timezone. UTC where the
+   * importer stored it; Pacific wall-clock where it was OBSERVED from a Sleeper league's own runs.
+   */
+  runsSchedule?: WaiverSchedule | null
   /**
    * The next-best adds on this wire after `add`, each scored against your lineup as it stands — so
    * "the second option" means what it would mean to someone making one claim. Up to three.
@@ -381,6 +386,16 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
   if (mine.length === 0) return { ...EMPTY, considered: 0 }
 
   const leagueIds = [...new Set(mine.map((c) => c.leagueId))]
+
+  /*
+   * Sleeper leagues have no imported schedule; read the one their own claims reveal. One query for
+   * every Sleeper league on the board (lib/waivers/observedWaiverSchedule.ts). A failed read costs
+   * the countdowns, never the board.
+   */
+  const observedSchedules = await loadObservedWaiverSchedules(
+    prisma,
+    mine.filter((c) => String(c.league?.platform ?? '').toLowerCase() === 'sleeper').map((c) => c.leagueId),
+  ).catch(() => new Map<string, ObservedWaiverSchedule>())
 
   const at = await latestProjectionWeek()
   if (!at) return { ...EMPTY, considered: mine.length }
@@ -747,7 +762,8 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
     const over = swap.displacesId != null ? toPlayer(swap.displacesId, pointsById.get(swap.displacesId)!) : null
 
     const w = waiverByLeague.get(c.leagueId)
-    const runsAt = runsAtLabel(w, l.platform)
+    const sched = rowWaiverSchedule(w, l.platform, observedSchedules.get(c.leagueId))
+    const runsAt = sched?.label ?? null
 
     const ranked: Array<{ add: WaiverPlayer; gain: number; displacesId: string | null }> = []
     for (const r of swap.ranked) {
@@ -797,7 +813,7 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
       drop,
       faabRemaining: faabRemainingOf(w, myRoster),
       runsAt,
-      runsAtUtc: runsAtSchedule(w, l.platform),
+      runsSchedule: sched?.schedule ?? null,
       alternatives,
       href: `/core/waivers?league=${encodeURIComponent(c.leagueId)}`,
       reasoning: `${reasoning}${ownership}`,

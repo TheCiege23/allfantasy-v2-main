@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from 'react'
 
-import { countdownText, nextWaiverRunMs, type WaiverSchedule } from '@/lib/core-app/waiverRunClock'
-
-const DAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+import { countdownText, nextWaiverRunMs, scheduleLabel, type WaiverSchedule } from '@/lib/core-app/waiverRunClock'
 
 /**
  * A league's next waiver run in the VIEWER's timezone, with a countdown.
@@ -35,7 +33,8 @@ export function WaiverRunClock({
     return () => clearInterval(t)
   }, [])
 
-  const utcLabel = `${DAY[schedule.dayOfWeek] ?? 'Unknown day'} ${schedule.timeUtc} UTC`
+  /* The schedule as kept — "Wednesday 09:00 UTC", "Daily 03:00 Pacific" — until local time is known. */
+  const utcLabel = scheduleLabel(schedule)
   const next = now != null ? nextWaiverRunMs(schedule, now) : null
   if (now == null || next == null) {
     return localOnly ? null : <span data-testid="waiver-run-clock">{utcLabel}</span>

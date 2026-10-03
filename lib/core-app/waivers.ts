@@ -6,6 +6,8 @@ import { leagueDisplayName, type SectionState } from './leagueHome'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { describeTiebreakRule } from './waiverRuleLabels'
 import { waiverScheduleIsImported } from './waiverRowMeta'
+import type { WaiverSchedule } from './waiverRunClock'
+import { loadObservedWaiverSchedules } from '@/lib/waivers/observedWaiverSchedule'
 import { normalizeSourcePlatform } from '@/lib/league-links/sourceLinkResolver'
 import { platformLabel } from './platformLinks'
 
@@ -54,17 +56,20 @@ export type WaiverTypeInfo = {
 }
 
 export type WaiverRunInfo = {
-  /** 0–6, Sunday = 0, as stored. */
-  dayOfWeek: number
-  dayLabel: string
   /**
-   * ⚠ UTC, and labelled as such wherever this renders. `processingTimeUtc` is
-   * definitionally UTC and `League.timezone` cannot localise it: that column is
-   * `@default("America/New_York")` and all 120 production leagues carry exactly
-   * the default, so converting would dress a schema default up as the league's
-   * real timezone and shift the hour by a number nobody chose.
+   * The schedule, in the zone it is kept in. ⚠ A STORED schedule is UTC and labelled as such:
+   * `processingTimeUtc` is definitionally UTC and `League.timezone` cannot localise it (it is
+   * `@default("America/New_York")` on every production league, so converting would dress a schema
+   * default up as the league's real timezone). An OBSERVED Sleeper schedule is Pacific wall-clock
+   * (lib/waivers/observedWaiverSchedule.ts). The viewer always sees their own time beside it.
    */
-  timeUtc: string
+  schedule: WaiverSchedule
+  /** "Wednesday", or "Every day" for daily waivers. */
+  dayLabel: string
+  /** "09:00 UTC", "03:00 Pacific". */
+  timeLabel: string
+  /** Set when the schedule was read off this league's own processed claims: how many runs agree. */
+  observedRuns: number | null
 }
 
 export type WaiversData = {
@@ -130,11 +135,37 @@ async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
     },
   })
 
+  /*
+   * A Sleeper league's schedule is not imported (its settings fields' meaning is unverified —
+   * contracts/sleeper/GAPS.md S-05/S-06), so it is OBSERVED from when this league's claims actually
+   * processed. Read before the settings row, because a league with no ingested settings row can
+   * still have a processing history.
+   */
+  const observed = !waiverScheduleIsImported(platform)
+    ? ((await loadObservedWaiverSchedules(prisma, [leagueId]).catch(() => null))?.get(leagueId) ?? null)
+    : null
+  const observedRun: SectionState<WaiverRunInfo> | null = observed
+    ? {
+        available: true,
+        data: {
+          schedule: observed.schedule,
+          dayLabel: observed.schedule.dayOfWeek == null ? 'Every day' : DAY_LABEL[observed.schedule.dayOfWeek],
+          timeLabel: `${observed.schedule.time} Pacific`,
+          observedRuns: observed.agreeingRuns,
+        },
+      }
+    : null
+  const notYetObserved = {
+    available: false as const,
+    reason:
+      'Sleeper’s processing schedule was not imported, and this league’s waivers have not been seen processing often enough to read it yet — check the league’s waiver settings on Sleeper.',
+  }
+
   if (!s) {
     const reason = 'no waiver settings were ingested for this league'
     return {
       waiverType: { available: false, reason },
-      processTime: { available: false, reason },
+      processTime: observedRun ?? (observed === null && !waiverScheduleIsImported(platform) ? notYetObserved : { available: false, reason }),
       tiebreak: { available: false, reason },
       claimLimits: { available: false, reason },
     }
@@ -162,12 +193,20 @@ async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
           available: false,
           reason: 'this league has waivers turned off — free agents are claimed instantly',
         }
-      // The Sleeper mapper imports type/budget, not its daily schedule or UTC
-      // processing time. This mirror can contain AllFantasy bootstrap defaults.
+      // The Sleeper mapper does not import the schedule, so this mirror can hold AllFantasy
+      // bootstrap defaults there. Sleeper's comes from its own processed claims, or not at all.
       : !waiverScheduleIsImported(platform)
-        ? { available: false, reason: 'Sleeper’s processing schedule was not imported — check the league’s waiver settings on Sleeper.' }
+        ? (observedRun ?? notYetObserved)
       : day != null && day >= 0 && day <= 6 && time
-        ? { available: true, data: { dayOfWeek: day, dayLabel: DAY_LABEL[day], timeUtc: time } }
+        ? {
+            available: true,
+            data: {
+              schedule: { dayOfWeek: day, time, timeZone: 'UTC' },
+              dayLabel: DAY_LABEL[day],
+              timeLabel: `${time} UTC`,
+              observedRuns: null,
+            },
+          }
         : { available: false, reason: 'no waiver run schedule was ingested for this league' }
 
   /*

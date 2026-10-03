@@ -86,9 +86,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
     'waivers',
   )
   const isFaab = data.waiverType.available && data.waiverType.data.kind === 'faab'
-  const schedule = data.processTime.available
-    ? { dayOfWeek: data.processTime.data.dayOfWeek, timeUtc: data.processTime.data.timeUtc }
-    : null
+  const schedule = data.processTime.available ? data.processTime.data.schedule : null
   /* "FAAB blind bidding · Wednesday" — the folded rules' one line. */
   const rulesSummary = [
     data.waiverType.available ? copy(data.waiverType.data.label) : null,
@@ -313,19 +311,30 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                   <span className="af-wv-rule-value">
                     {copy(data.processTime.data.dayLabel)}
                     {/*
-                      ⚠ "UTC" IS NOT NOISE — IT IS THE ONLY HONEST LABEL. The stored
-                      column is processingTimeUtc, and League.timezone cannot localise
-                      it: that column is @default("America/New_York") and all 120
-                      production leagues carry exactly the default, so converting would
-                      shift the hour by a timezone nobody actually chose.
+                      ⚠ THE ZONE IS NOT NOISE — IT IS THE ONLY HONEST LABEL. A stored schedule
+                      is processingTimeUtc, and League.timezone cannot localise it: that column
+                      is @default("America/New_York") on every production league, so converting
+                      would shift the hour by a timezone nobody actually chose. An observed
+                      Sleeper schedule is Pacific wall-clock and says so ("03:00 Pacific").
                     */}
                     <span className="af-wv-rule-budget af-num">
-                      {data.processTime.data.timeUtc} UTC
+                      {data.processTime.data.timeLabel}
                     </span>
+                    {/*
+                      An observed schedule says so: it is read off this league's own processed
+                      claims, not off a setting, and the reader should know what it rests on.
+                    */}
+                    {data.processTime.data.observedRuns != null ? (
+                      <span className="af-wv-rule-observed">
+                        {es
+                          ? `según las últimas ${data.processTime.data.observedRuns} ejecuciones de esta liga`
+                          : `seen over this league's last ${data.processTime.data.observedRuns} runs`}
+                      </span>
+                    ) : null}
                     {/* The same instant in the reader's own timezone, which IS knowable — see WaiverRunClock. */}
                     <span className="af-wv-rule-local">
                       <WaiverRunClock
-                        schedule={{ dayOfWeek: data.processTime.data.dayOfWeek, timeUtc: data.processTime.data.timeUtc }}
+                        schedule={data.processTime.data.schedule}
                         yourTime={es ? ' (tu hora)' : ' your time'}
                         localOnly
                       />

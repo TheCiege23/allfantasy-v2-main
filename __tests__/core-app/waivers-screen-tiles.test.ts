@@ -12,6 +12,12 @@ const prismaMock = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+
+/* The observed Sleeper schedule, per test — its own derivation is covered in sleeper-waiver-schedule.test.ts. */
+const observed = vi.hoisted(() => ({ map: new Map<string, unknown>() }))
+vi.mock('@/lib/waivers/observedWaiverSchedule', () => ({
+  loadObservedWaiverSchedules: async () => observed.map,
+}))
 vi.mock('server-only', () => ({}))
 
 const LEAGUE = { id: 'L1', name: 'Test League', platform: 'sleeper', leagueType: 'redraft', platformLeagueId: 'SL1' }
@@ -27,6 +33,7 @@ import { getWaiversData } from '@/lib/core-app/waivers'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  observed.map = new Map()
   LEAGUE.platform = 'sleeper'
   prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue(null)
   prismaMock.waiverClaim.count.mockResolvedValue(2)
@@ -77,5 +84,34 @@ describe('Your FAAB rank', () => {
     const data = await getWaiversData('L1', 'me')
     /* 90 is first; the two 40s are both second. */
     expect(data?.budget).toMatchObject({ available: true, data: { faabRemaining: 40, rankByBudget: 2 } })
+  })
+})
+
+describe('Waivers run — a Sleeper league', () => {
+  it('shows the schedule OBSERVED from its own processed claims, in Pacific, and says what it rests on', async () => {
+    prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'faab', processingDayOfWeek: 1, processingTimeUtc: '12:00' })
+    observed.map = new Map([['L1', { schedule: { dayOfWeek: 3, time: '03:00', timeZone: 'America/Los_Angeles' }, agreeingRuns: 5, consideredRuns: 6, lastRunAt: 'x' }]])
+    const data = await getWaiversData('L1', 'me')
+    expect(data?.processTime).toEqual({
+      available: true,
+      data: {
+        schedule: { dayOfWeek: 3, time: '03:00', timeZone: 'America/Los_Angeles' },
+        dayLabel: 'Wednesday',
+        timeLabel: '03:00 Pacific',
+        observedRuns: 5,
+      },
+    })
+  })
+
+  it('never falls back to the stored bootstrap default when nothing has been observed yet', async () => {
+    prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'faab', processingDayOfWeek: 1, processingTimeUtc: '12:00' })
+    const data = await getWaiversData('L1', 'me')
+    expect(data?.processTime).toMatchObject({ available: false, reason: expect.stringContaining('not been seen processing') })
+  })
+
+  it('still reads it when the league has no ingested waiver settings row at all', async () => {
+    observed.map = new Map([['L1', { schedule: { dayOfWeek: null, time: '01:00', timeZone: 'America/Los_Angeles' }, agreeingRuns: 9, consideredRuns: 10, lastRunAt: 'x' }]])
+    const data = await getWaiversData('L1', 'me')
+    expect(data?.processTime).toMatchObject({ available: true, data: { dayLabel: 'Every day', observedRuns: 9 } })
   })
 })

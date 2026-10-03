@@ -72,7 +72,7 @@ describe('the Waivers read stops pulling every roster blob', () => {
     prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'faab', faabBudget: 100, processingDayOfWeek: 1, processingTimeUtc: '12:00', tiebreakRule: 'highest_bid' })
     const { getWaiversData } = await import('@/lib/core-app/waivers')
     const data = await getWaiversData('L1', 'me')
-    expect(data?.processTime).toMatchObject({ available: true, data: { dayOfWeek: 1, timeUtc: '12:00' } })
+    expect(data?.processTime).toMatchObject({ available: true, data: { schedule: { dayOfWeek: 1, time: '12:00', timeZone: 'UTC' }, timeLabel: '12:00 UTC' } })
     expect(data?.tiebreak).toMatchObject({ available: true })
   })
 

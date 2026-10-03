@@ -1,3 +1,5 @@
+import { scheduleLabel, type WaiverSchedule } from './waiverRunClock'
+
 /**
  * The small, sport-free facts every cross-league waiver row prints about its league — shared by
  * the NFL rows and the season-rate sections of `waiversBoard.ts`, so the two cannot describe the
@@ -40,18 +42,26 @@ export function runsAtLabel(
 }
 
 /**
- * The same schedule as `runsAtLabel`, as data — for a countdown the CLIENT renders in the viewer's
- * own timezone. Same gate, so a Sleeper bootstrap default can never reach a clock either.
+ * The schedule a waiver row shows: the stored one where the importer really imported it, else —
+ * for a Sleeper league — the one OBSERVED from when its claims actually processed
+ * (lib/waivers/observedWaiverSchedule.ts). Never a Sleeper bootstrap default.
  *
  * ⚠ STRUCTURED, NOT AN INSTANT. The board is served from a clock-free cache (see
  * `waiversBoardSummary.ts`); "the next run" depends on now, so the component derives it.
  */
-export function runsAtSchedule(
+export function rowWaiverSchedule(
   w: { processingDayOfWeek: number | null; processingTimeUtc: string | null } | null | undefined,
   platform: string | null | undefined,
-): { dayOfWeek: number; timeUtc: string } | null {
-  if (!runsAtLabel(w, platform)) return null
-  return { dayOfWeek: w!.processingDayOfWeek!, timeUtc: w!.processingTimeUtc!.trim() }
+  observed: { schedule: WaiverSchedule; agreeingRuns: number } | null | undefined,
+): { label: string; schedule: WaiverSchedule } | null {
+  const stored = runsAtLabel(w, platform)
+  if (stored) {
+    return { label: stored, schedule: { dayOfWeek: w!.processingDayOfWeek!, time: w!.processingTimeUtc!.trim(), timeZone: 'UTC' } }
+  }
+  if (observed && !waiverScheduleIsImported(platform)) {
+    return { label: `${scheduleLabel(observed.schedule)} (seen over ${observed.agreeingRuns} runs)`, schedule: observed.schedule }
+  }
+  return null
 }
 
 /** FAAB left, only when the league runs FAAB. */

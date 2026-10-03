@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * league's stored schedule is a bootstrap default (`waiverScheduleIsImported`). Every withheld
  * count, the dedupe and the kickoffs are unchanged. Re-captured by this test and pasted unchanged.
  * Then again for cache v5: the row gains `runsAtUtc` (null — a Sleeper schedule is not imported)
+ * — renamed `runsSchedule` in v6, still null here: this fixture has no observed Sleeper runs —
  * and `alternatives` (Free Agent Two, +10.0, fills a slot). Nothing previously pinned moved.
  *
  * `GOLDEN` below was first written by THIS test against the pre-change loader (origin/main 812d99199) and
@@ -196,7 +197,7 @@ const GOLDEN = `{
       "drop": null,
       "faabRemaining": 87,
       "runsAt": null,
-      "runsAtUtc": null,
+      "runsSchedule": null,
       "alternatives": [
         {
           "add": {
