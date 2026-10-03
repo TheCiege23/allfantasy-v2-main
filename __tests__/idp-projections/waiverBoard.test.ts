@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { bestLineup, loadWaiverBoard, type Scored } from '@/lib/waivers/waiverBoard'
+import { bestLineup, loadWaiverBoard, lockedBestLineup, type Scored } from '@/lib/waivers/waiverBoard'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 
 /*
@@ -17,16 +17,23 @@ vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => ({
   lookupAfEngineProjections: vi.fn(async () => new Map()),
   latestProjectionWeek: vi.fn(async () => ({ season: '2026', week: 4 })),
   lookupProjections: vi.fn(async (ids: readonly string[]) => {
-    const feed: Record<string, { name: string; line: number }> = {
+    const feed: Record<string, { name: string; line: number; position?: string; team?: string }> = {
       '6038': { name: 'Wrong Player', line: 5 },
       fa1: { name: 'Free Agent', line: 12 },
+      ...extraFeed,
     }
     return new Map(
       ids
         .filter((id) => feed[id])
         .map((id) => [
           id,
-          { projectedPoints: feed[id].line, name: feed[id].name, position: 'TE', team: 'KC', componentStats: { rec: feed[id].line } },
+          {
+            projectedPoints: feed[id].line,
+            name: feed[id].name,
+            position: feed[id].position ?? 'TE',
+            team: feed[id].team ?? 'KC',
+            componentStats: { rec: feed[id].line },
+          },
         ]),
     )
   }),
@@ -37,6 +44,10 @@ vi.mock('@/lib/projections/leagueScoring', () => ({
 vi.mock('@/lib/waivers/recentFormProjection', () => ({ projectFromRecentForm: vi.fn(async () => new Map()) }))
 // Nobody ruled out unless a test says so.
 vi.mock('@/lib/core-app/unavailableStarters', () => ({ loadUnavailableBySport: vi.fn(async () => new Map()) }))
+// The week the fixtures say is being played: the kickoff tests set it; every other test has none.
+vi.mock('@/lib/core-app/sportsWeek', () => ({ resolveSportsWeek: vi.fn(async () => null), isPreseason: () => false }))
+/** Extra projection-feed players for one test, keyed by id. Each test that sets it resets it. */
+let extraFeed: Record<string, { name: string; line: number; position?: string; team?: string }> = {}
 
 /**
  * The waiver board this replaces read nothing at all: `waiverRecommendationService` selects
@@ -230,5 +241,127 @@ describe('loadWaiverBoard — foreign roster ids', () => {
     expect(board.state).toBe('ok')
     expect(board.currentLineupPoints).toBe(5)
     expect(board.candidates[0]?.gain).toBe(7)
+  })
+})
+
+/*
+ * Kickoff locks (2026-10-03). Rico Dowdle scored 9.8 from Elimination Station 2's bench on Thursday;
+ * on Saturday the board still seated him over a starter who had not played, so "your best lineup"
+ * was a lineup nobody could field and every free agent was measured against it.
+ */
+describe('lockedBestLineup', () => {
+  const SLOTS = ['RB', 'RB']
+  const s1 = p('s1', 'RB', 4)
+  const s2 = p('s2', 'RB', 15)
+  const b1 = p('b1', 'RB', 10)
+
+  it('without locks it is bestLineup, unchanged', () => {
+    const locks = { pinned: new Map<number, string>(), frozenOut: new Set<string>() }
+    expect(lockedBestLineup([s1, s2, b1], SLOTS, locks)).toEqual(bestLineup([s1, s2, b1], SLOTS))
+  })
+  it('a bench player whose game kicked off cannot come in', () => {
+    const r = lockedBestLineup([s1, s2, b1], SLOTS, { pinned: new Map(), frozenOut: new Set(['b1']) })
+    expect(r.total).toBe(19)
+    expect(r.used.has('b1')).toBe(false)
+  })
+  it('a starter whose game kicked off keeps his slot, even against a better player', () => {
+    const fa = p('fa', 'RB', 30)
+    const r = lockedBestLineup([s1, s2, fa], SLOTS, { pinned: new Map([[0, 's1']]), frozenOut: new Set() })
+    expect(r.used.has('s1')).toBe(true)
+    expect(r.total).toBe(34) // s1's locked 4 + the 30 in the one open slot
+  })
+})
+
+describe('loadWaiverBoard — kickoff locks', () => {
+  const SAT = new Date('2026-10-03T16:00:00Z')
+  const THU = new Date('2026-10-02T00:15:00Z') // PIT @ CLE, already played
+  const SUN = new Date('2026-10-04T17:00:00Z')
+  const games = [
+    { homeTeam: 'CLE', awayTeam: 'PIT', startTime: THU, seasonType: 'regular', venue: null },
+    { homeTeam: 'LV', awayTeam: 'KC', startTime: SUN, seasonType: 'regular', venue: null },
+    { homeTeam: 'BUF', awayTeam: 'NE', startTime: SUN, seasonType: 'regular', venue: null },
+    { homeTeam: 'CHI', awayTeam: 'NYJ', startTime: SUN, seasonType: 'regular', venue: null },
+  ]
+  const prisma = (starters: string[]) =>
+    ({
+      league: {
+        findUnique: async () => ({ id: 'L1', settings: { scoring_settings: { rec: 1 }, roster_positions: ['RB', 'RB', 'BN'] }, platform: 'sleeper' }),
+        findFirst: async () => null,
+      },
+      roster: { findMany: async () => [{ playerData: { players: ['s1', 's2', 'b1'], starters } }] },
+      playerGameStat: {
+        aggregate: async (args: any) => (args?.where?.season ? { _max: { weekOrRound: 3 } } : { _max: { season: 2026 } }),
+        findMany: async () => [{ playerId: 'faSun' }, { playerId: 'faThu' }],
+      },
+      sportsPlayer: {
+        findMany: async () => [
+          { sleeperId: 'faSun', name: 'Sunday FA', team: 'NYJ', position: 'RB', updatedAt: new Date() },
+          { sleeperId: 'faThu', name: 'Thursday FA', team: 'CLE', position: 'RB', updatedAt: new Date() },
+        ],
+      },
+      sportsGame: { findMany: async () => games },
+    }) as never
+
+  const DOWDLE_WEEK = {
+    s1: { name: 'Emmett Johnson', line: 4, position: 'RB', team: 'KC' },
+    s2: { name: 'Jeremiyah Love', line: 15, position: 'RB', team: 'BUF' },
+    b1: { name: 'Rico Dowdle', line: 10, position: 'RB', team: 'PIT' },
+    faSun: { name: 'Sunday FA', line: 8, position: 'RB', team: 'NYJ' },
+    faThu: { name: 'Thursday FA', line: 20, position: 'RB', team: 'CLE' },
+  }
+
+  const run = async (feed: typeof extraFeed, starters: string[], now: Date = SAT, fixturesWeek = 4) => {
+    extraFeed = feed
+    try {
+      const { findMyRoster } = await import('@/lib/core-app/myRoster')
+      vi.mocked(findMyRoster).mockResolvedValueOnce({ found: true, playerData: { players: ['s1', 's2', 'b1'], starters } } as never)
+      const { resolveSportsWeek } = await import('@/lib/core-app/sportsWeek')
+      vi.mocked(resolveSportsWeek).mockResolvedValueOnce({ season: 2026, week: fixturesWeek, seasonType: 'regular' } as never)
+      return await loadWaiverBoard({ prisma: prisma(starters), leagueId: 'L1', userId: 'u-1', now })
+    } finally {
+      extraFeed = {}
+    }
+  }
+
+  it('keeps a bench player who already played OUT of the best lineup, and measures adds against the real one', async () => {
+    const board = await run(DOWDLE_WEEK, ['s1', 's2'])
+    expect(board.currentLineupPoints).toBe(19) // Love 15 + Johnson 4 — not Love + Dowdle 25
+    expect(board.candidates.map((c) => c.name)).toEqual(['Sunday FA'])
+    expect(board.candidates[0]?.gain).toBe(4)
+    expect(board.candidates[0]?.displaces?.name).toBe('Emmett Johnson')
+    // The Thursday free agent would "gain" 16, but his game is over — he cannot play for you.
+    expect(board.notes.join(' ')).toContain('1 bench player can no longer come in')
+    expect(board.notes.join(' ')).toContain('1 free agent whose game has started is not shown')
+  })
+
+  it('a starter who already played keeps his slot and is never "displaced"', async () => {
+    const board = await run(
+      { ...DOWDLE_WEEK, s1: { name: 'Thursday Starter', line: 4, position: 'RB', team: 'PIT' }, b1: { name: 'Bench Back', line: 3, position: 'RB', team: 'KC' } },
+      ['s1', 's2'],
+    )
+    expect(board.currentLineupPoints).toBe(19)
+    // The Sunday FA (8) would replace the 4-point starter — but that starter is locked in.
+    expect(board.candidates).toEqual([])
+  })
+
+  it('CONTROL: the same roster on Wednesday, before any kickoff, seats the 10-point back as before', async () => {
+    const board = await run(DOWDLE_WEEK, ['s1', 's2'], new Date('2026-09-30T12:00:00Z'))
+    expect(board.currentLineupPoints).toBe(25)
+    expect(board.candidates.map((c) => c.name)).toEqual(['Thursday FA'])
+  })
+
+  it('applies no locks when the fixtures are for a different week than the projections', async () => {
+    // The clock says week 5 while the projections are week 4: last week's kickoffs say nothing here.
+    const board = await run(DOWDLE_WEEK, ['s1', 's2'], SAT, 5)
+    expect(board.currentLineupPoints).toBe(25)
+  })
+
+  it('does not pin a starter whose slot it cannot know — starters shorter than the slots', async () => {
+    const board = await run(
+      { ...DOWDLE_WEEK, s1: { name: 'Thursday Starter', line: 4, position: 'RB', team: 'PIT' }, b1: { name: 'Bench Back', line: 3, position: 'RB', team: 'KC' } },
+      ['s1'], // one starter stored against two slots
+    )
+    // Unpinned, so the old rule applies: the Sunday FA may take the 4-point back's seat.
+    expect(board.candidates.map((c) => c.name)).toEqual(['Sunday FA'])
   })
 })

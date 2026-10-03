@@ -59,3 +59,48 @@ export function bestLineup(
   }
   return { total: Math.round(total * 100) / 100, used, unfilled }
 }
+
+/**
+ * What kickoff has already settled about a lineup, for the week being played.
+ *
+ * A player whose game has kicked off is locked where he is on every launch platform: a starter can
+ * no longer be benched, and a bench player can no longer be brought in.
+ */
+export interface LineupLocks {
+  /** Index into the league's starting slots → the locked starter sitting in it. */
+  pinned: ReadonlyMap<number, string>
+  /** Players who cannot enter the lineup: on the bench when their game kicked off. */
+  frozenOut: ReadonlySet<string>
+}
+
+export const NO_LOCKS: LineupLocks = { pinned: new Map(), frozenOut: new Set() }
+
+/**
+ * `bestLineup` with kickoff respected: locked starters keep their slots (and their points), locked
+ * bench players stay out, and only the open slots are re-solved from the players still movable.
+ *
+ * ⚠ WITHOUT THIS THE "BEST LINEUP" INCLUDED MOVES NOBODY CAN MAKE. Elimination Station 2,
+ * 2026-10-03: Rico Dowdle scored 9.8 from the bench on Thursday night, and on Saturday the board
+ * still seated him over a starter who had not played — a lineup that no longer exists, about 5
+ * points above any lineup the manager can field, and the base every free agent was measured against.
+ *
+ * A pinned starter with no projection contributes nothing rather than a guess.
+ */
+export function lockedBestLineup(
+  players: readonly Scored[],
+  slots: readonly string[],
+  locks: LineupLocks,
+  fits: (slot: string, position: string | null) => boolean = canFillSlot,
+): ReturnType<typeof bestLineup> {
+  if (locks.pinned.size === 0 && locks.frozenOut.size === 0) return bestLineup(players, slots, fits)
+  const pinnedIds = new Set(locks.pinned.values())
+  const open = slots.filter((_, i) => !locks.pinned.has(i))
+  const pinnedPoints = players.filter((p) => pinnedIds.has(p.sleeperId)).reduce((sum, p) => sum + p.points, 0)
+  const movable = players.filter((p) => !pinnedIds.has(p.sleeperId) && !locks.frozenOut.has(p.sleeperId))
+  const solved = bestLineup(movable, open, fits)
+  return {
+    total: Math.round((solved.total + pinnedPoints) * 100) / 100,
+    used: new Set([...solved.used, ...pinnedIds]),
+    unfilled: solved.unfilled,
+  }
+}

@@ -112,8 +112,8 @@ const EMPTY = (state: WaiverBoardState, notes: string[] = []): WaiverBoard => ({
   notes,
 })
 
-export { bestLineup, type Scored } from './bestLineup'
-import { bestLineup, type Scored } from './bestLineup'
+export { bestLineup, lockedBestLineup, type LineupLocks, type Scored } from './bestLineup'
+import { lockedBestLineup, NO_LOCKS, type LineupLocks, type Scored } from './bestLineup'
 import { rosterNeeds, type RosterNeeds } from './rosterNeeds'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
@@ -141,6 +141,11 @@ export interface LoadWaiverBoardArgs {
    * `unavailable`, which is about THIS week's lineup.
    */
   claimWeek?: { season: string; week: number } | null
+  /**
+   * The clock kickoff locks are read against. The route passes it — it owns the clock, as it does for
+   * `claimWeek`; omitted, the loader reads it itself.
+   */
+  now?: Date
 }
 
 export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<WaiverBoard> {
@@ -368,21 +373,70 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    * three cannot disagree about who plays. Only for the week being played — a current injury says
    * nothing about next week's board. Fails open to the caller's list: a failed read changes nothing.
    */
-  if (!onNext) {
+  const at = onNext ? null : await Promise.resolve().then(() => latestProjectionWeek()).catch(() => null)
+  if (at) {
     try {
-      const at = await latestProjectionWeek()
-      if (at) {
-        const { loadUnavailableBySport } = await import('@/lib/core-app/unavailableStarters')
-        const bySport = await loadUnavailableBySport({ sleeperIds: myIds, sports: ['NFL'], season: Number(at.season), week: at.week })
-        for (const id of bySport.get('NFL') ?? []) out.add(id)
-      }
+      const { loadUnavailableBySport } = await import('@/lib/core-app/unavailableStarters')
+      const bySport = await loadUnavailableBySport({ sleeperIds: myIds, sports: ['NFL'], season: Number(at.season), week: at.week })
+      for (const id of bySport.get('NFL') ?? []) out.add(id)
     } catch {
       // Fail open: the board as it was, priced on the caller's list alone.
     }
   }
   // Kept on the roster at zero (not dropped), so `displaces` can still name him.
   const roster = score(mineProj as never).map((p) => (p.sleeperId && out.has(p.sleeperId) ? { ...p, points: 0 } : p))
-  const pool = score(poolProj as never)
+  const scoredPool = score(poolProj as never)
+
+  /*
+   * 🛑 KICKOFF LOCKS, for the week being played. Read from this week's fixtures against the clock,
+   * with the same `playerLock` rule My Team's swap check uses — so the board never counts a move the
+   * platform will refuse:
+   *   - a STARTER whose game has kicked off keeps his slot (pinned) and cannot be displaced;
+   *   - a BENCH player whose game has kicked off cannot come in (Rico Dowdle, see `lockedBestLineup`);
+   *   - a FREE AGENT whose game has kicked off cannot help this week, so he is not offered.
+   *
+   * ⚠ A STARTER IS PINNED ONLY WHEN HIS SLOT IS KNOWN. `starters` is positional against the starting
+   * slots only when the lengths match (`slotForStarterIndex`); on a mismatch he stays movable — the
+   * old behaviour — rather than being pinned to a slot read off by one.
+   * ⚠ AN UNKNOWN KICKOFF IS NOT A LOCK (a club missing from the week's map reads as movable), and the
+   * whole read is applied only when the fixtures' week IS the projections' week. Fails open.
+   */
+  let locks: LineupLocks = NO_LOCKS
+  let lockedNow: ((team: string | null) => boolean) | null = null
+  if (at) {
+    try {
+      const { resolveSportsWeek } = await import('@/lib/core-app/sportsWeek')
+      const { weekKickoffs } = await import('@/lib/core-app/playerGame')
+      const { playerLock } = await import('@/lib/core-app/swapLegality')
+      const { slotForStarterIndex } = await import('@/lib/core-app/slotEligibility')
+      const now = args.now ?? new Date()
+      const sportsWeek = await resolveSportsWeek('NFL', now)
+      if (sportsWeek && String(sportsWeek.season) === String(at.season) && sportsWeek.week === at.week) {
+        const games = await args.prisma.sportsGame.findMany({
+          where: { sport: 'NFL', season: sportsWeek.season, week: sportsWeek.week, seasonType: sportsWeek.seasonType },
+          select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
+          take: 400,
+        })
+        const kickoffs = weekKickoffs(games)
+        const nowIso = now.toISOString()
+        const isLocked = (team: string | null) => playerLock(team, kickoffs, nowIso).locked
+        lockedNow = isLocked
+        const rawStarters = (readable as { starters?: unknown } | null)?.starters
+        const starters = Array.isArray(rawStarters) ? rawStarters.map((x) => (x == null ? '' : String(x))) : []
+        const pinned = new Map<number, string>()
+        const frozenOut = new Set<string>()
+        for (const p of roster) {
+          if (!isLocked(p.team)) continue
+          const index = starters.indexOf(p.sleeperId)
+          if (index < 0) frozenOut.add(p.sleeperId)
+          else if (slotForStarterIndex(slots, starters.length, index) != null) pinned.set(index, p.sleeperId)
+        }
+        locks = { pinned, frozenOut }
+      }
+    } catch {
+      // Fail open: no locks read, the board as it was.
+    }
+  }
 
   /*
    * ⚠ THE VENDOR FEED IS ONE WEEK DEEP, SO MOST OF THE WIRE HAD NO PROJECTION AT ALL.
@@ -398,7 +452,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    * ⚠ NOT ON NEXT WEEK'S BOARD. A free agent missing from next week's board is very often on BYE,
    * and recent form would price him as if he plays. There, no line means not shown.
    */
-  const missing = onNext ? [] : [...poolIds].filter((id) => !pool.some((p) => p.sleeperId === id))
+  const missing = onNext ? [] : [...poolIds].filter((id) => !scoredPool.some((p) => p.sleeperId === id))
   if (missing.length > 0 && statSeason != null) {
     const form = await projectFromRecentForm({
       prisma: args.prisma,
@@ -409,7 +463,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
     for (const [id, f] of form) {
       const fromFeed = poolProj.get(id)
       const cached = metaOf.get(id)
-      pool.push({
+      scoredPool.push({
         sleeperId: id,
         name: fromFeed?.name ?? cached?.name ?? id,
         position: fromFeed?.position ?? cached?.position ?? null,
@@ -424,11 +478,16 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
     return EMPTY('no_projections', ['None of your rostered players could be projected under this league’s scoring.'])
   }
 
-  const base = bestLineup(roster, slots)
+  /* A free agent whose game has kicked off cannot play for you this week — after the form fallback,
+     so a filtered player is not then re-priced from his recent games and put back. */
+  const pool = lockedNow ? scoredPool.filter((c) => !lockedNow!(c.team)) : scoredPool
+  const lockedFreeAgents = scoredPool.length - pool.length
+
+  const base = lockedBestLineup(roster, slots, locks)
 
   const candidates: WaiverCandidate[] = []
   for (const cand of pool) {
-    const withCand = bestLineup([...roster, cand], slots)
+    const withCand = lockedBestLineup([...roster, cand], slots, locks)
     const gain = Math.round((withCand.total - base.total) * 100) / 100
     if (gain <= 0) continue // he would not start; that is not a recommendation
 
@@ -498,9 +557,16 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   if (candidates.length > limit) {
     notes.push(`${candidates.length} free agents would improve your lineup; showing the top ${limit}.`)
   }
-  if (pool.length < poolIds.size) {
+  if (locks.pinned.size > 0 || locks.frozenOut.size > 0 || lockedFreeAgents > 0) {
     notes.push(
-      `${poolIds.size - pool.length} of ${poolIds.size} startable free agents could not be ` +
+      `Games already kicked off are locked in: ${locks.pinned.size} of your starters keep their slots, ` +
+        `${locks.frozenOut.size} bench player${locks.frozenOut.size === 1 ? '' : 's'} can no longer come in, ` +
+        `and ${lockedFreeAgents} free agent${lockedFreeAgents === 1 ? '' : 's'} whose game has started ${lockedFreeAgents === 1 ? 'is' : 'are'} not shown.`,
+    )
+  }
+  if (scoredPool.length < poolIds.size) {
+    notes.push(
+      `${poolIds.size - scoredPool.length} of ${poolIds.size} startable free agents could not be ` +
         `projected under this league’s scoring and are not shown.`,
     )
   }

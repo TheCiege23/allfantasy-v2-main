@@ -150,7 +150,8 @@ export async function GET(req: NextRequest) {
      * THIS week's hole — its OUT and bye starters are this week's. Zeroing them against next week's
      * projections would answer a question nobody asked, so that request stays on the week being played.
      */
-    const claim = unavailable.length === 0 ? await resolveWaiverClaimWeek(Date.now()).catch(() => null) : null
+    const now = Date.now()
+    const claim = unavailable.length === 0 ? await resolveWaiverClaimWeek(now).catch(() => null) : null
     const payload = await loadWaiverBoard({
       prisma,
       leagueId,
@@ -158,6 +159,8 @@ export async function GET(req: NextRequest) {
       limit: Number.isFinite(lim) && lim > 0 ? lim : undefined,
       unavailable,
       claimWeek: claim?.basis === 'next' ? { season: claim.season, week: claim.week } : null,
+      // The same instant the claim week was decided on, for the kickoff locks.
+      now: new Date(now),
     })
     return NextResponse.json(payload)
   }
