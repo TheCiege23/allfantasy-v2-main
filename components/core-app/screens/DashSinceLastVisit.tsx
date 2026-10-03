@@ -2,6 +2,7 @@ import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-brief.css'
 import type { BriefStanding, SinceLastVisitBrief } from '@/lib/core-app/sinceLastVisit'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * "Since your last visit" — the top of the Core home.
@@ -106,6 +107,8 @@ export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief 
       <details open>
         <summary className="af-brief-head">
           <span className="af-label af-brief-kicker">Since your last visit</span>
+          {/* Inside the <summary> on purpose: a button there opens its popover without toggling the details. */}
+          <TopicTip topic="sinceLastVisit" />
           <span className="af-brief-when af-num">{whenLabel(brief, now)}</span>
         </summary>
 

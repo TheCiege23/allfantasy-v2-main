@@ -33,6 +33,7 @@ import type { DecisionReceiptsData } from '@/lib/core-app/decisionReceipts'
 import { YourWeekRoutine } from '@/components/core-app/screens/YourWeekRoutine'
 import type { WeeklyRoutineData } from '@/lib/core-app/weeklyRoutine'
 import { WorkbookBarChart } from '@/components/core-app/charts/WorkbookChart'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Screen 3a — Dashboard, all leagues.
@@ -824,10 +825,13 @@ export function Dash3AMatchups({
   const periods = [...new Set(shown.map((m) => m.period))]
   const matchupPeriod = periods.length === 1 && periods[0]
     ? periods[0] : shown.length > 0 ? 'League periods' : 'Available scores'
+  /* One "?" for the heading, and only when a card below actually prints a percentage. */
+  const anyWinShown = shown.some((m) => !m.completed && winProb?.[m.key] != null)
   return (
             <section className="af3a-sec">
               <header className="af3a-sechead">
                 <h2>League matchups</h2>
+                {anyWinShown ? <TopicTip topic="matchupWinProbability" /> : null}
                 <span className="af3a-note">{matchupPeriod}</span>
               </header>
 

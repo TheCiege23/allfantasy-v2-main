@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { readableApiError } from '@/lib/http/readableApiError'
 import type { WaiverOversight as WaiverOversightData } from '@/lib/core-app/commissionerWaivers'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-commish-waivers.css'
 
 /**
@@ -88,6 +89,13 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
           <header className="af-ch-section-head">
             <h3 className="af-label">
               {data.faabBudget != null ? `FAAB budgets · $${data.faabBudget.toLocaleString('en-US')} season` : data.waiverTypeLabel}
+              {/* One key for the bars below, only when there are bars to read. */}
+              {data.faabBudget != null && data.budgets.length > 0 ? (
+                <>
+                  {' '}
+                  <TopicTip topic="faabBudgetsBar" />
+                </>
+              ) : null}
             </h3>
             {data.nextRun ? <span className="af-ch-section-note af-num">Runs {data.nextRun}</span> : null}
           </header>

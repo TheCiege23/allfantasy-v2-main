@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import type { TodayStripData } from '@/lib/core-app/todayStrip'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Game day — the band that only exists while games are being played.
@@ -105,15 +106,19 @@ export function DashGameDayBand({
       <div className="af-gd-head">
         <span className="af-label af-gd-kicker">Game day</span>
         {record ? (
-          <span className="af-gd-record af-num">
-            <b>{record.wins} ahead</b>
-            <span className="af-gd-sep">·</span>
-            <i>{record.losses} behind</i>
-            <span className="af-gd-recmeta">
-              {' '}
-              right now · week {record.week}
+          <>
+            <span className="af-gd-record af-num">
+              <b>{record.wins} ahead</b>
+              <span className="af-gd-sep">·</span>
+              <i>{record.losses} behind</i>
+              <span className="af-gd-recmeta">
+                {' '}
+                right now · week {record.week}
+              </span>
             </span>
-          </span>
+            {/* A sibling of the record, not inside it: one "?" for the line, never per number. */}
+            <TopicTip topic="gameDayRecord" />
+          </>
         ) : (
           /*
            * Plays are landing but no matchup of yours is scored yet. Saying so
@@ -151,6 +156,16 @@ export function DashGameDayBand({
         </ul>
       ) : null}
 
+      {/*
+        One key for the betting lines, above the list — it replaces a per-row `title=` ("Odds checked
+        <ISO>") a phone never showed. The row already prints "line as of …" once a line is over an hour old.
+      */}
+      {upcoming.some((row) => row.game) ? (
+        <p className="af-gd-scope">
+          Next 24 hours · betting lines <TopicTip topic="bettingLine" />
+        </p>
+      ) : null}
+
       {upcoming.length > 0 ? (
         <ul className="af-gd-next">
           {upcoming.map((row, i) => (
@@ -167,7 +182,7 @@ export function DashGameDayBand({
                   <span>{row.game?.away ?? row.text}</span>
                   {row.game ? <><span>at</span>{row.game.homeLogo ? <FallbackImg src={row.game.homeLogo} fallback={null} alt="" width={24} height={24} loading="lazy" /> : null}<span>{row.game.home}</span></> : null}
                 </div>
-                {row.game ? <div className="af-gd-market" title={row.game.oddsAt ? `Odds checked ${row.game.oddsAt}` : undefined}>{row.game.odds}</div> : null}
+                {row.game ? <div className="af-gd-market">{row.game.odds}</div> : null}
                 <div className="af-gd-nextsub">{row.sub} · Starts in <Dash34Countdown to={row.time} initial="—" /></div>
               </div>
               {row.game ? <Link className="af-gd-scoring" href={row.game.href}>Live scoring →</Link> : null}
