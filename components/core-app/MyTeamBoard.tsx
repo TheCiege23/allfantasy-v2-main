@@ -26,6 +26,7 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { relativeAge } from '@/lib/core-app/cardFreshness'
 import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import { rowScoreOf, summariseWeekScores, type RowScore, type WeekScoreSummary } from '@/lib/core-app/myTeamScoreboard'
+import { boardFilterHref } from '@/lib/core-app/myTeamBoardFilter'
 
 /**
  * `/core/my-team` with no league held — the cross-league lineup board.
@@ -80,6 +81,8 @@ export type MyTeamBoardProps = {
    * score on each row and the week's record cost no query. Absent or null: no scores are drawn.
    */
   lineups?: WeekLineups | null
+  /** The board's own route — what a filter chip appends `?format=…` to, and "All" returns to. */
+  baseHref?: string
 }
 
 /** "Ghosts of Gridiron · 9 starters" — each clause dropped rather than faked. */
@@ -433,7 +436,7 @@ function CrossLeagueStrip({ flags }: { flags: CrossLeagueFlag[] }) {
   )
 }
 
-export function MyTeamBoard({ pulse, now, allHref, lineups = null }: MyTeamBoardProps) {
+export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/core/my-team' }: MyTeamBoardProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const nowMs = now ?? Date.now()
@@ -452,7 +455,18 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null }: MyTeamBoard
    * hole is a loss you can still prevent — that is the rule, and it falls out of
    * the order rather than being computed here.
    */
-  const rows = [...pulse.needs, ...pulse.set].slice(0, BOARD_ROWS)
+  /*
+   * ⚠ ALREADY FILTERED, BY THE LOADER. `needs`/`set` arrive capped at ten, so filtering them here
+   * would only ever search the rows already on screen — `myTeamBoardFilter.ts` has the account.
+   */
+  const needsView = pulse.needs
+  const setView = pulse.set
+  const filterOptions = pulse.filters ?? []
+  const activeFilter = pulse.filter ?? null
+  /* Readable rows the chip hides. Subtracted from the footer's hidden count, which is about the top ten. */
+  const filteredOut = pulse.filteredOut ?? 0
+  const readableTotal = pulse.needsTotal + pulse.setTotal + filteredOut
+  const rows = [...needsView, ...setView].slice(0, BOARD_ROWS)
   const total = pulse.considered
   const activeTotal = Math.max(0, total - (pulse.paused ?? 0) - (pulse.notChecked.inactive ?? 0))
 
@@ -466,18 +480,18 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null }: MyTeamBoard
    * instead would merge rows an hour apart, because `formatLockLabel` rounds to
    * the hour past a day.
    */
-  const needsShown = Math.min(pulse.needs.length, BOARD_ROWS)
+  const needsShown = Math.min(needsView.length, BOARD_ROWS)
   const ranks = tiedRankLabels(rankTiers(rows.map((r, i) => {
     const sev = r.actionableSeverity ?? r.severity
     return i < needsShown
       ? `N|${sev === 0 ? 1 : 0}|${sev}|${r.lockAt ?? ''}|${r.questionable}`
       : `S|${r.questionable}|${r.lockAt ?? ''}`
   })))
-  const questionableFirst = pulse.needs.length === 0 && rows.some((r) => r.questionable > 0)
+  const questionableFirst = needsView.length === 0 && rows.some((r) => r.questionable > 0)
   /* Nothing separated any row from any other, so the board is a set, not a ranking. */
   const unordered = ranks.length > 0 && ranks.every((r) => r === null)
-  /* Over EVERY board league, not the ten shown — the record is the whole weekend. */
-  const weekRecord = summariseWeekScores(lineups, [...pulse.needs, ...pulse.set].map((r) => r.leagueId))
+  /* Over every league in view, not the ten shown — the record is the whole weekend (of this chip). */
+  const weekRecord = summariseWeekScores(lineups, pulse.inViewLeagueIds ?? [...needsView, ...setView].map((r) => r.leagueId))
 
   /*
    * ⚠ THREE DIFFERENT SILENCES, THREE DIFFERENT SENTENCES. "Nothing needs you",
@@ -503,8 +517,10 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null }: MyTeamBoard
 
   const idsUnreadable = pulse.notChecked.idsUnreadable ?? 0
   const unreadable = pulse.notChecked.noRoster + pulse.notChecked.noLineup + idsUnreadable
-  const hidden = Math.max(0, activeTotal - rows.length)
+  /* The footer accounts for leagues past the top ten; a chip's hidden rows have their own line. */
+  const hidden = Math.max(0, activeTotal - rows.length - filteredOut)
   const hiddenNeeds = Math.max(0, pulse.needsTotal - Math.min(pulse.needs.length, BOARD_ROWS))
+  const es = language === 'es'
 
   return (
     <div className="af-bd">
@@ -540,7 +556,7 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null }: MyTeamBoard
               ? copy('Needs you first')
               : unordered
                 ? language === 'es' ? `${rows.length} visibles · cierran a la vez, sin orden particular` : `${rows.length} shown · all lock together, so in no particular order`
-                : pulse.needs.length > 0
+                : needsView.length > 0
                   ? language === 'es' ? `Primeros ${rows.length} · por urgencia` : `Top ${rows.length} · ranked by urgency`
                   : questionableFirst
                     ? language === 'es' ? `Primeros ${rows.length} · dudosos primero, luego por hora de cierre` : `Top ${rows.length} · questionable starters first, then lock time`
@@ -550,6 +566,34 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null }: MyTeamBoard
             ? `${pulse.checked.toLocaleString()} de ${activeTotal.toLocaleString()} equipos ${pulse.paused ? 'activos ' : ''}revisados`
             : `${pulse.checked.toLocaleString()} of ${activeTotal.toLocaleString()} ${pulse.paused ? 'active ' : ''}teams read`}
         />
+        {filterOptions.length > 0 ? (
+          <div className="af-bd-filters" role="group" aria-label={es ? 'Filtrar alineaciones' : 'Filter lineups'}>
+            <Link className="af-bd-chip" href={baseHref} aria-current={activeFilter == null ? 'true' : undefined} scroll={false}>
+              {es ? 'Todas' : 'All'} <span className="af-bd-chip-n">{readableTotal}</span>
+            </Link>
+            {filterOptions.map((o, i) => (
+              <Link
+                key={`${o.dim}:${o.value}`}
+                className="af-bd-chip"
+                href={boardFilterHref(baseHref, o)}
+                scroll={false}
+                data-dim={o.dim}
+                data-group-start={i === 0 || filterOptions[i - 1].dim !== o.dim ? 'true' : undefined}
+                aria-current={activeFilter?.dim === o.dim && activeFilter.value === o.value ? 'true' : undefined}
+              >
+                {o.label} <span className="af-bd-chip-n">{o.count}</span>
+              </Link>
+            ))}
+          </div>
+        ) : null}
+        {activeFilter && filteredOut > 0 ? (
+          <p className="af-bd-note af-bd-note--plain af-bd-note--filter">
+            {es
+              ? `${filteredOut} ${filteredOut === 1 ? 'alineación más está oculta' : 'alineaciones más están ocultas'} por este filtro. `
+              : `${filteredOut} other ${filteredOut === 1 ? 'lineup is' : 'lineups are'} hidden by this filter. `}
+            <Link href={baseHref} scroll={false}>{es ? 'Mostrar todas' : 'Show all'}</Link>
+          </p>
+        ) : null}
         {weekRecord ? (
           <p className="af-bd-note af-bd-note--plain af-bd-note--record">{weekRecordLine(weekRecord, language === 'es')}</p>
         ) : null}
