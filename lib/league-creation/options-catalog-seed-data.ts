@@ -167,7 +167,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     zombie: ['snake', 'offline', 'auto'],
     survivor: ['snake', 'auction', 'offline', 'auto'],
     tournament: ['snake', 'linear', 'auction', 'offline', 'auto'],
-    big_brother: ['snake', 'auction', 'offline', 'auto'],
+    big_brother: ['snake', 'offline', 'auto'],
   },
   allowedScoringPresetsByConceptSport: {
     redraft: {

@@ -9,11 +9,11 @@ import { freshnessStamp, type CardFreshnessStamp } from '@/lib/core-app/cardFres
 import { rankDecisions } from '@/lib/core-app/decisionQueue'
 import type { HomeCardOrder } from '@/lib/core-app/homeCardOrder'
 import { homePrefetchTargets } from '@/lib/core-app/homePrefetchTargets'
+import { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 import { ScopeResetLink } from '@/components/core-app/ScopeSwitcher'
 import Dashboard3A, {
   Dash3ACareer,
   Dash3AChimmy,
-  connectedLeagueCount,
   Dash3AExposure,
   Dash3AFollowing,
   Dash3ALeagues,
