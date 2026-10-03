@@ -37,6 +37,22 @@ export type FantraxScoringResult = {
  * player correctly; picking one would silently zero the other two.
  */
 const CATEGORY_KEYS: Record<string, string[]> = {
+  INDIVIDUAL_DOUBLES: ['double'],
+  INDIVIDUAL_HIT_BY_PITCHES: ['hbp'],
+  INDIVIDUAL_HOME_RUNS: ['hr'],
+  INDIVIDUAL_RBIS: ['rbi'],
+  INDIVIDUAL_RUNS_SCORED: ['r'],
+  INDIVIDUAL_SINGLES: ['single'],
+  INDIVIDUAL_STOLEN_BASES: ['sb'],
+  INDIVIDUAL_TRIPLES: ['triple'],
+  INDIVIDUAL_WALKS: ['bb'],
+  INDIVIDUAL_EARNED_RUNS_ALLOWED: ['er'],
+  INDIVIDUAL_INNINGS_PITCHED: ['ip'],
+  INDIVIDUAL_LOSSES: ['l'],
+  INDIVIDUAL_QUALITY_STARTS: ['qs'],
+  INDIVIDUAL_SAVES: ['sv'],
+  INDIVIDUAL_STRIKE_OUTS_PITCHED: ['so'],
+  INDIVIDUAL_WINS: ['w'],
   INDIVIDUAL_PASSING_YARDS: ['pass_yd'],
   INDIVIDUAL_PASSING_TOUCHDOWNS: ['pass_td'],
   INDIVIDUAL_RUSHING_YARDS: ['rush_yd'],
@@ -81,6 +97,10 @@ export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResu
   const configs = readConfigs(info)
   const rules: FantraxScoringRule[] = []
   const gaps: string[] = []
+  const systemType = (info.scoringSystem as { type?: string } | undefined)?.type
+  if (systemType && !systemType.includes('POINTS_BASED')) {
+    return { rules: [], gaps: [`${systemType} is a category scoring format; native points scoring cannot reproduce it`] }
+  }
 
   const defaultReception = configs.find(
     (c) =>
@@ -92,7 +112,11 @@ export function fantraxScoringRules(info: FantraxLeagueInfo): FantraxScoringResu
   for (const config of configs) {
     const code = config.scoringCategory?.code
     const points = Number(config.points)
-    if (!code || !Number.isFinite(points)) continue
+    if (!code) continue
+    if (config.points == null || !Number.isFinite(points)) {
+      gaps.push(`${config.scoringCategory?.name ?? code} has no verified points weight`)
+      continue
+    }
 
     const position = config.position?.shortName ?? config.position?.code
     if (!isDefaultPosition(position)) {

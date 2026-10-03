@@ -493,6 +493,8 @@ export async function fetchFantraxLeagueForImport(
   const lookup = parseFantraxSourceInput(sourceInput)
   let liveScoringRules: Array<{ stat_key: string; points_value: number }> = []
   let liveScoringGaps: string[] = []
+  let sourceSettings: { scoringSystem: Record<string, unknown> | null; rosterInfo: Record<string, unknown> } | undefined
+  let sourceSeasonState: string | null = null
 
   /*
    * ⚠ A LIVE LEAGUE IS FETCHED HERE, THEN READ BACK AS A SNAPSHOT. Fantrax has a
@@ -539,6 +541,8 @@ export async function fetchFantraxLeagueForImport(
      */
     liveScoringRules = outcome.scoringRules
     liveScoringGaps = outcome.scoringGaps
+    sourceSettings = outcome.sourceSettings
+    sourceSeasonState = outcome.seasonState
   }
 
   const includeConfig = {
@@ -827,12 +831,12 @@ export async function fetchFantraxLeagueForImport(
       season,
       size: leagueRecord.teamCount || teams.length,
       currentWeek,
-      isFinished: season < new Date().getFullYear(),
+      isFinished: sourceSeasonState === 'complete' || season < new Date().getFullYear(),
       url: null,
       isDevy: Boolean(leagueRecord.isDevy),
     },
     settings: {
-      scoringType: leagueRecord.isDevy ? 'devy' : null,
+      scoringType: sport === 'MLB' ? String(sourceSettings?.scoringSystem?.type ?? 'unknown') : leagueRecord.isDevy ? 'devy' : null,
       rosterPositions: buildRosterPositionCounts(),
       /* The real per-team size, so the mapper stops deriving it from the pool. */
       rosterSize: medianRosterSize(rosterPlayers),
@@ -841,6 +845,8 @@ export async function fetchFantraxLeagueForImport(
         isDevy: leagueRecord.isDevy,
         sport: leagueRecord.sport,
         teamCount: leagueRecord.teamCount,
+        ...(sourceSettings ?? {}),
+        seasonState: sourceSeasonState,
         /* Categories the mapper could not place. Surfaced as coverage rather
            than dropped: a scoring rule we silently skipped is a wrong score. */
         ...(liveScoringGaps.length > 0 ? { scoringGaps: liveScoringGaps } : {}),

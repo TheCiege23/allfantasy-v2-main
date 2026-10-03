@@ -159,6 +159,14 @@ async function handle(req: NextRequest) {
        * problem.
        */
       const { withSyncJobRun } = await import('@/lib/production-health/syncJobRunTelemetry')
+      const { ingestMlbFantraxIdentities } = await import('@/lib/player-identity/ingestMlbFantraxIdentities')
+      // The dedicated intel tick has runway for this weekly, batched identity refresh.
+      // It must run before the long feeds, rather than starve at the main import's tail.
+      await withSyncJobRun(
+        { jobName: 'mlb-fantrax-identities', sport: 'MLB', provider: 'fantrax', trigger: 'cron' },
+        () => ingestMlbFantraxIdentities(),
+        result => ({ rowsWritten: result.updated, metadata: result }),
+      ).catch(error => console.error('[cron/import-players] MLB Fantrax identities:', error instanceof Error ? error.message : 'refresh failed'))
       const { refreshDevyIntelSources } = await import('@/lib/devy/devyIntelRefresh')
       const { refreshDevyHeadshots, refreshCollegeSportsPlayerHeadshots } = await import(
         '@/lib/devy/devyHeadshotRefresh',

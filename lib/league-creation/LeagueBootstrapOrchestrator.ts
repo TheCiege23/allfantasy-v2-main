@@ -140,7 +140,7 @@ export async function runLeagueBootstrap(
       await applyDefaultNbaScoringOnCreate(leagueId)
     } catch { /* non-fatal */ }
   }
-  if (leagueSport === 'MLB') {
+  if (leagueSport === 'MLB' && !settings.importCarryover) {
     try {
       const { applyDefaultMlbScoringOnCreate } = await import('@/lib/mlb-scoring')
       await applyDefaultMlbScoringOnCreate(leagueId)
@@ -186,7 +186,7 @@ export async function runLeagueBootstrap(
   // Apply unified roster defaults (one-league one-config) through the shared roster engine.
   const leagueType = (settings.league_type as string) ?? (settings.leagueType as string) ?? 'redraft'
   const rosterRegistry = getRosterEngineRegistry()
-  if (rosterRegistry.isSupported(String(leagueSport))) {
+  if (rosterRegistry.isSupported(String(leagueSport)) && !(leagueSport === 'MLB' && settings.importCarryover)) {
     try {
       await createDefaultLeagueRosterConfig(leagueId, leagueSport as SupportedRosterSport, leagueType)
     } catch {

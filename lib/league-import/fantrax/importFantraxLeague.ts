@@ -43,6 +43,7 @@ export type FantraxImportOutcome =
        * and the live path re-reads getLeagueInfo on every import anyway.
        */
       scoringRules: FantraxScoringRule[]
+      sourceSettings: { scoringSystem: Record<string, unknown> | null; rosterInfo: Record<string, unknown> }
       scoringGaps: string[]
       /**
        * What the league's draft board actually contained.
@@ -140,18 +141,19 @@ export async function importFantraxLeague(args: {
    * drafted, or whose draft could not be read, is still worth importing. The
    * coverage note reports which of those happened.
    */
-  const [rosters, standings, cfb, nfl, schedule, draft] = await Promise.all([
+  const [rosters, standings, cfb, nfl, mlb, schedule, draft] = await Promise.all([
     getFantraxTeamRosters(args.leagueId),
     getFantraxStandings(args.leagueId),
     getFantraxPlayerIds('CFB'),
     getFantraxPlayerIds('NFL'),
+    getFantraxPlayerIds('MLB'),
     fetchFantraxScheduleWithScores(args.leagueId, info.data),
     getFantraxDraftResults(args.leagueId).catch(() => null),
   ])
   if (!rosters.ok) return { ok: false, error: rosters.failure.message, kind: rosters.failure.kind }
   /* Only one map has to load. A league is one sport, so failing the whole
      import because the OTHER sport's map was unavailable would be wrong. */
-  if (!cfb.ok && !nfl.ok) return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
+  if (!cfb.ok && !nfl.ok && !mlb.ok) return { ok: false, error: cfb.failure.message, kind: cfb.failure.kind }
 
   /*
    * ⚠ THE SPORT IS NOT IN THE LEAGUE INFO, SO IT IS MEASURED RATHER THAN
@@ -164,6 +166,7 @@ export async function importFantraxLeague(args: {
   const candidates = [
     cfb.ok ? { sport: 'cfb' as const, isDevy: true, resolved: resolveRosters(rosters.data, cfb.data) } : null,
     nfl.ok ? { sport: 'nfl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nfl.data) } : null,
+    mlb.ok ? { sport: 'mlb' as const, isDevy: false, resolved: resolveRosters(rosters.data, mlb.data) } : null,
   ].filter((c): c is NonNullable<typeof c> => c !== null)
 
   const scored = candidates
@@ -171,6 +174,9 @@ export async function importFantraxLeague(args: {
     .sort((a, b) => b.named - a.named)
 
   const best = scored[0]
+  if (!best || best.named === 0 || scored[1]?.named === best.named) {
+    return { ok: false, error: 'The roster player IDs do not identify one supported sport. Populate the source rosters and refresh the import.' }
+  }
   const resolved = best.resolved
   const total = resolved.reduce((a, r) => a + r.total, 0)
   const named = best.named
@@ -184,7 +190,7 @@ export async function importFantraxLeague(args: {
   if (total > 0 && named / total < 0.5) {
     return {
       ok: false,
-      error: `only ${named} of ${total} players could be named against either the college or the NFL player map, which is the signature of a sport we do not handle rather than a real league. Nothing was imported.`,
+      error: `Only ${named} of ${total} players could be named against the college, NFL or MLB player maps. Nothing was imported.`,
     }
   }
 
@@ -326,6 +332,7 @@ export async function importFantraxLeague(args: {
       state: draftSummary.draftState,
     },
     scoringGaps: scoring.gaps,
+    sourceSettings: { scoringSystem: info.data.scoringSystem ?? null, rosterInfo: info.data.rosterInfo },
     seasonState: schedule.position?.state ?? null,
     currentPeriod: schedule.position?.period ?? null,
     scoredPeriodsRead: schedule.periodsRead,

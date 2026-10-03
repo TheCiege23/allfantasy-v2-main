@@ -1890,6 +1890,10 @@ export function ImportV4({
           never changes anything on the external platform.
         </p>
         <p className="af-im-create-option">
+          Commissioners can then make a native copy to play here with supported rules. Already imported?{' '}
+          <Link href="/create-league#imported-leagues">Make an imported league native <span aria-hidden>&rarr;</span></Link>
+        </p>
+        <p className="af-im-create-option">
           Starting fresh?{' '}
           <Link href="/create-league" data-testid="import-create-league">
             Create a new league <span aria-hidden>&rarr;</span>
@@ -2903,7 +2907,7 @@ export function ImportV4({
                   href={`/create-league?fromLeague=${encodeURIComponent(phase.leagueId)}`}
                   className="af-btn af-btn--ghost af-done-alt"
                 >
-                  Create a standalone league from this import
+                  Make this league native to AllFantasy
                 </Link>
               </>
             ) : null}
