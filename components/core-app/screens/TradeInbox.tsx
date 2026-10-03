@@ -910,7 +910,7 @@ export function TradeInbox(props: {
                     {withheld ? <p className="af-tc-timeline-gap">{copy('Not graded:')} {copy(withheld)}</p> : null}
                     {trade.decisionRecommendation ? <p className="af-tc-timeline-advice">{trade.decisionRecommendation}</p> : null}
                     {trade.realizedGrade ? <p className="af-tc-timeline-advice">{copy('Realized outcome:')} {trade.realizedGrade}. {trade.realizedNote}</p> : null}
-                    {isCompleted && trade.status !== 'reversed' && leagueId && trade.impactRef ? <ImpactNowReview leagueId={leagueId} trade={trade.impactRef} /> : null}
+                    {isCompleted && trade.status !== 'reversed' && leagueId && trade.impactRef ? <ImpactNowReview leagueId={leagueId} trade={trade.impactRef} original={grade} /> : null}
                     {(isCompleted && trade.status !== 'reversed') || trade.status === 'accepted' || trade.status === 'scheduled' ? <><TradeReactionSettings /><AcceptedTradeReaction completed={isCompleted} /></> : null}
                     {lineupLine ? (
                       <p className="af-tc-timeline-lineup" data-direction={lineupImpactDirection(trade.rosterImpact)}>

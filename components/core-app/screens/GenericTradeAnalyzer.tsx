@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { TradeEvidencePanel } from './TradeEvidencePanel'
+import { TradeDecisionSummary } from './TradeDecisionSummary'
 import { TradeComparisonSnapshots } from './TradeComparisonSnapshots'
 import { TradeValueChart } from './TradeImpactCharts'
 import { TradeReaction, TradeReactionSettings } from './TradeReactions'
@@ -285,6 +286,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
               <p>Team A receives {result.grade.getMarket.toLocaleString()} in general market value and sends {result.grade.giveMarket.toLocaleString()}; Team B sees the reverse. The value gap is {Math.abs(result.grade.percentDiff ?? 0)}% of the larger side.</p>
               <p className="af-tc-generic-hint">This grade compares market value only. Position matters only through each asset’s quoted value; there is no team-specific position adjustment. League scoring, roster needs, injury risk, acceptance likelihood, and future results are not priced separately.</p>
               <p className="af-tc-generic-hint">Value basis: {result.grade.basis}. Valuation checked {result.lastUpdated && Number.isFinite(Date.parse(result.lastUpdated)) ? new Date(result.lastUpdated).toLocaleString() : 'at analysis time; source date unavailable'}.</p>
+              <TradeDecisionSummary grade={result.grade} evaluatedAt={analyzedAt} gaps={result.dataGaps} generic />
               <TradeEvidencePanel grade={result.grade} evaluatedAt={analyzedAt} gaps={result.dataGaps} generic />
               <TradeValueChart grade={result.grade} generic />
               <TradeReactionSettings />

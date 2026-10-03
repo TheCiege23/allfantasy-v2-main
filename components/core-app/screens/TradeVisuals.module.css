@@ -1,5 +1,9 @@
 .panel { border:1px solid var(--border,#334155);border-radius:16px;padding:16px;margin:12px 0;background:rgba(15,23,42,.18);min-width:0;color:inherit }
 .panel h4 {margin:0 0 10px;font-size:1rem}
+.decisionGrid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;overflow-wrap:anywhere}
+.decisionGrid ul {padding-left:18px;margin:8px 0;font-size:.85rem;line-height:1.55}
+.decisionGrid li {margin:8px 0}
+@media(max-width:900px){.decisionGrid{grid-template-columns:1fr}}
 .panel p,.panel small {font-size:.8rem;line-height:1.5;color:var(--muted,#94a3b8)}
 .row {display:grid;grid-template-columns:minmax(90px,1fr) minmax(100px,3fr) auto;gap:10px;align-items:center;margin:10px 0;font-size:.85rem}
 .track {height:18px;border-radius:5px;background:rgba(148,163,184,.12);overflow:hidden}

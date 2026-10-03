@@ -1,5 +1,5 @@
 import {beforeEach,describe,it,expect,vi} from 'vitest'
-const m=vi.hoisted(()=>({session:vi.fn(),membership:vi.fn(),load:vi.fn(),evaluate:vi.fn(),impact:vi.fn(),archive:vi.fn(),league:vi.fn(),archiveRow:vi.fn(),viewer:vi.fn(),players:vi.fn()}))
+const m=vi.hoisted(()=>({session:vi.fn(),membership:vi.fn(),load:vi.fn(),evaluate:vi.fn(),impact:vi.fn(),archive:vi.fn(),league:vi.fn(),archiveRow:vi.fn(),viewer:vi.fn(),players:vi.fn(),realized:vi.fn().mockResolvedValue(null)}))
 vi.mock('next-auth',()=>({getServerSession:m.session}))
 vi.mock('@/lib/auth',()=>({authOptions:{}}))
 vi.mock('@/lib/league-access',()=>({resolveLeagueMembership:m.membership}))
@@ -8,6 +8,7 @@ vi.mock('@/lib/decision-os/trade/evaluateStoredTrade',()=>({gradeInputsOf:(asset
 vi.mock('@/lib/decision-os/trade/evaluateTrade',()=>({evaluateTrade:m.evaluate}))
 vi.mock('@/lib/decision-os/trade/loadVisualImpact',()=>({loadVisualImpact:m.impact}))
 vi.mock('@/lib/core-app/archivedTradeGrade',()=>({gradeArchivedTradeRows:m.archive}))
+vi.mock('@/lib/decision-os/trade/loadRealizedReceipt',()=>({loadRealizedReceipt:m.realized}))
 vi.mock('@/lib/prisma',()=>({prisma:{league:{findUnique:m.league},leagueTrade:{findFirst:m.archiveRow}}}))
 vi.mock('@/lib/trade-intel/viewerLeagueRoster',()=>({resolveViewerLeagueRoster:m.viewer}))
 vi.mock('@/lib/decision-os/trade/tradePlayers',()=>({resolveTradePlayers:m.players}))
@@ -26,10 +27,11 @@ describe('Impact now privacy and original preservation',()=>{
     expect((await POST(request({leagueId:'l',trade:{kind:'archive',transactionId:'sleeper-league:tx'}}))).status).toBe(200)
     expect(m.archiveRow).toHaveBeenCalledWith(expect.objectContaining({where:{transactionId:'tx',history:{sleeperLeagueId:'sleeper-league',sleeperUsername:'owner'}}}))
     expect(m.archive).toHaveBeenCalledWith(expect.objectContaining({freezeOriginal:false}))
+    expect(m.realized).toHaveBeenCalledWith({leagueId:'sleeper-league',transactionId:'tx',ownerId:'owner'})
   })
   it('requires a session and membership before loading any trade assets',async()=>{
     m.session.mockResolvedValue(null);expect((await POST(request(body))).status).toBe(401)
-    m.session.mockResolvedValue({user:{id:'member'}});m.membership.mockResolvedValue({ok:false});expect((await POST(request(body))).status).toBe(403);expect(m.load).not.toHaveBeenCalled();expect(m.archive).not.toHaveBeenCalled()
+    m.session.mockResolvedValue({user:{id:'member'}});m.membership.mockResolvedValue({ok:false});expect((await POST(request(body))).status).toBe(403);expect(m.load).not.toHaveBeenCalled();expect(m.archive).not.toHaveBeenCalled();expect(m.realized).not.toHaveBeenCalled()
   })
   it('rejects a pending trade or a completed trade the viewer did not participate in',async()=>{
     const loaded=await m.load();loaded.trade.status='proposed';m.load.mockResolvedValue(loaded);expect((await POST(request(body))).status).toBe(400)

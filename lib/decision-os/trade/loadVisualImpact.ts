@@ -5,7 +5,9 @@ import { leagueWeekBasis, isLeagueWeekRefusal, priceLeagueWeek } from './leagueW
 import { computeRosterImpact } from './rosterImpact'
 import { summarizeRosterImpact, LEAGUE_WEEK_UNIT, type LineupImpactSummary } from './rosterImpactSummary'
 import { retrospectiveRoster } from './visualHistory'
-export type VisualImpactResult = {impact:LineupImpactSummary|null;reason:string|null;moved:string[];returned:string[];evaluatedAt:string;rostersSyncedAt:string|null;rostersStale:boolean;season:string|null}
+import { reviewPackageCost, type PackageCost } from './packageCost'
+import { resolveTradePlayers } from './tradePlayers'
+export type VisualImpactResult = {impact:LineupImpactSummary|null;reason:string|null;moved:string[];returned:string[];evaluatedAt:string;rostersSyncedAt:string|null;rostersStale:boolean;season:string|null;packageCost?:PackageCost|null}
 /** Both modes use today's roster and this league's weekly scoring. Completed mode compares to an explicit hypothetical undo. */
 export async function loadVisualImpact(args:{leagueId:string;userId:string;sent:string[];received:string[];completed?:boolean;unresolved?:boolean}):Promise<VisualImpactResult> {
   const empty:VisualImpactResult = {impact:null,reason:null,moved:[],returned:[],evaluatedAt:new Date().toISOString(),rostersSyncedAt:null,rostersStale:true,season:null}
@@ -19,6 +21,7 @@ export async function loadVisualImpact(args:{leagueId:string;userId:string;sent:
   if (!roster || !world.league.rosterSettings.starterSlots?.length) return {...result,reason:'Current roster or starting slots are missing.'}
   if (args.unresolved) return {...result,reason:'Some traded players lack verified roster identities; no lineup change is estimated.'}
   if (!args.sent.length && !args.received.length) return {...result,reason:'This trade has no original player swap to simulate. Weekly effects of picks and FAAB are not estimated.'}
+  if (!args.completed && (args.sent.some(id=>!roster.playerIds.includes(id)) || args.received.some(id=>roster.playerIds.includes(id)))) return {...result,reason:'The proposed player movements disagree with your current roster. Confirm both sides and sync before comparing lineups.'}
   const undo = retrospectiveRoster(roster.playerIds,args.sent,args.received)
   if (args.completed && !undo.withoutTrade) return {...result,reason:'Later roster moves prevent a clean comparison. The original acquired assets must still be held and sent assets must not have returned.',moved:undo.moved,returned:undo.returned}
   const basis = await leagueWeekBasis(world.league)
@@ -28,6 +31,16 @@ export async function loadVisualImpact(args:{leagueId:string;userId:string;sent:
   const ids = [...new Set([...roster.playerIds,...args.sent,...args.received])]
   const priced = await priceLeagueWeek(basis,ids,new Map())
   const player = (id:string) => priced.get(id) ?? {playerId:id,position:'',projectedPoints:null}
-  const impact = computeRosterImpact({roster:(args.completed ? undo.withoutTrade! : roster.playerIds).map(player),slots:world.league.rosterSettings.starterSlots,incoming:args.received.map(player),outgoingPlayerIds:args.sent})
-  return {...result,season:basis.week.season,impact:summarizeRosterImpact({...impact,unit:LEAGUE_WEEK_UNIT,week:basis.week.week})??null,reason:impact.blockedReason}
+  const protectedIds = new Set([...(roster.reserveIds??[]),...(roster.taxiIds??[])])
+  if ([...args.sent,...args.received].some(id=>protectedIds.has(id))) return {...result,reason:'A traded player occupies IR or taxi. Active-roster eligibility must be confirmed before comparing weekly lineups.'}
+  const active = (args.completed ? undo.withoutTrade! : roster.playerIds).filter(id=>!protectedIds.has(id)).map(player)
+  const impact = computeRosterImpact({roster:active,slots:world.league.rosterSettings.starterSlots,incoming:args.received.map(player),outgoingPlayerIds:args.sent})
+  const packageCost = args.completed ? null : reviewPackageCost({roster:roster.playerIds.map(player),sent:args.sent,incoming:args.received.map(player),slots:world.league.rosterSettings.starterSlots,reserveIds:roster.reserveIds??[],taxiIds:roster.taxiIds??[],capacity:world.league.rosterSettings.rosterSize})
+  if (packageCost) {
+    const metadata=await resolveTradePlayers([...packageCost.candidates.map(c=>c.playerId),...packageCost.displacedStarters],{space:'sleeper',sport:world.league.sport}).catch(()=>new Map())
+    const name=(id:string)=>{const found=metadata.get(id);return found?.ok?found.name:`Player ${id}`}
+    packageCost.candidates=packageCost.candidates.map(c=>({...c,name:name(c.playerId)}))
+    packageCost.displacedStarters=packageCost.displacedStarters.map(name)
+  }
+  return {...result,packageCost,season:basis.week.season,impact:summarizeRosterImpact({...impact,unit:LEAGUE_WEEK_UNIT,week:basis.week.week})??null,reason:impact.blockedReason}
 }

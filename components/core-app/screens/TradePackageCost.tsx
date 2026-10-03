@@ -1,0 +1,7 @@
+'use client'
+import type { PackageCost } from '@/lib/decision-os/trade/packageCost'
+import styles from './TradeVisuals.module.css'
+export function TradePackageCost({cost}:{cost:PackageCost|null|undefined}) {
+  if (!cost) return null
+  return <section className={styles.panel} aria-label="Roster space and opportunity cost"><h4>Does this package fit?</h4><p>Active players: {cost.activeBefore} → {cost.activeAfter}. Recorded capacity: {cost.capacity??'unknown'}.</p><strong>{cost.requiredDrops==null?'Roster capacity is unverified.':cost.requiredDrops>0?`${cost.requiredDrops} drop${cost.requiredDrops===1?'':'s'} needed before this package fits.`:'No active-roster drops needed under the recorded capacity.'}</strong>{cost.displacedStarters.length?<p>Current projected starters moved to the bench: {cost.displacedStarters.join(', ')}.</p>:null}{cost.candidates.length?<details><summary>Explore individual drop costs</summary><p>The lineup graph shows the package before required drops. These are independent scenarios, not recommended cuts.</p><div className={styles.table}><table><thead><tr><th>Retained player</th><th>Weekly starter points lost if dropped</th></tr></thead><tbody>{cost.candidates.map(c=><tr key={c.playerId}><td>{c.name}</td><td>{c.singleDropLineupCost==null?'Unavailable':c.singleDropLineupCost.toFixed(1)}</td></tr>)}</tbody></table></div></details>:null}<p>{cost.note}</p></section>
+}

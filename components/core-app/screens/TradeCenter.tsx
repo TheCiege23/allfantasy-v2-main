@@ -50,6 +50,9 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import { TradeEvidencePanel } from './TradeEvidencePanel'
+import { TradeDecisionSummary } from './TradeDecisionSummary'
+import { TradePackageCost } from './TradePackageCost'
+import { counterDecision } from '@/lib/decision-os/trade/decisionSummary'
 import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import { TradeValueChart, LineupImpactChart } from './TradeImpactCharts'
 import { TradeReaction, TradeReactionSettings } from './TradeReactions'
@@ -2303,10 +2306,12 @@ export function TradeCenter(props: {
             Which league type that chart is for, and whether anyone confirmed it. The league-type
             control sits in this page's header (CoreLeagueContextBar, `#league-type`).
           */}
+          {serverGrade ? <TradeDecisionSummary grade={serverGrade} evaluatedAt={analyzedAt} gaps={result.dataGaps} visual={result.visualImpact} /> : null}
           {serverGrade?.graded ? <TradeEvidencePanel grade={serverGrade} evaluatedAt={analyzedAt} gaps={result.dataGaps} /> : null}
           {serverGrade ? <TradeValueChart grade={serverGrade} /> : null}
           {result.visualImpact ? <><LineupImpactChart impact={result.visualImpact.impact} /><p className="af-tc-row-sub">{result.visualImpact.reason} {result.visualImpact.rostersStale ? 'Roster data may be stale; sync before acting.' : ''} Picks and FAAB are outside the weekly lineup simulation.</p></> : null}
           <TradeReactionSettings />
+          <TradePackageCost cost={result.visualImpact?.packageCost} />
           {serverGrade?.graded ? <div className="af-tc-grade-row"><span>Your grade {serverGrade.letter} <TradeReaction letter={serverGrade.letter} /></span><span>Their grade {serverGrade.partnerLetter} <TradeReaction letter={serverGrade.partnerLetter} /></span></div> : null}
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
           {serverGrade?.graded ? (
@@ -2482,6 +2487,7 @@ export function TradeCenter(props: {
                 {result.counterOffers!.map(counter => (
                   <li key={`${counter.addTo}-${counter.rosterPlayerId}`}>
                     <strong>{copy(counter.addTo === 'get' ? 'Ask for' : 'Offer')} {counter.name}</strong>
+                    {serverGrade ? <p className="af-tc-row-sub">{counterDecision({before:serverGrade,after:counter.grade,addTo:counter.addTo,cost:result.visualImpact?.packageCost})}</p> : null}
                     <span className="af-tc-row-sub">{copy('Base value')} {money(counter.marketValue)} · {copy('League value in this package')} {money(counter.assetLeagueValue)}</span>
                     <span className="af-tc-row-sub">
                       {copy('You')} {counter.grade.letter} / {theirLabel} {counter.grade.partnerLetter} · {counter.balanced ? copy('Within the even-value band') : `${Math.abs(counter.grade.percentDiff)}% ${copy('apart')}`} · {money(counter.remainingGap)} {copy('value gap remaining')}

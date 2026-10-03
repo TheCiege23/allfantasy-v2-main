@@ -2,6 +2,7 @@ import {beforeEach,describe,it,expect,vi} from 'vitest'
 const mocks=vi.hoisted(()=>({world:vi.fn(),viewer:vi.fn(),basis:vi.fn(),price:vi.fn()}))
 vi.mock('@/lib/decision-os/world',()=>({resolveCanonicalWorld:mocks.world}))
 vi.mock('@/lib/trade-intel/viewerLeagueRoster',()=>({resolveViewerLeagueRoster:mocks.viewer}))
+vi.mock('@/lib/decision-os/trade/tradePlayers',()=>({resolveTradePlayers:vi.fn().mockResolvedValue(new Map())}))
 vi.mock('@/lib/decision-os/trade/leagueWeekPricing',()=>({leagueWeekBasis:mocks.basis,isLeagueWeekRefusal:(b:unknown)=>Boolean(b && typeof b==='object' && 'refuse' in b),priceLeagueWeek:mocks.price}))
 import {loadVisualImpact} from '@/lib/decision-os/trade/loadVisualImpact'
 beforeEach(()=>{vi.clearAllMocks();mocks.world.mockResolvedValue({teams:[],rosters:[{rosterId:'r',playerIds:['got','other']}],league:{season:2026,sport:'NFL',rosterSettings:{starterSlots:['RB']},scoringSettings:{rec:.5}},provenance:{provider:'sleeper',freshness:{lastSyncedAt:'2026-10-03',isStale:false}}});mocks.viewer.mockResolvedValue({ok:true,team:{externalId:'1'},roster:{id:'r'}});mocks.basis.mockResolvedValue({rules:{rec:.5},week:{season:'2026',week:5}});mocks.price.mockResolvedValue(new Map([['got',{playerId:'got',position:'RB',projectedPoints:20}],['sent',{playerId:'sent',position:'RB',projectedPoints:10}],['other',{playerId:'other',position:'RB',projectedPoints:5}]]))})
