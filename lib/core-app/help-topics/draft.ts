@@ -28,7 +28,8 @@ import type { HelpTopic } from '../helpTopics'
  *   warRoomWeekMargins ..... components/core-app/screens/WarRoomWeek.tsx marginOf + sort; railMatchups.ts source
  *   eliminationCutLine ..... lib/core-app/railMatchups.ts standingIn (mostHavePlayed, afProjected ?? projected),
  *                            choppedBefore + the live field filter
- *   connectedFranchise ..... lib/core-app/leaguePairing.ts (stale > 24h or no sync time; Fantrax = stored snapshot)
+ *   connectedFranchise ..... lib/core-app/leaguePairing.ts (stale > 24h or no sync time; Fantrax = stored snapshot);
+ *                            move counts = getLeagueActivity counts (deduped events, newest ≤ 60 rows, countWindow)
  *   needsYouFirst .......... lib/core-app/outstandingIssues.ts deriveOutstandingIssues (stale_sync, draft_upcoming;
  *                            ≤ 24h → 'bad', "Draft today")
  *
@@ -189,11 +190,11 @@ export const DRAFT_TOPICS = {
   connectedFranchise: {
     en: {
       title: 'Connected franchise',
-      body: 'Links leagues you play as one team — for example a pro league and a college league — so their rosters and drafts sit on one screen. “Refresh recommended” means a league has not synced in the last 24 hours, or has no sync time on file. A Fantrax league is a stored snapshot: re-import it to refresh.',
+      body: 'Links leagues you play as one team — for example a pro league and a college league — so their rosters and drafts sit on one screen. “Refresh recommended” means a league has not synced in the last 24 hours, or has no sync time on file. A Fantrax league is a stored snapshot: re-import it to refresh. “Recent league moves” counts every manager’s trades, waivers and adds from each league’s newest transactions on file, one per trade — not a season total; a “+” means older moves were not counted.',
     },
     es: {
       title: 'Franquicia conectada',
-      body: 'Une ligas que juegas como un solo equipo, por ejemplo una liga profesional y una universitaria, para ver sus plantillas y drafts en una sola pantalla. «Refresh recommended» significa que una liga no se ha sincronizado en las últimas 24 horas o no tiene hora de sincronización registrada. Una liga de Fantrax es una copia guardada: vuelve a importarla para actualizarla.',
+      body: 'Une ligas que juegas como un solo equipo, por ejemplo una liga profesional y una universitaria, para ver sus plantillas y drafts en una sola pantalla. «Refresh recommended» significa que una liga no se ha sincronizado en las últimas 24 horas o no tiene hora de sincronización registrada. Una liga de Fantrax es una copia guardada: vuelve a importarla para actualizarla. «Recent league moves» cuenta los intercambios, waivers y altas de todos los mánagers a partir de las transacciones más recientes de cada liga, una por intercambio; no es el total de la temporada, y un «+» indica que hay movimientos anteriores sin contar.',
     },
   },
   needsYouFirst: {
