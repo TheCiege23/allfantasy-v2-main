@@ -37,3 +37,11 @@ export const DELIVERY_LABELS: Record<keyof DeliveryMethodAvailability, string> =
   sms: "SMS",
   push: "Push",
 }
+
+/** i18n keys beside `DELIVERY_LABELS` — display only; the English labels stay the fallback. */
+export const DELIVERY_LABEL_KEYS: Record<keyof DeliveryMethodAvailability, string> = {
+  inApp: "settings.notifications.delivery.inApp",
+  email: "settings.notifications.delivery.email",
+  sms: "settings.notifications.delivery.sms",
+  push: "settings.notifications.delivery.push",
+}

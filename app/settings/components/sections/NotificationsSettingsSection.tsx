@@ -12,11 +12,13 @@ import {
   describeTestNotificationResult,
   NOTIFICATION_CATEGORY_IDS,
   NOTIFICATION_CATEGORY_LABELS,
+  NOTIFICATION_CATEGORY_LABEL_KEYS,
   OPT_IN_NOTIFICATION_CATEGORY_IDS,
   getDefaultCategoryPreferences,
   type NotificationPreferences,
   type NotificationCategoryId,
 } from "@/lib/notification-settings"
+import { tOr } from "@/lib/i18n/tInterpolate"
 import { buildResetNotificationPreferences } from "@/lib/notification-settings/resetNotificationPreferences"
 import { NotificationCategoryRenderer } from "@/components/notification-settings/NotificationCategoryRenderer"
 import { LeagueNotificationOverridesCard } from "@/components/notification-settings/LeagueNotificationOverridesCard"
@@ -55,6 +57,13 @@ export function NotificationsSettingsSection({
   onRefetch: () => void
 }) {
   const { t, tInterpolate } = useLanguage()
+  /* Display labels only — ids stay the stored/sent values. English is the fallback. */
+  const categoryLabels = Object.fromEntries(
+    NOTIFICATION_CATEGORY_IDS.map((id) => [
+      id,
+      tOr(t, NOTIFICATION_CATEGORY_LABEL_KEYS[id], NOTIFICATION_CATEGORY_LABELS[id]),
+    ]),
+  ) as Record<NotificationCategoryId, string>
   const resolved = resolveNotificationPreferences(profile?.notificationPreferences as NotificationPreferences | null)
   const [prefs, setPrefs] = useState<NotificationPreferences>(resolved)
   const [expandedCategory, setExpandedCategory] = useState<NotificationCategoryId | null>("matchup_results")
@@ -262,7 +271,8 @@ export function NotificationsSettingsSection({
       blockedReasons: result.blockedReasons,
     })
     setTestResultTone(outcome.tone)
-    setTestResultMessage(outcome.message)
+    const translated = tInterpolate(outcome.messageKey, outcome.messageVars)
+    setTestResultMessage(translated && translated !== outcome.messageKey ? translated : outcome.message)
   }
 
   const handleChimmyShortcutToggle = (enabled: boolean) => {
@@ -460,7 +470,7 @@ export function NotificationsSettingsSection({
       <LeagueNotificationOverridesCard
         prefs={prefs}
         categoryIds={VISIBLE_CATEGORY_IDS}
-        categoryLabels={NOTIFICATION_CATEGORY_LABELS}
+        categoryLabels={categoryLabels}
         onChange={(next) => {
           setDirty(true)
           setSaveError(null)
@@ -560,7 +570,7 @@ export function NotificationsSettingsSection({
             className="w-full min-w-0 max-w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)] sm:w-auto"
           >
             {VISIBLE_CATEGORY_IDS.map((id) => (
-              <option key={id} value={id}>{NOTIFICATION_CATEGORY_LABELS[id]}</option>
+              <option key={id} value={id}>{categoryLabels[id]}</option>
             ))}
           </select>
           <button

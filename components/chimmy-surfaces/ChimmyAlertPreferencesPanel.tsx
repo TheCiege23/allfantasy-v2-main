@@ -1,19 +1,22 @@
 'use client'
 
 import React from 'react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useChimmyAlertPreferences } from '@/hooks/useChimmyAlertPreferences'
 import type { ChimmyAlertClass, ChimmyAlertUserPreferences } from '@/lib/chimmy-alerts/types'
+import { tOr } from '@/lib/i18n/tInterpolate'
 
-const ALERT_CLASSES: { id: ChimmyAlertClass; label: string }[] = [
-  { id: 'lineup', label: 'Lineup' },
-  { id: 'waiver', label: 'Waivers' },
-  { id: 'trade', label: 'Trades' },
-  { id: 'draft', label: 'Draft' },
-  { id: 'matchup', label: 'Matchup' },
-  { id: 'team_roster', label: 'Roster' },
-  { id: 'commissioner', label: 'Commissioner' },
-  { id: 'story_engagement', label: 'Stories' },
-  { id: 'specialty', label: 'Specialty' },
+/* `id` is the stored value in `mutedClasses`; `label`/`labelKey` are display only. */
+const ALERT_CLASSES: { id: ChimmyAlertClass; label: string; labelKey: string }[] = [
+  { id: 'lineup', label: 'Lineup', labelKey: 'settings.chimmyAlerts.class.lineup' },
+  { id: 'waiver', label: 'Waivers', labelKey: 'settings.chimmyAlerts.class.waiver' },
+  { id: 'trade', label: 'Trades', labelKey: 'settings.chimmyAlerts.class.trade' },
+  { id: 'draft', label: 'Draft', labelKey: 'settings.chimmyAlerts.class.draft' },
+  { id: 'matchup', label: 'Matchup', labelKey: 'settings.chimmyAlerts.class.matchup' },
+  { id: 'team_roster', label: 'Roster', labelKey: 'settings.chimmyAlerts.class.teamRoster' },
+  { id: 'commissioner', label: 'Commissioner', labelKey: 'settings.chimmyAlerts.class.commissioner' },
+  { id: 'story_engagement', label: 'Stories', labelKey: 'settings.chimmyAlerts.class.storyEngagement' },
+  { id: 'specialty', label: 'Specialty', labelKey: 'settings.chimmyAlerts.class.specialty' },
 ]
 
 // ── Shared sub-components ────────────────────────────────────────────────────
@@ -97,6 +100,7 @@ export default function ChimmyAlertPreferencesPanel({
   role = 'member',
   className = '',
 }: ChimmyAlertPreferencesPanelProps) {
+  const { t, tInterpolate } = useOptionalLanguage()
   const { prefs, loading, error, saving, patch } = useChimmyAlertPreferences()
 
   if (loading) {
@@ -112,7 +116,7 @@ export default function ChimmyAlertPreferencesPanel({
   if (error || !prefs) {
     return (
       <p className={`text-xs text-red-400 ${className}`}>
-        {error ?? 'Failed to load preferences.'}
+        {error ?? t('settings.chimmyAlerts.loadFailed')}
       </p>
     )
   }
@@ -132,19 +136,19 @@ export default function ChimmyAlertPreferencesPanel({
     <div className={`space-y-5 ${className}`}>
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Chimmy Alert Settings</h3>
-        {saving && <span className="text-[11px] text-cyan-400/70">Saving…</span>}
+        <h3 className="text-sm font-semibold text-white">{t('settings.chimmyAlerts.title')}</h3>
+        {saving && <span className="text-[11px] text-cyan-400/70">{t('settings.chimmyAlerts.saving')}</span>}
       </div>
 
       {/* Alert Volume */}
       <section className="space-y-2.5">
-        <SectionLabel>Alert Volume</SectionLabel>
+        <SectionLabel>{t('settings.chimmyAlerts.volume')}</SectionLabel>
         <div className="flex gap-2">
           {(
             [
-              { value: 'normal', label: 'Normal' },
-              { value: 'reduced', label: 'Reduced' },
-              { value: 'minimal', label: 'Minimal' },
+              { value: 'normal', label: t('settings.chimmyAlerts.volume.normal') },
+              { value: 'reduced', label: t('settings.chimmyAlerts.volume.reduced') },
+              { value: 'minimal', label: t('settings.chimmyAlerts.volume.minimal') },
             ] as const
           ).map((opt) => (
             <SegmentButton
@@ -162,13 +166,13 @@ export default function ChimmyAlertPreferencesPanel({
 
       {/* Sensitivity */}
       <section className="space-y-2.5">
-        <SectionLabel>Sensitivity</SectionLabel>
+        <SectionLabel>{t('settings.chimmyAlerts.sensitivity')}</SectionLabel>
         <div className="flex gap-2">
           {(
             [
-              { value: 'low', label: 'Low' },
-              { value: 'normal', label: 'Normal' },
-              { value: 'high', label: 'High' },
+              { value: 'low', label: t('settings.chimmyAlerts.sensitivity.low') },
+              { value: 'normal', label: t('settings.chimmyAlerts.sensitivity.normal') },
+              { value: 'high', label: t('settings.chimmyAlerts.sensitivity.high') },
             ] as const
           ).map((opt) => (
             <SegmentButton
@@ -186,10 +190,10 @@ export default function ChimmyAlertPreferencesPanel({
 
       {/* Channel Preferences */}
       <section className="space-y-3">
-        <SectionLabel>Delivery Channels</SectionLabel>
+        <SectionLabel>{t('settings.chimmyAlerts.channels')}</SectionLabel>
         <div className="space-y-2.5 rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-3">
           <Toggle
-            label="Push notifications"
+            label={t('settings.chimmyAlerts.channels.push')}
             checked={!(cp.disablePush ?? false)}
             onChange={(v) =>
               void patch({
@@ -198,7 +202,7 @@ export default function ChimmyAlertPreferencesPanel({
             }
           />
           <Toggle
-            label="Email alerts"
+            label={t('settings.chimmyAlerts.channels.email')}
             checked={!(cp.disableEmail ?? false)}
             onChange={(v) =>
               void patch({
@@ -207,7 +211,7 @@ export default function ChimmyAlertPreferencesPanel({
             }
           />
           <Toggle
-            label="SMS alerts"
+            label={t('settings.chimmyAlerts.channels.sms')}
             checked={!(cp.disableSms ?? false)}
             onChange={(v) =>
               void patch({
@@ -220,7 +224,7 @@ export default function ChimmyAlertPreferencesPanel({
 
       {/* Muted Categories */}
       <section className="space-y-2.5">
-        <SectionLabel>Muted Categories</SectionLabel>
+        <SectionLabel>{t('settings.chimmyAlerts.muted')}</SectionLabel>
         <div className="flex flex-wrap gap-2">
           {ALERT_CLASSES.map((cls) => {
             const isMuted = mutedClasses.includes(cls.id)
@@ -235,14 +239,17 @@ export default function ChimmyAlertPreferencesPanel({
                     : 'border-white/15 bg-white/5 text-white/65 hover:bg-white/10'
                 }`}
               >
-                {cls.label}
+                {tOr(t, cls.labelKey, cls.label)}
               </button>
             )
           })}
         </div>
         {mutedClasses.length > 0 && (
           <p className="text-[11px] text-white/35">
-            {mutedClasses.length} categor{mutedClasses.length === 1 ? 'y' : 'ies'} muted
+            {tInterpolate(
+              mutedClasses.length === 1 ? 'settings.chimmyAlerts.mutedOne' : 'settings.chimmyAlerts.mutedMany',
+              { count: mutedClasses.length },
+            )}
           </p>
         )}
       </section>
@@ -250,10 +257,10 @@ export default function ChimmyAlertPreferencesPanel({
       {/* Commissioner Prefs */}
       {(role === 'commissioner' || role === 'admin') && (
         <section className="space-y-3">
-          <SectionLabel>Commissioner Alerts</SectionLabel>
+          <SectionLabel>{t('settings.chimmyAlerts.commissioner')}</SectionLabel>
           <div className="space-y-2.5 rounded-xl border border-amber-400/20 bg-amber-500/5 px-3.5 py-3">
             <Toggle
-              label="Enable commissioner alerts"
+              label={t('settings.chimmyAlerts.commissioner.enable')}
               checked={commPrefs?.enabled ?? true}
               onChange={(v) =>
                 void patch({
@@ -264,7 +271,7 @@ export default function ChimmyAlertPreferencesPanel({
             {(commPrefs?.enabled ?? true) && (
               <>
                 <Toggle
-                  label="Suspicious trade alerts"
+                  label={t('settings.chimmyAlerts.commissioner.suspiciousTrade')}
                   checked={commPrefs?.receiveSuspiciousTradeAlerts ?? true}
                   onChange={(v) =>
                     void patch({
@@ -276,7 +283,7 @@ export default function ChimmyAlertPreferencesPanel({
                   }
                 />
                 <Toggle
-                  label="Orphan team alerts"
+                  label={t('settings.chimmyAlerts.commissioner.orphanTeam')}
                   checked={commPrefs?.receiveOrphanTeamAlerts ?? true}
                   onChange={(v) =>
                     void patch({
@@ -288,7 +295,7 @@ export default function ChimmyAlertPreferencesPanel({
                   }
                 />
                 <Toggle
-                  label="Integrity alerts"
+                  label={t('settings.chimmyAlerts.commissioner.integrity')}
                   checked={commPrefs?.receiveIntegrityAlerts ?? true}
                   onChange={(v) =>
                     void patch({

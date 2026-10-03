@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import type {
   NotificationCategoryId,
   NotificationPreferences,
@@ -66,6 +67,7 @@ export function LeagueNotificationOverridesCard({
   categoryIds: NotificationCategoryId[]
   categoryLabels: Record<NotificationCategoryId, string>
 }) {
+  const { t, tInterpolate } = useOptionalLanguage()
   const [leagues, setLeagues] = useState<LeagueRow[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -124,18 +126,15 @@ export function LeagueNotificationOverridesCard({
       data-testid="notifications-league-overrides-card"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium text-[var(--text)]">Per-league settings</span>
+        <span className="text-sm font-medium text-[var(--text)]">{t("settings.notifications.leagues.title")}</span>
         {customisedCount > 0 ? (
           <span className="text-xs text-[var(--muted)]" data-testid="league-overrides-count">
-            {customisedCount} customised
+            {tInterpolate("settings.notifications.leagues.customised", { count: customisedCount })}
           </span>
         ) : null}
       </div>
 
-      <p className="text-xs text-[var(--muted)]">
-        Everything above applies to all your leagues. Turn one down here without changing the
-        rest — a loud dynasty league can stay quiet while your main league still reaches you.
-      </p>
+      <p className="text-xs text-[var(--muted)]">{t("settings.notifications.leagues.intro")}</p>
 
       {globallyOff ? (
         /*
@@ -147,21 +146,18 @@ export function LeagueNotificationOverridesCard({
           className="rounded-lg border border-[var(--border)] bg-[var(--panel)] p-3 text-xs text-[var(--muted)]"
           data-testid="league-overrides-globally-off"
         >
-          Notifications are off for your whole account, so per-league settings have nothing to
-          change yet. Turn notifications on above and these become active.
+          {t("settings.notifications.leagues.globallyOff")}
         </p>
       ) : null}
 
       {leagues === null ? (
-        <p className="text-xs text-[var(--muted)]">Loading your leagues…</p>
+        <p className="text-xs text-[var(--muted)]">{t("settings.notifications.leagues.loading")}</p>
       ) : loadFailed ? (
         <p className="text-xs text-[var(--muted)]" data-testid="league-overrides-load-failed">
-          Could not load your leagues just now. Your global settings above are unaffected.
+          {t("settings.notifications.leagues.loadFailed")}
         </p>
       ) : leagues.length === 0 ? (
-        <p className="text-xs text-[var(--muted)]">
-          Once you join or import a league it will show up here.
-        </p>
+        <p className="text-xs text-[var(--muted)]">{t("settings.notifications.leagues.empty")}</p>
       ) : (
         <ul className="space-y-2">
           {leagues.map((league) => {
@@ -179,11 +175,16 @@ export function LeagueNotificationOverridesCard({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm text-[var(--text)]">
-                      {league.name?.trim() || "Untitled league"}
+                      {league.name?.trim() || t("settings.notifications.leagues.untitled")}
                     </p>
                     {mutedCats.length > 0 && !muted ? (
                       <p className="text-xs text-[var(--muted)]">
-                        {mutedCats.length} {mutedCats.length === 1 ? "category" : "categories"} muted
+                        {tInterpolate(
+                          mutedCats.length === 1
+                            ? "settings.notifications.leagues.mutedOne"
+                            : "settings.notifications.leagues.mutedMany",
+                          { count: mutedCats.length },
+                        )}
                       </p>
                     ) : null}
                   </div>
@@ -198,8 +199,8 @@ export function LeagueNotificationOverridesCard({
                     className="rounded-md border border-[var(--border)] bg-[var(--panel2)] px-2 py-1 text-xs text-[var(--text)] disabled:opacity-50"
                     data-testid={`league-override-select-${league.id}`}
                   >
-                    <option value="global">Follow my settings</option>
-                    <option value="muted">Mute this league</option>
+                    <option value="global">{t("settings.notifications.leagues.follow")}</option>
+                    <option value="muted">{t("settings.notifications.leagues.mute")}</option>
                   </select>
                 </div>
 
@@ -211,7 +212,9 @@ export function LeagueNotificationOverridesCard({
                       className="mt-1 inline-flex min-h-[44px] items-center text-xs text-[var(--accent-cyan)] underline-offset-2 hover:underline"
                       data-testid={`league-override-expand-${league.id}`}
                     >
-                      {isExpanded ? "Hide categories" : "Mute individual categories"}
+                      {isExpanded
+                        ? t("settings.notifications.leagues.hideCategories")
+                        : t("settings.notifications.leagues.muteIndividual")}
                     </button>
 
                     {isExpanded ? (
@@ -228,7 +231,9 @@ export function LeagueNotificationOverridesCard({
                               className="h-3.5 w-3.5 rounded accent-[var(--accent-cyan)]"
                               data-testid={`league-override-cat-${league.id}-${id}`}
                             />
-                            Mute {categoryLabels[id] ?? id}
+                            {tInterpolate("settings.notifications.leagues.muteCategory", {
+                              label: categoryLabels[id] ?? id,
+                            })}
                           </label>
                         ))}
                       </div>

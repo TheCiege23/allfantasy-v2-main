@@ -4,6 +4,8 @@ export type ChimmyVoice = {
   id: string
   name: string
   description: string
+  /** i18n key for `description` (display only); the English description stays the fallback. */
+  descriptionKey?: string
   gender: 'female' | 'male' | 'neutral'
   accent: string
   preview?: string
@@ -17,6 +19,7 @@ export const CHIMMY_VOICES: ChimmyVoice[] = [
     id: 'XrExE9yKIg1WjnnlVkGX',
     name: 'Allison',
     description: 'Warm, clear, friendly',
+    descriptionKey: 'settings.chimmyVoice.voiceDesc.allison',
     gender: 'female',
     accent: 'American',
   },
@@ -24,6 +27,7 @@ export const CHIMMY_VOICES: ChimmyVoice[] = [
     id: ELEVENLABS_RACHEL_PREMADE_VOICE_ID,
     name: 'Rachel',
     description: 'Calm, professional',
+    descriptionKey: 'settings.chimmyVoice.voiceDesc.rachel',
     gender: 'female',
     accent: 'American',
   },
@@ -31,6 +35,7 @@ export const CHIMMY_VOICES: ChimmyVoice[] = [
     id: 'TxGEqnHWrfWFTfGW9XjX',
     name: 'Josh',
     description: 'Deep, casual, energetic',
+    descriptionKey: 'settings.chimmyVoice.voiceDesc.josh',
     gender: 'male',
     accent: 'American',
   },
@@ -38,6 +43,7 @@ export const CHIMMY_VOICES: ChimmyVoice[] = [
     id: 'ErXwobaYiN019PkySvjV',
     name: 'Antoni',
     description: 'Smooth, well-rounded',
+    descriptionKey: 'settings.chimmyVoice.voiceDesc.antoni',
     gender: 'male',
     accent: 'American',
   },
@@ -45,6 +51,7 @@ export const CHIMMY_VOICES: ChimmyVoice[] = [
     id: 'pNInz6obpgDQGcFmaJgB',
     name: 'Adam',
     description: 'Authoritative, sports-ready',
+    descriptionKey: 'settings.chimmyVoice.voiceDesc.adam',
     gender: 'male',
     accent: 'American',
   },
@@ -52,6 +59,7 @@ export const CHIMMY_VOICES: ChimmyVoice[] = [
     id: 'yoZ06aMxZJJ28mfd3POQ',
     name: 'Sam',
     description: 'Raspy, confident',
+    descriptionKey: 'settings.chimmyVoice.voiceDesc.sam',
     gender: 'male',
     accent: 'American',
   },
