@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
+import type { CoreIssue, IssueSeverity } from '@/lib/core-app/outstandingIssues'
 import '@/components/core-app/af-pick-league.css'
 import type { ReactNode } from 'react'
 import { NoLeaguesYet } from '@/components/core-app/boards/BoardKit'
@@ -73,8 +73,14 @@ export type PickALeagueProps = {
   queueClearText?: string
 }
 
-/** Most severe first, and only rows that name a league — a row we cannot route is noise here. */
-const RANK: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 }
+/**
+ * Most severe first, and only rows that name a league — a row we cannot route is noise here.
+ *
+ * Keyed on `IssueSeverity` itself, so a severity added there is a compile error here rather than
+ * another silent miss. It was once keyed on critical/high/medium/low — values no CoreIssue carries —
+ * so every lookup fell through to one default and this sort never moved a row.
+ */
+const RANK: Record<IssueSeverity, number> = { bad: 0, warn: 1, info: 2 }
 
 export function PickALeague({
   tabKey,
@@ -91,7 +97,7 @@ export function PickALeague({
     issueHref ? issueHref(i) : `/core/${tabKey}?league=${encodeURIComponent(i.leagueId)}`
   const routable = issues
     .filter((i): i is CoreIssue & { leagueId: string } => i.leagueId != null)
-    .sort((a, b) => (RANK[a.severity] ?? 9) - (RANK[b.severity] ?? 9))
+    .sort((a, b) => RANK[a.severity] - RANK[b.severity])
     .slice(0, 10)
 
   const leagueCount = new Set(routable.map((i) => i.leagueId)).size
