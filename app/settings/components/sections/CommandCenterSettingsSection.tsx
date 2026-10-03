@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react"
 import Link from "next/link"
 import { LayoutGrid, HeartPulse, AlertTriangle, CalendarClock, ArrowRight, Sparkles } from "lucide-react"
+import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 
 /**
  * Command Center — READ-ONLY daily brief.
@@ -45,6 +46,7 @@ function severityColor(sev?: string): string {
 }
 
 export function CommandCenterSettingsSection() {
+  const { t, tInterpolate } = useLanguage()
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [loading, setLoading] = useState(false)
   const [started, setStarted] = useState(false)
@@ -72,18 +74,18 @@ export function CommandCenterSettingsSection() {
   const recCount = snap?.recommendations?.length ?? 0
 
   const tiles = [
-    { key: "leagues", label: "Leagues", icon: LayoutGrid, value: snap?.totalLeagues ?? 0 },
-    { key: "healthy", label: "Healthy", icon: HeartPulse, value: snap?.healthyLeagueCount ?? 0 },
-    { key: "attention", label: "Need attention", icon: AlertTriangle, value: snap?.atRiskLeagueCount ?? 0 },
-    { key: "drafts", label: "Drafts soon", icon: CalendarClock, value: snap?.draftsApproachingCount ?? 0 },
+    { key: "leagues", label: t("settings.command.tileLeagues"), icon: LayoutGrid, value: snap?.totalLeagues ?? 0 },
+    { key: "healthy", label: t("settings.command.tileHealthy"), icon: HeartPulse, value: snap?.healthyLeagueCount ?? 0 },
+    { key: "attention", label: t("settings.command.tileAttention"), icon: AlertTriangle, value: snap?.atRiskLeagueCount ?? 0 },
+    { key: "drafts", label: t("settings.command.tileDrafts"), icon: CalendarClock, value: snap?.draftsApproachingCount ?? 0 },
   ]
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>Command Center</h2>
+        <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>{t("settings.nav.command")}</h2>
         <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
-          Your daily brief — what needs a decision across your leagues.
+          {t("settings.hub.desc.command")}
         </p>
       </div>
 
@@ -91,7 +93,7 @@ export function CommandCenterSettingsSection() {
         <div className="rounded-xl border p-6 text-center" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
           <Sparkles className="mx-auto h-5 w-5" style={{ color: "var(--accent-cyan-strong)" }} />
           <p className="mx-auto mt-2 max-w-sm text-xs" style={{ color: "var(--muted)" }}>
-            Your daily brief pulls live health and attention signals across every league you&apos;re in.
+            {t("settings.command.intro")}
           </p>
           <button
             type="button"
@@ -99,16 +101,16 @@ export function CommandCenterSettingsSection() {
             className="mt-4 inline-flex rounded-lg border px-3 py-2 text-sm font-medium"
             style={{ borderColor: "var(--accent-cyan)", color: "var(--text)" }}
           >
-            Load today&apos;s brief
+            {t("settings.command.loadBrief")}
           </button>
         </div>
       ) : loading ? (
-        <p className="text-sm" style={{ color: "var(--muted)" }}>Building your brief…</p>
+        <p className="text-sm" style={{ color: "var(--muted)" }}>{t("settings.command.building")}</p>
       ) : failed ? (
         <div className="rounded-xl border p-6 text-center" style={{ borderColor: "var(--border)", background: "var(--panel2)" }} role="alert">
-          <p className="text-sm font-medium" style={{ color: "var(--text)" }}>Couldn&apos;t load your brief</p>
+          <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{t("settings.command.loadFailedTitle")}</p>
           <p className="mx-auto mt-1 max-w-sm text-xs" style={{ color: "var(--muted)" }}>
-            Something went wrong building it. Your leagues are fine — try again in a moment.
+            {t("settings.command.loadFailedBody")}
           </p>
           <button
             type="button"
@@ -116,21 +118,21 @@ export function CommandCenterSettingsSection() {
             className="mt-4 inline-flex rounded-lg border px-3 py-2 text-sm font-medium"
             style={{ borderColor: "var(--accent-cyan)", color: "var(--text)" }}
           >
-            Try again
+            {t("settings.tryAgain")}
           </button>
         </div>
       ) : total === 0 ? (
         <div className="rounded-xl border p-6 text-center" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
-          <p className="text-sm font-medium" style={{ color: "var(--text)" }}>No leagues yet</p>
+          <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{t("settings.command.emptyTitle")}</p>
           <p className="mx-auto mt-1 max-w-sm text-xs" style={{ color: "var(--muted)" }}>
-            Import or join a league and your daily brief will show what needs your attention here.
+            {t("settings.command.emptyBody")}
           </p>
           <Link
             href="/import"
             className="mt-4 inline-flex rounded-lg border px-3 py-2 text-sm font-medium"
             style={{ borderColor: "var(--accent-cyan)", color: "var(--text)" }}
           >
-            Import a league
+            {t("settings.command.importLeague")}
           </Link>
         </div>
       ) : (
@@ -149,10 +151,10 @@ export function CommandCenterSettingsSection() {
           {/* Attention queue */}
           <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
             <p className="mb-3 text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--muted2)" }}>
-              Needs your attention
+              {t("settings.command.needsAttention")}
             </p>
             {attention.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--muted)" }}>You&apos;re all caught up — nothing needs a decision right now.</p>
+              <p className="text-sm" style={{ color: "var(--muted)" }}>{t("settings.command.caughtUp")}</p>
             ) : (
               <ul className="space-y-3">
                 {attention.map((s) => {
@@ -164,7 +166,11 @@ export function CommandCenterSettingsSection() {
                   const body = (
                     <div className="min-w-0">
                       {/* The dot's colour is the only other severity cue; say it for screen readers. */}
-                      {s.severity ? <span className="sr-only">{s.severity} priority: </span> : null}
+                      {s.severity ? (
+                        <span className="sr-only">
+                          {tInterpolate("settings.command.severityPriority", { severity: s.severity })}
+                        </span>
+                      ) : null}
                       {s.title ? (
                         <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{s.title}</div>
                       ) : null}
@@ -209,8 +215,12 @@ export function CommandCenterSettingsSection() {
             className="inline-flex items-center gap-1.5 rounded-lg border px-4 py-2.5 text-sm font-medium"
             style={{ borderColor: "var(--border)", color: "var(--text)" }}
           >
-            Open the full command center
-            {recCount > 0 ? <span style={{ color: "var(--muted)" }}>· {recCount} recommendations</span> : null}
+            {t("settings.command.openFull")}
+            {recCount > 0 ? (
+              <span style={{ color: "var(--muted)" }}>
+                {tInterpolate("settings.command.recommendations", { count: recCount })}
+              </span>
+            ) : null}
             <ArrowRight className="h-4 w-4" style={{ color: "var(--accent-cyan-strong)" }} />
           </Link>
         </>

@@ -7,6 +7,9 @@ import { enforcePaidSubscriptionGeo } from "@/lib/geo/enforcePaidSubscriptionGeo
 
 export const dynamic = "force-dynamic"
 
+/** Apple's page for managing App Store subscriptions; on an iPhone it opens the Subscriptions screen. */
+const APPLE_MANAGE_SUBSCRIPTIONS_URL = "https://apps.apple.com/account/subscriptions"
+
 function appOrigin(): string {
   const fromAuth = process.env.NEXTAUTH_URL?.replace(/\/$/, "")
   if (fromAuth) return fromAuth
@@ -49,6 +52,22 @@ export async function GET(req: Request) {
         new URL(`/login?callbackUrl=${encodeURIComponent("/settings?tab=billing")}`, appOrigin()),
       )
     }
+
+    /*
+     * ⚠ AN APP STORE SUBSCRIBER HAS NO STRIPE CUSTOMER, and was sent to /pricing "no subscription" —
+     * told they had nothing while paying Apple every month. Only Apple can change or cancel that
+     * subscription, so a live Apple subscription with no live Stripe one goes to Apple's own page.
+     * "Live Stripe" and not "any Stripe customer": a long-cancelled Stripe plan must not route a
+     * current Apple subscriber into a portal that cannot touch what they pay for. (Inside the iOS app
+     * the Billing tab opens the native sheet instead and never reaches this route.)
+     */
+    const live = await prisma.userSubscription.findMany({
+      where: { userId: session.user.id, status: { notIn: ["canceled", "expired"] } },
+      select: { source: true, stripeCustomerId: true },
+    })
+    const liveApple = live.some((r) => r.source === "apple")
+    const liveStripe = live.some((r) => r.source !== "apple" && Boolean(r.stripeCustomerId))
+    if (liveApple && !liveStripe) return NextResponse.redirect(APPLE_MANAGE_SUBSCRIPTIONS_URL)
 
     const row = await prisma.userSubscription.findFirst({
       where: { userId: session.user.id, stripeCustomerId: { not: null } },

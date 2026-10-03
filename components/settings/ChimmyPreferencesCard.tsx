@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import {
   CHIMMY_PERSONALIZATION_DEFAULTS,
   type ChimmyPersonalizationProfile,
@@ -41,83 +42,99 @@ type Snapshot = {
 
 type SettingKey = 'explanationStyle' | 'riskPreference' | 'leagueStylePreference' | 'actionPreference'
 
+/* Every `label`, `hint` and option label below is a translation key. */
+
 const SETTINGS: { key: SettingKey; label: string; hint: string; options: [string, string][] }[] = [
   {
     key: 'explanationStyle',
-    label: 'Explanation depth',
-    hint: 'How much Chimmy explains.',
+    label: 'settings.chimmyPrefs.explanationStyle.label',
+    hint: 'settings.chimmyPrefs.explanationStyle.hint',
     options: [
-      ['concise', 'Short and direct'],
-      ['balanced', 'Balanced'],
-      ['detailed', 'Detailed'],
-      ['data-heavy', 'Show the numbers'],
-      ['beginner-friendly', 'Explain the basics'],
-      ['commissioner-focused', 'Commissioner lens'],
+      ['concise', 'settings.chimmyPrefs.explanationStyle.concise'],
+      ['balanced', 'settings.chimmyPrefs.optionBalanced'],
+      ['detailed', 'settings.chimmyPrefs.explanationStyle.detailed'],
+      ['data-heavy', 'settings.chimmyPrefs.explanationStyle.dataHeavy'],
+      ['beginner-friendly', 'settings.chimmyPrefs.explanationStyle.beginnerFriendly'],
+      ['commissioner-focused', 'settings.chimmyPrefs.explanationStyle.commissionerFocused'],
     ],
   },
   {
     key: 'riskPreference',
-    label: 'Risk tolerance',
-    hint: 'Safer floors or bigger ceilings when it is close.',
+    label: 'settings.chimmyPrefs.riskPreference.label',
+    hint: 'settings.chimmyPrefs.riskPreference.hint',
     options: [
-      ['floor', 'Play it safe (floor)'],
-      ['balanced', 'Balanced'],
-      ['upside', 'Chase upside (ceiling)'],
+      ['floor', 'settings.chimmyPrefs.riskPreference.floor'],
+      ['balanced', 'settings.chimmyPrefs.optionBalanced'],
+      ['upside', 'settings.chimmyPrefs.riskPreference.upside'],
     ],
   },
   {
     key: 'leagueStylePreference',
-    label: 'Favorite formats',
-    hint: 'The kind of league Chimmy should assume you think in.',
+    label: 'settings.chimmyPrefs.leagueStylePreference.label',
+    hint: 'settings.chimmyPrefs.leagueStylePreference.hint',
     options: [
-      ['redraft-first', 'Redraft'],
-      ['dynasty-first', 'Dynasty'],
-      ['specialty-league-first', 'Specialty formats'],
-      ['c2c-devy-heavy', 'Devy / College-to-Canton'],
+      ['redraft-first', 'settings.chimmyPrefs.leagueStylePreference.redraft'],
+      ['dynasty-first', 'settings.chimmyPrefs.leagueStylePreference.dynasty'],
+      ['specialty-league-first', 'settings.chimmyPrefs.leagueStylePreference.specialty'],
+      ['c2c-devy-heavy', 'settings.chimmyPrefs.leagueStylePreference.devy'],
     ],
   },
   {
     key: 'actionPreference',
-    label: 'Answer shape',
-    hint: 'One move, a short list, or the whole picture.',
+    label: 'settings.chimmyPrefs.actionPreference.label',
+    hint: 'settings.chimmyPrefs.actionPreference.hint',
     options: [
-      ['quick-one-move', 'One clear move'],
-      ['top-3-options', 'Top 3 options'],
-      ['full-breakdown', 'Full breakdown'],
+      ['quick-one-move', 'settings.chimmyPrefs.actionPreference.quickOneMove'],
+      ['top-3-options', 'settings.chimmyPrefs.actionPreference.top3'],
+      ['full-breakdown', 'settings.chimmyPrefs.actionPreference.fullBreakdown'],
     ],
   },
 ]
 
 const SOURCE_LABEL: Record<string, string> = {
-  explicit: 'Set by you',
-  inferred: 'Learned',
-  default: 'Default',
+  explicit: 'settings.chimmyPrefs.source.explicit',
+  inferred: 'settings.chimmyPrefs.source.inferred',
+  default: 'settings.chimmyPrefs.source.default',
 }
 
-const LEARNED_LABEL: Record<string, (v: string) => string> = {
-  riskStyle: (v) => `Risk: ${v}`,
-  detailLevel: (v) => `Detail: ${v}`,
-  toneStyle: (v) => `Tone: ${v}`,
-  scoringPreference: (v) =>
-    `Scoring: ${v === 'ppr' ? 'PPR' : v === 'half_ppr' ? 'Half PPR' : v === 'non_ppr' ? 'Standard' : v}`,
-  favoriteLeagueType: (v) => `Format: ${v}`,
+type Translate = (key: string) => string
+type Interpolate = (key: string, vars?: Record<string, string | number | undefined>) => string
+
+const LEARNED_LABEL: Record<string, (v: string, t: Translate, ti: Interpolate) => string> = {
+  riskStyle: (v, _t, ti) => ti('settings.chimmyPrefs.learned.risk', { value: v }),
+  detailLevel: (v, _t, ti) => ti('settings.chimmyPrefs.learned.detail', { value: v }),
+  toneStyle: (v, _t, ti) => ti('settings.chimmyPrefs.learned.tone', { value: v }),
+  scoringPreference: (v, t, ti) =>
+    ti('settings.chimmyPrefs.learned.scoring', {
+      value:
+        v === 'ppr'
+          ? 'PPR'
+          : v === 'half_ppr'
+            ? t('settings.chimmyPrefs.scoringHalfPpr')
+            : v === 'non_ppr'
+              ? t('settings.chimmyPrefs.scoringStandard')
+              : v,
+    }),
+  favoriteLeagueType: (v, _t, ti) => ti('settings.chimmyPrefs.learned.format', { value: v }),
 }
 
 const DIRECTION_OPTIONS: [string, string][] = [
-  ['', 'Not set'],
-  ['contender', 'Contending'],
-  ['rebuilder', 'Rebuilding'],
+  ['', 'settings.chimmyPrefs.direction.notSet'],
+  ['contender', 'settings.chimmyPrefs.direction.contender'],
+  ['rebuilder', 'settings.chimmyPrefs.direction.rebuilder'],
 ]
 
 const selectStyle = { borderColor: 'var(--border)', background: 'var(--panel)', color: 'var(--text)' } as const
 const ghostButton = { borderColor: 'var(--border)', color: 'var(--text)' } as const
 
-function optionLabel(key: SettingKey, value: string): string {
+function optionLabel(key: SettingKey, value: string, t: Translate): string {
   const found = SETTINGS.find((s) => s.key === key)?.options.find(([v]) => v === value)
-  return found ? found[1] : value
+  return found ? t(found[1]) : value
 }
 
 export default function ChimmyPreferencesCard() {
+  // Optional: the card is rendered on its own in tests, outside any LanguageProviderClient.
+  const { t, tInterpolate } = useOptionalLanguage()
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -128,14 +145,14 @@ export default function ChimmyPreferencesCard() {
     let cancelled = false
     fetch('/api/user/chimmy-personalization', { cache: 'no-store', credentials: 'include' })
       .then(async (res) => {
-        if (!res.ok) throw new Error('Could not load your Chimmy preferences.')
+        if (!res.ok) throw new Error(t('settings.chimmyPrefs.loadError'))
         return (await res.json()) as Snapshot
       })
       .then((data) => {
         if (!cancelled) setSnap({ profile: data.profile ?? null, remembered: data.remembered ?? [], leagues: data.leagues ?? [] })
       })
       .catch((e) => {
-        if (!cancelled) setLoadError(e instanceof Error ? e.message : 'Could not load your Chimmy preferences.')
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : t('settings.chimmyPrefs.loadError'))
       })
     return () => {
       cancelled = true
@@ -151,12 +168,16 @@ export default function ChimmyPreferencesCard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
-      if (!res.ok) throw new Error(res.status === 403 ? 'That league is not available to you.' : 'Could not save.')
+      if (!res.ok) {
+        throw new Error(
+          res.status === 403 ? t('settings.chimmyPrefs.leagueUnavailable') : t('settings.chimmyPrefs.saveFailed'),
+        )
+      }
       const data = (await res.json()) as Snapshot
       setSnap({ profile: data.profile ?? null, remembered: data.remembered ?? [], leagues: data.leagues ?? [] })
       toast.success(success)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not save.')
+      toast.error(e instanceof Error ? e.message : t('settings.chimmyPrefs.saveFailed'))
     } finally {
       setSaving(false)
       setConfirmForget(null)
@@ -175,17 +196,16 @@ export default function ChimmyPreferencesCard() {
       data-testid="chimmy-preferences-card"
     >
       <div>
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Chimmy preferences</h3>
+        <h3 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>{t('settings.chimmyPrefs.title')}</h3>
         <p className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
-          How Chimmy answers you, and what it has learned from your chats. Change anything here — your choice always
-          wins over what Chimmy learned.
+          {t('settings.chimmyPrefs.intro')}
         </p>
       </div>
 
       {loadError ? (
         <p className="text-xs" role="alert" style={{ color: 'var(--muted)' }}>{loadError}</p>
       ) : !snap ? (
-        <p className="text-xs" style={{ color: 'var(--muted)' }}>Loading…</p>
+        <p className="text-xs" style={{ color: 'var(--muted)' }}>{t('settings.chimmyPrefs.loading')}</p>
       ) : (
         <>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -202,14 +222,14 @@ export default function ChimmyPreferencesCard() {
               return (
                 <label key={setting.key} className="block" data-testid={`chimmy-pref-${setting.key}`}>
                   <span className="mb-1 flex items-center justify-between gap-2 text-xs font-medium" style={{ color: 'var(--muted2)' }}>
-                    {setting.label}
+                    {t(setting.label)}
                     <span
                       className="rounded-full border px-2 py-0.5 text-[11px]"
                       style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
                       data-testid={`chimmy-pref-source-${setting.key}`}
                       data-source={source}
                     >
-                      {SOURCE_LABEL[source] ?? source}
+                      {SOURCE_LABEL[source] ? t(SOURCE_LABEL[source]) : source}
                     </span>
                   </span>
                   <select
@@ -218,36 +238,46 @@ export default function ChimmyPreferencesCard() {
                     onChange={(e) =>
                       void patch(
                         { [setting.key]: e.target.value === '' ? null : e.target.value },
-                        e.target.value === '' ? `${setting.label}: Chimmy will decide` : `${setting.label} saved`,
+                        tInterpolate(
+                          e.target.value === ''
+                            ? 'settings.chimmyPrefs.chimmyWillDecide'
+                            : 'settings.chimmyPrefs.settingSaved',
+                          { label: t(setting.label) },
+                        ),
                       )
                     }
                     className="w-full rounded-lg border px-3 py-2 text-sm"
                     style={selectStyle}
                   >
                     {/* The "let Chimmy decide" option names what that currently means, so clearing is not a leap. */}
-                    <option value="">Let Chimmy decide ({optionLabel(setting.key, undecided)})</option>
+                    <option value="">
+                      {tInterpolate('settings.chimmyPrefs.letChimmyDecide', {
+                        current: optionLabel(setting.key, undecided, t),
+                      })}
+                    </option>
                     {setting.options.map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
+                      <option key={value} value={value}>{t(label)}</option>
                     ))}
                   </select>
-                  <span className="mt-1 block text-[11px]" style={{ color: 'var(--muted)' }}>{setting.hint}</span>
+                  <span className="mt-1 block text-[11px]" style={{ color: 'var(--muted)' }}>{t(setting.hint)}</span>
                 </label>
               )
             })}
           </div>
 
           <div className="space-y-2" data-testid="chimmy-remembered">
-            <h4 className="text-xs font-semibold" style={{ color: 'var(--text)' }}>What Chimmy remembers from your chats</h4>
+            <h4 className="text-xs font-semibold" style={{ color: 'var(--text)' }}>
+              {t('settings.chimmyPrefs.rememberedTitle')}
+            </h4>
             {remembered.length === 0 ? (
               <p className="text-xs" style={{ color: 'var(--muted)' }} data-testid="chimmy-remembered-empty">
-                Nothing yet. When you tell Chimmy something like &ldquo;I&rsquo;m rebuilding&rdquo; or &ldquo;keep it short&rdquo;, it
-                shows up here, and you can change it or make Chimmy forget it.
+                {t('settings.chimmyPrefs.rememberedEmpty')}
               </p>
             ) : (
               remembered.map((entry) => {
                 const id = entry.leagueId ?? 'all'
                 const chips = Object.entries(entry.learned)
-                  .map(([k, v]) => (LEARNED_LABEL[k] ? LEARNED_LABEL[k](v) : `${k}: ${v}`))
+                  .map(([k, v]) => (LEARNED_LABEL[k] ? LEARNED_LABEL[k](v, t, tInterpolate) : `${k}: ${v}`))
                 return (
                   <div
                     key={id}
@@ -257,35 +287,39 @@ export default function ChimmyPreferencesCard() {
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>
-                        {entry.leagueName ?? 'All leagues'}
+                        {entry.leagueName ?? t('settings.chimmyPrefs.allLeagues')}
                       </span>
                       <div className="flex items-center gap-2">
                         <select
-                          aria-label={`Team direction for ${entry.leagueName ?? 'all leagues'}`}
+                          aria-label={tInterpolate('settings.chimmyPrefs.directionAria', {
+                            league: entry.leagueName ?? t('settings.chimmyPrefs.directionAriaAllLeagues'),
+                          })}
                           value={entry.teamDirection ?? ''}
                           disabled={saving}
                           onChange={(e) =>
                             void patch(
                               { teamDirection: { leagueId: entry.leagueId, value: e.target.value || null } },
-                              'Team direction saved',
+                              t('settings.chimmyPrefs.directionSaved'),
                             )
                           }
                           className="rounded-lg border px-2 py-1 text-xs"
                           style={selectStyle}
                         >
                           {DIRECTION_OPTIONS.map(([v, l]) => (
-                            <option key={v} value={v}>{l}</option>
+                            <option key={v} value={v}>{t(l)}</option>
                           ))}
                         </select>
                         {confirmForget === id ? (
                           <button
                             type="button"
                             disabled={saving}
-                            onClick={() => void patch({ forget: { leagueId: entry.leagueId } }, 'Chimmy forgot it')}
+                            onClick={() =>
+                              void patch({ forget: { leagueId: entry.leagueId } }, t('settings.chimmyPrefs.forgotten'))
+                            }
                             className="rounded-lg border px-2 py-1 text-xs font-semibold"
                             style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
                           >
-                            Confirm forget
+                            {t('settings.chimmyPrefs.confirmForget')}
                           </button>
                         ) : (
                           <button
@@ -295,7 +329,7 @@ export default function ChimmyPreferencesCard() {
                             className="rounded-lg border px-2 py-1 text-xs"
                             style={ghostButton}
                           >
-                            Forget
+                            {t('settings.chimmyPrefs.forget')}
                           </button>
                         )}
                       </div>
@@ -321,13 +355,13 @@ export default function ChimmyPreferencesCard() {
             {otherLeagues.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <select
-                  aria-label="League to set a team direction for"
+                  aria-label={t('settings.chimmyPrefs.newLeagueAria')}
                   value={newLeagueId}
                   onChange={(e) => setNewLeagueId(e.target.value)}
                   className="rounded-lg border px-2 py-1 text-xs"
                   style={selectStyle}
                 >
-                  <option value="">Set team direction for a league…</option>
+                  <option value="">{t('settings.chimmyPrefs.newLeaguePlaceholder')}</option>
                   {otherLeagues.map((l) => (
                     <option key={l.leagueId} value={l.leagueId}>
                       {l.name}{l.season ? ` (${l.season})` : ''}
@@ -340,25 +374,31 @@ export default function ChimmyPreferencesCard() {
                       type="button"
                       disabled={saving}
                       onClick={() => {
-                        void patch({ teamDirection: { leagueId: newLeagueId, value: 'contender' } }, 'Team direction saved')
+                        void patch(
+                          { teamDirection: { leagueId: newLeagueId, value: 'contender' } },
+                          t('settings.chimmyPrefs.directionSaved'),
+                        )
                         setNewLeagueId('')
                       }}
                       className="rounded-lg border px-2 py-1 text-xs"
                       style={ghostButton}
                     >
-                      Contending
+                      {t('settings.chimmyPrefs.direction.contender')}
                     </button>
                     <button
                       type="button"
                       disabled={saving}
                       onClick={() => {
-                        void patch({ teamDirection: { leagueId: newLeagueId, value: 'rebuilder' } }, 'Team direction saved')
+                        void patch(
+                          { teamDirection: { leagueId: newLeagueId, value: 'rebuilder' } },
+                          t('settings.chimmyPrefs.directionSaved'),
+                        )
                         setNewLeagueId('')
                       }}
                       className="rounded-lg border px-2 py-1 text-xs"
                       style={ghostButton}
                     >
-                      Rebuilding
+                      {t('settings.chimmyPrefs.direction.rebuilder')}
                     </button>
                   </>
                 ) : null}

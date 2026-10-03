@@ -91,28 +91,28 @@ export function ConnectedAccountsSettingsSection({
     const spotifyStatus = searchParams?.get("spotify")
     if (discordStatus === "connected") {
       setStatusTone("success")
-      setStatusMessage("Discord connected. Your pool and league sharing tools can now use this account.")
+      setStatusMessage(t("settings.connected.discordStatus.connected"))
     } else if (discordStatus === "config-error") {
       setStatusTone("error")
-      setStatusMessage("Discord is temporarily unavailable because its connection settings need attention. Please contact support.")
+      setStatusMessage(t("settings.connected.discordStatus.configError"))
     } else if (discordStatus === "error") {
       setStatusTone("error")
-      setStatusMessage("Discord could not be connected. Start a new connection from this page and try again.")
+      setStatusMessage(t("settings.connected.discordStatus.error"))
     } else if (discordStatus === "session-expired" || discordStatus === "authorization-expired") {
       setStatusTone("error")
-      setStatusMessage("This Discord connection attempt expired or was replaced. Start a new connection from this page in the same browser.")
+      setStatusMessage(t("settings.connected.discordStatus.expired"))
     } else if (discordStatus === "cancelled") {
       setStatusTone("info")
-      setStatusMessage("Discord connection cancelled. Your account has not been changed.")
+      setStatusMessage(t("settings.connected.discordStatus.cancelled"))
     } else if (discordStatus === "provider-error") {
       setStatusTone("error")
-      setStatusMessage("Discord could not complete the connection. Please try again shortly.")
+      setStatusMessage(t("settings.connected.discordStatus.providerError"))
     } else if (discordStatus === "save-error") {
       setStatusTone("error")
-      setStatusMessage("Discord authorized the connection, but AllFantasy could not save it. Please try again or contact support.")
+      setStatusMessage(t("settings.connected.discordStatus.saveError"))
     } else if (discordStatus === "account-required") {
       setStatusTone("error")
-      setStatusMessage("Connect your Discord account before adding the AllFantasy bot to a server.")
+      setStatusMessage(t("settings.connected.discordStatus.accountRequired"))
     } else if (discordStatus === "bot-linked") {
       /*
        * The BOT install statuses land on this page too, and until now this
@@ -120,24 +120,22 @@ export function ConnectedAccountsSettingsSection({
        * here and said nothing at all, whether it worked or not.
        */
       setStatusTone("success")
-      setStatusMessage("AllFantasy is in your Discord server. You can now create a league channel from the league page.")
+      setStatusMessage(t("settings.connected.discordStatus.botLinked"))
     } else if (discordStatus === "bot-unverified") {
       setStatusTone("error")
-      setStatusMessage(
-        "We could not verify server-management access. Connect the Discord account that manages this server, check that the bot is installed, and try again.",
-      )
+      setStatusMessage(t("settings.connected.discordStatus.botUnverified"))
     } else if (discordStatus === "bot-not-ready") {
       setStatusTone("error")
-      setStatusMessage("The AllFantasy Discord bot is not configured on this environment yet, so it cannot be installed.")
+      setStatusMessage(t("settings.connected.discordStatus.botNotReady"))
     } else if (discordStatus === "bot-error") {
       setStatusTone("error")
-      setStatusMessage("The server installation could not be verified or is linked to another AllFantasy account. Restart the connection from Settings.")
+      setStatusMessage(t("settings.connected.discordStatus.botError"))
     } else if (spotifyStatus === "connected") {
       setStatusTone("success")
-      setStatusMessage("Spotify connected. Music controls are now available where supported.")
+      setStatusMessage(t("settings.connected.spotifyStatus.connected"))
     } else if (spotifyStatus === "error") {
       setStatusTone("error")
-      setStatusMessage("Spotify could not be connected. Check the Spotify app redirect URL and try again.")
+      setStatusMessage(t("settings.connected.spotifyStatus.error"))
     }
   }, [searchParams])
 
@@ -213,7 +211,14 @@ export function ConnectedAccountsSettingsSection({
     label: string,
   ) => {
     if (disconnecting) return
-    if (!(await askConfirm({ ...confirm, confirmLabel: `Disconnect ${label}` }))) return
+    if (
+      !(await askConfirm({
+        ...confirm,
+        confirmLabel: tInterpolate("settings.connected.confirmDisconnectLabel", { provider: label }),
+        cancelLabel: t("settings.actions.cancel"),
+      }))
+    )
+      return
     setDisconnecting(which)
     setStatusMessage(null)
     setStatusTone(null)
@@ -223,10 +228,10 @@ export function ConnectedAccountsSettingsSection({
       onRefetchProfile()
       await loadProviders(true)
       setStatusTone("success")
-      setStatusMessage(`${label} disconnected.`)
+      setStatusMessage(tInterpolate("settings.connected.disconnectSuccess", { provider: label }))
     } catch {
       setStatusTone("error")
-      setStatusMessage(`${label} could not be disconnected. Please try again.`)
+      setStatusMessage(tInterpolate("settings.connected.disconnectFailed", { provider: label }))
     } finally {
       setDisconnecting(null)
     }
@@ -237,7 +242,7 @@ export function ConnectedAccountsSettingsSection({
       "sleeper",
       {
         title: t("settings.connected.confirmDisconnectSleeper"),
-        body: "Imports and league sync stop finding your Sleeper teams until you link it again. Your imported leagues stay.",
+        body: t("settings.connected.disconnectSleeperBody"),
       },
       () =>
         fetch("/api/user/profile", {
@@ -252,8 +257,8 @@ export function ConnectedAccountsSettingsSection({
     runDisconnect(
       "discord",
       {
-        title: "Disconnect Discord?",
-        body: "This also unlinks the AllFantasy bot from your Discord server. You can reconnect any time.",
+        title: t("settings.connected.confirmDisconnectDiscord"),
+        body: t("settings.connected.confirmDisconnectDiscordBody"),
       },
       () => fetch("/api/auth/discord/disconnect", { method: "POST" }),
       "Discord",
@@ -262,7 +267,7 @@ export function ConnectedAccountsSettingsSection({
   const handleDisconnectSpotify = () =>
     runDisconnect(
       "spotify",
-      { title: "Disconnect Spotify?", body: "You can reconnect any time." },
+      { title: t("settings.connected.confirmDisconnectSpotify"), body: t("settings.connected.reconnectAnyTime") },
       () => fetch("/api/auth/spotify/disconnect", { method: "POST" }),
       "Spotify",
     )
@@ -278,7 +283,9 @@ export function ConnectedAccountsSettingsSection({
       window.location.href = authRoute
     } catch (error) {
       setStatusTone("error")
-      setStatusMessage(error instanceof Error ? error.message : `Failed to connect ${provider}.`)
+      setStatusMessage(
+        error instanceof Error ? error.message : tInterpolate("settings.connected.connectFailed", { provider }),
+      )
       setLinkingProvider(null)
     }
   }
@@ -295,8 +302,9 @@ export function ConnectedAccountsSettingsSection({
     }
     const shouldDisconnect = await askConfirm({
       title: tInterpolate("settings.connected.confirmDisconnectProvider", { provider: provider.name }),
-      body: `You will no longer be able to sign in with ${provider.name}. Your other sign-in methods keep working.`,
-      confirmLabel: `Disconnect ${provider.name}`,
+      body: tInterpolate("settings.connected.disconnectProviderBody", { provider: provider.name }),
+      confirmLabel: tInterpolate("settings.connected.confirmDisconnectLabel", { provider: provider.name }),
+      cancelLabel: t("settings.actions.cancel"),
     })
     if (!shouldDisconnect) return
     setBusyProviderId(provider.id)
@@ -460,7 +468,7 @@ export function ConnectedAccountsSettingsSection({
               className="rounded-lg border px-3 py-2 text-xs font-medium"
               style={{ borderColor: "var(--accent-red)", color: "var(--accent-red-strong)" }}
             >
-              {disconnecting === "discord" ? "Disconnecting…" : t("settings.connected.disconnect")}
+              {disconnecting === "discord" ? t("settings.connected.disconnecting") : t("settings.connected.disconnect")}
             </button>
           </div>
         )}
@@ -483,13 +491,13 @@ export function ConnectedAccountsSettingsSection({
               Re-enable only after extended quota is granted and the playback
               chain is fixed (scope persistence, isPremium, preview enrichment).
             */}
-            <p className="text-xs" style={{ color: "var(--muted)" }}>Music while you manage your leagues.</p>
+            <p className="text-xs" style={{ color: "var(--muted)" }}>{t("settings.connected.spotifyBlurb")}</p>
             <span
               className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium opacity-60"
               style={{ borderColor: "var(--border)", color: "var(--muted)" }}
             >
               <svg className="h-4 w-4" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-              Spotify — coming soon
+              {t("settings.connected.spotifyComingSoon")}
             </span>
           </div>
         ) : (
@@ -500,9 +508,9 @@ export function ConnectedAccountsSettingsSection({
               </div>
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium" style={{ color: "var(--text)" }}>
-                  {(profile as any)?.spotifyDisplayName ?? "Spotify Connected"}
+                  {(profile as any)?.spotifyDisplayName ?? t("settings.connected.spotifyConnectedFallback")}
                 </p>
-                <p className="truncate text-xs" style={{ color: "var(--muted)" }}>Connected</p>
+                <p className="truncate text-xs" style={{ color: "var(--muted)" }}>{t("settings.connected.connectedLabel")}</p>
               </div>
             </div>
             <button
@@ -512,7 +520,7 @@ export function ConnectedAccountsSettingsSection({
               className="rounded-lg border px-3 py-2 text-xs font-medium"
               style={{ borderColor: "var(--accent-red)", color: "var(--accent-red-strong)" }}
             >
-              {disconnecting === "spotify" ? "Disconnecting…" : "Disconnect"}
+              {disconnecting === "spotify" ? t("settings.connected.disconnecting") : t("settings.connected.disconnect")}
             </button>
           </div>
         )}

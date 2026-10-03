@@ -207,4 +207,18 @@ describe('settings hub groups (2026-10-02 layout pass)', () => {
     expect(items).toHaveLength(1)
     expect(items[0]).toMatch(/security/i)
   })
+
+  // 2026-10-03: the empty-result line once referenced a `tInterpolate` that was not in scope —
+  // a ReferenceError the moment a search matched nothing, which no test reached.
+  it('the sidebar search says when nothing matches, instead of crashing', () => {
+    render(
+      <SettingsChrome activeTab="profile" onTabChange={vi.fn()} onShowHub={vi.fn()} profile={profile()}>
+        <p>profile section</p>
+      </SettingsChrome>,
+    )
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'zzqqxx' } })
+    const nav = screen.getByRole('navigation', { name: /./ })
+    expect(within(nav).queryAllByRole('button')).toHaveLength(0)
+    expect(nav.textContent).toMatch(/No settings match “zzqqxx”/)
+  })
 })

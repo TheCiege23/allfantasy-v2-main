@@ -10,9 +10,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams() }))
 vi.mock('next-auth/react', () => ({ signIn: vi.fn() }))
-vi.mock('@/components/i18n/LanguageProviderClient', () => ({
-  useLanguage: () => ({ t: (k: string) => k, tInterpolate: (k: string) => k }),
-}))
+// The real English copy (not an identity t()), so these assertions read what a user sees.
+vi.mock('@/components/i18n/LanguageProviderClient', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/i18n/LanguageProviderClient')>()
+  return { ...actual, useLanguage: () => actual.defaultLanguageValue }
+})
 vi.mock('@/lib/connected-accounts', () => ({
   getConnectedAccounts: vi.fn(async () => ({ providers: [], hasPassword: true })),
   disconnectConnectedAccount: vi.fn(),

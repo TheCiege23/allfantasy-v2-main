@@ -70,6 +70,19 @@ const NAV_DEFS: NavDef[] = [
 /** Tab definitions (id + icon). Labels come from `settings.nav.*` via `useLanguage`. */
 export const SETTINGS_NAV = NAV_DEFS
 
+/** `settingsNavBadges` returns the literal 'OFF'; it is translated here, at render. */
+function badgeText(text: string, t: (key: string) => string): string {
+  return text === 'OFF' ? t('settings.hub.badgeOff') : text
+}
+
+/** Plan-card status copy, same keys as BillingSettingsSection's status chip. */
+const HUB_STATUS_KEYS: Record<string, string> = {
+  active: 'settings.billing.statusActive',
+  grace: 'settings.billing.statusGrace',
+  past_due: 'settings.billing.statusPastDue',
+  expired: 'settings.billing.statusExpired',
+}
+
 export function isSettingsTabId(value: string | null | undefined): value is SettingsTabId {
   return NAV_DEFS.some((n) => n.id === value)
 }
@@ -123,6 +136,7 @@ function firstMissingField(profile: SettingsProfile): CompletionField | null {
 /** The plan name the chrome shows — shared by the sidebar card and the hub, so they cannot disagree. */
 function usePlanText(planLabel: string | null) {
   const ent = useEntitlements()
+  const { t } = useLanguage()
   // Same tier-priority order as BillingSettingsSection.tsx: supreme inherits every lower tier, so
   // it must win the label even though hasCommissioner/hasPro/hasWarRoom are all also true for it.
   // A fetch error must never be conflated with a verified free plan — the hook's own catch path
@@ -131,7 +145,7 @@ function usePlanText(planLabel: string | null) {
   const derivedPlanText = ent.loading
     ? null
     : ent.error
-      ? 'Unable to verify'
+      ? t('settings.billing.unableToVerify')
       : ent.hasSupreme
         ? 'AF Supreme'
         : ent.hasCommissioner
@@ -140,7 +154,7 @@ function usePlanText(planLabel: string | null) {
             ? 'AF Pro'
             : ent.hasWarRoom
               ? 'AF Legacy'
-              : 'Free'
+              : t('settings.billing.statusFree')
   return { ent, isPro: ent.hasAnyPaid, planText: planLabel ?? derivedPlanText ?? '...' }
 }
 
@@ -151,9 +165,10 @@ function SidebarProfileCard({
   profile: SettingsProfile
   planLabel: string | null
 }) {
+  const { t, tInterpolate } = useLanguage()
   const { ent, isPro, planText } = usePlanText(planLabel)
 
-  const name = profile?.displayName || profile?.username || 'Your profile'
+  const name = profile?.displayName || profile?.username || t('settings.hub.yourProfile')
   const username = profile?.username
   const level = profile?.xpLevel
   const tier = profile?.rankTier
@@ -187,15 +202,15 @@ function SidebarProfileCard({
       <div className="ns-pc-meta">
         {level != null && tier ? (
           <span className="ns-rank">
-            Lv.{level} · {tier}
+            {tInterpolate('settings.hub.levelShort', { level })} · {tier}
           </span>
         ) : level != null ? (
-          <span className="ns-rank">Lv.{level}</span>
+          <span className="ns-rank">{tInterpolate('settings.hub.levelShort', { level })}</span>
         ) : null}
         <span className={`ns-plan ${isPro ? 'is-pro' : 'is-free'}`}>{planText}</span>
         {ent.isAdminBypassAccount && (
-          <span className="ns-rank" title="Admin bypass — not a real Stripe subscription" data-testid="sidebar-plan-bypass-notice">
-            (bypass)
+          <span className="ns-rank" title={t('settings.hub.bypassTitle')} data-testid="sidebar-plan-bypass-notice">
+            ({t('settings.hub.bypassTag')})
           </span>
         )}
       </div>
@@ -212,7 +227,7 @@ function SidebarProfileCard({
 
       <div className="ns-completion">
         <div className="ns-completion-row">
-          <span>Profile completion</span>
+          <span>{t('settings.hub.completion')}</span>
           <b>{pct}%</b>
         </div>
         <div className="ns-meter" aria-hidden="true">
@@ -303,10 +318,10 @@ function SettingsHub({
   onOpen: (id: SettingsTabId) => void
   notice?: ReactNode
 }) {
-  const { t } = useLanguage()
+  const { t, tInterpolate } = useLanguage()
   const { ent, isPro, planText } = usePlanText(planLabel)
 
-  const name = profile?.displayName || profile?.username || 'Your profile'
+  const name = profile?.displayName || profile?.username || t('settings.hub.yourProfile')
   const username = profile?.username
   const level = profile?.xpLevel
   const tier = profile?.rankTier
@@ -338,7 +353,9 @@ function SettingsHub({
       ? t('settings.hub.planFreeDetail')
       : periodEnd
         ? `${status === 'active' ? t('settings.billing.renews') : t('settings.billing.accessUntil')} ${periodEnd}`
-        : status.replace(/_/g, ' ')
+        : HUB_STATUS_KEYS[status]
+          ? t(HUB_STATUS_KEYS[status])
+          : status.replace(/_/g, ' ')
   /* Same gate as BillingSettingsSection: an admin bypass has no Stripe customer to open. */
   const portal = ent.hasAnyPaid && !ent.isAdminBypassAccount
 
@@ -366,7 +383,7 @@ function SettingsHub({
           <div className="ns-hub-chips">
             {level != null ? (
               <span className="ns-hub-chip">
-                Lv.{level}
+                {tInterpolate('settings.hub.levelShort', { level })}
                 {tier ? ` · ${tier}` : ''}
               </span>
             ) : null}
@@ -374,8 +391,8 @@ function SettingsHub({
               {planText}
             </span>
             {ent.isAdminBypassAccount ? (
-              <span className="ns-hub-chip" title="Admin bypass — not a real Stripe subscription">
-                bypass
+              <span className="ns-hub-chip" title={t('settings.hub.bypassTitle')}>
+                {t('settings.hub.bypassTag')}
               </span>
             ) : null}
           </div>
@@ -424,7 +441,7 @@ function SettingsHub({
                         <span className="ns-hub-card-title">{c.title}</span>
                         {badge ? (
                           <span className="ns-nav-badge" data-tone={badge.tone}>
-                            {badge.text}
+                            {badgeText(badge.text, t)}
                           </span>
                         ) : null}
                       </span>
@@ -440,7 +457,9 @@ function SettingsHub({
           </section>
         )
       })}
-      {cards.length === 0 ? <p className="ns-hub-empty">No settings match “{query}”.</p> : null}
+      {cards.length === 0 ? (
+        <p className="ns-hub-empty">{tInterpolate('settings.hub.noMatch', { query })}</p>
+      ) : null}
 
       <section className="ns-hub-plan" aria-label={t('settings.billing.currentPlan')}>
         <div className="ns-hub-plan-copy">
@@ -480,7 +499,7 @@ export function SettingsChrome({
   children: ReactNode
 }) {
   const router = useRouter()
-  const { t } = useLanguage()
+  const { t, tInterpolate } = useLanguage()
   const [query, setQuery] = useState('')
 
   /*
@@ -590,14 +609,14 @@ export function SettingsChrome({
                   <span className="ns-nav-label">{t(`settings.nav.${tab.id}`)}</span>
                   {badges[tab.id] ? (
                     <span className="ns-nav-badge" data-tone={badges[tab.id]!.tone}>
-                      {badges[tab.id]!.text}
+                      {badgeText(badges[tab.id]!.text, t)}
                     </span>
                   ) : null}
                 </button>
               )
             })}
             {filteredNav.length === 0 ? (
-              <p className="ns-nav-empty">No settings match “{query}”.</p>
+              <p className="ns-nav-empty">{tInterpolate('settings.hub.noMatch', { query })}</p>
             ) : null}
           </nav>
         </aside>

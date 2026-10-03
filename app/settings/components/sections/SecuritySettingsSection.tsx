@@ -34,11 +34,14 @@ import { useConfirm } from "./ConfirmDialog"
  * A rejected fetch (offline, a dropped phone connection) becomes an ordinary failed result.
  * The services below only handle HTTP errors, and none of these handlers had a catch — so a
  * network failure left its button spinning on "Saving…" forever with no message.
+ * `error` is the caller's translated `settings.networkFailure`.
  */
-function networkFailure<F extends (...args: never[]) => Promise<{ ok: boolean; error?: string }>>(): Awaited<ReturnType<F>> {
+function networkFailure<F extends (...args: never[]) => Promise<{ ok: boolean; error?: string }>>(
+  error: string,
+): Awaited<ReturnType<F>> {
   return {
     ok: false,
-    error: "Couldn't reach AllFantasy. Check your connection and try again.",
+    error,
   } as Awaited<ReturnType<F>>
 }
 
@@ -134,7 +137,7 @@ export function SecuritySettingsSection({
       email: nextEmail,
       currentPassword: status.hasPassword ? emailCurrentPassword : undefined,
       returnTo: "/settings?tab=security",
-    }).catch(() => networkFailure<typeof updateContactEmail>())
+    }).catch(() => networkFailure<typeof updateContactEmail>(t("settings.networkFailure")))
     setEmailSaving(false)
 
     if (result.ok) {
@@ -157,7 +160,7 @@ export function SecuritySettingsSection({
     setEmailResult(null)
     setEmailSaveResult(null)
     const result = await sendVerificationEmail("/settings?tab=security").catch(() =>
-      networkFailure<typeof sendVerificationEmail>(),
+      networkFailure<typeof sendVerificationEmail>(t("settings.networkFailure")),
     )
     setEmailSending(false)
     if (result.ok && result.alreadyVerified) setEmailResult("already")
@@ -192,7 +195,7 @@ export function SecuritySettingsSection({
     const result = await startPhoneVerification(normalizePhoneE164(trimmed), {
       smsConsent: true,
       consentSource: "settings-security",
-    }).catch(() => networkFailure<typeof startPhoneVerification>())
+    }).catch(() => networkFailure<typeof startPhoneVerification>(t("settings.networkFailure")))
     setPhoneSending(false)
     if (result.ok) setPhoneCodeSent(true)
     else if (result.rateLimited) setPhoneResult("rate_limited")
@@ -209,7 +212,9 @@ export function SecuritySettingsSection({
     setPhoneVerifying(true)
     setPhoneResult(null)
     setPhoneErrorMessage(null)
-    const result = await checkPhoneCode(phone, phoneCode).catch(() => networkFailure<typeof checkPhoneCode>())
+    const result = await checkPhoneCode(phone, phoneCode).catch(() =>
+      networkFailure<typeof checkPhoneCode>(t("settings.networkFailure")),
+    )
     setPhoneVerifying(false)
     if (result.ok) {
       setPhoneResult("verified")
@@ -239,7 +244,7 @@ export function SecuritySettingsSection({
     }
     setPasswordChanging(true)
     const result = await changePassword(currentPassword, newPassword).catch(() =>
-      networkFailure<typeof changePassword>(),
+      networkFailure<typeof changePassword>(t("settings.networkFailure")),
     )
     setPasswordChanging(false)
     if (result.ok) {
@@ -278,6 +283,7 @@ export function SecuritySettingsSection({
       title: t("settings.security.signOutEverywhereConfirmTitle"),
       body: t("settings.security.signOutEverywhereConfirmBody"),
       confirmLabel: t("settings.security.signOutEverywhere"),
+      cancelLabel: t("settings.actions.cancel"),
     })
     if (!ok) return
     setSignOutAllBusy(true)
@@ -303,6 +309,7 @@ export function SecuritySettingsSection({
       title: t("settings.security.removePhoneConfirmTitle"),
       body: t("settings.security.removePhoneConfirmBody"),
       confirmLabel: t("settings.security.removePhone"),
+      cancelLabel: t("settings.actions.cancel"),
     })
     if (!ok) return
     setPhoneRemoving(true)
@@ -740,7 +747,7 @@ export function SecuritySettingsSection({
               style={{ borderColor: "var(--border)", color: "var(--text)" }}
               data-testid="settings-set-password-link"
             >
-              Set a password
+              {t("settings.security.setPassword")}
             </Link>
           ) : !passwordFormOpen ? (
             <div className="flex flex-wrap gap-2">
@@ -768,8 +775,7 @@ export function SecuritySettingsSection({
         </div>
         {!status.hasPassword ? (
           <p className="text-xs" style={{ color: "var(--muted)" }}>
-            You sign in with a connected account, so there is no password on this one yet. Set one to
-            also sign in with your email.
+            {t("settings.security.passwordlessHint")}
           </p>
         ) : null}
         {passwordFormOpen && status.hasPassword && (

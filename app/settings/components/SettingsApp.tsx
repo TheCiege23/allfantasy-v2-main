@@ -97,7 +97,7 @@ export default function SettingsApp({
               label: action.label,
               href: action.href,
             })),
-            { id: "sign-out", label: "Sign out", href: "/logout" },
+            { id: "sign-out", label: t("settings.account.signOut"), href: "/logout" },
           ]}
           testId="settings-error-state"
         />
@@ -129,7 +129,7 @@ export default function SettingsApp({
             className="rounded-lg border border-amber-300/45 bg-amber-500/15 px-3 py-2 text-xs font-bold text-amber-100"
             data-testid="settings-session-expired-signin"
           >
-            Sign in again
+            {t("settings.signInAgain")}
           </a>
         </div>
       ) : error && (
