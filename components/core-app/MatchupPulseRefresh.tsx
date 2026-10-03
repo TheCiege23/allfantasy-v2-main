@@ -35,15 +35,25 @@ const IDLE_POLL_MS = 120_000
 
 export type MatchupPulseRefreshProps = {
   /**
-   * At least one ranked row is scored and still has starters to play, so the
-   * numbers on screen can move. Computed server-side in MatchupPulseBoard.
+   * A starter on screen has a game in progress right now, so the numbers can move within seconds —
+   * the 20s cadence. Not "starters still to play": that held 20s from Thursday to Monday.
    */
   inPlay: boolean
+  /**
+   * The next kickoff of a starter on screen, as an ISO instant. While idle, the control refreshes
+   * once just after it, so the board notices a game starting without polling for it.
+   */
+  nextKickoffAt?: string | null
   /** The refresh button's accessible name. The league Matchup screen reuses this control. */
   label?: string
 }
 
-export function MatchupPulseRefresh({ inPlay, label = 'Refresh where you stand' }: MatchupPulseRefreshProps) {
+/** How long after kickoff to look: the provider's status usually lands a poll after the whistle. */
+const KICKOFF_GRACE_MS = 45_000
+/** A kickoff further out than this is left to the idle cadence — no timer is held that long. */
+const KICKOFF_TIMER_MAX_MS = 6 * 60 * 60 * 1000
+
+export function MatchupPulseRefresh({ inPlay, nextKickoffAt = null, label = 'Refresh where you stand' }: MatchupPulseRefreshProps) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
@@ -70,13 +80,19 @@ export function MatchupPulseRefresh({ inPlay, label = 'Refresh where you stand' 
   pendingRef.current = pending
 
   /*
-   * This board owns the route's refresh while a row is IN PLAY — see routeRefreshClaim.
-   * ⚠ NOT WHILE IDLE. Idle, this board polls every 120s, and it is the shell's 20s
-   * game-day refresh that notices kickoff and flips `inPlay`; claiming then would hold
-   * a kicked-off board on projections for up to two minutes, and the rail's non-Sleeper
-   * margins (server snapshot only) with it.
+   * This control owns the route's refresh for as long as it is mounted — see routeRefreshClaim.
+   *
+   * 🛑 IT USED TO CLAIM ONLY WHILE IN PLAY, AND THAT LEFT THE MATCHUP SCREENS ON 20s ALL WEEKEND.
+   * Idle, it stood down so the shell's game-day refresh would notice kickoff — but the shell's
+   * `gameDayActive` is true whenever ANY game in ANY sport the user has a league in is on (an NHL or
+   * MLB night counts), so `/core/matchup` re-rendered every 20s, across every claimed league, on a
+   * Friday night with no NFL starter playing. This control knows more: `inPlay` says whether a
+   * starter is live, and `nextKickoffAt` says when one will be, so it wakes for kickoff itself.
+   *
+   * The cost, stated: the rail's non-Sleeper margins (server snapshot only) now follow this
+   * control's cadence on these two screens — 20s while a starter is live, 2 minutes otherwise.
    */
-  useEffect(() => (inPlay ? claimRouteRefresh() : undefined), [inPlay])
+  useEffect(() => claimRouteRefresh(), [])
 
   useEffect(() => {
     setRefreshedAt(Date.now())
@@ -140,6 +156,26 @@ export function MatchupPulseRefresh({ inPlay, label = 'Refresh where you stand' 
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [inPlay, refresh, refreshedAt])
+
+  /*
+   * Kickoff. While idle, one refresh just after the next starter's game begins, so the board turns
+   * live within a minute of the whistle instead of within the two-minute idle period. A hidden tab
+   * skips it; the visibility listener above catches up on return. Re-armed after every refresh,
+   * because each render brings the next kickoff.
+   */
+  useEffect(() => {
+    if (inPlay || !nextKickoffAt) return
+    const at = Date.parse(nextKickoffAt)
+    if (!Number.isFinite(at)) return
+    const wait = at + KICKOFF_GRACE_MS - Date.now()
+    if (wait <= 0 || wait > KICKOFF_TIMER_MAX_MS) return
+    const id = window.setTimeout(() => {
+      if (document.visibilityState !== 'visible') return
+      if (pendingRef.current) return
+      refresh()
+    }, wait)
+    return () => window.clearTimeout(id)
+  }, [inPlay, nextKickoffAt, refresh, refreshedAt])
 
   /*
    * Server render and first paint show nothing rather than "0s ago", which

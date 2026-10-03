@@ -98,20 +98,54 @@ describe('the shell poll and the matchup board', () => {
     expect(routeRefreshClaimed()).toBe(false)
   })
 
-  it("an idle board does not claim — the shell's cadence is what notices kickoff", () => {
+  /*
+   * 🛑 THE IDLE BOARD CLAIMS TOO, SINCE 2026-10-02. It used to stand down while idle so the shell's
+   * 20s game-day tick would notice kickoff — but `gameDayActive` is true whenever any game in any of
+   * the user's sports is on, so /core/matchup re-rendered every 20s all weekend with no NFL starter
+   * playing. The board now wakes for kickoff itself (`nextKickoffAt`).
+   */
+  it('🛑 an idle board claims the route: the shell spends no 20s game-day render under it', () => {
     const { unmount } = render(
       <Shell>
         <MatchupPulseRefresh inPlay={false} />
       </Shell>,
     )
-    // Board idles at 120s; the shell's 20s game-day tick must still fire.
+    expect(routeRefreshClaimed()).toBe(true)
+    act(() => void vi.advanceTimersByTime(100_000))
+    expect(nav.router.refresh).toHaveBeenCalledTimes(0)
+    /* …and the board's own idle cadence still refreshes. */
     act(() => void vi.advanceTimersByTime(20_000))
     expect(nav.router.refresh).toHaveBeenCalledTimes(1)
-    expect(routeRefreshClaimed()).toBe(false)
     unmount()
   })
 
-  it('the shell resumes when play ends and when the board unmounts', () => {
+  it('an idle board wakes just after the next kickoff, without polling for it', () => {
+    const kickoff = new Date(Date.now() + 30_000).toISOString()
+    const { unmount } = render(
+      <Shell>
+        <MatchupPulseRefresh inPlay={false} nextKickoffAt={kickoff} />
+      </Shell>,
+    )
+    act(() => void vi.advanceTimersByTime(74_000))
+    expect(nav.router.refresh).toHaveBeenCalledTimes(0)
+    act(() => void vi.advanceTimersByTime(2_000))
+    expect(nav.router.refresh).toHaveBeenCalledTimes(1)
+    unmount()
+  })
+
+  it('CONTROL: a kickoff more than six hours out holds no timer — the idle cadence covers it', () => {
+    const kickoff = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString()
+    const { unmount } = render(
+      <Shell>
+        <MatchupPulseRefresh inPlay={false} nextKickoffAt={kickoff} />
+      </Shell>,
+    )
+    act(() => void vi.advanceTimersByTime(119_000))
+    expect(nav.router.refresh).toHaveBeenCalledTimes(0)
+    unmount()
+  })
+
+  it('the shell resumes when the board unmounts', () => {
     const { rerender, unmount } = render(
       <Shell>
         <MatchupPulseRefresh inPlay />
@@ -123,12 +157,8 @@ describe('the shell poll and the matchup board', () => {
         <MatchupPulseRefresh inPlay={false} />
       </Shell>,
     )
-    expect(routeRefreshClaimed()).toBe(false)
-    rerender(
-      <Shell>
-        <MatchupPulseRefresh inPlay />
-      </Shell>,
-    )
+    /* Play ending no longer hands the route back — the idle board still owns it. */
+    expect(routeRefreshClaimed()).toBe(true)
     rerender(<Shell />)
     expect(routeRefreshClaimed()).toBe(false)
     act(() => void vi.advanceTimersByTime(20_000))

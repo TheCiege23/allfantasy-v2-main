@@ -328,3 +328,48 @@ describe('🛑 one win probability, shared with the league page', () => {
     expect(pulse.leading[0]?.pWin).toBe(shared.available ? shared.pWin : NaN)
   })
 })
+
+/*
+ * 🛑 THE 20s CADENCE KEYS ON A GAME IN PROGRESS, NOT ON STARTERS STILL TO PLAY (2026-10-02). This
+ * fixture is that Friday: Thursday's game is final, Sunday's are to come, nobody is playing.
+ */
+describe('🛑 what the refresh cadence reads: liveNow and nextKickoffAt', () => {
+  it('Friday, nothing on: not live, and the next kickoff is Sunday’s', async () => {
+    Object.assign(PLAYERS, { thu: [12, 'CIN'], sun: [12, 'KC'], o1: [12, 'SF'], o2: [12, 'LAR'] })
+    const plid = league('A', ['thu', 'sun'], ['o1', 'o2'], [20, 0])
+    db.scores = [{ leagueId: plid, seasonYear: 2026, week: 4, playerId: 'thu', points: 20 }]
+    const pulse = await getMatchupPulse(USER, NOW)
+    /* Your Sunday starter is still to play — the old test said "in play" here. */
+    expect([...pulse.leading, ...pulse.trailing, ...pulse.closest][0]?.startersLeft).toBe(1)
+    expect(pulse.liveNow).toBe(false)
+    expect(pulse.nextKickoffAt).toBe(SUN.toISOString())
+  })
+
+  it('a starter whose game is in progress makes the board live — either side', async () => {
+    db.games = [game('CIN', 'MIA', 'final', THU), game('KC', 'BUF', 'in_progress', new Date('2026-10-02T11:30:00Z')), game('SF', 'LAR', 'scheduled', SUN)]
+    Object.assign(PLAYERS, { a: [12, 'SF'], o1: [12, 'KC'] })
+    league('L', ['a'], ['o1'])
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.liveNow).toBe(true)
+  })
+
+  it('a ruled-out starter whose club is playing does not make the board live', async () => {
+    db.games = [game('KC', 'BUF', 'in_progress', new Date('2026-10-02T11:30:00Z')), game('SF', 'LAR', 'scheduled', SUN)]
+    Object.assign(PLAYERS, { hurt: [12, 'KC'], a: [12, 'SF'], o1: [12, 'LAR'] })
+    OUT.add('hurt')
+    league('X', ['hurt', 'a'], ['o1', '0'])
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.liveNow).toBe(false)
+    expect(pulse.nextKickoffAt).toBe(SUN.toISOString())
+  })
+
+  it('a finished week reports no next kickoff and is not live', async () => {
+    Object.assign(PLAYERS, { x: [10, 'CIN'], y: [10, 'MIA'] })
+    const plid = league('F', ['x'], ['y'], [40, 20])
+    db.scores = [{ leagueId: plid, seasonYear: 2026, week: 4, playerId: 'x', points: 40 }, { leagueId: plid, seasonYear: 2026, week: 4, playerId: 'y', points: 20 }]
+    db.games = [game('CIN', 'MIA', 'final', THU)]
+    const pulse = await getMatchupPulse(USER, NOW)
+    expect(pulse.liveNow).toBe(false)
+    expect(pulse.nextKickoffAt).toBeNull()
+  })
+})
