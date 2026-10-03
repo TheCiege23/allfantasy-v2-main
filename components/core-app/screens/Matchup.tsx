@@ -4,6 +4,7 @@ import '@/components/core-app/af-matchup.css'
 // The refresh control's own styles (`.af-mp-live*`) live with the all-leagues board it came from.
 import '@/components/core-app/af-matchup-pulse.css'
 import { MatchupPulseRefresh } from '@/components/core-app/MatchupPulseRefresh'
+import { claimRouteRefresh } from '@/components/core-app/routeRefreshClaim'
 import Link from 'next/link'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
@@ -714,15 +715,29 @@ export function Matchup({ data }: MatchupProps) {
   const yourLeft = weekState === 'live' ? leftFor(bySide?.you) : null
   const theirLeft = weekState === 'live' ? leftFor(bySide?.opponent) : null
   /*
-   * Can anything on this page still move? The same test the all-leagues board applies: points on
-   * the board and a starter left — where an unknown game state counts as "maybe", because
-   * freezing the page on the leagues we read worst would be the wrong way round.
+   * Can anything on this page move within seconds? A starter's game in progress — the same test the
+   * all-leagues board applies (`MatchupPulse.liveNow`).
+   *
+   * 🛑 NOT "A STARTER LEFT". Counting starters still to kick off (and unknown states as "maybe") held
+   * this page on the 20s cadence from Thursday night to Monday, a full re-render each tick. An idle
+   * page still refreshes every two minutes, and once just after the next kickoff below — so an
+   * unknown game state is refreshed, not frozen.
    */
-  const inPlay =
-    weekState === 'live' &&
-    (bySide == null ||
-      bySide.you.upcoming + bySide.you.live + bySide.you.unknown +
-        bySide.opponent.upcoming + bySide.opponent.live + bySide.opponent.unknown > 0)
+  const inPlay = bySide != null && bySide.you.live + bySide.opponent.live > 0
+  /* The earliest kickoff among starters still to play, either side — the refresh wakes for it. */
+  const nextKickoffAt = data.lineups.available
+    ? data.lineups.data
+        .flatMap((s) => [s.you, s.opponent])
+        .filter((c): c is MatchupPlayerCell => c != null && !c.empty && c.gameState === 'upcoming' && !!c.kickoff)
+        .map((c) => c.kickoff as string)
+        .sort()[0] ?? null
+    : null
+  /*
+   * A finished week renders no refresh control, so nothing held the route — and the shell's own
+   * game-day timer then re-rendered a FINAL matchup every 20s whenever any game anywhere was on.
+   * Nothing on a final page moves; claim the route so neither timer spends a render on it.
+   */
+  useEffect(() => (weekState === 'final' ? claimRouteRefresh() : undefined), [weekState])
 
   const leader =
     compared && compared.you !== compared.opponent
@@ -835,7 +850,7 @@ export function Matchup({ data }: MatchupProps) {
               hidden-tab rule. A finished week has nothing left to move, so it gets none.
             */}
             {weekState !== 'final' ? (
-              <MatchupPulseRefresh inPlay={inPlay} label={copy('Refresh this matchup')} />
+              <MatchupPulseRefresh inPlay={inPlay} nextKickoffAt={nextKickoffAt} label={copy('Refresh this matchup')} />
             ) : null}
           </>
         ) : data.league.elimination ? (

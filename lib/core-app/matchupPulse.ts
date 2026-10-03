@@ -186,6 +186,21 @@ export type MatchupPulse = {
    * exactly the middle the top-5/bottom-5 columns hide. Rows already in either column are left out.
    */
   closest: PulseRow[]
+  /**
+   * A starter on either side of some unfinished matchup has a game IN PROGRESS right now.
+   *
+   * 🛑 THIS, NOT "STARTERS LEFT", DECIDES THE 20s REFRESH. "Left to play" counts starters still to
+   * kick off, so it held the board on the live cadence from Thursday night to Monday — every 20s,
+   * a full re-render across every claimed league, through Friday and Saturday with no game on.
+   * Optional so a cached pulse from before this field still reads (as not live).
+   */
+  liveNow?: boolean
+  /**
+   * The next kickoff of any starter, either side, in an unfinished matchup — an ISO instant, or
+   * null when none is scheduled or none could be placed. The refresh control wakes for it, so an
+   * idle board notices kickoff without polling for it.
+   */
+  nextKickoffAt?: string | null
   /** Why the rest are absent. Stated on the screen, never silently dropped. */
   notRanked: {
     /**
@@ -837,9 +852,34 @@ export async function getMatchupPulse(
         projected: league?.points ?? proj?.projectedPoints ?? null,
         leagueScored: prices?.exact ? league?.points ?? null : null,
         state: (states.get(id) ?? 'unknown') as StarterGameState,
+        /* His club, for the next-kickoff read below. NFL only, where game states exist. */
+        club: isNfl ? normalizeTeamAbbrev(proj?.team ?? null) ?? null : null,
       }
     })
   }
+
+  /** Each club's next not-yet-started regular-season kickoff, per league-week. Built once per week. */
+  const kickoffsByWeek = new Map<string, Map<string, Date>>()
+  function nextKickoffs(p: Pending): Map<string, Date> {
+    const key = `${p.season}:${p.week}`
+    let byClub = kickoffsByWeek.get(key)
+    if (byClub) return byClub
+    byClub = new Map()
+    for (const g of gamesByWeek.get(key) ?? []) {
+      if (g.seasonType !== 'regular' || !g.startTime || g.startTime.getTime() <= now.getTime()) continue
+      if (FINAL_GAME.test(String(g.status ?? '').toLowerCase())) continue
+      for (const team of [g.homeTeam, g.awayTeam]) {
+        const club = normalizeTeamAbbrev(team)
+        if (!club) continue
+        const prior = byClub.get(club)
+        if (!prior || g.startTime < prior) byClub.set(club, g.startTime)
+      }
+    }
+    kickoffsByWeek.set(key, byClub)
+    return byClub
+  }
+  let liveNow = false
+  let nextKickoff: Date | null = null
 
   /** Price one lineup: its projected total, and how many starters that total was built from. */
   function price(facts: ReturnType<typeof starterFacts>) {
@@ -951,6 +991,19 @@ export async function getMatchupPulse(
 
     const final = basis === 'scored' && isFinalWeek(p)
     const isNfl = String(p.sport ?? 'NFL').toUpperCase() === 'NFL'
+
+    /* What can move this row, and when — the refresh cadence reads these (see `liveNow`). */
+    if (!final) {
+      const kickoffs = nextKickoffs(p)
+      for (const f of [...yourFacts, ...theirFacts]) {
+        if (f.empty || f.unavailable) continue
+        if (f.state === 'live') liveNow = true
+        if (f.state === 'upcoming' && 'club' in f && f.club) {
+          const at = kickoffs.get(f.club)
+          if (at && (!nextKickoff || at < nextKickoff)) nextKickoff = at
+        }
+      }
+    }
 
     /*
      * ── The win probability ─────────────────────────────────────────────
@@ -1086,6 +1139,8 @@ export async function getMatchupPulse(
     expectedWins,
     withOdds: withOddsRows.length,
     closest,
+    liveNow,
+    nextKickoffAt: (nextKickoff as Date | null)?.toISOString() ?? null,
     notRanked: { ...notRanked, unidentifiedRoster, notStarted },
   }
 }

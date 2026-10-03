@@ -660,3 +660,20 @@ describe('MatchupPulseBoard — counts that must add up', () => {
     expect(container.querySelector('.af-mp-live')?.getAttribute('data-inplay')).toBe('true')
   })
 })
+
+/* 🛑 The loader's `liveNow` decides the board's cadence wherever it is present (2026-10-02). */
+describe('MatchupPulseBoard — liveNow decides the cadence', () => {
+  it('🛑 a scored row with starters still to play is NOT live when no game is in progress', () => {
+    const { container } = render(
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row({ basis: 'scored', startersLeft: 6 })], liveNow: false })} />,
+    )
+    expect(container.querySelector('.af-mp-live')?.getAttribute('data-inplay')).toBe('false')
+  })
+
+  it('a game in progress is live, whatever the rows say', () => {
+    const { container } = render(
+      <MatchupPulseBoard allHref={ALL_HREF} totalLeagues={TOTAL} pulse={pulse({ leading: [row({ basis: 'projected', startersLeft: 9 })], liveNow: true })} />,
+    )
+    expect(container.querySelector('.af-mp-live')?.getAttribute('data-inplay')).toBe('true')
+  })
+})

@@ -294,8 +294,16 @@ function gapNote(pulse: MatchupPulse, language: string): string | null {
  * does not reach — so it is unknown, not zero. Treating an unknown as "nothing
  * left" would freeze the board for exactly the leagues whose data we are worst
  * at, which is the wrong way round.
+ *
+ * 🛑 SUPERSEDED BY `pulse.liveNow` WHEREVER THE LOADER SUPPLIES IT (2026-10-02). "Starters left"
+ * counts starters still to KICK OFF, so this test held the 20s cadence from Thursday night to
+ * Monday — and an unknown count held it all season on every NBA/MLB row — each tick a full re-render
+ * across the portfolio. `liveNow` is true only while a starter's game is in progress; the idle
+ * cadence (and a refresh timed to the next kickoff) covers the rest, so an unknown row is refreshed
+ * every two minutes rather than frozen. The fallback below is for a pulse cached before the field.
  */
 function anyInPlay(pulse: MatchupPulse): boolean {
+  if (typeof pulse.liveNow === 'boolean') return pulse.liveNow
   /* The closest games are on screen too, and the likeliest to be the ones still moving. */
   return [...pulse.leading, ...pulse.trailing, ...(pulse.closest ?? [])].some(
     (r) => r.basis === 'scored' && !r.final && (r.startersLeft == null || r.startersLeft > 0),
@@ -375,7 +383,7 @@ export function MatchupPulseBoard({
             ranked, a "live" indicator would be claiming to watch a thing that is
             not there.
           */}
-          {pulse.ranked > 0 ? <MatchupPulseRefresh inPlay={inPlay} /> : null}
+          {pulse.ranked > 0 ? <MatchupPulseRefresh inPlay={inPlay} nextKickoffAt={pulse.nextKickoffAt ?? null} /> : null}
         </header>
 
         {/*
