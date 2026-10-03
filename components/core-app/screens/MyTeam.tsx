@@ -1435,6 +1435,106 @@ function OffseasonView({ data }: MyTeamProps) {
   )
 }
 
+type WeekProjection = Extract<MyTeamData['projections'], { available: true }>['data']
+
+/** Per-viewer convenience only: a cleared or blocked store just means "collapsed". */
+const COMPARE_KEY = 'af-mt-compare'
+
+/**
+ * The week's projected total — ONE number, with the others one tap away.
+ *
+ * ⚠ THREE PROJECTIONS IN A ROW WAS TOO MANY (audit 2026-10-02). The header carried the provider's
+ * total re-scored for this league (API), AllFantasy's engine on the same starters (AF) and the
+ * generic standard total, at equal weight, beside the record and the roster value — five slabs,
+ * three of them the same question. A manager wants one answer; the comparison is for the one who
+ * asks for it. So the league-scored API total leads (the same number the roster's accent column
+ * carries, row by row), and AF and standard sit behind "Compare".
+ *
+ * ⚠ HIDDEN, NOT UNMOUNTED. The collapsed tiles stay in the DOM with `hidden`, so `aria-controls`
+ * always names real elements and the comparison is one toggle away rather than a re-render.
+ *
+ * The choice is remembered per browser — someone who always compares should not click every
+ * time — and read after mount, because the server cannot see it and first paint must match.
+ * No button at all when there is nothing to compare against.
+ */
+function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; bestBall: boolean }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const es = language === 'es'
+  const [compare, setCompare] = useState(false)
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem(COMPARE_KEY) === '1') setCompare(true)
+    } catch { /* blocked store — collapsed */ }
+  }, [])
+  const toggle = () => {
+    setCompare((open) => {
+      try {
+        window.localStorage.setItem(COMPARE_KEY, open ? '0' : '1')
+      } catch { /* the choice still holds for this page */ }
+      return !open
+    })
+  }
+  const engineId = useId()
+  const standardId = useId()
+  const canCompare = proj != null && (proj.afEngineTotal != null || proj.standardComparable)
+
+  return (
+    <div className="af-mt-projgroup" data-compare={compare ? 'true' : 'false'}>
+      <div className="af-mt-tile af-mt-tile--proj af-mt-tile--af af-mt-tile--lead">
+        <div className="af-mt-tile-value af-num">
+          {proj?.afTotal != null ? proj.afTotal.toFixed(1) : '—'}
+        </div>
+        <div className="af-label">{copy(bestBall ? 'Listed starters · API · your league' : 'Projected · API · your league')}</div>
+        {canCompare ? (
+          <button
+            type="button"
+            className="af-mt-compare-btn"
+            aria-expanded={compare}
+            aria-controls={`${engineId} ${standardId}`}
+            onClick={toggle}
+          >
+            {compare ? (es ? 'Ocultar comparación' : 'Hide comparison') : (es ? 'Comparar proyecciones' : 'Compare projections')}
+          </button>
+        ) : null}
+      </div>
+      {/*
+        AllFantasy's own engine over the same starters — the second projection, at
+        the same weight as the provider's so neither reads as the footnote once shown.
+      */}
+      <div id={engineId} hidden={!compare} className="af-mt-tile af-mt-tile--proj af-mt-tile--af af-mt-tile--engine">
+        <div className="af-mt-tile-value af-num">
+          {proj?.afEngineTotal != null ? proj.afEngineTotal.toFixed(1) : '—'}
+        </div>
+        <div className="af-label">{copy(bestBall ? 'Listed starters · AF · your league' : 'Projected · AF · your league')}</div>
+      </div>
+      {/*
+        ⚠ WITHHELD WHEN IT IS NOT COMPARABLE. In an IDP league the
+        generic line does not score defenders, so this total covers only
+        the offensive half of the lineup — 53.0 sitting beside a league
+        total of 166.7, two numbers that look like a pair and are
+        measured over different players.
+      */}
+      <div
+        id={standardId}
+        hidden={!compare}
+        className="af-mt-tile af-mt-tile--proj"
+        data-missing={proj ? !proj.standardComparable : undefined}
+      >
+        <div className="af-mt-tile-value af-num">
+          {proj && proj.standardComparable ? proj.total.toFixed(1) : '—'}
+        </div>
+        <div className="af-label">{copy(bestBall ? 'Listed starters · standard' : 'Projected · standard')}</div>
+        {proj && !proj.standardComparable ? (
+          <div className="af-mt-tile-why">
+            {copy('Standard scoring does not price defenders, so there is no like-for-like total in an IDP league.')}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 export function MyTeam({ data }: MyTeamProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -1608,45 +1708,7 @@ export function MyTeam({ data }: MyTeamProps) {
                 they differ. Your league's total leads at full size; standard
                 sits beside it, smaller, as the thing being compared against.
               */}
-              <div className="af-mt-projgroup">
-                <div className="af-mt-tile af-mt-tile--proj af-mt-tile--af">
-                  <div className="af-mt-tile-value af-num">
-                    {proj?.afTotal != null ? proj.afTotal.toFixed(1) : '—'}
-                  </div>
-                  <div className="af-label">{copy(bestBall ? 'Listed starters · API · your league' : 'Projected · API · your league')}</div>
-                </div>
-                {/*
-                  AllFantasy's own engine over the same starters — the second projection, at
-                  the same weight as the provider's so neither reads as the footnote.
-                */}
-                <div className="af-mt-tile af-mt-tile--proj af-mt-tile--af af-mt-tile--engine">
-                  <div className="af-mt-tile-value af-num">
-                    {proj?.afEngineTotal != null ? proj.afEngineTotal.toFixed(1) : '—'}
-                  </div>
-                  <div className="af-label">{copy(bestBall ? 'Listed starters · AF · your league' : 'Projected · AF · your league')}</div>
-                </div>
-              {/*
-                ⚠ WITHHELD WHEN IT IS NOT COMPARABLE. In an IDP league the
-                generic line does not score defenders, so this total covers only
-                the offensive half of the lineup — 53.0 sitting beside a league
-                total of 166.7, two numbers that look like a pair and are
-                measured over different players.
-              */}
-                <div
-                  className="af-mt-tile af-mt-tile--proj"
-                  data-missing={proj ? !proj.standardComparable : undefined}
-                >
-                  <div className="af-mt-tile-value af-num">
-                    {proj && proj.standardComparable ? proj.total.toFixed(1) : '—'}
-                  </div>
-                  <div className="af-label">{copy(bestBall ? 'Listed starters · standard' : 'Projected · standard')}</div>
-                  {proj && !proj.standardComparable ? (
-                    <div className="af-mt-tile-why">
-                      {copy('Standard scoring does not price defenders, so there is no like-for-like total in an IDP league.')}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
+              <ProjectionTiles proj={proj} bestBall={bestBall} />
               {/*
                 ⚠ THE ABSENT RECORD IS PROSE AND MUST NOT SIT IN THE VALUE SLOT.
                 `af-mt-tile-value` is a 24px tabular figure; the preseason string
