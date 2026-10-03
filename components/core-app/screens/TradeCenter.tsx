@@ -2557,7 +2557,7 @@ export function TradeCenter(props: {
       ) : intel ? (
         <details className="af-tc-analysis-fold" data-mstep="review">
         <summary>Deeper trade strategy and partner context</summary>
-        <section className="af-tc-dos">
+        <section className="af-tc-dos" data-mstep="review">
           {/* Was "Decision OS · this deal" — internal name; the section reads this deal. */}
           <div className="af-label">{copy('This deal')}</div>
           {depthAccess ? <FreeUntilNote access={depthAccess} /> : null}
