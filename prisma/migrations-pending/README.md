@@ -56,9 +56,12 @@ the other six depend on it. The roles are provisioned outside the migration hist
 `prisma/migrations/` they would make every `prisma migrate dev` fail with P3006 and break any
 database built from history. Parking is load-bearing for them, not housekeeping.
 
-⚠ `20260830190000_devy_head_coach_context` is applied, but its ledger checksum (`ed157f6d5e…`)
-does not match this file (`f06fd2fa23…`) — see its `PROVENANCE.md`. Moving it would show as a
-modified applied migration. The other nine have **no** ledger row, so moving any of them would make
+✅ `20260830190000_devy_head_coach_context` was applied with a CRLF ledger checksum (`ed157f6d5e…`)
+that did not match its file (`f06fd2fa23…`). On 2026-10-03 the ledger row was corrected to the LF
+digest and the folder moved to `prisma/migrations/`, after the same shadow replay as the four above:
+the replay still succeeds and the history-vs-schema diff lost exactly its six `DevyPlayer` columns
+and gained nothing (control: a planted column appeared as `DROP COLUMN`). See its `PROVENANCE.md`.
+The other nine have **no** ledger row, so moving any of them would make
 the next `migrate deploy` RUN it: `t101b` (do not apply yet), `fact_table_uniqueness` (deletes
 duplicate rows), `league_max_pf_freeze`, the three `manager_psych_*` and `league_last_viewed_at`.
 
