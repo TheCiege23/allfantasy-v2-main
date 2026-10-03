@@ -152,7 +152,7 @@ describe('gameweeks', () => {
   it('[control] NHL is unchanged seven-day arithmetic from its opener', () => {
     expect(resolveDailySportWeekWindow('NHL', 2026, 2)?.start.toISOString()).toBe('2026-10-06T00:00:00.000Z')
     expect(dailySportWeekForInstant('NHL', 2026, new Date('2026-10-06T01:00:00Z'))).toBe(2)
-    expect(resolveDailySportWeekWindow('MLB', 2027, 1)).toBeNull()
+    expect(resolveDailySportWeekWindow('MLB', 2028, 1)).toBeNull()
   })
 
   it('the roller relabels by gameweek and drops a kickoff inside a break', () => {

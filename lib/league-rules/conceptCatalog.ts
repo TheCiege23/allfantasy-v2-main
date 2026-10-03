@@ -35,7 +35,7 @@ const ENTRIES: ConceptCatalogEntry[] = [
     aliasTags: [],
     flattenedOnto: null,
     // Matches the create gate (options-catalog-seed-data.ts): season-capable sports only.
-    supportedSports: ['NFL', 'NBA', 'NHL'],
+    supportedSports: ['NFL', 'NBA', 'NHL', 'MLB'],
     summary:
       'One team is eliminated each scoring period and their entire roster is released to the waiver pool. Survive to the end rather than win a matchup.',
     elimination:
