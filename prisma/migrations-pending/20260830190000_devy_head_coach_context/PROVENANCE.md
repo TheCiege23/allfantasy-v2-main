@@ -25,10 +25,17 @@ CRLF (what prod recorded)      ed157f6d5eab26581540f1715ba0ae8c57edf838ecc4d8a4a
 ```
 
 Both are the same SQL. The LF form is committed because it matches the repo's
-convention and the original commit; the CRLF digest is recorded here so the
-mismatch is expected rather than alarming.
+convention and the original commit.
 
-🛑 **Consequence if this is ever moved into `prisma/migrations/`:** `prisma
+✅ **RESOLVED 2026-10-03, on the owner's instruction.** The six columns were first
+re-verified on production by effect (types, `VARCHAR(96)`, nullability, no defaults,
+`TIMESTAMP(3)`; positive-controlled), then the ledger row's checksum was changed from
+the CRLF digest to the LF one (`f06fd2fa23…`) by ONE guarded `UPDATE` — matched on
+name AND the exact CRLF value, inside a transaction, refusing unless exactly one row
+changed. The ledger now matches the committed file, so the consequence below no
+longer applies; it is kept as the record of why the row was ever wrong.
+
+🛑 **(Until 2026-10-03) Consequence if this is ever moved into `prisma/migrations/`:** `prisma
 migrate deploy` will report a checksum mismatch for a migration that is in fact
 correctly applied. Do not "fix" that by re-running it — the columns already
 exist. Resolve the discrepancy deliberately, or leave the file here.
