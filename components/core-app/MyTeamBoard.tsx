@@ -28,8 +28,55 @@ import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import { rowScoreOf, summariseWeekScores, type RowScore, type WeekScoreSummary } from '@/lib/core-app/myTeamScoreboard'
 import { boardFilterHref } from '@/lib/core-app/myTeamBoardFilter'
 import type { LineupReminderStatus } from '@/lib/core-app/lineupReminderStatus'
+import { InfoTip } from '@/components/core-app/InfoTip'
 
 const REMINDER_SETTINGS_HREF = `/settings?tab=notifications&returnTo=${encodeURIComponent('/core/my-team')}`
+
+/**
+ * How to read a row — the one "?" on this board, beside the list's heading, never on each row.
+ *
+ * ⚠ EVERY SENTENCE HERE RESTATES A RULE THE LOADER OR A ROW ALREADY FOLLOWS, so it must change with
+ * them: the order is `needs`' comparator in `myTeamPulse.ts` (fixable problems, most first, then the
+ * clock — `actionableSeverity`), the clock is `lockAt` (a FLAGGED starter's kickoff first), the tones
+ * are `tagsOf` above, and "synced" is `SyncStamp`. Each of those was a hover `title` or nothing.
+ * The score sentence only appears when a row can carry a score.
+ */
+function BoardReadingTip({ es, scores }: { es: boolean; scores: boolean }) {
+  return (
+    <InfoTip
+      label={es ? 'Cómo leer esta lista' : 'How to read this list'}
+      title={es ? 'Cómo leer esta lista' : 'How to read this list'}
+    >
+      <span className="af-info-para">
+        {es
+          ? 'Primero las alineaciones con problemas que aún puedes arreglar —una posición vacía, un titular descartado o en descanso—, las que más pierden primero, y luego por el inicio más cercano. T4 significa empatado en el 4.º lugar.'
+          : 'Lineups with problems you can still fix come first — an empty slot, a starter ruled out or on bye — the most first, then the soonest kickoff. T4 means tied for 4th.'}
+      </span>
+      <span className="af-info-para">
+        {es
+          ? 'Los números en rojo son puntos que perderás si no actúas. Un número «en duda» en ámbar es un riesgo, no una pérdida: probablemente juega, así que nunca sube una liga en la lista. «Sin identificar» es un titular que no pudimos buscar: una carencia nuestra, no tuya. SET significa que lo revisamos y no falta nada.'
+          : 'Red counts are points you will lose unless you act. An amber “questionable” count is a risk, not a loss: he probably plays, so it never moves a league up. “Unidentified” is a starter we could not look up — our gap, not yours. SET means we checked and nothing is missing.'}
+      </span>
+      <span className="af-info-para">
+        {es
+          ? 'El reloj cuenta hasta el inicio del próximo titular con un problema —si no hay, del próximo titular—, en hora del Este. Cada jugador se bloquea en su propio partido: confirma los cierres y cambios automáticos en tu plataforma.'
+          : 'The clock counts to the kickoff of the next starter with a problem — otherwise the next starter — in Eastern time. Each player locks at his own kickoff; confirm locks and AutoSubs on your platform.'}
+      </span>
+      <span className="af-info-para">
+        {es
+          ? '«Sincronizada hace 3 h»: cada fila lee tu plantilla guardada en la última sincronización. Al abrir una liga se revisa su alineación en vivo.'
+          : '“synced 3h ago”: each row reads your roster as stored at the last sync. Opening a league checks its live lineup.'}
+      </span>
+      {scores ? (
+        <span className="af-info-para">
+          {es
+            ? '«Ganando 88.4–71.2» es el marcador de esta semana; en una liga de eliminación es tu distancia al corte.'
+            : '“ahead 88.4–71.2” is this week’s score so far; in an elimination league it is your distance from the cut.'}
+        </span>
+      ) : null}
+    </InfoTip>
+  )
+}
 
 /**
  * Whether Chimmy's pre-lock check will reach you — see `lineupReminderStatus.ts`. Said once, under
@@ -620,6 +667,8 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
           count={language === 'es'
             ? `${pulse.checked.toLocaleString()} de ${activeTotal.toLocaleString()} equipos ${pulse.paused ? 'activos ' : ''}revisados`
             : `${pulse.checked.toLocaleString()} of ${activeTotal.toLocaleString()} ${pulse.paused ? 'active ' : ''}teams read`}
+          /* Only over rows: on an empty list there is nothing to read. */
+          info={rows.length > 0 ? <BoardReadingTip es={es} scores={weekRecord != null} /> : undefined}
         />
         {filterOptions.length > 0 ? (
           <div className="af-bd-filters" role="group" aria-label={es ? 'Filtrar alineaciones' : 'Filter lineups'}>

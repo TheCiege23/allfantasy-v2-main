@@ -85,6 +85,7 @@ export function SectionHead({
   count,
   id,
   tone,
+  info,
 }: {
   label: string
   count?: string | null
@@ -94,12 +95,21 @@ export function SectionHead({
    * ON THE BUBBLE amber (handoff 2026-09-13). Omit for a neutral section.
    */
   tone?: 'good' | 'bad' | 'warn'
+  /**
+   * An `InfoTip` explaining how to read the section — one for the whole list, never one per row.
+   *
+   * ⚠ BESIDE THE HEADING, NOT INSIDE IT. Sections are `aria-labelledby` this `<h2>`, so a button
+   * inside it would join every section's accessible name ("Top 10 · ranked by urgency How to read
+   * this list").
+   */
+  info?: ReactNode
 }) {
   return (
     <div className="af-bd-sec-head">
       <h2 className="af-bd-sec-label" id={id} data-tone={tone}>
         {label}
       </h2>
+      {info ? <span className="af-bd-sec-info">{info}</span> : null}
       <span className="af-bd-sec-rule" aria-hidden />
       {count ? <span className="af-bd-sec-count">{count}</span> : null}
     </div>
