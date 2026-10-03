@@ -42,6 +42,7 @@ export const LEAGUE_CONTEXT_SELECT = {
   platformLeagueId: true,
   sport: true,
   season: true,
+  scoring: true,
   leagueType: true,
   // The Devy nav check (`leagueDevyNav`) reads the variant off this row.
   leagueVariant: true,

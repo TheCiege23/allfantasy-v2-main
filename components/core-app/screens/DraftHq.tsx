@@ -2,6 +2,7 @@
 
 import '@/components/core-app/af-draft-hq.css'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { DraftPreparation } from './DraftPreparation'
 import type { DraftHqData } from '@/lib/core-app/draftHq'
 import { draftAfText, draftAfTitle } from '@/lib/core-app/draftAfLabel'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
@@ -87,6 +88,8 @@ export function DraftHq({ data, edge = null, edgeAccess = null }: DraftHqProps) 
           </>
         )}
       </section>
+
+      {data.preparation && <DraftPreparation data={data.preparation} leagueId={data.league.id} />}
 
       {/* ── Pick inventory ──────────────────────────────────────────── */}
       {/*

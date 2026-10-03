@@ -46,6 +46,13 @@ Acceptance: startup plus rookie drafts in the same season remain separate; multi
 
 ## Phase 3 — ADP and league-adjusted pre-draft preparation
 
+Implementation v1 is built on the Phase 2 provenance foundation; protected-PR checks and production verification are pending. Local validation: 138 tests across 12 suites passed and implementation lint passed. Scoped typechecking found no errors in the changed files; existing dependency/baseline errors remain elsewhere. A production read-only initial-capture rehearsal scanned 984 native picks and found two exact-context cohorts covering 84 player rows, with no reported errors. New native ADP observations are appended to existing AiAdpSnapshotHistory records under an isolated draft_hq/hq-v1 namespace. Context includes exact season, sport, scoring rules, repeated roster slots, team count, player pool, purpose and league type. The existing scheduled recompute also records these observations; scripts/capture-draft-hq-adp.ts supports a bounded dry-run or explicit initial capture (--apply, plus --production for a verified production target) without rewriting existing ADP/history. No new database schema is required. Historical native comparisons require an observation from at or before the verified draft start, and the saved context must match. Imported archive sections remain separate; retrospective current-ADP backfills are not attempted.
+
+The league preparation panel adds observed market rankings, market bands, same-position density, uncovered direct starter slots, sample/range/dispersion, keeper lock costs, remaining-queue and personal-autopick states, browser-local personal ordering/spread preferences scoped by viewer and draft, and a league-scoped what-if mock link. The proposed 45/35/20 pre-draft outlook is explicitly a relative heuristic for supported native redraft/keeper setups; equivalent fresh redraft teams tie. Capital sums inverse square roots of unspent overall picks, keeper strength uses matching observed ADP, flexibility counts unspent picks, and min-max scaling maps equal inputs to 50. Keeper costs and traded ownership use canonical draft-engine resolvers. This is not a forecast or a performance-risk model.
+
+Coverage limits are visible in the product: platform/consensus exports do not yet supply the complete matching context; auction bid-value datasets and draft-time dynasty roster snapshots are unavailable; imported historical ADP depends on unfinished Phase 2 selection/context work. These capabilities remain tracked work and this release does not represent completion of every original Phase 3 data integration. No unsupported source is silently substituted. The universal overview links upcoming drafts to preparation without cross-format portfolio ranking or additional per-league queries. Responsive controls use 44px minimum targets and tables scroll inside their containers; authenticated visual and physical-device verification remains outstanding.
+
+
 Dependency: phase 2 identity/snapshots. Effort: medium to large. Value: better preparation and repeat usage.
 
 - Version ADP snapshots by provider, timestamp, season, sport, scoring, team count, player pool, and relevant league format. Preserve sample size and dispersion where supplied. Confirm available historical coverage and usage rights before promising backfills.
@@ -130,6 +137,12 @@ Effort labels describe relative complexity, not calendar commitments. Provider h
 Measure: missing/duplicate picks (target zero), ownership mismatch rate, draft-selection consistency, import coverage by field/provider, ADP coverage, report load latency, help usage, board-to-report usage, and follow-through on recommended team actions. Separate usage metrics from claims about predictive accuracy.
 
 ## Research informing the plan
+
+Refreshed for Phase 3 on October 3, 2026: FantasyPros documents personal cheat sheets, team needs, position scarcity and tracking remaining tier players; its Draft Wizard documentation also connects custom rankings with mocks and keeper costs. This supports making preparation actionable. It does not validate our proposed outlook weights or transform ADP bands into projection tiers.
+
+- https://support.fantasypros.com/hc/en-us/articles/115001308567-What-is-the-Draft-Assistant
+- https://support.fantasypros.com/hc/en-us/articles/115001300547-What-is-Draft-Wizard
+
 
 - Sleeper previous boards: https://support.sleeper.com/en/articles/4035696-how-can-i-view-previous-drafts-in-my-league
 - Sleeper traded ownership: https://support.sleeper.com/en/articles/3974639-can-i-trade-draft-picks

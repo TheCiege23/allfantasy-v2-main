@@ -1,6 +1,9 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { computePickInventory } from './draftPickInventory'
+export { computePickInventory } from './draftPickInventory'
+import { getDraftPreparationData, unavailablePreparation, type DraftPreparationData } from './draftPreparation'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 import { getDraftReport, type DraftGradeLetter } from '@/lib/draft-intel/draftReportService'
 import { buildImportedDraftReport } from '@/lib/draft-intel/importedDraftReport'
@@ -15,7 +18,7 @@ import {
 import { formatPickLabel, getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { KeeperConfig, KeeperSelection } from '@/lib/live-draft-engine/keeper/types'
-import type { DraftType, QueueEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
+import type { QueueEntry, TradedPickRecord } from '@/lib/live-draft-engine/types'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { leagueContextFor, type LeagueContext, type LeagueContextRow } from './leagueContext'
 import { composePlayerIdentities } from './playerIdentityCompose'
@@ -219,70 +222,12 @@ export type DraftHqData = {
   grades: SectionState<DraftGrades>
   lottery: SectionState<LotteryOdds>
   queue: SectionState<PreparedQueue>
+  preparation?: DraftPreparationData
   keepers: SectionState<KeeperList>
 }
 
 type SlotOrderRow = { slot: number; rosterId: string; displayName: string }
 
-/**
- * Every pick of the draft, owner resolved: the ones `myRosterId` holds now, and
- * the ones it started with that a trade moved elsewhere.
- *
- * ⚠ THE SAME TWO STEPS THE DRAFT ROOM TAKES, NOT A COPY OF THEM. Whose slot a pick
- * is comes from `getSlotInRoundForOverall` (snake, linear and third-round
- * reversal), and who owns it now from `resolvePickOwner`. A second copy of either
- * is how this screen would come to disagree with the board about who owns 2.01.
- */
-export function computePickInventory(input: {
-  myRosterId: string
-  slotOrder: readonly SlotOrderRow[]
-  tradedPicks: readonly TradedPickRecord[]
-  rounds: number
-  teamCount: number
-  draftType: string
-  thirdRoundReversal: boolean
-}): { held: PickSlot[]; tradedAway: TradedAwayPick[] } {
-  const { myRosterId, slotOrder, rounds, teamCount } = input
-  const held: PickSlot[] = []
-  const tradedAway: TradedAwayPick[] = []
-  if (teamCount <= 0 || rounds <= 0) return { held, tradedAway }
-
-  // Anything but snake runs in slot order every round, as the old arithmetic had it.
-  const draftType: DraftType = input.draftType.toLowerCase() === 'snake' ? 'snake' : 'linear'
-  const tradedPicks = [...input.tradedPicks]
-
-  for (let overall = 1; overall <= rounds * teamCount; overall += 1) {
-    const round = Math.ceil(overall / teamCount)
-    const slot = getSlotInRoundForOverall({
-      overall,
-      teamCount,
-      draftType,
-      thirdRoundReversal: input.thirdRoundReversal,
-    })
-    const original = slotOrder.find((e) => e.slot === slot)
-    const owner = resolvePickOwner(round, slot, [...slotOrder], tradedPicks)
-    if (!original || !owner) continue
-
-    const label = formatPickLabel(overall, teamCount)
-    const pickInRound = ((overall - 1) % teamCount) + 1
-    const wasMine = original.rosterId === myRosterId
-    if (owner.rosterId === myRosterId) {
-      held.push({
-        round,
-        pickInRound,
-        overall,
-        label,
-        // A pick that left and came back is simply yours again.
-        acquiredFrom: wasMine
-          ? null
-          : owner.tradedPickMeta?.previousOwnerName || original.displayName || 'another team',
-      })
-    } else if (wasMine) {
-      tradedAway.push({ round, overall, label, to: owner.displayName || 'another team' })
-    }
-  }
-  return { held, tradedAway }
-}
 
 const PLATFORM_LABEL: Record<string, string> = {
   sleeper: 'Sleeper',
@@ -983,7 +928,7 @@ export async function getDraftHqData(
       select: {
         id: true, status: true, draftType: true, rounds: true, teamCount: true, slotOrder: true,
         thirdRoundReversal: true, tradedPicks: true, keeperConfig: true, keeperSelections: true,
-        sleeperDraftId: true,
+        sleeperDraftId: true, startedAt: true, playerPool: true, draftModeLabel: true, customRankingsEnabled: true,
       },
     }),
   ])
@@ -1043,7 +988,7 @@ export async function getDraftHqData(
         }
       : none
 
-    return { ...base, session: noSession, pickSlots: noSession, madePicks, board, grades, queue, keepers }
+    return { ...base, session: noSession, pickSlots: noSession, madePicks, board, grades, queue, keepers, preparation: unavailablePreparation('Historical imported ADP needs a preserved draft-time context. No upcoming draft is scheduled here.') }
   }
 
   const myTeam = await lc.claimedTeam()
@@ -1210,5 +1155,6 @@ export async function getDraftHqData(
   )
   const keepers = keepersFromSession(session, myRosterIds)
 
-  return { ...base, session: sessionState, pickSlots, madePicks, board, grades, queue, keepers }
+  const preparation = await getDraftPreparationData(league, session, userId, mySlotEntry?.rosterId ?? myTeam?.externalId ?? undefined).catch(() => unavailablePreparation('Draft preparation could not be loaded. Retry this page.', 'error'))
+  return { ...base, session: sessionState, pickSlots, madePicks, board, grades, queue, keepers, preparation }
 }
