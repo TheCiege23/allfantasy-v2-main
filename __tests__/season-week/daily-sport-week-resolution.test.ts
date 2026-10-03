@@ -153,9 +153,9 @@ describe('resolveSportWeek no longer refuses the daily sports', () => {
   // anchor — widening the gate must not become "resolve everything".
   it('still returns NO_WEEK_SIGNAL for a sport with no anchor', async () => {
     const { resolveSportWeek } = await import('@/lib/season-week/seasonWeekService')
-    const resolved = await resolveSportWeek('MLB', 2026, {
-      prisma: fakeDb([game('2026-05-01T23:00:00Z')]),
-      now: new Date('2026-05-02T12:00:00Z'),
+    const resolved = await resolveSportWeek('MLB', 2027, {
+      prisma: fakeDb([game('2027-05-01T23:00:00Z')]),
+      now: new Date('2027-05-02T12:00:00Z'),
     })
     expect(resolved).toEqual({ ok: false, reason: 'NO_WEEK_SIGNAL' })
   })

@@ -97,7 +97,13 @@ describe('resolveStoredSeasonType', () => {
 
   it('is unknown for a sport with no recorded opener', () => {
     expect(
-      resolveStoredSeasonType({ normalizedStatMap: {}, sport: 'MLB', season: 2026, gameDate: at('2026-03-01T04:00:00Z') }),
+      resolveStoredSeasonType({ normalizedStatMap: {}, sport: 'MLB', season: 2027, gameDate: at('2027-03-01T04:00:00Z') }),
     ).toBeNull()
+  })
+
+  it('marks an unlabelled 2026 MLB row before Opening Night as preseason', () => {
+    expect(
+      resolveStoredSeasonType({ normalizedStatMap: {}, sport: 'MLB', season: 2026, gameDate: at('2026-03-01T04:00:00Z') }),
+    ).toBe('pre')
   })
 })
