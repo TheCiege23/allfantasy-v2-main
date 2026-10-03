@@ -99,7 +99,7 @@ export interface NormalizedLeagueSettings {
    * Sleeper's own waiver-schedule settings, exactly as Sleeper sent them — present only for a
    * Sleeper import that carried at least one. `daily_waivers_hour` is the Pacific run hour
    * (measured, contracts/sleeper/GAPS.md S-06); ⚠ `waiver_day_of_week`'s weekday is UNRESOLVED
-   * (S-05) — never render it. Read `lib/waivers/sleeperWaiverSchedule.ts` for a schedule a screen
+   * (S-05) except the measured `2` = Wednesday — never convert it by arithmetic. Read `lib/waivers/sleeperWaiverSchedule.ts` for a schedule a screen
    * can show.
    */
   sleeper_waiver_schedule?: {

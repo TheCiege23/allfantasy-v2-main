@@ -259,7 +259,7 @@ async function importedWaivers(league: LeagueRow, userId: string): Promise<strin
             ? `seen over this league's last ${sleeperSchedule.agreeingRuns} runs`
             : "this league's Sleeper setting"
         }). That is Pacific time — convert it for the user if they are elsewhere.`
-      : `- Processing schedule: not known yet — this league has not been seen processing often enough, and Sleeper's settings give only the hour for a daily league. Tell them to check ${platform}.`
+      : `- Processing schedule: not known yet — this league has not been seen processing often enough, and its Sleeper waiver day is not one we can read. Tell them to check ${platform}.`
     : `- Processing day: ${dayRaw != null && DAYS[dayRaw] ? DAYS[dayRaw] : `not in the imported data — tell them to check ${platform}`}.`
 
   const [mine, rosters, label] = await Promise.all([

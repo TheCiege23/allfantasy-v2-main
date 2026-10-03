@@ -163,10 +163,11 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
        * carrying `waiver_day_of_week`). Compared on 2026-10-03 against the schedule OBSERVED from
        * when each league's claims processed (lib/waivers/observedWaiverSchedule.ts):
        * - `daily_waivers_hour` IS the Pacific run hour (246 of 249 leagues, ~20 distinct hours —
-       *   contracts/sleeper/GAPS.md S-06). lib/waivers/sleeperWaiverSchedule.ts uses it, for
-       *   `daily_waivers === 1` leagues only, where nothing has been observed.
-       * - `waiver_day_of_week` is still NOT read anywhere: which weekday it names is unresolved
-       *   (S-05). Do not render it.
+       *   contracts/sleeper/GAPS.md S-06). lib/waivers/sleeperWaiverSchedule.ts uses it where
+       *   nothing has been observed.
+       * - `waiver_day_of_week`: which weekday it names is unresolved in general (S-05). ONE value is
+       *   measured — `2` is Wednesday — and sleeperWaiverSchedule.ts reads that value and no other.
+       *   Never render the number as a weekday by arithmetic.
        */
       ...(sleeperWaiverSchedule ? { sleeper_waiver_schedule: sleeperWaiverSchedule } : {}),
       reserve_allow_cov: reserveAllowCov,

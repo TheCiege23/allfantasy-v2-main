@@ -139,8 +139,8 @@ async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
 
   /*
    * A Sleeper league's schedule is OBSERVED from when this league's claims actually processed, else
-   * read off Sleeper's own daily-hour setting for a league Sleeper says runs daily — the hour is
-   * measured to be the Pacific run hour; the weekly day is not (contracts/sleeper/GAPS.md S-05/S-06,
+   * read off Sleeper's own settings: the hour is measured to be the Pacific run hour, and of the
+   * weekday values only `2` (Wednesday) is measured (contracts/sleeper/GAPS.md S-05/S-06,
    * lib/waivers/sleeperWaiverSchedule.ts). Read before the settings row, because a league with no
    * ingested settings row can still have a processing history.
    */
@@ -162,7 +162,7 @@ async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
   const notYetObserved = {
     available: false as const,
     reason:
-      'Sleeper’s waiver day is not imported (only its hour, for a league that runs daily), and this league’s waivers have not been seen processing often enough to read the schedule yet — check the league’s waiver settings on Sleeper.',
+      'This league’s Sleeper waiver day is not imported in a form we can read, and its waivers have not been seen processing often enough to read the schedule yet — check the league’s waiver settings on Sleeper.',
   }
 
   if (!s) {

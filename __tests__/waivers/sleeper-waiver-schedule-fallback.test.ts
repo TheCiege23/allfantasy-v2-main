@@ -23,9 +23,26 @@ describe('scheduleFromSleeperSetting', () => {
     expect(setting({ daily_waivers: 1, daily_waivers_hour: 0 })).toEqual({ dayOfWeek: null, time: '00:00', timeZone: PT })
   })
 
-  it('a league that is NOT daily gets nothing — its weekday is unresolved (S-05)', () => {
-    expect(setting({ daily_waivers: 0, daily_waivers_hour: 0, waiver_day_of_week: 2 })).toBeNull()
-    expect(setting({ daily_waivers_hour: 0 })).toBeNull()
+  it('a non-daily league on 2 runs Wednesday at its hour — the ONE measured value (S-05)', () => {
+    expect(setting({ daily_waivers: 0, daily_waivers_hour: 0, waiver_day_of_week: 2 })).toEqual({ dayOfWeek: 3, time: '00:00', timeZone: PT })
+    expect(setting({ daily_waivers: 0, daily_waivers_hour: 17, waiver_day_of_week: 2 })).toEqual({ dayOfWeek: 3, time: '17:00', timeZone: PT })
+  })
+
+  it('any other day value gets nothing — no arithmetic turns a day number into a weekday', () => {
+    /* (w + 1) % 7 would say Tuesday for 1 and Monday for 0; 17 of 24 leagues on 1 peak Wednesday. */
+    for (const w of [0, 1, 3, 4, 5, 6, 7, -1]) expect(setting({ daily_waivers: 0, daily_waivers_hour: 0, waiver_day_of_week: w })).toBeNull()
+    expect(setting({ daily_waivers: 0, daily_waivers_hour: 0 })).toBeNull()
+    expect(setting({ daily_waivers: 0, daily_waivers_hour: 0, waiver_day_of_week: '2' })).toBeNull()
+    expect(setting({ daily_waivers_hour: 0, waiver_day_of_week: 2 })).toBeNull()
+  })
+
+  it('a daily league stays daily whatever its day value says', () => {
+    expect(setting({ daily_waivers: 1, daily_waivers_hour: 4, waiver_day_of_week: 2 })).toEqual({ dayOfWeek: null, time: '04:00', timeZone: PT })
+  })
+
+  it('the Wednesday rule still needs a real hour', () => {
+    expect(setting({ daily_waivers: 0, waiver_day_of_week: 2 })).toBeNull()
+    expect(setting({ daily_waivers: 0, daily_waivers_hour: 24, waiver_day_of_week: 2 })).toBeNull()
   })
 
   it('refuses an hour that is not an hour', () => {
