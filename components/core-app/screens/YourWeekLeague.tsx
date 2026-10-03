@@ -239,7 +239,7 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
             data-tone={rivalry ? rivalryTone(rivalry.wins, rivalry.losses) : 'none'}
           >
             <span className="af-label af-wl-rivalry-tag">
-              {rivalry ? `${copy('All-time')} ${rivalry.wins}—${rivalry.losses}` : copy('All-time')}{' '}
+              {rivalry ? `${copy('All-time')} ${rivalryRecord(rivalry)}` : copy('All-time')}{' '}
               <TopicTip topic="rivalrySeries" />
             </span>
             <p className="af-wl-rivalry-note">
@@ -351,6 +351,14 @@ function Sideline({ m, board }: { m: LeagueSideline; board: LeagueWeekBoard }) {
       ) : null}
     </article>
   )
+}
+
+/**
+ * W—L, or W—L—T once a meeting has finished level, so a tie never reads as a
+ * loss. Digits and dashes only — the same in English and Spanish.
+ */
+function rivalryRecord(r: { wins: number; losses: number; ties: number }): string {
+  return r.ties > 0 ? `${r.wins}—${r.losses}—${r.ties}` : `${r.wins}—${r.losses}`
 }
 
 function rivalryTone(wins: number, losses: number): 'up' | 'down' | 'even' {

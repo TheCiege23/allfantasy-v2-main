@@ -248,7 +248,7 @@ function leagueBlock(
     if (lb.rivalry) {
       const r = lb.rivalry
       lines.push(
-        `- All-time vs this opponent: ${r.wins}-${r.losses} in ${r.meetings} meeting(s), average margin ${r.averageMargin >= 0 ? '+' : ''}${pts(r.averageMargin)}.`,
+        `- All-time vs this opponent: ${r.ties > 0 ? `${r.wins}-${r.losses}-${r.ties} (W-L-T)` : `${r.wins}-${r.losses}`} in ${r.meetings} meeting(s), average margin ${r.averageMargin >= 0 ? '+' : ''}${pts(r.averageMargin)}.`,
       )
     } else {
       lines.push('- They have never played this opponent before (first meeting on file).')

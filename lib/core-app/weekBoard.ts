@@ -204,6 +204,8 @@ export type LeagueWeekBoard = {
   rivalry: {
     wins: number
     losses: number
+    /** Meetings that finished level. Counted apart so a tie never reads as a loss. */
+    ties: number
     meetings: number
     averageMargin: number
   } | null
@@ -266,7 +268,8 @@ export type RivalryCard = {
   platform: string
   opponent: WeekOpponent
   /** All-time, across every synced season. */
-  series: { wins: number; losses: number; meetings: number }
+  /** `ties` is its own count: a meeting that finished level is neither a win nor a loss. */
+  series: { wins: number; losses: number; ties: number; meetings: number }
   /** Signed average margin across the series, from your side. */
   averageMargin: number
   closest: {
@@ -275,6 +278,8 @@ export type RivalryCard = {
     margin: number
     /** True when you won that one. */
     won: boolean
+    /** True when it finished level. `won` is false then, and it is NOT a loss. */
+    tied: boolean
   } | null
   /** This week's meeting, when they are on your schedule. */
   thisWeek: { winProbability: number | null; projectedMargin: number | null } | null
@@ -1305,6 +1310,7 @@ export async function getWeekBoard(
         const oppRosterId = yours.opponent.rosterId
         let wins = 0
         let losses = 0
+        let ties = 0
         let marginSum = 0
         let meetings = 0
         for (const pair of pairRows(history.rows.filter((r) => r.leagueId === pid))) {
@@ -1320,10 +1326,12 @@ export async function getWeekBoard(
           meetings += 1
           marginSum += you.pointsFor - them.pointsFor
           if (you.pointsFor > them.pointsFor) wins += 1
-          else losses += 1
+          else if (you.pointsFor < them.pointsFor) losses += 1
+          // A meeting that finished level is a tie, never a loss.
+          else ties += 1
         }
         if (meetings > 0) {
-          rivalry = { wins, losses, meetings, averageMargin: marginSum / meetings }
+          rivalry = { wins, losses, ties, meetings, averageMargin: marginSum / meetings }
         }
       }
 
@@ -1445,6 +1453,7 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
     opponent: WeekOpponent
     wins: number
     losses: number
+    ties: number
     marginSum: number
     meetings: number
     closest: RivalryCard['closest']
@@ -1480,6 +1489,7 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
         },
         wins: 0,
         losses: 0,
+        ties: 0,
         marginSum: 0,
         meetings: 0,
         closest: null,
@@ -1494,16 +1504,23 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
       // A completed meeting contributes to the series.
       const margin = you.pointsFor - them.pointsFor
       const won = margin > 0
+      /*
+       * ⚠ A LEVEL MEETING IS A TIE, NOT A LOSS. Counting "not won" as lost turned
+       * a 1-1-1 series into 1-2, filed it under "They own you", and printed a dead
+       * heat as "you lost by 0.0".
+       */
+      const tied = margin === 0
       acc.meetings += 1
       acc.marginSum += margin
       if (won) acc.wins += 1
+      else if (tied) acc.ties += 1
       else acc.losses += 1
       seasons.add(pair.season)
       platforms.add(meta.platform)
       meetings += 1
 
       if (!acc.closest || Math.abs(margin) < Math.abs(acc.closest.margin)) {
-        acc.closest = { season: pair.season, week: pair.week, margin, won }
+        acc.closest = { season: pair.season, week: pair.week, margin, won, tied }
       }
     }
 
@@ -1528,7 +1545,7 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
       leagueName: a.leagueName,
       platform: a.platform,
       opponent: a.opponent,
-      series: { wins: a.wins, losses: a.losses, meetings: a.meetings },
+      series: { wins: a.wins, losses: a.losses, ties: a.ties, meetings: a.meetings },
       averageMargin: a.meetings > 0 ? a.marginSum / a.meetings : 0,
       closest: a.closest,
       thisWeek: a.thisWeek,
