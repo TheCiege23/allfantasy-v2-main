@@ -5,8 +5,8 @@ import { loadObservedWaiverSchedules, OBSERVED_TIME_ZONE, type ObservedWaiverSch
 
 /**
  * The waiver schedule a Sleeper league's screens show: OBSERVED from its own processed claims
- * first, else read off Sleeper's own `daily_waivers_hour` setting for a league Sleeper says runs
- * DAILY.
+ * first, else read off Sleeper's own settings — `daily_waivers_hour` for a league Sleeper says runs
+ * DAILY, and Wednesday at that hour for a non-daily league on `waiver_day_of_week = 2`.
  *
  * ── Why the setting is trusted now, and only this much of it ──────────────────────────────────
  * `daily_waivers_hour` IS the Pacific hour a league's claims resolve: measured 2026-10-03 on
@@ -14,10 +14,18 @@ import { loadObservedWaiverSchedules, OBSERVED_TIME_ZONE, type ObservedWaiverSch
  * distinct hours — not just the default 0 (contracts/sleeper/GAPS.md S-06). So a league too quiet
  * to have been observed still gets its real hour.
  *
- * 🛑 ONLY FOR `daily_waivers === 1`. A non-daily league runs on one weekday, and which weekday
- * `waiver_day_of_week` names is NOT established (GAPS.md S-05: the leagues that could separate the
- * readings point against the obvious one). A daily schedule for such a league would count down to a
- * run every night that does not happen — so it gets nothing, and the screens keep saying so.
+ * ── A non-daily league: ONE measured value, never a base ─────────────────────────────────────
+ * Which weekday `waiver_day_of_week` names in general is NOT established (GAPS.md S-05: the leagues
+ * that could separate the readings point against the obvious one). But the value `2` is measured on
+ * its own: of the 27 observed leagues with `daily_waivers = 0` and `2`, a Wednesday run at
+ * `daily_waivers_hour` really happens in 25 — 19 run Wednesday only, exactly; 6 run nightly (so the
+ * Wednesday run is real, the other nights unshown); 2 run another day (Friday, Monday). So `2` →
+ * Wednesday, and nothing else: `0`, `1` or any other value gets no schedule, because no rule here
+ * converts a day number into a weekday. Do NOT generalise this into `(w + 1) % 7` — that IS the
+ * unmeasured base, and the `1` leagues contradict it.
+ *
+ * A daily schedule is never given to a non-daily league: it would count down to a run every night
+ * that does not happen.
  *
  * Observed wins over the setting when both exist: it is this league's measured behaviour.
  */
@@ -26,15 +34,22 @@ export type SleeperWaiverSchedule =
   | ({ source: 'observed' } & ObservedWaiverSchedule)
   | { source: 'sleeper_setting'; schedule: WaiverSchedule }
 
-/** Sleeper's own daily schedule from `League.settings`, or null. Pure. */
+/** The ONE `waiver_day_of_week` value measured to name a weekday (S-05): 2 → Wednesday (JS 3). */
+const MEASURED_WAIVER_DAY: Readonly<Record<number, number>> = { 2: 3 }
+
+/** Sleeper's own schedule from `League.settings`, or null. Pure. */
 export function scheduleFromSleeperSetting(settings: unknown): WaiverSchedule | null {
   const s = settings && typeof settings === 'object' ? (settings as Record<string, unknown>) : null
   const raw = s?.sleeper_waiver_schedule
   const r = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null
-  if (!r || r.daily_waivers !== 1) return null
+  if (!r) return null
   const h = r.daily_waivers_hour
   if (typeof h !== 'number' || !Number.isInteger(h) || h < 0 || h > 23) return null
-  return { dayOfWeek: null, time: `${String(h).padStart(2, '0')}:00`, timeZone: OBSERVED_TIME_ZONE }
+  const time = `${String(h).padStart(2, '0')}:00`
+  if (r.daily_waivers === 1) return { dayOfWeek: null, time, timeZone: OBSERVED_TIME_ZONE }
+  if (r.daily_waivers !== 0 || typeof r.waiver_day_of_week !== 'number') return null
+  const dayOfWeek = MEASURED_WAIVER_DAY[r.waiver_day_of_week]
+  return dayOfWeek == null ? null : { dayOfWeek, time, timeZone: OBSERVED_TIME_ZONE }
 }
 
 /**

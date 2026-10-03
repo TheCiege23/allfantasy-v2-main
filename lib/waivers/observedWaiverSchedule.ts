@@ -9,8 +9,9 @@ import { zonedParts, type WaiverSchedule } from '@/lib/core-app/waiverRunClock'
  * Sleeper's league settings carry `waiver_day_of_week` and `daily_waivers_hour`, now stored raw at
  * import (`sleeper_waiver_schedule`). The hour was later measured against this module's output and
  * IS the Pacific run hour (contracts/sleeper/GAPS.md S-06) — lib/waivers/sleeperWaiverSchedule.ts
- * falls back to it for a daily league nothing has been observed for. Which weekday
- * `waiver_day_of_week` names is still unresolved (S-05); a wrong guess is a countdown to the wrong day.
+ * falls back to it for a league nothing has been observed for. Which weekday `waiver_day_of_week`
+ * names is unresolved except the measured `2` = Wednesday (S-05); a wrong guess is a countdown to the
+ * wrong day.
  *
  * Every completed waiver claim, though, carries Sleeper's `status_updated`: the instant it was
  * resolved. One league's claims in one run all resolve together, so its history clusters into

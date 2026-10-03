@@ -132,9 +132,25 @@ describe('Waivers run — a Sleeper league', () => {
     })
   })
 
-  it('does NOT invent a schedule for a league Sleeper says is not daily — its weekday is unresolved (S-05)', async () => {
+  it('a non-daily league on day value 2 runs Wednesday at its hour — the one measured value (S-05)', async () => {
     prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'faab', processingDayOfWeek: 1, processingTimeUtc: '12:00' })
     prismaMock.$queryRaw.mockResolvedValue([{ id: 'L1', raw: { daily_waivers: 0, daily_waivers_hour: 0, waiver_day_of_week: 2 } }])
+    const data = await getWaiversData('L1', 'me')
+    expect(data?.processTime).toEqual({
+      available: true,
+      data: {
+        schedule: { dayOfWeek: 3, time: '00:00', timeZone: 'America/Los_Angeles' },
+        dayLabel: 'Wednesday',
+        timeLabel: '00:00 Pacific',
+        observedRuns: null,
+        fromSleeperSetting: true,
+      },
+    })
+  })
+
+  it('does NOT invent a schedule for any other day value — that weekday is unresolved (S-05)', async () => {
+    prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'faab', processingDayOfWeek: 1, processingTimeUtc: '12:00' })
+    prismaMock.$queryRaw.mockResolvedValue([{ id: 'L1', raw: { daily_waivers: 0, daily_waivers_hour: 0, waiver_day_of_week: 1 } }])
     const data = await getWaiversData('L1', 'me')
     expect(data?.processTime).toMatchObject({ available: false, reason: expect.stringContaining('not been seen processing') })
   })

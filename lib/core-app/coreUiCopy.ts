@@ -542,8 +542,8 @@ const spanish: Record<string, string> = {
   'this league’s waiver type was not read': 'No se pudo leer el tipo de reclamo de esta liga.',
   'this league has waivers turned off — free agents are claimed instantly': 'Esta liga tiene los reclamos desactivados; los agentes libres se adquieren al instante.',
   'Sleeper’s processing schedule was not imported — check the league’s waiver settings on Sleeper.': 'No se importó el calendario de reclamos de Sleeper. Revisa los ajustes de la liga allí.',
-  'Sleeper’s waiver day is not imported (only its hour, for a league that runs daily), and this league’s waivers have not been seen processing often enough to read the schedule yet — check the league’s waiver settings on Sleeper.':
-    'No se importó el día de reclamos de Sleeper (solo su hora, en una liga con reclamos diarios), y aún no se han visto suficientes ejecuciones de esta liga para leer su calendario. Revisa los ajustes de la liga en Sleeper.',
+  'This league’s Sleeper waiver day is not imported in a form we can read, and its waivers have not been seen processing often enough to read the schedule yet — check the league’s waiver settings on Sleeper.':
+    'El día de reclamos de Sleeper de esta liga no se importó en una forma que podamos leer, y aún no se han visto suficientes ejecuciones para leer su calendario. Revisa los ajustes de la liga en Sleeper.',
   'no waiver run schedule was ingested for this league': 'No se importó el calendario de reclamos de esta liga.',
   'no waivers to tie — free agents are claimed instantly': 'No hay desempate: los agentes libres se adquieren al instante.',
   'Waiver priority order': 'Orden de prioridad de reclamo',
