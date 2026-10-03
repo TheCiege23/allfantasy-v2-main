@@ -25,6 +25,8 @@ The existing dry-run market recalculation considered 8,805 deduplicated transact
 
 The candidate median adjustment was +2.5% in the writer dry run (+2.4% in the diagnostic's lower-median convention). The existing centering gate failed. Candidate movements were 182 rising, 159 falling and 5 stable, frequently at the ±12% cap. This estimator is distinct from the analyzer's shared value-grade rules. Passing the replay does not validate publishing these adjusted prices.
 
+A 2026-only diagnostic considered 2,398 transactions and used 1,732 (534 without players, 60 with a zero-value side, 72 with an unpriced player). It produced 236 candidate prices across 366 observed players: 119 falling, 115 rising and 2 stable. The median adjustment was −1.0%, which passes the centering check. This window dependence is evidence against treating the broad historical sample as an interchangeable current-market benchmark. Passing centering alone does not establish predictive calibration. Neither diagnostic wrote any rows.
+
 ## Calibration decision
 
 Keep the current price-grade rules and original snapshots unchanged. Do not publish the candidate adjustments or label the displayed grade as empirically calibrated from this audit. Completed-only observations cannot calibrate acceptance probability, and historical transactions quoted with current prices cannot validate trade-day predictions. Most saved originals here were preserved after execution.
