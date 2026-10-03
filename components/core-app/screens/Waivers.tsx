@@ -14,6 +14,8 @@ import { platformLabel, verifiedHandoff } from '@/lib/core-app/platformLinks'
 import { WaiverCompetitiveEdge, type WaiverEdgeState } from '@/components/core-app/screens/WaiverCompetitiveEdge'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { TopicTip } from '@/components/core-app/TopicTip'
+import type { HelpTopicId } from '@/lib/core-app/helpTopics'
 
 /**
  * Screen 7 — Waivers.
@@ -50,11 +52,14 @@ function Tile({
   state,
   render,
   sub,
+  help,
 }: {
   label: string
   state: SectionState<unknown>
   render?: (d: never) => { value: string; sub?: string }
   sub?: string
+  /** A "?" beside the label (lib/core-app/helpTopics.ts). */
+  help?: HelpTopicId
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -62,7 +67,10 @@ function Tile({
     return (
       <div className="af-wv-tile" data-missing="true">
         <div className="af-wv-tile-value af-num">—</div>
-        <div className="af-label">{copy(label)}</div>
+        <div className="af-label">
+          {copy(label)}
+          {help ? <> <TopicTip topic={help} /></> : null}
+        </div>
         <div className="af-wv-tile-why">{copy(state.reason)}</div>
       </div>
     )
@@ -71,7 +79,10 @@ function Tile({
   return (
     <div className="af-wv-tile">
       <div className="af-wv-tile-value af-num">{out.value}</div>
-      <div className="af-label">{copy(label)}</div>
+      <div className="af-label">
+        {copy(label)}
+        {help ? <> <TopicTip topic={help} /></> : null}
+      </div>
       {out.sub ? <div className="af-wv-tile-sub">{copy(out.sub)}</div> : null}
     </div>
   )
@@ -113,7 +124,9 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
       */}
       {schedule ? (
         <p className="af-wv-next" data-testid="waiver-next-run">
-          <span className="af-label">{copy('Next waiver run')}</span>{' '}
+          <span className="af-label">
+            {copy('Next waiver run')} <TopicTip topic="waiverRun" />
+          </span>{' '}
           <WaiverRunClock schedule={schedule} yourTime={es ? ' (tu hora)' : ' your time'} />
         </p>
       ) : null}
@@ -123,6 +136,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
           <div className="af-wv-tiles">
             <Tile
               label="Your FAAB"
+              help="faab"
               state={data.budget}
               render={(d: never) => {
                 const b = d as unknown as {
@@ -142,6 +156,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
 
             <Tile
               label="Waiver priority"
+              help="waiverPriority"
               state={data.waiverPriority}
               render={(d: never) => {
                 const w = d as unknown as { priority: number; leagueRosters: number }
@@ -163,6 +178,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
 
             <Tile
               label="Claims queued"
+              help="claimsQueued"
               state={data.claimsQueued}
               render={(d: never) => {
                 const c = d as unknown as { count: number }
@@ -301,7 +317,9 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
           >
             <ul className="af-wv-rules">
               <li>
-                <span className="af-wv-rule-key">{copy('Waiver type')}</span>
+                <span className="af-wv-rule-key">
+                  {copy('Waiver type')} <TopicTip topic="waiverType" />
+                </span>
                 {data.waiverType.available ? (
                   <span className="af-wv-rule-value">
                     {copy(data.waiverType.data.label)}
@@ -316,7 +334,9 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                 )}
               </li>
               <li>
-                <span className="af-wv-rule-key">{copy('Waivers run')}</span>
+                <span className="af-wv-rule-key">
+                  {copy('Waivers run')} <TopicTip topic="waiverRun" />
+                </span>
                 {data.processTime.available ? (
                   <span className="af-wv-rule-value">
                     {copy(data.processTime.data.dayLabel)}
@@ -359,7 +379,9 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                 )}
               </li>
               <li>
-                <span className="af-wv-rule-key">{copy('Tiebreak')}</span>
+                <span className="af-wv-rule-key">
+                  {copy('Tiebreak')} <TopicTip topic="tiebreak" />
+                </span>
                 {data.tiebreak.available ? (
                   <span className="af-wv-rule-value">{waiverRuleText(data.tiebreak.data, language)}</span>
                 ) : (
@@ -367,7 +389,9 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                 )}
               </li>
               <li>
-                <span className="af-wv-rule-key">{copy('Claim limits')}</span>
+                <span className="af-wv-rule-key">
+                  {copy('Claim limits')} <TopicTip topic="claimLimits" />
+                </span>
                 {data.claimLimits.available ? (
                   <span className="af-wv-rule-value">{waiverRuleText(data.claimLimits.data, language)}</span>
                 ) : (
