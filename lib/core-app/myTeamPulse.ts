@@ -172,7 +172,21 @@ export type MyTeamRow = {
   teamId: string | null
 }
 
+/**
+ * One starter flagged in TWO OR MORE of your lineups — the fact no single row can show.
+ * 'Jayden Daniels OUT' on one board row is a lineup problem; the same player ruled out in three
+ * leagues is one piece of news with three places to act on it.
+ */
+export type CrossLeagueFlag = {
+  id: string
+  name: string
+  status: 'out' | 'questionable'
+  leagues: Array<{ leagueId: string; leagueName: string; href: string }>
+}
+
 export type MyTeamPulse = {
+  /** Starters flagged in 2+ of your lineups, ruled-out first. Locked games and Best Ball excluded. */
+  crossLeague?: CrossLeagueFlag[]
   /** Lineups with at least one certain hole, most urgent first. */
   needs: MyTeamRow[]
   /** Lineups with nothing wrong we can see, soonest lock first. */
@@ -533,6 +547,7 @@ export async function getMyTeamPulse(
 
   /* ── 6. One row per checked lineup. ────────────────────────────────────── */
   const rows: MyTeamRow[] = []
+  const flaggedBy = new Map<string, CrossLeagueFlag>()
 
   for (const p of pending) {
     const week = weekBySport.get(p.sport) ?? null
@@ -568,6 +583,24 @@ export async function getMyTeamPulse(
       /* `bye` keeps him out of "N without a kickoff": the row used to say a starter's schedule
          was missing when the schedule says plainly that his team is not playing. */
       deadlines.push({ kickoff: at ?? null, issues: Number(isRuledOut(status)) + Number(onBye), bye: onBye })
+
+      /*
+       * The cross-league view, from the SAME status this row just counted. Skipped where there is
+       * nothing to do: a Best Ball lineup (the provider sets it) and a game already under way (locked).
+       */
+      const flagged = isRuledOut(status) ? 'out' : isAtRisk(status) ? 'questionable' : null
+      if (flagged && !p.bestBall && !(at && at.getTime() <= now.getTime())) {
+        const held: CrossLeagueFlag = flaggedBy.get(id) ?? { id, name: row.name, status: flagged, leagues: [] }
+        if (flagged === 'out') held.status = 'out'
+        if (!held.leagues.some((l) => l.leagueId === p.leagueId)) {
+          held.leagues.push({
+            leagueId: p.leagueId,
+            leagueName: p.leagueName,
+            href: `/core/my-team?league=${encodeURIComponent(p.leagueId)}#lineup-player-${id}`,
+          })
+        }
+        flaggedBy.set(id, held)
+      }
     }
 
     const severity = p.bestBall ? 0 : p.empty + out + (bye ?? 0)
@@ -642,7 +675,13 @@ export async function getMyTeamPulse(
     .filter((r) => r.severity === 0)
     .sort((a, b) => b.questionable - a.questionable || byLock(a, b))
 
+  const crossLeague = [...flaggedBy.values()]
+    .filter((f) => f.leagues.length >= 2)
+    .sort((a, b) => Number(b.status === 'out') - Number(a.status === 'out') || b.leagues.length - a.leagues.length || a.name.localeCompare(b.name))
+    .slice(0, 6)
+
   return {
+    crossLeague,
     needs: needsAll.slice(0, NEEDS_CAP),
     set: setAll.slice(0, SET_CAP),
     needsTotal: needsAll.length,

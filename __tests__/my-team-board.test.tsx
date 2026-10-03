@@ -82,7 +82,8 @@ describe('paused league accounting', () => {
     const text = container.textContent?.replace(/\s+/g, ' ')
     expect(text).toContain('57 of 64 active teams read')
     expect(text).toContain('7 of your 64 active claimed teams could not be checked')
-    expect(text).toContain('62 more leagues are either set or could not be read')
+    // The split, not "either set or could not be read": 7 unreadable are all hidden, the other 55 are set.
+    expect(text).toContain('62 more leagues are not shown: 55 set, 7 could not be read')
     expect(within(container).getByRole('link', { name: 'View all 65 →' }).getAttribute('href')).toBe(ALL_HREF)
   })
   it('says a foreign-id league cannot be matched, never that it has no starting lineup', () => {
