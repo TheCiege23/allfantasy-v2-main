@@ -2110,6 +2110,10 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.notifications.pushAll": "Push / in-app (all categories)",
     "settings.notifications.deliveryMixHint":
       "If some categories are on and some off, the switch shows off until they all match; flipping it applies to every category.",
+    "settings.notifications.emailUnsubscribed":
+      "You unsubscribed from alert emails on {{date}}, so none are being sent even where Email is on. Account notices still arrive.",
+    "settings.notifications.resumeEmail": "Turn alert emails back on",
+    "settings.notifications.resumeEmailError": "Your email alerts could not be turned back on. Please try again.",
     "settings.notifications.byCategory": "By category",
     "settings.notifications.smsNeedsConsent":
       "Texts are off: we have no SMS opt-in for your phone. Re-verify your phone in Security settings and tick the SMS box to turn them on.",

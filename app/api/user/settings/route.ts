@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { getSettingsSnapshot, saveSettingsOrchestrated } from "@/lib/user-settings"
 import type { SettingsSavePayload } from "@/lib/user-settings"
+import { resumeAlertEmails } from "@/lib/email/emailSubscription"
 
 export const dynamic = "force-dynamic"
 
@@ -50,6 +51,18 @@ export async function PATCH(req: Request) {
 
   const body = (await req.json().catch(() => ({}))) as SettingsSavePayload
   const current = await getSettingsSnapshot(session.user.id)
+
+  // Settings › Notifications › "Resume emails": undo an Unsubscribe for THIS account's address.
+  if (body?.emailResubscribe === true) {
+    const email = current?.profile.email
+    if (!email) return NextResponse.json({ error: "No email address on this account." }, { status: 400 })
+    try {
+      await resumeAlertEmails(email)
+      return NextResponse.json({ ok: true })
+    } catch {
+      return NextResponse.json({ error: "Your email alerts could not be resumed. Please try again." }, { status: 503 })
+    }
+  }
   const currentNotificationPreferences =
     (current?.profile.notificationPreferences &&
     typeof current.profile.notificationPreferences === "object"
