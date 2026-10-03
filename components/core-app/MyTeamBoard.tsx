@@ -27,6 +27,37 @@ import { relativeAge } from '@/lib/core-app/cardFreshness'
 import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import { rowScoreOf, summariseWeekScores, type RowScore, type WeekScoreSummary } from '@/lib/core-app/myTeamScoreboard'
 import { boardFilterHref } from '@/lib/core-app/myTeamBoardFilter'
+import type { LineupReminderStatus } from '@/lib/core-app/lineupReminderStatus'
+
+const REMINDER_SETTINGS_HREF = `/settings?tab=notifications&returnTo=${encodeURIComponent('/core/my-team')}`
+
+/**
+ * Whether Chimmy's pre-lock check will reach you — see `lineupReminderStatus.ts`. Said once, under
+ * the rows: it is how this board's warnings reach a manager who is not looking at it.
+ */
+function ReminderLine({ status, es }: { status: LineupReminderStatus; es: boolean }) {
+  const when = es
+    ? `una vez por semana, entre ${status.opensHoursBefore} y ${status.closesHoursBefore} horas antes del bloque principal de la NFL`
+    : `once a week, ${status.closesHoursBefore}–${status.opensHoursBefore} hours before the main NFL slate`
+  return (
+    <p className="af-bd-note af-bd-note--plain af-bd-note--reminder" data-state={status.state}>
+      {status.state === 'on'
+        ? es
+          ? `Recordatorio de alineación activado: ${when}, Chimmy revisa cada alineación y te escribe solo si alguna necesita arreglo. `
+          : `Lineup reminder is on: ${when}, Chimmy checks every lineup and messages you only if one needs fixing. `
+        : status.state === 'muted'
+          ? es
+            ? 'Las alertas de alineación de Chimmy están silenciadas, así que nadie revisará estas alineaciones antes del inicio. '
+            : 'Chimmy’s lineup alerts are muted, so nothing will check these lineups for you before kickoff. '
+          : es
+            ? `Recordatorio de alineación desactivado. Actívalo y Chimmy revisará cada alineación ${when}, y te escribirá solo si alguna necesita arreglo. `
+            : `Lineup reminder is off. Turn it on and Chimmy checks every lineup ${when}, messaging you only if one needs fixing. `}
+      <Link href={REMINDER_SETTINGS_HREF}>
+        {status.state === 'on' ? (es ? 'Gestionar' : 'Manage') : es ? 'Activarlo' : 'Turn it on'}
+      </Link>
+    </p>
+  )
+}
 
 /**
  * `/core/my-team` with no league held — the cross-league lineup board.
@@ -83,6 +114,8 @@ export type MyTeamBoardProps = {
   lineups?: WeekLineups | null
   /** The board's own route — what a filter chip appends `?format=…` to, and "All" returns to. */
   baseHref?: string
+  /** Chimmy's pre-lock check for this user. Null or absent: the line is omitted. */
+  lineupReminder?: LineupReminderStatus | null
 }
 
 /** "Ghosts of Gridiron · 9 starters" — each clause dropped rather than faked. */
@@ -436,7 +469,7 @@ function CrossLeagueStrip({ flags }: { flags: CrossLeagueFlag[] }) {
   )
 }
 
-export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/core/my-team' }: MyTeamBoardProps) {
+export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/core/my-team', lineupReminder = null }: MyTeamBoardProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const nowMs = now ?? Date.now()
@@ -745,6 +778,9 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
           {copy('The bye check did not run this week — the ingested schedule was too incomplete to tell a bye from a gap in our own data, so no row claims to be bye-clear.')}
         </p>
       ) : null}
+
+      {/* The check reads NFL lineups only (`loadRegularSeasonGames`); under an NBA chip it would describe nothing on screen. */}
+      {lineupReminder && rows.some((r) => (r.sport ?? 'NFL') === 'NFL') ? <ReminderLine status={lineupReminder} es={es} /> : null}
 
       <FooterSummary
         hidden={hidden}
