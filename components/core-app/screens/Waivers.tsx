@@ -81,6 +81,8 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
   const { language } = useOptionalLanguage()
   const es = language === 'es'
   const copy = (english: string) => coreUiCopy(english, language)
+  /** A league AllFantasy runs takes its claims (and its free-agent board) here; any other is only read. */
+  const claimsHere = data.league.platform !== 'manual' && platformLabel(data.league.platform) === 'AllFantasy'
   const providerClaim = verifiedHandoff(
     { id: data.league.id, platform: data.league.platform, platformLeagueId: data.league.platformLeagueId ?? null, name: data.league.name },
     'waivers',
@@ -243,10 +245,18 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
               route reads `searchParams.get("leagueId")` and renders "No league
               selected" for anything else. Written as `?league=` first, which sent
               someone from a working waivers tab to an empty page.
+
+              🛑 NATIVE LEAGUES ONLY. That board reads AllFantasy's own `Roster` rows to decide who is
+              taken, and an imported league has none — so every player in the sport read as available
+              (A.J. Brown, Tom Brady, a 49ers assistant coach), every projection read 0.0, and the budget
+              fell back to a hard-coded $100 against a real $1,000 (Elimination Station 2, 2026-10-03).
+              An imported league browses on its platform: the provider handoff below IS its player list.
             */}
-            <Link className="af-btn af-wv-browse" href={`/waiver-wire?leagueId=${encodeURIComponent(data.league.id)}`}>
-              {copy('Browse every available player')}
-            </Link>
+            {claimsHere ? (
+              <Link className="af-btn af-wv-browse" href={`/waiver-wire?leagueId=${encodeURIComponent(data.league.id)}`}>
+                {copy('Browse every available player')}
+              </Link>
+            ) : null}
 
             {/*
               An imported league's claims are made on its platform, so the screen hands over to the
@@ -266,7 +276,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
           <p className="af-wv-footnote">
             {data.league.platform === 'manual'
               ? copy('Claims are made on your platform. AllFantasy only reads your league.')
-              : platformLabel(data.league.platform) === 'AllFantasy'
+              : claimsHere
                 ? copy('Claims for this league are made here, on AllFantasy.')
                 : es ? `Los reclamos se hacen en ${platformLabel(data.league.platform)}. AllFantasy solo lee tu liga.` : `Claims are made on ${platformLabel(data.league.platform)}. AllFantasy only reads your league.`}
           </p>

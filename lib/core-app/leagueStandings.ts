@@ -608,7 +608,15 @@ export async function getLeagueStandings(
             available: false,
             reason: `a pace needs at least ${MIN_WEEKS_TO_PROJECT} scored weeks behind it — you have ${youBoard.weeksPlayed}`,
           }
-        : weeksRemaining === 0
+        : /*
+           * ⚠ NO HEAD-TO-HEAD MEANS NO SCHEDULE, NOT NO SEASON. `gamesLeft` counts unplayed PAIRINGS, and a
+           * guillotine or other all-play league writes one matchupId per roster — so it has none, ever, and
+           * read "the regular season is over" in week 4 (Elimination Station 2, 2026-10-03). Such a league's
+           * length is how long you survive, which no pace can project; say that instead.
+           */
+          !board.hasHeadToHead
+          ? { available: false, reason: 'this league has no head-to-head schedule, so there is no fixed number of weeks left to project' }
+          : weeksRemaining === 0
           ? { available: false, reason: 'the regular season is over — this is the final total' }
           : (() => {
               const values = final

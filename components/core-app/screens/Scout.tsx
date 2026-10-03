@@ -41,6 +41,13 @@ export type ScoutProps = {
    */
   gamePlanHref: string
   matchupHref: string
+  /**
+   * The league's standings — where an elimination week's whole field is listed against the cut,
+   * with every lineup's projection. The elimination banner links here, not to `matchupHref`: a
+   * guillotine league's Matchup screen only says there is no head-to-head, so "Every team against
+   * the cut" landed on a page with no teams on it (2026-10-03).
+   */
+  standingsHref: string
   tradesHref: string
   /**
    * Competitive Edge — every other manager's trade and waiver record. Null to a viewer whose plan
@@ -325,7 +332,7 @@ function OpponentBanner({ data, matchupHref, tradesHref }: { data: ScoutData; ma
  * from the rail's read; "projected" said out loud before a snap is played, because then the rank comes
  * from projections, not points.
  */
-function EliminationBanner({ data, standing, matchupHref }: { data: ScoutData; standing: RailStanding | null; matchupHref: string }) {
+function EliminationBanner({ data, standing, standingsHref }: { data: ScoutData; standing: RailStanding | null; standingsHref: string }) {
   const me = data.managers.available ? data.managers.data.find((m) => m.isYou) ?? null : null
   if (me?.eliminated) {
     return (
@@ -354,7 +361,7 @@ function EliminationBanner({ data, standing, matchupHref }: { data: ScoutData; s
         <p className="af-sc-vs-h2h">The cut line is not readable yet this week.</p>
       )}
       <div className="af-sc-vs-links">
-        <Link className="af-sc-cta af-sc-cta--primary" href={matchupHref}>
+        <Link className="af-sc-cta af-sc-cta--primary" href={standingsHref}>
           Every team against the cut &rarr;
         </Link>
       </div>
@@ -382,6 +389,7 @@ export function Scout({
   data,
   gamePlanHref,
   matchupHref,
+  standingsHref,
   tradesHref,
   edge = null,
   edgeAccess = null,
@@ -411,7 +419,7 @@ export function Scout({
       </header>
 
       {data.format.elimination ? (
-        <EliminationBanner data={data} standing={eliminationStanding} matchupHref={matchupHref} />
+        <EliminationBanner data={data} standing={eliminationStanding} standingsHref={standingsHref} />
       ) : (
         <OpponentBanner data={data} matchupHref={matchupHref} tradesHref={tradesHref} />
       )}

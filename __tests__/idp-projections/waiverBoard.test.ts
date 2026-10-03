@@ -15,6 +15,7 @@ vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => ({
   // The AF engine column: the carry-over arithmetic stays real, and the read finds no AF rows.
   afEngineForLeague: (await importOriginal<typeof import('@/lib/core-app/playerProjections')>()).afEngineForLeague,
   lookupAfEngineProjections: vi.fn(async () => new Map()),
+  latestProjectionWeek: vi.fn(async () => ({ season: '2026', week: 4 })),
   lookupProjections: vi.fn(async (ids: readonly string[]) => {
     const feed: Record<string, { name: string; line: number }> = {
       '6038': { name: 'Wrong Player', line: 5 },
@@ -34,6 +35,8 @@ vi.mock('@/lib/projections/leagueScoring', () => ({
   computeLeagueProjectedPoints: (line: Record<string, number>) => ({ points: Number(line.rec) }),
 }))
 vi.mock('@/lib/waivers/recentFormProjection', () => ({ projectFromRecentForm: vi.fn(async () => new Map()) }))
+// Nobody ruled out unless a test says so.
+vi.mock('@/lib/core-app/unavailableStarters', () => ({ loadUnavailableBySport: vi.fn(async () => new Map()) }))
 
 /**
  * The waiver board this replaces read nothing at all: `waiverRecommendationService` selects
@@ -202,5 +205,30 @@ describe('loadWaiverBoard — foreign roster ids', () => {
     const out = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1', unavailable: ['6038'] })
     expect(out.candidates[0]?.gain).toBe(12) // 12 against a zero
     expect(out.candidates[0]?.displaces?.name).toBe('Wrong Player')
+  })
+
+  /*
+   * The Waivers screen passes no `unavailable` — only My Team's Lineup check did. So an IR back's stale
+   * projection sat in "your lineup" (97.68 against a lineup projected 81.5, Elimination Station 2,
+   * 2026-10-03) and sank every free agent's gain. The board now reads who is out itself.
+   */
+  it('zeroes a ruled-out roster player on its own, with no caller list — the Waivers screen passes none', async () => {
+    const { loadUnavailableBySport } = await import('@/lib/core-app/unavailableStarters')
+    vi.mocked(loadUnavailableBySport).mockResolvedValueOnce(new Map([['NFL', new Set(['6038'])]]))
+    const board = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    expect(board.currentLineupPoints).toBe(0)
+    expect(board.candidates[0]?.gain).toBe(12)
+    expect(vi.mocked(loadUnavailableBySport)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sleeperIds: ['6038'], sports: ['NFL'], season: 2026, week: 4 }),
+    )
+  })
+
+  it('a failed availability read changes nothing — the board as before', async () => {
+    const { loadUnavailableBySport } = await import('@/lib/core-app/unavailableStarters')
+    vi.mocked(loadUnavailableBySport).mockRejectedValueOnce(new Error('db down'))
+    const board = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    expect(board.state).toBe('ok')
+    expect(board.currentLineupPoints).toBe(5)
+    expect(board.candidates[0]?.gain).toBe(7)
   })
 })

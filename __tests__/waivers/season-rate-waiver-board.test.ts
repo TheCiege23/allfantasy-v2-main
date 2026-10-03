@@ -116,6 +116,8 @@ vi.mock('@/lib/core-app/playerProjections', async (importOriginal) => ({
   // The AF engine column: the carry-over arithmetic stays real, and the read finds no AF rows.
   afEngineForLeague: (await importOriginal<typeof import('@/lib/core-app/playerProjections')>()).afEngineForLeague,
   lookupAfEngineProjections: vi.fn(async () => new Map()),
+  // No week on file: the board's availability read is skipped, which this file does not test.
+  latestProjectionWeek: vi.fn(async () => null),
   lookupProjections: vi.fn(async (ids: readonly string[]) =>
     new Map(
       ids
