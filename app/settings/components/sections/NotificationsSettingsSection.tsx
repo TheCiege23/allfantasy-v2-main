@@ -26,6 +26,7 @@ import type { SettingsProfile } from "./settings-types"
 import { EnableWebPushCard } from "@/components/notifications/EnableWebPushCard"
 import { IosAppPushCard } from "@/components/notifications/IosAppPushCard"
 import { hasSmsConsent } from "@/lib/sms/smsConsent"
+import TeamFollowsSettingsCard from "@/components/settings/TeamFollowsSettingsCard"
 
 const CHIMMY_SHORTCUTS_DISABLED_KEY = "af_chimmy_shortcuts_disabled"
 
@@ -580,6 +581,9 @@ export function NotificationsSettingsSection({
       </div>
 
       <div className="space-y-2">
+        {/* Teams you follow — the permanent home for the one-time My Team prompt's choices. Its alerts
+            use the "Teams you follow" category in the list right below. */}
+        <TeamFollowsSettingsCard />
         <p className="text-sm font-medium text-[var(--muted2)]">{t("settings.notifications.byCategory")}</p>
         {profile?.phoneVerifiedAt && !smsConsented ? (
           <p className="text-xs text-[var(--muted2)]" data-testid="sms-needs-consent">

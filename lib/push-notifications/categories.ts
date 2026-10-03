@@ -27,6 +27,8 @@ export const PUSH_NOTIFICATION_CATEGORIES = [
   "trade_accept_reject",
   // A player you follow (2026-09-14): the whole point of following is being told.
   "followed_players",
+  // A team you follow (2026-10-03): same reason as a followed player. Capped per day at the sender.
+  "followed_teams",
   // Someone messaged you (2026-09-25). Without these the dispatcher drops the push before the
   // category's own push switch is ever read, however the rest of the path is built.
   "direct_messages",

@@ -82,6 +82,7 @@ import { resolveLeagueScope } from '@/lib/core-app/finderLeaguePicks'
 import { getFinderLeaguePicks } from '@/lib/core-app/finderLeaguePicksStore'
 import { getLeaguePreferences } from '@/lib/core-app/leaguePreferencesStore'
 import { hasSmsConsent } from '@/lib/sms/smsConsent'
+import { shouldShowTeamFollowPrompt } from '@/lib/follows/teamFollows'
 import { applyLeagueOrder } from '@/lib/core-app/leaguePreferences'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import ScreenLoadError from '@/components/core-app/ScreenLoadError'
@@ -717,10 +718,15 @@ export default async function AfCorePage({
    * The account's favorite / hidden / ordered leagues (lib/core-app/leaguePreferences.ts), read in
    * the same wave as the list it arranges. Never throws — no preferences means every league, in order.
    */
-  const [leagueListPayload, pausedSyncKeys, leaguePrefs] = await Promise.all([
+  /*
+   * The "follow your teams" prompt (lib/follows/teamFollows): shown once — never seen, follows none,
+   * follows available. Read in the same wave; it never throws (a failed read answers false).
+   */
+  const [leagueListPayload, pausedSyncKeys, leaguePrefs, teamFollowPromptEligible] = await Promise.all([
     getDashboardLeagueListForUser(userId, { rosterDetail: 'count' }).catch(() => null),
     getPausedSyncKeys(userId).catch(() => null),
     getLeaguePreferences(userId),
+    shouldShowTeamFollowPrompt(userId),
   ])
   const leagues = (leagueListPayload?.leagues ?? []) as unknown as UserLeague[]
 
@@ -1614,6 +1620,7 @@ export default async function AfCorePage({
       notificationCount={unreadNotifications}
       profile={shellProfile}
       smsOptInEligible={smsOptInEligible}
+      teamFollowPromptEligible={teamFollowPromptEligible}
       /*
        * The activity snapshot's count, on every screen. The Live screen itself publishes the
        * count from the slate it loaded, which replaces this one while that screen is open.

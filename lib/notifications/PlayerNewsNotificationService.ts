@@ -20,6 +20,8 @@ import type { NewsCategory } from '@/lib/workers/x-news-ingestion'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { classifyPlayerNewsCategory } from '@/lib/news/player-news-category'
 import { listFollowerIdsForPlayer } from '@/lib/follows/playerFollows'
+import { listFollowerIdsForTeam } from '@/lib/follows/teamFollows'
+import { resolveNewsTeam, withinTeamFollowDailyCap } from '@/lib/follows/teamFollowAlerts'
 import { alreadyToldAbout, recordToldAbout } from '@/lib/notifications/playerNewsRepeatGuard'
 
 type OptionalPlayerNewsNotificationModel = {
@@ -322,6 +324,10 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   recipients: number
   /** Of `recipients`, users told because they FOLLOW the player and roster him nowhere. */
   followerRecipients: number
+  /** Of `recipients`, users told because they follow the player's TEAM (and not him, nor roster him). */
+  teamFollowerRecipients: number
+  /** Team followers not told because they hit today's team-alert cap. */
+  teamFollowCapped: number
   /** Rows with no rostering manager AND no follower — nobody to tell. */
   noRoster: number
   /** Rows fetched but never considered because the budget ran out. Zero means the run completed. */
@@ -354,6 +360,8 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
   let notified = 0
   let recipients = 0
   let followerRecipients = 0
+  let teamFollowerRecipients = 0
+  let teamFollowCapped = 0
   let noRoster = 0
   let deferred = 0
   let repeatsSuppressed = 0
@@ -418,7 +426,19 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
     const followers = await listFollowerIdsForPlayer(row.sport, row.playerName).catch(() => null)
     const allFollowersOnly = (followers ?? []).filter((id) => !rostered.has(id))
 
-    if (byLeague.size === 0 && allFollowersOnly.length === 0) { noRoster++; continue }
+    /*
+     * Team followers (owner's call, 2026-10-03): anyone following this player's TEAM, under their own
+     * `followed_teams` switch. Same rule as above, one level wider — minus everyone already told via a
+     * roster or a player follow, so one story is one buzz. The team comes from the row's own text
+     * through the resolver (lib/follows/teamResolver), or the player's current team when the row has
+     * none; an ambiguous row resolves to no team and tells no team follower.
+     */
+    const teamAbbr = await resolveNewsTeam(row.sport, row.team, row.playerName).catch(() => null)
+    const teamFollowers = teamAbbr ? await listFollowerIdsForTeam(row.sport, teamAbbr).catch(() => null) : null
+    const playerFollowerSet = new Set(allFollowersOnly)
+    const allTeamFollowersOnly = (teamFollowers ?? []).filter((id) => !rostered.has(id) && !playerFollowerSet.has(id))
+
+    if (byLeague.size === 0 && allFollowersOnly.length === 0 && allTeamFollowersOnly.length === 0) { noRoster++; continue }
 
     /*
      * ONE ALERT PER PERSON PER STORY. Everyone already told this story (or this player's same status
@@ -427,7 +447,7 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
      * under the first league, not three times: `dedupePrefix` only ever collapsed the bell row.
      */
     const news = { sport: row.sport, playerName: row.playerName, headline: row.headline, category }
-    const told = await alreadyToldAbout([...rostered, ...allFollowersOnly], news)
+    const told = await alreadyToldAbout([...rostered, ...allFollowersOnly, ...allTeamFollowersOnly], news)
     const assigned = new Set<string>(told)
     for (const [leagueId, ids] of byLeague) {
       const fresh = new Set([...ids].filter((id) => !assigned.has(id)))
@@ -436,8 +456,12 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       else byLeague.delete(leagueId)
     }
     const followersOnly = allFollowersOnly.filter((id) => !told.has(id))
+    const uncappedTeamFollowers = allTeamFollowersOnly.filter((id) => !told.has(id))
     repeatsSuppressed += told.size
-    if (byLeague.size === 0 && followersOnly.length === 0) continue
+    if (byLeague.size === 0 && followersOnly.length === 0 && uncappedTeamFollowers.length === 0) continue
+    // The daily cap is consumed only for people who would otherwise be told THIS story.
+    const teamFollowersOnly = await withinTeamFollowDailyCap(uncappedTeamFollowers)
+    teamFollowCapped += uncappedTeamFollowers.length - teamFollowersOnly.length
 
     const icon = CATEGORY_ICONS[category] ?? '📰'
     const label = CATEGORY_LABELS[category] ?? 'News'
@@ -474,7 +498,23 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
       recipients += followersOnly.length
       followerRecipients += followersOnly.length
     }
-    const toldNow: string[] = followersOnly.slice()
+    if (teamFollowersOnly.length > 0) {
+      await dispatchNotification({
+        userIds: teamFollowersOnly,
+        category: 'followed_teams',
+        type: isInjury ? 'player_injury_update' : 'player_news_update',
+        title,
+        body: row.headline.slice(0, 500),
+        // No league: a team follow belongs to none, so no league mute applies either.
+        leagueId: null,
+        severity: isInjury ? 'high' : 'medium',
+        dedupePrefix: `player-news:${row.id}`,
+        meta: { playerName: row.playerName, team: teamAbbr, sport: row.sport, newsCategory: category, followedTeam: teamAbbr },
+      }).catch(() => {})
+      recipients += teamFollowersOnly.length
+      teamFollowerRecipients += teamFollowersOnly.length
+    }
+    const toldNow: string[] = [...followersOnly, ...teamFollowersOnly]
     for (const ids of byLeague.values()) toldNow.push(...ids)
     await recordToldAbout(toldNow, news)
     notified++
@@ -488,5 +528,15 @@ export async function dispatchPendingPlayerNewsNotifications(input?: {
 
   // `scanned` counts rows actually considered, not rows fetched — otherwise a truncated run
   // reports the same number as a complete one and the deferral is invisible in the response.
-  return { scanned: stamped.length, notified, recipients, followerRecipients, noRoster, deferred, repeatsSuppressed }
+  return {
+    scanned: stamped.length,
+    notified,
+    recipients,
+    followerRecipients,
+    teamFollowerRecipients,
+    teamFollowCapped,
+    noRoster,
+    deferred,
+    repeatsSuppressed,
+  }
 }
