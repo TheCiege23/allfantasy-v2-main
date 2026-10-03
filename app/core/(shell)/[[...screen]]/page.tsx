@@ -87,6 +87,7 @@ import { getMyTeamData } from '@/lib/core-app/myTeam'
 import MyTeamBoard from '@/components/core-app/MyTeamBoard'
 import { getMyTeamPulse } from '@/lib/core-app/myTeamPulse'
 import { boardFilterFromParams } from '@/lib/core-app/myTeamBoardFilter'
+import { getLineupReminderStatus } from '@/lib/core-app/lineupReminderStatus'
 import { getMatchupData } from '@/lib/core-app/matchup'
 import { buildMatchupStrip } from '@/lib/live/matchupStrip'
 import MatchupPulseBoard from '@/components/core-app/MatchupPulseBoard'
@@ -2597,8 +2598,11 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * running it while a single league is selected would put that whole board on
    * the critical path of a screen that never renders it.
    */
+  const onMyTeamBoard = activeKey === 'my-team' && !selectedLeagueId && sp.all !== '1' && sp.all !== 'true'
+  /* Started before the pulse is awaited, so its two small reads overlap the board's. Null on failure: the line is omitted. */
+  const lineupReminderPromise = onMyTeamBoard ? getLineupReminderStatus(userId).catch(() => null) : Promise.resolve(null)
   const myTeamPulse =
-    activeKey === 'my-team' && !selectedLeagueId && sp.all !== '1' && sp.all !== 'true'
+    onMyTeamBoard
       /* `?format=` / `?sport=` / `?platform=` — the board's filter chips, applied before the cap. */
       ? await getMyTeamPulse(userId, new Date(), pausedSyncLeagueIds ?? undefined, boardFilterFromParams(sp)).catch((error: unknown) => {
           console.error('[core/my-team] pulse read failed', error)
@@ -2606,6 +2610,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           return null
         })
       : null
+  const lineupReminder = await lineupReminderPromise
 
   /* Same split as my-team above: a failed read must not read as "no league". */
   let matchupLoadFailed = false
@@ -4389,7 +4394,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             leagues={rail}
           />
         ) : (
-          <MyTeamBoard pulse={myTeamPulse} allHref="/core/my-team?all=1" lineups={ctx.weekLineups} />
+          <MyTeamBoard pulse={myTeamPulse} allHref="/core/my-team?all=1" lineups={ctx.weekLineups} lineupReminder={lineupReminder} />
         )
       ) : activeKey === 'matchup' ? (
         matchup ? (
