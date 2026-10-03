@@ -24,7 +24,8 @@ import { getSeasonBoard, getSeasonStatsBoard } from '@/lib/sports-data/sleeperMa
 import { getMarketValues, playerValue } from '@/lib/trade-intel/marketValueService'
 
 const SLEEPER = 'https://api.sleeper.app/v1'
-const CACHE_PREFIX = 'waiver-intel:v1:'
+/* v2: targets carry `unavailable` — a v1 payload would keep an IR player unflagged for its hour. */
+const CACHE_PREFIX = 'waiver-intel:v2:'
 const CACHE_TTL_MS = 60 * 60 * 1000 // 1h — waivers move faster than trades
 const MAX_CHAIN = 12
 const MAX_WEEKS = 18
@@ -89,6 +90,13 @@ export type WaiverTarget = {
   fillsSlots: string[]
   suggestedBid: number | null
   reasoning: string[]
+  /**
+   * Set when he cannot play THIS week — ruled out (IR, out, suspended) or his club is on bye. The bid
+   * stays: a stash is a real move in a dynasty or keeper league. But he is ranked after everyone who
+   * can play, and the row says why, so a manager trying to survive one week is never handed a $600
+   * suggestion on a player who cannot help him (Jordan Mason, IR after thumb surgery, 2026-10-03).
+   */
+  unavailable?: { kind: 'ruled_out'; status: string } | { kind: 'bye' }
 }
 export type WaiverIntelPayload = {
   version: 1
@@ -113,6 +121,24 @@ export type WaiverIntelPayload = {
   bidQuotes?: Record<string, number>
   formulaNotes: string[]
   missing: string[]
+}
+
+/**
+ * Who among these players cannot play in the week being played, and why — through the shared reader,
+ * so this list and the waiver board agree. Fails open: an unreadable week or a failed read flags no
+ * one, which is the list as it was.
+ */
+async function readAbsences(sleeperIds: readonly string[]): Promise<Map<string, NonNullable<WaiverTarget['unavailable']>>> {
+  try {
+    const { latestProjectionWeek } = await import('@/lib/core-app/playerProjections')
+    const at = await latestProjectionWeek()
+    if (!at || sleeperIds.length === 0) return new Map()
+    const { loadAbsencesBySport } = await import('@/lib/core-app/unavailableStarters')
+    const bySport = await loadAbsencesBySport({ sleeperIds, sports: ['NFL'], season: Number(at.season), week: at.week })
+    return bySport.get('NFL') ?? new Map()
+  } catch {
+    return new Map()
+  }
 }
 
 function quantile(sorted: number[], q: number): number | null {
@@ -233,7 +259,9 @@ async function buildWaiverIntel(
       if (q != null) bidQuotes[p.playerId] = q
     }
     const candidates = valued.slice(0, 10)
+    const absences = await readAbsences(candidates.map(({ p }) => p.playerId))
     for (const { p, v } of candidates) {
+      const absence = absences.get(p.playerId)
       const fills = openSlots.filter((slot) => (SLOT_ACCEPTS[slot] ?? []).includes(p.position ?? ''))
       const suggestedBid: number | null = bidFor(v)
       const reasoning: string[] = [`market value ${v.toLocaleString()} (${values.mode} chart)`]
@@ -246,6 +274,13 @@ async function buildWaiverIntel(
         )
       }
       if (fills.length > 0) reasoning.push(`fills your open ${fills.join(' / ')} slot`)
+      if (absence) {
+        reasoning.unshift(
+          absence.kind === 'bye'
+            ? 'on bye this week — he cannot score for you until next week'
+            : `${absence.status} — he cannot play this week, so any bid is a stash`,
+        )
+      }
       targets.push({
         playerId: p.playerId,
         name: p.name,
@@ -255,10 +290,16 @@ async function buildWaiverIntel(
         fillsSlots: fills,
         suggestedBid,
         reasoning,
+        ...(absence ? { unavailable: absence } : {}),
       })
     }
-    // Needs first, then raw value.
-    targets.sort((a, b) => (b.fillsSlots.length > 0 ? 1 : 0) - (a.fillsSlots.length > 0 ? 1 : 0) || (b.marketValue ?? 0) - (a.marketValue ?? 0))
+    // Who can play this week first, then needs, then raw value.
+    targets.sort(
+      (a, b) =>
+        (a.unavailable ? 1 : 0) - (b.unavailable ? 1 : 0) ||
+        (b.fillsSlots.length > 0 ? 1 : 0) - (a.fillsSlots.length > 0 ? 1 : 0) ||
+        (b.marketValue ?? 0) - (a.marketValue ?? 0),
+    )
   }
 
   return {

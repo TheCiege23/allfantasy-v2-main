@@ -1034,3 +1034,94 @@ html[data-mode='af'] .af-core {
 .af-commish-c::before {
   content: "C";
 }
+
+/*
+ * ── The "?" (InfoTip.tsx) — one explanation control for all of /core (2026-10-03) ──
+ *
+ * A 14px ringed "?" with a 30px hit area (the pseudo-element), so it sits inside a heading or a
+ * label without moving it and is still easy to hit; 44px on a touch screen. The popover is in the
+ * top layer once open but still INHERITS from where it sits — usually an uppercase, letter-spaced,
+ * right-aligned label — so every one of those is undone here.
+ *
+ * Its own top-level block at end of file, per this file's convention.
+ */
+.af-core .af-info-tip-wrap {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+.af-core .af-info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  /* 11px is the app floor (__tests__/core-app/type-floor.test.ts) — the glyph too, not only body text. */
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 0.85;
+  cursor: pointer;
+}
+.af-core .af-info-tip::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+@media (pointer: coarse) {
+  .af-core .af-info-tip::after {
+    inset: -15px;
+  }
+}
+.af-core .af-info-tip:hover,
+.af-core .af-info-tip:focus-visible {
+  opacity: 1;
+}
+.af-core .af-info-tip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.af-core .af-info-pop {
+  /* Not left to Tailwind preflight: content-box adds the padding ON TOP of max-width (390px edge to edge at 390). */
+  box-sizing: border-box;
+  max-width: min(360px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border: 1px solid var(--accent-line);
+  border-radius: 14px;
+  background: var(--surface2);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+}
+.af-core .af-info-pop > strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 14px;
+}
+.af-core .af-info-pop-body {
+  display: block;
+}
+.af-core .af-info-para {
+  display: block;
+  margin: 0 0 6px;
+}
+.af-core .af-info-para:last-child {
+  margin-bottom: 0;
+}

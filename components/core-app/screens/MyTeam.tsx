@@ -21,6 +21,7 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
+import { InfoTip } from '@/components/core-app/InfoTip'
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -820,14 +821,28 @@ const AF_PTS_EXPLAINER =
   'defenders are priced by AllFantasy’s IDP model instead. ' +
   'AF is AllFantasy’s own projection engine, adjusted to the same settings.'
 
+/** The matchup card's two figures per side. The AF line explained itself only by a hover title. */
+const MATCHUP_NUMBERS_EXPLAINER =
+  'The large number is Sleeper’s projection for each lineup, re-scored under your league’s settings. ' +
+  'AF beneath it is AllFantasy’s own engine on the same lineup and the same settings.'
+const MATCHUP_COVERAGE_EXPLAINER =
+  '“from 5 of 9” means only five starters have a projection yet, so that total reads low.'
+
+/** What OWN and START are — the two market columns the explainer used to leave to a hover title. */
+const MARKET_COLUMNS_EXPLAINER =
+  'OWN is the share of AllFantasy leagues that roster him. START is, of those leagues, how many ' +
+  'start him this week — byes and injuries move it on their own. Both show on wide screens.'
+
 function ProjHeader() {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
-  /* Two headers render (Starters, Bench), so each popover needs its own id. */
-  const popId = useId()
   return (
     <div className="af-mt-projhead">
-      <span className="af-label af-mt-projhead--af" title={copy(AF_PTS_EXPLAINER)}>
+      {/*
+        No `title` on this heading: the popover is its descendant, and a title here would pop a
+        second, hover-only copy of the same text over the popover itself.
+      */}
+      <span className="af-label af-mt-projhead--af">
         {PROJECTION_PROVIDER_LABEL}
         {/*
           The question mark is the point: two numbers sitting side by side with
@@ -835,12 +850,14 @@ function ProjHeader() {
 
           ⚠ IT WAS A `span role="img"` WITH A TOOLTIP — the one explanation of the page's two
           numbers, and nothing could OPEN it but a mouse hovering a 12px circle. Not focusable,
-          not tappable (audit 2026-10-02). Now a button driving a native popover: focus, Enter,
-          Escape and click-away come from the platform rather than from state this file keeps.
+          not tappable (audit 2026-10-02). Now the shared `InfoTip`, which keeps its popover inside
+          its own wrapper — so the narrow page's `nth-child` rules still hide OWN and START, not AF.
+          It explains all four columns: one "?" per header, never one per row.
         */}
-        <button type="button" className="af-mt-info" popoverTarget={popId} aria-label={copy('What Sleeper and AF mean')}>
-          ?
-        </button>
+        <InfoTip label={copy('What Sleeper, AF, OWN and START mean')} title={copy('What these columns mean')}>
+          <span className="af-info-para">{copy(AF_PTS_EXPLAINER)}</span>
+          <span className="af-info-para">{copy(MARKET_COLUMNS_EXPLAINER)}</span>
+        </InfoTip>
       </span>
       <span className="af-label af-mt-projhead--engine" title={copy("AllFantasy's own projection engine, adjusted to your league's scoring")}>
         AF
@@ -854,15 +871,6 @@ function ProjHeader() {
       >
         START
       </span>
-      {/*
-        LAST ON PURPOSE: the narrow-page rules hide the 3rd and 4th headings by `nth-child`, so a
-        popover placed earlier would shift them and hide AF instead of START. Hidden until opened,
-        and in the top layer once it is, so it never takes a grid cell.
-      */}
-      <div id={popId} popover="auto" className="af-mt-info-pop" role="note">
-        <strong>{copy('Sleeper and AF')}</strong>
-        <p>{copy(AF_PTS_EXPLAINER)}</p>
-      </div>
     </div>
   )
 }
@@ -1603,6 +1611,7 @@ export function MyTeam({ data }: MyTeamProps) {
     : null
 
 
+
   /*
    * The per-lineup "share" helper lived here and has been DELETED, not merely
    * unused. It divided a player's projection by his own team's total, which is
@@ -1844,6 +1853,16 @@ export function MyTeam({ data }: MyTeamProps) {
           <div className="af-mt-mu-head">
             <h2 className="af-label">
               {copy('Week')} {data.nextMatchup.data.week} · {copy(bestBall ? 'listed starter projections' : 'projected matchup')}
+              {/*
+                One "?" for the card, not one per side: both sides carry the same two numbers. Only
+                when there ARE numbers — explaining two dashes is noise.
+              */}
+              {data.nextMatchup.data.you.projected != null ? (
+                <InfoTip label={copy('What the matchup numbers mean')} title={copy('The two numbers')}>
+                  <span className="af-info-para">{copy(MATCHUP_NUMBERS_EXPLAINER)}</span>
+                  <span className="af-info-para">{copy(MATCHUP_COVERAGE_EXPLAINER)}</span>
+                </InfoTip>
+              ) : null}
             </h2>
             {data.nextMatchup.data.bye ? (
               <span className="af-mt-mu-bye">{copy('no opponent recorded — bye')}</span>

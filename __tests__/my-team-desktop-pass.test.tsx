@@ -87,7 +87,7 @@ const page = (over: Record<string, unknown> = {}) => ({
 describe('the "?" is a control now', () => {
   it('is a button that targets its own popover, in each header', () => {
     const { container } = render(<MyTeam data={page()} />)
-    const buttons = [...container.querySelectorAll('button.af-mt-info')]
+    const buttons = [...container.querySelectorAll('.af-mt-projhead button.af-info-tip')]
     expect(buttons.length).toBe(2) // Starters and Bench
     const ids = buttons.map((b) => b.getAttribute('popovertarget'))
     expect(new Set(ids).size).toBe(2)
@@ -96,14 +96,20 @@ describe('the "?" is a control now', () => {
       expect(pop.getAttribute('popover')).toBe('auto')
       expect(pop.textContent).toContain('re-scored under YOUR league’s settings')
     }
-    expect(container.querySelector('.af-mt-info[role="img"]')).toBeNull()
+    expect(container.querySelector('[role="img"].af-info-tip')).toBeNull()
   })
 
-  it('puts the popover LAST — the narrow page hides the 3rd and 4th headings by nth-child', () => {
+  it('keeps the popover OUT of the heading row — the narrow page hides the 3rd and 4th headings by nth-child', () => {
     const { container } = render(<MyTeam data={page()} />)
     const head = container.querySelector('.af-mt-projhead')!
-    expect([...head.children].slice(0, 4).map((c) => c.textContent?.trim())).toEqual(['Sleeper?', 'AF', 'OWN', 'START'])
-    expect(head.lastElementChild?.hasAttribute('popover')).toBe(true)
+    /* Exactly four cells, in order; the popover lives inside the first one's tip wrapper. */
+    const label = (el: Element) => {
+      const copy = el.cloneNode(true) as Element
+      copy.querySelectorAll('.af-info-pop').forEach((p) => p.remove())
+      return copy.textContent?.trim()
+    }
+    expect([...head.children].map(label)).toEqual(['Sleeper?', 'AF', 'OWN', 'START'])
+    expect(head.children[0].querySelector('.af-info-tip-wrap > [popover]')).not.toBeNull()
   })
 })
 

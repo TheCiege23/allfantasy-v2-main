@@ -25,7 +25,26 @@ export async function loadUnavailableBySport(args: {
   season: number
   week: number
 }): Promise<Map<string, Set<string>>> {
-  const out = new Map<string, Set<string>>()
+  const absences = await loadAbsencesBySport(args)
+  return new Map([...absences].map(([sport, byId]) => [sport, new Set(byId.keys())]))
+}
+
+/** Why a player cannot score this week: a designation that rules him out, or his club is off. */
+export type Absence = { kind: 'ruled_out'; status: string } | { kind: 'bye' }
+
+/**
+ * `loadUnavailableBySport` with the REASON kept — the same reads and the same `isRuledOut` rule, so the
+ * two can never disagree about who is out; that one is this one's key set. For a surface that has to
+ * say WHY ("IR", "on bye") rather than only price him at zero. A designation wins over a bye when a
+ * player has both.
+ */
+export async function loadAbsencesBySport(args: {
+  sleeperIds: readonly string[]
+  sports: readonly string[]
+  season: number
+  week: number
+}): Promise<Map<string, Map<string, Absence>>> {
+  const out = new Map<string, Map<string, Absence>>()
   const sports = [...new Set(args.sports.map((s) => String(s || 'NFL').toUpperCase()))]
   if (args.sleeperIds.length === 0 || sports.length === 0) return out
   const playerRows = await prisma.sportsPlayer
@@ -42,13 +61,14 @@ export async function loadUnavailableBySport(args: {
         readInjuryStatusById(sport, namesBySleeperId(players), teams),
         getByeWeeks({ sport, season: args.season, playerTeams: teams, fromWeek: args.week, horizon: 0 }).catch(() => null),
       ])
-      out.set(
-        sport,
-        new Set([
-          ...[...statuses].filter(([, status]) => isRuledOut(status)).map(([id]) => id),
-          ...(byes?.byWeek.get(args.week) ?? []),
-        ]),
-      )
+      const byId = new Map<string, Absence>()
+      for (const [id, status] of statuses) {
+        if (status && isRuledOut(status)) byId.set(id, { kind: 'ruled_out', status })
+      }
+      for (const id of byes?.byWeek.get(args.week) ?? []) {
+        if (!byId.has(id)) byId.set(id, { kind: 'bye' })
+      }
+      out.set(sport, byId)
     }),
   )
   return out
