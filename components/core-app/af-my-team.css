@@ -1830,3 +1830,88 @@ a.af-mt-lock-fix:focus-visible {
     display: none !important;
   }
 }
+
+/*
+ * ── Lineup check (2026-10-02) ───────────────────────────────────────────────
+ * Appended at depth 0. The roster's verdict above the roster: certain losses (OUT, bye,
+ * empty) in the bad tone, a bench swap in the accent, questionable in the warn tone — the same
+ * tones the rows and the cross-league board already use for the same facts.
+ */
+.af-mt-check {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+.af-mt-check[data-clear='true'] {
+  border-color: var(--good);
+}
+.af-mt-check-clear,
+.af-mt-check-locked {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text2);
+}
+.af-mt-check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-mt-check-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+}
+.af-mt-check-item:hover,
+.af-mt-check-item:focus-visible {
+  background: var(--chip);
+}
+.af-mt-check-tag {
+  flex: 0 0 auto;
+  min-width: 46px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--bad);
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: center;
+}
+li[data-kind='swap'] .af-mt-check-tag {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+li[data-kind='questionable'] .af-mt-check-tag {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-mt-check-slot {
+  flex: 0 0 auto;
+  min-width: 34px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-mt-check-text {
+  min-width: 0;
+}
+.af-mt-check-fix {
+  align-self: flex-start;
+}
+@media (pointer: coarse) {
+  .af-mt-check-item {
+    min-height: 44px;
+  }
+}
