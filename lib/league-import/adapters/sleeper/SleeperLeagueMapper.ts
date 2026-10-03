@@ -98,6 +98,16 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
     const reserveAllowDnr = toBoolFromNumeric(settings.reserve_allow_dnr)
     const reserveAllowDoubtful = toBoolFromNumeric(settings.reserve_allow_doubtful)
 
+    const rawSchedule = {
+      waiver_day_of_week: toIntOrUndef(settings.waiver_day_of_week),
+      daily_waivers: toIntOrUndef(settings.daily_waivers),
+      daily_waivers_hour: toIntOrUndef(settings.daily_waivers_hour),
+      waiver_clear_days: toIntOrUndef(settings.waiver_clear_days),
+    }
+    const sleeperWaiverSchedule = Object.values(rawSchedule).some((v) => v !== undefined)
+      ? Object.fromEntries(Object.entries(rawSchedule).filter(([, v]) => v !== undefined))
+      : null
+
     // Sleeper regular season = weeks before playoff_week_start. Previously hardcoded
     // to 14 which broke every league whose playoffs didn't start on week 15.
     const regularSeasonLength =
@@ -146,6 +156,18 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       max_keepers: maxKeepers,
       // See the `isKeeper` note above: max_keepers is a Sleeper default, this is the real flag.
       is_keeper: isKeeper,
+      /*
+       * 🛑 SLEEPER'S WAIVER SCHEDULE FIELDS, STORED RAW AND DELIBERATELY NOT INTERPRETED.
+       *
+       * Dropped at import until 2026-10-02 (`lib/chimmy-alerts/waiverCheck.ts` measured no league
+       * carrying `waiver_day_of_week`). What the numbers MEAN is not established anywhere in this
+       * repo — whether day 0 is Sunday or Monday, what timezone `daily_waivers_hour` is in — and
+       * the contract rule is to record that, not guess it: contracts/sleeper/GAPS.md S-05/S-06.
+       * No screen reads these. The schedule the screens show is OBSERVED from when this league's
+       * claims actually processed (lib/waivers/observedWaiverSchedule.ts); once both exist for
+       * enough leagues, comparing the two answers S-05 without a probe.
+       */
+      ...(sleeperWaiverSchedule ? { sleeper_waiver_schedule: sleeperWaiverSchedule } : {}),
       reserve_allow_cov: reserveAllowCov,
       reserve_allow_sus: reserveAllowSus,
       reserve_allow_out: reserveAllowOut,

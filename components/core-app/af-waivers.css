@@ -621,3 +621,6 @@
   font-weight: 700;
   color: var(--accent);
 }
+
+/* An observed Sleeper schedule's provenance — "seen over this league's last 5 runs". */
+.af-core .af-wv-rule-observed { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--muted); }

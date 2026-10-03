@@ -263,6 +263,19 @@ export function buildTransactionFacts(args: {
         // transfer between managers, the other is a purchase from the league.
         waiverBid: waiverBidFor(tx),
         createdAt: tx.created ? new Date(tx.created).toISOString() : null,
+        /*
+         * WHEN SLEEPER RESOLVED IT — for a completed waiver claim, the moment the league's waivers
+         * PROCESSED. `createdAt` above is when the manager SUBMITTED the claim, and measured on the
+         * full-data DB (2026-10-02) it is no use for that: across 38,969 completed waiver claims in
+         * 114 leagues the busiest weekday-hour held a median 7% of a league's claims. Every claim
+         * one run settles shares a resolution instant, which is what lets
+         * lib/waivers/observedWaiverSchedule.ts read a league's real schedule off its own history.
+         * The upsert overwrites payloads, so each re-read week backfills this field.
+         */
+        statusUpdatedAt:
+          typeof tx.status_updated === 'number' && Number.isFinite(tx.status_updated) && tx.status_updated > 0
+            ? new Date(tx.status_updated).toISOString()
+            : null,
         creator: tx.creator ?? null,
         source: 'sleeper_historical_transaction_sync',
       },

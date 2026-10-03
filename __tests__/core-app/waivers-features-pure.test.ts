@@ -7,7 +7,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {} }))
 import { countdownText, nextWaiverRunMs } from '@/lib/core-app/waiverRunClock'
 import { rosterNeeds } from '@/lib/waivers/rosterNeeds'
 import { multiLeagueAdds, type WaiverBoardRow, type WaiverPlayer } from '@/lib/core-app/waiversBoard'
-import { runsAtSchedule } from '@/lib/core-app/waiverRowMeta'
+import { rowWaiverSchedule } from '@/lib/core-app/waiverRowMeta'
 import { pickLineupSwap } from '@/lib/core-app/waiverSwap'
 
 /* Wednesday 2026-09-30 06:00 UTC. */
@@ -15,17 +15,17 @@ const WED_0600 = Date.UTC(2026, 8, 30, 6, 0)
 
 describe('nextWaiverRunMs', () => {
   it('later the same day', () => {
-    expect(nextWaiverRunMs({ dayOfWeek: 3, timeUtc: '09:00' }, WED_0600)).toBe(Date.UTC(2026, 8, 30, 9, 0))
+    expect(nextWaiverRunMs({ dayOfWeek: 3, time: '09:00', timeZone: 'UTC' }, WED_0600)).toBe(Date.UTC(2026, 8, 30, 9, 0))
   })
   it('already passed today → a week out, never in the past', () => {
-    expect(nextWaiverRunMs({ dayOfWeek: 3, timeUtc: '05:00' }, WED_0600)).toBe(Date.UTC(2026, 9, 7, 5, 0))
+    expect(nextWaiverRunMs({ dayOfWeek: 3, time: '05:00', timeZone: 'UTC' }, WED_0600)).toBe(Date.UTC(2026, 9, 7, 5, 0))
   })
   it('wraps across the week boundary', () => {
-    expect(nextWaiverRunMs({ dayOfWeek: 1, timeUtc: '12:30' }, WED_0600)).toBe(Date.UTC(2026, 9, 5, 12, 30))
+    expect(nextWaiverRunMs({ dayOfWeek: 1, time: '12:30', timeZone: 'UTC' }, WED_0600)).toBe(Date.UTC(2026, 9, 5, 12, 30))
   })
   it('refuses an unreadable schedule rather than guessing', () => {
-    expect(nextWaiverRunMs({ dayOfWeek: 3, timeUtc: '9am' }, WED_0600)).toBeNull()
-    expect(nextWaiverRunMs({ dayOfWeek: 7, timeUtc: '09:00' }, WED_0600)).toBeNull()
+    expect(nextWaiverRunMs({ dayOfWeek: 3, time: '9am', timeZone: 'UTC' }, WED_0600)).toBeNull()
+    expect(nextWaiverRunMs({ dayOfWeek: 7, time: '09:00', timeZone: 'UTC' }, WED_0600)).toBeNull()
   })
   it('countdown text', () => {
     expect(countdownText(12 * 60_000)).toBe('in 12m')
@@ -34,13 +34,13 @@ describe('nextWaiverRunMs', () => {
   })
 })
 
-describe('runsAtSchedule', () => {
+describe('rowWaiverSchedule', () => {
   const w = { processingDayOfWeek: 3, processingTimeUtc: '09:00' }
   it('hands a countdown the schedule of a league that imported one', () => {
-    expect(runsAtSchedule(w, 'manual')).toEqual({ dayOfWeek: 3, timeUtc: '09:00' })
+    expect(rowWaiverSchedule(w, 'manual', null)).toEqual({ label: 'Wednesday 09:00 UTC', schedule: { dayOfWeek: 3, time: '09:00', timeZone: 'UTC' } })
   })
   it('never hands a Sleeper bootstrap default to a clock', () => {
-    expect(runsAtSchedule(w, 'sleeper')).toBeNull()
+    expect(rowWaiverSchedule(w, 'sleeper', null)).toBeNull()
   })
 })
 

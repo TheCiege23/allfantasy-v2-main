@@ -317,7 +317,7 @@ function Card({ row }: { row: WaiverBoardRow }) {
               <span className="af-bd-tag-detail">
                 {' '}
                 {/* The viewer's own time and a countdown once mounted; the UTC label until then. */}
-                {row.runsAtUtc ? <WaiverRunClock schedule={row.runsAtUtc} compact /> : row.runsAt}
+                {row.runsSchedule ? <WaiverRunClock schedule={row.runsSchedule} compact /> : row.runsAt}
               </span>
             </span>
           ) : null}
@@ -515,7 +515,7 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
           />
           <WaiversDueSoon
             leagues={data.rows.flatMap((r) =>
-              r.runsAtUtc ? [{ key: r.leagueId, leagueName: r.leagueName, href: r.href, schedule: r.runsAtUtc }] : [],
+              r.runsSchedule ? [{ key: r.leagueId, leagueName: r.leagueName, href: r.href, schedule: r.runsSchedule }] : [],
             )}
           />
           <WaiversBoardList
@@ -524,7 +524,7 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
               gain: r.netGain,
               leagueName: r.leagueName,
               position: r.add.position,
-              schedule: r.runsAtUtc ?? null,
+              schedule: r.runsSchedule ?? null,
             }))}
             cards={Object.fromEntries(data.rows.map((r) => [r.leagueId, <Card key={r.leagueId} row={r} />]))}
           />

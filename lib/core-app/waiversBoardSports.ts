@@ -34,7 +34,8 @@ import { countRealLeagues, keepBestPerRealLeague } from './realLeague'
 import { canFillSlotForSport, isStartableInSport } from './sportSlotEligibility'
 import { pickLineupSwap, rosterCapacity, swapReasoning, type SwapCandidate, type SwapRosterPlayer } from './waiverSwap'
 import { startingSlots } from './slotEligibility'
-import { faabRemainingOf, formatOf, runsAtLabel, runsAtSchedule } from './waiverRowMeta'
+import { faabRemainingOf, formatOf, rowWaiverSchedule } from './waiverRowMeta'
+import { loadObservedWaiverSchedules, type ObservedWaiverSchedule } from '@/lib/waivers/observedWaiverSchedule'
 import type { ClaimedTeam, WaiverBoardRow, WaiverPlayer, WaiverSportSection } from './waiversBoard'
 
 /**
@@ -133,6 +134,16 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
   }
 
   const leagueIds = [...new Set(teams.map((c) => c.leagueId))]
+
+  /*
+   * Sleeper leagues have no imported schedule; read the one their own claims reveal. One query for
+   * every Sleeper league on the board (lib/waivers/observedWaiverSchedule.ts). A failed read costs
+   * the countdowns, never the board.
+   */
+  const observedSchedules = await loadObservedWaiverSchedules(
+    prisma,
+    teams.filter((c) => String(c.league?.platform ?? '').toLowerCase() === 'sleeper').map((c) => c.leagueId),
+  ).catch(() => new Map<string, ObservedWaiverSchedule>())
   const [rosters, waiverSettings, pool] = await Promise.all([
     prisma.roster
       .findMany({
@@ -341,6 +352,7 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
     })
 
     const w = waiverByLeague.get(c.leagueId)
+    const sched = rowWaiverSchedule(w, l.platform, observedSchedules.get(c.leagueId))
     rows.push({
       leagueId: c.leagueId,
       leagueName: leagueDisplayName(l.name),
@@ -355,8 +367,8 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       add,
       drop: dropPlayer,
       faabRemaining: faabRemainingOf(w, myRoster),
-      runsAt: runsAtLabel(w, l.platform),
-      runsAtUtc: runsAtSchedule(w, l.platform),
+      runsAt: sched?.label ?? null,
+      runsSchedule: sched?.schedule ?? null,
       alternatives,
       href: `/core/waivers?league=${encodeURIComponent(c.leagueId)}`,
       reasoning,
