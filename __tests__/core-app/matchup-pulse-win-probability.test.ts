@@ -26,6 +26,13 @@ const db = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    /* The slimmed settings read — one row per league, from the claimed fixture's own settings. */
+    $queryRawUnsafe: vi.fn(async (_sql: string, ids: string[]) =>
+      db.claimed.flatMap((c) => {
+        const l = c.league as { id?: string; settings?: unknown } | undefined
+        return l?.id && ids.includes(l.id) ? [{ id: l.id, settings: l.settings ?? null }] : []
+      }),
+    ),
     leagueTeam: {
       findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => (where.claimedByUserId ? db.claimed : db.teams)),
     },
