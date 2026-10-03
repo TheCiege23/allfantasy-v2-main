@@ -669,6 +669,7 @@ export const translationsEsParity: Record<string, string> = {
     "Los ajustes no están disponibles ahora. Reintenta para recuperar el estado de tu perfil.",
   "settings.errorTitle": "No se pudieron cargar los ajustes",
   "settings.home": "Inicio",
+  "settings.back": "Volver",
   "settings.searchPlaceholder": "Buscar ajustes…",
   "settings.inlineErrorTitle": "Algunos ajustes no se actualizaron",
   "settings.legacy.activeImportNote":

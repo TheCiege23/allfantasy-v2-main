@@ -1629,6 +1629,7 @@ export const translations: Record<string, Record<string, string>> = {
 
     "settings.title": "Settings",
     "settings.home": "Home",
+    "settings.back": "Back",
     "settings.searchPlaceholder": "Search settings…",
     "settings.aria.sections": "Settings sections",
     "settings.aria.navigation": "Settings navigation",

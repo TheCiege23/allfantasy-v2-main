@@ -855,7 +855,7 @@ export function SettingsSubPanelBody({
         </div>
       )
     case 'notifications':
-      return <NotificationsPanel />
+      return <NotificationsPanel leagueId={ctx.league.id} />
     case 'invite':
       return (
         <InvitePanel
@@ -1154,7 +1154,7 @@ function ScoringSubPanel({
   )
 }
 
-function NotificationsPanel() {
+function NotificationsPanel({ leagueId }: { leagueId: string }) {
   /*
    * ⚠ THE FAKE PANEL IS GONE ON PURPOSE. This rendered eight toggles and a
    * primary "Save preferences" button whose onClick was empty — every click a
@@ -1164,11 +1164,13 @@ function NotificationsPanel() {
    */
   return (
     <div className="space-y-3">
+      {/* Not "account-wide" any more: Settings › Notifications has per-league mutes (2026-09). */}
       <p className="text-[12px] text-white/60">
-        Notification preferences are account-wide and live in your settings.
+        Your notification settings live in Settings, including mutes for just this league under
+        &ldquo;Per-league settings&rdquo;.
       </p>
       <a
-        href="/settings?tab=notifications"
+        href={`/settings?tab=notifications&returnTo=${encodeURIComponent(`/league/${leagueId}`)}`}
         className="block w-full rounded-xl bg-[#ff3d81]/20 py-2.5 text-center text-[13px] font-bold text-[#ffd7e5]"
       >
         Open notification settings
