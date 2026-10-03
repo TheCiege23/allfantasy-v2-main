@@ -170,6 +170,13 @@ export type MyTeamRow = {
    */
   leagueSeason: number | null
   teamId: string | null
+  /**
+   * When this league was last synced (`League.lastSyncedAt`), ISO. The board reads the STORED
+   * roster, so this is how old every count on the row is. Null when we have never recorded a sync.
+   */
+  syncedAt?: string | null
+  /** The last sync attempt failed (`League.syncStatus`), so the row may describe an older lineup. */
+  syncFailed?: boolean
 }
 
 /**
@@ -322,6 +329,9 @@ export async function getMyTeamPulse(
             /* Read only to collapse duplicate copies — see `realLeague.ts`. */
             userId: true,
             updatedAt: true,
+            /* When WE last wrote this league, and whether that write failed — the row's freshness stamp. */
+            lastSyncedAt: true,
+            syncStatus: true,
           },
         },
       },
@@ -386,6 +396,8 @@ export async function getMyTeamPulse(
     platformLeagueId: string | null
     leagueSeason: number | null
     teamId: string | null
+    syncedAt: string | null
+    syncFailed: boolean
     ids: string[]
     empty: number
   }
@@ -448,6 +460,9 @@ export async function getMyTeamPulse(
       platformLeagueId: l.platformLeagueId ?? null,
       leagueSeason: typeof l.season === 'number' ? l.season : null,
       teamId: c.externalId != null ? String(c.externalId) : null,
+      syncedAt: l.lastSyncedAt instanceof Date ? l.lastSyncedAt.toISOString() : null,
+      /* Prod holds `failed`; `app/api/league/sync` writes `error`. Both mean the last write did not land. */
+      syncFailed: /fail|error/i.test(String(l.syncStatus ?? '')),
       ids,
       empty,
     })
@@ -632,6 +647,8 @@ export async function getMyTeamPulse(
       platformLeagueId: p.platformLeagueId,
       leagueSeason: p.leagueSeason,
       teamId: p.teamId,
+      syncedAt: p.syncedAt,
+      syncFailed: p.syncFailed,
     })
   }
 

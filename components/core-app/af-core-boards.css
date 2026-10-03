@@ -1782,3 +1782,9 @@
     padding: 6px 0;
   }
 }
+
+/* Row freshness (2026-10-03): "synced 3h ago" is quiet; older than a day, or a failed sync, is the warn tone. */
+.af-core .af-bd-sync[data-stale='true'] {
+  color: var(--warn);
+  font-weight: 700;
+}
