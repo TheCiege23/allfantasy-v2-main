@@ -19,7 +19,12 @@ import {
  * THE grade for a COMPLETED provider trade — the grade email, the /core history and the dashboard
  * band all read it from here, so a finished deal carries one letter wherever it appears.
  *
- * Graded from side one's point of view, on TODAY's league values, and WITHOUT roster need: the trade
+ * The letter is the trade's FROZEN ORIGINAL — taken the first time any surface graded it, which for
+ * an imported trade can be long after the trade itself — with today's re-grade beside it as
+ * `current`, never merged into it (`frozenCompletedGrade.ts`). Only a deal not yet graded is priced
+ * on today's values, and that grade becomes the original.
+ *
+ * Graded from side one's point of view, on this league's values, and WITHOUT roster need: the trade
  * has happened and both rosters already hold its result, so "does this fill a hole" has no honest
  * answer.
  *
@@ -210,8 +215,11 @@ function archivedSide(players: ReadonlyArray<ArchivedPlayer>, picks: ReadonlyArr
 
 /**
  * THE grade for one archived trade row (`LeagueTrade`), from the row's own point of view — what it
- * received against what it gave — on today's league values, without roster need. Used by the /core
+ * received against what it gave — on this league's values, without roster need. Used by the /core
  * Trades list and the cross-league board, so a trade reads the same letter on both.
+ *
+ * With `original` the letter is the trade's FROZEN ORIGINAL (today's re-grade rides as `current`);
+ * only a caller that omits `original` gets a grade on today's values.
  */
 export async function gradeArchivedTrade(
   grader: LeagueTradeGrader | null,
