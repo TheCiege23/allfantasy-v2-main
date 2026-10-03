@@ -55,6 +55,8 @@ const pts = (n: number) => n.toFixed(1)
 
 function Status({ m, margin }: { m: RailMatchup; margin: number | null }) {
   if (m.unpaired) {
+    // Chopped: say so — "No head-to-head this week" read as a quiet week in a league you are out of.
+    if (m.eliminated) return <span className="af-wrw-status">You were chopped</span>
     const s = m.standing
     if (!s) return <span className="af-wrw-status">No head-to-head this week</span>
     return (

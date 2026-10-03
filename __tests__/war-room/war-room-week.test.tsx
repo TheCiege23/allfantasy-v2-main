@@ -102,4 +102,10 @@ describe('WarRoomWeek', () => {
   it('renders nothing for leagues with no matchup row', () => {
     expect(render(lineups({}))).toBe('')
   })
+
+  it('says "You were chopped" in an elimination league you are out of — not "No head-to-head this week"', () => {
+    const html = render(lineups({ D: m('D', { unpaired: true, opponentTeam: null, standing: null, eliminated: true }) }), [leagues[3]!])
+    expect(html).toContain('You were chopped')
+    expect(html).not.toContain('No head-to-head this week')
+  })
 })

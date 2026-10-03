@@ -190,6 +190,12 @@ export type RailMatchup = {
   unpaired: boolean
   /** Present only when `unpaired`, and only when the league could be ranked. */
   standing: RailStanding | null
+  /**
+   * Elimination leagues: YOUR team has been chopped (see `choppedBefore`). The standing is null then —
+   * you are not in the live field — and a surface says "you were chopped", not "no head-to-head".
+   * Optional so the many callers that build a RailMatchup by hand need not carry it.
+   */
+  eliminated?: boolean
   /** False when the fixture exists but has not been played. */
   scored: boolean
   /** Newest provider-written row used by this card. Drives the visible freshness label. */
@@ -335,18 +341,37 @@ export async function getRailMatchups(
    * week-1 casualty at 0–0, so the rail sat on week 2 while the provider was on week 4. Scout, Your
    * Week's cut line and the War Room strip all drew last-but-one week's race.
    *
-   * So an elimination league takes the provider's own stated period first — the rule
-   * `resolveCurrentWeek` has always applied ("Prefer the saved provider period") and the rail did
-   * not — when the season's rows carry that week. Head-to-head leagues are untouched: the row rule
-   * is right for them, and changing every league's week is a bigger decision than this bug.
+   * 🛑 AND THE ROW RULE FAILS HEAD-TO-HEAD LEAGUES TOO, MID-WEEK — EVERY ONE OF THEM, BY SUNDAY. Once
+   * every matchup in a week has any points on the board (Thursday's game, the early slate), no 0–0 row
+   * is left and the rule calls the week finished: it jumps to NEXT week's empty, unstarted fixture
+   * while this week's games are still being played. Measured the next morning (Saturday, week 4): four
+   * small leagues already on "week 5" with all week-4 rows scored and the provider saying 4. Larger
+   * leagues reach the same state by Sunday afternoon and stay there until the provider rolls over.
+   * (The guillotine-only first version of this fix — #1915 — said head-to-head was "right for them".
+   * It is not; that was an assumption, and the measurement disproved it.)
+   *
+   * So EVERY league takes the provider's own stated period first — the rule `resolveCurrentWeek`
+   * has always applied ("Prefer the saved provider period") and the rail did not — when the
+   * season's rows carry that week. Measured before widening it, 2026-10-03: 493 of 494 in-season
+   * Sleeper NFL leagues and 8 of 8 ESPN state week 4, synced within the hour; leagues with no stated
+   * week, or one their rows do not carry, keep the row rule exactly as before.
    */
   const eliminationIds = [...new Set(leagues.filter((l) => l.elimination && l.platformLeagueId).map((l) => l.platformLeagueId!))]
   const statedByLeague = new Map<string, { seasonYear: number; week: number }>()
-  if (eliminationIds.length > 0) {
-    const meta = await readLeagueWeekMetadata(eliminationIds, 'platform').catch(() => [])
+  if (platformIds.length > 0) {
+    const meta = await readLeagueWeekMetadata([...new Set(platformIds)], 'platform').catch(() => [])
     for (const m of meta) {
       const week = leagueWeekFromSettings(m.settings)
-      if (m.platformLeagueId && m.season != null && week != null) statedByLeague.set(m.platformLeagueId, { seasonYear: m.season, week })
+      if (!m.platformLeagueId || m.season == null || week == null) continue
+      /*
+       * ⚠ ONE SLEEPER LEAGUE CAN BE SEVERAL `leagues` ROWS (one per importer), and an importer whose row
+       * has not synced lately still carries an older period. The furthest-along statement wins — the
+       * provider never moves backwards, so the newest season and highest week is the current one.
+       */
+      const held = statedByLeague.get(m.platformLeagueId)
+      if (!held || m.season > held.seasonYear || (m.season === held.seasonYear && week > held.week)) {
+        statedByLeague.set(m.platformLeagueId, { seasonYear: m.season, week })
+      }
     }
   }
 
@@ -635,6 +660,7 @@ export async function getRailMatchups(
             elimination: f.elimination || priced?.elimination === true,
           })
         : null,
+      eliminated: outByLeague.get(row.leagueId)?.has(String(row.rosterId)) === true,
       scored,
       freshAt: row.updatedAt?.toISOString?.() ?? null,
       source: row.source,
