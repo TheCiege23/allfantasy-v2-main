@@ -1729,6 +1729,21 @@
   .af-core .af-wvb-multi-n { white-space: normal; }
 }
 
+/* "How to read a card" — one "?" per term, wrapping onto as many lines as a phone needs. */
+.af-core .af-wvb-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 4px;
+}
+.af-core .af-wvb-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
 /*
  * ── My Team board: players hurting more than one lineup (2026-10-03) ────────
  * Appended at depth 0. Sits between the section head and the ranked rows.
