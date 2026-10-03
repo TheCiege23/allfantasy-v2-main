@@ -1062,7 +1062,15 @@ export async function runTradeConsoleAnalysis(
     }
   }
 
+  const visualImpact = input.leagueId && input.userId
+    ? await (await import('@/lib/decision-os/trade/loadVisualImpact')).loadVisualImpact({
+      leagueId: input.leagueId, userId: input.userId,
+      sent: giveLines.flatMap(p => p.enrichmentPlayerId ? [p.enrichmentPlayerId] : []),
+      received: getLines.flatMap(p => p.enrichmentPlayerId ? [p.enrichmentPlayerId] : []),
+      unresolved: [...giveLines, ...getLines].some(p => p.pricedSource !== 'pick' && p.pricedSource !== 'faab' && !p.enrichmentPlayerId),
+    }).catch(() => null) : null
   return {
+    visualImpact,
     ok: true,
     analysisMode: leagueSnapshot ? 'league' : 'global',
     effectiveSport,

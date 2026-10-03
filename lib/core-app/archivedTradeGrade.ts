@@ -60,6 +60,8 @@ export async function gradeArchivedTradeRows(args: {
   /** A Sleeper id to a display name, or null — an unnamed player withholds the letter. */
   nameOf: (sleeperId: string) => string | null
   currentSeason?: number
+  /** Explicit current review: return a fresh grade without reading or creating an original. */
+  freezeOriginal?: boolean
 }): Promise<Map<string, ArchivedTradeGrade>> {
   const out = new Map<string, ArchivedTradeGrade>()
   if (args.rows.length === 0) return out
@@ -73,7 +75,7 @@ export async function gradeArchivedTradeRows(args: {
         .map((t) => ({ sleeperLeagueId: args.platformLeagueId, transactionId: t.transactionId })),
     ),
     // Each trade's frozen original on this row, one read for the whole list (`frozenCompletedGrade.ts`).
-    loadFrozenCompletedGrades(args.afLeagueId, args.rows.map((t) => t.transactionId)),
+    args.freezeOriginal === false ? Promise.resolve(new Map<string, FrozenCompletedGrade>()) : loadFrozenCompletedGrades(args.afLeagueId, args.rows.map((t) => t.transactionId)),
   ])
   const toFreeze: FrozenCompletedGrade[] = []
   const now = new Date()
@@ -99,11 +101,11 @@ export async function gradeArchivedTradeRows(args: {
         picksIn: picksIn.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted, draftedId: p.draftedId })),
         picksOut: picksOut.map((p) => ({ ...pickRef(p), label: p.name, drafted: p.drafted, draftedId: p.draftedId })),
         currentSeason,
-        original: { afLeagueId: args.afLeagueId, tradeId: t.transactionId, frozen, onFreeze: (f) => toFreeze.push(f), now },
+        original: args.freezeOriginal === false ? undefined : { afLeagueId: args.afLeagueId, tradeId: t.transactionId, frozen, onFreeze: (f) => toFreeze.push(f), now },
       })
       out.set(t.transactionId, { grade, picksIn, picksOut, give, get })
     }),
   )
-  await saveFrozenCompletedGrades(args.afLeagueId, toFreeze)
+  if (args.freezeOriginal !== false) await saveFrozenCompletedGrades(args.afLeagueId, toFreeze)
   return out
 }

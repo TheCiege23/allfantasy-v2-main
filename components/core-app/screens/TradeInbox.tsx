@@ -13,6 +13,8 @@ import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
+import { ImpactNowReview, type ImpactNowRef } from './ImpactNowReview'
+import { TradeReaction, TradeReactionSettings } from './TradeReactions'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -90,6 +92,7 @@ type Offer = {
  * without a type error the moment the counter row tried to count them.
  */
 type NativeRow = {
+  impactRef?: ImpactNowRef
   sideALabel?: string
   sideBLabel?: string
   realizedGrade?: string | null
@@ -907,6 +910,8 @@ export function TradeInbox(props: {
                     {withheld ? <p className="af-tc-timeline-gap">{copy('Not graded:')} {copy(withheld)}</p> : null}
                     {trade.decisionRecommendation ? <p className="af-tc-timeline-advice">{trade.decisionRecommendation}</p> : null}
                     {trade.realizedGrade ? <p className="af-tc-timeline-advice">{copy('Realized outcome:')} {trade.realizedGrade}. {trade.realizedNote}</p> : null}
+                    {isCompleted && trade.status !== 'reversed' && leagueId && trade.impactRef ? <ImpactNowReview leagueId={leagueId} trade={trade.impactRef} /> : null}
+                    {isCompleted && trade.status !== 'reversed' ? <TradeReactionSettings /> : null}
                     {lineupLine ? (
                       <p className="af-tc-timeline-lineup" data-direction={lineupImpactDirection(trade.rosterImpact)}>
                         {lineupLine}
@@ -935,6 +940,7 @@ export function TradeInbox(props: {
                       <div data-letter={teamGrades.letter}>
                         <span title={sideAName}>{sideAName}</span>
                         <strong>{teamGrades.letter}</strong>
+                        <TradeReaction letter={teamGrades.letter} completed />
                         <small>{teamGrades.getValue.toLocaleString()} {language === 'es' ? 'por' : 'for'} {teamGrades.giveValue.toLocaleString()}</small>
                         {teamGrades.current && teamGrades.current.letter !== teamGrades.letter
                           ? <small>{copy('Today')} {teamGrades.current.letter}</small>
@@ -943,6 +949,7 @@ export function TradeInbox(props: {
                       <div data-letter={teamGrades.partnerLetter}>
                         <span title={sideBName}>{sideBName}</span>
                         <strong>{teamGrades.partnerLetter}</strong>
+                        <TradeReaction letter={teamGrades.partnerLetter} completed />
                         <small>{teamGrades.giveValue.toLocaleString()} {language === 'es' ? 'por' : 'for'} {teamGrades.getValue.toLocaleString()}</small>
                         {teamGrades.current && teamGrades.current.partnerLetter !== teamGrades.partnerLetter
                           ? <small>{copy('Today')} {teamGrades.current.partnerLetter}</small>

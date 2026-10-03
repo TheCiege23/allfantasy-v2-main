@@ -50,6 +50,10 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
+import { TradeEvidencePanel } from './TradeEvidencePanel'
+import { TradeValueChart, LineupImpactChart } from './TradeImpactCharts'
+import { TradeReaction, TradeReactionSettings } from './TradeReactions'
+import { usePlayerCard } from '../player-card/PlayerCardProvider'
 import { matchOfferToRosters, screenshotDraftNote, screenshotLoadedLine } from '@/lib/trade-screenshot/matchOffer'
 import type { OfferRead } from '@/lib/trade-screenshot/offerRead'
 import { managerNameBesideLabel } from '@/lib/trade-screenshot/managerHandles'
@@ -230,6 +234,7 @@ function playerEngineLine(asset: Extract<PickedAsset, { kind: 'player' }>, lines
 }
 
 type AnalyzeResult = {
+  visualImpact?: import('@/lib/decision-os/trade/loadVisualImpact').VisualImpactResult | null
   lastUpdated?: string
   evaluationReceipt?: ({ status: 'saved' } & import('@/lib/decision-os/trade/evaluationReceipt').SavedTradeEvaluation) | { status: 'unavailable' } | null
   salaryCap?: import('@/lib/trade-value-console/proposalCap').ProposalCapResult
@@ -589,6 +594,15 @@ export function TradeCenter(props: {
    */
   const [giveAssets, setGiveAssets] = useState<PickedAsset[]>([])
   const [getAssets, setGetAssets] = useState<PickedAsset[]>([])
+  const playerCard = usePlayerCard()
+  function cardForTradePlayer(side: 'give' | 'get', index: number) {
+    const asset = (side === 'give' ? giveAssets : getAssets)[index]
+    if (!asset || asset.kind !== 'player') return null
+    const line = playerEngineLine(asset, result?.players?.[side] ?? [])
+    const sleeperId = asset.providerIdentity?.provider === 'sleeper' ? asset.providerIdentity.id : line?.enrichmentPlayerId
+    const sport = asset.sportHint ?? props.league?.sport ?? line?.sport ?? 'NFL'
+    return sleeperId && String(sport).toUpperCase() === 'NFL' ? {sport:'NFL',sleeperId,name:asset.name,position:asset.position,leagueId:props.league?.id} : null
+  }
   const [picking, setPicking] = useState<'give' | 'get' | null>(null)
   // Offers poll independently. Rebuilding the full route while editing can remount
   // this form and discard an unsaved proposal or its in-flight analysis.
@@ -1932,7 +1946,7 @@ export function TradeCenter(props: {
                     </span>
                   )}
                   <span className="af-tc-row-body">
-                    <span className="af-tc-row-name">{l.name}</span>
+                    {cardForTradePlayer(side.side, i) ? <button type="button" className="af-tc-row-name" style={{background:'none',border:0,color:'inherit',padding:0,textAlign:'left',cursor:'pointer'}} onClick={() => {const card=cardForTradePlayer(side.side,i);if(card)playerCard.open(card)}} aria-label={`Open ${l.name} player card and value history`}>{l.name}</button> : <span className="af-tc-row-name">{l.name}</span>}
                     <span className="af-tc-row-sub">
                       {l.position ? (
                         <span className="af-tc-pos" data-pos={positionTone(l.position)}>
@@ -2289,6 +2303,11 @@ export function TradeCenter(props: {
             Which league type that chart is for, and whether anyone confirmed it. The league-type
             control sits in this page's header (CoreLeagueContextBar, `#league-type`).
           */}
+          {serverGrade?.graded ? <TradeEvidencePanel grade={serverGrade} evaluatedAt={analyzedAt} gaps={result.dataGaps} /> : null}
+          {serverGrade ? <TradeValueChart grade={serverGrade} /> : null}
+          {result.visualImpact ? <><LineupImpactChart impact={result.visualImpact.impact} /><p className="af-tc-row-sub">{result.visualImpact.reason} {result.visualImpact.rostersStale ? 'Roster data may be stale; sync before acting.' : ''} Picks and FAAB are outside the weekly lineup simulation.</p></> : null}
+          <TradeReactionSettings />
+          {serverGrade?.graded ? <div className="af-tc-grade-row"><span>Your grade {serverGrade.letter} <TradeReaction letter={serverGrade.letter} /></span><span>Their grade {serverGrade.partnerLetter} <TradeReaction letter={serverGrade.partnerLetter} /></span></div> : null}
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
           {serverGrade?.graded ? (
             <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
@@ -2359,7 +2378,7 @@ export function TradeCenter(props: {
               <strong className="af-tc-score-label">
                 {noSignal ? copy('Grade unavailable') : result.labels?.fairnessLabel ? copy(result.labels.fairnessLabel) : copy('No verdict')}
               </strong>
-              {!noSignal && result.labels?.confidenceLabel ? (
+              {!noSignal && !serverGrade?.graded && result.labels?.confidenceLabel ? (
                 <span className="af-tc-conf">{copy(result.labels.confidenceLabel)}</span>
               ) : null}
             </div>

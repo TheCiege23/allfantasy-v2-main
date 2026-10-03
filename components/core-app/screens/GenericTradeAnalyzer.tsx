@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { TradeComparisonSnapshots } from './TradeComparisonSnapshots'
+import { TradeEvidencePanel } from './TradeEvidencePanel'
+import { TradeValueChart } from './TradeImpactCharts'
+import { TradeReaction, TradeReactionSettings } from './TradeReactions'
 import styles from './GenericTradeAnalyzer.module.css'
 
 type Result = {
@@ -275,13 +278,16 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
           {result.grade.graded ? (
             <>
               <div className="af-tc-generic-grades">
-                <div><span>Team A</span><strong>{result.grade.letter}</strong><small>Receives Team B assets</small></div>
-                <div><span>Team B</span><strong>{result.grade.partnerLetter}</strong><small>Receives Team A assets</small></div>
+                <div><span>Team A</span><strong>{result.grade.letter}</strong><small>Receives Team B assets</small><TradeReaction letter={result.grade.letter} /></div>
+                <div><span>Team B</span><strong>{result.grade.partnerLetter}</strong><small>Receives Team A assets</small><TradeReaction letter={result.grade.partnerLetter} /></div>
               </div>
               <h3>{result.grade.sideAdvantage === 'even' ? 'Near-even market value' : result.grade.sideAdvantage === 'you' ? 'Team A receives more market value' : 'Team B receives more market value'}</h3>
               <p>Team A receives {result.grade.getMarket.toLocaleString()} in general market value and sends {result.grade.giveMarket.toLocaleString()}; Team B sees the reverse. The value gap is {Math.abs(result.grade.percentDiff ?? 0)}% of the larger side.</p>
               <p className="af-tc-generic-hint">This grade compares market value only. Position matters only through each asset’s quoted value; there is no team-specific position adjustment. League scoring, roster needs, injury risk, acceptance likelihood, and future results are not priced separately.</p>
               <p className="af-tc-generic-hint">Value basis: {result.grade.basis}. Valuation checked {result.lastUpdated && Number.isFinite(Date.parse(result.lastUpdated)) ? new Date(result.lastUpdated).toLocaleString() : 'at analysis time; source date unavailable'}.</p>
+              <TradeEvidencePanel grade={result.grade} evaluatedAt={analyzedAt} gaps={result.dataGaps} generic />
+              <TradeValueChart grade={result.grade} generic />
+              <TradeReactionSettings />
               {result.grade.lines.length ? (
                 <details className={styles.breakdown}>
                   <summary>Why this grade? View asset values and sources</summary>

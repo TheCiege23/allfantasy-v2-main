@@ -383,9 +383,9 @@ describe('pick quote recovery parity', () => {
     savedProposal()
     rosterData.current = { ...(rosterData.current as object),
       pickPreviewBook: { leagueId: league.id, values: { '2027:2': 1585 } } }
-    const grade = gradeTrade({ giveValue: 1585, getValue: 1801, giveCount: 1, getCount: 1,
-      unpriced: 0, basis: 'Dynasty', scoringApplied: false, needApplied: false,
-      lines: [{ side: 'give', name: '2027 Round 2', marketValue: 1585, leagueValue: 1585 },
+    const grade = gradeTrade({ giveValue: 1585, getValue: 1801, giveMarket: 1585, getMarket: 1801, giveCount: 1, getCount: 1,
+      unpriced: 0, basis: 'Dynasty', scoringApplied: false, needApplied: false, needGap: null,
+      moves: [], lines: [{ side: 'give', name: '2027 Round 2', marketValue: 1585, leagueValue: 1585 },
         { side: 'get', name: 'DK Metcalf', marketValue: 1801, leagueValue: 1801 }] })
     fetchMock.mockImplementation(async (url: string) => String(url).includes('/api/trade-value/analyze')
       ? { ok: true, status: 200, json: async () => ({ ...ANALYSIS, grade, giveTotal: 1585, getTotal: 1801,

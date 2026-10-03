@@ -587,6 +587,7 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
       return {
         id: trade.id,
         direction: viewerIsProposer ? 'outgoing' as const : viewerIsReceiver ? 'incoming' as const : 'complete' as const,
+        impactRef: viewerIsProposer || viewerIsReceiver ? {kind:'af' as const,tradeId:trade.id} : undefined,
         partnerName: nameOf(viewerIsProposer ? trade.receiverRosterId : trade.proposerRosterId),
         proposerName: nameOf(trade.proposerRosterId),
         receiverName: nameOf(trade.receiverRosterId),
@@ -684,6 +685,7 @@ async function buildNativeExecutedTrades(
     return {
       id: t.id,
       direction: 'complete' as const,
+      impactRef: participantIds.some(id=>userIdByRosterId.get(id)===userId) ? {kind:'af' as const,tradeId:t.id} : undefined,
       partnerName: nameOf(t.receiverRosterId),
       proposerName: nameOf(t.proposerRosterId),
       receiverName: nameOf(t.receiverRosterId),
@@ -791,6 +793,7 @@ function mapProviderTrades(
 ): LeagueTradeHistoryItem[] {
   return pending.map((trade) => ({
     id: `${trade.provider}:${trade.transactionId}`,
+    impactRef: trade.provider === 'sleeper' && trade.lifecycleStatus === 'complete' ? {kind:'provider' as const,provider:'sleeper' as const,providerTradeId:trade.transactionId} : undefined,
     receiptId: receiptIds.get(trade.transactionId) ?? null,
     // Facing matters: a trade the viewer SENT is outgoing. Hardcoding
     // 'incoming' would render their own offer backwards, with given/received
