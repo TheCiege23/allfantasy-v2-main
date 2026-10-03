@@ -85,7 +85,10 @@ describe('which leagues the weekly season covers', () => {
     ['NFL', 'guillotine', false],
     ['NFL', 'survivor', false],
     ['NFL', 'zombie', false],
-    ['MLB', 'redraft', false],
+    ['MLB', 'redraft', true],
+    ['MLB', 'dynasty', true],
+    ['MLB', 'keeper', true],
+    ['MLB', 'best_ball', true],
     ['SOCCER', 'redraft', false],
   ])('%s %s → %s', (sport, format, expected) => {
     expect(runsStandardWeeklySeason(sport, format)).toBe(expected)

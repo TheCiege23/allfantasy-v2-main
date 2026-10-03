@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { draftPickOwner, draftNextPick, latestDraftsByLeague } from './draftHqState'
 
 /**
  * Draft Season HQ, across every league — the cross-league aggregator.
@@ -9,9 +10,9 @@ import { prisma } from '@/lib/prisma'
  * `getDraftHqData(leagueId, userId)` answers for one league. Calling it in a loop
  * over 60 leagues is the exact N+1 fan-out that was removed from the signed-in
  * home — dozens of sequential round-trips per page load. This reads the same
- * tables in THREE set-based queries regardless of how many leagues the user has:
+ * tables in bounded set-based queries regardless of how many leagues the user has:
  *
- *   1. draftSession  WHERE leagueId IN (…)     — one row per league (leagueId is @unique)
+ *   1. draftSession WHERE leagueId IN (…) — then retain the newest session per league
  *   2. leagueTeam    WHERE leagueId IN (…) AND claimedByUserId = user
  *   3. draftPick     groupBy sessionId          — pick counts, one pass
  *
@@ -95,8 +96,8 @@ export type DraftHqAllData = {
 }
 
 const LIVE = new Set(['in_progress', 'paused', 'active', 'drafting', 'live', 'running', 'on_clock'])
-const UPCOMING = new Set(['pre_draft', 'scheduled'])
-const DONE = new Set(['complete', 'completed', 'post_draft', 'expired'])
+const UPCOMING = new Set(['pre_draft', 'scheduled', 'configuring', 'configured'])
+const DONE = new Set(['complete', 'completed', 'post_draft'])
 
 export function phaseOf(status: string | null | undefined): DraftPhase {
   const s = (status ?? '').trim().toLowerCase()
@@ -128,7 +129,7 @@ export async function getDraftHqAll(
 
   const leagueIds = leagues.map((l) => l.id)
 
-  const [sessions, myTeams] = await Promise.all([
+  const [allSessions, myTeams] = await Promise.all([
     prisma.draftSession.findMany({
       where: { leagueId: { in: leagueIds } },
       select: {
@@ -144,6 +145,9 @@ export async function getDraftHqAll(
         currentRoundNum: true,
         draftModeLabel: true,
         startedAt: true,
+        createdAt: true,
+        thirdRoundReversal: true,
+        tradedPicks: true,
       },
     }),
     prisma.leagueTeam.findMany({
@@ -152,6 +156,7 @@ export async function getDraftHqAll(
     }),
   ])
 
+  const sessions = latestDraftsByLeague(allSessions)
   if (sessions.length === 0) {
     return { ...empty, withoutDraft: leagues.length }
   }
@@ -230,15 +235,11 @@ export async function getDraftHqAll(
      */
     let onClockName: string | null = null
     let yoursOnClock = false
-    if (phase === 'live' && order.length > 0 && typeof session.nextOverallPick === 'number') {
-      const n = session.nextOverallPick
-      const teams = order.length
-      const roundIndex = Math.floor((n - 1) / teams)
-      const withinRound = (n - 1) % teams
-      const isSnake = String(session.draftType ?? '').toLowerCase() !== 'linear'
-      const slotIndex =
-        isSnake && roundIndex % 2 === 1 ? teams - 1 - withinRound : withinRound
-      const onClock = order[slotIndex]
+    const nextPick = draftNextPick(session.status, session.nextOverallPick, session.rounds * session.teamCount)
+    if (phase === 'live' && nextPick != null) {
+      const onClock = draftPickOwner({ overall: nextPick, teamCount: session.teamCount,
+        draftType: session.draftType, thirdRoundReversal: session.thirdRoundReversal,
+        slotOrder: order, tradedPicks: session.tradedPicks })
       if (onClock) {
         const named = onClock.displayName?.trim()
         onClockName = named && named.length > 0 ? named : null
@@ -261,12 +262,11 @@ export async function getDraftHqAll(
       picksMade: picksBySession.get(session.id) ?? null,
       // Only meaningful while a pick is actually running.
       pickExpiresAt:
-        phase === 'live' && session.timerEndAt ? session.timerEndAt.toISOString() : null,
+        phase === 'live' && session.status !== 'paused' && nextPick != null && session.timerEndAt ? session.timerEndAt.toISOString() : null,
       onClockName,
       yoursOnClock,
-      currentRound: typeof session.currentRoundNum === 'number' ? session.currentRoundNum : null,
-      nextOverallPick:
-        typeof session.nextOverallPick === 'number' ? session.nextOverallPick : null,
+      currentRound: nextPick != null ? Math.ceil(nextPick / session.teamCount) : null,
+      nextOverallPick: nextPick,
       queuedCount: queuedBySession.get(session.id) ?? 0,
       modeLabel: session.draftModeLabel?.trim() || null,
       startedAt: session.startedAt ? session.startedAt.toISOString() : null,

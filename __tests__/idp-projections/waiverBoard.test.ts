@@ -330,8 +330,11 @@ describe('loadWaiverBoard — kickoff locks', () => {
     expect(board.candidates[0]?.gain).toBe(4)
     expect(board.candidates[0]?.displaces?.name).toBe('Emmett Johnson')
     // The Thursday free agent would "gain" 16, but his game is over — he cannot play for you.
-    expect(board.notes.join(' ')).toContain('1 bench player can no longer come in')
-    expect(board.notes.join(' ')).toContain('1 free agent whose game has started is not shown')
+    // Only what happened: no starter is pinned here, so the note does not say "0 of your starters".
+    expect(board.notes).toContain(
+      'Games already kicked off are locked in: 1 bench player can no longer come in and 1 free agent whose game has started is not shown.',
+    )
+    expect(board.notes.join(' ')).not.toMatch(/\b0 /)
   })
 
   it('a starter who already played keeps his slot and is never "displaced"', async () => {
@@ -342,6 +345,9 @@ describe('loadWaiverBoard — kickoff locks', () => {
     expect(board.currentLineupPoints).toBe(19)
     // The Sunday FA (8) would replace the 4-point starter — but that starter is locked in.
     expect(board.candidates).toEqual([])
+    expect(board.notes).toContain(
+      'Games already kicked off are locked in: 1 of your starters keeps his slot and 1 free agent whose game has started is not shown.',
+    )
   })
 
   it('CONTROL: the same roster on Wednesday, before any kickoff, seats the 10-point back as before', async () => {

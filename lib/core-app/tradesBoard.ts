@@ -29,6 +29,7 @@ import { draftedPickNamesForRow, withDraftedNames } from './archivedPickMatch'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { assetValues } from '@/lib/decision-os/trade/gradeLineValues'
 import { isPirateLeague, isPirateSteal } from '@/lib/trade-intel/pirateSteal'
+import { runWithConcurrency } from '@/lib/async-utils'
 
 /**
  * Trades, across every league — the cross-league board at `/core/trades`.
@@ -187,6 +188,9 @@ const ROW_CAP = 10
 
 /** Trades to price per league. Enough to grade the latest without a wide read. */
 const TRADES_PER_LEAGUE = 4
+
+/** Leagues graded at once — see the grading pool in `getTradesBoard`. */
+export const BOARD_GRADE_CONCURRENCY = 6
 
 type DeadlineInfo = {
   week: number | null
@@ -862,10 +866,21 @@ export async function getTradesBoard(
       .map((t) => ({ sleeperLeagueId: t.sleeperLeagueId, transactionId: t.transactionId })),
   )
 
-  /* Latest graded trade per league, built from the surviving copy. */
+  /*
+   * Latest graded trade per league, built from the surviving copy.
+   *
+   * ⚠ GRADED SEVERAL LEAGUES AT A TIME (2026-10-03). This was a sequential `for…await`, and each
+   * league's first grade builds that league's chart (`completedTradeGraderFor`, memoised 5 min), so
+   * the board paid every league's chart load end to end: measured read-only against production, 40
+   * leagues took 27.6s cold and 4–5s warm, ~95% of the whole board. The leagues are independent —
+   * one grader each, one frozen-original row each — so they run in a bounded pool.
+   * `runWithConcurrency` returns results in INPUT order and the map is filled from that array, so
+   * the board reads identically to the sequential loop; the bound keeps one board from taking the
+   * whole connection pool.
+   */
   const latestByLeague = new Map<string, BoardTrade>()
 
-  for (const t of firstByLeague.values()) {
+  const gradedCards = await runWithConcurrency([...firstByLeague.values()], BOARD_GRADE_CONCURRENCY, async (t) => {
     const league = { id: t.leagueId }
     const h = { sleeperUsername: t.username }
     /*
@@ -964,7 +979,7 @@ export async function getTradesBoard(
       ? oneGradeBreakdown({ grade: g, receiverLabel: fromName, partnerLabel: toName })
       : []
 
-    latestByLeague.set(league.id, {
+    const card: BoardTrade = {
       transactionId: t.transactionId,
       season: t.season ?? null,
       week: t.week ?? null,
@@ -978,8 +993,10 @@ export async function getTradesBoard(
       breakdown,
       // The grader's own reason — it names what could not be priced, never a count.
       withheldReason: g.graded ? null : g.reason,
-    })
-  }
+    }
+    return [league.id, card] as const
+  })
+  for (const [leagueId, card] of gradedCards) latestByLeague.set(leagueId, card)
 
   let deadlineUnknown = 0
   const windows: TradeWindowRow[] = []

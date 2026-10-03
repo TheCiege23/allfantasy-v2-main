@@ -150,6 +150,15 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
 }
 
 /**
+ * i18n keys for `NOTIFICATION_CATEGORY_LABELS`, one per id. Display only — render with
+ * `tOr(t, NOTIFICATION_CATEGORY_LABEL_KEYS[id], NOTIFICATION_CATEGORY_LABELS[id])`. The English
+ * labels above stay the fallback and are what non-React code (and tests) read.
+ */
+export const NOTIFICATION_CATEGORY_LABEL_KEYS = Object.fromEntries(
+  Object.keys(NOTIFICATION_CATEGORY_LABELS).map((id) => [id, `settings.notifications.category.${id}`]),
+) as Record<NotificationCategoryId, string>
+
+/**
  * Categories that start OFF on every channel. Everything else defaults on (in-app, push, email;
  * SMS is always opt-in). League chat is the chattiest thing in the product — defaulting it on
  * would buzz twelve phones for every "lol" — so a person has to ask for it.

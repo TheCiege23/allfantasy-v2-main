@@ -7,6 +7,7 @@ export {
 export {
   getDeliveryMethodAvailability,
   DELIVERY_LABELS,
+  DELIVERY_LABEL_KEYS,
 } from "./DeliveryMethodResolver"
 export {
   getNotificationPreferencesFromProfile,
@@ -30,5 +31,6 @@ export type {
 export {
   NOTIFICATION_CATEGORY_IDS,
   NOTIFICATION_CATEGORY_LABELS,
+  NOTIFICATION_CATEGORY_LABEL_KEYS,
   OPT_IN_NOTIFICATION_CATEGORY_IDS,
 } from "./types"

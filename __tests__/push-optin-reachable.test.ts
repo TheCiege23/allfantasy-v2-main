@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { translations } from '@/lib/i18n/translations'
 
 /**
  * THE PUSH PIPELINE WAS COMPLETE AND DELIVERED TO NOBODY.
@@ -200,7 +201,9 @@ describe('the iPhone dead end', () => {
     const src = read('components/notifications/EnableWebPushCard.tsx')
     const unsupportedGuard = src.indexOf('if (!supported)')
     const homeScreenBranch = src.indexOf('needsHomeScreen', unsupportedGuard)
-    const deadEndCopy = src.indexOf("doesn&apos;t support web push")
+    // The copy lives in lib/i18n/translations.ts since the i18n move; its key marks the branch.
+    const deadEndCopy = src.indexOf("t('settings.push.unsupported')")
+    expect(deadEndCopy).toBeGreaterThan(-1)
     expect(unsupportedGuard).toBeGreaterThan(-1)
     expect(homeScreenBranch).toBeGreaterThan(-1)
     // The iOS branch must come between the guard and the generic dead-end message.
@@ -211,7 +214,11 @@ describe('the iPhone dead end', () => {
     // A denial is sticky and cannot be re-asked from script, so this copy is the only exit.
     const src = read('components/notifications/EnableWebPushCard.tsx')
     const denied = src.slice(src.indexOf("permission === 'denied'"))
-    expect(denied).toMatch(/Allow|Permissions|Settings/)
+    // The copy lives in lib/i18n/translations.ts since the i18n move: the branch renders the
+    // key, and the key's English (and Spanish) must still carry the steps.
+    expect(denied).toContain("t('settings.push.denied')")
+    expect(translations.en!['settings.push.denied']).toMatch(/Allow|Permissions|Settings/)
+    expect(translations.es!['settings.push.denied']).toMatch(/Permitir|Permisos|Configuración/)
   })
 })
 

@@ -139,6 +139,22 @@ async function handle(req: NextRequest) {
     const budget = createRunBudget(RUN_BUDGET_MS)
     const perSport: Record<string, unknown> = {}
     const deferred: string[] = []
+    let schedule: Record<string, unknown> | null = null
+    const syncSchedule = async (sport: "MLB" | "NCAAB" | "SOCCER") => {
+      if (fromDate || toDate || budget.exhausted() || !candidates.includes(sport)) return
+      try {
+        // Baseball is a calendar-year season. College basketball and soccer span two years.
+        const season = sport === "MLB" ? new Date().getUTCFullYear() : currentScheduleSeason()
+        const result = await syncRiSeasonSchedule({ sport, season, db: prisma as never })
+        schedule = { ...(schedule ?? {}), [sport]: result }
+      } catch (err) {
+        schedule = { ...(schedule ?? {}), [sport]: { error: String(err).slice(0, 200) } }
+      }
+    }
+
+    // MLB's complete slate is required for lineup locks and safe week sealing. Fetch it before
+    // the multi-sport stat sweep can spend the whole run budget; no new cron slot is needed.
+    await syncSchedule("MLB")
 
     // Rotated so a budget cut does not starve the same sport every night.
     for (const s of rotateForFairness(candidates)) {
@@ -215,17 +231,7 @@ async function handle(req: NextRequest) {
      * syncRiSeasonSchedule). Its pool spans those three leagues and SportsGame holds only the EPL,
      * and the daily re-sync is also what moves a played game to `completed` for the finalizer.
      */
-    let schedule: Record<string, unknown> | null = null
-    for (const scheduleSport of ["NCAAB", "SOCCER"] as const) {
-      if (fromDate || toDate || budget.exhausted() || !candidates.includes(scheduleSport)) continue
-      try {
-        const season = currentScheduleSeason()
-        const r = await syncRiSeasonSchedule({ sport: scheduleSport, season, db: prisma as never })
-        schedule = { ...(schedule ?? {}), [scheduleSport]: r }
-      } catch (err) {
-        schedule = { ...(schedule ?? {}), [scheduleSport]: { error: String(err).slice(0, 200) } }
-      }
-    }
+    for (const scheduleSport of ["NCAAB", "SOCCER"] as const) await syncSchedule(scheduleSport)
 
     const written = Object.values(perSport).reduce<number>(
       (a, r) => a + (typeof (r as { written?: number }).written === "number" ? (r as { written: number }).written : 0),

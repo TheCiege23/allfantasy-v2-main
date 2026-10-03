@@ -93,7 +93,7 @@ describe('LeagueHome — Power board, AF beside API', () => {
     const root = render(<LeagueHome data={page()} otherLeagueIssueCount={0} identityInShell lineups={lineups} />).container
     const list = root.querySelector('.af-pb-list')!
     expect(list.getAttribute('data-proj')).toBe('true')
-    expect(root.querySelector('.af-lh-power-panel')!.textContent).toContain('AF / API projected, week 4')
+    expect(root.querySelector('.af-lh-power-panel')!.textContent).toContain('AF / Sleeper projected, week 4')
 
     const rows = [...list.querySelectorAll('.af-pb-row')]
     // The board's own order: rank 1, 2, 3 — the higher AF team stays second.

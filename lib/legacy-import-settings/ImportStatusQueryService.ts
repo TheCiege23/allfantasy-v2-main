@@ -48,6 +48,29 @@ export function getImportStatusLabel(status: string | null): string {
 }
 
 /**
+ * i18n key for `getImportStatusLabel`, or null when that function would echo the raw status
+ * (or "—"). Display only — the status values themselves are untouched.
+ */
+export function getImportStatusLabelKey(status: string | null): string | null {
+  switch (status) {
+    case "completed":
+      return "settings.legacy.importStatus.completed"
+    case "running":
+      return "settings.legacy.importStatus.running"
+    case "queued":
+      return "settings.legacy.importStatus.queued"
+    case "failed":
+    case "error":
+      return "settings.legacy.importStatus.failed"
+    case "not_started":
+    case "none":
+      return "settings.legacy.importStatus.notStarted"
+    default:
+      return null
+  }
+}
+
+/**
  * Resolves provider status from API response.
  */
 export function getProviderStatus(
@@ -73,6 +96,23 @@ export function shouldShowRetryImport(status: LegacyProviderStatus | null | unde
 export function getLegacyProviderHelpHref(providerId: LegacyProviderId): string {
   if (providerId === "sleeper") return "/import"
   return "/import"
+}
+
+/**
+ * i18n keys for the labels `getLegacyProviderPrimaryAction` returns, keyed by that English label.
+ * A lookup beside the function rather than a new field on its result, so the action object (and
+ * the `label.includes("Retry")` styling check that reads it) is unchanged. Display only.
+ */
+const LEGACY_PRIMARY_ACTION_LABEL_KEYS: Record<string, string> = {
+  "Connect first": "settings.legacy.action.connectFirst",
+  "Retry import": "settings.legacy.action.retryImport",
+  "Re-import / refresh": "settings.legacy.action.reimport",
+  "Start import": "settings.legacy.action.startImport",
+  "Open import": "settings.legacy.action.openImport",
+}
+
+export function getLegacyPrimaryActionLabelKey(label: string): string | null {
+  return LEGACY_PRIMARY_ACTION_LABEL_KEYS[label] ?? null
 }
 
 /** The one page that links a Sleeper account to this profile. */

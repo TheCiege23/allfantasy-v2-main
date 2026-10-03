@@ -36,19 +36,18 @@
  * anything and no event plumbing at all. That is strictly better than a TTL for exactly this gap,
  * and trades have the same shape: they appear when a sync imports them.
  *
- * It is NOT adopted here, deliberately and only for sequencing: the fingerprint wants to be part of
- * the cache key, `SummaryScope` has no field for it, and PR #943 already has an unmerged change to
- * `lib/sports-os/summaries.ts` adding `platform`. A second concurrent edit to that shared file would
- * put two of my own branches in conflict over the one module every summary depends on. So the TTL
- * below is the interim bound and the fingerprint is the named follow-up, recorded here rather than
- * left for someone to rediscover.
+ * It was adopted later via `SummaryScope.fingerprint` — and then narrowed on 2026-10-03, because
+ * `lastSyncedAt` moves on every routine sync and kept the board permanently cold. The key now follows
+ * the board's own inputs; see `tradesBoardInputDigest`.
  */
 
 import 'server-only'
 
+import { createHash } from 'node:crypto'
 import { getTradesBoard, type TradesBoardData } from './tradesBoard'
 import { portfolioFingerprint } from './homePortfolioSummary'
 import type { Dash34LeagueRow } from './dash34'
+import { prisma } from '@/lib/prisma'
 import { readScreenSummary, registerScreenSummary } from '@/lib/sports-os/summaries'
 import { sportsDataCacheTier } from '@/lib/sports-os/durableTier'
 import type { Fresh } from '@/lib/sports-os/freshness'
@@ -62,8 +61,9 @@ export const TRADES_BOARD_SCREEN = 'trades-board'
  * a user-scoped key the TTL was the only thing that would surface it — so it was set short enough
  * that "I just traded and it is not here" was a brief wait rather than a long one.
  *
- * The fingerprint does that precisely now: the sync moves `lastSyncedAt`, the digest changes, the
- * key changes, and the next read rebuilds. The TTL returns to being a backstop.
+ * The fingerprint does that precisely now: a sync that imports or rewrites a trade changes
+ * `tradesBoardInputDigest`, the key changes, and the next read rebuilds. The TTL returns to being a
+ * backstop — and is what bounds the fields that digest deliberately leaves out (see it).
  */
 const TTL_MS = 30 * 60_000
 
@@ -111,6 +111,76 @@ registerScreenSummary<TradesBoardData | null>({
 })
 
 /**
+ * A digest of the rows `getTradesBoard` actually reads that a sync can change: which teams the
+ * account has claimed, the CONTENT of every `LeagueTrade` behind them, and the pending AF offers.
+ *
+ * 🛑 WHY THIS EXISTS (2026-10-03): `lastSyncedAt` IN THE KEY MEANT THE BOARD WAS ALMOST NEVER SERVED
+ * FROM CACHE. The fingerprint digested every league row's `lastSyncedAt`, and a routine sync sweep
+ * moves it on dozens of leagues several times an hour whether or not it imported anything. Measured
+ * on production: the owner's 65 leagues synced in five separate minutes in one hour, and the durable
+ * tier held 29 boards for one user and one week, each under a different fingerprint, all written in
+ * the same two minutes — every one a full ~30s cold build (40 leagues graded in sequence) that
+ * stale-while-revalidate could not cover, because SWR only applies within a key.
+ *
+ * So the key now follows the board's INPUTS rather than a proxy for "something may have changed":
+ * a sync that imports a trade (or rewrites one — `normalize-historical` upserts players, picks,
+ * week and date onto an existing row, which is why this hashes content and not `count + max(createdAt)`)
+ * changes the digest and still gets the genuinely cold build the fingerprint was introduced for.
+ * A sync that imported nothing no longer evicts anything.
+ *
+ * ⚠ NOT COVERED, DELIBERATELY: manager display names (`LeagueTeam.ownerName`/`teamName`) and player
+ * values. Both are cosmetic or market-driven, `LeagueTeam.lastUpdatedAt` is `@updatedAt` and so moves
+ * on every sync upsert (it would reintroduce exactly the churn removed here), and the 30-minute TTL
+ * — the only correctness this screen had before the fingerprint — bounds them.
+ *
+ * Measured at 7.7ms execution against production for the owner (95 claimed teams, 733 trade rows),
+ * 144ms round trip for the heaviest account. Returns null on any failure; the caller then falls back
+ * to the conservative full fingerprint, which over-invalidates rather than serving stale.
+ */
+export async function tradesBoardInputDigest(userId: string): Promise<string | null> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ claimed: string; trades: string; pending: string }>>`
+      WITH claimed AS (
+        SELECT DISTINCT t."leagueId" AS id, l."platformLeagueId" AS pid
+        FROM league_teams t JOIN leagues l ON l.id = t."leagueId"
+        WHERE t."claimedByUserId" = ${userId}
+      ), hist AS (
+        SELECT h.id FROM "LeagueTradeHistory" h
+        WHERE h."sleeperLeagueId" IN (SELECT pid FROM claimed WHERE pid IS NOT NULL AND pid <> '')
+      )
+      SELECT
+        (SELECT count(*)::text || ':' || md5(coalesce(string_agg(id, ',' ORDER BY id), '')) FROM claimed) AS claimed,
+        (SELECT count(*)::text || ':' || md5(coalesce(string_agg(
+            concat_ws('|', lt."historyId", lt."transactionId", lt.season, lt.week, lt."tradeDate",
+              lt."playersGiven"::text, lt."playersReceived"::text, lt."picksGiven"::text, lt."picksReceived"::text,
+              lt."partnerName", lt."partnerRosterId"),
+            ',' ORDER BY lt."historyId", lt."transactionId"), ''))
+         FROM "LeagueTrade" lt WHERE lt."historyId" IN (SELECT id FROM hist)) AS trades,
+        (SELECT count(*)::text || ':' || coalesce(max(a."updatedAt")::text, '')
+         FROM af_league_trades a WHERE a."leagueId" IN (SELECT id FROM claimed) AND a.status = 'pending') AS pending`
+    const row = rows[0]
+    if (!row) return null
+    return `${row.claimed}/${row.trades}/${row.pending}`
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The board's cache fingerprint: the league list WITHOUT `lastSyncedAt` (so an import, a removed
+ * league or a rename still changes it) plus the input digest above. With no digest, the full
+ * league-list fingerprint — the pre-2026-10-03 behaviour, which errs towards rebuilding.
+ */
+export function tradesBoardFingerprint(
+  leagueRows: readonly Dash34LeagueRow[],
+  inputDigest: string | null,
+): string {
+  if (!inputDigest) return portfolioFingerprint(leagueRows)
+  const leagues = portfolioFingerprint(leagueRows.map((row) => ({ ...row, lastSyncedAt: null })))
+  return createHash('sha256').update(`${leagues}\n${inputDigest}`).digest('hex').slice(0, 32)
+}
+
+/**
  * Read the cross-league trade board through the summary cache.
  *
  * `currentWeek` is the already-resolved slate — null when no league has a `WeeklyMatchup` row to
@@ -124,9 +194,10 @@ export async function readTradesBoardSummary(
   leagueRows: readonly Dash34LeagueRow[],
 ): Promise<Fresh<TradesBoardData | null> | null> {
   if (!userId) return null
+  const fingerprint = tradesBoardFingerprint(leagueRows, await tradesBoardInputDigest(userId))
   return readScreenSummary<TradesBoardData | null>(
     TRADES_BOARD_SCREEN,
-    { userId, period: currentWeek, fingerprint: portfolioFingerprint(leagueRows) },
+    { userId, period: currentWeek, fingerprint },
     { durable: sportsDataCacheTier() },
   )
 }

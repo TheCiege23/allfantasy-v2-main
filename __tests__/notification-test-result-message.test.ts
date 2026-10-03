@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { describeTestNotificationResult } from '@/lib/notification-settings/testResultMessage'
+import { translations } from '@/lib/i18n/translations'
+import { tInterpolate } from '@/lib/i18n/tInterpolate'
 
 /*
  * 🛑 A PARTIAL SEND WAS REPORTED AS A CLEAN SUCCESS, ON THE SCREEN BUILT TO DIAGNOSE SENDING.
@@ -75,5 +77,23 @@ describe('describeTestNotificationResult', () => {
     const out = describeTestNotificationResult({ sent: undefined, blockedReasons: undefined })
     expect(out.tone).toBe('info')
     expect(out.message.length).toBeGreaterThan(0)
+  })
+
+  /*
+   * The screen renders `tInterpolate(messageKey, messageVars)`, falling back to `message`. In
+   * English those two must be the same sentence, and the Spanish key must exist.
+   */
+  it('each outcome carries a key whose English renders the same sentence', () => {
+    const cases = [
+      { sent: { inApp: true, email: true }, blockedReasons: [] },
+      { sent: { email: true }, blockedReasons: ['sms_unavailable', 'quiet_hours'] },
+      { sent: {}, blockedReasons: ['category_disabled'] },
+      { sent: {}, blockedReasons: [] },
+    ]
+    for (const args of cases) {
+      const out = describeTestNotificationResult(args)
+      expect(tInterpolate((k) => translations.en![k] ?? k, out.messageKey, out.messageVars)).toBe(out.message)
+      expect(out.messageKey in translations.es!).toBe(true)
+    }
   })
 })

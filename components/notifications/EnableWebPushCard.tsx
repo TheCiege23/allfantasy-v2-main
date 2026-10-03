@@ -17,6 +17,7 @@
 
 import { useEffect, useState } from 'react'
 
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SendTestPushButton } from '@/components/notifications/SendTestPushButton'
 import { useWebPushSubscription } from '@/lib/push-notifications/useWebPushSubscription'
 
@@ -38,6 +39,7 @@ function isIosSafariWithoutStandalone(): boolean {
  * so the web is unchanged and there is no flash in the app.
  */
 export function EnableWebPushCard({ className }: { className?: string }) {
+  const { t } = useOptionalLanguage()
   const [vapidKey, setVapidKey] = useState<string | null>(null)
   const [configured, setConfigured] = useState<boolean | null>(null)
   const [needsHomeScreen, setNeedsHomeScreen] = useState(false)
@@ -68,9 +70,7 @@ export function EnableWebPushCard({ className }: { className?: string }) {
   if (configured === false) {
     return (
       <div className={className} data-hide-in-ios-app>
-        <p className="text-sm text-[var(--af-muted,#9aa4b2)]">
-          Push alerts aren&apos;t available yet — the server isn&apos;t configured to send them.
-        </p>
+        <p className="text-sm text-[var(--af-muted,#9aa4b2)]">{t('settings.push.notConfigured')}</p>
       </div>
     )
   }
@@ -93,20 +93,17 @@ export function EnableWebPushCard({ className }: { className?: string }) {
     if (needsHomeScreen) {
       return (
         <div className={className} data-hide-in-ios-app>
-          <p className="text-sm font-semibold">Game-day alerts</p>
+          <p className="text-sm font-semibold">{t('settings.push.title')}</p>
           <p className="mt-1 text-sm text-[var(--af-muted,#9aa4b2)]">
-            Add AllFantasy to your Home Screen first — iPhone only allows notifications for
-            installed apps. Tap the Share button, choose <strong>Add to Home Screen</strong>,
-            then open AllFantasy from there and come back to this screen.
+            {t('settings.push.homeScreenBefore')} <strong>{t('settings.push.addToHomeScreen')}</strong>
+            {t('settings.push.homeScreenAfter')}
           </p>
         </div>
       )
     }
     return (
       <div className={className} data-hide-in-ios-app>
-        <p className="text-sm text-[var(--af-muted,#9aa4b2)]">
-          This browser doesn&apos;t support web push notifications.
-        </p>
+        <p className="text-sm text-[var(--af-muted,#9aa4b2)]">{t('settings.push.unsupported')}</p>
       </div>
     )
   }
@@ -115,10 +112,8 @@ export function EnableWebPushCard({ className }: { className?: string }) {
     <div className={className} data-hide-in-ios-app>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold">Game-day alerts</p>
-          <p className="mt-1 text-sm text-[var(--af-muted,#9aa4b2)]">
-            Get notified when a starter is ruled out before kickoff, with a replacement suggestion.
-          </p>
+          <p className="text-sm font-semibold">{t('settings.push.title')}</p>
+          <p className="mt-1 text-sm text-[var(--af-muted,#9aa4b2)]">{t('settings.push.body')}</p>
         </div>
         <button
           type="button"
@@ -126,15 +121,12 @@ export function EnableWebPushCard({ className }: { className?: string }) {
           onClick={() => void (subscribed ? unsubscribe() : subscribe())}
           className="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-sm font-medium disabled:opacity-50"
         >
-          {busy ? 'Working…' : subscribed ? 'Turn off' : 'Enable'}
+          {busy ? t('settings.push.working') : subscribed ? t('settings.push.turnOff') : t('settings.push.enable')}
         </button>
       </div>
 
       {needsHomeScreen && !subscribed && (
-        <p className="mt-2 text-xs text-[var(--af-muted,#9aa4b2)]">
-          On iPhone, add AllFantasy to your Home Screen first — Safari only allows notifications
-          for installed sites.
-        </p>
+        <p className="mt-2 text-xs text-[var(--af-muted,#9aa4b2)]">{t('settings.push.iphoneHint')}</p>
       )}
 
       {/*
@@ -145,19 +137,13 @@ export function EnableWebPushCard({ className }: { className?: string }) {
         the league page.
       */}
       {permission === 'denied' && (
-        <p className="mt-2 text-xs text-amber-400">
-          Notifications are blocked for this site, and we can&apos;t ask again — you&apos;ll
-          need to clear it once. On desktop Chrome or Edge, click the icon to the left of the
-          web address, then set Notifications to Allow. On Android, tap the same icon →
-          Permissions → Notifications. On iPhone, check Settings → Notifications → AllFantasy.
-          Then reload this page.
-        </p>
+        <p className="mt-2 text-xs text-amber-400">{t('settings.push.denied')}</p>
       )}
 
       {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
 
       {subscribed && !error && (
-        <p className="mt-2 text-xs text-emerald-400">Alerts are on for this device.</p>
+        <p className="mt-2 text-xs text-emerald-400">{t('settings.push.onDevice')}</p>
       )}
 
       {subscribed && <SendTestPushButton />}

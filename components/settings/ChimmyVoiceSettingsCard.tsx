@@ -12,6 +12,7 @@ import {
   type VoiceConfig,
 } from '@/lib/chimmy-voice'
 import { CHIMMY_VOICES } from '@/lib/tts/voices'
+import { tOr } from '@/lib/i18n/tInterpolate'
 
 /*
  * Spoken, not shown: sent to the TTS endpoint as the sample line. Left in English with the bundled
@@ -147,7 +148,7 @@ export default function ChimmyVoiceSettingsCard() {
           >
             {CHIMMY_VOICES.map((v) => (
               <option key={v.id} value={v.id}>
-                {v.name} — {v.description}
+                {v.name} — {tOr(t, v.descriptionKey, v.description)}
               </option>
             ))}
           </select>

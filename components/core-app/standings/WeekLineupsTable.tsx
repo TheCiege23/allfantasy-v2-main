@@ -4,9 +4,11 @@ import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 import '@/components/core-app/af-standings.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 
 /**
- * This week's lineups, projected — every team, AllFantasy's engine (AF) beside the provider's (API).
+ * This week's lineups, projected — every team, AllFantasy's engine (AF) beside Sleeper's (labelled
+ * "API" until 2026-10-03; see projectionProvider.ts).
  * Shared by the Standings screen and the league Season Outlook.
  *
  * ⚠ A PROJECTION OF THE COMING WEEK, NOT A STANDING. The caller's `caveat` says what this is NOT
@@ -45,15 +47,15 @@ export function WeekLineupsBody({ lineups, caveat }: { lineups: StandingsLineups
     <>
       <p className="af-st-lu-note">
         {language === 'es'
-          ? `La alineación actual de cada equipo, proyectada para la semana ${lineups.week} con las reglas de esta liga. AF es la proyección de AllFantasy; API es la del proveedor (Sleeper). Es un pronóstico: ${copy(caveat)}`
-          : `Each team’s lineup as currently set, projected for week ${lineups.week} under this league’s scoring. AF is AllFantasy’s own projection engine; API is the provider’s (Sleeper). A forecast of the coming week — ${caveat}`}
+          ? `La alineación actual de cada equipo, proyectada para la semana ${lineups.week} con las reglas de esta liga. AF es la proyección de AllFantasy; ${PROJECTION_PROVIDER_LABEL} es la de ${PROJECTION_PROVIDER_LABEL}. Es un pronóstico: ${copy(caveat)}`
+          : `Each team’s lineup as currently set, projected for week ${lineups.week} under this league’s scoring. AF is AllFantasy’s own projection engine; ${PROJECTION_PROVIDER_LABEL} is ${PROJECTION_PROVIDER_LABEL}’s own projection. A forecast of the coming week — ${caveat}`}
       </p>
       <table className="af-st-lu-table">
         <thead>
           <tr>
           <th scope="col">{copy('Team')}</th>
             <th scope="col" className="af-num">AF</th>
-            <th scope="col" className="af-num">API</th>
+            <th scope="col" className="af-num">{PROJECTION_PROVIDER_LABEL}</th>
           </tr>
         </thead>
         <tbody>

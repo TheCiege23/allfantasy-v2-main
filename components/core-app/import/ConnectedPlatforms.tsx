@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useConfirm } from '@/app/settings/components/sections/ConfirmDialog'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-connected.css'
@@ -45,21 +46,24 @@ type AuthRow = {
 
 type RowStatus = 'connected' | 'action-needed' | 'not-connected' | 'coming-soon'
 
-const STATUS_LABEL: Record<RowStatus, string> = {
-  connected: 'Connected',
-  'action-needed': 'Action needed',
-  'not-connected': 'Not connected',
-  'coming-soon': 'Coming soon',
+/* i18n keys for the status tag. Display only — `RowStatus` is also the `data-status` attribute. */
+const STATUS_LABEL_KEY: Record<RowStatus, string> = {
+  connected: 'import.platforms.status.connected',
+  'action-needed': 'import.platforms.status.actionNeeded',
+  'not-connected': 'import.platforms.status.notConnected',
+  'coming-soon': 'import.status.comingSoon',
 }
 
+type T = (key: string) => string
+
 /** Which credential each platform's connection actually consists of. */
-function methodFor(platform: string, row: AuthRow | undefined, status: RowStatus): string {
-  if (status === 'coming-soon') return 'Not available yet'
+function methodFor(t: T, platform: string, row: AuthRow | undefined, status: RowStatus): string {
+  if (status === 'coming-soon') return t('import.platforms.method.notAvailable')
   switch (platform) {
     case 'espn':
       return status === 'connected'
-        ? 'Connected with your ESPN cookies · stored encrypted'
-        : 'Connects with the AllFantasy extension, or your ESPN cookies · stored encrypted'
+        ? t('import.platforms.method.espnConnected')
+        : t('import.platforms.method.espnConnects')
     case 'yahoo':
       /*
        * ⚠ A ROW WITH NO TOKEN IS THE "ACTION NEEDED" CASE, and it is a real state
@@ -68,18 +72,22 @@ function methodFor(platform: string, row: AuthRow | undefined, status: RowStatus
        * That is precisely what "re-authorize" fixes.
        */
       return status === 'action-needed'
-        ? 'Yahoo sign-in started but never finished — re-authorize to complete it'
+        ? t('import.platforms.method.yahooActionNeeded')
         : status === 'connected'
-          ? 'Connected with Yahoo sign-in'
-          : 'Connects with Yahoo sign-in'
+          ? t('import.platforms.method.yahooConnected')
+          : t('import.platforms.method.yahooConnects')
     case 'mfl':
       return status === 'connected'
-        ? 'Connected with a league API key · stored encrypted'
-        : 'Connects with a league API key · stored encrypted'
+        ? t('import.platforms.method.mflConnected')
+        : t('import.platforms.method.mflConnects')
     case 'sleeper':
-      return status === 'connected' ? 'Connected by username' : 'Connects by username'
+      return status === 'connected'
+        ? t('import.platforms.method.sleeperConnected')
+        : t('import.platforms.method.sleeperConnects')
     default:
-      return status === 'connected' ? 'Connected by league ID' : 'Connects by league ID'
+      return status === 'connected'
+        ? t('import.platforms.method.leagueIdConnected')
+        : t('import.platforms.method.leagueIdConnects')
   }
 }
 
@@ -109,6 +117,7 @@ export type ConnectedPlatformsProps = {
 }
 
 export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleeperBusy = false }: ConnectedPlatformsProps) {
+  const { t, tInterpolate } = useOptionalLanguage()
   const [rows, setRows] = useState<AuthRow[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [message, setMessage] = useState<{ tone: 'good' | 'error'; text: string } | null>(null)
@@ -148,9 +157,9 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
      * on the one screen a user reads before deciding.
      */
     const ok = await askConfirm({
-      title: `Disconnect ${label}?`,
-      body: `This removes the ${label} login AllFantasy saved for you, so new ${label} leagues can't be imported or re-synced until you reconnect. Leagues you already imported stay in AllFantasy, and nothing on ${label} itself changes.`,
-      confirmLabel: 'Disconnect',
+      title: tInterpolate('import.platforms.confirmTitle', { label }),
+      body: tInterpolate('import.platforms.confirmBody', { label }),
+      confirmLabel: t('import.platforms.disconnect'),
     })
     if (!ok) return
     setBusy(platform)
@@ -162,13 +171,13 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
         body: JSON.stringify({ platform }),
       })
       if (!res.ok) {
-        setMessage({ tone: 'error', text: `${label} could not be disconnected. Please try again.` })
+        setMessage({ tone: 'error', text: tInterpolate('import.platforms.disconnectFailed', { label }) })
         return
       }
-      setMessage({ tone: 'good', text: `${label} disconnected.` })
+      setMessage({ tone: 'good', text: tInterpolate('import.platforms.disconnected', { label }) })
       await load()
     } catch {
-      setMessage({ tone: 'error', text: 'Network error — please try again.' })
+      setMessage({ tone: 'error', text: t('import.platforms.networkError') })
     } finally {
       setBusy(null)
     }
@@ -208,21 +217,23 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
   return (
     <div className="af-ca">
       <div className="af-ca-head">
-        <span className="af-label">Settings</span>
-        <h3 className="af-ca-title">Connected accounts</h3>
+        <span className="af-label">{t('import.settingsWord')}</span>
+        <h3 className="af-ca-title">{t('import.platforms.title')}</h3>
       </div>
 
       {rows === null ? (
         <p className="af-ca-note" role="status">
-          Checking your connections&hellip;
+          {t('import.platforms.checking')}
         </p>
       ) : (
         <>
         <div className="af-ca-progress">
           <p className="af-ca-progress-head">
             <span className="af-label">
-              {connectedCount} of {livePlatformCount} live{' '}
-              {livePlatformCount === 1 ? 'platform' : 'platforms'} connected
+              {tInterpolate(
+                livePlatformCount === 1 ? 'import.platforms.progressOne' : 'import.platforms.progress',
+                { connected: connectedCount, total: livePlatformCount },
+              )}
             </span>
             <span className="af-ca-progress-pct af-num">{connectedPct}%</span>
           </p>
@@ -232,7 +243,7 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
             aria-valuenow={connectedCount}
             aria-valuemin={0}
             aria-valuemax={livePlatformCount}
-            aria-label="Platforms connected"
+            aria-label={t('import.platforms.progressAria')}
           >
             <div className="af-ca-progress-fill" style={{ width: `${connectedPct}%` }} />
           </div>
@@ -244,7 +255,7 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
             label="Sleeper"
             handle={sleeperUsername ?? null}
             status={sleeperUsername ? 'connected' : 'not-connected'}
-            method={methodFor('sleeper', undefined, sleeperUsername ? 'connected' : 'not-connected')}
+            method={methodFor(t, 'sleeper', undefined, sleeperUsername ? 'connected' : 'not-connected')}
             busy={sleeperBusy}
             onDisconnect={sleeperUsername && onDisconnectSleeper ? onDisconnectSleeper : undefined}
           />
@@ -259,7 +270,7 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
                 label={getImportProviderLabel(opt.provider)}
                 handle={null}
                 status={status}
-                method={methodFor(opt.provider, row, status)}
+                method={methodFor(t, opt.provider, row, status)}
                 since={row?.updatedAt ?? null}
                 busy={busy === opt.provider}
                 reauthorizeHref={opt.provider === 'yahoo' ? YAHOO_CONNECT_HREF : undefined}
@@ -291,20 +302,17 @@ export function ConnectedPlatforms({ sleeperUsername, onDisconnectSleeper, sleep
 
       <div className="af-ca-data">
         <p className="af-ca-data-head">
-          <span className="af-label">Your data</span>
+          <span className="af-label">{t('import.platforms.yourData')}</span>
           <DataHint />
         </p>
-        <p className="af-ca-data-body">
-          Disconnecting a platform removes the login we saved for it, so it can&rsquo;t re-sync.
-          Leagues you already imported stay, and nothing changes on the platform itself.
-        </p>
+        <p className="af-ca-data-body">{t('import.platforms.dataBody')}</p>
         <div className="af-ca-data-actions">
           {/*
             Handoff rule 5: "Add a platform" re-enters the connect flow rather than
             opening a second, settings-only form. That flow is /import.
           */}
           <Link href="/import" className="af-btn af-ca-add">
-            Add a platform
+            {t('import.platforms.addPlatform')}
           </Link>
           {/*
             ⚠ NO "DISCONNECT A PLATFORM" BUTTON. The capture pairs "Add a platform"
@@ -341,6 +349,7 @@ function PlatformRow({
   reauthorizeHref?: string
   onDisconnect?: () => void
 }) {
+  const { t, tInterpolate } = useOptionalLanguage()
   return (
     <li
       className="af-ca-row"
@@ -358,10 +367,12 @@ function PlatformRow({
         </span>
         <span className="af-ca-method">
           {method}
-          {since && status === 'connected' ? ` · since ${new Date(since).toLocaleDateString()}` : ''}
+          {since && status === 'connected'
+            ? ` · ${tInterpolate('import.platforms.since', { date: new Date(since).toLocaleDateString() })}`
+            : ''}
         </span>
       </span>
-      <span className="af-ca-tag af-num">{STATUS_LABEL[status]}</span>
+      <span className="af-ca-tag af-num">{t(STATUS_LABEL_KEY[status])}</span>
       <span className="af-ca-actions">
         {/*
           Handoff rule 1: ACTION NEEDED is the only status that earns a CTA button,
@@ -369,11 +380,11 @@ function PlatformRow({
         */}
         {status === 'action-needed' && reauthorizeHref ? (
           <a className="af-btn af-ca-fix" href={reauthorizeHref}>
-            Re-authorize
+            {t('import.platforms.reauthorize')}
           </a>
         ) : status === 'action-needed' ? (
           <Link className="af-btn af-ca-fix" href={`/import?provider=${platform}`}>
-            Finish connecting
+            {t('import.platforms.finishConnecting')}
           </Link>
         ) : null}
         {onDisconnect ? (
@@ -383,11 +394,11 @@ function PlatformRow({
             onClick={onDisconnect}
             disabled={busy}
           >
-            {busy ? 'Disconnecting…' : 'Disconnect'}
+            {busy ? t('import.platforms.disconnecting') : t('import.platforms.disconnect')}
           </button>
         ) : status === 'coming-soon' ? null : (
           <Link className="af-btn af-btn--ghost af-ca-manage" href={`/import?provider=${platform}`}>
-            Connect
+            {t('import.platforms.connect')}
           </Link>
         )}
       </span>
@@ -396,13 +407,14 @@ function PlatformRow({
 }
 
 function DataHint() {
+  const { t } = useOptionalLanguage()
   const [open, setOpen] = useState(false)
   return (
     <span className="af-ca-hint">
       <button
         type="button"
         className="af-ca-hint-btn"
-        aria-label="How your platform credentials are stored"
+        aria-label={t('import.platforms.hintAria')}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         onMouseEnter={() => setOpen(true)}
@@ -411,8 +423,7 @@ function DataHint() {
         ?
       </button>
       <span className="af-ca-hint-bubble" role="tooltip" hidden={!open}>
-        Platform credentials are stored encrypted at rest and never logged. Disconnecting removes
-        that platform&rsquo;s leagues and our read-only copy of their data from AllFantasy.
+        {t('import.platforms.hintBody')}
       </span>
     </span>
   )

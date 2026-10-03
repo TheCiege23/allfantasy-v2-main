@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason';
 import { getServerSession } from 'next-auth';
 import type { Prisma } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
@@ -1223,7 +1224,7 @@ export async function POST(req: Request) {
     } catch {
       /* non-fatal */
     }
-    const foundingSeason = new Date().getFullYear();
+    const foundingSeason = resolveLeagueCreationSeason(sport);
     if (effectiveDynasty) {
       (initialSettings as Record<string, unknown>).startup_season = foundingSeason;
     }

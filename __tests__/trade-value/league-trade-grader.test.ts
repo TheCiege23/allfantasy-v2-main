@@ -283,3 +283,31 @@ describe('gradeDeal', () => {
     expect(v).toMatchObject({ graded: false, reason: expect.stringMatching(/^Future pick cannot be priced/) })
   })
 })
+
+describe('P0 package and team-direction regression through the shared league grader', () => {
+  it('counts players separately from picks and requests review for a favorable 2-for-1 package', async () => {
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    const view = graded(await grader.grade({
+      give: [{ kind: 'player', name: 'Jaxon Smith-Njigba' }],
+      get: [{ kind: 'player', name: 'Drake London' }, { kind: 'player', name: 'Puka Nacua' }],
+      viewerSide: true,
+    }))
+    expect(view.letter).toBe('A')
+    expect(view.action).toBe('review')
+    expect(view.recommendation).toContain('may require drops')
+    expect(view.lines.map(line => line.assetKind)).toEqual(['player', 'player', 'player'])
+  })
+  it.each([0.85, 1.2])('roster utility factor %s changes fit while preserving the trade-value letter', async factor => {
+    h.needFactor = factor
+    const grader = (await createLeagueTradeGrader({ leagueId: 'L1', userId: 'u' }))!
+    const assets = {
+      give: [{ kind: 'player' as const, name: 'Drake London' }],
+      get: [{ kind: 'player' as const, name: 'Jaxon Smith-Njigba' }],
+    }
+    const withRoster = graded(await grader.grade({ ...assets, viewerSide: true }))
+    const shared = graded(await grader.grade({ ...assets, viewerSide: false }))
+    expect(withRoster.rosterFit?.giveValue).toBe(Math.round(4000 * factor))
+    expect([withRoster.letter, withRoster.partnerLetter]).toEqual(['B', 'D'])
+    expect([withRoster.letter, withRoster.giveValue, withRoster.getValue]).toEqual([shared.letter, shared.giveValue, shared.getValue])
+  })
+})

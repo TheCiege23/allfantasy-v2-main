@@ -23,6 +23,7 @@ import { rosterLabel } from '@/lib/core-app/managerName'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
+import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
 
 /**
@@ -522,7 +523,6 @@ export function LeagueHome({
         </div>
       </header>
 
-
       <section className="af-card af-lh-week-summary" aria-labelledby="af-lh-week-summary-title">
         <div className="af-lh-week-summary-head">
           <div><span className="af-label">{copy('Your next steps')}</span><h2 id="af-lh-week-summary-title">{copy('This week')}</h2></div>
@@ -671,7 +671,7 @@ export function LeagueHome({
             <span className="af-lh-here">
               {copy('through')} {data.powerBoard.data.weeksCounted}{' '}
               {copy(data.powerBoard.data.weeksCounted === 1 ? 'week' : 'weeks')}
-              {lineups ? ` · AF / API ${copy('projected, week')} ${lineups.week}` : ''}
+              {lineups ? ` · AF / ${PROJECTION_PROVIDER_LABEL} ${copy('projected, week')} ${lineups.week}` : ''}
             </span>
           ) : undefined
         }
@@ -1149,7 +1149,7 @@ function ProjectedCells({ row }: { row: StandingsLineups['rows'][number] | null 
       <span className="af-pb-proj-af">
         {cell(row?.af ?? null, row?.afFrom ?? 0, row?.starterCount ?? 0, 'AF — AllFantasy’s own projection for this week’s lineup')}
       </span>
-      {cell(row?.api ?? null, row?.apiFrom ?? 0, row?.starterCount ?? 0, 'API — the provider’s projection for this week’s lineup')}
+      {cell(row?.api ?? null, row?.apiFrom ?? 0, row?.starterCount ?? 0, `${PROJECTION_PROVIDER_LABEL} — ${PROJECTION_PROVIDER_LABEL}’s projection for this week’s lineup`)}
     </>
   )
 }

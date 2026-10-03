@@ -2,9 +2,11 @@
 
 import { ChevronDown, ChevronRight } from "lucide-react"
 import type { NotificationCategoryId, NotificationChannelPrefs } from "@/lib/notification-settings"
-import { NOTIFICATION_CATEGORY_LABELS } from "@/lib/notification-settings"
-import { DELIVERY_LABELS, type DeliveryMethodAvailability } from "@/lib/notification-settings"
+import { NOTIFICATION_CATEGORY_LABELS, NOTIFICATION_CATEGORY_LABEL_KEYS } from "@/lib/notification-settings"
+import { DELIVERY_LABELS, DELIVERY_LABEL_KEYS, type DeliveryMethodAvailability } from "@/lib/notification-settings"
 import { isPushCategory } from "@/lib/push-notifications/categories"
+import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
+import { tOr } from "@/lib/i18n/tInterpolate"
 
 export interface NotificationCategoryRendererProps {
   categoryId: NotificationCategoryId
@@ -33,7 +35,15 @@ export function NotificationCategoryRenderer({
   onToggleEnabled,
   onToggleChannel,
 }: NotificationCategoryRendererProps) {
-  const label = NOTIFICATION_CATEGORY_LABELS[categoryId]
+  const { t, tInterpolate } = useOptionalLanguage()
+  const label = tOr(t, NOTIFICATION_CATEGORY_LABEL_KEYS[categoryId], NOTIFICATION_CATEGORY_LABELS[categoryId])
+  /* Display only — the channel keys passed to onToggleChannel are unchanged. */
+  const delivery = {
+    inApp: tOr(t, DELIVERY_LABEL_KEYS.inApp, DELIVERY_LABELS.inApp),
+    push: tOr(t, DELIVERY_LABEL_KEYS.push, DELIVERY_LABELS.push),
+    email: tOr(t, DELIVERY_LABEL_KEYS.email, DELIVERY_LABELS.email),
+    sms: tOr(t, DELIVERY_LABEL_KEYS.sms, DELIVERY_LABELS.sms),
+  }
 
   return (
     <div
@@ -59,7 +69,7 @@ export function NotificationCategoryRenderer({
           <span className="min-w-0 text-sm font-medium">{label}</span>
         </button>
         <label className="flex shrink-0 items-center gap-2">
-          <span className="w-6 text-right text-xs" style={{ color: "var(--muted)" }}>{prefs.enabled ? "On" : "Off"}</span>
+          <span className="w-6 text-right text-xs" style={{ color: "var(--muted)" }}>{prefs.enabled ? t("settings.notifications.on") : t("settings.notifications.off")}</span>
           <input
             type="checkbox"
             role="switch"
@@ -67,7 +77,7 @@ export function NotificationCategoryRenderer({
             onChange={(e) => onToggleEnabled(e.target.checked)}
             className="h-4 w-4 rounded border"
             style={{ accentColor: "var(--accent-cyan)" }}
-            aria-label={`${label} enabled`}
+            aria-label={tInterpolate("settings.notifications.categoryEnabledAria", { label })}
           />
         </label>
       </div>
@@ -78,7 +88,9 @@ export function NotificationCategoryRenderer({
           style={{ borderColor: "var(--border)", opacity: prefs.enabled ? 1 : 0.6 }}
         >
           <p className="text-xs font-medium" style={{ color: "var(--muted2)" }}>
-            Delivery{prefs.enabled ? "" : " — turn this alert on to use these"}
+            {prefs.enabled
+              ? t("settings.notifications.deliveryHeading")
+              : t("settings.notifications.deliveryHeadingOff")}
           </p>
           <div className="flex flex-wrap gap-x-5 gap-y-1">
             <label className="flex items-center gap-2 text-sm">
@@ -89,9 +101,9 @@ export function NotificationCategoryRenderer({
                 disabled={!deliveryAvailability.inApp}
                 className="h-3.5 w-3.5 rounded"
                 style={{ accentColor: "var(--accent-cyan)" }}
-                aria-label={`${label} ${DELIVERY_LABELS.inApp}`}
+                aria-label={`${label} ${delivery.inApp}`}
               />
-              <span style={{ color: "var(--text)" }}>{DELIVERY_LABELS.inApp}</span>
+              <span style={{ color: "var(--text)" }}>{delivery.inApp}</span>
             </label>
             {isPushCategory(categoryId) && deliveryAvailability.push !== false && (
               <label className="flex items-center gap-2 text-sm">
@@ -101,9 +113,9 @@ export function NotificationCategoryRenderer({
                   onChange={(e) => onToggleChannel("push", e.target.checked)}
                   className="h-3.5 w-3.5 rounded"
                   style={{ accentColor: "var(--accent-cyan)" }}
-                  aria-label={`${label} ${DELIVERY_LABELS.push}`}
+                  aria-label={`${label} ${delivery.push}`}
                 />
-                <span style={{ color: "var(--text)" }}>{DELIVERY_LABELS.push}</span>
+                <span style={{ color: "var(--text)" }}>{delivery.push}</span>
               </label>
             )}
             {deliveryAvailability.email && (
@@ -114,9 +126,9 @@ export function NotificationCategoryRenderer({
                   onChange={(e) => onToggleChannel("email", e.target.checked)}
                   className="h-3.5 w-3.5 rounded"
                   style={{ accentColor: "var(--accent-cyan)" }}
-                  aria-label={`${label} ${DELIVERY_LABELS.email}`}
+                  aria-label={`${label} ${delivery.email}`}
                 />
-                <span style={{ color: "var(--text)" }}>{DELIVERY_LABELS.email}</span>
+                <span style={{ color: "var(--text)" }}>{delivery.email}</span>
               </label>
             )}
             {deliveryAvailability.sms && (
@@ -127,9 +139,9 @@ export function NotificationCategoryRenderer({
                   onChange={(e) => onToggleChannel("sms", e.target.checked)}
                   className="h-3.5 w-3.5 rounded"
                   style={{ accentColor: "var(--accent-cyan)" }}
-                  aria-label={`${label} ${DELIVERY_LABELS.sms}`}
+                  aria-label={`${label} ${delivery.sms}`}
                 />
-                <span style={{ color: "var(--text)" }}>{DELIVERY_LABELS.sms}</span>
+                <span style={{ color: "var(--text)" }}>{delivery.sms}</span>
               </label>
             )}
           </div>

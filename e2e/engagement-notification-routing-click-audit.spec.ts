@@ -45,15 +45,27 @@ test.describe("@retention engagement notification routing click audit", () => {
     await expect(weeklyLink).toHaveAttribute("href", "/tools-hub")
     await expect(blockedLink).toHaveAttribute("href", "/dashboard")
 
+    /*
+     * ⚠ A CLICK-THROUGH WAITS ON THE DESTINATION'S COMPILE, NOT ON THE CLICK. These run against
+     * `next dev`, and a <Link> only changes the URL once the target route's payload has arrived —
+     * so on a route compiled cold (first visit, or after the dev server restarts and drops its
+     * compiles) the browser sits on the harness while webpack works. The default 5s expect timeout
+     * failed exactly that way in CI on 2026-10-03: "9 × unexpected value .../e2e/engagement-
+     * notification-routing". 20s is the budget global-setup.ts already names for click-reached
+     * destinations. The lane's E2E_WARM_ROUTES (playwright.yml) warms all three targets, so this is
+     * headroom for a cold compile, not a cover for a broken link — the hrefs are asserted above.
+     */
+    const CLICK_THROUGH = { timeout: 20_000 }
+
     await dailyLink.click()
-    await expect(page).toHaveURL(/\/trade-analyzer/)
+    await expect(page).toHaveURL(/\/trade-analyzer/, CLICK_THROUGH)
 
     await gotoWithRetry(page, "/e2e/engagement-notification-routing")
     await page.getByRole("link", { name: /AI insight unlocked/i }).click()
-    await expect(page).toHaveURL(/\/chimmy/)
+    await expect(page).toHaveURL(/\/chimmy/, CLICK_THROUGH)
 
     await gotoWithRetry(page, "/e2e/engagement-notification-routing")
     await page.getByRole("link", { name: /Weekly recap summary/i }).click()
-    await expect(page).toHaveURL(/\/tools-hub/)
+    await expect(page).toHaveURL(/\/tools-hub/, CLICK_THROUGH)
   })
 })

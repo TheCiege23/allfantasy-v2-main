@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { normalizePlayerName } from '@/lib/player-identity/playerIdentityResolution'
 import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
+import { hasIdpScoring, isIdpPosition } from '@/lib/core-app/scoringNotes'
 
 /**
  * What one player is projected for, for the model to read. Phase 7.2.
@@ -200,8 +201,17 @@ export async function buildPlayerProjectionContext(args: {
           const leaguePoints = componentStats ? computeLeagueProjectedPoints(componentStats, scoring) : null
           if (leaguePoints) {
             const leagueName = league.name ?? 'the selected league'
+            /*
+             * Named for who made it ("API" until 2026-10-03), so Chimmy says "Sleeper" back to the
+             * user. ⚠ A DEFENDER IN AN IDP LEAGUE IS NOT SLEEPER'S: the lookup above passes IDP
+             * enrichment, and Sleeper has no defensive line, so his component stats come from
+             * AllFantasy's IDP model — and the line says so rather than crediting Sleeper.
+             */
+            const idpModel = isIdpPosition(r.position) && hasIdpScoring(scoring)
             lines.push(
-              `- API (the provider's, Sleeper, projection): ${leaguePoints.points.toFixed(1)} points in ${leagueName} for week ${targetWeek}, re-scored from the provider's component projection under that league’s imported rules.`,
+              idpModel
+                ? `- AllFantasy IDP model (Sleeper publishes no defensive projection): ${leaguePoints.points.toFixed(1)} points in ${leagueName} for week ${targetWeek}, scored under that league’s imported IDP rules.`
+                : `- Sleeper projection: ${leaguePoints.points.toFixed(1)} points in ${leagueName} for week ${targetWeek}, re-scored from Sleeper's component projection under that league’s imported rules.`,
             )
             /*
              * AllFantasy's own engine for the same week and player, carried into the league's rules by

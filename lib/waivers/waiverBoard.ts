@@ -557,12 +557,24 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   if (candidates.length > limit) {
     notes.push(`${candidates.length} free agents would improve your lineup; showing the top ${limit}.`)
   }
-  if (locks.pinned.size > 0 || locks.frozenOut.size > 0 || lockedFreeAgents > 0) {
-    notes.push(
-      `Games already kicked off are locked in: ${locks.pinned.size} of your starters keep their slots, ` +
-        `${locks.frozenOut.size} bench player${locks.frozenOut.size === 1 ? '' : 's'} can no longer come in, ` +
-        `and ${lockedFreeAgents} free agent${lockedFreeAgents === 1 ? '' : 's'} whose game has started ${lockedFreeAgents === 1 ? 'is' : 'are'} not shown.`,
-    )
+  /* Only the parts that happened — "0 of your starters keep their slots" read as a claim about nothing. */
+  const lockParts = [
+    locks.pinned.size > 0
+      ? `${locks.pinned.size === 1 ? '1 of your starters keeps his slot' : `${locks.pinned.size} of your starters keep their slots`}`
+      : null,
+    locks.frozenOut.size > 0
+      ? `${locks.frozenOut.size} bench player${locks.frozenOut.size === 1 ? '' : 's'} can no longer come in`
+      : null,
+    lockedFreeAgents > 0
+      ? `${lockedFreeAgents} free agent${lockedFreeAgents === 1 ? '' : 's'} whose game has started ${lockedFreeAgents === 1 ? 'is' : 'are'} not shown`
+      : null,
+  ].filter((part): part is string => part != null)
+  if (lockParts.length > 0) {
+    const listed =
+      lockParts.length === 1
+        ? lockParts[0]
+        : `${lockParts.slice(0, -1).join(', ')}${lockParts.length > 2 ? ',' : ''} and ${lockParts[lockParts.length - 1]}`
+    notes.push(`Games already kicked off are locked in: ${listed}.`)
   }
   if (scoredPool.length < poolIds.size) {
     notes.push(
