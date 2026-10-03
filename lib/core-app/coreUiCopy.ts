@@ -30,6 +30,7 @@ const spanish: Record<string, string> = {
   Sync: 'Sincronizar',
   Tools: 'Herramientas',
   Settings: 'Configuración',
+  'Plans & tokens': 'Planes y tokens',
   Admin: 'Administración',
   'My Leagues': 'Mis ligas',
   'My leagues': 'Mis ligas',
