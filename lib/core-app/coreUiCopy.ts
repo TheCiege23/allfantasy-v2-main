@@ -1086,6 +1086,32 @@ const spanish: Record<string, string> = {
   'the regular season is over — this is the final total': 'la temporada regular terminó: este es el total final',
   'this league has no head-to-head schedule, so there is no fixed number of weeks left to project':
     'esta liga no tiene enfrentamientos directos, así que no hay un número fijo de semanas que proyectar',
+  // Standings — why there is no table at all (lib/core-app/leagueStandings.ts). Scout shows these too.
+  'this league has no platform id on file, and the weekly results this board is built from are stored against the provider’s id rather than ours':
+    'esta liga no tiene id de plataforma registrado, y los resultados semanales de esta tabla se guardan con el id del proveedor, no con el nuestro',
+  'no weekly results have been synced for this league yet — the board is built from scored weeks, and there are none on file':
+    'todavía no se sincronizaron resultados semanales de esta liga: la tabla se arma con semanas jugadas y no hay ninguna registrada',
+  'Order is total points for.': 'El orden es el total de puntos a favor.',
+  // Scout — why there is nobody to scout (lib/core-app/scout.ts).
+  'membership in this league could not be checked just now — try again in a moment':
+    'no pudimos comprobar tu pertenencia a esta liga: inténtalo de nuevo en un momento',
+  'scouting reads the managers of a league you are in, and this account is not a member of this one':
+    'el scouting lee a los mánagers de una liga en la que estás, y esta cuenta no pertenece a esta liga',
+  'the teams in this league could not be read just now — try again in a moment':
+    'no pudimos leer los equipos de esta liga: inténtalo de nuevo en un momento',
+  'no teams have been imported for this league, so there is nobody to scout':
+    'no se importó ningún equipo de esta liga, así que no hay a quién analizar',
+  'the standings could not be read just now, so the table order and records are missing':
+    'no pudimos leer la clasificación, así que faltan el orden de la tabla y los récords',
+  // Scout — Competitive Edge reasons (lib/competitive-edge/scoutEdgeLoader.ts, waiverEdgeLoader.ts).
+  'membership in this league could not be checked just now': 'no pudimos comprobar tu pertenencia a esta liga',
+  'Competitive Edge reads the managers of a league you are in': 'Competitive Edge lee a los mánagers de una liga en la que estás',
+  'this league could not be read': 'no pudimos leer esta liga',
+  'the waiver history could not be read just now': 'no pudimos leer el historial de agentes libres',
+  "this league's trade history hasn't been read yet — it loads with the league's Trades screen":
+    'todavía no se leyó el historial de intercambios de esta liga: se carga con la pantalla de Intercambios de la liga',
+  'Competitive Edge could not be read right now': 'no pudimos leer Competitive Edge en este momento',
+  // 'This league could not be read.' and 'Competitive Edge could not be read right now.' are already above.
   // Waivers — "Worth adding" board notes and states (lib/waivers/waiverBoard.ts, seasonRateWaiverBoard.ts,
   // waiverSportBasis.ts) and its empty-state reasons (components/core-app/WaiverLineupBoard.tsx).
   'Ranked by how much each adds to your best starting lineup, not by raw projection — a big name who would not crack your lineup is worth nothing this week.':
@@ -1162,6 +1188,29 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   [
     /^a pace needs at least (\d+) scored weeks behind it — you have (\d+)$/,
     (m) => `un ritmo necesita al menos ${m[1]} semanas jugadas — llevas ${m[2]}`,
+  ],
+  // Standings — the order basis (lib/core-app/standingsModel.ts `orderBasis`; Scout prints it too).
+  [/^Order is (.+)'s reported standings\.$/, (m) => `El orden es la clasificación que reporta ${m[1]}.`],
+  [
+    /^Order is winning percentage, then points for, then head-to-head — (.+)'s rule\.$/,
+    (m) => `El orden es porcentaje de victorias, luego puntos a favor y luego enfrentamientos directos: la regla de ${m[1]}.`,
+  ],
+  [
+    /^Order is winning percentage, then points for, then head-to-head — assumed, because (.+) does not report its tiebreaker to us\.$/,
+    (m) => `El orden es porcentaje de victorias, luego puntos a favor y luego enfrentamientos directos: lo suponemos, porque ${m[1]} no nos reporta su criterio de desempate.`,
+  ],
+  [
+    /^nothing has been scored in (\d+) yet\. The full schedule is already on file, so there are rows for every week — but ranking them would order twelve teams that have all scored nothing\.$/,
+    (m) => `todavía no se anotó nada en ${m[1]}. El calendario completo ya está registrado, así que hay filas para cada semana, pero ordenarlas sería clasificar a doce equipos que no anotaron nada.`,
+  ],
+  // Scout — Competitive Edge, a league on a platform it does not read yet.
+  [
+    /^Competitive Edge reads Sleeper trade and waiver history today, and (.+) leagues aren't connected yet$/,
+    (m) => `Competitive Edge lee hoy el historial de intercambios y agentes libres de Sleeper, y las ligas de ${m[1]} todavía no están conectadas`,
+  ],
+  [
+    /^Competitive Edge reads Sleeper waiver history today\. (.+) leagues aren't connected yet\.$/,
+    (m) => `Competitive Edge lee hoy el historial de agentes libres de Sleeper. Las ligas de ${m[1]} todavía no están conectadas.`,
   ],
   // Waivers — "Worth adding" board notes.
   [

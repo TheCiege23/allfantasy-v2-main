@@ -169,3 +169,49 @@ describe('Waivers empty states and Waiver Intelligence reasons, in Spanish', () 
     expect(es('IR — he cannot play this week, so any bid is a stash')).toBe('IR: no puede jugar esta semana, así que cualquier oferta es para guardarlo')
   })
 })
+
+describe('Scout — what its loaders write, in Spanish', () => {
+  const SCOUT = readFileSync(resolve(process.cwd(), 'lib/core-app/scout.ts'), 'utf8')
+  const EDGE = readFileSync(resolve(process.cwd(), 'lib/competitive-edge/scoutEdgeLoader.ts'), 'utf8')
+  const WAIVER_EDGE = readFileSync(resolve(process.cwd(), 'lib/competitive-edge/waiverEdgeLoader.ts'), 'utf8')
+  const MODEL = readFileSync(resolve(process.cwd(), 'lib/core-app/standingsModel.ts'), 'utf8')
+
+  /** [a sentence exactly as a loader writes it, that loader's source, a fragment the source must still hold] */
+  const cases: Array<[string, string, string]> = [
+    ['membership in this league could not be checked just now — try again in a moment', SCOUT, "'membership in this league could not be checked just now — try again in a moment'"],
+    ['scouting reads the managers of a league you are in, and this account is not a member of this one', SCOUT, 'scouting reads the managers of a league you are in'],
+    ['the teams in this league could not be read just now — try again in a moment', SCOUT, "'the teams in this league could not be read just now — try again in a moment'"],
+    ['no teams have been imported for this league, so there is nobody to scout', SCOUT, "'no teams have been imported for this league, so there is nobody to scout'"],
+    ['the standings could not be read just now, so the table order and records are missing', SCOUT, "'the standings could not be read just now, so the table order and records are missing'"],
+    ['no weekly results have been synced for this league yet — the board is built from scored weeks, and there are none on file', STANDINGS, 'no weekly results have been synced for this league yet'],
+    ['this league has no platform id on file, and the weekly results this board is built from are stored against the provider’s id rather than ours', STANDINGS, 'this league has no platform id on file'],
+    [
+      'nothing has been scored in 2026 yet. The full schedule is already on file, so there are rows for every week — but ranking them would order twelve teams that have all scored nothing.',
+      STANDINGS,
+      'but ranking them would order twelve teams that have all scored nothing.',
+    ],
+    ['membership in this league could not be checked just now', EDGE, "'membership in this league could not be checked just now'"],
+    ['Competitive Edge reads the managers of a league you are in', EDGE, "'Competitive Edge reads the managers of a league you are in'"],
+    ['this league could not be read', EDGE, "'this league could not be read'"],
+    ["Competitive Edge reads Sleeper trade and waiver history today, and ESPN leagues aren't connected yet", EDGE, "leagues aren't connected yet`"],
+    ['the waiver history could not be read just now', EDGE, "'the waiver history could not be read just now'"],
+    ["this league's trade history hasn't been read yet — it loads with the league's Trades screen", EDGE, "it loads with the league's Trades screen"],
+    ['Competitive Edge could not be read right now', EDGE, "'Competitive Edge could not be read right now'"],
+    ['This league could not be read.', WAIVER_EDGE, "'This league could not be read.'"],
+    ["Competitive Edge reads Sleeper waiver history today. ESPN leagues aren't connected yet.", WAIVER_EDGE, 'Competitive Edge reads Sleeper waiver history today.'],
+    ['Competitive Edge could not be read right now.', WAIVER_EDGE, "'Competitive Edge could not be read right now.'"],
+    ["Order is Sleeper's reported standings.", MODEL, "`Order is ${P}'s reported standings.`"],
+    ["Order is winning percentage, then points for, then head-to-head — Sleeper's rule.", MODEL, "Order is winning percentage, then points for, then head-to-head"],
+    ['Order is winning percentage, then points for, then head-to-head — assumed, because ESPN does not report its tiebreaker to us.', MODEL, 'does not report its tiebreaker to us'],
+    ['Order is total points for.', MODEL, "'Order is total points for.'"],
+  ]
+
+  it.each(cases)('"%s" has Spanish, and the loader still writes it', (english, source, fragment) => {
+    expect(source).toContain(fragment)
+    const out = es(english)
+    expect(out).not.toBe(english)
+    for (const n of english.match(/\d+/g) ?? []) expect(out).toContain(n)
+    // A platform named in the English is named in the Spanish too.
+    for (const p of english.match(/\b(Sleeper|ESPN)\b/g) ?? []) expect(out).toContain(p)
+  })
+})

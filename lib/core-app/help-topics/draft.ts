@@ -173,7 +173,7 @@ export const DRAFT_TOPICS = {
     },
     es: {
       title: 'Por delante y por detrás',
-      body: 'Primero aparece el enfrentamiento que pierdes por más. El margen es el marcador cuando ya se jugó; antes, es la proyección de alineación de AllFantasy, o la del proveedor de proyecciones con las reglas de tu liga si AF no tiene una. Por eso «ahead in X, behind in Y» puede incluir partidos que no han empezado. «Last import» significa que el marcador viene del historial importado, no de los datos en vivo.',
+      body: 'Primero aparece el enfrentamiento que pierdes por más. El margen es el marcador cuando ya se jugó; antes, es la proyección de alineación de AllFantasy, o la del proveedor de proyecciones con las reglas de tu liga si AF no tiene una. Por eso «ganando en X, perdiendo en Y» puede incluir partidos que no han empezado. «Última importación» significa que el marcador viene del historial importado, no de los datos en vivo.',
     },
   },
   eliminationCutLine: {
@@ -183,7 +183,7 @@ export const DRAFT_TOPICS = {
     },
     es: {
       title: 'La línea de corte',
-      body: 'Una semana de eliminación no tiene rival: se te clasifica contra todos los equipos que siguen vivos y la puntuación más baja es el corte. «Over the cut» es tu total menos ese más bajo; si tienes el más bajo o empatas en él, dice «at the cut». Hasta que más de la mitad de los equipos tenga puntos, la posición usa las proyecciones previas del proveedor, no el motor de AllFantasy, y lo indica con «(projected)». Los equipos eliminados en semanas anteriores quedan fuera.',
+      body: 'Una semana de eliminación no tiene rival: se te clasifica contra todos los equipos que siguen vivos y la puntuación más baja es el corte. «Por encima del corte» es tu total menos ese más bajo; si tienes el más bajo o empatas en él, dice «en el corte». Hasta que más de la mitad de los equipos tenga puntos, la posición usa las proyecciones previas del proveedor, no el motor de AllFantasy, y lo indica con «(proyectado)». Los equipos eliminados en semanas anteriores quedan fuera.',
     },
   },
   connectedFranchise: {
