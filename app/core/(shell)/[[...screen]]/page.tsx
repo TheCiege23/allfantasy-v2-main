@@ -111,6 +111,7 @@ import { getDraftBoardData } from '@/lib/core-app/draftBoard'
 import Scout from '@/components/core-app/screens/Scout'
 import { getScoutData } from '@/lib/core-app/scout'
 import GamePlan from '@/components/core-app/screens/GamePlan'
+import WarRoomWeek from '@/components/core-app/screens/WarRoomWeek'
 import LandingV4 from '@/components/core-app/screens/LandingV4'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
 import Partners from '@/components/core-app/screens/Partners'
@@ -4688,15 +4689,26 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 the picker below is a complete screen on its own, which is what it
                 was before this change.
               */
-              gamePlan?.available ? (
-                <GamePlan
-                  data={gamePlan.data}
-                  nowIso={new Date().toISOString()}
-                  weekHref="/core/week"
-                  waiversHref="/core/waivers"
-                  showHead={false}
+              <>
+                {gamePlan?.available ? (
+                  <GamePlan
+                    data={gamePlan.data}
+                    nowIso={new Date().toISOString()}
+                    weekHref="/core/week"
+                    waiversHref="/core/waivers"
+                    showHead={false}
+                  />
+                ) : null}
+                {/*
+                  This week's matchup in every league, from the rail's own read (no query). After
+                  Game Plan: what you must DO comes before how the week is going.
+                */}
+                <WarRoomWeek
+                  lineups={ctx.weekLineups}
+                  leagues={playedLeagues.map((l) => ({ id: l.id, name: String(l.name ?? 'League') }))}
+                  boardHref="/core/matchup"
                 />
-              ) : null
+              </>
             }
           />
         )
