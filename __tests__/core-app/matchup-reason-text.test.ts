@@ -3,8 +3,14 @@
  *
  * The loaders write their `reason` strings in English on the server, which does not know the
  * reader's language, so the screen translates them at render (`matchupReasonText`). This suite
- * SCANS the producing modules for fixed reason literals, so a new English reason added without a
- * Spanish line fails here instead of shipping English to a Spanish reader.
+ * SCANS the producing modules for every English prose literal — quoted or template — so a new
+ * English reason added without a Spanish line fails here instead of shipping English to a Spanish
+ * reader.
+ *
+ * ⚠ THE FIRST VERSION OF THIS GUARD SCANNED ONLY `reason: '…'` QUOTED LITERALS, AND WAS BLIND TO
+ * TEMPLATES. Two reasons are template strings in ternary branches — the lead note over the slot board
+ * on every pre-kickoff week, and the unpriced projected final — and both shipped English under a green
+ * suite until the My Team session probed the merged build. The scan below reads all literals.
  */
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -18,23 +24,39 @@ const PRODUCERS = [
   'lib/projections/winProbability.ts',
 ]
 
-function fixedReasons(path: string): string[] {
-  const src = readFileSync(resolve(process.cwd(), path), 'utf8')
-  const out: string[] = []
-  // `reason: '…'` / `reason: "…"` — a quoted literal, not a template.
-  for (const m of src.matchAll(/reason:\s*(['"])((?:(?!\1).)+)\1/g)) out.push(m[2]!)
-  // `export const X_REASON =\n  '…'`
-  for (const m of src.matchAll(/_REASON\s*=\s*(['"])((?:(?!\1).)+)\1/g)) out.push(m[2]!)
+/**
+ * Every English prose literal in a file — single-quoted, double-quoted or template — with comments
+ * stripped. A `${…}` is filled as a reader would see it: a ternary (`starter${n === 1 ? '' : 's'}`)
+ * by its empty branch, anything else by a digit.
+ */
+function proseLiterals(path: string): Array<{ at: string; text: string }> {
+  const src = readFileSync(resolve(process.cwd(), path), 'utf8').replace(/\r\n/g, '\n')
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' ')).replace(/^\s*\/\/.*$/gm, '')
+  const out: Array<{ at: string; text: string }> = []
+  for (const m of code.matchAll(/(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g)) {
+    const text = m[2]!.replace(/\$\{([^}]*)\}/g, (_, expr: string) => (expr.includes('?') ? '' : '7'))
+    const words = text.match(/[A-Za-z][a-z’']+/g) ?? []
+    if (words.length < 5 || !text.includes(' ')) continue
+    out.push({ at: `${path}:${code.slice(0, m.index).split('\n').length}`, text })
+  }
   return out
 }
 
 describe('matchupReasonText', () => {
-  it('🛑 every fixed reason the Matchup loaders can return has Spanish', () => {
-    const all = PRODUCERS.flatMap(fixedReasons)
-    // The scan must find real strings, or it asserts nothing.
-    expect(all.length).toBeGreaterThan(20)
-    const untranslated = all.filter((r) => matchupReasonText(r, 'es') === r)
+  it('🛑 every English sentence the Matchup loaders can return has Spanish — templates included', () => {
+    const all = PRODUCERS.flatMap(proseLiterals)
+    // The scan must find real strings — and the TEMPLATES among them — or it asserts nothing.
+    expect(all.length).toBeGreaterThan(30)
+    expect(all.some((r) => r.text.startsWith('no per-player scoring has been ingested for 7 week 7'))).toBe(true)
+    const untranslated = all.filter((r) => matchupReasonText(r.text, 'es') === r.text).map((r) => `${r.at}  ${r.text}`)
     expect(untranslated).toEqual([])
+  })
+
+  it('the My Team card’s unpriced reason, which it relays through this translator, has Spanish', () => {
+    const src = readFileSync(resolve(process.cwd(), 'lib/core-app/playerProjections.ts'), 'utf8')
+    const m = src.match(/NOTHING_LEAGUE_SCORED_REASON\s*=\s*\n?\s*"([^"]+)"/)
+    expect(m).not.toBeNull()
+    expect(matchupReasonText(m![1]!, 'es')).not.toBe(m![1])
   })
 
   it('🛑 the Matchup screen prints no server reason raw — each goes through the translator', () => {
