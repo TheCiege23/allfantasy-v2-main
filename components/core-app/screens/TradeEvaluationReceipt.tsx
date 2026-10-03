@@ -1,34 +1,39 @@
 'use client'
+import { useTradeVisualCopy } from "./useTradeVisualCopy"
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { TradeEvaluationReceipt as Receipt } from '@/lib/decision-os/trade/evaluationReceipt'
 import { evaluationReceiptSchema } from '@/lib/decision-os/trade/evaluationReceipt'
 
-const number = (value: number | null) => value == null ? 'Unpriced' : value.toLocaleString()
+const number = (value: number | null, locale: string) => value == null ? 'Unpriced' : value.toLocaleString(locale)
 
 function Evaluation({ title, grade }: { title: string; grade: Receipt['grade'] }) {
+  const {copy,locale}=useTradeVisualCopy()
+
   return <div>
-    <h3>{title}</h3>
+    <h3>{copy(title)}</h3>
     {grade.graded ? <>
-      <p>Your value grade: <strong>{grade.letter}</strong> · Other team: <strong>{grade.partnerLetter}</strong> · {grade.percentDiff > 0 ? '+' : ''}{grade.percentDiff}%</p>
-      <p>{grade.basis}</p>
+      <p>{copy("Your value grade: ")}<strong>{copy(grade.letter)}</strong>{copy(" · Other team: ")}<strong>{copy(grade.partnerLetter)}</strong>{copy(" · ")}{copy(grade.percentDiff > 0 ? '+' : '')}{copy(grade.percentDiff)}{copy("%")}</p>
+      <p>{copy(grade.basis)}</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))', gap: 16 }}>
         {(['give', 'get'] as const).map(side => <div key={side}>
-          <h4>{side === 'give' ? 'You give' : 'You get'} · {number(side === 'give' ? grade.giveValue : grade.getValue)}</h4>
+          <h4>{copy(side === 'give' ? 'You give' : 'You get')}{copy(" · ")}{copy(number(side === 'give' ? grade.giveValue : grade.getValue, locale))}</h4>
           <ul>{grade.lines.filter(line => line.side === side).map((line, index) => <li key={index} style={{ overflowWrap: 'anywhere' }}>
-            {line.name}: <strong>{number(line.leagueValue)}</strong>{line.marketValue !== line.leagueValue ? ` (base ${number(line.marketValue)})` : ''}
+            {line.name}{copy(": ")}<strong>{copy(number(line.leagueValue, locale))}</strong>{copy(line.marketValue !== line.leagueValue ? ` (base ${number(line.marketValue, locale)})` : '')}
           </li>)}</ul>
         </div>)}
       </div>
-      {grade.recommendation ? <p>{grade.recommendation}</p> : null}
-      {grade.moves?.length ? <ul>{grade.moves.map((move, index) => <li key={index}>{move.name}: {move.reasons.join('; ')}</li>)}</ul> : null}
-      {grade.rosterFit ? <p>Original personal roster utility: {number(grade.rosterFit.giveValue)} given, {number(grade.rosterFit.getValue)} received. This is separate from the value grade.</p> : null}
-    </> : <p>Not graded: {grade.reason}</p>}
+      {grade.recommendation ? <p>{copy(grade.recommendation)}</p> : null}
+      {grade.moves?.length ? <ul>{grade.moves.map((move, index) => <li key={index}>{move.name}{copy(": ")}{copy(move.reasons.join('; '))}</li>)}</ul> : null}
+      {grade.rosterFit ? <p>{copy("Original personal roster utility: ")}{copy(number(grade.rosterFit.giveValue, locale))}{copy(" given, ")}{copy(number(grade.rosterFit.getValue, locale))}{copy(" received. This is separate from the value grade.")}</p> : null}
+    </> : <p>{copy("Not graded: ")}{copy(grade.reason)}</p>}
   </div>
 }
 
 /** Deep links from a calculator or email reopen the original, not a freshly repriced deal. */
 export function TradeEvaluationReceipt({ leagueId, viewerId }: { leagueId: string | null; viewerId?: string | null }) {
+  const {copy,locale}=useTradeVisualCopy()
+
   const search = useSearchParams()
   const evaluationQuery = search?.get('evaluation') ?? null
   const comparisonAbort = useRef<AbortController | null>(null)
@@ -72,21 +77,21 @@ export function TradeEvaluationReceipt({ leagueId, viewerId }: { leagueId: strin
     } catch (e) { if (!abort.signal.aborted) setError(e instanceof Error ? e.message : 'Comparison failed. Your original evaluation is unchanged.') }
     finally { if (!abort.signal.aborted) setBusy(false) }
   }
-  return <section className="af-tc-panel" aria-label="Saved trade evaluation" style={{ padding: 16, overflowWrap: 'anywhere' }}>
-    <h2>Saved trade evaluation</h2>
+  return <section className="af-tc-panel" aria-label={copy("Saved trade evaluation")} style={{ padding: 16, overflowWrap: 'anywhere' }}>
+    <h2>{copy("Saved trade evaluation")}</h2>
     {receipt ? <>
-      <p>Original evaluation: {new Date(receipt.evaluatedAt).toLocaleString()}. This record stays unchanged.</p>
-      <p>{receipt.sourceUpdatedAt ? `Price source updated: ${receipt.sourceUpdatedAt}.` : 'Price source update time was not available.'} Evaluation time does not mean every source was updated then.</p>
-      <Evaluation title="Original values" grade={receipt.grade} />
-      {receipt.contextNotes ? <ul>{[...receipt.contextNotes.byeNotes, ...receipt.contextNotes.formatNotes].map((note, index) => <li key={index}>{note}</li>)}</ul> : null}
-      {receipt.dataGaps.length ? <details><summary>Original data gaps</summary><ul>{receipt.dataGaps.map((gap, index) => <li key={index}>{gap}</li>)}</ul></details> : null}
-      <button type="button" disabled={busy} onClick={() => void compare()}>{busy ? 'Comparing…' : 'Compare with current values'}</button>
-      {' '}<a href={`/api/trade-value/analyze?evaluation=${encodeURIComponent(id)}`} target="_blank" rel="noreferrer">View saved data</a>
+      <p>{copy("Original evaluation: ")}{copy(new Date(receipt.evaluatedAt).toLocaleString(locale))}{copy(". This record stays unchanged.")}</p>
+      <p>{copy(receipt.sourceUpdatedAt ? `Price source updated: ${receipt.sourceUpdatedAt}.` : 'Price source update time was not available.')}{copy(" Evaluation time does not mean every source was updated then.")}</p>
+      <Evaluation title={copy("Original values")} grade={receipt.grade} />
+      {receipt.contextNotes ? <ul>{[...receipt.contextNotes.byeNotes, ...receipt.contextNotes.formatNotes].map((note, index) => <li key={index}>{copy(note)}</li>)}</ul> : null}
+      {receipt.dataGaps.length ? <details><summary>{copy("Original data gaps")}</summary><ul>{receipt.dataGaps.map((gap, index) => <li key={index}>{copy(gap)}</li>)}</ul></details> : null}
+      <button type="button" disabled={busy} onClick={() => void compare()}>{copy(busy ? 'Comparing…' : 'Compare with current values')}</button>
+      {copy(' ')}<a href={`/api/trade-value/analyze?evaluation=${encodeURIComponent(id)}`} target="_blank" rel="noreferrer">{copy("View saved data")}</a>
       {current ? <>
-        <p>Current evaluation: {currentTime ? new Date(currentTime).toLocaleString() : ''}. Prices, league rules, and pick resolution can change between evaluations.</p>
-        <Evaluation title="Current values" grade={current} />
+        <p>{copy("Current evaluation: ")}{copy(currentTime ? new Date(currentTime).toLocaleString(locale) : '')}{copy(". Prices, league rules, and pick resolution can change between evaluations.")}</p>
+        <Evaluation title={copy("Current values")} grade={current} />
       </> : null}
-    </> : !error ? <p>Loading original evaluation…</p> : null}
-    {error ? <p role="alert">{error}</p> : null}
+    </> : !error ? <p>{copy("Loading original evaluation…")}</p> : null}
+    {error ? <p role="alert">{copy(error)}</p> : null}
   </section>
 }

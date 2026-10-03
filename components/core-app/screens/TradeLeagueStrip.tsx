@@ -1,4 +1,5 @@
 'use client'
+import { useTradeVisualCopy } from "./useTradeVisualCopy"
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -141,6 +142,8 @@ function statusLine(s: TileState, platform: string): { text: string; tone: strin
 }
 
 export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId: string | null }) {
+  const {copy,locale}=useTradeVisualCopy()
+
   const [visibleCount, setVisibleCount] = useState(MAX_LEAGUES_READ)
   const leagues = props.leagues.slice(0, visibleCount)
   const [states, setStates] = useState<Record<string, TileState>>({})
@@ -245,13 +248,11 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
   const beyond = props.leagues.length - leagues.length
 
   return (
-    <section className="af-tc-strip" aria-label="Offers across your leagues">
+    <section className="af-tc-strip" aria-label={copy("Offers across your leagues")}>
       <div className="af-tc-strip-head">
-        <span className="af-label">Offers across your leagues</span>
+        <span className="af-label">{copy("Offers across your leagues")}</span>
         <span className="af-tc-rule" aria-hidden />
-        <span className="af-tc-strip-note">
-          Sleeper and Yahoo are read · other platforms are not, and say so
-          {beyond > 0 ? ` · ${beyond} more available below` : ''}
+        <span className="af-tc-strip-note">{copy(" Sleeper and Yahoo are read · other platforms are not, and say so ")}{copy(beyond > 0 ? ` · ${beyond} more available below` : '')}
         </span>
       </div>
       <div className="af-tc-tiles">
@@ -271,28 +272,27 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
             >
               <span className="af-tc-tile-head">
                 <span className="af-tc-mark af-platform" data-platform={l.platform.toLowerCase()} aria-hidden>
-                  {l.mark}
+                  {copy(l.mark)}
                 </span>
                 <span className="af-tc-tile-body">
                   <span className="af-tc-tile-name">{l.name}</span>
-                  {l.meta ? <span className="af-tc-tile-meta">{l.meta}</span> : null}
-                  {l.syncAge === 'over-day' ? <span className="af-tc-tile-sync">Last sync over 24 hours ago</span> : null}
-                  {l.syncAge === 'unknown' ? <span className="af-tc-tile-sync">Sync time unavailable</span> : null}
+                  {l.meta ? <span className="af-tc-tile-meta">{copy(l.meta)}</span> : null}
+                  {l.syncAge === 'over-day' ? <span className="af-tc-tile-sync">{copy("Last sync over 24 hours ago")}</span> : null}
+                  {l.syncAge === 'unknown' ? <span className="af-tc-tile-sync">{copy("Sync time unavailable")}</span> : null}
                 </span>
               </span>
               <span className="af-tc-tile-status af-num" data-tone={line.tone}>
-                {line.text}
+                {copy(line.text)}
               </span>
-              <span className="af-tc-tile-deadline">{deadlineLine(l)}</span>
-              {(s.kind === 'waiting' || s.kind === 'clear') ? <span className="af-tc-tile-last">{lastOfferLine(s.last)}</span> : null}
-              <span className="af-tc-tile-action">{nextAction(s, l.platform)} <span aria-hidden>→</span></span>
+              <span className="af-tc-tile-deadline">{copy(deadlineLine(l))}</span>
+              {(s.kind === 'waiting' || s.kind === 'clear') ? <span className="af-tc-tile-last">{copy(lastOfferLine(s.last))}</span> : null}
+              <span className="af-tc-tile-action">{copy(nextAction(s, l.platform))} <span aria-hidden>{copy("→")}</span></span>
             </Link>
           )
         })}
       </div>
       {beyond > 0 ? (
-        <button type="button" className="af-tc-strip-more" onClick={() => setVisibleCount((count) => count + MAX_LEAGUES_READ)}>
-          Show {Math.min(beyond, MAX_LEAGUES_READ)} more {beyond === 1 ? 'league' : 'leagues'}
+        <button type="button" className="af-tc-strip-more" onClick={() => setVisibleCount((count) => count + MAX_LEAGUES_READ)}>{copy(" Show ")}{copy(Math.min(beyond, MAX_LEAGUES_READ))}{copy(" more ")}{copy(beyond === 1 ? 'league' : 'leagues')}
         </button>
       ) : null}
     </section>

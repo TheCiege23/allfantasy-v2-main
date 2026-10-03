@@ -92,7 +92,11 @@ let fetchMock: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
-  vi.stubGlobal('fetch', fetchMock)
+  // History is a separate read; these assertions pin the star's write endpoint.
+  vi.stubGlobal('fetch', (url: string, init?: RequestInit) =>
+    String(url).startsWith('/api/core/player-value-history?')
+      ? Promise.resolve({ ok: true, json: async () => ({ points: [], description: 'Recorded values', note: '', scope: 'league' }) })
+      : fetchMock(url, init))
 })
 afterEach(() => {
   vi.unstubAllGlobals()

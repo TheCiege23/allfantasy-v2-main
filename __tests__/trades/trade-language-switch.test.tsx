@@ -11,6 +11,9 @@ import {PlayerValueHistoryChart} from '@/components/core-app/player-card/PlayerV
 import {TradeReactionSettings,TradeReaction} from '@/components/core-app/screens/TradeReactions'
 import {gradeTrade} from '@/lib/decision-os/trade/tradeGrade'
 import {tradeVisualCopy} from '@/lib/core-app/tradeVisualCopy'
+import {TradeFinderPanel} from '@/components/core-app/screens/TradeFinderPanel'
+import {TradePartnerSuggestions} from '@/components/core-app/screens/TradePartnerSuggestions'
+import {TradeCompetitiveEdge} from '@/components/core-app/screens/TradeCompetitiveEdge'
 const grade=gradeTrade({giveValue:100,getValue:140,giveMarket:100,getMarket:140,unpriced:0,giveCount:1,getCount:1,basis:'Dynasty · Superflex · 12 teams',scoringApplied:false,needApplied:false,needGap:null,moves:[],lines:[{side:'give',assetKind:'player',name:'Josh Allen',marketValue:100,leagueValue:100,valueSource:'fantasycalc',valueAsOf:'2026-10-03'},{side:'get',assetKind:'player',name:'Justin Jefferson',marketValue:140,leagueValue:140,valueSource:'fantasycalc',valueAsOf:'2026-10-03'}]})
 function Toggle(){const {setLanguage}=useLanguage();return <><button onClick={()=>setLanguage('es')}>Español</button><button onClick={()=>setLanguage('en')}>English</button></>}
 afterEach(()=>{cleanup();localStorage.clear();vi.restoreAllMocks();vi.unstubAllGlobals();document.documentElement.dataset.lang='en'})
@@ -25,6 +28,18 @@ function mockFetch(){
   });vi.stubGlobal('fetch',fetch);return fetch
 }
 describe('English ↔ Spanish trade experience',()=>{
+  it('switches older finder, partner and evidence panels without translating manager names',()=>{
+    mockFetch()
+    render(<LanguageProviderClient><Toggle/><TradeFinderPanel leagueId="l"/><TradePartnerSuggestions ranking={{partners:[],gaps:[]} as never} selectedRosterId={null} onChoose={()=>{}} onStartWith={()=>{}}/><TradeCompetitiveEdge access={null} partnerName="Casey Smith" edge={{available:false,reason:'No completed trades on file in this league.'}}/></LanguageProviderClient>)
+    fireEvent.click(screen.getByRole('button',{name:'Español'}))
+    expect(screen.getByRole('button',{name:'Buscar socios de intercambio'})).toBeTruthy()
+    expect(screen.getByText('Mejores socios de intercambio')).toBeTruthy()
+    expect(screen.getByText('No hay intercambios completados registrados en esta liga.')).toBeTruthy()
+    expect(screen.getByRole('region',{name:'Ventaja competitiva · Casey Smith'})).toBeTruthy()
+    fireEvent.click(screen.getByRole('button',{name:'English'}))
+    expect(screen.getByRole('button',{name:'Find trade partners'})).toBeTruthy()
+    expect(screen.getByText('Best trade partners')).toBeTruthy()
+  })
   it('switches existing evaluation, history chart, package costs, receipts and reactions without regrading',async()=>{
     const fetch=mockFetch()
     render(<LanguageProviderClient><Toggle/><TradeDecisionSummary grade={grade} evaluatedAt="2026-10-03T12:00:00Z"/><TradeEvidencePanel grade={grade} evaluatedAt="2026-10-03T12:00:00Z"/><TradePackageCost cost={{capacity:16,activeBefore:16,activeAfter:17,requiredDrops:1,displacedStarters:[],candidates:[{playerId:'1',name:'Josh Allen',singleDropLineupCost:0}],note:'Roster capacity is unverified.'}}/><ImpactNowReview leagueId="l" trade={{kind:'af',tradeId:'t'}} original={grade}/><PlayerValueHistoryChart sleeperId="1" sport="NFL" unlocked/><TradeReactionSettings/><TradeReaction letter="A"/></LanguageProviderClient>)

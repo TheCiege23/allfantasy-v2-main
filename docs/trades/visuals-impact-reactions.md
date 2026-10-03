@@ -32,8 +32,12 @@ Regression coverage checks missing history weeks, NFL season boundaries, current
 
 ## English and Spanish verification
 
-The new trade panels use the current language context to translate labels, deterministic explanations, chart titles and accessible text, evidence notices, roster consequences, receipts and optional Chimmy phrases. Language switching re-renders cached evaluations without regrading. Numbers and dates use the selected locale. Spanish draft-pick descriptions are accepted by the generic analyzer.
+The new trade panels and older picker, finder, partner suggestions, offer strip, competitive-edge and saved-evaluation panels use the current language context to translate labels, deterministic explanations, chart titles and accessible text, evidence notices, roster consequences, receipts and optional Chimmy phrases. Language switching re-renders cached evaluations without regrading. Numbers and dates use the selected locale. Spanish draft-pick descriptions are accepted by the generic analyzer. The Chimmy prompt requests Spanish while keeping the canonical asset sentence its parser consumes.
 
 Downloaded share cards render their embedded text in the language selected at download time. Player identities, photographs, logos and uploaded screenshots remain original; neutral chart shapes and emojis require no separate translated image.
+
+The server-generated proposed-trade PNG accepts a bounded language field, and the completed-trade PNG reads the explicit language parameter or language-preference cookie. Both translate embedded headings and explanatory labels; manager and player identities remain original. These routes retain their authentication and league-membership checks.
+
+See [the real completed-trade audit](completed-trade-audit-2026-10-03.md) for consistency results and the failed candidate market-estimator calibration gate. No production data was changed by that audit.
 
 Tests exercise the real language provider through English → Spanish → English, including downloaded canvas text, cached evaluation persistence and Spanish pick parsing. Chromium fixture checks cover 390, 412, 768, 1024 and 1366-pixel layouts with expanded Spanish content and reduced motion. These checks do not certify signed-in production, Safari or native Android behavior. Older screens and arbitrary source or AI prose are not certified as fully translated by this coverage; Spanish support remains partial across the application. Production verification follows the PR's CI and deployment gates.

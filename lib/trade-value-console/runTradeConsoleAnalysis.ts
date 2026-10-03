@@ -1070,8 +1070,8 @@ export async function runTradeConsoleAnalysis(
       unresolved: [...giveLines, ...getLines].some(p => p.pricedSource !== 'pick' && p.pricedSource !== 'faab' && !p.enrichmentPlayerId),
     }).catch(() => null) : null
   return {
-    visualImpact,
     ok: true,
+    visualImpact,
     analysisMode: leagueSnapshot ? 'league' : 'global',
     effectiveSport,
     analysisScope: leagueSnapshot ? 'league' : 'general',
