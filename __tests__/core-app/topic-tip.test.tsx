@@ -11,7 +11,7 @@ const lang = vi.hoisted(() => ({ language: 'en' }))
 vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useOptionalLanguage: () => ({ language: lang.language }) }))
 
 import { TopicTip } from '@/components/core-app/TopicTip'
-import { HELP_TOPICS, helpTopic, type HelpTopicId } from '@/lib/core-app/helpTopics'
+import { HELP_TOPIC_AREAS, HELP_TOPICS, helpTopic, type HelpTopicId } from '@/lib/core-app/helpTopics'
 
 afterEach(() => {
   cleanup()
@@ -28,6 +28,13 @@ describe('helpTopics', () => {
       expect(t.es.body, id).not.toBe(t.en.body)
     }
   })
+  it('no topic id is defined in two area files — a spread would silently keep only the last', () => {
+    const all = Object.values(HELP_TOPIC_AREAS).flatMap((a) => Object.keys(a))
+    const dupes = all.filter((id, i) => all.indexOf(id) !== i)
+    expect(dupes).toEqual([])
+    expect(Object.keys(HELP_TOPICS).length).toBe(all.length)
+  })
+
   it('anything but Spanish reads English', () => {
     expect(helpTopic('faab', 'fr')).toBe(HELP_TOPICS.faab.en)
     expect(helpTopic('faab', 'es')).toBe(HELP_TOPICS.faab.es)
