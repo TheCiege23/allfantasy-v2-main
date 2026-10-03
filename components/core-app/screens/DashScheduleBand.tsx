@@ -4,6 +4,7 @@ import '@/components/core-app/af-dash-schedule.css'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import type { WeekBoard, WeekMatchup } from '@/lib/core-app/weekBoard'
 import { rosterLabel } from '@/lib/core-app/managerName'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Who you play this week — the schedule half of the matchup question.
@@ -105,6 +106,8 @@ export function DashScheduleBand({
     <section className="af-core af-sched" aria-label="Who you play this week">
       <div className="af-sched-head">
         <span className="af-label af-sched-kicker">{weekLabel} · who you play</span>
+        {/* One "?" for the ELIM chip, at the heading — the cards are links, and a tip may not sit in one. */}
+        {visible.some((m) => m.elimination) ? <TopicTip topic="eliminationFormat" /> : null}
         <span className="af-sched-when af-num">
           {[
             matchups.length === 1 ? '1 matchup' : `${matchups.length} matchups`,
@@ -133,9 +136,7 @@ export function DashScheduleBand({
                 scoring that does not exist yet, so it is not implied here.
               */}
               {m.elimination ? (
-                <span className="af-sched-elim" title="Lowest score is eliminated this week">
-                  ELIM
-                </span>
+                <span className="af-sched-elim">ELIM</span>
               ) : null}
               {m.platform.toUpperCase()}
             </span>

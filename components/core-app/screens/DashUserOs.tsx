@@ -2,6 +2,7 @@ import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import type { UserOsSnapshot } from '@/lib/decision-os/userOs'
 import UserOsCard from '@/components/decision-os/UserOsCard'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * P4-5 — the /core home's Decision OS companion slot: the deterministic User OS
@@ -66,6 +67,8 @@ export function DashUserOs({
         <h2 className="af-display" style={{ margin: 0, fontSize: 15, letterSpacing: '-0.02em' }}>
           Your team{leagueName ? ` · ${leagueName}` : ''}
         </h2>
+        {/* Explains the card's tier chip (Elite … Inactive). UserOsCard is shared with other surfaces, so the tip lives here. */}
+        <TopicTip topic="participationTier" />
         <Link href={`/league/${leagueId}?view=decide`} style={{ fontSize: 12, color: 'var(--muted)' }}>
           Open Decide
         </Link>

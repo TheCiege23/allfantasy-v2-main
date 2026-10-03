@@ -8,6 +8,7 @@ import { CommissionerOsActionsSummary } from '@/components/league-hub/Commission
 import { CommissionerChimmy } from '@/components/core-app/commissioner/CommissionerChimmy'
 import { PublishStandingsToggle } from '@/components/core-app/PublishStandingsToggle'
 import { WaiverOversight } from '@/components/core-app/WaiverOversight'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import type { CommissionerHubResult, CommissionerTile } from '@/lib/core-app/commissionerHub'
 import { loadActivityCharts, loadAuditTimeline } from '@/lib/core-app/commissioner/reports'
 import { platformLabel } from '@/lib/core-app/platformLinks'
@@ -179,7 +180,9 @@ export function CommissionerHub({ data, lineups = null }: CommissionerHubProps) 
           </div>
         ) : null}
         <div className="afh-hero-body">
-          <div className="afh-label">This league right now</div>
+          <div className="afh-label">
+            This league right now <TopicTip topic="commissionerTiles" />
+          </div>
           <div className="afh-tiles">
             {tiles.map((t) => (
               <Tile key={t.key} tile={t} />
