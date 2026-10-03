@@ -168,7 +168,7 @@ function plan(data: Partial<GameDayTriage>): string {
 }
 
 const stat = (html: string, label: string) => {
-  const m = html.match(new RegExp(`<dt>${label}</dt><dd[^>]*>(.*?)</dd>`))
+  const m = html.match(new RegExp(`<dt>${label}[\\s\\S]*?</dt><dd[^>]*>(.*?)</dd>`))
   return m ? m[1].replace(/<[^>]+>/g, '') : null
 }
 

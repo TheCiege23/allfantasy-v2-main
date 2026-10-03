@@ -3,6 +3,7 @@ import type { Milestones, ScheduleStrength } from '@/lib/core-app/outlookSim'
 import type { OddsRange, OutlookAssumptions, OutlookTeam } from '@/lib/core-app/seasonOutlook'
 import type { OutlookDriver, OutlookDurability, OutlookMove } from '@/lib/core-app/seasonOutlookFocus'
 import { ageLabel, band, ordinal, pct, rangeLabel, signedPts } from '@/lib/core-app/outlookCopy'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Season Outlook — the pieces both screens are built from.
@@ -199,14 +200,15 @@ export function MilestonePanel({ m, playoffTeams }: { m: Milestones; playoffTeam
         middle of your simulated finishes.
       </p>
       <figure className="af-olk-wins">
-        <figcaption className="af-label">Playoff odds by final record</figcaption>
+        <figcaption className="af-label">
+          Playoff odds by final record <TopicTip topic="winsMilestones" />
+        </figcaption>
         <div className="af-olk-wins-bars" aria-hidden>
           {rows.map(({ w, v }) => (
             <span
               key={w}
               className="af-olk-wins-col"
               data-v={v == null ? `${record(w)}: too few runs` : `${record(w)}: ${pct(v)}%`}
-              title={v == null ? `${record(w)}: too few runs` : `${record(w)}: ${pct(v)}%`}
             >
               <span className="af-olk-wins-bar" data-known={v != null} style={{ height: `${v == null ? 3 : Math.max(3, v)}%` }} />
               <span className="af-olk-wins-x af-num">{w}</span>

@@ -7,6 +7,7 @@ import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import '@/components/core-app/af-week.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * 24b — Rivalry Radar.
@@ -183,7 +184,8 @@ export function RivalryRadar({ data, weekHref }: RivalryRadarProps) {
                 <span className="af-num">{data.totals.seasons}</span>{' '}
                 {es ? data.totals.seasons === 1 ? 'temporada' : 'temporadas' : data.totals.seasons === 1 ? 'season' : 'seasons'} {es ? 'y' : 'and'}{' '}
                 <span className="af-num">{data.totals.platforms}</span>{' '}
-                {es ? data.totals.platforms === 1 ? 'plataforma' : 'plataformas' : data.totals.platforms === 1 ? 'platform' : 'platforms'}.
+                {es ? data.totals.platforms === 1 ? 'plataforma' : 'plataformas' : data.totals.platforms === 1 ? 'platform' : 'platforms'}.{' '}
+                <TopicTip topic="rivalrySeries" />
               </>
             ) : (
               copy('No head-to-head history is on file yet.')
