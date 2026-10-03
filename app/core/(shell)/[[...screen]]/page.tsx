@@ -4387,7 +4387,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             leagues={rail}
           />
         ) : (
-          <MyTeamBoard pulse={myTeamPulse} allHref="/core/my-team?all=1" />
+          <MyTeamBoard pulse={myTeamPulse} allHref="/core/my-team?all=1" lineups={ctx.weekLineups} />
         )
       ) : activeKey === 'matchup' ? (
         matchup ? (

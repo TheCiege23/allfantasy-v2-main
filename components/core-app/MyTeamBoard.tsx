@@ -24,6 +24,8 @@ import '@/components/core-app/af-core-boards.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { relativeAge } from '@/lib/core-app/cardFreshness'
+import type { WeekLineups } from '@/lib/core-app/weekLineups'
+import { rowScoreOf, summariseWeekScores, type RowScore, type WeekScoreSummary } from '@/lib/core-app/myTeamScoreboard'
 
 /**
  * `/core/my-team` with no league held — the cross-league lineup board.
@@ -73,6 +75,11 @@ export type MyTeamBoardProps = {
   now?: number
   /** Where the footer's "View all" goes — the full picker. */
   allHref: string
+  /**
+   * The rail's matchups for this render (`ctx.weekLineups`) — already loaded for the shell, so the
+   * score on each row and the week's record cost no query. Absent or null: no scores are drawn.
+   */
+  lineups?: WeekLineups | null
 }
 
 /** "Ghosts of Gridiron · 9 starters" — each clause dropped rather than faked. */
@@ -228,17 +235,64 @@ function SyncStamp({ row, now }: { row: MyTeamRow; now: number }) {
   )
 }
 
+const pts = (n: number) => n.toFixed(1)
+
+/** " · ahead 88.4–71.2", or the distance to the cut in an elimination week. */
+function ScoreStamp({ score }: { score: RowScore | null }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  if (!score) return null
+  if (score.kind === 'cut') {
+    const place = es ? `${score.rank}.º de ${score.outOf}` : `${score.rank} of ${score.outOf}`
+    return (
+      <span className="af-bd-score" data-lead={score.overCut == null ? 'behind' : 'ahead'}>
+        {' · '}
+        {score.overCut == null
+          ? es ? `puntuación más baja: en el corte (${place})` : `lowest score: on the cut (${place})`
+          : es ? `${pts(score.overCut)} sobre el corte (${place})` : `${pts(score.overCut)} over the cut (${place})`}
+      </span>
+    )
+  }
+  const word = es
+    ? { ahead: 'ganando', behind: 'perdiendo', level: 'empatado' }[score.lead]
+    : score.lead
+  return (
+    <span className="af-bd-score" data-lead={score.lead}>
+      {' · '}
+      {word} {pts(score.you)}–{pts(score.them)}
+    </span>
+  )
+}
+
+/** "This week so far: ahead in 3, behind in 2 · on the cut in 1 · no points yet in 4." */
+function weekRecordLine(s: WeekScoreSummary, es: boolean): string {
+  const h2h = es
+    ? [s.ahead && `ganando en ${s.ahead}`, s.behind && `perdiendo en ${s.behind}`, s.level && `empatado en ${s.level}`]
+    : [s.ahead && `ahead in ${s.ahead}`, s.behind && `behind in ${s.behind}`, s.level && `level in ${s.level}`]
+  const cut = es
+    ? [s.aboveCut && `sobre el corte en ${s.aboveCut}`, s.onCut && `en el corte en ${s.onCut}`]
+    : [s.aboveCut && `above the cut in ${s.aboveCut}`, s.onCut && `on the cut in ${s.onCut}`]
+  const parts = [
+    h2h.filter(Boolean).join(', '),
+    cut.filter(Boolean).join(', '),
+    s.noPointsYet ? (es ? `sin puntos aún en ${s.noPointsYet}` : `no points yet in ${s.noPointsYet}`) : '',
+  ].filter(Boolean)
+  return `${es ? 'Esta semana hasta ahora' : 'This week so far'}: ${parts.join(' · ')}.`
+}
+
 function Row({
   row,
   rank,
   showRank,
   now,
+  score = null,
 }: {
   row: MyTeamRow
   rank: string | null
   /** False when NOTHING on the board is ordered — then there is no gutter at all. */
   showRank: boolean
   now: number
+  score?: RowScore | null
 }) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -335,7 +389,7 @@ function Row({
         )}
       </div>
       <div className="af-mt-board-actions">
-        <span>{row.bestBall ? copy('Provider selects the scoring lineup · review roster depth') : <>{row.started ? language === 'es' ? `${row.started} ${copy(row.started === 1 ? 'starter' : 'starters')} con partido iniciado · ` : `${row.started} ${row.started === 1 ? 'starter' : 'starters'} past kickoff · ` : ''}{nextDeadline ? `${copy('Next player deadline')} ${nextDeadline}` : copy(row.lockAt ? 'Next player deadline' : 'Check individual locks')}{row.unknownKickoffs ? language === 'es' ? ` · ${row.unknownKickoffs} sin hora de inicio` : ` · ${row.unknownKickoffs} without a kickoff` : ''}</>}<SyncStamp row={row} now={now} /></span>
+        <span>{row.bestBall ? copy('Provider selects the scoring lineup · review roster depth') : <>{row.started ? language === 'es' ? `${row.started} ${copy(row.started === 1 ? 'starter' : 'starters')} con partido iniciado · ` : `${row.started} ${row.started === 1 ? 'starter' : 'starters'} past kickoff · ` : ''}{nextDeadline ? `${copy('Next player deadline')} ${nextDeadline}` : copy(row.lockAt ? 'Next player deadline' : 'Check individual locks')}{row.unknownKickoffs ? language === 'es' ? ` · ${row.unknownKickoffs} sin hora de inicio` : ` · ${row.unknownKickoffs} without a kickoff` : ''}</>}<ScoreStamp score={score} /><SyncStamp row={row} now={now} /></span>
         <LineupIntelligenceActions leagueId={row.leagueId} leagueName={row.leagueName} bestBall={row.bestBall} />
       </div>
     </li>
@@ -379,7 +433,7 @@ function CrossLeagueStrip({ flags }: { flags: CrossLeagueFlag[] }) {
   )
 }
 
-export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
+export function MyTeamBoard({ pulse, now, allHref, lineups = null }: MyTeamBoardProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const nowMs = now ?? Date.now()
@@ -422,6 +476,8 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
   const questionableFirst = pulse.needs.length === 0 && rows.some((r) => r.questionable > 0)
   /* Nothing separated any row from any other, so the board is a set, not a ranking. */
   const unordered = ranks.length > 0 && ranks.every((r) => r === null)
+  /* Over EVERY board league, not the ten shown — the record is the whole weekend. */
+  const weekRecord = summariseWeekScores(lineups, [...pulse.needs, ...pulse.set].map((r) => r.leagueId))
 
   /*
    * ⚠ THREE DIFFERENT SILENCES, THREE DIFFERENT SENTENCES. "Nothing needs you",
@@ -494,6 +550,9 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
             ? `${pulse.checked.toLocaleString()} de ${activeTotal.toLocaleString()} equipos ${pulse.paused ? 'activos ' : ''}revisados`
             : `${pulse.checked.toLocaleString()} of ${activeTotal.toLocaleString()} ${pulse.paused ? 'active ' : ''}teams read`}
         />
+        {weekRecord ? (
+          <p className="af-bd-note af-bd-note--plain af-bd-note--record">{weekRecordLine(weekRecord, language === 'es')}</p>
+        ) : null}
         {pulse.crossLeague && pulse.crossLeague.length > 0 ? <CrossLeagueStrip flags={pulse.crossLeague} /> : null}
         {rows.length > 0 ? (
           <>
@@ -525,6 +584,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
                   rank={ranks[i]}
                   showRank={!unordered}
                   now={nowMs}
+                  score={rowScoreOf(lineups?.byLeague[r.leagueId])}
                 />
               ))}
             </ul>
