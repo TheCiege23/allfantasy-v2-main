@@ -313,3 +313,12 @@
   line-height: 1.45;
   color: var(--bdx-ink-faint);
 }
+
+/* ── Severity chips on the core page's LIGHT theme ──
+   The deck's chips hard-code a dark wash (#0c3326 …), which on /core's light theme left dark-green
+   text on a near-black chip. There, the wash is derived from the chip's own colour instead. Dark
+   theme and the Decide deck itself are untouched. */
+html[data-mode='light'] .bdx.bdx-embed-core .bdx-sev.ok { background: color-mix(in srgb, var(--bdx-ok) 14%, transparent); color: color-mix(in srgb, var(--bdx-ok) 72%, #000); }
+html[data-mode='light'] .bdx.bdx-embed-core .bdx-sev.warn { background: color-mix(in srgb, var(--bdx-warn) 16%, transparent); color: color-mix(in srgb, var(--bdx-warn) 72%, #000); }
+html[data-mode='light'] .bdx.bdx-embed-core .bdx-sev.crit { background: color-mix(in srgb, var(--bdx-crit) 14%, transparent); color: color-mix(in srgb, var(--bdx-crit) 72%, #000); }
+html[data-mode='light'] .bdx.bdx-embed-core .bdx-sev.info { background: color-mix(in srgb, var(--bdx-info) 14%, transparent); color: color-mix(in srgb, var(--bdx-info) 72%, #000); }
