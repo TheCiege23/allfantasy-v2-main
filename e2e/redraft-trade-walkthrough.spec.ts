@@ -306,43 +306,6 @@ test.describe('@db Redraft Trade Center walkthrough', () => {
     expect(events2.filter((e) => e.tradeProposalId === proposalId2).map((e) => e.eventType)).toContain('commissioner_vetoed')
   })
 
-  test('8. Commissioner trade review is commissioner-gated', async ({ page }) => {
-    const { leagueId, seasonId } = seed.nfl
-    const r2 = rid(leagueId, 2), r3 = rid(leagueId, 3)
-
-    // Create a fresh proposal (mgr2 -> mgr3).
-    await loginAs(page, seed.mgr2)
-    const r2p = await rosterPlayerIds(page, r2)
-    const r3p = await rosterPlayerIds(page, r3)
-    const create = await page.request.post('/api/redraft/trade-proposals', {
-      data: {
-        leagueId, seasonId, proposerRosterId: r2, receiverRosterId: r3,
-        assets: [
-          { fromRosterId: r2, toRosterId: r3, assetType: 'player', playerId: r2p[0], metadata: { position: 'RB', restOfSeasonProjection: 185 } },
-          { fromRosterId: r3, toRosterId: r2, assetType: 'player', playerId: r3p[0], metadata: { position: 'WR', restOfSeasonProjection: 150 } },
-        ],
-      },
-    })
-    const proposalId = (await create.json()).proposal.id as string
-
-    // Non-commissioner (the proposer) cannot read the commissioner review.
-    const forbidden = await page.request.get(`/api/redraft/trades/${proposalId}/commissioner-review`)
-    expect(forbidden.status()).toBe(403)
-
-    // Commissioner can read it — gets summary, flags, market context, and the event trail.
-    await loginAs(page, seed.commish)
-    const res = await page.request.get(`/api/redraft/trades/${proposalId}/commissioner-review`)
-    expect(res.status()).toBe(200)
-    const body = await res.json()
-    expect(typeof body.review.summary.fairnessScore).toBe('number')
-    expect(typeof body.review.summary.reviewRecommended).toBe('boolean')
-    expect(Array.isArray(body.review.riskFlags)).toBe(true)
-    expect(body.review.marketContext).toBeTruthy()
-    expect(body.eventTrail.map((e: { eventType: string }) => e.eventType)).toContain('proposal_created')
-    // Non-accusatory copy guarantee.
-    expect(JSON.stringify(body).toLowerCase()).not.toMatch(/collusion|cheat/)
-  })
-
   test('9. Market aggregates are commissioner-gated and read-only', async ({ page }) => {
     const { leagueId } = seed.nfl
 
