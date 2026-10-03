@@ -14,6 +14,7 @@ import { useOverlayContainment } from '../useOverlayContainment'
 import { CoreDepthLock, FreeUntilNote } from '../CoreDepthLock'
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { scheduleProjectionNote, scheduleRowValue } from '@/lib/core-app/scheduleProjectionNote'
+import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
 import { PlayerValueHistoryChart } from './PlayerValueHistoryChart'
@@ -99,8 +100,8 @@ function ScheduleRows({ weeks }: { weeks: PlayerCardWeek[] }) {
             </span>
             {/* The week AllFantasy's engine published: both projections, labelled. */}
             {w.afProjection != null ? (
-              <span className="af-pc-row-v af-num" title="API: provider (Sleeper) projection · AF: AllFantasy engine projection">
-                <span className="af-pc-proj-src">API</span> {w.projection != null ? w.projection.toFixed(1) : '—'}
+              <span className="af-pc-row-v af-num" title={`${PROJECTION_PROVIDER_LABEL}: ${PROJECTION_PROVIDER_LABEL}’s projection · AF: AllFantasy engine projection`}>
+                <span className="af-pc-proj-src">{PROJECTION_PROVIDER_LABEL}</span> {w.projection != null ? w.projection.toFixed(1) : '—'}
                 {' · '}
                 <span className="af-pc-proj-src af-pc-proj-src--af">AF</span> {w.afProjection.toFixed(1)}
               </span>
@@ -777,7 +778,7 @@ export default function PlayerCardSheet({
                     <p className="af-pc-basis">{scheduleProjectionNote(data.schedule.data)}</p>
                     {data.schedule.data.weeks.some((w) => w.afProjection != null) ? (
                       <p className="af-pc-basis">
-                        API is the provider (Sleeper) projection; AF is AllFantasy&rsquo;s own engine. Both are PPR.
+                        {PROJECTION_PROVIDER_LABEL} is {PROJECTION_PROVIDER_LABEL}&rsquo;s own projection; AF is AllFantasy&rsquo;s own engine. Both are PPR.
                       </p>
                     ) : null}
                   </>

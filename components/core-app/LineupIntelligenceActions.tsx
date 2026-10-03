@@ -1,9 +1,15 @@
 'use client'
 
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { COMMS_OPEN_EVENT, type CommsOpenDetail } from './comms/commsEvents'
 
 /** Open the existing Decision OS-backed Chimmy flow in the row's league. Never auto-send. */
 export function LineupIntelligenceActions({ leagueId, leagueName, bestBall = false }: { leagueId: string; leagueName: string; bestBall?: boolean }) {
+  /*
+   * ⚠ THE PREFILL IS IN THE READER'S LANGUAGE TOO. It lands in their own composer as the question
+   * they send, so an English prefill under a Spanish screen made a Spanish speaker ask in English.
+   */
+  const es = useOptionalLanguage().language === 'es'
   const ask = () => {
     const detail: CommsOpenDetail = {
       tab: 'chimmy', leagueId,
@@ -15,11 +21,21 @@ export function LineupIntelligenceActions({ leagueId, leagueName, bestBall = fal
        * something a manager would actually type.
        */
       prefill: bestBall
-        ? `Review my ${leagueName} Best Ball roster using this league's scoring and my latest data. The provider selects my scoring starters automatically; focus on injuries, roster depth, potential free agents and missing data.`
-        : `Run a start/sit check for my ${leagueName} lineup using this league's scoring and my latest data. Compare eligible bench replacements under this league's scoring, check injuries and byes, exclude players whose games have started, and identify any missing data or platform locks I must verify.`,
+        ? es
+          ? `Revisa mi plantilla Best Ball de ${leagueName} con la puntuación de esta liga y mis datos más recientes. La plataforma elige automáticamente mis titulares; céntrate en lesiones, profundidad de la plantilla, posibles agentes libres y datos que falten.`
+          : `Review my ${leagueName} Best Ball roster using this league's scoring and my latest data. The provider selects my scoring starters automatically; focus on injuries, roster depth, potential free agents and missing data.`
+        : es
+          ? `Revisa titulares y suplentes de mi alineación de ${leagueName} con la puntuación de esta liga y mis datos más recientes. Compara los reemplazos elegibles del banquillo con la puntuación de esta liga, revisa lesiones y semanas de descanso, excluye a los jugadores cuyos partidos ya empezaron e indica qué datos faltan o qué cierres de la plataforma debo confirmar.`
+          : `Run a start/sit check for my ${leagueName} lineup using this league's scoring and my latest data. Compare eligible bench replacements under this league's scoring, check injuries and byes, exclude players whose games have started, and identify any missing data or platform locks I must verify.`,
     }
     window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail }))
   }
   /* The words sit in their own span so a narrow board can show only the ✦ (the aria-label carries the full name). */
-  return <button type="button" className="af-btn af-mt-intelligence" onClick={ask} aria-label={`Ask Chimmy to check ${leagueName}'s ${bestBall ? 'Best Ball roster' : 'lineup'}`}>✦<span className="af-mt-intelligence-label"> Ask Chimmy · {bestBall ? 'roster check' : 'lineup check'}</span></button>
+  const label = es
+    ? `Pedir a Chimmy que revise ${bestBall ? 'la plantilla Best Ball' : 'la alineación'} de ${leagueName}`
+    : `Ask Chimmy to check ${leagueName}'s ${bestBall ? 'Best Ball roster' : 'lineup'}`
+  const words = es
+    ? ` Preguntar a Chimmy · ${bestBall ? 'revisar plantilla' : 'revisar alineación'}`
+    : ` Ask Chimmy · ${bestBall ? 'roster check' : 'lineup check'}`
+  return <button type="button" className="af-btn af-mt-intelligence" onClick={ask} aria-label={label}>✦<span className="af-mt-intelligence-label">{words}</span></button>
 }

@@ -1084,7 +1084,9 @@ export async function getDraftHqData(
     }))
 
   const pickSlots: SectionState<PickInventory> =
-    yourSlot == null
+    !['snake', 'linear'].includes(session.draftType.toLowerCase())
+      ? { available: false, reason: 'fixed pick ownership is not shown for this draft format; review the recorded selections on the board' }
+      : yourSlot == null
       ? {
           available: false,
           reason:

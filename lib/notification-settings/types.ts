@@ -150,6 +150,15 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
 }
 
 /**
+ * i18n keys for `NOTIFICATION_CATEGORY_LABELS`, one per id. Display only — render with
+ * `tOr(t, NOTIFICATION_CATEGORY_LABEL_KEYS[id], NOTIFICATION_CATEGORY_LABELS[id])`. The English
+ * labels above stay the fallback and are what non-React code (and tests) read.
+ */
+export const NOTIFICATION_CATEGORY_LABEL_KEYS = Object.fromEntries(
+  Object.keys(NOTIFICATION_CATEGORY_LABELS).map((id) => [id, `settings.notifications.category.${id}`]),
+) as Record<NotificationCategoryId, string>
+
+/**
  * Categories that start OFF on every channel. Everything else defaults on (in-app, push, email;
  * SMS is always opt-in). League chat is the chattiest thing in the product — defaulting it on
  * would buzz twelve phones for every "lol" — so a person has to ask for it.
@@ -158,3 +167,28 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
  * subscribe me to every league chat message" — see NotificationsSettingsSection.
  */
 export const OPT_IN_NOTIFICATION_CATEGORY_IDS: readonly NotificationCategoryId[] = ["league_chat"]
+
+/**
+ * Categories whose SMS channel defaults ON once the user has agreed to texts (owner's call,
+ * 2026-10-03: "texts on by default after consent"). Without a live consent record SMS stays off
+ * everywhere — texting without agreement is the line the A2P campaign and the TCPA draw.
+ *
+ * Deliberately the TIME-SENSITIVE alerts only: a text is a phone buzz and a Twilio charge, and the
+ * chatty categories (mentions, DMs, league chat, drama, AI tips, milestones) are what make people
+ * reply STOP. The daily cap (smsDailyCap, 15/user) is a backstop, not the design.
+ *
+ * A row the user saved with an explicit `sms` value keeps it; this only changes the DEFAULT.
+ */
+export const SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS: readonly NotificationCategoryId[] = [
+  "lineup_reminders",
+  "lineup_alerts",
+  "injury_alerts",
+  "followed_players",
+  "trade_proposals",
+  "trade_accept_reject",
+  "waiver_processing",
+  "draft_alerts",
+  "commissioner_alerts",
+  "matchup_results",
+  "system_account",
+]

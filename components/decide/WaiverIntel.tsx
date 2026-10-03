@@ -87,6 +87,13 @@ export function WaiverIntel({ leagueId, surface = 'deck' }: { leagueId: string; 
                         {t.fillsSlots.length > 0 ? (
                           <span className="bdx-sev ok">▲ fills {t.fillsSlots.join(' / ')}</span>
                         ) : null}
+                        {/* Before the bid, on the row itself: a manager surviving one week must not
+                            read "bid ~$600" on a player who cannot play this week. */}
+                        {t.unavailable ? (
+                          <span className={`bdx-sev ${t.unavailable.kind === 'bye' ? 'warn' : 'crit'}`} data-testid="waiver-intel-unavailable">
+                            {t.unavailable.kind === 'bye' ? 'bye this week' : `${t.unavailable.status} · can't play this week`}
+                          </span>
+                        ) : null}
                         {/*
                           The why, on the page — it used to live only in `title`, and a phone or a
                           tablet has no hover, so iOS and Android readers never saw it.

@@ -86,11 +86,11 @@ describe('normalizeMlbGameStats — against the captured Rolling Insights respon
     expect(normalizeMlbGameStats({ stats: { H: 2 } })).toEqual({ stats: {}, unmappedKeys: ['group:(missing)'] })
   })
 
-  it('MLB is a daily sport now, with a week window — and no opener is invented for 2027', () => {
+  it('MLB is a daily sport with a recorded 2027 Opening Night', () => {
     expect(isDailyStatSport('MLB')).toBe(true)
     expect(getDailySportNormalizer('MLB')).toBe(normalizeMlbGameStats)
     expect(DATE_WINDOWED_SPORTS).toContain('MLB')
-    expect(resolveDailySportSeasonStart('MLB', 2027)).toBeNull()
+    expect(resolveDailySportSeasonStart('MLB', 2027)).toBe('2027-03-24T00:00:00.000Z')
   })
 })
 

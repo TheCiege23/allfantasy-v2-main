@@ -3,7 +3,12 @@ import type {
   NotificationCategoryId,
   NotificationChannelPrefs,
 } from "./types"
-import { NOTIFICATION_CATEGORY_IDS, OPT_IN_NOTIFICATION_CATEGORY_IDS } from "./types"
+import {
+  NOTIFICATION_CATEGORY_IDS,
+  OPT_IN_NOTIFICATION_CATEGORY_IDS,
+  SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS,
+} from "./types"
+import { readSmsConsent } from "@/lib/sms/smsConsent"
 
 const DEFAULT_CHANNEL: NotificationChannelPrefs = {
   enabled: true,
@@ -30,18 +35,36 @@ const OPT_IN_CHANNEL: NotificationChannelPrefs = {
  * below reads `defaults.categories[id]` field by field. So an opt-in category saved as
  * `{ enabled: true }` alone does NOT silently switch its email on: absent channels stay off.
  */
-export function getDefaultCategoryPreferences(id: NotificationCategoryId): NotificationChannelPrefs {
-  return OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id) ? { ...OPT_IN_CHANNEL } : { ...DEFAULT_CHANNEL }
+export function getDefaultCategoryPreferences(
+  id: NotificationCategoryId,
+  opts: { smsConsented?: boolean } = {},
+): NotificationChannelPrefs {
+  if (OPT_IN_NOTIFICATION_CATEGORY_IDS.includes(id)) return { ...OPT_IN_CHANNEL }
+  return { ...DEFAULT_CHANNEL, sms: Boolean(opts.smsConsented) && SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS.includes(id) }
+}
+
+/**
+ * Has this preferences blob a LIVE SMS consent record (agreed, not withdrawn)? It flips the SMS
+ * DEFAULT for the time-sensitive categories. It is read from the same JSON the resolver is given,
+ * so every caller agrees without threading a flag through.
+ *
+ * ⚠ This decides a default, never a send. The dispatcher still requires `hasSmsConsent` against
+ * the CURRENT phone number (consent is per number), a verified phone and the daily cap; a stale
+ * record for an old number can therefore flip a switch on screen but cannot text anyone.
+ */
+export function hasLiveSmsConsentRecord(saved: unknown): boolean {
+  const record = readSmsConsent(saved)
+  return Boolean(record?.consentedAt) && !record?.revokedAt
 }
 
 /**
  * Returns default preferences: every category enabled with in-app + push + email and no SMS,
  * except the opt-in categories, which start off on every channel.
  */
-export function getDefaultNotificationPreferences(): NotificationPreferences {
+export function getDefaultNotificationPreferences(opts: { smsConsented?: boolean } = {}): NotificationPreferences {
   const categories: Partial<Record<NotificationCategoryId, NotificationChannelPrefs>> = {}
   for (const id of NOTIFICATION_CATEGORY_IDS) {
-    categories[id] = getDefaultCategoryPreferences(id)
+    categories[id] = getDefaultCategoryPreferences(id, opts)
   }
   return { globalEnabled: true, categories }
 }
@@ -64,7 +87,7 @@ export function getDefaultNotificationPreferences(): NotificationPreferences {
 export function resolveNotificationPreferences(
   saved: NotificationPreferences | null | undefined
 ): NotificationPreferences {
-  const defaults = getDefaultNotificationPreferences()
+  const defaults = getDefaultNotificationPreferences({ smsConsented: hasLiveSmsConsentRecord(saved) })
   // Preserved on BOTH return paths — the early return dropped them too.
   const passthrough: Partial<NotificationPreferences> = {
     ...(saved?.quietHours !== undefined && { quietHours: saved.quietHours }),

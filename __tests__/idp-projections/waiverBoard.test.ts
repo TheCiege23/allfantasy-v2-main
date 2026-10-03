@@ -230,7 +230,8 @@ describe('loadWaiverBoard — foreign roster ids', () => {
     expect(board.currentLineupPoints).toBe(0)
     expect(board.candidates[0]?.gain).toBe(12)
     expect(vi.mocked(loadUnavailableBySport)).toHaveBeenLastCalledWith(
-      expect.objectContaining({ sleeperIds: ['6038'], sports: ['NFL'], season: 2026, week: 4 }),
+      // Your roster AND the free agents: one read decides who can play for both.
+      expect.objectContaining({ sleeperIds: ['6038', 'fa1'], sports: ['NFL'], season: 2026, week: 4 }),
     )
   })
 
@@ -369,5 +370,81 @@ describe('loadWaiverBoard — kickoff locks', () => {
     )
     // Unpinned, so the old rule applies: the Sunday FA may take the 4-point back's seat.
     expect(board.candidates.map((c) => c.name)).toEqual(['Sunday FA'])
+  })
+})
+
+/*
+ * The free-agent pool on a Saturday (2026-10-03). The newest stat week held only Thursday's game —
+ * 144 players against ~2,320 in a full week — so the pool was two NFL teams and every free agent who
+ * had not played since Thursday was invisible.
+ */
+describe('loadWaiverBoard — the free-agent pool', () => {
+  type StatRow = { playerId: string; weekOrRound: number }
+  const prisma = (stats: StatRow[], meta: Array<{ sleeperId: string; team: string }>) =>
+    ({
+      league: {
+        findUnique: async () => ({ id: 'L1', settings: { scoring_settings: { rec: 1 }, roster_positions: ['TE'] }, platform: 'sleeper' }),
+        findFirst: async () => null,
+      },
+      roster: { findMany: async () => [{ playerData: { players: ['6038'] } }] },
+      playerGameStat: {
+        aggregate: async (args: any) =>
+          args?.where?.season ? { _max: { weekOrRound: Math.max(...stats.map((s) => s.weekOrRound)) } } : { _max: { season: 2026 } },
+        // Honours the week filter, so a query for the newest week alone really does miss week 3.
+        findMany: async (args: any) => {
+          const w = args?.where?.weekOrRound
+          const inWeek = (n: number) => (typeof w === 'number' ? n === w : (w?.gte == null || n >= w.gte) && (w?.lte == null || n <= w.lte))
+          return [...new Set(stats.filter((s) => inWeek(s.weekOrRound)).map((s) => s.playerId))].map((playerId) => ({ playerId }))
+        },
+      },
+      sportsPlayer: {
+        findMany: async () => meta.map((m) => ({ sleeperId: m.sleeperId, name: m.sleeperId, team: m.team, position: 'TE', updatedAt: new Date() })),
+      },
+    }) as never
+
+  it('on a Saturday, finds the free agent who last played on Sunday — not only Thursday’s players', async () => {
+    extraFeed = {
+      w3a: { name: 'Sunday Tight End', line: 9, position: 'TE', team: 'NYJ' },
+      th1: { name: 'Thursday Tight End', line: 7, position: 'TE', team: 'CLE' },
+    }
+    try {
+      const board = await loadWaiverBoard({
+        prisma: prisma(
+          [{ playerId: 'w3a', weekOrRound: 3 }, { playerId: 'th1', weekOrRound: 4 }],
+          [{ sleeperId: 'w3a', team: 'NYJ' }, { sleeperId: 'th1', team: 'CLE' }],
+        ),
+        leagueId: 'L1',
+        userId: 'u-1',
+      })
+      expect(board.candidates.map((c) => c.name)).toEqual(['Sunday Tight End', 'Thursday Tight End'])
+    } finally {
+      extraFeed = {}
+    }
+  })
+
+  it('does not offer a free agent who is out or on IR this week, and does not call him unprojected', async () => {
+    const { loadUnavailableBySport } = await import('@/lib/core-app/unavailableStarters')
+    vi.mocked(loadUnavailableBySport).mockResolvedValueOnce(new Map([['NFL', new Set(['irPriced', 'irBare'])]]))
+    extraFeed = {
+      ok: { name: 'Healthy Tight End', line: 8, position: 'TE', team: 'NYJ' },
+      irPriced: { name: 'Injured Star', line: 30, position: 'TE', team: 'BUF' }, // stale line, on IR
+      // irBare: on IR with no line at all — Jordan Mason's shape
+    }
+    try {
+      const board = await loadWaiverBoard({
+        prisma: prisma(
+          [{ playerId: 'ok', weekOrRound: 3 }, { playerId: 'irPriced', weekOrRound: 3 }, { playerId: 'irBare', weekOrRound: 3 }],
+          [{ sleeperId: 'ok', team: 'NYJ' }, { sleeperId: 'irPriced', team: 'BUF' }, { sleeperId: 'irBare', team: 'MIN' }],
+        ),
+        leagueId: 'L1',
+        userId: 'u-1',
+      })
+      expect(board.candidates.map((c) => c.name)).toEqual(['Healthy Tight End'])
+      expect(board.notes).toContain('2 free agents are ruled out, on injured reserve or on a bye this week and not shown.')
+      // Every free agent who CAN play was priced, so there is no projection gap to report.
+      expect(board.notes.join(' ')).not.toMatch(/could not be projected/)
+    } finally {
+      extraFeed = {}
+    }
   })
 })

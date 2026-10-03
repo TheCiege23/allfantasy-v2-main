@@ -97,7 +97,7 @@ describe('resolveStoredSeasonType', () => {
 
   it('is unknown for a sport with no recorded opener', () => {
     expect(
-      resolveStoredSeasonType({ normalizedStatMap: {}, sport: 'MLB', season: 2027, gameDate: at('2027-03-01T04:00:00Z') }),
+      resolveStoredSeasonType({ normalizedStatMap: {}, sport: 'MLB', season: 2028, gameDate: at('2028-03-01T04:00:00Z') }),
     ).toBeNull()
   })
 

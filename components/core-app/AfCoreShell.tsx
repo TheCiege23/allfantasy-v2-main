@@ -9,6 +9,7 @@ import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
+import { SmsOptInCard } from '@/components/notifications/SmsOptInCard'
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
@@ -38,6 +39,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 import {
@@ -422,6 +424,8 @@ export type AfCoreShellProps = {
    * previously a hardcoded 'G' for every account.
    */
   profile?: { name: string | null; imageUrl: string | null } | null
+  /** No live SMS consent for the current number: show the "Get alerts by text" nudge on home. */
+  smsOptInEligible?: boolean
   /**
    * Games in progress right now, for the Live scores badge. Same rule as every
    * other badge here: only rendered when something is actually live, never a
@@ -1145,7 +1149,7 @@ function RailSide({
       data-side={them ? 'them' : undefined}
       data-partial={partial ? 'true' : undefined}
       title={projection
-        ? `Weekly baseline projection — API: provider (Sleeper) from ${projection.pricedFrom} of ${projection.starterCount} starters${
+        ? `Weekly baseline projection — ${PROJECTION_PROVIDER_LABEL} (SLPR): ${PROJECTION_PROVIDER_LABEL}’s projection from ${projection.pricedFrom} of ${projection.starterCount} starters${
             projection.afProjected == null
               ? ', generic PPR because this league’s scoring could not be re-scored'
               : ', re-scored with this league’s settings'
@@ -1919,7 +1923,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       <span className="af-rail-row-labels" aria-hidden>
                         <span />
                         <span>{m.source === 'history_fallback' ? 'LAST' : 'SCORE'}</span>
-                        <span title="Provider (Sleeper) projection">API</span>
+                        {/*
+                          "SLPR", not "API" (2026-10-03) and not "SLEEPER": the column is 38px of
+                          11px monospace, where the full word measures ~52px. The tooltip spells it.
+                        */}
+                        <span title={`${PROJECTION_PROVIDER_LABEL} projection`}>SLPR</span>
                         <span title="AllFantasy engine projection">AF</span>
                       </span>
                       <RailSide
@@ -2254,6 +2262,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
           {active === 'home' ? <GameDayAlertsBanner /> : null}
+          {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
           {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
           <CoreWelcomeTour leagueCount={leagues.length} />
           {/*

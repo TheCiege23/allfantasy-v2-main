@@ -12,11 +12,13 @@ import {
   describeTestNotificationResult,
   NOTIFICATION_CATEGORY_IDS,
   NOTIFICATION_CATEGORY_LABELS,
+  NOTIFICATION_CATEGORY_LABEL_KEYS,
   OPT_IN_NOTIFICATION_CATEGORY_IDS,
   getDefaultCategoryPreferences,
   type NotificationPreferences,
   type NotificationCategoryId,
 } from "@/lib/notification-settings"
+import { tOr } from "@/lib/i18n/tInterpolate"
 import { buildResetNotificationPreferences } from "@/lib/notification-settings/resetNotificationPreferences"
 import { NotificationCategoryRenderer } from "@/components/notification-settings/NotificationCategoryRenderer"
 import { LeagueNotificationOverridesCard } from "@/components/notification-settings/LeagueNotificationOverridesCard"
@@ -55,6 +57,13 @@ export function NotificationsSettingsSection({
   onRefetch: () => void
 }) {
   const { t, tInterpolate } = useLanguage()
+  /* Display labels only — ids stay the stored/sent values. English is the fallback. */
+  const categoryLabels = Object.fromEntries(
+    NOTIFICATION_CATEGORY_IDS.map((id) => [
+      id,
+      tOr(t, NOTIFICATION_CATEGORY_LABEL_KEYS[id], NOTIFICATION_CATEGORY_LABELS[id]),
+    ]),
+  ) as Record<NotificationCategoryId, string>
   const resolved = resolveNotificationPreferences(profile?.notificationPreferences as NotificationPreferences | null)
   const [prefs, setPrefs] = useState<NotificationPreferences>(resolved)
   const [expandedCategory, setExpandedCategory] = useState<NotificationCategoryId | null>("matchup_results")
@@ -62,6 +71,32 @@ export function NotificationsSettingsSection({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
+  const [resumingEmail, setResumingEmail] = useState(false)
+  const [resumeEmailError, setResumeEmailError] = useState<string | null>(null)
+  /*
+   * An Unsubscribe click (from any notification email) withholds alert emails at the dispatcher, so
+   * the email switches below would otherwise read ON while nothing arrives. Say so, with the way back.
+   */
+  const emailSub = profile?.emailSubscription
+  const unsubscribedAt = emailSub && emailSub !== "unknown" ? emailSub.unsubscribedAt : null
+  const resumeEmails = async () => {
+    if (resumingEmail) return
+    setResumingEmail(true)
+    setResumeEmailError(null)
+    try {
+      const res = await fetch("/api/user/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emailResubscribe: true }),
+      })
+      if (!res.ok) throw new Error(String(res.status))
+      onRefetch()
+    } catch {
+      setResumeEmailError(t("settings.notifications.resumeEmailError"))
+    } finally {
+      setResumingEmail(false)
+    }
+  }
   const [remoteUpdatePending, setRemoteUpdatePending] = useState(false)
   const [testCategory, setTestCategory] = useState<NotificationCategoryId>("matchup_results")
   const [testing, setTesting] = useState(false)
@@ -262,7 +297,8 @@ export function NotificationsSettingsSection({
       blockedReasons: result.blockedReasons,
     })
     setTestResultTone(outcome.tone)
-    setTestResultMessage(outcome.message)
+    const translated = tInterpolate(outcome.messageKey, outcome.messageVars)
+    setTestResultMessage(translated && translated !== outcome.messageKey ? translated : outcome.message)
   }
 
   const handleChimmyShortcutToggle = (enabled: boolean) => {
@@ -460,7 +496,7 @@ export function NotificationsSettingsSection({
       <LeagueNotificationOverridesCard
         prefs={prefs}
         categoryIds={VISIBLE_CATEGORY_IDS}
-        categoryLabels={NOTIFICATION_CATEGORY_LABELS}
+        categoryLabels={categoryLabels}
         onChange={(next) => {
           setDirty(true)
           setSaveError(null)
@@ -511,6 +547,36 @@ export function NotificationsSettingsSection({
           />
         </label>
         <p className="text-xs text-[var(--muted2)]">{t("settings.notifications.deliveryMixHint")}</p>
+        {unsubscribedAt ? (
+          <div
+            role="status"
+            className="space-y-2 rounded-lg border p-3 text-xs"
+            style={{ borderColor: "color-mix(in srgb, #fbbf24 45%, var(--border))", color: "var(--text)" }}
+            data-testid="settings-email-unsubscribed"
+          >
+            <p>
+              {tInterpolate("settings.notifications.emailUnsubscribed", {
+                date: new Date(unsubscribedAt).toLocaleDateString(),
+              })}
+            </p>
+            <button
+              type="button"
+              onClick={() => void resumeEmails()}
+              disabled={resumingEmail}
+              aria-busy={resumingEmail}
+              className="rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-60"
+              style={{ borderColor: "var(--border)", color: "var(--text)" }}
+              data-testid="settings-email-resume"
+            >
+              {resumingEmail ? t("settings.actions.saving") : t("settings.notifications.resumeEmail")}
+            </button>
+            {resumeEmailError ? (
+              <p role="alert" style={{ color: "var(--accent-red-strong)" }}>
+                {resumeEmailError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className="space-y-2">
@@ -518,6 +584,16 @@ export function NotificationsSettingsSection({
         {profile?.phoneVerifiedAt && !smsConsented ? (
           <p className="text-xs text-[var(--muted2)]" data-testid="sms-needs-consent">
             {t("settings.notifications.smsNeedsConsent")}
+          </p>
+        ) : null}
+        {/* No phone yet: point at the one consent flow (Security), which also turns the time-
+           sensitive alerts on for text the moment the user agrees. */}
+        {!profile?.phoneVerifiedAt ? (
+          <p className="text-xs text-[var(--muted2)]" data-testid="sms-add-phone">
+            {t("settings.notifications.smsAddPhone")}{" "}
+            <a href="/settings?tab=security" className="underline">
+              {t("settings.notifications.smsAddPhoneLink")}
+            </a>
           </p>
         ) : null}
         <ul className="space-y-2">
@@ -560,7 +636,7 @@ export function NotificationsSettingsSection({
             className="w-full min-w-0 max-w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)] sm:w-auto"
           >
             {VISIBLE_CATEGORY_IDS.map((id) => (
-              <option key={id} value={id}>{NOTIFICATION_CATEGORY_LABELS[id]}</option>
+              <option key={id} value={id}>{categoryLabels[id]}</option>
             ))}
           </select>
           <button

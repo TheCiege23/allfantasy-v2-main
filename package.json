@@ -50,6 +50,7 @@
     "db:migrate": "node scripts/prisma-cli-guard.cjs migrate dev",
     "db:migrate:deploy": "node scripts/prisma-migrate-deploy.cjs",
     "db:migrate:deploy:prod": "node scripts/prisma-migrate-deploy.cjs --prod",
+    "db:resolve:prod": "node scripts/prisma-resolve-prod.cjs",
     "db:target": "node scripts/db-target-identity.cjs",
     "db:drift": "tsx scripts/check-schema-drift.ts",
     "db:drift:ci": "tsx scripts/check-schema-drift.ts --ci",

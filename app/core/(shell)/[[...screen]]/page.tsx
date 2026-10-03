@@ -81,6 +81,7 @@ import { loadLeagueShareView } from '@/lib/core-app/playerSharesLeague'
 import { resolveLeagueScope } from '@/lib/core-app/finderLeaguePicks'
 import { getFinderLeaguePicks } from '@/lib/core-app/finderLeaguePicksStore'
 import { getLeaguePreferences } from '@/lib/core-app/leaguePreferencesStore'
+import { hasSmsConsent } from '@/lib/sms/smsConsent'
 import { applyLeagueOrder } from '@/lib/core-app/leaguePreferences'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import ScreenLoadError from '@/components/core-app/ScreenLoadError'
@@ -1137,7 +1138,14 @@ export default async function AfCorePage({
       prisma.appUser
         .findUnique({
           where: { id: userId },
-          select: { username: true, displayName: true, avatarUrl: true },
+          // The profile half feeds the "Get alerts by text" nudge: shown only to an account with no
+          // live SMS consent for its current number (lib/sms/smsConsent). Same row, no extra read.
+          select: {
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+            profile: { select: { phone: true, notificationPreferences: true } },
+          },
         })
         .catch(() => null),
     ]),
@@ -1274,6 +1282,13 @@ export default async function AfCorePage({
     name: shellUser?.displayName?.trim() || shellUser?.username?.trim() || null,
     imageUrl: resolveDashboardAvatarUrl(shellUser?.avatarUrl) ?? null,
   }
+  /*
+   * ⚠ FALSE WHEN THE READ FAILED, not true. A failed read must not nag someone who may well have
+   * agreed already; the nudge waits for a read that can say they have not.
+   */
+  const smsOptInEligible = shellUser
+    ? !hasSmsConsent(shellUser.profile?.notificationPreferences, shellUser.profile?.phone)
+    : false
 
   /*
    * ⚠ SYNC AGE IS NOW READ, NOT ASSUMED. This was hardcoded to `null` — "never
@@ -1598,6 +1613,7 @@ export default async function AfCorePage({
       commissionerCount={commissionerCount}
       notificationCount={unreadNotifications}
       profile={shellProfile}
+      smsOptInEligible={smsOptInEligible}
       /*
        * The activity snapshot's count, on every screen. The Live screen itself publishes the
        * count from the slate it loaded, which replaces this one while that screen is open.

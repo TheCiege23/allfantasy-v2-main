@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import type { MultiLeagueAdd, WaiverBoardRow, WaiverPlayer, WaiversBoardData, WaiverSportSection } from '@/lib/core-app/waiversBoard'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import { WaiverRunClock } from '@/components/core-app/WaiverRunClock'
 import { WaiversBoardList, WaiversDueSoon } from '@/components/core-app/boards/WaiversBoardList'
 import { PER_GAME_UNIT, waiverSportLabel } from '@/lib/waivers/waiverSportBasis'
@@ -334,6 +335,46 @@ function Card({ row }: { row: WaiverBoardRow }) {
  * Free agents who would start for you in two or more leagues — one claim decision that a
  * per-league list spreads across several cards.
  */
+/**
+ * How to read a card, once per section — a "?" for each term the cards use, instead of the same
+ * icons repeated on all forty cards. A term only gets its "?" when some card here shows it.
+ */
+function CardLegend({ rows }: { rows: WaiverBoardRow[] }) {
+  const hasAf = rows.some((r) => r.afNetGain != null || r.add?.afProjected != null)
+  const hasFaab = rows.some((r) => r.faabRemaining != null)
+  const hasRuns = rows.some((r) => r.runsAt)
+  /* Always: a dash under Rostered / Started (too few leagues) needs explaining as much as a number. */
+  const hasMarket = rows.length > 0
+  return (
+    <p className="af-bd-note af-bd-note--plain af-wvb-legend" data-testid="waivers-card-legend">
+      <span>How to read a card:</span>
+      <span>
+        lineup gain <TopicTip topic="lineupGain" />
+      </span>
+      {hasAf ? (
+        <span>
+          AF <TopicTip topic="afProjection" />
+        </span>
+      ) : null}
+      {hasMarket ? (
+        <span>
+          Rostered / Started <TopicTip topic="marketRates" />
+        </span>
+      ) : null}
+      {hasFaab ? (
+        <span>
+          FAAB left <TopicTip topic="faab" />
+        </span>
+      ) : null}
+      {hasRuns ? (
+        <span>
+          Runs <TopicTip topic="waiverRun" />
+        </span>
+      ) : null}
+    </p>
+  )
+}
+
 function MultiLeagueSection({ players }: { players: MultiLeagueAdd[] }) {
   return (
     <section className="af-bd-sec" aria-labelledby="af-wv-multi" data-testid="waivers-multi-league">
@@ -435,6 +476,8 @@ function SportSection({ section }: { section: WaiverSportSection }) {
       {section.state !== 'ok' ? (
         <p className="af-bd-note">{section.reason}</p>
       ) : section.rows.length > 0 ? (
+        <>
+        <CardLegend rows={section.rows} />
         <ul className="af-bd-cards af-bd-cards--rich af-bd-cards--waivers">
           {section.rows.map((r) => (
             <li key={r.leagueId}>
@@ -442,6 +485,7 @@ function SportSection({ section }: { section: WaiverSportSection }) {
             </li>
           ))}
         </ul>
+        </>
       ) : (
         <p className="af-bd-note">None of your {label} leagues could be priced — the reasons are below.</p>
       )}
@@ -515,6 +559,7 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
                 : null
             }
           />
+          <CardLegend rows={data.rows} />
           <WaiversDueSoon
             leagues={data.rows.flatMap((r) =>
               r.runsSchedule ? [{ key: r.leagueId, leagueName: r.leagueName, href: r.href, schedule: r.runsSchedule }] : [],

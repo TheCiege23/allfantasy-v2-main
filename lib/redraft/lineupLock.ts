@@ -292,6 +292,8 @@ export async function buildWeekKickoffMap(
       // The finalizer's regular slate: labelled regular, or unlabelled. A replaced game's replacement is its own row.
       if (g.seasonType != null && g.seasonType !== 'regular') continue
       if (g.replacedBy || String(g.status ?? '').toLowerCase() === 'replaced') continue
+      // A postponed MLB original does not start a scoring game; the makeup locks on its own date.
+      if (sport === 'MLB' && String(g.status ?? '').toLowerCase() === 'postponed') continue
       if (!g.homeTeam && !g.awayTeam) {
         teamless += 1
         continue

@@ -9,6 +9,7 @@ import type { WaiverBoard, WaiverBoardState } from '@/lib/waivers/waiverBoard'
 import type { RosterNeeds } from '@/lib/waivers/rosterNeeds'
 import { useWaiverIntel } from '@/components/decide/useWaiverIntel'
 import { isPerGameBasis } from '@/lib/waivers/waiverSportBasis'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Who is worth adding, ranked by what the add does to YOUR starting lineup.
@@ -107,7 +108,10 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
   return (
     <section className="af-card af-wv-section af-wlb" data-testid="waiver-lineup-board">
       <div className="af-wv-section-head">
-        <h2 className="af-label">Worth adding</h2>
+        {/* One "?" for the whole list — how +N, "over …" and AF are read — not four per row. */}
+        <h2 className="af-label">
+          Worth adding <TopicTip topic="worthAdding" />
+        </h2>
         {board.state === 'ok' && board.currentLineupPoints != null ? (
           <span className="af-wv-section-note af-num">
             {/* The BEST lineup your roster can field — not the one set on the platform. */}

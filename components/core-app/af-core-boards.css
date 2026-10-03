@@ -1729,6 +1729,21 @@
   .af-core .af-wvb-multi-n { white-space: normal; }
 }
 
+/* "How to read a card" — one "?" per term, wrapping onto as many lines as a phone needs. */
+.af-core .af-wvb-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 4px;
+}
+.af-core .af-wvb-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
 /*
  * ── My Team board: players hurting more than one lineup (2026-10-03) ────────
  * Appended at depth 0. Sits between the section head and the ranked rows.
@@ -1885,3 +1900,19 @@
 .af-core .af-bd-xl-more > summary::-webkit-details-marker { display: none; }
 .af-core .af-bd-xl-more[open] > summary { display: none; }
 .af-core .af-bd-xl-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/*
+ * ── A section's "?" (`SectionHead`'s `info`, 2026-10-03) ──
+ *
+ * Beside the heading rather than inside it (see BoardKit), so it takes the heading's quiet colour
+ * here instead of inheriting it, and drops the tip's own left margin: the head's 8px gap already
+ * spaces it. Centred, because the head aligns on the baseline and a 14px circle has none worth using.
+ */
+.af-core .af-bd-sec-info {
+  display: inline-flex;
+  align-self: center;
+  color: var(--faint);
+}
+.af-core .af-bd-sec-info .af-info-tip {
+  margin-left: 0;
+}

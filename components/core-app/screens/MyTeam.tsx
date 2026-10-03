@@ -21,6 +21,7 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
+import { InfoTip } from '@/components/core-app/InfoTip'
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -281,13 +282,16 @@ function VenueMark({
   indoors: boolean | null
   weather: LineupPlayer['weather']
 }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const es = language === 'es'
   if (weather?.indoors || indoors === true) {
     return (
       <span
         className="af-mt-venue"
         data-indoors="true"
-        title="Indoor or roofed stadium — weather is not a factor. Retractable roofs count as roofed; we do not track whether the roof is open."
-        aria-label="Indoor stadium"
+        title={copy('Indoor or roofed stadium — weather is not a factor. Retractable roofs count as roofed; we do not track whether the roof is open.')}
+        aria-label={copy('Indoor stadium')}
       >
         ⌂
       </span>
@@ -298,10 +302,10 @@ function VenueMark({
     const bits = [
       weather.temperatureF != null ? `${Math.round(weather.temperatureF)}°F` : null,
       weather.windSpeedMph != null && weather.windSpeedMph >= 8
-        ? `${Math.round(weather.windSpeedMph)} mph wind`
+        ? es ? `viento de ${Math.round(weather.windSpeedMph)} mph` : `${Math.round(weather.windSpeedMph)} mph wind`
         : null,
       weather.precipChancePct != null && weather.precipChancePct >= 20
-        ? `${Math.round(weather.precipChancePct)}% precip`
+        ? es ? `${Math.round(weather.precipChancePct)}% de lluvia` : `${Math.round(weather.precipChancePct)}% precip`
         : null,
       weather.conditionLabel,
     ].filter(Boolean)
@@ -310,8 +314,8 @@ function VenueMark({
         className="af-mt-venue"
         data-indoors="false"
         data-forecast="true"
-        title={bits.join(' · ') || 'Open-air stadium'}
-        aria-label={bits.join(', ') || 'Outdoor stadium'}
+        title={bits.join(' · ') || copy('Open-air stadium')}
+        aria-label={bits.join(', ') || copy('Outdoor stadium')}
       >
         {weather.symbol}
         {weather.temperatureF != null ? (
@@ -326,8 +330,8 @@ function VenueMark({
       <span
         className="af-mt-venue"
         data-indoors="false"
-        title="Open-air stadium — no forecast yet for this kickoff"
-        aria-label="Outdoor stadium, forecast not available yet"
+        title={copy('Open-air stadium — no forecast yet for this kickoff')}
+        aria-label={copy('Outdoor stadium, forecast not available yet')}
       >
         ☁
       </span>
@@ -531,6 +535,8 @@ function WinForecast({ forecast }: { forecast: NonNullable<NextMatchup['forecast
 
 /** One side of the projected matchup. */
 function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   return (
     <div className="af-mt-mu-side">
       <div className="af-mt-mu-who">
@@ -550,7 +556,7 @@ function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) 
       </div>
       {/* AllFantasy's own engine for the same lineup, beside the provider total. */}
       {side.afProjected != null ? (
-        <div className="af-mt-mu-af af-num" title="AllFantasy engine projection, adjusted to this league's scoring">
+        <div className="af-mt-mu-af af-num" title={copy("AllFantasy engine projection, adjusted to this league's scoring")}>
           AF {side.afProjected.toFixed(1)}
         </div>
       ) : null}
@@ -561,7 +567,7 @@ function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) 
       */}
       {side.projected != null && side.projectedFrom < side.starterCount ? (
         <div className="af-mt-mu-cov">
-          from {side.projectedFrom} of {side.starterCount}
+          {language === 'es' ? `con ${side.projectedFrom} de ${side.starterCount}` : `from ${side.projectedFrom} of ${side.starterCount}`}
         </div>
       ) : null}
     </div>
@@ -718,19 +724,32 @@ function abbreviate(status: string): { short: string; tone: string; full: string
   return { short: status.slice(0, 3).toUpperCase(), tone: 'none', full: status }
 }
 
+/**
+ * The status in Spanish, by its abbreviation — the same words as `RosterKey`. `full` is the
+ * provider's own text ("Questionable"), so without this a screen reader said English in Spanish.
+ * An unfamiliar designation keeps the provider's text, as `abbreviate` does.
+ */
+const STATUS_ES: Record<string, string> = {
+  H: 'sano', Q: 'dudoso', D: 'poco probable', O: 'fuera', IR: 'reserva de lesionados', DNP: 'no entrenó',
+  P: 'probable', SUS: 'suspendido', PUP: 'no apto físicamente', INA: 'inactivo',
+}
+
 function StatusChip({ status }: { status: string | null }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   if (!status) {
     return (
       <span
         className="af-mt-status"
         data-tone="none"
-        title="No injury designation reported, which is not the same as confirmed healthy"
+        title={copy('No injury designation reported, which is not the same as confirmed healthy')}
       >
         &mdash;
       </span>
     )
   }
-  const { short, tone, full } = abbreviate(status)
+  const { short, tone, full: provider } = abbreviate(status)
+  const full = language === 'es' ? STATUS_ES[short] ?? provider : provider
   return (
     <span className="af-mt-status" data-tone={tone} title={full} aria-label={full}>
       {short}
@@ -752,6 +771,8 @@ function StatusChip({ status }: { status: string | null }) {
  * own scoring could not be applied, and the caveat under the roster says so.
  */
 function Projections({ player }: { player: LineupPlayer }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const fmt = (v: number | null) =>
     v == null ? <span className="af-mt-proj--none">&mdash;</span> : v.toFixed(1)
   const pct = (v: number | null | undefined) =>
@@ -768,8 +789,8 @@ function Projections({ player }: { player: LineupPlayer }) {
       */}
       <span
         className="af-mt-proj af-mt-proj--af af-num"
-        title={`Provider (Sleeper) projection scored under YOUR league's rules${
-          player.projectedPoints != null ? ` · standard PPR ${player.projectedPoints.toFixed(1)}` : ''
+        title={`${copy("Provider (Sleeper) projection scored under YOUR league's rules")}${
+          player.projectedPoints != null ? ` · ${copy('standard PPR')} ${player.projectedPoints.toFixed(1)}` : ''
         }`}
       >
         {fmt(player.afProjectedPoints)}
@@ -781,7 +802,7 @@ function Projections({ player }: { player: LineupPlayer }) {
       */}
       <span
         className="af-mt-proj af-mt-proj--engine af-num"
-        title="AllFantasy's own projection engine, adjusted to your league's scoring"
+        title={copy("AllFantasy's own projection engine, adjusted to your league's scoring")}
       >
         {fmt(player.afEngineProjectedPoints ?? null)}
       </span>
@@ -792,13 +813,13 @@ function Projections({ player }: { player: LineupPlayer }) {
       */}
       <span
         className="af-mt-share af-num"
-        title="Share of AllFantasy leagues rostering this player"
+        title={copy('Share of AllFantasy leagues rostering this player')}
       >
         {pct(player.market?.ownPct)}
       </span>
       <span
         className="af-mt-share af-num"
-        title="Of the leagues that roster him, how many are starting him this week. Byes and injuries move this on their own."
+        title={copy('Of the leagues that roster him, how many are starting him this week. Byes and injuries move this on their own.')}
       >
         {pct(player.market?.startPct)}
       </span>
@@ -820,14 +841,28 @@ const AF_PTS_EXPLAINER =
   'defenders are priced by AllFantasy’s IDP model instead. ' +
   'AF is AllFantasy’s own projection engine, adjusted to the same settings.'
 
+/** The matchup card's two figures per side. The AF line explained itself only by a hover title. */
+const MATCHUP_NUMBERS_EXPLAINER =
+  'The large number is Sleeper’s projection for each lineup, re-scored under your league’s settings. ' +
+  'AF beneath it is AllFantasy’s own engine on the same lineup and the same settings.'
+const MATCHUP_COVERAGE_EXPLAINER =
+  '“from 5 of 9” means only five starters have a projection yet, so that total reads low.'
+
+/** What OWN and START are — the two market columns the explainer used to leave to a hover title. */
+const MARKET_COLUMNS_EXPLAINER =
+  'OWN is the share of AllFantasy leagues that roster him. START is, of those leagues, how many ' +
+  'start him this week — byes and injuries move it on their own. Both show on wide screens.'
+
 function ProjHeader() {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
-  /* Two headers render (Starters, Bench), so each popover needs its own id. */
-  const popId = useId()
   return (
     <div className="af-mt-projhead">
-      <span className="af-label af-mt-projhead--af" title={copy(AF_PTS_EXPLAINER)}>
+      {/*
+        No `title` on this heading: the popover is its descendant, and a title here would pop a
+        second, hover-only copy of the same text over the popover itself.
+      */}
+      <span className="af-label af-mt-projhead--af">
         {PROJECTION_PROVIDER_LABEL}
         {/*
           The question mark is the point: two numbers sitting side by side with
@@ -835,12 +870,14 @@ function ProjHeader() {
 
           ⚠ IT WAS A `span role="img"` WITH A TOOLTIP — the one explanation of the page's two
           numbers, and nothing could OPEN it but a mouse hovering a 12px circle. Not focusable,
-          not tappable (audit 2026-10-02). Now a button driving a native popover: focus, Enter,
-          Escape and click-away come from the platform rather than from state this file keeps.
+          not tappable (audit 2026-10-02). Now the shared `InfoTip`, which keeps its popover inside
+          its own wrapper — so the narrow page's `nth-child` rules still hide OWN and START, not AF.
+          It explains all four columns: one "?" per header, never one per row.
         */}
-        <button type="button" className="af-mt-info" popoverTarget={popId} aria-label={copy('What Sleeper and AF mean')}>
-          ?
-        </button>
+        <InfoTip label={copy('What Sleeper, AF, OWN and START mean')} title={copy('What these columns mean')}>
+          <span className="af-info-para">{copy(AF_PTS_EXPLAINER)}</span>
+          <span className="af-info-para">{copy(MARKET_COLUMNS_EXPLAINER)}</span>
+        </InfoTip>
       </span>
       <span className="af-label af-mt-projhead--engine" title={copy("AllFantasy's own projection engine, adjusted to your league's scoring")}>
         AF
@@ -854,15 +891,6 @@ function ProjHeader() {
       >
         START
       </span>
-      {/*
-        LAST ON PURPOSE: the narrow-page rules hide the 3rd and 4th headings by `nth-child`, so a
-        popover placed earlier would shift them and hide AF instead of START. Hidden until opened,
-        and in the top layer once it is, so it never takes a grid cell.
-      */}
-      <div id={popId} popover="auto" className="af-mt-info-pop" role="note">
-        <strong>{copy('Sleeper and AF')}</strong>
-        <p>{copy(AF_PTS_EXPLAINER)}</p>
-      </div>
     </div>
   )
 }
@@ -1228,6 +1256,8 @@ function SlotRow({
   leagueId: string
   sourceLink: MyTeamData['league']['sourceLink']
 }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   return (
     /*
       ⚠ A STARTER ON BYE IS TREATED LIKE AN EMPTY SLOT, because it is one — a
@@ -1265,8 +1295,8 @@ function SlotRow({
           */}
           <div className="af-mt-player af-mt-empty-text">
             <div>
-              <div className="af-mt-player-name">Empty</div>
-              <div className="af-mt-player-meta">Nobody is starting in this slot</div>
+              <div className="af-mt-player-name">{copy('Empty')}</div>
+              <div className="af-mt-player-meta">{copy('Nobody is starting in this slot')}</div>
             </div>
             {/*
               ⚠ NO LINK IS BETTER THAN THE WRONG ONE. With no platform link on file (a native
@@ -1590,6 +1620,19 @@ export function MyTeam({ data }: MyTeamProps) {
 
 
   const proj = data.projections.available ? data.projections.data : null
+  const decisionSlot = data.starters.available
+    ? data.starters.data.find((slot) => slot.empty || slot.player?.ruledOut || slot.player?.onBye)
+      ?? data.starters.data.find((slot) => slot.benchCheck?.verdict === 'swap')
+      ?? null
+    : null
+  const suggestedBench = decisionSlot?.benchCheck && data.bench.available
+    ? data.bench.data.find((player) => player.name === decisionSlot.benchCheck?.benchName) ?? null
+    : null
+  const leagueDelta = decisionSlot?.player?.afProjectedPoints != null && suggestedBench?.afProjectedPoints != null
+    ? suggestedBench.afProjectedPoints - decisionSlot.player.afProjectedPoints
+    : null
+
+
 
   /*
    * The per-lineup "share" helper lived here and has been DELETED, not merely
@@ -1660,6 +1703,43 @@ export function MyTeam({ data }: MyTeamProps) {
           <span className="af-mt-lock-note">{data.lock.reason}</span>
         </div>
       )}
+
+      {!bestBall ? (
+        <section className="af-frame af-mt-decision" aria-labelledby="af-mt-decision-title">
+          <div>
+            <span className="af-label">{copy('Lineup decision')}</span>
+            <h2 id="af-mt-decision-title">
+              {decisionSlot?.empty
+                ? `Fill your ${decisionSlot.slotLabel} slot`
+                : decisionSlot?.player?.ruledOut
+                  ? `Replace ${decisionSlot.player.name}`
+                  : decisionSlot?.player?.onBye
+                    ? `Cover ${decisionSlot.player.name}'s bye`
+                    : decisionSlot?.benchCheck?.verdict === 'swap'
+                      ? `Review ${decisionSlot.benchCheck.starterName} vs ${decisionSlot.benchCheck.benchName}`
+                      : copy('Review your starting lineup')}
+            </h2>
+            <p>
+              {decisionSlot?.empty
+                ? copy('An empty starting slot is a certain zero. Check eligibility and the player lock on your platform.')
+                : decisionSlot?.player?.ruledOut || decisionSlot?.player?.onBye
+                  ? `${decisionSlot.player.name} is ${decisionSlot.player.onBye ? 'on a bye' : 'ruled out'}. Check an eligible replacement before that player locks.`
+                  : decisionSlot?.benchCheck?.verdict === 'swap'
+                    ? leagueDelta != null && leagueDelta > 0
+                      ? `${decisionSlot.benchCheck.benchName} projects ${leagueDelta.toFixed(1)} more points under this league's scoring. Confirm injury status and eligibility first.`
+                      : copy('The standard projection favors the bench option. A reliable league-scored difference is unavailable, so review before swapping.')
+                    : data.starters.available
+                      ? copy('No certain empty, out, or bye slot was found in the lineup we could read. Check late injury news before lock.')
+                      : data.starters.reason}
+            </p>
+            <small>{proj ? `Week ${proj.week} · ${proj.afProjected} of ${proj.projected} projected starters priced for this league` : copy('Projection coverage unavailable')}</small>
+          </div>
+          <div className="af-mt-decision-actions">
+            <a className="af-btn af-btn--ghost" href="#af-mt-starters">{copy('Review starters')}</a>
+            {data.league.sourceLink ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
+          </div>
+        </section>
+      ) : null}
 
       {/* ── Team header ─────────────────────────────────────────────── */}
       <header className="af-frame af-mt-head">
@@ -1795,6 +1875,16 @@ export function MyTeam({ data }: MyTeamProps) {
           <div className="af-mt-mu-head">
             <h2 className="af-label">
               {copy('Week')} {data.nextMatchup.data.week} · {copy(bestBall ? 'listed starter projections' : 'projected matchup')}
+              {/*
+                One "?" for the card, not one per side: both sides carry the same two numbers. Only
+                when there ARE numbers — explaining two dashes is noise.
+              */}
+              {data.nextMatchup.data.you.projected != null ? (
+                <InfoTip label={copy('What the matchup numbers mean')} title={copy('The two numbers')}>
+                  <span className="af-info-para">{copy(MATCHUP_NUMBERS_EXPLAINER)}</span>
+                  <span className="af-info-para">{copy(MATCHUP_COVERAGE_EXPLAINER)}</span>
+                </InfoTip>
+              ) : null}
             </h2>
             {data.nextMatchup.data.bye ? (
               <span className="af-mt-mu-bye">{copy('no opponent recorded — bye')}</span>
@@ -1915,7 +2005,7 @@ export function MyTeam({ data }: MyTeamProps) {
         />
       ) : null}
       {/* ── Starters ────────────────────────────────────────────────── */}
-      <section className="af-frame af-mt-section">
+      <section id="af-mt-starters" className="af-frame af-mt-section">
         <header className="af-mt-section-head">
           <h2 className="af-label">{copy('Starters')}</h2>
           <span className="af-mt-section-note">

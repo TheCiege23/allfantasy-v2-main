@@ -9,10 +9,12 @@
  * server cannot send to Apple — see `useIosAppPush`.
  */
 
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { SendTestPushButton } from '@/components/notifications/SendTestPushButton'
 import { useIosAppPush } from '@/lib/push-notifications/useIosAppPush'
 
 export function IosAppPushCard({ className }: { className?: string }) {
+  const { t } = useOptionalLanguage()
   const { available, permission, registered, busy, error, enable } = useIosAppPush()
   if (!available || permission === null) return null
 
@@ -22,10 +24,8 @@ export function IosAppPushCard({ className }: { className?: string }) {
     <div className={className} data-testid="ios-app-push-card">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold">Game-day alerts</p>
-          <p className="mt-1 text-sm text-[var(--af-muted,#9aa4b2)]">
-            Get notified when a starter is ruled out before kickoff, with a replacement suggestion.
-          </p>
+          <p className="text-sm font-semibold">{t('settings.push.title')}</p>
+          <p className="mt-1 text-sm text-[var(--af-muted,#9aa4b2)]">{t('settings.push.body')}</p>
         </div>
         {permission !== 'denied' && !on ? (
           <button
@@ -34,25 +34,23 @@ export function IosAppPushCard({ className }: { className?: string }) {
             onClick={() => void enable()}
             className="min-h-[44px] shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-sm font-medium disabled:opacity-50"
           >
-            {busy ? 'Working…' : permission === 'granted' ? 'Try again' : 'Turn on'}
+            {busy
+              ? t('settings.push.working')
+              : permission === 'granted'
+                ? t('settings.push.tryAgain')
+                : t('settings.push.turnOn')}
           </button>
         ) : null}
       </div>
 
       {permission === 'denied' ? (
-        <p className="mt-2 text-xs text-amber-400">
-          Notifications are off for AllFantasy. To turn them on, open the iPhone Settings app →
-          Notifications → AllFantasy, and switch on Allow Notifications.
-        </p>
+        <p className="mt-2 text-xs text-amber-400">{t('settings.push.iosDenied')}</p>
       ) : null}
 
       {error ? <p className="mt-2 text-xs text-red-400">{error}</p> : null}
 
       {on && !error ? (
-        <p className="mt-2 text-xs text-emerald-400">
-          Alerts are on for this iPhone. You can turn them off any time in Settings → Notifications
-          → AllFantasy.
-        </p>
+        <p className="mt-2 text-xs text-emerald-400">{t('settings.push.iosOn')}</p>
       ) : null}
 
       {on ? <SendTestPushButton /> : null}

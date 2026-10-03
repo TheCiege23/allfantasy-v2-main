@@ -10,3 +10,15 @@
 # guard survives a checkout that ignores this file. Both are deliberate: this
 # rule fixes the working copy, the installer fixes what actually runs.
 .githooks/** text eol=lf
+
+# Prisma migrations MUST check out with LF endings, for a different reason.
+#
+# Prisma records each migration's checksum in production's _prisma_migrations as
+# the sha256 of migration.sql AS IT SITS ON DISK. A CRLF working copy therefore
+# records a checksum no Linux checkout of the same commit will ever match. Four
+# production rows were written that way on 2026-10-03, each corrected by hand.
+# scripts/prisma-migrate-deploy.cjs and scripts/prisma-resolve-prod.cjs refuse a
+# CRLF checkout; this rule stops one from being created. Every committed
+# migration.sql was already LF (205 of 205), so adding it renormalises nothing.
+prisma/migrations/**/migration.sql text eol=lf
+prisma/migrations-pending/**/migration.sql text eol=lf
