@@ -55,11 +55,8 @@ export async function generateMetadata(
   }
 }
 
-// LeagueShellClient is imported directly — it owns the dynamic() call inside a client component.
-// This keeps next/dynamic with ssr:false inside a proper 'use client' boundary.
-const _unused = {
-  ssr: false,  // reminder: ssr:false is applied inside LeagueShellClient.tsx
-}
+// LeagueShellClient is the 'use client' boundary; since 925110077 (2026-07-01) it renders LeagueShell
+// directly rather than through next/dynamic with ssr:false, so the shell server-renders.
 
 function firstSearchParam(value: string | string[] | undefined): string | null {
   if (typeof value === 'string') return value
