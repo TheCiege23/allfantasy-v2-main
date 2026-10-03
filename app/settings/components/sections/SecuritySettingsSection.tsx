@@ -27,6 +27,8 @@ import {
 import type { SettingsProfile } from "./settings-types"
 import { SmsConsentCheckbox } from "@/components/legal/SmsConsentCheckbox"
 import { normalizePhoneE164 } from "@/lib/phone/e164"
+import { signOutAndPurge } from "@/lib/pwa/signOutAndPurge"
+import { useConfirm } from "./ConfirmDialog"
 
 /**
  * A rejected fetch (offline, a dropped phone connection) becomes an ordinary failed result.
@@ -84,6 +86,11 @@ export function SecuritySettingsSection({
   const [passwordSuccess, setPasswordSuccess] = useState(false)
   const [idleSaving, setIdleSaving] = useState(false)
   const [idleError, setIdleError] = useState<string | null>(null)
+  const [signOutAllBusy, setSignOutAllBusy] = useState(false)
+  const [signOutAllError, setSignOutAllError] = useState<string | null>(null)
+  const [phoneRemoving, setPhoneRemoving] = useState(false)
+  const [phoneRemoveError, setPhoneRemoveError] = useState<string | null>(null)
+  const [askConfirm, confirmDialog] = useConfirm()
 
   useEffect(() => {
     if (!emailEdit) {
@@ -259,6 +266,62 @@ export function SecuritySettingsSection({
     setPhoneErrorMessage(null)
   }
 
+  /*
+   * Sign out everywhere (app/api/user/sessions/revoke-all). Revocation is user-wide, so it ends THIS
+   * session too — the dialog says so, and on success this device signs out straight away rather than
+   * waiting for its next request to be refused. On failure nothing is signed out, and the reason
+   * (the other devices are still signed in) is shown.
+   */
+  const handleSignOutEverywhere = async () => {
+    if (signOutAllBusy) return
+    const ok = await askConfirm({
+      title: t("settings.security.signOutEverywhereConfirmTitle"),
+      body: t("settings.security.signOutEverywhereConfirmBody"),
+      confirmLabel: t("settings.security.signOutEverywhere"),
+    })
+    if (!ok) return
+    setSignOutAllBusy(true)
+    setSignOutAllError(null)
+    try {
+      const res = await fetch("/api/user/sessions/revoke-all", { method: "POST" })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: unknown }
+        setSignOutAllError(typeof data.message === "string" && data.message ? data.message : t("settings.security.signOutEverywhereFailed"))
+        setSignOutAllBusy(false)
+        return
+      }
+      await signOutAndPurge({ callbackUrl: "/login" })
+    } catch {
+      setSignOutAllError(t("settings.security.signOutEverywhereFailed"))
+      setSignOutAllBusy(false)
+    }
+  }
+
+  const handleRemovePhone = async () => {
+    if (phoneRemoving) return
+    const ok = await askConfirm({
+      title: t("settings.security.removePhoneConfirmTitle"),
+      body: t("settings.security.removePhoneConfirmBody"),
+      confirmLabel: t("settings.security.removePhone"),
+    })
+    if (!ok) return
+    setPhoneRemoving(true)
+    setPhoneRemoveError(null)
+    try {
+      const res = await fetch("/api/user/phone", { method: "DELETE" })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { message?: unknown }
+        setPhoneRemoveError(typeof data.message === "string" && data.message ? data.message : t("settings.security.removePhoneFailed"))
+        return
+      }
+      onRefetch()
+    } catch {
+      setPhoneRemoveError(t("settings.security.removePhoneFailed"))
+    } finally {
+      setPhoneRemoving(false)
+    }
+  }
+
   async function saveSessionIdle(value: string) {
     setIdleSaving(true)
     setIdleError(null)
@@ -318,6 +381,22 @@ export function SecuritySettingsSection({
       <div className="rounded-xl border p-4 space-y-2" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
         <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{t("settings.security.sessionsTitle")}</p>
         <p className="text-xs" style={{ color: "var(--muted)" }}>{t("settings.security.sessionsBody")}</p>
+        <button
+          type="button"
+          onClick={() => void handleSignOutEverywhere()}
+          disabled={signOutAllBusy}
+          aria-busy={signOutAllBusy}
+          className="rounded-lg border px-3 py-2 text-sm font-medium disabled:cursor-wait disabled:opacity-60"
+          style={{ borderColor: "var(--border)", color: "var(--text)" }}
+          data-testid="settings-sign-out-everywhere"
+        >
+          {signOutAllBusy ? t("settings.security.signingOutEverywhere") : t("settings.security.signOutEverywhere")}
+        </button>
+        {signOutAllError ? (
+          <p role="alert" className="text-xs" style={{ color: "var(--accent-red-strong)" }} data-testid="settings-sign-out-everywhere-error">
+            {signOutAllError}
+          </p>
+        ) : null}
       </div>
 
       <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
@@ -526,7 +605,7 @@ export function SecuritySettingsSection({
             </p>
           </div>
           {!phoneEdit ? (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setPhoneEdit(true)}
@@ -542,6 +621,19 @@ export function SecuritySettingsSection({
               >
                 {t("settings.security.verifyAddLink")}
               </Link>
+              {profile?.phone ? (
+                <button
+                  type="button"
+                  onClick={() => void handleRemovePhone()}
+                  disabled={phoneRemoving}
+                  aria-busy={phoneRemoving}
+                  className="rounded-lg border px-3 py-2 text-sm font-medium disabled:cursor-wait disabled:opacity-60"
+                  style={{ borderColor: "color-mix(in srgb, var(--accent-red) 55%, var(--border))", color: "var(--accent-red-strong)" }}
+                  data-testid="settings-remove-phone"
+                >
+                  {phoneRemoving ? t("settings.security.removingPhone") : t("settings.security.removePhone")}
+                </button>
+              ) : null}
             </div>
           ) : (
             <button type="button" onClick={cancelPhoneEdit} className="rounded-lg border px-3 py-2 text-sm font-medium" style={{ borderColor: "var(--border)", color: "var(--text)" }}>
@@ -549,6 +641,11 @@ export function SecuritySettingsSection({
             </button>
           )}
         </div>
+        {phoneRemoveError ? (
+          <p role="alert" className="text-xs" style={{ color: "var(--accent-red-strong)" }} data-testid="settings-remove-phone-error">
+            {phoneRemoveError}
+          </p>
+        ) : null}
         {phoneEdit && (
           <div className="pt-2 border-t space-y-3" style={{ borderColor: "var(--border)" }}>
             <div>
@@ -738,6 +835,7 @@ export function SecuritySettingsSection({
           </form>
         )}
       </div>
+      {confirmDialog}
     </div>
   )
 }

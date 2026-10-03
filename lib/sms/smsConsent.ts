@@ -48,3 +48,19 @@ export function hasSmsConsent(notificationPreferences: unknown, phone: string | 
   if (record.phone && !sameNumber(record.phone, phone)) return false
   return true
 }
+
+/**
+ * The preferences object with any live SMS consent marked withdrawn — the same shape
+ * `recordSmsOptOut` writes on a STOP. Kept, never deleted: the record of when someone opted in and
+ * out is the compliance trail. Every other preference passes through untouched. An already
+ * withdrawn (or absent) record is returned as-is, so the original withdrawal date is not rewritten.
+ */
+export function withdrawSmsConsent(notificationPreferences: unknown, reason: string, now: Date = new Date()): Record<string, unknown> {
+  const prefs =
+    notificationPreferences && typeof notificationPreferences === 'object' && !Array.isArray(notificationPreferences)
+      ? (notificationPreferences as Record<string, unknown>)
+      : {}
+  const record = readSmsConsent(prefs)
+  if (!record || record.revokedAt) return { ...prefs }
+  return { ...prefs, smsConsent: { ...record, revokedAt: now.toISOString(), revokedReason: reason } }
+}
