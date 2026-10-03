@@ -127,6 +127,7 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * feed and is now monitored by the guard.
    */
   { name: 'share-link', why: 'Sleeper deep links handed to the user', test: /^sleeper\.com$/i },
+  { name: 'share-link', why: "Apple's subscription-management page, a redirect handed to an App Store subscriber, never fetched", test: /^apps\.apple\.com$/i },
   /*
    * FOUR MORE OF THE SAME SHAPE, moved out of DATA_API_UNMONITORED on 2026-08-28 by
    * re-deriving that ledger. Every one is an href or a URL returned for the client to
