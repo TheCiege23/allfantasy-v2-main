@@ -1539,12 +1539,47 @@ export async function getMyTeamData(
         ? await resolvePlayers(missing, sport, projectionWeek, sportsWeek, scoringSettings, String(league.platform ?? ''))
         : new Map<string, LineupPlayer>()
     if (extra.size > 0) await zeroByeWeekPlayers(extra, sport, sportsWeek)
-    const pointsOf = (id: string) => (resolved.get(id) ?? extra.get(id))?.afProjectedPoints
+    // The opponent's starters get the same game-day read yours did, so the forecast knows who has played.
+    if (extra.size > 0) {
+      const days = await readLineupGameDay({
+        sport,
+        week: sportsWeek,
+        platformLeagueId: league.platformLeagueId ? String(league.platformLeagueId) : null,
+        players: extra,
+      }).catch(() => new Map<string, PlayerGameDay>())
+      for (const [id, p] of extra) {
+        const day = days.get(id)
+        if (day) p.gameDay = day
+      }
+    }
+    const playerOf = (id: string) => resolved.get(id) ?? extra.get(id)
+    const pointsOf = (id: string) => playerOf(id)?.afProjectedPoints
     // AllFantasy's own engine over the same lineups, through the same per-player numbers.
-    const enginePointsOf = (id: string) => (resolved.get(id) ?? extra.get(id))?.afEngineProjectedPoints
+    const enginePointsOf = (id: string) => playerOf(id)?.afEngineProjectedPoints
+    /*
+     * The shared forecast's inputs, from the SAME per-player numbers the totals sum. "Kicked off, no
+     * fresh status" is `unknown` to the forecast (it refuses rather than guess what is banked); no
+     * game-day read at all means nothing is known to have started, so it is `upcoming`.
+     */
+    const forecastRow = (id: string) => {
+      const p = playerOf(id)
+      const day = p?.gameDay
+      const state = !day || day.state === 'upcoming' ? 'upcoming' : day.state === 'started' ? 'unknown' : day.state
+      return {
+        playerId: id,
+        projected: p?.afProjectedPoints ?? null,
+        unavailable: p ? p.ruledOut || p.onBye === true : false,
+        actual: day && day.state !== 'upcoming' ? day.points : 0,
+        state,
+      } as const
+    }
     return new Map([...lineups].map(([rosterId, ids]) => [
       rosterId,
-      { ...sumLeagueScoredStarters(ids, pointsOf), afProjected: sumLeagueScoredStarters(ids, enginePointsOf).projected },
+      {
+        ...sumLeagueScoredStarters(ids, pointsOf),
+        afProjected: sumLeagueScoredStarters(ids, enginePointsOf).projected,
+        forecast: ids.map(forecastRow),
+      },
     ]))
   }
 
@@ -1567,6 +1602,7 @@ export async function getMyTeamData(
             ? { week: liveRoster.verification.week, byRosterId: liveRoster.weekStarters }
             : null,
         priceLineups,
+        bestBall: base.league.bestBall === true,
       }).catch(() => null)
     : null
 

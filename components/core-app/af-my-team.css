@@ -1915,3 +1915,30 @@ li[data-kind='questionable'] .af-mt-check-tag {
     min-height: 44px;
   }
 }
+
+/*
+ * ── Win probability on the matchup card (2026-10-02) ────────────────────────
+ * Appended at depth 0. The percentage is the one number a manager scans for, so it is the
+ * accent figure; the margin and confidence sit beside it in the muted tier.
+ */
+.af-mt-mu-win {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text2);
+}
+.af-mt-mu-win-pct {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-mt-mu-win[data-favoured='true'] .af-mt-mu-win-pct {
+  color: var(--accent);
+}
+.af-mt-mu-win-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-mt-mu-win[data-available='false'] {
+  color: var(--muted);
+  font-size: 12px;
+}
