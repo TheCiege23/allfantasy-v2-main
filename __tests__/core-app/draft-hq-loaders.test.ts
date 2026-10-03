@@ -59,6 +59,12 @@ describe('Draft HQ loader regressions', () => {
     const result = await getDraftHqAll('user', [{ id: 'one' }])
     expect(result.rows[0].pickExpiresAt).toBeNull()
   })
+  it('does not run a league countdown when paused remaining time is missing', async () => {
+    db.draftSession.findFirst.mockResolvedValue(session({ status: 'paused', pausedRemainingSeconds: null }))
+    const context = { league: async () => ({ id: 'one', name: 'One', platform: 'manual' }), claimedTeam: async () => ({ externalId: 'b' }) }
+    const result = await getDraftBoardData('one', 'user', context as never)
+    expect(result?.clock.available && result.clock.data.endsAt).toBeNull()
+  })
   it('keeps expired status unknown and recognizes configured drafts', () => {
     expect(phaseOf('expired')).toBe('unknown')
     expect(phaseOf('configured')).toBe('upcoming')

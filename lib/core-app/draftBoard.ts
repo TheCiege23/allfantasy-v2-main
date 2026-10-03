@@ -192,7 +192,7 @@ export async function getDraftBoardData(
     : {
         available: true,
         data: {
-          endsAt: session.timerEndAt,
+          endsAt: session.status === 'paused' ? null : session.timerEndAt,
           pausedSecondsRemaining: session.pausedRemainingSeconds ?? null,
           yoursOnClock: myRosterId != null && onClockRosterId === myRosterId,
         },
