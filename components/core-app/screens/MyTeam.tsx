@@ -1291,7 +1291,13 @@ function OffseasonView({ data }: MyTeamProps) {
   const id = encodeURIComponent(data.league.id)
   const dynasty = data.dynasty != null || String(data.league.format ?? '').toLowerCase() === 'dynasty'
   const phase = data.preDraft ? 'predraft' : data.eliminated ? 'eliminated' : 'complete'
-  const team = data.team.available ? data.team.data : null
+  /*
+   * ⚠ OPTIONAL-CHAINED ON PURPOSE. The type marks these sections required, but the loader's early
+   * returns (no claimed team, no roster) omit `rosterGrade` and friends — and the off-season is
+   * exactly when a league is most often unclaimed. The in-season view never reaches here.
+   */
+  const team = data.team?.available ? data.team.data : null
+  const grade = data.rosterGrade?.available ? data.rosterGrade.data : null
   /*
    * Rank only with a record behind it — before a scored game it is import order (see the in-season
    * header). A finished season's rank is the final standing, which is worth saying.
@@ -1306,7 +1312,7 @@ function OffseasonView({ data }: MyTeamProps) {
     actions.push({ href: `/core/trades?league=${id}`, label: es ? 'Centro de intercambios' : 'Trade center' })
   }
   actions.push({ href: `/core?league=${id}`, label: copy('Open league overview'), primary: actions.length === 0 })
-  const showStrength = data.rosterGrade.available && (data.rosterGrade.data.positions?.length ?? 0) > 1
+  const showStrength = grade != null && (grade.positions?.length ?? 0) > 1
   return (
     <div className="af-mt af-mt-off" data-phase={phase}>
       <section className="af-frame af-mt-off-hero">
@@ -1321,10 +1327,10 @@ function OffseasonView({ data }: MyTeamProps) {
           <p className="af-mt-off-team">
             <span className="af-mt-off-team-name">{team.teamName}</span>
             {standing ? <span className="af-mt-off-team-meta af-num"> · {standing}</span> : null}
-            {data.rosterGrade.available ? (
+            {grade ? (
               <span className="af-mt-off-team-meta">
                 {' · '}
-                {es ? 'valor de plantilla' : 'roster value'} {ordinal(data.rosterGrade.data.rank)} {es ? 'de' : 'of'} {data.rosterGrade.data.outOf}
+                {es ? 'valor de plantilla' : 'roster value'} {ordinal(grade.rank)} {es ? 'de' : 'of'} {grade.outOf}
               </span>
             ) : null}
           </p>
@@ -1340,7 +1346,7 @@ function OffseasonView({ data }: MyTeamProps) {
       <div className="af-mt-body">
         <div className="af-mt-main">
           {data.dynasty ? <DynastyCard outlook={data.dynasty} /> : null}
-          {showStrength && data.rosterGrade.available ? <PositionStrengthCard grade={data.rosterGrade.data} /> : null}
+          {showStrength && grade ? <PositionStrengthCard grade={grade} /> : null}
         </div>
         <div className="af-mt-aside">
           {data.teamActivity ? <TeamActivityCard activity={data.teamActivity} myTeamName={team?.teamName ?? null} /> : null}
