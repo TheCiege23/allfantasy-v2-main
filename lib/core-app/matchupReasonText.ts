@@ -55,9 +55,16 @@ const EXACT_ES: Record<string, string> = {
   'a win probability needs both lineups priced — and a ratio of current points would not be a probability':
     'una probabilidad de victoria necesita ambas alineaciones valoradas — y una proporción de los puntos actuales no sería una probabilidad',
 
+  'Assumes starters score independently. Same-team stacks correlate, so extreme probabilities are overstated.':
+    'Supone que los titulares puntúan de forma independiente. Los jugadores del mismo equipo están correlacionados, así que las probabilidades extremas están exageradas.',
+
   // lib/projections/leagueScoring.ts
   'we hold no scoring settings for this league, and a generic projection would not be yours':
     'no tenemos la configuración de puntuación de esta liga, y una proyección genérica no sería la tuya',
+
+  // lib/core-app/playerProjections.ts — My Team's matchup card relays it (`nextMatchup.unpricedReason`)
+  "no starter could be priced under this league's scoring — the projection feed does not carry these players, or this league's rules do not cover their stat lines":
+    'no se pudo valorar a ningún titular con la puntuación de esta liga — el feed de proyecciones no incluye a estos jugadores, o las reglas de esta liga no cubren sus estadísticas',
 
   // lib/core-app/bestBallForecast.ts
   'the league has no verified starting-slot template': 'la liga no tiene una plantilla de posiciones titulares verificada',
@@ -93,6 +100,16 @@ const PATTERNS_ES: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
       `${starters(Number(m[1]))} por jugar sin proyección — contar${m[1] === '1' ? 'lo' : 'los'} como cero inclinaría el resultado hacia el otro lado`,
   ],
   [/^all starters final — decided by ([\d.]+)$/, (m) => `todos los titulares terminaron — decidido por ${m[1]}`],
+  [
+    /^no starter could be priced for (\d+) week (\d+) — the feed does not cover this week, or this league's rules cannot score its stat lines$/,
+    (m) =>
+      `no se pudo valorar a ningún titular para la semana ${m[2]} de ${m[1]} — el feed no cubre esta semana, o las reglas de esta liga no pueden puntuar sus estadísticas`,
+  ],
+  [
+    /^no per-player scoring has been ingested for (\d+) week (\d+), so each column below is a projection priced under this league's rules — not a live score$/,
+    (m) =>
+      `aún no se han importado los puntos por jugador de la semana ${m[2]} de ${m[1]}, así que cada columna de abajo es una proyección valorada con las reglas de esta liga — no un marcador en vivo`,
+  ],
   [
     /^(\d+) starters? (?:still to play|with scoring remaining), ([\d.]+) projected points outstanding$/,
     (m) => `${starters(Number(m[1]))} con puntos por sumar, ${m[2]} puntos proyectados pendientes`,
