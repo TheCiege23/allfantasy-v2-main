@@ -13,6 +13,7 @@ export type PreparationContext = {
   purpose: string;
 };
 export type PreparationEntry = {
+  playerId: string;
   playerKey: string;
   playerName: string;
   position: string;
@@ -21,6 +22,7 @@ export type PreparationEntry = {
   minPick: number;
   maxPick: number;
   standardDeviation: number | null;
+  observedTeams?: string[];
 };
 export type PreparationSnapshot = {
   version: 1;
@@ -146,8 +148,14 @@ export function preparationFormatKey(context: PreparationContext): string {
       .slice(0, 24)
   );
 }
-export function preparationPlayerKey(name: string, position: string): string {
-  return name.trim().toLowerCase() + "|" + position.trim().toUpperCase();
+export function preparationPlayerKey(
+  name: string,
+  position: string,
+  playerId?: string | null,
+): string {
+  return playerId
+    ? "id:" + playerId.trim() + "|" + position.trim().toUpperCase()
+    : name.trim().toLowerCase() + "|" + position.trim().toUpperCase();
 }
 export function validPreparationSnapshot(
   raw: unknown,
@@ -173,11 +181,17 @@ export function validPreparationSnapshot(
   const entries = s.entries.filter((e): e is PreparationEntry => {
     const r = record(e);
     return (
+      typeof r.playerId === "string" &&
+      !!r.playerId.trim() &&
       typeof r.playerName === "string" &&
       !!r.playerName.trim() &&
       typeof r.position === "string" &&
       !!r.position.trim() &&
-      r.playerKey === preparationPlayerKey(r.playerName, r.position) &&
+      r.playerKey ===
+        preparationPlayerKey(r.playerName, r.position, r.playerId as string) &&
+      (r.observedTeams === undefined ||
+        (Array.isArray(r.observedTeams) &&
+          r.observedTeams.every((team) => typeof team === "string"))) &&
       typeof r.adp === "number" &&
       Number.isFinite(r.adp) &&
       r.adp > 0 &&
@@ -197,7 +211,11 @@ export function validPreparationSnapshot(
     );
   });
   const keys = new Set(entries.map((e) => e.playerKey));
-  if (!entries.length || entries.length !== s.entries.length || keys.size !== entries.length)
+  if (
+    !entries.length ||
+    entries.length !== s.entries.length ||
+    keys.size !== entries.length
+  )
     return null;
   return {
     version: 1,
@@ -206,6 +224,16 @@ export function validPreparationSnapshot(
     observedAt: s.observedAt as string,
     entries,
   };
+}
+/** Source IDs must agree; names are presentation, not proof of identity. */
+export function matchingPreparationEntry(
+  entries: Map<string, PreparationEntry>,
+  name: string,
+  position: string,
+  playerId: string | null | undefined,
+): PreparationEntry | null {
+  const entry = entries.get(preparationPlayerKey(name, position, playerId));
+  return playerId && entry?.playerId === playerId.trim() ? entry : null;
 }
 export function pickAdpDifference(
   overall: number,
@@ -230,7 +258,8 @@ export function preparationPlayers(
   const counts = new Map<string, number>();
   heldPositions.forEach((p) => counts.set(p, (counts.get(p) ?? 0) + 1));
   const entries = snapshot.entries
-    .filter((e) => !excluded.has(e.playerKey))
+    .filter((e) => !excluded.has(e.playerKey) &&
+      !excluded.has(preparationPlayerKey(e.playerName, e.position)))
     .sort((a, b) => a.adp - b.adp || a.playerKey.localeCompare(b.playerKey));
   const positionAdps = new Map<string, number[]>();
   entries.forEach((e) => {

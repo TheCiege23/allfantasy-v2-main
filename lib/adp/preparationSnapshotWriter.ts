@@ -11,6 +11,8 @@ import { isDraftPickRowEmpty } from "@/lib/live-draft-engine/draftPickEmpty";
 
 /** Separate exact-context cohort; never borrow the legacy table's standard-roster defaults. */
 export interface PreparationSample {
+  playerId?: string | null;
+  team?: string | null;
   playerName: string;
   position: string | null;
   overall: number;
@@ -45,6 +47,7 @@ export function preparationSnapshotGroups(
       snapshot: PreparationSnapshot;
       picks: Map<string, number[]>;
       sessions: Set<string>;
+      teams: Map<string, Set<string>>;
     }
   >();
   for (const row of rows) {
@@ -52,6 +55,7 @@ export function preparationSnapshotGroups(
       row.session.sessionKind !== "live" ||
       !!row.session.sleeperDraftId ||
       !row.session.league ||
+      !row.playerId?.trim() ||
       !row.playerName?.trim() ||
       !row.position?.trim() ||
       !Number.isInteger(row.overall) ||
@@ -87,14 +91,23 @@ export function preparationSnapshotGroups(
         },
         picks: new Map(),
         sessions: new Set(),
+        teams: new Map(),
       };
       groups.set(key, group);
     }
     if (row.session.id) group.sessions.add(row.session.id);
-    const playerKey = preparationPlayerKey(row.playerName, row.position);
+    const playerKey = preparationPlayerKey(
+      row.playerName,
+      row.position,
+      row.playerId,
+    );
+    const teams = group.teams.get(playerKey) ?? new Set<string>();
+    if (row.team?.trim()) teams.add(row.team.trim());
+    group.teams.set(playerKey, teams);
     if (!group.picks.has(playerKey)) {
       group.picks.set(playerKey, []);
       group.snapshot.entries.push({
+        playerId: row.playerId!.trim(),
         playerKey,
         playerName: row.playerName.trim(),
         position: row.position.trim().toUpperCase(),
@@ -107,8 +120,9 @@ export function preparationSnapshotGroups(
     }
     group.picks.get(playerKey)!.push(row.overall);
   }
-  for (const group of groups.values())
+  for (const group of groups.values()) {
     for (const entry of group.snapshot.entries) {
+      entry.observedTeams = [...group.teams.get(entry.playerKey)!].sort();
       const picks = group.picks.get(entry.playerKey)!;
       entry.adp = picks.reduce((a, b) => a + b, 0) / picks.length;
       entry.sampleSize = picks.length;
@@ -122,10 +136,13 @@ export function preparationSnapshotGroups(
             )
           : null;
     }
-  return [...groups.values()].map((g) => ({
-    ...g.snapshot,
-    totalDrafts: g.sessions.size,
-  }));
+  }
+  return [...groups.values()]
+    .filter((g) => g.snapshot.entries.length)
+    .map((g) => ({
+      ...g.snapshot,
+      totalDrafts: g.sessions.size,
+    }));
 }
 export async function persistPreparationSnapshotHistory(
   rows: PreparationSample[],

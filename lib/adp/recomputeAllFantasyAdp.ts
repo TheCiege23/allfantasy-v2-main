@@ -143,6 +143,8 @@ export interface RecomputeAllFantasyAdpReport {
 }
 
 interface DraftPickWithSession {
+  team?: string | null
+  playerId?: string | null
   playerName: string
   position: string | null
   overall: number
@@ -281,7 +283,9 @@ export async function recomputeAllFantasyAdp(
         ...(sportFilter ? { session: { league: { sport: sportFilter } } } : {}),
       },
       select: {
-        playerName: true,
+        team: true,
+        playerId: true,
+      playerName: true,
         position: true,
         overall: true,
         round: true,

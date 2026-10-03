@@ -25,6 +25,8 @@ async function main() {
     take: 200000,
     orderBy: { id: "asc" },
     select: {
+      team: true,
+      playerId: true,
       playerName: true,
       position: true,
       overall: true,

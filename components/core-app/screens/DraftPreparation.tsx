@@ -447,7 +447,12 @@ export function DraftPreparation({
                     <td>{page * 25 + i + 1}</td>
                     <td>
                       {p.playerName}
-                      <small>{p.position}</small>
+                      <small>
+                        {p.position}
+                        {p.observedTeams?.length
+                          ? " · " + p.observedTeams.join(" / ")
+                          : ""}
+                      </small>
                     </td>
                     <td>{p.adp.toFixed(1)}</td>
                     <td>
