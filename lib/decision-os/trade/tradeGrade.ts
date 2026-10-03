@@ -39,6 +39,7 @@ import {
 } from '@/lib/trade-intel/gradeScale'
 import type { LeagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import type { TradeValueSource } from './valueSource'
+import { tradePackageReview } from './tradeEvidence'
 
 export type TradeGradeAction = 'accept' | 'review' | 'counter' | 'decline'
 
@@ -47,6 +48,8 @@ export type TradeGradeSideAdvantage = 'even' | 'you' | 'opponent'
 /** One asset in the graded deal, with both prices. Null prices mean the pricer found nothing. */
 export type TradeGradeLine = {
   side: 'give' | 'get'
+  /** Explicit identity for roster-slot checks; absent on older saved evaluations. */
+  assetKind?: 'player' | 'pick' | 'faab'
   name: string
   marketValue: number | null
   leagueValue: number | null
@@ -228,6 +231,10 @@ export function gradeTrade(args: {
       basis,
     }
   }
+  if (![args.giveValue, args.getValue, args.giveMarket, args.getMarket].every(Number.isFinite) ||
+      args.lines.some(line => [line.marketValue, line.leagueValue].some(value => value != null && (!Number.isFinite(value) || value < 0)))) {
+    return { graded: false, reason: 'One or more asset values are invalid. Refresh the values before grading this deal.', basis }
+  }
   if (!(args.giveValue > 0) || !(args.getValue > 0)) {
     return { graded: false, reason: 'The priced assets carry no usable value.', basis }
   }
@@ -238,6 +245,7 @@ export function gradeTrade(args: {
   if (!letter || !partnerLetter) return { graded: false, reason: 'The value gap could not be measured.', basis }
 
   const { label, sideAdvantage } = tradeGradeLabel(percentDiff)
+  const packageReview = tradePackageReview(args.lines)
   return {
     graded: true,
     letter,
@@ -245,8 +253,10 @@ export function gradeTrade(args: {
     percentDiff,
     label,
     sideAdvantage,
-    action: ACTION_BY_LETTER[letter],
-    recommendation: tradeGradeRecommendation({ letter, giveValue: args.giveValue, getValue: args.getValue }),
+    action: packageReview && ACTION_BY_LETTER[letter] === 'accept' ? 'review' : ACTION_BY_LETTER[letter],
+    recommendation: packageReview
+      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      : tradeGradeRecommendation({ letter, giveValue: args.giveValue, getValue: args.getValue }),
     giveValue: Math.round(args.giveValue),
     getValue: Math.round(args.getValue),
     giveMarket: Math.round(args.giveMarket),
@@ -287,6 +297,7 @@ export function mirrorTradeGrade(view: TradeGradeView): TradeGradeView {
   if (!view.graded) return view
   const percentDiff = -view.percentDiff
   const { label, sideAdvantage } = tradeGradeLabel(percentDiff)
+  const packageReview = tradePackageReview(view.lines.map(line => ({ ...line, side: line.side === 'give' ? 'get' : 'give' })))
   return {
     ...view,
     letter: view.partnerLetter,
@@ -294,8 +305,10 @@ export function mirrorTradeGrade(view: TradeGradeView): TradeGradeView {
     percentDiff,
     label,
     sideAdvantage,
-    action: ACTION_BY_LETTER[view.partnerLetter],
-    recommendation: tradeGradeRecommendation({ letter: view.partnerLetter, giveValue: view.getValue, getValue: view.giveValue }),
+    action: packageReview && ACTION_BY_LETTER[view.partnerLetter] === 'accept' ? 'review' : ACTION_BY_LETTER[view.partnerLetter],
+    recommendation: packageReview
+      ? `Quoted values: ${label.toLowerCase()}. ${packageReview.note}`
+      : tradeGradeRecommendation({ letter: view.partnerLetter, giveValue: view.getValue, getValue: view.giveValue }),
     giveValue: view.getValue,
     getValue: view.giveValue,
     giveMarket: view.getMarket,
