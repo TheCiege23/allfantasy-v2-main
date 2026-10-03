@@ -105,6 +105,30 @@ async function warm(baseURL: string, path: string): Promise<string> {
   }
 }
 
+/**
+ * A lane's own warm list, from `E2E_WARM_ROUTES` (comma-separated paths), or null for the default.
+ *
+ * ⚠ WARMING EVERYTHING IS WHAT RESTARTED THE SERVER IN A ONE-TEST LANE. `retention-engagement` runs
+ * a single spec that visits four routes, and still paid all 33 compiles above (161s) — enough to
+ * push `next dev` past its memory line, so it restarted ("approaching the used memory threshold,
+ * restarting...") partway through the test, threw every compiled route away, and the test's
+ * click-throughs waited on cold compiles. Measured 2026-10-03 over 13 runs of that lane: 6 had a
+ * restart, and 6 of those 6 went flaky or failed; of the 7 without one, 6 were clean. A lane that
+ * names its routes warms only those — the ones it actually needs, including any the default list
+ * omits — and stays under the line.
+ *
+ * Paths only, each starting with "/"; anything else is ignored, and an override that leaves
+ * nothing falls back to the default list rather than warming nothing.
+ */
+function lanesOwnWarmList(raw: string | undefined): string[] | null {
+  if (!raw) return null
+  const paths = raw
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p.startsWith('/') && !p.startsWith('//'))
+  return paths.length > 0 ? paths : null
+}
+
 export default async function globalSetup(config: FullConfig): Promise<void> {
   const baseURL =
     config.projects[0]?.use?.baseURL ??
@@ -112,7 +136,8 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? process.env.PORT ?? 3101}`
 
   const started = Date.now()
-  const queue = [...WARM_ROUTES]
+  const override = lanesOwnWarmList(process.env.E2E_WARM_ROUTES)
+  const queue = [...(override ?? WARM_ROUTES)]
   const results: string[] = []
 
   const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
@@ -127,7 +152,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     await Promise.all(workers)
     // eslint-disable-next-line no-console
     console.log(
-      `[global-setup] warmed ${results.length} routes in ${Math.round((Date.now() - started) / 1000)}s\n  ` +
+      `[global-setup] warmed ${results.length} routes${override ? ' (E2E_WARM_ROUTES)' : ''} in ${Math.round((Date.now() - started) / 1000)}s\n  ` +
         results.join('\n  ')
     )
   } catch {
