@@ -70,8 +70,9 @@ indexes; `WeeklyMatchup.rosterId` = `text` over 106,704 rows, 0 null, 0 non-nume
 with a positive control (planted wrong expectations were all reported). Then
 `prisma migrate resolve --applied` from an LF export, so each ledger checksum equals the sha256 of
 the committed LF file (`91be26727c…`, `91305477aa…`). A later `migrate deploy` now matches and
-SKIPS them instead of re-running them. They stay parked: moving them is a separate step that needs
-its own shadow-replay check, like the four above.
+SKIPS them instead of re-running them. Both were then moved to `prisma/migrations/` the same day
+(#1954 — see the section at the end of this file); a shadow replay of `main` afterwards showed the
+move gave `prisma migrate dev` nothing to DROP, as it did for the four above.
 
 ## ✅ ALL SEVEN ARE APPLIED TO PRODUCTION (2026-08-31)
 
