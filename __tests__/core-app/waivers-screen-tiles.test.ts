@@ -9,13 +9,18 @@ const prismaMock = vi.hoisted(() => ({
   roster: { findMany: vi.fn(), findUnique: vi.fn() },
   leagueWaiverSettings: { findUnique: vi.fn() },
   waiverClaim: { count: vi.fn() },
+  /* Sleeper's own settings, read for a league with no observed schedule (lib/waivers/sleeperWaiverSchedule.ts). */
+  $queryRaw: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 
 /* The observed Sleeper schedule, per test — its own derivation is covered in sleeper-waiver-schedule.test.ts. */
 const observed = vi.hoisted(() => ({ map: new Map<string, unknown>() }))
-vi.mock('@/lib/waivers/observedWaiverSchedule', () => ({
+vi.mock('@/lib/waivers/observedWaiverSchedule', async (importOriginal) => ({
+  /* Keep the real exports: lib/waivers/sleeperWaiverSchedule.ts reads OBSERVED_TIME_ZONE from here,
+   * and a bare mock throws on it — which the screen's catch turns into a silent "not observed". */
+  ...(await importOriginal<typeof import('@/lib/waivers/observedWaiverSchedule')>()),
   loadObservedWaiverSchedules: async () => observed.map,
 }))
 vi.mock('server-only', () => ({}))
@@ -37,6 +42,7 @@ beforeEach(() => {
   LEAGUE.platform = 'sleeper'
   prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue(null)
   prismaMock.waiverClaim.count.mockResolvedValue(2)
+  prismaMock.$queryRaw.mockResolvedValue([])
   prismaMock.roster.findMany.mockResolvedValue([
     { id: 'r-me', platformUserId: 'me', faabRemaining: 40, waiverPriority: 3 },
     { id: 'r-them', platformUserId: 'them', faabRemaining: 40, waiverPriority: 1 },
@@ -99,6 +105,7 @@ describe('Waivers run — a Sleeper league', () => {
         dayLabel: 'Wednesday',
         timeLabel: '03:00 Pacific',
         observedRuns: 5,
+        fromSleeperSetting: false,
       },
     })
   })
@@ -107,6 +114,37 @@ describe('Waivers run — a Sleeper league', () => {
     prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'faab', processingDayOfWeek: 1, processingTimeUtc: '12:00' })
     const data = await getWaiversData('L1', 'me')
     expect(data?.processTime).toMatchObject({ available: false, reason: expect.stringContaining('not been seen processing') })
+  })
+
+  it("falls back to Sleeper's own daily hour when nothing has been observed — and says so", async () => {
+    prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'faab', processingDayOfWeek: 1, processingTimeUtc: '12:00' })
+    prismaMock.$queryRaw.mockResolvedValue([{ id: 'L1', raw: { daily_waivers: 1, daily_waivers_hour: 9, waiver_day_of_week: 2 } }])
+    const data = await getWaiversData('L1', 'me')
+    expect(data?.processTime).toEqual({
+      available: true,
+      data: {
+        schedule: { dayOfWeek: null, time: '09:00', timeZone: 'America/Los_Angeles' },
+        dayLabel: 'Every day',
+        timeLabel: '09:00 Pacific',
+        observedRuns: null,
+        fromSleeperSetting: true,
+      },
+    })
+  })
+
+  it('does NOT invent a schedule for a league Sleeper says is not daily — its weekday is unresolved (S-05)', async () => {
+    prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'faab', processingDayOfWeek: 1, processingTimeUtc: '12:00' })
+    prismaMock.$queryRaw.mockResolvedValue([{ id: 'L1', raw: { daily_waivers: 0, daily_waivers_hour: 0, waiver_day_of_week: 2 } }])
+    const data = await getWaiversData('L1', 'me')
+    expect(data?.processTime).toMatchObject({ available: false, reason: expect.stringContaining('not been seen processing') })
+  })
+
+  it('an observed schedule wins over the setting, and the setting is not even read', async () => {
+    observed.map = new Map([['L1', { schedule: { dayOfWeek: null, time: '00:05', timeZone: 'America/Los_Angeles' }, agreeingRuns: 7, consideredRuns: 10, lastRunAt: 'x' }]])
+    prismaMock.$queryRaw.mockResolvedValue([{ id: 'L1', raw: { daily_waivers: 1, daily_waivers_hour: 9 } }])
+    const data = await getWaiversData('L1', 'me')
+    expect(data?.processTime).toMatchObject({ available: true, data: { timeLabel: '00:05 Pacific', observedRuns: 7, fromSleeperSetting: false } })
+    expect(prismaMock.$queryRaw).not.toHaveBeenCalled()
   })
 
   it('still reads it when the league has no ingested waiver settings row at all', async () => {

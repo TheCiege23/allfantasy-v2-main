@@ -10,6 +10,8 @@ import { getLeagueWaiverState } from '@/lib/waiver-wire/waiver-state-service'
 import { computeNextWaiverRunAtUtc } from '@/lib/waiver-wire/next-waiver-run'
 import { getWaiverTypeLabel } from '@/lib/waiver-wire/WaiverWireViewService'
 import { readWaiverBudgetUsed } from '@/lib/decision-os/world/derive'
+import { loadSleeperWaiverSchedules } from '@/lib/waivers/sleeperWaiverSchedule'
+import { scheduleLabel } from '@/lib/core-app/waiverRunClock'
 
 /**
  * "Who's on waivers / what's my FAAB / when do claims run / what did I put in for?"
@@ -240,6 +242,25 @@ async function importedWaivers(league: LeagueRow, userId: string): Promise<strin
   const type = importedWaiverType(ws.waiverType ?? s.waiver_type ?? nested.waiver_type)
   const budget = num(ws.faabBudget ?? s.waiver_budget ?? nested.waiver_budget ?? s.faab_budget)
   const dayRaw = num(s.waiver_day_of_week ?? nested.waiver_day_of_week)
+  /*
+   * 🛑 NOT FOR SLEEPER. Sleeper's `waiver_day_of_week` was read here as Sunday = 0, and which weekday
+   * it names is NOT established (contracts/sleeper/GAPS.md S-05). A Sleeper league's schedule is the
+   * one the screens show: observed from its own processed claims, else Sleeper's daily-hour setting
+   * (lib/waivers/sleeperWaiverSchedule.ts) — never a guessed weekday.
+   */
+  const isSleeper = String(league.platform ?? '').toLowerCase() === 'sleeper'
+  const sleeperSchedule = isSleeper
+    ? ((await loadSleeperWaiverSchedules(prisma, [league.id]).catch(() => null))?.get(league.id) ?? null)
+    : null
+  const processingLine = isSleeper
+    ? sleeperSchedule
+      ? `- Waivers run: ${scheduleLabel(sleeperSchedule.schedule)} (${
+          sleeperSchedule.source === 'observed'
+            ? `seen over this league's last ${sleeperSchedule.agreeingRuns} runs`
+            : "this league's Sleeper setting"
+        }). That is Pacific time — convert it for the user if they are elsewhere.`
+      : `- Processing schedule: not known yet — this league has not been seen processing often enough, and Sleeper's settings give only the hour for a daily league. Tell them to check ${platform}.`
+    : `- Processing day: ${dayRaw != null && DAYS[dayRaw] ? DAYS[dayRaw] : `not in the imported data — tell them to check ${platform}`}.`
 
   const [mine, rosters, label] = await Promise.all([
     findUserRoster(league.id, userId),
@@ -251,7 +272,7 @@ async function importedWaivers(league: LeagueRow, userId: string): Promise<strin
     `WAIVER WIRE — "${league.name ?? 'this league'}" is imported from ${platform}. Only what the import stored is below; ${platform} is the system of record.`,
     `- Waiver type: ${type ?? `not in the data ${platform} sent us — do not guess it`}.`,
     `- FAAB budget: ${budget != null ? `$${budget} per team` : 'not in the imported data'}.`,
-    `- Processing day: ${dayRaw != null && DAYS[dayRaw] ? DAYS[dayRaw] : `not in the imported data — tell them to check ${platform}`}.`,
+    processingLine,
   ]
 
   if (!mine) {

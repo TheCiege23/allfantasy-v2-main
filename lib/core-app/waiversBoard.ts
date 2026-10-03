@@ -17,7 +17,7 @@ import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import type { WaiverValueBasis } from '@/lib/waivers/waiverSportBasis'
 import { faabRemainingOf, formatOf, rowWaiverSchedule } from './waiverRowMeta'
 import type { WaiverSchedule } from './waiverRunClock'
-import { loadObservedWaiverSchedules, type ObservedWaiverSchedule } from '@/lib/waivers/observedWaiverSchedule'
+import { loadSleeperWaiverSchedules, type SleeperWaiverSchedule } from '@/lib/waivers/sleeperWaiverSchedule'
 import { buildWaiverSportSections } from './waiversBoardSports'
 import { projectionWeekKickoffs } from './waiverClaimWeek'
 import { futureWeekProjectionsReady, futureWeekStoreReader } from '@/lib/projections/futureWeekProjectionStore'
@@ -409,13 +409,14 @@ async function nflWaiversBoard(
 
   /*
    * Sleeper leagues have no imported schedule; read the one their own claims reveal. One query for
-   * every Sleeper league on the board (lib/waivers/observedWaiverSchedule.ts). A failed read costs
+   * every Sleeper league on the board, falling back to Sleeper's daily hour setting
+   * (lib/waivers/sleeperWaiverSchedule.ts). A failed read costs
    * the countdowns, never the board.
    */
-  const observedSchedules = await loadObservedWaiverSchedules(
+  const observedSchedules = await loadSleeperWaiverSchedules(
     prisma,
     mine.filter((c) => String(c.league?.platform ?? '').toLowerCase() === 'sleeper').map((c) => c.leagueId),
-  ).catch(() => new Map<string, ObservedWaiverSchedule>())
+  ).catch(() => new Map<string, SleeperWaiverSchedule>())
 
   const current = await latestProjectionWeek()
   if (!current) return { ...EMPTY, considered: mine.length }

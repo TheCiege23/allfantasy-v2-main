@@ -7,7 +7,7 @@ import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { describeTiebreakRule } from './waiverRuleLabels'
 import { waiverScheduleIsImported } from './waiverRowMeta'
 import type { WaiverSchedule } from './waiverRunClock'
-import { loadObservedWaiverSchedules } from '@/lib/waivers/observedWaiverSchedule'
+import { loadSleeperWaiverSchedules } from '@/lib/waivers/sleeperWaiverSchedule'
 import { normalizeSourcePlatform } from '@/lib/league-links/sourceLinkResolver'
 import { platformLabel } from './platformLinks'
 
@@ -70,6 +70,8 @@ export type WaiverRunInfo = {
   timeLabel: string
   /** Set when the schedule was read off this league's own processed claims: how many runs agree. */
   observedRuns: number | null
+  /** True when it is Sleeper's own daily-hour setting (lib/waivers/sleeperWaiverSchedule.ts). */
+  fromSleeperSetting: boolean
 }
 
 export type WaiversData = {
@@ -136,13 +138,14 @@ async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
   })
 
   /*
-   * A Sleeper league's schedule is not imported (its settings fields' meaning is unverified —
-   * contracts/sleeper/GAPS.md S-05/S-06), so it is OBSERVED from when this league's claims actually
-   * processed. Read before the settings row, because a league with no ingested settings row can
-   * still have a processing history.
+   * A Sleeper league's schedule is OBSERVED from when this league's claims actually processed, else
+   * read off Sleeper's own daily-hour setting for a league Sleeper says runs daily — the hour is
+   * measured to be the Pacific run hour; the weekly day is not (contracts/sleeper/GAPS.md S-05/S-06,
+   * lib/waivers/sleeperWaiverSchedule.ts). Read before the settings row, because a league with no
+   * ingested settings row can still have a processing history.
    */
   const observed = !waiverScheduleIsImported(platform)
-    ? ((await loadObservedWaiverSchedules(prisma, [leagueId]).catch(() => null))?.get(leagueId) ?? null)
+    ? ((await loadSleeperWaiverSchedules(prisma, [leagueId]).catch(() => null))?.get(leagueId) ?? null)
     : null
   const observedRun: SectionState<WaiverRunInfo> | null = observed
     ? {
@@ -151,14 +154,15 @@ async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
           schedule: observed.schedule,
           dayLabel: observed.schedule.dayOfWeek == null ? 'Every day' : DAY_LABEL[observed.schedule.dayOfWeek],
           timeLabel: `${observed.schedule.time} Pacific`,
-          observedRuns: observed.agreeingRuns,
+          observedRuns: observed.source === 'observed' ? observed.agreeingRuns : null,
+          fromSleeperSetting: observed.source === 'sleeper_setting',
         },
       }
     : null
   const notYetObserved = {
     available: false as const,
     reason:
-      'Sleeper’s processing schedule was not imported, and this league’s waivers have not been seen processing often enough to read it yet — check the league’s waiver settings on Sleeper.',
+      'Sleeper’s waiver day is not imported (only its hour, for a league that runs daily), and this league’s waivers have not been seen processing often enough to read the schedule yet — check the league’s waiver settings on Sleeper.',
   }
 
   if (!s) {
@@ -205,6 +209,7 @@ async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
               dayLabel: DAY_LABEL[day],
               timeLabel: `${time} UTC`,
               observedRuns: null,
+              fromSleeperSetting: false,
             },
           }
         : { available: false, reason: 'no waiver run schedule was ingested for this league' }
