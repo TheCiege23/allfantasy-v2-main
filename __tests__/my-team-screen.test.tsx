@@ -521,7 +521,7 @@ describe('My Team — the reported problems', () => {
     expect(c0.querySelector('.af-mt-projhead--engine')?.textContent).toBe('AF')
     /* The "?" is a button now (2026-10-03); the explainer is the popover it opens, not its label. */
     const c = render(<MyTeam data={data()} />).container
-    const info = c.querySelector('button.af-mt-info')
+    const info = c.querySelector('.af-mt-projhead button.af-info-tip')
     expect(info).toBeTruthy()
     const explainer = c.querySelector(`[id="${info?.getAttribute('popovertarget')}"]`)?.textContent ?? ''
     expect(explainer).toContain('Sleeper’s own projection')
