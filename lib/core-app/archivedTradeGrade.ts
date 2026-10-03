@@ -20,7 +20,10 @@ import { pickAssets, type TradeAsset } from './tradePicks'
  * implementations of one grading rule once. Behaviour is unchanged from that list:
  *
  *  - graded from the ROW's point of view (what it received against what it gave), on this league's
- *    own chart, TODAY, without roster need — the trade has happened;
+ *    own chart, without roster need — the trade has happened;
+ *  - the letter is each trade's FROZEN ORIGINAL (`frozenCompletedGrade.ts`), taken the first time
+ *    it was graded on this AF league row, with today's re-grade beside it as `current` — not a fresh
+ *    price on today's values;
  *  - 🛑 a USED pick is graded as the player drafted with it (Guap's ruling, 2026-09-25), named from
  *    the league's graded ledger (`archivedPickOutcomes.ts`), one read for the rows that moved a pick;
  *  - any asset that cannot be priced withholds the letter. Nothing is priced as zero.

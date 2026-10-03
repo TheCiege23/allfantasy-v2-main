@@ -20,11 +20,14 @@ import { TeamLogo } from '@/app/components/TeamLogo'
  * Each side therefore labels its basis and explains which contextual inputs
  * were available. A zero-signal result never appears as an earned C.
  *
- * The verdict that IS shown is THE grade (lib/decision-os/trade/tradeGrade.ts):
- * this league's values TODAY for what each side received — the same letter the
- * Trade Center gives the deal. ⚠ It used to say "valued the day it was made",
- * which was never true: the prices were always the newest on file. It renders
- * only when every asset on both sides priced; absent means exactly that.
+ * The verdict that IS shown is THE grade (lib/decision-os/trade/tradeGrade.ts)
+ * for what each side received: the trade's FROZEN ORIGINAL, taken the first time
+ * AllFantasy graded it on this league's values (`frozenCompletedGrade.ts`) — the
+ * same frozen row the /core Trades history reads. The band says when with
+ * `gradeMoment(t.gradedAt)`. ⚠ It once said "valued the day it was made", and that
+ * is still not true: an imported trade is first graded when we first read it,
+ * which can be long after the deal. It renders only when every asset on both
+ * sides priced; absent means exactly that.
  *
  * ⚠ A PICK IS NAMED AS A PICK. "2027 4th", never the player it later became —
  * the two managers traded the pick, and resolving it would rewrite the deal

@@ -862,6 +862,7 @@ const spanish: Record<string, string> = {
   'You got': 'Recibiste',
   got: 'recibió',
   'League value today': 'Valor actual en esta liga',
+  'League value used by this grade': 'Valor de liga usado en esta calificación',
   drafted: 'seleccionado',
   'Why it graded this way': 'Por qué recibió esta calificación',
   'League grade withheld:': 'Calificación de liga no disponible:',

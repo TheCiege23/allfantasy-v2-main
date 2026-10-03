@@ -943,7 +943,8 @@ export async function getTradesBoard(
      * 🛑 THE LETTER IS THE ONE GRADE (2026-09-25) — not rank space on share bands, which is what
      * this board and the /core Trades list used to grade in while every other screen graded on
      * league value. Same deal, same letter, same numbers: `gradeArchivedTrade`, on this league's
-     * chart today, from this row's point of view.
+     * chart, from this row's point of view — and, through `original` below, the trade's FROZEN
+     * ORIGINAL from the first time it was graded, not a re-price on today's values.
      */
     // Priced by the Sleeper id the row keys each player by, as the live paths price him — see `sleeperPlayerInput`.
     const nameOfId = (id: string) => ({ name: playerById.get(id)?.name?.trim() || null, sleeperId: id })

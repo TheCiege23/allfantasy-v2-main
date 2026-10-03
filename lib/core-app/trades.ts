@@ -131,9 +131,11 @@ export type TradeRecord = {
     gradeNote?: string
   }>
   /**
-   * THE grade (`oneGradeForCompletedTrade`) — today's league values, no roster need — from
-   * `players[0]`'s side: `give` is what players[0] sent. Absent when no AF league was in hand to
-   * grade on; a withheld view (`graded: false`) carries its reason and never a letter.
+   * THE grade (`oneGradeForCompletedTrade`) — the FROZEN ORIGINAL taken the first time AllFantasy
+   * graded the deal, on this league's values, no roster need, with today's re-grade beside it as
+   * `current` (`frozenCompletedGrade.ts`; say when with `gradeMoment`) — from `players[0]`'s side:
+   * `give` is what players[0] sent. Absent when no AF league was in hand to grade on; a withheld
+   * view (`graded: false`) carries its reason and never a letter.
    *
    * ⚠ NOT THE SAME FACT AS `players[].grade`. That is the realized-points / market-projection
    * letter from the grade ledger; this is the one letter every other trade surface shows.

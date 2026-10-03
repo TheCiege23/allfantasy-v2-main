@@ -15,9 +15,10 @@ import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch
  *
  * ⚠ NOT SCANNED IS CHECKED BEFORE EMPTY. The panel route returns
  * `pending.scanned` precisely so a league we never read cannot render as a
- * league with nothing in it — the same rule TradeInbox carries. A Yahoo or
- * Sleeper league says "Nothing waiting"; an ESPN league says it was not read,
- * and why.
+ * league with nothing in it — the same rule TradeInbox carries. A Yahoo league
+ * says "Nothing waiting"; a Sleeper league says "None visible · open offers live
+ * in Sleeper", because Sleeper's feed never carries an offer until it is
+ * accepted (see `statusLine`); an ESPN league says it was not read, and why.
  *
  * ⚠ ONE PANEL READ PER VISIBLE LEAGUE, BATCHED. Each read may scan the
  * provider's pending transactions. The first eight load on entry; managers can

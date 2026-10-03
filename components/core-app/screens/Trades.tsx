@@ -283,7 +283,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                       team={p.team}
                     />
                     {p.team ? <TeamLogo teamAbbr={p.team} sport="NFL" logoUrl={p.teamLogoUrl} size={20} /> : null}
-                    {values[j] != null ? <em className="af-tr-asset-value af-num" title={copy('League value today')}>{Math.round(values[j]!).toLocaleString()}</em> : null}
+                    {values[j] != null ? <em className="af-tr-asset-value af-num" title={copy('League value used by this grade')}>{Math.round(values[j]!).toLocaleString()}</em> : null}
                   </span>
                 ))}
                 {side.picks?.map((pick, j) => {
@@ -293,7 +293,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                     <span key={`${pick}-${j}`}>
                       {side.received.length > 0 || j > 0 ? ', ' : ''}{pick}
                       {drafted ? <span className="af-tr-pick-drafted"> ({copy('drafted')} {drafted})</span> : null}
-                      {value != null ? <em className="af-tr-asset-value af-num" title={copy('League value today')}>{Math.round(value).toLocaleString()}</em> : null}
+                      {value != null ? <em className="af-tr-asset-value af-num" title={copy('League value used by this grade')}>{Math.round(value).toLocaleString()}</em> : null}
                     </span>
                   )
                 })}
