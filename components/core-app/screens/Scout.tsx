@@ -1,6 +1,10 @@
 import Link from 'next/link'
 
 import '@/components/core-app/af-scout.css'
+import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import type { ScoutEdge, ScoutEdgeManager } from '@/lib/competitive-edge/scoutEdgeLoader'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import type { SectionState } from '@/lib/core-app/leagueHome'
 import type { ScoutData, ScoutedManager, ScoutStanding } from '@/lib/core-app/scout'
 import type { Record3, Zone } from '@/lib/core-app/standingsModel'
 
@@ -36,6 +40,61 @@ export type ScoutProps = {
   gamePlanHref: string
   matchupHref: string
   tradesHref: string
+  /**
+   * Competitive Edge — every other manager's trade and waiver record. Null to a viewer whose plan
+   * does not include it: the server never loaded it, and `edgeAccess` draws the lock in its place.
+   */
+  edge?: SectionState<ScoutEdge> | null
+  edgeAccess?: CoreDepthAccess | null
+}
+
+/** "Sep 21, 2025" — pinned to en-US and Eastern so the server paint is the only paint. */
+const DAY = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })
+function day(iso: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? null : DAY.format(d)
+}
+
+/**
+ * One manager's record as counts — "7 trades · last Sep 21, 2025 · 12 waiver claims won · $64 FAAB
+ * left". Facts only, the Competitive Edge contract: nothing here says what kind of trader they are.
+ */
+function EdgeLine({ m }: { m: ScoutEdgeManager }) {
+  const parts: string[] = []
+  if (m.trades != null) {
+    const last = day(m.lastTradeAt)
+    parts.push(m.trades === 0 ? 'no completed trades' : `${m.trades} ${m.trades === 1 ? 'trade' : 'trades'}${last ? ` · last ${last}` : ''}`)
+  }
+  if (m.waiverClaims != null) parts.push(`${m.waiverClaims} waiver ${m.waiverClaims === 1 ? 'claim' : 'claims'} won`)
+  if (m.faabRemaining != null) parts.push(`$${Math.round(m.faabRemaining).toLocaleString('en-US')} FAAB left`)
+  if (parts.length === 0) return null
+  return <p className="af-sc-edge af-num">{parts.join(' · ')}</p>
+}
+
+/** What the edge counts are measured over — said once, above the cards, like the standings basis. */
+function EdgeBasis({ edge, access }: { edge: SectionState<ScoutEdge>; access: CoreDepthAccess | null }) {
+  if (!edge.available) {
+    return <p className="af-sc-edge-basis">Competitive Edge: {edge.reason.replace(/\.$/, '')}.</p>
+  }
+  const t = edge.data.trades
+  const w = edge.data.waivers
+  const seasons = t.available ? t.data.seasons : []
+  const span = seasons.length > 1 ? `${[...seasons].sort()[0]}–${[...seasons].sort().slice(-1)[0]}` : seasons[0] ?? null
+  return (
+    <p className="af-sc-edge-basis">
+      <strong>Competitive Edge</strong>
+      {' · '}
+      {t.available
+        ? `completed trades${span ? ` across ${span}` : ''}, read ${day(t.data.asOf) ?? 'recently'}${t.data.stale ? ' (may be out of date)' : ''}`
+        : `trades: ${t.reason}`}
+      {' · '}
+      {w.available
+        ? `waiver claims won in ${w.data.season}${w.data.stale ? ' (may be out of date)' : ''} — Sleeper records only winning claims`
+        : `waivers: ${w.reason}`}
+      .{access ? <> <FreeUntilNote access={access} /></> : null}
+    </p>
+  )
 }
 
 const ZONE_LABEL: Record<Zone, string> = {
@@ -106,7 +165,7 @@ function Facts({ s }: { s: ScoutStanding }) {
   )
 }
 
-function ManagerCard({ m, tradesHref }: { m: ScoutedManager; tradesHref: string }) {
+function ManagerCard({ m, tradesHref, edge }: { m: ScoutedManager; tradesHref: string; edge: ScoutEdgeManager | null }) {
   const s = m.standing
   return (
     <li>
@@ -156,11 +215,13 @@ function ManagerCard({ m, tradesHref }: { m: ScoutedManager; tradesHref: string 
           <p className="af-sc-unavailable">Not on the standings table yet.</p>
         )}
 
+        {edge ? <EdgeLine m={edge} /> : null}
+
         {m.isYou ? null : (
           <footer className="af-sc-card-foot">
             {/*
-              The Trade Center is where Competitive Edge shows this manager's own trade record, inside
-              the deal it bears on — the paid depth stays in the decision, not on this free screen.
+              The Trade Center grades a deal with them, and its Competitive Edge section binds their
+              trade record to the positions in that deal — more than the counts above can say.
             */}
             <Link className="af-sc-cta" href={tradesHref}>
               Build a trade &rarr;
@@ -223,7 +284,8 @@ function OpponentBanner({ data, matchupHref, tradesHref }: { data: ScoutData; ma
   )
 }
 
-export function Scout({ data, gamePlanHref, matchupHref, tradesHref }: ScoutProps) {
+export function Scout({ data, gamePlanHref, matchupHref, tradesHref, edge = null, edgeAccess = null }: ScoutProps) {
+  const edgeBy = edge?.available ? edge.data.byManager : null
   return (
     <div className="af-sc">
       <header className="af-frame af-sc-head">
@@ -265,10 +327,22 @@ export function Scout({ data, gamePlanHref, matchupHref, tradesHref }: ScoutProp
         </p>
       ) : null}
 
+      {/*
+        Competitive Edge, once, above the cards. A viewer without the plan sees the lock in its place —
+        and was never sent the counts (loadScoutEdgeForScreen returns null for them).
+      */}
+      {data.managers.available ? (
+        edgeAccess && !edgeAccess.unlocked ? (
+          <CoreDepthLock access={edgeAccess} what="Every manager’s trade and waiver record" />
+        ) : edge ? (
+          <EdgeBasis edge={edge} access={edgeAccess} />
+        ) : null
+      ) : null}
+
       {data.managers.available ? (
         <ul className="af-sc-list">
           {data.managers.data.map((m) => (
-            <ManagerCard key={m.managerId} m={m} tradesHref={tradesHref} />
+            <ManagerCard key={m.managerId} m={m} tradesHref={tradesHref} edge={m.isYou ? null : (edgeBy?.[m.managerId] ?? null)} />
           ))}
         </ul>
       ) : (
