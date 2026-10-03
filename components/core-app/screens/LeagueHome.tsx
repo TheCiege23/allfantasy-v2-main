@@ -536,8 +536,8 @@ export function LeagueHome({
           </Link>
           <Link href={`/core/matchup?league=${league.id}`}>
             <span className="af-label">{copy('Matchup')}</span>
-            <strong>{data.matchup.available ? `${data.matchup.data.you.name} vs ${data.matchup.data.opponent.name}` : copy('Open matchup')}</strong>
-            <span>{data.matchup.available ? `Week ${data.matchup.data.week} · ${copy('league scoring')}` : copy('Matchup data is not ready')} →</span>
+            <strong>{data.matchup?.available ? `${data.matchup.data.you.name} vs ${data.matchup.data.opponent.name}` : copy('Open matchup')}</strong>
+            <span>{data.matchup?.available ? `Week ${data.matchup.data.week} · ${copy('league scoring')}` : copy('Matchup data is not ready')} →</span>
           </Link>
           <div className="af-lh-week-summary-moves">
             <span className="af-label">{copy('Moves')}</span>
