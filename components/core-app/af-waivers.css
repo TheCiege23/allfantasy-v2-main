@@ -388,3 +388,68 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ── Next waiver run, roster needs, bids, priority cost (2026-10-02 features) ──
+   Own top-level blocks at end of file, so nothing can be carried into another band. */
+.af-core .af-wv-next {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-core .af-wv-clock-in { color: var(--text2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.af-core [data-soon='true'] .af-wv-clock-in { color: var(--warn, #fbbf24); }
+.af-core .af-wv-rule-local { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--text2); }
+
+.af-core .af-wlb-needs { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.af-core .af-wlb-needs li {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text2);
+  background: var(--surface2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.07));
+}
+.af-core .af-wlb-need-k { font-weight: 800; color: var(--text); }
+.af-core .af-wlb-needs li[data-tone='bad'] { border-color: color-mix(in srgb, var(--bad, #ff6b8b) 40%, transparent); }
+.af-core .af-wlb-needs li[data-tone='bad'] .af-wlb-need-k { color: var(--bad, #ff6b8b); }
+.af-core .af-wlb-needs li[data-tone='warn'] .af-wlb-need-k { color: var(--warn, #fbbf24); }
+
+.af-core .af-wlb-bid {
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--good, #34d399);
+  background: color-mix(in srgb, var(--good, #34d399) 12%, transparent);
+}
+.af-core .af-wlb-bid[data-over='true'] {
+  color: var(--warn, #fbbf24);
+  background: color-mix(in srgb, var(--warn, #fbbf24) 12%, transparent);
+}
+
+.af-core .af-wlb-priority {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+}
+.af-core .af-wlb-priority strong { color: var(--text); }

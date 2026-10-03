@@ -48,6 +48,19 @@ export type LineupSwap = {
   dropBasis: 'market_value' | 'projection' | null
   /** The roster has an empty spot, so the add needs no drop at all. */
   openRosterSpot: boolean
+  /**
+   * Every free agent who would improve the lineup, best first — the add is `ranked[0]`. Each is
+   * scored against your lineup ALONE (not after the add), which is what "the next option" means
+   * to someone choosing one claim.
+   */
+  ranked: RankedAdd[]
+}
+
+export type RankedAdd = {
+  id: string
+  gain: number
+  /** The starter this add would take the place of; null when he fills an empty slot. */
+  displacesId: string | null
 }
 
 export type PickLineupSwapArgs = {
@@ -101,7 +114,7 @@ export function pickLineupSwap(args: PickLineupSwapArgs): LineupSwap | null {
     .map((p) => ({ sleeperId: p.id, name: p.id, position: p.position, team: null, points: p.points as number }))
   const base = bestLineup(lineup, args.slots, fits)
 
-  let best: { cand: SwapCandidate; gain: number; used: Set<string> } | null = null
+  const scored: Array<{ cand: SwapCandidate; gain: number; used: Set<string> }> = []
   for (const cand of args.candidates) {
     const withCand = bestLineup(
       [...lineup, { sleeperId: cand.id, name: cand.id, position: cand.position, team: null, points: cand.points }],
@@ -111,26 +124,27 @@ export function pickLineupSwap(args: PickLineupSwapArgs): LineupSwap | null {
     if (!withCand.used.has(cand.id)) continue
     const gain = round2(withCand.total - base.total)
     if (gain <= 0) continue
-    /* Ties go to the higher projection, then the lower id, so a cached board cannot flip between loads. */
-    if (
-      !best ||
-      gain > best.gain ||
-      (gain === best.gain && (cand.points > best.cand.points || (cand.points === best.cand.points && cand.id < best.cand.id)))
-    ) {
-      best = { cand, gain, used: withCand.used }
-    }
+    scored.push({ cand, gain, used: withCand.used })
   }
-  if (!best) return null
+  if (scored.length === 0) return null
+  /* Ties go to the higher projection, then the lower id, so a cached board cannot flip between loads. */
+  scored.sort(
+    (a, b) => b.gain - a.gain || b.cand.points - a.cand.points || (a.cand.id < b.cand.id ? -1 : a.cand.id > b.cand.id ? 1 : 0),
+  )
+  const displacedBy = (used: Set<string>) =>
+    lineup.find((p) => base.used.has(p.sleeperId) && !used.has(p.sleeperId))?.sleeperId ?? null
+  const ranked: RankedAdd[] = scored.map((x) => ({ id: x.cand.id, gain: x.gain, displacesId: displacedBy(x.used) }))
+  const best = scored[0]
 
   const openRosterSpot = args.held != null && args.capacity != null && args.held < args.capacity
 
-  const displacesId = lineup.find((p) => base.used.has(p.sleeperId) && !best!.used.has(p.sleeperId))?.sleeperId ?? null
+  const displacesId = ranked[0].displacesId
 
   /*
    * Drop candidates: your bench — not a declared starter, and not anyone the new best lineup
    * would start (a bench player good enough to move up is not dead weight).
    */
-  const bench = args.roster.filter((p) => !args.starterIds.has(p.id) && !best!.used.has(p.id))
+  const bench = args.roster.filter((p) => !args.starterIds.has(p.id) && !best.used.has(p.id))
   let dropId: string | null = null
   let dropBasis: LineupSwap['dropBasis'] = null
   if (openRosterSpot) {
@@ -159,7 +173,7 @@ export function pickLineupSwap(args: PickLineupSwapArgs): LineupSwap | null {
     if (dropId) dropBasis = 'projection'
   }
 
-  return { addId: best.cand.id, gain: best.gain, displacesId, dropId, dropBasis, openRosterSpot }
+  return { addId: best.cand.id, gain: best.gain, displacesId, dropId, dropBasis, openRosterSpot, ranked }
 }
 
 type NamedPoints = { name: string; position?: string | null; projected: number }

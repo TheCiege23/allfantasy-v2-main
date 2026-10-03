@@ -82,8 +82,9 @@ registerScreenSummary<WaiversBoardData | null>({
    * basketball-only account would otherwise keep serving the board with its leagues silently gone.
    * 4: ranked by lineup gain, with `withheld.noUpgrade`, `startsOver` and `dropBasis`. A v3 entry
    * would keep serving backup-QB adds for up to the stale window after deploy.
+   * 5: `alternatives`, `runsAtUtc`, `multiLeague`, and up to 40 rows (was 10).
    */
-  version: 4,
+  version: 5,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a user-scoped key carries no league id, so a league sweep would match nothing.

@@ -95,6 +95,12 @@ export interface WaiverBoard {
    */
   sport?: string
   basis?: WaiverValueBasis
+  /**
+   * What your roster needs this week and in the next few — empty slots, positions with no backup,
+   * upcoming byes. NFL only (the schedule and slot shapes are football's); absent when it could not
+   * be read, never a guess.
+   */
+  needs?: RosterNeeds
 }
 
 const EMPTY = (state: WaiverBoardState, notes: string[] = []): WaiverBoard => ({
@@ -108,6 +114,8 @@ const EMPTY = (state: WaiverBoardState, notes: string[] = []): WaiverBoard => ({
 
 export { bestLineup, type Scored } from './bestLineup'
 import { bestLineup, type Scored } from './bestLineup'
+import { rosterNeeds, type RosterNeeds } from './rosterNeeds'
+import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 
 export interface LoadWaiverBoardArgs {
   prisma: PrismaClient
@@ -176,7 +184,8 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    * roster is translated — read raw, ESPN 12483 (Stafford) struck Sleeper's Jack Bech off the board
    * and left Stafford himself listed as a free agent.
    */
-  const myIds = rosterPlayerIds(await sleeperReadablePlayerDataOf(league.platform, mine.playerData))
+  const readable = await sleeperReadablePlayerDataOf(league.platform, mine.playerData)
+  const myIds = rosterPlayerIds(readable)
   if (myIds.length === 0) {
     const unreadable = rosterIdSpaceOf(league.platform) !== 'sleeper'
     return EMPTY(
@@ -432,6 +441,14 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
     )
   }
 
+  /* A failed read costs the needs card and nothing else — the ranking above is already settled. */
+  const needs = await readRosterNeeds(args.prisma, {
+    readable,
+    myIds,
+    slots,
+    unfilled: base.unfilled,
+  }).catch(() => null)
+
   return {
     state: 'ok',
     season: statSeason != null ? String(statSeason) : null,
@@ -439,7 +456,80 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
     currentLineupPoints: base.total,
     candidates: shown,
     notes,
+    ...(needs ? { needs } : {}),
   }
+}
+
+/** How many weeks of byes to look ahead, counting the projection week. */
+const BYE_LOOKAHEAD = 4
+
+/**
+ * The reads behind `rosterNeeds`: your players' positions and teams, and which teams play in the
+ * projection week and the few after it. Postgres only — `SportsGame` holds the whole NFL schedule.
+ */
+async function readRosterNeeds(
+  prisma: PrismaClient,
+  args: { readable: unknown; myIds: string[]; slots: string[]; unfilled: string[] },
+): Promise<RosterNeeds | null> {
+  const { latestProjectionWeek } = await import('@/lib/core-app/playerProjections')
+  const at = await latestProjectionWeek()
+  const d = (args.readable ?? {}) as Record<string, unknown>
+  const idsOf = (v: unknown) =>
+    new Set(Array.isArray(v) ? v.map((x) => String(x ?? '').trim()).filter((x) => x !== '' && x !== '0') : [])
+  const starters = idsOf(d.starters)
+  /* IR and taxi are not part of this week's problem, and a bye on IR is not news. */
+  const stashed = new Set([...idsOf(d.reserve), ...idsOf(d.taxi)])
+  const ids = args.myIds.filter((id) => !stashed.has(id))
+  if (ids.length === 0) return null
+
+  const rows = await prisma.sportsPlayer.findMany({
+    where: { sleeperId: { in: ids } },
+    select: { sleeperId: true, source: true, name: true, position: true, team: true },
+  })
+  /* Several rows can carry one Sleeper id; Sleeper's own holds the fantasy-shaped fields. */
+  const meta = new Map<string, { name: string; position: string | null; team: string | null; sleeper: boolean }>()
+  for (const r of rows) {
+    if (!r.sleeperId) continue
+    const sleeper = r.source === 'sleeper'
+    const cur = meta.get(r.sleeperId)
+    if (cur && (cur.sleeper || !sleeper)) continue
+    meta.set(r.sleeperId, { name: r.name, position: r.position ?? null, team: r.team ?? null, sleeper })
+  }
+
+  const teamsPlayingByWeek = new Map<number, Set<string>>()
+  const season = at ? Number(at.season) : NaN
+  if (at && Number.isFinite(season)) {
+    const weeks = Array.from({ length: BYE_LOOKAHEAD }, (_, i) => at.week + i)
+    const games = await prisma.sportsGame.findMany({
+      where: {
+        sport: 'NFL',
+        season,
+        week: { in: weeks },
+        seasonType: { in: ['regular', 'REG', 'reg', 'Regular', 'regular_season'] },
+      },
+      select: { homeTeam: true, awayTeam: true, week: true },
+    })
+    for (const g of games) {
+      if (g.week == null) continue
+      const set = teamsPlayingByWeek.get(g.week) ?? new Set<string>()
+      for (const t of [g.homeTeam, g.awayTeam]) {
+        const n = t ? (normalizeTeamAbbrev(t) ?? t.toUpperCase()) : null
+        if (n) set.add(n)
+      }
+      teamsPlayingByWeek.set(g.week, set)
+    }
+  }
+
+  return rosterNeeds({
+    week: at?.week ?? null,
+    slots: args.slots,
+    unfilled: args.unfilled,
+    players: ids.flatMap((id) => {
+      const m = meta.get(id)
+      return m ? [{ id, name: m.name, position: m.position, team: m.team, starter: starters.has(id) }] : []
+    }),
+    teamsPlayingByWeek,
+  })
 }
 
 /** The vendor row nests the real stat line one level down at `stats.stats`. */

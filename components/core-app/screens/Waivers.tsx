@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { WaiverLineupBoard } from '@/components/core-app/WaiverLineupBoard'
+import { WaiverRunClock } from '@/components/core-app/WaiverRunClock'
 import '@/components/core-app/af-waivers.css'
 import { WaiverIntel } from '@/components/decide/WaiverIntel'
 import AIWaiverRecommendationsPanel from '@/components/waivers/AIWaiverRecommendationsPanel'
@@ -83,9 +84,24 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
     { id: data.league.id, platform: data.league.platform, platformLeagueId: data.league.platformLeagueId ?? null, name: data.league.name },
     'waivers',
   )
+  const isFaab = data.waiverType.available && data.waiverType.data.kind === 'faab'
+  const schedule = data.processTime.available
+    ? { dayOfWeek: data.processTime.data.dayOfWeek, timeUtc: data.processTime.data.timeUtc }
+    : null
   return (
     <div className="af-wv">
       <h1 className="af-display">{copy('Waivers')}</h1>
+      {/*
+        The deadline first, when there is a real one: a manager opening this tab is usually checking
+        it. Only leagues whose schedule we actually imported — a Sleeper league's is not on file and
+        the rules list below says so.
+      */}
+      {schedule ? (
+        <p className="af-wv-next" data-testid="waiver-next-run">
+          <span className="af-label">{copy('Next waiver run')}</span>{' '}
+          <WaiverRunClock schedule={schedule} yourTime={es ? ' (tu hora)' : ' your time'} />
+        </p>
+      ) : null}
       {/* ── Pricing context ─────────────────────────────────────────── */}
       <div className="af-wv-context">
         <span className="af-label">{copy('Priced for this league')}</span>
@@ -181,6 +197,14 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                 <span className="af-wv-rule-budget af-num">
                   {data.processTime.data.timeUtc} UTC
                 </span>
+                {/* The same instant in the reader's own timezone, which IS knowable — see WaiverRunClock. */}
+                <span className="af-wv-rule-local">
+                  <WaiverRunClock
+                    schedule={{ dayOfWeek: data.processTime.data.dayOfWeek, timeUtc: data.processTime.data.timeUtc }}
+                    yourTime={es ? ' (tu hora)' : ' your time'}
+                    localOnly
+                  />
+                </span>
               </span>
             ) : (
               <span className="af-wv-rule-why">{copy(data.processTime.reason)}</span>
@@ -217,7 +241,15 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
         and it removes itself when it cannot form an opinion rather than leaving
         an empty card above panels that work.
       */}
-      <WaiverLineupBoard leagueId={data.league.id} />
+      <WaiverLineupBoard
+        leagueId={data.league.id}
+        faab={isFaab ? { remaining: data.budget.available ? data.budget.data.faabRemaining : null } : null}
+        rollingPriority={
+          data.waiverType.available && data.waiverType.data.kind === 'rolling' && data.waiverPriority.available
+            ? data.waiverPriority.data
+            : null
+        }
+      />
 
       {/*
         ── Waiver intelligence ──────────────────────────────────────────
@@ -234,9 +266,7 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
         null or an explicit empty rather than a fabricated bid, so mounting it
         does not weaken the honesty rule the withheld panel was protecting.
       */}
-      {data.waiverType.available && data.waiverType.data.kind === 'faab' ? (
-        <WaiverIntel leagueId={data.league.id} surface="core" />
-      ) : null}
+      {isFaab ? <WaiverIntel leagueId={data.league.id} surface="core" /> : null}
 
       {/*
         ── Competitive Edge ─────────────────────────────────────────────

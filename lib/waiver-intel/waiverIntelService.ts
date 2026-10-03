@@ -29,6 +29,8 @@ const CACHE_TTL_MS = 60 * 60 * 1000 // 1h — waivers move faster than trades
 const MAX_CHAIN = 12
 const MAX_WEEKS = 18
 const BID_CAP_PCT = 0.6
+/** Available players quoted a bid in `bidQuotes` — deep enough to cover a lineup board's adds. */
+const BID_QUOTE_POOL = 80
 
 async function j<T>(path: string): Promise<T | null> {
   try {
@@ -102,6 +104,13 @@ export type WaiverIntelPayload = {
     recent: WinningBid[]
   }
   targets: WaiverTarget[]
+  /**
+   * The same suggested bid as `targets[].suggestedBid`, by the same rule and cap, for a deeper pool
+   * of available players (Sleeper id → dollars). Lets the Waivers screen's lineup list show ONE bid
+   * source beside every add it ranks, instead of a second model or nothing. Absent on payloads
+   * cached before it existed, and when there is no budget or value chart.
+   */
+  bidQuotes?: Record<string, number>
   formulaNotes: string[]
   missing: string[]
 }
@@ -208,19 +217,27 @@ async function buildWaiverIntel(
   // Targets: best available by market value, needs-tagged, bid-suggested.
   const anchor = values?.faab.anchorValue ?? null
   const targets: WaiverTarget[] = []
+  const bidQuotes: Record<string, number> = {}
+  const bidFor = (v: number): number | null =>
+    budget != null && anchor != null && anchor > 0
+      ? Math.max(1, Math.min(Math.round(budget * BID_CAP_PCT), Math.round((v / anchor) * budget)))
+      : null
   if (board && values) {
-    const candidates = Object.values(board.players)
+    const valued = Object.values(board.players)
       .filter((p) => !rostered.has(p.playerId) && p.position && p.position !== 'DEF')
       .map((p) => ({ p, v: playerValue(values, p.playerId) }))
       .filter((x): x is { p: (typeof x)['p']; v: number } => x.v != null && x.v > 0)
       .sort((a, b) => b.v - a.v)
-      .slice(0, 10)
+    for (const { p, v } of valued.slice(0, BID_QUOTE_POOL)) {
+      const q = bidFor(v)
+      if (q != null) bidQuotes[p.playerId] = q
+    }
+    const candidates = valued.slice(0, 10)
     for (const { p, v } of candidates) {
       const fills = openSlots.filter((slot) => (SLOT_ACCEPTS[slot] ?? []).includes(p.position ?? ''))
-      let suggestedBid: number | null = null
+      const suggestedBid: number | null = bidFor(v)
       const reasoning: string[] = [`market value ${v.toLocaleString()} (${values.mode} chart)`]
-      if (budget != null && anchor != null && anchor > 0) {
-        suggestedBid = Math.max(1, Math.min(Math.round(budget * BID_CAP_PCT), Math.round((v / anchor) * budget)))
+      if (suggestedBid != null) {
         reasoning.push(`suggested = min(${Math.round(BID_CAP_PCT * 100)}% of $${budget}, $${budget} × value/anchor)`)
       }
       if (sortedBids.length > 0) {
@@ -258,6 +275,7 @@ async function buildWaiverIntel(
       recent: bids.slice(0, 6),
     },
     targets,
+    ...(Object.keys(bidQuotes).length > 0 ? { bidQuotes } : {}),
     /*
      * Shown to the manager word for word (components/decide/WaiverIntel.tsx), so it is written for
      * them. `values.faab.formula` states the same rule for the model — Chimmy's grounding and the

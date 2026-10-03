@@ -1,6 +1,8 @@
 import Link from 'next/link'
 
-import type { WaiverBoardRow, WaiverPlayer, WaiversBoardData, WaiverSportSection } from '@/lib/core-app/waiversBoard'
+import type { MultiLeagueAdd, WaiverBoardRow, WaiverPlayer, WaiversBoardData, WaiverSportSection } from '@/lib/core-app/waiversBoard'
+import { WaiverRunClock } from '@/components/core-app/WaiverRunClock'
+import { WaiversBoardList, WaiversDueSoon } from '@/components/core-app/boards/WaiversBoardList'
 import { PER_GAME_UNIT, waiverSportLabel } from '@/lib/waivers/waiverSportBasis'
 import { claimLink } from '@/lib/core-app/platformLinks'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
@@ -170,7 +172,7 @@ function Card({ row }: { row: WaiverBoardRow }) {
   const perGame = row.sport != null
 
   return (
-    <li>
+    <>
       {/*
         2026-09-13 handoff: net gain as a pill and the claim as a button in the
         header; the add and the drop as two tinted panels with an arrow between;
@@ -269,11 +271,54 @@ function Card({ row }: { row: WaiverBoardRow }) {
           <p className="af-bd-reason">{row.reasoning}</p>
         </div>
 
+        {row.alternatives && row.alternatives.length > 0 ? (
+          /*
+            The next options on this wire. A native <details>: no script, keyboard-reachable, and
+            collapsed by default so a 40-league board stays one card tall per league.
+          */
+          <details className="af-wvb-alts" data-testid={`waivers-alts-${row.leagueId}`}>
+            <summary>
+              {row.alternatives.length} more {row.alternatives.length === 1 ? 'option' : 'options'} on this wire
+            </summary>
+            <ul>
+              {row.alternatives.map((a) => (
+                <li key={a.add.playerId}>
+                  <span className="af-wvb-alt-who">
+                    <PlayerName
+                      sport={row.sport ?? 'NFL'}
+                      sleeperId={row.sport ? null : a.add.playerId}
+                      name={a.add.name}
+                      position={a.add.position}
+                      team={a.add.team}
+                      imageUrl={a.add.imageUrl}
+                      leagueId={row.leagueId}
+                    />
+                    <span className="af-bd-sub">
+                      {' '}
+                      {a.add.position ?? ''}
+                      {a.add.team ? ` · ${a.add.team}` : ''} · {a.add.projected.toFixed(1)}
+                      {a.startsOver ? ` · over ${a.startsOver.name}` : ' · fills an empty slot'}
+                    </span>
+                  </span>
+                  <span className="af-wvb-alt-gain">
+                    +{a.gain.toFixed(1)}
+                    {perGame ? ` ${PER_GAME_UNIT}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+
         <div className="af-bd-card-foot">
           {row.runsAt ? (
             <span className="af-bd-tag" data-sev="muted">
               RUNS
-              <span className="af-bd-tag-detail"> {row.runsAt}</span>
+              <span className="af-bd-tag-detail">
+                {' '}
+                {/* The viewer's own time and a countdown once mounted; the UTC label until then. */}
+                {row.runsAtUtc ? <WaiverRunClock schedule={row.runsAtUtc} compact /> : row.runsAt}
+              </span>
             </span>
           ) : null}
           <Link className="af-bd-cta" href={row.href}>
@@ -281,7 +326,53 @@ function Card({ row }: { row: WaiverBoardRow }) {
           </Link>
         </div>
       </article>
-    </li>
+    </>
+  )
+}
+
+/**
+ * Free agents who would start for you in two or more leagues — one claim decision that a
+ * per-league list spreads across several cards.
+ */
+function MultiLeagueSection({ players }: { players: MultiLeagueAdd[] }) {
+  return (
+    <section className="af-bd-sec" aria-labelledby="af-wv-multi" data-testid="waivers-multi-league">
+      <SectionHead id="af-wv-multi" label="Available in more than one of your leagues" count={`${players.length}`} />
+      <ul className="af-wvb-multi">
+        {players.map((p) => (
+          <li key={p.playerId}>
+            <span className="af-wvb-multi-who">
+              <PlayerName
+                sport="NFL"
+                sleeperId={p.playerId}
+                name={p.name}
+                position={p.position}
+                team={p.team}
+                imageUrl={p.imageUrl}
+              />
+              <span className="af-bd-sub">
+                {' '}
+                {p.position ?? ''}
+                {p.team ? ` · ${p.team}` : ''}
+              </span>
+            </span>
+            <span className="af-wvb-multi-n">starts for you in {p.leagues.length} leagues</span>
+            <span className="af-wvb-multi-leagues">
+              {p.leagues.map((l, i) => (
+                <span key={l.leagueId}>
+                  {i > 0 ? ' · ' : ''}
+                  <Link href={l.href}>{l.leagueName}</Link> +{l.gain.toFixed(1)}
+                </span>
+              ))}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <p className="af-bd-note af-bd-note--plain">
+        Each gain is that league&apos;s own lineup gain, scored under its own rules — they are not added
+        into one number, because a point in one league is not a point in another.
+      </p>
+    </section>
   )
 }
 
@@ -346,7 +437,9 @@ function SportSection({ section }: { section: WaiverSportSection }) {
       ) : section.rows.length > 0 ? (
         <ul className="af-bd-cards af-bd-cards--rich af-bd-cards--waivers">
           {section.rows.map((r) => (
-            <Card key={r.leagueId} row={r} />
+            <li key={r.leagueId}>
+              <Card row={r} />
+            </li>
           ))}
         </ul>
       ) : (
@@ -415,16 +508,26 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
         <section className="af-bd-sec" aria-labelledby="af-wv-board">
           <SectionHead
             id="af-wv-board"
-            label={`${sports.length > 0 ? 'NFL · ' : ''}Top ${data.rows.length} · ranked by lineup gain`}
+            label={`${sports.length > 0 ? 'NFL · ' : ''}${data.rows.length} ${data.rows.length === 1 ? 'league' : 'leagues'} · ranked by lineup gain`}
             count={
               data.at ? `week ${data.at.week}, ${data.at.season}` : null
             }
           />
-          <ul className="af-bd-cards af-bd-cards--rich af-bd-cards--waivers">
-            {data.rows.map((r) => (
-              <Card key={r.leagueId} row={r} />
-            ))}
-          </ul>
+          <WaiversDueSoon
+            leagues={data.rows.flatMap((r) =>
+              r.runsAtUtc ? [{ key: r.leagueId, leagueName: r.leagueName, href: r.href, schedule: r.runsAtUtc }] : [],
+            )}
+          />
+          <WaiversBoardList
+            items={data.rows.map((r) => ({
+              key: r.leagueId,
+              gain: r.netGain,
+              leagueName: r.leagueName,
+              position: r.add.position,
+              schedule: r.runsAtUtc ?? null,
+            }))}
+            cards={Object.fromEntries(data.rows.map((r) => [r.leagueId, <Card key={r.leagueId} row={r} />]))}
+          />
         </section>
       ) : (
         <p className="af-bd-note">
@@ -433,6 +536,8 @@ export function WaiversBoard({ data, allHref, totalLeagues, nowMs = Date.now() }
             : `None of your ${sports.length > 0 ? 'NFL ' : ''}leagues could be priced this week — the reasons are below.`}
         </p>
       )}
+
+      {showNfl && data.multiLeague && data.multiLeague.length > 0 ? <MultiLeagueSection players={data.multiLeague} /> : null}
 
       {showNfl ? (
         <p className="af-bd-note af-bd-note--plain">

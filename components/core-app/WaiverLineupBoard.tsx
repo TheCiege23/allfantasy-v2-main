@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react'
 
 import { FOREIGN_IDS_UNREADABLE } from '@/lib/core-app/foreignIdSpaceCopy'
 import type { WaiverBoard, WaiverBoardState } from '@/lib/waivers/waiverBoard'
+import type { RosterNeeds } from '@/lib/waivers/rosterNeeds'
+import { useWaiverIntel } from '@/components/decide/useWaiverIntel'
 import { isPerGameBasis } from '@/lib/waivers/waiverSportBasis'
 
 /**
@@ -34,9 +36,26 @@ const REASON: Record<Exclude<WaiverBoardState, 'ok'>, string> = {
   no_producer: 'nothing projects this sport’s players yet, so this wire cannot be priced',
 }
 
-export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
+export type WaiverLineupBoardProps = {
+  leagueId: string
+  /**
+   * Set on a FAAB league. Each add then carries the bid the Waiver intelligence panel would suggest
+   * for him — the same rule, the same request (useWaiverIntel), so the screen has ONE bid source.
+   * `remaining` is your FAAB left, when the platform publishes it.
+   */
+  faab?: { remaining: number | null } | null
+  /**
+   * Set on a ROLLING-priority league with a published priority. A claim there sends you to the back
+   * of the order, so the list says what that costs against what waiting costs — facts, not a verdict.
+   */
+  rollingPriority?: { priority: number; leagueRosters: number } | null
+}
+
+export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = null }: WaiverLineupBoardProps) {
   const [board, setBoard] = useState<WaiverBoard | null>(null)
   const [failed, setFailed] = useState(false)
+  const { data: intelResponse } = useWaiverIntel(leagueId, faab != null)
+  const bidQuotes = intelResponse && intelResponse.supported ? (intelResponse.intel?.bidQuotes ?? null) : null
 
   useEffect(() => {
     let alive = true
@@ -96,6 +115,8 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
           </span>
         ) : null}
       </div>
+
+      {board.state === 'ok' && board.needs ? <RosterNeedsStrip needs={board.needs} /> : null}
 
       {board.state !== 'ok' ? (
         <p className="af-wlb-why">{REASON[board.state]}</p>
@@ -160,6 +181,21 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
                       per game · season
                     </span>
                   ) : null}
+                  {/*
+                    The bid, from the Waiver intelligence rule — the only bid source on this
+                    screen. A player that rule has no market value for gets no figure, never a
+                    made-up one; "over your $N left" is said rather than hidden.
+                  */}
+                  {faab && c.sleeperId && bidQuotes?.[c.sleeperId] != null ? (
+                    <span
+                      className="af-wlb-bid af-num"
+                      data-over={faab.remaining != null && bidQuotes[c.sleeperId] > faab.remaining ? 'true' : undefined}
+                      title="Suggested bid by the Waiver intelligence rule below: budget × his market value ÷ the anchor, capped at 60% of the budget"
+                    >
+                      bid ~${bidQuotes[c.sleeperId]}
+                      {faab.remaining != null && bidQuotes[c.sleeperId] > faab.remaining ? ` · over your $${faab.remaining} left` : ''}
+                    </span>
+                  ) : null}
                 </span>
               </span>
               {/* The headline. Everything else on the row justifies it. */}
@@ -183,6 +219,10 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
         </ul>
       )}
 
+      {rollingPriority && board.state === 'ok' && board.candidates.length > 0 ? (
+        <PriorityCost priority={rollingPriority} candidates={board.candidates} perGame={perGame} />
+      ) : null}
+
       {/*
         Coverage rides with the ranking. A board built from a third of the wire is a different
         claim from one built off all of it, and nothing else on screen would say which.
@@ -193,6 +233,74 @@ export function WaiverLineupBoard({ leagueId }: { leagueId: string }) {
         </p>
       ))}
     </section>
+  )
+}
+
+/**
+ * What your roster needs from the wire: empty starting slots this week, positions with no backup,
+ * and byes in the weeks just ahead. Three checkable facts (lib/waivers/rosterNeeds.ts) — nothing
+ * here grades the roster.
+ */
+function RosterNeedsStrip({ needs }: { needs: RosterNeeds }) {
+  const byes = needs.byes.filter((b) => b.players.some((p) => p.starter))
+  if (needs.emptySlots.length === 0 && needs.noBackup.length === 0 && byes.length === 0) return null
+  return (
+    <ul className="af-wlb-needs" data-testid="waiver-roster-needs" aria-label="What your roster needs">
+      {needs.emptySlots.length > 0 ? (
+        <li data-tone="bad">
+          <span className="af-wlb-need-k">Empty{needs.week != null ? ` in wk ${needs.week}` : ''}</span>
+          {needs.emptySlots.join(', ')}
+        </li>
+      ) : null}
+      {needs.noBackup.map((n) => (
+        <li key={n.position} data-tone="warn">
+          <span className="af-wlb-need-k">No {n.position} backup</span>
+          {n.rostered} rostered for {n.starting} starting {n.starting === 1 ? 'slot' : 'slots'}
+        </li>
+      ))}
+      {byes.map((b) => (
+        <li key={b.week} data-tone={needs.week != null && b.week === needs.week ? 'bad' : 'muted'}>
+          <span className="af-wlb-need-k">Bye wk {b.week}</span>
+          {/* Starters only: a bench player's bye changes nothing you start. */}
+          {b.players
+            .filter((p) => p.starter)
+            .map((p) => `${p.name}${p.position ? ` (${p.position})` : ''}`)
+            .join(', ')}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/**
+ * Rolling priority: a claim sends you to the back of the order. Two numbers decide whether that
+ * is worth it — the best add's gain, and how much you give up by taking the next-best instead
+ * (or by waiting, when he is the only one). Stated, not decided: how much a priority slot is
+ * worth this late in a season is the manager's call.
+ */
+function PriorityCost({
+  priority,
+  candidates,
+  perGame,
+}: {
+  priority: { priority: number; leagueRosters: number }
+  candidates: WaiverBoard['candidates']
+  perGame: boolean
+}) {
+  const [top, next] = candidates
+  const unit = perGame ? ' per game' : ''
+  return (
+    <p className="af-wlb-priority" data-testid="waiver-priority-cost">
+      <strong>Your priority: #{priority.priority} of {priority.leagueRosters}.</strong>{' '}
+      {priority.priority === priority.leagueRosters
+        ? 'You are already last, so a claim costs you no place in the order.'
+        : `A claim sends you to #${priority.leagueRosters}. `}
+      {priority.priority !== priority.leagueRosters
+        ? next
+          ? `${top.name} adds +${top.gain.toFixed(1)}${unit}; the next best, ${next.name}, adds +${next.gain.toFixed(1)} — a ${(top.gain - next.gain).toFixed(1)}-point gap is what spending it buys.`
+          : `${top.name} (+${top.gain.toFixed(1)}${unit}) is the only free agent who improves your lineup.`
+        : ''}
+    </p>
   )
 }
 

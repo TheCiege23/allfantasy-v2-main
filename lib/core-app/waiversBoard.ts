@@ -16,7 +16,7 @@ import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import type { WaiverValueBasis } from '@/lib/waivers/waiverSportBasis'
-import { faabRemainingOf, formatOf, runsAtLabel } from './waiverRowMeta'
+import { faabRemainingOf, formatOf, runsAtLabel, runsAtSchedule } from './waiverRowMeta'
 import { buildWaiverSportSections } from './waiversBoardSports'
 import { pickLineupSwap, rosterCapacity, swapReasoning, type SwapCandidate, type SwapRosterPlayer } from './waiverSwap'
 import { valueBookFor, valueBookKey, type ValueBook } from './valueBook'
@@ -139,6 +139,13 @@ export type WaiverBoardRow = {
   faabRemaining: number | null
   /** "Wednesday 09:00 UTC", when the league publishes a processing time. */
   runsAt: string | null
+  /** The same schedule as data, for a countdown rendered in the viewer's timezone. */
+  runsAtUtc?: { dayOfWeek: number; timeUtc: string } | null
+  /**
+   * The next-best adds on this wire after `add`, each scored against your lineup as it stands — so
+   * "the second option" means what it would mean to someone making one claim. Up to three.
+   */
+  alternatives?: WaiverAlternative[]
   href: string
   /** One derived sentence. Assembled from the fields above; never generated. */
   reasoning: string
@@ -214,6 +221,29 @@ export type WaiversBoardData = {
    * at least one, so an NFL-only account's payload is exactly what it was.
    */
   sports?: WaiverSportSection[]
+  /**
+   * Free agents who would start for you in TWO OR MORE of your leagues — the one view a per-league
+   * list cannot give. Real leagues, after the twin collapse; NFL only (a per-game gain and a weekly
+   * one do not add up). Absent when nobody qualifies.
+   */
+  multiLeague?: MultiLeagueAdd[]
+}
+
+export type WaiverAlternative = {
+  add: WaiverPlayer
+  gain: number
+  startsOver: { playerId: string; name: string; projected: number } | null
+}
+
+export type MultiLeagueAdd = {
+  playerId: string
+  name: string
+  position: string | null
+  team: string | null
+  imageUrl: string | null
+  /** Sum of the per-league lineup gains — each in that league's own points, so a rough total. */
+  totalGain: number
+  leagues: Array<{ leagueId: string; leagueName: string; href: string; gain: number; projected: number }>
 }
 
 const EMPTY: WaiversBoardData = {
@@ -228,8 +258,18 @@ const EMPTY: WaiversBoardData = {
 /** How many free-agent candidates to consider. The wire below this is noise. */
 const CANDIDATE_POOL = 900
 
-/** How many leagues the board renders. */
-const ROW_CAP = 10
+/**
+ * How many leagues the board carries. The renderer shows the top ten and lets the reader sort,
+ * filter and reveal the rest — a manager in 40 leagues used to see ten and a "View all" that led
+ * to a league picker, not to the other thirty adds.
+ */
+const ROW_CAP = 40
+
+/** Next-best adds carried per league. */
+const ALTERNATIVES = 3
+
+/** Players in the multi-league list. */
+const MULTI_LEAGUE_CAP = 8
 
 /**
  * The share of your own roster that must resolve into the projection id space
@@ -545,6 +585,8 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
 
   const withheld = { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 }
   const rows: WaiverBoardRow[] = []
+  /* Every lineup-improving add per league, for the multi-league view — kept off the rows. */
+  const rankedByLeague = new Map<string, Array<{ add: WaiverPlayer; gain: number }>>()
 
   const myRosterIn = (c: ClaimedTeam) => {
     const leaguePool = rostersByLeague.get(c.leagueId) ?? []
@@ -707,6 +749,21 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
     const w = waiverByLeague.get(c.leagueId)
     const runsAt = runsAtLabel(w, l.platform)
 
+    const ranked: Array<{ add: WaiverPlayer; gain: number; displacesId: string | null }> = []
+    for (const r of swap.ranked) {
+      const p = toPlayer(r.id, pointsById.get(r.id)!)
+      if (p) ranked.push({ add: p, gain: r.gain, displacesId: r.displacesId })
+    }
+    rankedByLeague.set(c.leagueId, ranked)
+    const alternatives: WaiverAlternative[] = ranked.slice(1, 1 + ALTERNATIVES).map((r) => {
+      const o = r.displacesId != null ? toPlayer(r.displacesId, pointsById.get(r.displacesId)!) : null
+      return {
+        add: r.add,
+        gain: r.gain,
+        startsOver: o ? { playerId: o.playerId, name: o.name, projected: o.projected } : null,
+      }
+    })
+
     const netGain = swap.gain
     const reasoning = swapReasoning({
       addLead: `${add.name}${add.position ? ` (${add.position})` : ''} projects ${add.projected.toFixed(1)} under this league's own scoring`,
@@ -740,6 +797,8 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
       drop,
       faabRemaining: faabRemainingOf(w, myRoster),
       runsAt,
+      runsAtUtc: runsAtSchedule(w, l.platform),
+      alternatives,
       href: `/core/waivers?league=${encodeURIComponent(c.leagueId)}`,
       reasoning: `${reasoning}${ownership}`,
     })
@@ -767,6 +826,7 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
 
   deduped.sort((a, b) => b.netGain - a.netGain)
   const shown = deduped.slice(0, ROW_CAP)
+  const multiLeague = multiLeagueAdds(deduped, rankedByLeague)
   /* AllFantasy's own engine beside the provider figures, for the players actually shown. A failed
      read costs the AF figures and nothing else. */
   await attachAfEngine(shown, at, (id) => poolById.get(id)?.generic ?? null).catch(() => undefined)
@@ -786,7 +846,45 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
     at,
     /* A schedule read that fails costs the note, never the board. */
     weekKickoffs: await projectionWeekKickoffs(at).catch(() => null),
+    ...(multiLeague.length > 0 ? { multiLeague } : {}),
   }
+}
+
+/**
+ * Free agents who would improve your lineup in two or more of your REAL leagues.
+ *
+ * ⚠ OVER THE DEDUPED ROWS, NOT EVERY AF ROW. Two members' imports of one Sleeper league are two AF
+ * rows with identical wires; counting both would turn "available in one league" into "two". The
+ * leagues considered are exactly the ones the board kept, by the same `keepBestPerRealLeague` rule.
+ */
+export function multiLeagueAdds(
+  keptRows: readonly WaiverBoardRow[],
+  rankedByLeague: ReadonlyMap<string, ReadonlyArray<{ add: WaiverPlayer; gain: number }>>,
+): MultiLeagueAdd[] {
+  const byPlayer = new Map<string, MultiLeagueAdd>()
+  for (const row of keptRows) {
+    for (const r of rankedByLeague.get(row.leagueId) ?? []) {
+      const cur =
+        byPlayer.get(r.add.playerId) ??
+        ({
+          playerId: r.add.playerId,
+          name: r.add.name,
+          position: r.add.position,
+          team: r.add.team,
+          imageUrl: r.add.imageUrl,
+          totalGain: 0,
+          leagues: [],
+        } satisfies MultiLeagueAdd)
+      cur.leagues.push({ leagueId: row.leagueId, leagueName: row.leagueName, href: row.href, gain: r.gain, projected: r.add.projected })
+      cur.totalGain = Math.round((cur.totalGain + r.gain) * 100) / 100
+      byPlayer.set(r.add.playerId, cur)
+    }
+  }
+  return [...byPlayer.values()]
+    .filter((p) => p.leagues.length >= 2)
+    .map((p) => ({ ...p, leagues: [...p.leagues].sort((a, b) => b.gain - a.gain) }))
+    .sort((a, b) => b.leagues.length - a.leagues.length || b.totalGain - a.totalGain || (a.playerId < b.playerId ? -1 : 1))
+    .slice(0, MULTI_LEAGUE_CAP)
 }
 
 /**

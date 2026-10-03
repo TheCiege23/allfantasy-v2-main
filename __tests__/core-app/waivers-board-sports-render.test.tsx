@@ -109,7 +109,7 @@ describe('WaiversBoard — sport sections', () => {
     const nflRow: WaiverBoardRow = { ...nbaRow, leagueId: 'N1', sport: undefined, netGain: 5 }
     const data: WaiversBoardData = { ...onlyOtherSports([section({})]), rows: [nflRow], considered: 1 }
     const { container } = render(<WaiversBoard data={data} allHref="/x" totalLeagues={2} />)
-    expect(container.textContent).toContain('NFL · Top 1 · ranked by lineup gain')
+    expect(container.textContent).toContain('NFL · 1 league · ranked by lineup gain')
     expect(container.textContent).toContain('+5.0 pts/wk')
   })
 
