@@ -43,6 +43,7 @@ import type { WeeklyStory as WeeklyStoryData } from '@/lib/core-app/weeklyStoryM
 import { CareerCompareView } from '@/components/core-app/career/CareerCompareView'
 import { HallLayoutToggle, TrophyWall } from '@/components/core-app/career/TrophyWall'
 import { buildTrophyWall } from '@/lib/core-app/trophyWall'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-career.css'
 import '@/components/core-app/af-career-brief.css'
 import '@/components/core-app/af-career-live.css'
@@ -104,14 +105,6 @@ const LEGACY_COLORS: Record<string, string> = {
 
 function nf(n: number): string {
   return n.toLocaleString('en-US')
-}
-
-function HelpDot({ body, left }: { body: string; left?: boolean }) {
-  return (
-    <span className="af-cr-help" data-left={left ? '' : undefined} tabIndex={0} role="note">
-      ?<span className="af-cr-helpbody">{body}</span>
-    </span>
-  )
 }
 
 /** Radial prestige gauge. Geometry is the handoff's: r=52 on a 128 viewBox. */
@@ -307,9 +300,10 @@ function CareerMobile({
                 <span className="af-crm-tile-v">{data.seasonsPlayed}</span>
               </div>
             </div>
-            <p className="af-crx-muted af-crx-mnote" title={acc.finalsNote}>
+            <p className="af-crx-muted af-crx-mnote">
               Finals:{' '}
-              {acc.finals == null ? 'not recorded yet' : `${acc.finals} (${acc.championships} won · ${acc.finalsLost} lost)`}
+              {acc.finals == null ? 'not recorded yet' : `${acc.finals} (${acc.championships} won · ${acc.finalsLost} lost)`}{' '}
+              <TopicTip topic="careerFinals" />
             </p>
 
             <CareerLive data={data} awards={screen.awards} />
@@ -375,6 +369,7 @@ function CareerMobile({
                       <span className="af-crm-scoreval af-crm-scoreval--accent">{data.prestige.total.toFixed(1)}</span>
                       <span className="af-crm-scoreof">/ 100</span>
                       <span className="af-crm-scorelabel">GM PRESTIGE</span>
+                      <TopicTip topic="careerPrestige" />
                     </div>
                     <div className="af-crm-bar">
                       <i style={{ width: `${data.prestige.total}%`, background: 'var(--accent)' }} />
@@ -387,6 +382,7 @@ function CareerMobile({
                       <span className="af-crm-scoreval af-crm-scoreval--warn">{data.legacy.total}</span>
                       <span className="af-crm-scoreof">/ 100</span>
                       <span className="af-crm-scorelabel">LEGACY</span>
+                      <TopicTip topic="careerLegacy" />
                     </div>
                     <div className="af-crm-bar">
                       {data.legacy.dimensions.map((d) => (
@@ -617,7 +613,9 @@ function CareerDesktop({
         <div className="af-crx-navside">
           <div className="af-cr-tabstats">
             <span className="af-cr-tabstat">{nf(data.distinctLeagues)} leagues</span>
-            <span className="af-cr-tabstat">{nf(data.leaguesPlayed)} league-seasons</span>
+            <span className="af-cr-tabstat">
+              {nf(data.leaguesPlayed)} league-seasons <TopicTip topic="leagueSeason" />
+            </span>
             {data.sports.length > 0 ? <span className="af-cr-tabstat">{data.sports.join(' · ')}</span> : null}
           </div>
           <div className="af-cr-actions">
@@ -812,7 +810,7 @@ function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAwar
               <p className="af-c13-head">
                 GM prestige
                 <span className="sp" />
-                <HelpDot body="Championships 30%, win rate 20%, tenure 20%, leagues 15%, playoff appearances 15%. Each is capped, so one huge number cannot carry the score." />
+                <TopicTip topic="careerPrestige" />
               </p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
                 <Gauge value={prestige.total} />
@@ -880,10 +878,7 @@ function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAwar
                 <span className="af-c13-big warn" style={{ fontSize: 26 }}>
                   {legacy.total}
                 </span>
-                <HelpDot
-                  left
-                  body="Each dimension is scored 0-100 from recorded results, then multiplied by its weight. Weights are re-normalised across the dimensions that can actually be scored, so an unmeasurable one does not silently drag the total down."
-                />
+                <TopicTip topic="careerLegacy" />
               </p>
               <div className="af-cr-stack">
                 {legacy.dimensions.map((d) => (
@@ -994,7 +989,7 @@ function CareerOverview({ data, awards }: { data: CareerData; awards: CareerAwar
         <div className="af-c13-col">
           <section className="af-c13-card">
             <p className="af-c13-head">
-              AF rank
+              AF rank <TopicTip topic="careerXp" />
               {data.level != null ? <span className="sp">LEVEL {data.level} OF 25</span> : null}
             </p>
             {data.level != null ? (

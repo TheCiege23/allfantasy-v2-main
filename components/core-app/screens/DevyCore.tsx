@@ -21,6 +21,7 @@ import '../af-core.css'
 import '../af-devy.css'
 import type { DevyTrend } from '@/lib/devy/devyTrend'
 import DevyTrendMark from './DevyTrendMark'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Devy Core — the cross-league college-prospect hub.
@@ -226,7 +227,9 @@ export default function DevyCore({
       <header className="af-devy-head">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <div className="af-devy-eyebrow">Core · Devy</div>
-          <h1 className="af-devy-title">Devy</h1>
+          <h1 className="af-devy-title">
+            Devy <TopicTip topic="devy" />
+          </h1>
           <p className="af-devy-sub">
             College prospects tracked across every league you&apos;re in — rankings, exposure, and
             news, pulled from public college data feeds.
@@ -241,8 +244,13 @@ export default function DevyCore({
         <>
           <section className="af-devy-card" aria-labelledby="af-devy-top">
             <div className="af-devy-sec-head">
-              <div className="af-devy-eyebrow" id="af-devy-top">
-                Top devy prospects
+              {/* Eyebrow and "?" grouped so the head's space-between does not split them; the tip
+                  sits beside the eyebrow, never inside it — the eyebrow names the section. */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <div className="af-devy-eyebrow" id="af-devy-top">
+                  Top devy prospects
+                </div>
+                <TopicTip topic="devyGrade" />
               </div>
             </div>
             {prospects.map((p) => (
@@ -276,8 +284,11 @@ export default function DevyCore({
 
           <section className="af-devy-card" aria-labelledby="af-devy-exp">
             <div className="af-devy-sec-head">
-              <div className="af-devy-eyebrow" id="af-devy-exp">
-                Cross-league exposure
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <div className="af-devy-eyebrow" id="af-devy-exp">
+                  Cross-league exposure
+                </div>
+                <TopicTip topic="devyExposure" />
               </div>
             </div>
             <div className="af-devy-tablewrap">

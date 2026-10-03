@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 
 import '@/components/core-app/af-scout.css'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import type { ScoutEdge, ScoutEdgeManager } from '@/lib/competitive-edge/scoutEdgeLoader'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { SectionState } from '@/lib/core-app/leagueHome'
@@ -104,7 +105,7 @@ function EdgeBasis({ edge, access }: { edge: SectionState<ScoutEdge>; access: Co
   const span = seasons.length > 1 ? `${[...seasons].sort()[0]}–${[...seasons].sort().slice(-1)[0]}` : seasons[0] ?? null
   return (
     <p className="af-sc-edge-basis">
-      <strong>Competitive Edge</strong>
+      <strong>Competitive Edge</strong> <TopicTip topic="competitiveEdge" />
       {' · '}
       {t.available
         ? `completed trades${span ? ` across ${span}` : ''}, read ${day(t.data.asOf) ?? 'recently'}${t.data.stale ? ' (may be out of date)' : ''}`
@@ -355,10 +356,14 @@ function EliminationBanner({ data, standing, standingsHref }: { data: ScoutData;
         <p className="af-sc-vs-h2h af-num">
           You are <strong>#{standing.rank}</strong> of {standing.outOf}
           {standing.overCut == null ? ' — at the cut line.' : ` — ${standing.overCut.toFixed(1)} over the cut.`}
-          {standing.basis === 'projected' ? ' Projected: most teams have not played yet.' : ''}
+          {standing.basis === 'projected' ? ' Projected: most teams have not played yet.' : ''}{' '}
+          {/* Beside the h2, not in it: the h2 names the section (aria-labelledby). */}
+          <TopicTip topic="scoutEliminationStanding" />
         </p>
       ) : (
-        <p className="af-sc-vs-h2h">The cut line is not readable yet this week.</p>
+        <p className="af-sc-vs-h2h">
+          The cut line is not readable yet this week. <TopicTip topic="scoutEliminationStanding" />
+        </p>
       )}
       <div className="af-sc-vs-links">
         <Link className="af-sc-cta af-sc-cta--primary" href={standingsHref}>
@@ -439,7 +444,8 @@ export function Scout({
             <>
               Standings through week <span className="af-num">{data.basis.data.throughWeek}</span> of{' '}
               <span className="af-num">{data.basis.data.season}</span>
-              {data.basis.data.seasonComplete ? ' — final' : ''}. {data.basis.data.orderBasis}
+              {data.basis.data.seasonComplete ? ' — final' : ''}. {data.basis.data.orderBasis}{' '}
+              <TopicTip topic="scoutCardLegend" />
             </>
           ) : (
             <>No standings yet: {data.basis.reason.replace(/\.$/, '')}.</>
