@@ -20,6 +20,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { platformLabel } from '@/lib/core-app/platformLinks'
+import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -805,10 +806,18 @@ function Projections({ player }: { player: LineupPlayer }) {
   )
 }
 
-/** What AF PTS is, in one sentence a manager can act on. */
+/**
+ * What the two projection columns are, in sentences a manager can act on.
+ *
+ * ⚠ THE COLUMN WAS "API", AND THE OLD SENTENCE CREDITED SLEEPER WITH IDP SCORING. "API" named
+ * nothing a manager recognises, and Sleeper's projection has no defensive line at all — in an IDP
+ * league the defenders are priced by AllFantasy's own IDP model. Named now, and the defender case
+ * said out loud. See `projectionProvider.ts` for the census behind the name.
+ */
 const AF_PTS_EXPLAINER =
-  'API is the provider’s (Sleeper) projection re-scored under YOUR league’s settings — ' +
-  'your reception value, TE premium, passing-TD value and IDP scoring. ' +
+  'SLEEPER is Sleeper’s own projection, re-scored under YOUR league’s settings — your reception ' +
+  'value, TE premium and passing-TD value. Sleeper projects no defensive stats, so in an IDP league ' +
+  'defenders are priced by AllFantasy’s IDP model instead. ' +
   'AF is AllFantasy’s own projection engine, adjusted to the same settings.'
 
 function ProjHeader() {
@@ -819,7 +828,7 @@ function ProjHeader() {
   return (
     <div className="af-mt-projhead">
       <span className="af-label af-mt-projhead--af" title={copy(AF_PTS_EXPLAINER)}>
-        API
+        {PROJECTION_PROVIDER_LABEL}
         {/*
           The question mark is the point: two numbers sitting side by side with
           no explanation reads as a bug, not a feature.
@@ -829,7 +838,7 @@ function ProjHeader() {
           not tappable (audit 2026-10-02). Now a button driving a native popover: focus, Enter,
           Escape and click-away come from the platform rather than from state this file keeps.
         */}
-        <button type="button" className="af-mt-info" popoverTarget={popId} aria-label={copy('What API and AF mean')}>
+        <button type="button" className="af-mt-info" popoverTarget={popId} aria-label={copy('What Sleeper and AF mean')}>
           ?
         </button>
       </span>
@@ -851,7 +860,7 @@ function ProjHeader() {
         and in the top layer once it is, so it never takes a grid cell.
       */}
       <div id={popId} popover="auto" className="af-mt-info-pop" role="note">
-        <strong>{copy('API and AF')}</strong>
+        <strong>{copy('Sleeper and AF')}</strong>
         <p>{copy(AF_PTS_EXPLAINER)}</p>
       </div>
     </div>
@@ -893,7 +902,7 @@ function RosterKey() {
           </div>
         ))}
         <div>
-          <dt>API · AF</dt>
+          <dt>{PROJECTION_PROVIDER_LABEL} · AF</dt>
           <dd>{copy(AF_PTS_EXPLAINER)}</dd>
         </div>
         <div>
@@ -1444,10 +1453,11 @@ const COMPARE_KEY = 'af-mt-compare'
  * The week's projected total — ONE number, with the others one tap away.
  *
  * ⚠ THREE PROJECTIONS IN A ROW WAS TOO MANY (audit 2026-10-02). The header carried the provider's
- * total re-scored for this league (API), AllFantasy's engine on the same starters (AF) and the
- * generic standard total, at equal weight, beside the record and the roster value — five slabs,
- * three of them the same question. A manager wants one answer; the comparison is for the one who
- * asks for it. So the league-scored API total leads (the same number the roster's accent column
+ * total re-scored for this league (Sleeper's — labelled "API" until 2026-10-03), AllFantasy's
+ * engine on the same starters (AF) and the generic standard total, at equal weight, beside the
+ * record and the roster value — five slabs, three of them the same question. A manager wants one
+ * answer; the comparison is for the one who asks for it. So the league-scored Sleeper total leads
+ * (the same number the roster's accent column
  * carries, row by row), and AF and standard sit behind "Compare".
  *
  * ⚠ HIDDEN, NOT UNMOUNTED. The collapsed tiles stay in the DOM with `hidden`, so `aria-controls`
@@ -1485,7 +1495,18 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
         <div className="af-mt-tile-value af-num">
           {proj?.afTotal != null ? proj.afTotal.toFixed(1) : '—'}
         </div>
-        <div className="af-label">{copy(bestBall ? 'Listed starters · API · your league' : 'Projected · API · your league')}</div>
+        {/*
+          Named for who made it. In an IDP league the total is Sleeper's offence plus AllFantasy's
+          IDP model for the defenders, and the label says both rather than crediting Sleeper with
+          numbers Sleeper never published.
+        */}
+        <div className="af-label">
+          {copy(
+            proj?.defendersModelled
+              ? bestBall ? 'Listed starters · Sleeper + AF IDP · your league' : 'Projected · Sleeper + AF IDP · your league'
+              : bestBall ? 'Listed starters · Sleeper · your league' : 'Projected · Sleeper · your league',
+          )}
+        </div>
         {canCompare ? (
           <button
             type="button"
@@ -1581,6 +1602,7 @@ export function MyTeam({ data }: MyTeamProps) {
     ? suggestedBench.afProjectedPoints - decisionSlot.player.afProjectedPoints
     : null
 
+
   /*
    * The per-lineup "share" helper lived here and has been DELETED, not merely
    * unused. It divided a player's projection by his own team's total, which is
@@ -1650,7 +1672,6 @@ export function MyTeam({ data }: MyTeamProps) {
           <span className="af-mt-lock-note">{data.lock.reason}</span>
         </div>
       )}
-
 
       {!bestBall ? (
         <section className="af-frame af-mt-decision" aria-labelledby="af-mt-decision-title">

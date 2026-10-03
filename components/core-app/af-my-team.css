@@ -2592,6 +2592,18 @@ li[data-kind='questionable'] .af-mt-check-tag {
     border-top: 1px solid var(--accent-line);
   }
 }
+
+/*
+ * ── "SLEEPER", not "API" (2026-10-03) ─────────────────────────────────────────
+ *
+ * The provider column is named for who made the projection (`projectionProvider.ts`). At the
+ * label's 0.12em tracking "SLEEPER" plus its "?" measured 55px in a 54px column on the live page;
+ * at 0.06em it is 51px. Tracking on this one heading only — the column stays 54px wide, so every
+ * number under it keeps its place.
+ */
+.af-core .af-mt-projhead > .af-mt-projhead--af {
+  letter-spacing: 0.06em;
+}
 .af-mt-decision { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:18px 22px; border:1px solid rgba(34,211,238,.45); background:rgba(34,211,238,.06); }
 .af-mt-decision h2 { margin:5px 0 8px; font-size:clamp(18px,2vw,24px); }
 .af-mt-decision p { margin:0 0 8px; max-width:70ch; }
