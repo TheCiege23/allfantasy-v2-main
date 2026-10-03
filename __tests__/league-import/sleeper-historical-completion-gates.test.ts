@@ -352,7 +352,9 @@ describe('🛑 Sleeper historical draft sync — each pick records who owned the
     const rows = (draftFactCreateMany.mock.calls[0]![0] as { data: Array<Record<string, unknown>> }).data
     expect(rows[0]!.metadata).toMatchObject({ ownerSleeperId: 'sl-a', isKeeper: true })
     expect(rows[1]!.metadata).toMatchObject({ ownerSleeperId: 'sl-a' })
+    expect(rows[1]!.metadata).not.toHaveProperty('isKeeper')
     expect(rows[2]!.metadata).toMatchObject({ isKeeper: true })
+    expect(rows[2]!.metadata).not.toHaveProperty('ownerSleeperId')
   })
 
   it("🛑 credits a departed manager's picks to them, not to whoever holds their old slot now", async () => {
