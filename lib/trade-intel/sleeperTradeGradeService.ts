@@ -10,6 +10,7 @@ import {
   scoreStatLine,
   type SeasonStatsBoard,
 } from '@/lib/sports-data/sleeperMarketService'
+import { runWithConcurrency } from '@/lib/async-utils'
 
 /**
  * sleeperTradeGradeService v2 — retroactive + evolving trade grades over the
@@ -48,6 +49,13 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1000
 const MAX_CHAIN = 12
 const MAX_WEEKS = 18
 const SEASON_GAMES = 17
+/** Weekly stat boards read at once during a rebuild — see the prefetch in `buildTradeGrades`. */
+export const WEEK_BOARD_READ_CONCURRENCY = 12
+/**
+ * How long past its TTL an expired payload may still be served while a rebuild runs behind it — see
+ * `getTradeGrades`. Beyond this, the read waits for the rebuild as it always did.
+ */
+export const TRADE_GRADES_STALE_WHILE_REVALIDATE_MS = 7 * 24 * 60 * 60 * 1000
 
 // Provider reads live in the sync module (DB-first boundary): this service owns
 // grading, not how league data is fetched.
@@ -429,13 +437,21 @@ async function buildTradeGrades(sleeperLeagueId: string): Promise<TradeGradesPay
   const seasonByYear = new Map(seasons.map((s) => [s.season, s]))
   const currentSeasonPartial = !seasons[seasons.length - 1].complete
 
-  // Season totals (full-season reference + full-season windows).
+  /*
+   * Season totals (full-season reference + full-season windows).
+   *
+   * ⚠ READ TOGETHER, RECORDED IN ORDER (2026-10-03). These were awaited one season at a time. Each is
+   * a ~2MB cached JSON row (`stats:season:v1:*`), so a five-season league paid 3–5s of serial reads
+   * before grading began — measured read-only against production. The reads are independent; the
+   * `missing` notes are still pushed in season order so the payload is unchanged.
+   */
   const seasonBoards = new Map<string, SeasonStatsBoard>()
-  for (const s of seasons) {
-    const board = await getSeasonStatsBoard(s.season, s.complete)
+  const seasonBoardReads = await Promise.all(seasons.map((s) => getSeasonStatsBoard(s.season, s.complete)))
+  seasons.forEach((s, i) => {
+    const board = seasonBoardReads[i]
     if (board) seasonBoards.set(s.season, board)
     else missing.push(`${s.season}: season stats`)
-  }
+  })
 
   const seasonPoints = (playerId: string, season: string): number | null => {
     const row = seasonBoards.get(season)?.players[playerId]
@@ -588,12 +604,29 @@ async function buildTradeGrades(sleeperLeagueId: string): Promise<TradeGradesPay
   }
 
   // ── Prefetch weekly boards for every partial window ──
+  /*
+   * ⚠ ACROSS SEASONS, NOT ONE SEASON AFTER ANOTHER (2026-10-03). Each season's weeks were already read
+   * together, but the seasons were awaited in turn — up to 72 ~450KB rows in four serial waves, 8–10s
+   * of a rebuild measured read-only against production. All (season, week) reads now share one bounded
+   * pool; the bound keeps one rebuild from holding the whole connection pool. Results are regrouped
+   * and the `missing` notes pushed in the original season order, so the payload is unchanged.
+   */
   const weekBoards = new Map<string, SeasonStatsBoard>() // `${season}:${week}`
-  for (const [season, weeks] of weeklyNeeds) {
+  const weekReads = [...weeklyNeeds].flatMap(([season, weeks]) => {
     const complete = seasonByYear.get(season)?.complete ?? true
-    const fetched = await Promise.all(
-      [...weeks].map(async (wk) => ({ wk, board: await getWeekStatsBoard(season, wk, complete) })),
-    )
+    return [...weeks].map((wk) => ({ season, wk, complete }))
+  })
+  const weekBoardReads = await runWithConcurrency(weekReads, WEEK_BOARD_READ_CONCURRENCY, (r) =>
+    getWeekStatsBoard(r.season, r.wk, r.complete),
+  )
+  const fetchedBySeason = new Map<string, Array<{ wk: number; board: SeasonStatsBoard | null }>>()
+  weekReads.forEach((r, i) => {
+    const list = fetchedBySeason.get(r.season) ?? []
+    list.push({ wk: r.wk, board: weekBoardReads[i] })
+    fetchedBySeason.set(r.season, list)
+  })
+  for (const [season] of weeklyNeeds) {
+    const fetched = fetchedBySeason.get(season) ?? []
     let anyMissing = false
     for (const { wk, board } of fetched) {
       if (board) weekBoards.set(`${season}:${wk}`, board)
@@ -788,7 +821,51 @@ async function buildTradeGrades(sleeperLeagueId: string): Promise<TradeGradesPay
  * `options.force` bypasses a still-fresh cache — used by the trade-completion
  * notifier the moment a NEW completed trade is detected upstream, so the
  * emailed grades include it instead of waiting out the TTL.
+ *
+ * 🛑 AN EXPIRED PAYLOAD IS SERVED WHILE THE REBUILD RUNS BEHIND IT (2026-10-03). Past the 6h TTL the
+ * read used to WAIT for `buildTradeGrades` — a full Sleeper chain walk plus ~40MB of cached stat
+ * boards, 15–26s measured read-only against production — so the first viewer after every expiry sat
+ * through it. Both test leagues' entries had been expired for days, so in practice that was most
+ * views; the 3.5–5s `withTimeout` callers (career card, Chimmy grounding) simply got nothing.
+ *
+ * Within `TRADE_GRADES_STALE_WHILE_REVALIDATE_MS` of expiry the last payload is now returned at once
+ * and ONE rebuild per league runs in the background. That is safe here for a specific reason: a NEW
+ * completed trade does not wait on this TTL — `getReconciledTradeGrades` compares the payload against
+ * Sleeper's live transaction ids and calls this with `force`, which never takes the stale path. What
+ * the TTL refreshes is the realized-points tally, which moves weekly. The payload keeps its own
+ * `fetchedAt`, so the screen still dates the grades truthfully. Past the window, and on `force`, the
+ * read waits as it always did.
  */
+const tradeGradeRebuilds = new Map<string, Promise<TradeGradesPayload | null>>()
+
+async function rebuildTradeGrades(sleeperLeagueId: string): Promise<TradeGradesPayload | null> {
+  const cacheKey = `${CACHE_PREFIX}${sleeperLeagueId}`
+  const fresh = await buildTradeGrades(sleeperLeagueId).catch((err) => {
+    console.error('[trade-grades] build failed', { sleeperLeagueId, err })
+    return null
+  })
+  if (fresh) {
+    const expiresAt = new Date(Date.now() + CACHE_TTL_MS)
+    await prisma.sportsDataCache
+      .upsert({
+        where: { cacheKey },
+        update: { data: fresh as unknown as object, expiresAt },
+        create: { cacheKey, data: fresh as unknown as object, expiresAt },
+      })
+      .catch((err) => console.error('[trade-grades] cache write failed', { sleeperLeagueId, err }))
+  }
+  return fresh
+}
+
+/** One background rebuild per league at a time; a second stale read joins the first. */
+function revalidateTradeGrades(sleeperLeagueId: string): Promise<TradeGradesPayload | null> {
+  const inFlight = tradeGradeRebuilds.get(sleeperLeagueId)
+  if (inFlight) return inFlight
+  const run = rebuildTradeGrades(sleeperLeagueId).finally(() => tradeGradeRebuilds.delete(sleeperLeagueId))
+  tradeGradeRebuilds.set(sleeperLeagueId, run)
+  return run
+}
+
 export async function getTradeGrades(
   sleeperLeagueId: string,
   options?: { force?: boolean },
@@ -803,21 +880,23 @@ export async function getTradeGrades(
   if (!options?.force && cachedPayload?.version === 2 && cached && cached.expiresAt > now) {
     return cachedPayload
   }
-
-  const fresh = await buildTradeGrades(sleeperLeagueId).catch((err) => {
-    console.error('[trade-grades] build failed', { sleeperLeagueId, err })
-    return null
-  })
-  if (fresh) {
-    await prisma.sportsDataCache
-      .upsert({
-        where: { cacheKey },
-        update: { data: fresh as unknown as object, expiresAt: new Date(now.getTime() + CACHE_TTL_MS) },
-        create: { cacheKey, data: fresh as unknown as object, expiresAt: new Date(now.getTime() + CACHE_TTL_MS) },
-      })
-      .catch((err) => console.error('[trade-grades] cache write failed', { sleeperLeagueId, err }))
-    return fresh
+  if (
+    !options?.force &&
+    cachedPayload?.version === 2 &&
+    cached &&
+    cached.expiresAt.getTime() + TRADE_GRADES_STALE_WHILE_REVALIDATE_MS > now.getTime()
+  ) {
+    void revalidateTradeGrades(sleeperLeagueId).catch(() => undefined)
+    return cachedPayload
   }
+
+  /*
+   * ⚠ `force` NEVER JOINS AN IN-FLIGHT BACKGROUND REBUILD. That rebuild may have read Sleeper's
+   * transactions before the trade that triggered `force` existed, and joining it would hand back a
+   * payload without the very trade the caller came to grade.
+   */
+  const fresh = await rebuildTradeGrades(sleeperLeagueId)
+  if (fresh) return fresh
   if (cachedPayload?.version === 2 && cached) {
     return { ...cachedPayload, staleAsOf: cached.expiresAt.toISOString() }
   }
