@@ -378,6 +378,41 @@ function gradeSubtitle(g: RosterGrade): string {
   return parts.join(' · ')
 }
 
+/**
+ * Your chance to win, from the shared forecast the Matchup screen and the all-leagues board use —
+ * so this card can never say 70% beside a Matchup tab that says 55%. When the forecast declines it
+ * says why, in the forecast's own words, instead of printing a number it does not stand behind.
+ */
+function WinForecast({ forecast }: { forecast: NonNullable<NextMatchup['forecast']> }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  if (!forecast.available) {
+    return (
+      <p className="af-mt-mu-win" data-available="false">
+        {es ? 'Sin probabilidad de victoria' : 'No win probability'} — {forecast.reason}.
+      </p>
+    )
+  }
+  const pct = Math.round(forecast.pWin * 100)
+  const margin = forecast.projectedMargin
+  const marginText = `${margin >= 0 ? '+' : '−'}${Math.abs(margin).toFixed(1)}`
+  return (
+    <p className="af-mt-mu-win" data-available="true" data-favoured={pct >= 50}>
+      <span className="af-mt-mu-win-pct af-num">{pct}%</span>{' '}
+      {es ? 'probabilidad de ganar' : 'to win'}
+      <span className="af-mt-mu-win-meta">
+        {' · '}
+        {es ? 'margen proyectado' : 'projected margin'} <span className="af-num">{marginText}</span>
+        {' · '}
+        {es ? 'confianza' : 'confidence'}{' '}
+        {es
+          ? ({ HIGH: 'alta', MEDIUM: 'media', LOW: 'baja', INSUFFICIENT: 'insuficiente' } as Record<string, string>)[forecast.confidence] ?? forecast.confidence
+          : forecast.confidence.toLowerCase()}
+      </span>
+    </p>
+  )
+}
+
 /** One side of the projected matchup. */
 function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) {
   return (
@@ -1263,6 +1298,7 @@ export function MyTeam({ data }: MyTeamProps) {
               {copy('No projected totals')} — {data.nextMatchup.data.unpricedReason}.
             </p>
           ) : null}
+          {data.nextMatchup.data.forecast ? <WinForecast forecast={data.nextMatchup.data.forecast} /> : null}
         </section>
       ) : (
         <p className="af-mt-footnote">{data.nextMatchup.reason}</p>
