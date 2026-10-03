@@ -186,6 +186,20 @@ describe('formatLockLabel', () => {
 })
 
 describe('MyTeamBoard', () => {
+  it('puts urgent leagues and their platform handoffs in the action queue', () => {
+    const { container } = render(
+      <MyTeamBoard
+        allHref={ALL_HREF}
+        now={NOW}
+        pulse={pulse({ needs: [row({ empty: 1, severity: 1 })], needsTotal: 1 })}
+      />,
+    )
+    const queue = container.querySelector('.af-bd-action-queue')
+    expect(queue?.textContent).toContain('1 lineup needs a look')
+    expect(queue?.querySelector('a[href="/core/my-team?league=l1"]')).not.toBeNull()
+    expect(queue?.querySelector('a[href*="sleeper.com"]')).not.toBeNull()
+  })
+
   it('names every certain hole in the lineup', () => {
     const { container } = render(
       <MyTeamBoard
