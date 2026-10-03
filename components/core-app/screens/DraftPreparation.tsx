@@ -219,6 +219,34 @@ export function DraftPreparation({
           {data.context.draftType}
         </p>
       )}
+      {data.context && (
+        <details className="af-prep-rules">
+          <summary>
+            {t("Benchmark settings")}{" "}
+            {help(
+              "Benchmark settings",
+              "ADP is matched to these recorded scoring rules and roster slots. A benchmark for another context is never substituted.",
+              "El ADP coincide con estas reglas y puestos registrados. Nunca se sustituye con otra configuración.",
+            )}
+          </summary>
+          <p>
+            {t("Roster slots")}:{" "}
+            {Object.entries(
+              data.context.rosterSlots.reduce<Record<string, number>>(
+                (counts, slot) => ({
+                  ...counts,
+                  [slot]: (counts[slot] ?? 0) + 1,
+                }),
+                {},
+              ),
+            )
+              .map(([slot, count]) => slot + " × " + count)
+              .join(" · ")}
+          </p>
+          <p>{t("Scoring rules")}</p>
+          <pre>{JSON.stringify(data.context.scoringRules, null, 2)}</pre>
+        </details>
+      )}
       <div className="af-prep-summary">
         <div>
           <h3>

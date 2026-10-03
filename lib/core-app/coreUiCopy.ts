@@ -233,6 +233,7 @@ const spanish: Record<string, string> = {
   'Go to the draft room': 'Ir a la sala del draft',
   'Open the board': 'Abrir el tablero',
   'Open Draft HQ': 'Abrir el centro del draft',
+  'Prepare for draft →': 'Preparar el draft →',
   'Read-only': 'Solo lectura',
   'Back to home': 'Volver al inicio',
   'Import coverage': 'Cobertura de importación',
