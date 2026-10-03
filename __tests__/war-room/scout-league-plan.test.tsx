@@ -50,6 +50,7 @@ const scout: ScoutData = {
     data: [{ managerId: 'rival', teamName: 'Rivals', ownerName: 'Rival', avatarUrl: null, isYou: false, isNextOpponent: true, standing: null }],
   },
   basis: { available: false, reason: 'no table' },
+  format: { kind: 'redraft', elimination: false, bestBall: false, dynasty: false, picks: null },
 }
 
 describe('Scout carries this league’s plan', () => {

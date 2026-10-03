@@ -56,6 +56,7 @@ function scoutData(over: Partial<ScoutData> = {}): ScoutData {
       ],
     },
     basis: { available: true, data: { season: 2026, throughWeek: 3, seasonComplete: false, orderBasis: 'Order is winning percentage, then points for.' } },
+    format: { kind: 'redraft', elimination: false, bestBall: false, dynasty: false, picks: null },
     ...over,
   }
 }

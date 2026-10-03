@@ -4642,8 +4642,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   This league's plan, inline (step 4c). A failed or unavailable read shows nothing
                   here — "Every league's game plan →" in Scout's header still reaches the full room.
                 */
+                /*
+                  Elimination formats (step 4d): your place against the cut, from the rail's own read
+                  — so the banner and the rail cannot disagree. Only an unpaired (elimination) row has one.
+                */
+                eliminationStanding={
+                  ctx.weekLineups?.byLeague[scout.league.id]?.unpaired
+                    ? (ctx.weekLineups.byLeague[scout.league.id]?.standing ?? null)
+                    : null
+                }
                 leaguePlan={
-                  leagueGamePlan?.available ? (
+                  /* Best ball has no lineup to set; Scout's format note says so, and the plan would only repeat it. */
+                  leagueGamePlan?.available && !scout.format.bestBall ? (
                     <GamePlan
                       data={leagueGamePlan.data}
                       nowIso={new Date().toISOString()}

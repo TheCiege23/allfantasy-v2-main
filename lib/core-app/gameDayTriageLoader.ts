@@ -11,6 +11,7 @@ import { unresolvedClubNames, weekKickoffs } from './playerGame'
 import { applyBridge, loadBridgedLeagues } from './bridgedRosterIds'
 import { collectRosterIds, loadEspnToSleeperMap, rosterIdSpaceOf } from './rosterIdSpace'
 import { resolveSportsWeek } from './sportsWeek'
+import { isEliminatedTeam } from './eliminatedTeam'
 
 /**
  * Your flagged starters across every league — the finder's game-day home.
@@ -113,7 +114,7 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     prisma.guillotineRosterState.findMany({ where: { leagueId: { in: claimedLeagueIds }, choppedAt: { not: null } }, select: { leagueId: true, rosterId: true } }).catch(() => []),
     prisma.guillotineElimination.findMany({
       where: { leagueId: { in: claimedLeagueIds }, eliminatedOwnerId: { in: [userId, ...teams.map((t) => t.platformUserId).filter((id): id is string => Boolean(id))] } },
-      select: { leagueId: true, season: { select: { season: true } } },
+      select: { leagueId: true, eliminatedOwnerId: true, season: { select: { season: true } } },
     }).catch(() => []),
   ])
   const leagueById = new Map<string, LeagueRow>(leagues.map((l) => [l.id, l]))
@@ -156,7 +157,6 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform) === 'other' && !bridgeReadable(l.id)).map((l) => l.id),
   )
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
-  const choppedTeams = new Set(chopped.map((row) => `${row.leagueId}:${row.rosterId}`))
 
   // One roster per league — the first that matches your candidates — and its starters.
   const startersByLeague = new Map<string, string[]>()
@@ -186,11 +186,16 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     // A guillotine team already chopped has no lineup left to set (559c56580).
     const team = teamByLeague.get(r.leagueId)
     const guillotine = league.guillotineMode === true || league.leagueVariant === 'guillotine' || String(league.leagueType).toLowerCase() === 'guillotine'
-    const all = Array.isArray(pd.players) ? pd.players.filter((id) => id && id !== '0') : []
-    const eliminated = pd.eliminated === true || pd.chopped === true ||
-      [team?.externalId, team?.id, r.id].some((id) => id && choppedTeams.has(`${r.leagueId}:${id}`)) ||
-      eliminations.some((e) => e.leagueId === r.leagueId && e.season.season === league.season) ||
-      (guillotine && all.length === 0)
+    // The shared rule (eliminatedTeam.ts) — Scout marks rivals out of the league with the same one.
+    // The eliminations query is already narrowed to the viewer's own owner ids, so any row for this
+    // league and season names the viewer; its owner id is passed as one of the team's ids.
+    const eliminated = isEliminatedTeam({
+      playerData: pd,
+      ids: [team?.externalId, team?.id, r.id, ...eliminations.filter((e) => e.leagueId === r.leagueId && e.season.season === league.season).map((e) => e.eliminatedOwnerId)],
+      chopped: new Set(chopped.filter((c) => c.leagueId === r.leagueId).map((c) => c.rosterId)),
+      eliminated: new Set(eliminations.filter((e) => e.leagueId === r.leagueId && e.season.season === league.season).map((e) => e.eliminatedOwnerId)),
+      elimination: guillotine,
+    })
     if (eliminated) continue
     /*
      * ⚠ '0' IS AN EMPTY STARTING SLOT, AND IT WAS FILTERED OUT AS NOISE. An empty slot is the

@@ -3,6 +3,9 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueMembership } from '@/lib/league-access'
 import { resolveLeagueStage } from '@/lib/league-stage/leagueStage'
+import { resolveLeagueCardTypeKey } from '@/lib/league-media/leagueTypeMedia'
+import { loadDynastyPickCapital } from '@/lib/dynasty-war-room/dynastyPickCapital'
+import { isEliminatedTeam } from './eliminatedTeam'
 import { currentFantasySeason } from './connectLeague'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { leagueDisplayName, type SectionState } from './leagueHome'
@@ -66,6 +69,24 @@ export type ScoutedManager = {
   isNextOpponent: boolean
   /** Where they stand, from the Standings screen's own table. Null when that table cannot be drawn. */
   standing: ScoutStanding | null
+  /** Elimination formats only: chopped, and in which week when a record says so. Null = still alive. */
+  eliminated: { week: number | null } | null
+  /** Dynasty only: future picks held, and how many fall in rounds 1–2. Null when not read. */
+  picks: { count: number; early: number } | null
+}
+
+/**
+ * The league's format, by the canonical resolver (`resolveLeagueCardTypeKey`) — the one the rail uses
+ * for its artwork, which reads the settings too. `leagueType` alone misses elimination leagues whose
+ * flag lives only in settings (measured: 12 of 14).
+ */
+export type ScoutFormat = {
+  kind: string
+  elimination: boolean
+  bestBall: boolean
+  dynasty: boolean
+  /** Dynasty: whether the pick read reached the teams, and its caveat when partial. */
+  picks: { state: string; note: string | null } | null
 }
 
 export type ScoutOpponent = {
@@ -90,10 +111,12 @@ export type ScoutData = {
    * yet, with the Standings loader's own reason.
    */
   basis: SectionState<{ season: number; throughWeek: number; seasonComplete: boolean; orderBasis: string }>
+  format: ScoutFormat
 }
 
-/** Sort: your opponent, then the table's own order, then anyone the table does not place. */
+/** Sort: your opponent, then the table's own order, then anyone the table does not place; the chopped last. */
 function scoutOrder(a: ScoutedManager, b: ScoutedManager): number {
+  if (Boolean(a.eliminated) !== Boolean(b.eliminated)) return a.eliminated ? 1 : -1
   if (a.isNextOpponent !== b.isNextOpponent) return a.isNextOpponent ? -1 : 1
   const sa = a.standing?.seed ?? Number.MAX_SAFE_INTEGER
   const sb = b.standing?.seed ?? Number.MAX_SAFE_INTEGER
@@ -130,6 +153,18 @@ export async function getScoutData(
   if (!league) return null
 
   const sport = String(league.sport ?? 'NFL')
+  const settings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? (league.settings as Record<string, unknown>) : undefined
+  const kind = resolveLeagueCardTypeKey({
+    leagueType: league.leagueType,
+    leagueVariant: league.leagueVariant,
+    settings,
+    isDynasty: league.isDynasty,
+    guillotineMode: league.guillotineMode,
+    bestBallMode: league.bestBallMode,
+  })
+  const elimination = kind === 'guillotine' || kind === 'survivor'
+  const dynasty = kind === 'dynasty' || league.isDynasty === true
+  const format: ScoutFormat = { kind, elimination, bestBall: kind === 'best_ball', dynasty, picks: null }
   const base = {
     league: { id: league.id, name: leagueDisplayName(league.name), sport },
   }
@@ -140,6 +175,7 @@ export async function getScoutData(
     opponent: null,
     managers: { available: false, reason },
     basis: { available: false, reason },
+    format,
   })
 
   /*
@@ -157,7 +193,7 @@ export async function getScoutData(
     prisma.leagueTeam
       .findMany({
         where: { leagueId },
-        select: { id: true, externalId: true, ownerName: true, teamName: true, avatarUrl: true, claimedByUserId: true },
+        select: { id: true, externalId: true, ownerName: true, teamName: true, avatarUrl: true, claimedByUserId: true, platformUserId: true },
       })
       .then((rows) => ({ ok: true as const, rows }))
       .catch(() => ({ ok: false as const, rows: [] as never[] })),
@@ -170,6 +206,9 @@ export async function getScoutData(
   const managerIdOf = (t: { externalId: string; id: string }) => t.externalId || t.id
   const mine = teams.rows.find((t) => t.claimedByUserId === userId) ?? null
   const myManagerId = mine ? managerIdOf(mine) : null
+
+  const facts = await formatFacts({ leagueId, league, format, teams: teams.rows }).catch(() => null)
+  if (facts?.picksState) format.picks = facts.picksState
 
   /*
    * The board's `rosterId` is the platform roster id — `LeagueTeam.externalId`. A team without one
@@ -212,7 +251,12 @@ export async function getScoutData(
     resolvedWeek && !weekIsBehindLeague(resolvedWeek, league, new Date()) ? resolvedWeek : null
 
   let opponentManagerId: string | null = null
-  if (week && league.platformLeagueId && mine?.externalId) {
+  /*
+   * ⚠ NO OPPONENT IN AN ELIMINATION LEAGUE. Some providers publish matchup ids even for a guillotine
+   * field (the rail's own note in railMatchups.ts); those ids do not turn an elimination race into a
+   * head-to-head, so naming a THIS WEEK opponent there would invent a game.
+   */
+  if (week && league.platformLeagueId && mine?.externalId && !elimination) {
     const rows = await prisma.weeklyMatchup
       .findMany({
         where: {
@@ -251,6 +295,8 @@ export async function getScoutData(
       isYou: managerId === myManagerId,
       isNextOpponent: opponentManagerId != null && managerId === opponentManagerId,
       standing: t.externalId ? standingOf(t.externalId) : null,
+      eliminated: facts?.eliminatedByTeamId.get(t.id) ?? null,
+      picks: facts?.picksByTeamId.get(t.id) ?? null,
     }
   })
   managers.sort(scoutOrder)
@@ -288,5 +334,118 @@ export async function getScoutData(
             ? standings.reason
             : 'the standings could not be read just now, so the table order and records are missing',
         },
+    format,
   }
+}
+
+/** Stages before a draft, when every roster is legitimately empty. */
+const PRE_SEASON_STAGES = new Set(['setup', 'pre_draft', 'predraft', 'drafting', 'draft'])
+
+type FormatFacts = {
+  eliminatedByTeamId: Map<string, { week: number | null }>
+  picksByTeamId: Map<string, { count: number; early: number }>
+  picksState: { state: string; note: string | null } | null
+}
+
+/**
+ * The format-specific facts (War Room step 4d), read only for a league whose format needs them.
+ *
+ *   - ELIMINATION: who has been chopped, by the shared rule (eliminatedTeam.ts) Game Plan uses.
+ *   - DYNASTY: each team's future picks, by the dynasty War Room's own reader
+ *     (loadDynastyPickCapital), whose 'partial' caveat is carried through rather than hidden.
+ *
+ * Keyed by `LeagueTeam.id`. A roster is matched to its team by owner, as the dynasty context does.
+ */
+async function formatFacts(args: {
+  leagueId: string
+  league: { platform: string | null; season: number | null; settings: unknown; status: string | null; lifecycleState: string | null }
+  format: ScoutFormat
+  teams: ReadonlyArray<{ id: string; externalId: string; platformUserId: string | null; claimedByUserId: string | null; teamName: string | null }>
+}): Promise<FormatFacts> {
+  const out: FormatFacts = { eliminatedByTeamId: new Map(), picksByTeamId: new Map(), picksState: null }
+  if (!args.format.elimination && !args.format.dynasty) return out
+
+  const rosters = await prisma.roster.findMany({
+    where: { leagueId: args.leagueId },
+    select: { id: true, platformUserId: true, playerData: true },
+  })
+  const rosterByUser = new Map(rosters.map((r) => [r.platformUserId, r]))
+  const rosterOf = (t: { platformUserId: string | null; claimedByUserId: string | null }) =>
+    (t.platformUserId ? rosterByUser.get(t.platformUserId) : undefined) ??
+    (t.claimedByUserId ? rosterByUser.get(t.claimedByUserId) : undefined) ??
+    null
+
+  if (args.format.elimination) {
+    const [chopped, eliminations] = await Promise.all([
+      prisma.guillotineRosterState.findMany({
+        where: { leagueId: args.leagueId, choppedAt: { not: null } },
+        select: { rosterId: true, choppedInPeriod: true },
+      }),
+      prisma.guillotineElimination.findMany({
+        where: { leagueId: args.leagueId },
+        select: { eliminatedRosterId: true, eliminatedOwnerId: true, scoringPeriod: true, season: { select: { season: true } } },
+      }),
+    ])
+    const thisSeason = eliminations.filter((e) => args.league.season == null || e.season.season === args.league.season)
+    const weekById = new Map<string, number | null>()
+    for (const c of chopped) weekById.set(c.rosterId, c.choppedInPeriod ?? null)
+    for (const e of thisSeason) {
+      weekById.set(e.eliminatedRosterId, e.scoringPeriod)
+      weekById.set(e.eliminatedOwnerId, e.scoringPeriod)
+    }
+    const choppedIds = new Set(chopped.map((c) => c.rosterId))
+    const eliminatedIds = new Set(thisSeason.flatMap((e) => [e.eliminatedRosterId, e.eliminatedOwnerId]))
+    /*
+     * 🛑 BEFORE THE DRAFT EVERY ROSTER IS EMPTY, so the empty-roster signal would chop the whole league.
+     * Game Plan's loader never meets this case because it skips pre-draft leagues first; Scout lists
+     * them, so the signal is switched off until the season is under way — and for a team with no
+     * roster row at all, which is missing data, not an elimination.
+     */
+    const started = !PRE_SEASON_STAGES.has(resolveLeagueStage(args.league) ?? '')
+    for (const t of args.teams) {
+      const r = rosterOf(t)
+      const ids = [t.externalId, t.id, r?.id, t.platformUserId]
+      if (
+        isEliminatedTeam({
+          playerData: r?.playerData,
+          ids,
+          chopped: choppedIds,
+          eliminated: eliminatedIds,
+          elimination: started && r != null,
+        })
+      ) {
+        const week = ids.map((id) => (id ? weekById.get(id) : undefined)).find((w) => w !== undefined) ?? null
+        out.eliminatedByTeamId.set(t.id, { week })
+      }
+    }
+  }
+
+  if (args.format.dynasty && args.league.season != null) {
+    const status = args.league.settings && typeof args.league.settings === 'object' ? (args.league.settings as Record<string, unknown>).status : null
+    const capital = await loadDynastyPickCapital({
+      leagueId: args.leagueId,
+      platform: args.league.platform,
+      leagueSeason: args.league.season,
+      providerStatus: typeof status === 'string' ? status : null,
+      rosters: rosters.map((r) => ({ id: r.id, platformUserId: r.platformUserId, playerData: r.playerData })),
+      teams: args.teams.map((t) => ({
+        id: t.id,
+        externalId: String(t.externalId ?? ''),
+        platformUserId: t.platformUserId,
+        claimedByUserId: t.claimedByUserId,
+        teamName: t.teamName ?? null,
+      })),
+    })
+    out.picksState = { state: capital.state, note: capital.note }
+    if (capital.state !== 'missing') {
+      for (const t of args.teams) {
+        const r = rosterOf(t)
+        if (!r) continue
+        const picks = capital.picksByRosterId.get(r.id) ?? []
+        out.picksByTeamId.set(t.id, { count: picks.length, early: picks.filter((p) => p.round <= 2).length })
+      }
+    }
+  }
+
+  return out
 }

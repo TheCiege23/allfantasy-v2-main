@@ -192,6 +192,7 @@ const scout: ScoutData = {
     ],
   },
   basis: { available: false, reason: 'no table' },
+  format: { kind: 'redraft', elimination: false, bestBall: false, dynasty: false, picks: null },
 }
 
 const edge: ScoutEdge = {
