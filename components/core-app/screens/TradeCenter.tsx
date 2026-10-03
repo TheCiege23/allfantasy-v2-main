@@ -49,6 +49,7 @@ import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-a
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
+import { TradeEvidencePanel } from './TradeEvidencePanel'
 import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import { matchOfferToRosters, screenshotDraftNote, screenshotLoadedLine } from '@/lib/trade-screenshot/matchOffer'
 import type { OfferRead } from '@/lib/trade-screenshot/offerRead'
@@ -2289,6 +2290,7 @@ export function TradeCenter(props: {
             Which league type that chart is for, and whether anyone confirmed it. The league-type
             control sits in this page's header (CoreLeagueContextBar, `#league-type`).
           */}
+          {serverGrade?.graded ? <TradeEvidencePanel grade={serverGrade} evaluatedAt={analyzedAt} gaps={result.dataGaps} /> : null}
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
           {serverGrade?.graded ? (
             <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
@@ -2359,7 +2361,7 @@ export function TradeCenter(props: {
               <strong className="af-tc-score-label">
                 {noSignal ? copy('Grade unavailable') : result.labels?.fairnessLabel ? copy(result.labels.fairnessLabel) : copy('No verdict')}
               </strong>
-              {!noSignal && result.labels?.confidenceLabel ? (
+              {!noSignal && !serverGrade?.graded && result.labels?.confidenceLabel ? (
                 <span className="af-tc-conf">{copy(result.labels.confidenceLabel)}</span>
               ) : null}
             </div>

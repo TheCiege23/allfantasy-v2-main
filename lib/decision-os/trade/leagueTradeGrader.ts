@@ -90,6 +90,7 @@ export function linesOf(
     const scope = l.projectionScope
     return {
       side,
+      assetKind: l.pricedSource === 'pick' ? 'pick' : l.pricedSource === 'faab' ? 'faab' : 'player',
       name: l.name,
       marketValue: l.unpriced ? null : l.marketValue,
       leagueValue: l.leagueValue ?? null,
