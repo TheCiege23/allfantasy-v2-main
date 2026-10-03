@@ -349,6 +349,35 @@ function ordinal(n: number): string {
  * names its comparison; a letter invents a scale and hides its inputs. When
  * coverage is partial that is stated here rather than folded into the number.
  */
+function gradeSubtitle(g: RosterGrade): string {
+  const parts: string[] = []
+  const vsMedian = g.value - g.median
+  parts.push(
+    Math.abs(vsMedian) < g.median * 0.03
+      ? 'right on the league median'
+      : `${Math.abs(vsMedian).toLocaleString()} ${vsMedian > 0 ? 'above' : 'below'} the median`,
+  )
+  if (g.strongest) parts.push(`${g.strongest.position} is your best (${ordinal(g.strongest.rank)})`)
+  if (g.weakest && g.weakest.position !== g.strongest?.position) {
+    parts.push(`${g.weakest.position} your thinnest (${ordinal(g.weakest.rank)})`)
+  }
+  if (g.pricedPlayers < g.totalPlayers) {
+    parts.push(`priced ${g.pricedPlayers} of your ${g.totalPlayers}`)
+  }
+  /*
+   * WHICH CLAIM THIS RANK IS MAKING. Repriced under your league's scoring is a
+   * different and much stronger statement than a raw market ordering, and a
+   * manager in a TE-premium or IDP league is entitled to know which one they
+   * are reading. Both are honest; presenting them identically would not be.
+   */
+  parts.push(
+    g.basis.leagueScored
+      ? 'valued under your scoring'
+      : 'market prices, not adjusted for your scoring',
+  )
+  return parts.join(' · ')
+}
+
 /**
  * Where your roster is deep and where it is thin, position by position, against THIS league.
  *
@@ -356,6 +385,69 @@ function ordinal(n: number): string {
  * were computed by `getRosterGrade` and thrown away. They are the part a manager uses to decide
  * what to trade from and what to trade for. Same values, same basis line as the tile.
  */
+/** "Sep 28" in Eastern — the schedule's zone, and fixed so the server and client render alike. */
+function shortDate(d: Date | string): string {
+  const date = typeof d === 'string' ? new Date(d) : d
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' }).format(date)
+}
+
+const ACTIVITY_TAG: Record<string, string> = { trade: 'TRADE', waiver: 'CLAIM', roster_move: 'ADD/DROP' }
+
+/**
+ * Your own trades, claims and adds/drops in this league (`teamActivity.ts`). The league home has a
+ * league-wide feed; this answers "what did I change?" without scanning everyone's moves for your
+ * name. A bid shows only when the provider recorded one — null is unknown, never $0.
+ */
+function TeamActivityCard({ activity, myTeamName }: { activity: NonNullable<MyTeamData['teamActivity']>; myTeamName: string | null }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  return (
+    <section className="af-frame af-mt-moves" aria-label={es ? 'Tus movimientos recientes' : 'Your recent moves'}>
+      <h2 className="af-label">{es ? 'Tus movimientos recientes' : 'Your recent moves'}</h2>
+      {activity.items.length === 0 ? (
+        <p className="af-mt-moves-note">
+          {es ? 'No hay movimientos tuyos en la actividad registrada.' : 'No moves by you in the activity we hold.'}
+          {activity.feedNewest
+            ? es
+              ? ` Actividad de la liga registrada hasta el ${shortDate(activity.feedNewest)}.`
+              : ` League activity on file through ${shortDate(activity.feedNewest)}.`
+            : ''}
+        </p>
+      ) : (
+        <ul className="af-mt-moves-list">
+          {activity.items.map((m) => {
+            const partners = m.kind === 'trade' ? m.involvedTeams.filter((t) => t !== myTeamName) : []
+            return (
+              <li key={m.id} data-kind={m.kind}>
+                <div className="af-mt-moves-head">
+                  <span className="af-mt-moves-tag">{ACTIVITY_TAG[m.kind] ?? m.kind}</span>
+                  <span className="af-mt-moves-date af-num">{shortDate(m.occurredAt)}</span>
+                  {partners.length ? (
+                    <span className="af-mt-moves-meta">{es ? 'con' : 'with'} {partners.join(', ')}</span>
+                  ) : null}
+                  {m.bid != null ? <span className="af-mt-moves-bid af-num">${m.bid}</span> : null}
+                </div>
+                <div className="af-mt-moves-body">
+                  {m.adds.map((p) => (
+                    <span key={`a${p.id}`} className="af-mt-moves-add">+ {p.label}</span>
+                  ))}
+                  {m.drops.map((p) => (
+                    <span key={`d${p.id}`} className="af-mt-moves-drop">− {p.label}</span>
+                  ))}
+                  {m.picks.map((pk) => (
+                    <span key={`p${pk}`} className="af-mt-moves-meta">{pk}</span>
+                  ))}
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 function PositionStrengthCard({ grade }: { grade: RosterGrade }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
@@ -399,34 +491,6 @@ function PositionStrengthCard({ grade }: { grade: RosterGrade }) {
   )
 }
 
-function gradeSubtitle(g: RosterGrade): string {
-  const parts: string[] = []
-  const vsMedian = g.value - g.median
-  parts.push(
-    Math.abs(vsMedian) < g.median * 0.03
-      ? 'right on the league median'
-      : `${Math.abs(vsMedian).toLocaleString()} ${vsMedian > 0 ? 'above' : 'below'} the median`,
-  )
-  if (g.strongest) parts.push(`${g.strongest.position} is your best (${ordinal(g.strongest.rank)})`)
-  if (g.weakest && g.weakest.position !== g.strongest?.position) {
-    parts.push(`${g.weakest.position} your thinnest (${ordinal(g.weakest.rank)})`)
-  }
-  if (g.pricedPlayers < g.totalPlayers) {
-    parts.push(`priced ${g.pricedPlayers} of your ${g.totalPlayers}`)
-  }
-  /*
-   * WHICH CLAIM THIS RANK IS MAKING. Repriced under your league's scoring is a
-   * different and much stronger statement than a raw market ordering, and a
-   * manager in a TE-premium or IDP league is entitled to know which one they
-   * are reading. Both are honest; presenting them identically would not be.
-   */
-  parts.push(
-    g.basis.leagueScored
-      ? 'valued under your scoring'
-      : 'market prices, not adjusted for your scoring',
-  )
-  return parts.join(' · ')
-}
 
 /**
  * Your chance to win, from the shared forecast the Matchup screen and the all-leagues board use —
@@ -1593,6 +1657,9 @@ export function MyTeam({ data }: MyTeamProps) {
       {data.rosterGrade.available && (data.rosterGrade.data.positions?.length ?? 0) > 1 ? (
         <PositionStrengthCard grade={data.rosterGrade.data} />
       ) : null}
+
+      {/* ── Your recent moves in this league ─────────────────────────── */}
+      {data.teamActivity ? <TeamActivityCard activity={data.teamActivity} myTeamName={data.team.available ? data.team.data.teamName : null} /> : null}
 
       {/* ── Dynasty outlook: the next three seasons, not this week ────── */}
       {data.dynasty ? <DynastyCard outlook={data.dynasty} /> : null}
