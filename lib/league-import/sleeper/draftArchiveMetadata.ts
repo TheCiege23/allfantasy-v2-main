@@ -19,7 +19,7 @@ export function sleeperDraftArchiveMetadata(args: {
   }
   const draft = record(args.draft), league = record(args.league), pick = record(args.pick)
   const player = record(pick.metadata)
-  const metadata: Prisma.InputJsonObject = {
+  const metadata: Record<string, Prisma.InputJsonValue | null> = {
     archiveVersion: 1, provider: 'sleeper', sourceDraftId: args.sourceDraftId,
     sourceLeagueId: args.sourceLeagueId, season: args.season,
     selectionRosterId: id(pick.roster_id), providerPickedBy: id(pick.picked_by),
