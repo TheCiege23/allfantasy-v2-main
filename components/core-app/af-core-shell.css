@@ -12,6 +12,14 @@
   grid-template-columns: 68px 232px minmax(0, 1fr);
   min-height: 100vh;
   min-height: 100dvh;
+  /*
+   * The side insets of a notched phone or tablet held sideways. `app/layout.tsx` sets
+   * `viewportFit: 'cover'`, which hands those edges to the page, and the top and bottom insets were
+   * already handled — the sides never were, so the 68px rail sat under the notch on a landscape
+   * iPhone. Zero everywhere else, so nothing moves on a device without one.
+   */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   background: var(--bg);
   background-image: var(--hero);
   background-repeat: no-repeat;

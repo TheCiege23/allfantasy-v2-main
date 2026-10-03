@@ -167,8 +167,13 @@
   about when to stack. Scoped above the phone breakpoint on purpose: below it the
   board is already one column, and a two-up row grid there would be two 160px
   rows.
+
+  ⚠ KEYED ON THE BOARD'S WIDTH, NOT THE VIEWPORT. This was `min-width: 781px`, so
+  an iPad (834) got the two-up grid in a ~510px board: each row ~248px against
+  ~241px of fixed parts (face, crest, ring, PROJ tag, margin, gaps), leaving the
+  league name ~7px. `af-board` is the container af-core-boards.css puts on `.af-bd`.
 */
-@media (min-width: 781px) {
+@container af-board (min-width: 760px) {
   .af-mp-cols[data-stack] {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
@@ -299,6 +304,26 @@
   background: rgba(52, 211, 153, 0.14);
   border-color: rgba(52, 211, 153, 0.3);
   color: #5fe0b4;
+}
+/*
+  The tints above are tuned for the dark theme: on a light page their 11px initials sat at roughly
+  1.4–2.6:1 against the tinted chip. The same hues, darkened until the text clears 4.5:1.
+*/
+html[data-mode='light'] .af-core .af-mp-face--none[data-platform='sleeper'],
+html[data-mode='light'] .af-core .af-mp-crest--none[data-platform='sleeper'] {
+  color: #5b2fc9;
+}
+html[data-mode='light'] .af-core .af-mp-face--none[data-platform='espn'],
+html[data-mode='light'] .af-core .af-mp-crest--none[data-platform='espn'] {
+  color: #b3122f;
+}
+html[data-mode='light'] .af-core .af-mp-face--none[data-platform='yahoo'],
+html[data-mode='light'] .af-core .af-mp-crest--none[data-platform='yahoo'] {
+  color: #5a32c4;
+}
+html[data-mode='light'] .af-core .af-mp-face--none[data-platform='fantrax'],
+html[data-mode='light'] .af-core .af-mp-crest--none[data-platform='fantrax'] {
+  color: #0a6e4b;
 }
 
 .af-mp-text {
@@ -658,5 +683,34 @@
 @media (prefers-reduced-motion: reduce) {
   .af-mp-ring-arc {
     transition: none;
+  }
+}
+
+/* ── Narrow BOARD, wide viewport (2026-10-02 layout pass) ─────────────────────
+ *
+ * Top-level sibling blocks appended at end of file. The phone rules above key on the viewport, but
+ * the board gets the viewport minus the shell's rail and nav — ~500–760px on every tablet, while
+ * the ≤780 viewport rules stayed off. The same rules on the board's own width (`af-board`, on
+ * `.af-bd`); the viewport blocks stay as the fallback for a browser without container queries.
+ */
+@container af-board (max-width: 760px) {
+  .af-mp-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-mp {
+    padding: 0;
+  }
+  .af-mp-crest {
+    display: none;
+  }
+}
+
+@container af-board (max-width: 540px) {
+  .af-mp-score {
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .af-mp-score-n {
+    font-size: 24px;
   }
 }

@@ -85,11 +85,12 @@ export function LiveMatchupStrip({
     <section className="af-live-matchup" aria-label="Your matchup" data-state="scored" data-lead={lead}>
       <div className="af-live-matchup-row">
         <span className="af-live-matchup-team">{strip.you.name}</span>
-        <span className="af-live-matchup-score af-num">{strip.you.points.toFixed(1)}</span>
+        {/* `data-side`, not position: the CSS used `:nth-of-type`, which counts every span in the row. */}
+        <span className="af-live-matchup-score af-num" data-side="you">{strip.you.points.toFixed(1)}</span>
         <span className="af-live-matchup-vs" aria-hidden>
           –
         </span>
-        <span className="af-live-matchup-score af-num">{strip.opponent.points.toFixed(1)}</span>
+        <span className="af-live-matchup-score af-num" data-side="them">{strip.opponent.points.toFixed(1)}</span>
         <span className="af-live-matchup-team">{strip.opponent.name}</span>
       </div>
       <p className="af-live-matchup-meta">

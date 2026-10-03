@@ -11,7 +11,7 @@ import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import type {
   MatchupData,
   MatchupPlayerCell,
@@ -136,8 +136,13 @@ function TeamCard({
  * watching. Tapping the bar returns to the banner.
  *
  * Rendered only while the banner is OUT of view (an IntersectionObserver, no scroll listener), and
- * hidden above 1024px by CSS — a desktop shows both at once. It repeats what the banner already
- * says, so a screen reader is not read it twice: it is a plain button labelled for its action.
+ * shown by CSS only while the matchup itself is narrow (≤760px of matchup, af-matchup.css) — a wide
+ * matchup shows both at once. It repeats what the banner already says, so a screen reader is not
+ * read it twice: it is a plain button labelled for its action.
+ *
+ * ⚠ IT SITS OVER THE MATCHUP, NOT THE WINDOW. Under a tablet's desktop shell a full-width fixed bar
+ * covered the rail and nav, so the matchup's own box is measured into `--af-mu-sticky-left/-width`;
+ * on a phone the CSS ignores both and goes full-bleed.
  */
 function StickyScore({
   target,
@@ -166,12 +171,40 @@ function StickyScore({
     io.observe(el)
     return () => io.disconnect()
   }, [target])
+  const [box, setBox] = useState<{ left: number; width: number } | null>(null)
+  useEffect(() => {
+    if (!show) return
+    const matchup = target.current?.closest('.af-mu')
+    if (!matchup) return
+    const measure = () => {
+      const r = matchup.getBoundingClientRect()
+      setBox((prev) =>
+        prev && prev.left === Math.round(r.left) && prev.width === Math.round(r.width)
+          ? prev
+          : { left: Math.round(r.left), width: Math.round(r.width) },
+      )
+    }
+    measure()
+    /* The rail opening or closing moves the matchup without resizing the window. */
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    ro?.observe(matchup)
+    window.addEventListener('resize', measure)
+    return () => {
+      ro?.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [show, target])
   if (!show) return null
   const fmt = (v: number | null) => (v == null ? '—' : v.toFixed(1))
   return (
     <button
       type="button"
       className="af-mu-sticky"
+      style={
+        box
+          ? ({ '--af-mu-sticky-left': `${box.left}px`, '--af-mu-sticky-width': `${box.width}px` } as CSSProperties)
+          : undefined
+      }
       data-leader={leader ?? undefined}
       data-basis={basis}
       onClick={() => target.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
