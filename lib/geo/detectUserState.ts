@@ -4,7 +4,8 @@ import type { GeoDetectionResult } from "./geoTypes"
 import { isTorExit, resolveEdgeGeo } from "./geoHeaders"
 import { fetchIpApi, fetchProxycheck } from "./geoIpFetch"
 import {
-  combineAnonymizerSignals,
+  combineAnonymizerDetail,
+  logAnonymizerBlock,
   parseIpApiPayload,
   parseProxycheckPayload,
   UNREADABLE_IP_GEO,
@@ -126,13 +127,18 @@ export async function detectUserState(request: Request | Headers): Promise<GeoDe
   const appleNetwork = !isVpnOrProxy && rawIp !== null && isAppleCorporateNetwork(rawIp)
   const skipAnonymizerCheck =
     appleNetwork && !(await getRelayRangeSetNode().then((s) => Boolean(s && lookupRelayState(s, rawIp as string)), () => false))
+  // Kept for the block log below — which vendor said yes, and in what words.
+  let blockSignals: { proxycheck: ProxycheckVerdict | null; ipapi: ParsedIpGeo | null } = { proxycheck: null, ipapi: null }
+  let blockDetail = combineAnonymizerDetail({ tor: isVpnOrProxy, proxycheck: null, ipapi: null })
   if (!isVpnOrProxy && rawIp && !skipAnonymizerCheck) {
     const proxycheck = await proxycheckVerdict(rawIp)
     // Reuse the response already in hand rather than calling twice; only ask
     // again when the geo branch above never ran, and not at all once proxycheck
     // has already said yes.
     const ipapi = proxycheck?.anonymized ? null : (lookup ?? (await ipapiLookup(rawIp)))
-    isVpnOrProxy = combineAnonymizerSignals({ tor: false, proxycheck, ipapi }) === true
+    blockSignals = { proxycheck, ipapi }
+    blockDetail = combineAnonymizerDetail({ tor: false, proxycheck, ipapi })
+    isVpnOrProxy = blockDetail.anonymized === true
   }
 
   // An anonymized address Apple's Private Relay feed lists can be PLACED rather
@@ -152,6 +158,10 @@ export async function detectUserState(request: Request | Headers): Promise<GeoDe
       }
     }
   }
+
+  // Logged only here, after the Private Relay placement above, so a relay user who is PLACED rather
+  // than refused is not reported as a block. Never the address.
+  if (isVpnOrProxy) logAnonymizerBlock("detectUserState", blockDetail, blockSignals)
 
   return {
     stateCode,
