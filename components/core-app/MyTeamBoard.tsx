@@ -23,6 +23,7 @@ import {
 import '@/components/core-app/af-core-boards.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { relativeAge } from '@/lib/core-app/cardFreshness'
 
 /**
  * `/core/my-team` with no league held — the cross-league lineup board.
@@ -198,6 +199,35 @@ function tiedRankLabels(ranks: Array<string | null>): Array<string | null> {
   return out
 }
 
+/** A row synced longer ago than this is called out: lineups move daily in season. */
+export const STALE_SYNC_MS = 24 * 3600_000
+
+/**
+ * How old this row's counts are. The board reads the STORED roster, while a league's own page
+ * reads the provider live — so the two can disagree, and the row should say which moment it
+ * describes. A failed last sync is worse than an old one: say it.
+ *
+ * `suppressHydrationWarning` because "3h ago" is computed against a clock that differs by a few
+ * seconds between server and client render; the words only change at a minute boundary.
+ */
+function SyncStamp({ row, now }: { row: MyTeamRow; now: number }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  if (row.syncFailed) {
+    return <span className="af-bd-sync" data-stale="true"> · {es ? 'la última sincronización falló' : 'last sync failed'}</span>
+  }
+  if (!row.syncedAt) return null
+  const at = Date.parse(row.syncedAt)
+  if (Number.isNaN(at)) return null
+  const age = relativeAge(at, now)
+  return (
+    <span className="af-bd-sync" data-stale={now - at > STALE_SYNC_MS} suppressHydrationWarning>
+      {' · '}
+      {es ? (age === 'just now' ? 'sincronizada ahora' : `sincronizada hace ${age.replace(' ago', '')}`) : `synced ${age}`}
+    </span>
+  )
+}
+
 function Row({
   row,
   rank,
@@ -305,7 +335,7 @@ function Row({
         )}
       </div>
       <div className="af-mt-board-actions">
-        <span>{row.bestBall ? copy('Provider selects the scoring lineup · review roster depth') : <>{row.started ? language === 'es' ? `${row.started} ${copy(row.started === 1 ? 'starter' : 'starters')} con partido iniciado · ` : `${row.started} ${row.started === 1 ? 'starter' : 'starters'} past kickoff · ` : ''}{nextDeadline ? `${copy('Next player deadline')} ${nextDeadline}` : copy(row.lockAt ? 'Next player deadline' : 'Check individual locks')}{row.unknownKickoffs ? language === 'es' ? ` · ${row.unknownKickoffs} sin hora de inicio` : ` · ${row.unknownKickoffs} without a kickoff` : ''}</>}</span>
+        <span>{row.bestBall ? copy('Provider selects the scoring lineup · review roster depth') : <>{row.started ? language === 'es' ? `${row.started} ${copy(row.started === 1 ? 'starter' : 'starters')} con partido iniciado · ` : `${row.started} ${row.started === 1 ? 'starter' : 'starters'} past kickoff · ` : ''}{nextDeadline ? `${copy('Next player deadline')} ${nextDeadline}` : copy(row.lockAt ? 'Next player deadline' : 'Check individual locks')}{row.unknownKickoffs ? language === 'es' ? ` · ${row.unknownKickoffs} sin hora de inicio` : ` · ${row.unknownKickoffs} without a kickoff` : ''}</>}<SyncStamp row={row} now={now} /></span>
         <LineupIntelligenceActions leagueId={row.leagueId} leagueName={row.leagueName} bestBall={row.bestBall} />
       </div>
     </li>
@@ -583,6 +613,23 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
           ) : null}
         </p>
       ) : null}
+
+      {/*
+        ⚠ STALE ROWS SAY SO TOGETHER, NOT ONLY ONE AT A TIME. Each row carries its own "synced 2d ago";
+        this line is the reason to act on them — a re-sync is one click for all of them at once.
+      */}
+      {(() => {
+        const stale = rows.filter((r) => r.syncFailed || (r.syncedAt != null && nowMs - Date.parse(r.syncedAt) > STALE_SYNC_MS))
+        if (stale.length === 0) return null
+        return (
+          <p className="af-bd-note af-bd-note--plain af-bd-note--stale" suppressHydrationWarning>
+            {language === 'es'
+              ? `${stale.length} ${stale.length === 1 ? 'liga mostrada no se sincroniza' : 'ligas mostradas no se sincronizan'} desde hace más de un día o falló su última sincronización, así que sus filas pueden describir una alineación anterior. `
+              : `${stale.length} of the leagues shown ${stale.length === 1 ? 'was' : 'were'} last synced over a day ago or failed to sync, so ${stale.length === 1 ? 'its row' : 'their rows'} may describe an older lineup. `}
+            <Link href="/core/sync">{copy('re-sync imported leagues')}</Link>.
+          </p>
+        )
+      })()}
 
       {!pulse.byeChecked ? (
         /*
