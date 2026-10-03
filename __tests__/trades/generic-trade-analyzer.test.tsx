@@ -19,7 +19,7 @@ describe('league-free trade analyzer', () => {
       ok: true,
       json: async () => ({
         grade: {
-          graded: true, letter: 'B', partnerLetter: 'D', label: 'Slightly favors you',
+          graded: true, letter: 'B', partnerLetter: 'D', sideAdvantage: 'you', label: 'Slightly favors you',
           recommendation: 'Review the market gap.', giveMarket: 100, getMarket: 120,
           basis: 'General market values', lines: [],
         },
@@ -29,7 +29,7 @@ describe('league-free trade analyzer', () => {
     fireEvent.change(screen.getByLabelText('Team A sends'), { target: { value: 'Player One' } })
     fireEvent.change(screen.getByLabelText('Team B sends'), { target: { value: 'Player Two' } })
     fireEvent.click(screen.getByRole('button', { name: 'Analyze trade' }))
-    await screen.findByText('Slightly favors you')
+    expect((await screen.findAllByText('Team A receives more market value')).length).toBeGreaterThan(0)
     const [, init] = fetchMock.mock.calls[0]
     const body = JSON.parse(init.body)
     expect(body).toMatchObject({ sportFilter: 'NFL', leagueId: null, strategy: 'neutral', teamContext: 'neutral' })
@@ -57,7 +57,7 @@ describe('league-free trade analyzer', () => {
 
   it('explains the generic grade with asset sources and excluded factors', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({
-      grade: { graded: true, letter: 'B', partnerLetter: 'D', percentDiff: 17,
+      grade: { graded: true, letter: 'B', partnerLetter: 'D', sideAdvantage: 'you', percentDiff: 17,
         label: 'Slightly favors you', recommendation: 'A clear win on league value.',
         giveMarket: 100, getMarket: 120, basis: 'General market values',
         lines: [{ side: 'give', name: 'Player One', marketValue: 100, leagueValue: 100, valueSource: 'fantasycalc', valueAsOf: '2026-10-01T00:00:00Z' }],
@@ -84,7 +84,7 @@ describe('league-free trade analyzer', () => {
 
   it('saves a dated comparison on this device for later review', async () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({
-      grade: { graded: true, letter: 'B', partnerLetter: 'D', label: 'Slightly favors you',
+      grade: { graded: true, letter: 'B', partnerLetter: 'D', sideAdvantage: 'you', label: 'Slightly favors you',
         recommendation: 'Review the market gap.', giveMarket: 100, getMarket: 120,
         basis: 'General market values', lines: [] },
     }) })
@@ -92,7 +92,7 @@ describe('league-free trade analyzer', () => {
     fireEvent.change(screen.getByLabelText('Team A sends'), { target: { value: 'Player One' } })
     fireEvent.change(screen.getByLabelText('Team B sends'), { target: { value: 'Player Two' } })
     fireEvent.click(screen.getByRole('button', { name: 'Analyze trade' }))
-    await screen.findByText('Slightly favors you')
+    expect((await screen.findAllByText('Team A receives more market value')).length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Save this comparison' }))
     expect(screen.getByText(/Comparison saved on this device/)).toBeTruthy()
     view.unmount()
