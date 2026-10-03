@@ -1098,7 +1098,7 @@ const spanish: Record<string, string> = {
     'No se pudo proyectar a ninguno de tus jugadores con la puntuación de esta liga.',
   "Weekly projections, re-scored under each league's own scoring_settings.":
     'Proyecciones semanales, recalculadas con la puntuación propia de cada liga.',
-  'we cannot tell which roster in this league is yours': 'no podemos identificar cuál es tu plantilla en esta liga',
+  // 'we cannot tell which roster in this league is yours' is already above, with the same Spanish.
   'no roster rows imported for your team yet': 'todavía no se importó la plantilla de tu equipo',
   "this league's player ids can't be matched to ours yet": 'todavía no podemos emparejar los ids de jugadores de esta liga con los nuestros',
   'this league publishes no scoring settings, so nothing here can be priced':
@@ -1115,6 +1115,16 @@ const spanish: Record<string, string> = {
     'ningún agente libre mejoraría tu alineación titular por partido',
   // Waiver Intelligence — why a target cannot play this week (lib/waiver-intel/waiverIntelService.ts).
   'on bye this week — he cannot score for you until next week': 'descansa esta semana: no puede sumarte puntos hasta la próxima',
+  // …its formula notes, shown word for word (the templated one is a pattern below).
+  'Bid suggestions are off until the player value chart syncs.': 'Las ofertas sugeridas se activan cuando se sincronice la tabla de valores.',
+  "The room's history counts every winning claim since this league began. The platform doesn't share losing bids.":
+    'El historial de la liga cuenta todos los reclamos ganados desde que empezó. La plataforma no comparte las ofertas perdidas.',
+  // …and the injury designations that rule a player out (lib/core-app/injuryStatus.ts `isRuledOut`). IR, PUP,
+  // NFI and IL are abbreviations a Spanish-reading manager sees on the platform too, so they stay.
+  // `Out` is already above (the standings zone), with the same Spanish.
+  Suspension: 'Suspendido',
+  Suspended: 'Suspendido',
+  'Injured Reserve': 'Lista de lesionados',
 }
 
 /** One part of the waiver board's lock sentence ("Games already kicked off are locked in: A, B and C."). */
@@ -1207,8 +1217,24 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   // Waiver Intelligence — a ruled-out target's reason line ("IR — he cannot play this week…").
   [
     /^(.+) — he cannot play this week, so any bid is a stash$/,
-    (m) => `${m[1]}: no puede jugar esta semana, así que cualquier oferta es para guardarlo`,
+    (m) => `${coreUiCopy(m[1]!, 'es')}: no puede jugar esta semana, así que cualquier oferta es para guardarlo`,
   ],
+  // …and each target's reasoning lines (lib/waiver-intel/waiverIntelService.ts).
+  [/^market value ([\d,.]+) \((.+) chart\)$/, (m) => `valor de mercado ${m[1]} (tabla ${m[2]})`],
+  [
+    /^suggested = min\((\d+)% of \$(\d+), \$\2 × value\/anchor\)$/,
+    (m) => `sugerida = mín(${m[1]}% de $${m[2]}, $${m[2]} × valor/ancla)`,
+  ],
+  [
+    /^this league's winning bids: median \$(\d+), p75 \$(\d+) — calibrate against the room$/,
+    (m) => `ofertas ganadoras en esta liga: mediana $${m[1]}, p75 $${m[2]}; compáralas con lo que paga la liga`,
+  ],
+  [/^fills your open (.+) slot$/, (m) => `ocupa tu puesto libre de ${m[1]}`],
+  [
+    /^How a bid is suggested: our own rule, not market data — a full FAAB budget is treated as worth about the (\d+)th-best player, and a player's bid is his share of that\.$/,
+    (m) => `Cómo se sugiere una oferta: es nuestra regla, no datos del mercado. El presupuesto FAAB completo equivale más o menos al jugador número ${m[1]}, y la oferta de cada jugador es su parte de eso.`,
+  ],
+  [/^No suggestion is more than (\d+)% of the budget\.$/, (m) => `Ninguna sugerencia supera el ${m[1]}% del presupuesto.`],
 ]
 
 export function coreUiCopy(english: string, language: string): string {
