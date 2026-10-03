@@ -1,6 +1,7 @@
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { FreeAgentBids as FreeAgentBidsData } from '@/lib/core-app/freeAgentBids'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * "Available in your leagues" — every league where he is a free agent (the strip's FA chips), each
@@ -24,9 +25,13 @@ export function FreeAgentBids({
   const n = data.rows.length
   return (
     <section className="af-card af-pf-fa" aria-labelledby="af-pf-fa-h">
-      <h3 className="af-label" id="af-pf-fa-h">
-        Available in {n} of your leagues
-      </h3>
+      {/* The "?" sits beside the h3, not in it (aria-labelledby), and only where there are bids to explain. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <h3 className="af-label" id="af-pf-fa-h">
+          Available in {n} of your leagues
+        </h3>
+        {!data.bidsLocked ? <TopicTip topic="faabBid" /> : null}
+      </div>
       {!data.bidsLocked && access ? <FreeUntilNote access={access} /> : null}
       <ul className="af-pf-fa-list">
         {data.rows.map((r) => (

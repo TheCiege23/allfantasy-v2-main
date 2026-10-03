@@ -8,6 +8,7 @@ import type { CareerPeers } from '@/lib/core-app/careerPeers'
 import type { CareerCoverageExtras, CareerRecordBook } from '@/lib/core-app/careerScreen'
 import { platformLabel } from '@/lib/core-app/rankingsEngine'
 import { CareerProgressChart } from './CareerProgressChart'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * The career brief's views. Every one renders absence as absence: an empty
@@ -22,7 +23,7 @@ const pct = (n: number | null) => (n == null ? '—' : `${(Math.round(n * 1000) 
 
 export function AccomplishmentStrip({ data }: { data: CareerData }) {
   const a = data.accomplishments
-  const tiles: Array<{ k: string; label: string; value: string; tone?: string; note?: string; muted?: boolean; title?: string }> = [
+  const tiles: Array<{ k: string; label: string; value: string; tone?: string; note?: string; muted?: boolean; tip?: ReactNode }> = [
     { k: 'titles', label: 'Championships', value: nf(a.championships), tone: 'warn' },
     {
       k: 'finals',
@@ -30,7 +31,7 @@ export function AccomplishmentStrip({ data }: { data: CareerData }) {
       value: a.finals == null ? 'Not recorded' : nf(a.finals),
       muted: a.finals == null,
       note: a.finals == null ? 'No stored playoff bracket to check' : `${nf(a.championships)} won · ${nf(a.finalsLost)} lost`,
-      title: a.finalsNote,
+      tip: <TopicTip topic="careerFinals" />,
     },
     {
       k: 'playoffs',
@@ -53,8 +54,11 @@ export function AccomplishmentStrip({ data }: { data: CareerData }) {
   return (
     <section className="af-crx-acc" aria-label="Accomplishments">
       {tiles.map((t) => (
-        <div key={t.k} className="af-crx-acc-tile" data-muted={t.muted ? '' : undefined} title={t.title}>
-          <span className="af-crx-acc-l">{t.label}</span>
+        <div key={t.k} className="af-crx-acc-tile" data-muted={t.muted ? '' : undefined}>
+          <span className="af-crx-acc-l">
+            {t.label}
+            {t.tip ? <> {t.tip}</> : null}
+          </span>
           <b className={`af-crx-acc-v${t.tone ? ` ${t.tone}` : ''}`}>{t.value}</b>
           {t.note ? <span className="af-crx-acc-n">{t.note}</span> : null}
         </div>
@@ -478,7 +482,9 @@ export function PeersView({ peers }: { peers: CareerPeers | null }) {
   return (
     <div className="af-crx-stack">
       <section className="af-c13-card">
-        <p className="af-c13-head">You vs your leagues</p>
+        <p className="af-c13-head">
+          You vs your leagues <TopicTip topic="careerPeersIndex" />
+        </p>
         <div className="af-crx-tablewrap">
           <table className="af-crx-table">
             <thead>

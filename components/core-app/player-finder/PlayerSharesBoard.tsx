@@ -6,6 +6,7 @@ import type { LeagueHolder, LeagueShareView } from '@/lib/core-app/playerSharesL
 import { shareOf } from '@/lib/core-app/playerSharesRank'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { TeamSplit } from '@/components/core-app/player-finder/TeamSplit'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * "YOUR SHARES" — the Player Finder home's board of the players you roster most (Phase 2).
@@ -57,9 +58,13 @@ export function PlayerSharesBoard({
   return (
     <section className="af-card af-pf-shares" aria-labelledby="af-pf-shares-h" data-mode={league ? 'league' : 'all'}>
       <header className="af-pf-shares-head">
-        <h3 className="af-label" id="af-pf-shares-h">
-          {league ? `Your shares · in ${league.leagueName}` : 'Your shares'}
-        </h3>
+        {/* Grouped so the head's space-between keeps the "?" beside the h3 (not in it: aria-labelledby). */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <h3 className="af-label" id="af-pf-shares-h">
+            {league ? `Your shares · in ${league.leagueName}` : 'Your shares'}
+          </h3>
+          <TopicTip topic="playerShares" />
+        </div>
         <span className="af-pf-shares-sub af-num">
           {playersHeld} players across {leaguesRead} {leaguesRead === 1 ? 'roster' : 'rosters'}
           {unsupportedLeagues > 0 ? ` · ${unsupportedLeagues} on a platform we can't read yet` : ''}

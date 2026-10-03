@@ -5,6 +5,7 @@ import { AfCrest } from '@/components/core-app/AfCrest'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CareerData } from '@/lib/core-app/career'
 import { chooseShareVideoFormat } from '@/lib/core-app/shareVideo'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-career-share.css'
 
 /**
@@ -504,7 +505,9 @@ export function CareerShare({
           {league ? (
             <div className="af-cs-block af-cs-wrapped">
               <div className="af-cs-blockhead">
-                <h2 className="af-cs-blocktitle">{wrapped?.season ?? 'Season'} recap</h2>
+                <h2 className="af-cs-blocktitle">
+                  {wrapped?.season ?? 'Season'} recap <TopicTip topic="wrappedRecap" />
+                </h2>
                 {wrapped?.commissioner ? (
                   <div className="af-cs-chips af-cs-chips--tight">
                     <button type="button" className="af-cs-chip" data-on={edition === 'manager'} onClick={() => setEdition('manager')}>My team</button>
@@ -546,7 +549,9 @@ export function CareerShare({
             <h2 className="af-cs-blocktitle">What&apos;s going on it</h2>
             <dl className="af-cs-stats">
               <div>
-                <dt>Level</dt>
+                <dt>
+                  Level <TopicTip topic="careerXp" />
+                </dt>
                 <dd className="af-num">
                   {career.level != null ? career.level : '—'}
                   {career.levelName ? <span className="af-cs-statsub">{career.levelName}</span> : null}

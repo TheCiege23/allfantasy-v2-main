@@ -3,6 +3,7 @@ import { kickoffClock } from '@/lib/core-app/lineupLock'
 import type { PlayerCardWeek } from '@/lib/core-app/playerCard'
 import type { PlayerNextGame } from '@/lib/core-app/playerDepth'
 import { SETTLED_GAMES, rankPhrase, type MatchupOutlook, type MatchupRead } from '@/lib/core-app/matchupOutlook'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * "Next game" — the opponent and kickoff, and the betting market's read of HIS offense this week
@@ -45,9 +46,13 @@ export function PlayerNextGames({
   const line = next.available ? marketLine(next.data.market) : null
   return (
     <section className="af-pf-block af-pf-next" aria-labelledby="af-pf-next-h">
-      <h3 className="af-label" id="af-pf-next-h">
-        Next game
-      </h3>
+      {/* The "?" sits beside the h3, not in it: the h3 names the section (aria-labelledby). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <h3 className="af-label" id="af-pf-next-h">
+          Next game
+        </h3>
+        <TopicTip topic="nextGameMarket" />
+      </div>
       {next.available ? (
         <p className="af-pf-next-game">
           <strong>
