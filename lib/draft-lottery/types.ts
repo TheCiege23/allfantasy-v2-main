@@ -51,7 +51,7 @@ export interface LotteryEligibleTeam {
   rosterId: string
   displayName: string
   teamIndex: number
-  /** 1-based rank (worst = 1). */
+  /** 1-based league rank, 1 = BEST (`LeagueTeam.currentRank`); the pool's worst has the highest. */
   rank: number
   wins: number
   losses: number
