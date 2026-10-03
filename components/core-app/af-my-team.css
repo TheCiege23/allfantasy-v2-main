@@ -2062,3 +2062,74 @@ li[data-kind='questionable'] .af-mt-check-tag {
   font-size: 12px;
   color: var(--muted);
 }
+
+/*
+ * ── Positional strength (2026-10-02) ────────────────────────────────────────
+ * Appended at depth 0. Side column on a wide page; after the roster on a narrow one (order: 1).
+ * Top third of the league in the good tone, bottom third in the bad tone — the same thirds the
+ * eye reads a 12-team ranking in.
+ */
+.af-mt-posstr {
+  order: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+.af-mt-posstr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-mt-posstr-list li {
+  display: grid;
+  grid-template-columns: 40px minmax(48px, 1fr) auto;
+  grid-template-areas: 'pos bar rank' '. meta meta';
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+  font-size: 13px;
+}
+.af-mt-posstr-pos {
+  grid-area: pos;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-mt-posstr-bar {
+  grid-area: bar;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--chip);
+  overflow: hidden;
+}
+.af-mt-posstr-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--muted);
+}
+.af-mt-posstr-list li[data-tone='good'] .af-mt-posstr-bar > span {
+  background: var(--good);
+}
+.af-mt-posstr-list li[data-tone='bad'] .af-mt-posstr-bar > span {
+  background: var(--bad);
+}
+.af-mt-posstr-rank {
+  grid-area: rank;
+  color: var(--text2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.af-mt-posstr-meta {
+  grid-area: meta;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-mt-posstr-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}

@@ -34,6 +34,8 @@ export type PositionStrength = {
   rank: number
   outOf: number
   playerCount: number
+  /** The league's median total at this position, so the rank has a distance attached. */
+  median?: number
 }
 
 export type RosterGrade = {
@@ -47,6 +49,12 @@ export type RosterGrade = {
   /** Strongest and weakest positions by league rank. Null when unrankable. */
   strongest: PositionStrength | null
   weakest: PositionStrength | null
+  /**
+   * EVERY rankable position, strongest first by percentile. The two above are its ends; the
+   * middle was computed and thrown away, which is exactly the view a manager wants when deciding
+   * where to trade from and where to trade for.
+   */
+  positions?: PositionStrength[]
   /** How many of YOUR players carried a price, of how many held. */
   pricedPlayers: number
   totalPlayers: number
@@ -248,6 +256,7 @@ export async function getRosterGrade(args: {
       value: Math.round(list[idx].total),
       rank: idx + 1,
       outOf: list.length,
+      median: Math.round(median(list.map((t) => t.total))),
       playerCount: mine.filter((id) => (priced.get(id)?.position ?? '').toUpperCase() === position)
         .length,
     })
@@ -263,6 +272,7 @@ export async function getRosterGrade(args: {
     median: Math.round(median(totals.map((t) => t.total))),
     strongest: strengths[0] ?? null,
     weakest: strengths.length > 1 ? strengths[strengths.length - 1] : null,
+    positions: strengths,
     pricedPlayers: mine.filter((id) => priced.has(id)).length,
     totalPlayers: mine.length,
     basis: { format, qbFormat, capturedAt: newest?.toISOString() ?? null, leagueScored },
