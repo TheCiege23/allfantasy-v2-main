@@ -79,6 +79,8 @@ import { loadLiveGameBadge } from '@/lib/core-app/liveGameBadgeLoader'
 import { loadLeagueShareView } from '@/lib/core-app/playerSharesLeague'
 import { resolveLeagueScope } from '@/lib/core-app/finderLeaguePicks'
 import { getFinderLeaguePicks } from '@/lib/core-app/finderLeaguePicksStore'
+import { getLeaguePreferences } from '@/lib/core-app/leaguePreferencesStore'
+import { applyLeagueOrder } from '@/lib/core-app/leaguePreferences'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import ScreenLoadError from '@/components/core-app/ScreenLoadError'
 import { getMyTeamData } from '@/lib/core-app/myTeam'
@@ -261,6 +263,7 @@ import {
   platformOf,
   SCOPE_COOKIE,
   scopeLabel,
+  serializeFavoriteIds,
   serializeHomeScope,
   sportOf,
   type HomeScope,
@@ -705,9 +708,14 @@ export default async function AfCorePage({
    * `rosterDetail: 'count'` — this page reads no roster off the list; every screen that needs a lineup
    * queries rosters itself. See the option's note in get-dashboard-league-list.ts for the census.
    */
-  const [leagueListPayload, pausedSyncKeys] = await Promise.all([
+  /*
+   * The account's favorite / hidden / ordered leagues (lib/core-app/leaguePreferences.ts), read in
+   * the same wave as the list it arranges. Never throws — no preferences means every league, in order.
+   */
+  const [leagueListPayload, pausedSyncKeys, leaguePrefs] = await Promise.all([
     getDashboardLeagueListForUser(userId, { rosterDetail: 'count' }).catch(() => null),
     getPausedSyncKeys(userId).catch(() => null),
+    getLeaguePreferences(userId),
   ])
   const leagues = (leagueListPayload?.leagues ?? []) as unknown as UserLeague[]
 
@@ -810,7 +818,12 @@ export default async function AfCorePage({
           .catch(() => null)
       : Promise.resolve(null)
 
-  const rail: RailLeague[] = playedLeagues.map((l) => ({
+  /*
+   * In the account's own order (leaguePreferences.ts). ORDER ONLY: `rail` also feeds every "pick a
+   * league" chooser, where a hidden league must stay reachable — the shell drops hidden ids from its
+   * rail rows itself (`hiddenLeagueIds` below).
+   */
+  const rail: RailLeague[] = applyLeagueOrder(playedLeagues, leaguePrefs.order).map((l) => ({
     id: l.id,
     name: l.name,
     platform: String(l.platform ?? 'manual').toLowerCase(),
@@ -1366,15 +1379,20 @@ export default async function AfCorePage({
    * already run on the full list; favorites are intersected with that list before use.
    */
   const cookieJar = await cookies()
+  /*
+   * The account's favorites once it has saved any (they follow the manager across devices,
+   * 2026-10-02); until then this device's cookie, as before. Either way intersected with the played
+   * list, so a stored id can only ever narrow.
+   */
   const favoriteIds = parseFavoriteIds(
-    cookieJar.get(FAVORITES_COOKIE)?.value,
+    leaguePrefs.favorites !== null ? serializeFavoriteIds(leaguePrefs.favorites) : cookieJar.get(FAVORITES_COOKIE)?.value,
     playedLeagues.map((l) => l.id),
   )
   const appliesHomeScope = activeKey === 'home' && segment !== 'dashboard-v2' && !selectedLeagueId
   const homeScope: HomeScope = appliesHomeScope
     ? parseHomeScope(sp[HOME_SCOPE_PARAM] ?? cookieJar.get(SCOPE_COOKIE)?.value)
     : { kind: 'all' }
-  const scopeLeagues = playedLeagues.map((l) => ({
+  const scopeLeagues = applyLeagueOrder(playedLeagues, leaguePrefs.order).map((l) => ({
     id: l.id,
     name: l.name,
     platform: platformOf(l),
@@ -1395,6 +1413,7 @@ export default async function AfCorePage({
     label: scopeLabel(homeScope, selectedScopeLabel),
     favoriteIds: [...favoriteIds],
     leagues: scopeLeagues,
+    hiddenIds: leaguePrefs.hidden,
   }
 
   recordRootDuration('af.shell_ms', shellStartedAt)
@@ -1534,6 +1553,7 @@ export default async function AfCorePage({
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
       leagues={rail}
+      hiddenLeagueIds={leaguePrefs.hidden}
       syncAge={{ label: syncAge.label, stale: syncAge.stale }}
       syncEligibleCount={syncEligibleCount}
       leagueHasScoredWeek={leagueHasScoredWeek}

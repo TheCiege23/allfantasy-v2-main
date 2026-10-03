@@ -28,6 +28,7 @@ import { CoreWelcomeTour } from '@/components/core-app/CoreWelcomeTour'
 import { matchLeagueSearchHits, type LeagueSearchHit } from '@/lib/core-app/topSearch'
 import { ShellSignalsContext, withPublishedSignals, type ShellSignals } from '@/components/core-app/shellSignals'
 import { ScopeSwitcher, type ScopeSwitcherLeague } from '@/components/core-app/ScopeSwitcher'
+import { withoutHidden } from '@/lib/core-app/leaguePreferences'
 import { isLeagueScreen } from '@/lib/core-app/leagueScreens'
 import { RAIL_WARM_DWELL_MS, railAutoPrefetchEnabled, shouldWarmRailLeague } from '@/components/core-app/railPrefetch'
 import { speculationGate } from '@/components/core-app/speculationGate'
@@ -270,6 +271,12 @@ export type AfCoreShellProps = {
   leagueChatPreview?: LeagueChatPreview | null
   leagues: RailLeague[]
   /**
+   * Leagues the account hid from its lists (lib/core-app/leaguePreferences.ts). Dropped from the
+   * rail's ROWS only — `leagues` itself stays whole, so the top search still finds a hidden league
+   * and the selected one still resolves. The open league is never dropped.
+   */
+  hiddenLeagueIds?: string[]
+  /**
    * This week's matchup per league id, for the expanded rail.
    *
    * Optional: the rail expands with or without it, and without it a row shows
@@ -326,6 +333,8 @@ export type AfCoreShellProps = {
     label: string
     favoriteIds: string[]
     leagues: ScopeSwitcherLeague[]
+    /** Leagues hidden from lists (lib/core-app/leaguePreferences.ts). Optional for older callers. */
+    hiddenIds?: string[]
   } | null
   /**
    * Does the selected league score IDP? Gates the Defense Hub nav entry.
@@ -1614,7 +1623,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    * Computed ONCE over exactly the rows the rail draws by name — a hub card draws its own
    * members — and the header reads the same label, so the two never disagree.
    */
-  const railRows = useMemo(() => groupLeagueHubs(leagues), [leagues])
+  const hiddenLeagueKey = (props.hiddenLeagueIds ?? []).join('.')
+  const railLeagues = useMemo(
+    () => withoutHidden(leagues, hiddenLeagueKey ? hiddenLeagueKey.split('.') : [], props.selectedLeagueId ?? null),
+    [leagues, hiddenLeagueKey, props.selectedLeagueId],
+  )
+  const hiddenRailCount = leagues.length - railLeagues.length
+  const railRows = useMemo(() => groupLeagueHubs(railLeagues), [railLeagues])
   const railLabels = useMemo(() => distinctLeagueLabels(railRows.filter((l) => !l.hub)), [railRows])
   const selectedLeague = leagues.find((league) => league.id === props.selectedLeagueId)
   const selectedLeagueName = selectedLeague ? (railLabels.get(selectedLeague.id) ?? selectedLeague.name) : null
@@ -1747,6 +1762,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           </span>
           <span className="af-rail-toggle-text">
             {leagues.length} {leagues.length === 1 ? 'league' : 'leagues'}
+            {/* The rail draws fewer rows than the count when some are hidden; say so. */}
+            {hiddenRailCount > 0 ? ` · ${hiddenRailCount} hidden` : ''}
             {railWeekLabel ? ` · ${railWeekLabel}` : ''}
             {props.liveGameCount && props.liveGameCount > 0 ? (
               <span className="af-rail-live-state">LIVE{railFreshLabel ? ` · ${railFreshLabel}` : ''}</span>
@@ -2122,6 +2139,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               selectedLeagueId={props.selectedLeagueId ?? null}
               favoriteIds={props.scope.favoriteIds}
               leagueScreen={isLeagueScreen(active)}
+              hiddenIds={props.scope.hiddenIds}
             />
           ) : null}
           {props.leagueFirst ? (

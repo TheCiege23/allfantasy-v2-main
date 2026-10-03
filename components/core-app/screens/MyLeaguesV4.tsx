@@ -47,6 +47,11 @@ import '@/components/core-app/af-my-leagues.css'
  */
 
 export type MyLeaguesV4Props = MyLeaguesData & {
+  /**
+   * Leagues the account hid from its lists (lib/core-app/leaguePreferences.ts). They leave the tiers
+   * and collect in a collapsed "Hidden leagues" section; a search still finds them in place.
+   */
+  hiddenIds?: string[]
   /** Where the "Import more" actions go. */
   importHref: string
   /** The add-league / re-sync surface this screen replaced at /leagues. */
@@ -115,6 +120,7 @@ export function MyLeaguesV4({
   notice,
   importHref,
   syncHref,
+  hiddenIds = [],
 }: MyLeaguesV4Props) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -126,9 +132,14 @@ export function MyLeaguesV4({
   const [expanded, setExpanded] = useState<Partial<Record<MyLeaguesTier, boolean>>>({})
 
   const q = query.trim().toLowerCase()
+  const hiddenKey = hiddenIds.join('.')
+  const hiddenSet = useMemo(() => new Set(hiddenKey ? hiddenKey.split('.') : []), [hiddenKey])
+  // Out of the tiers unless the reader is searching — then a hidden league is found where it lives.
+  const hiddenLeagues = useMemo(() => (q ? [] : leagues.filter((l) => hiddenSet.has(l.id))), [leagues, hiddenSet, q])
 
   const filtered = useMemo(() => {
     return leagues.filter((l) => {
+      if (!q && hiddenSet.has(l.id)) return false
       if (platform !== 'all' && String(l.platform).toLowerCase() !== platform) return false
       if (q && ![l.name, l.hub?.name, ...(l.hub?.members.map((m) => m.name) ?? [])].filter(Boolean).join(' ').toLowerCase().includes(q)) return false
       if (chip === 'needs' && l.tier !== 'needs') return false
@@ -144,7 +155,7 @@ export function MyLeaguesV4({
       }
       return true
     })
-  }, [leagues, platform, q, chip])
+  }, [leagues, platform, q, chip, hiddenSet])
 
   /* History is only searched when the "+ history" toggle is on — the handoff's
      "543 past seasons searchable via + history". */
@@ -418,6 +429,26 @@ export function MyLeaguesV4({
           </section>
         )
       })}
+
+      {/* ── Hidden ─────────────────────────────────────────────────────────── */}
+      {hiddenLeagues.length > 0 ? (
+        <details className="af-ml-tier" id="af-ml-hidden" data-testid="my-leagues-hidden">
+          <summary className="af-ml-tier-head">
+            <h2 className="af-ml-tier-title">
+              {copy('Hidden leagues')} <span className="af-ml-tier-n af-num">{hiddenLeagues.length}</span>
+            </h2>
+            <p className="af-ml-tier-blurb">
+              Hidden from your lists, still counted in your totals.{' '}
+              <Link href="/settings?tab=preferences&returnTo=%2Fleagues">Manage in Settings</Link>
+            </p>
+          </summary>
+          <div className="af-ml-grid" data-tier="quiet" data-view={view}>
+            {hiddenLeagues.map((l) => (
+              <LeagueCard key={l.id} league={l} tier={l.tier} view={view} />
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       {/* ── History ──────────────────────────────────────────────────────── */}
       {showHistory && filteredHistory.length > 0 ? (

@@ -76,6 +76,13 @@ type Props = {
    * then does picking a league keep you on it; a cross-league screen sends you to the league's home.
    */
   leagueScreen: boolean
+  /**
+   * Leagues the account hid from its lists (lib/core-app/leaguePreferences.ts). Left out of the
+   * league list below — but NOT out of the filter counts, which describe what each filter shows on
+   * Home, where a hidden league still counts. Searching still finds one, and the open league always
+   * shows.
+   */
+  hiddenIds?: string[]
 }
 
 function writeCookie(name: string, value: string | null, maxAgeSeconds: number | null) {
@@ -92,7 +99,7 @@ function writeCookie(name: string, value: string | null, maxAgeSeconds: number |
   }
 }
 
-export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, favoriteIds, leagueScreen }: Props) {
+export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, favoriteIds, leagueScreen, hiddenIds = [] }: Props) {
   const router = useRouter()
   const pathname = usePathname() ?? '/core'
   const [open, setOpen] = useState(false)
@@ -132,7 +139,9 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
   const labels = useMemo(() => distinctLeagueLabels(leagues), [leagues])
   const labelOf = (l: ScopeSwitcherLeague) => labels.get(l.id) ?? l.name
   const q = query.trim().toLowerCase()
+  const hiddenKey = hiddenIds.join('.')
   const shownLeagues = useMemo(() => {
+    const hidden = new Set(hiddenKey ? hiddenKey.split('.') : [])
     const matched = q
       ? leagues.filter(
           (l) =>
@@ -140,10 +149,10 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
             l.sport.toLowerCase() === q ||
             platformLabel(l.platform).toLowerCase().includes(q),
         )
-      : leagues
+      : leagues.filter((l) => !hidden.has(l.id) || l.id === selectedLeagueId)
     // Starred first, then the order the rail uses (by name) — stable within each group.
     return [...matched].sort((a, b) => Number(favorites.has(b.id)) - Number(favorites.has(a.id)))
-  }, [leagues, labels, favorites, q])
+  }, [leagues, labels, favorites, q, hiddenKey, selectedLeagueId])
 
   const filterHref = (value: string | null) =>
     value == null ? `/core?${HOME_SCOPE_PARAM}=all` : `/core?${HOME_SCOPE_PARAM}=${encodeURIComponent(value)}`
@@ -164,6 +173,16 @@ export function ScopeSwitcher({ leagues, scopeValue, label, selectedLeagueId, fa
     else next.add(id)
     setFavorites(next)
     writeCookie(FAVORITES_COOKIE, next.size ? serializeFavoriteIds(next) : null, 60 * 60 * 24 * 365)
+    /*
+     * And to the account, so a star follows the manager to another device (2026-10-02). The cookie
+     * stays as this device's fallback until a first save exists; the server list wins after that.
+     * Fire-and-forget: a failed save leaves the cookie, which is exactly the old behaviour.
+     */
+    void fetch('/api/core/league-preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ field: 'favorites', leagueIds: [...next] }),
+    }).catch(() => undefined)
     // The favorites view is the only one whose contents a star changes.
     if (scopeValue === 'fav' && !selectedLeagueId) router.refresh()
   }
