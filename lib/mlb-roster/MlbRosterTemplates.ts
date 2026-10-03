@@ -23,7 +23,7 @@ export const MLB_ROSTER_SLOTS: RosterSlotDef[] = [
   // Pitchers
   { key: 'SP', label: 'Starting Pitcher', shortLabel: 'SP', color: '#ef4444', category: 'offense', eligiblePositions: ['SP'], defaultCount: 2, minCount: 0, maxCount: 7 },
   { key: 'RP', label: 'Relief Pitcher', shortLabel: 'RP', color: '#fb923c', category: 'offense', eligiblePositions: ['RP'], defaultCount: 2, minCount: 0, maxCount: 5 },
-  { key: 'P', label: 'Pitcher (Any)', shortLabel: 'P', color: '#dc2626', category: 'flex', eligiblePositions: ['SP', 'RP'], defaultCount: 3, minCount: 0, maxCount: 7 },
+  { key: 'P', label: 'Pitcher (Any)', shortLabel: 'P', color: '#dc2626', category: 'flex', eligiblePositions: ['SP', 'RP', 'P'], defaultCount: 3, minCount: 0, maxCount: 15 },
   // Bench / Reserve
   { key: 'BN', label: 'Bench', shortLabel: 'BN', color: '#4b5563', category: 'bench', eligiblePositions: [], defaultCount: 6, minCount: 0, maxCount: 20 },
   { key: 'IL', label: 'Injured List', shortLabel: 'IL', color: '#ef4444', category: 'reserve', eligiblePositions: [], defaultCount: 2, minCount: 0, maxCount: 8 },

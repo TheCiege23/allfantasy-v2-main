@@ -22,6 +22,16 @@ beforeEach(() => {
 })
 
 describe('imported roster materialization recovery', () => {
+  it('does not label next-season baseball carryover in season before opening day', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-03T12:00:00Z'))
+    try {
+      db.league.findUnique.mockResolvedValue({ sport: 'MLB', season: 2027, settings: { importCarryover: { playerCount: 2 } } })
+      db.redraftRosterPlayer.count.mockResolvedValue(2)
+      expect(await finalizeImportedCarryover('baseball')).toMatchObject({ complete: true })
+      expect(db.league.update).toHaveBeenCalledWith({ where: { id: 'baseball' }, data: { status: 'active', lifecycleState: 'post_draft' } })
+    } finally { vi.useRealTimers() }
+  })
   it('keeps the league in setup until all imported players are present, then activates it on retry', async () => {
     db.redraftRosterPlayer.count.mockResolvedValueOnce(1).mockResolvedValueOnce(2)
 

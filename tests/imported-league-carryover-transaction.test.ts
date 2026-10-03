@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { carryOverImportedLeague } from '@/lib/league-creation/canonical/carryOverImportedLeague'
+import fixture from './fixtures/fantrax/mlb-points-public.json'
 
 function transaction() {
   const teams = [
@@ -16,7 +17,18 @@ function transaction() {
         where.id === 'source' ? { platform: 'sleeper', sport: 'NFL' } : { settings: { existing: true } }),
       update: vi.fn(),
     },
-    leagueTeam: { findMany: vi.fn().mockResolvedValue(teams), update: vi.fn() },
+    leagueTeam: { findMany: vi.fn().mockResolvedValue(teams), update: vi.fn().mockResolvedValue({ id: 'native-team' }) },
+    leagueSeason: { findMany: vi.fn().mockResolvedValue([]), createMany: vi.fn() },
+    matchupFact: { findMany: vi.fn().mockResolvedValue([]), createMany: vi.fn() },
+    draftFact: { findMany: vi.fn().mockResolvedValue([]), createMany: vi.fn() },
+    transactionFact: { findMany: vi.fn().mockResolvedValue([]), createMany: vi.fn() },
+    seasonStandingFact: { findMany: vi.fn().mockResolvedValue([]), createMany: vi.fn() },
+    leagueDynastySeason: { findMany: vi.fn().mockResolvedValue([]), createMany: vi.fn() },
+    rosterSnapshot: { findMany: vi.fn().mockResolvedValue([]), createMany: vi.fn() },
+    seasonResult: { findMany: vi.fn().mockResolvedValue([]), createMany: vi.fn() },
+    leagueRosterConfig: { upsert: vi.fn() },
+    leagueScoringOverride: { deleteMany: vi.fn(), createMany: vi.fn() },
+    scoringSettingsSnapshot: { updateMany: vi.fn() },
     roster: {
       findMany: vi.fn().mockResolvedValue(rosters),
       findUnique: vi.fn().mockImplementation(({ where }: { where: { id: string } }) => ({ id: where.id, platformUserId: where.id })),
@@ -38,6 +50,30 @@ function transaction() {
 }
 
 describe('standalone carryover transaction', () => {
+  it('preserves MLB rules and history while translating owned players into native IDs', async () => {
+    const tx = transaction()
+    tx.league.findUnique.mockImplementation(({ where }) => where.id === 'source' ? {
+      platform: 'fantrax', sport: 'MLB', season: 2026,
+      settings: { scoringSettings: { format: 'points', rules: { hr: 1 } }, fantrax_settings: fixture.info },
+    } : { settings: { existing: true } })
+    tx.playerIdentityMap.findMany.mockResolvedValue([
+      { fantraxId: 'sleeper-1', rollingInsightsId: 'native-1', canonicalName: 'First Player', position: 'OF', currentTeam: 'NYM' },
+      { fantraxId: 'sleeper-2', rollingInsightsId: 'native-2', canonicalName: 'Second Player', position: 'SP', currentTeam: 'NYY' },
+    ] as never)
+    tx.matchupFact.findMany.mockResolvedValue([{ matchupId: 'old-matchup', leagueId: 'source', sport: 'MLB', season: 2026, weekOrPeriod: 12, teamA: 'seat-1', teamB: 'seat-2', scoreA: 10, scoreB: 8, winnerTeamId: 'seat-1' }] as never)
+    expect(await carryOverImportedLeague(tx as never, { sourceLeagueId: 'source', targetLeagueId: 'native', creatorUserId: 'creator', sport: 'MLB', teamCount: 2 })).toBe(2)
+    expect(tx.roster.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ playerData: expect.objectContaining({ players: ['native-1'] }) }) }))
+    expect(tx.leagueScoringOverride.createMany).toHaveBeenCalledWith({ data: expect.arrayContaining([
+      expect.objectContaining({ statKey: 'home_run', pointsValue: 1 }),
+      expect.objectContaining({ statKey: 'hold', pointsValue: 0 }),
+    ]) })
+    expect(tx.matchupFact.createMany).toHaveBeenCalledWith({ data: [expect.objectContaining({ leagueId: 'native', season: 2026, scoreA: 10, scoreB: 8 })] })
+    expect(tx.league.update).toHaveBeenCalledWith(expect.objectContaining({ data: { settings: expect.objectContaining({
+      mlb_scoring_config: expect.objectContaining({ presetKey: 'custom', rules: expect.objectContaining({ home_runs: 1, holds: 0 }) }),
+      mlb_roster_config: expect.objectContaining({ slots: expect.objectContaining({ UTIL: 1, P: 9, BN: 8 }) }),
+      importCarryover: expect.objectContaining({ sourceSeason: 2026, history: expect.objectContaining({ matchups: 1 }) }),
+    }) } }))
+  })
   it('carries claimed manager seats and produces a completed native draft snapshot', async () => {
     const tx = transaction()
     const count = await carryOverImportedLeague(tx as never, {

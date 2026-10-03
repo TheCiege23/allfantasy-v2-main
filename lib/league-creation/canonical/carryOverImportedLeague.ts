@@ -3,6 +3,9 @@ import { leagueIdentityColumns } from '@/lib/player-identity/externalIdNamespace
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { rosterSourceTeamId } from '@/lib/league-import/importedRosterIdentity'
+import { importedMlbScoring } from './importedMlbScoring'
+import { copyImportedHistory } from './copyImportedHistory'
+import { importedMlbRoster } from './importedMlbRoster'
 
 type Tx = Prisma.TransactionClient
 
@@ -108,7 +111,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   teamCount: number
 }): Promise<number> {
   const [source, target, teams, rosters, slots, session] = await Promise.all([
-    tx.league.findUnique({ where: { id: args.sourceLeagueId }, select: { platform: true, sport: true } }),
+    tx.league.findUnique({ where: { id: args.sourceLeagueId }, select: { platform: true, sport: true, settings: true, season: true } }),
     tx.league.findUnique({ where: { id: args.targetLeagueId }, select: { settings: true } }),
     tx.leagueTeam.findMany({
       where: { leagueId: args.sourceLeagueId, lifecycleState: { not: 'ARCHIVED' } },
@@ -120,6 +123,12 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   ])
   if (!source || !target || isNativePlatform(source.platform) || String(source.sport) !== args.sport) {
     refuse('The imported league sport must match the standalone league.')
+  }
+  let mlbScoring: ReturnType<typeof importedMlbScoring> | undefined
+  let mlbRoster: ReturnType<typeof importedMlbRoster> | undefined
+  if (args.sport === 'MLB') {
+    try { mlbScoring = importedMlbScoring(source.settings); mlbRoster = importedMlbRoster(source.settings) }
+    catch (error) { refuse(error instanceof Error ? error.message : 'Imported scoring cannot be verified.') }
   }
   if (teams.length !== args.teamCount || slots.length !== args.teamCount || !session) {
     refuse('Team count must match the imported league exactly to carry over every roster.')
@@ -178,6 +187,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   const picks: Prisma.DraftPickCreateManyInput[] = []
   const playerPicksBySlot: Array<Array<{ nativeId: string; name: string; position: string; team: string | null }>> = []
   const draftSlotOrder: Array<{ slot: number; rosterId: string; displayName: string; open: boolean }> = []
+  const teamIds = new Map<string, string>()
   for (let i = 0; i < orderedTeams.length; i++) {
     const team = orderedTeams[i]!
     const sourceRoster = sourceRosters[i]!
@@ -197,7 +207,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
         settings: { openSlot: !claimedUserId, commissioner: i === 0 },
       },
     })
-    await tx.leagueTeam.update({
+    const nativeTeam = await tx.leagueTeam.update({
       where: { leagueId_externalId: { leagueId: args.targetLeagueId, externalId: targetRoster.id } },
       data: {
         teamName: team.teamName,
@@ -210,6 +220,8 @@ export async function carryOverImportedLeague(tx: Tx, args: {
         role: i === 0 ? 'commissioner' : 'member',
       },
     })
+    teamIds.set(team.id, nativeTeam.id)
+    teamIds.set(team.externalId, nativeTeam.id)
     if (claimedUserId && i > 0) {
       await tx.redraftLeagueMember.create({ data: { leagueId: args.targetLeagueId, userId: claimedUserId, role: 'MEMBER', teamNumber: slot.slotNumber } })
       await tx.leagueEntrySlot.updateMany({ where: { leagueId: args.targetLeagueId, slotNumber: slot.slotNumber }, data: { status: 'FILLED' } })
@@ -244,10 +256,28 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     nextOverallPick: picks.length + 1, slotOrder: draftSlotOrder as Prisma.InputJsonValue,
   } })
   if (picks.length) await tx.draftPick.createMany({ data: picks })
+  const history = await copyImportedHistory(tx, args.sourceLeagueId, args.targetLeagueId, teamIds)
+  if (mlbScoring) {
+    const slots = mlbRoster!.config.sections[0]!.slots
+    await tx.leagueRosterConfig.upsert({ where: { leagueId: args.targetLeagueId }, create: { leagueId: args.targetLeagueId, templateId: `custom-MLB-${args.targetLeagueId}`, overrides: { customSlots: slots, customTemplateKey: 'imported', isCustom: true } }, update: { overrides: { customSlots: slots, customTemplateKey: 'imported', isCustom: true } } })
+    await tx.leagueScoringOverride.deleteMany({ where: { leagueId: args.targetLeagueId } })
+    await tx.leagueScoringOverride.createMany({ data: Object.entries(mlbScoring.templatePoints).map(([statKey, pointsValue]) => ({ leagueId: args.targetLeagueId, statKey, pointsValue, enabled: true })) })
+    await tx.scoringSettingsSnapshot.updateMany({ where: { leagueId: args.targetLeagueId }, data: { scoringMode: 'points', scoringFormat: 'custom', effectiveRules: mlbScoring.scoringSettings as Prisma.InputJsonValue, overrides: mlbScoring.categoryPoints } })
+  }
   await tx.league.update({ where: { id: args.targetLeagueId }, data: {
     settings: {
       ...asRecord(target.settings),
-      importCarryover: { sourceLeagueId: args.sourceLeagueId, teamCount: teams.length, playerCount: picks.length, copiedAt: new Date().toISOString() },
+      ...(mlbScoring ? {
+        roster: mlbRoster,
+        rosterSettings: mlbRoster,
+        starter_slots: mlbRoster?.starterSlots,
+        bench_slots: mlbRoster?.benchSlots,
+        mlb_roster_config: { templateKey: 'imported', templateLabel: 'Imported roster', slots: mlbRoster!.config.sections[0]!.slots, isCustom: true, lastUpdatedBy: args.creatorUserId, lastUpdatedAt: new Date().toISOString() },
+        scoringSettings: mlbScoring.scoringSettings,
+        sportConfig: { ...asRecord(asRecord(target.settings).sportConfig), scoringMode: 'points', categoryPoints: mlbScoring.categoryPoints },
+        mlb_scoring_config: { presetKey: 'custom', source: 'CUSTOM', rules: mlbScoring.uiRules, lastUpdatedBy: args.creatorUserId, lastUpdatedAt: new Date().toISOString() },
+      } : {}),
+      importCarryover: { sourceLeagueId: args.sourceLeagueId, sourceSeason: source.season, history, teamCount: teams.length, playerCount: picks.length, copiedAt: new Date().toISOString() },
     } as Prisma.InputJsonValue,
   } })
   return picks.length

@@ -7,6 +7,9 @@ import { getLeagueRole, isCommissionerRole } from '@/lib/league/permissions'
 import { isNativePlatform } from '@/lib/dashboard/platform-label'
 import { createStateFromImportedLeague } from '@/lib/create-league-v2/import-template'
 import { CreateLeaguePageClient } from './CreateLeaguePageClient'
+import { importedMlbScoring } from '@/lib/league-creation/canonical/importedMlbScoring'
+import { importedMlbRoster } from '@/lib/league-creation/canonical/importedMlbRoster'
+import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,7 +47,28 @@ export default async function CreateLeaguePage(
     redirect(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
   }
 
-  if (!fromLeagueId) return <CreateLeaguePageClient userId={userId} />
+  if (!fromLeagueId) {
+    const candidates = allowE2EBypass ? [] : await prisma.league.findMany({
+      where: { OR: [{ userId }, { teams: { some: { claimedByUserId: userId, OR: [{ isCommissioner: true }, { isCoCommissioner: true }] } } }] },
+      select: { id: true, name: true, platform: true, sport: true },
+      orderBy: { updatedAt: 'desc' },
+    })
+    const imports = candidates.filter(league => !isNativePlatform(league.platform))
+    return <>
+      <section className="mx-auto max-w-5xl px-6 pt-6" aria-label="League import options">
+        <h2 className="text-lg font-bold">Bring your league to AllFantasy</h2>
+        <p className="mt-2 text-sm">Import from a supported platform, then review the rules and make the league native.</p>
+        <a className="mt-3 inline-block font-bold underline" href="/import">Import a league</a>
+        {imports.length > 0 && <details className="mt-4 rounded-xl border p-4">
+          <summary className="cursor-pointer font-bold">Make an already imported league native</summary>
+          <ul className="mt-3 space-y-3">{imports.map(league => <li key={league.id}>
+            <a className="underline" href={`/create-league?fromLeague=${encodeURIComponent(league.id)}`}>{league.name || 'Imported league'} · {String(league.sport)}</a>
+          </li>)}</ul>
+        </details>}
+      </section>
+      <CreateLeaguePageClient userId={userId} />
+    </>
+  }
 
   const source = await prisma.league.findUnique({
     where: { id: fromLeagueId },
@@ -57,6 +81,8 @@ export default async function CreateLeaguePage(
       leagueVariant: true,
       leagueSize: true,
       scoringPresetId: true,
+      season: true,
+      settings: true,
       leagueSettings: { select: { draftType: true } },
     },
   })
@@ -83,12 +109,26 @@ export default async function CreateLeaguePage(
     )
   }
 
+  let reviewError: string | undefined
+  let baseballReview: ReturnType<typeof importedMlbScoring> | undefined
+  if (String(source.sport) === 'MLB') {
+    try { baseballReview = importedMlbScoring(source.settings); importedMlbRoster(source.settings) }
+    catch (error) { reviewError = error instanceof Error ? error.message : 'Imported settings need review.' }
+  }
   return (
+    <>
+    <section className="mx-auto max-w-5xl px-6 pt-6" aria-label="Native import review">
+      <h2 className="text-lg font-bold">Review native carryover</h2>
+      <p className="mt-2 text-sm">Source season: {source.season ?? 'Unknown'}. Native season: {resolveLeagueCreationSeason(String(source.sport))}. All {currentTeamCount} teams and their current rosters carry over. Available history is archived; past results are not rescored.</p>
+      {baseballReview && <p className="mt-2 text-sm">Imported points rules: {Object.entries(baseballReview.categoryPoints).filter(([, value]) => value !== 0).map(([key, value]) => `${key}: ${value}`).join(' · ') || 'All categories score zero'}.</p>}
+      {reviewError && <p role="alert" className="mt-3 rounded-xl border border-amber-500 p-4">{reviewError} Native creation will stop until these settings can be preserved.</p>}
+    </section>
     <CreateLeaguePageClient
       userId={userId}
       importSourceLeagueId={source.id}
       importTemplate={importTemplate}
       importSourceName={source.name?.trim() || 'Imported League'}
     />
+    </>
   )
 }

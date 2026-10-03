@@ -2903,7 +2903,7 @@ export function ImportV4({
                   href={`/create-league?fromLeague=${encodeURIComponent(phase.leagueId)}`}
                   className="af-btn af-btn--ghost af-done-alt"
                 >
-                  Create a standalone league from this import
+                  Make this league native to AllFantasy
                 </Link>
               </>
             ) : null}
