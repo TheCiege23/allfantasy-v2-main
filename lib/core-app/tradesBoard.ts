@@ -184,7 +184,7 @@ const EMPTY: TradesBoardData = {
   currentWeek: null,
 }
 
-const ROW_CAP = 10
+export const ROW_CAP = 10
 
 /** Trades to price per league. Enough to grade the latest without a wide read. */
 const TRADES_PER_LEAGUE = 4
@@ -877,10 +877,42 @@ export async function getTradesBoard(
    * `runWithConcurrency` returns results in INPUT order and the map is filled from that array, so
    * the board reads identically to the sequential loop; the bound keeps one board from taking the
    * whole connection pool.
+   *
+   * 🛑 AND ONLY THE LEAGUES WHOSE CARDS WILL BE SHOWN (2026-10-03). The board returns `ROW_CAP`
+   * windows, and graded all 40 of the owner's leagues to show 10 — after the pool, per-league chart
+   * builds (1–4s each, cold) were still most of the board. Nothing the ordering reads comes from a
+   * grade: `byTradeUrgency` and `isFreshTrade` read the trade row's season, week and date plus the
+   * deadline and the trade count. So the shortlist is sorted on those row facts with the same
+   * comparator, over `mine` in the same order — `Array.prototype.sort` is stable — and it picks the
+   * same ten, in the same order, that sorting the fully graded windows did.
    */
+  const rowFacts = new Map<string, { at: string | null; season: number | null; week: number | null }>()
+  for (const t of firstByLeague.values()) {
+    rowFacts.set(t.leagueId, { at: t.tradeDate ? t.tradeDate.toISOString() : null, season: t.season ?? null, week: t.week ?? null })
+  }
+  const shortlist = mine
+    .map((c) => {
+      const l = c.league!
+      const d = readDeadline(l.settings)
+      const facts = rowFacts.get(l.id) ?? null
+      return {
+        leagueId: l.id,
+        weeksLeft: d.week != null && currentWeek != null ? d.week - currentWeek : null,
+        deadlineWeek: d.week,
+        noDeadline: d.none,
+        tradesOnFile: countByLeague.get(l.id) ?? 0,
+        freshTrade: isFreshTrade(facts, l.season, currentWeek),
+        latest: facts,
+      }
+    })
+    .sort(byTradeUrgency)
+    .slice(0, ROW_CAP)
+  const shownLeagueIds = new Set(shortlist.map((row) => row.leagueId))
+
   const latestByLeague = new Map<string, BoardTrade>()
 
-  const gradedCards = await runWithConcurrency([...firstByLeague.values()], BOARD_GRADE_CONCURRENCY, async (t) => {
+  const toGrade = [...firstByLeague.values()].filter((t) => shownLeagueIds.has(t.leagueId))
+  const gradedCards = await runWithConcurrency(toGrade, BOARD_GRADE_CONCURRENCY, async (t) => {
     const league = { id: t.leagueId }
     const h = { sleeperUsername: t.username }
     /*
@@ -1005,6 +1037,8 @@ export async function getTradesBoard(
     const l = c.league!
     const d = readDeadline(l.settings)
     if (!d.known) deadlineUnknown++
+    // Counted over every league above; a card is built only for the shortlist.
+    if (!shownLeagueIds.has(l.id)) continue
 
     const weeksLeft =
       d.week != null && currentWeek != null ? d.week - currentWeek : null

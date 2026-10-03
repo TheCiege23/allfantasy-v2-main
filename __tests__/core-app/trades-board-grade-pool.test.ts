@@ -9,13 +9,14 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const h = vi.hoisted(() => ({ leagues: 10, inFlight: 0, maxInFlight: 0, finishOrder: [] as string[] }))
+const h = vi.hoisted(() => ({ leagues: 10, freshFrom: 99, graded: [] as string[], inFlight: 0, maxInFlight: 0, finishOrder: [] as string[] }))
 
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/decision-os/trade/completedTradeGrade', () => ({
   completedTradeGraderFor: async () => ({}),
   gradeArchivedTrade: async (_grader: unknown, input: { original: { afLeagueId: string } }) => {
     const id = input.original.afLeagueId
+    h.graded.push(id)
     h.inFlight += 1
     h.maxInFlight = Math.max(h.maxInFlight, h.inFlight)
     // Later leagues finish FIRST, so completion order is the reverse of input order.
@@ -27,11 +28,11 @@ vi.mock('@/lib/decision-os/trade/completedTradeGrade', () => ({
   },
 }))
 vi.mock('@/lib/prisma', () => {
-  const ids = Array.from({ length: h.leagues }, (_, i) => i)
+  const ids = () => Array.from({ length: h.leagues }, (_, i) => i)
   const rows: Record<string, (args: { where?: Record<string, unknown> }) => unknown[]> = {
     leagueTeam: (args) =>
       args.where?.claimedByUserId
-        ? ids.map((i) => ({
+        ? ids().map((i) => ({
             leagueId: `L${i}`,
             league: {
               id: `L${i}`,
@@ -48,13 +49,13 @@ vi.mock('@/lib/prisma', () => {
             },
           }))
         : [],
-    leagueTradeHistory: () => ids.map((i) => ({ id: `H${i}`, sleeperLeagueId: `S${i}`, sleeperUsername: '111' })),
+    leagueTradeHistory: () => ids().map((i) => ({ id: `H${i}`, sleeperLeagueId: `S${i}`, sleeperUsername: '111' })),
     leagueTrade: () =>
-      ids.map((i) => ({
+      ids().map((i) => ({
         transactionId: `T${i}`,
         historyId: `H${i}`,
         season: 2026,
-        week: 3,
+        week: i >= h.freshFrom ? 4 : 1,
         tradeDate: new Date(Date.UTC(2026, 8, 20, i)),
         playersGiven: ['4046'],
         playersReceived: ['6794'],
@@ -80,9 +81,12 @@ vi.mock('@/lib/prisma', () => {
   return { prisma }
 })
 
-import { BOARD_GRADE_CONCURRENCY, getTradesBoard } from '@/lib/core-app/tradesBoard'
+import { BOARD_GRADE_CONCURRENCY, ROW_CAP, getTradesBoard } from '@/lib/core-app/tradesBoard'
 
 beforeEach(() => {
+  h.leagues = 10
+  h.freshFrom = 99
+  h.graded = []
   h.inFlight = 0
   h.maxInFlight = 0
   h.finishOrder = []
@@ -107,5 +111,22 @@ describe('Trades board grading pool', () => {
       expect(tx).toBe(`T${n}`)
       expect(reason).toBe(`ungraded-L${n}`)
     }
+  })
+
+  it('🛑 grades ONLY the leagues whose cards are shown, and picks the same ones in the same order', async () => {
+    // 14 leagues, a ${ROW_CAP}-card board. Leagues 10–13 traded this week, so they lead; the rest tie
+    // on everything the sort reads and keep input order. Grading must follow the cut, not precede it.
+    h.leagues = 14
+    h.freshFrom = 10
+    const board = await getTradesBoard('u1', 4)
+    const expected = ['L13', 'L12', 'L11', 'L10', 'L0', 'L1', 'L2', 'L3', 'L4', 'L5']
+    expect(ROW_CAP).toBe(expected.length)
+    expect(board.windows.map((w) => w.leagueId)).toEqual(expected)
+    expect([...h.graded].sort()).toEqual([...expected].sort())
+    // Every shown card carries its OWN league's grade, and the cut leagues were never graded.
+    for (const w of board.windows) expect(w.latest?.withheldReason).toBe(`ungraded-${w.leagueId}`)
+    for (const cut of ['L6', 'L7', 'L8', 'L9']) expect(h.graded).not.toContain(cut)
+    // The count of leagues considered still covers all of them.
+    expect(board.considered).toBe(14)
   })
 })
