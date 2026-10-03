@@ -26,7 +26,8 @@
  *
  * The weekly recap already runs for every Sleeper league (`/api/cron/weekly-awards`,
  * Tuesdays, no opt-in). Its switch here is an OPT-OUT that route now honours; it
- * defaults on for Sleeper and is unavailable elsewhere, which is the truth.
+ * defaults on for Sleeper. Native leagues can opt in; their recap reads finalized
+ * AllFantasy matchups from the same Tuesday cron.
  *
  * The other four are sent by `runCommissionerRecipes`, riding the daily
  * `/api/cron/commissioner-workspace-refresh` fire. That sender is OFF until the
@@ -81,8 +82,12 @@ export const RECIPES: RecipeDefinition[] = [
     label: 'Weekly recap',
     description: 'Results, the top of the table and the week’s awards, counted from real matchups.',
     cadence: 'Tuesdays',
-    unavailableReason: (league) =>
-      league.platform.toLowerCase() === 'sleeper' ? null : 'The weekly recap is built from Sleeper’s week feed, so it runs for Sleeper leagues only.',
+    unavailableReason: (league) => {
+      const platform = league.platform.toLowerCase()
+      return platform === 'sleeper' || ['manual', 'allfantasy', 'af', 'native'].includes(platform)
+        ? null
+        : 'Weekly recaps require a Sleeper week feed or finalized AllFantasy matchups.'
+    },
   },
   {
     key: 'inactivityWarning',
