@@ -14,6 +14,8 @@ vi.mock('@/components/notification-settings/LeagueNotificationOverridesCard', ()
 }))
 vi.mock('@/components/notifications/EnableWebPushCard', () => ({ EnableWebPushCard: () => null }))
 vi.mock('@/components/notifications/IosAppPushCard', () => ({ IosAppPushCard: () => null }))
+// Nested in the same section and fetching its own data; stubbed like the other children (2026-10-03).
+vi.mock('@/components/settings/TeamFollowsSettingsCard', () => ({ default: () => null }))
 vi.mock('@/components/i18n/LanguageProviderClient', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/components/i18n/LanguageProviderClient')>()
   return { ...actual, useLanguage: () => actual.defaultLanguageValue }

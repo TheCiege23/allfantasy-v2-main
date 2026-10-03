@@ -10,6 +10,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
 import { SmsOptInCard } from '@/components/notifications/SmsOptInCard'
+import { TeamFollowPrompt } from '@/components/follows/TeamFollowPrompt'
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
@@ -426,6 +427,8 @@ export type AfCoreShellProps = {
   profile?: { name: string | null; imageUrl: string | null } | null
   /** No live SMS consent for the current number: show the "Get alerts by text" nudge on home. */
   smsOptInEligible?: boolean
+  /** Show the one-time "follow your teams" prompt on home (decided server-side). */
+  teamFollowPromptEligible?: boolean
   /**
    * Games in progress right now, for the Live scores badge. Same rule as every
    * other badge here: only rendered when something is actually live, never a
@@ -2263,6 +2266,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           */}
           {active === 'home' ? <GameDayAlertsBanner /> : null}
           {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
+          {active === 'home' ? <TeamFollowPrompt eligible={Boolean(props.teamFollowPromptEligible)} /> : null}
           {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
           <CoreWelcomeTour leagueCount={leagues.length} />
           {/*
