@@ -77,6 +77,11 @@ export interface UserProfileForSettings {
   userId: string
   username: string
   email: string | null
+  /**
+   * The address's Unsubscribe state (lib/email/emailSubscription). Set by getSettingsSnapshot;
+   * absent on profiles built elsewhere, which the dispatcher treats as "no opt-out known".
+   */
+  emailSubscription?: import("@/lib/email/emailSubscription").EmailSubscriptionState
   displayName: string | null
   profileImageUrl: string | null
   avatarPreset: string | null
@@ -183,4 +188,6 @@ export interface SettingsSavePayload {
   profile?: ProfileUpdatePayload
   settings?: UserSettingsUpdatePayload
   aiSettings?: Record<string, boolean>
+  /** Resume alert emails after an Unsubscribe (lib/email/emailSubscription.resumeAlertEmails). */
+  emailResubscribe?: boolean
 }

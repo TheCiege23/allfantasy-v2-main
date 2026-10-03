@@ -1145,6 +1145,10 @@ export const translationsEsParity: Record<string, string> = {
   "settings.notifications.deliveryMasters": "Maestros de entrega",
   "settings.notifications.deliveryMixHint":
     "Si las categorías mezclan estados, el interruptor queda apagado hasta que coincidan todas; al cambiarlo aplica a todas.",
+  "settings.notifications.emailUnsubscribed":
+    "Te diste de baja de los correos de alertas el {{date}}, así que no se envía ninguno aunque Correo esté activado. Los avisos de la cuenta siguen llegando.",
+  "settings.notifications.resumeEmail": "Volver a activar los correos de alertas",
+  "settings.notifications.resumeEmailError": "No se pudieron volver a activar tus correos de alertas. Inténtalo de nuevo.",
   "settings.notifications.discard": "Descartar",
   "settings.notifications.emailAll": "Correo (todas las categorías)",
   "settings.notifications.globalHint":

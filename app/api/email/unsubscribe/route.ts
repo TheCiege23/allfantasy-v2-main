@@ -42,7 +42,9 @@ export async function GET(request: Request) {
     },
   })
 
-  return html("You have been unsubscribed from AllFantasy marketing emails. Transactional account, payment, and pool-invite notices may still be sent when required.")
+  // Since 2026-10-03 this also stops alert emails (the notification dispatcher reads the same row),
+  // so the page says so — it used to promise only "marketing emails" while alerts kept coming.
+  return html("You have been unsubscribed from AllFantasy alert and marketing emails. Account, payment, and pool-invite notices may still be sent when required. You can turn alert emails back on anytime in Settings &rarr; Notifications.")
 }
 
 export async function POST(request: Request) {

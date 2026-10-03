@@ -16,6 +16,7 @@ import { shouldSuppressTokenMonetizationNotification } from "@/lib/notifications
 import { quietHoursSuppression } from "@/lib/notifications/quietHours"
 import { isCategoryAllowedForLeague } from "@/lib/notifications/leagueOverrides"
 import { pushTagFor } from "@/lib/notifications/pushTag"
+import { emailWithheldByUnsubscribe } from "@/lib/email/emailSubscription"
 
 export type DispatchNotificationParams = {
   userIds: string[]
@@ -156,12 +157,18 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
 
       // Undeliverable domains (RFC-reserved fixture rows, example.com seeds)
       // never get a send — they only bounce and burn the sending domain.
+      //
+      // ⚠ AND AN UNSUBSCRIBED ADDRESS GETS NO ALERT EMAIL. Every notification email carries an
+      // Unsubscribe link, which wrote `EmailPreference.unsubscribedAt` — and this dispatcher never
+      // read it, so alerts kept arriving after the user had clicked it (found 2026-10-03). Account
+      // notices (`system_account`) still send, as the unsubscribe page says; a failed read withholds.
       if (
         catPrefs.email &&
         availability.email &&
         profile.email &&
         !skipChannels?.email &&
-        !isUndeliverableEmailDomain(profile.email)
+        !isUndeliverableEmailDomain(profile.email) &&
+        !emailWithheldByUnsubscribe(profile.emailSubscription, category)
       ) {
         try {
           await retryWithBackoff(
