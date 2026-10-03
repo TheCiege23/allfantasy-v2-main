@@ -189,4 +189,18 @@ describe('loadWaiverBoard — foreign roster ids', () => {
     expect(board.candidates[0] && 'afProjectedPoints' in board.candidates[0]).toBe(false)
     expect(before.candidates[0]?.gain).toBe(board.candidates[0]?.gain)
   })
+
+  /*
+   * My Team's Lineup check sends the starters it knows will not play. Without that, a ruled-out
+   * starter whose projection predates the designation stays in the best lineup at full value, and
+   * the free agent who fills his slot is priced against a player who is not playing.
+   */
+  it('prices an add against the hole an unavailable starter leaves, and still names him', async () => {
+    const normal = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1' })
+    expect(normal.candidates[0]?.gain).toBe(7) // 12 against a 5-point starter
+
+    const out = await loadWaiverBoard({ prisma: prismaOn('sleeper'), leagueId: 'L1', userId: 'u-1', unavailable: ['6038'] })
+    expect(out.candidates[0]?.gain).toBe(12) // 12 against a zero
+    expect(out.candidates[0]?.displaces?.name).toBe('Wrong Player')
+  })
 })

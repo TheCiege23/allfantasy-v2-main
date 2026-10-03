@@ -130,11 +130,22 @@ export async function GET(req: NextRequest) {
   }
   if (view === 'waiver-board') {
     const lim = Number(searchParams?.get('limit'))
+    /*
+     * Your starters who will not play this week, priced at zero so an add is measured against the
+     * hole (see `LoadWaiverBoardArgs.unavailable`). Ids only — well-formed, capped — and they only
+     * re-weight the caller's OWN roster, which `loadWaiverBoard` resolves from the session.
+     */
+    const unavailable = (searchParams?.get('unavailable') ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => /^[A-Za-z0-9_-]{1,32}$/.test(s))
+      .slice(0, 40)
     const payload = await loadWaiverBoard({
       prisma,
       leagueId,
       userId,
       limit: Number.isFinite(lim) && lim > 0 ? lim : undefined,
+      unavailable,
     })
     return NextResponse.json(payload)
   }

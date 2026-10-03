@@ -124,6 +124,16 @@ export interface LoadWaiverBoardArgs {
   userId: string
   /** How many candidates to return. */
   limit?: number
+  /**
+   * Your players who will not play this week — ruled out or on bye — as the caller already knows
+   * them. They stay on your roster at ZERO, so the board prices an add against the hole they leave.
+   *
+   * ⚠ WITHOUT THIS, AN OUT STARTER STILL COUNTS AT HIS FULL PROJECTION. Nothing here reads injury
+   * status, and a projection written before the designation keeps him in your best lineup — so the
+   * free agent who would actually fill his slot shows little or no gain. My Team's Lineup check
+   * passes them; omitting it changes nothing for any other caller.
+   */
+  unavailable?: readonly string[]
 }
 
 export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<WaiverBoard> {
@@ -323,7 +333,9 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
     return out
   }
 
-  const roster = score(mineProj as never)
+  const out = new Set(args.unavailable ?? [])
+  // Kept on the roster at zero (not dropped), so `displaces` can still name him.
+  const roster = score(mineProj as never).map((p) => (p.sleeperId && out.has(p.sleeperId) ? { ...p, points: 0 } : p))
   const pool = score(poolProj as never)
 
   /*
