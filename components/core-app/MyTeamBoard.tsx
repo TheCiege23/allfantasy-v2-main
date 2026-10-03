@@ -515,6 +515,7 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
    * would only ever search the rows already on screen — `myTeamBoardFilter.ts` has the account.
    */
   const needsView = pulse.needs
+  const actionNeeds = needsView.filter((row) => !row.bestBall)
   const setView = pulse.set
   const filterOptions = pulse.filters ?? []
   const activeFilter = pulse.filter ?? null
@@ -585,15 +586,15 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
         blurb={copy('Review remaining lineup problems across your leagues, as of your last sync — opening a league checks its live lineup. Deadlines follow individual players; confirm locks and AutoSubs on your platform.')}
       />
 
-      {needsView.length > 0 ? (
+      {actionNeeds.length > 0 ? (
         <section className="af-bd-action-queue" aria-labelledby="af-mt-action-queue">
           <div>
             <span className="af-label">{copy('Before lock')}</span>
-            <h2 id="af-mt-action-queue">{needsView.length} {needsView.length === 1 ? copy('lineup needs a look') : copy('lineups need a look')}</h2>
+            <h2 id="af-mt-action-queue">{actionNeeds.length} {actionNeeds.length === 1 ? copy('lineup needs a look') : copy('lineups need a look')}</h2>
             <p>{copy('Open a team to inspect the issue and confirm player locks on your platform.')}</p>
           </div>
           <ol>
-            {needsView.slice(0, 3).map((row) => {
+            {actionNeeds.slice(0, 3).map((row) => {
               const source = lineupLink({
                 id: row.leagueId, platform: row.platform, platformLeagueId: row.platformLeagueId,
                 season: row.leagueSeason, name: row.leagueName, teamId: row.teamId,
