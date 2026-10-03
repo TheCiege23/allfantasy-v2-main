@@ -41,7 +41,7 @@ const teamForecasts = (byTeam: Record<string, number>) =>
  * Four teams. Roster "1" outscores everyone; roster "4" is outscored by everyone.
  *
  * ⚠ RAW SQL, NOT `createMany`, AND THE REASON IS A REAL ENVIRONMENT FINDING.
- * `prisma/migrations-pending/20260903222531_weekly_matchup_roster_id_text` turns
+ * `prisma/migrations/20260903222531_weekly_matchup_roster_id_text` turns
  * `WeeklyMatchup.rosterId` from Int into Text. Its README records it as APPLIED
  * TO PRODUCTION 2026-09-03 — but this TEST database still has the integer
  * column, so the generated client (which expects String) cannot round-trip the
@@ -88,9 +88,9 @@ function requireAllPlay(ctx: { skip: () => void }): void {
     throw new Error(
       'M19_DB_STRICT=1 but the Prisma client cannot read WeeklyMatchup on this database. ' +
       'The success-path coverage this suite exists for did not run. Most likely cause: the ' +
-      'pending migration 20260903222531_weekly_matchup_roster_id_text is unapplied here, so ' +
-      '"rosterId" is still integer while the generated client expects text. Apply it to this ' +
-      'non-production database, or unset M19_DB_STRICT to allow the skip.',
+      'migration 20260903222531_weekly_matchup_roster_id_text is unapplied here, so ' +
+      '"rosterId" is still integer while the generated client expects text. Run `prisma migrate ' +
+      'deploy` against this non-production database, or unset M19_DB_STRICT to allow the skip.',
     )
   }
   ctx.skip()

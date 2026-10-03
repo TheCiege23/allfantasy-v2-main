@@ -104,7 +104,7 @@ role", but "the app's role is a MEMBER of the migration role".
 
 ## ⚠ A THIRD CASE: applied to production, but NOT through Prisma
 
-### `20260901220000_domain_os_facts`
+### `20260901220000_domain_os_facts` — ✅ moved to `prisma/migrations/` 2026-10-03 (see the end of this file)
 
 **Applied to production 2026-09-01 by the owner, as raw SQL in a console.** So it
 is neither "pending approval" nor recorded in `_prisma_migrations` — it is a
@@ -313,7 +313,7 @@ every read of those models; against a database that lacks them that is P2022 on
 `findMany`, not confined to code that wants the new fields. The order is: apply,
 then update `schema.prisma`, then ship writers.
 
-### `20260903222531_weekly_matchup_roster_id_text`
+### `20260903222531_weekly_matchup_roster_id_text` — ✅ moved to `prisma/migrations/` 2026-10-03 (see the end of this file)
 
 ✅ **APPLIED TO PRODUCTION 2026-09-03.** `WeeklyMatchup.rosterId Int` → `String`.
 One statement: `ALTER COLUMN "rosterId" TYPE TEXT USING "rosterId"::text` —
@@ -791,3 +791,35 @@ remain). `schema.prisma` carries the matching `@@unique`, and `db:drift:ci` is b
 `DROP INDEX` of this index, which is what an applied constraint absent from the model looks like.
 
 `ROLLBACK.sql` drops the index. No data is lost by the rollback; duplicates become possible again.
+
+---
+
+## `20260901220000_domain_os_facts` + `20260903222531_weekly_matchup_roster_id_text` — ✅ moved to `prisma/migrations/` 2026-10-03
+
+Both were hand-applied to production in September (their own headers record it) and then sat
+here for a month with **no** `_prisma_migrations` row. On 2026-10-03 at 16:08:55 and 16:09:03 UTC
+another session recorded them with `migrate resolve --applied` — 0 steps, `started_at = finished_at`.
+The owner then authorised moving the folders. **No SQL was run by the move; it is a pure `git mv`.**
+
+**Verified by the objects, not the ledger**, on `ep-curly-block-ad0dlt9o/neondb`, read-only:
+
+- `domain_os_facts`: all 10 columns with the migration's types and nullability (`confidence`,
+  `sampleSize` nullable), and all four indexes, including the load-bearing unique
+  `(domain, kind, level, "scopeKey")` that `store.ts`'s upsert needs. Live: 1,470 rows, newest
+  `capturedAt` 16:00 that day.
+- `"WeeklyMatchup"."rosterId"`: `text NOT NULL`, unique `(leagueId, seasonYear, week, rosterId)`
+  intact, 106,704 rows, 0 null, 0 non-numeric.
+
+**The checksums match, so nothing looks modified.** Each ledger row's `checksum` equals the
+sha256 of the file as git stores it (LF): `91be2672…` and `91305477…`. The move keeps the
+blobs byte-identical. Control: `20261003110000_expand_player_trend_ids` matches its blob the same
+way. ⚠ The CRLF working-tree copy on a Windows checkout hashes differently. That is a property of
+the checkout, not of the migration, and Linux CI reads the LF blob.
+
+**What the move changes elsewhere.** Production: nothing, because both are recorded and
+`migrate deploy` skips them. A FRESH database now gets them in order:
+- `domain_os_facts` is all `IF NOT EXISTS`.
+- The `rosterId` cast runs after `20260407024117_init` created the column as `INTEGER`, which is
+  exactly the drift that left the M19 test database unable to round-trip `WeeklyMatchup`. A
+  non-production database still on the integer column is now cured by an ordinary
+  `migrate deploy`.

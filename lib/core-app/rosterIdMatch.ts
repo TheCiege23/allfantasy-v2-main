@@ -21,8 +21,8 @@ function isPlainDigits(value: string): boolean {
  * True when `externalId` and `rosterId` name the same team, padding included.
  *
  * `rosterId` accepts `number | string` because `WeeklyMatchup.rosterId` itself
- * is mid-migration from Int to Text (see the schema comment and
- * prisma/migrations-pending/20260903222531_weekly_matchup_roster_id_text) —
+ * moved from Int to Text (see the schema comment and
+ * prisma/migrations/20260903222531_weekly_matchup_roster_id_text) —
  * some callers still hand this a number, others already hand it the raw
  * string. Both are coerced to a string before comparing, so this keeps
  * working unchanged either way.
