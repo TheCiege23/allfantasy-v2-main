@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { resolveCurrentWeekFrom } from './currentWeek'
+import { resolveCurrentWeekFrom, type WeekScoreRow } from './currentWeek'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueWeekFromSettings } from './seasonTimeline'
 import { managerArtUrl } from './leagueArt'
@@ -309,30 +309,53 @@ export async function getRailMatchups(
     seasonRows.flatMap((row) => row._max.seasonYear == null ? [] : [[row.leagueId, row._max.seasonYear] as const]),
   )
   const seasons = [...new Set(seasonByLeague.values())]
-  const seasonCandidates: MatchupRow[] = await prisma.weeklyMatchup
-    .findMany({
-      where: { leagueId: { in: platformIds }, seasonYear: { in: seasons } },
-      select: {
-        leagueId: true,
-        seasonYear: true,
-        week: true,
-        rosterId: true,
-        matchupId: true,
-        pointsFor: true,
-        pointsAgainst: true,
-        updatedAt: true,
-      },
-    })
-    .then((rows) => rows.map((row) => ({ ...row, source: 'live_cache' as const })))
-    .catch((): MatchupRow[] => [])
 
-  const rowsByCandidateLeague = new Map<string, MatchupRow[]>()
-  for (const row of seasonCandidates) {
-    if (seasonByLeague.get(row.leagueId) !== row.seasonYear) continue
-    const list = rowsByCandidateLeague.get(row.leagueId)
-    if (list) list.push(row)
-    else rowsByCandidateLeague.set(row.leagueId, [row])
+  /*
+   * 🛑 A SUMMARY PER LEAGUE-WEEK, NOT THE WHOLE SEASON'S ROWS. This read every `WeeklyMatchup` row of
+   * the season for every played league — every team, every week, ~13k rows on a 65-league account —
+   * on every `/core` page, to keep one week of them. Timed read-only against production 2026-10-03:
+   * ~510–580 ms, the rail's largest database step.
+   *
+   * ⚠ THE WEEK RULE NEEDS TWO FACTS PER WEEK, NOT A MAXIMUM. `resolveCurrentWeekFrom` takes the
+   * earliest week holding ANY row in which neither side has scored. A `_max` of points (the board's
+   * summary) calls a week played the moment one game has a point — by Saturday that is next week,
+   * the jump `fc12c9e1c` fixed. So: which weeks have a scored row, and which have an unscored one —
+   * two grouped reads under `isScored`'s exact condition. Rebuilt as one marker row per fact, they
+   * give `resolveCurrentWeekFrom` the same season, earliest unplayed week, last week and scored-week
+   * count as the rows did, and the stated-week check the same "does this week exist".
+   *
+   * The rows themselves are then read for the resolved week only — and, for an elimination league,
+   * for its whole season, because `choppedBefore` replays every past week to find who is out.
+   */
+  type WeekFlagRow = { leagueId: string; seasonYear: number; week: number }
+  const seasonWeeks = { leagueId: { in: platformIds }, seasonYear: { in: seasons } }
+  const [scoredWeeks, unscoredWeeks]: [WeekFlagRow[], WeekFlagRow[]] = seasons.length
+    ? await Promise.all([
+        prisma.weeklyMatchup
+          .groupBy({
+            by: ['leagueId', 'seasonYear', 'week'],
+            where: { ...seasonWeeks, OR: [{ pointsFor: { gt: 0 } }, { pointsAgainst: { gt: 0 } }] },
+          })
+          .catch((): WeekFlagRow[] => []),
+        prisma.weeklyMatchup
+          .groupBy({
+            by: ['leagueId', 'seasonYear', 'week'],
+            where: { ...seasonWeeks, pointsFor: { lte: 0 }, pointsAgainst: { lte: 0 } },
+          })
+          .catch((): WeekFlagRow[] => []),
+      ])
+    : [[], []]
+
+  const weekSummaryByLeague = new Map<string, WeekScoreRow[]>()
+  const addMarker = (r: WeekFlagRow, scored: boolean) => {
+    if (seasonByLeague.get(r.leagueId) !== r.seasonYear) return
+    const marker: WeekScoreRow = { seasonYear: r.seasonYear, week: r.week, pointsFor: scored ? 1 : 0, pointsAgainst: 0 }
+    const list = weekSummaryByLeague.get(r.leagueId)
+    if (list) list.push(marker)
+    else weekSummaryByLeague.set(r.leagueId, [marker])
   }
+  for (const r of scoredWeeks) addMarker(r, true)
+  for (const r of unscoredWeeks) addMarker(r, false)
 
   /*
    * 🛑 A GUILLOTINE LEAGUE NEVER LEAVES WEEK 2 UNDER THE ROW RULE. `resolveCurrentWeekFrom` takes the
@@ -376,7 +399,7 @@ export async function getRailMatchups(
   }
 
   const currentByLeague = new Map<string, { seasonYear: number; week: number }>()
-  for (const [leagueId, rows] of rowsByCandidateLeague) {
+  for (const [leagueId, rows] of weekSummaryByLeague) {
     const stated = statedByLeague.get(leagueId)
     if (stated && rows.some((r) => r.seasonYear === stated.seasonYear && r.week === stated.week)) {
       currentByLeague.set(leagueId, stated)
@@ -386,21 +409,53 @@ export async function getRailMatchups(
     if (current) currentByLeague.set(leagueId, { seasonYear: current.season, week: current.week })
   }
 
+  /* The rows themselves: the resolved week of every league, and an elimination league's whole season. */
+  const rowSelect = {
+    leagueId: true,
+    seasonYear: true,
+    week: true,
+    rosterId: true,
+    matchupId: true,
+    pointsFor: true,
+    pointsAgainst: true,
+    updatedAt: true,
+  } as const
+  const eliminationWithSeason = eliminationIds.filter((id) => currentByLeague.has(id))
+  const toRows = (rows: Array<Omit<MatchupRow, 'source'>>): MatchupRow[] =>
+    rows.map((row) => ({ ...row, source: 'live_cache' as const }))
+  const [weekRows, eliminationSeasonRows]: [MatchupRow[], MatchupRow[]] = await Promise.all([
+    currentByLeague.size
+      ? prisma.weeklyMatchup
+          .findMany({
+            where: { OR: [...currentByLeague].map(([leagueId, w]) => ({ leagueId, seasonYear: w.seasonYear, week: w.week })) },
+            select: rowSelect,
+          })
+          .then(toRows)
+          .catch((): MatchupRow[] => [])
+      : Promise.resolve([] as MatchupRow[]),
+    eliminationWithSeason.length
+      ? prisma.weeklyMatchup
+          .findMany({
+            where: { OR: eliminationWithSeason.map((leagueId) => ({ leagueId, seasonYear: currentByLeague.get(leagueId)!.seasonYear })) },
+            select: rowSelect,
+          })
+          .then(toRows)
+          .catch((): MatchupRow[] => [])
+      : Promise.resolve([] as MatchupRow[]),
+  ])
+
   /*
    * And the teams already out, so the standing ranks the LIVE field. Without this a chopped team's 0
    * was the field's lowest score — the cut line — so "95.7 over the cut" measured you against a team
    * that was already gone, and "#13 of 18" counted three of them.
    */
   const outByLeague = new Map<string, Set<string>>()
-  for (const leagueId of eliminationIds) {
-    const rows = rowsByCandidateLeague.get(leagueId)
+  for (const leagueId of eliminationWithSeason) {
+    const rows = eliminationSeasonRows.filter((r) => r.leagueId === leagueId)
     const current = currentByLeague.get(leagueId)
-    if (rows && current) outByLeague.set(leagueId, choppedBefore(rows, current.week))
+    if (rows.length && current) outByLeague.set(leagueId, choppedBefore(rows, current.week))
   }
-  let matchups = seasonCandidates.filter((row) => {
-    const current = currentByLeague.get(row.leagueId)
-    return current?.seasonYear === row.seasonYear && current.week === row.week
-  })
+  let matchups = weekRows
 
   /* Some importers historically materialized their schedule in MatchupFact
      before WeeklyMatchup parity existed. Use that canonical history only when

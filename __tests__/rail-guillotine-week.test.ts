@@ -46,12 +46,12 @@ function h2hRows(): Row[] {
 
 const db = vi.hoisted(() => ({ rows: [] as unknown[], stated: [] as unknown[], queryRaw: vi.fn(), mine: '1' }))
 
-vi.mock('@/lib/prisma', () => ({
+vi.mock('@/lib/prisma', async () => {
+  /* Applies each read's `where` — see the helper for why a fixed answer no longer tests anything. */
+  const { fakeWeeklyMatchup } = await import('./helpers/fakeWeeklyMatchup')
+  return {
   prisma: {
-    weeklyMatchup: {
-      groupBy: async () => [{ leagueId: 'G', _max: { seasonYear: 2026 } }, { leagueId: 'H', _max: { seasonYear: 2026 } }],
-      findMany: async () => db.rows,
-    },
+    weeklyMatchup: fakeWeeklyMatchup(() => db.rows as Record<string, unknown>[]),
     leagueTeam: {
       findMany: async () => [
         ...rosters.map((r) => ({ externalId: r, teamName: `G${r}`, ownerName: null, avatarUrl: null, claimedByUserId: r === db.mine ? 'user' : null, platformUserId: `g-${r}`, league: { id: 'AF-G', platform: 'sleeper', platformLeagueId: 'G' } })),
@@ -63,7 +63,8 @@ vi.mock('@/lib/prisma', () => ({
     $queryRaw: db.queryRaw,
     $queryRawUnsafe: async () => [],
   },
-}))
+  }
+})
 
 import { choppedBefore, getRailMatchups, mostHavePlayed, standingIn } from '@/lib/core-app/railMatchups'
 
@@ -231,5 +232,29 @@ describe('standingIn: the basis follows how much of the field has played', () =>
     expect(s?.basis).toBe('projected')
     expect(s?.overCut).toBeNull()
     expect(s?.rank).toBe(5)
+  })
+})
+
+/*
+ * 🛑 THE RAIL NO LONGER READS A HEAD-TO-HEAD LEAGUE'S WHOLE SEASON (2026-10-03). It read every row of
+ * the season for every league on every /core page — ~510–580 ms on a 65-league account — to keep one
+ * week. Only an elimination league's season is read whole, because `choppedBefore` replays it.
+ */
+describe('getRailMatchups — what it reads', () => {
+  it('🛑 reads the week summary, then only the resolved week — except an elimination league, read whole', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    const findMany = vi.spyOn(prisma.weeklyMatchup, 'findMany')
+    findMany.mockClear()
+    await call()
+    const clauses = findMany.mock.calls.flatMap(([args]) => ((args as { where?: { OR?: Array<Record<string, unknown>> } })?.where?.OR ?? []))
+    /* Every row read names its league; only the elimination league is read without a week. */
+    expect(clauses.every((c) => typeof c.leagueId === 'string')).toBe(true)
+    const wholeSeason = clauses.filter((c) => c.week === undefined).map((c) => c.leagueId)
+    expect(wholeSeason).toEqual(['G'])
+    expect(clauses).toContainEqual({ leagueId: 'H', seasonYear: 2026, week: 4 })
+    /* The head-to-head league's week-3 rows are never fetched. */
+    const fetched = (await Promise.all(findMany.mock.results.map((r) => r.value))) as Array<Array<{ leagueId: string; week: number }>>
+    expect(fetched.flat().some((r) => r.leagueId === 'H' && r.week === 3)).toBe(false)
+    findMany.mockRestore()
   })
 })
