@@ -1250,25 +1250,36 @@ function BenchRow({
   )
 }
 
-/** How many taxi years are left, or an honest silence. */
+/**
+ * How many taxi years are left, or an honest silence.
+ *
+ * "1 year left of 2", not "1 of 2 year left": the noun agrees with the count beside it. The old
+ * order pluralised on the remaining years but printed the noun after the limit, so it read wrong
+ * every time the two differed (audit, 2026-10-02, live on KBFL).
+ */
 function TaxiYears({ tenure }: { tenure: TaxiTenure | null }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
   if (!tenure) {
     return (
       <span
         className="af-mt-taxi-years af-mt-taxi-years--none"
-        title="This needs the league's taxi-year limit and its season-end roster history. One of them is missing, so we are not going to guess."
+        title={es
+          ? 'Hace falta el límite de años de taxi de la liga y su historial de plantillas a fin de temporada. Falta uno de los dos, así que no vamos a adivinar.'
+          : "This needs the league's taxi-year limit and its season-end roster history. One of them is missing, so we are not going to guess."}
       >
-        years left unknown
+        {es ? 'años restantes desconocidos' : 'years left unknown'}
       </span>
     )
   }
+  const n = tenure.yearsRemaining
   return (
-    <span className="af-mt-taxi-years af-num" data-last={tenure.yearsRemaining <= 1}>
-      {tenure.yearsRemaining === 0
-        ? 'no taxi years left'
-        : `${tenure.yearsRemaining} of ${tenure.yearsAllowed} ${
-            tenure.yearsRemaining === 1 ? 'year' : 'years'
-          } left`}
+    <span className="af-mt-taxi-years af-num" data-last={n <= 1}>
+      {n === 0
+        ? es ? 'sin años de taxi' : 'no taxi years left'
+        : es
+          ? `${n === 1 ? 'queda 1 año' : `quedan ${n} años`} de ${tenure.yearsAllowed}`
+          : `${n} ${n === 1 ? 'year' : 'years'} left of ${tenure.yearsAllowed}`}
     </span>
   )
 }

@@ -402,7 +402,23 @@ describe('My Team — the reported problems', () => {
     )
     expect(t).toContain('TAXI')
     expect(t).toContain('Taxi squad')
-    expect(t).toContain('1 of 2 year left')
+    /* The noun agrees with the count beside it — this read "1 of 2 year left" until 2026-10-03. */
+    expect(t).toContain('1 year left of 2')
+    expect(t).not.toContain('of 2 year left')
+  })
+
+  it('pluralises taxi years on the count it sits beside', () => {
+    const t = text(
+      <MyTeam
+        data={data({
+          taxi: {
+            available: true,
+            data: [{ ...player({ sleeperId: 't1' }), tenure: { yearsUsed: 1, yearsAllowed: 3, yearsRemaining: 2 } }],
+          } as never,
+        })}
+      />,
+    )
+    expect(t).toContain('2 years left of 3')
   })
 
   it('refuses to guess taxi years when the history is missing', () => {
