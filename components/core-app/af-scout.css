@@ -385,6 +385,49 @@
   padding: 16px 18px;
 }
 
+/* ── Formats (War Room step 4d) ──────────────────────────────────────── */
+
+/* A chopped team: marked by surface and a muted name, never by opacity (which took faint text below contrast). */
+.af-core .af-sc-card[data-eliminated='true'] {
+  background: var(--surface2);
+  border-style: dashed;
+}
+
+.af-core .af-sc-card[data-eliminated='true'] .af-sc-team {
+  color: var(--muted);
+}
+
+.af-core .af-sc-tag[data-sev='out'] {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.af-core .af-sc-vs[data-elimination] {
+  border-color: var(--warn);
+}
+
+.af-core .af-sc-vs[data-elimination] .af-sc-vs-label {
+  color: var(--warn);
+}
+
+.af-core .af-sc-picks {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text2);
+}
+
+.af-core .af-sc-format {
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--chip);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+  max-width: 90ch;
+}
+
 /* ── Competitive Edge (plan holders) ─────────────────────────────────── */
 
 .af-core .af-sc-edge-basis {

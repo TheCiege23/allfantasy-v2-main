@@ -8,6 +8,7 @@ import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import type { ScoutData, ScoutedManager, ScoutStanding } from '@/lib/core-app/scout'
 import type { Record3, Zone } from '@/lib/core-app/standingsModel'
+import type { RailStanding } from '@/lib/core-app/railMatchups'
 
 /**
  * Scout — the first room of the War Room.
@@ -53,6 +54,12 @@ export type ScoutProps = {
    * stays a reader of standings and the page decides what Game Plan shows.
    */
   leaguePlan?: ReactNode
+  /**
+   * Elimination formats: your place against the cut this week — the rail's own read (getRailMatchups
+   * `standing`), handed down so this banner and the rail cannot disagree. Null outside an elimination
+   * week or when the rail could not rank the league.
+   */
+  eliminationStanding?: RailStanding | null
 }
 
 /** "Sep 21, 2025" — pinned to en-US and Eastern so the server paint is the only paint. */
@@ -180,6 +187,7 @@ function ManagerCard({ m, tradesHref, edge }: { m: ScoutedManager; tradesHref: s
         className="af-card af-sc-card"
         data-opponent={m.isNextOpponent || undefined}
         data-you={m.isYou || undefined}
+        data-eliminated={m.eliminated ? 'true' : undefined}
       >
         <header className="af-sc-card-head">
           {m.avatarUrl ? (
@@ -196,7 +204,11 @@ function ManagerCard({ m, tradesHref, edge }: { m: ScoutedManager; tradesHref: s
             <span className="af-sc-owner">{m.ownerName ?? 'Manager not named'}</span>
           </span>
 
-          {m.isNextOpponent ? (
+          {m.eliminated ? (
+            <span className="af-sc-tag" data-sev="out">
+              {m.eliminated.week != null ? `OUT · WEEK ${m.eliminated.week}` : 'OUT'}
+            </span>
+          ) : m.isNextOpponent ? (
             <span className="af-sc-tag" data-sev="bad">
               THIS WEEK
             </span>
@@ -222,9 +234,19 @@ function ManagerCard({ m, tradesHref, edge }: { m: ScoutedManager; tradesHref: s
           <p className="af-sc-unavailable">Not on the standings table yet.</p>
         )}
 
+        {/* Dynasty: the dynasty War Room's own pick read, as a count — facts, never a valuation label. */}
+        {m.picks ? (
+          <p className="af-sc-picks af-num">
+            {m.picks.count === 0
+              ? 'No future picks held'
+              : `${m.picks.count} future ${m.picks.count === 1 ? 'pick' : 'picks'} · ${m.picks.early} in rounds 1–2`}
+          </p>
+        ) : null}
+
         {edge ? <EdgeLine m={edge} /> : null}
 
-        {m.isYou ? null : (
+        {/* No trade with yourself, and none with a chopped team — its roster has gone to waivers. */}
+        {m.isYou || m.eliminated ? null : (
           <footer className="af-sc-card-foot">
             {/*
               The Trade Center grades a deal with them, and its Competitive Edge section binds their
@@ -291,7 +313,74 @@ function OpponentBanner({ data, matchupHref, tradesHref }: { data: ScoutData; ma
   )
 }
 
-export function Scout({ data, gamePlanHref, matchupHref, tradesHref, edge = null, edgeAccess = null, leaguePlan = null }: ScoutProps) {
+/**
+ * An elimination week has no opponent — it has a cut. Your rank and your margin over the lowest team,
+ * from the rail's read; "projected" said out loud before a snap is played, because then the rank comes
+ * from projections, not points.
+ */
+function EliminationBanner({ data, standing, matchupHref }: { data: ScoutData; standing: RailStanding | null; matchupHref: string }) {
+  const me = data.managers.available ? data.managers.data.find((m) => m.isYou) ?? null : null
+  if (me?.eliminated) {
+    return (
+      <section className="af-frame af-sc-vs" data-elimination="out" aria-labelledby="af-sc-vs-h">
+        <h2 className="af-label af-sc-vs-label" id="af-sc-vs-h">
+          Elimination league
+        </h2>
+        <p className="af-sc-vs-h2h">
+          You were chopped{me.eliminated.week != null ? ` in week ${me.eliminated.week}` : ''}. The cards below are the managers still alive.
+        </p>
+      </section>
+    )
+  }
+  return (
+    <section className="af-frame af-sc-vs" data-elimination="alive" aria-labelledby="af-sc-vs-h">
+      <h2 className="af-label af-sc-vs-label" id="af-sc-vs-h">
+        Elimination week{data.week ? ` · week ${data.week.week}` : ''}
+      </h2>
+      {standing ? (
+        <p className="af-sc-vs-h2h af-num">
+          You are <strong>#{standing.rank}</strong> of {standing.outOf}
+          {standing.overCut == null ? ' — at the cut line.' : ` — ${standing.overCut.toFixed(1)} over the cut.`}
+          {standing.basis === 'projected' ? ' Projected: no snap has been played yet.' : ''}
+        </p>
+      ) : (
+        <p className="af-sc-vs-h2h">The cut line is not readable yet this week.</p>
+      )}
+      <div className="af-sc-vs-links">
+        <Link className="af-sc-cta af-sc-cta--primary" href={matchupHref}>
+          Every team against the cut &rarr;
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+/** One line on what this format changes about the screen, when it changes anything. */
+function FormatNote({ format }: { format: ScoutData['format'] }) {
+  if (format.bestBall) {
+    return (
+      <p className="af-sc-format">
+        Best ball: the platform starts your highest scorers each week, so there is no lineup to set and no game plan for this league.
+      </p>
+    )
+  }
+  if (format.dynasty && format.picks) {
+    if (format.picks.state === 'missing') return <p className="af-sc-format">Dynasty: future picks could not be read for this league.</p>
+    if (format.picks.state === 'partial' && format.picks.note) return <p className="af-sc-format">Dynasty picks: {format.picks.note}</p>
+  }
+  return null
+}
+
+export function Scout({
+  data,
+  gamePlanHref,
+  matchupHref,
+  tradesHref,
+  edge = null,
+  edgeAccess = null,
+  leaguePlan = null,
+  eliminationStanding = null,
+}: ScoutProps) {
   const edgeBy = edge?.available ? edge.data.byManager : null
   return (
     <div className="af-sc">
@@ -314,7 +403,13 @@ export function Scout({ data, gamePlanHref, matchupHref, tradesHref, edge = null
         </Link>
       </header>
 
-      <OpponentBanner data={data} matchupHref={matchupHref} tradesHref={tradesHref} />
+      {data.format.elimination ? (
+        <EliminationBanner data={data} standing={eliminationStanding} matchupHref={matchupHref} />
+      ) : (
+        <OpponentBanner data={data} matchupHref={matchupHref} tradesHref={tradesHref} />
+      )}
+
+      <FormatNote format={data.format} />
 
       {leaguePlan}
 
