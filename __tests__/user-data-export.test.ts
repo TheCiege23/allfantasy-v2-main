@@ -194,6 +194,15 @@ describe('buildUserDataExport — the document', () => {
     expect(out.billing.subscriptions).toHaveLength(2)
   })
 
+  it('includes the legal acceptances: what was agreed, at which version, where and when', async () => {
+    const { db, calls } = fakeDb()
+    const out = await buildUserDataExport(db, USER)
+    const read = calls.find((c) => c.model === 'legalAcceptance')!
+    expect(read.args.where).toEqual({ userId: USER })
+    expect(Object.keys(read.args.select).sort()).toEqual(['acceptedAt', 'document', 'documentVersion', 'source'])
+    expect(out.legalAcceptances).toHaveLength(2)
+  })
+
   it('serializes BigInt columns (xpTotal) instead of throwing', () => {
     expect(JSON.parse(serializeUserDataExport({ xp: BigInt('9007199254740993') }))).toEqual({ xp: '9007199254740993' })
   })

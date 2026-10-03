@@ -4025,6 +4025,7 @@ model AppUser {
   householdExceptionsAsA                   HouseholdException[]                   @relation("HouseholdExceptionUserA")
   householdExceptionsAsB                   HouseholdException[]                   @relation("HouseholdExceptionUserB")
   deletedLeagueTombstones                  DeletedLeagueTombstone[]
+  legalAcceptances                         LegalAcceptance[]
 
   @@map("app_users")
 }
@@ -19094,4 +19095,23 @@ model ManagerRatingEvent {
   @@index([subjectKey, sport, modelVersion, season, week])
   @@index([leagueId, season, week])
   @@map("manager_rating_events")
+}
+
+/// One row per document a user agreed to, at the version they saw (lib/legal/legalVersions).
+/// Append-only: re-accepting a revised document adds a row, it never rewrites the old one —
+/// the history of what was agreed, when, is the point. Written by lib/legal/recordLegalAcceptance.
+model LegalAcceptance {
+  id              String   @id @default(uuid())
+  userId          String
+  /// "terms" | "disclaimer" | "privacy"
+  document        String   @db.VarChar(32)
+  /// The page's last-updated stamp at the moment of acceptance, e.g. "September 2026".
+  documentVersion String   @db.VarChar(64)
+  /// Where it was accepted: "signup" | "age_prompt"
+  source          String   @db.VarChar(32)
+  acceptedAt      DateTime @default(now())
+  user            AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, document])
+  @@map("legal_acceptances")
 }
