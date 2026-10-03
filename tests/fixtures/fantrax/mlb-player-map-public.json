@@ -1,0 +1,24 @@
+{
+  "sourceUrl": "https://www.fantrax.com/fxea/general/getPlayerIds?sport=MLB",
+  "capturedAt": "2026-10-03",
+  "players": [
+    {
+      "name": "Smith, Will",
+      "team": "LAD",
+      "position": "C",
+      "fantraxId": "042sz"
+    },
+    {
+      "name": "Judge, Aaron",
+      "team": "NYY",
+      "position": "RF",
+      "fantraxId": "02z0s"
+    },
+    {
+      "name": "Ohtani, Shohei",
+      "team": "LAD",
+      "position": "DH",
+      "fantraxId": "02yc4"
+    }
+  ]
+}

@@ -28,3 +28,11 @@ The fixture verifies hitting/pitching category codes, per-team roster constraint
 ESPN MLB is not enabled: the current ESPN import service is football specific. Yahoo remains unavailable pending provider access approval. Fantrax category formats can be imported for source-platform research/history, but native points scoring cannot reproduce those formats and conversion refuses them. Private-provider access has not been verified in this task; the owner has no external MLB league to supply.
 
 No database schema migration is required.
+
+## Production identity readiness
+
+The initial production audit found 7,320 MLB native identities and no Fantrax IDs. A captured public MLB player map was matched on exact normalized name, recognized current team and batting/pitching role. Ambiguous names, unknown teams, duplicate native identities and conflicting links are skipped. No existing provider ID is overwritten.
+
+The additive backfill was tested on Neon branch br-wispy-bird-adqh35o2: 2,823 unique Fantrax IDs linked to 2,823 unique native IDs; a retry wrote zero rows. The same guarded update linked 2,823 production identities. Judge, Ohtani and Will Smith's catcher entry were verified individually. A small public reference fixture is in tests/fixtures/fantrax/mlb-player-map-public.json.
+
+The existing import-players intel tick now runs this identity refresh with a seven-day cadence marker and job telemetry. It adds no cron registry slot. Unmapped owned players still block conversion with a review error.

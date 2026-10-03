@@ -18,8 +18,8 @@ export const MLB_ROSTER_SLOTS: RosterSlotDef[] = [
   { key: 'CI', label: 'Corner Infielder', shortLabel: 'CI', color: '#22d3ee', category: 'flex', eligiblePositions: ['1B', '3B'], defaultCount: 1, minCount: 0, maxCount: 3 },
   { key: 'MI', label: 'Middle Infielder', shortLabel: 'MI', color: '#818cf8', category: 'flex', eligiblePositions: ['2B', 'SS'], defaultCount: 1, minCount: 0, maxCount: 3 },
   { key: 'OF', label: 'Outfielder', shortLabel: 'OF', color: '#34d399', category: 'offense', eligiblePositions: ['OF', 'LF', 'CF', 'RF'], defaultCount: 3, minCount: 0, maxCount: 7 },
-  { key: 'UTIL', label: 'Utility', shortLabel: 'UTIL', color: '#e879f9', category: 'flex', eligiblePositions: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH'], defaultCount: 1, minCount: 0, maxCount: 4 },
-  { key: 'H', label: 'Hitter (Any)', shortLabel: 'H', color: '#ec4899', category: 'flex', eligiblePositions: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH'], defaultCount: 0, minCount: 0, maxCount: 4 },
+  { key: 'UTIL', label: 'Utility', shortLabel: 'UTIL', color: '#e879f9', category: 'flex', eligiblePositions: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'TWP'], defaultCount: 1, minCount: 0, maxCount: 4 },
+  { key: 'H', label: 'Hitter (Any)', shortLabel: 'H', color: '#ec4899', category: 'flex', eligiblePositions: ['C', '1B', '2B', '3B', 'SS', 'OF', 'LF', 'CF', 'RF', 'DH', 'TWP'], defaultCount: 0, minCount: 0, maxCount: 4 },
   // Pitchers
   { key: 'SP', label: 'Starting Pitcher', shortLabel: 'SP', color: '#ef4444', category: 'offense', eligiblePositions: ['SP'], defaultCount: 2, minCount: 0, maxCount: 7 },
   { key: 'RP', label: 'Relief Pitcher', shortLabel: 'RP', color: '#fb923c', category: 'offense', eligiblePositions: ['RP'], defaultCount: 2, minCount: 0, maxCount: 5 },
