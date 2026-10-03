@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { Check } from "lucide-react"
 import ChimmyVoiceSettingsCard from "@/components/settings/ChimmyVoiceSettingsCard"
 import ChimmyPreferencesCard from "@/components/settings/ChimmyPreferencesCard"
+import AutoCoachSettingsCard from "@/components/settings/AutoCoachSettingsCard"
 import { useThemeMode } from "@/components/theme/ThemeProvider"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { DEFAULT_THEME, normalizeStoredTheme, type ThemeId } from "@/lib/theme"
@@ -297,6 +298,9 @@ export function PreferencesSettingsSection({
         Chimmy uses on the next message should not wait for "Save preferences".
       */}
       <ChimmyPreferencesCard />
+
+      {/* Saves on change through /api/user/autocoach, like the Chimmy card above. */}
+      <AutoCoachSettingsCard />
 
       <div className="flex flex-wrap items-center gap-2">
         <button
