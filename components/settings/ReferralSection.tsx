@@ -7,7 +7,15 @@ import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { ReferralShareBar } from "@/components/referral/ReferralShareBar"
 import { copyText, selectField } from "@/lib/clipboard/copyText"
 
-type Stats = { clicks: number; signups: number; pendingRewards: number; redeemedRewards: number }
+/*
+ * `claimableRewards` is optional only for an older API response that lacked it. The "pending" tile is
+ * pending + claimable: a reward waiting on the user to claim it is exactly what that tile should
+ * count, and before 2026-10-02 it counted only `pending` — two claimable rewards read as 0, and a
+ * redeem then decremented a number that had never included the reward.
+ */
+type Stats = { clicks: number; signups: number; pendingRewards: number; claimableRewards?: number; redeemedRewards: number }
+
+const unclaimedCount = (s: Stats) => s.pendingRewards + (s.claimableRewards ?? 0)
 type Reward = {
   id: string
   type: string
@@ -117,7 +125,8 @@ export function ReferralSection() {
           prev
             ? {
                 ...prev,
-                pendingRewards: Math.max(0, prev.pendingRewards - 1),
+                // The redeemed reward was CLAIMABLE (only those have a claim button).
+                claimableRewards: Math.max(0, (prev.claimableRewards ?? 0) - 1),
                 redeemedRewards: prev.redeemedRewards + 1,
               }
             : null
@@ -237,7 +246,7 @@ export function ReferralSection() {
               <Gift className="h-5 w-5" style={{ color: "var(--muted)" }} />
               <span className="text-sm" style={{ color: "var(--muted)" }}>{t("settings.referral.statPendingRewards")}</span>
             </div>
-            <p className="mt-1 text-2xl font-semibold" style={{ color: "var(--text)" }}>{stats.pendingRewards}</p>
+            <p className="mt-1 text-2xl font-semibold" style={{ color: "var(--text)" }}>{unclaimedCount(stats)}</p>
           </div>
           <div data-testid="referral-stat-redeemed-rewards" className="rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
             <span className="text-sm" style={{ color: "var(--muted)" }}>{t("settings.referral.statRedeemed")}</span>
@@ -266,7 +275,16 @@ export function ReferralSection() {
                 <div>
                   <span className="font-medium" style={{ color: "var(--text)" }}>{r.label}</span>
                   <span className="ml-2 text-xs" style={{ color: "var(--muted)" }}>
-                    {r.status === "redeemed" ? t("settings.referral.statusClaimed") : r.status === "claimable" ? t("settings.referral.statusReady") : t("settings.referral.statusPending")}
+                    {/* expired and blocked are real statuses (ReferralRewardStatus); both read "Pending" before 2026-10-02. */}
+                    {r.status === "redeemed"
+                      ? t("settings.referral.statusClaimed")
+                      : r.status === "claimable"
+                        ? t("settings.referral.statusReady")
+                        : r.status === "expired"
+                          ? t("settings.referral.statusExpired")
+                          : r.status === "blocked"
+                            ? t("settings.referral.statusBlocked")
+                            : t("settings.referral.statusPending")}
                   </span>
                   {r.helperText ? (
                     <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>

@@ -6,6 +6,12 @@
 import type { LanguageCode } from "@/lib/i18n/constants"
 
 export type ThemePreference = "dark" | "light" | "legacy" | "system"
+
+/**
+ * Longest display name the profile accepts — what other managers see on chat, standings and trades.
+ * Enforced by UserProfileService and mirrored as the input's maxLength. Uncapped before 2026-10-02.
+ */
+export const MAX_DISPLAY_NAME_LENGTH = 50
 export type PreferredLanguage = LanguageCode
 
 /** Supported sport code (aligns with LeagueSport). */
