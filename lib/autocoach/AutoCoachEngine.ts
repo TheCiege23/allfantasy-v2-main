@@ -16,7 +16,7 @@ import {
 import { BESTBALL_VARIANTS, isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { getNotificationsQueue } from '@/lib/queues/bullmq'
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
-import { parseAutoCoachUserPreferences } from '@/lib/autocoach/autoCoachPreferences'
+import { autoCoachSkipReason, parseAutoCoachUserPreferences } from '@/lib/autocoach/autoCoachPreferences'
 import { getPlayerGameLockStateForAutoCoach } from '@/lib/autocoach/playerGameLock'
 import { pickBestBenchReplacementForAutoCoach } from '@/lib/autocoach/pickBestBenchReplacement'
 import { getServerNowUTC } from '@/lib/time-engine/serverClock'
@@ -353,6 +353,9 @@ export async function runAutoCoachForLeague(leagueId: string): Promise<AutoCoach
         const rawStatus = row?.status ?? ''
         if (!rawStatus || !isSwapEligibleStatus(rawStatus)) continue
 
+        // The user's own "leave him alone" — an excluded player, or a position they switched off.
+        if (autoCoachSkipReason({ id: pid, position: String(row?.position ?? st.position ?? '') }, prefs)) continue
+
         const lock = await getPlayerGameLockStateForAutoCoach({
           sport,
           teamAbbr: row?.team,
@@ -379,6 +382,8 @@ export async function runAutoCoachForLeague(leagueId: string): Promise<AutoCoach
           const pRow = await findSportsPlayerByLeagueId(sport, bid)
           const stB = pRow?.status ?? ''
           if (stB && isSwapEligibleStatus(stB)) continue
+          // An excluded player is the user's to move, in either direction.
+          if (autoCoachSkipReason({ id: bid }, prefs) === 'excluded') continue
 
           eligibleBench.push({
             id: bid,
