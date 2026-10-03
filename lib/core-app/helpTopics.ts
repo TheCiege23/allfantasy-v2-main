@@ -13,6 +13,10 @@
 
 import { WAIVERS_TOPICS } from './help-topics/waivers'
 import { RANKINGS_TOPICS } from './help-topics/rankings'
+import { DRAFT_TOPICS } from './help-topics/draft'
+import { OUTLOOK_TOPICS } from './help-topics/outlook'
+import { CAREER_TOPICS } from './help-topics/career'
+import { HOME_TOPICS } from './help-topics/home'
 
 export type HelpText = { title: string; body: string }
 export type HelpTopic = { en: HelpText; es: HelpText }
@@ -22,9 +26,23 @@ export type HelpTopic = { en: HelpText; es: HelpText }
  * different people do not all edit one file. ⚠ A topic id must be unique ACROSS areas: a spread
  * silently keeps the last duplicate, so __tests__/core-app/topic-tip.test.tsx checks the count.
  */
-export const HELP_TOPIC_AREAS = { waivers: WAIVERS_TOPICS, rankings: RANKINGS_TOPICS } as const
+export const HELP_TOPIC_AREAS = {
+  waivers: WAIVERS_TOPICS,
+  rankings: RANKINGS_TOPICS,
+  draft: DRAFT_TOPICS,
+  outlook: OUTLOOK_TOPICS,
+  career: CAREER_TOPICS,
+  home: HOME_TOPICS,
+} as const
 
-export const HELP_TOPICS = { ...WAIVERS_TOPICS, ...RANKINGS_TOPICS } satisfies Record<string, HelpTopic>
+export const HELP_TOPICS = {
+  ...WAIVERS_TOPICS,
+  ...RANKINGS_TOPICS,
+  ...DRAFT_TOPICS,
+  ...OUTLOOK_TOPICS,
+  ...CAREER_TOPICS,
+  ...HOME_TOPICS,
+} satisfies Record<string, HelpTopic>
 
 /** Derived, so a misspelt `topic=` fails the typecheck rather than rendering an empty bubble. */
 export type HelpTopicId = keyof typeof HELP_TOPICS
