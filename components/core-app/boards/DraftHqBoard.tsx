@@ -317,7 +317,7 @@ function Card({ row, picks }: { row: DraftHqAllRow; picks?: LiveDraftPicks }) {
             className="af-bd-btn"
             href={`/core/draft-hq?league=${encodeURIComponent(row.leagueId)}`}
           >
-            {row.phase === 'live' ? 'Open the board →' : 'Open board →'}
+            {row.phase === 'live' ? 'Open the board →' : row.phase === 'upcoming' ? 'Prepare for draft →' : 'Open board →'}
           </Link>
         </header>
 
