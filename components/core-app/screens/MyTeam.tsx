@@ -349,6 +349,56 @@ function ordinal(n: number): string {
  * names its comparison; a letter invents a scale and hides its inputs. When
  * coverage is partial that is stated here rather than folded into the number.
  */
+/**
+ * Where your roster is deep and where it is thin, position by position, against THIS league.
+ *
+ * The header tile already names the two ends ("WR is your best (2nd)"); the ranks between them
+ * were computed by `getRosterGrade` and thrown away. They are the part a manager uses to decide
+ * what to trade from and what to trade for. Same values, same basis line as the tile.
+ */
+function PositionStrengthCard({ grade }: { grade: RosterGrade }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const positions = grade.positions ?? []
+  return (
+    <section className="af-frame af-mt-posstr" aria-label={es ? 'Fuerza por posición' : 'Positional strength'}>
+      <h2 className="af-label">{es ? 'Fuerza por posición' : 'Positional strength'}</h2>
+      <ul className="af-mt-posstr-list">
+        {positions.map((p) => {
+          // 1 of 12 fills the bar; 12 of 12 leaves a sliver, so last place is still visible.
+          const pct = Math.max(4, Math.round(((p.outOf - p.rank + 1) / p.outOf) * 100))
+          const tone = p.rank / p.outOf <= 1 / 3 ? 'good' : p.rank / p.outOf > 2 / 3 ? 'bad' : 'mid'
+          return (
+            <li key={p.position} data-tone={tone}>
+              <span className="af-mt-posstr-pos af-num">{p.position}</span>
+              <span className="af-mt-posstr-bar" aria-hidden>
+                <span style={{ width: `${pct}%` }} />
+              </span>
+              <span className="af-mt-posstr-rank af-num">
+                {ordinal(p.rank)} {es ? 'de' : 'of'} {p.outOf}
+              </span>
+              {p.median != null ? (
+                <span className="af-mt-posstr-meta">
+                  {p.value.toLocaleString()} {es ? 'vs mediana' : 'vs median'} {p.median.toLocaleString()}
+                </span>
+              ) : null}
+            </li>
+          )
+        })}
+      </ul>
+      <p className="af-mt-posstr-note">
+        {grade.basis.leagueScored
+          ? es
+            ? 'Valor de plantilla con la puntuación de tu liga, contra los demás equipos de esta liga.'
+            : 'Roster value priced under your league’s scoring, against the other teams in this league.'
+          : es
+            ? 'Valor de plantilla con precios de mercado PPR de 12 equipos, contra los demás equipos de esta liga.'
+            : 'Roster value at 12-team PPR market prices, against the other teams in this league.'}
+      </p>
+    </section>
+  )
+}
+
 function gradeSubtitle(g: RosterGrade): string {
   const parts: string[] = []
   const vsMedian = g.value - g.median
@@ -1537,6 +1587,11 @@ export function MyTeam({ data }: MyTeamProps) {
             {copy('Ask Chimmy why they differ')}
           </button>
         </section>
+      ) : null}
+
+      {/* ── Positional strength: every position, not only the two ends ─ */}
+      {data.rosterGrade.available && (data.rosterGrade.data.positions?.length ?? 0) > 1 ? (
+        <PositionStrengthCard grade={data.rosterGrade.data} />
       ) : null}
 
       {/* ── Dynasty outlook: the next three seasons, not this week ────── */}
