@@ -97,9 +97,10 @@ export interface NormalizedLeagueSettings {
   is_keeper?: boolean
   /**
    * Sleeper's own waiver-schedule settings, exactly as Sleeper sent them — present only for a
-   * Sleeper import that carried at least one. ⚠ UNINTERPRETED: the day-index base and the hour's
-   * timezone are open questions (contracts/sleeper/GAPS.md S-05, S-06). Nothing renders these;
-   * read `lib/waivers/observedWaiverSchedule.ts` for a schedule a screen can show.
+   * Sleeper import that carried at least one. `daily_waivers_hour` is the Pacific run hour
+   * (measured, contracts/sleeper/GAPS.md S-06); ⚠ `waiver_day_of_week`'s weekday is UNRESOLVED
+   * (S-05) — never render it. Read `lib/waivers/sleeperWaiverSchedule.ts` for a schedule a screen
+   * can show.
    */
   sleeper_waiver_schedule?: {
     waiver_day_of_week?: number

@@ -330,6 +330,10 @@ export function Waivers({ data, edge = null, edgeAccess = null }: WaiversProps) 
                           ? `según las últimas ${data.processTime.data.observedRuns} ejecuciones de esta liga`
                           : `seen over this league's last ${data.processTime.data.observedRuns} runs`}
                       </span>
+                    ) : data.processTime.data.fromSleeperSetting ? (
+                      <span className="af-wv-rule-observed">
+                        {es ? 'según la configuración de Sleeper de esta liga' : "from this league's Sleeper settings"}
+                      </span>
                     ) : null}
                     {/* The same instant in the reader's own timezone, which IS knowable — see WaiverRunClock. */}
                     <span className="af-wv-rule-local">

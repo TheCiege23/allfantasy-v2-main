@@ -43,8 +43,8 @@ export function runsAtLabel(
 
 /**
  * The schedule a waiver row shows: the stored one where the importer really imported it, else —
- * for a Sleeper league — the one OBSERVED from when its claims actually processed
- * (lib/waivers/observedWaiverSchedule.ts). Never a Sleeper bootstrap default.
+ * for a Sleeper league — the one OBSERVED from when its claims actually processed, else Sleeper's
+ * own daily hour setting (lib/waivers/sleeperWaiverSchedule.ts). Never a Sleeper bootstrap default.
  *
  * ⚠ STRUCTURED, NOT AN INSTANT. The board is served from a clock-free cache (see
  * `waiversBoardSummary.ts`); "the next run" depends on now, so the component derives it.
@@ -52,14 +52,21 @@ export function runsAtLabel(
 export function rowWaiverSchedule(
   w: { processingDayOfWeek: number | null; processingTimeUtc: string | null } | null | undefined,
   platform: string | null | undefined,
-  observed: { schedule: WaiverSchedule; agreeingRuns: number } | null | undefined,
+  observed:
+    | { source?: 'observed'; schedule: WaiverSchedule; agreeingRuns: number }
+    | { source: 'sleeper_setting'; schedule: WaiverSchedule }
+    | null
+    | undefined,
 ): { label: string; schedule: WaiverSchedule } | null {
   const stored = runsAtLabel(w, platform)
   if (stored) {
     return { label: stored, schedule: { dayOfWeek: w!.processingDayOfWeek!, time: w!.processingTimeUtc!.trim(), timeZone: 'UTC' } }
   }
   if (observed && !waiverScheduleIsImported(platform)) {
-    return { label: `${scheduleLabel(observed.schedule)} (seen over ${observed.agreeingRuns} runs)`, schedule: observed.schedule }
+    /* Say what the schedule rests on: this league's own runs, or Sleeper's hour setting
+     * (lib/waivers/sleeperWaiverSchedule.ts — daily leagues only). */
+    const basis = observed.source === 'sleeper_setting' ? "Sleeper's setting" : `seen over ${observed.agreeingRuns} runs`
+    return { label: `${scheduleLabel(observed.schedule)} (${basis})`, schedule: observed.schedule }
   }
   return null
 }

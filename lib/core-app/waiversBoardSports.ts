@@ -35,7 +35,7 @@ import { canFillSlotForSport, isStartableInSport } from './sportSlotEligibility'
 import { pickLineupSwap, rosterCapacity, swapReasoning, type SwapCandidate, type SwapRosterPlayer } from './waiverSwap'
 import { startingSlots } from './slotEligibility'
 import { faabRemainingOf, formatOf, rowWaiverSchedule } from './waiverRowMeta'
-import { loadObservedWaiverSchedules, type ObservedWaiverSchedule } from '@/lib/waivers/observedWaiverSchedule'
+import { loadSleeperWaiverSchedules, type SleeperWaiverSchedule } from '@/lib/waivers/sleeperWaiverSchedule'
 import type { ClaimedTeam, WaiverBoardRow, WaiverPlayer, WaiverSportSection } from './waiversBoard'
 
 /**
@@ -137,13 +137,14 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
 
   /*
    * Sleeper leagues have no imported schedule; read the one their own claims reveal. One query for
-   * every Sleeper league on the board (lib/waivers/observedWaiverSchedule.ts). A failed read costs
+   * every Sleeper league on the board, falling back to Sleeper's daily hour setting
+   * (lib/waivers/sleeperWaiverSchedule.ts). A failed read costs
    * the countdowns, never the board.
    */
-  const observedSchedules = await loadObservedWaiverSchedules(
+  const observedSchedules = await loadSleeperWaiverSchedules(
     prisma,
     teams.filter((c) => String(c.league?.platform ?? '').toLowerCase() === 'sleeper').map((c) => c.leagueId),
-  ).catch(() => new Map<string, ObservedWaiverSchedule>())
+  ).catch(() => new Map<string, SleeperWaiverSchedule>())
   const [rosters, waiverSettings, pool] = await Promise.all([
     prisma.roster
       .findMany({

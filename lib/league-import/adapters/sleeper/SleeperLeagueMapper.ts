@@ -157,15 +157,16 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       // See the `isKeeper` note above: max_keepers is a Sleeper default, this is the real flag.
       is_keeper: isKeeper,
       /*
-       * 🛑 SLEEPER'S WAIVER SCHEDULE FIELDS, STORED RAW AND DELIBERATELY NOT INTERPRETED.
+       * 🛑 SLEEPER'S WAIVER SCHEDULE FIELDS, STORED RAW — AND ONLY ONE OF THEM IS INTERPRETED.
        *
        * Dropped at import until 2026-10-02 (`lib/chimmy-alerts/waiverCheck.ts` measured no league
-       * carrying `waiver_day_of_week`). What the numbers MEAN is not established anywhere in this
-       * repo — whether day 0 is Sunday or Monday, what timezone `daily_waivers_hour` is in — and
-       * the contract rule is to record that, not guess it: contracts/sleeper/GAPS.md S-05/S-06.
-       * No screen reads these. The schedule the screens show is OBSERVED from when this league's
-       * claims actually processed (lib/waivers/observedWaiverSchedule.ts); once both exist for
-       * enough leagues, comparing the two answers S-05 without a probe.
+       * carrying `waiver_day_of_week`). Compared on 2026-10-03 against the schedule OBSERVED from
+       * when each league's claims processed (lib/waivers/observedWaiverSchedule.ts):
+       * - `daily_waivers_hour` IS the Pacific run hour (246 of 249 leagues, ~20 distinct hours —
+       *   contracts/sleeper/GAPS.md S-06). lib/waivers/sleeperWaiverSchedule.ts uses it, for
+       *   `daily_waivers === 1` leagues only, where nothing has been observed.
+       * - `waiver_day_of_week` is still NOT read anywhere: which weekday it names is unresolved
+       *   (S-05). Do not render it.
        */
       ...(sleeperWaiverSchedule ? { sleeper_waiver_schedule: sleeperWaiverSchedule } : {}),
       reserve_allow_cov: reserveAllowCov,

@@ -87,7 +87,7 @@ registerScreenSummary<WaiversBoardData | null>({
    * 7: keyed on the CLAIM WEEK (`period`) and priced on next week's board when that is the claim
    *    week (`pricedOn`). A v6 entry would keep pricing the week already played for a stale window.
    */
-  version: 7,
+  version: 8,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a user-scoped key carries no league id, so a league sweep would match nothing.
