@@ -125,7 +125,7 @@ import {
 import { execFileSync, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join, resolve, dirname } from 'node:path'
-import { clearStaleIndexLock, quarantineUntracked } from './smoke-worktree-hygiene.mjs'
+import { clearStaleIndexLock, quarantineUntracked, setAsideOrphanedWorktree } from './smoke-worktree-hygiene.mjs'
 
 const ZEROS = /^0+$/
 
@@ -387,6 +387,26 @@ const ADD_TIMEOUT_MS = 5 * 60_000
 
 function ensureWorktree(dir, sha) {
   mkdirSync(dirname(dir), { recursive: true })
+
+  /*
+   * 🛑 A WORKTREE WITH NO `.git` LINK IS NOT A WORKTREE, WHATEVER `git worktree list` SAYS. Every
+   * command in it resolves to the primary repository's git dir and fails, so the checkout below
+   * could not advance and the quarantine could not list a single stray — measured 2026-10-03, the
+   * link gone since 2026-09-11 and twelve deleted files compiled into every push. Park the whole
+   * directory (moved, never deleted — see setAsideOrphanedWorktree), drop the dead registration,
+   * and fall through to a fresh `add`.
+   */
+  const orphan = setAsideOrphanedWorktree(dir, join(dirname(dir), 'af-smoke-quarantine'))
+  if (orphan.movedTo) {
+    git(['worktree', 'prune'])
+    process.stderr.write(
+      `  … pre-push-smoke: the smoke worktree had lost its .git link; moved it aside to ${orphan.movedTo} ` +
+        `(nothing deleted) and rebuilding it.\n`,
+    )
+  } else if (orphan.error) {
+    process.stderr.write(`  ⚠ pre-push-smoke: could not set aside an orphaned smoke worktree: ${orphan.error}\n`)
+  }
+
   const entry = worktreeEntry(dir)
 
   if (entry) {

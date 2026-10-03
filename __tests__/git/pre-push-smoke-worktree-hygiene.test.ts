@@ -18,15 +18,17 @@
  */
 import { describe, expect, it, afterEach } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 
 import {
   STALE_LOCK_MS,
   clearStaleIndexLock,
   listUntracked,
   quarantineUntracked,
+  setAsideOrphanedWorktree,
   // @ts-expect-error -- plain .mjs helper, no type declarations by design
 } from '../../scripts/smoke-worktree-hygiene.mjs'
 
@@ -174,5 +176,71 @@ describe('clearStaleIndexLock', () => {
   it('holds the threshold at ten minutes', () => {
     // Pinned because the prose in both files quotes it; a drift here makes the message a lie.
     expect(STALE_LOCK_MS).toBe(10 * 60_000)
+  })
+})
+
+/*
+ * Measured 2026-10-03: the shared smoke worktree had lost its `.git` link file (git still listed it,
+ * "prunable"). Every git command in it then resolved to the primary repository and failed, so the
+ * checkout could not advance, `quarantineUntracked` could list nothing, and files deleted from main
+ * since 2026-09-11 were compiled into every push. The fallback deleted the directory; this parks it.
+ */
+describe('setAsideOrphanedWorktree', () => {
+  /** A repo plus a linked worktree under its `.git`, the way the smoke worktree is laid out. */
+  function makeOrphan(): { repo: string; wt: string; quarantine: string; nmTarget: string } {
+    const repo = makeRepo()
+    const wt = join(repo, '.git', 'af-smoke-worktree')
+    g(['worktree', 'add', '--quiet', '--detach', wt, 'HEAD'], repo)
+    writeFileSync(join(wt, 'stale-since-09-11.ts'), 'export const deletedOnMain = true\n')
+    // A stand-in for the shared install, INSIDE this test's own temp dir, so nothing real is reachable.
+    const nmTarget = join(repo, 'shared-node-modules')
+    mkdirSync(nmTarget)
+    writeFileSync(join(nmTarget, 'marker.txt'), 'shared install\n')
+    symlinkSync(nmTarget, join(wt, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir')
+    rmSync(join(wt, '.git'), { force: true }) // the defect: the link file is gone
+    return { repo, wt, quarantine: join(repo, '.git', 'af-smoke-quarantine'), nmTarget }
+  }
+
+  it('PREMISE: git cannot operate in a worktree whose .git link is gone', () => {
+    const { wt } = makeOrphan()
+    const r = spawnSync('git', ['-C', wt, 'status', '--porcelain'], { encoding: 'utf8', windowsHide: true })
+    expect(r.status).not.toBe(0)
+    expect(r.stderr).toMatch(/work tree/i)
+  })
+
+  it('moves the whole directory aside, contents intact, and nothing is deleted', () => {
+    const { wt, quarantine } = makeOrphan()
+    const out = setAsideOrphanedWorktree(wt, quarantine, { now: new Date('2026-10-03T03:30:00Z') })
+    expect(out.movedTo).toBe(join(quarantine, '2026-10-03T03-30-00-000Z-orphaned-worktree'))
+    expect(existsSync(wt)).toBe(false)
+    expect(readFileSync(join(out.movedTo, 'stale-since-09-11.ts'), 'utf8')).toContain('deletedOnMain')
+    expect(readFileSync(join(out.movedTo, 'tracked.ts'), 'utf8')).toContain('export const a = 1')
+  })
+
+  it('unlinks the node_modules link first, and leaves its target untouched', () => {
+    const { wt, quarantine, nmTarget } = makeOrphan()
+    const before = readdirSync(nmTarget)
+    const out = setAsideOrphanedWorktree(wt, quarantine)
+    expect(existsSync(join(out.movedTo, 'node_modules'))).toBe(false)
+    expect(readdirSync(nmTarget)).toEqual(before)
+    expect(readFileSync(join(nmTarget, 'marker.txt'), 'utf8')).toBe('shared install\n')
+  })
+
+  it('after a prune the slot is free for a fresh worktree', () => {
+    const { repo, wt, quarantine } = makeOrphan()
+    setAsideOrphanedWorktree(wt, quarantine)
+    g(['worktree', 'prune'], repo)
+    g(['worktree', 'add', '--quiet', '--detach', wt, 'HEAD'], repo)
+    expect(existsSync(join(wt, '.git'))).toBe(true)
+    expect(existsSync(join(wt, 'stale-since-09-11.ts'))).toBe(false)
+  })
+
+  it('CONTROL: leaves a healthy worktree, and a missing directory, alone', () => {
+    const repo = makeRepo()
+    const wt = join(repo, '.git', 'af-smoke-worktree')
+    g(['worktree', 'add', '--quiet', '--detach', wt, 'HEAD'], repo)
+    expect(setAsideOrphanedWorktree(wt, join(repo, '.git', 'q'))).toEqual({ movedTo: null })
+    expect(lstatSync(join(wt, '.git')).isFile()).toBe(true)
+    expect(setAsideOrphanedWorktree(join(repo, 'nope'), join(repo, '.git', 'q'))).toEqual({ movedTo: null })
   })
 })

@@ -177,3 +177,44 @@ export function quarantineUntracked(worktreeDir, quarantineRoot, { now = new Dat
 
   return { stamp, dir, moved, failed, skipped }
 }
+
+/**
+ * A worktree directory that git no longer recognises as a worktree — its `.git` link file is gone —
+ * moved aside whole, never deleted. Returns `{ movedTo, error }`; `movedTo` is null when nothing
+ * needed doing (no directory, or a healthy link) or when the move failed.
+ *
+ * 🛑 MEASURED 2026-10-03: THE SHARED SMOKE WORKTREE HAD LOST ITS `.git` LINK SINCE 2026-09-11.
+ * Git still listed it ("prunable: gitdir file points to non-existent location"), but every command
+ * run in it resolved to the PRIMARY repository's git dir and failed with "this operation must be
+ * run in a work tree". So the checkout could not advance, `quarantineUntracked` could not list
+ * anything, and twelve files deleted from `main` since 09-11 stayed on disk to be compiled by every
+ * run — "TypeScript errors: 177 (baseline 143)", the same twelve files every time, against commits
+ * a clean full typecheck measured at 139. It blocked every push whose smoke actually ran.
+ *
+ * The existing fallback (`nukeWorktree`) DELETES the directory, recursively, with every error
+ * swallowed — the repair this file exists to avoid, because a stray may be someone's only copy.
+ * So the whole directory is parked under the quarantine root instead, after which the caller can
+ * prune the dead registration and add a fresh worktree.
+ *
+ * ⚠ THE node_modules LINK IS UNLINKED FIRST, AND ONLY UNLINKED. `unlinkSync` removes a junction or
+ * symlink and refuses a real directory, so it can never recurse into the shared install. Leaving
+ * the link inside the parked copy would plant a path into every session's node_modules in a
+ * directory whose whole purpose is to be cleaned up by hand someday.
+ */
+export function setAsideOrphanedWorktree(worktreeDir, quarantineRoot, { now = new Date() } = {}) {
+  if (!existsSync(worktreeDir)) return { movedTo: null }
+  if (existsSync(join(worktreeDir, '.git'))) return { movedTo: null }
+  try {
+    unlinkSync(join(worktreeDir, 'node_modules'))
+  } catch {
+    // Absent, or a real directory (which unlinkSync refuses) — either way, nothing was followed.
+  }
+  const to = join(quarantineRoot, `${now.toISOString().replace(/[:.]/g, '-')}-orphaned-worktree`)
+  try {
+    mkdirSync(quarantineRoot, { recursive: true })
+    renameSync(worktreeDir, to)
+    return { movedTo: to }
+  } catch (err) {
+    return { movedTo: null, error: err.message }
+  }
+}
