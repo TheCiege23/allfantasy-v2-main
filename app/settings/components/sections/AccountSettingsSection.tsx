@@ -17,6 +17,8 @@ export function AccountSettingsSection({
   const [deleteConfirm, setDeleteConfirm] = useState("")
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [dataBusy, setDataBusy] = useState(false)
+  const [dataStatus, setDataStatus] = useState<{ kind: "ready" | "partial" | "error"; message?: string } | null>(null)
   // No caller currently passes a real planLabel prop (it's always null) — this page never queried
   // a real plan before. Fall back to a live client-side entitlement check rather than always
   // showing "Free" regardless of the user's actual subscription.
@@ -142,6 +144,50 @@ export function AccountSettingsSection({
     }
   }
 
+  /*
+   * "Download my data" (app/api/user/export). Fetched rather than linked, so a refusal — signed out,
+   * rate-limited, a failed read — shows its reason here instead of downloading an error page as
+   * the file. The export names any section it could not gather; when it does, say so, because a
+   * partial copy must never read as a complete one.
+   */
+  const handleDownloadData = async () => {
+    if (dataBusy) return
+    setDataBusy(true)
+    setDataStatus(null)
+    try {
+      const res = await fetch("/api/user/export", { cache: "no-store" })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: unknown; message?: unknown }
+        const reason = typeof body.message === "string" ? body.message : typeof body.error === "string" ? body.error : ""
+        setDataStatus({ kind: "error", message: res.status === 429 && reason ? reason : undefined })
+        return
+      }
+      const text = await res.text()
+      let partial = false
+      try {
+        const parsed = JSON.parse(text) as { unavailableSections?: unknown }
+        partial = Array.isArray(parsed.unavailableSections) && parsed.unavailableSections.length > 0
+      } catch {
+        // Unparseable is still the file the server sent; hand it over as-is.
+      }
+      const filename =
+        /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? "allfantasy-data.json"
+      const url = URL.createObjectURL(new Blob([text], { type: "application/json" }))
+      const a = document.createElement("a")
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      setDataStatus({ kind: partial ? "partial" : "ready" })
+    } catch {
+      setDataStatus({ kind: "error" })
+    } finally {
+      setDataBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -184,8 +230,51 @@ export function AccountSettingsSection({
           style={{ borderColor: "var(--border)", color: "var(--text)" }}
           data-testid="settings-account-sign-out"
         >
-          Sign out
+          {t("settings.account.signOut")}
         </button>
+      </div>
+
+      <div
+        className="rounded-xl border p-4 space-y-3"
+        style={{ borderColor: "var(--border)", background: "var(--panel2)" }}
+        data-testid="settings-account-data"
+      >
+        <p className="text-sm font-medium" style={{ color: "var(--text)" }}>
+          {t("settings.account.dataHeading")}
+        </p>
+        <p className="text-xs" style={{ color: "var(--muted)" }}>{t("settings.account.dataIntro")}</p>
+        <button
+          type="button"
+          onClick={() => void handleDownloadData()}
+          disabled={dataBusy}
+          aria-busy={dataBusy}
+          className="rounded-xl border px-4 py-2 text-sm font-semibold disabled:cursor-wait disabled:opacity-60"
+          style={{ borderColor: "var(--border)", color: "var(--text)" }}
+          data-testid="settings-account-data-download"
+        >
+          {dataBusy ? t("settings.account.dataPreparing") : t("settings.account.dataDownload")}
+        </button>
+        {dataStatus ? (
+          <p
+            role={dataStatus.kind === "ready" ? "status" : "alert"}
+            className="text-xs"
+            style={{
+              color:
+                dataStatus.kind === "error"
+                  ? "var(--accent-red-strong)"
+                  : dataStatus.kind === "partial"
+                    ? "#fbbf24"
+                    : "var(--muted)",
+            }}
+            data-testid="settings-account-data-status"
+          >
+            {dataStatus.kind === "ready"
+              ? t("settings.account.dataReady")
+              : dataStatus.kind === "partial"
+                ? t("settings.account.dataPartial")
+                : dataStatus.message || t("settings.account.dataError")}
+          </p>
+        ) : null}
       </div>
 
       <div className="rounded-xl border border-red-500/30 p-4 space-y-3" style={{ background: "var(--panel2)" }}>

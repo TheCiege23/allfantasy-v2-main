@@ -1885,7 +1885,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.legal.linkDataDeletion": "Data Deletion",
 
     "settings.account.title": "Account",
-    "settings.account.subtitle": "Plan, member since, sign out, and account deletion.",
+    "settings.account.subtitle": "Plan, member since, sign out, your data, and account deletion.",
     "settings.account.plan": "Plan",
     "settings.account.memberSince": "Member since {{date}}",
     "settings.account.planFree": "Free",
@@ -1902,6 +1902,13 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.account.confirmDeleteCta": "Delete my account permanently",
     "settings.account.deleting": "Deleting…",
     "settings.account.deletionFooter": "Deletion is immediate and cannot be undone. Leagues you were in keep an anonymized member record.",
+    "settings.account.dataHeading": "Download your data",
+    "settings.account.dataIntro": "Get a copy of what AllFantasy holds about you — profile, connections, billing history, leagues, your messages and Chimmy chats — as a JSON file. Passwords and sign-in keys are never included.",
+    "settings.account.dataDownload": "Download my data",
+    "settings.account.dataPreparing": "Preparing your file…",
+    "settings.account.dataReady": "Your download has started.",
+    "settings.account.dataPartial": "Your download has started, but some sections could not be gathered right now — the file lists which. Try again later for a complete copy.",
+    "settings.account.dataError": "Your data could not be downloaded. Please try again.",
 
     "settings.billing.currentPlan": "Current plan",
     "settings.billing.afFree": "AF Free",
