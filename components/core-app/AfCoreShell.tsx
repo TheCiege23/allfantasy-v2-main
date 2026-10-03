@@ -9,7 +9,6 @@ import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
-import { IosAppPushRegistrar } from '@/components/notifications/IosAppPushRegistrar'
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
@@ -36,8 +35,16 @@ import { routeRefreshClaimed } from '@/components/core-app/routeRefreshClaim'
 import { CORE_NAV_ATTRIBUTE, CoreNavPendingContext, pendingCoreNavTarget } from '@/components/core-app/coreNavPending'
 import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from 'react'
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
+import {
+  currentRailCareerLines,
+  RAIL_CAREER_EVENT,
+  railLeagueKey,
+  type RailCareerDetail,
+} from '@/lib/core-app/railCareerChannel'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
 
@@ -177,6 +184,7 @@ export type CoreNavKey =
   | 'live-scores'
   | 'my-leagues'
   | 'settings'
+  | 'plans'
   /*
    * 38a. `live` is the league-dashboard entry to the cross-league live slate
    * that /live already serves — same data layer, inside the shell. `standings`
@@ -445,7 +453,7 @@ const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
   },
   {
     label: 'You',
-    keys: ['career', 'rankings', 'notifications', 'commissioner', 'tools', 'settings'],
+    keys: ['career', 'rankings', 'notifications', 'commissioner', 'tools', 'settings', 'plans'],
   },
 ]
 
@@ -788,6 +796,16 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     // unreachable from Core: the nav skipped straight past it, and the redesign
     // read as "Settings did not change". Preferences is one card away.
     { key: 'settings', label: 'Settings', glyph: '◧', href: '/settings' },
+    /*
+     * Plans and token packs. Until 2026-10-03 the only way to buy was More → Tools → scroll to
+     * the bottom → Account → Plans, and the owner could not find it; neither, App Review warned,
+     * would a reviewer. Points at /pricing, which also lists the token packs.
+     *
+     * ⚠ KEEP IT A PLAIN /pricing HREF. In an iOS build that cannot sell (no AFIAP marker),
+     * globals.css hides every `a[href^='/pricing']` and middleware redirects the page — App
+     * Store 3.1.1. A tracking param or an absolute URL here would slip past that rule.
+     */
+    { key: 'plans', label: 'Plans & tokens', glyph: '✦', href: '/pricing' },
     /* Admins only — see the CoreNavKey note. Another full page outside /core. */
     ...(props.isAdmin
       ? [{ key: 'admin' as const, label: 'Admin', glyph: '⬢', href: '/admin' }]
@@ -822,7 +840,7 @@ const NAV_SECTIONS: Array<{ id: string; heading: string | null; keys: CoreNavKey
      * used to sit beside is retired — see the rail note above — so this is now
      * the only sync entry, and it answers a per-league question only.
      */
-    keys: ['commissioner', 'notifications', 'sync', 'my-leagues', 'settings', 'tools', 'admin'],
+    keys: ['commissioner', 'notifications', 'sync', 'my-leagues', 'settings', 'plans', 'tools', 'admin'],
   },
 ]
 
@@ -1225,6 +1243,8 @@ export function syncChipText(ageLabel: string): string {
 }
 
 export function AfCoreShell(incoming: AfCoreShellProps) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   /*
    * The screen streams in after this shell paints, so the few pieces of chrome only a screen
    * can know (week label, tab badges, Chimmy's home signals, the live slate count) arrive by
@@ -1374,6 +1394,18 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
    *   'open'    chose expanded  desktop 300px,        mobile tray OPEN
    */
   const [railChoice, setRailChoice] = useState<'open' | 'closed' | null>(null)
+  /*
+   * Your record in each league, published by the Career screen while it is open
+   * (`lib/core-app/railCareerChannel.ts`); null everywhere else. Read once on mount — the screen may
+   * have published before this effect ran — then kept current by the event.
+   */
+  const [railCareer, setRailCareer] = useState<Record<string, string> | null>(null)
+  useEffect(() => {
+    setRailCareer(currentRailCareerLines())
+    const onLines = (e: Event) => setRailCareer((e as CustomEvent<RailCareerDetail>).detail?.lines ?? null)
+    window.addEventListener(RAIL_CAREER_EVENT, onLines)
+    return () => window.removeEventListener(RAIL_CAREER_EVENT, onLines)
+  }, [])
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   /* League-first reuses the More sheet (and its focus handling) for two menus: Me and Play. */
   const [mobileSheet, setMobileSheet] = useState<'me' | 'play'>('me')
@@ -1661,7 +1693,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         type="button"
         className="af-rail-handle"
         ref={railHandleRef}
-        aria-label={railOpen ? 'Close leagues' : 'Open leagues'}
+        aria-label={railOpen ? (language === 'es' ? 'Cerrar ligas' : 'Close leagues') : (language === 'es' ? 'Abrir ligas' : 'Open leagues')}
         aria-expanded={railOpen}
         aria-controls="af-rail"
         onClick={toggleRail}
@@ -1670,7 +1702,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <AfCrest size={20} tone="inherit" />
         </span>
         <span className="af-rail-handle-text">
-          {railOpen ? 'Close' : selectedLeagueName ?? 'Leagues'}
+          {railOpen ? copy('Close') : selectedLeagueName ?? copy('Leagues')}
         </span>
       </button>
 
@@ -1679,7 +1711,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         ref={railRef}
         className="af-rail"
         id="af-rail"
-        aria-label="Leagues"
+        aria-label={copy('Leagues')}
         onClick={(event) => {
           if (mobileRailOpen && (event.target as HTMLElement).closest('a[href]')) {
             setRailChoice('closed')
@@ -1760,6 +1792,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               ? Math.max(0, Math.floor((railClock - mFreshAt) / 60_000))
               : null
             const railName = railLabels.get(l.id) ?? l.name
+            // Keyed on the league's own name, not the rail's disambiguated label: that is Career's identity.
+            const careerLine = railCareer?.[railLeagueKey(l.name)] ?? null
             /* League-first opens a league on its matchup when it has a head-to-head this week —
                the same rule the /core landing uses (resolveLeagueFirstLanding). */
             const leagueHref = props.leagueFirst && m && !m.unpaired
@@ -1800,8 +1834,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 data-active={l.id === props.selectedLeagueId}
                 data-score-changed={railSwings[l.id] != null ? 'true' : undefined}
                 aria-current={l.id === props.selectedLeagueId ? 'true' : undefined}
-                title={`${railName} · ${l.platform}`}
-                aria-label={`${railName} on ${l.platform}`}
+                title={`${railName} · ${l.platform}${careerLine ? ` · your career here ${careerLine}` : ''}`}
+                aria-label={`${railName} on ${l.platform}${careerLine ? `, your career here ${careerLine}` : ''}`}
                 /*
                   ⚠ CLOSES THE TRAY ON SELECTION, ON MOBILE ONLY. The handoff asks
                   for it, and it matters: the tray is full-screen, so navigating
@@ -1856,6 +1890,8 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       </span>
                     ) : null}
                   </span>
+                  {/* On the Career screen only: your finished-season record and titles in this league. */}
+                  {careerLine ? <span className="af-rail-row-career">{careerLine}</span> : null}
                   {l.platform.toLowerCase() === 'sleeper' && railOpen ? (
                     <span className="af-rail-score-status" data-delayed={!l.syncPaused && delayed || undefined}>
                       {l.syncPaused ? 'Account sync paused' : delayed ? 'Score update delayed' : live ? `W${live.week} scores updated ${new Date(live.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Refreshing scores...'}
@@ -1924,13 +1960,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           them. This is the half that makes removing the cap safe.
         */}
         <div className="af-rail-foot">
-        <Link href="/create-league" className="af-rail-tile af-rail-add">
+        <Link href="/create-league" className="af-rail-tile af-rail-add" aria-label={copy('Create a league')}>
           <span className="af-rail-foot-icon" aria-hidden>+</span>
-          <span className="af-rail-foot-copy"><strong>Create a league</strong><small>Build a custom league</small></span>
+          <span className="af-rail-foot-copy"><strong>{copy('Create a league')}</strong><small>{copy('Build a custom league')}</small></span>
         </Link>
-        <Link href="/import" className="af-rail-tile af-rail-add">
+        <Link href="/import" className="af-rail-tile af-rail-add" aria-label={copy('Import a league')}>
           <span className="af-rail-foot-icon" aria-hidden>↓</span>
-          <span className="af-rail-foot-copy"><strong>Import a league</strong><small>Connect a platform</small></span>
+          <span className="af-rail-foot-copy"><strong>{copy('Import a league')}</strong><small>{copy('Connect a platform')}</small></span>
         </Link>
 
         <Link href="/settings" className="af-rail-tile af-rail-profile" title="Profile, settings and modes">
@@ -1965,7 +2001,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           <div className="af-nav-group" key={section.id}>
             {section.heading ? (
               <div className="af-nav-heading af-label" aria-hidden>
-                {section.heading}
+                {copy(section.heading)}
               </div>
             ) : null}
             {/*
@@ -1974,7 +2010,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               aria-hidden because it is repeated as the list's accessible name —
               announcing it twice is worse than not styling it at all.
             */}
-            <ul className="af-nav-items" aria-label={section.heading ?? 'Primary'}>
+            <ul className="af-nav-items" aria-label={section.heading ? copy(section.heading) : copy('Primary')}>
               {section.items.map((item) => (
                 <li key={item.key}>
                   <Link
@@ -1988,7 +2024,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     <span className="af-nav-glyph" aria-hidden>
                       {item.glyph}
                     </span>
-                    <span className="af-nav-label">{item.label}</span>
+                    <span className="af-nav-label">{copy(item.label)}</span>
                     {item.badge ? (
                       <span className="af-nav-badge" data-tone={item.badge.tone}>
                         {item.badge.text}
@@ -2013,10 +2049,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         */}
         <div className="af-nav-foot">
         <div className="af-import-cta">
-          <div className="af-import-title">Import a league</div>
+          <div className="af-import-title">{copy('Import a league')}</div>
           <p className="af-import-body">{availableImportPlatformsPhrase()}. Read-only, takes about a minute.</p>
           <Link href="/import" className="af-btn af-import-btn">
-            Connect a platform
+            {copy('Connect a platform')}
           </Link>
         </div>
 
@@ -2031,7 +2067,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           className="af-nav-support"
           onClick={() => window.dispatchEvent(new CustomEvent(SUPPORT_OPEN_EVENT))}
         >
-          Contact support
+          {copy('Contact support')}
         </button>
         </div>
       </aside>
@@ -2200,8 +2236,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
           {active === 'home' ? <GameDayAlertsBanner /> : null}
-          {/* iOS app only, renders nothing: re-stores this phone's push token and opens tapped notifications. */}
-          <IosAppPushRegistrar />
+          {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
           <CoreWelcomeTour leagueCount={leagues.length} />
           {/*
             The VISIBLE button, on the /core home screen: a real action row
@@ -2261,7 +2296,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             aria-current={active !== 'live' && !mobileMoreOpen ? 'page' : undefined}
           >
             <span className="af-tabbar-glyph" aria-hidden>▣</span>
-            <span className="af-tabbar-label">Leagues</span>
+            <span className="af-tabbar-label">{copy('Leagues')}</span>
           </Link>
           <Link
             href="/core/live"
@@ -2276,7 +2311,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               ●
               {props.liveGameCount && props.liveGameCount > 0 ? <span className="af-tabbar-dot" data-tone="live" /> : null}
             </span>
-            <span className="af-tabbar-label">Live</span>
+            <span className="af-tabbar-label">{copy('Live')}</span>
           </Link>
           <button
             type="button"
@@ -2298,7 +2333,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             }}
           >
             <span className="af-tabbar-glyph" aria-hidden>⊕</span>
-            <span className="af-tabbar-label">Play</span>
+            <span className="af-tabbar-label">{copy('Play')}</span>
           </button>
           <button
             type="button"
@@ -2313,7 +2348,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             }}
           >
             <span className="af-tabbar-glyph" aria-hidden>◉</span>
-            <span className="af-tabbar-label">Me</span>
+            <span className="af-tabbar-label">{copy('Me')}</span>
           </button>
         </nav>
       ) : (
@@ -2331,7 +2366,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 {item.glyph}
                 {item.badge ? <span className="af-tabbar-dot" data-tone={item.badge.tone} /> : null}
               </span>
-              <span className="af-tabbar-label">{item.label}</span>
+              <span className="af-tabbar-label">{copy(item.label)}</span>
             </Link>
           ))}
           <button
@@ -2346,7 +2381,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             <span className="af-tabbar-glyph" aria-hidden>
               ⋯
             </span>
-            <span className="af-tabbar-label">More</span>
+            <span className="af-tabbar-label">{copy('More')}</span>
           </button>
         </nav>
       )}
@@ -2372,23 +2407,23 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             id="af-mobile-more"
             role="dialog"
             aria-modal="true"
-            aria-label={props.leagueFirst && mobileSheet === 'play' ? 'Play' : 'More screens'}
+            aria-label={props.leagueFirst && mobileSheet === 'play' ? copy('Play') : copy('More screens')}
           >
             <header className="af-mobile-more-head">
               <span>
-                <span className="af-label">{props.leagueFirst ? (mobileSheet === 'play' ? 'Play' : 'Me') : 'More'}</span>
-                <strong>{selectedLeagueName ?? props.scope?.label ?? 'All leagues'}</strong>
+                <span className="af-label">{copy(props.leagueFirst ? (mobileSheet === 'play' ? 'Play' : 'Me') : 'More')}</span>
+                <strong>{selectedLeagueName ?? props.scope?.label ?? copy('All leagues')}</strong>
               </span>
               <button type="button" aria-label="Close more menu" onClick={() => setMobileMoreOpen(false)}>×</button>
             </header>
             {props.leagueFirst && mobileSheet === 'play' ? (
               <div className="af-mobile-more-list">
                 <div className="af-mobile-more-group">
-                  <span className="af-label">Start something</span>
+                  <span className="af-label">{copy('Start something')}</span>
                   {LEAGUE_FIRST_PLAY_LINKS.map((item) => (
                     <Link key={item.href} href={item.href} className="af-mobile-more-link" data-core-nav="" onClick={() => setMobileMoreOpen(false)}>
                       <span className="af-mobile-more-icon" aria-hidden>{item.glyph}</span>
-                      <span>{item.label}</span>
+                      <span>{copy(item.label)}</span>
                     </Link>
                   ))}
                 </div>
@@ -2397,7 +2432,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             <div className="af-mobile-more-list">
               {sections.map((section) => (
                 <div className="af-mobile-more-group" key={section.id}>
-                  {section.heading ? <span className="af-label">{section.heading}</span> : null}
+                  {section.heading ? <span className="af-label">{copy(section.heading)}</span> : null}
                   {section.items.map((item) => (
                     <Link
                       key={item.key}
@@ -2415,7 +2450,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       <span className="af-mobile-more-icon" aria-hidden>
                         <CoreNavIcon navKey={item.key} />
                       </span>
-                      <span>{item.label}</span>
+                      <span>{copy(item.label)}</span>
                       {item.badge ? <b>{item.badge.text}</b> : null}
                     </Link>
                   ))}
@@ -2435,7 +2470,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 one support modal and one code path, not a phone copy.
               */}
               <div className="af-mobile-more-group">
-                <span className="af-label">Help</span>
+                <span className="af-label">{copy('Help')}</span>
                 <button
                   type="button"
                   className="af-mobile-more-link"
@@ -2463,7 +2498,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                       <path d="M12 16.6h.01" />
                     </svg>
                   </span>
-                  <span>Contact support</span>
+                  <span>{copy('Contact support')}</span>
                 </button>
               </div>
             </div>

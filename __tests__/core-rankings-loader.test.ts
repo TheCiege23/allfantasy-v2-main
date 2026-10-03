@@ -45,6 +45,7 @@ const state = {
   cache: new Map<string, unknown>(),
   failProfiles: false,
   upserts: [] as Array<{ key: string; data: unknown }>,
+  rankWrites: [] as Array<{ userId: string; xpTotal: bigint; xpLevel: number }>,
 }
 
 function inList(where: unknown, path: string[]): string[] | null {
@@ -60,6 +61,13 @@ vi.mock('@/lib/prisma', () => ({
       return state.profiles
     }),
     league: { findMany: vi.fn(async () => []) },
+    // The daily snapshot's level refresh writes through `calculateAndSaveRank`.
+    userProfile: {
+      upsert: vi.fn(async (args: { where: { userId: string }; update: { xpTotal: bigint; xpLevel: number } }) => {
+        state.rankWrites.push({ userId: args.where.userId, xpTotal: args.update.xpTotal, xpLevel: args.update.xpLevel })
+        return {}
+      }),
+    },
     appUser: {
       findMany: vi.fn(async (args: { where: unknown }) => {
         const ids = inList(args.where, ['id', 'in']) ?? []
@@ -145,6 +153,7 @@ beforeEach(() => {
   n = 0
   state.failProfiles = false
   state.upserts = []
+  state.rankWrites = []
   state.cache = new Map()
   state.profiles = [
     { userId: 'u1', username: 'alice', displayName: null, avatarUrl: null, xp_total: BigInt(0), rank_calculated_at: new Date('2026-09-10T00:00:00Z') },
@@ -262,6 +271,31 @@ describe('runRankingsDailySnapshot', () => {
     expect(state.upserts).toHaveLength(1)
   })
 
+  it('rewrites only the stored levels that disagree with the ledger, on the first fire of the day', async () => {
+    const { runRankingsDailySnapshot } = await import('@/lib/core-app/rankingsCommunity')
+    // Every fixture profile is stale: u1 stores 0 XP, u2 and u3 store none.
+    const first = await runRankingsDailySnapshot(NOW)
+    expect(first).toMatchObject({ written: 1, failed: 0, levelsRefreshed: 3, levelsRefreshFailed: 0, levelsDeferred: 0 })
+    expect(state.rankWrites.map((w) => w.userId).sort()).toEqual(['u1', 'u2', 'u3'])
+    const u1 = state.rankWrites.find((w) => w.userId === 'u1')!
+    expect(Number(u1.xpTotal)).toBeGreaterThan(0)
+
+    // Store exactly what was written; tomorrow nothing disagrees, so nothing is rewritten.
+    for (const p of state.profiles) {
+      p.xp_total = state.rankWrites.find((w) => w.userId === p.userId)!.xpTotal
+    }
+    state.rankWrites = []
+    const next = await runRankingsDailySnapshot(new Date('2026-09-17T16:00:00Z'))
+    expect(next).toMatchObject({ written: 1, levelsRefreshed: 0, levelsRefreshFailed: 0 })
+    expect(state.rankWrites).toHaveLength(0)
+
+    // Same day again: the snapshot exists, so the refresh does not run a second time.
+    state.profiles[0].xp_total = BigInt(1)
+    const again = await runRankingsDailySnapshot(new Date('2026-09-17T20:00:00Z'))
+    expect(again).toMatchObject({ alreadyWritten: 1, levelsRefreshed: 0 })
+    expect(state.rankWrites).toHaveLength(0)
+  })
+
   it('counts a failure instead of throwing', async () => {
     state.failProfiles = true
     const { runRankingsDailySnapshot } = await import('@/lib/core-app/rankingsCommunity')
@@ -281,5 +315,15 @@ describe('runRankingsDailySnapshot', () => {
     } finally {
       vi.unstubAllEnvs()
     }
+  })
+})
+
+describe('recordText — the league board record', () => {
+  it('shows a tie only when there is one, and reads a cached row without the field as no ties', async () => {
+    const { recordText } = await import('@/lib/core-app/rankings')
+    expect(recordText({ wins: 7, losses: 5, ties: 1 })).toBe('7-5-1')
+    expect(recordText({ wins: 7, losses: 6, ties: 0 })).toBe('7-6')
+    // A `leagueStandingsSummary` row cached before `ties` existed.
+    expect(recordText({ wins: 7, losses: 6 })).toBe('7-6')
   })
 })

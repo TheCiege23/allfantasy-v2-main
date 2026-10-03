@@ -67,6 +67,13 @@ model PlayerValueSnapshot {
 
   capturedAt DateTime @default(now())
 
+  /// Market axes and observation time, added by 20260909130000_decision_os_market_observations.
+  /// Historic rows are NULL — their axes were never recorded. Modelled so that `migrate dev`
+  /// does not propose dropping live columns (see __tests__/prisma/migration-tables-have-models).
+  marketNumTeams Int?
+  marketPpr      Float?
+  observedAt     DateTime? @db.Timestamptz(3)
+
   @@unique([sleeperId, source, format, qbFormat, capturedAt])
   @@index([sleeperId, capturedAt])
   @@index([source, capturedAt])
@@ -6476,6 +6483,7 @@ model League {
   devyRights                            DevyRights[]
   discordLeagueChannels                 DiscordLeagueChannel[]
   draftPickAuditLogs                    DraftPickAuditLog[]
+  commissionerNetworkMembers            CommissionerNetworkMember[]
   draftIntroViews                       DraftIntroView[]
   draftRecaps                           DraftRecap[]
   /// Every draft this league has run, oldest to newest. Was `DraftSession?` (one-to-one) until
@@ -17941,6 +17949,52 @@ model DecisionOsBehavioralSnapshot {
   @@map("decision_os_behavioral_snapshot")
 }
 
+/// Owner-scoped Decision OS strategy state, one row per (user, league, season). Created by
+/// 20260909140000_decision_os_strategy_state, which was applied to production on 2026-09-09 but
+/// only committed on 2026-10-01 — modelled then from that migration so `migrate dev` stops
+/// proposing to drop a live table.
+///
+/// ⚠ The migration also carries CHECK constraints (`active` in balanced/win-now/rebuild,
+/// `revision` >= 0, `lastObservedWeek` >= 1) and ENABLES ROW LEVEL SECURITY with no policies.
+/// Prisma cannot express either; they live in SQL only.
+model DecisionStrategyState {
+  id               String   @id
+  userId           String
+  leagueId         String
+  season           Int
+  active           String   @default("balanced") @db.VarChar(16)
+  revision         Int      @default(0)
+  pending          Json?
+  lastObservedWeek Int?
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([userId, leagueId, season])
+  @@map("decision_strategy_states")
+}
+
+/// Append-only ledger of DecisionStrategyState changes, one row per revision. Same migration,
+/// same CHECK (`action` in observe/confirm) and RLS caveat as above. `stateId` deliberately
+/// carries NO relation: production has no FK on it, and declaring one would make the schema
+/// propose adding it.
+model DecisionStrategyEvent {
+  id         String   @id
+  stateId    String
+  userId     String
+  leagueId   String
+  season     Int
+  revision   Int
+  action     String   @db.VarChar(16)
+  evidenceId String?
+  before     Json
+  after      Json
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([stateId, revision])
+  @@index([userId, leagueId, season, createdAt])
+  @@map("decision_strategy_events")
+}
+
 /// Fantasy OS Suite — Phase OS-A1. Decision OS's provider-agnostic BELIEF about whether real money
 /// is involved in a league, and how confident that belief is. Deliberately separate from
 /// `LeagueFinance` (AF-native Stripe/PayPal treasury processing for leagues that opt into AllFantasy's
@@ -18594,6 +18648,35 @@ model RecentPlayerSearch {
   @@map("recent_player_searches")
 }
 
+/// One commissioner-owned group of leagues, independent of player franchises.
+model CommissionerNetwork {
+  id          String                      @id @default(cuid())
+  ownerUserId String
+  name        String
+  createdAt   DateTime                    @default(now())
+  updatedAt   DateTime                    @updatedAt
+  members     CommissionerNetworkMember[]
+
+  @@index([ownerUserId])
+  @@map("commissioner_networks")
+}
+
+/// An owned league in a commissioner network. The owner is rechecked at read and write time.
+model CommissionerNetworkMember {
+  id        String              @id @default(cuid())
+  networkId String
+  leagueId  String
+  role      String              @default("member")
+  label     String?
+  createdAt DateTime            @default(now())
+  network   CommissionerNetwork @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  league    League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+
+  @@unique([networkId, leagueId])
+  @@unique([leagueId])
+  @@map("commissioner_network_members")
+}
+
 /// Commissioner Workspace's persisted task store — see
 /// prisma/migrations/20260908120000_commissioner_workspace_tasks for why it exists
 /// and what each column means. The short version: Workspace deliberately shipped
@@ -18911,4 +18994,92 @@ model ChimmyRequestReceipt {
   @@index([userId, createdAt], map: "chimmy_receipts_user_created")
   @@index([status, expiresAt], map: "chimmy_receipts_recovery")
   @@map("chimmy_request_receipts")
+}
+
+/// A manager's Class rating — the ONE sanctioned derivation of manager quality from
+/// `dw_matchup_facts` (ADR F2.10a). All-play Glicko-2, back-tested 2026-10-01.
+///
+/// ⚠ THE SUBJECT IS A PLATFORM PERSON, NOT AN AF ACCOUNT. `subjectKey` is
+/// `${platform}:${LeagueTeam.platformUserId}` — every league-mate is rated, and only a
+/// few are AllFantasy users (32 of 2,455 at back-test). `userId` is filled when an AF
+/// account has claimed a team held by this person, and is the only link to one.
+///
+/// ⚠ DERIVED AND REBUILDABLE. The writer replays the whole matchup history per
+/// `modelVersion`, so a row is never hand-edited; changing the math means a new
+/// `modelVersion`, never an in-place rewrite of an old one.
+model ManagerRating {
+  id                String    @id @default(cuid())
+  subjectKey        String    @db.VarChar(160)
+  platform          String    @db.VarChar(16)
+  platformUserId    String    @db.VarChar(128)
+  /// The AF account that has claimed a team held by this person, when one has.
+  userId            String?   @db.VarChar(64)
+  sport             String    @default("NFL") @db.VarChar(12)
+  modelVersion      String    @db.VarChar(32)
+  /// Glicko-2 on the 1500 display scale.
+  rating            Float
+  /// Rating deviation — the uncertainty. Always shown beside the rating (ADR F2.10a).
+  rd                Float
+  volatility        Float
+  /// Rated league-weeks (one all-play observation each).
+  games             Int
+  /// `rd` at or under the model's establishment threshold. Only established
+  /// ratings define the Class percentiles, and only they are gated by division.
+  established       Boolean   @default(false)
+  /// Share of established ratings below this one, 0–1. Null while provisional.
+  percentile        Float?
+  /// Class 1–25 by percentile. Null while provisional.
+  classLevel        Int?
+  /// Matchmaking division 1–5 (Classes 1–5, 6–10 …). Null while provisional.
+  division          Int?
+  /// Last rating period folded in, as season * 100 + week.
+  lastPeriod        Int?
+  computedAt        DateTime
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([subjectKey, sport, modelVersion])
+  @@index([userId, sport, modelVersion])
+  @@index([sport, modelVersion, established, rating])
+  @@map("manager_ratings")
+}
+
+/// One league-week in a rated person's game log: what they scored, how they did
+/// against the whole league (all-play) and their head-to-head opponent, and what it
+/// did to their rating.
+///
+/// ⚠ A RATING PERIOD IS A WEEK, NOT A GAME. Glicko-2 folds every league a person
+/// played in that week into one update, so `ratingBefore`/`ratingAfter` are the
+/// week's, shared by all of that week's rows. `ratingDelta` is THIS league's share
+/// of the change and the shares sum to the week's move — that is what lets the game
+/// log say "+9 from League A, −3 from League B".
+model ManagerRatingEvent {
+  id                String    @id @default(cuid())
+  subjectKey        String    @db.VarChar(160)
+  sport             String    @default("NFL") @db.VarChar(12)
+  modelVersion      String    @db.VarChar(32)
+  /// Our `League.id` — the canonical row kept when one platform league was imported
+  /// under several AF rows.
+  leagueId          String    @db.VarChar(64)
+  season            Int
+  week              Int
+  pointsFor         Float
+  /// Teams beaten / tied this week across the whole league, and how many there were.
+  allPlayWins       Float
+  allPlayGames      Int
+  /// The head-to-head game, when the week had one for this person.
+  opponentKey       String?   @db.VarChar(160)
+  pointsAgainst     Float?
+  /// 'W' | 'L' | 'T'; null when there was no head-to-head game.
+  result            String?   @db.VarChar(1)
+  ratingBefore      Float
+  ratingAfter       Float
+  rdAfter           Float
+  ratingDelta       Float
+  createdAt         DateTime  @default(now())
+
+  @@unique([subjectKey, sport, modelVersion, leagueId, season, week])
+  @@index([subjectKey, sport, modelVersion, season, week])
+  @@index([leagueId, season, week])
+  @@map("manager_rating_events")
 }

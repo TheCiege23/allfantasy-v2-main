@@ -34,6 +34,8 @@ export type ApnsPayload = {
   tag?: string
   type?: string
   leagueId?: string | null
+  /** Absolute https picture; the app's notification service extension attaches it. */
+  imageUrl?: string | null
 }
 
 export type ApnsResult = { ok: true } | { ok: false; expired: boolean; error: string }
@@ -86,14 +88,23 @@ export function __resetApnsTokenCache(): void {
 
 /** The notification body Apple shows, plus our own fields the app reads when it is tapped. */
 export function apnsBody(payload: ApnsPayload): string {
+  const imageUrl = payload.imageUrl?.startsWith("https://") ? payload.imageUrl : null
   return JSON.stringify({
     aps: {
       alert: { title: payload.title, ...(payload.body ? { body: payload.body } : {}) },
       sound: "default",
+      /*
+       * `mutable-content` hands the notification to the app's service extension before it is
+       * shown, which is the only way iOS displays a remote image. Set it ONLY with a picture:
+       * the extension gets ~30 s and a memory cap, and a build without one simply shows the
+       * text, so the flag costs nothing to an old app and is pointless without an image.
+       */
+      ...(imageUrl ? { "mutable-content": 1 } : {}),
     },
     href: payload.href ?? null,
     type: payload.type ?? "notification",
     leagueId: payload.leagueId ?? null,
+    ...(imageUrl ? { imageUrl } : {}),
   })
 }
 

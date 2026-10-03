@@ -211,6 +211,30 @@ export async function assignLeagueSeat(
         ...(native ? { platformUserId: userId } : {}),
       },
     })
+  } else if (native) {
+    /*
+     * 🛑 A NATIVE SEAT WITH NO TEAM ROW IS A SEAT THE APP CANNOT SEE YOU IN. The redraft routes'
+     * member check, the Career Wire, the home brief and the league standings all find your team by
+     * `LeagueTeam.claimedByUserId`, and this function only ever UPDATED that row — so a seat whose
+     * row was never created (production 2026-10-01: 33 of 120 native rosters have none) was claimed
+     * with no team at all. An import's team rows belong to its provider sync and are never created
+     * here. An upsert on (leagueId, externalId): a duplicate insert would abort the transaction.
+     */
+    const seat = {
+      ownerName: name,
+      teamName,
+      claimedByUserId: userId,
+      platformUserId: userId,
+      isOrphan: false,
+      isCommissioner: userId === league.userId,
+      isCoCommissioner: false,
+      role: userId === league.userId ? 'commissioner' : 'member',
+    }
+    await tx.leagueTeam.upsert({
+      where: { leagueId_externalId: { leagueId, externalId: rosterId } },
+      create: { leagueId, externalId: rosterId, ...seat },
+      update: seat,
+    })
   }
 
   const slot = await tx.leagueEntrySlot.findFirst({

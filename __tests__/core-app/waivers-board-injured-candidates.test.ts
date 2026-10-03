@@ -14,7 +14,9 @@ vi.mock('server-only', () => ({}))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   leagueTeam: { findMany: async () => [{
     leagueId: 'lg', externalId: '1', platformUserId: 'me',
-    league: { id: 'lg', name: 'Test League', platform: 'sleeper', sport: 'NFL', settings: {}, platformLeagueId: 'SL', leagueType: 'redraft', scoring: 'ppr', logoUrl: null, avatarUrl: null },
+    /* Real starting slots: the board ranks by lineup gain, and a league with none is withheld. The
+       roster starts no QB, so every quarterback here fills the empty QB slot. */
+    league: { id: 'lg', name: 'Test League', platform: 'sleeper', sport: 'NFL', settings: { roster_positions: ['QB', 'RB', 'WR', 'FLEX', 'BN'] }, platformLeagueId: 'SL', leagueType: 'redraft', scoring: 'ppr', logoUrl: null, avatarUrl: null },
   }] },
   roster: { findMany: async () => [{ leagueId: 'lg', platformUserId: 'me', faabRemaining: 100, playerData: { players: ['bench1', 'starter1'], starters: ['starter1'] } }] },
   leagueWaiverSettings: { findMany: async () => [] },

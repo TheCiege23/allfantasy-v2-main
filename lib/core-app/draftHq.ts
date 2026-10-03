@@ -20,6 +20,7 @@ import { leagueDisplayName, type SectionState } from './leagueHome'
 import { leagueContextFor, type LeagueContext, type LeagueContextRow } from './leagueContext'
 import { composePlayerIdentities } from './playerIdentityCompose'
 import { loadDraftAfProjections, type DraftAfProjection } from './draftAfProjections'
+import { parseFormerSleeperKey } from '@/lib/league-import/sleeper/historicalTeamIdentity'
 
 /**
  * Draft HQ — "before the draft: your picks, the lottery, the board settings and
@@ -798,7 +799,7 @@ async function loadCompletedDraftBoard(lc: LeagueContext): Promise<SectionState<
       overall: inRound > 0 ? (r.round - 1) * teamCount + inRound : r.pickNumber,
       label: inRound > 0 ? `${r.round}.${String(inRound).padStart(2, '0')}` : `Round ${r.round}`,
       teamKey,
-      teamName: nameByKey.get(teamKey) ?? null,
+      teamName: nameByKey.get(teamKey) ?? (parseFormerSleeperKey(teamKey) ? 'Former manager' : null),
       isYou: yours.has(teamKey),
       playerName: hit?.name ?? `Player ${r.playerId} (not yet mapped)`,
       position: hit?.position ?? '\u2014',

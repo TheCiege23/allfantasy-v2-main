@@ -8,6 +8,9 @@
   flex-direction: column;
   gap: 12px;
   max-width: 1020px;
+  /* The narrow-screen rules key on THIS box as well as the viewport — see the
+     @container blocks at the end of this file. */
+  container: af-mu / inline-size;
 }
 
 /* ── Week banner ─────────────────────────────────────────────────────── */
@@ -342,7 +345,8 @@
   font-size: 26px;
   font-weight: 800;
   line-height: 1;
-  color: var(--ink);
+  /* `--ink` is defined nowhere, so this used to fall through to inheritance. */
+  color: var(--text);
 }
 
 .af-mu-missing-value {
@@ -350,7 +354,7 @@
   font-size: 13.5px;
   font-weight: 700;
   line-height: 1.5;
-  color: var(--ink);
+  color: var(--text);
 }
 /*
   The coverage caveat is quieter than the total but NOT hidden — it qualifies the
@@ -626,8 +630,9 @@
   .af-mu-half-sub {
     display: none;
   }
+  /* 12px, the app's floor for phone body text (see af-matchup-pulse.css). Was 11.5px. */
   .af-mu-half-name {
-    font-size: 11.5px;
+    font-size: 12px;
   }
   .af-mu-half-pts {
     font-size: 12.5px;
@@ -651,6 +656,15 @@
   .af-mu-missing li {
     flex-direction: column;
     gap: 2px;
+  }
+  /*
+   * ⚠ THE 240px BASIS ON THESE IS A WIDTH IN THE ROW LAYOUT, AND A HEIGHT IN THIS ONE. Flipping
+   * the item to a column turned `flex: 1 1 240px` into a 240px-tall box under one line of text:
+   * measured 261px per item at 375px and at 768px, ~440px of empty card on every phone and tablet.
+   */
+  .af-mu-missing-why,
+  .af-mu-missing-value {
+    flex: 0 0 auto;
   }
 }
 
@@ -840,4 +854,732 @@
   font-weight: 800;
   letter-spacing: 0.07em;
   vertical-align: 2px;
+}
+
+/* ── Game day (components/core-app/screens/Matchup.tsx) ──────────────────────
+ *
+ * Top-level rules and one sibling @media at end of file, for the reason the
+ * 720px block above gives: nothing here can be carried into a narrower band by
+ * an early-closed outer query.
+ */
+
+/* Each starter whose game is on or still to come, beside his (empty) points. */
+.af-mu-gs {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+.af-mu-gs[data-state='live'] {
+  background: var(--good);
+  box-shadow: 0 0 0 2px var(--good-soft);
+}
+.af-mu-gs[data-state='upcoming'] {
+  border: 1.5px solid var(--faint);
+}
+.af-mu-gs-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: -2px 0 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* "3 left to play" under each live score — warn-toned like the LIVE chip: still moving. */
+.af-mu-left {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--warn);
+  white-space: nowrap;
+}
+.af-mu-left[data-none] {
+  color: var(--faint);
+}
+
+/*
+ * ⚠ THE PROVIDER BUTTON CARRIES THE LEAGUE'S NAME, AND ITS MINIMUM WIDTH IS THAT WHOLE NAME.
+ * "View Matchup in <league>" sits in SourceActionLink's `truncate` span, which clips it with an
+ * ellipsis inside the pill — that part always worked. What did not: a flex item's automatic
+ * minimum width is its min-content width, and a nowrap label's min-content is the entire name.
+ * In the phone league-first layout, where the button goes full width, it grew to 463px in a
+ * 343px row and the page scrolled sideways (479px document on a 375px screen). `min-width: 0`
+ * lets it shrink, so the ellipsis can do its job. `.af-btn` raises specificity so this holds
+ * whichever stylesheet the bundle orders first.
+ *
+ * ⚠ MEASURE WITH TAILWIND'S REAL `.truncate`. A static render that loads only the preflight
+ * leaves that span unstyled, and the label then spills OUT of the pill — an artefact this
+ * comment first described as the bug, and a wrapping rule that the span's own nowrap overrides.
+ */
+.af-core .af-btn.af-mu-source {
+  min-width: 0;
+  /* More of the name before the ellipsis on a wide screen than the shared 260px allows. */
+  max-width: min(100%, 420px);
+}
+
+@media (max-width: 780px) {
+  /*
+   * Both team names truncated on a 375px phone ("Purdy Good Situat…", "Gibbs Me The
+   * Ball…") — the only place on the page that names the two sides. Two lines, clamped.
+   */
+  .af-mu-team-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.2;
+  }
+}
+
+/* ── 2026-10-02 visual pass (components/core-app/screens/Matchup.tsx) ─────────
+ *
+ * Top-level rules and sibling @media blocks only, appended at end of file — the
+ * nested-@media incident this file is named for cannot reach anything below.
+ *
+ * Three ideas, all driven by data attributes the screen already knows:
+ *   1. The banner takes the colour of whoever is ahead (`data-leader`).
+ *   2. Win probability is a bar as well as a number.
+ *   3. Every slot row is tinted on the side that is winning it (`data-edge`),
+ *      so the board reads as a scoreboard before a single number is parsed.
+ */
+
+/* 1 — the banner */
+.af-mu-h2h {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.af-mu-h2h::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.af-mu-h2h[data-leader='you']::before {
+  opacity: 1;
+  background: radial-gradient(120% 140% at 0% 50%, var(--good-soft), transparent 55%);
+}
+.af-mu-h2h[data-leader='opponent']::before {
+  opacity: 1;
+  background: radial-gradient(120% 140% at 100% 50%, var(--bad-soft), transparent 55%);
+}
+.af-mu-h2h[data-leader='you'] .af-mu-team[data-you='true'] .af-mu-score[data-basis='scored'] {
+  color: var(--good);
+}
+.af-mu-h2h[data-leader='opponent'] .af-mu-team[data-you='false'] .af-mu-score[data-basis='scored'] {
+  color: var(--bad);
+}
+/* The leader's crest gets a ring — one more cue that does not depend on reading a number. */
+.af-mu-h2h[data-leader='you'] .af-mu-team[data-you='true'] .af-mu-crest {
+  box-shadow: 0 0 0 2px var(--good);
+}
+.af-mu-h2h[data-leader='opponent'] .af-mu-team[data-you='false'] .af-mu-crest {
+  box-shadow: 0 0 0 2px var(--bad);
+}
+
+/* LIVE breathes. A finished or unplayed week holds still. */
+.af-mu-week-state[data-state='live'] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-mu-week-state[data-state='live']::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: af-mu-breathe 1.6s ease-in-out infinite;
+}
+@keyframes af-mu-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+/* 2 — win probability as a bar */
+.af-mu-centre-value[data-tone='good'] {
+  color: var(--good);
+}
+.af-mu-centre-value[data-tone='bad'] {
+  color: var(--bad);
+}
+.af-mu-wp {
+  position: relative;
+  width: 100%;
+  max-width: 180px;
+  height: 8px;
+  margin: 6px 0 2px;
+  border-radius: 999px;
+  background: var(--bad-soft);
+  box-shadow: inset 0 0 0 1px var(--line);
+  overflow: hidden;
+}
+.af-mu-wp-you {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--good), var(--accent));
+  transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* 3 — the slot board */
+.af-mu-board-row {
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.af-mu-board-row[data-edge='ahead'] {
+  background-image: linear-gradient(90deg, var(--good-soft), transparent 48%);
+}
+.af-mu-board-row[data-edge='behind'] {
+  background-image: linear-gradient(270deg, var(--bad-soft), transparent 48%);
+}
+.af-mu-half[data-edge='ahead'] .af-mu-half-pts {
+  color: var(--good);
+}
+.af-mu-half[data-edge='behind'] .af-mu-half-pts {
+  color: var(--muted);
+  font-weight: 700;
+}
+@media (hover: hover) {
+  .af-mu-board-row:hover {
+    border-color: var(--line2);
+  }
+}
+
+/* What an unplayed starter is still expected to add — labelled, quiet, never in the PTS figure. */
+.af-mu-half-proj {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* "7 slots winning · 5 losing" */
+.af-mu-tally {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-mu-tally-n {
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-mu-tally[data-leader='you'] .af-mu-tally-n {
+  color: var(--good);
+}
+.af-mu-tally[data-leader='opponent'] .af-mu-tally-n {
+  color: var(--bad);
+}
+.af-mu-tally-of {
+  color: var(--faint);
+}
+
+/*
+ * A scoreboard-sized score where the team columns have room for it; elsewhere the size the layout
+ * was measured at.
+ *
+ * ⚠ KEYED ON THE MATCHUP'S OWN WIDTH, NOT THE VIEWPORT. This was `min-width: 1024px`, but at 1024 the
+ * shell's rail and nav leave the matchup ~700px, and a 36px score then left each team name ~30px.
+ * Each team column needs crest 48 + score ~110 + gaps 24 + a readable name — about 860px of
+ * matchup for all three columns.
+ */
+@container af-mu (min-width: 860px) {
+  .af-mu-score {
+    font-size: 36px;
+  }
+  .af-mu-h2h {
+    padding: 22px 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-mu-week-state[data-state='live']::before {
+    animation: none;
+  }
+  .af-mu-wp-you,
+  .af-mu-h2h::before,
+  .af-mu-board-row {
+    transition: none;
+  }
+}
+
+/* ── Phone layout pass (components/core-app/screens/Matchup.tsx), 2026-10-02 ──
+ *
+ * Top-level rules and sibling @media blocks, appended at end of file.
+ */
+
+/*
+ * One bright button, not two. "Set lineup" is the action that changes a result; "View Matchup in
+ * <league>" is a hand-off to read the same thing on the platform. Both were filled accent pills of
+ * equal weight, side by side. The hand-off becomes an outline — every width.
+ */
+.af-core .af-btn.af-mu-source:not([data-handoff='lineup']) {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  box-shadow: none;
+}
+
+/* The sticky scorebar is a phone control; hidden everywhere else. */
+.af-mu-sticky {
+  display: none;
+}
+
+@media (max-width: 780px) {
+  .af-mu-sticky {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 38;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 14px 8px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    animation: af-mu-drop 0.18s ease-out;
+  }
+  .af-mu-sticky-side {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+  .af-mu-sticky-side[data-side='them'] {
+    justify-content: flex-end;
+  }
+  .af-mu-sticky-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .af-mu-sticky-n {
+    flex: none;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .af-mu-sticky[data-basis='projected'] .af-mu-sticky-n {
+    color: var(--text2);
+  }
+  .af-mu-sticky[data-leader='you'] [data-side='you'] .af-mu-sticky-n {
+    color: var(--good);
+  }
+  .af-mu-sticky[data-leader='opponent'] [data-side='them'] .af-mu-sticky-n {
+    color: var(--bad);
+  }
+  .af-mu-sticky-wp {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--chip);
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--muted);
+  }
+  .af-mu-sticky-wp[data-tone='good'] {
+    background: var(--good-soft);
+    color: var(--good);
+  }
+  .af-mu-sticky-wp[data-tone='bad'] {
+    background: var(--bad-soft);
+    color: var(--bad);
+  }
+
+  /*
+   * Score first, hand-offs last. The two provider buttons sat between the week banner and the
+   * score — measured at 375px, the score started 570px down. They read as the end of the page's
+   * job ("now go and fix it"), so they go after the board.
+   */
+  .af-mu > .af-mu-handoff {
+    order: 10;
+    justify-content: stretch;
+  }
+  .af-mu > .af-mu-handoff > * {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  /*
+   * The league is already named, with its crest, in the league card directly above this screen —
+   * on a phone it was printed four times before the score. Hidden from sight, NOT from the
+   * accessibility tree: it is still the page's h1.
+   */
+  .af-mu-week > .af-mu-league-crest {
+    display: none;
+  }
+  .af-mu-week > .af-mu-league-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* The league pill and chat launcher float over the last rows; leave room to scroll past them. */
+  .af-mu {
+    padding-bottom: 76px;
+  }
+}
+
+@keyframes af-mu-drop {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-mu-sticky {
+    animation: none;
+  }
+}
+
+/* ── Kickoffs, injury tags, week picker (components/core-app/screens/Matchup.tsx), 2026-10-02 ──
+ *
+ * Top-level rules and sibling @media blocks, appended at end of file.
+ */
+
+/* "Q" / "D" beside a starter's name — an uncertainty, so warn-toned, never the red of OUT. */
+.af-mu-inj {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}
+
+/* "Sun 1:00 PM @ BUF" under an unplayed starter. Shown at every width — the phone hides the
+   position line, but when he plays is what a phone user checks. */
+.af-mu-half-game {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ‹ Week 4 · 2026 › */
+.af-mu-weeknav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-core .af-mu-weeknav-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+}
+.af-core .af-mu-weeknav-btn:hover,
+.af-core .af-mu-weeknav-btn:focus-visible {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+/* A 44px hit area on touch without moving the 24px paint. */
+@media (pointer: coarse) {
+  .af-core .af-mu-weeknav-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@media (max-width: 560px) {
+  /* The game line sits in the two-row phone grid with the name, under it. */
+  .af-mu-board-row .af-mu-half > .af-mu-half-text .af-mu-half-game {
+    font-size: 11px;
+  }
+}
+
+/* ── Narrow MATCHUP, wide viewport (2026-10-02 layout pass) ───────────────────
+ *
+ * Top-level rules and sibling blocks only, appended at end of file — the nested-@media incident
+ * this file is named for cannot reach anything below.
+ *
+ * 🛑 THE PHONE RULES ABOVE KEY ON THE VIEWPORT, BUT THE SPACE THE MATCHUP GETS IS THE VIEWPORT MINUS
+ * THE SHELL'S RAIL AND NAV. From 781 to ~1080 (every iPad in portrait, and a 1024 landscape) the
+ * matchup measured ~500–760px while the viewport rules stayed off, so it drew the full desktop
+ * three-column banner in it: at 834 each team column got ~115px for a 48px crest, a ~86px score and
+ * a name — the name collapsed to an ellipsis and the score ran into the centre card. And 721–780 got
+ * the opposite: the phone layout under a desktop shell, with a full-width fixed scorebar over the rail.
+ *
+ * The same rules, keyed on the matchup's own width (`container: af-mu` on `.af-mu`) — the pattern
+ * af-core-boards.css already uses for the boards. The viewport blocks stay as they are: they are the
+ * fallback for a browser without container queries (iOS before 16), and on a phone both fire
+ * identically. Thresholds are the viewport ones less the phone shell's padding: 780 → 760,
+ * 720 → 700, 560 → 540.
+ */
+@container af-mu (max-width: 760px) {
+  .af-mu-h2h {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-mu-board-head,
+  .af-mu-board-row,
+  .af-mu-board-foot {
+    grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1fr);
+    gap: 5px;
+  }
+  .af-mu-slot {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+  }
+  .af-mu-portrait,
+  .af-mu-face,
+  .af-mu-portrait--empty {
+    width: 26px;
+    height: 26px;
+  }
+  .af-mu-club {
+    width: 12px;
+    height: 12px;
+  }
+  .af-mu-half-sub {
+    display: none;
+  }
+  .af-mu-half-name {
+    font-size: 12px;
+  }
+  .af-mu-half-pts {
+    font-size: 12.5px;
+  }
+  .af-mu-team[data-align='right'] {
+    flex-direction: row;
+    text-align: left;
+  }
+  .af-mu-centre {
+    order: 3;
+  }
+  .af-mu-basis {
+    order: 4;
+  }
+  .af-mu-missing li {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .af-mu-missing-why,
+  .af-mu-missing-value {
+    flex: 0 0 auto;
+  }
+  .af-mu-team-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.2;
+  }
+
+  /*
+   * The scorebar, on a tablet too — the Matchup.tsx note always said "phone or tablet", and the
+   * viewport rule only ever gave it to ≤780.
+   *
+   * ⚠ POSITIONED OVER THE MATCHUP, NOT THE WINDOW. `left: 0; right: 0` under a desktop shell painted
+   * it across the rail and nav at z-index 38 and took their taps. `StickyScore` measures the
+   * matchup's own box into these two variables; the phone rule below restores full-bleed.
+   */
+  .af-mu-sticky {
+    position: fixed;
+    top: 0;
+    left: var(--af-mu-sticky-left, 0px);
+    right: auto;
+    width: var(--af-mu-sticky-width, 100%);
+    z-index: 38;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 14px 8px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    border-radius: 0 0 12px 12px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    animation: af-mu-drop 0.18s ease-out;
+  }
+  .af-mu-sticky-side {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+  .af-mu-sticky-side[data-side='them'] {
+    justify-content: flex-end;
+  }
+  .af-mu-sticky-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .af-mu-sticky-n {
+    flex: none;
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .af-mu-sticky[data-basis='projected'] .af-mu-sticky-n {
+    color: var(--text2);
+  }
+  .af-mu-sticky[data-leader='you'] [data-side='you'] .af-mu-sticky-n {
+    color: var(--good);
+  }
+  .af-mu-sticky[data-leader='opponent'] [data-side='them'] .af-mu-sticky-n {
+    color: var(--bad);
+  }
+  .af-mu-sticky-wp {
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--chip);
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--muted);
+  }
+  .af-mu-sticky-wp[data-tone='good'] {
+    background: var(--good-soft);
+    color: var(--good);
+  }
+  .af-mu-sticky-wp[data-tone='bad'] {
+    background: var(--bad-soft);
+    color: var(--bad);
+  }
+}
+
+/* On a phone the shell is one column, so the scorebar is full-bleed again, square-cornered. */
+@media (max-width: 720px) {
+  .af-mu-sticky {
+    left: 0;
+    right: 0;
+    width: auto;
+    border-radius: 0;
+  }
+}
+
+@container af-mu (max-width: 700px) {
+  .af-mu-board-row .af-mu-half-name {
+    padding-block: 11px;
+    margin-block: -11px;
+  }
+}
+
+@container af-mu (max-width: 540px) {
+  .af-mu-board-row .af-mu-half {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 1px;
+  }
+  .af-mu-board-row .af-mu-half > .af-mu-portrait {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+  .af-mu-board-row .af-mu-half > .af-mu-half-text {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .af-mu-board-row .af-mu-half > .af-mu-half-pts {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .af-mu-board-row .af-mu-half[data-align='right'] {
+    grid-template-columns: minmax(0, 1fr) 26px;
+    justify-items: end;
+  }
+  .af-mu-board-row .af-mu-half[data-align='right'] > .af-mu-portrait {
+    grid-column: 2;
+  }
+  .af-mu-board-row .af-mu-half[data-align='right'] > .af-mu-half-text,
+  .af-mu-board-row .af-mu-half[data-align='right'] > .af-mu-half-pts {
+    grid-column: 1;
+  }
+  .af-mu-board-row .af-mu-half-name {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.2;
+  }
+}
+
+/*
+ * The provider buttons are `.af-btn`, 36px tall, and nothing raised them for touch — not even at
+ * full width on a phone. 44px wherever the pointer is a finger.
+ */
+@media (pointer: coarse) {
+  .af-core .af-btn.af-mu-source {
+    min-height: 44px;
+  }
 }

@@ -9,6 +9,10 @@ import { reapAllAbandonedRuns, recordSyncJobRun } from '@/lib/production-health/
 import { runTradeAgentPass, type TradeAgentPassResult } from '@/lib/decision-os/trade/tradeAgentPass'
 import { runComprehensiveBackgroundAnalysis, type TradeLearningPassResult } from '@/lib/comprehensive-trade-learning'
 import { runTradeCalibrationPass, type TradeCalibrationPassResult } from '@/lib/trade-engine/calibrationPass'
+import {
+  runRelationshipRefreshPass,
+  type RelationshipRefreshPassResult,
+} from '@/lib/relationship-insights/relationshipRefreshPass'
 
 /**
  * Heartbeat identity, read by PROBES in scripts/cron-freshness-check.mjs.
@@ -40,6 +44,8 @@ const ROUTE_BUDGET_MS = 240_000
 const LEARNING_MIN_BUDGET_MS = 20_000
 /** Below this, the calibration pass waits for the next hour; each of its steps is a bounded read. */
 const CALIBRATION_MIN_BUDGET_MS = 10_000
+/** Below this, the rivalry/drama refresh waits for the next hour; one league is a few bounded reads. */
+const RELATIONSHIP_MIN_BUDGET_MS = 10_000
 
 /**
  * GET /api/cron/reap-sync-runs
@@ -201,5 +207,31 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, reaped, cutoff, cachePurge, privateRelay, tradeAgent, tradeLearning, tradeCalibration })
+  /*
+   * The rivalry + drama writer rides here last (2026-10-01). It is the ONLY scheduled writer of
+   * rivalry_records and drama_events, which the commissioner storyline/rivalry feeds read — both were
+   * empty in production because nothing ran it. Change-driven (only leagues whose matchup facts moved),
+   * window-gated like the trade agent, and it records its own telemetry row (`cron-relationship-refresh`).
+   * Gets only the budget left after everything above, so it can never delay the reap.
+   */
+  const relationshipBudgetMs = ROUTE_BUDGET_MS - (Date.now() - startedAt)
+  const relationshipRefresh: RelationshipRefreshPassResult =
+    relationshipBudgetMs < RELATIONSHIP_MIN_BUDGET_MS
+      ? { ran: false as const, reason: `only ${Math.round(relationshipBudgetMs / 1000)}s of budget left` }
+      : await runRelationshipRefreshPass({ budgetMs: relationshipBudgetMs }).catch((error) => ({
+          ran: false as const,
+          reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed',
+        }))
+
+  return NextResponse.json({
+    ok: true,
+    reaped,
+    cutoff,
+    cachePurge,
+    privateRelay,
+    tradeAgent,
+    tradeLearning,
+    tradeCalibration,
+    relationshipRefresh,
+  })
 }

@@ -3295,6 +3295,22 @@
 }
 .af-cm-dmrow .af-cm-threadrow-unread { margin-left: auto; }
 
+/* ✓ sent / ✓✓ seen on your own last message: muted until it is seen, then the accent. */
+.af-cm-ticks {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-right: -4px;
+  color: var(--faint);
+  line-height: 0;
+}
+.af-cm-ticks[data-seen='true'] { color: var(--accent); }
+.af-cm-seenby { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.af-cm-seenby .af-cm-ticks { margin-right: 0; }
+/* The phone-alerts ask in an open DM: inset like the Sent/Seen line above it. */
+.af-cm-convo > .af-cm-pushask { margin: 8px 16px 0; font-size: 12.5px; }
+
 /* Unread: the name and the line under it go bold and bright, and the time takes the accent. */
 .af-cm-dmrow[data-unread='true'] .af-cm-threadrow-title { font-weight: 800; }
 .af-cm-dmrow[data-unread='true'] .af-cm-dmrow-preview { font-weight: 700; color: var(--text); }

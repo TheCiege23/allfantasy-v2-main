@@ -146,7 +146,12 @@ function resolveAiFeatures(raw: Record<string, unknown>): string[] {
   return enabled.slice(0, 4)
 }
 
-function isFantasyLeagueDiscoverable(settings: Record<string, unknown>): boolean {
+/**
+ * Exported for the division gate (`lib/league-join/joinDivisionGate.ts`): a league this
+ * returns true for publishes its join code, so joining it is self-service, not an invitation.
+ * One predicate for "public", not two that drift.
+ */
+export function isFantasyLeagueDiscoverable(settings: Record<string, unknown>): boolean {
   const visibility = String(settings[LEAGUE_VISIBILITY_KEY] ?? "").trim().toLowerCase()
   const hasPublicDashboard = settings[LEAGUE_PUBLIC_DASHBOARD_KEY] === true
   const inviteCode = String(settings[LEAGUE_INVITE_CODE_KEY] ?? "").trim()

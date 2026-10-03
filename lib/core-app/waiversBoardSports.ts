@@ -31,16 +31,18 @@ import { leagueArtUrl } from './leagueArt'
 import { leagueDisplayName } from './leagueHome'
 import { myRosterCandidates } from './myRoster'
 import { countRealLeagues, keepBestPerRealLeague } from './realLeague'
-import { isStartableInSport } from './sportSlotEligibility'
+import { canFillSlotForSport, isStartableInSport } from './sportSlotEligibility'
+import { pickLineupSwap, rosterCapacity, swapReasoning, type SwapCandidate, type SwapRosterPlayer } from './waiverSwap'
 import { startingSlots } from './slotEligibility'
-import { faabRemainingOf, formatOf, runsAtLabel } from './waiverRowMeta'
+import { faabRemainingOf, formatOf, rowWaiverSchedule } from './waiverRowMeta'
+import { loadObservedWaiverSchedules, type ObservedWaiverSchedule } from '@/lib/waivers/observedWaiverSchedule'
 import type { ClaimedTeam, WaiverBoardRow, WaiverPlayer, WaiverSportSection } from './waiversBoard'
 
 /**
  * The cross-league Waivers board for every sport but the NFL — one section per sport.
  *
- * Same rule as the NFL rows beside it (the best available player on each wire, against the weakest
- * bench player we can price, ranked by net gain) on each sport's own producer — see
+ * Same rule as the NFL rows beside it (the free agent who adds the most to your starting lineup,
+ * ranked by that gain — `waiverSwap.ts`) on each sport's own producer — see
  * `lib/waivers/waiverSportBasis.ts` for what that producer is and why the category sports are on
  * AllFantasy's default scoring. Reads Postgres only; nothing here calls a provider.
  *
@@ -66,7 +68,23 @@ const orderOf = (s: string) => {
   return i === -1 ? SPORT_ORDER.length : i
 }
 
-const noWithheld = () => ({ noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 })
+const noWithheld = () => ({ noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 })
+
+/** IR and taxi on a stored roster blob — rostered, but neither seated nor offered as a drop. */
+function stashedIdsOf(playerData: unknown): Set<string> {
+  const out = new Set<string>()
+  if (!playerData || typeof playerData !== 'object') return out
+  const d = playerData as Record<string, unknown>
+  for (const key of ['reserve', 'taxi']) {
+    const raw = d[key]
+    if (!Array.isArray(raw)) continue
+    for (const x of raw) {
+      const v = x == null ? '' : String(x).trim()
+      if (v && v !== '0') out.add(v)
+    }
+  }
+  return out
+}
 
 type RosterRow = { leagueId: string; platformUserId: string; playerData: unknown; faabRemaining: number | null }
 
@@ -116,6 +134,16 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
   }
 
   const leagueIds = [...new Set(teams.map((c) => c.leagueId))]
+
+  /*
+   * Sleeper leagues have no imported schedule; read the one their own claims reveal. One query for
+   * every Sleeper league on the board (lib/waivers/observedWaiverSchedule.ts). A failed read costs
+   * the countdowns, never the board.
+   */
+  const observedSchedules = await loadObservedWaiverSchedules(
+    prisma,
+    teams.filter((c) => String(c.league?.platform ?? '').toLowerCase() === 'sleeper').map((c) => c.leagueId),
+  ).catch(() => new Map<string, ObservedWaiverSchedule>())
   const [rosters, waiverSettings, pool] = await Promise.all([
     prisma.roster
       .findMany({
@@ -233,7 +261,16 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
     const myKeys = new Set(mineIds.map((id) => keyOf.get(id)).filter((k): k is string => k != null))
 
     const slots = startingSlots(l.settings)
-    let best: { row: SeasonRateRow; pts: number } | null = null
+    if (!slots || slots.length === 0) {
+      withheld.noScoring++
+      continue
+    }
+    const fits = (slot: string, position: string | null) => canFillSlotForSport(sport, slot, position)
+
+    /* The wire, priced per game; never a player the injury feed rules out. */
+    const wire: SwapCandidate[] = []
+    const rowByKey = new Map<string, SeasonRateRow>()
+    const pointsByKey = new Map<string, number>()
     for (const row of pool) {
       if (myKeys.has(row.key)) continue
       // A player with no id in this league's space cannot be looked for on its rosters: not provably free.
@@ -243,40 +280,79 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       if (ruledOut.has(row.key)) continue
       const pts = priceSeasonRate(row, basis, scoring)
       if (pts == null) continue
-      if (!best || pts > best.pts) best = { row, pts }
+      wire.push({ id: row.key, position: row.position, points: pts })
+      rowByKey.set(row.key, row)
+      pointsByKey.set(row.key, pts)
     }
-    if (!best) {
+    if (wire.length === 0) {
       withheld.noCandidate++
       continue
     }
 
-    /* Weakest droppable: the lowest priced NON-starter — the NFL rows' rule, for the same reasons. */
-    const starters = starterIdsOf(myRoster.playerData)
-    let drop: { row: SeasonRateRow; pts: number } | null = null
+    /*
+     * Your lineup side, keyed by projection key. IR and taxi sit out of it. No dynasty value chart
+     * exists for these sports, so the drop is by projection — the rule a redraft league gets.
+     */
+    const starterIds = starterIdsOf(myRoster.playerData)
+    const stashed = stashedIdsOf(myRoster.playerData)
+    const starterKeys = new Set<string>()
+    const roster: SwapRosterPlayer[] = []
+    const seen = new Set<string>()
     for (const id of mineIds) {
-      if (starters.has(id)) continue
+      if (stashed.has(id)) continue
       const key = keyOf.get(id)
-      const row = key ? myRows.get(key) : undefined
-      if (!row) continue
-      const pts = priceSeasonRate(row, basis, scoring)
-      if (pts == null) continue
-      if (!drop || pts < drop.pts) drop = { row, pts }
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      if (starterIds.has(id)) starterKeys.add(key)
+      const row = myRows.get(key)
+      const pts = row && !ruledOut.has(key) ? priceSeasonRate(row, basis, scoring) : null
+      if (row) rowByKey.set(key, row)
+      if (pts != null) pointsByKey.set(key, pts)
+      roster.push({ id: key, position: row?.position ?? null, points: pts })
     }
 
-    const add = toPlayer(best.row, best.pts)
-    const dropPlayer = drop ? toPlayer(drop.row, drop.pts) : null
-    const netGain = dropPlayer ? add.projected - dropPlayer.projected : add.projected
+    const swap = pickLineupSwap({
+      roster,
+      starterIds: starterKeys,
+      candidates: wire,
+      slots,
+      fits,
+      dynasty: false,
+      held: mineIds.filter((id) => !stashed.has(id)).length,
+      capacity: rosterCapacity(l.settings),
+    })
+    if (!swap) {
+      withheld.noUpgrade++
+      continue
+    }
 
-    const bits: string[] = [
-      `${add.name}${add.position ? ` (${add.position})` : ''} projects ${add.projected.toFixed(1)} per game ${basisPhrase}, from AllFantasy's ${label} season projection`,
-    ]
-    bits.push(
-      dropPlayer
-        ? `against ${dropPlayer.projected.toFixed(1)} for ${dropPlayer.name}, the weakest bench player we can price — a net ${netGain >= 0 ? '+' : ''}${netGain.toFixed(1)} per game`
-        : 'and no bench player here could be priced, so this is a gross figure, not a swap',
-    )
+    const playerFor = (key: string | null) =>
+      key != null && rowByKey.has(key) && pointsByKey.has(key) ? toPlayer(rowByKey.get(key)!, pointsByKey.get(key)!) : null
+    const add = playerFor(swap.addId)!
+    const dropPlayer = playerFor(swap.dropId)
+    const over = playerFor(swap.displacesId)
+    const netGain = swap.gain
+
+    const reasoning = swapReasoning({
+      addLead: `${add.name}${add.position ? ` (${add.position})` : ''} projects ${add.projected.toFixed(1)} per game ${basisPhrase}, from AllFantasy's ${label} season projection`,
+      over,
+      drop: dropPlayer,
+      dropBasis: swap.dropBasis,
+      openRosterSpot: swap.openRosterSpot,
+      gain: netGain,
+      unit: ' per game',
+    })
+
+    /* The next-best adds, scored against the lineup as it stands — the NFL rows' rule. */
+    const alternatives = swap.ranked.slice(1, 4).flatMap((r) => {
+      const p = playerFor(r.id)
+      if (!p) return []
+      const o = playerFor(r.displacesId)
+      return [{ add: p, gain: r.gain, startsOver: o ? { playerId: o.playerId, name: o.name, projected: o.projected } : null }]
+    })
 
     const w = waiverByLeague.get(c.leagueId)
+    const sched = rowWaiverSchedule(w, l.platform, observedSchedules.get(c.leagueId))
     rows.push({
       leagueId: c.leagueId,
       leagueName: leagueDisplayName(l.name),
@@ -285,12 +361,17 @@ async function buildSection(sport: string, teams: ClaimedTeam[], userId: string)
       logoUrl: leagueArtUrl({ logoUrl: l.logoUrl, avatarUrl: l.avatarUrl, platform: l.platform }),
       format: formatOf(l.leagueType, l.scoring),
       netGain,
+      startsOver: over ? { playerId: over.playerId, name: over.name, projected: over.projected } : null,
+      dropBasis: swap.dropBasis,
+      openRosterSpot: swap.openRosterSpot,
       add,
       drop: dropPlayer,
       faabRemaining: faabRemainingOf(w, myRoster),
-      runsAt: runsAtLabel(w),
+      runsAt: sched?.label ?? null,
+      runsSchedule: sched?.schedule ?? null,
+      alternatives,
       href: `/core/waivers?league=${encodeURIComponent(c.leagueId)}`,
-      reasoning: `${bits.join(', ')}.`,
+      reasoning,
       sport,
     })
   }

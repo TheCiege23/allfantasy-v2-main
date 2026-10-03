@@ -6,7 +6,6 @@ import ChimmyAlertPreferencesPanel from "@/components/chimmy-surfaces/ChimmyAler
 import {
   resolveNotificationPreferences,
   getNotificationPreferencesFingerprint,
-  getDefaultNotificationPreferences,
   getDeliveryMethodAvailability,
   updateNotificationPreferences,
   sendTestNotification,
@@ -18,11 +17,13 @@ import {
   type NotificationPreferences,
   type NotificationCategoryId,
 } from "@/lib/notification-settings"
+import { buildResetNotificationPreferences } from "@/lib/notification-settings/resetNotificationPreferences"
 import { NotificationCategoryRenderer } from "@/components/notification-settings/NotificationCategoryRenderer"
 import { LeagueNotificationOverridesCard } from "@/components/notification-settings/LeagueNotificationOverridesCard"
 import type { SettingsProfile } from "./settings-types"
 import { EnableWebPushCard } from "@/components/notifications/EnableWebPushCard"
 import { IosAppPushCard } from "@/components/notifications/IosAppPushCard"
+import { hasSmsConsent } from "@/lib/sms/smsConsent"
 
 const CHIMMY_SHORTCUTS_DISABLED_KEY = "af_chimmy_shortcuts_disabled"
 
@@ -60,6 +61,7 @@ export function NotificationsSettingsSection({
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
+  const [savedFlash, setSavedFlash] = useState(false)
   const [remoteUpdatePending, setRemoteUpdatePending] = useState(false)
   const [testCategory, setTestCategory] = useState<NotificationCategoryId>("matchup_results")
   const [testing, setTesting] = useState(false)
@@ -79,9 +81,15 @@ export function NotificationsSettingsSection({
     }
   }, [])
 
+  /*
+   * SMS is offered only where it can actually be sent: a verified phone AND a live opt-in for it
+   * (lib/sms/smsConsent). A verified phone with no opt-in would show switches that send nothing.
+   */
+  const smsConsented = hasSmsConsent(profile?.notificationPreferences, profile?.phone)
   const deliveryAvailability = getDeliveryMethodAvailability({
     hasEmail: !!profile?.email,
     phoneVerified: !!profile?.phoneVerifiedAt,
+    smsConsented,
   })
 
   useEffect(() => {
@@ -152,12 +160,30 @@ export function NotificationsSettingsSection({
     return (c?.push ?? c?.inApp) === true
   })
 
+  // The "saved" confirmation clears itself, and the moment anything changes again.
+  useEffect(() => {
+    if (!savedFlash) return
+    if (dirty) {
+      setSavedFlash(false)
+      return
+    }
+    const id = window.setTimeout(() => setSavedFlash(false), 4000)
+    return () => window.clearTimeout(id)
+  }, [savedFlash, dirty])
+
   const handleSave = async () => {
+    // A zero-width quiet-hours window is "off" server-side; refuse to save one that looks on.
+    if (prefs.quietHours?.enabled && (prefs.quietHours.startHour ?? 22) === (prefs.quietHours.endHour ?? 7)) {
+      setSaveError("Quiet hours need two different hours.")
+      return
+    }
     setSaving(true)
     setSaveError(null)
+    setSavedFlash(false)
     const result = await updateNotificationPreferences(prefs)
     setSaving(false)
     if (result.ok) {
+      setSavedFlash(true)
       setDirty(false)
       setRemoteUpdatePending(false)
       setLastLoadedFingerprint(getNotificationPreferencesFingerprint(prefs))
@@ -166,8 +192,8 @@ export function NotificationsSettingsSection({
   }
 
   const handleReset = () => {
-    const defaults = getDefaultNotificationPreferences()
-    setPrefs(defaults)
+    // Not bare defaults — the server merge would keep quiet hours and league mutes. See the helper.
+    setPrefs(buildResetNotificationPreferences(prefs))
     setDirty(true)
     setSaveError(null)
     setRemoteUpdatePending(false)
@@ -277,6 +303,7 @@ export function NotificationsSettingsSection({
             </span>
             <input
               type="checkbox"
+              role="switch"
               checked={prefs.globalEnabled !== false}
               onChange={(e) => {
                 setDirty(true)
@@ -316,6 +343,7 @@ export function NotificationsSettingsSection({
           <span className="text-sm font-medium text-[var(--text)]">Quiet hours</span>
           <input
             type="checkbox"
+            role="switch"
             checked={prefs.quietHours?.enabled === true}
             onChange={(e) => {
               setDirty(true)
@@ -393,6 +421,26 @@ export function NotificationsSettingsSection({
             </label>
           </div>
         ) : null}
+        {prefs.quietHours?.enabled ? (
+          <>
+            {/*
+              ⚠ SAME HOUR = OFF. quietHours.ts treats a zero-width window as disabled (the other
+              reading, "always on", would silence everything), so From == Until saved cleanly and
+              then never ran. Say so here, and handleSave refuses it.
+            */}
+            {(prefs.quietHours.startHour ?? 22) === (prefs.quietHours.endHour ?? 7) ? (
+              <p role="alert" className="text-xs text-[#fb7185]" data-testid="quiet-hours-same-hour">
+                From and Until are the same hour, so quiet hours would never run. Pick two different hours.
+              </p>
+            ) : null}
+            {/* The window runs in the profile timezone; with none set the server falls back to its own clock. */}
+            <p className="text-xs text-[var(--muted)]" data-testid="quiet-hours-zone">
+              {profile?.timezone
+                ? `Times are in ${profile.timezone.replace(/_/g, " ")}. Change it in Preferences.`
+                : "No timezone set, so these hours run on server time (UTC). Set your timezone in Preferences."}
+            </p>
+          </>
+        ) : null}
       </div>
 
       {/*
@@ -435,7 +483,7 @@ export function NotificationsSettingsSection({
         <p className="text-xs text-[var(--muted)]">{t("settings.notifications.pushHint")}</p>
       </div>
 
-      <div className="rounded-xl border border-white/[0.08] bg-[#1a1f3a]/90 p-4 space-y-3">
+      <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--panel2)] p-4">
         <p className="text-sm font-medium text-[var(--text)]">
           {t("settings.notifications.deliveryMasters")}
         </p>
@@ -443,6 +491,7 @@ export function NotificationsSettingsSection({
           <span className="text-[var(--muted)]">{t("settings.notifications.emailAll")}</span>
           <input
             type="checkbox"
+            role="switch"
             checked={allEmailOn}
             onChange={(e) => setAllEmailChannels(e.target.checked)}
             className="h-4 w-4 rounded accent-[var(--accent-cyan)]"
@@ -452,6 +501,7 @@ export function NotificationsSettingsSection({
           <span className="text-[var(--muted)]">{t("settings.notifications.pushAll")}</span>
           <input
             type="checkbox"
+            role="switch"
             checked={allPushOn}
             onChange={(e) => setAllPushChannels(e.target.checked)}
             className="h-4 w-4 rounded accent-[var(--accent-cyan)]"
@@ -462,6 +512,11 @@ export function NotificationsSettingsSection({
 
       <div className="space-y-2">
         <p className="text-sm font-medium text-[var(--muted2)]">{t("settings.notifications.byCategory")}</p>
+        {profile?.phoneVerifiedAt && !smsConsented ? (
+          <p className="text-xs text-[var(--muted2)]" data-testid="sms-needs-consent">
+            {t("settings.notifications.smsNeedsConsent")}
+          </p>
+        ) : null}
         <ul className="space-y-2">
           {VISIBLE_CATEGORY_IDS.map((categoryId) => (
             <li key={categoryId}>
@@ -499,7 +554,7 @@ export function NotificationsSettingsSection({
             aria-label="Notification test category"
             value={testCategory}
             onChange={(e) => setTestCategory(e.target.value as NotificationCategoryId)}
-            className="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)]"
+            className="w-full min-w-0 max-w-full rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)] sm:w-auto"
           >
             {VISIBLE_CATEGORY_IDS.map((id) => (
               <option key={id} value={id}>{NOTIFICATION_CATEGORY_LABELS[id]}</option>
@@ -544,6 +599,7 @@ export function NotificationsSettingsSection({
             <span className="text-[var(--text)]">Enable Chimmy global keyboard shortcuts</span>
             <input
               type="checkbox"
+              role="switch"
               checked={chimmyShortcutsEnabled}
               onChange={(e) => handleChimmyShortcutToggle(e.target.checked)}
               className="h-4 w-4 rounded accent-[var(--accent-cyan)]"
@@ -554,24 +610,44 @@ export function NotificationsSettingsSection({
         </div>
       </div>
 
-      {saveError && (
-        <p className="text-sm text-[var(--accent-red-strong)]">{saveError}</p>
-      )}
-
-      <div className="flex flex-wrap gap-2">
+      {/*
+        The save bar. Every switch above is a DRAFT until this saves, and on a phone this tab is
+        about four screens tall — so while anything is unsaved the bar sticks to the bottom of the
+        screen and says so (nocturne-settings.css `.ns-savebar`), and a save says it worked.
+        Before 2026-10-02 the only signal was this button changing colour, at the foot of the page.
+      */}
+      <div className="ns-savebar" data-pinned={dirty || savedFlash ? "true" : undefined} data-testid="notifications-savebar">
+        <p
+          className="ns-savebar-msg"
+          role="status"
+          aria-live="polite"
+          data-tone={saveError ? "error" : savedFlash && !dirty ? "saved" : undefined}
+        >
+          {saveError ?? (dirty ? "You have unsaved changes." : savedFlash ? "✓ Notification settings saved." : "")}
+        </p>
+        {dirty ? (
+          <button
+            type="button"
+            onClick={handleReloadSaved}
+            disabled={saving}
+            className="ns-btn-ghost"
+            data-testid="notifications-discard-button"
+          >
+            Discard
+          </button>
+        ) : null}
         <button
           type="button"
           disabled={saving || !dirty}
           onClick={handleSave}
           data-testid="notifications-save-button"
-          className={
-            dirty && !saving
-              ? "ns-btn-primary"
-              : "rounded-xl border border-[var(--border)] bg-[var(--panel2)] px-4 py-2 text-sm font-semibold text-[var(--muted)]"
-          }
+          className={dirty ? "ns-btn-primary" : "ns-btn-ghost"}
         >
           {saving ? t("settings.actions.saving") : t("settings.notifications.save")}
         </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={handleReset}

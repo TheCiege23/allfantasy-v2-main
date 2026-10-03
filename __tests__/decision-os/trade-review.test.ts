@@ -5,12 +5,14 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  CLASS_GAP_DIVISIONS,
   buildTradeReview,
   recommendationFor,
   rebuildIsNormal,
   type ReviewCheck,
   type TradeReviewFacts,
 } from '@/lib/decision-os/trade/tradeReview'
+import { DIVISION_BAND } from '@/lib/class-rating/divisionGate'
 
 const NOW = '2026-11-12T12:00:00.000Z'
 const missing = (reason: string) => ({ ok: false as const, reason })
@@ -31,6 +33,7 @@ function facts(over: Partial<TradeReviewFacts> = {}): TradeReviewFacts {
     inactiveDays: { ok: true, value: [2, 3] },
     playoffPct: { ok: true, value: [55, 40] },
     deadlineAt: { ok: true, value: '2026-11-26T18:00:00.000Z' },
+    managerDivisions: { ok: true, value: [3, 3] },
     now: NOW,
     ...over,
   }
@@ -38,10 +41,10 @@ function facts(over: Partial<TradeReviewFacts> = {}): TradeReviewFacts {
 const check = (f: TradeReviewFacts, code: ReviewCheck['code']) => buildTradeReview(f).checks.find((c) => c.code === code)!
 
 describe('a clean trade', () => {
-  it('six checks, all clear, no flags, approve', () => {
+  it('seven checks, all clear, no flags, approve', () => {
     const r = buildTradeReview(facts())
     expect(r.checks.map((c) => c.code)).toEqual([
-      'heavily_lopsided', 'tanking_signal', 'repeat_partners', 'inactive_manager', 'eliminated_team_dumping', 'deadline_rush',
+      'heavily_lopsided', 'tanking_signal', 'repeat_partners', 'inactive_manager', 'eliminated_team_dumping', 'deadline_rush', 'class_gap',
     ])
     expect(r.checks.every((c) => c.status === 'clear')).toBe(true)
     expect(r.flags).toEqual([])
@@ -209,5 +212,42 @@ describe('dynasty and keeper: a rebuild, not tanking (Guap, 2026-09-27)', () => 
     const d = { type: 'keeper', label: 'Keeper' }
     expect(buildTradeReview(facts({ leagueType: d })).checks[1]).toMatchObject({ code: 'rebuild_signal', status: 'clear' })
     expect(buildTradeReview(facts({ leagueType: d, lineup: missing('pending only') })).checks[1]).toMatchObject({ code: 'rebuild_signal', status: 'not_computed' })
+  })
+})
+
+describe('class gap — Class divisions (ADR F2.10a, 2026-10-01)', () => {
+  it('uses the same band as public matchmaking', () => {
+    expect(CLASS_GAP_DIVISIONS).toBe(DIVISION_BAND)
+  })
+
+  it('raises when the managers are two or more divisions apart and the value leans to the stronger one', () => {
+    // + gap means side A (Alpha) receives more; Alpha is Division 5, Bravo Division 2.
+    const c = check(facts({ gapPct: { ok: true, value: 18 }, managerDivisions: { ok: true, value: [5, 2] } }), 'class_gap')
+    expect(c.status).toBe('raised')
+    expect(c.severity).toBe('low')
+    expect(c.explanation).toContain('Alpha (the stronger manager by Class) receives 18% more value')
+    expect(c.explanation).toContain('Division 5 and Division 2, 3 divisions apart')
+  })
+
+  it('is clear when the trade leans toward the weaker manager, or the gap is inside the even band', () => {
+    expect(check(facts({ gapPct: { ok: true, value: -18 }, managerDivisions: { ok: true, value: [5, 2] } }), 'class_gap').status).toBe('clear')
+    expect(check(facts({ gapPct: { ok: true, value: 9 }, managerDivisions: { ok: true, value: [5, 2] } }), 'class_gap').status).toBe('clear')
+  })
+
+  it('is clear inside the band, whatever the gap', () => {
+    expect(check(facts({ gapPct: { ok: true, value: 35 }, managerDivisions: { ok: true, value: [4, 3] } }), 'class_gap').status).toBe('clear')
+  })
+
+  it('is not computed — never clear — without both divisions, or without a grade', () => {
+    expect(check(facts({ managerDivisions: undefined }), 'class_gap').status).toBe('not_computed')
+    expect(check(facts({ managerDivisions: { ok: true, value: [4, null] } }), 'class_gap').status).toBe('not_computed')
+    expect(check(facts({ managerDivisions: missing('nope') }), 'class_gap').explanation).toBe('nope')
+    expect(check(facts({ gapPct: missing('ungraded'), managerDivisions: { ok: true, value: [5, 2] } }), 'class_gap').status).toBe('not_computed')
+  })
+
+  it('on its own never moves the recommendation off approve', () => {
+    const r = buildTradeReview(facts({ gapPct: { ok: true, value: 18 }, managerDivisions: { ok: true, value: [5, 2] } }))
+    expect(r.flags.map((f) => f.code)).toEqual(['class_gap'])
+    expect(r.recommendation).toBe('approve')
   })
 })

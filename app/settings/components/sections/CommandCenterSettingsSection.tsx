@@ -33,6 +33,8 @@ type Snapshot = {
   draftsApproachingCount?: number
   attentionQueue?: AttentionSignal[]
   recommendations?: Array<{ leagueId?: string }>
+  /** Row id → navigable league id (manager-command-center route). Absent on an older response. */
+  leagueLinks?: Record<string, string>
 }
 
 function severityColor(sev?: string): string {
@@ -46,6 +48,7 @@ export function CommandCenterSettingsSection() {
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [loading, setLoading] = useState(false)
   const [started, setStarted] = useState(false)
+  const [failed, setFailed] = useState(false)
 
   // Load-on-demand: composing the brief fans out across every league the user
   // belongs to, so it only runs on an explicit click — never automatically on
@@ -53,10 +56,14 @@ export function CommandCenterSettingsSection() {
   const load = useCallback(async () => {
     setStarted(true)
     setLoading(true)
+    setFailed(false)
     const data = await fetch("/api/decision-os/manager-command-center", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .catch(() => null)
+    // A failed load used to fall through to "No leagues yet", which reads as a fact about the
+    // account rather than a request that did not come back.
     if (data && typeof data === "object") setSnap(data as Snapshot)
+    else setFailed(true)
     setLoading(false)
   }, [])
 
@@ -97,6 +104,21 @@ export function CommandCenterSettingsSection() {
         </div>
       ) : loading ? (
         <p className="text-sm" style={{ color: "var(--muted)" }}>Building your brief…</p>
+      ) : failed ? (
+        <div className="rounded-xl border p-6 text-center" style={{ borderColor: "var(--border)", background: "var(--panel2)" }} role="alert">
+          <p className="text-sm font-medium" style={{ color: "var(--text)" }}>Couldn&apos;t load your brief</p>
+          <p className="mx-auto mt-1 max-w-sm text-xs" style={{ color: "var(--muted)" }}>
+            Something went wrong building it. Your leagues are fine — try again in a moment.
+          </p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="mt-4 inline-flex rounded-lg border px-3 py-2 text-sm font-medium"
+            style={{ borderColor: "var(--accent-cyan)", color: "var(--text)" }}
+          >
+            Try again
+          </button>
+        </div>
       ) : total === 0 ? (
         <div className="rounded-xl border p-6 text-center" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
           <p className="text-sm font-medium" style={{ color: "var(--text)" }}>No leagues yet</p>
@@ -133,14 +155,16 @@ export function CommandCenterSettingsSection() {
               <p className="text-sm" style={{ color: "var(--muted)" }}>You&apos;re all caught up — nothing needs a decision right now.</p>
             ) : (
               <ul className="space-y-3">
-                {attention.map((s) => (
-                  <li key={s.id} className="flex gap-3">
-                    <span
-                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
-                      style={{ background: severityColor(s.severity) }}
-                      aria-hidden="true"
-                    />
+                {attention.map((s) => {
+                  /*
+                   * Each item opens its league. They were plain text before 2026-10-02 — a list of
+                   * things needing a decision with no way to go and make it.
+                   */
+                  const navId = s.leagueId ? snap?.leagueLinks?.[s.leagueId] : undefined
+                  const body = (
                     <div className="min-w-0">
+                      {/* The dot's colour is the only other severity cue; say it for screen readers. */}
+                      {s.severity ? <span className="sr-only">{s.severity} priority: </span> : null}
                       {s.title ? (
                         <div className="text-sm font-medium" style={{ color: "var(--text)" }}>{s.title}</div>
                       ) : null}
@@ -153,8 +177,28 @@ export function CommandCenterSettingsSection() {
                         </div>
                       ) : null}
                     </div>
-                  </li>
-                ))}
+                  )
+                  return (
+                    <li key={s.id} className="flex gap-3">
+                      <span
+                        className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                        style={{ background: severityColor(s.severity) }}
+                        aria-hidden="true"
+                      />
+                      {navId ? (
+                        <Link
+                          href={`/league/${encodeURIComponent(navId)}`}
+                          className="min-w-0 flex-1 rounded-md hover:underline"
+                          data-testid={`command-center-item-${s.id}`}
+                        >
+                          {body}
+                        </Link>
+                      ) : (
+                        body
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>

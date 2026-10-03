@@ -83,6 +83,23 @@ export async function getPushSubscriptions(userId: string): Promise<
   return rows
 }
 
+/**
+ * A notification picture must be absolute https: Apple's extension and a browser both fetch it
+ * from the device, with no idea which site sent it. A path on this site is made absolute; any
+ * other scheme (http, data:, javascript:) is dropped rather than forwarded — the text still
+ * goes out, it just goes out without a picture.
+ */
+export function absolutePushImageUrl(imageUrl: string | null | undefined): string | null {
+  const url = imageUrl?.trim()
+  if (!url) return null
+  if (url.startsWith("https://")) return url
+  if (url.startsWith("/") && !url.startsWith("//")) {
+    const base = getBaseUrl().replace(/\/$/, "")
+    return base.startsWith("https://") ? `${base}${url}` : null
+  }
+  return null
+}
+
 /** Send push to one subscription (web-push format). */
 async function sendToSubscription(
   subscription: { endpoint: string; p256dh: string; auth: string },
@@ -108,6 +125,10 @@ async function sendToSubscription(
     tag: payload.tag ?? undefined,
     type: payload.type ?? "notification",
     leagueId: payload.leagueId ?? null,
+    // public/sw.js already passes `payload.image` to showNotification; Android shows it large.
+    image: payload.imageUrl ?? undefined,
+    // public/sw.js reads `payload.icon` (falling back to the crest): the sender's face on a DM.
+    icon: payload.iconUrl ?? undefined,
   })
 
   const pushSubscription = {
@@ -136,10 +157,16 @@ async function sendToSubscription(
  */
 export async function sendPushToUser(
   userId: string,
-  payload: PushPayload
+  input: PushPayload
 ): Promise<SendPushResult[]> {
   const all = await getPushSubscriptions(userId)
   if (all.length === 0) return []
+  // Resolved once here so the APNs and web-push halves see the same, already-vetted picture.
+  const payload: PushPayload = {
+    ...input,
+    imageUrl: absolutePushImageUrl(input.imageUrl),
+    iconUrl: absolutePushImageUrl(input.iconUrl),
+  }
 
   /*
    * iPhones (endpoint `apns:<token>`, registered by the iOS app) go to Apple's push service;
@@ -154,7 +181,8 @@ export async function sendPushToUser(
   if (ios.length > 0) {
     const sent = await sendApns(
       ios.map((s) => s.endpoint.slice(IOS_ENDPOINT_PREFIX.length)),
-      payload,
+      // iOS has no remote icon slot: a face with no other picture rides the attachment instead.
+      { ...payload, imageUrl: payload.imageUrl ?? payload.iconUrl ?? null },
     )
     for (let i = 0; i < ios.length; i += 1) {
       const r = sent[i]

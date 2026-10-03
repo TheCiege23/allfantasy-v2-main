@@ -54,6 +54,11 @@ import {
 } from '@/lib/core-app/rankingsEngine'
 import { firstSnapshotDate, readRankSnapshots } from '@/lib/core-app/rankingsSnapshots'
 import { communityEntries, handleOf, levelOf, loadCommunity } from '@/lib/core-app/rankingsCommunity'
+import { getClassView, getDivisionsForUsers, type ClassView } from '@/lib/class-rating/classView'
+import { DIVISION_BAND, divisionBand } from '@/lib/class-rating/divisionGate'
+import { getManagerClass } from '@/lib/class-rating/reads'
+import { headToHeadWith, type HeadToHead } from '@/lib/core-app/rankingsRivals'
+import { getLeaguePower, type LeaguePowerView } from '@/lib/core-app/rankingsLeaguePower'
 
 /**
  * Rankings — the data layer for `/core/rankings` (handoffs 14a ladder and boards,
@@ -219,7 +224,7 @@ export function buildXpRows(xp: CareerXp): XpRow[] {
 
 /* ───────────────────────────── the page payload ─────────────────────────── */
 
-export type RankingsScopeKey = 'global' | 'portfolio' | 'league'
+export type RankingsScopeKey = 'global' | 'portfolio' | 'league' | 'class'
 
 export type YourRank = {
   handle: string | null
@@ -281,8 +286,15 @@ export type Movement = {
   season: number | null
 }
 
+export type RankingsPanel = 'power' | 'legacy'
+
 export type RankingsData = {
   scope: RankingsScopeKey
+  /**
+   * A full former page embedded in the hub (2026-10-01): `power` (was /power-rankings) on the
+   * league scope, `legacy` (was /af-rankings) on the portfolio scope. Null for the normal view.
+   */
+  panel: RankingsPanel | null
   signedIn: boolean
   filters: RankingFilters
   filtersLabel: string
@@ -300,6 +312,8 @@ export type RankingsData = {
   global: GlobalView | null
   portfolio: PortfolioView | null
   league: LeagueView | null
+  /** The Class rating (ADR F2.10a), on `?scope=class`. */
+  classView: ClassView | null
 }
 
 export type GlobalView = {
@@ -319,6 +333,26 @@ export type GlobalView = {
   you: { rank: number; of: number; display: string; movement: Movement } | null
   explain: { handle: string; rank: number; score: ManagerScore; isYou: boolean } | null
   freshness: { newestImport: string | null; stalestManager: string | null; ledgerRows: number }
+  /**
+   * "My division": the board narrowed to managers within ±DIVISION_BAND of your Class division —
+   * the same band public league joins use (ADR F2.10a). Null without an established Class.
+   * XP level is NOT the basis: it measures volume, and the owner ruled it out (2026-10-01).
+   */
+  divisionFilter: { active: boolean; division: number; band: [number, number]; spread: number; href: string } | null
+  /** Up to three managers directly above you on this board, closest first. */
+  rivals: RivalRow[]
+}
+
+export type RivalRow = {
+  userId: string
+  handle: string
+  rank: number
+  level: number
+  display: string
+  yourDisplay: string
+  /** Head-to-head across every imported and native league; null when never measured. */
+  headToHead: HeadToHead | null
+  compareHref: string
 }
 
 export type PortfolioView = {
@@ -351,6 +385,8 @@ export type LeagueView = {
     week: number | null
     seasonComplete: boolean
   } | null
+  /** Power score and trend from the league's stored power ranking, when one has been run. */
+  power: LeaguePowerView
 }
 
 type Params = Record<string, string | string[] | undefined>
@@ -368,8 +404,15 @@ function qs(pairs: Array<[string, string | null | undefined]>): string {
   return s ? `?${s}` : ''
 }
 
+/** `W-L`, or `W-L-T` when the team has a tie — the same shape the portfolio rows use. */
+export function recordText(t: { wins: number; losses: number; ties?: number }): string {
+  return `${t.wins}-${t.losses}${t.ties ? `-${t.ties}` : ''}`
+}
+
 export function parseScope(raw: string | null, hasLeague: boolean): RankingsScopeKey {
-  if (raw === 'global' || raw === 'portfolio' || raw === 'league') return raw
+  if (raw === 'global' || raw === 'portfolio' || raw === 'league' || raw === 'class') return raw
+  // PR #1753 shipped this tab as `?scope=skill`; any link minted from that branch still lands here.
+  if (raw === 'skill') return 'class'
   return hasLeague ? 'league' : 'global'
 }
 
@@ -574,6 +617,8 @@ export async function getRankingsData(
     ...(scope !== 'global' ? ([['scope', scope]] as Array<[string, string]>) : []),
     ...(leagueId ? ([['league', leagueId]] as Array<[string, string]>) : []),
     ...filterParams(filters),
+    // The division slice survives a board, sort or filter change, like the filters do.
+    ...(scope === 'global' && one(sp, 'division') === 'mine' ? ([['division', 'mine']] as Array<[string, string]>) : []),
   ]
   const boardParams: Array<[string, string]> = [
     ...baseParams,
@@ -608,9 +653,22 @@ export async function getRankingsData(
 
   let global: GlobalView | null = null
   if (scope === 'global') {
-    const entries = isDefaultFilters(filters) ? overallEntries : communityEntries(base, filters)
+    const yourClass = userId ? await getManagerClass(userId) : null
+    const yourDivision = yourClass?.status === 'established' ? yourClass.division : null
+    const yourBand = yourDivision != null ? divisionBand(yourDivision) : null
+    const classMine = yourBand != null && one(sp, 'division') === 'mine'
+    const allEntries = isDefaultFilters(filters) ? overallEntries : communityEntries(base, filters)
+    const divisions = classMine ? await getDivisionsForUsers(allEntries.map((e) => e.userId)) : null
+    const entries =
+      classMine && yourBand && divisions
+        ? allEntries.filter((e) => {
+            const d = divisions.get(e.userId)
+            return d != null && d >= yourBand[0] && d <= yourBand[1]
+          })
+        : allEntries
     const ranked = rankBoard(entries, board, filters.minSample)
-    const tracked = board === 'overall' && isDefaultFilters(filters)
+    // Snapshots record the whole board, so movement means nothing on a class slice of it.
+    const tracked = board === 'overall' && isDefaultFilters(filters) && !classMine
     const rows = sortBoardRows(
       ranked.rows.map((r) => ({ ...r, movement: tracked ? movementSince(r.userId, r.rank, sevenSnap) : null })),
       sort,
@@ -631,6 +689,28 @@ export async function getRankingsData(
       .filter((s): s is string => !!s)
       .sort()
 
+    // The three managers directly above you — the next people to pass.
+    const above = yourRow
+      ? ranked.rows.filter((r) => r.rank < yourRow.rank && r.userId !== userId).slice(-3).reverse()
+      : []
+    const h2h = userId && above.length ? await headToHeadWith(userId, above.map((r) => r.userId)).catch(() => null) : null
+    const rivals: RivalRow[] = yourRow
+      ? above.map((r) => {
+          const h = h2h?.get(r.userId) ?? null
+          return {
+            userId: r.userId,
+            handle: r.handle,
+            rank: r.rank,
+            level: r.level,
+            display: r.display,
+            yourDisplay: yourRow.display,
+            headToHead: h && h.wins + h.losses + h.ties > 0 ? h : null,
+            compareHref: `/core/rankings${qs([['view', 'compare'], ['kind', 'managers'], ['user', r.handle]])}`,
+          }
+        })
+      : []
+
+    const classParams = boardParams.filter(([k]) => k !== 'division')
     global = {
       board,
       label: BOARD_META[board].label,
@@ -664,6 +744,16 @@ export async function getRankingsData(
         stalestManager: newestPerManager.length ? newestPerManager[0] : null,
         ledgerRows: filteredRows.length,
       },
+      divisionFilter: yourBand && yourDivision != null
+        ? {
+            active: classMine,
+            division: yourDivision,
+            band: yourBand,
+            spread: DIVISION_BAND,
+            href: `/core/rankings${qs(classMine ? classParams : [...classParams, ['division', 'mine']])}`,
+          }
+        : null,
+      rivals,
     }
   }
 
@@ -699,7 +789,10 @@ export async function getRankingsData(
   if (scope === 'league') {
     const selected = leagueId ? visibleLeagues.find((l) => l.id === leagueId) ?? null : null
     let leagueBoard: LeagueView['board'] = null
+    let power: LeaguePowerView = null
     if (userId && selected) {
+      // Membership is already settled: `selected` comes from the viewer's own leagues.
+      power = await getLeaguePower(selected.id, userId).catch(() => null)
       const standings = await getLeagueStandings(selected.id, userId).catch(() => null)
       leagueBoard = standings?.available
         ? {
@@ -711,7 +804,7 @@ export async function getRankingsData(
               rosterId: team.rosterId,
               rank: team.rank,
               name: team.name ?? `Roster ${team.rosterId}`,
-              record: `${team.wins}-${team.losses}`,
+              record: recordText(team),
               pointsFor: team.pointsFor,
               average: team.average,
               movement: team.movement,
@@ -743,8 +836,11 @@ export async function getRankingsData(
           }
         : null,
       board: leagueBoard,
+      power,
     }
   }
+
+  const classView = scope === 'class' ? await getClassView(userId, one(sp, 'division')).catch(() => null) : null
 
   const optionRows = scope === 'portfolio' ? mineRows : base.rows
   const shareable =
@@ -754,8 +850,13 @@ export async function getRankingsData(
         ? `/api/share/career-card${qs([['design', 'rank'], ['scope', 'portfolio'], ...filterParams(filters)])}`
         : null
 
+  const panelRaw = one(sp, 'panel')
+  const panel: RankingsPanel | null =
+    panelRaw === 'power' && scope === 'league' ? 'power' : panelRaw === 'legacy' && scope === 'portfolio' ? 'legacy' : null
+
   return {
     scope,
+    panel,
     signedIn: userId != null,
     filters,
     filtersLabel: describeFilters(filters),
@@ -771,6 +872,7 @@ export async function getRankingsData(
     global,
     portfolio,
     league,
+    classView,
   }
 }
 
@@ -1284,13 +1386,15 @@ export async function getTeamCompareData(userId: string | null, leagueId: string
   const pick = (id: string | null): TeamCompareSide | null => {
     const t = id ? standings.teams.find((x) => x.rosterId === id) : null
     if (!t) return null
-    const games = t.wins + t.losses
+    const ties = t.ties ?? 0
+    const games = t.wins + t.losses + ties
     return {
       rosterId: t.rosterId,
       name: t.name ?? `Roster ${t.rosterId}`,
       isYou: t.isYou,
       facts: [
-        { label: 'Record', value: `${t.wins}-${t.losses}`, raw: games > 0 ? t.wins / games : null, higherIsBetter: true },
+        // A tie is half a win, the same rule the standings board's all-play share uses.
+        { label: 'Record', value: recordText(t), raw: games > 0 ? (t.wins + ties / 2) / games : null, higherIsBetter: true },
         { label: 'Points for', value: Math.round(t.pointsFor).toLocaleString(), raw: t.pointsFor, higherIsBetter: true },
         { label: 'Points per week', value: t.average == null ? '—' : t.average.toFixed(1), raw: t.average, higherIsBetter: true },
         { label: 'Points rank', value: `#${t.rank} of ${standings.teams.length}`, raw: -t.rank, higherIsBetter: true },

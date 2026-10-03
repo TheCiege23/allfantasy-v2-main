@@ -271,15 +271,16 @@ export function TradeCenter({
                 </div>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   <div className="rounded border border-white/10 bg-white/[0.03] p-2">
-                    <p className="font-semibold text-white/70">{rosterNameById.get(p.proposerRosterId) ?? 'Team A'} sends</p>
+                    {/* Each team over what it GETS — the proposer's grade above is for this column. */}
+                    <p className="font-semibold text-white/70">{rosterNameById.get(p.proposerRosterId) ?? 'Team A'} gets</p>
                     <p className="mt-1 text-white/55">
-                      {proposerAssets.length ? proposerAssets.map(formatProposalAsset).join(', ') : '—'}
+                      {receiverAssets.length ? receiverAssets.map(formatProposalAsset).join(', ') : '—'}
                     </p>
                   </div>
                   <div className="rounded border border-white/10 bg-white/[0.03] p-2">
-                    <p className="font-semibold text-white/70">{rosterNameById.get(p.receiverRosterId) ?? 'Team B'} sends</p>
+                    <p className="font-semibold text-white/70">{rosterNameById.get(p.receiverRosterId) ?? 'Team B'} gets</p>
                     <p className="mt-1 text-white/55">
-                      {receiverAssets.length ? receiverAssets.map(formatProposalAsset).join(', ') : '—'}
+                      {proposerAssets.length ? proposerAssets.map(formatProposalAsset).join(', ') : '—'}
                     </p>
                   </div>
                 </div>

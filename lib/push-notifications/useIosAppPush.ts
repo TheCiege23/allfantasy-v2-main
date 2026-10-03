@@ -28,7 +28,14 @@ export type IosAppPushState = {
   enable: () => Promise<void>
 }
 
-export function useIosAppPush(): IosAppPushState {
+export function useIosAppPush(
+  /**
+   * `registerOnMount: false` reads the permission without re-sending the token. Only the ROOT
+   * `IosAppPushRegistrar` needs the re-send; an inline ask that can render many times per page
+   * (one under each Chimmy answer) would otherwise POST the same token once per render.
+   */
+  { registerOnMount = true }: { registerOnMount?: boolean } = {},
+): IosAppPushState {
   const [bridge, setBridge] = useState<IosPushBridge | null>(null)
   const [permission, setPermission] = useState<IosPushPermission | null>(null)
   const [registered, setRegistered] = useState(false)
@@ -52,7 +59,7 @@ export function useIosAppPush(): IosAppPushState {
       setPermission(current)
       // Already allowed: make sure THIS login has the token (a new sign-in on the same
       // phone, or a token iOS rotated). The server upserts, so repeating is harmless.
-      if (current === "granted") {
+      if (current === "granted" && registerOnMount) {
         const ok = await registerIosDevice(b)
         if (!cancelled) setRegistered(ok)
       }
@@ -60,7 +67,7 @@ export function useIosAppPush(): IosAppPushState {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [registerOnMount])
 
   const enable = useCallback(async () => {
     if (!bridge) return

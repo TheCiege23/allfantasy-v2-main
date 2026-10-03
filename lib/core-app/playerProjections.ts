@@ -277,6 +277,11 @@ export type AfEngineProjection = {
    * hand-built fixtures may not carry it.
    */
   canonicalPlayerId?: string | null
+  /**
+   * The position the mirror row recorded. With `basis`, it is how `afEngineForLeague` knows a
+   * defender's number is IDP-scored rather than PPR. Optional for the same reason as above.
+   */
+  position?: string | null
 }
 
 export async function lookupAfEngineProjections(
@@ -296,13 +301,14 @@ export async function lookupAfEngineProjections(
   for (const r of rows) {
     const points = Number(r.projectedPoints)
     if (!Number.isFinite(points)) continue
-    const s = (r.stats ?? {}) as { basis?: unknown; confidenceLevel?: unknown; canonicalPlayerId?: unknown }
+    const s = (r.stats ?? {}) as { basis?: unknown; confidenceLevel?: unknown; canonicalPlayerId?: unknown; position?: unknown }
     out.set(r.playerId, {
       playerId: r.playerId,
       projectedPoints: points,
       basis: typeof s.basis === 'string' ? s.basis : null,
       confidence: typeof s.confidenceLevel === 'string' ? s.confidenceLevel : null,
       canonicalPlayerId: typeof s.canonicalPlayerId === 'string' && s.canonicalPlayerId ? s.canonicalPlayerId : null,
+      position: typeof s.position === 'string' && s.position ? s.position : null,
     })
   }
   return out
@@ -444,7 +450,7 @@ export function afEngineLineupTotal(
       scoringSettings && provider?.componentStats
         ? computeLeagueProjectedPoints(provider.componentStats, scoringSettings)
         : null
-    const v = afEngineForLeague(row.projectedPoints, provider?.projectedPoints ?? null, league?.points ?? null)
+    const v = afEngineForLeague(row, provider?.projectedPoints ?? null, league?.points ?? null)
     if (v == null) continue
     total += v
     from += 1

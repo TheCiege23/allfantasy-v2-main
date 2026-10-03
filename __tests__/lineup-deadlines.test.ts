@@ -30,3 +30,24 @@ describe('individual lineup deadlines', () => {
     expect(lineupDeadlines([{ kickoff: thursday, issues: 1 }], 1, now).locked).toBe(false)
   })
 })
+
+/*
+ * A starter on bye has no kickoff because his club is not playing — a known fact. Counting him
+ * in `unknownKickoffs` made the board say "1 without a kickoff" and "schedule incomplete".
+ */
+describe('a starter on bye is not a missing schedule', () => {
+  it('keeps him actionable but never counts him as an unknown kickoff', () => {
+    const d = lineupDeadlines([{ kickoff: sunday, issues: 0 }, { kickoff: null, issues: 1, bye: true }], 0, now - 3_600_000)
+    expect(d.unknownKickoffs).toBe(0)
+    expect(d.actionableSeverity).toBe(1)
+    expect(d.lockAt).toBe(sunday.getTime())
+  })
+
+  it('control: the same row without the bye flag is still an unknown kickoff', () => {
+    expect(lineupDeadlines([{ kickoff: null, issues: 1 }], 0, now).unknownKickoffs).toBe(1)
+  })
+
+  it('a bye never establishes a whole-lineup lock', () => {
+    expect(lineupDeadlines([{ kickoff: thursday, issues: 0 }, { kickoff: null, issues: 1, bye: true }], 0, now).locked).toBe(false)
+  })
+})

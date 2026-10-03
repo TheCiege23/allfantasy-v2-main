@@ -1,0 +1,226 @@
+/*
+ * Weekly Career Story (`career/WeeklyStory.tsx`) — the tile on the Career overview and the
+ * full-screen viewer it opens.
+ *
+ * Phone: the viewer IS the screen (edge to edge, safe-area aware). From 768px it becomes a 9:16
+ * card centred over a dimmed page, so a tablet or desktop reader keeps their place.
+ *
+ * ⚠ EVERY @media BLOCK HERE IS TOP-LEVEL — a block opened inside another closes the outer one early
+ * (see CLAUDE.md, the af-matchup.css incident).
+ *
+ * ⚠ z-index 1300: above the shell's highest layer (1200) so the story covers the nav and drawers;
+ * the Chimmy drawer is opened only AFTER the story closes, never beneath it.
+ */
+
+/* ── Tile ─────────────────────────────────────────────────────────────── */
+
+.af-cst-tile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 14px 10px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  min-height: 64px;
+}
+.af-cst-tile:hover,
+.af-cst-tile:focus-visible { border-color: var(--accent-line); }
+
+.af-cst-ring {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  padding: 2.5px;
+  background: conic-gradient(var(--accent), var(--good), var(--accent));
+}
+.af-cst-tile[data-seen='true'] .af-cst-ring { background: var(--line2); }
+.af-cst-ring-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--surface);
+  box-sizing: border-box;
+}
+/* 11px is the app's floor (__tests__/core-app/type-floor.test.ts); the 48px ring fits WK at 11 over the 17px week. */
+.af-cst-ring-wk { font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace; letter-spacing: 0.08em; color: var(--faint); }
+.af-cst-ring-n { font: 800 17px/1.05 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--text); }
+.af-cst-tile-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.af-cst-tile-t { font: 700 14px/1.25 var(--font-archivo, 'Archivo'), system-ui, sans-serif; }
+.af-cst-tile-s { font: 400 12px/1.35 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--muted); }
+
+/* ── Viewer ───────────────────────────────────────────────────────────── */
+
+.af-cst-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: var(--bg);
+}
+
+.af-cst-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  background:
+    radial-gradient(120% 70% at 50% 0%, var(--accent-soft), transparent 70%),
+    var(--surface);
+  color: var(--text);
+  overflow: hidden;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.af-cst-bars { display: flex; gap: 4px; }
+.af-cst-bar { flex: 1; height: 3px; border-radius: 2px; background: var(--line2); overflow: hidden; }
+.af-cst-bar > i { display: block; height: 100%; width: 0; background: var(--text); }
+.af-cst-bar > i[data-state='done'],
+.af-cst-bar > i[data-state='full'] { width: 100%; }
+/* The bar mirrors the JS timer: a pause restarts the card's 6s, so the fill restarts with it. */
+.af-cst-bar > i[data-run='true'] { animation-name: af-cst-fill; animation-timing-function: linear; animation-fill-mode: both; }
+@keyframes af-cst-fill { from { width: 0; } to { width: 100%; } }
+
+.af-cst-top { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+.af-cst-top-t { font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.af-cst-close {
+  position: relative;
+  z-index: 3;
+  width: 44px;
+  height: 44px;
+  margin-right: -10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* The card is the middle of the frame; tap zones lie over it, interactive bits sit above them. */
+.af-cst-card {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  min-height: 0;
+  padding: 8px 4px;
+}
+.af-cst-zone {
+  position: absolute;
+  top: 70px;
+  bottom: 50px;
+  z-index: 1;
+  width: 50%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.af-cst-zone--prev { left: 0; cursor: w-resize; }
+.af-cst-zone--next { right: 0; cursor: e-resize; }
+.af-cst-zone:disabled { cursor: default; }
+.af-cst-link,
+.af-cst-actions { position: relative; z-index: 2; }
+
+.af-cst-eyebrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  font: 700 12px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.af-cst-plat { font-size: 11px; color: var(--muted); border: 1px solid var(--line2); border-radius: 4px; padding: 3px 5px; }
+.af-cst-big { margin: 0; font: 800 clamp(64px, 22vw, 112px)/0.95 var(--font-archivo, 'Archivo'), system-ui, sans-serif; letter-spacing: -0.02em; }
+.af-cst-name { margin: 0; font: 800 clamp(30px, 9vw, 44px)/1.05 var(--font-archivo, 'Archivo'), system-ui, sans-serif; }
+.af-cst-verdict { margin: 0; font: 800 clamp(48px, 16vw, 80px)/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--bad); }
+.af-cst-verdict[data-won='true'] { color: var(--good); }
+.af-cst-score { margin: 0; font: 700 clamp(26px, 8vw, 38px)/1.1 var(--font-archivo, 'Archivo'), system-ui, sans-serif; }
+.af-cst-score span { color: var(--faint); }
+.af-cst-sub { margin: 0; font: 400 15px/1.45 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--muted); }
+.af-cst-headline {
+  display: flex;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border: 1px solid var(--accent-line);
+  border-radius: 14px;
+  background: var(--accent-soft);
+  font: 600 17px/1.4 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+}
+.af-cst-mark { color: var(--accent); flex: none; }
+.af-cst-link {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 8px;
+  color: var(--accent);
+  font: 700 14px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  text-decoration: none;
+}
+
+.af-cst-actions { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.af-cst-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50px;
+  padding: 0 16px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  font: 700 15px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  text-decoration: none;
+  cursor: pointer;
+}
+.af-cst-action--chimmy { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+
+.af-cst-foot {
+  display: flex;
+  justify-content: space-between;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+}
+
+/* Tablet and desktop: a 9:16 card over a dimmed page. */
+@media (min-width: 768px) {
+  .af-cst-scrim { align-items: center; background: rgba(4, 5, 12, 0.78); }
+  .af-cst-frame {
+    width: min(440px, 92vw);
+    height: min(782px, 92vh);
+    border: 1px solid var(--line2);
+    border-radius: 22px;
+    padding: 14px 20px 16px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+  }
+  .af-cst-big { font-size: 104px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-cst-bar > i[data-run='true'] { animation: none; }
+}

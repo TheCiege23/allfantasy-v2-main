@@ -5,6 +5,11 @@ import { myRosterCandidates } from './myRoster'
 import { leagueDisplayName, type SectionState } from './leagueHome'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { describeTiebreakRule } from './waiverRuleLabels'
+import { waiverScheduleIsImported } from './waiverRowMeta'
+import type { WaiverSchedule } from './waiverRunClock'
+import { loadObservedWaiverSchedules } from '@/lib/waivers/observedWaiverSchedule'
+import { normalizeSourcePlatform } from '@/lib/league-links/sourceLinkResolver'
+import { platformLabel } from './platformLinks'
 
 /**
  * Waivers — "targets, bids and claim order, priced against this league's FAAB
@@ -51,21 +56,25 @@ export type WaiverTypeInfo = {
 }
 
 export type WaiverRunInfo = {
-  /** 0–6, Sunday = 0, as stored. */
-  dayOfWeek: number
-  dayLabel: string
   /**
-   * ⚠ UTC, and labelled as such wherever this renders. `processingTimeUtc` is
-   * definitionally UTC and `League.timezone` cannot localise it: that column is
-   * `@default("America/New_York")` and all 120 production leagues carry exactly
-   * the default, so converting would dress a schema default up as the league's
-   * real timezone and shift the hour by a number nobody chose.
+   * The schedule, in the zone it is kept in. ⚠ A STORED schedule is UTC and labelled as such:
+   * `processingTimeUtc` is definitionally UTC and `League.timezone` cannot localise it (it is
+   * `@default("America/New_York")` on every production league, so converting would dress a schema
+   * default up as the league's real timezone). An OBSERVED Sleeper schedule is Pacific wall-clock
+   * (lib/waivers/observedWaiverSchedule.ts). The viewer always sees their own time beside it.
    */
-  timeUtc: string
+  schedule: WaiverSchedule
+  /** "Wednesday", or "Every day" for daily waivers. */
+  dayLabel: string
+  /** "09:00 UTC", "03:00 Pacific". */
+  timeLabel: string
+  /** Set when the schedule was read off this league's own processed claims: how many runs agree. */
+  observedRuns: number | null
 }
 
 export type WaiversData = {
-  league: { id: string; name: string; platform: string; format: string | null }
+  /** `platformLeagueId` is carried so the screen can link to the provider's own player page. */
+  league: { id: string; name: string; platform: string; format: string | null; platformLeagueId: string | null }
   budget: SectionState<WaiverBudget>
   waiverPriority: SectionState<{ priority: number; leagueRosters: number }>
   rosterLoad: SectionState<{ playersHeld: number; starters: number; bench: number; reserve: number }>
@@ -126,11 +135,37 @@ async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
     },
   })
 
+  /*
+   * A Sleeper league's schedule is not imported (its settings fields' meaning is unverified —
+   * contracts/sleeper/GAPS.md S-05/S-06), so it is OBSERVED from when this league's claims actually
+   * processed. Read before the settings row, because a league with no ingested settings row can
+   * still have a processing history.
+   */
+  const observed = !waiverScheduleIsImported(platform)
+    ? ((await loadObservedWaiverSchedules(prisma, [leagueId]).catch(() => null))?.get(leagueId) ?? null)
+    : null
+  const observedRun: SectionState<WaiverRunInfo> | null = observed
+    ? {
+        available: true,
+        data: {
+          schedule: observed.schedule,
+          dayLabel: observed.schedule.dayOfWeek == null ? 'Every day' : DAY_LABEL[observed.schedule.dayOfWeek],
+          timeLabel: `${observed.schedule.time} Pacific`,
+          observedRuns: observed.agreeingRuns,
+        },
+      }
+    : null
+  const notYetObserved = {
+    available: false as const,
+    reason:
+      'Sleeper’s processing schedule was not imported, and this league’s waivers have not been seen processing often enough to read it yet — check the league’s waiver settings on Sleeper.',
+  }
+
   if (!s) {
     const reason = 'no waiver settings were ingested for this league'
     return {
       waiverType: { available: false, reason },
-      processTime: { available: false, reason },
+      processTime: observedRun ?? (observed === null && !waiverScheduleIsImported(platform) ? notYetObserved : { available: false, reason }),
       tiebreak: { available: false, reason },
       claimLimits: { available: false, reason },
     }
@@ -158,12 +193,20 @@ async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
           available: false,
           reason: 'this league has waivers turned off — free agents are claimed instantly',
         }
-      // The Sleeper mapper imports type/budget, not its daily schedule or UTC
-      // processing time. This mirror can contain AllFantasy bootstrap defaults.
-      : platform === 'sleeper'
-        ? { available: false, reason: 'Sleeper’s processing schedule was not imported — check the league’s waiver settings on Sleeper.' }
+      // The Sleeper mapper does not import the schedule, so this mirror can hold AllFantasy
+      // bootstrap defaults there. Sleeper's comes from its own processed claims, or not at all.
+      : !waiverScheduleIsImported(platform)
+        ? (observedRun ?? notYetObserved)
       : day != null && day >= 0 && day <= 6 && time
-        ? { available: true, data: { dayOfWeek: day, dayLabel: DAY_LABEL[day], timeUtc: time } }
+        ? {
+            available: true,
+            data: {
+              schedule: { dayOfWeek: day, time, timeZone: 'UTC' },
+              dayLabel: DAY_LABEL[day],
+              timeLabel: `${time} UTC`,
+              observedRuns: null,
+            },
+          }
         : { available: false, reason: 'no waiver run schedule was ingested for this league' }
 
   /*
@@ -181,7 +224,18 @@ async function resolveWaiverRules(leagueId: string, platform: string): Promise<{
       : kind === 'rolling' || kind === 'standard' || kind === 'reverse_standings'
           ? { available: true, data: 'Waiver priority order' }
           : rawTiebreak
-            ? { available: true, data: describeTiebreakRule(rawTiebreak) }
+            ? /*
+               * ⚠ "Highest FAAB bid" IS NOT A TIEBREAK ON A FAAB LEAGUE — a tie is two EQUAL bids, so
+               * printing it as the answer to "how is a tie broken" was circular. The stored value is
+               * the claim-priority rule (`claim_priority_behavior`). For a league AllFantasy runs,
+               * the engine's own order is known (`orderClaimsForProcessing`: equal bids go to waiver
+               * priority); for an imported one it was never published, and says so.
+               */
+              kind === 'faab' && describeTiebreakRule(rawTiebreak) === 'Highest FAAB bid'
+              ? normalizeSourcePlatform(platform)
+                ? { available: false, reason: 'highest bid wins — how two equal bids are split was not published' }
+                : { available: true, data: 'Highest bid wins · equal bids go to waiver priority' }
+              : { available: true, data: describeTiebreakRule(rawTiebreak) }
             : { available: false, reason: 'this league’s tiebreak rule was not published' }
 
   /*
@@ -244,6 +298,7 @@ export async function getWaiversData(
       name: leagueDisplayName(league.name),
       platform: String(league.platform ?? 'manual').toLowerCase(),
       format: league.leagueType ?? null,
+      platformLeagueId: league.platformLeagueId ?? null,
     },
     waiverType: rules.waiverType,
     processTime: rules.processTime,
@@ -341,10 +396,8 @@ export async function getWaiversData(
             faabRemaining: mine.faabRemaining,
             rankByBudget:
               withBudget.length > 0
-                ? withBudget
-                    .slice()
-                    .sort((a, b) => (b.faabRemaining ?? 0) - (a.faabRemaining ?? 0))
-                    .findIndex((r) => r.platformUserId === mine.platformUserId) + 1
+                ? /* Competition rank: rosters tied on budget share a rank, so a tie cannot read as "2nd". */
+                  withBudget.filter((r) => (r.faabRemaining ?? 0) > (mine.faabRemaining ?? 0)).length + 1
                 : null,
             leagueRosters: allRosters.length,
             rostersWithBudget: withBudget.length,
@@ -359,11 +412,22 @@ export async function getWaiversData(
         }
       : { available: true, data: { priority: mine.waiverPriority, leagueRosters: allRosters.length } }
 
+  /*
+   * 🛑 SLEEPER'S `players` ALREADY CONTAINS IR AND TAXI. Bench used to be `players − starters`, so
+   * every reserve and taxi player was counted twice — once in "bench" and again in "IR/taxi" —
+   * and a 10-starter roster with 3 stashed read "10 starting · 12 bench · 3 IR/taxi" for a bench
+   * of nine. Counted as sets now: bench is held, not starting, and not stashed.
+   */
   const pd = (mine.playerData ?? {}) as Record<string, unknown>
-  const count = (v: unknown) => (Array.isArray(v) ? v.filter((x) => String(x) !== '0').length : 0)
-  const players = count(pd.players)
-  const starters = count(pd.starters)
-  const reserve = count(pd.reserve) + count(pd.taxi)
+  const ids = (v: unknown) =>
+    new Set(Array.isArray(v) ? v.map((x) => String(x ?? '').trim()).filter((x) => x !== '' && x !== '0') : [])
+  const starterIds = ids(pd.starters)
+  const stashIds = new Set([...ids(pd.reserve), ...ids(pd.taxi)])
+  const heldIds = new Set([...ids(pd.players), ...starterIds, ...stashIds])
+  const players = heldIds.size
+  const starters = starterIds.size
+  const reserve = stashIds.size
+  const bench = [...heldIds].filter((id) => !starterIds.has(id) && !stashIds.has(id)).length
 
   const rosterLoad: SectionState<{
     playersHeld: number
@@ -378,19 +442,35 @@ export async function getWaiversData(
           data: {
             playersHeld: players,
             starters,
-            // `players` is the catch-all list, so bench is what is not starting.
-            bench: Math.max(0, players - starters),
+            bench,
             reserve,
           },
         }
 
-  const claimCount = await prisma.waiverClaim
-    .count({ where: { roster: { leagueId, platformUserId: mine.platformUserId } } })
-    .catch(() => null)
+  /*
+   * 🛑 TWO WAYS THIS TILE WAS WRONG.
+   *
+   * 1. It counted EVERY claim — processed, failed and cancelled included — under the label
+   *    "Claims queued". One awarded claim and the tile said one was still waiting.
+   * 2. On an imported league it read "0 · nothing pending", always. `WaiverClaim` is written only by
+   *    AllFantasy's own claim service, so a Sleeper manager's claims never reach it; zero was a
+   *    fact about our table, presented as a fact about the manager's week. Now an imported league says we
+   *    cannot see them, and only a league AllFantasy runs counts its own pending claims.
+   */
+  const importedFrom = normalizeSourcePlatform(league.platform)
+  const claimCount = importedFrom
+    ? null
+    : await prisma.waiverClaim
+        .count({ where: { status: 'pending', roster: { leagueId, platformUserId: mine.platformUserId } } })
+        .catch(() => null)
 
-  const claimsQueued: SectionState<{ count: number; committed: number | null }> =
-    claimCount == null
-      ? { available: false, reason: 'waiver claims are not ingested for this league' }
+  const claimsQueued: SectionState<{ count: number; committed: number | null }> = importedFrom
+    ? {
+        available: false,
+        reason: `claims you place on ${platformLabel(importedFrom)} are not visible to AllFantasy, so we cannot count them`,
+      }
+    : claimCount == null
+      ? { available: false, reason: 'waiver claims could not be read for this league' }
       : { available: true, data: { count: claimCount, committed: null } }
 
   return { ...base, budget, waiverPriority, rosterLoad, claimsQueued }

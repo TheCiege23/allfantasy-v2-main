@@ -48,6 +48,8 @@ export function BackToTop() {
     <button
       onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
       aria-label="Back to top"
+      /* A hook for af-core-shell.css, which hides this in the league-first phone shell. */
+      data-af-back-to-top=""
       /*
        * ⚠ 44x44, NOT 40x40. It is a fixed control sitting over page content, so
        * a missed tap lands on whatever is underneath — the same argument

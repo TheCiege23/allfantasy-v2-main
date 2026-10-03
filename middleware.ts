@@ -23,20 +23,23 @@ import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken"
 import { applyAttributionCapture } from "@/lib/analytics/attributionCookies"
 import {
   IOS_APP_PLANS_PATH,
+  isIosAppClosedPage,
   isIosAppPurchaseApi,
-  isIosAppPurchasePage,
   isIosAppUserAgent,
 } from "@/lib/platform/iosApp"
 import { isSessionRevoked } from "@/lib/auth/sessionRevocation"
 
 /**
- * Inside the iOS app nothing is for sale (App Store guideline 3.1.1 — see
- * lib/platform/iosApp). Checked ahead of every geo gate: it is a UA read with
- * no network call, and it only ever refuses, so running first cannot let
- * anything through that a later gate would have stopped.
+ * Inside the iOS app nothing is sold except through Apple (App Store guideline
+ * 3.1.1 — see lib/platform/iosApp). Stripe checkout APIs are refused in every
+ * build; plan and token pages reopen only for builds with the StoreKit bridge.
+ * Checked ahead of every geo gate: it is a UA read with no network call, and it
+ * only ever refuses, so running first cannot let anything through that a later
+ * gate would have stopped.
  */
 function iosAppPurchaseRefusal(request: NextRequest, pathname: string): NextResponse | null {
-  if (!isIosAppUserAgent(request.headers.get("user-agent"))) return null
+  const userAgent = request.headers.get("user-agent")
+  if (!isIosAppUserAgent(userAgent)) return null
   if (isApiPath(pathname)) {
     if (!isIosAppPurchaseApi(pathname)) return null
     return NextResponse.json(
@@ -44,7 +47,7 @@ function iosAppPurchaseRefusal(request: NextRequest, pathname: string): NextResp
       { status: 403, headers: { "cache-control": "no-store" } },
     )
   }
-  if (!isIosAppPurchasePage(pathname)) return null
+  if (!isIosAppClosedPage(pathname, userAgent)) return null
   return NextResponse.redirect(new URL(IOS_APP_PLANS_PATH, request.url), 307)
 }
 
@@ -208,6 +211,10 @@ const GEO_EXEMPT_PREFIXES = [
   "/api/cron",
   "/api/webhooks",
   "/api/stripe/webhook",
+  // App Store Server Notifications V2 — renewals, refunds, expiries. Every payload is verified
+  // against Apple's signature chain in the route, so nothing here opens it to anyone else. Not
+  // under /api/webhooks because that URL is already configured in App Store Connect.
+  "/api/monetization/apple/notifications",
   "/api/community/discord/webhook",
   "/_next",
   "/favicon.ico",
@@ -260,6 +267,15 @@ function isUsernameGateExempt(pathname: string): boolean {
   return false
 }
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Cancelling a subscription from /paid-restricted and /geo-blocked (owner's calls, 2026-10-02). Also
+ * exempt from the FULL-state block in apiGeoRefusal, so a fully blocked state can cancel. It is deliberately NOT
+ * under /api/subscription/cancel — that prefix is in PAID_GEO_PREFIXES below, which would refuse it
+ * in exactly the states it exists for. Exempt wherever the billing portal is: cancelling must never
+ * depend on a VPN being off or an account lock being lifted.
+ */
+const CANCEL_SUBSCRIPTION_API = "/api/account/cancel-subscription"
 
 /** Paid API surfaces in paid_block states (cron/webhooks like sync-profiles stay open). */
 const PAID_GEO_PREFIXES = [
@@ -376,6 +392,8 @@ const VPN_EXEMPT_API_PREFIXES = [
   ...GEO_EXEMPT_PREFIXES.filter((p) => p.startsWith("/api/") && p !== "/api/auth"),
   ...FULL_BLOCK_API_EXEMPT_PREFIXES,
   "/api/subscription/billing-portal",
+  // Same reason: the cancel button on /paid-restricted (owner's call, 2026-10-02).
+  CANCEL_SUBSCRIPTION_API,
   "/api/auth/session",
   "/api/auth/csrf",
   "/api/auth/providers",
@@ -564,7 +582,7 @@ async function pageVpnRedirect(
  * the paid surfaces only (isPaidRoute) — the same surfaces a paid-block state's
  * IP is kept off, from anywhere. Free features stay open.
  */
-const ACCOUNT_LOCK_EXEMPT_API_PREFIXES = ["/api/subscription/billing-portal"]
+const ACCOUNT_LOCK_EXEMPT_API_PREFIXES = ["/api/subscription/billing-portal", CANCEL_SUBSCRIPTION_API]
 
 function hasSessionCookie(request: NextRequest): boolean {
   return request.cookies
@@ -652,6 +670,34 @@ async function pageAccountLockRedirect(request: NextRequest, pathname: string): 
  * The session is decoded only for a request that would be refused, to honour
  * the same owner bypass the page gate has.
  */
+/**
+ * 🛑 AN API URL A PERSON OPENS AS A PAGE GOT ITS REFUSAL'S JSON PRINTED RAW. "Manage billing" is a
+ * plain link to /api/subscription/billing-portal, so from a paid-block state the screen read
+ * {"error":"PAID_GEO_BLOCKED",…}. Every refusal body names its block page in `redirectTo`; a
+ * browser NAVIGATION is sent there instead. fetch() callers (no `Sec-Fetch-Mode: navigate`) keep
+ * the status and JSON they parse — the refusal itself is unchanged, only its shape for a page load.
+ */
+function isDocumentNavigation(request: NextRequest): boolean {
+  if (request.method !== "GET") return false
+  const mode = request.headers.get("sec-fetch-mode")
+  if (mode) return mode === "navigate"
+  // Browsers without Fetch Metadata: a page load asks for HTML first.
+  return (request.headers.get("accept") ?? "").split(",").some((t) => t.trim().startsWith("text/html"))
+}
+
+async function refusalAsPageIfNavigation(request: NextRequest, refusal: NextResponse): Promise<NextResponse> {
+  if (!isDocumentNavigation(request)) return refusal
+  const body = (await refusal.clone().json().catch(() => null)) as { redirectTo?: unknown } | null
+  const to = body?.redirectTo
+  // Same-site paths only — never an absolute or protocol-relative URL out of a body.
+  if (typeof to !== "string" || !to.startsWith("/") || to.startsWith("//")) return refusal
+  const target = new URL(to, "http://same-site.invalid")
+  const url = request.nextUrl.clone()
+  url.pathname = target.pathname
+  url.search = target.search
+  return NextResponse.redirect(url)
+}
+
 async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<NextResponse | null> {
   if (hasMachineCredential(request.headers)) return null
   // Before the geo exemptions and the `country !== "US"` early return below: a
@@ -665,7 +711,10 @@ async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<Ne
 
   const { country, region } = await resolveRequestGeo(request, vpn)
   if (country !== "US" || !region) return null
-  const fullBlock = isFullyBlocked(region) && !isFullBlockApiExempt(pathname)
+  // The cancel button on /geo-blocked must work FROM a fully blocked state — owner's call, 2026-10-02.
+  // It only ever removes billing; the billing portal itself stays refused (its plan changes are a purchase).
+  const fullBlock =
+    isFullyBlocked(region) && !isFullBlockApiExempt(pathname) && !isPaidPrefix(CANCEL_SUBSCRIPTION_API, pathname)
   const paidBlock = !fullBlock && isPaidRoute(pathname) && (isPaidBlocked(region) || isFullyBlocked(region))
   if (!fullBlock && !paidBlock) return null
 
@@ -676,13 +725,14 @@ async function apiGeoRefusal(request: NextRequest, pathname: string): Promise<Ne
   }
 
   const body = fullBlock
-    ? { error: "GEO_BLOCKED", message: "AllFantasy.ai is not available in your state.", stateCode: region }
+    ? { error: "GEO_BLOCKED", message: "AllFantasy.ai is not available in your state.", stateCode: region, redirectTo: `/geo-blocked?state=${encodeURIComponent(region)}` }
     : {
         error: "PAID_GEO_BLOCKED",
         message: "Paid features are not available in your state.",
         stateCode: region,
         allowFree: true,
-        redirectTo: "/paid-restricted",
+        // With the state, so the page names it — it defaults to Hawaii without one.
+        redirectTo: `/paid-restricted?state=${encodeURIComponent(region)}`,
       }
   return new NextResponse(JSON.stringify(body), {
     status: fullBlock ? 403 : 451,
@@ -756,7 +806,11 @@ function redirectDeprecatedAppRoutes(request: NextRequest): NextResponse | null 
     return NextResponse.redirect(url)
   }
   if (pathname.startsWith("/app/power-rankings")) {
-    url.pathname = pathname.replace(/^\/app/, "")
+    // Straight to the rankings hub's power panel (2026-10-01) — not via /power-rankings, which is
+    // itself a redirect now and would cost a second hop.
+    url.pathname = "/core/rankings"
+    url.searchParams.set("scope", "league")
+    url.searchParams.set("panel", "power")
     return NextResponse.redirect(url)
   }
   const leagueRoot = pathname.match(/^\/app\/league\/([^/]+)$/)
@@ -788,7 +842,8 @@ function redirectDeprecatedDashboardRoutes(request: NextRequest): NextResponse |
   if (pathname.startsWith("/dashboard/admin") || pathname.startsWith("/dashboard/dispersal")) {
     return null
   }
-  url.pathname = "/core"
+  // The old rankings screen has a direct successor, so it lands there rather than on the home screen.
+  url.pathname = pathname === "/dashboard/rankings" || pathname.startsWith("/dashboard/rankings/") ? "/core/rankings" : "/core"
   return NextResponse.redirect(url)
 }
 
@@ -803,13 +858,18 @@ function redirectLegacyMarketingRoutes(request: NextRequest): NextResponse | nul
 }
 
 /**
- * Permanent app-owner / developer accounts that bypass geo-restrictions.
- * Mirror of STATIC_ADMIN_USER_IDS in lib/dev-admin/access.ts.
- * Keep in sync manually — this lives here to stay Edge-runtime-safe.
+ * Permanent app-owner / developer accounts that bypass geo-restrictions and the VPN gate.
+ * Mirror of STATIC_ADMIN_USER_IDS in lib/dev-admin/access.ts — kept identical by
+ * __tests__/admin-id-lists-in-sync.test.ts. This copy lives here to stay Edge-runtime-safe.
+ *
+ * 🛑 EVERY ID HERE MUST BE A ROW IN PRODUCTION `app_users`. The two IDs this list held until
+ * 2026-10-02 (theciege24 `944bb9f1-…`, TheCiege24 `3a7ffd10-…`) were checked against production
+ * and exist nowhere, so the owner bypass matched no account at all: the owner, signed in as
+ * TheCiege26 and shown as admin everywhere in the app (that check also reads ADMIN_EMAILS and the
+ * admin role), was sent to /vpn-blocked when his home IP was flagged. Check the row before adding.
  */
 const MIDDLEWARE_ADMIN_USER_IDS = new Set<string>([
-  '944bb9f1-7a25-455b-8ef2-66146dbf3553', // theciege24 — app owner
-  '3a7ffd10-b1a5-4a40-8d07-232364596735', // TheCiege24 — current app owner account
+  '9791bae0-e47f-418a-ae40-285f6a2e7887', // TheCiege26 — app owner (verified in app_users 2026-10-02)
 ])
 
 function parseMiddlewareAdminIds(rawValue: string | undefined): Set<string> {
@@ -1042,7 +1102,7 @@ async function routeMiddleware(request: NextRequest) {
   // only stamps standard security headers on API responses.
   if (isApiPath(pathname)) {
     const geoRefusal = await apiGeoRefusal(request, pathname)
-    if (geoRefusal) return geoRefusal
+    if (geoRefusal) return refusalAsPageIfNavigation(request, geoRefusal)
     return applyApiSecurityHeaders(pathname, nextWithRouteHeaders(request, pathname))
   }
 

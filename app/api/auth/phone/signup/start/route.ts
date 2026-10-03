@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
+import { maskPhonesInText } from "@/lib/sms/maskPhone"
 
 export const runtime = "nodejs"
 
-function normalizePhone(phone: string): string {
-  const stripped = phone.trim().replace(/[\s()-]/g, "")
-  if (!stripped) return ""
-  if (stripped.startsWith("+")) return stripped
-  return `+1${stripped}`
-}
+const normalizePhone = normalizePhoneE164
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
@@ -55,7 +52,8 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({ ok: true })
   } catch (err: any) {
-    console.error("[auth/phone/signup/start] error:", err?.message || err)
+    // Masked: Twilio's error messages quote the full number.
+    console.error("[auth/phone/signup/start] error:", maskPhonesInText(String(err?.message || err)))
     return NextResponse.json(
       { error: "SEND_FAILED", message: "Failed to send verification code." },
       { status: 500 }

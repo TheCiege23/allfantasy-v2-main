@@ -6,14 +6,9 @@
  * players, needs-tagged. Every formula renders verbatim from the payload.
  */
 
-import { useEffect, useState } from 'react'
-import type { WaiverIntelPayload } from '@/lib/waiver-intel/waiverIntelService'
 import { sleeperPlayerHeadshot } from '@/lib/sports-data/headshots'
+import { useWaiverIntel } from './useWaiverIntel'
 import './broadcast-deck.css'
-
-type ApiResponse =
-  | { supported: false; platform: string }
-  | { supported: true; intel: WaiverIntelPayload | null; error?: string }
 
 /**
  * `surface="core"` when mounted on the /core Waivers screen. Every rule in broadcast-deck.css is
@@ -22,30 +17,8 @@ type ApiResponse =
  * without the deck's full-page ground and maps its palette onto /core's own tokens.
  */
 export function WaiverIntel({ leagueId, surface = 'deck' }: { leagueId: string; surface?: 'deck' | 'core' }) {
-  const [data, setData] = useState<ApiResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    void fetch(`/api/league/waiver-intel?leagueId=${encodeURIComponent(leagueId)}`, {
-      credentials: 'same-origin',
-      cache: 'no-store',
-    })
-      .then((res) => res.json() as Promise<ApiResponse>)
-      .then((payload) => {
-        if (!cancelled) setData(payload)
-      })
-      .catch(() => {
-        if (!cancelled) setData({ supported: true, intel: null, error: 'Request failed' })
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [leagueId])
+  /* Shared with the lineup list on the same screen — one request between them (useWaiverIntel). */
+  const { data, loading } = useWaiverIntel(leagueId)
 
   if (data && !data.supported) return null
   const intel = data && data.supported ? data.intel : null
@@ -73,10 +46,20 @@ export function WaiverIntel({ leagueId, surface = 'deck' }: { leagueId: string; 
           <div className="m">The first sync scans every waiver claim in league history — try again shortly.</div>
         </div>
       ) : (
-        <div className="bdx-support" style={{ gridTemplateColumns: '1.4fr 1fr' }}>
+        /*
+          ⚠ A CLASS, NOT AN INLINE `gridTemplateColumns`. The inline style beat the deck's own
+          `@media (max-width: 960px) { .bdx-support { 1fr } }`, so on a phone the targets and the
+          bid history stayed two cramped columns side by side. See `.bdx-support--wide`.
+        */
+        <div className="bdx-support bdx-support--wide">
           {/* Targets */}
           <div className="bdx-panelbox">
-            <h3>Top available · suggested bids</h3>
+            {/*
+              Named by source. The Chimmy panel further down this screen suggests its own FAAB
+              figure from a different model; two bare "bid" numbers on one page read as one
+              system contradicting itself.
+            */}
+            <h3>Top available · bids from this room&apos;s history</h3>
             {intel.targets.length > 0 ? (
               <div className="bdx-rows">
                 {intel.targets.slice(0, 8).map((t) => {
@@ -104,6 +87,11 @@ export function WaiverIntel({ leagueId, surface = 'deck' }: { leagueId: string; 
                         {t.fillsSlots.length > 0 ? (
                           <span className="bdx-sev ok">▲ fills {t.fillsSlots.join(' / ')}</span>
                         ) : null}
+                        {/*
+                          The why, on the page — it used to live only in `title`, and a phone or a
+                          tablet has no hover, so iOS and Android readers never saw it.
+                        */}
+                        {t.reasoning.length > 0 ? <span className="bdx-reason">{t.reasoning.join(' · ')}</span> : null}
                       </span>
                       <span className="k" style={{ fontVariantNumeric: 'tabular-nums' }}>
                         {t.suggestedBid != null ? `bid ~$${t.suggestedBid}` : '—'}

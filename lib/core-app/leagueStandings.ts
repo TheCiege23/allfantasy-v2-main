@@ -65,6 +65,12 @@ export type StandingRow = {
   wins: number
   losses: number
   /**
+   * ⚠ OPTIONAL BECAUSE CACHED SUMMARIES PREDATE IT, like `live` below — a row read
+   * from `leagueStandingsSummary` before this field existed has no key, which must
+   * read as "no ties", never as an error.
+   */
+  ties?: number
+  /**
    * Rank change against last completed week. Null when there is no prior week
    * to compare against — the first scored week has no movement, and rendering
    * "—" there is different from rendering "no change".
@@ -116,6 +122,14 @@ export type LeagueStandingsData = {
   history: SeasonHistoryRow[]
   /** Official and power tables, history, zones, projections — see `standingsModel.ts`. */
   board: StandingsBoard
+  /**
+   * The same board with the week in progress counted at its current scores — "if scores held". Only
+   * while a week is held back as in progress; null otherwise.
+   *
+   * ⚠ OPTIONAL BECAUSE CACHED SUMMARIES PREDATE IT. A board read from `leagueStandingsSummary` before
+   * this field existed has no key, and that must read as "no live view", never as an error.
+   */
+  live?: StandingsBoard | null
 }
 
 /**
@@ -496,7 +510,14 @@ export async function getLeagueStandings(
     }
   }
 
-  const board = buildStandingsBoard({ season, snapshots, unplayed: unplayedPairs(rows), teams, rules })
+  const unplayed = unplayedPairs(rows)
+  const board = buildStandingsBoard({ season, snapshots, unplayed, teams, rules })
+  /*
+   * "If scores held" — built only while the platform is still finishing a week, from the same inputs.
+   * ⚠ NEVER STORED. Its snapshots are the ones above, already built; the hypothetical is only where the
+   * table stops, and `toStore` below is filtered on the REAL board's `settledThrough`.
+   */
+  const live = board.pendingWeeks.length > 0 ? buildStandingsBoard({ season, snapshots, unplayed, teams, rules, asIfFinal: true }) : null
 
   /*
    * Store what is settled and new. Awaited so a serverless runtime cannot drop it, and bounded: at most
@@ -531,6 +552,7 @@ export async function getLeagueStandings(
         weeksPlayed: t.weeksPlayed,
         wins: t.record.wins,
         losses: t.record.losses,
+        ties: t.record.ties,
         // Positive is an improvement: moving from 5th to 2nd is +3.
         movement: before != null ? before - rank : null,
       }
@@ -634,5 +656,6 @@ export async function getLeagueStandings(
     scoredWeeks: latest ? final.length : scoredWeekCount,
     history,
     board,
+    live,
   }
 }

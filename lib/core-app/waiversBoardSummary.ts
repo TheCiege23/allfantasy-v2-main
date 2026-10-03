@@ -80,8 +80,12 @@ registerScreenSummary<WaiversBoardData | null>({
    * ⚠ Bump whenever `WaiversBoardData` changes shape — the version is part of the cache key.
    * 2: the per-sport `sports` sections, and `considered` counting NFL leagues only. A v1 entry for a
    * basketball-only account would otherwise keep serving the board with its leagues silently gone.
+   * 4: ranked by lineup gain, with `withheld.noUpgrade`, `startsOver` and `dropBasis`. A v3 entry
+   * would keep serving backup-QB adds for up to the stale window after deploy.
+   * 5: `alternatives`, `runsAtUtc`, `multiLeague`, and up to 40 rows (was 10).
+   * 6: `runsAtUtc` -> `runsSchedule` (a zoned schedule), and Sleeper rows gain an OBSERVED schedule.
    */
-  version: 3,
+  version: 6,
   ttlMs: TTL_MS,
   staleWhileRevalidateMs: STALE_WHILE_REVALIDATE_MS,
   // See the header: a user-scoped key carries no league id, so a league sweep would match nothing.

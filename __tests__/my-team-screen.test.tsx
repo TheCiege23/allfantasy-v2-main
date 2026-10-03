@@ -161,14 +161,15 @@ describe('My Team — the reported problems', () => {
   it.each([{ eliminated: true }, { completed: true }])('does not offer lineup fixes for an inactive team: %j', (status) => {
     const t = text(<MyTeam data={data(status)} />)
     expect(t).not.toContain('Nobody is starting in this slot')
-    expect(t).not.toContain('Fix in sleeper')
+    // Case-insensitive: the platform is "Sleeper" now, and a lowercase-only check would pass vacuously.
+    expect(t).not.toMatch(/Fix in sleeper/i)
     expect(t).not.toContain('Lineup lock')
   })
   it('shows draft preparation rather than empty-slot lineup fixes before the draft', () => {
     const t = text(<MyTeam data={data({ preDraft: true })} />)
     expect(t).toContain('Draft pending')
     expect(t).not.toContain('Nobody is starting in this slot')
-    expect(t).not.toContain('Fix in sleeper')
+    expect(t).not.toMatch(/Fix in sleeper/i)
   })
   it('⚠ prices BENCH players, not only starters', () => {
     // The bench rendered a name and a status chip and nothing else, so half the
@@ -661,6 +662,8 @@ describe('My Team — the reported problems', () => {
       ['Injured Reserve', 'IR'],
       ['Did Not Practice', 'DNP'],
       ['Active', 'H'],
+      // "Inactive" contains "active" and used to render as a green H.
+      ['Inactive', 'INA'],
     ]
     for (const [full, short] of cases) {
       const c = render(
@@ -683,6 +686,62 @@ describe('My Team — the reported problems', () => {
       ).container
       expect(c.querySelector('.af-mt-status')?.textContent).toBe(short)
     }
+  })
+
+  /*
+   * On a phone the game line never fits on one line, and it wrapped mid-phrase —
+   * "WAS vs IND · Sun / 9:30a ET". The matchup and the kickoff are now separate
+   * whole pieces, so af-my-team.css can put the break between them.
+   */
+  it('splits the game line into matchup and kickoff, keeping the full text', () => {
+    const c = render(<MyTeam data={data()} />).container
+    const meta = c.querySelector('.af-mt-player-meta')!
+    expect(meta.querySelector('.af-mt-opp')?.textContent).toBe('DEN vs MIA')
+    expect(meta.querySelector('.af-mt-sep')?.textContent).toBe(' · ')
+    expect(meta.querySelector('.af-mt-when')?.textContent).toBe('Sun 9:05p')
+    expect(meta.textContent).toContain('DEN vs MIA · Sun 9:05p')
+  })
+
+  it('keeps a game line with no kickoff, and the no-game note, as plain text', () => {
+    const one = (gameContext: string | null) =>
+      render(
+        <MyTeam
+          data={data({
+            starters: { available: true, data: [{ slotLabel: 'QB', player: player({ gameContext }), empty: false, unresolvedId: null }] },
+            bench: { available: false, reason: 'none' },
+          })}
+        />,
+      ).container.querySelector('.af-mt-player-meta')!
+    const bare = one('DEN vs MIA')
+    expect(bare.querySelector('.af-mt-opp')).toBeNull()
+    expect(bare.textContent).toContain('DEN vs MIA')
+    expect(one(null).textContent).toContain('no game found for this week')
+  })
+
+  /*
+   * In an IDP league the standard tile reads "—" and explains why, but the footnote still
+   * said "Standard total built from 7 of 16 starters … so it reads low" (live, 2026-10-02).
+   */
+  it('drops the standard-coverage footnote in an IDP league, where no standard total is shown', () => {
+    const idp = (standardComparable: boolean) =>
+      render(
+        <MyTeam
+          data={data({
+            projections: {
+              available: true,
+              data: {
+                total: 80, projected: 7, unprojected: 9, season: '2026', week: 4,
+                afTotal: 165.7, afEngineTotal: 138.6, afProjected: 15, standardComparable,
+              },
+            },
+          })}
+        />,
+      ).container.textContent ?? ''
+    const withheld = idp(false)
+    expect(withheld).toContain('Standard scoring does not price defenders')
+    expect(withheld).not.toContain('Standard total built from')
+    // Control: the same coverage in a league with a standard total keeps its footnote.
+    expect(idp(true)).toContain('Standard total built from 7 of 16 starters')
   })
 
   it('shows an unfamiliar designation as-is rather than inventing a letter', () => {

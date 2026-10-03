@@ -39,9 +39,11 @@ export type MatchupPulseRefreshProps = {
    * numbers on screen can move. Computed server-side in MatchupPulseBoard.
    */
   inPlay: boolean
+  /** The refresh button's accessible name. The league Matchup screen reuses this control. */
+  label?: string
 }
 
-export function MatchupPulseRefresh({ inPlay }: MatchupPulseRefreshProps) {
+export function MatchupPulseRefresh({ inPlay, label = 'Refresh where you stand' }: MatchupPulseRefreshProps) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
 
@@ -170,7 +172,7 @@ export function MatchupPulseRefresh({ inPlay }: MatchupPulseRefreshProps) {
         className="af-mp-live-btn"
         onClick={refresh}
         disabled={pending}
-        aria-label="Refresh where you stand"
+        aria-label={label}
       >
         ↻
       </button>

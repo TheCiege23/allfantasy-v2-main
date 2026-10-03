@@ -1,0 +1,154 @@
+/*
+ * "This week across your leagues" — the War Room strip (screens/WarRoomWeek.tsx).
+ *
+ * Scoped under `.af-core`, tokens only. Rows stack by the strip's OWN width (@container wrw), the
+ * way Game Plan's do, so a tablet with the rail open gets the phone layout. Queries last, not nested.
+ */
+
+.af-core .af-wrw {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 1020px;
+  container: wrw / inline-size;
+}
+
+.af-core .af-wrw-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.af-core .af-wrw-head h2 {
+  margin: 0;
+}
+
+.af-core .af-wrw-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-core .af-wrw-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-core .af-wrw-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto;
+  grid-template-areas:
+    'league vs status'
+    'lineup lineup lineup';
+  align-items: center;
+  gap: 2px 12px;
+  min-height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.af-core .af-wrw-row:hover,
+.af-core .af-wrw-row:focus-visible {
+  border-color: var(--accent-line);
+}
+
+.af-core .af-wrw-league {
+  grid-area: league;
+  font-weight: 700;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A league numbering its weeks differently from the rest says so beside its name. */
+.af-core .af-wrw-weektag {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-core .af-wrw-vs {
+  grid-area: vs;
+  font-size: 12.5px;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-wrw-status {
+  grid-area: status;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.af-core .af-wrw-status[data-tone='good'] {
+  color: var(--good);
+}
+
+.af-core .af-wrw-status[data-tone='bad'] {
+  color: var(--bad);
+}
+
+.af-core .af-wrw-score {
+  color: var(--text);
+}
+
+.af-core .af-wrw-row .af-wk-lineup {
+  grid-area: lineup;
+}
+
+.af-core .af-wrw-board {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.af-core .af-wrw-board:hover {
+  border-color: var(--accent);
+}
+
+/* ── Narrow, by the strip's own width ────────────────────────────────── */
+
+/*
+ * ⚠ ONE COLUMN, AND THE STATUS WRAPS. A two-column phone row ('league status') gave the nowrap
+ * status the `auto` track; "Elimination week · #11 of 12 · 3.2 over the cut" then took the whole
+ * row in WebKit, squeezed the league name to 0px and pushed the page 17px wide at 375 — measured in
+ * WebKit only, because Chromium's narrower font fit. Stacking removes the contest for width.
+ */
+@container wrw (max-width: 560px) {
+  .af-core .af-wrw-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'league'
+      'vs'
+      'status'
+      'lineup';
+  }
+
+  .af-core .af-wrw-status {
+    text-align: left;
+    white-space: normal;
+  }
+}

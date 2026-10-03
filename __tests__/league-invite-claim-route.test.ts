@@ -39,6 +39,17 @@ const {
 
 vi.mock('@/lib/league/leagueSeats', () => ({ assignLeagueSeat: assignLeagueSeatMock }))
 
+const { assertPaidJoinAllowedMock, linkDuesToRosterMock, findExistingLeagueClaimMock } = vi.hoisted(() => ({
+  assertPaidJoinAllowedMock: vi.fn(),
+  linkDuesToRosterMock: vi.fn(),
+  findExistingLeagueClaimMock: vi.fn(),
+}))
+vi.mock('@/lib/league-finance/joinGate', () => ({
+  assertPaidJoinAllowed: assertPaidJoinAllowedMock,
+  linkDuesToRoster: linkDuesToRosterMock,
+}))
+vi.mock('@/lib/identity/linkedAccounts', () => ({ findExistingLeagueClaim: findExistingLeagueClaimMock }))
+
 vi.mock('next-auth', () => ({
   getServerSession: getServerSessionMock,
 }))
@@ -131,6 +142,93 @@ describe('POST /api/league/invite/claim', () => {
     rosterUpdateMock.mockResolvedValue({ id: 'roster-1' })
     leagueManagerClaimCreateMock.mockResolvedValue({ id: 'claim-1' })
     leagueInviteUpdateMock.mockResolvedValue({ id: 'invite-1' })
+    assertPaidJoinAllowedMock.mockResolvedValue({ ok: true })
+    linkDuesToRosterMock.mockResolvedValue(undefined)
+    findExistingLeagueClaimMock.mockResolvedValue(null)
+  })
+
+  const claim = async (body: Record<string, unknown>) => {
+    const { POST } = await import('@/app/api/league/invite/claim/route')
+    return POST(
+      new Request('http://localhost/api/league/invite/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }) as any,
+    )
+  }
+  const nativeLeague = () =>
+    leagueInviteFindFirstMock.mockResolvedValue({
+      id: 'invite-1',
+      leagueId: 'league-1',
+      useCount: 0,
+      maxUses: 50,
+      expiresAt: null,
+      league: { id: 'league-1', platform: 'manual' },
+    })
+  const openNativeTeam = () =>
+    leagueTeamFindFirstMock.mockResolvedValue({
+      id: 'team-row-3',
+      leagueId: 'league-1',
+      externalId: 'roster-3',
+      claimedByUserId: null,
+      isOrphan: true,
+      platformUserId: 'open-slot-league-1-3',
+    })
+  const unpaid = { ok: false, code: 'PAYMENT_REQUIRED', message: 'This league requires a paid entry before joining.' }
+
+  /**
+   * 🛑 THE BYPASS (census 2026-10-01). Canonical create and the commissioner invite route store the
+   * league's PUBLIC join code as a `LeagueInvite.token`, so anyone holding `/join?code=` can present
+   * it here. POST /api/leagues/join refuses an unpaid player in a paid league; this route did not
+   * check dues at all, on either branch.
+   */
+  it('🛑 refuses a native seat in a paid league until dues are paid — and writes nothing', async () => {
+    nativeLeague()
+    openNativeTeam()
+    assertPaidJoinAllowedMock.mockResolvedValue(unpaid)
+    const res = await claim({ token: 'PUBLICCODE', teamExternalId: 'roster-3' })
+    expect(res.status).toBe(402)
+    await expect(res.json()).resolves.toMatchObject({ code: 'PAYMENT_REQUIRED' })
+    expect(assertPaidJoinAllowedMock).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'league-1', userId: 'af-user-1' }))
+    expect(assignLeagueSeatMock).not.toHaveBeenCalled()
+    expect(leagueManagerClaimCreateMock).not.toHaveBeenCalled()
+  })
+
+  it('🛑 refuses an imported seat in a paid league until dues are paid — and writes nothing', async () => {
+    leagueTeamFindFirstMock.mockResolvedValue({
+      id: 'team-row-1',
+      leagueId: 'league-1',
+      externalId: 'team-1',
+      claimedByUserId: null,
+      isOrphan: false,
+      platformUserId: 'sleeper-user-1',
+    })
+    assertPaidJoinAllowedMock.mockResolvedValue(unpaid)
+    const res = await claim({ token: 'invite-token', teamExternalId: 'team-1' })
+    expect(res.status).toBe(402)
+    expect(leagueTeamUpdateMock).not.toHaveBeenCalled()
+    expect(rosterUpdateMock).not.toHaveBeenCalled()
+    expect(transactionMock).not.toHaveBeenCalled()
+  })
+
+  it('links the paid dues row to the seat it bought', async () => {
+    nativeLeague()
+    openNativeTeam()
+    assignLeagueSeatMock.mockResolvedValue({ ok: true, rosterId: 'roster-3', teamNumber: 3, alreadyHeld: false })
+    const res = await claim({ token: 'invite-token', teamExternalId: 'roster-3' })
+    expect(res.status).toBe(200)
+    expect(linkDuesToRosterMock).toHaveBeenCalledWith(expect.objectContaining({ leagueId: 'league-1', userId: 'af-user-1', rosterId: 'roster-3' }))
+  })
+
+  it('🛑 refuses a person whose OTHER account already holds a team here, as the join route does', async () => {
+    nativeLeague()
+    openNativeTeam()
+    findExistingLeagueClaimMock.mockResolvedValue({ viaOtherAccount: true })
+    const res = await claim({ token: 'invite-token', teamExternalId: 'roster-3' })
+    expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({ code: 'DUPLICATE_LEAGUE_CLAIM' })
+    expect(transactionMock).not.toHaveBeenCalled()
   })
 
   it('allows claiming the matched imported placeholder and rebinds the roster', async () => {

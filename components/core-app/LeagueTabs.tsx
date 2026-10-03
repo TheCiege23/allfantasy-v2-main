@@ -1,4 +1,9 @@
+'use client'
+
 import Link from 'next/link'
+import { useEffect, useRef } from 'react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { LeagueTabsPrewarm } from '@/components/core-app/LeagueTabsPrewarm'
 import { LeagueTabsScroller } from '@/components/core-app/LeagueTabsScroller'
 import '@/components/core-app/af-league-tabs.css'
@@ -50,12 +55,12 @@ export type LeagueTabsProps = {
 }
 
 /** The compact strip's five, in order, with their short labels. `''` is the league home. */
-const COMPACT_PRIMARY: Array<{ key: string; label: string }> = [
-  { key: 'matchup', label: 'Match' },
-  { key: 'my-team', label: 'Team' },
-  { key: 'players', label: 'Players' },
-  { key: 'trades', label: 'Trades' },
-  { key: '', label: 'League' },
+const COMPACT_PRIMARY: Array<{ key: string; label: string; labelEs: string }> = [
+  { key: 'matchup', label: 'Match', labelEs: 'Partido' },
+  { key: 'my-team', label: 'Team', labelEs: 'Equipo' },
+  { key: 'players', label: 'Players', labelEs: 'Jugad.' },
+  { key: 'trades', label: 'Trades', labelEs: 'Cambios' },
+  { key: '', label: 'League', labelEs: 'Liga' },
 ]
 
 type TabRequirement = 'scores' | 'trades' | 'draft'
@@ -89,15 +94,37 @@ export function LeagueTabs({
   platform = null,
   compact = false,
 }: LeagueTabsProps) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const q = `?league=${encodeURIComponent(leagueId)}`
+  const moreRef = useRef<HTMLDetailsElement>(null)
+  /*
+   * ⚠ ON A PHONE THE MORE LIST IS A DROPDOWN OVER THE PAGE, so it has to close
+   * the way a menu does: a tap outside it, Escape, or picking a view. A bare
+   * <details> closes only when its own summary is tapped again, which left the
+   * list covering Chimmy's moves until the reader found the word "More".
+   */
+  useEffect(() => {
+    const close = (event: Event) => {
+      const el = moreRef.current
+      if (!el?.open) return
+      if (event instanceof KeyboardEvent ? event.key === 'Escape' : !el.contains(event.target as Node)) el.open = false
+    }
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('keydown', close)
+    return () => {
+      document.removeEventListener('pointerdown', close)
+      document.removeEventListener('keydown', close)
+    }
+  }, [])
   const hiddenFor = (requires: TabRequirement): boolean =>
     requires === 'scores' ? hasScoredWeek === false : requires === 'trades' ? !tradeSupported : !draftSupported
 
   const visibleTabs = TABS.filter((tab) => !tab.requires || !hiddenFor(tab.requires))
-  const notes = describeHiddenTabs({ hasScoredWeek, tradeSupported, draftSupported, platform })
+  const notes = describeHiddenTabs({ hasScoredWeek, tradeSupported, draftSupported, platform }, language)
 
   return (
-    <nav className="af-lt" aria-label={`${leagueName} views`}>
+    <nav className="af-lt" aria-label={language === 'es' ? `Secciones de ${leagueName}` : `${leagueName} views`}>
       {/*
         Warms My team and Matchup once the screen you asked for has landed.
 
@@ -134,13 +161,15 @@ export function LeagueTabs({
           )
         }
         const restActive = rest.some((t) => t.key === activeKey)
+        const restActiveTab = rest.find((t) => t.key === activeKey)
         return (
           <div className="af-lt-compact">
-            <div className="af-lt-compact-row">{primary.map((t) => tab(t.key, t.label))}</div>
+            <div className="af-lt-compact-row" style={{ gridTemplateColumns: `repeat(${primary.length}, minmax(0, 1fr))` }}>{primary.map((t) => tab(t.key, language === 'es' ? t.labelEs : t.label))}</div>
             {rest.length ? (
-              <details className="af-lt-more" open={restActive || undefined}>
-                <summary className="af-lt-tab" data-active={restActive}>More</summary>
-                <div className="af-lt-more-list">{rest.map((t) => tab(t.key, t.label))}</div>
+              <details className="af-lt-more" ref={moreRef}>
+                {/* The active view is its own span so a phone can drop it and keep "More" one tab wide — see af-league-tabs.css. */}
+                <summary className="af-lt-tab" data-active={restActive}>{copy('More')}{restActiveTab ? <span className="af-lt-more-active"> · {copy(restActiveTab.label)}</span> : null}</summary>
+                <div className="af-lt-more-list" onClick={() => { if (moreRef.current) moreRef.current.open = false }}>{rest.map((t) => tab(t.key, copy(t.label)))}</div>
               </details>
             ) : null}
           </div>
@@ -160,7 +189,7 @@ export function LeagueTabs({
                   data-active={active}
                   aria-current={active ? 'page' : undefined}
                 >
-                  {t.label}
+                  {copy(t.label)}
                 </Link>
               </span>
             )
@@ -186,7 +215,7 @@ export function LeagueTabs({
         something that is not coming, or to give up on something that is.
       */}
       {notes.length > 0 ? (
-        <ul className="af-lt-absent" aria-label="Views not available for this league">
+        <ul className="af-lt-absent" aria-label={copy('Views not available for this league')}>
           {notes.map((note) => (
             <li key={note}>{note}</li>
           ))}
@@ -213,9 +242,10 @@ export function describeHiddenTabs({
   tradeSupported: boolean
   draftSupported: boolean
   platform?: string | null
-}): string[] {
+}, language = 'en'): string[] {
   const notes: string[] = []
-  const label = (platform ?? '').trim() || 'this platform'
+  const es = language === 'es'
+  const label = (platform ?? '').trim() || (es ? 'esta plataforma' : 'this platform')
 
   /*
    * ⚠ `=== false`, NOT `!hasScoredWeek`. `null` means the signal was not read —
@@ -225,14 +255,14 @@ export function describeHiddenTabs({
    */
   if (hasScoredWeek === false) {
     notes.push(
-      'Matchup, Your week, Standings and Outlook open once this league has a scored week — they are all built from one.',
+      es ? 'Enfrentamiento, Tu semana, Clasificación y Pronóstico se abren cuando esta liga tenga una semana puntuada.' : 'Matchup, Your week, Standings and Outlook open once this league has a scored week — they are all built from one.',
     )
   }
   if (!tradeSupported) {
-    notes.push(`We couldn’t bring across trade history from ${label} for this league yet, so there is no Trades view.`)
+    notes.push(es ? `Aún no pudimos importar el historial de intercambios de ${label} para esta liga; la vista de Intercambios no está disponible.` : `We couldn’t bring across trade history from ${label} for this league yet, so there is no Trades view.`)
   }
   if (!draftSupported) {
-    notes.push(`We couldn’t bring across draft results from ${label} for this league yet, so there is no Draft HQ view.`)
+    notes.push(es ? `Aún no pudimos importar los resultados del draft de ${label} para esta liga; la vista de Draft HQ no está disponible.` : `We couldn’t bring across draft results from ${label} for this league yet, so there is no Draft HQ view.`)
   }
   return notes
 }

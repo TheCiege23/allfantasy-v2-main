@@ -1,3 +1,4 @@
+import { isSingleGameSeries } from "./singleGame"
 import type { PlayoffRoundKey, PlayoffSeriesView, PlayoffSport } from "./types"
 
 /**
@@ -190,6 +191,8 @@ export function seriesRecordLine(series: PlayoffSeriesView): string | null {
   const hw = Number(series.homeTeamWins ?? 0)
   const aw = Number(series.awayTeamWins ?? 0)
   if (!hw && !aw) return null
+  // A single game has a winner, not a "leads 1-0" record.
+  if (isSingleGameSeries(series)) return `${hw > aw ? series.homeTeamName : series.awayTeamName} won`
   if (hw === aw) return `Tied ${hw}-${aw}`
   const leaderIsHome = hw > aw
   const leader = leaderIsHome ? series.homeTeamName : series.awayTeamName
@@ -230,6 +233,12 @@ export const ROUND_SHORT_LABELS: Record<string, SportRoundLabels> = {
     conference_finals: "Conf. Finals",
     finals: "Stanley Cup",
   },
+  ncaaf: {
+    cfp_first_round: "First Round",
+    cfp_quarterfinals: "Quarterfinal",
+    cfp_semifinals: "Semifinal",
+    cfp_championship: "Title Game",
+  },
 }
 
 export function roundLabel(sport: PlayoffSport | string | null | undefined, round: PlayoffRoundKey): string {
@@ -248,6 +257,10 @@ export function sideLabel(conference: string | null): string {
       return "Eastern Conference"
     case "west":
       return "Western Conference"
+    case "upper":
+      return "Upper Bracket"
+    case "lower":
+      return "Lower Bracket"
     default:
       return ""
   }

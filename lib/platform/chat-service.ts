@@ -121,6 +121,9 @@ function threadListInclude(appUserId: string) {
     members: {
       select: {
         userId: true,
+        // For the row's read receipt — see `lastMessageSeenByOthers`.
+        lastReadAt: true,
+        isBlocked: true,
         user: {
           select: {
             id: true,
@@ -144,6 +147,30 @@ function threadListInclude(appUserId: string) {
       },
     },
   }
+}
+
+/**
+ * Has anybody else in the thread opened it since `sentAt`? Drives the ✓ / ✓✓ on the sender's own
+ * row. `lastReadAt` is stamped whenever a member's client reads the thread's messages (and on their
+ * own send), so a read at or after the message's own timestamp means it was on their screen.
+ *
+ * ⚠ ONLY EVER A POSITIVE. A member with no `lastReadAt` has not opened the thread on a build that
+ * recorded it; that reads as "sent", never as "ignored". A blocked member is not counted — their
+ * read is not something the sender is owed.
+ */
+export function lastMessageSeenByOthers(
+  members: Array<{ userId?: string | null; lastReadAt?: Date | string | null; isBlocked?: boolean | null }> | null | undefined,
+  appUserId: string,
+  sentAt: Date | string | null | undefined,
+): boolean {
+  if (!sentAt || !Array.isArray(members)) return false
+  const sent = new Date(sentAt).getTime()
+  if (!Number.isFinite(sent)) return false
+  return members.some((m) => {
+    if (!m?.userId || m.userId === appUserId || m.isBlocked || !m.lastReadAt) return false
+    const read = new Date(m.lastReadAt).getTime()
+    return Number.isFinite(read) && read >= sent
+  })
 }
 
 function memberDisplayName(user: { displayName?: string | null; username?: string | null } | null | undefined): string {
@@ -211,6 +238,7 @@ async function normalizeThread(row: any, memberRow: any, appUserId: string): Pro
     memberRow?.lastReadAt ?? null,
     latestMessage?.createdAt ?? row?.lastMessageAt ?? null,
   )
+  const lastMessageMine = Boolean(previewMessage?.senderUserId) && previewMessage?.senderUserId === appUserId
   return {
     id: row.id,
     threadType: row.threadType,
@@ -235,7 +263,11 @@ async function normalizeThread(row: any, memberRow: any, appUserId: string): Pro
         ? toMessagePreview(previewMessage.messageType, previewMessage.body, previewMessage.metadata)
         : null,
       lastMessageType: previewMessage?.messageType || null,
-      lastMessageMine: Boolean(previewMessage?.senderUserId) && previewMessage?.senderUserId === appUserId,
+      lastMessageMine,
+      /** Your last message has been opened by the other person (any other member, in a huddle). */
+      lastMessageSeen: lastMessageMine
+        ? lastMessageSeenByOthers(row?.members, appUserId, previewMessage?.createdAt)
+        : false,
       lastMessageCreatedAt: previewMessage?.createdAt ? toIso(previewMessage.createdAt) : null,
       /** Up to three other members: `{ id, name, avatarUrl }`, for the row's avatar(s). */
       members: otherMembers,

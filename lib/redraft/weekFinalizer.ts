@@ -7,6 +7,7 @@ import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonS
 import { DATE_WINDOWED_SPORTS, RI_SCHEDULE_SLATE_SPORTS, readWeekGames } from './weekGames'
 import { countsTowardScore, leagueIsBestBall, recalculateMatchupsForSeasonWeek } from './scoringEngine'
 import { seasonSportToLeagueSport } from '@/lib/season-week/standardSeasonScope'
+import { enqueueTankingScan } from '@/lib/integrity/enqueueTankingScan'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 import { isSealedWeek } from './weekSealed'
 
@@ -144,6 +145,12 @@ export type WeekFinalizeResult = {
 }
 
 export type WeekFinalizerDeps = {
+  enqueueTankingScan?: (leagueId: string, weekNumber: number, seasonId: string) => Promise<void>
+  /**
+   * The "week N final — you won" push (`nativeResultNotify.ts`), sent once every game is final.
+   * Loaded on first use by default: the dispatcher's import graph is not this module's to carry.
+   */
+  notifyResults?: (args: { prisma: PrismaClient; seasonId: string; week: number }) => Promise<unknown>
   prisma?: PrismaClient
   now?: () => Date
   recalculateMatchups?: typeof recalculateMatchupsForSeasonWeek
@@ -570,6 +577,31 @@ export async function finalizeRedraftWeek(
     select: { status: true },
   })
   const matchupsFinal = after.filter((m) => m.status === 'final').length
+
+  if (matchupsFinal > 0 && matchupsFinal === after.length) {
+    try {
+      await (deps.enqueueTankingScan ?? enqueueTankingScan)(season.leagueId, params.week, season.id)
+    } catch (error) {
+      // A queue outage must not undo a completed scoring week; coverage remains unscanned.
+      console.error('[weekFinalizer] Unable to queue tanking scan', { leagueId: season.leagueId, week: params.week, error })
+    }
+    /*
+     * The result push, on the same gate: every game final, so a week this function refused (or
+     * only partly scored) never announces a score. The notifier dedupes per person per week, so the
+     * scheduled re-runs of an already-closed week cannot repeat it.
+     */
+    try {
+      const notify =
+        deps.notifyResults ?? (await import('./nativeResultNotify')).notifyNativeWeekResults
+      await notify({ prisma, seasonId: season.id, week: params.week })
+    } catch (error) {
+      console.error('[weekFinalizer] Unable to send result push', {
+        leagueId: season.leagueId,
+        week: params.week,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
 
   return {
     ...base,

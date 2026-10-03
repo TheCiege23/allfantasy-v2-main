@@ -4,6 +4,7 @@ import {
   mathStatus,
   pctOf,
   readMilestones,
+  rootingGuide,
   scheduleStrength,
   simulateOddsBands,
   simulateSeason,
@@ -256,5 +257,92 @@ describe('readMilestones', () => {
     const tally = simulateSeason(input, { iterations: 100, seed: 4 })
     expect(readMilestones(tally, input, '5')).toBeNull()
     expect(readMilestones(tally, input, 'nobody')).toBeNull()
+  })
+})
+
+describe('winnerOf — who won each game, per run', () => {
+  it('names one side of a scheduled game, in either order, and nothing for a game not on the schedule', () => {
+    const input = league()
+    const g = input.remaining[0]
+    let runs = 0
+    simulateSeason(input, {
+      iterations: 200,
+      seed: 3,
+      onRun: (run) => {
+        runs += 1
+        const w = run.winnerOf(g.week, g.a, g.b)
+        expect([g.a, g.b]).toContain(w)
+        expect(run.winnerOf(g.week, g.b, g.a)).toBe(w)
+        expect(run.winnerOf(99, g.a, g.b)).toBeNull()
+      },
+    })
+    expect(runs).toBe(200)
+  })
+
+  it('reports a forced result as forced, and nothing for a game an unmodelled team never plays out', () => {
+    const input = league()
+    input.teams[7] = { ...input.teams[7], profile: null }
+    const forcedGame = input.remaining.find((x) => x.a !== '8' && x.b !== '8')!
+    const ghost = input.remaining.find((x) => x.a === '8' || x.b === '8')!
+    simulateSeason(input, {
+      iterations: 100,
+      seed: 5,
+      forced: [{ ...forcedGame, winner: forcedGame.b }],
+      onRun: (run) => {
+        expect(run.winnerOf(forcedGame.week, forcedGame.a, forcedGame.b)).toBe(forcedGame.b)
+        expect(run.winnerOf(ghost.week, ghost.a, ghost.b)).toBeNull()
+      },
+    })
+  })
+
+  it('does not change the headline numbers', () => {
+    const quiet = simulateSeason(league(), { iterations: 400, seed: 11 })
+    const watched = simulateSeason(league(), { iterations: 400, seed: 11, onRun: () => {} })
+    expect(watched.counts).toEqual(quiet.counts)
+  })
+})
+
+describe('rootingGuide', () => {
+  /*
+   * Two spots. a is far clear; y and r race for the second. In week 7 r plays a, so y should root for
+   * a. p is unmodelled, so its game with q is never played out and can never be named.
+   */
+  function race(): SimInput {
+    return {
+      teams: [
+        team('a', 6, 0, 130),
+        team('y', 3, 3, 100),
+        team('r', 3, 3, 100),
+        team('z', 0, 6, 80),
+        { rosterId: 'p', wins: 0, losses: 6, pointsFor: 0, profile: null },
+        team('q', 0, 6, 80),
+      ],
+      remaining: [
+        { week: 7, a: 'y', b: 'z' },
+        { week: 7, a: 'a', b: 'r' },
+        { week: 7, a: 'p', b: 'q' },
+        { week: 8, a: 'y', b: 'a' },
+        { week: 8, a: 'r', b: 'z' },
+      ],
+      playoffTeams: 2,
+      byeTeams: 0,
+    }
+  }
+
+  it('names the rival result that helps you, and never your own game', () => {
+    const guide = rootingGuide(race(), { iterations: 4000, seed: 9, youId: 'y', week: 7 })
+    expect(guide).toHaveLength(1)
+    const [g] = guide
+    expect([g.a, g.b]).toEqual(['a', 'r'])
+    expect(g.rootFor).toBe('a')
+    // Conditional on r losing, y is in far more often than when r wins.
+    expect(g.ifA - g.ifB).toBeGreaterThan(15)
+  })
+
+  it('is deterministic for a seed, and empty for a week with no other games', () => {
+    const one = rootingGuide(race(), { iterations: 2000, seed: 2, youId: 'y', week: 7 })
+    const two = rootingGuide(race(), { iterations: 2000, seed: 2, youId: 'y', week: 7 })
+    expect(one).toEqual(two)
+    expect(rootingGuide(race(), { iterations: 500, seed: 2, youId: 'y', week: 12 })).toEqual([])
   })
 })

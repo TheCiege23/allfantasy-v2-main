@@ -53,6 +53,8 @@ test.describe('@preferences universal click audit', () => {
 
     await page.goto('/e2e/universal-preferences')
     await expect(page.getByRole('heading', { name: /universal preferences click audit harness/i })).toBeVisible()
+    // A server-rendered button can be visible before its client handler hydrates.
+    await expect.poll(async () => page.evaluate(() => window.localStorage.getItem('af_mode'))).not.toBeNull()
 
     await page.getByTestId('desktop-language-es').click()
     await expect.poll(async () => page.getAttribute('html', 'data-lang')).toBe('es')
@@ -83,5 +85,9 @@ test.describe('@preferences universal click audit', () => {
     await page.reload()
     await expect(page.getByTestId('preference-summary-language')).toContainText('es')
     await expect(page.getByTestId('preference-summary-theme')).toContainText('dark')
+
+    await page.goto('/')
+    await expect.poll(async () => page.getAttribute('html', 'data-lang')).toBe('es')
+    await expect.poll(async () => page.getAttribute('html', 'data-mode')).toBe('dark')
   })
 })

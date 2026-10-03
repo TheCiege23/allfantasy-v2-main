@@ -37,7 +37,17 @@ export function HubSwitcher({
         All leagues{runCount != null && runCount > 0 ? ` · ${runCount}` : ''}
       </Link>
       {ORDER.map((f) => (
-        <Link key={f} href={`/core/hubs/${f}`} aria-current={f === current ? 'page' : undefined}>
+        <Link
+          key={f}
+          href={`/core/hubs/${f}`}
+          aria-current={f === current ? 'page' : undefined}
+          /*
+           * A format the reader is in no league of. On a phone these pills were two rows of dead
+           * ends above the hub, so the phone hides them (af-format-hubs.css); desktop keeps the
+           * full row, where it is how someone discovers a format. The open hub is never hidden.
+           */
+          data-empty={counts[f] > 0 || f === current ? undefined : 'true'}
+        >
           {HUB_TABS[f]}
           {counts[f] > 0 && f !== current ? ` · ${counts[f]}` : ''}
         </Link>

@@ -24,6 +24,7 @@ import {
   emptyRankingsSnapshotCounts,
   type RankingsSnapshotCounts,
 } from '@/lib/core-app/rankingsCommunity'
+import { runClassRatingDaily, emptyClassRatingCounts, type ClassRatingCounts } from '@/lib/class-rating/run'
 import {
   runForecastSweep,
   emptyForecastSweepCounts,
@@ -231,6 +232,12 @@ type RefreshCounts = {
    * counts leagues whose rows were rewritten by a sync with the same content — the common case.
    */
   outlook: OutlookPrewarmCounts
+  /**
+   * The Class rating (ADR F2.10a), an eighth writer: `manager_ratings` and
+   * `manager_rating_events`. `skipped: 'already_ran_today'` is the normal state after the first
+   * fire of the Eastern day, and `'unchanged_input'` the normal first fire outside a new week.
+   */
+  classRating: ClassRatingCounts
 }
 
 export async function GET(req: NextRequest) {
@@ -272,7 +279,7 @@ export async function GET(req: NextRequest) {
         r.portfolio.deferred +
         r.outlook.deferred +
         r.odds.skippedForTime,
-      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors, ...r.snapshot.errors, ...r.portfolio.errors, ...r.outlook.errors],
+      errors: [...r.errors, ...r.rankings.errors, ...r.forecast.errors, ...r.odds.errors, ...r.snapshot.errors, ...r.portfolio.errors, ...r.outlook.errors, ...r.classRating.errors],
       /*
        * A rankings `failed` is a genuine fault and downgrades the run, the same as a feed failure.
        * `skipped` does NOT: a league whose settings Sleeper will not serve is a normal single-league
@@ -280,7 +287,7 @@ export async function GET(req: NextRequest) {
        */
       status:
         r.failed > 0 || r.writeFailed > 0 || r.rankings.failed > 0 || r.forecast.failed > 0 || r.odds.failed > 0 ||
-        r.snapshot.failed > 0 || r.portfolio.failed > 0 || r.outlook.failed > 0
+        r.snapshot.failed > 0 || r.portfolio.failed > 0 || r.outlook.failed > 0 || r.classRating.failed > 0
           ? 'partial'
           : 'success',
       metadata: {
@@ -326,6 +333,9 @@ export async function GET(req: NextRequest) {
           alreadyWritten: r.snapshot.alreadyWritten,
           ranked: r.snapshot.population,
           failed: r.snapshot.failed,
+          levelsRefreshed: r.snapshot.levelsRefreshed,
+          levelsRefreshFailed: r.snapshot.levelsRefreshFailed,
+          levelsDeferred: r.snapshot.levelsDeferred,
         },
         /*
          * The daily portfolio value record, unsummed. The /core/portfolio chart draws a stored day
@@ -370,6 +380,25 @@ export async function GET(req: NextRequest) {
           unprojected: r.odds.unprojected,
           failed: r.odds.failed,
           skippedForTime: r.odds.skippedForTime,
+        },
+        /*
+         * The Class rating, unsummed. `rebuilt: 1` happens about weekly in season; a long run of
+         * `unchanged_input` through the season means no new week is being rated — check that the
+         * leagues' stated week is advancing, because that is what releases a finished week.
+         */
+        classRating: {
+          date: r.classRating.date,
+          skipped: r.classRating.skipped,
+          rebuilt: r.classRating.rebuilt,
+          games: r.classRating.games,
+          people: r.classRating.people,
+          established: r.classRating.established,
+          events: r.classRating.events,
+          ms: r.classRating.ms,
+          failed: r.classRating.failed,
+          recapQueued: r.classRating.recapQueued,
+          recapSent: r.classRating.recapSent,
+          recapFailed: r.classRating.recapFailed,
         },
       },
     }),
@@ -498,6 +527,7 @@ async function run(): Promise<RefreshCounts> {
     snapshot: emptyRankingsSnapshotCounts(),
     portfolio: emptyPortfolioTotalsCounts(),
     outlook: emptyOutlookPrewarmCounts(),
+    classRating: emptyClassRatingCounts(),
   }
 
   // R3.2 — app-level sources first; see the note on refreshAppSources for why the order matters.
@@ -517,6 +547,23 @@ async function run(): Promise<RefreshCounts> {
     out.errors.push(`rankings_snapshot: ${e instanceof Error ? e.message : String(e)}`)
     return out
   })
+
+  /*
+   * ── THE CLASS RATING (ADR F2.10a), ALSO BEFORE THE LEAGUE WALK ─────────────────────────────
+   *
+   * Same reason as the snapshot: the walk's early return has nothing to do with it. Every fire
+   * but the first of the Eastern day is one state read; the first reads the matchup facts and
+   * rebuilds only when they changed (about weekly). It takes the budget it needs from the fire
+   * and stands down for the next one when too little is left. It never throws.
+   */
+  counts.classRating = await runClassRatingDaily(new Date(), { remainingMs: () => budget.remainingMs() }).catch(
+    (e: unknown) => {
+      const out = emptyClassRatingCounts()
+      out.failed = 1
+      out.errors.push(`class_rating: ${e instanceof Error ? e.message : String(e)}`)
+      return out
+    },
+  )
 
   const leagues = await prisma.league
     .findMany({

@@ -77,6 +77,7 @@ import { detectInjuredStarterAlerts } from '@/lib/chimmy-alerts/ChimmyAlertDetec
 import { hydrateInjuredStarters } from '@/lib/chimmy-alerts/hydrateInjuredStarters'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { sendPushToUser } from '@/lib/push-notifications'
+import { apnsConfig } from '@/lib/push-notifications/apns'
 import { decidePushForUser } from '@/lib/notifications/pushGate'
 import { recordSyncJobRun, withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runLineupCheck, type LineupCheckRun } from '@/lib/chimmy-alerts/runLineupCheck'
@@ -393,9 +394,12 @@ async function handle(req: NextRequest) {
   const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.floor(limitParam) : 200
 
   const startedAt = Date.now()
-  const pushConfigured = Boolean(
-    process.env.VAPID_PUBLIC_KEY?.trim() && process.env.VAPID_PRIVATE_KEY?.trim(),
-  )
+  // Either transport is enough: sendPushToUser routes iPhones to APNs and browsers to web-push,
+  // each on its own keys. Gating on VAPID alone skipped every iPhone-only user whenever web
+  // push was unset, and reported the run as "push not configured" while APNs was live.
+  const pushConfigured =
+    Boolean(process.env.VAPID_PUBLIC_KEY?.trim() && process.env.VAPID_PRIVATE_KEY?.trim()) ||
+    apnsConfig() !== null
 
   const runSweep = async () => {
     // Game-window fold FIRST, so this very sweep evaluates against the fresh

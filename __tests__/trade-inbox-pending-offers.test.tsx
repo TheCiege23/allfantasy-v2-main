@@ -184,7 +184,7 @@ describe('⚠ the inbox never claims an empty league it did not read', () => {
     expect(INBOX).toContain('Public transaction feed check')
     // Sleeper: the feed carries a trade only once accepted — rendered coverage in
     // __tests__/trades/trade-inbox-sleeper-open-offers.test.tsx.
-    expect(INBOX).toContain('Sleeper only shares a trade once it&rsquo;s accepted')
+    expect(INBOX).toContain('Sleeper only shares a trade once it’s accepted')
   })
 
   it('⚠ offers no accept, reject or counter — the provider has no write endpoint', () => {

@@ -34,6 +34,7 @@ export default async function TradeSharePage(props: { params: Promise<{ id: stri
   const sideA = (share.sideA || []) as TradeAsset[];
   const sideB = (share.sideB || []) as TradeAsset[];
   const { teamAName, teamBName } = analysis;
+  // `sideA` is what team A GAVE. Each card lists what its team RECEIVED, beside that team's letter below.
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#0a0a0f] to-[#0f0f1a] py-16">
@@ -53,34 +54,7 @@ export default async function TradeSharePage(props: { params: Promise<{ id: stri
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <div className="h-3 w-3 rounded-full bg-cyan-400" />
-                  {teamAName} gives
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {sideA.map((asset: TradeAsset) => (
-                    <Badge
-                      key={asset.id}
-                      variant="outline"
-                      className={`py-1.5 px-3 ${
-                        asset.type === 'player'
-                          ? 'border-cyan-500/40 text-cyan-300 bg-cyan-950/20'
-                          : 'border-amber-500/40 text-amber-300 bg-amber-950/20'
-                      }`}
-                    >
-                      {asset.type === 'pick' && '📋 '}{asset.name}
-                    </Badge>
-                  ))}
-                  {sideA.length === 0 && <span className="text-sm text-gray-500 italic">No assets</span>}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-purple-900/30 bg-black/40 backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <div className="h-3 w-3 rounded-full bg-purple-400" />
-                  {teamBName} gives
+                  {teamAName} receives
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -99,6 +73,33 @@ export default async function TradeSharePage(props: { params: Promise<{ id: stri
                     </Badge>
                   ))}
                   {sideB.length === 0 && <span className="text-sm text-gray-500 italic">No assets</span>}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-purple-900/30 bg-black/40 backdrop-blur-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <div className="h-3 w-3 rounded-full bg-purple-400" />
+                  {teamBName} receives
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {sideA.map((asset: TradeAsset) => (
+                    <Badge
+                      key={asset.id}
+                      variant="outline"
+                      className={`py-1.5 px-3 ${
+                        asset.type === 'player'
+                          ? 'border-cyan-500/40 text-cyan-300 bg-cyan-950/20'
+                          : 'border-amber-500/40 text-amber-300 bg-amber-950/20'
+                      }`}
+                    >
+                      {asset.type === 'pick' && '📋 '}{asset.name}
+                    </Badge>
+                  ))}
+                  {sideA.length === 0 && <span className="text-sm text-gray-500 italic">No assets</span>}
                 </div>
               </CardContent>
             </Card>

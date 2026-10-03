@@ -16,11 +16,17 @@ export interface DeliveryMethodAvailability {
 export function getDeliveryMethodAvailability(options: {
   hasEmail: boolean
   phoneVerified: boolean
+  /**
+   * A live SMS opt-in for the current number (`hasSmsConsent`). Senders MUST pass it: a
+   * verified phone alone is not consent — several flows verify a number with no opt-in box.
+   * Omitted (display-only callers) it does not restrict.
+   */
+  smsConsented?: boolean
 }): DeliveryMethodAvailability {
   return {
     inApp: true,
     email: options.hasEmail,
-    sms: options.phoneVerified,
+    sms: options.phoneVerified && options.smsConsented !== false,
     push: true,
   }
 }

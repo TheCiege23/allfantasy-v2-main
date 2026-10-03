@@ -232,6 +232,11 @@ const EMPTY_PULSE: MyTeamPulse = {
  * rather than a quota — six broken and four quiet is a full board, and so is
  * zero and ten.
  */
+/** League `status` / `lifecycleState` values with no lineup in play — counted as inactive, never checked. */
+const INACTIVE_LEAGUE_STATES = new Set([
+  'pre_draft', 'setup', 'drafting', 'complete', 'completed', 'offseason', 'renewal_pending', 'archived',
+])
+
 const NEEDS_CAP = 10
 const SET_CAP = 10
 
@@ -376,8 +381,14 @@ export async function getMyTeamPulse(
   for (const c of mine) {
     if (pausedLeagueIds?.has(c.leagueId)) continue
     const l = c.league!
-    const state = String(l.status ?? l.lifecycleState ?? '').toLowerCase()
-    if (eliminated.some(e => e.leagueId === l.id && e.season.season === l.season) || ['pre_draft', 'setup', 'drafting', 'complete', 'completed', 'offseason'].includes(state)) { notChecked.inactive++; continue }
+    /*
+     * ⚠ BOTH FIELDS, NOT `status ?? lifecycleState`. `status` is set on every import, so the
+     * lifecycle state was never read — and `archived` (the guillotine archive) and
+     * `renewal_pending` were not in the list either. A finished league's stale roster was
+     * checked as a live lineup. Either field saying the league is not in play is enough.
+     */
+    const states = [l.status, l.lifecycleState].map((s) => String(s ?? '').toLowerCase())
+    if (eliminated.some(e => e.leagueId === l.id && e.season.season === l.season) || states.some((s) => INACTIVE_LEAGUE_STATES.has(s))) { notChecked.inactive++; continue }
     const bestBall = l.bestBallMode === true || l.leagueVariant === 'best_ball' || isBestBallSettings(l.settings)
     const candidates = myRosterCandidates(c, userId)
     const pool: RosterRow[] = rostersByLeague.get(c.leagueId) ?? []
@@ -529,7 +540,7 @@ export async function getMyTeamPulse(
     let questionable = 0
     let unresolved = 0
     let bye: number | null = byeIds ? 0 : null
-    const deadlines: Array<{ kickoff: Date | null; issues: number }> = []
+    const deadlines: Array<{ kickoff: Date | null; issues: number; bye?: boolean }> = []
 
     for (const id of p.ids) {
       const row = playerBy.get(id)
@@ -551,7 +562,9 @@ export async function getMyTeamPulse(
       /* A player on bye has no fixture this week, so he cannot set the lock. */
       const club = normalizeTeamAbbrev(row.team)
       const at = !onBye && club ? kickoffs.get(club) : undefined
-      deadlines.push({ kickoff: at ?? null, issues: Number(isRuledOut(status)) + Number(onBye) })
+      /* `bye` keeps him out of "N without a kickoff": the row used to say a starter's schedule
+         was missing when the schedule says plainly that his team is not playing. */
+      deadlines.push({ kickoff: at ?? null, issues: Number(isRuledOut(status)) + Number(onBye), bye: onBye })
     }
 
     const severity = p.bestBall ? 0 : p.empty + out + (bye ?? 0)
@@ -609,10 +622,22 @@ export async function getMyTeamPulse(
     .sort(
       (a, b) => Number(a.actionableSeverity === 0) - Number(b.actionableSeverity === 0)
         || (b.actionableSeverity ?? b.severity) - (a.actionableSeverity ?? a.severity)
-        || byLock(a, b),
+        || byLock(a, b)
+        || b.questionable - a.questionable,
     )
 
-  const setAll = rows.filter((r) => r.severity === 0).sort(byLock)
+  /*
+   * ⚠ QUESTIONABLE FIRST, THEN THE CLOCK. This sorted on lock time alone, so a
+   * lineup with four questionable starters tied a lineup with nothing wrong —
+   * observed live 2026-10-02, where "4 questionable" and "SET · nothing missing"
+   * shared one tier and the set league sat at #7 of a list headed "ranked by
+   * urgency". A questionable starter is a risk, not a certain loss, which is why
+   * it stays out of `severity` and below every row in `needs`; but among lineups
+   * with no certain loss it is the only thing left to check.
+   */
+  const setAll = rows
+    .filter((r) => r.severity === 0)
+    .sort((a, b) => b.questionable - a.questionable || byLock(a, b))
 
   return {
     needs: needsAll.slice(0, NEEDS_CAP),

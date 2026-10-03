@@ -1,8 +1,9 @@
 'use client'
 
 import type { ComponentType, ReactNode } from 'react'
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { safeInternalPathOr } from '@/lib/auth/auth-intent-resolver'
 import {
   AlertTriangle,
   Archive,
@@ -242,6 +243,18 @@ const HUB_ORDER: SettingsTabId[] = [
   'account',
 ]
 
+/**
+ * The hub's four groups, in reading order. Twelve flat cards were ~1,300px of scrolling on a phone
+ * with nothing to scan by; grouped, a person looking for "password" or "billing" reads four headings
+ * first. Every tab in HUB_ORDER appears in exactly one group — the hub test pins that.
+ */
+const HUB_GROUPS: ReadonlyArray<{ id: 'account' | 'app' | 'leagues' | 'plan'; tabs: SettingsTabId[] }> = [
+  { id: 'account', tabs: ['profile', 'security', 'account'] },
+  { id: 'app', tabs: ['preferences', 'notifications', 'command'] },
+  { id: 'leagues', tabs: ['connected', 'legacy', 'rank'] },
+  { id: 'plan', tabs: ['billing', 'referral', 'legal'] },
+]
+
 type HubCta = 'edit' | 'manage' | 'review' | 'view' | 'import'
 
 const HUB_CTA: Record<SettingsTabId, HubCta> = {
@@ -381,39 +394,52 @@ function SettingsHub({
         </div>
       </section>
 
-      <ul className="ns-hub-grid" aria-label={t('settings.aria.sections')}>
-        {cards.map((c) => {
-          const Icon = NAV_ICON[c.id]
-          const badge = badges[c.id]
-          return (
-            <li key={c.id}>
-              <button
-                type="button"
-                className="ns-hub-card"
-                data-tone={badge?.tone === 'warn' ? 'warn' : undefined}
-                data-testid={`settings-hub-card-${c.id}`}
-                onClick={() => onOpen(c.id)}
-              >
-                <span className="ns-hub-card-head">
-                  <span className="ns-hub-icon" aria-hidden="true">
-                    <Icon />
-                  </span>
-                  <span className="ns-hub-card-title">{c.title}</span>
-                  {badge ? (
-                    <span className="ns-nav-badge" data-tone={badge.tone}>
-                      {badge.text}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="ns-hub-card-desc">{c.desc}</span>
-                <span className="ns-hub-cta" aria-hidden="true">
-                  {t(`settings.hub.cta.${HUB_CTA[c.id]}`)} →
-                </span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
+      {/* Grouped, and a group with no match drops out while searching. */}
+      {HUB_GROUPS.map((group) => {
+        const groupCards = cards.filter((c) => group.tabs.includes(c.id))
+        if (groupCards.length === 0) return null
+        const headingId = `settings-hub-group-${group.id}`
+        return (
+          <section key={group.id} className="ns-hub-group" aria-labelledby={headingId}>
+            <h2 id={headingId} className="ns-hub-group-title">
+              {t(`settings.hub.group.${group.id}`)}
+            </h2>
+            <ul className="ns-hub-grid" aria-labelledby={headingId}>
+              {groupCards.map((c) => {
+                const Icon = NAV_ICON[c.id]
+                const badge = badges[c.id]
+                return (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      className="ns-hub-card"
+                      data-tone={badge?.tone === 'warn' ? 'warn' : undefined}
+                      data-testid={`settings-hub-card-${c.id}`}
+                      onClick={() => onOpen(c.id)}
+                    >
+                      <span className="ns-hub-card-head">
+                        <span className="ns-hub-icon" aria-hidden="true">
+                          <Icon />
+                        </span>
+                        <span className="ns-hub-card-title">{c.title}</span>
+                        {badge ? (
+                          <span className="ns-nav-badge" data-tone={badge.tone}>
+                            {badge.text}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="ns-hub-card-desc">{c.desc}</span>
+                      <span className="ns-hub-cta" aria-hidden="true">
+                        {t(`settings.hub.cta.${HUB_CTA[c.id]}`)} →
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )
+      })}
       {cards.length === 0 ? <p className="ns-hub-empty">No settings match “{query}”.</p> : null}
 
       <section className="ns-hub-plan" aria-label={t('settings.billing.currentPlan')}>
@@ -464,10 +490,36 @@ export function SettingsChrome({
    */
   const badges = useMemo(() => settingsNavBadges(profile), [profile])
 
+  /*
+   * Below 860px the nav is one horizontally scrolling row (nocturne-settings.css). Opened
+   * on a tab near the end — Account, Legal — the row still started at Profile, so the
+   * active tab was off-screen. Centre it in the row; only the row scrolls, never the page.
+   */
+  const navRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const nav = navRef.current
+    if (!nav || nav.scrollWidth <= nav.clientWidth) return
+    const item = nav.querySelector<HTMLElement>('.ns-nav-item.is-active')
+    if (!item) return
+    nav.scrollLeft = item.offsetLeft - (nav.clientWidth - item.offsetWidth) / 2
+  }, [activeTab])
+
+  /*
+   * Where Settings was opened from. Home always went to /core, so a member who opened Settings from
+   * a league's gear was dropped on the dashboard. A caller passes `?returnTo=<path>` (the app's
+   * existing convention, see ImportV4); it is validated as an on-site path (open-redirect safe) and
+   * survives tab switches because handleTabSelect keeps the query string.
+   */
+  const searchParams = useSearchParams()
+  const rawReturnTo = searchParams?.get('returnTo')
+  const returnTo = rawReturnTo ? safeInternalPathOr(rawReturnTo, '') : ''
+  const backTo = returnTo && !returnTo.startsWith('/settings') ? returnTo : null
+
   const filteredNav = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return NAV_DEFS
-    return NAV_DEFS.filter((n) => t(`settings.nav.${n.id}`).toLowerCase().includes(q))
+    // Same rule as the hub's search: a description counts, so "password" finds Security here too.
+    return NAV_DEFS.filter((n) => `${t(`settings.nav.${n.id}`)} ${t(`settings.hub.desc.${n.id}`)}`.toLowerCase().includes(q))
   }, [query, t])
 
   return (
@@ -494,11 +546,11 @@ export function SettingsChrome({
         <button
           type="button"
           className="ns-home"
-          onClick={() => router.push('/core')}
+          onClick={() => router.push(backTo ?? '/core')}
           data-testid="settings-home"
         >
-          <Home strokeWidth={2} />
-          {t('settings.home')}
+          {backTo ? <ArrowLeft strokeWidth={2} /> : <Home strokeWidth={2} />}
+          {backTo ? t('settings.back') : t('settings.home')}
         </button>
       </header>
 
@@ -522,7 +574,7 @@ export function SettingsChrome({
           ) : null}
           <SidebarProfileCard profile={profile} planLabel={planLabel} />
 
-          <nav className="ns-nav" aria-label={t('settings.aria.sections')}>
+          <nav ref={navRef} className="ns-nav" aria-label={t('settings.aria.sections')}>
             {filteredNav.map((tab) => {
               const Icon = tab.icon
               const active = activeTab === tab.id

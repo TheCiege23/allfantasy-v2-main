@@ -98,6 +98,7 @@ import FormatHub from '@/components/core-app/screens/FormatHub'
 import { getFormatHub, parseHubFormat } from '@/lib/core-app/formatHubs'
 import { getWaiversData } from '@/lib/core-app/waivers'
 import { loadWaiverEdgeForScreen } from '@/lib/competitive-edge/waiverEdgeLoader'
+import { loadScoutEdgeForScreen } from '@/lib/competitive-edge/scoutEdgeLoader'
 import { getWaiversBoard } from '@/lib/core-app/waiversBoard'
 import { readWaiversBoardSummary } from '@/lib/core-app/waiversBoardSummary'
 import { readPortfolioSummary } from '@/lib/core-app/portfolioSummary'
@@ -110,6 +111,7 @@ import { getDraftBoardData } from '@/lib/core-app/draftBoard'
 import Scout from '@/components/core-app/screens/Scout'
 import { getScoutData } from '@/lib/core-app/scout'
 import GamePlan from '@/components/core-app/screens/GamePlan'
+import WarRoomWeek from '@/components/core-app/screens/WarRoomWeek'
 import LandingV4 from '@/components/core-app/screens/LandingV4'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
 import Partners from '@/components/core-app/screens/Partners'
@@ -178,6 +180,9 @@ import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
 import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
 import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
+import { toStandingsOdds } from '@/lib/core-app/standingsOdds'
+import { getLineupEfficiency } from '@/lib/core-app/lineupEfficiency'
+import { buildDraftOrderPreview, readDraftOrderRule } from '@/lib/core-app/standingsDraftOrder'
 import SeasonOutlookLeague from '@/components/core-app/screens/SeasonOutlookLeague'
 import { slimOutlookForBoard } from '@/lib/core-app/outlookCopy'
 import LiveScores from '@/components/core-app/screens/LiveScores'
@@ -206,6 +211,7 @@ import Standings from '@/components/core-app/screens/Standings'
 import StandingsBoard from '@/components/core-app/boards/StandingsBoard'
 import { parseStandingsView } from '@/lib/core-app/standingsView'
 import PickALeague from '@/components/core-app/PickALeague'
+import { warRoomIssueHref } from '@/lib/core-app/warRoomIssueHref'
 import LeagueTabs from '@/components/core-app/LeagueTabs'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { getLeagueStandings } from '@/lib/core-app/leagueStandings'
@@ -214,6 +220,9 @@ import { readLeagueStandingsSummary } from '@/lib/core-app/leagueStandingsSummar
 import { readWeekAllSummary } from '@/lib/core-app/weekAllSummary'
 import { readSeasonOutlookSummary, seasonOutlookFingerprint } from '@/lib/core-app/seasonOutlookSummary'
 import { getCareerScreen, parseCareerView } from '@/lib/core-app/careerScreen'
+import { getCareerWire } from '@/lib/core-app/careerWire'
+import { getWeeklyStory } from '@/lib/core-app/weeklyStory'
+import { getDecisionRecord } from '@/lib/core-app/decisionRecord'
 import { parseCareerFilter } from '@/lib/core-app/careerModel'
 import { isEnabled, DEFAULT_ROLLOUTS } from '@/lib/sports-os/rollout'
 import { freshnessLabel, freshnessMeta, shouldWarnAboutFreshness } from '@/lib/sports-os/freshness'
@@ -1867,12 +1876,20 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * ⚠ THE LOADERS BELOW SKIP WHAT A LOCKED VIEWER MAY NOT SEE. A lock card over data the page
    * already sent is a client-only gate; the screens' own locks only decide what is drawn.
    */
+  /*
+   * 🛑 'war-room' WAS MISSING, AND SCOUT'S COMPETITIVE EDGE NEVER LOADED FOR ANYONE. Scout's edge
+   * access is `corePaywall?.competitive_edge`; with no read here that is null for every viewer, so
+   * loadScoutEdgeForScreen returned null and Scout drew neither the counts nor a lock — a plan holder
+   * got nothing and no error. Found on the live page (2026-10-03), not by a test: the tests handed
+   * the access in directly. war-room-visual-guards now pins this list.
+   */
   const corePaywallRead =
     activeKey === 'players' ||
     activeKey === 'trades' ||
     activeKey === 'commissioner' ||
     activeKey === 'waivers' ||
-    activeKey === 'draft-hq'
+    activeKey === 'draft-hq' ||
+    activeKey === 'war-room'
       ? resolveCorePaywall(userId, { email: viewerEmail, now })
       : Promise.resolve(null)
 
@@ -2033,6 +2050,94 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * that one league's own career below.
    */
   const careerView = activeKey === 'career' ? parseCareerView(sp.view) : null
+  /*
+   * Career Wire (live-career plan, phase 3): every platform's sync state, this season's board and
+   * what moved since the last Career visit. Started BEFORE the career read so the two run side by
+   * side. Cross-league overview only — a league's own career has its own Sync screen — and a
+   * prefetch or speculative render reads the Wire without moving the Career visit marker.
+   */
+  const careerWireRead =
+    activeKey === 'career' && careerView === 'overview' && !selectedLeagueId
+      ? (async () =>
+          getCareerWire({
+            userId,
+            leagues: playedLeagues.map((l) => {
+              const row = l as unknown as {
+                platformLeagueId?: string | null
+                season?: number | string | null
+                sport?: string | null
+                lastSyncedAt?: Date | string | null
+              }
+              return {
+                id: l.id,
+                name: l.name ?? null,
+                platform: l.platform ?? null,
+                platformLeagueId: row.platformLeagueId ?? null,
+                // A display year here; `getCareerWire` re-reads `League.season` for the sync key.
+                season: row.season != null && Number.isFinite(Number(row.season)) ? Number(row.season) : null,
+                sport: row.sport ?? null,
+                lastSyncedAt: row.lastSyncedAt ?? null,
+              }
+            }),
+            pausedLeagueIds: pausedSyncLeagueIds ?? new Set<string>(),
+            now,
+            recordVisit: !isSpeculativeRequestHeaders(await headers()),
+          }))().catch((e: unknown) => {
+          console.error('[core/career] wire read failed', e)
+          return null
+        })
+      : Promise.resolve(null)
+  /*
+   * Weekly Career Story: last week across every league as story cards. Same conditions as the Wire
+   * (overview, no league selected) and started beside it. These are the home's own weekly reads
+   * (`getRoutineFacts`), with no model call: Chimmy's cover line is fetched by the viewer on open.
+   */
+  const careerStoryRead =
+    activeKey === 'career' && careerView === 'overview' && !selectedLeagueId
+      ? getWeeklyStory({
+          userId,
+          leagues: playedLeagues.map((l) => ({
+            id: l.id,
+            name: l.name ?? null,
+            platform: l.platform ?? null,
+            platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+            season: (l as { season?: number | string | null }).season ?? null,
+          })),
+          ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
+        }).catch((e: unknown) => {
+          console.error('[core/career] story read failed', e)
+          return null
+        })
+      : Promise.resolve(null)
+  /*
+   * Decision record: this season's Chimmy and AutoCoach calls, resolved by the Receipts card's own
+   * resolvers (`lib/core-app/decisionRecord.ts`). Same conditions as the story, started beside it.
+   * The season is your newest league's. ⚠ `undefined` on a failed read, NOT null: null renders the
+   * "start one" card, which would tell someone with a record that they have none.
+   */
+  const decisionRecordRead =
+    activeKey === 'career' && careerView === 'overview' && !selectedLeagueId
+      ? (() => {
+          const leagues = playedLeagues.map((l) => ({
+            id: l.id,
+            name: l.name ?? null,
+            platform: l.platform ?? null,
+            platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+            season: (l as { season?: number | string | null }).season ?? null,
+          }))
+          const seasons = leagues.map((l) => Number(l.season)).filter((s) => Number.isInteger(s) && s > 2000)
+          const season = seasons.length > 0 ? Math.max(...seasons) : now.getUTCFullYear()
+          return getDecisionRecord({
+            userId,
+            leagues,
+            season,
+            ownerSleeperId: leagueListPayload?.sleeperUserId ?? null,
+          }).catch((e: unknown) => {
+            console.error('[core/career] decision record read failed', e)
+            return undefined
+          })
+        })()
+      : Promise.resolve(undefined)
   const careerScreen =
     activeKey === 'career'
       ? await getCareerScreen(
@@ -2045,6 +2150,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           return null
         })
       : null
+  const careerWire = await careerWireRead
+  const careerStory = await careerStoryRead
+  const decisionRecord = await decisionRecordRead
 
   /*
    * Rankings, its FAQ and the compare view share one screen key and one data
@@ -2467,9 +2575,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   /* Same split as my-team above: a failed read must not read as "no league". */
   let matchupLoadFailed = false
+  /*
+   * `?week=N` — the week picker. The loader has always honoured an explicit week ("an explicit
+   * ?week= still wins"); the page simply never passed one. A non-integer or out-of-range value is
+   * ignored rather than trusted, so a hand-edited URL falls back to the current week.
+   */
+  const matchupWeekParam = (() => {
+    const n = typeof sp.week === 'string' ? Number(sp.week) : NaN
+    return Number.isInteger(n) && n >= 1 && n <= 30 ? n : null
+  })()
   const matchup =
     activeKey === 'matchup' && selectedLeagueId
-      ? await getMatchupData(selectedLeagueId, userId, null, leagueCtx).catch((e: unknown) => {
+      ? await getMatchupData(selectedLeagueId, userId, matchupWeekParam, leagueCtx).catch((e: unknown) => {
           console.error('[core/matchup] read failed', e)
           matchupLoadFailed = true
           return null
@@ -2484,9 +2601,20 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * would put that whole board on the critical path of a screen that never
    * renders it.
    */
+  /*
+   * ⚠ NOT ON `?all=1`, where the picker renders and this result is thrown away — the my-team pulse
+   * above already skips that case. And a failure is LOGGED: it falls back to the picker, which reads
+   * exactly like "no games this week", so a silent catch made a broken read invisible (audit,
+   * 2026-10-02).
+   */
+  let matchupPulseFailed = false
   const matchupPulse =
-    activeKey === 'matchup' && !selectedLeagueId
-      ? await getMatchupPulse(userId).catch(() => null)
+    activeKey === 'matchup' && !selectedLeagueId && sp.all !== '1' && sp.all !== 'true'
+      ? await getMatchupPulse(userId).catch((error: unknown) => {
+          console.error('[core/matchup] pulse read failed', error)
+          matchupPulseFailed = true
+          return null
+        })
       : null
 
   /*
@@ -2664,7 +2792,23 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * War Room's picker fallback is reached through.
    */
   let scoutLoadFailed = false
-  const [scout, connectedFranchise] = await Promise.all([
+  /*
+   * Scout's Competitive Edge — every manager's trade and waiver record, for a plan that includes it
+   * (owner's decision 2026-10-02). `loadScoutEdgeForScreen` returns null to a locked viewer, so the
+   * counts are never sent; the lock card only draws the gate.
+   */
+  const scoutEdgeAccess =
+    activeKey === 'war-room' && !gamePlanView && selectedLeagueId ? (corePaywall?.competitive_edge ?? null) : null
+  /*
+   * THIS league's game plan, inline in Scout (War Room step 4c) — the same loader as the cross-league
+   * room, handed one id. Before this the league view only LINKED to Game Plan, and that link ignored
+   * the league: `?view=plan&league=X` read every league.
+   *
+   * ⚠ SAFE ON A URL ID: the loader reads only the viewer's OWN claimed teams (`claimedByUserId`), so
+   * a league they have no team in returns `available: false`, never somebody else's lineup.
+   */
+  const wantsLeaguePlan = activeKey === 'war-room' && !gamePlanView && Boolean(selectedLeagueId) && Boolean(userId)
+  const [scout, connectedFranchise, scoutEdge, leagueGamePlan] = await Promise.all([
     activeKey === 'war-room' && !gamePlanView && selectedLeagueId
       ? getScoutData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
           console.error('[core/war-room] scout read failed', e)
@@ -2678,6 +2822,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           leagueContext: leagueCtx,
         }).catch(() => null)
       : Promise.resolve(null),
+    loadScoutEdgeForScreen({ leagueId: scoutEdgeAccess ? selectedLeagueId : null, access: scoutEdgeAccess, userId }),
+    wantsLeaguePlan && selectedLeagueId ? loadGameDayTriage(userId, [selectedLeagueId]).catch(() => null) : Promise.resolve(null),
   ])
 
   /*
@@ -3048,6 +3194,61 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ? (outlookFresh?.data ?? null)
       : await getSeasonOutlook(userId, outlookLeagues, selectedLeagueId).catch(() => null)
     : null
+
+  /*
+   * The per-league standings table's playoff odds, schedule strength and "what is at stake" panel.
+   *
+   * ⚠ THE SAME STORED SIMULATION SEASON OUTLOOK PRINTS, NOT A SECOND ONE. Runs are stored per league
+   * and reused until the league's inputs move (`seasonOutlookSims.ts`), and they are seeded, so this
+   * one-league call reads the identical numbers the Season Outlook tab shows — usually without
+   * simulating anything. A one-league call also sits far inside the game budget, so it never runs a
+   * reduced-iteration board.
+   *
+   * ⚠ NO FOCUS LEAGUE, ON PURPOSE. Focus loads rosters, injuries and the scenario model — Season
+   * Outlook's own panel, and the expensive part. The swing game and rooting guide do not need it; they
+   * run for any league where your odds are still in play.
+   *
+   * ⚠ ONLY AFTER THE TABLE ITSELF LOADED. A failed read costs the odds and nothing else.
+   */
+  const standingsOutlookLeague =
+    activeKey === 'standings' && selectedLeagueId && standings?.available
+      ? (outlookLeagues.find((l) => l.id === selectedLeagueId) ?? null)
+      : null
+  const standingsOdds = standingsOutlookLeague
+    ? await getSeasonOutlook(userId, [standingsOutlookLeague], null)
+        .then((o) => {
+          const league = o.leagues.find((l) => l.leagueId === selectedLeagueId)
+          return league ? toStandingsOdds(league, o.swingByLeague[league.leagueId] ?? null, o.basis) : null
+        })
+        .catch(() => null)
+    : null
+
+  /*
+   * Lineup efficiency (Sleeper only) and next season's draft order, for the same table.
+   *
+   * ⚠ DISPLAY-ONLY READS, EACH ALLOWED TO FAIL ALONE. Neither changes a number the table prints; a
+   * failure costs its own section and nothing else, exactly as the odds above.
+   *
+   * ⚠ EFFICIENCY STOPS AT THE TABLE'S `throughWeek`, so a week the platform has not finalised is never
+   * scored against the lineup someone may still be changing.
+   */
+  const standingsLeagueRow =
+    activeKey === 'standings' && selectedLeagueId && standings?.available && leagueCtx
+      ? await leagueCtx.league().catch(() => null)
+      : null
+  const [standingsEfficiency, standingsDraftOrder] =
+    standings?.available && standingsLeagueRow
+      ? await Promise.all([
+          getLineupEfficiency({
+            league: standingsLeagueRow,
+            season: standings.season,
+            throughWeek: standings.board.throughWeek,
+          }).catch(() => null),
+          readDraftOrderRule(standingsLeagueRow)
+            .then((rule) => (rule ? buildDraftOrderPreview(standings.board, rule) : null))
+            .catch(() => null),
+        ])
+      : [null, null]
 
   /*
    * This week's lineups, projected — AF beside API — for the ONE league whose outlook is on screen.
@@ -4116,6 +4317,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               leagueId: myTeam.league.id,
               leagueName: myTeam.league.name,
               starters: myTeam.starters.available ? myTeam.starters.data.flatMap((slot) => slot.player ? [slot.player] : []) : [],
+              emptySlots: myTeam.starters.available ? myTeam.starters.data.flatMap((slot, index) => slot.empty && !slot.player ? [{ index, slotLabel: slot.slotLabel }] : []) : [],
               nowIso: new Date().toISOString(),
             })} />}
             <MyTeam data={myTeam} />
@@ -4156,11 +4358,30 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         ) : matchupLoadFailed ? (
           <ScreenLoadError screen="Matchup" retryHref={retryHref} />
         ) : showAllLeagues || !matchupPulse ? (
-          /* A failed pulse read is not "no games" — fall back to the picker. */
+          /*
+           * A failed pulse read is not "no games" — fall back to the picker, and SAY it failed.
+           * ⚠ The picker alone read exactly like a quiet week, under a blurb promising a ranking it
+           * does not draw; only the server log knew (audit, 2026-10-02).
+           */
           <PickALeague
             tabKey="matchup"
             title="Matchup"
-            blurb="Every league with a head-to-head this week, ranked by margin. Pick one below for the full box score."
+            blurb="Pick a league for its full box score."
+            above={
+              matchupPulseFailed ? (
+                <div className="af-card" role="alert" style={{ padding: 16, marginBottom: 12 }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>
+                    The all-leagues board did not load.
+                  </p>
+                  <p style={{ marginTop: 6, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+                    Something failed on our side — your leagues are untouched. Open one below, or{' '}
+                    <a href="/core/matchup">try again</a>.
+                  </p>
+                </div>
+              ) : showAllLeagues ? (
+                <p><Link href="/core/matchup">Back to where you stand</Link></p>
+              ) : undefined
+            }
             issues={issues}
             leagues={rail}
           />
@@ -4374,6 +4595,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                   : 'No starting lineups could be read, so there is nothing to plan against yet.'
               }
               issues={issues}
+              issueHref={warRoomIssueHref}
               leagues={rail}
             />
           )
@@ -4381,6 +4603,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           <>
             {connectedFranchise && selectedLeagueId ? (
               <ConnectedFranchiseWarRoom
+                headingLevel={scout ? 2 : 1}
                 linkId={connectedFranchise.linkId}
                 franchiseName={connectedFranchise.franchiseName}
                 primaryMemberId={connectedFranchise.primaryMemberId}
@@ -4419,6 +4642,36 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                     ? `/core/war-room?view=plan&league=${encodeURIComponent(selectedLeagueId)}`
                     : '/core/war-room?view=plan'
                 }
+                matchupHref={`/core/matchup?league=${encodeURIComponent(scout.league.id)}`}
+                tradesHref={`/core/trades?league=${encodeURIComponent(scout.league.id)}`}
+                edge={scoutEdge}
+                edgeAccess={scoutEdgeAccess}
+                /*
+                  This league's plan, inline (step 4c). A failed or unavailable read shows nothing
+                  here — "Every league's game plan →" in Scout's header still reaches the full room.
+                */
+                /*
+                  Elimination formats (step 4d): your place against the cut, from the rail's own read
+                  — so the banner and the rail cannot disagree. Only an unpaired (elimination) row has one.
+                */
+                eliminationStanding={
+                  ctx.weekLineups?.byLeague[scout.league.id]?.unpaired
+                    ? (ctx.weekLineups.byLeague[scout.league.id]?.standing ?? null)
+                    : null
+                }
+                leaguePlan={
+                  /* Best ball has no lineup to set; Scout's format note says so, and the plan would only repeat it. */
+                  leagueGamePlan?.available && !scout.format.bestBall ? (
+                    <GamePlan
+                      data={leagueGamePlan.data}
+                      nowIso={new Date().toISOString()}
+                      weekHref={`/core/week?league=${encodeURIComponent(scout.league.id)}`}
+                      waiversHref={`/core/waivers?league=${encodeURIComponent(scout.league.id)}`}
+                      showHead={false}
+                      scope="league"
+                    />
+                  ) : null
+                }
               />
             ) : scoutLoadFailed ? (
               /*
@@ -4448,6 +4701,18 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 : 'Scouting a room means scouting one room — pick the league whose managers you want read.'
             }
             issues={issues}
+            issueHref={warRoomIssueHref}
+            /*
+              🛑 THE DEFAULT ALL-CLEAR CONTRADICTED THE SECTION ABOVE IT. The queue detects only
+              stale syncs and upcoming drafts, so "Nothing in your leagues is waiting on a
+              decision" printed directly under a list of hurt starters and empty slots. Say
+              what the queue actually checked.
+            */
+            queueClearText={
+              gamePlan?.available && (gamePlan.data.rows.length > 0 || (gamePlan.data.emptySlots?.length ?? 0) > 0)
+                ? 'No stale syncs or upcoming drafts in your leagues. The lineup problems above are this week’s work.'
+                : 'No stale syncs or upcoming drafts in your leagues right now. Pick one below to scout its managers.'
+            }
             leagues={rail}
             /*
               The slot `PickALeague` has carried unused since it was written:
@@ -4468,15 +4733,26 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 the picker below is a complete screen on its own, which is what it
                 was before this change.
               */
-              gamePlan?.available ? (
-                <GamePlan
-                  data={gamePlan.data}
-                  nowIso={new Date().toISOString()}
-                  weekHref="/core/week"
-                  waiversHref="/core/waivers"
-                  showHead={false}
+              <>
+                {gamePlan?.available ? (
+                  <GamePlan
+                    data={gamePlan.data}
+                    nowIso={new Date().toISOString()}
+                    weekHref="/core/week"
+                    waiversHref="/core/waivers"
+                    showHead={false}
+                  />
+                ) : null}
+                {/*
+                  This week's matchup in every league, from the rail's own read (no query). After
+                  Game Plan: what you must DO comes before how the week is going.
+                */}
+                <WarRoomWeek
+                  lineups={ctx.weekLineups}
+                  leagues={playedLeagues.map((l) => ({ id: l.id, name: String(l.name ?? 'League') }))}
+                  boardHref="/core/matchup"
                 />
-              ) : null
+              </>
             }
           />
         )
@@ -4623,7 +4899,15 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         )
       ) : activeKey === 'standings' ? (
         standings ? (
-          <Standings data={standings} freshness={standingsFreshness} view={standingsView} lineups={standingsLineups} />
+          <Standings
+            data={standings}
+            freshness={standingsFreshness}
+            view={standingsView}
+            lineups={standingsLineups}
+            odds={standingsOdds}
+            efficiency={standingsEfficiency}
+            draftOrder={standingsDraftOrder}
+          />
         ) : (
           /* Same split as Commissioner: a read failure is not an unpicked league. */
           selectedLeagueId ? (
@@ -4836,7 +5120,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         leagueCareer ? (
           <LeagueCareer data={leagueCareer} allLeaguesHref="/core/career" />
         ) : careerScreen ? (
-          <Career screen={careerScreen} share={shareCard} />
+          <Career
+            screen={careerScreen}
+            share={shareCard}
+            wire={careerWire}
+            story={careerStory}
+            decisionRecord={decisionRecord}
+            nowIso={now.toISOString()}
+          />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>

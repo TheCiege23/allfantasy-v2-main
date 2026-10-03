@@ -94,6 +94,7 @@ export interface IntegrityJobPayload {
   tradeRef?: { kind: "af"; tradeId: string } | { kind: "redraft"; proposalId: string }
   tradingRosterIds?: string[]
   weekNumber?: number
+  seasonId?: string
 }
 
 /** AutoCoach multi-source status intelligence (BullMQ). */

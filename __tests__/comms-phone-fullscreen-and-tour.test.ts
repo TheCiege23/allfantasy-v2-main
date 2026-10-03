@@ -9,7 +9,8 @@ import { describe, expect, it } from 'vitest'
  *
  * Geometry was measured in Chromium, before and after, at 390x844, 375x667, 820x1180 and 1280x800:
  * phones went from [19,16,354,810] with a 26px radius to [0,0,390,844] with none; tablet and desktop
- * were byte-identical; the tour card overlapped the bubble at all four sizes before and at none after.
+ * were byte-identical. The phone welcome guide now sits in document flow, so it cannot
+ * cover the content it is introducing or the chat entry point.
  * jsdom applies no media queries, so these pin the rules that produced that — anchored to line
  * starts, so a comment ABOUT a rule cannot satisfy them.
  */
@@ -45,15 +46,17 @@ describe('chat is the whole screen on a phone', () => {
   })
 })
 
-describe('the welcome tour sits above the chat bubble, not on it', () => {
+describe('the welcome tour stays out of the chat bubble and mobile content', () => {
   const base = tour.slice(tour.indexOf('.af-welcome {'), tour.indexOf('}', tour.indexOf('.af-welcome {')))
   const phoneStart = tour.indexOf('@media (max-width: 720px)')
   const phone = tour.slice(phoneStart, tour.indexOf('}', tour.indexOf('.af-welcome {', phoneStart)))
 
-  it('anchors to slot 1 of the corner geometry — the bubble is slot 0 — at every width', () => {
+  it('uses slot 1 beside desktop content, while phones place it in the page flow', () => {
     expect(base).toMatch(/^\s+bottom: var\(--af-fab-slot-1, 86px\);$/m)
     expect(base).toMatch(/^\s+right: var\(--af-fab-inset, 18px\);$/m)
-    expect(phone).toMatch(/^\s+bottom: var\(--af-fab-slot-1, 136px\);$/m)
+    expect(phone).toContain('position: relative;')
+    expect(phone).toContain('bottom: auto;')
+    expect(phone).toContain('right: auto;')
   })
 
   it('no longer uses the fixed corner offsets that put it on the bubble', () => {
@@ -61,7 +64,8 @@ describe('the welcome tour sits above the chat bubble, not on it', () => {
     expect(phone).not.toContain('bottom: calc(82px')
   })
 
-  it('shrinks its height by the slot it now starts from, so it cannot run off the top', () => {
-    expect(phone).toContain('max-height: min(440px, calc(100dvh - var(--af-fab-slot-1, 136px) - 16px - env(safe-area-inset-top, 0px)));')
+  it('lets the full guide scroll with the page on a phone', () => {
+    expect(phone).toContain('max-height: none;')
+    expect(phone).toContain('margin-bottom: 18px;')
   })
 })

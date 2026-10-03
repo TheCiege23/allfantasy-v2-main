@@ -55,8 +55,21 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
     }
 
-    // Validate with schema
-    const validated = AutoCoachUserPreferencesSchema.parse(body)
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Invalid preferences' }, { status: 400 })
+    }
+
+    /*
+     * ⚠ MERGE OVER WHAT IS STORED, THEN VALIDATE. Parsing the body alone filled every field it
+     * omitted with the schema DEFAULT, so a client sending `{ aggressiveness }` (the hook's
+     * `Partial<>` contract) silently reset exclusions and position overrides to empty.
+     */
+    const existing = await prisma.userProfile.findUnique({
+      where: { userId },
+      select: { autoCoachPreferences: true },
+    })
+    const stored = parseAutoCoachUserPreferences(existing?.autoCoachPreferences ?? null)
+    const validated = AutoCoachUserPreferencesSchema.parse({ ...stored, ...(body as Record<string, unknown>) })
 
     // Serialize for storage
     const serialized = serializeAutoCoachPreferences(validated)

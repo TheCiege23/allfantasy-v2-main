@@ -87,7 +87,9 @@ function buildThread(thread: Row, include: any): Row {
     out.members = db.members
       .filter((m) => m.threadId === thread.id)
       .map((m) => ({
-        userId: m.userId,
+        // Only the member columns the service SELECTS — so a receipt read off an unselected
+        // column comes back undefined here, exactly as it would from Postgres.
+        ...pick(m, include.members.select),
         user: pick(db.users.find((u) => u.id === m.userId)!, include.members.select.user.select),
       }))
   }
@@ -258,6 +260,44 @@ describe('what the row needs', () => {
     db.messages.push(message('dm1', 'jo', 'yo', 25))
     const again = await listById()
     expect(again.dm1.context?.lastMessageMine).toBe(false)
+  })
+
+  it('✓ until the other person opens the DM after your message, ✓✓ once they have', async () => {
+    db.messages = [message('dm1', 'me', 'sup', 20)]
+    // jo has never opened it: sent, not seen — and "not seen" is all it says.
+    expect((await listById()).dm1.context?.lastMessageSeen).toBe(false)
+
+    // Opened BEFORE the message went out: still not seen.
+    db.members.find((m) => m.id === 'b')!.lastReadAt = at(15)
+    expect((await listById()).dm1.context?.lastMessageSeen).toBe(false)
+
+    // Opened after it: seen.
+    db.members.find((m) => m.id === 'b')!.lastReadAt = at(21)
+    expect((await listById()).dm1.context?.lastMessageSeen).toBe(true)
+  })
+
+  it('your own read of your own message never counts as theirs', async () => {
+    db.messages = [message('dm1', 'me', 'sup', 20)]
+    db.members.find((m) => m.id === 'a')!.lastReadAt = at(59)
+    expect((await listById()).dm1.context?.lastMessageSeen).toBe(false)
+  })
+
+  it('no receipt on THEIR message — the ticks are only ever on yours', async () => {
+    db.messages = [message('dm1', 'jo', 'yo', 20)]
+    db.members.find((m) => m.id === 'b')!.lastReadAt = at(21)
+    const { dm1 } = await listById()
+    expect(dm1.context?.lastMessageMine).toBe(false)
+    expect(dm1.context?.lastMessageSeen).toBe(false)
+  })
+
+  it('a huddle is seen once anybody else has opened it; a blocked member does not count', async () => {
+    db.messages = [message('hud', 'me', 'waivers?', 30)]
+    db.members.find((m) => m.id === 'f')!.isBlocked = true
+    db.members.find((m) => m.id === 'f')!.lastReadAt = at(31)
+    expect((await listById()).hud.context?.lastMessageSeen).toBe(false)
+
+    db.members.find((m) => m.id === 'd')!.lastReadAt = at(31)
+    expect((await listById()).hud.context?.lastMessageSeen).toBe(true)
   })
 
   it('says Photo or GIF for media, whichever shape the row was written in', async () => {

@@ -17,6 +17,7 @@ import type { AutomationSummary } from '@/lib/commissioner-ui/automations/decisi
 import type { AnalyticsSummary } from '@/lib/commissioner-ui/analytics/decision-os-client'
 import type { ReportsSummary } from '@/lib/commissioner-ui/reports/decision-os-client'
 import type { NotificationsSummary } from '@/lib/commissioner-ui/notifications/decision-os-client'
+import { allClearCopy } from '@/lib/commissioner-ui/allClear'
 
 export interface MissionControlViewProps {
   leagueHealth: LeagueHealthSummary
@@ -37,6 +38,16 @@ export interface MissionControlViewProps {
   /** The behavioural snapshot series — Mission Control's one chart. Null when it could not be read. */
   activityTrend: LeagueActivityTrend | null
   dataMode: CommissionerDataMode
+  /** Only a league's owner can add a co-commissioner, and Commissioner OS also admits co-commissioners. */
+  canInviteCoCommissioner?: boolean
+  /**
+   * Whether `leagueHealth` is a real reading or the page's nothing-loaded fallback. Without it the
+   * fallback's zero renders as a score and an empty queue reads as an all-clear. Defaults to true
+   * for direct renders; the page always passes it.
+   */
+  leagueHealthAvailable?: boolean
+  /** Whether the recommendations queue was read. A failed read arrives as `[]`, which is not "none". */
+  recommendationsRead?: boolean
 }
 
 /**
@@ -48,8 +59,15 @@ export interface MissionControlViewProps {
  * job is arranging it per the Mission Control Blueprint's layout and
  * Decision Hierarchy.
  */
-export function MissionControlView({ leagueHealth, recommendations, managerHighlights, kpis, recentActivity, automationSummary, analyticsSummary, reportsSummary, notificationsSummary, activityTrend, dataMode }: MissionControlViewProps) {
+export function MissionControlView({ leagueHealth, recommendations, managerHighlights, kpis, recentActivity, automationSummary, analyticsSummary, reportsSummary, notificationsSummary, activityTrend, dataMode, canInviteCoCommissioner = false, leagueHealthAvailable = true, recommendationsRead = true }: MissionControlViewProps) {
   const trendPoints = activityTrend?.points ?? []
+  const allClear = allClearCopy({
+    emptyTitle: 'Nothing needs your attention right now.',
+    healthyDescription: 'Your league is in good shape.',
+    listName: 'recommendations',
+    listRead: recommendationsRead,
+    healthTier: leagueHealthAvailable ? leagueHealth.tier : null,
+  })
   return (
     <div>
       <PreviewDataBanner mode={dataMode} />
@@ -58,8 +76,8 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_2fr]">
         <SummaryCard
           title="League Health"
-          status={leagueHealth.tier}
-          summary={`${leagueHealth.score} — ${leagueHealth.driver}`}
+          status={leagueHealthAvailable ? leagueHealth.tier : 'standard'}
+          summary={leagueHealthAvailable ? `${leagueHealth.score} — ${leagueHealth.driver}` : 'Not available yet — there is no reading for this league.'}
           icon={HeartPulse}
         />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -77,9 +95,11 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
         <Button size="sm" variant="outline" className="h-11 min-h-11 sm:h-9 sm:min-h-[36px]">
           <ListChecks size={14} aria-hidden /> Review Pending Trades
         </Button>
-        <Button size="sm" variant="outline" className="h-11 min-h-11 sm:h-9 sm:min-h-[36px]">
-          <UserPlus size={14} aria-hidden /> Invite Co-Commissioner
-        </Button>
+        {canInviteCoCommissioner && (
+          <Button size="sm" variant="outline" className="h-11 min-h-11 sm:h-9 sm:min-h-[36px]">
+            <UserPlus size={14} aria-hidden /> Invite Co-Commissioner
+          </Button>
+        )}
       </div>
 
       {/*
@@ -144,7 +164,7 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
               Today&rsquo;s Priorities
             </h2>
             {recommendations.length === 0 ? (
-              <EmptyState icon={Lightbulb} title="Nothing needs your attention right now." description="Your league is in good shape." />
+              <EmptyState icon={Lightbulb} title={allClear.title} description={allClear.description} />
             ) : (
               <div className="space-y-3">
                 {recommendations.map((rec) => (

@@ -68,7 +68,7 @@ describe('a claimed manager keeps their moves', () => {
 
     const out = await readManagerActivity('lg-1', 14)
 
-    expect(out).toEqual([
+    expect(out).toMatchObject([
       { managerName: 'Ada', currentCount: 1, priorCount: 0 },
       { managerName: 'Bea', currentCount: 1, priorCount: 0 },
     ])
@@ -80,7 +80,18 @@ describe('a claimed manager keeps their moves', () => {
 
     const out = await readManagerActivity('lg-1', 14)
 
-    expect(out).toEqual([{ managerName: 'Bea', currentCount: 2, priorCount: 1 }])
+    expect(out).toMatchObject([{ managerName: 'Bea', currentCount: 2, priorCount: 1 }])
+    expect(out[0].lastActionAt).toBeInstanceOf(Date)
+  })
+
+  it('retains the last known action even when it predates both count windows', async () => {
+    mocks.activityFindMany.mockResolvedValue([move(80, 'af-user-bea')])
+    const out = await readManagerActivity('lg-1', 14)
+    expect(out).toMatchObject([{ managerName: 'Bea', currentCount: 0, priorCount: 0 }])
+    expect(out[0].lastActionAt).toBeInstanceOf(Date)
+    expect(mocks.activityFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ activityType: { in: ['trade', 'waiver', 'roster_move'] } }),
+    }))
   })
 
   it('counts a move once for a team even when it carries two of that team’s keys', async () => {
@@ -90,7 +101,7 @@ describe('a claimed manager keeps their moves', () => {
 
     const out = await readManagerActivity('lg-1', 14)
 
-    expect(out).toEqual([{ managerName: 'Ada', currentCount: 1, priorCount: 0 }])
+    expect(out).toMatchObject([{ managerName: 'Ada', currentCount: 1, priorCount: 0 }])
   })
 
   it('credits both sides of a trade', async () => {
@@ -99,7 +110,7 @@ describe('a claimed manager keeps their moves', () => {
     const out = await readManagerActivity('lg-1', 14)
 
     // Team 3 has no team name, so the owner handle is its label — as everywhere else.
-    expect(out).toEqual([
+    expect(out).toMatchObject([
       { managerName: 'Bea', currentCount: 1, priorCount: 0 },
       { managerName: 'cy-owner', currentCount: 1, priorCount: 0 },
     ])
@@ -113,7 +124,7 @@ describe('what it still refuses to guess', () => {
 
     const out = await readManagerActivity('lg-1', 14)
 
-    expect(out).toEqual([{ managerName: 'cy-owner', currentCount: 1, priorCount: 0 }])
+    expect(out).toMatchObject([{ managerName: 'cy-owner', currentCount: 1, priorCount: 0 }])
   })
 
   it('leaves out keys that match no current owner or claimer', async () => {

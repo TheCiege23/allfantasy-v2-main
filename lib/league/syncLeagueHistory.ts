@@ -64,15 +64,21 @@ export function parseChampionFromBracket(
   return { winnerRosterId, loserRosterId };
 }
 
-function pointsAgainst(roster: SleeperRoster): number {
+/**
+ * A Sleeper roster's season points against: `fpts_against` plus its hundredths.
+ *
+ * ⚠ NOT `ppts`. This used to return `settings.ppts` whenever Sleeper sent it, but `ppts` is POTENTIAL
+ * points — the best lineup the team could have set — a different quantity entirely, and usually larger
+ * than either points for or points against. Every Sleeper season that carried it was imported with its
+ * potential points standing in for points against. Exported so the rule is pinned by a test.
+ */
+export function pointsAgainst(roster: SleeperRoster): number {
   const s = roster.settings;
   if (!s) return 0;
-  const base = (s.fpts_against ?? 0) + (s.fpts_against_decimal ?? 0) / 100;
-  if (typeof s.ppts === "number") return s.ppts;
-  return base;
+  return (s.fpts_against ?? 0) + (s.fpts_against_decimal ?? 0) / 100;
 }
 
-function pointsFor(roster: SleeperRoster): number {
+export function pointsFor(roster: SleeperRoster): number {
   const s = roster.settings;
   if (!s) return 0;
   return (s.fpts ?? 0) + (s.fpts_decimal ?? 0) / 100;

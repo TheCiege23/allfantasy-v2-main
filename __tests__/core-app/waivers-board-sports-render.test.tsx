@@ -36,14 +36,14 @@ const section = (over: Partial<WaiverSportSection>): WaiverSportSection => ({
   season: 2026,
   rows: [nbaRow],
   considered: 2,
-  withheld: { noRoster: 0, idSpace: 1, noScoring: 0, noCandidate: 0 },
+  withheld: { noRoster: 0, idSpace: 1, noScoring: 0, noCandidate: 0, noUpgrade: 0 },
   ...over,
 })
 
 const onlyOtherSports = (sports: WaiverSportSection[]): WaiversBoardData => ({
   rows: [],
   considered: 0,
-  withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
+  withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 },
   marketLeagues: 0,
   at: { season: '2026', week: 4 },
   weekKickoffs: null,
@@ -59,7 +59,7 @@ const soccer = section({
   season: null,
   rows: [],
   considered: 1,
-  withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0 },
+  withheld: { noRoster: 0, idSpace: 0, noScoring: 0, noCandidate: 0, noUpgrade: 0 },
 })
 
 describe('WaiversBoard — sport sections', () => {
@@ -70,7 +70,7 @@ describe('WaiversBoard — sport sections', () => {
     expect(text).not.toMatch(/No team is claimed/)
     expect(text).not.toMatch(/re-scored under that league/)
     expect(container.querySelector('[data-testid="waivers-sport-NBA"]')).not.toBeNull()
-    expect(text).toContain('NBA · top 1 · ranked by net gain per game')
+    expect(text).toContain('NBA · top 1 · ranked by lineup gain per game')
   })
 
   it('prints every season-rate figure per game, never per week', () => {
@@ -79,7 +79,7 @@ describe('WaiversBoard — sport sections', () => {
     expect(nba.textContent).toContain('+32.0 pts/g')
     expect(nba.textContent).toContain('Proj pts/g')
     expect(nba.textContent).not.toContain('pts/wk')
-    expect(nba.querySelector('[aria-label="Net gain +32.0 projected points per game"]')).not.toBeNull()
+    expect(nba.querySelector('[aria-label="Lineup gain +32.0 projected points per game"]')).not.toBeNull()
     expect(nba.textContent).toContain('season rate, 2026')
     expect(nba.textContent).toContain("AllFantasy's default NBA scoring")
   })
@@ -109,7 +109,16 @@ describe('WaiversBoard — sport sections', () => {
     const nflRow: WaiverBoardRow = { ...nbaRow, leagueId: 'N1', sport: undefined, netGain: 5 }
     const data: WaiversBoardData = { ...onlyOtherSports([section({})]), rows: [nflRow], considered: 1 }
     const { container } = render(<WaiversBoard data={data} allHref="/x" totalLeagues={2} />)
-    expect(container.textContent).toContain('NFL · Top 1 · ranked by net gain')
+    expect(container.textContent).toContain('NFL · 1 league · ranked by lineup gain')
     expect(container.textContent).toContain('+5.0 pts/wk')
+  })
+
+  it('marks every card list as the Waivers board, so its phone layout cannot reach Trades or Draft HQ', () => {
+    const nflRow: WaiverBoardRow = { ...nbaRow, leagueId: 'N1', sport: undefined, netGain: 5 }
+    const data: WaiversBoardData = { ...onlyOtherSports([section({})]), rows: [nflRow], considered: 1 }
+    const { container } = render(<WaiversBoard data={data} allHref="/x" totalLeagues={2} />)
+    const lists = [...container.querySelectorAll('ul.af-bd-cards')]
+    expect(lists.length).toBe(2) // the NFL list and the basketball section
+    for (const ul of lists) expect(ul.classList.contains('af-bd-cards--waivers')).toBe(true)
   })
 })

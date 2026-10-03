@@ -7,7 +7,15 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 1020px;
+  /*
+   * 1020 was a one-column reading width. The page is two columns where there is room now (see the
+   * layout block at the end of this file), so it can use a desktop's width — and it is a size
+   * CONTAINER, because the core shell's rail takes a slice of the viewport and only the page's own
+   * width says whether two columns fit.
+   */
+  max-width: 1280px;
+  container-type: inline-size;
+  container-name: af-wv;
 }
 
 /* ── Pricing context ─────────────────────────────────────────────────── */
@@ -187,6 +195,16 @@
     flex-direction: column;
     gap: 2px;
   }
+  /*
+   * ⚠ THE 240px BASIS ON THESE IS A WIDTH IN THE ROW, AND A HEIGHT IN THIS COLUMN. Measured at
+   * 375px: every rule 261px tall under one line of text — four of them, ~1,000px of empty card.
+   * The lineup board's footnotes below hit the same trap and got their own classes (see
+   * `.af-wlb-why`); the rules list itself never did.
+   */
+  .af-wv-rule-why,
+  .af-wv-rule-value {
+    flex: 0 0 auto;
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -290,6 +308,23 @@
   font-weight: 700;
 }
 
+/* "Worth adding" while its fetch is in flight — three rows' height, so the page does not jump. */
+.af-core .af-wlb-skel {
+  height: 34px;
+  border-radius: 8px;
+  background: var(--surface2, rgba(255, 255, 255, 0.04));
+}
+@media (prefers-reduced-motion: no-preference) {
+  .af-core .af-wlb-skel {
+    animation: af-wlb-pulse 1.4s ease-in-out infinite;
+  }
+}
+@keyframes af-wlb-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
 .af-core .af-wlb-chip {
   margin-left: 6px;
   padding: 2px 5px;
@@ -350,3 +385,242 @@
   line-height: 1.4;
   color: var(--text2);
 }
+
+/*
+ * The four header tiles, two by two on a phone (2026-10-01 audit). `minmax(190px, 1fr)` fits
+ * one column in a 343px row, so four small figures took four full-width rows (~380px).
+ * Its own top-level block at end of file — nothing here can be carried into another band.
+ */
+@media (max-width: 560px) {
+  .af-wv-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ── Next waiver run, roster needs, bids, priority cost (2026-10-02 features) ──
+   Own top-level blocks at end of file, so nothing can be carried into another band. */
+.af-core .af-wv-next {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-core .af-wv-clock-in { color: var(--text2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.af-core [data-soon='true'] .af-wv-clock-in { color: var(--warn, #fbbf24); }
+.af-core .af-wv-rule-local { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--text2); }
+
+.af-core .af-wlb-needs { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.af-core .af-wlb-needs li {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text2);
+  background: var(--surface2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.07));
+}
+.af-core .af-wlb-need-k { font-weight: 800; color: var(--text); }
+.af-core .af-wlb-needs li[data-tone='bad'] { border-color: color-mix(in srgb, var(--bad, #ff6b8b) 40%, transparent); }
+.af-core .af-wlb-needs li[data-tone='bad'] .af-wlb-need-k { color: var(--bad, #ff6b8b); }
+.af-core .af-wlb-needs li[data-tone='warn'] .af-wlb-need-k { color: var(--warn, #fbbf24); }
+
+.af-core .af-wlb-bid {
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--good, #34d399);
+  background: color-mix(in srgb, var(--good, #34d399) 12%, transparent);
+}
+.af-core .af-wlb-bid[data-over='true'] {
+  color: var(--warn, #fbbf24);
+  background: color-mix(in srgb, var(--warn, #fbbf24) 12%, transparent);
+}
+
+.af-core .af-wlb-priority {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+}
+.af-core .af-wlb-priority strong { color: var(--text); }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Layout (2026-10-02): one column on a phone, two where there is room.
+   Own top-level blocks at end of file — nothing here can be carried into
+   another rule's band (see the af-matchup.css incident in CLAUDE.md).
+
+   DOM order = phone order: tiles → actions → reference. From 900px of PAGE
+   width (a container query, not the viewport — the rail takes a slice) the
+   reference moves to a right-hand column beside the actions.
+   ══════════════════════════════════════════════════════════════════════ */
+.af-core .af-wv-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'tiles' 'main' 'side';
+  gap: 12px;
+  align-items: start;
+}
+.af-core .af-wv-area-tiles { grid-area: tiles; min-width: 0; }
+.af-core .af-wv-area-main { grid-area: main; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.af-core .af-wv-area-side { grid-area: side; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+
+@container af-wv (min-width: 900px) {
+  .af-core .af-wv-layout {
+    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-areas: 'main tiles' 'main side';
+    grid-template-rows: auto 1fr;
+    column-gap: 16px;
+  }
+  /* Four tiles in a 300px column: two by two, not four full-width rows. */
+  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .af-core .af-wv-area-tiles .af-wv-tile-value { font-size: 22px; }
+}
+/* A tablet-width page: the four tiles in one row, not three and an orphan. */
+@container af-wv (min-width: 600px) and (max-width: 899px) {
+  .af-core .af-wv-area-tiles .af-wv-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@container af-wv (min-width: 1180px) {
+  .af-core .af-wv-layout { grid-template-columns: minmax(0, 1fr) 340px; }
+}
+
+/* The closing actions: browse the wire, and the platform handoff, side by side when they fit. */
+.af-core .af-wv-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* ── The rules, as a <details>: one line on a phone, open where there is room ── */
+.af-core .af-wv-rules-box > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-height: 44px;
+  cursor: pointer;
+  list-style: none;
+}
+.af-core .af-wv-rules-box > summary::-webkit-details-marker { display: none; }
+.af-core .af-wv-rules-box > summary::after {
+  content: '▾';
+  margin-left: auto;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+.af-core .af-wv-rules-box:not([open]) > summary::after { transform: rotate(-90deg); }
+.af-core .af-wv-rules-box > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.af-core .af-wv-rules-summary { font-size: 12.5px; font-weight: 600; color: var(--text2); }
+/* Open, the summary line repeats what the list says right under it. */
+.af-core .af-wv-rules-box[open] .af-wv-rules-summary { display: none; }
+/* The section's own 10px gap already separates the list from the summary. */
+.af-core .af-wv-rules-box[open] > summary { min-height: 0; }
+
+/* In the side column the rules list is always the stacked form. */
+.af-core .af-wv-area-side .af-wv-rules li { flex-direction: column; gap: 2px; }
+.af-core .af-wv-area-side .af-wv-rule-key { min-width: 0; }
+.af-core .af-wv-area-side .af-wv-rule-why,
+.af-core .af-wv-area-side .af-wv-rule-value { flex: 0 0 auto; }
+
+/* ── The next waiver run sticks to the top of a narrow page while you scroll the adds ── */
+@container af-wv (max-width: 899px) {
+  .af-core .af-wv-next {
+    position: sticky;
+    /* Below the iOS notch strip the shell paints (af-core-shell.css, .af-shell::before). */
+    top: env(safe-area-inset-top, 0px);
+    z-index: 5;
+    box-shadow: 0 6px 16px -10px rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* ── Readability: the 11px grey reasons are the first thing a phone shrinks to unreadable ── */
+.af-core .af-wv-tile-sub,
+.af-core .af-wv-tile-why,
+.af-core .af-wv-section-note,
+.af-core .af-wlb-meta,
+.af-core .af-wlb-note,
+.af-core .af-wlb-over { font-size: 12px; }
+.af-core .af-wv-rule-why,
+.af-core .af-wlb-why,
+.af-core .af-wv-edge-note,
+.af-core .af-wv-footnote { font-size: 12.5px; }
+.af-core .af-wv-tile-why,
+.af-core .af-wv-rule-why,
+.af-core .af-wlb-note,
+.af-core .af-wv-footnote { color: var(--muted); }
+
+/* ── Touch: a player name is a button that opens the card; give it a real target ── */
+@media (pointer: coarse) {
+  .af-core .af-wlb-row { min-height: 44px; align-items: center; }
+  .af-core .af-wlb-name button { min-height: 44px; }
+  .af-core .af-wv-actions .af-btn { min-height: 44px; }
+}
+
+/* ══ Chimmy's recommendations on the core skin (AIWaiverRecommendationsPanel surface="core") ══ */
+.af-core .af-wvai-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.af-core .af-wvai-sub { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text2); }
+.af-core .af-btn.af-wvai-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; }
+.af-core .af-btn.af-wvai-btn:disabled { opacity: 0.55; }
+.af-core .af-wvai-box {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--warn, #fbbf24) 35%, transparent);
+  background: color-mix(in srgb, var(--warn, #fbbf24) 8%, transparent);
+}
+.af-core .af-wvai-box-title { margin: 0; font-size: 13.5px; font-weight: 700; color: var(--text); }
+.af-core .af-wvai-box .af-wvai-btn { margin-top: 8px; }
+.af-core .af-wvai-error {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: var(--bad, #ff6b8b);
+  border: 1px solid color-mix(in srgb, var(--bad, #ff6b8b) 40%, transparent);
+  background: color-mix(in srgb, var(--bad, #ff6b8b) 8%, transparent);
+}
+.af-core .af-wvai-results { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.af-core .af-wvai-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; font-size: 12px; color: var(--muted); }
+.af-core .af-wvai-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.af-core .af-wvai-rec { padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface2, var(--surface)); }
+.af-core .af-wvai-rec-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.af-core .af-wvai-rec-title { margin: 0; font-size: 14px; color: var(--text); }
+.af-core .af-wvai-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.af-core .af-wvai-rec > .af-wvai-chips { margin-top: 8px; }
+.af-core .af-wvai-chip,
+.af-core .af-wvai-tag {
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+  background: var(--chip, rgba(127, 127, 127, 0.12));
+}
+.af-core .af-wvai-chip--bid { color: var(--good, #34d399); background: color-mix(in srgb, var(--good, #34d399) 12%, transparent); }
+.af-core .af-wvai-tag { text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; }
+.af-core .af-wvai-reason { margin: 8px 0 0; font-size: 13px; line-height: 1.5; color: var(--text2); }
+.af-core .af-wvai-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* An observed Sleeper schedule's provenance — "seen over this league's last 5 runs". */
+.af-core .af-wv-rule-observed { flex-basis: 100%; font-size: 12px; font-weight: 600; color: var(--muted); }

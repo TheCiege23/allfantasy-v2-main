@@ -223,7 +223,7 @@ test.describe("@db @notifications notification preferences click audit", () => {
       await matchupHeader.click()
     }
     await expect(matchupHeader).toHaveAttribute("aria-expanded", "true")
-    await page.getByRole("checkbox", { name: "Matchup results enabled" }).uncheck()
+    await page.getByRole("switch", { name: "Matchup results enabled" }).uncheck()
     await page.getByRole("checkbox", { name: "Matchup results Email" }).uncheck()
     await page.getByRole("checkbox", { name: "Matchup results SMS" }).check()
 
@@ -255,7 +255,7 @@ test.describe("@db @notifications notification preferences click audit", () => {
     if ((await matchupHeaderAfterReload.getAttribute("aria-expanded")) !== "true") {
       await matchupHeaderAfterReload.click()
     }
-    await expect(page.getByRole("checkbox", { name: "Matchup results enabled" })).not.toBeChecked()
+    await expect(page.getByRole("switch", { name: "Matchup results enabled" })).not.toBeChecked()
     await expect(page.getByRole("checkbox", { name: "Matchup results SMS" })).toBeChecked()
 
     // Reset flow

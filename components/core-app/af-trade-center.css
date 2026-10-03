@@ -12,11 +12,22 @@
   --tc-good: #34d399;
   --tc-warn: #fbbf24;
   --tc-bad: #fb5b78;
+  --tc-grade-a: var(--good);
+  --tc-grade-b: #5eead4;
+  --tc-grade-c: var(--warn);
+  --tc-grade-d: #fb923c;
+  --tc-grade-f: var(--bad);
 
   display: flex;
   flex-direction: column;
   gap: 16px;
   width: 100%;
+}
+
+/* Grade letters also appear as small text on white cards in light mode. */
+html[data-mode='light'] .af-core .af-tc {
+  --tc-grade-b: #0a746b;
+  --tc-grade-d: #96500d;
 }
 
 /* ── Header ──────────────────────────────────────────────────────────── */
@@ -596,11 +607,11 @@
 
 /* Grade colours from the handoff. Applied to the letter only — the badge stays
    neutral so a red F does not shout louder than the verdict it sits beside. */
-.af-tc-grade[data-letter='A'] .af-tc-grade-letter { color: #34d399; }
-.af-tc-grade[data-letter='B'] .af-tc-grade-letter { color: #5eead4; }
-.af-tc-grade[data-letter='C'] .af-tc-grade-letter { color: #fbbf24; }
-.af-tc-grade[data-letter='D'] .af-tc-grade-letter { color: #fb923c; }
-.af-tc-grade[data-letter='F'] .af-tc-grade-letter { color: #fb5b78; }
+.af-tc-grade[data-letter='A'] .af-tc-grade-letter { color: var(--tc-grade-a); }
+.af-tc-grade[data-letter='B'] .af-tc-grade-letter { color: var(--tc-grade-b); }
+.af-tc-grade[data-letter='C'] .af-tc-grade-letter { color: var(--tc-grade-c); }
+.af-tc-grade[data-letter='D'] .af-tc-grade-letter { color: var(--tc-grade-d); }
+.af-tc-grade[data-letter='F'] .af-tc-grade-letter { color: var(--tc-grade-f); }
 
 /* ── Mobile treatment ────────────────────────────────────────────────────
  *
@@ -797,11 +808,11 @@
   font-weight: 900;
   line-height: 1;
 }
-.af-tc-offer-grade[data-letter='A'] strong { color: #34d399; }
-.af-tc-offer-grade[data-letter='B'] strong { color: #5eead4; }
-.af-tc-offer-grade[data-letter='C'] strong { color: #fbbf24; }
-.af-tc-offer-grade[data-letter='D'] strong { color: #fb923c; }
-.af-tc-offer-grade[data-letter='F'] strong { color: #fb5b78; }
+.af-tc-offer-grade[data-letter='A'] strong { color: var(--tc-grade-a); }
+.af-tc-offer-grade[data-letter='B'] strong { color: var(--tc-grade-b); }
+.af-tc-offer-grade[data-letter='C'] strong { color: var(--tc-grade-c); }
+.af-tc-offer-grade[data-letter='D'] strong { color: var(--tc-grade-d); }
+.af-tc-offer-grade[data-letter='F'] strong { color: var(--tc-grade-f); }
 .af-tc-offer-sides {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1234,11 +1245,11 @@
 .af-tc-timeline-grades[data-mode='teams'] { align-items: flex-start; gap: 10px; }
 .af-tc-timeline-grades[data-mode='teams'] > div { min-width: 64px; }
 .af-tc-timeline-grades[data-mode='teams'] span { max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.af-tc-timeline-grades [data-letter='A'] strong { color: #34d399; }
-.af-tc-timeline-grades [data-letter='B'] strong { color: #5eead4; }
-.af-tc-timeline-grades [data-letter='C'] strong { color: #fbbf24; }
-.af-tc-timeline-grades [data-letter='D'] strong { color: #fb923c; }
-.af-tc-timeline-grades [data-letter='F'] strong { color: #fb5b78; }
+.af-tc-timeline-grades [data-letter='A'] strong { color: var(--tc-grade-a); }
+.af-tc-timeline-grades [data-letter='B'] strong { color: var(--tc-grade-b); }
+.af-tc-timeline-grades [data-letter='C'] strong { color: var(--tc-grade-c); }
+.af-tc-timeline-grades [data-letter='D'] strong { color: var(--tc-grade-d); }
+.af-tc-timeline-grades [data-letter='F'] strong { color: var(--tc-grade-f); }
 .af-tc-timeline-advice,
 .af-tc-timeline-gap { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
 .af-tc-timeline-gap { color: var(--warn); }
@@ -2213,6 +2224,11 @@
   .af-core .af-tc-stepbar .af-tc-stepbar-primary {
     flex: 0 0 auto;
     min-height: 44px;
+    max-width: 52%;
+    min-width: 0;
+    white-space: normal;
+    line-height: 1.2;
+    text-align: center;
   }
 
   /*
@@ -2427,11 +2443,11 @@
 /* THE grade for a suggested deal — see TradePartnerSuggestions. */
 .af-tc-fit-grade { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; font-size: 11px; line-height: 1.4; color: var(--muted); }
 .af-tc-fit-grade strong { font-size: 18px; font-weight: 800; color: var(--text); }
-.af-tc-fit-grade[data-letter='A'] strong { color: #34d399; }
-.af-tc-fit-grade[data-letter='B'] strong { color: #5eead4; }
-.af-tc-fit-grade[data-letter='C'] strong { color: #fbbf24; }
-.af-tc-fit-grade[data-letter='D'] strong { color: #fb923c; }
-.af-tc-fit-grade[data-letter='F'] strong { color: #fb5b78; }
+.af-tc-fit-grade[data-letter='A'] strong { color: var(--tc-grade-a); }
+.af-tc-fit-grade[data-letter='B'] strong { color: var(--tc-grade-b); }
+.af-tc-fit-grade[data-letter='C'] strong { color: var(--tc-grade-c); }
+.af-tc-fit-grade[data-letter='D'] strong { color: var(--tc-grade-d); }
+.af-tc-fit-grade[data-letter='F'] strong { color: var(--tc-grade-f); }
 .af-tc-fit-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2597,3 +2613,43 @@
 .af-tc-moves-why b { color: var(--text); }
 .af-tc-moves-why[data-dir='up'] b { color: var(--good); }
 .af-tc-moves-why[data-dir='down'] b { color: var(--bad); }
+
+/* ── Phone audit, 2026-10-01 ─────────────────────────────────────────────────
+ *
+ * Top-level rules and one sibling @media at end of file, so nothing here can be carried into
+ * another band by an early-closed outer query.
+ */
+
+/*
+ * ⚠ ONE LONG PICKED NAME SCROLLED THE WHOLE PAGE SIDEWAYS ON THE "WHAT YOU GET" STEP. The
+ * builder is one `1fr` column on a phone — `minmax(auto, 1fr)` — and a grid item's `auto`
+ * minimum is its min-content width. A picked row ("Amon-Ra St. Brown · WR · DET · AF 17.4 ·
+ * 9,116 · +6% · base …") measured 350px, the side panel 380px, the page 396px on a 375px
+ * screen. `min-width: 0` lets the panel fit the screen; the name ellipsises inside its row as it
+ * already does on the "give" side. Unscoped: the desktop columns have a fixed 280px minimum.
+ */
+.af-tc-builder > .af-tc-team {
+  min-width: 0;
+}
+
+/*
+ * ⚠ THE LEAGUE NAME GOT 74px. On a phone the context row is a non-wrapping scroller (rule
+ * above: chip rows scroll rather than wrap), but its name and meta are allowed to SHRINK, so
+ * the row never scrolled — the DEADLINE chip (138px, nowrap) and the format squeezed the name
+ * instead: "The / Gridiron / Dynasty / League — / 2026 / Superflex", a 152px card. Scrolling
+ * would put the deadline off screen, which is the one urgent thing in it, so this row wraps
+ * after all: tile and name share the first line, format and deadline the second. 105px.
+ */
+@media (max-width: 720px) {
+  .af-tc-context {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  .af-tc-context .af-tc-context-name {
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+  .af-tc-context .af-tc-context-meta {
+    flex: 0 0 auto;
+  }
+}

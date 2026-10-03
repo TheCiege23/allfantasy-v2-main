@@ -35,6 +35,8 @@ function profile(overrides: Record<string, unknown> = {}) {
         inAppEnabled: true,
         smsEnabled: true,
       },
+      // The opt-in record /api/verify/phone/start writes; a verified phone alone is not consent.
+      smsConsent: { consentedAt: "2026-01-01T00:00:00.000Z", phone: "+15555550100" },
     },
     ...overrides,
   }
@@ -135,6 +137,32 @@ describe("worldCupNotifications", () => {
     expect(createPlatformNotificationMock).toHaveBeenCalledTimes(1)
     expect(createPlatformNotificationMock.mock.calls[0]?.[0]).toMatchObject({ userId: "user-2" })
     expect(sendSmsMock).toHaveBeenCalledTimes(1)
+    // The poster's words and name stay in-app: user-written text is not sent over SMS.
+    const text = String(sendSmsMock.mock.calls[0]?.[1])
+    expect(text).toContain("Office Pool")
+    expect(text).not.toContain("picks lock tonight")
+    expect(text).not.toContain("Alex")
+  })
+
+  it("does not SMS a verified phone with SMS switched on but no stored opt-in", async () => {
+    getSettingsProfileMock.mockResolvedValue(profile({
+      notificationPreferences: { worldCup: { inAppEnabled: true, smsEnabled: true } },
+    }))
+    const { notifyWorldCupMention } = await import("@/lib/world-cup/worldCupNotifications")
+
+    const diagnostics = await notifyWorldCupMention({
+      challengeId: "pool-1",
+      poolName: "Office Pool",
+      senderName: "Alex",
+      body: "hey @friend",
+      messageId: "msg-9",
+      senderUserId: "user-1",
+      targetUserIds: ["user-2"],
+    })
+
+    expect(createPlatformNotificationMock).toHaveBeenCalledTimes(1)
+    expect(sendSmsMock).not.toHaveBeenCalled()
+    expect(diagnostics[0]).toMatchObject({ smsEligible: false, smsSent: false })
   })
 
   it("private Chimmy notification is sender-only and private-safe", async () => {

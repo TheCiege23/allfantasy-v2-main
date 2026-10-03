@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
-import { nextStripState, type MatchupStrip } from '@/lib/live/matchupStrip'
+import { describeRemaining, nextStripState, type MatchupStrip } from '@/lib/live/matchupStrip'
 
 /**
  * You vs your opponent for the league held on the live screen, refreshed on the slate's cadence.
@@ -85,18 +85,19 @@ export function LiveMatchupStrip({
     <section className="af-live-matchup" aria-label="Your matchup" data-state="scored" data-lead={lead}>
       <div className="af-live-matchup-row">
         <span className="af-live-matchup-team">{strip.you.name}</span>
-        <span className="af-live-matchup-score af-num">{strip.you.points.toFixed(1)}</span>
+        {/* `data-side`, not position: the CSS used `:nth-of-type`, which counts every span in the row. */}
+        <span className="af-live-matchup-score af-num" data-side="you">{strip.you.points.toFixed(1)}</span>
         <span className="af-live-matchup-vs" aria-hidden>
           –
         </span>
-        <span className="af-live-matchup-score af-num">{strip.opponent.points.toFixed(1)}</span>
+        <span className="af-live-matchup-score af-num" data-side="them">{strip.opponent.points.toFixed(1)}</span>
         <span className="af-live-matchup-team">{strip.opponent.name}</span>
       </div>
       <p className="af-live-matchup-meta">
         {strip.isFinal ? 'Final' : lead === 'tied' ? 'Tied' : `You ${lead} by ${Math.abs(strip.margin).toFixed(1)}`}
         {strip.pWin != null && !strip.isFinal ? ` · ${Math.round(strip.pWin * 100)}% to win` : ''}
         {strip.remaining && !strip.isFinal
-          ? ` · ${strip.remaining.live} playing, ${strip.remaining.upcoming} yet to start`
+          ? ` · You: ${describeRemaining(strip.remaining.you)} · ${strip.opponent.name}: ${describeRemaining(strip.remaining.opponent)}`
           : ''}
         {' · '}
         <Link href={href}>Open matchup</Link>

@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { Trophy, Medal, Crown, Users, CalendarDays } from "lucide-react"
+import { RetryNotice } from "./RetryNotice"
 
 /**
  * Legacy (rank / XP / career / achievements) — READ-ONLY.
@@ -52,24 +53,53 @@ const num = (v: unknown): number | null =>
 export function LegacyRankSettingsSection() {
   const [rank, setRank] = useState<RankData | null>(null)
   const [achievements, setAchievements] = useState<Achievement[] | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [rankLoading, setRankLoading] = useState(true)
+  const [achievementsLoading, setAchievementsLoading] = useState(true)
+  /* A failed fetch is not "no rank yet" — say which one it is, and offer the retry right there. */
+  const [rankFailed, setRankFailed] = useState(false)
+  const [achievementsFailed, setAchievementsFailed] = useState(false)
 
+  // Set true on mount (not only at init) so a StrictMode remount does not leave it false.
+  const mounted = useRef(true)
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const [rankRes, achRes] = await Promise.all([
-        fetch("/api/user/rank", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-        fetch("/api/achievements", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      ])
-      if (cancelled) return
-      if (rankRes && typeof rankRes === "object") setRank(rankRes as RankData)
-      if (achRes && Array.isArray(achRes.achievements)) setAchievements(achRes.achievements as Achievement[])
-      setLoading(false)
-    })()
+    mounted.current = true
     return () => {
-      cancelled = true
+      mounted.current = false
     }
   }, [])
+
+  /*
+   * One loader per card, so "Try again" on the rank card does not refetch achievements (or blank
+   * a list that loaded fine). Each was a one-shot effect whose only recovery was a page reload.
+   */
+  const loadRank = useCallback(async () => {
+    setRankLoading(true)
+    setRankFailed(false)
+    const res = await fetch("/api/user/rank", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+    if (!mounted.current) return
+    if (res && typeof res === "object") setRank(res as RankData)
+    else setRankFailed(true)
+    setRankLoading(false)
+  }, [])
+
+  const loadAchievements = useCallback(async () => {
+    setAchievementsLoading(true)
+    setAchievementsFailed(false)
+    const res = await fetch("/api/achievements", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+    if (!mounted.current) return
+    if (res && Array.isArray(res.achievements)) setAchievements(res.achievements as Achievement[])
+    else setAchievementsFailed(true)
+    setAchievementsLoading(false)
+  }, [])
+
+  useEffect(() => {
+    void loadRank()
+    void loadAchievements()
+  }, [loadRank, loadAchievements])
 
   const level = num(rank?.level) ?? num(rank ? (rank as Record<string, unknown>).xpLevel : null)
   const pct = Math.max(0, Math.min(100, num(rank?.progressPct) ?? 0))
@@ -97,8 +127,14 @@ export function LegacyRankSettingsSection() {
 
       {/* Rank card */}
       <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
-        {loading ? (
+        {rankLoading ? (
           <p className="text-sm" style={{ color: "var(--muted)" }}>Loading your rank…</p>
+        ) : rankFailed ? (
+          <RetryNotice
+            message="Couldn't load your rank right now."
+            onRetry={() => void loadRank()}
+            testId="legacy-rank-retry"
+          />
         ) : level == null && xpTotal == null ? (
           <div className="text-sm" style={{ color: "var(--muted)" }}>
             {rank?.rankProcessing
@@ -110,7 +146,9 @@ export function LegacyRankSettingsSection() {
             <div
               className="grid h-24 w-24 shrink-0 place-items-center rounded-full"
               style={{ background: `conic-gradient(var(--accent-cyan) ${pct}%, var(--border) ${pct}% 100%)` }}
-              aria-hidden="true"
+              /* Was aria-hidden — on the element that holds the level number, so it was never read out. */
+              role="img"
+              aria-label={level != null ? `Level ${level}` : "Level not set yet"}
             >
               <div
                 className="flex h-[76px] w-[76px] flex-col items-center justify-center rounded-full"
@@ -140,7 +178,15 @@ export function LegacyRankSettingsSection() {
                     : ""}
                 {rank?.nextLevelName ? ` · next: ${rank.nextLevelName}` : ""}
               </div>
-              <div className="mt-2 h-1.5 max-w-sm overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+              <div
+                className="mt-2 h-1.5 max-w-sm overflow-hidden rounded-full"
+                style={{ background: "var(--border)" }}
+                role="progressbar"
+                aria-label="Progress to the next level"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(pct)}
+              >
                 <div className="h-full rounded-full" style={{ width: `${pct}%`, background: "var(--accent-cyan)" }} />
               </div>
             </div>
@@ -168,12 +214,18 @@ export function LegacyRankSettingsSection() {
       <div className="rounded-xl border p-5" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
         <div className="mb-4 flex items-center justify-between">
           <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--muted2)" }}>Achievements</p>
-          <Link href="/af-legacy" className="text-xs font-medium" style={{ color: "var(--accent-cyan-strong)" }}>
+          <Link href="/af-legacy" className="-mr-2 inline-flex min-h-[44px] items-center px-2 text-xs font-medium" style={{ color: "var(--accent-cyan-strong)" }}>
             View all
           </Link>
         </div>
-        {loading ? (
+        {achievementsLoading ? (
           <p className="text-sm" style={{ color: "var(--muted)" }}>Loading…</p>
+        ) : achievementsFailed ? (
+          <RetryNotice
+            message="Couldn't load your achievements right now."
+            onRetry={() => void loadAchievements()}
+            testId="legacy-achievements-retry"
+          />
         ) : !achievements || achievements.length === 0 ? (
           <p className="text-sm" style={{ color: "var(--muted)" }}>No achievements available yet.</p>
         ) : (
@@ -197,6 +249,12 @@ export function LegacyRankSettingsSection() {
                     <div className="text-[11px]" style={{ color: "var(--muted)" }}>
                       {earned ? "Unlocked" : "Locked"}
                     </div>
+                    {/* The description lived only in `title` — invisible on touch and unreliable for screen readers. */}
+                    {a.description ? (
+                      <div className="mt-0.5 line-clamp-2 text-[11px]" style={{ color: "var(--muted)" }}>
+                        {a.description}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )
@@ -219,3 +277,4 @@ function winLoss(rank: RankData | null): string {
   if (w == null && l == null) return "—"
   return `${w ?? 0}-${l ?? 0}`
 }
+

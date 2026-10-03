@@ -1,5 +1,5 @@
 import type { TradeRecord } from './trades'
-import { mirrorTradeGrade, type TradeGradeLine, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { mirrorTradeGrade, type TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
 
 /** One asset on a timeline row, as the Trade Center renders it. */
@@ -51,7 +51,8 @@ export function importedTradeTimelineRows(trades: readonly TradeRecord[]) {
       partnerName: `${first.manager ?? 'Side A'} ↔ ${second.manager ?? 'Side B'}`,
       sideAName: first.manager ?? 'Side A', sideBName: second.manager ?? 'Side B',
       sideAYou: first.isYou, sideBYou: second.isYou,
-      sideALabel: `${first.manager ?? 'Side A'} sent`, sideBLabel: `${second.manager ?? 'Side B'} sent`,
+      // Each column is named for the team that RECEIVED it — the card lists side A's `received` first.
+      sideALabel: `${first.manager ?? 'Side A'} received`, sideBLabel: `${second.manager ?? 'Side B'} received`,
       sent: assets(second), received: assets(first),
       timestamp: Number.isFinite(date.getTime()) ? date.toISOString() : '',
       leagueGrade,
@@ -66,7 +67,11 @@ export function importedTradeTimelineRows(trades: readonly TradeRecord[]) {
   })
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+/*
+ * The value-to-asset matcher lives with the grade (`gradeLineValues.ts`) so the email and the boards
+ * use the same one; re-exported here for the surfaces that already import it from this module.
+ */
+export { assetValues, pickKey } from '@/lib/decision-os/trade/gradeLineValues'
 
 /** A live completed feed has unresolved picks. Preserve its metadata, but use
  * the graded ledger's resolved assets and values when both describe the same deal. */
@@ -92,34 +97,6 @@ export function mergeImportedTradeTimelineRows<T extends { id: string }>(
   return [...rows.values()]
 }
 
-/**
- * The league value the grade priced each asset at, in the assets' own order.
- *
- * Matched by NAME first (a used pick by the player drafted with it), then — only when what is left
- * on the side pairs up one-for-one — by position, which is the order the grader priced them in. An
- * asset nothing matches reads null and renders no number: a guessed value beside a real letter is
- * the thing the grade exists to refuse.
- */
-export function assetValues(
-  assets: ReadonlyArray<TimelineAsset>,
-  lines: ReadonlyArray<TradeGradeLine>,
-  side: 'give' | 'get',
-): Array<number | null> {
-  const pool = lines.filter(l => l.side === side).map(l => ({ line: l, used: false }))
-  const out: Array<number | null> = assets.map(a => {
-    const want = norm(a.gradedAs ?? a.label)
-    const hit = pool.find(p => !p.used && norm(p.line.name) === want)
-    if (!hit) return null
-    hit.used = true
-    return hit.line.leagueValue
-  })
-  const openAssets = out.map((v, i) => (v == null ? i : -1)).filter(i => i >= 0)
-  const openLines = pool.filter(p => !p.used)
-  if (openAssets.length > 0 && openAssets.length === openLines.length) {
-    openAssets.forEach((idx, k) => { out[idx] = openLines[k]!.line.leagueValue })
-  }
-  return out
-}
 
 /**
  * Why the deal graded that way, from the side that SENT `give` — THE grade's own sentences, so no

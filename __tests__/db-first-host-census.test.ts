@@ -174,6 +174,14 @@ const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
    * outside scripts/, that is a finding regardless of what this ledger says.
    */
   { name: 'platform-infra', why: 'Neon control plane — database branch lifecycle, not a data feed', test: /^console\.neon\.tech$/i },
+  /*
+   * The same kind of host for Railway: backboard.railway.com is Railway's GraphQL control plane.
+   * scripts/cron-build-reaper.mjs lists a service's deployments and cancels the ones a newer
+   * commit has superseded. It asks "which builds are running", never reads application data, so
+   * there is nothing in Postgres it could have read instead. Like Neon above it can stop
+   * production work (a cancelled build), so it belongs in scripts/ and nowhere else.
+   */
+  { name: 'platform-infra', why: 'Railway control plane — deployment lifecycle, not a data feed', test: /^backboard\.railway\.com$/i },
   // klipy.com and giphy.com are the attribution links under the picker — Klipy's terms ask for one.
   { name: 'gif-picker', why: 'user-facing media search, not a sports data feed', test: /^(giphy\.com|api\.giphy\.com|tenor\.googleapis\.com|klipy\.com|api\.klipy\.(com|ai))$/i },
   { name: 'chat-integration', why: 'Discord OAuth, bot API and deep links — a chat platform, not a data feed', test: /^discord\.com$/i },

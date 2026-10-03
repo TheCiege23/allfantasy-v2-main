@@ -230,13 +230,30 @@ describe("applyPlayoffSeedsToChallenge", () => {
     expect(db.$transaction).toHaveBeenCalledTimes(1)
     expect(result.picksMigrated).toBe(6)
     expect(db.playoffBracketPick.updateMany).toHaveBeenCalledWith({
-      where: { seriesId: "s1", pickTeamName: "AL1" },
+      where: { seriesId: { in: ["s1"] }, pickTeamName: "AL1" },
       data: { pickTeamName: "Tampa Bay Rays" },
     })
-    // Scoped to the series, never the whole challenge: the same placeholder
-    // string legitimately appears in more than one series.
+  })
+
+  /*
+   * A pick CARRIES FORWARD: picking AL4 in the Wild Card puts "AL4" into the
+   * Division Series, and a pick there reads "AL4" too. Renaming only inside the
+   * slot's own series stranded that pick — unscoreable, nothing red. Scoped to
+   * every series of THIS challenge (never another pool's), which is safe because
+   * a seed placeholder sits in exactly one series per template.
+   */
+  it("renames carried-forward picks in later rounds of the same challenge", async () => {
+    db.playoffBracketSeries.findMany.mockResolvedValue([
+      series(),
+      series({ id: "s5", round: "al_ds", roundIndex: 2, seriesNumber: 5, homeTeamName: "AL1", awayTeamName: "Winner S1" }),
+    ])
+    db.playoffBracketPick.updateMany.mockResolvedValue({ count: 1 })
+    const { applyPlayoffSeedsToChallenge } = await import("@/lib/playoffs/playoffSeeding")
+
+    await applyPlayoffSeedsToChallenge({ challengeId: "c1" })
+
     for (const call of db.playoffBracketPick.updateMany.mock.calls) {
-      expect(call[0].where).toHaveProperty("seriesId")
+      expect(call[0].where.seriesId).toEqual({ in: ["s1", "s5"] })
     }
   })
 

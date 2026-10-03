@@ -36,7 +36,7 @@ export type RankColumn = {
   /** Present when the column can be sorted; the link to the page sorted by it. */
   sortHref?: string
   sort?: 'ascending' | 'descending' | 'none'
-  /** Hidden below 720px; the value stays in the row's detail link. */
+  /** Hidden below 720px; the value moves into the row's "More" toggle (`PhoneMore`). */
   hideOnPhone?: boolean
 }
 
@@ -65,6 +65,7 @@ export function RankTable({
   rowHeaderIndex = 1,
   emptyText,
   virtualizeAt = VIRTUALIZE_AT,
+  phoneSort = true,
 }: {
   caption: string
   columns: RankColumn[]
@@ -73,14 +74,21 @@ export function RankTable({
   rowHeaderIndex?: number
   emptyText: string
   virtualizeAt?: number
+  /**
+   * Render the phone sort chips above the table. A screen that folds its board controls
+   * (PhoneFold) passes false and renders <PhoneSort> inside the fold, so the chips appear once.
+   */
+  phoneSort?: boolean
 }) {
   if (rows.length === 0) return <p className="af-rk-empty">{emptyText}</p>
   const virtual = rows.length > virtualizeAt
   return virtual ? (
-    <VirtualTable caption={caption} columns={columns} rows={rows} rowHeaderIndex={rowHeaderIndex} />
+    <VirtualTable caption={caption} columns={columns} rows={rows} rowHeaderIndex={rowHeaderIndex} phoneSort={phoneSort} />
   ) : (
+    <>
+    {phoneSort ? <PhoneSort columns={columns} /> : null}
     <div className="af-rk-tablewrap" role="region" aria-label={caption} tabIndex={0}>
-      <table className="af-rk-grid-table" aria-rowcount={rows.length + 1}>
+      <table className="af-rk-grid-table af-rk-cards" aria-rowcount={rows.length + 1}>
         <Caption caption={caption} count={rows.length} />
         <Head columns={columns} />
         <tbody>
@@ -90,6 +98,7 @@ export function RankTable({
         </tbody>
       </table>
     </div>
+    </>
   )
 }
 
@@ -98,11 +107,13 @@ function VirtualTable({
   columns,
   rows,
   rowHeaderIndex,
+  phoneSort,
 }: {
   caption: string
   columns: RankColumn[]
   rows: RankRow[]
   rowHeaderIndex: number
+  phoneSort: boolean
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const virtualizer = useVirtualizer({
@@ -120,6 +131,7 @@ function VirtualTable({
 
   return (
     <>
+      {phoneSort ? <PhoneSort columns={columns} /> : null}
       <div
         ref={scrollRef}
         className="af-rk-tablewrap af-rk-tablewrap--virtual"
@@ -128,7 +140,7 @@ function VirtualTable({
         tabIndex={0}
         style={{ maxHeight: VIEW_HEIGHT }}
       >
-        <table className="af-rk-grid-table" aria-rowcount={rows.length + 1}>
+        <table className="af-rk-grid-table af-rk-cards" aria-rowcount={rows.length + 1}>
           <Caption caption={caption} count={rows.length} />
           <Head columns={columns} sticky />
           <tbody>
@@ -162,6 +174,35 @@ function VirtualTable({
         </p>
       </noscript>
     </>
+  )
+}
+
+/**
+ * Phone only (≤720px, CSS). A row becomes a card there and the header row is
+ * hidden, so the sortable columns are offered as a row of chips instead — the
+ * same links the header carries, nothing new to keep in step.
+ */
+export function PhoneSort({ columns }: { columns: RankColumn[] }) {
+  const sortable = columns.filter((c) => c.sortHref)
+  if (sortable.length === 0) return null
+  return (
+    <nav className="af-rk-phonesort" aria-label="Sort">
+      <span className="af-rk-phonesort-label" aria-hidden="true">
+        Sort
+      </span>
+      {sortable.map((c) => (
+        <Link
+          key={c.key}
+          href={c.sortHref!}
+          scroll={false}
+          className="af-rk-tab"
+          aria-current={c.sort && c.sort !== 'none' ? 'true' : undefined}
+        >
+          {c.label === '#' ? 'Rank' : c.label}
+          {c.sort === 'ascending' ? ' ▲' : c.sort === 'descending' ? ' ▼' : ''}
+        </Link>
+      ))}
+    </nav>
   )
 }
 
@@ -236,10 +277,22 @@ function Row({
       data-index={index}
       aria-rowindex={index + 2}
       className={row.highlight ? 'af-rk-row-you' : undefined}
+      data-phonemore={hiddenOnPhone(columns) >= PHONE_MORE_MIN ? '' : undefined}
       style={height ? { height } : undefined}
     >
       {row.cells.map((cell, ci) => {
         const col = columns[ci]
+        /*
+         * The phone card's slot for this cell (CSS reads it at ≤720px): the first cell leads, the
+         * row header is the title, the first other always-visible cell is the headline value, and
+         * the other always-visible cells become labelled chips. Columns a desktop table hides on
+         * phones go behind the row's "More" toggle (`PhoneMore`), so a phone still reaches every
+         * number without every card carrying all of them.
+         */
+        const firstValue = columns.findIndex((c, i) => i !== 0 && i !== rowHeaderIndex && !c.hideOnPhone)
+        const card = ci === 0 ? 'lead' : ci === rowHeaderIndex ? 'title' : ci === firstValue ? 'value' : 'detail'
+        // A chip whose text already says what it is ("Why") needs no label in front of it.
+        const label = col?.label === '#' ? 'Rank' : col?.label === cell.text ? '' : col?.label
         const cls =
           [col?.align ? `af-rk-${col.align}` : '', col?.hideOnPhone ? 'af-rk-hide-phone' : '', cell.tone ? `af-rk-tone-${cell.tone}` : '']
             .join(' ')
@@ -257,16 +310,67 @@ function Row({
           </>
         )
         return ci === rowHeaderIndex ? (
-          <th key={col?.key ?? ci} scope="row" className={cls} title={cell.title}>
+          <th key={col?.key ?? ci} scope="row" className={cls} title={cell.title} data-card={card} data-label={label}>
             {body}
           </th>
         ) : (
-          <td key={col?.key ?? ci} className={cls} title={cell.title}>
+          <td key={col?.key ?? ci} className={cls} title={cell.title} data-card={card} data-label={label}>
             {body}
           </td>
         )
       })}
+      <PhoneMore row={row} columns={columns} />
     </tr>
+  )
+}
+
+/**
+ * Phone only (≤720px, CSS). The columns a desktop table hides on phones used to become chips on
+ * every card, which made a row ~160px tall at 375px — four rows to a screen. They now sit behind a
+ * per-row "More" toggle instead, so a phone still reaches every number with one tap.
+ *
+ * ⚠ AN EXTRA CELL WITH NO HEADER. Above 720px it is `display: none`, which removes it from the
+ * accessibility tree too, so a desktop reader never meets a cell its column headers do not name.
+ * At ≤720px the original cells are the hidden ones, so each value is announced exactly once.
+ */
+const PHONE_MORE_MIN = 2
+
+function hiddenOnPhone(columns: RankColumn[]): number {
+  return columns.filter((c) => c.hideOnPhone).length
+}
+
+function PhoneMore({ row, columns }: { row: RankRow; columns: RankColumn[] }) {
+  /*
+   * ⚠ ONE HIDDEN COLUMN STAYS A CHIP. Measured at 375px: a toggle for a single value made the
+   * league table's rows taller (65px → 80px), not shorter. The row's `data-phonemore` is what
+   * tells the CSS to hide the originals, so below the threshold nothing changes at all.
+   */
+  if (hiddenOnPhone(columns) < PHONE_MORE_MIN) return null
+  const hidden = columns.flatMap((c, i) => (c.hideOnPhone && row.cells[i] ? [{ col: c, cell: row.cells[i] }] : []))
+  if (hidden.length === 0) return null
+  return (
+    <td className="af-rk-phonemore" data-card="more">
+      <details>
+        <summary>More</summary>
+        <dl className="af-rk-phonemore-list">
+          {hidden.map(({ col, cell }) => (
+            <div key={col.key}>
+              <dt>{col.srLabel ?? col.label}</dt>
+              <dd className={cell.tone ? `af-rk-tone-${cell.tone}` : undefined}>
+                {cell.href ? (
+                  <Link href={cell.href} scroll={false} className="af-rk-celllink">
+                    {cell.text}
+                  </Link>
+                ) : (
+                  cell.text
+                )}
+                {cell.sub ? <span className="af-rk-cellsub">{cell.sub}</span> : null}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </details>
+    </td>
   )
 }
 

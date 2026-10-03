@@ -92,6 +92,16 @@ export type GameDayTriage = {
   unsupportedLeagues?: number
   /** When the OLDEST lineup read was last synced (Roster.updatedAt), ISO — the list is only as current as that. */
   rostersAsOf?: string | null
+  /**
+   * Leagues whose starting lineup has an unfilled slot ('0' in `starters`), with how many.
+   * Optional so older callers and fixtures need not carry it; absent reads as none found.
+   */
+  emptySlots?: Array<TriageLeague & { count: number }>
+  /**
+   * When each league's lineup READ was last synced, one entry per league read. Lets a screen name the
+   * leagues behind an old `rostersAsOf` instead of letting one stale league date the whole list.
+   */
+  rosterAges?: Array<{ leagueId: string; leagueName: string; asOf: string }>
 }
 
 const SEVERITY: Record<MoveTone, number> = { bad: 0, warn: 1, good: 2 }
@@ -189,18 +199,25 @@ export function triageRows(args: {
     })
   }
 
-  /*
-   * Soonest lock first: a game still ahead sorts by minutes to kickoff; a
-   * player with no game this week can be fixed any time before his leagues
-   * lock, so he follows; a player whose game has already started cannot be
-   * changed and goes last. Severity breaks ties, then the name.
-   */
+  return [...byPlayer.values()].sort(compareTriageRows(nowIso))
+}
+
+/**
+ * Soonest lock first: a game still ahead sorts by minutes to kickoff; a
+ * player with no game this week can be fixed any time before his leagues
+ * lock, so he follows; a player whose game has already started cannot be
+ * changed and goes last. Severity breaks ties, then the name.
+ *
+ * Exported so the loader can merge one sport's rows with another's under the
+ * same order, rather than concatenating two lists each sorted on its own.
+ */
+export function compareTriageRows(nowIso: string): (a: TriageRow, b: TriageRow) => number {
   const bucket = (r: TriageRow): number => {
     if (!r.kickoff) return 1
     return lockState(r.kickoff, nowIso).state === 'locked' ? 2 : 0
   }
   const minutes = (r: TriageRow): number => (r.kickoff ? lockState(r.kickoff, nowIso).minutes : Number.MAX_SAFE_INTEGER)
-  return [...byPlayer.values()].sort((a, b) => {
+  return (a, b) => {
     const ba = bucket(a)
     const bb = bucket(b)
     if (ba !== bb) return ba - bb
@@ -209,5 +226,5 @@ export function triageRows(args: {
     const sb = b.status ? SEVERITY[b.status.tone] : 3
     if (sa !== sb) return sa - sb
     return a.player.name.localeCompare(b.player.name)
-  })
+  }
 }

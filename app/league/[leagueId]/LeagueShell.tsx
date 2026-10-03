@@ -2148,7 +2148,11 @@ function LeagueTabRouter({
             idpLeagueUi={idpLeagueActive}
             idpViewMode={idpViewMode}
             idpPositionMode={idpPositionMode}
-            onUserSettingsClick={() => router.push('/settings')}
+            // returnTo brings Settings' Back button home to this league tab instead of /core (a click
+            // handler, so window is defined).
+            onUserSettingsClick={() =>
+              router.push(`/settings?returnTo=${encodeURIComponent(window.location.pathname + window.location.search || `/league/${leagueId}`)}`)
+            }
           />
         </div>
       )

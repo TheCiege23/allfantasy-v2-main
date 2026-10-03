@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
@@ -20,6 +20,10 @@ import { EspnCookieConnection } from "@/components/settings/EspnCookieConnection
 import { MflApiKeyConnection } from "@/components/settings/MflApiKeyConnection"
 import { ConnectedPlatforms } from "@/components/core-app/import/ConnectedPlatforms"
 import type { SettingsProfile } from "./settings-types"
+import { useConfirm } from "./ConfirmDialog"
+
+/** Window-focus refreshes of providers + profile are at most this frequent. */
+const FOCUS_REFRESH_MIN_MS = 30_000
 
 /*
  * ⚠ THE HARDCODED PLATFORM LIST IS GONE, NOT MOVED. It named five platforms as
@@ -53,6 +57,8 @@ export function ConnectedAccountsSettingsSection({
   const [refreshing, setRefreshing] = useState(false)
   const [busyProviderId, setBusyProviderId] = useState<SignInProviderId | null>(null)
   const [linkingProvider, setLinkingProvider] = useState<"discord" | "spotify" | null>(null)
+  const [disconnecting, setDisconnecting] = useState<"sleeper" | "discord" | "spotify" | null>(null)
+  const [askConfirm, confirmDialog] = useConfirm()
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [statusTone, setStatusTone] = useState<"info" | "error" | "success" | null>(null)
 
@@ -135,8 +141,19 @@ export function ConnectedAccountsSettingsSection({
     }
   }, [searchParams])
 
+  /*
+   * Refresh when the user comes back to the tab (e.g. from an OAuth window), but at most once per
+   * 30s and only when the page is actually visible. Unthrottled, every app switch on a phone
+   * refetched the whole profile — and each refetch was another chance for a dropped request to
+   * blank the page (useSettingsProfile now keeps the last good profile either way).
+   */
+  const lastFocusRefresh = useRef(0)
   useEffect(() => {
     const onFocus = () => {
+      if (document.visibilityState === "hidden") return
+      const now = Date.now()
+      if (now - lastFocusRefresh.current < FOCUS_REFRESH_MIN_MS) return
+      lastFocusRefresh.current = now
       void loadProviders(true)
     }
     if (typeof window !== "undefined") {
@@ -155,6 +172,14 @@ export function ConnectedAccountsSettingsSection({
     setStatusMessage(null)
     setStatusTone(null)
     setBusyProviderId(providerId)
+    /*
+     * ⚠ `settings.connected.connectError` did not EXIST until 2026-10-02, and t() returns the KEY for
+     * a missing string — so the old `t(...) || fallback` put the raw key on screen and its fallback
+     * was dead code. The string now exists in en and es, and names the provider by its label
+     * ("Google"), not its id ("google").
+     */
+    const connectError = () =>
+      tInterpolate("settings.connected.connectError", { provider: signInProviderLabel(providerId, t) })
     // signIn() for OAuth providers does a full-page redirect — the .finally() fires
     // only if the redirect does NOT happen (e.g. the provider is missing on the server).
     void signIn(providerId, { callbackUrl: "/settings?tab=connected" })
@@ -163,46 +188,84 @@ export function ConnectedAccountsSettingsSection({
         // does a hard redirect so we never reach this branch on success.
         if (result?.error) {
           setStatusTone("error")
-          setStatusMessage(
-            t("settings.connected.connectError") ||
-              `Could not connect ${providerId}. Please try again.`
-          )
+          setStatusMessage(connectError())
         }
       })
       .catch(() => {
         setStatusTone("error")
-        setStatusMessage(`Could not connect ${providerId}. Please try again.`)
+        setStatusMessage(connectError())
       })
       .finally(() => {
         setBusyProviderId(null)
       })
   }
 
-  const handleDisconnectSleeper = async () => {
-    if (typeof window !== "undefined" && !window.confirm(t("settings.connected.confirmDisconnectSleeper"))) return
-    const res = await fetch("/api/user/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ disconnectSleeper: true }),
-    })
-    if (res.ok) {
-      onRefetchProfile()
-      await loadProviders(true)
-    }
-  }
-
-  const handleDisconnectDiscord = async () => {
-    const res = await fetch("/api/auth/discord/disconnect", { method: "POST" })
-    if (res.ok) {
+  /*
+   * One path for every disconnect: an in-app confirmation saying what disconnecting does
+   * (ConfirmDialog — not window.confirm, which some webviews suppress), a busy state so a second
+   * tap cannot fire a second request, and a message on BOTH outcomes. Sleeper used to fail
+   * silently, and Discord and Spotify went in a single tap.
+   */
+  const runDisconnect = async (
+    which: "sleeper" | "discord" | "spotify",
+    confirm: { title: string; body?: string },
+    request: () => Promise<Response>,
+    label: string,
+  ) => {
+    if (disconnecting) return
+    if (!(await askConfirm({ ...confirm, confirmLabel: `Disconnect ${label}` }))) return
+    setDisconnecting(which)
+    setStatusMessage(null)
+    setStatusTone(null)
+    try {
+      const res = await request()
+      if (!res.ok) throw new Error(String(res.status))
       onRefetchProfile()
       await loadProviders(true)
       setStatusTone("success")
-      setStatusMessage("Discord disconnected.")
-    } else {
+      setStatusMessage(`${label} disconnected.`)
+    } catch {
       setStatusTone("error")
-      setStatusMessage("Discord could not be disconnected. Please try again.")
+      setStatusMessage(`${label} could not be disconnected. Please try again.`)
+    } finally {
+      setDisconnecting(null)
     }
   }
+
+  const handleDisconnectSleeper = () =>
+    runDisconnect(
+      "sleeper",
+      {
+        title: t("settings.connected.confirmDisconnectSleeper"),
+        body: "Imports and league sync stop finding your Sleeper teams until you link it again. Your imported leagues stay.",
+      },
+      () =>
+        fetch("/api/user/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ disconnectSleeper: true }),
+        }),
+      "Sleeper",
+    )
+
+  const handleDisconnectDiscord = () =>
+    runDisconnect(
+      "discord",
+      {
+        title: "Disconnect Discord?",
+        body: "This also unlinks the AllFantasy bot from your Discord server. You can reconnect any time.",
+      },
+      () => fetch("/api/auth/discord/disconnect", { method: "POST" }),
+      "Discord",
+    )
+
+  const handleDisconnectSpotify = () =>
+    runDisconnect(
+      "spotify",
+      { title: "Disconnect Spotify?", body: "You can reconnect any time." },
+      () => fetch("/api/auth/spotify/disconnect", { method: "POST" }),
+      "Spotify",
+    )
 
   const handleLinkIdentity = async (provider: "discord" | "spotify") => {
     setStatusMessage(null)
@@ -230,14 +293,12 @@ export function ConnectedAccountsSettingsSection({
       )
       return
     }
-    if (typeof window !== "undefined") {
-      const shouldDisconnect = window.confirm(
-        tInterpolate("settings.connected.confirmDisconnectProvider", {
-          provider: provider.name,
-        }),
-      )
-      if (!shouldDisconnect) return
-    }
+    const shouldDisconnect = await askConfirm({
+      title: tInterpolate("settings.connected.confirmDisconnectProvider", { provider: provider.name }),
+      body: `You will no longer be able to sign in with ${provider.name}. Your other sign-in methods keep working.`,
+      confirmLabel: `Disconnect ${provider.name}`,
+    })
+    if (!shouldDisconnect) return
     setBusyProviderId(provider.id)
     setStatusMessage(null)
     setStatusTone(null)
@@ -271,6 +332,8 @@ export function ConnectedAccountsSettingsSection({
       </div>
       {statusMessage && (
         <div
+          /* Announced: connect/disconnect results were silent to a screen reader. */
+          role={statusTone === "error" ? "alert" : "status"}
           className="rounded-xl border px-3 py-2 text-sm"
           style={{
             borderColor: statusTone === "error" ? "var(--accent-red)" : "var(--accent-cyan)",
@@ -314,7 +377,13 @@ export function ConnectedAccountsSettingsSection({
           <p className="text-sm" style={{ color: "var(--muted)" }}>{t("settings.connected.loading")}</p>
         ) : (
           <ul className="space-y-3">
-            {providers.map((provider) => (
+            {/*
+              A provider this deployment has no OAuth credentials for cannot be linked — its Connect
+              button only ever printed a "not available" note. Measured live 2026-10-02: Apple,
+              Facebook, Instagram, X and TikTok all rendered an enabled Connect beside "Not configured".
+              Unlinked + unconfigured rows are dropped; a LINKED one stays so it can still be managed.
+            */}
+            {providers.filter((provider) => provider.configured || provider.linked).map((provider) => (
               <li key={provider.id} className="flex flex-wrap items-center justify-between gap-2">
                 <ConnectedIdentityRenderer provider={provider} size="md" />
                 {!provider.linked ? (
@@ -387,10 +456,11 @@ export function ConnectedAccountsSettingsSection({
               type="button"
               data-testid="settings-disconnect-discord"
               onClick={() => void handleDisconnectDiscord()}
+              disabled={disconnecting === "discord"}
               className="rounded-lg border px-3 py-2 text-xs font-medium"
               style={{ borderColor: "var(--accent-red)", color: "var(--accent-red-strong)" }}
             >
-              {t("settings.connected.disconnect")}
+              {disconnecting === "discord" ? "Disconnecting…" : t("settings.connected.disconnect")}
             </button>
           </div>
         )}
@@ -437,22 +507,12 @@ export function ConnectedAccountsSettingsSection({
             </div>
             <button
               type="button"
-              onClick={async () => {
-                const res = await fetch("/api/auth/spotify/disconnect", { method: "POST" })
-                if (res.ok) {
-                  onRefetchProfile()
-                  await loadProviders(true)
-                  setStatusTone("success")
-                  setStatusMessage("Spotify disconnected.")
-                } else {
-                  setStatusTone("error")
-                  setStatusMessage("Spotify could not be disconnected. Please try again.")
-                }
-              }}
+              onClick={() => void handleDisconnectSpotify()}
+              disabled={disconnecting === "spotify"}
               className="rounded-lg border px-3 py-2 text-xs font-medium"
               style={{ borderColor: "var(--accent-red)", color: "var(--accent-red-strong)" }}
             >
-              Disconnect
+              {disconnecting === "spotify" ? "Disconnecting…" : "Disconnect"}
             </button>
           </div>
         )}
@@ -484,6 +544,7 @@ export function ConnectedAccountsSettingsSection({
           <ConnectedPlatforms
             sleeperUsername={profile?.sleeperUsername ?? null}
             onDisconnectSleeper={() => void handleDisconnectSleeper()}
+            sleeperBusy={disconnecting === "sleeper"}
           />
           <div className="mt-4 space-y-4">
             <EspnCookieConnection />
@@ -507,6 +568,7 @@ export function ConnectedAccountsSettingsSection({
           </Link>
         </div>
       </div>
+      {confirmDialog}
     </div>
   )
 }

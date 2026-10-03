@@ -4,6 +4,8 @@ import '@/components/core-app/af-commish-hub.css'
 import '@/components/core-app/af-format-hubs.css'
 import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
 import { CommissionerOsLink } from '@/components/core-app/hubs/CommissionerOsLink'
+import { CommissionerOsActionsSummary } from '@/components/league-hub/CommissionerOsActionsSummary'
+import { CommissionerChimmy } from '@/components/core-app/commissioner/CommissionerChimmy'
 import { PublishStandingsToggle } from '@/components/core-app/PublishStandingsToggle'
 import { WaiverOversight } from '@/components/core-app/WaiverOversight'
 import type { CommissionerHubResult, CommissionerTile } from '@/lib/core-app/commissionerHub'
@@ -30,6 +32,7 @@ import {
 import { GuidedWorkflows } from '@/components/core-app/commissioner/GuidedWorkflows'
 import { AutomationRecipes } from '@/components/core-app/commissioner/AutomationRecipes'
 import { AnnounceButton } from '@/components/core-app/commissioner/AnnounceButton'
+import { FormatTemplateControl } from '@/components/core-app/commissioner/FormatTemplateControl'
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
@@ -218,6 +221,40 @@ export function CommissionerHub({ data, lineups = null }: CommissionerHubProps) 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} />
 
+      <HubSection id="ch-intelligence" title="Commissioner intelligence">
+        <CommissionerOsActionsSummary leagueId={league.id} sport={league.sport} />
+        <CommissionerChimmy leagueId={league.id} />
+      </HubSection>
+
+      <HubSection id="ch-format-ops" title="Format operations">
+        {data.network && <p className="af-ch-muted">Network: <Link href="/commissioner-os/networks">{data.network.name}</Link> · {data.network.role}</p>}
+        {data.formatCards.length ? (
+          <ul className="af-ch-areas">
+            {data.formatCards.map((card) => <li key={card.key}>
+              <strong>{card.title}</strong><p>{card.detail}</p><Link href={card.href}>{card.action} →</Link>
+            </li>)}
+          </ul>
+        ) : <p className="af-ch-muted">No specialty mechanics were resolved for this league. Review league settings before applying format-specific rules.</p>}
+        {/* The owner's statement of how the league is really run, which no platform publishes. */}
+        {data.formatTemplate ? <FormatTemplateControl leagueId={league.id} template={data.formatTemplate} /> : null}
+      </HubSection>
+
+      <HubSection id="ch-history" title="Trades and draft archive">
+        <h3>Latest trades</h3>
+        {data.history.trades.length ? <ul className="af-ch-areas">{data.history.trades.map((trade) => <li key={trade.id}>
+          <strong>{trade.label}</strong><p>{trade.status} · {trade.source} · {new Date(trade.at).toLocaleDateString()}</p>
+        </li>)}</ul> : <p className="af-ch-muted">{data.history.tradeAvailable ? 'No trade records on file.' : 'Trade history unavailable.'}</p>}
+        <p className="af-ch-muted">{data.history.tradeNote}</p>
+        <h3>Draft archive</h3>
+        {data.history.drafts.length ? data.history.drafts.map((draft) => <details key={`${draft.source}-${draft.id}`}>
+          <summary>{draft.season ?? 'Season unknown'}{draft.seasonBasis === 'date_inferred' ? ' (year inferred)' : ''} · {draft.source} · {draft.status} · {draft.picks.length} picks</summary>
+          <ol>{draft.picks.map((pick) => <li key={pick.overall}>
+            Round {pick.round}, pick {pick.overall}: {pick.owner} selected {pick.player}{pick.corrections.length > 0 && <ul>{pick.corrections.map((correction, index) => <li key={index}>Correction: {correction}</li>)}</ul>}
+          </li>)}</ol>
+        </details>) : <p className="af-ch-muted">{data.history.draftAvailable ? 'No draft sessions on file.' : 'Draft history unavailable.'}</p>}
+        <p className="af-ch-muted">{data.history.draftNote}</p>
+      </HubSection>
+
       {/* ── 2 · Cockpit (item 1) — the tiles are in the band above ─────── */}
       <div className="af-ch-split">
         <Suspense fallback={<RecentChangesFallback />}>
@@ -288,6 +325,7 @@ export function CommissionerHub({ data, lineups = null }: CommissionerHubProps) 
           <div className="af-ch-disputes">
             <span className="af-label">Disputes</span>
             <p>{disputes.reason}</p>
+            {league.native && <Link href={`/league/${encodeURIComponent(league.id)}/commissioner/integrity`}>Open integrity monitor →</Link>}
           </div>
         </HubSection>
 
@@ -300,13 +338,26 @@ export function CommissionerHub({ data, lineups = null }: CommissionerHubProps) 
           {access.length > 0 ? (
             <ul className="af-ch-access">
               {access.map((a) => (
-                <li key={`${a.role}-${a.handle}`}>
+                <li key={`${a.role}-${a.basis}-${a.handle}`}>
                   <span className="af-ch-access-mark af-num" aria-hidden>
                     {a.initials}
                   </span>
                   <span className="af-ch-access-name">
                     {a.handle}
                     {a.isYou ? <span className="af-ch-access-you"> · you</span> : null}
+                    {/*
+                      An imported league has two authorities, and the row says which one this is:
+                      AllFantasy's owner runs it here, the platform publishes its own commissioner.
+                    */}
+                    {league.native ? null : (
+                      <span className="af-ch-access-basis">
+                        {a.basis === 'platform'
+                          ? `On ${platformName}`
+                          : a.basis === 'both'
+                            ? `Here and on ${platformName}`
+                            : 'Here on AllFantasy'}
+                      </span>
+                    )}
                   </span>
                   <span className="af-ch-access-role af-label" data-role={a.role}>
                     {a.role === 'commissioner' ? 'Commissioner' : 'Co-commissioner'}
@@ -325,6 +376,12 @@ export function CommissionerHub({ data, lineups = null }: CommissionerHubProps) 
               </p>
             </div>
           )}
+          {!league.native && access.some((a) => a.basis === 'platform') && access.some((a) => a.basis === 'allfantasy') ? (
+            <p className="af-ch-access-note">
+              Whoever imported this league runs it here on AllFantasy. {platformName}&apos;s own commissioner is listed as{' '}
+              {platformName} publishes it — rulings are still applied there.
+            </p>
+          ) : null}
 
           {/*
             The boundary the handoff asks to be stated. Worth saying plainly to a
@@ -412,20 +469,14 @@ export function CommissionerHub({ data, lineups = null }: CommissionerHubProps) 
           {league.native
             ? 'This league runs on AllFantasy, so settings and rulings saved here are the league’s own.'
             : `AllFantasy reads this league. Settings and rulings are applied on ${platformName}.`}
-          {data.viewerIsOwner ? ' Health trends, manager intelligence and reports are in Commissioner OS.' : ''}
+          {' Health trends, manager intelligence and reports are in Commissioner OS.'}
         </p>
         <Link className="afh-link" href={data.chatHref}>
           Open league chat →
         </Link>
-        {/*
-          Commissioner OS admits the league owner only (`resolveActiveLeagueId`), so
-          a co-commissioner is not sent to a screen that would turn them away.
-        */}
-        {data.viewerIsOwner ? (
-          <CommissionerOsLink className="afh-link" href="/commissioner-os/league-health" leagueId={league.id}>
-            Health trends in Commissioner OS →
-          </CommissionerOsLink>
-        ) : null}
+        <CommissionerOsLink className="afh-link" href="/commissioner-os/league-health" leagueId={league.id}>
+          Health trends in Commissioner OS →
+        </CommissionerOsLink>
       </footer>
     </div>
   )

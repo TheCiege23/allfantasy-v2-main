@@ -71,3 +71,31 @@ export function buildCommissionerTemplatePinFragment(pin: CommissionerTemplatePi
     conceptRules: { extensions: { commissionerTemplate: { id: pin.id, version: pin.version } } },
   }
 }
+
+/**
+ * `settings` with the template pin set to `pin`, or removed when `pin` is null.
+ *
+ * The merge `buildCommissionerTemplatePinFragment` leaves to its caller: everything else in
+ * `settings`, `conceptRules` and `conceptRules.extensions` is kept exactly as it was. Returns a new
+ * object; the input is not mutated.
+ *
+ * ⚠ REMOVAL CLEARS BOTH SPELLINGS. The reader falls back to the flat `conceptRules.commissionerTemplate`
+ * when `extensions` holds none, so removing only the `extensions` copy would leave an older pin
+ * standing — the league would look unpinned to this writer and pinned to every reader.
+ */
+export function withCommissionerTemplatePin(settings: unknown, pin: CommissionerTemplatePin | null): Record<string, unknown> {
+  const next: Record<string, unknown> = { ...(asRecord(settings) ?? {}) }
+  const conceptRules: Record<string, unknown> = { ...(asRecord(next.conceptRules) ?? {}) }
+  const extensions: Record<string, unknown> = { ...(asRecord(conceptRules.extensions) ?? {}) }
+
+  delete conceptRules.commissionerTemplate
+  if (pin) {
+    extensions.commissionerTemplate = buildCommissionerTemplatePinFragment(pin).conceptRules.extensions.commissionerTemplate
+  } else {
+    delete extensions.commissionerTemplate
+  }
+
+  conceptRules.extensions = extensions
+  next.conceptRules = conceptRules
+  return next
+}

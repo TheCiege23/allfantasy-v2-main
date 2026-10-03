@@ -1,9 +1,7 @@
 'use client'
 
-import { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
-export { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
-
 import Link from 'next/link'
+import { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 import { availableImportPlatformsPhrase } from '@/lib/league-import/provider-ui-config'
 import { useRouter } from 'next/navigation'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
@@ -532,7 +530,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
             {/* ⚠ THREE PRODUCTS WERE ALL CALLED "Rankings" on /core: the rail's manager ladder
                 (/core/rankings), this career-rank page, and the tools tile's league power rankings
                 (/rankings). Each label now names which one it opens. Production audit 2026-09-28. */}
-            <Link className="af3a-navitem" href="/af-rankings">
+            <Link className="af3a-navitem" href="/core/rankings">
               <i>↑</i>Career rank
               {career?.level != null ? <em className="af3a-tag">LVL {career.level}</em> : null}
             </Link>
@@ -640,7 +638,7 @@ export function Dashboard3A(props: Dashboard3AProps) {
               <Link className="af3a-tool" href="/trade-evaluator"><i>⇄</i>Trade analyzer</Link>
               <Link className="af3a-tool" href="/core/waivers"><i>◷</i>Waiver assistant</Link>
               <Link className="af3a-tool" href="/mock-draft"><i>▤</i>Mock draft</Link>
-              <Link className="af3a-tool" href="/rankings"><i>★</i>Power rankings</Link>
+              <Link className="af3a-tool" href="/core/rankings?scope=league"><i>★</i>Power rankings</Link>
               {/*
                 Only renders for managers who are in at least one league that starts defenders
                 or kickers — the user-scoped question, because /core is not one league. See
@@ -888,6 +886,8 @@ export function Dash3AMatchups({
  * the first screen a new user sees. `leagueCount` 0 says so instead; null (unknown) keeps the
  * old behaviour.
  */
+export { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
+
 export function Dash3AChimmy({ openCount, leagueCount = null }: { openCount: number; leagueCount?: number | null }) {
   return (
             <section className="af3a-card af3a-chimmy">
@@ -930,7 +930,7 @@ export function Dash3ACareer({ career, freshness = null }: { career: CareerData 
                   Level comes from the XP engine: championships, win rate, tenure,
                   leagues and playoff appearances.
                 </Help>
-                <Link className="af3a-cardlink" href="/af-rankings">Rankings →</Link>
+                <Link className="af3a-cardlink" href="/core/rankings">Rankings →</Link>
               </header>
 
               {career ? (

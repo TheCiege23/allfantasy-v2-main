@@ -115,6 +115,41 @@ describe('stored team crests', () => {
   })
 })
 
+describe('college crests under another feed’s spelling', () => {
+  // Spellings as stored on the test DB 2026-10-01: TheSportsDB for basketball, CFBD for football.
+  const basketball = buildTeamLogoResolver([
+    { externalId: 'b1', name: 'UNC Greensboro', shortName: null, city: 'Greensboro, North Carolina', logo: 'https://x/uncg.png', source: 'thesportsdb' },
+    { externalId: 'b2', name: 'Tennessee-Martin', shortName: null, city: 'Martin, Tennessee', logo: 'https://x/utm.png', source: 'thesportsdb' },
+    { externalId: 'b3', name: 'Holy Cross', shortName: null, city: 'Worcester, Massachusetts', logo: 'https://x/hc.png', source: 'thesportsdb' },
+    { externalId: 'b4', name: 'Southern Mississippi', shortName: null, city: 'Hattiesburg, Mississippi', logo: 'https://x/usm.png', source: 'thesportsdb' },
+  ])
+  const football = buildTeamLogoResolver([
+    { externalId: 'f1', name: 'UT Martin', shortName: 'UTM', city: null, logo: 'https://x/utm-fb.png', source: 'cfbd' },
+    { externalId: 'f2', name: 'Louisiana', shortName: 'Ragin Cajuns', city: null, logo: 'https://x/ull.png', source: 'thesportsdb' },
+    { externalId: 'f3', name: 'Louisiana-Lafayette', shortName: null, city: null, logo: 'https://x/wrong.png', source: 'api_sports' },
+  ])
+
+  it('reaches a basketball row through its logo-only spelling', () => {
+    expect(basketball('University of North Carolina at Greensboro')).toBe('https://x/uncg.png')
+    expect(basketball('University of Southern Mississippi')).toBe('https://x/usm.png')
+  })
+
+  it('reaches a football row through CFBD’s spelling, and the basketball row through its own', () => {
+    expect(football('University of Tennessee at Martin')).toBe('https://x/utm-fb.png')
+    expect(basketball('University of Tennessee at Martin')).toBe('https://x/utm.png')
+  })
+
+  it('never moves a crest the first name already found', () => {
+    // "Louisiana" hits first; the logo-only "Louisiana-Lafayette" would reach a different row.
+    expect(football('University of Louisiana at Lafayette')).toBe('https://x/ull.png')
+  })
+
+  it('does not give Holy Cross College (Indiana) the Worcester crest', () => {
+    expect(basketball('College of the Holy Cross')).toBe('https://x/hc.png')
+    expect(basketball('Holy Cross College (IN)')).toBeNull()
+  })
+})
+
 describe('non-NFL pool order without ADP', () => {
   it('ranks a rostered player with a photo above a free agent, and above a bare row', () => {
     const star = rosteredPlayerSignal({ team: 'Memphis Grizzlies', imageUrl: 'https://x/ja.png' })

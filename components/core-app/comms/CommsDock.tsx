@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
 import { MessageSquare } from 'lucide-react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import CommsDrawer, { type CommsLeague, type CommsTab } from './CommsDrawer'
 import SupportModal from '@/components/core-app/support/SupportModal'
 import { useDraggableLauncher } from './useDraggableLauncher'
@@ -80,6 +82,7 @@ export function CommsDock({
   unread = 0,
   mentions = 0,
 }: CommsDockProps) {
+  const { language } = useOptionalLanguage()
   const { data: session } = useSession()
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<CommsTab>('chimmy')
@@ -175,13 +178,15 @@ export function CommsDock({
             if (launcher.consumeDragClick()) return
             setOpen(true)
           }}
-          title="Open chat — drag to move"
+          title={language === 'es' ? 'Abrir chat · arrastra para mover' : 'Open chat · drag to move'}
           aria-label={
             badge.mentions > 0
-              ? `Open communications (${badge.mentions} mention${badge.mentions === 1 ? '' : 's'}, ${badge.unread} unread)`
+              ? language === 'es'
+                ? `Abrir chat (${badge.mentions} menciones, ${badge.unread} sin leer)`
+                : `Open communications (${badge.mentions} mention${badge.mentions === 1 ? '' : 's'}, ${badge.unread} unread)`
               : badge.unread > 0
-                ? `Open communications (${badge.unread} unread)`
-                : 'Open communications'
+                ? language === 'es' ? `Abrir chat (${badge.unread} sin leer)` : `Open communications (${badge.unread} unread)`
+                : coreUiCopy('Open communications', language)
           }
         >
           {/*
@@ -196,10 +201,9 @@ export function CommsDock({
             small bubble would be unreadable, and the louder state is the one
             worth the pixels.
           */}
-          {badge.unread > 0 ? (
+          {badge.unread > 0 || badge.mentions > 0 ? (
             <span className="af-cm-launchdot" data-kind={badge.mentions > 0 ? 'mention' : 'unread'}>
-              {badge.mentions > 0 ? '@' : ''}
-              {badge.unread}
+              {badge.mentions > 0 ? `@${badge.mentions}` : badge.unread}
             </span>
           ) : null}
         </button>

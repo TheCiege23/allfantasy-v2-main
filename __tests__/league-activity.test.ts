@@ -317,3 +317,31 @@ describe('league buzz: faces and bids', () => {
     expect((await one({ adds: ['p2'], settings: { waiver_bid: 0 } })).bid).toBe(0)
   })
 })
+
+describe('involvedTeams', () => {
+  /*
+   * A trade is one row whose managerKeys name every side, but `teamName` keeps only the first. The
+   * Commissioner Hub's trade list needs both, so they ride along as `involvedTeams`.
+   */
+  it('names every side of a trade, team name before owner name', async () => {
+    activityFindMany.mockResolvedValue([
+      {
+        id: 't1', activityType: 'trade', occurredAt: T('2026-08-24T10:00:00Z'), rosterId: null,
+        payload: { adds: { p1: 2, p2: 1 } },
+        normalized: { managerKeys: ['sleeper:manager:sleeperU1', 'af-user-1', 'sleeper:manager:sleeperU2', 'nobody'] },
+      },
+    ])
+    const out = await getLeagueActivity(ARGS)
+    // sleeperU1 and af-user-1 are the same team, and 'nobody' resolves to nothing: neither repeats or blanks.
+    expect(out!.items[0].involvedTeams).toEqual(['Yours', 'Theirs'])
+    expect(out!.items[0].teamName).toBe('Yours')
+  })
+
+  it('is empty, not missing, when no manager resolves', async () => {
+    activityFindMany.mockResolvedValue([
+      { id: 't2', activityType: 'trade', occurredAt: T('2026-08-24T10:00:00Z'), rosterId: null, payload: {}, normalized: { managerKeys: [] } },
+    ])
+    const out = await getLeagueActivity(ARGS)
+    expect(out!.items[0].involvedTeams).toEqual([])
+  })
+})

@@ -7,7 +7,12 @@ import type {
   LeagueGrade,
 } from '@/lib/core-app/leagueCareer'
 import type { SectionState } from '@/lib/core-app/leagueHome'
+import { CareerAskChimmy } from '@/components/core-app/career/CareerAskChimmy'
+import { LegacyStakes } from '@/components/core-app/career/LegacyStakes'
+import { leagueCareerChimmyPrompts, leagueWeeklyCareerChimmyPrompts } from '@/lib/core-app/careerChimmy'
+import { computeLeagueMilestones } from '@/lib/core-app/careerMilestones'
 import '@/components/core-app/af-league-career.css'
+import '@/components/core-app/af-career-live.css'
 
 /**
  * Screen 38a·6 — your career inside ONE league.
@@ -51,6 +56,8 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
       </div>
     )
   }
+
+  if (data.mode === 'weekly') return <WeeklyLeagueCareer data={data} allLeaguesHref={allLeaguesHref} />
 
   const { league, seasons, totals, firstSeason, lastSeason, toughestRival, tradeGrade, waiverGrade, tradeStory } =
     data
@@ -117,80 +124,257 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
         would invent the one number people quote.
       </p>
 
-      {/* ── Grades ──────────────────────────────────────────────────── */}
-      <div className="af-lc-grades">
-        <GradeCard
-          title="Career trade grade"
-          state={tradeGrade}
-          blurb="Graded on realised value per season — what each side of your trades actually went on to do."
+      {/*
+        The live half, one league. Milestones only: a "win it and it is your Nth title here"
+        stake would need the title count the note above refuses to guess.
+      */}
+      <div className="af-crl-pair">
+        <LegacyStakes
+          data={{ stakes: [], milestones: computeLeagueMilestones(data), season: null }}
+          leagueId={league.id}
+          milestonesOnly
         />
-        <GradeCard
-          title="Career waiver grade"
-          state={waiverGrade}
-          blurb="Claim value against this league's own median winning bid, on the same bands as the trade grade."
+        <CareerAskChimmy
+          prompts={leagueCareerChimmyPrompts(data)}
+          leagueId={league.id}
+          title={`Ask Chimmy about ${league.name}`}
         />
       </div>
 
-      {tradeStory.available ? <TradeStory story={tradeStory.data} /> : (
-        <section className="af-lc-panel">
-          <h2 className="af-label">Your trading journey</h2>
-          <p className="af-lc-panel-why">{tradeStory.reason}</p>
-        </section>
-      )}
-
-      {/* ── Season by season ────────────────────────────────────────── */}
-      <section className="af-lc-panel">
-        <header className="af-lc-panel-head">
-          <h2 className="af-label">Season by season</h2>
-          <span className="af-lc-panel-note">Bar height is win rate</span>
-        </header>
-
-        <div className="af-lc-bars">
-          {seasons.map((s) => {
-            const rate = winRate(s)
-            return (
-              <div className="af-lc-bar" key={s.season}>
-                <div className="af-lc-bar-track">
-                  <div
-                    className="af-lc-bar-fill"
-                    data-best={best != null && s.season === best.season && seasons.length > 1}
-                    style={{ height: `${Math.max(4, rate * 100)}%` }}
-                  />
-                </div>
-                <span className="af-lc-bar-year af-num">{String(s.season).slice(-2)}</span>
-                <span className="af-lc-bar-rec af-num">
-                  {s.wins}–{s.losses}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {/* ── Rival ───────────────────────────────────────────────────── */}
-      <section className="af-lc-panel">
-        <h2 className="af-label">Toughest rival</h2>
-        {toughestRival ? (
-          <div className="af-lc-rival">
-            <span className="af-lc-rival-name">{toughestRival.name}</span>
-            <span className="af-lc-rival-rec af-num">
-              {toughestRival.wins}—{toughestRival.losses}
-            </span>
-            <p className="af-lc-rival-note">
-              {toughestRival.meetings} {toughestRival.meetings === 1 ? 'meeting' : 'meetings'}, and
-              they have beaten you {toughestRival.losses}{' '}
-              {toughestRival.losses === 1 ? 'time' : 'times'} — more than anyone else in this
-              league. Average margin {toughestRival.averageMargin >= 0 ? '+' : '−'}
-              {Math.abs(toughestRival.averageMargin).toFixed(1)} to you.
-            </p>
+      {/*
+        Two columns once the screen's OWN width allows (container query, af-league-career.css):
+        the market on the left, the results on the right. Source order is the single-column order,
+        so a phone and a narrow frame read exactly what they did before.
+      */}
+      <div className="af-lc-split">
+        <div className="af-lc-col">
+          {/* ── Grades ──────────────────────────────────────────────── */}
+          <div className="af-lc-grades">
+            <GradeCard
+              title="Career trade grade"
+              state={tradeGrade}
+              blurb="Graded on realised value per season — what each side of your trades actually went on to do."
+            />
+            <GradeCard
+              title="Career waiver grade"
+              state={waiverGrade}
+              blurb="Claim value against this league's own median winning bid, on the same bands as the trade grade."
+            />
           </div>
-        ) : (
-          <p className="af-lc-panel-why">
-            You have not played anyone in this league twice yet, so there is no rivalry to name — one
-            result is a game, not a pattern.
-          </p>
-        )}
-      </section>
+
+          {tradeStory.available ? <TradeStory story={tradeStory.data} /> : (
+            <section className="af-lc-panel">
+              <h2 className="af-label">Your trading journey</h2>
+              <p className="af-lc-panel-why">{tradeStory.reason}</p>
+            </section>
+          )}
+        </div>
+
+        <div className="af-lc-col">
+          {/* ── Season by season ────────────────────────────────────── */}
+          <section className="af-lc-panel">
+            <header className="af-lc-panel-head">
+              <h2 className="af-label">Season by season</h2>
+              <span className="af-lc-panel-note">Bar height is win rate</span>
+            </header>
+
+            <div className="af-lc-bars">
+              {seasons.map((s) => {
+                const rate = winRate(s)
+                return (
+                  <div className="af-lc-bar" key={s.season}>
+                    <div className="af-lc-bar-track">
+                      <div
+                        className="af-lc-bar-fill"
+                        data-best={best != null && s.season === best.season && seasons.length > 1}
+                        style={{ height: `${Math.max(4, rate * 100)}%` }}
+                      />
+                    </div>
+                    <span className="af-lc-bar-year af-num">{String(s.season).slice(-2)}</span>
+                    <span className="af-lc-bar-rec af-num">
+                      {s.wins}–{s.losses}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* ── Rival ───────────────────────────────────────────────── */}
+          <section className="af-lc-panel">
+            <h2 className="af-label">Toughest rival</h2>
+            {toughestRival ? (
+              <div className="af-lc-rival">
+                <span className="af-lc-rival-name">{toughestRival.name}</span>
+                <span className="af-lc-rival-rec af-num">
+                  {toughestRival.wins}—{toughestRival.losses}
+                </span>
+                <p className="af-lc-rival-note">
+                  {toughestRival.meetings} {toughestRival.meetings === 1 ? 'meeting' : 'meetings'}, and
+                  they have beaten you {toughestRival.losses}{' '}
+                  {toughestRival.losses === 1 ? 'time' : 'times'} — more than anyone else in this
+                  league. Average margin {toughestRival.averageMargin >= 0 ? '+' : '−'}
+                  {Math.abs(toughestRival.averageMargin).toFixed(1)} to you.
+                </p>
+              </div>
+            ) : (
+              <p className="af-lc-panel-why">
+                You have not played anyone in this league twice yet, so there is no rivalry to name — one
+                result is a game, not a pattern.
+              </p>
+            )}
+          </section>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * A league with no head-to-head history — guillotine and other no-opponent formats — read from
+ * weekly team scores (`leagueWeeklyCareer.ts`).
+ *
+ * ⚠ NO WIN-LOSS RECORD, NO RIVAL. There was never an opponent, so a record or a "toughest rival"
+ * would be invented. What the league does have is a score against the whole field every week, so
+ * that is the unit: where you finished, how often you topped it, and — in a guillotine — how long
+ * you lasted.
+ */
+function WeeklyLeagueCareer({
+  data,
+  allLeaguesHref,
+}: {
+  data: Extract<LeagueCareerResult, { mode: 'weekly' }>
+  allLeaguesHref: string
+}) {
+  const { league, weekly, tradeGrade, waiverGrade, tradeStory } = data
+  const { seasons, totals, firstSeason, lastSeason, format } = weekly
+  const current = seasons[seasons.length - 1]
+  const elimination = format === 'elimination'
+  const alive = elimination && current.choppedAfterWeek == null
+
+  return (
+    <div className="af-lc">
+      <header className="af-lc-head">
+        <p className="af-label af-lc-eyebrow">{league.name}</p>
+        <h1 className="af-display af-lc-title">Your career here</h1>
+        <p className="af-lc-sub">
+          {elimination ? 'A guillotine league' : 'A league scored against the whole field'}, so every week is your
+          score against everyone still playing — since {firstSeason}.{' '}
+          <Link href={allLeaguesHref}>Across every league →</Link>
+        </p>
+      </header>
+
+      <div className="af-lc-banner">
+        <div className="af-lc-stat">
+          {elimination ? (
+            <>
+              <span className="af-lc-stat-v af-num">{alive ? current.weeks : `Wk ${current.choppedAfterWeek}`}</span>
+              <span className="af-label">{alive ? `${current.weeks === 1 ? 'Week' : 'Weeks'} survived` : 'Chopped after'}</span>
+              <span className="af-lc-stat-s af-num">
+                {alive ? `still alive in ${current.season}` : `${current.season} · ${current.weeks} ${current.weeks === 1 ? 'week' : 'weeks'} played`}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="af-lc-stat-v af-num">{totals.weeks}</span>
+              <span className="af-label">{totals.weeks === 1 ? 'Week played' : 'Weeks played'}</span>
+              <span className="af-lc-stat-s af-num">
+                {firstSeason === lastSeason ? firstSeason : `${firstSeason}–${lastSeason}`}
+              </span>
+            </>
+          )}
+        </div>
+        <div className="af-lc-stat">
+          <span className="af-lc-stat-v af-num">
+            {totals.averageFinish != null ? totals.averageFinish.toFixed(1) : '—'}
+          </span>
+          <span className="af-label">Average weekly finish</span>
+          <span className="af-lc-stat-s af-num">of up to {Math.max(...seasons.map((s) => s.fieldSize))} teams</span>
+        </div>
+        <div className="af-lc-stat">
+          <span className="af-lc-stat-v af-num">{totals.topScores}</span>
+          <span className="af-label">{totals.topScores === 1 ? 'Top score' : 'Top scores'}</span>
+          <span className="af-lc-stat-s">weeks you outscored everyone</span>
+        </div>
+        <div className="af-lc-stat">
+          <span className="af-lc-stat-v af-num">{Math.round(totals.pointsFor).toLocaleString()}</span>
+          <span className="af-label">Points scored</span>
+          <span className="af-lc-stat-s af-num">
+            {totals.weeks > 0 ? `${(totals.pointsFor / totals.weeks).toFixed(1)} per week` : '—'}
+          </span>
+        </div>
+      </div>
+
+      <p className="af-lc-note">
+        No win-loss record or rival here: this league never pairs teams, so there is no opponent to count. Finishes
+        rank your score among the teams that scored that week; a week before it is final is not counted.
+      </p>
+
+      <div className="af-crl-pair">
+        <CareerAskChimmy
+          prompts={leagueWeeklyCareerChimmyPrompts(data)}
+          leagueId={league.id}
+          title={`Ask Chimmy about ${league.name}`}
+        />
+      </div>
+
+      {/* Same two-column split as the head-to-head view: the market left, the results right. */}
+      <div className="af-lc-split">
+        <div className="af-lc-col">
+          <div className="af-lc-grades">
+            <GradeCard
+              title="Career trade grade"
+              state={tradeGrade}
+              blurb="Graded on realised value per season — what each side of your trades actually went on to do."
+            />
+            <GradeCard
+              title="Career waiver grade"
+              state={waiverGrade}
+              blurb="Claim value against this league's own median winning bid, on the same bands as the trade grade."
+            />
+          </div>
+
+          {tradeStory.available ? (
+            <TradeStory story={tradeStory.data} />
+          ) : (
+            <section className="af-lc-panel">
+              <h2 className="af-label">Your trading journey</h2>
+              <p className="af-lc-panel-why">{tradeStory.reason}</p>
+            </section>
+          )}
+        </div>
+
+        <div className="af-lc-col">
+          <section className="af-lc-panel">
+            <header className="af-lc-panel-head">
+              <h2 className="af-label">Season by season</h2>
+              <span className="af-lc-panel-note">Finish is your weekly rank against the field</span>
+            </header>
+            <ul className="af-lc-weekly">
+              {[...seasons].reverse().map((s) => (
+                <li key={s.season} className="af-lc-weekly-row">
+                  <span className="af-lc-weekly-year af-num">{s.season}</span>
+                  <span className="af-lc-weekly-body">
+                    <strong>
+                      {s.weeks} {s.weeks === 1 ? 'week' : 'weeks'} · avg finish {s.averageFinish.toFixed(1)} of {s.fieldSize}
+                    </strong>
+                    <span>
+                      Best #{s.bestFinish}
+                      {s.topScores > 0 ? ` · ${s.topScores} top ${s.topScores === 1 ? 'score' : 'scores'}` : ''}
+                      {s.bottomScores > 0 && !(elimination && s.choppedAfterWeek != null && s.bottomScores === 1)
+                        ? ` · ${s.bottomScores} lowest ${s.bottomScores === 1 ? 'score' : 'scores'}`
+                        : ''}
+                      {elimination ? (s.choppedAfterWeek != null ? ` · chopped after week ${s.choppedAfterWeek}` : ' · still alive') : ''}
+                      {' · '}
+                      {Math.round(s.pointsFor).toLocaleString()} pts
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      </div>
     </div>
   )
 }

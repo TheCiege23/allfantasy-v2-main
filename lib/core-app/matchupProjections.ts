@@ -2,7 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { crosswalkToSleeperIds, sleeperLookupId } from './rosterIdCrosswalk'
-import { isRuledOut } from './injuryStatus'
+import { isAtRisk, isRuledOut } from './injuryStatus'
 import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
 import { getByeWeeks } from './byeWeeks'
 import { afEngineForLeague, lookupAfEngineProjections } from './playerProjections'
@@ -13,7 +13,14 @@ import {
   hasScoringRules,
   NO_LEAGUE_SCORING_REASON,
 } from '@/lib/projections/leagueScoring'
-import { computeWinProbability, type MatchupPlayer } from '@/lib/projections/winProbability'
+import type { MatchupPlayer } from '@/lib/projections/winProbability'
+import {
+  EMPTY_SLOT,
+  forecastMatchup,
+  UNATTRIBUTED_REASON,
+  type ForecastSide,
+} from './matchupForecast'
+import type { StarterGameState } from './matchupGameState'
 import { isBestBallSettings } from './lineupMode'
 import { startingSlotTemplate } from './rosterSlots'
 import { displayPosition } from './positionLabels'
@@ -76,6 +83,13 @@ export type SideProjections = {
   you: SideProjection
   opponent: SideProjection
   leagueScoring: { available: true } | { available: false; reason: string }
+  /**
+   * A starter's injury designation when it is an UNCERTAINTY — questionable, doubtful, day-to-day —
+   * keyed by Sleeper id. A designation of absence is already `unavailable: 'out'` on the lineup and
+   * is not repeated here. Read in the same pass as the absences, so the two cannot disagree; the
+   * board shows it as a Q / D tag beside the name. Absent (not empty) when nothing was read.
+   */
+  atRiskBySleeperId?: Record<string, string>
   bestBall?: {
     slots: string[] | null
     you: BestBallCandidate[]
@@ -215,7 +229,7 @@ export async function loadSideProjections(args: {
   )
   /* Spread, not a key set to null: a starter the engine never wrote carries no `afEngine` at all. */
   const engineFor = (id: string, generic: number | null, league: number | null): { afEngine?: number } => {
-    const v = afEngineForLeague(afEngineRows.get(lookupOf(id) ?? '')?.projectedPoints, generic, league)
+    const v = afEngineForLeague(afEngineRows.get(lookupOf(id) ?? ''), generic, league)
     return v == null ? {} : { afEngine: v }
   }
 
@@ -233,6 +247,7 @@ export async function loadSideProjections(args: {
    */
   const canScore = hasScoringRules(scoring)
   const unavailableBySleeperId = new Map<string, Unavailable>()
+  const atRiskBySleeperId: Record<string, string> = {}
   if (canScore && lookupIds.length > 0) {
     const sport = String(league?.sport ?? 'NFL')
     try {
@@ -252,6 +267,13 @@ export async function loadSideProjections(args: {
       ])
       for (const [sleeperId, status] of statuses) {
         if (isRuledOut(status)) unavailableBySleeperId.set(sleeperId, 'out')
+        /*
+         * 🛑 `isAtRisk`, NOT "ANY NON-EMPTY STATUS". "Active" is the feed's second most common
+         * value, and the non-empty test turned it into an amber "ACTI" chip beside nearly every
+         * healthy starter on the matchup board (production, 2026-10-02) — the exact mistake
+         * `isHealthyDesignation` documents.
+         */
+        else if (status && isAtRisk(status)) atRiskBySleeperId[sleeperId] = status.trim()
       }
       // A bye is the stronger fact — no game at all — so it wins over any status he also carries.
       for (const sleeperId of byes?.byWeek.get(week) ?? []) unavailableBySleeperId.set(sleeperId, 'bye')
@@ -266,6 +288,17 @@ export async function loadSideProjections(args: {
     let unprojected = 0
     let projectedRemaining = 0
     for (const id of ids) {
+      /*
+       * 🛑 AN EMPTY SLOT IS A CERTAIN ZERO, NOT AN UNPRICED STARTER. `'0'` passed `isResolvableId`,
+       * found no projection and was counted here as unprojected — so an opponent with four empty IDP
+       * slots refused the whole win probability ("5 starters could not be priced") while the
+       * all-leagues board priced the same game at 98% (production, 2026-10-02). It keeps its slot on
+       * the board, which prints "Slot empty" for it, and adds nothing to anything.
+       */
+      if (id === EMPTY_SLOT) {
+        lineup.push({ playerId: id, projected: null })
+        continue
+      }
       const unavailable = isResolvableId(id)
         ? unavailableBySleeperId.get(lookupOf(id) ?? '') ?? null
         : null
@@ -352,6 +385,7 @@ export async function loadSideProjections(args: {
       you: candidates(yourPlayers, args.yourPlatformUserId),
       opponent: candidates(oppPlayers, args.opponentPlatformUserId),
     } } : {}),
+    atRiskBySleeperId,
     // A metadata-only settings object is "no rules" too — see `hasScoringRules`. Without this the
     // eight label-only leagues read "N starters could not be priced", blaming the feed.
     leagueScoring: hasScoringRules(scoring)
@@ -381,8 +415,7 @@ export const NO_LIVE_POINTS: LivePoints = { team: { you: 0, opponent: 0 }, byPla
  * Why a live matchup cannot be priced when only team totals are known. Shared by the win
  * probability and the projected final so the screen gives one reason, not two.
  */
-export const LIVE_SCORES_UNATTRIBUTED_REASON =
-  "points are already on the board, but this league's per-player scores have not been imported, so we cannot tell how much of each starter's projection is still to come"
+export const LIVE_SCORES_UNATTRIBUTED_REASON = UNATTRIBUTED_REASON
 
 /** A banked total with no player row behind it — see `liveSide`. Never a real player id. */
 const UNATTRIBUTED_BANKED = '__banked_unattributed__'
@@ -477,36 +510,26 @@ export function projectedFinalFor(
  */
 export function winProbabilityFor(
   sides: SideProjections,
-  live: LivePoints
+  live: LivePoints,
+  opts: {
+    /**
+     * Each lineup player's game state, by the id the roster holds. Omitted, a starter is final
+     * exactly when `starters[].isFinal` says so and upcoming otherwise — the state this function
+     * was called with before game states existed.
+     */
+    states?: ReadonlyMap<string, StarterGameState> | null
+    bestBall?: boolean
+  } = {},
 ):
   | { available: true; data: { pWin: number; projectedMargin: number; confidence: string; detail: string } }
   | { available: false; reason: string } {
-  // "No rules" and "no projection" are DIFFERENT failures — blaming the feed
-  // for a missing league import sends someone hunting the wrong problem.
-  if (!sides.leagueScoring.available) {
-    return { available: false, reason: sides.leagueScoring.reason }
-  }
-
-  const totalUnprojected = sides.you.unprojected + sides.opponent.unprojected
-  if (totalUnprojected > 0) {
-    return {
-      available: false,
-      reason: `${totalUnprojected} starter${totalUnprojected === 1 ? '' : 's'} could not be priced under this league's scoring — no projection on file, or stats its rules do not cover — and counting them as zero would tilt the result toward the other side`,
-    }
-  }
-
-  // Mid-slate with only team totals, "what is left" is unknowable — see `liveSide`.
-  if (liveUnattributable(sides, live)) {
-    return { available: false, reason: LIVE_SCORES_UNATTRIBUTED_REASON }
-  }
-
-  const result = computeWinProbability(
-    { teamId: 'you', starters: liveSide(sides.you, live.team.you, live.byPlayer).starters },
-    { teamId: 'opponent', starters: liveSide(sides.opponent, live.team.opponent, live.byPlayer).starters }
-  )
-
+  /* The rules live in `matchupForecast.ts`, shared with the all-leagues board. This only maps inputs. */
+  const [you, opponent] = forecastSidesFor(sides, live, opts.states ?? null)
+  const result = forecastMatchup(you, opponent, {
+    bestBall: opts.bestBall,
+    noRulesReason: sides.leagueScoring.available ? null : sides.leagueScoring.reason,
+  })
   if (!result.available) return { available: false, reason: result.reason }
-
   return {
     available: true,
     data: {
@@ -516,4 +539,33 @@ export function winProbabilityFor(
       detail: result.detail,
     },
   }
+}
+
+/** Both sides in the shared forecast's terms, from the board's own lineups. */
+export function forecastSidesFor(
+  sides: SideProjections,
+  live: LivePoints,
+  states: ReadonlyMap<string, StarterGameState> | null,
+): [ForecastSide, ForecastSide] {
+  const side = (s: SideProjection, teamPoints: number): ForecastSide => {
+    const finalById = new Map(s.starters.map((p) => [p.playerId, p.isFinal]))
+    /*
+     * ⚠ THE PRICE COMES FROM `starters` WHERE IT HAS ONE — that is the model's input, and callers
+     * adjust it there (`playerLeagueImpact.sidesWithoutPlayer` zeroes one starter's projection to
+     * measure what he is worth). `lineup` only fills in the slots `starters` leaves out.
+     */
+    const priceById = new Map(s.starters.map((p) => [p.playerId, p.projectedPoints]))
+    return {
+      teamPoints,
+      hasPlayerPoints: s.lineup.some((slot) => live.byPlayer?.has(slot.playerId)),
+      starters: s.lineup.map((slot) => ({
+        playerId: slot.playerId,
+        projected: slot.unavailable ? 0 : priceById.has(slot.playerId) ? priceById.get(slot.playerId) ?? null : slot.projected,
+        unavailable: slot.unavailable != null,
+        actual: live.byPlayer?.get(slot.playerId) ?? 0,
+        state: states ? states.get(slot.playerId) ?? 'unknown' : finalById.get(slot.playerId) ? 'final' : 'upcoming',
+      })),
+    }
+  }
+  return [side(sides.you, live.team.you), side(sides.opponent, live.team.opponent)]
 }

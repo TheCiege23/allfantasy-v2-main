@@ -22,6 +22,12 @@ copy <repo>\docs\play-store\twa-manifest.json .
 bubblewrap update   # regenerates the Android project from twa-manifest.json
 ```
 
+The long-press shortcuts (My Leagues, Trade Analyzer, and since 2026-10-01 **Your career**) come
+from `shortcuts` in `twa-manifest.json`, so a shortcut change reaches phones only with the next
+Play build. Haptics need no build: the app runs Chrome, and the website calls `navigator.vibrate`
+(`lib/platform/haptics.ts`). A home-screen widget is not possible in a Trusted Web Activity
+without leaving Bubblewrap's generated project, which is why Android has none.
+
 ⚠ **`bubblewrap build` does NOT create the keystore.** This runbook used to say it
 prompts to create `android.keystore` on first run. It does not: it prompts for the
 PASSWORD, builds the unsigned APK, then dies at the signing step with
@@ -119,12 +125,43 @@ bubblewrap build
      been removed).
    - Ads: No (the app itself serves no ads).
 3. **Store listing** assets:
-   - Icon 512×512: `public/icons/icon-512.png` ✓ (already in repo)
-   - Feature graphic 1024×500: needs creating (screenshot of the /core board
-     with the wordmark works).
-   - Phone screenshots (min 2, 1080×1920+): take from a phone or Chrome
-     devtools device mode — /core home with triage, Player Finder, live
-     matchups, the Legacy profile.
+   - Icon 512×512: **`docs/play-store/play-store-icon-512.png`** ✓ — NOT
+     `public/icons/icon-512.png`. Play requires a 32-bit PNG; the web icons are
+     deliberately 24-bit (iOS/App Store reject icon alpha), so this is the same
+     tile with a fully opaque alpha channel added. Both come from
+     `node scripts/build-pwa-icons.mjs`. Play rounds the corners itself (30%);
+     upload the square as-is.
+   - Feature graphic 1024×500: **`docs/play-store/feature-graphic-1024x500.png`** ✓
+     (24-bit, no alpha — the opposite of the icon rule). The live homepage
+     headline lifted in its real font, beside the demo "Your leagues" card, on
+     brand navy. Built by `node scripts/build-play-feature-graphic.mjs`; add
+     `--capture` to re-shoot the public homepage first (it records where the
+     h1 and card are, so nothing is hand-positioned). Deliberately NOT used:
+     the crest (Play: no branding similar to the icon), pure black (blends into
+     Play's UI), and the homepage launch countdown (no promo/price content).
+     Alt text for the asset: *"Play fantasy sports. All in one place. An
+     example Your leagues card showing four Sleeper and ESPN leagues with their
+     scores and the one thing each needs: set flex, waivers, trade, or all set."*
+   - Phone screenshots (min 2 to publish; **4+ at 1080×1920 for promotion**):
+     taken BY HAND on a phone, then made compliant by a script. Why by hand:
+     they should show the app (`/core`), which needs a sign-in, and the public
+     pages a script can reach gave only two usable shots on 2026-10-01.
+     1. Sign in as the **demo account** — never a real league: other managers'
+        names would end up in a public listing.
+     2. Take them **after Oct 15**. Before launch, /core shows the "free until
+        Oct 15" countdown, and Play forbids price/promo content and anything
+        time-sensitive.
+     3. Shot list, in this order (dark mode, no notifications pending):
+        `/core` home (what needs you), `/core/my-team`, `/core/matchup`,
+        `/core/players` (Player Finder), `/core/trades`, `/core/career`.
+     4. Put the files in one folder, named in the order you want, then:
+        `node scripts/prepare-play-screenshots.mjs <folder>`
+        → `docs/play-store/screenshots/phone-N.png`. A modern phone shoots
+        20:9 (1080×2400), which Play REJECTS (longest side over 2× the
+        shortest); the script crops to 9:16 below the status bar, outputs
+        exactly 1080×1920 and strips alpha. It warns if a shot is soft.
+     No device frames, no added captions over 20% of the image, no
+     "download"/"install" call-to-action (Play rules).
 4. **Release** → Internal testing → upload the `.aab` → enroll in
    **Play App Signing** when prompted (always yes).
 
@@ -159,3 +196,28 @@ developer account. iOS has no TWA equivalent; its Capacitor shell lives in
 The TWA is a shell; web deploys need nothing. Rebuild + re-upload the AAB only
 when changing: package id, start URL, icons/colors, or Android-level features
 (notification delegation etc.). Bump `appVersionCode` each upload.
+
+### Refreshing the launcher icon (done for the traced crest, 2026-10-01)
+
+The launcher icon is NOT in this repo's Android project — there isn't one.
+`bubblewrap update` DOWNLOADS `iconUrl` / `maskableIconUrl` from the live site,
+so the order is fixed: deploy the new `public/icons/*` to production FIRST,
+confirm the live files are the new ones, THEN rebuild. Rebuilding before the
+deploy bakes the old icon into the bundle with nothing to warn you.
+
+1. Confirm production serves the new icons (both must be the navy tile):
+   https://www.allfantasy.ai/icons/icon-512.png and
+   https://www.allfantasy.ai/icons/icon-maskable-512.png
+2. In your existing `C:\af-twa`, set `appVersionCode` ABOVE the last bundle you
+   uploaded (Play Console → **App bundle explorer** lists it; Play rejects a
+   reused code). ⚠ The copy of `twa-manifest.json` in this repo still says `1`
+   and is not kept in sync with uploads — do not re-copy it over a project that
+   has already shipped without fixing the code.
+3. `bubblewrap update` then `bubblewrap build`, upload the `.aab` to Internal
+   testing, and check the home-screen icon on a phone.
+4. The **store-listing** icon is separate and needs no build: Play Console →
+   **Grow → Store presence → Main store listing** → upload
+   `docs/play-store/play-store-icon-512.png`.
+
+An installed app keeps the icon from the bundle it was installed from, so phones
+show the new one only after updating to the new release.

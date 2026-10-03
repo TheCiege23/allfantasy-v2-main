@@ -1,6 +1,9 @@
 'use client'
 
 import { useRef } from 'react'
+import { MessageCircle, ChevronUp } from 'lucide-react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { COMMS_OPEN_EVENT, type CommsOpenDetail } from './comms/commsEvents'
@@ -25,6 +28,8 @@ export function LeagueChatBar({
   preview: LeagueChatPreview | null
 }) {
   const touchStartY = useRef<number | null>(null)
+  const suppressClick = useRef(false)
+  const { language } = useOptionalLanguage()
 
   const open = () => {
     const detail: CommsOpenDetail = { tab: 'league', leagueId }
@@ -35,8 +40,15 @@ export function LeagueChatBar({
     <button
       type="button"
       className="af-lf-chatbar"
-      aria-label={`Open ${leagueName ?? 'league'} chat`}
-      onClick={open}
+      aria-label={language === 'es' ? `Abrir chat de ${leagueName ?? 'la liga'}` : `Open ${leagueName ?? 'league'} chat`}
+      onClick={() => {
+        // iOS sends a click after touchend. A swipe must open the drawer once.
+        if (suppressClick.current) {
+          suppressClick.current = false
+          return
+        }
+        open()
+      }}
       // A pull up opens it too — the gesture the bar's grip invites. A tap is still the main way in.
       onTouchStart={(e) => {
         touchStartY.current = e.touches[0]?.clientY ?? null
@@ -45,28 +57,28 @@ export function LeagueChatBar({
         const start = touchStartY.current
         touchStartY.current = null
         const end = e.changedTouches[0]?.clientY
-        if (start != null && end != null && start - end > 24) open()
+        if (start != null && end != null && start - end > 24) {
+          suppressClick.current = true
+          open()
+          window.setTimeout(() => { suppressClick.current = false }, 450)
+        }
       }}
     >
       <span className="af-lf-chatbar-grip" aria-hidden />
-      <span className="af-lf-chatbar-icon" aria-hidden>
-        💬
-      </span>
+      <span className="af-lf-chatbar-icon" aria-hidden><MessageCircle size={21} strokeWidth={2.2} /></span>
       <span className="af-lf-chatbar-body">
-        <span className="af-lf-chatbar-title">League chat</span>
+        <span className="af-lf-chatbar-title">{coreUiCopy('League chat', language)}</span>
         <span className="af-lf-chatbar-preview">
           {preview ? (
             <>
               <strong>{preview.senderName}:</strong> {preview.text}
             </>
           ) : (
-            'No messages yet — say something to the league'
+            coreUiCopy('No messages yet — say something to the league', language)
           )}
         </span>
       </span>
-      <span className="af-lf-chatbar-chevron" aria-hidden>
-        ⌃
-      </span>
+      <span className="af-lf-chatbar-chevron" aria-hidden><ChevronUp size={19} strokeWidth={2.4} /></span>
     </button>
   )
 }

@@ -27,8 +27,8 @@ describe('imported leagues are judged by moves', () => {
       {
         kind: 'imported',
         managers: [
-          { managerName: 'Busy', currentCount: 3, priorCount: 1 },
-          { managerName: 'QuietQuinn', currentCount: 0, priorCount: 2 },
+          { managerName: 'Busy', currentCount: 3, priorCount: 1, lastActionAt: new Date('2026-09-15T12:00:00Z') },
+          { managerName: 'QuietQuinn', currentCount: 0, priorCount: 2, lastActionAt: new Date('2026-08-30T12:00:00Z') },
           { managerName: 'SilentSam', currentCount: 0, priorCount: 0 },
         ],
         lastActivityAt: fresh,
@@ -44,8 +44,9 @@ describe('imported leagues are judged by moves', () => {
       ['SilentSam', 'inactive'],
       ['Busy', 'active'],
     ])
-    expect(r.data.rows[0].detail).toBe('no moves in 14 days (2 the 14 before)')
-    expect(r.data.rows[2].detail).toBe('3 moves in 14 days')
+    expect(r.data.rows[0].detail).toBe('last move 17 days ago')
+    expect(r.data.rows[1].detail).toBe('no qualifying move on file')
+    expect(r.data.rows[2].detail).toBe('last move 1 day ago')
     expect(r.data).toMatchObject({ total: 3, active: 1, inactive: 2 })
     expect(r.data.basis).toContain('last 14 days')
   })
@@ -108,7 +109,7 @@ describe('leagues created in AllFantasy keep the roster clock', () => {
     expect(r.available).toBe(true)
     if (!r.available) return
     expect(r.data.rows.map((x) => x.name)).toEqual(['solo', 'Home Team'])
-    expect(r.data.rows[0].detail).toBe('last move 15d ago')
+    expect(r.data.rows[0].detail).toBe('last move 15 days ago')
     expect(r.data.rows[1].detail).toBe('active today')
   })
 

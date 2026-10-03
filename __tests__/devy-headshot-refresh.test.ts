@@ -14,6 +14,11 @@ vi.mock('server-only', () => ({}))
  */
 const findMany = vi.fn()
 const update = vi.fn()
+const identityFindFirst = vi.fn()
+const playerFindUnique = vi.fn()
+const playerUpdate = vi.fn()
+const writePrimaryPlayerImage = vi.fn()
+const isPlaceholderHeadshot = vi.fn()
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -25,8 +30,23 @@ vi.mock('@/lib/prisma', () => ({
       findMany: (...a: unknown[]) => findMany(...a),
       update: (...a: unknown[]) => update(...a),
     },
+    playerProviderIdentity: { findFirst: (...a: unknown[]) => identityFindFirst(...a) },
+    player: {
+      findUnique: (...a: unknown[]) => playerFindUnique(...a),
+      update: (...a: unknown[]) => playerUpdate(...a),
+    },
   },
 }))
+vi.mock('@/lib/player-assets/playerImageStore', () => ({
+  PLAYER_IMAGE_TYPE_HEADSHOT: 'headshot',
+  writePrimaryPlayerImage: (...a: unknown[]) => writePrimaryPlayerImage(...a),
+}))
+vi.mock('@/lib/player-assets/apiSportsPlaceholder', () => ({
+  isPlaceholderHeadshot: (...a: unknown[]) => isPlaceholderHeadshot(...a),
+}))
+
+const ESPN = (id: string) => `https://a.espncdn.com/i/headshots/college-football/players/full/${id}.png`
+const API_SPORTS = 'https://media.api-sports.io/american-football/players/60595.png'
 
 const budget = (remainingMs = 240_000) => ({
   exhausted: () => remainingMs <= 0,
@@ -144,6 +164,18 @@ describe('devy headshots', () => {
 })
 
 describe('college SportsPlayer headshots', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.unstubAllGlobals()
+    findMany.mockReset()
+    update.mockReset().mockResolvedValue({})
+    identityFindFirst.mockReset().mockResolvedValue({ playerId: 'ncaaf-player-1' })
+    playerFindUnique.mockReset().mockResolvedValue({ imageUrl: API_SPORTS })
+    playerUpdate.mockReset().mockResolvedValue({})
+    writePrimaryPlayerImage.mockReset().mockResolvedValue({ written: true })
+    isPlaceholderHeadshot.mockReset().mockResolvedValue(false)
+  })
+
   it('only touches CFBD-sourced rows — RI ids are a DIFFERENT id space', async () => {
     // SportsPlayer.externalId means different things per source. CFBD rows hold
     // the ESPN athlete id; the 68,637 Rolling Insights rows hold RI's own
@@ -160,11 +192,31 @@ describe('college SportsPlayer headshots', () => {
     const where = (findMany.mock.calls[0]?.[0] as { where?: Record<string, unknown> })?.where
     expect(where?.source, 'would have fed RI ids to the ESPN CDN').toBe('cfbd')
     expect(where?.sport).toBe('NCAAF')
-    expect(where?.imageUrl).toBeNull()
+  })
+
+  it('selects rows holding an api-sports URL, not only empty ones', async () => {
+    // 4,728 of 5,226 CFBD rows held a name-matched api-sports URL — mostly its stock
+    // "image not available" picture — so a NULL-only drain never reached them.
+    findMany.mockResolvedValue([])
+    vi.stubGlobal('fetch', vi.fn())
+
+    const { refreshCollegeSportsPlayerHeadshots } = await import('@/lib/devy/devyHeadshotRefresh')
+    await refreshCollegeSportsPlayerHeadshots(budget() as never)
+
+    const args = findMany.mock.calls[0]?.[0] as {
+      where?: { OR?: unknown[] }
+      orderBy?: Record<string, string>
+    }
+    expect(args.where?.OR).toEqual([
+      { imageUrl: null },
+      { imageUrl: { startsWith: 'https://media.api-sports.io/' } },
+    ])
+    // Rotation: misses are touched (below), so ordering must be by updatedAt.
+    expect(args.orderBy).toEqual({ updatedAt: 'asc' })
   })
 
   it('still refuses a URL the CDN did not serve as an image', async () => {
-    findMany.mockResolvedValue([{ id: 'sp1', externalId: '5194306' }])
+    findMany.mockResolvedValue([{ id: 'sp1', externalId: '5194306', imageUrl: null }])
     vi.stubGlobal('fetch', vi.fn(async () => headResponse(404, 'text/html', '1')))
 
     const { refreshCollegeSportsPlayerHeadshots } = await import(
@@ -172,6 +224,76 @@ describe('college SportsPlayer headshots', () => {
     )
     const r = await refreshCollegeSportsPlayerHeadshots(budget() as never)
     expect(r.written).toBe(0)
-    expect(update).not.toHaveBeenCalled()
+    expect(r.missing).toBe(1)
+    // The miss is touched so it rotates to the back — but no URL is stored.
+    expect(update).toHaveBeenCalledTimes(1)
+    expect((update.mock.calls[0]?.[0] as { data: { imageUrl: unknown } }).data.imageUrl).toBeNull()
+    expect(writePrimaryPlayerImage).not.toHaveBeenCalled()
+  })
+
+  it('replaces an api-sports URL with the verified ESPN photo, and the canonical cache too', async () => {
+    findMany.mockResolvedValue([{ id: 'sp2', externalId: '4880203', imageUrl: API_SPORTS }])
+    vi.stubGlobal('fetch', vi.fn(async () => headResponse(200, 'image/png', '261636')))
+
+    const { refreshCollegeSportsPlayerHeadshots } = await import('@/lib/devy/devyHeadshotRefresh')
+    const r = await refreshCollegeSportsPlayerHeadshots(budget() as never)
+
+    expect(r.written).toBe(1)
+    expect(update.mock.calls[0]?.[0]).toEqual({ where: { id: 'sp2' }, data: { imageUrl: ESPN('4880203') } })
+    // Linked by the cfbd identity row, never by name.
+    expect((identityFindFirst.mock.calls[0]?.[0] as { where: unknown }).where).toEqual({
+      provider: 'cfbd',
+      sportKey: 'NCAAF',
+      providerPlayerId: '4880203',
+      playerId: { not: null },
+    })
+    expect(playerUpdate).toHaveBeenCalledWith({
+      where: { id: 'ncaaf-player-1' },
+      data: { imageUrl: ESPN('4880203') },
+    })
+    expect(writePrimaryPlayerImage).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: 'ncaaf-player-1', url: ESPN('4880203'), provider: 'espn' }),
+    )
+  })
+
+  it('does not overwrite a canonical image that came from somewhere else', async () => {
+    findMany.mockResolvedValue([{ id: 'sp3', externalId: '4590295', imageUrl: null }])
+    playerFindUnique.mockResolvedValue({
+      imageUrl: 'https://r2.thesportsdb.com/images/media/player/cutout/abc.png',
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => headResponse(200, 'image/png', '254626')))
+
+    const { refreshCollegeSportsPlayerHeadshots } = await import('@/lib/devy/devyHeadshotRefresh')
+    await refreshCollegeSportsPlayerHeadshots(budget() as never)
+
+    expect(playerUpdate, 'clobbered a non-api-sports canonical image').not.toHaveBeenCalled()
+  })
+
+  it('on an ESPN miss, drops a CONFIRMED placeholder', async () => {
+    findMany.mockResolvedValue([{ id: 'sp4', externalId: '5198328', imageUrl: API_SPORTS }])
+    isPlaceholderHeadshot.mockResolvedValue(true)
+    vi.stubGlobal('fetch', vi.fn(async () => headResponse(404, 'text/html', '1')))
+
+    const { refreshCollegeSportsPlayerHeadshots } = await import('@/lib/devy/devyHeadshotRefresh')
+    await refreshCollegeSportsPlayerHeadshots(budget() as never)
+
+    expect(update).toHaveBeenCalledWith({ where: { id: 'sp4' }, data: { imageUrl: null } })
+  })
+
+  it('on an ESPN miss, KEEPS an api-sports URL that is real or could not be checked', async () => {
+    for (const verdict of [false, null]) {
+      update.mockClear()
+      findMany.mockResolvedValue([{ id: 'sp5', externalId: '5198328', imageUrl: API_SPORTS }])
+      isPlaceholderHeadshot.mockResolvedValue(verdict)
+      vi.stubGlobal('fetch', vi.fn(async () => headResponse(404, 'text/html', '1')))
+
+      const { refreshCollegeSportsPlayerHeadshots } = await import('@/lib/devy/devyHeadshotRefresh')
+      await refreshCollegeSportsPlayerHeadshots(budget() as never)
+
+      expect(update, `verdict ${verdict}`).toHaveBeenCalledWith({
+        where: { id: 'sp5' },
+        data: { imageUrl: API_SPORTS },
+      })
+    }
   })
 })

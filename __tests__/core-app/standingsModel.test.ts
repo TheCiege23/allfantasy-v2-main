@@ -9,6 +9,7 @@ import {
   isWeekSnapshot,
   readPlayoffTeams,
   readStandingsRules,
+  showMagicNumbers,
   weekStamp,
   type RemainingGame,
   type ReportedRecord,
@@ -264,6 +265,56 @@ describe('checking against the platform', () => {
     expect(board.recordBasis).toMatch(/including the weekly median game, and match Sleeper/)
   })
 
+  it('counts the week in progress at its current scores when asked to — and says it is not a result', () => {
+    const input = {
+      season: 2026,
+      snapshots: fold([week1, week2Live], IDS),
+      unplayed: [{ week: 2, a: 'b', b: 'd' }],
+      teams: [meta('a', { wins: 1 }), meta('b', { losses: 1 }), meta('c', { wins: 1 }), meta('d', { losses: 1 })],
+      rules: RULES,
+    }
+    const live = buildStandingsBoard({ ...input, asIfFinal: true })
+    expect(live.asIfFinal).toBe(true)
+    expect(live.throughWeek).toBe(2)
+    expect(live.pendingWeeks).toEqual([])
+    // c leads a 30-12 in week two: as it stands, c is 2-0 and a 1-1.
+    const by = (id: string) => live.teams.find((t) => t.rosterId === id)!
+    expect(by('c').record).toEqual({ wins: 2, losses: 0, ties: 0 })
+    expect(by('a').record).toEqual({ wins: 1, losses: 1, ties: 0 })
+    // Movement is measured against last week's final table, which the real board (one final week) cannot have.
+    expect(live.teams[0].rosterId).toBe('c')
+    expect(by('c').seedMove).toBe(0)
+    expect(buildStandingsBoard(input).teams.every((t) => t.seedMove === null)).toBe(true)
+    // b and d have not kicked off, so their game is still ahead of them and nobody else's is.
+    expect(live.gamesRemaining).toBe(1)
+    expect(live.recordBasis).toMatch(/If the scores on the board held: records include week 2 as it stands now/)
+    // The real board is untouched by the option existing.
+    expect(buildStandingsBoard(input).asIfFinal).toBe(false)
+  })
+
+  it('takes a median-league record apart into head-to-head and median games', () => {
+    const medianWeek = [...game(1, 1, ['a', 130], ['b', 125]), ...game(1, 2, ['c', 90], ['d', 70])]
+    const board = buildStandingsBoard({
+      season: 2026,
+      snapshots: fold([medianWeek], IDS),
+      unplayed: [],
+      teams: [
+        meta('a', { wins: 2 }),
+        meta('b', { wins: 1, losses: 1 }),
+        meta('c', { wins: 1, losses: 1 }),
+        meta('d', { losses: 2 }),
+      ],
+      rules: RULES,
+    })
+    const by = (id: string) => board.teams.find((t) => t.rosterId === id)!
+    // b lost head-to-head but finished in the top half; c won head-to-head but did not.
+    expect(by('b').split).toEqual({ headToHead: { wins: 0, losses: 1, ties: 0 }, median: { wins: 1, losses: 0, ties: 0 } })
+    expect(by('c').split).toEqual({ headToHead: { wins: 1, losses: 0, ties: 0 }, median: { wins: 0, losses: 1, ties: 0 } })
+    // A league with no median game has nothing to take apart.
+    const plain = buildStandingsBoard({ season: 2026, snapshots: fold([week1], IDS), unplayed: [], teams: IDS.map((id) => meta(id)), rules: RULES })
+    expect(plain.teams.every((t) => t.split === null)).toBe(true)
+  })
+
   it('falls back to the platform’s records when it counts games we cannot pair', () => {
     const board = buildStandingsBoard({
       season: 2026,
@@ -385,6 +436,128 @@ describe('playoff line', () => {
     const board = buildStandingsBoard({ season: 2026, snapshots: snaps, unplayed: [], teams: IDS.map((id) => meta(id)), rules: RULES })
     expect(board.teams.slice(0, 2).map((t) => t.clinched)).toEqual(['playoff', 'playoff'])
     expect(board.teams.slice(2).map((t) => t.zone)).toEqual(['eliminated', 'eliminated'])
+  })
+})
+
+describe('magic numbers and the next game', () => {
+  // Six teams, two playoff spots. After three weeks: a 3-0, b 2-1, c 2-1, d 1-2, e 1-2, f 0-3.
+  const ids = ['a', 'b', 'c', 'd', 'e', 'f']
+  const w = (week: number, pairs: Array<[string, number, string, number]>) =>
+    pairs.flatMap(([x, xp, y, yp], i) => game(week, i + 1, [x, xp], [y, yp]))
+  const snaps = fold(
+    [
+      w(1, [['a', 100, 'b', 90], ['c', 100, 'd', 90], ['e', 100, 'f', 90]]),
+      w(2, [['a', 100, 'c', 90], ['b', 100, 'e', 90], ['d', 100, 'f', 90]]),
+      w(3, [['a', 100, 'd', 90], ['b', 100, 'f', 90], ['c', 100, 'e', 90]]),
+    ],
+    ids,
+  )
+  // Three weeks left, nine games: few enough to enumerate.
+  const unplayed: RemainingGame[] = [
+    { week: 4, a: 'a', b: 'f' },
+    { week: 4, a: 'b', b: 'c' },
+    { week: 4, a: 'd', b: 'e' },
+    { week: 5, a: 'a', b: 'b' },
+    { week: 5, a: 'c', b: 'e' },
+    { week: 5, a: 'd', b: 'f' },
+    { week: 6, a: 'a', b: 'c' },
+    { week: 6, a: 'b', b: 'd' },
+    { week: 6, a: 'e', b: 'f' },
+  ]
+  const board = buildStandingsBoard({
+    season: 2026,
+    snapshots: snaps,
+    unplayed,
+    teams: ids.map((id) => meta(id)),
+    rules: { ...RULES, playoffTeams: 2, byes: 0 },
+  })
+  const by = (id: string) => board.teams.find((t) => t.rosterId === id)!
+
+  it('counts the wins that guarantee a spot, crediting that rivals who meet cannot both win', () => {
+    /*
+     * a on 4 (one more win) is not safe: b beats a and c, c beats a and e, and both pass 4. On 5 it is
+     * safe in every outcome, because b and c meet in week 4 and only one of them can also reach 5. The
+     * every-rival-wins-out bound would say 3 here — true, but not the number.
+     */
+    expect(by('a').path.winsToClinch).toBe(2)
+    expect(by('a').path.gamesLeft).toBe(3)
+    // a cannot be knocked out by its own losses alone: at 3-3 some outcomes still leave it second.
+    expect(by('a').path.lossesToElimination).toBeNull()
+  })
+
+  it('counts the losses that end the chase, and says when winning out is not enough', () => {
+    // f at 0-3: one more loss caps it at 2, below a and whichever of b/c wins week 4.
+    expect(by('f').path.lossesToElimination).toBe(1)
+    // Winning out takes f to 3, which a and the b/c winner always reach — it needs help.
+    expect(by('f').path.winsToClinch).toBeNull()
+    expect(by('f').zone).not.toBe('eliminated')
+  })
+
+  it('agrees with the table: settled teams read 0, and nobody is both', () => {
+    for (const t of board.teams) {
+      const { winsToClinch, lossesToElimination } = t.path
+      expect(winsToClinch === 0).toBe(t.clinched != null)
+      expect(lossesToElimination === 0).toBe(t.zone === 'eliminated')
+      expect(winsToClinch === 0 && lossesToElimination === 0).toBe(false)
+    }
+  })
+
+  it('reads the current streak off the end of the results', () => {
+    // a W W W; b L W W; f L L L.
+    expect(by('a').streak).toEqual({ result: 'W', length: 3 })
+    expect(by('b').streak).toEqual({ result: 'W', length: 2 })
+    expect(by('f').streak).toEqual({ result: 'L', length: 3 })
+  })
+
+  it('names the next opponent from the schedule, earliest week first', () => {
+    expect(by('a').next).toEqual({ week: 4, opponentId: 'f', opponentName: 'Team F', inProgress: false })
+    expect(by('d').next).toEqual({ week: 4, opponentId: 'e', opponentName: 'Team E', inProgress: false })
+  })
+
+  it('settles the numbers once the season is over', () => {
+    const over = buildStandingsBoard({ season: 2026, snapshots: snaps, unplayed: [], teams: ids.map((id) => meta(id)), rules: RULES })
+    expect(over.teams.map((t) => t.next)).toEqual(ids.map(() => null))
+    expect(over.teams.slice(0, 2).map((t) => t.path)).toEqual([
+      { winsToClinch: 0, lossesToElimination: null, gamesLeft: 0 },
+      { winsToClinch: 0, lossesToElimination: null, gamesLeft: 0 },
+    ])
+    expect(over.teams.slice(2).every((t) => t.path.lossesToElimination === 0)).toBe(true)
+  })
+
+  it('shows them from the second half of the season on, or once any team is settled', () => {
+    const at = (playedWeeks: number, remainingWeeks: number, anySettled = false) =>
+      showMagicNumbers({ hasHeadToHead: true, playedWeeks, remainingWeeks, anySettled })
+    expect(at(3, 11)).toBe(false)
+    expect(at(6, 8)).toBe(false)
+    expect(at(7, 7)).toBe(true)
+    expect(at(10, 4)).toBe(true)
+    // A clinch or an elimination is information whenever it happens.
+    expect(at(3, 11, true)).toBe(true)
+    // Nothing left, or nothing head-to-head: there is no number to show.
+    expect(at(14, 0, true)).toBe(false)
+    expect(showMagicNumbers({ hasHeadToHead: false, playedWeeks: 10, remainingWeeks: 4, anySettled: false })).toBe(false)
+    // This board: three weeks played, three left.
+    expect(board.showPaths).toBe(true)
+  })
+
+  it('hides them early in the season, when every number is "win or lose nearly everything"', () => {
+    const later = Array.from({ length: 8 }, (_, w) => [
+      { week: 4 + w, a: 'a', b: 'b' },
+      { week: 4 + w, a: 'c', b: 'd' },
+      { week: 4 + w, a: 'e', b: 'f' },
+    ]).flat()
+    const early = buildStandingsBoard({ season: 2026, snapshots: snaps, unplayed: later, teams: ids.map((id) => meta(id)), rules: { ...RULES, playoffTeams: 2, byes: 0 } })
+    expect(early.teams.some((t) => t.clinched != null || t.zone === 'eliminated')).toBe(false)
+    expect(early.showPaths).toBe(false)
+  })
+
+  it('uses a bound that only ever over-states when too many games are left to enumerate', () => {
+    const many: RemainingGame[] = Array.from({ length: 20 }, (_, i) => ({ week: 4 + Math.floor(i / 3), a: ids[i % 6], b: ids[(i + 3) % 6] }))
+    const wide = buildStandingsBoard({ season: 2026, snapshots: snaps, unplayed: many, teams: ids.map((id) => meta(id)), rules: RULES })
+    const a = wide.teams.find((t) => t.rosterId === 'a')!
+    const aLeft = many.filter((g) => g.a === 'a' || g.b === 'a').length
+    // Bound: rivals win out. a's guarantee, if any, needs at least as many wins as the exact answer would.
+    expect(a.path.winsToClinch == null || (a.path.winsToClinch > 0 && a.path.winsToClinch <= aLeft)).toBe(true)
   })
 })
 

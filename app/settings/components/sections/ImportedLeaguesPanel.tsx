@@ -1,8 +1,11 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { RefreshCw, ExternalLink, Search } from "lucide-react"
+import { RetryNotice } from "./RetryNotice"
+import { isImportProviderAvailable } from "@/lib/league-import/provider-ui-config"
+import type { ImportProvider } from "@/lib/league-import/types"
 
 /**
  * The real per-league list for the "League Imports" tab.
@@ -51,6 +54,21 @@ function syncPill(status?: string | null): { label: string; color: string; bg: s
   return { label: "Active", color: "#7ee081", bg: "color-mix(in srgb, #7ee081 15%, transparent)" }
 }
 
+/**
+ * What the Resync button shows. The route answers 200 only once the refresh has COMPLETED and
+ * advanced the league's freshness — it never queues — so success is "Synced", not the "Queued" this
+ * used to say. Every refusal carries a sentence saying why (already refreshing, data preserved but
+ * the refresh did not finish, not authorized), which used to collapse into a bare "Failed".
+ */
+type ResyncState = { kind: "busy" } | { kind: "done" } | { kind: "locked" } | { kind: "error"; message: string }
+
+const RESYNC_LABEL: Record<ResyncState["kind"], string> = {
+  busy: "Syncing…",
+  done: "Synced ✓",
+  locked: "Already syncing",
+  error: "Retry",
+}
+
 function relTime(iso?: string | null): string {
   if (!iso) return ""
   const t = new Date(iso).getTime()
@@ -66,25 +84,42 @@ function relTime(iso?: string | null): string {
 export function ImportedLeaguesPanel() {
   const [leagues, setLeagues] = useState<LeagueRow[] | null>(null)
   const [loading, setLoading] = useState(true)
+  const [failed, setFailed] = useState(false)
   const [query, setQuery] = useState("")
   const [platform, setPlatform] = useState("all")
-  const [resyncing, setResyncing] = useState<Record<string, "busy" | "done" | "error">>({})
+  const [resyncing, setResyncing] = useState<Record<string, ResyncState>>({})
 
+  // Set true on mount (not only at init) so a StrictMode remount does not leave it false.
+  const mounted = useRef(true)
   useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const data = await fetch("/api/league/list", { cache: "no-store" })
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null)
-      if (cancelled) return
-      if (data && Array.isArray(data.leagues)) setLeagues(data.leagues as LeagueRow[])
-      else setLeagues([])
-      setLoading(false)
-    })()
+    mounted.current = true
     return () => {
-      cancelled = true
+      mounted.current = false
     }
   }, [])
+
+  /* A loader the "Try again" button can call — this was a one-shot effect whose only recovery was a reload. */
+  const loadLeagues = useCallback(async () => {
+    setLoading(true)
+    setFailed(false)
+    // `?summary=1` drops only `settings` and `rosters` (≈94% of a 5.28 MB response for 557 leagues,
+    // measured in the route) — neither is read here.
+    const data = await fetch("/api/league/list?summary=1", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+    if (!mounted.current) return
+    if (data && Array.isArray(data.leagues)) setLeagues(data.leagues as LeagueRow[])
+    else {
+      // Not "No leagues imported yet" — the list did not load; that is a different message.
+      setLeagues([])
+      setFailed(true)
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    void loadLeagues()
+  }, [loadLeagues])
 
   const platforms = useMemo(() => {
     const set = new Set<string>()
@@ -103,26 +138,59 @@ export function ImportedLeaguesPanel() {
 
   async function resync(l: LeagueRow) {
     if (!l.platformLeagueId || !l.platform) return
-    setResyncing((r) => ({ ...r, [l.id]: "busy" }))
+    const set = (state: ResyncState | null) =>
+      setResyncing((r) => {
+        const next = { ...r }
+        if (state) next[l.id] = state
+        else delete next[l.id]
+        return next
+      })
+    set({ kind: "busy" })
+    let outcome: ResyncState
     try {
       const res = await fetch("/api/leagues/import/resync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider: l.platform, sourceId: l.platformLeagueId }),
       })
-      setResyncing((r) => ({ ...r, [l.id]: res.ok ? "done" : "error" }))
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: unknown }
+      if (res.ok && data.ok !== false) {
+        outcome = { kind: "done" }
+        // The refresh finished, so the row is current now — not whatever the list said on load.
+        setLeagues((prev) =>
+          (prev ?? []).map((row) =>
+            row.id === l.id ? { ...row, syncStatus: "active", lastSyncedAt: new Date().toISOString() } : row,
+          ),
+        )
+      } else if (res.status === 409) {
+        outcome = { kind: "locked" }
+      } else {
+        outcome = {
+          kind: "error",
+          message:
+            typeof data.error === "string" && data.error ? data.error : "The sync didn't finish. Please try again.",
+        }
+      }
     } catch {
-      setResyncing((r) => ({ ...r, [l.id]: "error" }))
+      outcome = { kind: "error", message: "Couldn't reach AllFantasy. Check your connection and try again." }
     }
+    set(outcome)
+    // A success or "already syncing" settles back to the plain button; an error stays until retried.
+    if (outcome.kind !== "error") window.setTimeout(() => set(null), 4000)
   }
 
   // Only leagues with a live native backing are resyncable. Historical career-board
   // snapshots (from /api/league/list) carry a platformLeagueId but no navigation/unified
   // record — resyncing those would re-import and materialize a native league from what the
   // user sees as read-only history, so they're excluded.
+  //
+  // ⚠ AND ONLY ON A PROVIDER THAT IS CURRENTLY AVAILABLE. The resync route refuses anything
+  // `isImportProviderAvailable` rejects ("Import from yahoo is not available."), so a Yahoo league
+  // showed a Resync button that failed every time. Same predicate as the route, so they cannot drift.
   const canResync = (l: LeagueRow) =>
     Boolean(l.platformLeagueId) &&
     IMPORT_PLATFORMS.has((l.platform ?? "").toLowerCase()) &&
+    isImportProviderAvailable((l.platform ?? "").toLowerCase() as ImportProvider) &&
     (Boolean(l.navigationLeagueId) || l.hasUnifiedRecord === true)
 
   return (
@@ -134,12 +202,15 @@ export function ImportedLeaguesPanel() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search your leagues…"
+            aria-label="Search your leagues"
+            type="search"
             className="w-full rounded-lg border py-2 pl-8 pr-3 text-sm outline-none"
             style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text)" }}
           />
         </div>
         {platforms.length > 1 ? (
           <select
+            aria-label="Filter by platform"
             value={platform}
             onChange={(e) => setPlatform(e.target.value)}
             className="rounded-lg border py-2 px-3 text-sm outline-none"
@@ -155,14 +226,27 @@ export function ImportedLeaguesPanel() {
 
       {loading ? (
         <p className="py-4 text-sm" style={{ color: "var(--muted)" }}>Loading your leagues…</p>
+      ) : failed ? (
+        <div className="py-2">
+          <RetryNotice
+            message="Couldn't load your leagues right now."
+            onRetry={() => void loadLeagues()}
+            testId="imported-leagues-retry"
+          />
+        </div>
       ) : filtered.length === 0 ? (
         <p className="py-4 text-sm" style={{ color: "var(--muted)" }}>
-          {(leagues ?? []).length === 0 ? "No leagues imported yet." : "No leagues match your filters."}
+          {(leagues ?? []).length === 0
+              ? "No leagues imported yet."
+              : "No leagues match your filters."}
         </p>
       ) : (
         <ul className="space-y-2">
           {filtered.map((l) => {
-            const pill = syncPill(l.syncStatus)
+            // A sync status only means something for an IMPORTED league. A native AllFantasy league has
+            // nothing to sync, and the pill's "Active" default read as an import that was fine.
+            const imported = IMPORT_PLATFORMS.has((l.platform ?? "").toLowerCase())
+            const pill = imported ? syncPill(l.syncStatus) : null
             const managers = l.teamCount ?? l.leagueSize
             const meta = [platformLabel(l.platform), managers ? `${managers} managers` : null, l.leagueType || l.scoring, l.season]
               .filter(Boolean)
@@ -185,13 +269,19 @@ export function ImportedLeaguesPanel() {
                   <div className="truncate text-sm font-medium" style={{ color: "var(--text)" }}>{l.name ?? "Untitled league"}</div>
                   <div className="truncate text-[11.5px]" style={{ color: "var(--muted)" }}>{meta}</div>
                 </div>
-                <span className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: pill.bg, color: pill.color }}>
-                  {pill.label}
-                </span>
+                {pill ? (
+                  <span className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: pill.bg, color: pill.color }}>
+                    {pill.label}
+                  </span>
+                ) : null}
                 {l.lastSyncedAt ? (
                   <span className="shrink-0 text-[11px]" style={{ color: "var(--muted)" }}>{relTime(l.lastSyncedAt)}</span>
                 ) : null}
-                <div className="flex shrink-0 gap-1.5">
+                {/*
+                  12px between Open and Resync on touch: at the 6px used for a mouse, a thumb that
+                  lands just left of Resync hits Open — which navigates away from Settings.
+                */}
+                <div className="flex shrink-0 gap-1.5 [@media(pointer:coarse)]:gap-3">
                   <Link
                     href={openHref}
                     className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-medium"
@@ -203,15 +293,29 @@ export function ImportedLeaguesPanel() {
                     <button
                       type="button"
                       onClick={() => void resync(l)}
-                      disabled={rs === "busy"}
+                      disabled={rs?.kind === "busy"}
+                      aria-live="polite"
                       className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-medium disabled:opacity-50"
-                      style={{ borderColor: "var(--border)", color: rs === "error" ? "var(--accent-red-strong)" : "var(--muted2)" }}
+                      style={{
+                        borderColor: "var(--border)",
+                        color:
+                          rs?.kind === "error"
+                            ? "var(--accent-red-strong)"
+                            : rs?.kind === "done"
+                              ? "#34d399"
+                              : "var(--muted2)",
+                      }}
                     >
-                      <RefreshCw className={`h-3.5 w-3.5 ${rs === "busy" ? "animate-spin" : ""}`} />
-                      {rs === "busy" ? "Resyncing…" : rs === "done" ? "Queued" : rs === "error" ? "Failed" : "Resync"}
+                      <RefreshCw className={`h-3.5 w-3.5 ${rs?.kind === "busy" ? "animate-spin" : ""}`} />
+                      {rs ? RESYNC_LABEL[rs.kind] : "Resync"}
                     </button>
                   ) : null}
                 </div>
+                {rs?.kind === "error" ? (
+                  <p className="basis-full text-xs text-red-600" role="alert" data-testid={`resync-error-${l.id}`}>
+                    {rs.message}
+                  </p>
+                ) : null}
               </li>
             )
           })}

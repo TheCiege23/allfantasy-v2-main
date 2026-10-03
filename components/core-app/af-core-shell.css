@@ -12,6 +12,14 @@
   grid-template-columns: 68px 232px minmax(0, 1fr);
   min-height: 100vh;
   min-height: 100dvh;
+  /*
+   * The side insets of a notched phone or tablet held sideways. `app/layout.tsx` sets
+   * `viewportFit: 'cover'`, which hands those edges to the page, and the top and bottom insets were
+   * already handled — the sides never were, so the 68px rail sat under the notch on a landscape
+   * iPhone. Zero everywhere else, so nothing moves on a device without one.
+   */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   background: var(--bg);
   background-image: var(--hero);
   background-repeat: no-repeat;
@@ -1553,6 +1561,20 @@
   color: var(--warn);
 }
 
+/*
+ * Your record in this league, shown only while the Career screen has published one
+ * (`lib/core-app/railCareerChannel.ts`). Top level on purpose (brace depth 0): it lives inside
+ * `.af-rail-row`, which the collapsed rail already hides, so it needs no state of its own.
+ */
+.af-core .af-rail-row-career {
+  font: 700 11px/1.3 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .af-core .af-rail-row-name {
   font: 800 12px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
   color: var(--text);
@@ -2134,6 +2156,7 @@
 }
 
 /* `af` is the third dark theme; it takes the dark values. Light inverts. */
+html[data-mode='legacy'] .af-core,
 html[data-mode='af'] .af-core {
   --af-sk-fill: rgba(255, 255, 255, 0.14);
   --af-sk-sheen: rgba(255, 255, 255, 0.1);
@@ -3073,4 +3096,77 @@ html[data-mode='light'] .af-core {
 .af-shell .af-rail-tile[data-nav-pending='true'] {
   background: var(--accent-soft);
   border-color: var(--accent-line);
+}
+
+/* Core readability pass: keep the same controls and data, with clearer scan points. */
+@media (min-width: 721px) {
+  .af-core .af-nav-item {
+    border-radius: 11px;
+  }
+  .af-core .af-nav-item[data-active='true'] {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile {
+    margin-block: 2px;
+    border: 1px solid transparent;
+    border-radius: 13px;
+  }
+  .af-shell[data-rail-open='true'] .af-rail-scroll .af-rail-tile[data-active='true'] {
+    border-color: var(--accent-line);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .af-core .af-rail-row-name {
+    font-size: 13px;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1080px) {
+  .af-core.af-shell:not([data-rail-open='true']) {
+    grid-template-columns: 68px 220px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .af-core .af-tabbar {
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.12);
+  }
+  .af-core .af-tabbar-item[data-active='true'] {
+    box-shadow: inset 0 2px 0 var(--accent);
+  }
+  .af-core.af-shell[data-league-first='true'] .af-lf-chatbar {
+    border-color: var(--accent-line);
+    background: var(--surface);
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.22);
+  }
+  .af-core.af-shell[data-league-first='true'] .af-lf-chatbar-icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+}
+
+/* ── League-first, phone: two gaps measured on the live shell, 2026-10-02 ────
+ *
+ * Its own top-level @media, appended — never nested inside an earlier block.
+ *
+ * - Back to top. Phase 1.5 cleared every other floating control off this shell ("nothing
+ *   floating") but missed this one: it is a Tailwind component outside the shell, so it is matched
+ *   through `body:has(...)` like the theme pill. It was the only purple thing on the screen and sat
+ *   on the roster's AF column. Owner's call, 2026-10-02: finish league-first's no-floating rule.
+ * - The content reserve. The comment above the chat bar says its top sits inside the reserve; at
+ *   the true document end the last line ("Standard total built from …") ended 3px above the bar,
+ *   touching it. The reserve now counts the bar itself: tab bar + the bar's 18px offset + its
+ *   ~68px measured height + 20px of air.
+ */
+@media (max-width: 720px) {
+  body:has(.af-core.af-shell[data-league-first='true']) [data-af-back-to-top] {
+    display: none !important;
+  }
+  .af-core.af-shell[data-league-first='true'] .af-content {
+    padding-bottom: calc(var(--af-tabbar-height, calc(56px + env(safe-area-inset-bottom, 0px))) + 18px + 68px + 20px);
+  }
 }

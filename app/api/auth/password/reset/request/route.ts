@@ -7,6 +7,7 @@ import { logPasswordResetAudit } from "@/lib/auth/password-reset-audit"
 import { getResendFromEmail } from "@/lib/resend-client"
 import { getServedOrigin } from "@/lib/http/served-origin"
 import { safeInternalPathOr } from "@/lib/auth/auth-intent-resolver"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
 
 export const runtime = "nodejs"
 
@@ -53,8 +54,7 @@ export async function POST(req: Request) {
   const type = String(body?.type || "email").toLowerCase()
   const returnTo = typeof body?.returnTo === "string" ? body.returnTo : null
   const email = String(body?.email || "").toLowerCase().trim()
-  let phone = String(body?.phone || "").trim().replace(/[\s()-]/g, "")
-  if (phone && !phone.startsWith("+")) phone = "+1" + phone
+  const phone = normalizePhoneE164(String(body?.phone || ""))
 
   if (type === "sms") {
     if (!/^\+\d{10,15}$/.test(phone)) {
@@ -66,6 +66,24 @@ export async function POST(req: Request) {
       })
       return NextResponse.json({ ok: true }, { status: 200 })
     }
+
+    /*
+     * ⚠ PER NUMBER, NOT ONLY PER IP. The only limit was 5 per 10 minutes per IP, so rotating IPs
+     * could text a verified user's phone with reset codes without end — a harassment and
+     * SMS-pumping path billed to us. Answered exactly like every other refusal here.
+     */
+    const phoneRl = rateLimit(`pw-reset-sms:${phone}`, 3, 3_600_000)
+    if (!phoneRl.success) {
+      void logPasswordResetAudit({
+        outcome: "rate_limited",
+        type: "sms",
+        phone,
+        ip,
+        detail: { limiter: "pw-reset-sms" },
+      })
+      return NextResponse.json({ ok: true }, { status: 200 })
+    }
+
     let profile: { userId: string; phoneVerifiedAt: Date | null } | null = null
     let profileLookupError: unknown = null
     try {
@@ -140,43 +158,44 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true }, { status: 200 })
     }
 
-    try {
-      const { getTwilioClient } = await import("@/lib/twilio-client")
-      const client = await getTwilioClient()
-      const fromNumber = process.env.TWILIO_PHONE_NUMBER
-      if (!fromNumber) {
-        void logPasswordResetAudit({
-          outcome: "sms_provider_missing",
-          type: "sms",
-          userId: profile.userId,
-          phone,
-          ip,
-        })
-        return NextResponse.json({ ok: true }, { status: 200 })
-      }
-      await client.messages.create({
-        body: `Your AllFantasy password reset code is: ${code}. It expires in 15 minutes.`,
-        from: fromNumber,
-        to: phone,
-      })
+    if (!process.env.TWILIO_PHONE_NUMBER?.trim()) {
       void logPasswordResetAudit({
-        outcome: "sms_sent",
+        outcome: "sms_provider_missing",
         type: "sms",
         userId: profile.userId,
         phone,
         ip,
       })
-    } catch (error) {
+      return NextResponse.json({ ok: true }, { status: 200 })
+    }
+
+    /*
+     * ⚠ THROUGH sendSms, LIKE EVERY OTHER TEXT. This route called `messages.create` itself, so
+     * the reset text was the one raw SMS without the "Reply STOP to opt out." line the A2P
+     * campaign promises, and a STOP reply (21610) went unrecorded. sendSms adds the line
+     * (the body already names AllFantasy, so no prefix is added) and records an opt-out.
+     * ⚠ The A2P campaign's sample 1 is this text — it now ends with the STOP line; update the
+     * campaign sample to match.
+     */
+    const { sendSms } = await import("@/lib/twilio-client")
+    const sent = await sendSms(phone, `Your AllFantasy password reset code is: ${code}. It expires in 15 minutes.`)
+    if (!sent) {
       void logPasswordResetAudit({
         outcome: "sms_send_failed",
         type: "sms",
         userId: profile.userId,
         phone,
         ip,
-        detail: { error: error instanceof Error ? error.message : String(error) },
       })
       return NextResponse.json({ ok: true }, { status: 200 })
     }
+    void logPasswordResetAudit({
+      outcome: "sms_sent",
+      type: "sms",
+      userId: profile.userId,
+      phone,
+      ip,
+    })
     return NextResponse.json({ ok: true, method: "sms" }, { status: 200 })
   }
 

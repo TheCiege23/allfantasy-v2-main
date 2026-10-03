@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { parseFormerSleeperKey } from '@/lib/league-import/sleeper/historicalTeamIdentity'
 
 type JsonRecord = Record<string, unknown>
 
@@ -18,6 +19,12 @@ function asString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed ? trimmed : null
+}
+
+/** A stored team id: Sleeper writes bracket ids and playoff participants as NUMBERS, which `asString` drops. */
+function asId(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  return asString(value)
 }
 
 function asNumber(value: unknown): number | null {
@@ -167,15 +174,24 @@ function buildPlayoffBracket(metadata: unknown, standingNameMap: Map<string, str
   const idMap = asRecord(playoffStructure.canonicalRosterIdByHistoricalRosterId) ?? {}
   const finishByRosterId = asRecord(playoffStructure.playoffFinishByRosterId) ?? {}
   const mapRosterId = (value: unknown) => {
-    const rawId = asString(value)
+    const rawId = asId(value)
     if (!rawId) return null
-    const canonical = asString(idMap[rawId])
+    const canonical = asId(idMap[rawId])
     return canonical ?? rawId
   }
+  /*
+   * ⚠ NAME BY THE SEASON'S OWN ROSTER ID. `teamRecords` is written per season, keyed by that season's
+   * `roster_id`; the canonical id is TODAY's slot, which in a past season may have been someone else's.
+   */
   const resolveLabel = (value: unknown) => {
+    const rawId = asId(value)
     const canonical = mapRosterId(value)
-    if (!canonical) return null
-    return standingNameMap.get(canonical) ?? canonical
+    if (!rawId || !canonical) return null
+    return (
+      standingNameMap.get(rawId) ??
+      standingNameMap.get(canonical) ??
+      (parseFormerSleeperKey(canonical) ? 'Former manager' : canonical)
+    )
   }
 
   const decorateBracket = (value: unknown) =>
@@ -199,20 +215,17 @@ function buildPlayoffBracket(metadata: unknown, standingNameMap: Map<string, str
       }
     })
 
-  const participantIds = asArray(playoffStructure.playoffParticipants)
-    .map(mapRosterId)
+  const participantRawIds = asArray(playoffStructure.playoffParticipants)
+    .map(asId)
     .filter(Boolean) as string[]
 
-  const participants = participantIds.map((participantId) => {
-    const finishEntry = asRecord(
-      finishByRosterId[participantId] ??
-        finishByRosterId[
-          Object.keys(idMap).find((historicalId) => asString(idMap[historicalId]) === participantId) ?? ''
-        ]
-    )
+  // `playoffFinishByRosterId` is keyed by the season's own roster id, like `teamRecords`.
+  const participants = participantRawIds.map((rawId) => {
+    const participantId = mapRosterId(rawId) ?? rawId
+    const finishEntry = asRecord(finishByRosterId[rawId])
     return {
       rosterId: participantId,
-      managerName: standingNameMap.get(participantId) ?? participantId,
+      managerName: resolveLabel(rawId) ?? participantId,
       seed: asNumber(finishEntry?.playoffSeed),
       label: asString(finishEntry?.label),
       isChampion: finishEntry?.isChampion === true,

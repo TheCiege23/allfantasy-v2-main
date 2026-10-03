@@ -4,6 +4,7 @@ import { Dash34Time, Dash34Countdown } from '@/components/core-app/screens/Dashb
 import Link from 'next/link'
 import type { PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import type { TodayStripData } from '@/lib/core-app/todayStrip'
+import { FallbackImg } from '@/components/core-app/FallbackImg'
 
 /**
  * Game day — the band that only exists while games are being played.
@@ -133,8 +134,7 @@ export function DashGameDayBand({
             <li key={p.id} className="af-gd-play">
               <span className="af-gd-face" aria-hidden>
                 {p.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.imageUrl} alt="" loading="lazy" />
+                  <FallbackImg src={p.imageUrl} alt="" loading="lazy" fallback={initialsOf(p.playerName)} />
                 ) : (
                   initialsOf(p.playerName)
                 )}
@@ -162,9 +162,10 @@ export function DashGameDayBand({
               </span>
               <div className="af-gd-nexttext">
                 <div className="af-gd-matchup">
-                  {row.game?.awayLogo ? <img src={row.game.awayLogo} alt="" width={24} height={24} loading="lazy" /> : null}
+                  {/* A crest that fails to load disappears, like one we never had — never a broken glyph. */}
+                  {row.game?.awayLogo ? <FallbackImg src={row.game.awayLogo} fallback={null} alt="" width={24} height={24} loading="lazy" /> : null}
                   <span>{row.game?.away ?? row.text}</span>
-                  {row.game ? <><span>at</span>{row.game.homeLogo ? <img src={row.game.homeLogo} alt="" width={24} height={24} loading="lazy" /> : null}<span>{row.game.home}</span></> : null}
+                  {row.game ? <><span>at</span>{row.game.homeLogo ? <FallbackImg src={row.game.homeLogo} fallback={null} alt="" width={24} height={24} loading="lazy" /> : null}<span>{row.game.home}</span></> : null}
                 </div>
                 {row.game ? <div className="af-gd-market" title={row.game.oddsAt ? `Odds checked ${row.game.oddsAt}` : undefined}>{row.game.odds}</div> : null}
                 <div className="af-gd-nextsub">{row.sub} · Starts in <Dash34Countdown to={row.time} initial="—" /></div>

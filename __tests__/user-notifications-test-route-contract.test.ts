@@ -292,10 +292,8 @@ describe("User notifications test route contracts", () => {
     expect(payload.sent.sms).toBe(false)
     expect(payload.smsDestination).toBeNull()
     expect(sendSmsMock).not.toHaveBeenCalled()
-    // the mocked status is what the route reports back, not an ambient env read
-    expect(payload.twilioRuntimeStatus).toMatchObject({
-      canUseRawSms: false,
-      hasFromNumber: false,
-    })
+    // the mocked status is what the route reports back, not an ambient env read — and only the
+    // user-actionable bit of it: credential mode and env-var presence are server configuration
+    expect(payload.twilioRuntimeStatus).toEqual({ canUseRawSms: false })
   })
 })

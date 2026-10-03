@@ -19,10 +19,18 @@ const MLB_ROUND_ORDER: PlayoffRoundKey[] = [
   "world_series",
 ]
 
+const CFP_ROUND_ORDER: PlayoffRoundKey[] = [
+  "cfp_first_round",
+  "cfp_quarterfinals",
+  "cfp_semifinals",
+  "cfp_championship",
+]
+
 const ROUND_ORDER_BY_SPORT: Record<PlayoffSport, PlayoffRoundKey[]> = {
   nba: CONFERENCE_ROUND_ORDER,
   nhl: CONFERENCE_ROUND_ORDER,
   mlb: MLB_ROUND_ORDER,
+  ncaaf: CFP_ROUND_ORDER,
 }
 
 const NBA_TEAMS = {
@@ -45,10 +53,22 @@ const MLB_TEAMS = {
   nl: ["Dodgers", "Phillies", "Brewers", "Padres", "Mets", "Braves"],
 } as const
 
+/*
+ * TWELVE, in seed order, under one national key — CFP seeds are not split by
+ * conference. Test mode only; a real pool's names come from the admin seeding.
+ */
+const CFP_TEAMS = {
+  cfp: [
+    "Oregon", "Georgia", "Boise State", "Arizona State", "Texas", "Penn State",
+    "Notre Dame", "Ohio State", "Tennessee", "Indiana", "SMU", "Clemson",
+  ],
+} as const
+
 const TEST_MODE_TEAMS: Record<PlayoffSport, Record<string, readonly string[]>> = {
   nba: NBA_TEAMS,
   nhl: NHL_TEAMS,
   mlb: MLB_TEAMS,
+  ncaaf: CFP_TEAMS,
 }
 
 /**
@@ -60,7 +80,8 @@ const TEST_MODE_TEAMS: Record<PlayoffSport, Record<string, readonly string[]>> =
  */
 function resolveSeedName(
   sport: BuildPlayoffTemplateInput["sport"],
-  conference: "east" | "west" | "al" | "nl",
+  // `cfp` is the CFP's single national seed list — its placeholder is `CFP1`…`CFP12`.
+  conference: "east" | "west" | "al" | "nl" | "cfp",
   seed: number,
   isTestMode: boolean,
 ) {
@@ -208,10 +229,143 @@ function buildMlbTemplate(isTestMode: boolean): PlayoffTemplateSeries[] {
   return [...wildCard, ...divisionSeries, ...championshipSeries, worldSeries]
 }
 
+/**
+ * The 12-team College Football Playoff, as played since the 2024 season.
+ *
+ * ⚠ EVERY GAME IS A SINGLE GAME. `bestOf: 1` throughout; the win maths in the
+ * sync (`floor(bestOf / 2) + 1` = 1) already handles it. The UI must say
+ * "Final", not "wins series 1-0" — see `isSingleGameSeries`.
+ *
+ * ⚠ THE BRACKET IS FIXED, NOT RESEEDED — and the pairings are not the
+ * "1 v lowest survivor" a fresh reader expects:
+ *   First round (higher seed hosts): 8v9, 5v12, 7v10, 6v11
+ *   Quarterfinals: #1 v W(8/9) · #4 v W(5/12) · #2 v W(7/10) · #3 v W(6/11)
+ *   Semifinals:    W(1 side) v W(4 side) · W(2 side) v W(3 side)
+ * Checked against the real 2024-25 bracket: #8 Ohio State beat #9 Tennessee,
+ * then #1 Oregon, then met the #5/#4 side's Texas in a semifinal.
+ *
+ * ⚠ BYES ARE EXPRESSED BY ABSENCE, as in MLB: seeds 1–4 do not appear in the
+ * first round; each enters its quarterfinal with a real seed name on one side
+ * and a `Winner S<n>` placeholder on the other.
+ *
+ * Halves: `upper` is the 1/4 side (S1, S2, S5, S6, S9), `lower` the 2/3 side
+ * (S3, S4, S7, S8, S10); S11 is the championship.
+ */
+function buildCfpTemplate(isTestMode: boolean): PlayoffTemplateSeries[] {
+  const seed = (n: number) => resolveSeedName("ncaaf", "cfp", n, isTestMode)
+
+  const firstRound = (
+    [
+      { seriesNumber: 1, conference: "upper", homeSeed: 8, awaySeed: 9, nextSeriesNumber: 5 },
+      { seriesNumber: 2, conference: "upper", homeSeed: 5, awaySeed: 12, nextSeriesNumber: 6 },
+      { seriesNumber: 3, conference: "lower", homeSeed: 7, awaySeed: 10, nextSeriesNumber: 7 },
+      { seriesNumber: 4, conference: "lower", homeSeed: 6, awaySeed: 11, nextSeriesNumber: 8 },
+    ] as const
+  ).map((spec) =>
+    createSeries({
+      round: "cfp_first_round",
+      roundIndex: 1,
+      seriesNumber: spec.seriesNumber,
+      conference: spec.conference,
+      homeSeed: spec.homeSeed,
+      awaySeed: spec.awaySeed,
+      homeTeamName: seed(spec.homeSeed),
+      awayTeamName: seed(spec.awaySeed),
+      winnerTeamName: null,
+      bestOf: 1,
+      status: "scheduled",
+      startsAt: null,
+      nextSeriesNumber: spec.nextSeriesNumber,
+      // The first-round winner is always the quarterfinal's AWAY side; the bye seed is home.
+      nextSeriesSlot: "away",
+      sourceSeriesHome: null,
+      sourceSeriesAway: null,
+    }),
+  )
+
+  const quarterfinals = (
+    [
+      { seriesNumber: 5, conference: "upper", byeSeed: 1, from: 1, nextSeriesNumber: 9, nextSeriesSlot: "home" },
+      { seriesNumber: 6, conference: "upper", byeSeed: 4, from: 2, nextSeriesNumber: 9, nextSeriesSlot: "away" },
+      { seriesNumber: 7, conference: "lower", byeSeed: 2, from: 3, nextSeriesNumber: 10, nextSeriesSlot: "home" },
+      { seriesNumber: 8, conference: "lower", byeSeed: 3, from: 4, nextSeriesNumber: 10, nextSeriesSlot: "away" },
+    ] as const
+  ).map((spec) =>
+    createSeries({
+      round: "cfp_quarterfinals",
+      roundIndex: 2,
+      seriesNumber: spec.seriesNumber,
+      conference: spec.conference,
+      homeSeed: spec.byeSeed,
+      awaySeed: 0,
+      homeTeamName: seed(spec.byeSeed),
+      awayTeamName: `Winner S${spec.from}`,
+      winnerTeamName: null,
+      bestOf: 1,
+      status: "scheduled",
+      startsAt: null,
+      nextSeriesNumber: spec.nextSeriesNumber,
+      nextSeriesSlot: spec.nextSeriesSlot,
+      sourceSeriesHome: null,
+      sourceSeriesAway: spec.from,
+    }),
+  )
+
+  const semifinals = (
+    [
+      { seriesNumber: 9, conference: "upper", home: 5, away: 6, nextSeriesSlot: "home" },
+      { seriesNumber: 10, conference: "lower", home: 7, away: 8, nextSeriesSlot: "away" },
+    ] as const
+  ).map((spec) =>
+    createSeries({
+      round: "cfp_semifinals",
+      roundIndex: 3,
+      seriesNumber: spec.seriesNumber,
+      conference: spec.conference,
+      homeSeed: 0,
+      awaySeed: 0,
+      homeTeamName: `Winner S${spec.home}`,
+      awayTeamName: `Winner S${spec.away}`,
+      winnerTeamName: null,
+      bestOf: 1,
+      status: "scheduled",
+      startsAt: null,
+      nextSeriesNumber: 11,
+      nextSeriesSlot: spec.nextSeriesSlot,
+      sourceSeriesHome: spec.home,
+      sourceSeriesAway: spec.away,
+    }),
+  )
+
+  const championship = createSeries({
+    round: "cfp_championship",
+    roundIndex: 4,
+    seriesNumber: 11,
+    conference: "finals",
+    homeSeed: 0,
+    awaySeed: 0,
+    // `Winner S<n>` is a placeholder by `isOfficialTeamName`'s reckoning, which
+    // keeps the title game unpickable until both semifinals are called.
+    homeTeamName: "Winner S9",
+    awayTeamName: "Winner S10",
+    winnerTeamName: null,
+    bestOf: 1,
+    status: "scheduled",
+    startsAt: null,
+    nextSeriesNumber: null,
+    nextSeriesSlot: null,
+    sourceSeriesHome: 9,
+    sourceSeriesAway: 10,
+  })
+
+  return [...firstRound, ...quarterfinals, ...semifinals, championship]
+}
+
 export function buildPlayoffTemplate(input: BuildPlayoffTemplateInput): PlayoffTemplateSeries[] {
   const isTestMode = Boolean(input.isTestMode)
 
   if (input.sport === "mlb") return buildMlbTemplate(isTestMode)
+  if (input.sport === "ncaaf") return buildCfpTemplate(isTestMode)
 
   return [
     createSeries({

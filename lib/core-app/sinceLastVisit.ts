@@ -453,7 +453,8 @@ async function writeMarker(userId: string, marker: VisitMarker, now: Date): Prom
     .catch(() => undefined)
 }
 
-async function snapshotStandings(userId: string, leagueIds: string[]): Promise<Record<string, StandingSnap>> {
+/** Exported for the Career Wire (`careerWire.ts`), which diffs the same claimed-team standings. */
+export async function snapshotStandings(userId: string, leagueIds: string[]): Promise<Record<string, StandingSnap>> {
   if (leagueIds.length === 0) return {}
   const teams = await prisma.leagueTeam
     .findMany({
@@ -469,6 +470,46 @@ async function snapshotStandings(userId: string, leagueIds: string[]): Promise<R
     out[t.leagueId] = { rank: t.currentRank ?? null, wins: t.wins, losses: t.losses, ties: t.ties }
   }
   for (const id of dupes) delete out[id]
+
+  const unclaimed = leagueIds.filter((id) => !out[id] && !dupes.has(id))
+  if (unclaimed.length > 0) Object.assign(out, await snapshotNativeStandings(userId, unclaimed))
+  return out
+}
+
+/**
+ * Your record in an AllFantasy-native league where you have no claimed `LeagueTeam`, read from the
+ * season engine's own row (`RedraftRoster`, owned by your AppUser id).
+ *
+ * 🛑 THE `LeagueTeam` MIRROR CANNOT BE TRUSTED TO FIND YOU IN A NATIVE LEAGUE. The standings engine
+ * copies records onto `LeagueTeam` (`mirrorNativeLeagueTeamRecords`), but the Wire and the home
+ * brief only read a team CLAIMED by you. Measured on production 2026-10-01: of the three native
+ * leagues with games played, one had 3 `league_teams` rows against 12 rosters and its owner's seat
+ * was not among the claimed ones — a 1-2 record the Career Wire could never report.
+ *
+ * A FALLBACK, NEVER AN OVERRIDE: a league with a claimed team keeps that reading, and a league with
+ * two claimed teams stays dropped. `playoffSeed` is the engine's standings order, so it is the rank;
+ * before a game is on record it is withheld, as `diffStandings` already does for a stored rank.
+ * Newest season wins. A failed read — or a client without the model — is simply no fallback.
+ */
+async function snapshotNativeStandings(userId: string, leagueIds: string[]): Promise<Record<string, StandingSnap>> {
+  const rows = await Promise.resolve()
+    .then(() =>
+      prisma.redraftRoster.findMany({
+        where: { leagueId: { in: leagueIds }, ownerId: userId },
+        select: { leagueId: true, wins: true, losses: true, ties: true, playoffSeed: true, season: { select: { season: true } } },
+      }),
+    )
+    .catch(() => [])
+  const newest = new Map<string, (typeof rows)[number]>()
+  for (const r of rows) {
+    const held = newest.get(r.leagueId)
+    if (!held || (r.season?.season ?? 0) > (held.season?.season ?? 0)) newest.set(r.leagueId, r)
+  }
+  const out: Record<string, StandingSnap> = {}
+  for (const [leagueId, r] of newest) {
+    const played = r.wins + r.losses + r.ties > 0
+    out[leagueId] = { rank: played ? (r.playoffSeed ?? null) : null, wins: r.wins, losses: r.losses, ties: r.ties }
+  }
   return out
 }
 

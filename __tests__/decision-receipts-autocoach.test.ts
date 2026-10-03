@@ -170,6 +170,20 @@ describe('getAutoCoachReceipts', () => {
     expect(out?.autocoach[0].week).toBe(MAX_AUTOCOACH_RECEIPTS + 2)
   })
 
+  it('the Career decision record widens the window and lifts the cap — through THIS function, not a copy', async () => {
+    const kick = (w: number) => new Date(Date.UTC(2026, 8, 7 + 7 * w, 17))
+    const swaps = Array.from({ length: MAX_AUTOCOACH_RECEIPTS + 2 }, (_, i) => swap({ playerInId: `in${i}`, playerOutId: `out${i}`, gameStartsAt: kick(i + 1) }))
+    const games = swaps.map((s, i) => ({ startTime: s.gameStartsAt, week: i + 1, season: 2026 }))
+    const scores = swaps.flatMap((s, i) => [score(`in${i}`, 10, true, { week: i + 1 }), score(`out${i}`, 5, false, { week: i + 1 })])
+    db({ swaps, games, scores })
+    const since = new Date('2026-08-01T00:00:00Z')
+    const out = await getAutoCoachReceipts({ userId: USER, leagues: [ICE], currentWeek: 12, since, limit: Number.POSITIVE_INFINITY })
+    const query = h.swapFind.mock.calls[0][0]
+    expect(query.where.swapMadeAt).toEqual({ gte: since })
+    expect(query.take).toBe(600)
+    expect(out?.autocoach).toHaveLength(MAX_AUTOCOACH_RECEIPTS + 2)
+  })
+
   it('🛑 no swaps → null (no card section) and nothing else is read', async () => {
     db({ swaps: [] })
     expect(await getAutoCoachReceipts({ userId: USER, leagues: [ICE], currentWeek: 6 })).toBeNull()

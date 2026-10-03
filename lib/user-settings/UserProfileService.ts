@@ -9,7 +9,7 @@ import {
   OFFENSIVE_DISPLAY_NAME_MESSAGE,
   OFFENSIVE_USERNAME_MESSAGE,
 } from "@/lib/moderation/offensiveName"
-import type { ProfileUpdatePayload } from "./types"
+import { MAX_DISPLAY_NAME_LENGTH, type ProfileUpdatePayload } from "./types"
 
 /**
  * Updates user profile fields that are editable from Settings.
@@ -35,6 +35,9 @@ export async function updateUserProfile(
    */
   if (typeof payload.displayName === "string" && isOffensiveDisplayName(payload.displayName.trim())) {
     return { ok: false, error: OFFENSIVE_DISPLAY_NAME_MESSAGE }
+  }
+  if (typeof payload.displayName === "string" && payload.displayName.trim().length > MAX_DISPLAY_NAME_LENGTH) {
+    return { ok: false, error: `Display name can be at most ${MAX_DISPLAY_NAME_LENGTH} characters.` }
   }
 
   if (payload.username !== undefined && payload.username !== null) {

@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { groupLeagueHubs } from '@/lib/core-app/leagueHubGroups'
 import type { MyLeaguesData, MyLeaguesLeague, MyLeaguesTier } from '@/lib/core-app/myLeagues'
 import { LeagueHistoryVirtualList } from './LeagueHistoryVirtualList'
@@ -114,6 +116,8 @@ export function MyLeaguesV4({
   importHref,
   syncHref,
 }: MyLeaguesV4Props) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const [query, setQuery] = useState('')
   const [platform, setPlatform] = useState<string>('all')
   const [showHistory, setShowHistory] = useState(false)
@@ -175,7 +179,7 @@ export function MyLeaguesV4({
     <div className="af-core af-ml">
       <header className="af-ml-head">
         <div className="af-ml-headline">
-          <h1 className="af-ml-title">My leagues</h1>
+          <h1 className="af-ml-title">{copy('My leagues')}</h1>
           <p className="af-ml-sub">
             <strong>{counts.live}</strong> live
             {counts.history > 0 ? (
@@ -198,7 +202,7 @@ export function MyLeaguesV4({
           */}
           {syncHref ? (
             <Link href={syncHref} className="af-ml-btn af-ml-btn--ghost">
-              Sync &amp; connect
+              {copy('Sync & connect')}
             </Link>
           ) : null}
           {/*
@@ -209,10 +213,10 @@ export function MyLeaguesV4({
             synced — which is most of them.
           */}
           <Link href="/core/connect-leagues" className="af-ml-btn af-ml-btn--ghost">
-            Connect two leagues
+            {copy('Connect two leagues')}
           </Link>
           <Link href={importHref} className="af-ml-btn">
-            Import more
+            {copy('Import more')}
           </Link>
         </div>
       </header>
@@ -232,19 +236,19 @@ export function MyLeaguesV4({
                 ? `Search ${counts.all} leagues and past seasons`
                 : `Search ${counts.live} live leagues`
             }
-            aria-label="Search leagues"
+            aria-label={copy('Search leagues')}
             className="af-ml-search-input"
           />
         </label>
 
         <label className="af-ml-select">
-          <span className="af-ml-select-label">Platform</span>
+          <span className="af-ml-select-label">{copy('Platform')}</span>
           <select
             value={platform}
             onChange={(e) => setPlatform(e.target.value)}
             aria-label="Filter by platform"
           >
-            <option value="all">All platforms</option>
+            <option value="all">{copy('All platforms')}</option>
             {platforms.map((p) => (
               <option key={p} value={p}>
                 {platformLabel(p)}
@@ -260,10 +264,10 @@ export function MyLeaguesV4({
           onClick={() => setShowHistory((v) => !v)}
           aria-pressed={showHistory}
         >
-          {showHistory ? 'Live + history' : '+ history'}
+          {copy(showHistory ? 'Live + history' : '+ history')}
         </button>
 
-        <div className="af-ml-view" role="group" aria-label="View mode">
+        <div className="af-ml-view" role="group" aria-label={copy('View mode')}>
           <button
             type="button"
             className="af-ml-view-btn"
@@ -271,7 +275,7 @@ export function MyLeaguesV4({
             onClick={() => setView('grid')}
             aria-pressed={view === 'grid'}
           >
-            Grid
+            {copy('Grid')}
           </button>
           <button
             type="button"
@@ -280,7 +284,7 @@ export function MyLeaguesV4({
             onClick={() => setView('list')}
             aria-pressed={view === 'list'}
           >
-            List
+            {copy('List')}
           </button>
         </div>
       </div>
@@ -296,12 +300,12 @@ export function MyLeaguesV4({
             onClick={() => setChip((cur) => (cur === c.key ? null : c.key))}
             aria-pressed={chip === c.key}
           >
-            {c.label} <span className="af-ml-chip-n af-num">{c.count}</span>
+            {copy(c.label)} <span className="af-ml-chip-n af-num">{c.count}</span>
           </button>
         ))}
         {chip ? (
           <button type="button" className="af-ml-chip af-ml-chip--clear" onClick={() => setChip(null)}>
-            Clear filter
+            {copy('Clear filter')}
           </button>
         ) : null}
       </div>
@@ -327,7 +331,7 @@ export function MyLeaguesV4({
 
       {nothingMatches ? (
         <div className="af-ml-empty">
-          <p className="af-ml-empty-t">Nothing matches those filters</p>
+          <p className="af-ml-empty-t">{copy('Nothing matches those filters')}</p>
           <p className="af-ml-empty-p">
             {counts.live === 0
               ? 'No leagues are connected to this account yet.'
@@ -339,7 +343,7 @@ export function MyLeaguesV4({
             </Link>
             {counts.live === 0 ? (
               <Link href={importHref} className="af-ml-btn">
-                Import a league
+                {copy('Import a league')}
               </Link>
             ) : (
               <button
@@ -351,7 +355,7 @@ export function MyLeaguesV4({
                   setChip(null)
                 }}
               >
-                Reset filters
+                {copy('Reset filters')}
               </button>
             )}
           </div>
@@ -372,7 +376,7 @@ export function MyLeaguesV4({
           <section key={tier} className="af-ml-tier" id={meta.anchor} data-tier={tier}>
             <div className="af-ml-tier-head">
               <h2 className="af-ml-tier-title">
-                {meta.title} <span className="af-ml-tier-n af-num">{all.length}</span>
+                {copy(meta.title)} <span className="af-ml-tier-n af-num">{all.length}</span>
               </h2>
               <p className="af-ml-tier-blurb">{meta.blurb}</p>
             </div>
@@ -408,7 +412,7 @@ export function MyLeaguesV4({
                 className="af-ml-collapse"
                 onClick={() => setExpanded((e) => ({ ...e, [tier]: false }))}
               >
-                Show fewer
+                {copy('Show fewer')}
               </button>
             ) : null}
           </section>
@@ -420,7 +424,7 @@ export function MyLeaguesV4({
         <section className="af-ml-tier" id="af-ml-history">
           <div className="af-ml-tier-head">
             <h2 className="af-ml-tier-title">
-              Past seasons <span className="af-ml-tier-n af-num">{filteredHistory.length}</span>
+              {copy('Past seasons')} <span className="af-ml-tier-n af-num">{filteredHistory.length}</span>
             </h2>
             <p className="af-ml-tier-blurb">
               Finished seasons from your career import. These are records, not leagues you play —
@@ -447,10 +451,10 @@ export function MyLeaguesV4({
         </div>
         <div className="af-ml-foot-actions">
           <Link href="/core/career" className="af-ml-btn af-ml-btn--ghost">
-            Browse history
+            {copy('Browse history')}
           </Link>
           <Link href={importHref} className="af-ml-btn">
-            Import more
+            {copy('Import more')}
           </Link>
         </div>
       </footer>
@@ -465,7 +469,7 @@ export function MyLeaguesV4({
       {coverage.length > 0 ? (
         <section className="af-ml-cover" aria-labelledby="af-ml-cover-h">
           <h2 className="af-ml-cover-h" id="af-ml-cover-h">
-            Not yet watched
+            {copy('Not yet watched')}
           </h2>
           <ul className="af-ml-cover-list">
             {coverage.map((c) => (

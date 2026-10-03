@@ -215,11 +215,147 @@ describe('StandingsBoard', () => {
     expect(container.textContent ?? '').toMatch(/1 league could not be ranked/i)
   })
 
+  it("adds this week's swing, who to root for and the schedule ahead — only from what was simulated", () => {
+    const sched = (rank: number) => ({
+      pastOpponentMu: null,
+      remainingOpponentMu: 110,
+      pastRank: null,
+      remainingRank: rank,
+      leagueMu: 105,
+      pastGames: 0,
+      remainingGames: 3,
+    })
+    const l = outlookLeague()
+    const league = {
+      ...l,
+      you: { ...l.you!, schedule: sched(2) },
+      teams: [1, 2, 3].map((r) => ({ ...l.you!, rosterId: String(r), isYou: r === 1, schedule: sched(r === 1 ? 2 : r === 2 ? 1 : 3) })),
+    } as OutlookLeague
+    const swing = {
+      leagueId: 'l1',
+      leagueName: l.leagueName,
+      week: 9,
+      opponentName: 'Gridiron Ghosts',
+      ifWin: 71.4,
+      ifLose: 38.2,
+      swing: 33.2,
+      clinchOnWin: false,
+      helpIfLose: [],
+      rooting: [{ week: 9, a: '2', b: '3', aName: 'Turf Wars', bName: 'Bench Mob', ifA: 40, ifB: 60, rootFor: '3' }],
+    }
+    const { container } = render(
+      <StandingsBoard
+        outlook={outlook({ leagues: [league], swingByLeague: { l1: swing } })}
+        allHref="/core/standings?all=1"
+        totalLeagues={9}
+      />,
+    )
+    expect(container.querySelector('.af-bd-sub3')?.textContent).toBe(
+      'Wk 9 vs Gridiron Ghosts: 71% with a win, 38% with a loss · root for Bench Mob · 2nd-hardest schedule left of 3',
+    )
+  })
+
+  it('draws no stakes line when there is neither a swing game nor a ranked schedule', () => {
+    const { container } = render(
+      <StandingsBoard outlook={outlook()} allHref="/core/standings?all=1" totalLeagues={9} />,
+    )
+    expect(container.querySelector('.af-bd-sub3')).toBeNull()
+  })
+
   it('states that the odds are simulated, never bare', () => {
     const { container } = render(
       <StandingsBoard outlook={outlook()} allHref="/core/standings?all=1" totalLeagues={9} />,
     )
     expect(container.textContent ?? '').toMatch(/simulated over each league/i)
+  })
+
+  it('leads with the summary Season Outlook computed, over the leagues it could rank', () => {
+    const { container } = render(
+      <StandingsBoard
+        outlook={outlook({
+          leagues: [outlookLeague(), outlookLeague({ leagueId: 'l2', you: null })],
+          summary: { makingPlayoffs: 1, clinched: 1, onTheBubble: 0, onByePace: 0, bestTitle: { pct: 22.4, leagueName: "Chimmy's Champions" } },
+        })}
+        allHref="/core/standings?all=1"
+        totalLeagues={9}
+      />,
+    )
+    const pulse = container.querySelector('.af-bd-pulse')?.textContent ?? ''
+    /* Of the ONE ranked league — not of the two simulated, nor the nine on the account. */
+    expect(pulse).toContain('On playoff pace in 1 of 1 league')
+    expect(pulse).toContain('22%')
+    expect(pulse).toContain('Best title shot')
+  })
+
+  it('draws no summary when there is nothing ranked', () => {
+    const { container } = render(
+      <StandingsBoard
+        outlook={outlook({ leagues: [outlookLeague({ you: null })] })}
+        allHref="/core/standings?all=1"
+        totalLeagues={9}
+      />,
+    )
+    expect(container.querySelector('.af-bd-pulse')).toBeNull()
+  })
+
+  it("names the week's biggest game and links into its league", () => {
+    const swing = {
+      leagueId: 'l1',
+      leagueName: "Chimmy's Champions",
+      week: 9,
+      opponentName: 'Gridiron Ghosts',
+      ifWin: 88.4,
+      ifLose: 12.1,
+      swing: 76.3,
+      clinchOnWin: true,
+      helpIfLose: [],
+      rooting: [{ week: 9, a: '2', b: '3', aName: 'Turf Wars', bName: 'Bench Mob', ifA: 40, ifB: 60, rootFor: '3' }],
+    }
+    const { container } = render(
+      <StandingsBoard outlook={outlook({ weekThatMatters: swing })} allHref="/core/standings?all=1" totalLeagues={9} />,
+    )
+    const card = container.querySelector('a.af-bd-mustwin')
+    expect(card?.getAttribute('href')).toBe('/core/standings?league=l1')
+    expect(card?.textContent).toContain('Wk 9 vs Gridiron Ghosts')
+    expect(card?.textContent).toContain('88%')
+    expect(card?.textContent).toContain('12%')
+    expect(card?.textContent).toContain('Win and you are in. Root for Bench Mob.')
+  })
+
+  it('draws no biggest-game card for a league that is not on the board', () => {
+    const swing = {
+      leagueId: 'elsewhere',
+      leagueName: 'Not ranked',
+      week: 9,
+      opponentName: null,
+      ifWin: 60,
+      ifLose: 20,
+      swing: 40,
+      clinchOnWin: false,
+      helpIfLose: [],
+    }
+    const { container } = render(
+      <StandingsBoard outlook={outlook({ weekThatMatters: swing })} allHref="/core/standings?all=1" totalLeagues={9} />,
+    )
+    expect(container.querySelector('.af-bd-mustwin')).toBeNull()
+  })
+
+  it('marks the seed and the playoff cutoff on the meter', () => {
+    const l = outlookLeague()
+    const { container } = render(
+      <StandingsBoard
+        outlook={outlook({
+          leagues: [{ ...l, playoffTeams: 6, you: { ...l.you!, seed: 9 }, teams: Array.from({ length: 12 }, (_, i) => ({ ...l.you!, rosterId: String(i + 1), seed: i + 1 })) }],
+        })}
+        allHref="/core/standings?all=1"
+        totalLeagues={9}
+      />,
+    )
+    const bar = container.querySelector('.af-bd-seedbar')
+    expect(bar?.getAttribute('aria-hidden')).toBe('true')
+    expect(parseFloat((bar?.querySelector('.af-bd-seedbar-in') as HTMLElement | null)?.style.width ?? '')).toBeCloseTo(50, 1)
+    /* Seed 9 of 12 sits at the centre of the 9th slot: (9 − 0.5) / 12. */
+    expect(parseFloat((bar?.querySelector('.af-bd-seedbar-dot') as HTMLElement | null)?.style.left ?? '')).toBeCloseTo(70.8, 1)
   })
 })
 
@@ -635,7 +771,7 @@ function waiversData(over: Partial<WaiversBoardData> = {}): WaiversBoardData {
       },
     ],
     considered: 40,
-    withheld: { noRoster: 1, idSpace: 6, noScoring: 3, noCandidate: 0 },
+    withheld: { noRoster: 1, idSpace: 6, noScoring: 3, noCandidate: 0, noUpgrade: 0 },
     marketLeagues: 120,
     at: { season: '2026', week: 3 },
     ...over,
@@ -698,7 +834,7 @@ describe('WaiversBoard', () => {
     const text = container.textContent ?? ''
     expect(text).toMatch(/10 leagues are not on this board/i)
     expect(text).toMatch(/6 store player ids the projection feed does not use/i)
-    expect(text).toMatch(/3 have never published their scoring settings/i)
+    expect(text).toMatch(/3 have never published their scoring or lineup settings/i)
     expect(text).toMatch(/1 has no roster of yours imported/i)
   })
 
@@ -1106,13 +1242,14 @@ describe('TradesBoard — which side each asset is on', () => {
     const s = sides(container)
     expect(s).toHaveLength(2)
 
+    // Each side is what its manager RECEIVED: TheCiege24 sent Vance and got Okoye.
     expect(s[0].label).toContain('TheCiege24')
-    expect(s[0].assets.join(' ')).toContain('Perry Vance')
-    expect(s[0].assets.join(' ')).not.toContain('Dana Okoye')
+    expect(s[0].assets.join(' ')).toContain('Dana Okoye')
+    expect(s[0].assets.join(' ')).not.toContain('Perry Vance')
 
     expect(s[1].label).toContain('Jordan')
-    expect(s[1].assets.join(' ')).toContain('Dana Okoye')
-    expect(s[1].assets.join(' ')).not.toContain('Perry Vance')
+    expect(s[1].assets.join(' ')).toContain('Perry Vance')
+    expect(s[1].assets.join(' ')).not.toContain('Dana Okoye')
   })
 
   /*
@@ -1135,10 +1272,10 @@ describe('TradesBoard — which side each asset is on', () => {
     const okoye = rows.find((r) => r.name.includes('Dana Okoye'))
 
     expect(vance?.value).toBe('6,552')
-    expect(vance?.side).toContain('TheCiege24')
+    expect(vance?.side).toContain('Jordan')
     /* Unpriced, and the dash must be on HIS row rather than anywhere on the card. */
     expect(okoye?.value).toBe('—')
-    expect(okoye?.side).toContain('Jordan')
+    expect(okoye?.side).toContain('TheCiege24')
   })
 
   /*
@@ -1165,12 +1302,13 @@ describe('TradesBoard — which side each asset is on', () => {
     )
     const s = sides(container)
     expect(s).toHaveLength(2)
-    expect(s[1].assets.join(' ')).toMatch(/Nothing on record for this side/i)
-    expect(s[1].assets.join(' ')).not.toMatch(/no players on this side/i)
+    // `received` is TheCiege24's side, which comes first.
+    expect(s[0].assets.join(' ')).toMatch(/Nothing on record for this side/i)
+    expect(s[0].assets.join(' ')).not.toMatch(/no players on this side/i)
 
     /* The other side still renders its own assets, picks included. */
-    expect(s[0].assets.join(' ')).toContain('Perry Vance')
-    expect(s[0].assets.join(' ')).toContain('2027 3rd')
+    expect(s[1].assets.join(' ')).toContain('Perry Vance')
+    expect(s[1].assets.join(' ')).toContain('2027 3rd')
   })
 })
 
@@ -1445,7 +1583,7 @@ describe('TradesBoard — whose side is whose', () => {
   const sideLabels = (c: HTMLElement) =>
     Array.from(c.querySelectorAll('.af-bd-side-label')).map((n) => n.textContent)
 
-  it('says "You sent" for the reader and names the other manager', () => {
+  it('says "You received" for the reader and names the other manager', () => {
     const { container } = render(
       <TradesBoard
         data={tradesData({
@@ -1457,8 +1595,13 @@ describe('TradesBoard — whose side is whose', () => {
         allHref="/core/trades?all=1"
       />,
     )
-    expect(sideLabels(container)).toContain('You sent')
-    expect(sideLabels(container)).toContain('Jordan sent')
+    expect(sideLabels(container)).toContain('You received')
+    expect(sideLabels(container)).toContain('Jordan received')
+    // Each side holds what its named manager RECEIVED, so the reader's grade sits over what they got.
+    const [mine, theirs] = Array.from(container.querySelectorAll('.af-bd-side'))
+    expect(mine.textContent).toContain('Dana Okoye')
+    expect(mine.textContent).not.toContain('Perry Vance')
+    expect(theirs.textContent).toContain('Perry Vance')
   })
 
   /* Unresolved reader: the previous behaviour, not a degraded one. */
@@ -1466,8 +1609,8 @@ describe('TradesBoard — whose side is whose', () => {
     const { container } = render(
       <TradesBoard data={tradesData()} allHref="/core/trades?all=1" />,
     )
-    expect(sideLabels(container)).toContain('TheCiege24 sent')
-    expect(sideLabels(container)).not.toContain('You sent')
+    expect(sideLabels(container)).toContain('TheCiege24 received')
+    expect(sideLabels(container)).not.toContain('You received')
   })
 })
 

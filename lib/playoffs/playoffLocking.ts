@@ -1,3 +1,4 @@
+import { matchupNoun } from "./singleGame"
 import type { PlayoffSeriesView } from "./types"
 
 export const PLAYOFF_LATE_PICK_LOCK_RULES = new Set(["none", "commissioner_override"])
@@ -20,13 +21,16 @@ export function canUsePlayoffLatePicks(input: {
 }
 
 export function getPlayoffSeriesLockedReason(
-  series: Pick<PlayoffSeriesView, "status" | "startsAt">,
+  // `bestOf` is optional so existing callers type-check; when present, a single
+  // game reads "Game completed" rather than "Series completed".
+  series: Pick<PlayoffSeriesView, "status" | "startsAt"> & { bestOf?: number | null },
   lockRule: string | null | undefined,
   options: { isPoolOwner?: boolean; isTestMode?: boolean; hasPoolAdminAccess?: boolean } = {},
 ): string | null {
   if (canUsePlayoffLatePicks({ lockRule, ...options })) return null
-  if (series.status === "final") return "Series completed"
-  if (series.status === "in_progress") return "Series already started/locked"
-  if (series.startsAt && new Date(series.startsAt).getTime() <= Date.now()) return "Series already started/locked"
+  const noun = matchupNoun(series)
+  if (series.status === "final") return `${noun} completed`
+  if (series.status === "in_progress") return `${noun} already started/locked`
+  if (series.startsAt && new Date(series.startsAt).getTime() <= Date.now()) return `${noun} already started/locked`
   return null
 }

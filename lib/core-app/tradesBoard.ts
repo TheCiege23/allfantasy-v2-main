@@ -1,5 +1,6 @@
 import 'server-only'
 import { realManagerName } from './managerName'
+import { composePlayerIdentities } from './playerIdentityCompose'
 import { translateProviderIdsToSleeper, type ProviderIdTranslation } from '@/lib/player-identity/providerToSleeperIds'
 import { CROSS_LEAGUE_BOOK, valueBookFor, type ValueBook } from './valueBook'
 
@@ -26,6 +27,7 @@ import { oneGradeBreakdown } from '@/lib/decision-os/trade/tradeGradeBreakdown'
 import { ledgerKey, loadLedgerSidesForTrades } from './archivedPickOutcomes'
 import { draftedPickNamesForRow, withDraftedNames } from './archivedPickMatch'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
+import { assetValues } from '@/lib/decision-os/trade/gradeLineValues'
 import { isPirateLeague, isPirateSteal } from '@/lib/trade-intel/pirateSteal'
 
 /**
@@ -375,7 +377,18 @@ export function valuesOnTheGrade(
 ): TradeAsset[] {
   if (!grade.graded) return assets.map((a) => ({ ...a, value: null }))
   const lines = grade.lines.filter((l) => l.side === side)
-  return lines.length === assets.length ? assets.map((a, i) => ({ ...a, value: lines[i]!.leagueValue })) : [...assets]
+  if (lines.length !== assets.length) return [...assets]
+  /*
+   * By name, then pick year + round, then place (`assetValues`) — never by place alone. The letter is
+   * often the FROZEN original, whose lines are in the order of whichever surface froze it, not this
+   * board's; by place alone a 1st's value printed beside the 2nd it was traded with.
+   */
+  const values = assetValues(
+    assets.map((a) => ({ label: a.name, gradedAs: (a as TradeAsset & { drafted?: string | null }).drafted ?? null })),
+    grade.lines,
+    side,
+  )
+  return assets.map((a, i) => ({ ...a, value: values[i] ?? null }))
 }
 
 export async function getTradesBoard(
@@ -637,7 +650,7 @@ export async function getTradesBoard(
       ? prisma.sportsPlayer
           .findMany({
             where: { sleeperId: { in: [...assetIds] } },
-            select: { sleeperId: true, name: true, position: true, team: true, imageUrl: true },
+            select: { sleeperId: true, sport: true, name: true, position: true, team: true, imageUrl: true },
           })
           .catch(() => [])
       : Promise.resolve([]),
@@ -715,7 +728,16 @@ export async function getTradesBoard(
     ).catch(() => []),
   ])
 
-  const playerById = new Map(players.map((p) => [p.sleeperId, p]))
+  /*
+   * 🛑 COMPOSED, NOT `new Map(rows)`. `sleeperId` is not unique in `SportsPlayer`: one
+   * athlete is a `sleeper`, a `thesportsdb` and a `rolling_insights` row, and the last
+   * row returned won. Rolling Insights stores the literal `contact_support` (or, once
+   * cleared, nothing) where a headshot belongs, so whenever its row came last a player
+   * with two good stored photos rendered as initials — Quinshon Judkins, David
+   * Montgomery and Drake Maye on one board, 2026-10-01. Each field now comes from the
+   * row that actually holds it; see `playerIdentityCompose.ts`.
+   */
+  const playerById = composePlayerIdentities(players)
   /*
    * ⚠ KEYED ON BOOK + PLAYER, NOT PLAYER. Two of this user's leagues can want
    * different books for the same man, so a `Map<sleeperId, …>` silently served

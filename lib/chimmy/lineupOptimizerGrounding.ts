@@ -16,6 +16,7 @@ import { resolveCanonicalWorld } from '@/lib/decision-os/world'
 import type { CanonicalWorld } from '@/lib/decision-os/world/facts'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { afEngineForLeague, lookupAfEngineProjections, lookupProjections } from '@/lib/core-app/playerProjections'
+import type { AfEngineCarryInput } from '@/lib/core-app/afEngineCarry'
 import { activePlayerIds, viewerRosterOf } from './leagueRosterIndex'
 import type { RosterIdsUnreadable, ScenarioWeek } from './tradeScenarioTypes'
 import type { ChatStartCall } from './tools/chimmyTools'
@@ -133,7 +134,8 @@ export interface LineupOptimizerDeps extends LeagueWeekPricingDeps {
    * carries AF into the league's scoring. Optional: without it the block simply shows no AF.
    */
   loadAfWeek?: (args: { week: { season: string; week: number }; ids: string[] }) => Promise<{
-    engine: ReadonlyMap<string, number>
+    /* The engine row, not just its number: a defender's AF figure is IDP-scored and must not be carried by the PPR ratio. */
+    engine: ReadonlyMap<string, AfEngineCarryInput>
     generic: ReadonlyMap<string, number>
   }>
 }
@@ -152,7 +154,7 @@ const defaultDeps: LineupOptimizerDeps = {
       lookupProjections(ids, week),
     ])
     return {
-      engine: new Map([...engine].map(([id, e]) => [id, e.projectedPoints])),
+      engine,
       generic: new Map([...providers].map(([id, p]) => [id, p.projectedPoints])),
     }
   },

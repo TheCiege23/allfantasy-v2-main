@@ -1,13 +1,19 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Upload, Trash2 } from "lucide-react"
+import { Check, Upload, Trash2 } from "lucide-react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { ProfileImagePreviewController } from "@/components/identity/ProfileImagePreviewController"
 import { setProfileAvatarUrl, uploadProfileImage, AVATAR_PRESET_EMOJI } from "@/lib/avatar"
 import { AvatarCropDialog, shouldCropBeforeUpload } from "@/components/identity/AvatarCropDialog"
 import { AVATAR_PRESETS, AVATAR_PRESET_LABELS, type AvatarPresetId } from "@/lib/signup/avatar-presets"
+import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import type { SettingsOnSave, SettingsProfile } from "./settings-types"
+import { MAX_DISPLAY_NAME_LENGTH } from "@/lib/user-settings/types"
+import { useSavedFlash } from "./useSavedFlash"
+
+/** The server keeps 160 characters (app/api/user/profile handleProfileWrite); say so before it truncates. */
+const BIO_MAX = 160
 
 export function ProfileSettingsSection({
   profile,
@@ -28,6 +34,10 @@ export function ProfileSettingsSection({
 }) {
   const { t } = useLanguage()
   const [displayName, setDisplayName] = useState(profile?.displayName ?? "")
+  const [bio, setBio] = useState(profile?.bio ?? "")
+  const [sports, setSports] = useState<string[]>(profile?.preferredSports ?? [])
+  const savedFlash = useSavedFlash()
+  const sportsKey = (profile?.preferredSports ?? []).join(",")
   const [avatarPreset, setAvatarPreset] = useState<string | null>(profile?.avatarPreset ?? null)
   const [avatarSelectionTouched, setAvatarSelectionTouched] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -39,12 +49,20 @@ export function ProfileSettingsSection({
 
   useEffect(() => {
     setDisplayName(profile?.displayName ?? "")
+    setBio(profile?.bio ?? "")
+    setSports(profile?.preferredSports ?? [])
     setAvatarPreset(profile?.avatarPreset ?? null)
     setAvatarSelectionTouched(false)
-  }, [profile?.displayName, profile?.avatarPreset])
+    // Keyed on the joined list, not the array: a refetch hands back a new array with the same
+    // sports, and an identity dependency would wipe an unsaved edit every time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.displayName, profile?.bio, sportsKey, profile?.avatarPreset])
 
   const resetDraft = () => {
+    savedFlash.clear()
     setDisplayName(profile?.displayName ?? "")
+    setBio(profile?.bio ?? "")
+    setSports(profile?.preferredSports ?? [])
     setAvatarPreset(profile?.avatarPreset ?? null)
     setAvatarSelectionTouched(false)
     setUploadError(null)
@@ -53,11 +71,21 @@ export function ProfileSettingsSection({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setUploadError(null)
-    await onSave({
+    savedFlash.clear()
+    const ok = await onSave({
       displayName: displayName.trim() || null,
+      bio: bio.trim() || null,
+      /* Order is meaning: the first sport is the default Preferences shows. */
+      preferredSports: sports.length > 0 ? sports : null,
       avatarPreset: (avatarPreset as AvatarPresetId) || null,
       avatarUrl: avatarSelectionTouched ? null : undefined,
     })
+    if (ok) savedFlash.flash()
+  }
+
+  const toggleSport = (sport: string) => {
+    savedFlash.clear()
+    setSports((prev) => (prev.includes(sport) ? prev.filter((s) => s !== sport) : [...prev, sport]))
   }
 
   /*
@@ -186,10 +214,12 @@ export function ProfileSettingsSection({
           <button
             type="button"
             onClick={() => {
+              savedFlash.clear()
               setAvatarPreset(null)
               setAvatarSelectionTouched(true)
             }}
-            className="flex h-9 min-w-14 items-center justify-center rounded-lg border px-2 text-[11px] font-semibold"
+            aria-pressed={avatarPreset == null}
+            className="flex h-11 min-w-14 items-center justify-center rounded-lg border px-2 text-xs font-semibold"
             style={{
               borderColor: avatarPreset == null ? "var(--accent-cyan)" : "var(--border)",
               background: avatarPreset == null ? "color-mix(in srgb, var(--accent-cyan) 18%, transparent)" : "var(--panel2)",
@@ -204,10 +234,13 @@ export function ProfileSettingsSection({
               key={id}
               type="button"
               onClick={() => {
+                savedFlash.clear()
                 setAvatarPreset(id)
                 setAvatarSelectionTouched(true)
               }}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border text-base"
+              aria-pressed={avatarPreset === id}
+              aria-label={AVATAR_PRESET_LABELS[id]}
+              className="flex h-11 w-11 items-center justify-center rounded-lg border text-lg"
               style={{
                 borderColor: avatarPreset === id ? "var(--accent-cyan)" : "var(--border)",
                 background: avatarPreset === id ? "color-mix(in srgb, var(--accent-cyan) 18%, transparent)" : "var(--panel2)",
@@ -221,20 +254,85 @@ export function ProfileSettingsSection({
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium" style={{ color: "var(--muted2)" }}>
+        <label htmlFor="settings-profile-display-name" className="mb-1 block text-sm font-medium" style={{ color: "var(--muted2)" }}>
           {t("settings.profile.displayName")}
         </label>
         <input
+          id="settings-profile-display-name"
           type="text"
+          maxLength={MAX_DISPLAY_NAME_LENGTH}
           value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
+          onChange={(e) => {
+            savedFlash.clear()
+            setDisplayName(e.target.value)
+          }}
           className="w-full max-w-md rounded-xl border px-3 py-2 text-sm outline-none"
           style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
           placeholder={t("settings.profile.displayNamePlaceholder")}
         />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      {/*
+        Bio and sports. The hub card promises "Display name, avatar, bio and preferred sports" and
+        its completion meter nudges "Next: add a bio." / "Next: pick your sports." — but until
+        2026-10-02 neither field was editable anywhere in Settings, so those nudges led nowhere.
+      */}
+      <div>
+        <label
+          htmlFor="settings-profile-bio"
+          className="mb-1 block text-sm font-medium"
+          style={{ color: "var(--muted2)" }}
+        >
+          Bio
+        </label>
+        <textarea
+          id="settings-profile-bio"
+          value={bio}
+          maxLength={BIO_MAX}
+          rows={3}
+          onChange={(e) => {
+            savedFlash.clear()
+            setBio(e.target.value)
+          }}
+          className="block w-full max-w-md resize-y rounded-xl border px-3 py-2 text-sm outline-none"
+          style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
+          placeholder="A line about you — your leagues, your team, your trash talk."
+          data-testid="settings-profile-bio"
+        />
+        <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
+          {bio.length}/{BIO_MAX}
+        </p>
+      </div>
+
+      <div>
+        <span className="ns-field-label mb-2 block text-sm font-medium" style={{ color: "var(--muted2)" }} id="settings-profile-sports-label">
+          Sports you play
+        </span>
+        <div className="flex flex-wrap gap-2" role="group" aria-labelledby="settings-profile-sports-label">
+          {SUPPORTED_SPORTS.map((sport) => {
+            const on = sports.includes(sport)
+            return (
+              <button
+                key={sport}
+                type="button"
+                onClick={() => toggleSport(sport)}
+                aria-pressed={on}
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold"
+                style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--muted)" }}
+                data-testid={`settings-profile-sport-${sport}`}
+              >
+                {on ? <Check className="ns-chip-check" aria-hidden="true" /> : null}
+                {sport}
+              </button>
+            )
+          })}
+        </div>
+        <p className="mt-1.5 text-xs" style={{ color: "var(--muted)" }}>
+          The first one you picked is your default sport — change it under Preferences.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="submit"
           disabled={saving}
@@ -250,6 +348,9 @@ export function ProfileSettingsSection({
         >
           {t("settings.actions.cancelChanges")}
         </button>
+        <p role="status" aria-live="polite" className="text-sm font-semibold" style={{ color: "#34d399" }}>
+          {savedFlash.saved ? "✓ Profile saved" : ""}
+        </p>
       </div>
     </form>
   )

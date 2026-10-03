@@ -301,6 +301,7 @@ html[data-mode='light'] .af-core {
  * Now diffed against design_handoff_core_app/tokens.css programmatically —
  * all 39 tokens present and byte-identical, as light and dark already were.
  */
+html[data-mode='legacy'] .af-core,
 html[data-mode='af'] .af-core {
   --bg: #0d0819;
   --surface: #170f2b;

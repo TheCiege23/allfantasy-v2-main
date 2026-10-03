@@ -110,5 +110,27 @@ export function getNotificationPreferencesFingerprint(
     const push = value.push ?? value.inApp
     return `${id}:${value.enabled ? "1" : "0"}${value.inApp ? "1" : "0"}${value.email ? "1" : "0"}${value.sms ? "1" : "0"}${push ? "1" : "0"}`
   })
-  return `${resolved.globalEnabled !== false ? "1" : "0"}|${categories.join("|")}`
+  /*
+   * ⚠ QUIET HOURS AND LEAGUE OVERRIDES ARE PART OF THE STATE. The "updated elsewhere" banner compares
+   * this string; before 2026-10-02 it covered only the switch and the categories, so a quiet-hours
+   * window or a league mute changed on another device was never noticed — and the stale draft on
+   * screen then saved over it.
+   *
+   * Canonical on purpose: a league override with no opinion (`{}`, what "Follow my settings" and
+   * Reset write) prints the same as an absent one, and leagues are sorted, so two equivalent states
+   * cannot raise a false "updated elsewhere".
+   */
+  const q = resolved.quietHours
+  // A window switched off is the same state as no window at all.
+  const quiet =
+    q && q.enabled !== false ? `q:${q.startHour}-${q.endHour}${q.allowCritical === false ? "c0" : "c1"}` : "q:off"
+  const leagues = Object.entries(resolved.leagues ?? {})
+    .map(([id, o]) => {
+      const muted = [...(o?.mutedCategories ?? [])].sort().join(",")
+      const off = o?.enabled === false
+      return off || muted ? `${id}:${off ? "0" : "1"}:${muted}` : null
+    })
+    .filter((x): x is string => x !== null)
+    .sort()
+  return `${resolved.globalEnabled !== false ? "1" : "0"}|${categories.join("|")}|${quiet}|L:${leagues.join(";")}`
 }

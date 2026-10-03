@@ -113,11 +113,11 @@ export function SupportCrestWidget() {
         className="group fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-[4.75rem] z-40 inline-flex h-12 w-12 items-center justify-center rounded-full border border-cyan-400/30 bg-gradient-to-br from-cyan-500/25 to-violet-500/20 shadow-[0_8px_30px_-8px_rgba(34,211,238,0.6)] backdrop-blur-md transition hover:from-cyan-500/35 hover:to-violet-500/30 hover:shadow-[0_10px_36px_-8px_rgba(34,211,238,0.75)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 active:scale-95 lg:bottom-24 lg:right-6"
       >
         <span className="relative inline-flex h-7 w-7 items-center justify-center">
-          {/* Plain <img>: matches GlobalTopNav's crest usage. No .svg counterpart exists in
-              /public, so the raster crest is the sharpest asset available at this size. */}
+          {/* Plain <img>: matches GlobalTopNav's crest usage. /af-crest.svg is the
+              transparent vector crest — /af-crest.png is a JPEG with a black box baked in. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/af-crest.png"
+            src="/af-crest.svg"
             alt=""
             aria-hidden
             className="mode-logo-safe h-7 w-7 rounded-md object-contain"

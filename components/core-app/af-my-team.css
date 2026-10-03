@@ -1440,3 +1440,93 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
 .af-core .af-mt-bench-caveat { color: var(--muted); font-size: 11px; line-height: 1.5; }
 .af-core .af-mt-bench-check { flex-wrap: wrap; }
 .af-core .af-mt-bench-caveat { flex-basis: 100%; }
+
+/* ── Phone audit, 2026-10-01 (components/core-app/screens/MyTeam.tsx) ──────
+ *
+ * Top-level rules and sibling @media blocks at end of file, for the reason the
+ * touch-target block above gives. Each was measured at 375 / 768 / 1280 with
+ * Tailwind's real `.truncate` applied — a render without it invents overflow.
+ */
+
+/*
+ * ⚠ THE OPPONENT CARD'S TEAM NAME RAN 59px ACROSS ITS OWN PROJECTED TOTAL at 375 and at 768.
+ * `.af-mt-mu-who` carries `min-width: 0`, but the unnamed wrapper around the name and manager
+ * does not — so its minimum width was the whole nowrap name, the who-block could not shrink,
+ * and "Purdy Good Situation Over Here" painted straight over "131.5".
+ */
+.af-mt-mu-who > div {
+  min-width: 0;
+}
+@media (max-width: 860px) {
+  /* Room for the name on two lines where the card is narrow, rather than an ellipsis. */
+  .af-mt-mu-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.25;
+  }
+}
+
+/* The empty-slot fix sits at the far end of its cell on a wide row. */
+.af-mt-empty-text > .af-mt-fix {
+  margin-left: auto;
+}
+
+/* The lineup-lock "Fix it in Sleeper" is a link now, not a span that looked like one. */
+a.af-mt-lock-fix {
+  text-decoration: none;
+}
+a.af-mt-lock-fix:hover,
+a.af-mt-lock-fix:focus-visible {
+  text-decoration: underline;
+}
+
+/*
+ * ⚠ ONE SENTENCE IN A 92px COLUMN MADE ALL THREE PROJECTION TILES 205px TALL ON A PHONE.
+ * When standard scoring cannot price this league (IDP, custom rules), the third tile carries
+ * its reason instead of a number, and the pair beside it stretched to match. On a phone the
+ * explanation takes its own full-width row under the two totals it qualifies.
+ */
+@media (max-width: 560px) {
+  .af-mt-projgroup {
+    flex-wrap: wrap;
+  }
+  .af-mt-projgroup > .af-mt-tile--proj[data-missing='true'] {
+    flex: 1 0 100%;
+    border-left: 0;
+    border-top: 1px solid var(--accent-line);
+  }
+  /*
+   * ⚠ AND THE TWO TOTALS SHARE THE FIRST ROW, OR WRAPPING MAKES IT WORSE. Sized by their long
+   * labels ("PROJECTED · API · YOUR LEAGUE"), each took a row of its own: three rows, 236px,
+   * taller than the 205px this replaced. An equal zero basis puts them side by side — measured
+   * 69px each, 191px for the group, with the explanation readable at full width.
+   */
+  .af-mt-projgroup > .af-mt-tile--af {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+/*
+ * The game line in two whole pieces — see `GameContext` in MyTeam.tsx. Each piece
+ * never breaks inside itself; on a phone the matchup takes its own line and the
+ * separator goes, so the break lands between "WAS vs IND" and "Sun 9:30a ET"
+ * instead of between "Sun" and "9:30a". Top level, depth 0, its own @media.
+ */
+.af-mt-opp,
+.af-mt-when {
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .af-mt-sep {
+    display: none;
+  }
+  .af-mt-opp {
+    display: block;
+  }
+}

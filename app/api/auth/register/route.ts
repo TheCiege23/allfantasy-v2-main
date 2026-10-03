@@ -9,6 +9,7 @@ import { Prisma, VerificationMethod } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { sha256Hex, makeToken, isStrongPassword } from "@/lib/tokens"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
+import { normalizePhoneE164 } from "@/lib/phone/e164"
 import { attributeSignup } from "@/lib/referral"
 import { attributeSignupFromLandingInviteToken } from "@/lib/dashboard/attributeSignupFromLandingInvite"
 import { recordAttribution } from "@/lib/viral-loop"
@@ -66,10 +67,7 @@ function normalizeEmail(e: string) {
 }
 
 function normalizePhone(p?: string | null) {
-  const s = (p ?? "").trim().replace(/[\s()-]/g, "")
-  if (!s.length) return null
-  if (s.startsWith("+")) return s
-  return `+1${s}`
+  return normalizePhoneE164(p ?? "") || null
 }
 
 function getUniqueConstraintTarget(err: Prisma.PrismaClientKnownRequestError): string {

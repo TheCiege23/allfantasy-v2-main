@@ -2,14 +2,13 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeekFrom } from './currentWeek'
+import { readLeagueWeekMetadata } from './leagueWeekMetadata'
+import { leagueWeekFromSettings } from './seasonTimeline'
 import { managerArtUrl } from './leagueArt'
 import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
-import { isRuledOut } from './injuryStatus'
-import { namesBySleeperId, readInjuryStatusById } from './injuryStatusById'
-import { composePlayerIdentities } from './playerIdentityCompose'
-import { getByeWeeks } from './byeWeeks'
-import { resolveRailMatchupMode } from './railMatchupMode'
+import { eliminationFormat, resolveRailMatchupMode } from './railMatchupMode'
+import { loadUnavailableBySport } from './unavailableStarters'
 import { isForeignIdSpace } from './rosterIdSpace'
 
 /**
@@ -329,10 +328,49 @@ export async function getRailMatchups(
     else rowsByCandidateLeague.set(row.leagueId, [row])
   }
 
+  /*
+   * 🛑 A GUILLOTINE LEAGUE NEVER LEAVES WEEK 2 UNDER THE ROW RULE. `resolveCurrentWeekFrom` takes the
+   * earliest week that still has a 0–0 row — and a chopped team keeps a 0–0 row in every week after
+   * its chop. Measured 2026-10-03 on all six of one account's guillotine leagues: week 2 holds the
+   * week-1 casualty at 0–0, so the rail sat on week 2 while the provider was on week 4. Scout, Your
+   * Week's cut line and the War Room strip all drew last-but-one week's race.
+   *
+   * So an elimination league takes the provider's own stated period first — the rule
+   * `resolveCurrentWeek` has always applied ("Prefer the saved provider period") and the rail did
+   * not — when the season's rows carry that week. Head-to-head leagues are untouched: the row rule
+   * is right for them, and changing every league's week is a bigger decision than this bug.
+   */
+  const eliminationIds = [...new Set(leagues.filter((l) => l.elimination && l.platformLeagueId).map((l) => l.platformLeagueId!))]
+  const statedByLeague = new Map<string, { seasonYear: number; week: number }>()
+  if (eliminationIds.length > 0) {
+    const meta = await readLeagueWeekMetadata(eliminationIds, 'platform').catch(() => [])
+    for (const m of meta) {
+      const week = leagueWeekFromSettings(m.settings)
+      if (m.platformLeagueId && m.season != null && week != null) statedByLeague.set(m.platformLeagueId, { seasonYear: m.season, week })
+    }
+  }
+
   const currentByLeague = new Map<string, { seasonYear: number; week: number }>()
   for (const [leagueId, rows] of rowsByCandidateLeague) {
+    const stated = statedByLeague.get(leagueId)
+    if (stated && rows.some((r) => r.seasonYear === stated.seasonYear && r.week === stated.week)) {
+      currentByLeague.set(leagueId, stated)
+      continue
+    }
     const current = resolveCurrentWeekFrom(rows)
     if (current) currentByLeague.set(leagueId, { seasonYear: current.season, week: current.week })
+  }
+
+  /*
+   * And the teams already out, so the standing ranks the LIVE field. Without this a chopped team's 0
+   * was the field's lowest score — the cut line — so "95.7 over the cut" measured you against a team
+   * that was already gone, and "#13 of 18" counted three of them.
+   */
+  const outByLeague = new Map<string, Set<string>>()
+  for (const leagueId of eliminationIds) {
+    const rows = rowsByCandidateLeague.get(leagueId)
+    const current = currentByLeague.get(leagueId)
+    if (rows && current) outByLeague.set(leagueId, choppedBefore(rows, current.week))
   }
   let matchups = seasonCandidates.filter((row) => {
     const current = currentByLeague.get(row.leagueId)
@@ -544,7 +582,8 @@ export async function getRailMatchups(
       row: m,
       unpaired,
       elimination,
-      field: unpaired ? (rowsByLeague.get(m.leagueId) ?? []) : [],
+      // The live field only: a chopped team's 0 is not a cut line (see `choppedBefore`).
+      field: unpaired ? (rowsByLeague.get(m.leagueId) ?? []).filter((r) => !outByLeague.get(m.leagueId)?.has(String(r.rosterId))) : [],
     })
   }
 
@@ -803,25 +842,15 @@ export async function loadRailProjections(args: {
 
   // A current injury cannot be applied to a fallback projection from another week.
   // All roster ids share one identity read and one availability read per sport.
-  const unavailableBySport = new Map<string, Set<string>>()
+  // `loadUnavailableBySport` is shared with the all-leagues matchup board.
+  let unavailableBySport = new Map<string, Set<string>>()
   if (projectionWeek?.season === asked.season && projectionWeek.week === asked.week) {
-    const sports = [...new Set(leagueMeta.map((l) => String(l.sport ?? 'NFL').toUpperCase()))]
-    const playerRows = await prisma.sportsPlayer.findMany({
-      where: { sleeperId: { in: wanted }, sport: { in: sports } },
-      select: { sleeperId: true, name: true, team: true, sport: true },
-    }).catch(() => [])
-    await Promise.all(sports.map(async (sport) => {
-      const players = playerRows.filter((p) => String(p.sport).toUpperCase() === sport)
-      const teams = new Map([...composePlayerIdentities(players)].map(([id, p]) => [id, p.team]))
-      const [statuses, byes] = await Promise.all([
-        readInjuryStatusById(sport, namesBySleeperId(players), teams),
-        getByeWeeks({ sport, season: args.season, playerTeams: teams, fromWeek: args.week, horizon: 0 }).catch(() => null),
-      ])
-      unavailableBySport.set(sport, new Set([
-        ...[...statuses].filter(([, status]) => isRuledOut(status)).map(([id]) => id),
-        ...(byes?.byWeek.get(args.week) ?? []),
-      ]))
-    }))
+    unavailableBySport = await loadUnavailableBySport({
+      sleeperIds: wanted,
+      sports: leagueMeta.map((l) => String(l.sport ?? 'NFL')),
+      season: args.season,
+      week: args.week,
+    })
   }
   const sportByLeague = new Map(leagueMeta.map((l) => [l.id, String(l.sport ?? 'NFL').toUpperCase()]))
   const scoringByLeague = new Map<string, Record<string, unknown> | null>()
@@ -835,16 +864,20 @@ export async function loadRailProjections(args: {
         yahoo_settings: l.yahoo_settings,
       }),
     )
-    const type = (l.confirmedType ?? l.leagueType ?? '').toLowerCase()
     /*
      * ⚠ `survivor_guillotine` IS AN ELIMINATION FORMAT TOO. The confirmation is read
      * first, and a confirmed Survivor Guillotine league's confirmation says
      * `survivor_guillotine` (only its column says `guillotine`), so matching the
-     * one word alone would drop its elimination flag.
+     * one word alone would drop its elimination flag. The rule lives in
+     * `eliminationFormat` so the matchup screens cannot read it differently.
      */
     eliminationByLeague.set(
       l.id,
-      Boolean(l.guillotineMode) || type === 'guillotine' || type === 'survivor_guillotine',
+      eliminationFormat({
+        confirmedType: l.confirmedType,
+        leagueType: l.leagueType,
+        guillotineMode: l.guillotineMode,
+      }) != null,
     )
   }
 
@@ -897,7 +930,7 @@ export async function loadRailProjections(args: {
         af += league.points
         afFrom += 1
       }
-      const engineHere = afEngineForLeague(engineRow?.projectedPoints, p.projectedPoints, league?.points ?? null)
+      const engineHere = afEngineForLeague(engineRow, p.projectedPoints, league?.points ?? null)
       if (engineHere != null) {
         engine += engineHere
         engineFrom += 1
@@ -990,4 +1023,38 @@ function standingIn(args: {
     cutLine: Math.round(lowest.value * 100) / 100,
     elimination: args.elimination,
   }
+}
+
+/**
+ * The rosters a guillotine league has already chopped before `currentWeek`, from its own score rows.
+ *
+ * Two facts, applied week by week in order over the teams still alive:
+ *   - a team at 0–0 in a week the rest of the field played is out (a chopped team keeps scoring 0);
+ *   - the single lowest scorer of each COMPLETED week is chopped after it — the guillotine rule.
+ *     Verified on production 2026-10-03 before it was written: across six leagues and three completed
+ *     weeks each, every week's lowest scorer was 0–0 the following week, 18 of 18, no ties.
+ *
+ * ⚠ A TIE AT THE BOTTOM CHOPS NOBODY HERE. The provider's tiebreak is not on file, so guessing would
+ * remove a live team; leaving both in costs one extra row in the field until the next week's 0–0
+ * says which one went.
+ *
+ * Pure; exported for the test.
+ */
+export function choppedBefore(
+  rows: ReadonlyArray<{ week: number; rosterId: string | number; pointsFor: number }>,
+  currentWeek: number,
+): Set<string> {
+  const out = new Set<string>()
+  const weeks = [...new Set(rows.map((r) => r.week))].filter((w) => w < currentWeek).sort((a, b) => a - b)
+  for (const week of weeks) {
+    const live = rows.filter((r) => r.week === week && !out.has(String(r.rosterId)))
+    const scored = live.filter((r) => r.pointsFor > 0)
+    // A week nobody scored in says nothing about who is out.
+    if (scored.length === 0) continue
+    for (const r of live) if (r.pointsFor <= 0) out.add(String(r.rosterId))
+    const low = Math.min(...scored.map((r) => r.pointsFor))
+    const lowest = scored.filter((r) => r.pointsFor === low)
+    if (lowest.length === 1) out.add(String(lowest[0]!.rosterId))
+  }
+  return out
 }

@@ -24,6 +24,7 @@ export type NotificationCategoryId =
   | "followed_players"
   | "direct_messages"
   | "league_chat"
+  | "career_milestones"
 
 export interface NotificationChannelPrefs {
   enabled: boolean
@@ -104,6 +105,7 @@ export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
   "followed_players",
   "direct_messages",
   "league_chat",
+  "career_milestones",
 ]
 
 export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string> = {
@@ -141,6 +143,10 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   // Every message in league chat. OPT-IN: off on every channel until the user turns it on — see
   // OPT_IN_NOTIFICATION_CATEGORY_IDS below.
   league_chat: "League chat messages",
+  // Live-career plan, phase 4 (lib/core-app/careerMilestoneNotify.ts): a title won, a new award
+  // tier, a career-wins mark — each at most once ever, and only for a season that just finished,
+  // never for history an import backfilled.
+  career_milestones: "Career milestones — titles, awards & records",
 }
 
 /**

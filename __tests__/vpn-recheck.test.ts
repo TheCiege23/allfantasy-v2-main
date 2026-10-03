@@ -181,6 +181,11 @@ describe("classification", () => {
 
   it("keeps the boolean rule unchanged", () => {
     expect(combineAnonymizerDetail({ tor: false, proxycheck: null, ipapi: null })).toEqual({ anonymized: null, kind: null })
-    expect(combineAnonymizerDetail({ tor: true, proxycheck: null, ipapi: null })).toEqual({ anonymized: true, kind: "tor" })
+    // `decidedBy` (2026-10-02) names the signal for the block log; the verdict itself is unchanged.
+    expect(combineAnonymizerDetail({ tor: true, proxycheck: null, ipapi: null })).toEqual({
+      anonymized: true,
+      kind: "tor",
+      decidedBy: "tor",
+    })
   })
 })

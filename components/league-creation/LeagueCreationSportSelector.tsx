@@ -32,13 +32,13 @@ const SPORT_EMOJI: Record<LeagueSportOption, string> = {
 };
 
 const SPORT_MEDIA: Record<LeagueSportOption, { image: string; video: string; thumbFallback: string }> = {
-  NFL: { image: '/Football.png', video: '/Football.mp4', thumbFallback: '/af-crest.png' },
-  NBA: { image: '/Basketball.png', video: '/Basketball.mp4', thumbFallback: '/af-crest.png' },
-  MLB: { image: '/Baseball.png', video: '/Baseball.mp4', thumbFallback: '/af-crest.png' },
-  NHL: { image: '/Hockey.png', video: '/Hockey.mp4', thumbFallback: '/af-crest.png' },
-  NCAAF: { image: '/Football.png', video: '/Football.mp4', thumbFallback: '/af-crest.png' },
-  NCAAB: { image: '/Basketball.png', video: '/Basketball.mp4', thumbFallback: '/af-crest.png' },
-  SOCCER: { image: '/Soccer.png', video: '/Soccer.mp4', thumbFallback: '/af-crest.png' },
+  NFL: { image: '/Football.png', video: '/Football.mp4', thumbFallback: '/af-crest.svg' },
+  NBA: { image: '/Basketball.png', video: '/Basketball.mp4', thumbFallback: '/af-crest.svg' },
+  MLB: { image: '/Baseball.png', video: '/Baseball.mp4', thumbFallback: '/af-crest.svg' },
+  NHL: { image: '/Hockey.png', video: '/Hockey.mp4', thumbFallback: '/af-crest.svg' },
+  NCAAF: { image: '/Football.png', video: '/Football.mp4', thumbFallback: '/af-crest.svg' },
+  NCAAB: { image: '/Basketball.png', video: '/Basketball.mp4', thumbFallback: '/af-crest.svg' },
+  SOCCER: { image: '/Soccer.png', video: '/Soccer.mp4', thumbFallback: '/af-crest.svg' },
 };
 
 export interface LeagueCreationSportSelectorProps {

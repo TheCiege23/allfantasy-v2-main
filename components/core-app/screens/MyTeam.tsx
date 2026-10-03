@@ -15,7 +15,10 @@ import type { MatchupSide, NextMatchup } from '@/lib/core-app/nextMatchup'
 import type { RosterGrade } from '@/lib/core-app/rosterGrade'
 import { buildProjectionQuestion } from '@/lib/core-app/scoringNotes'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import { platformLabel } from '@/lib/core-app/platformLinks'
 
 export type MyTeamProps = {
   data: MyTeamData
@@ -40,6 +43,7 @@ function LockCountdown({
   at,
   anyEmptySlot,
   platform,
+  fixHref = null,
   week,
   daysAway,
   next = false,
@@ -48,12 +52,39 @@ function LockCountdown({
   at: Date
   anyEmptySlot: boolean
   platform: string
+  /** The provider's lineup screen, when the loader resolved one. Null renders the line as text. */
+  fixHref?: string | null
   week: number | null
   daysAway: number
   next?: boolean
   asOf?: number
 }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const [now, setNow] = useState<number>(() => asOf ?? Date.now())
+  /*
+   * ⚠ THE LOCK TIME WAS ALWAYS PRINTED IN UTC — a Sunday 1pm Eastern kickoff read "17:00 UTC".
+   * UTC is the one zone server and browser agree on, so it is what the server renders and what
+   * hydration matches; the reader's own zone replaces it after mount, when it is knowable.
+   */
+  const [localTime, setLocalTime] = useState<string | null>(null)
+  const atMs = at.getTime()
+  useEffect(() => {
+    try {
+      setLocalTime(
+        new Intl.DateTimeFormat(language === 'es' ? 'es' : undefined, {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short',
+        }).format(new Date(atMs)),
+      )
+    } catch {
+      setLocalTime(null)
+    }
+  }, [atMs, language])
 
   useEffect(() => {
     setNow(Date.now())
@@ -73,7 +104,7 @@ function LockCountdown({
   const s = total % 60
 
   const label = locked
-    ? 'Games started'
+    ? copy('Games started')
     : d > 0
       ? `${d}d ${h}h ${m}m`
       : `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
@@ -92,16 +123,26 @@ function LockCountdown({
         and are headings.
       */}
       <span className="af-label af-mt-lock-label">
-        {week != null ? `Week ${week} · ${next ? 'next player kickoff' : 'first kickoff'}` : next ? 'Next player kickoff' : 'First kickoff'}
+        {week != null ? `${copy('Week')} ${week} · ${copy(next ? 'next player kickoff' : 'first kickoff')}` : copy(next ? 'Next player kickoff' : 'First kickoff')}
       </span>
       <span className="af-num af-mt-lock-time">{label}</span>
       <span className="af-mt-lock-note">
-        {at.toUTCString().slice(0, 22)} UTC
-        {' · confirm individual locks and AutoSubs on your platform'}
-        {anyEmptySlot ? ' · a starting slot is still empty' : null}
+        {localTime ?? `${at.toUTCString().slice(0, 22)} UTC`}
+        {` · ${copy('confirm individual locks and AutoSubs on your platform')}`}
+        {anyEmptySlot ? ` · ${copy('a starting slot is still empty')}` : null}
       </span>
+      {/*
+        ⚠ IT LOOKED LIKE A LINK AND WAS A SPAN. Accent caps under an urgent banner read as a
+        control; tapping it did nothing. Now it IS the provider's lineup screen when we have one.
+      */}
       {anyEmptySlot && !locked ? (
-        <span className="af-mt-lock-fix">Fix it in {platform}</span>
+        fixHref ? (
+          <a className="af-mt-lock-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
+            {copy('Fix it in')} {platform} <span aria-hidden>↗</span>
+          </a>
+        ) : (
+          <span className="af-mt-lock-fix">{copy('Fix it in')} {platform}</span>
+        )
       ) : null}
     </div>
   )
@@ -126,8 +167,31 @@ function posGroup(label: string | null | undefined): string {
   if (['DL', 'DE', 'DT'].includes(p)) return 'dl'
   if (['LB', 'ILB', 'OLB', 'MLB'].includes(p)) return 'lb'
   if (['DB', 'CB', 'S', 'SS', 'FS'].includes(p)) return 'db'
-  if (p.includes('FLEX') || p === 'WRT' || p === 'WRTQ') return 'flex'
+  if (p.includes('FLEX') || p === 'WRT' || p === 'WRTQ' || p === 'W/R') return 'flex'
   return 'other'
+}
+
+/**
+ * "DEN @ SF · Sun 4:25p ET", as two pieces that each stay whole.
+ *
+ * ⚠ ON A PHONE THIS LINE NEVER FITS, SO THE QUESTION IS ONLY WHERE IT BREAKS. The
+ * player column is ~112px at 375 and the whole line with weather is ~170, so it
+ * wrapped wherever the text ran out — "WAS vs IND · Sun / 9:30a ET", the day
+ * stranded from its time. Measured on the live page with this split: every row
+ * reads "WAS vs IND" over "Sun 9:30a ET ☁ 61°" at the same 31px height, with no
+ * overflow. Desktop keeps the one line and its separator (af-my-team.css).
+ */
+function GameContext({ text }: { text: string | null }) {
+  if (!text) return <>no game found for this week</>
+  const at = text.indexOf(' · ')
+  if (at < 0) return <>{text}</>
+  return (
+    <>
+      <span className="af-mt-opp">{text.slice(0, at)}</span>
+      <span className="af-mt-sep"> · </span>
+      <span className="af-mt-when">{text.slice(at + 3)}</span>
+    </>
+  )
 }
 
 /**
@@ -383,7 +447,7 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
           ) : null}
         </div>
         <div className="af-mt-player-meta">
-          {player.gameContext ?? 'no game found for this week'}
+          <GameContext text={player.gameContext} />
           <VenueMark indoors={player.indoors} weather={player.weather} />
           {player.preseason ? (
             <span
@@ -419,6 +483,9 @@ function abbreviate(status: string): { short: string; tone: string; full: string
   if (t.includes('question')) return { short: 'Q', tone: 'warn', full: status }
   if (t.includes('out')) return { short: 'O', tone: 'bad', full: status }
   if (t.includes('probable')) return { short: 'P', tone: 'ok', full: status }
+  /* ⚠ BEFORE 'active', WHICH IT CONTAINS. "Inactive" used to fall through to the
+     line below and render as a green H for Healthy. */
+  if (t.includes('inactive')) return { short: 'INA', tone: 'bad', full: status }
   if (t.includes('active') || t.includes('healthy')) return { short: 'H', tone: 'ok', full: 'Healthy' }
   /* An unfamiliar designation is shown as-is rather than given an invented
      letter, because a wrong abbreviation is worse than a long one. */
@@ -520,27 +587,29 @@ const AF_PTS_EXPLAINER =
   'AF is AllFantasy’s own projection engine, adjusted to the same settings.'
 
 function ProjHeader() {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   return (
     <div className="af-mt-projhead">
-      <span className="af-label af-mt-projhead--af" title={AF_PTS_EXPLAINER}>
+      <span className="af-label af-mt-projhead--af" title={copy(AF_PTS_EXPLAINER)}>
         API
         {/*
           The question mark is the point: two numbers sitting side by side with
           no explanation reads as a bug, not a feature.
         */}
-        <span className="af-mt-info" role="img" aria-label={AF_PTS_EXPLAINER}>
+        <span className="af-mt-info" role="img" aria-label={copy(AF_PTS_EXPLAINER)}>
           ?
         </span>
       </span>
-      <span className="af-label af-mt-projhead--engine" title="AllFantasy's own projection engine, adjusted to your league's scoring">
+      <span className="af-label af-mt-projhead--engine" title={copy("AllFantasy's own projection engine, adjusted to your league's scoring")}>
         AF
       </span>
-      <span className="af-label" title="Share of AllFantasy leagues rostering this player">
+      <span className="af-label" title={copy('Share of AllFantasy leagues rostering this player')}>
         OWN
       </span>
       <span
         className="af-label"
-        title="Of the leagues rostering him, how many start him this week"
+        title={copy('Of the leagues rostering him, how many start him this week')}
       >
         START
       </span>
@@ -644,15 +713,21 @@ function SlotRow({
         </div>
       ) : (
         <>
+          {/*
+            ⚠ THE BUTTON BELONGS INSIDE THIS CELL — af-my-team.css is written for exactly that ("a
+            flex row holding the 'Empty' text block and this button"). Rendered as the cell's
+            SIBLING it became a loose grid item, auto-placed into the 34–46px slot-badge column:
+            measured 34px wide with its label overflowing by 26px at 375, 23 at 768, 20 at 1280.
+          */}
           <div className="af-mt-player af-mt-empty-text">
             <div>
               <div className="af-mt-player-name">Empty</div>
               <div className="af-mt-player-meta">Nobody is starting in this slot</div>
             </div>
+            {!automatic ? <Link href={sourceHref ?? "/core/sync"} className="af-btn af-mt-fix">
+              Fix in {platform}
+            </Link> : null}
           </div>
-          {!automatic ? <Link href={sourceHref ?? "/core/sync"} className="af-btn af-mt-fix">
-            Fix in {platform}
-          </Link> : null}
         </>
       )}
 
@@ -723,6 +798,8 @@ function TaxiYears({ tenure }: { tenure: TaxiTenure | null }) {
 }
 
 export function MyTeam({ data }: MyTeamProps) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   // A streamed roster can arrive after the browser's native fragment lookup.
   // Re-check on mount/hash changes, never on routine lineup refreshes.
   useEffect(() => {
@@ -746,15 +823,16 @@ export function MyTeam({ data }: MyTeamProps) {
     }
   }, [data.league.id])
 
-  const platform = data.league.platform === 'manual' ? 'your platform' : data.league.platform
+  // "Sleeper", not "sleeper": the raw id read as a typo in "Fix in sleeper" and "Lineup from sleeper".
+  const platform = data.league.platform === 'manual' ? copy('your platform') : platformLabel(data.league.platform)
   const bestBall = data.bestBall === true || data.league.bestBall === true
 
   if (data.preDraft || data.eliminated || data.completed) return <div className="af-mt">
     <h1>{data.league.name}</h1>
     <section className="af-frame af-mt-section">
-      <h2>{data.preDraft ? 'Draft pending' : data.eliminated ? 'Team eliminated' : 'Season complete'}</h2>
-      <p>{data.preDraft ? 'This league has not finished its draft. Empty roster slots do not need a lineup fix yet.' : data.eliminated ? 'This team is no longer competing. Empty roster slots do not need a lineup fix.' : 'This season has finished. There are no active weekly lineup tasks.'}</p>
-      <a className="af-btn" href={`/core?league=${encodeURIComponent(data.league.id)}`}>Open league overview</a>
+      <h2>{copy(data.preDraft ? 'Draft pending' : data.eliminated ? 'Team eliminated' : 'Season complete')}</h2>
+      <p>{copy(data.preDraft ? 'This league has not finished its draft. Empty roster slots do not need a lineup fix yet.' : data.eliminated ? 'This team is no longer competing. Empty roster slots do not need a lineup fix.' : 'This season has finished. There are no active weekly lineup tasks.')}</p>
+      <a className="af-btn" href={`/core?league=${encodeURIComponent(data.league.id)}`}>{copy('Open league overview')}</a>
     </section>
   </div>
 
@@ -794,8 +872,8 @@ export function MyTeam({ data }: MyTeamProps) {
       {platform.toLowerCase() === 'sleeper' && <LineupVerification verification={data.lineupVerification} />}
       {/* ── Lock banner ─────────────────────────────────────────────── */}
       {bestBall ? <div className="af-mt-lock" data-urgent={false}>
-        <span className="af-label af-mt-lock-label">Best Ball · automatic lineup</span>
-        <span className="af-mt-lock-note">Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.</span>
+        <span className="af-label af-mt-lock-label">{copy('Best Ball · automatic lineup')}</span>
+        <span className="af-mt-lock-note">{copy('Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.')}</span>
       </div> : data.lock.available ? (
         data.lock.data.daysAway >= DISTANT_LOCK_DAYS ? (
           /*
@@ -804,12 +882,11 @@ export function MyTeam({ data }: MyTeamProps) {
             November game. Saying so is more useful than a large number.
           */
           <div className="af-mt-lock" data-urgent={false} data-locked={false}>
-            <span className="af-label af-mt-lock-label">Lineup lock</span>
+            <span className="af-label af-mt-lock-label">{copy('Lineup lock')}</span>
             <span className="af-mt-lock-note">
-              The next game we hold for your starters is {data.lock.data.daysAway} days away
-              {data.lock.data.week != null ? ` (week ${data.lock.data.week})` : ''}. That is further
-              out than a lineup lock should be, so this week&rsquo;s schedule probably has not been
-              ingested yet rather than your lineup being safe for {data.lock.data.daysAway} days.
+              {language === 'es'
+                ? `El próximo partido registrado de tus titulares es en ${data.lock.data.daysAway} días${data.lock.data.week != null ? ` (semana ${data.lock.data.week})` : ''}. Es demasiado pronto para una hora de cierre; probablemente aún falta el calendario de esta semana.`
+                : `The next game we hold for your starters is ${data.lock.data.daysAway} days away${data.lock.data.week != null ? ` (week ${data.lock.data.week})` : ''}. That is further out than a lineup lock should be, so this week's schedule probably has not been ingested yet rather than your lineup being safe for ${data.lock.data.daysAway} days.`}
             </span>
           </div>
         ) : (
@@ -817,6 +894,7 @@ export function MyTeam({ data }: MyTeamProps) {
             at={new Date(data.lock.data.at)}
             anyEmptySlot={data.lock.data.anyEmptySlot}
             platform={platform}
+            fixHref={data.league.sourceLink?.href ?? null}
             week={data.lock.data.week}
             daysAway={data.lock.data.daysAway}
             next={data.lock.data.next}
@@ -825,7 +903,7 @@ export function MyTeam({ data }: MyTeamProps) {
         )
       ) : (
         <div className="af-mt-lock" data-urgent={false} data-locked={false}>
-          <span className="af-label af-mt-lock-label">Lineup lock</span>
+          <span className="af-label af-mt-lock-label">{copy('Lineup lock')}</span>
           <span className="af-mt-lock-note">{data.lock.reason}</span>
         </div>
       )}
@@ -898,7 +976,7 @@ export function MyTeam({ data }: MyTeamProps) {
                   <div className="af-mt-tile-value af-num">
                     {proj?.afTotal != null ? proj.afTotal.toFixed(1) : '—'}
                   </div>
-                  <div className="af-label">{bestBall ? 'Listed starters · API · your league' : 'Projected · API · your league'}</div>
+                  <div className="af-label">{copy(bestBall ? 'Listed starters · API · your league' : 'Projected · API · your league')}</div>
                 </div>
                 {/*
                   AllFantasy's own engine over the same starters — the second projection, at
@@ -908,7 +986,7 @@ export function MyTeam({ data }: MyTeamProps) {
                   <div className="af-mt-tile-value af-num">
                     {proj?.afEngineTotal != null ? proj.afEngineTotal.toFixed(1) : '—'}
                   </div>
-                  <div className="af-label">{bestBall ? 'Listed starters · AF · your league' : 'Projected · AF · your league'}</div>
+                  <div className="af-label">{copy(bestBall ? 'Listed starters · AF · your league' : 'Projected · AF · your league')}</div>
                 </div>
               {/*
                 ⚠ WITHHELD WHEN IT IS NOT COMPARABLE. In an IDP league the
@@ -924,11 +1002,10 @@ export function MyTeam({ data }: MyTeamProps) {
                   <div className="af-mt-tile-value af-num">
                     {proj && proj.standardComparable ? proj.total.toFixed(1) : '—'}
                   </div>
-                  <div className="af-label">{bestBall ? 'Listed starters · standard' : 'Projected · standard'}</div>
+                  <div className="af-label">{copy(bestBall ? 'Listed starters · standard' : 'Projected · standard')}</div>
                   {proj && !proj.standardComparable ? (
                     <div className="af-mt-tile-why">
-                      Standard scoring does not price defenders, so there is no
-                      like-for-like total in an IDP league.
+                      {copy('Standard scoring does not price defenders, so there is no like-for-like total in an IDP league.')}
                     </div>
                   ) : null}
                 </div>
@@ -946,7 +1023,7 @@ export function MyTeam({ data }: MyTeamProps) {
                 <div className="af-mt-tile-value af-num">
                   {data.team.data.recordKnown ? data.team.data.record : '—'}
                 </div>
-                <div className="af-label">Record</div>
+                <div className="af-label">{copy('Record')}</div>
                 {data.team.data.recordKnown ? null : (
                   <div className="af-mt-tile-why">{data.team.data.record}</div>
                 )}
@@ -955,9 +1032,9 @@ export function MyTeam({ data }: MyTeamProps) {
                 <div className="af-mt-tile af-mt-tile--grade">
                   <div className="af-mt-tile-value af-num">
                     {ordinal(data.rosterGrade.data.rank)}
-                    <span className="af-mt-grade-of"> of {data.rosterGrade.data.outOf}</span>
+                    <span className="af-mt-grade-of"> {copy('of')} {data.rosterGrade.data.outOf}</span>
                   </div>
-                  <div className="af-label">Roster value in this league</div>
+                  <div className="af-label">{copy('Roster value in this league')}</div>
                   <div className="af-mt-tile-why">
                     {gradeSubtitle(data.rosterGrade.data)}
                   </div>
@@ -965,7 +1042,7 @@ export function MyTeam({ data }: MyTeamProps) {
               ) : (
                 <div className="af-mt-tile" data-missing="true">
                   <div className="af-mt-tile-value af-num">—</div>
-                  <div className="af-label">Roster value</div>
+                  <div className="af-label">{copy('Roster value')}</div>
                   <div className="af-mt-tile-why">{data.rosterGrade.reason}</div>
                 </div>
               )}
@@ -988,24 +1065,24 @@ export function MyTeam({ data }: MyTeamProps) {
         <section className="af-frame af-mt-matchup">
           <div className="af-mt-mu-head">
             <h2 className="af-label">
-              Week {data.nextMatchup.data.week} · {bestBall ? 'listed starter projections' : 'projected matchup'}
+              {copy('Week')} {data.nextMatchup.data.week} · {copy(bestBall ? 'listed starter projections' : 'projected matchup')}
             </h2>
             {data.nextMatchup.data.bye ? (
-              <span className="af-mt-mu-bye">no opponent recorded — bye</span>
+              <span className="af-mt-mu-bye">{copy('no opponent recorded — bye')}</span>
             ) : null}
           </div>
           <div className="af-mt-mu-body">
-            <MatchupSideView side={data.nextMatchup.data.you} label="You" />
+            <MatchupSideView side={data.nextMatchup.data.you} label={copy('You')} />
             <span className="af-mt-mu-v" aria-hidden>
               v
             </span>
             {data.nextMatchup.data.opponent ? (
-              <MatchupSideView side={data.nextMatchup.data.opponent} label="Them" />
+              <MatchupSideView side={data.nextMatchup.data.opponent} label={copy('Them')} />
             ) : (
               <div className="af-mt-mu-side af-mt-mu-side--none">
-                <div className="af-mt-mu-name">Opponent not set</div>
+                <div className="af-mt-mu-name">{copy('Opponent not set')}</div>
                 <div className="af-mt-mu-sub">
-                  The league recorded this week without pairing teams.
+                  {copy('The league recorded this week without pairing teams.')}
                 </div>
               </div>
             )}
@@ -1015,7 +1092,7 @@ export function MyTeam({ data }: MyTeamProps) {
           ) : data.nextMatchup.data.unpricedReason ? (
             // Two dashes and nothing else read as a broken screen; say why, where the read goes.
             <p className="af-mt-mu-edge">
-              No projected totals — {data.nextMatchup.data.unpricedReason}.
+              {copy('No projected totals')} — {data.nextMatchup.data.unpricedReason}.
             </p>
           ) : null}
         </section>
@@ -1031,13 +1108,13 @@ export function MyTeam({ data }: MyTeamProps) {
       */}
       {data.upcomingByes.length > 0 ? (
         <section className="af-frame af-mt-byes">
-          <h2 className="af-label">Byes coming up</h2>
+          <h2 className="af-label">{copy('Byes coming up')}</h2>
           <ul className="af-mt-byes-list">
             {data.upcomingByes.map((b) => (
               <li key={b.week} data-stack={b.names.length >= 3}>
-                <span className="af-mt-byes-wk af-num">Week {b.week}</span>
+                <span className="af-mt-byes-wk af-num">{copy('Week')} {b.week}</span>
                 <span className="af-mt-byes-who">
-                  {b.names.length} off · {b.names.join(', ')}
+                  {b.names.length} {copy('off')} · {b.names.join(', ')}
                 </span>
               </li>
             ))}
@@ -1053,7 +1130,7 @@ export function MyTeam({ data }: MyTeamProps) {
               data.projectionBasis.notes.length > 0 ? (
                 <>
                   <p className="af-mt-basis-lead">
-                    Your league scores differently from the standard projection:
+                    {copy('Your league scores differently from the standard projection:')}
                   </p>
                   <ul className="af-mt-basis-list">
                     {data.projectionBasis.notes.map((n) => (
@@ -1063,25 +1140,24 @@ export function MyTeam({ data }: MyTeamProps) {
                 </>
               ) : (
                 <p className="af-mt-basis-lead">
-                  Your league uses standard PPR scoring, so both numbers should agree. Where they
-                  do not, it is because we could not score a player under your rules.
+                  {copy('Your league uses standard PPR scoring, so both numbers should agree. Where they do not, it is because we could not score a player under your rules.')}
                 </p>
               )
             ) : (
               <p className="af-mt-basis-lead">
-                We do not hold this league&rsquo;s scoring settings, so there is no league-specific
-                projection to show — only the standard one.
+                {copy('We do not hold this league’s scoring settings, so there is no league-specific projection to show — only the standard one.')}
               </p>
             )}
             {proj.afTotal != null && proj.afProjected < proj.projected ? (
               <p className="af-mt-basis-cov">
-                Your league&rsquo;s total is built from {proj.afProjected} of {proj.projected}{' '}
-                priced starters, so it reads low next to the standard one.
+                {language === 'es'
+                  ? `El total de tu liga incluye ${proj.afProjected} de ${proj.projected} titulares con proyección, así que puede parecer bajo frente al estándar.`
+                  : `Your league’s total is built from ${proj.afProjected} of ${proj.projected} priced starters, so it reads low next to the standard one.`}
               </p>
             ) : null}
           </div>
           <button type="button" className="af-btn af-mt-ask" onClick={askChimmy}>
-            Ask Chimmy why they differ
+            {copy('Ask Chimmy why they differ')}
           </button>
         </section>
       ) : null}
@@ -1089,9 +1165,11 @@ export function MyTeam({ data }: MyTeamProps) {
       {/* ── Starters ────────────────────────────────────────────────── */}
       <section className="af-frame af-mt-section">
         <header className="af-mt-section-head">
-          <h2 className="af-label">Starters</h2>
+          <h2 className="af-label">{copy('Starters')}</h2>
           <span className="af-mt-section-note">
-            {bestBall ? `Best Ball roster from ${platform}. Scoring selects your eligible starters automatically.` : `Lineup from ${platform}. To change it, open ${platform} — AllFantasy only reads.`}
+            {bestBall
+              ? language === 'es' ? `Plantilla Best Ball de ${platform}. Los titulares elegibles se seleccionan automáticamente.` : `Best Ball roster from ${platform}. Scoring selects your eligible starters automatically.`
+              : language === 'es' ? `Alineación de ${platform}. Para cambiarla, abre ${platform}; AllFantasy solo la consulta.` : `Lineup from ${platform}. To change it, open ${platform} — AllFantasy only reads.`}
           </span>
           <ProjHeader />
         </header>
@@ -1119,7 +1197,7 @@ export function MyTeam({ data }: MyTeamProps) {
       {/* ── Bench ───────────────────────────────────────────────────── */}
       <section className="af-frame af-mt-section">
         <header className="af-mt-section-head">
-          <h2 className="af-label">Bench</h2>
+          <h2 className="af-label">{copy('Bench')}</h2>
           <ProjHeader />
         </header>
         {data.bench.available ? (
@@ -1137,7 +1215,7 @@ export function MyTeam({ data }: MyTeamProps) {
       {data.ir.available ? (
         <section className="af-frame af-mt-section">
           <header className="af-mt-section-head">
-            <h2 className="af-label">Injured reserve</h2>
+            <h2 className="af-label">{copy('Injured reserve')}</h2>
           </header>
           <ul className="af-mt-list">
             {data.ir.data.map((p) => (
@@ -1155,10 +1233,9 @@ export function MyTeam({ data }: MyTeamProps) {
       {data.taxi.available ? (
         <section className="af-frame af-mt-section">
           <header className="af-mt-section-head">
-            <h2 className="af-label">Taxi squad</h2>
+            <h2 className="af-label">{copy('Taxi squad')}</h2>
             <span className="af-mt-section-note">
-              Not eligible to start. Years left counts season-end rosters against your
-              league&rsquo;s taxi limit.
+              {copy('Not eligible to start. Years left counts season-end rosters against your league’s taxi limit.')}
             </span>
           </header>
           <ul className="af-mt-list">
@@ -1175,11 +1252,19 @@ export function MyTeam({ data }: MyTeamProps) {
       ) : null}
 
       {/* ── Coverage footnote ───────────────────────────────────────── */}
-      {data.projections.available ? (
+      {/*
+        ⚠ NO STANDARD-COVERAGE LINE WHERE THERE IS NO STANDARD TOTAL. In an IDP
+        league the standard tile reads "—" and explains why, but this footnote
+        still said "Standard total built from 7 of 16 starters … so it reads low"
+        — a total the page had just declined to show, and a count inflated by
+        every defender standard scoring cannot price. The tile carries the
+        explanation; the footnote stays out of it.
+      */}
+      {data.projections.available && !data.projections.data.standardComparable && data.projections.data.unprojected > 0 ? null : data.projections.available ? (
         <p className="af-mt-footnote">
           {data.projections.data.unprojected === 0
-            ? `All ${data.projections.data.projected} starters projected · ${data.projections.data.season} week ${data.projections.data.week}`
-            : `Standard total built from ${data.projections.data.projected} of ${
+            ? language === 'es' ? `Los ${data.projections.data.projected} titulares tienen proyección · ${data.projections.data.season}, semana ${data.projections.data.week}` : `All ${data.projections.data.projected} starters projected · ${data.projections.data.season} week ${data.projections.data.week}`
+            : language === 'es' ? `Total estándar calculado con ${data.projections.data.projected} de ${data.projections.data.projected + data.projections.data.unprojected} titulares; ${data.projections.data.unprojected} sin proyección, así que puede parecer bajo.` : `Standard total built from ${data.projections.data.projected} of ${
                 data.projections.data.projected + data.projections.data.unprojected
               } starters — ${data.projections.data.unprojected} ${
                 data.projections.data.unprojected === 1 ? 'has' : 'have'
@@ -1187,7 +1272,7 @@ export function MyTeam({ data }: MyTeamProps) {
         </p>
       ) : (
         <p className="af-mt-footnote">
-          Projections are not shown because {data.projections.reason}.
+          {copy('Projections are not shown because')} {data.projections.reason}.
         </p>
       )}
     </div>

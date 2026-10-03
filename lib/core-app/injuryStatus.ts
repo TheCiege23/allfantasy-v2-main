@@ -89,9 +89,9 @@ export function isOutDesignation(status: string | null | undefined): boolean {
  *
  * `NA` and `Unrevealed` are the provider declining to say, which is an absence
  * of information rather than a report of risk — an amber chip on those is a
- * claim we do not have.
+ * claim we do not have. `ACT` is Rolling Insights' spelling of Active.
  */
-const NO_DESIGNATION = ['active', 'healthy', 'na', 'n/a', 'none', 'unrevealed', 'unknown']
+const NO_DESIGNATION = ['active', 'act', 'healthy', 'na', 'n/a', 'none', 'unrevealed', 'unknown']
 
 export function isHealthyDesignation(status: string | null | undefined): boolean {
   if (!status) return true

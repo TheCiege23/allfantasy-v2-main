@@ -360,6 +360,39 @@ describe('MyTeamBoard', () => {
     expect(text).toContain('12 have no roster imported')
   })
 
+  /*
+   * The off-season: every team pre-draft, finished or paused, nothing unreadable. This used to
+   * print "We could not read a single lineup" — a data-gap warning over an account with no gap.
+   */
+  it('says there is nothing to set — not that it could not read — when every team sits out', () => {
+    const { container } = render(
+      <MyTeamBoard
+        allHref={ALL_HREF}
+        now={NOW}
+        pulse={pulse({ considered: 9, checked: 0, paused: 1, notChecked: { noRoster: 0, noLineup: 0, idsUnreadable: 0, inactive: 8 } })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('No lineups to set right now')
+    expect(text).not.toContain('We could not read a single lineup')
+    expect(text).toContain('8 pre-draft, completed, or inactive teams are excluded')
+    // Never a verdict that the lineups are fine.
+    expect(text).not.toContain('is set')
+  })
+
+  it('still warns when even one team could not be read, alongside teams that sit out', () => {
+    const { container } = render(
+      <MyTeamBoard
+        allHref={ALL_HREF}
+        now={NOW}
+        pulse={pulse({ considered: 9, checked: 0, notChecked: { noRoster: 1, noLineup: 0, inactive: 8 } })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('We could not read a single lineup')
+    expect(text).not.toContain('No lineups to set right now')
+  })
+
   it('links the league name into that league own my-team screen', () => {
     const { container } = render(
       <MyTeamBoard allHref={ALL_HREF} now={NOW} pulse={pulse({ needs: [row()], needsTotal: 1 })} />,
@@ -474,7 +507,11 @@ describe('the board ranks only what it actually ordered', () => {
    * keeps counting rows rather than tiers -- "03" means the third ROW, which is
    * what a reader comparing against the list length expects.
    */
-  it('numbers the first row of each tier and bullets the rest', () => {
+  /*
+   * ⚠ A TIE IS WRITTEN "T3", NOT AS A BULLET. The bullet read as a missing number
+   * on the live board ("01, 02, •, 04, •, •").
+   */
+  it('marks every row of a shared tier with the tier rank and a T', () => {
     const { container } = board(
       atLocks([
         '2026-09-13T17:00:00Z',
@@ -483,7 +520,42 @@ describe('the board ranks only what it actually ordered', () => {
         '2026-09-14T00:20:00Z',
       ]),
     )
-    expect(ranksOf(container)).toEqual(['01', '•', '03', '•'])
+    expect(ranksOf(container)).toEqual(['T1', 'T1', 'T3', 'T3'])
+    expect(container.querySelectorAll('.af-bd-rank[data-tied]').length).toBe(4)
+  })
+
+  it('keeps a plain numeral for a row alone in its tier', () => {
+    const { container } = board(
+      atLocks([
+        '2026-09-13T17:00:00Z',
+        '2026-09-13T20:00:00Z',
+        '2026-09-13T20:00:00Z',
+        '2026-09-14T00:20:00Z',
+      ]),
+    )
+    expect(ranksOf(container)).toEqual(['01', 'T2', 'T2', '04'])
+  })
+
+  /*
+   * The loader now orders `set` by questionable count, then lock. The tier key must
+   * follow, or two rows the loader separated would be printed as a tie.
+   */
+  it('ranks a questionable lineup above a clean one at the same lock, and says so', () => {
+    const lock = '2026-09-13T17:00:00Z'
+    const { container } = board([
+      row({ leagueId: 'q', leagueName: 'Risky', lockAt: lock, questionable: 2 }),
+      row({ leagueId: 'c', leagueName: 'Clean', lockAt: lock, questionable: 0 }),
+    ])
+    expect(ranksOf(container)).toEqual(['01', '02'])
+    expect(container.textContent).toContain('questionable starters first, then lock time')
+    expect(container.textContent).not.toContain('nothing is broken, so ranked by lock time')
+  })
+
+  it('prints the deadline it names beside the label, in Eastern time', () => {
+    const { container } = board(atLocks(['2026-09-14T00:20:00Z', '2026-09-13T17:00:00Z']))
+    const text = container.textContent ?? ''
+    expect(text).toContain('Next player deadline Sun 8:20p ET')
+    expect(text).toContain('Next player deadline Sun 1:00p ET')
   })
 
   /*

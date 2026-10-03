@@ -36,8 +36,9 @@ describe('⚠ no core screen opens the legacy league page', () => {
            * ⚠ AN EXPLICIT ?view= IS A DELIBERATE DEEP LINK, NOT THIS DEFECT.
            * Trade activity asks for `?view=trades` and DashUserOs for
            * `?view=decide`; those are deliberate league-surface deep links.
+           * `/commissioner/integrity` is a named commissioner tool, not the legacy league overview.
            */
-          if (line.includes('?view=')) return
+          if (line.includes('?view=') || line.includes('/commissioner/integrity')) return
           offenders.push(`${file}:${i + 1}`)
         })
     }

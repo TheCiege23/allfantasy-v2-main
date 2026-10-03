@@ -17,8 +17,9 @@ export async function changePassword(
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      currentPassword: currentPassword.trim(),
-      newPassword: newPassword.trim(),
+      // As typed — sign-in compares the exact bytes (see the change route).
+      currentPassword,
+      newPassword,
     }),
   })
   const data = await res.json().catch(() => ({}))

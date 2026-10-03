@@ -41,22 +41,28 @@ export function NotificationCategoryRenderer({
       style={{ borderColor: "var(--border)", background: "var(--panel2)" }}
       data-notification-category={categoryId}
     >
-      <button
-        type="button"
-        onClick={onToggleExpand}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
-        style={{ color: "var(--text)" }}
-        aria-expanded={expanded}
-        aria-controls={`notification-category-${categoryId}-panel`}
-      >
-        <span className="flex items-center gap-2">
-          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          <span className="text-sm font-medium">{label}</span>
-        </span>
-        <label className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <span className="text-xs" style={{ color: "var(--muted)" }}>{prefs.enabled ? "On" : "Off"}</span>
+      {/*
+        ⚠ THE SWITCH IS A SIBLING OF THE EXPAND BUTTON, NOT A CHILD. It used to sit inside the
+        <button>, which is invalid HTML (no interactive content inside a button): Firefox delivers
+        the click to the button, so the switch never toggled and the row expanded instead.
+      */}
+      <div className="flex items-center gap-2 pr-3">
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 py-2.5 pl-3 text-left"
+          style={{ color: "var(--text)" }}
+          aria-expanded={expanded}
+          aria-controls={`notification-category-${categoryId}-panel`}
+        >
+          {expanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+          <span className="min-w-0 text-sm font-medium">{label}</span>
+        </button>
+        <label className="flex shrink-0 items-center gap-2">
+          <span className="w-6 text-right text-xs" style={{ color: "var(--muted)" }}>{prefs.enabled ? "On" : "Off"}</span>
           <input
             type="checkbox"
+            role="switch"
             checked={prefs.enabled}
             onChange={(e) => onToggleEnabled(e.target.checked)}
             className="h-4 w-4 rounded border"
@@ -64,15 +70,17 @@ export function NotificationCategoryRenderer({
             aria-label={`${label} enabled`}
           />
         </label>
-      </button>
+      </div>
       {expanded && (
         <div
           id={`notification-category-${categoryId}-panel`}
           className="border-t px-3 py-2 space-y-2"
-          style={{ borderColor: "var(--border)" }}
+          style={{ borderColor: "var(--border)", opacity: prefs.enabled ? 1 : 0.6 }}
         >
-          <p className="text-xs font-medium" style={{ color: "var(--muted2)" }}>Delivery</p>
-          <div className="flex flex-wrap gap-4">
+          <p className="text-xs font-medium" style={{ color: "var(--muted2)" }}>
+            Delivery{prefs.enabled ? "" : " — turn this alert on to use these"}
+          </p>
+          <div className="flex flex-wrap gap-x-5 gap-y-1">
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"

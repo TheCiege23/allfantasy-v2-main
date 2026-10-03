@@ -36,7 +36,7 @@ import {
   type ChimmyPlanAllowanceView,
 } from '@/lib/chimmy/planAllowanceView'
 import { describeOutOfAnswers, type OutOfAnswers } from '@/lib/chimmy/outOfAnswers'
-import { isInIosAppClient } from '@/lib/platform/iosApp'
+import { isInIosAppWithoutIapClient } from '@/lib/platform/iosApp'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { confirmTokenSpend } from '@/lib/tokens/client-confirm'
@@ -765,7 +765,8 @@ export function ChimmyPanel({
             setScreenshot(attached)
             setOutOfAnswers(
               describeOutOfAnswers(readPlanAllowanceView(from.planAllowance) ?? planStatus, {
-                inIosApp: isInIosAppClient(),
+                // Only a build that sells nothing drops the buy offer; an IAP build sells tokens.
+                inIosApp: isInIosAppWithoutIapClient(),
               }),
             )
           }

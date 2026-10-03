@@ -2,6 +2,13 @@
  * POST /api/leagues/join — Join a league by invite code (and optional password).
  * Body: { code: string, password?: string }
  * Creates a Roster for the user if not already a member.
+ *
+ * Body: { action: 'request_class_exception', code?: string, token?: string }
+ * A manager the division gate refused asks the commissioner to let them in
+ * (`lib/league-join/classRequests.ts`). On this path rather than its own route
+ * because of the route ceiling noted on GET below (ported from PR #1753). The
+ * league's code or a `/join/<token>` token proves the manager was handed the way
+ * in — a bare league id would let anyone queue requests at any league.
  */
 
 import type { Prisma } from '@prisma/client'
@@ -10,7 +17,8 @@ import { getServerSession } from 'next-auth'
 import { getServedOrigin } from '@/lib/http/served-origin'
 import { authOptions } from '@/lib/auth'
 import { validateFantasyInviteCode } from '@/lib/league-invite'
-import { resolveJoinRankGate } from '@/lib/league-join/resolveJoinRankGate'
+import { divisionGateRefusal, evaluateJoinDivisionGate } from '@/lib/league-join/joinDivisionGate'
+import { requestClassException } from '@/lib/league-join/classRequests'
 import { prisma } from '@/lib/prisma'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
@@ -18,6 +26,28 @@ import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
 
 export const dynamic = 'force-dynamic'
+
+async function resolveInvitedLeagueId(code: string | null, token: string | null): Promise<string | null> {
+  if (token) {
+    const invite = await prisma.leagueInvite.findFirst({
+      where: { token, isActive: true },
+      select: { leagueId: true },
+    })
+    if (invite) return invite.leagueId
+  }
+  if (code) {
+    // A tracked invite link (`/invite/accept`) carries its own token, not the league's code.
+    const { getInviteByToken } = await import('@/lib/invite-engine/InviteEngine')
+    const { normalizeToken } = await import('@/lib/invite-engine/tokenGenerator')
+    const tracked = normalizeToken(code)
+    const link = tracked ? await getInviteByToken(tracked).catch(() => null) : null
+    if (link?.type === 'league' && link.targetId) return link.targetId
+    const validation = await validateFantasyInviteCode(code)
+    if (validation.valid) return validation.preview.leagueId
+    return validation.preview?.leagueId ?? null
+  }
+  return null
+}
 
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
@@ -27,6 +57,15 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const code = typeof body.code === 'string' ? body.code.trim() : null
   const password = typeof body.password === 'string' ? body.password : undefined
+
+  if (body.action === 'request_class_exception') {
+    const token = typeof body.token === 'string' ? body.token.trim() : null
+    const leagueId = await resolveInvitedLeagueId(code, token)
+    if (!leagueId) return NextResponse.json({ error: 'Invite not found' }, { status: 404 })
+    const requested = await requestClassException({ leagueId, userId })
+    if (!requested.ok) return NextResponse.json({ error: requested.error }, { status: requested.status })
+    return NextResponse.json({ success: true, leagueId, requestStatus: requested.status })
+  }
 
   if (!code) return NextResponse.json({ error: 'Missing invite code' }, { status: 400 })
 
@@ -64,25 +103,18 @@ export async function POST(req: NextRequest) {
   }
   const result = validation.preview
 
-  const rankGate = await resolveJoinRankGate({
-    leagueId: result.leagueId,
-    inviteTokenOrCode: code,
+  /*
+   * The division gate (ADR F2.10a), replacing the XP-level gate retired 2026-10-01: career XP
+   * measures volume, not skill, and gating on it is what the owner ruled out. Only an OPEN join
+   * — this league publishes its code — can be refused; a private league's code is an invitation.
+   */
+  const divisionGate = await evaluateJoinDivisionGate({
     userId,
+    leagueId: result.leagueId,
+    credential: { kind: 'league_code' },
   })
-
-  if (!rankGate.allowed) {
-    const minRankLevel = rankGate.minRankLevel ?? 1
-    const maxRankLevel = rankGate.maxRankLevel ?? 1
-    return NextResponse.json(
-      {
-        error: 'RANK_GATE_BLOCKED',
-        message: `This league is open to users ranked Level ${minRankLevel} through Level ${maxRankLevel}. Ask the commissioner for a special invite.`,
-        minRankLevel,
-        maxRankLevel,
-        userRankLevel: rankGate.userRankLevel,
-      },
-      { status: 403 }
-    )
+  if (divisionGate.outcome === 'deny') {
+    return NextResponse.json(divisionGateRefusal(divisionGate, result.leagueId), { status: 403 })
   }
 
   const joinResult = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
@@ -129,6 +161,7 @@ export async function POST(req: NextRequest) {
           platform: true,
           leagueSize: true,
           leagueVariant: true,
+          userId: true,
         },
       }),
       tx.roster.findMany({
@@ -310,14 +343,31 @@ export async function POST(req: NextRequest) {
       if (league.leagueSize == null || manualTeamCount < league.leagueSize) {
         const displayName = profile?.displayName?.trim() || profile?.sleeperUsername?.trim() || 'Manager'
         const teamBaseName = league.name?.trim() || 'League'
-        await tx.leagueTeam.create({
-          data: {
+        /*
+         * 🛑 CLAIMED, AND AN UPSERT. This was a bare `create` of an UNCLAIMED row — no
+         * `claimedByUserId`, no `platformUserId` — so the new manager held the roster while every
+         * reader that finds your team by its claim (the redraft member check, the Career Wire, the
+         * home brief) could not see them. Production 2026-10-01: a manager at 1-2 with exactly that
+         * row. And `assignLeagueSeat` now creates a native seat's row itself, so on the placeholder
+         * path the row already exists: a duplicate insert inside this transaction aborts it, which
+         * the `.catch` that used to sit here could hide but never undo. An existing row is left to
+         * the seat writer that made it.
+         */
+        await tx.leagueTeam.upsert({
+          where: { leagueId_externalId: { leagueId: result.leagueId, externalId: roster.id } },
+          create: {
             leagueId: result.leagueId,
             externalId: roster.id,
             ownerName: displayName,
             teamName: `${displayName}'s ${teamBaseName} Team`,
+            claimedByUserId: userId,
+            platformUserId: userId,
+            isOrphan: false,
+            isCommissioner: userId === league.userId,
+            role: userId === league.userId ? 'commissioner' : 'member',
           },
-        }).catch(() => null)
+          update: {},
+        })
       }
     }
 
@@ -342,7 +392,11 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  return NextResponse.json(joinResult)
+  return NextResponse.json(
+    divisionGate.outcome === 'allow_flagged' && !joinResult.alreadyMember
+      ? { ...joinResult, divisionFlag: { reason: divisionGate.reason, userDivision: divisionGate.userDivision, leagueDivision: divisionGate.leagueDivision } }
+      : joinResult,
+  )
 }
 
 /**

@@ -91,6 +91,7 @@ function deps(over: Partial<TradeReviewDeps> = {}): Partial<TradeReviewDeps> {
     lastMoves: async () => ({ ok: true, value: lastMovesFrom([{ teamId: 'rA', at: new Date(NOW.getTime() - 20 * DAY) }, { teamId: 'rB', at: new Date(NOW.getTime() - DAY) }]) }),
     forecast: async () => ({ week: 10, teamForecasts: [{ teamId: '1', playoffProbability: 0.5 }, { teamId: '2', playoffProbability: 81 }] }),
     deadlineKickoff: async () => new Date(NOW.getTime() + 30 * 3_600_000),
+    managerDivisions: async () => new Map(),
     now: () => NOW,
     ...over,
   }
@@ -110,6 +111,8 @@ describe('reviewStoredTrade — every check fed from its source', () => {
     expect(r.review.checks.map((c) => `${c.code}:${c.status}`)).toEqual([
       'heavily_lopsided:raised', 'tanking_signal:raised', 'repeat_partners:raised',
       'inactive_manager:raised', 'eliminated_team_dumping:raised', 'deadline_rush:raised',
+      // The fixture's teams name no manager, so there is no level to compare.
+      'class_gap:not_computed',
     ])
     expect(r.review.recommendation).toBe('consider_veto')
     const text = r.review.checks.map((c) => c.explanation).join(' | ')
@@ -195,6 +198,58 @@ describe('reviewStoredTrade — each missing source says so', () => {
     const noDeadline = async () => ({ id: 'L1', season: 2026, sport: 'NFL', platformLeagueId: 'SL1', tradeDeadlineWeek: null, settings: {} }) as never
     expect((await statusOf({ leagueRow: noDeadline })).deadline_rush).toBe('clear')
     expect((await statusOf({ deadlineKickoff: async () => null })).deadline_rush).toBe('not_computed')
+  })
+
+  it('reads each manager\'s Class division from their AllFantasy id and compares the two', async () => {
+    const named = {
+      ...world,
+      teams: [
+        { ...world.teams[0], managerUserId: 'u-strong' },
+        { ...world.teams[1], managerUserId: 'u-newer' },
+      ],
+    }
+    const managerDivisions = vi.fn(async () => new Map([['u-strong', 5], ['u-newer', 1]]))
+    const r = await reviewStoredTrade(
+      { leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' },
+      deps({
+        evaluate: vi.fn(async () => ({ ok: true, trade: trade(), receipt: receipt(), perspectiveTeamId: 'rA', viewerInTrade: false, world: named })) as never,
+        managerDivisions,
+      }),
+    )
+    if (!r.ok) throw new Error('refused')
+    expect(managerDivisions).toHaveBeenCalledWith(['u-strong', 'u-newer'])
+    expect(r.facts.managerDivisions).toEqual({ ok: true, value: [5, 1] })
+    expect(r.review.checks.find((c) => c.code === 'class_gap')!.status).not.toBe('not_computed')
+  })
+
+  it('🛑 a side with no established Class is not computed — there is no XP-level fallback', async () => {
+    // getDivisionsForUsers returns established ratings only, so a provisional or unrated manager is absent.
+    const named = { ...world, teams: [{ ...world.teams[0], managerUserId: 'u-a' }, { ...world.teams[1], managerUserId: 'u-provisional' }] }
+    const r = await reviewStoredTrade(
+      { leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' },
+      deps({
+        evaluate: vi.fn(async () => ({ ok: true, trade: trade(), receipt: receipt(), perspectiveTeamId: 'rA', viewerInTrade: false, world: named })) as never,
+        managerDivisions: async () => new Map([['u-a', 5]]),
+      }),
+    )
+    if (!r.ok) throw new Error('refused')
+    expect(r.facts.managerDivisions).toEqual({ ok: true, value: [5, null] })
+    expect(r.review.checks.find((c) => c.code === 'class_gap')!.status).toBe('not_computed')
+    expect(r.facts).not.toHaveProperty('managerLevels')
+    expect(r.facts).not.toHaveProperty('classBasis')
+  })
+
+  it('a manager with no AllFantasy account has no division: not computed', async () => {
+    const named = { ...world, teams: [{ ...world.teams[0], managerUserId: 'u-strong' }, { ...world.teams[1], managerUserId: 'sleeper-123' }] }
+    const r = await reviewStoredTrade(
+      { leagueId: 'L1', ref: { kind: 'af', tradeId: 't1' }, userId: 'commish' },
+      deps({
+        evaluate: vi.fn(async () => ({ ok: true, trade: trade(), receipt: receipt(), perspectiveTeamId: 'rA', viewerInTrade: false, world: named })) as never,
+        managerDivisions: async () => new Map([['u-strong', 5]]),
+      }),
+    )
+    if (!r.ok) throw new Error('refused')
+    expect(r.review.checks.find((c) => c.code === 'class_gap')!.status).toBe('not_computed')
   })
 
   it('history that cannot be read is not computed', async () => {

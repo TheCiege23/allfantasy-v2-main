@@ -839,7 +839,7 @@ export async function GET(
       p.weeklyProjection = leagueProjection ?? projection?.projectedPoints ?? null
       // Set only when the engine priced him, so every other player's shape is exactly as before.
       const afProjection = afEngineForLeague(
-        afEngine.get(p.id)?.projectedPoints,
+        afEngine.get(p.id),
         projection?.projectedPoints ?? null,
         leagueProjection,
       )

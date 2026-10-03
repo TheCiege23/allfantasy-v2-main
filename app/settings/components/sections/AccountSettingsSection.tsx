@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { signOutAndPurge } from "@/lib/pwa/signOutAndPurge"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
@@ -21,6 +21,71 @@ export function AccountSettingsSection({
   // a real plan before. Fall back to a live client-side entitlement check rather than always
   // showing "Free" regardless of the user's actual subscription.
   const ents = useEntitlements()
+  /*
+   * /api/user/delete cancels Stripe billing before it erases anything (lib/account/
+   * cancelSubscriptionsOnDelete) — immediately, with no refund for the rest of the period — so the
+   * dialog says so. An App Store subscription is the one we cannot cancel: Apple only lets the
+   * user do that. Same paid gate as BillingSettingsSection.
+   */
+  const hasLiveSubscription = ents.hasAnyPaid && !ents.isAdminBypassAccount
+
+  /*
+   * The delete dialog is modal, so it behaves like one: Escape closes it (never mid-deletion),
+   * Tab / Shift+Tab cycle INSIDE it rather than walking out into the page behind, the page does
+   * not scroll under it on a phone, and closing hands focus back to "Start deletion" instead of
+   * dropping it on <body>. Focus enters on the confirm input (autoFocus below).
+   */
+  const openerRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const wasOpen = useRef(false)
+
+  useEffect(() => {
+    if (!deleteOpen) {
+      if (wasOpen.current) {
+        wasOpen.current = false
+        openerRef.current?.focus()
+      }
+      return
+    }
+    wasOpen.current = true
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (!deleteBusy) {
+          e.preventDefault()
+          setDeleteOpen(false)
+        }
+        return
+      }
+      if (e.key !== "Tab") return
+      const panel = dialogRef.current
+      if (!panel) return
+      const items = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), a[href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+      if (items.length === 0) return
+      const first = items[0]!
+      const last = items[items.length - 1]!
+      const active = document.activeElement
+      if (e.shiftKey && (active === first || !panel.contains(active))) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (active === last || !panel.contains(active))) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener("keydown", onKey)
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.removeEventListener("keydown", onKey)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [deleteOpen, deleteBusy])
 
   const createdLabel = accountCreatedAt
     ? new Date(accountCreatedAt).toLocaleDateString(undefined, {
@@ -60,7 +125,12 @@ export function AccountSettingsSection({
         body: JSON.stringify({ confirm: true }),
       })
       if (!res.ok) {
-        setDeleteError("Account deletion failed. Please try again.")
+        // The route explains a refused deletion (e.g. billing could not be cancelled, so nothing
+        // was deleted); show that rather than a generic failure.
+        const data = (await res.json().catch(() => ({}))) as { error?: unknown }
+        setDeleteError(
+          typeof data.error === "string" && data.error ? data.error : "Account deletion failed. Please try again.",
+        )
         return
       }
       // PII is erased and auth is revoked — sign the user out and leave.
@@ -124,6 +194,7 @@ export function AccountSettingsSection({
         </p>
         <p className="text-xs" style={{ color: "var(--muted)" }}>{t("settings.account.deleteIntro")}</p>
         <button
+          ref={openerRef}
           type="button"
           onClick={() => {
             setDeleteOpen(true)
@@ -147,21 +218,41 @@ export function AccountSettingsSection({
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-account-title"
+          aria-describedby="delete-account-desc"
         >
           <div
+            ref={dialogRef}
             className="w-full max-w-md rounded-2xl border p-5 shadow-xl"
             style={{ borderColor: "var(--border)", background: "var(--panel)" }}
           >
             <h3 id="delete-account-title" className="text-lg font-semibold" style={{ color: "var(--text)" }}>
               {t("settings.account.confirmDeletionTitle")}
             </h3>
-            <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
+            <p id="delete-account-desc" className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
               {t("settings.account.confirmDeletionBeforeWord")}{" "}
               <span className="font-mono font-semibold text-white">DELETE</span>{" "}
               {t("settings.account.confirmDeletionAfterWord")}
             </p>
+            {hasLiveSubscription ? (
+              <p
+                className="mt-3 rounded-lg border px-3 py-2 text-xs"
+                style={{ borderColor: "color-mix(in srgb, #fbbf24 45%, transparent)", color: "#fbbf24" }}
+                data-testid="settings-account-delete-subscription-warning"
+              >
+                Deleting your account cancels your AllFantasy subscription right away, with no refund for the
+                rest of the billing period. If you subscribed in the iPhone app, cancel it in your iPhone
+                Settings → your name → Subscriptions — Apple doesn&apos;t let us cancel it for you.
+              </p>
+            ) : null}
             <input
               type="text"
+              id="delete-account-confirm"
+              /* The name matches the visible sentence's opening words ("Type DELETE to confirm"), so
+                 voice control can target it by what is on screen; the full sentence, including that
+                 data is erased immediately, is read as its description when focus lands here. */
+              aria-label="Type DELETE to confirm"
+              aria-describedby="delete-account-desc"
+              autoFocus
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value)}
               className="mt-3 w-full rounded-lg border px-3 py-2 text-sm outline-none"
@@ -192,6 +283,8 @@ export function AccountSettingsSection({
               <button
                 type="button"
                 onClick={() => setDeleteOpen(false)}
+                disabled={deleteBusy}
+                data-testid="settings-account-delete-cancel"
                 className="rounded-xl border px-4 py-2 text-sm font-semibold"
                 style={{ borderColor: "var(--border)", color: "var(--text)" }}
               >

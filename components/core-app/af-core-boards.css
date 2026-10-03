@@ -157,9 +157,15 @@
 }
 
 /*
- * A row that ties with the one above it carries a bullet instead of a numeral.
- * It keeps the column's width so the league names stay aligned, and drops the
- * weight — a bullet as bold as a rank would read as a rank.
+ * A row in a shared tier carries "T4" — the tier's rank with a T, as a standings
+ * table writes a tie (see `tiedRankLabels` in MyTeamBoard). It replaced a bullet,
+ * which on a live board read "01, 02, •, 04, •, •" — a list that had lost its
+ * numbering. The tie label is a real rank, so it keeps the numerals' weight and
+ * colour; it only drops a pixel so "T10" still fits the 20px column and the
+ * league names stay aligned.
+ *
+ * The history below is the bullet's, kept because its two rules still hold for
+ * anything in this column: no opacity, and no gutter on a board with one tier.
  *
  * 🛑 NO OPACITY. This shipped at `opacity: 0.45` and had to be corrected on the
  * production screen: `--faint` #7d84a8 at 45% over the board's #0b0d17 resolves
@@ -188,8 +194,9 @@
  * MIXED board, where numerals sit beside it and give it context. The glyph is
  * U+2022 BULLET, roughly 2.5x the ink of the middot it replaced.
  */
-.af-core .af-bd-rank[data-untiered] {
-  font-weight: 400;
+.af-core .af-bd-rank[data-tied] {
+  font-size: 11px;
+  letter-spacing: -0.03em;
 }
 
 /* league identity block — name over platform · detail */
@@ -756,8 +763,14 @@
  *
  * Rides the rich card. Net gain as a tinted pill, the add and the drop as two
  * tinted panels with an arrow between, the reasoning in its own box.
+ *
+ * 🛑 `.af-bd-gain`, NOT `.af-bd-pill`. This block used to be `.af-bd-pill`, and so is the filter
+ * chip further down this file — same specificity, later in the cascade, so the chip's
+ * `font: 700 11px Archivo`, padding and border silently won. The loudest number on every Waivers
+ * card, the ranking key, rendered as an 11px filter chip. Brace balance, lint and tests were all
+ * clean; only the computed style showed it. A distinct name cannot collide.
  */
-.af-core .af-bd-pill {
+.af-core .af-bd-gain {
   flex: none;
   display: inline-flex;
   align-items: baseline;
@@ -771,9 +784,16 @@
   white-space: nowrap;
 }
 /* Tinted from the token, not `currentColor` — Chromium resolved that mix grey. */
-.af-core .af-bd-pill[data-sev='good'] { color: var(--good); background: color-mix(in srgb, var(--good) 13%, transparent); }
-.af-core .af-bd-pill[data-sev='bad'] { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); }
-.af-core .af-bd-pill-unit { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.af-core .af-bd-gain[data-sev='good'] { color: var(--good); background: color-mix(in srgb, var(--good) 13%, transparent); }
+.af-core .af-bd-gain[data-sev='bad'] { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); }
+.af-core .af-bd-gain-unit { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* Under a swap side: who the add starts over, or why this player is the drop. */
+.af-core .af-bd-swap .af-bd-side-note {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text2);
+}
 
 .af-core .af-bd-cards--rich .af-bd-swap {
   display: grid;
@@ -1380,4 +1400,331 @@
 /* 44px: Apple's minimum tap target; .af-btn alone is 36px. */
 .af-core .af-bd-noleagues-actions .af-btn {
   min-height: 44px;
+}
+
+/* Standings board: the week's stakes and the schedule ahead, under "what decides it". */
+.af-core .af-bd-sub3 {
+  color: var(--faint);
+}
+
+/*
+ * ── Standings board: the account at a glance, and the week's biggest game ──
+ *
+ * TOP-LEVEL on purpose, appended after every query above: a rule inserted inside
+ * a query silently moves into it. The narrow layout keys on the BOARD's width
+ * (`af-board` container), for the reason the block above records.
+ */
+.af-core .af-bd-pulse-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.af-core .af-bd-pulse,
+.af-core .af-bd-mustwin {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.af-core .af-bd-pulse-lead {
+  margin: 0;
+  font: 900 20px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.af-core .af-bd-pulse-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.af-core .af-bd-pulse-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--chip);
+  border-radius: 9px;
+}
+.af-core .af-bd-pulse-v {
+  font: 900 22px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.af-core .af-bd-pulse-tile[data-sev='good'] .af-bd-pulse-v { color: var(--good); }
+.af-core .af-bd-pulse-tile[data-sev='warn'] .af-bd-pulse-v { color: var(--warn); }
+.af-core .af-bd-pulse-k {
+  font: 600 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+.af-core .af-bd-pulse-s {
+  font: 500 11px/1.2 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-core .af-bd-pulse-note {
+  margin: 0;
+  font: 400 11px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--faint);
+}
+
+/* The card is one link — the whole thing is the tap target. */
+.af-core a.af-bd-mustwin {
+  gap: 4px;
+  color: inherit;
+  text-decoration: none;
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
+}
+.af-core a.af-bd-mustwin:hover,
+.af-core a.af-bd-mustwin:focus-visible {
+  background: var(--chip);
+}
+.af-core .af-bd-mustwin-k {
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+.af-core .af-bd-mustwin-title {
+  margin-top: 4px;
+  font: 800 16px/1.25 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--text);
+}
+.af-core .af-bd-mustwin-league {
+  font: 500 12px/1.3 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-core .af-bd-mustwin-branches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.af-core .af-bd-mustwin-branches > span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font: 900 18px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+.af-core .af-bd-mustwin-branches > span[data-sev='good'] {
+  color: var(--good);
+  background: color-mix(in srgb, var(--good) 11%, transparent);
+}
+.af-core .af-bd-mustwin-branches > span[data-sev='bad'] {
+  color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 10%, transparent);
+}
+.af-core .af-bd-mustwin-bk {
+  font: 700 11px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.af-core .af-bd-mustwin-note {
+  margin-top: 6px;
+  font: 500 12px/1.4 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  color: var(--muted);
+}
+
+/*
+ * Seed meter under "#3 of 12": the field as a track, the playoff places shaded,
+ * your seed as a dot. Decorative — the text beside it carries the fact.
+ */
+.af-core .af-bd-seedbar {
+  position: relative;
+  display: block;
+  width: 64px;
+  height: 4px;
+  margin: 2px 0;
+  border-radius: 2px;
+  background: var(--line);
+}
+.af-core .af-bd-seedbar-in {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--good) 35%, transparent);
+}
+.af-core .af-bd-seedbar-dot {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--muted);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.af-core .af-bd-seedbar-dot[data-sev='good'] { background: var(--good); }
+.af-core .af-bd-seedbar-dot[data-sev='warn'] { background: var(--warn); }
+.af-core .af-bd-seedbar-dot[data-sev='bad'] { background: var(--bad); }
+
+@container af-board (max-width: 760px) {
+  .af-core .af-bd-pulse-row { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .af-core .af-bd-pulse-row { grid-template-columns: minmax(0, 1fr); }
+  .af-core .af-bd-pulse-lead { font-size: 18px; }
+  .af-core .af-bd-pulse-v { font-size: 19px; }
+  .af-core .af-bd-pulse-tiles { gap: 6px; }
+  .af-core .af-bd-pulse-tile { padding: 9px 10px; }
+}
+
+/*
+ * ── Waivers board on a phone: Add and Drop side by side (2026-10-01 audit) ──
+ *
+ * The shared 720px rule stacks the two panels with a rotated arrow between, which made each
+ * Waivers card ~562px on a 375px phone — a top five ran to ~3.5 screens. Side by side, the
+ * add-for-drop reads as the one decision it is, and a card is ~467px (board 4,865px -> 4,128px).
+ * Trades and Draft HQ use the same swap and keep the stack: `--waivers` scopes this, and the
+ * extra class out-ranks the shared rule however the bundle orders the files. Hiding the faces as
+ * well would buy only 18px more, so the headshots stay.
+ */
+@media (max-width: 720px) {
+  .af-core .af-bd-cards--rich.af-bd-cards--waivers .af-bd-swap {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+  .af-core .af-bd-cards--waivers .af-bd-swap-arrow {
+    display: none;
+  }
+  .af-core .af-bd-cards--waivers .af-bd-swap .af-bd-side {
+    padding: 10px 12px;
+  }
+  .af-core .af-bd-cards--rich.af-bd-cards--waivers .af-bd-swap .af-bd-kvrow {
+    flex-wrap: wrap;
+    gap: 2px 10px;
+  }
+  /* "13.1 PROJ PTS AF 13.7" measured 131px in a 125px half; it wraps rather than crowding the padding. */
+  .af-core .af-bd-cards--waivers .af-bd-swap .af-bd-proj {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Waivers board — sort/filter, the 24h strip, alternatives, multi-league.
+   Own top-level blocks at end of file: nothing here can be carried into
+   another rule's @media band (see the af-matchup.css incident in CLAUDE.md).
+   ══════════════════════════════════════════════════════════════════════ */
+.af-core .af-wvb { display: flex; flex-direction: column; gap: 12px; }
+.af-core .af-wvb-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.af-core .af-wvb-sort { display: inline-flex; align-items: center; gap: 8px; }
+.af-core .af-wvb-sort select {
+  min-height: 36px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line2, rgba(255, 255, 255, 0.12));
+  background: var(--surface, #12152b);
+  color: var(--text, #eef0fa);
+  font: 600 13px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+.af-core .af-wvb-pos { display: flex; flex-wrap: wrap; gap: 6px; }
+.af-core .af-wvb-chip {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line, rgba(255, 255, 255, 0.1));
+  background: var(--chip, rgba(255, 255, 255, 0.04));
+  color: var(--text2, #c9cee8);
+  font: 700 12px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  cursor: pointer;
+}
+.af-core .af-wvb-chip[data-active='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.af-core .af-wvb-chip:focus-visible,
+.af-core .af-wvb-more:focus-visible,
+.af-core .af-wvb-alts summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-core .af-wvb-more {
+  align-self: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: 10px;
+  border: 1px solid var(--line2, rgba(255, 255, 255, 0.12));
+  background: var(--surface2, rgba(255, 255, 255, 0.04));
+  color: var(--text, #eef0fa);
+  font: 700 13px/1 var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  cursor: pointer;
+}
+
+.af-core .af-wvb-due {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--warn, #fbbf24) 35%, transparent);
+  background: color-mix(in srgb, var(--warn, #fbbf24) 8%, transparent);
+}
+.af-core .af-wvb-due ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.af-core .af-wvb-due a { color: var(--text); font-weight: 700; }
+.af-core .af-wvb-due-at { font-size: 12px; color: var(--text2); font-variant-numeric: tabular-nums; }
+
+.af-core .af-wvb-alts { border-top: 1px solid var(--line, rgba(255, 255, 255, 0.07)); padding-top: 8px; }
+.af-core .af-wvb-alts summary {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-core .af-wvb-alts ul { margin: 4px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.af-core .af-wvb-alts li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13px;
+}
+.af-core .af-wvb-alt-who { min-width: 0; overflow-wrap: anywhere; }
+.af-core .af-wvb-alt-gain {
+  flex: none;
+  font: 800 13px/1 var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  color: var(--good);
+}
+
+.af-core .af-wvb-multi { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.af-core .af-wvb-multi li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.07));
+  background: var(--surface, rgba(255, 255, 255, 0.02));
+}
+.af-core .af-wvb-multi-who { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.af-core .af-wvb-multi-n { font-size: 12px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.af-core .af-wvb-multi-leagues { grid-column: 1 / -1; font-size: 12.5px; color: var(--text2); line-height: 1.5; }
+.af-core .af-wvb-multi-leagues a { color: var(--text); }
+
+/* Touch screens: every new control at the 44px tap-target floor. */
+@media (pointer: coarse) {
+  .af-core .af-wvb-chip,
+  .af-core .af-wvb-sort select,
+  .af-core .af-wvb-alts summary { min-height: 44px; }
+}
+@media (max-width: 560px) {
+  .af-core .af-wvb-multi li { grid-template-columns: minmax(0, 1fr); }
+  .af-core .af-wvb-multi-n { white-space: normal; }
 }

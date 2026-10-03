@@ -32,6 +32,9 @@ export const PUSH_NOTIFICATION_CATEGORIES = [
   "direct_messages",
   // Opt-in and off by default; push only fires for someone who switched it on.
   "league_chat",
+  // A title won, a new award tier, a career-wins mark (2026-10-01) — rare by construction: once per
+  // milestone ever, only for a season that just finished.
+  "career_milestones",
 ] as const
 
 export type PushNotificationCategory = (typeof PUSH_NOTIFICATION_CATEGORIES)[number]

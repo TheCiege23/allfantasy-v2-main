@@ -85,6 +85,51 @@ describe('RankTable', () => {
   })
 })
 
+/*
+ * Phone "More" toggle. The hide/show itself is CSS (≤720px), so these pin the markup contract
+ * that CSS reads: which rows carry `data-phonemore`, and that the toggle holds every hidden value
+ * once — and that a lone hidden column is left alone, where a toggle made the row taller.
+ */
+describe('RankTable phone "More" toggle', () => {
+  const wide: RankColumn[] = [
+    { key: 'rank', label: '#', srLabel: 'Rank' },
+    { key: 'manager', label: 'Manager' },
+    { key: 'score', label: 'Score' },
+    { key: 'win', label: 'Win %', srLabel: 'Adjusted win rate', hideOnPhone: true },
+    { key: 'titles', label: 'Titles', hideOnPhone: true },
+  ]
+  const wideRows: RankRow[] = [
+    { id: 'a', cells: [{ text: '1' }, { text: '@ace' }, { text: '98.0' }, { text: '64.0%' }, { text: '3 / 1.2', sub: 'over 9 seasons' }] },
+  ]
+
+  it('puts every phone-hidden column behind one toggle, labelled by its full name', () => {
+    const html = renderToStaticMarkup(<RankTable caption="Board" columns={wide} rows={wideRows} emptyText="none" />)
+    const doc = new DOMParser().parseFromString(`<table>${html.match(/<table[\s\S]*<\/table>/)![0]}</table>`, 'text/html')
+    const tr = doc.querySelector('tbody tr')!
+    expect(tr.hasAttribute('data-phonemore')).toBe(true)
+    const more = tr.querySelector('td.af-rk-phonemore')!
+    expect(more.querySelector('summary')?.textContent).toBe('More')
+    expect([...more.querySelectorAll('dt')].map((e) => e.textContent)).toEqual(['Adjusted win rate', 'Titles'])
+    expect([...more.querySelectorAll('dd')].map((e) => e.textContent)).toEqual(['64.0%', '3 / 1.2over 9 seasons'])
+    // The toggle is an extra cell; the visible columns keep their own cells untouched.
+    expect(tr.querySelectorAll('[data-card]').length).toBe(wide.length + 1)
+  })
+
+  it('leaves a single phone-hidden column as a chip — no toggle, no data-phonemore', () => {
+    const one = wide.slice(0, 4)
+    const html = renderToStaticMarkup(
+      <RankTable caption="Board" columns={one} rows={[{ id: 'a', cells: wideRows[0].cells.slice(0, 4) }]} emptyText="none" />,
+    )
+    expect(html).not.toContain('af-rk-phonemore')
+    expect(html).not.toContain('data-phonemore')
+  })
+
+  it('adds nothing when no column is hidden on phones', () => {
+    const html = renderToStaticMarkup(<RankTable caption="Board" columns={columns} rows={rows(3)} emptyText="none" />)
+    expect(html).not.toContain('af-rk-phonemore')
+  })
+})
+
 describe('TrendLine', () => {
   it('breaks the line at a gap and lists the gap in the table', () => {
     const html = renderToStaticMarkup(

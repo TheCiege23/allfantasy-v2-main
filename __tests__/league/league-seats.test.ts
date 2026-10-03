@@ -22,6 +22,7 @@ function matches(row: Row, where: Row | undefined): boolean {
   return Object.entries(where).every(([key, cond]) => {
     if (key === 'NOT') return !matches(row, cond as Row)
     if (key === 'leagueId_userId') return row.leagueId === cond.leagueId && row.userId === cond.userId
+    if (key === 'leagueId_externalId') return row.leagueId === cond.leagueId && row.externalId === cond.externalId
     if (cond && typeof cond === 'object' && !Array.isArray(cond)) {
       if ('in' in cond) return (cond.in as unknown[]).includes(row[key])
       if ('not' in cond) return row[key] !== cond.not
@@ -56,8 +57,10 @@ function table(rows: Row[]) {
     upsert: async ({ where, create, update }: { where: Row; create: Row; update: Row }) => {
       const row = rows.find((r) => matches(r, where))
       if (row) return Object.assign(row, update)
-      // The real table is unique on (leagueId, userId); a second insert would abort the txn.
-      if (rows.some((r) => r.leagueId === create.leagueId && r.userId === create.userId)) {
+      // The real tables are unique on (leagueId, userId) / (leagueId, externalId); a second insert
+      // would abort the txn.
+      const key = 'externalId' in create ? 'externalId' : 'userId'
+      if (rows.some((r) => r.leagueId === create.leagueId && r[key] === create[key])) {
         throw new Error('P2002 unique violation')
       }
       rows.push({ ...create })
@@ -167,6 +170,52 @@ describe('assignLeagueSeat', () => {
   it('refuses a user id that is not a person', async () => {
     const db = nativeLeague()
     expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'nobody' })).toMatchObject({ ok: false, code: 'USER_NOT_FOUND' })
+  })
+})
+
+describe('assignLeagueSeat — a native seat with no team row (2026-10-01)', () => {
+  /*
+   * Production: 33 of 120 native rosters had no `LeagueTeam`, and this function only UPDATED one, so
+   * a claim left the manager with no team for the member check, the Career Wire or the standings.
+   */
+  const withoutTeam = (db: any, rosterId: string) => {
+    db.leagueTeam.rows.splice(db.leagueTeam.rows.findIndex((t: Row) => t.externalId === rosterId), 1)
+    return db
+  }
+
+  it('🛑 creates the team row, claimed by the new holder', async () => {
+    const db = withoutTeam(nativeLeague(), 'r3')
+    expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })).toMatchObject({ ok: true })
+    expect(db.leagueTeam.rows.filter((t: Row) => t.externalId === 'r3')).toEqual([
+      expect.objectContaining({
+        leagueId: 'L', claimedByUserId: 'amy', platformUserId: 'amy', isOrphan: false,
+        isCommissioner: false, role: 'member', ownerName: 'Amy', teamName: "Amy's Team",
+      }),
+    ])
+  })
+
+  it('the league owner taking a team-less seat gets the commissioner role on it', async () => {
+    const db = withoutTeam(nativeLeague(), 'r1')
+    db.roster.rows.find((r: Row) => r.id === 'r1').platformUserId = 'open-slot-L-1'
+    await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r1', userId: 'commish' })
+    expect(db.leagueTeam.rows.find((t: Row) => t.externalId === 'r1')).toMatchObject({ isCommissioner: true, role: 'commissioner' })
+  })
+
+  it('re-asserting a seat already held repairs an UNCLAIMED team row (the join route used to write one)', async () => {
+    const db = nativeLeague()
+    db.roster.rows.find((r: Row) => r.id === 'r2').platformUserId = 'amy'
+    Object.assign(db.leagueTeam.rows.find((t: Row) => t.id === 't2'), { claimedByUserId: null, platformUserId: null, isOrphan: false })
+    expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r2', userId: 'amy' })).toMatchObject({ ok: true, alreadyHeld: true })
+    expect(db.leagueTeam.rows.filter((t: Row) => t.externalId === 'r2')).toEqual([
+      expect.objectContaining({ id: 't2', claimedByUserId: 'amy', platformUserId: 'amy' }),
+    ])
+  })
+
+  it('an IMPORTED seat with no team row is left without one — its provider sync owns those rows', async () => {
+    const db = withoutTeam(nativeLeague(), 'r3')
+    db.league.rows[0].platform = 'sleeper'
+    expect(await assignLeagueSeat(db, { leagueId: 'L', rosterId: 'r3', userId: 'amy' })).toMatchObject({ ok: true })
+    expect(db.leagueTeam.rows.some((t: Row) => t.externalId === 'r3')).toBe(false)
   })
 })
 

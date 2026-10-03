@@ -255,6 +255,8 @@ export async function getTradeReceipts(args: {
   /** Your Sleeper user id — the only way to tell which side of a trade was yours. */
   ownerSleeperId: string | null
   currentWeek: number | null
+  /** Rows returned; the home card's five unless a caller (the Career decision record) needs all. */
+  limit?: number
 }): Promise<DecisionReceiptsData | null> {
   if (!args.ownerSleeperId) return null
 
@@ -313,7 +315,7 @@ export async function getTradeReceipts(args: {
   }
 
   receipts.sort((a, b) => b.createdIso.localeCompare(a.createdIso))
-  return { trades: receipts.slice(0, MAX_TRADE_RECEIPTS), tooEarly: early, uncoveredLeagues }
+  return { trades: receipts.slice(0, args.limit ?? MAX_TRADE_RECEIPTS), tooEarly: early, uncoveredLeagues }
 }
 
 /* ── Waiver adds ──────────────────────────────────────────────────────────────── */
@@ -525,6 +527,8 @@ export async function getWaiverReceipts(args: {
   userId: string
   leagues: readonly ReceiptsLeague[]
   currentWeek: number | null
+  /** Rows returned; the home card's five unless a caller (the Career decision record) needs all. */
+  limit?: number
 }): Promise<{ waivers: WaiverReceipt[]; tooEarly: number; unscored: number } | null> {
   const loaded = await loadSeasonAdds(args)
   if (!loaded) return null
@@ -567,7 +571,7 @@ export async function getWaiverReceipts(args: {
   }
 
   receipts.sort((x, y) => y.week - x.week || y.points - x.points)
-  return { waivers: receipts.slice(0, MAX_WAIVER_RECEIPTS), tooEarly: early, unscored }
+  return { waivers: receipts.slice(0, args.limit ?? MAX_WAIVER_RECEIPTS), tooEarly: early, unscored }
 }
 
 /* ── Lineups (start/sit) ──────────────────────────────────────────────────────── */
@@ -790,6 +794,13 @@ export async function getAutoCoachReceipts(args: {
   userId: string
   leagues: readonly ReceiptsLeague[]
   currentWeek: number | null
+  /**
+   * The Career decision record reads a whole season through THIS function rather than a copy of its
+   * rules: `since` widens the window from the card's 45 days, `limit` lifts the card's five. Both
+   * default to the card's own values, so the home card is unchanged.
+   */
+  since?: Date
+  limit?: number
 }): Promise<{ autocoach: AutoCoachReceipt[]; pending: number; unscored: number; unreadable: number } | null> {
   if (!args.userId) return null
   const sleeper = args.leagues.filter(isSleeper).slice(0, MAX_WAIVER_LEAGUES)
@@ -799,10 +810,10 @@ export async function getAutoCoachReceipts(args: {
     where: {
       userId: args.userId,
       leagueId: { in: sleeper.map((l) => l.id) },
-      swapMadeAt: { gte: new Date(Date.now() - AUTOCOACH_LOOKBACK_DAYS * 86_400_000) },
+      swapMadeAt: { gte: args.since ?? new Date(Date.now() - AUTOCOACH_LOOKBACK_DAYS * 86_400_000) },
     },
     orderBy: { swapMadeAt: 'desc' },
-    take: 60,
+    take: args.since ? 600 : 60,
     select: {
       leagueId: true,
       slotPosition: true,
@@ -878,7 +889,7 @@ export async function getAutoCoachReceipts(args: {
     })),
   )
   return {
-    autocoach: scored.receipts.slice(0, MAX_AUTOCOACH_RECEIPTS),
+    autocoach: scored.receipts.slice(0, args.limit ?? MAX_AUTOCOACH_RECEIPTS),
     pending,
     unscored: scored.unscored,
     unreadable: unreadable + scored.unreadable,

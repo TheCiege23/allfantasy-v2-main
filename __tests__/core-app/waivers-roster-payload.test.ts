@@ -72,7 +72,7 @@ describe('the Waivers read stops pulling every roster blob', () => {
     prismaMock.leagueWaiverSettings.findUnique.mockResolvedValue({ waiverType: 'faab', faabBudget: 100, processingDayOfWeek: 1, processingTimeUtc: '12:00', tiebreakRule: 'highest_bid' })
     const { getWaiversData } = await import('@/lib/core-app/waivers')
     const data = await getWaiversData('L1', 'me')
-    expect(data?.processTime).toMatchObject({ available: true, data: { dayOfWeek: 1, timeUtc: '12:00' } })
+    expect(data?.processTime).toMatchObject({ available: true, data: { schedule: { dayOfWeek: 1, time: '12:00', timeZone: 'UTC' }, timeLabel: '12:00 UTC' } })
     expect(data?.tiebreak).toMatchObject({ available: true })
   })
 
@@ -115,7 +115,9 @@ describe('the Waivers read stops pulling every roster blob', () => {
 
     expect(data?.rosterLoad).toMatchObject({
       available: true,
-      data: { playersHeld: 3, starters: 2, bench: 1, reserve: 1 },
+      /* Sleeper's `players` already holds the reserve player: 3 held = 2 starting + 0 bench + 1 IR.
+         This read `bench: 1` until 2026-10-02, counting p3 as bench AND as IR. */
+      data: { playersHeld: 3, starters: 2, bench: 0, reserve: 1 },
     })
   })
 

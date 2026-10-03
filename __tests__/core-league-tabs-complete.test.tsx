@@ -21,6 +21,13 @@ vi.mock('next/navigation', () => ({
 }))
 
 describe('league Core navigation', () => {
+  it('names the active secondary view without expanding the phone menu', () => {
+    const { container } = render(<LeagueTabs leagueId="league-1" leagueName="AFC Dreaming" activeKey="week" compact hasScoredWeek />)
+    const more = container.querySelector<HTMLDetailsElement>('.af-lt-more')
+    expect(more?.hasAttribute('open')).toBe(false)
+    expect(more?.querySelector('summary')).toHaveTextContent('More · Your week')
+    expect(screen.getByRole('link', { name: 'Your week', hidden: true })).toHaveAttribute('aria-current', 'page')
+  })
   it('keeps league context across every supported decision tab', () => {
     render(
       <LeagueTabs
@@ -105,6 +112,13 @@ describe('league Core navigation', () => {
 })
 
 describe('describeHiddenTabs', () => {
+  it('explains unavailable league views in Spanish', () => {
+    const notes = describeHiddenTabs({ hasScoredWeek: false, tradeSupported: false, draftSupported: false, platform: 'ESPN' }, 'es')
+    expect(notes).toHaveLength(3)
+    expect(notes[0]).toContain('semana puntuada')
+    expect(notes[1]).toContain('ESPN')
+    expect(notes[2]).toContain('Draft HQ')
+  })
   const full = { hasScoredWeek: true, tradeSupported: true, draftSupported: true }
 
   it('separates our temporary gap from the platform’s permanent one', () => {

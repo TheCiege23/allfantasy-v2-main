@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { triageRows, type GameDayTriage, type TriageStarter } from './gameDayTriage'
+import { compareTriageRows, triageRows, type GameDayTriage, type TriageLeague, type TriageStarter } from './gameDayTriage'
 import { readInjuryClaims } from './injuryClaims'
 import type { SectionState } from './leagueHome'
 import { isBestBallLeagueRow } from './leagueBestBall'
@@ -11,6 +11,7 @@ import { unresolvedClubNames, weekKickoffs } from './playerGame'
 import { applyBridge, loadBridgedLeagues } from './bridgedRosterIds'
 import { collectRosterIds, loadEspnToSleeperMap, rosterIdSpaceOf } from './rosterIdSpace'
 import { resolveSportsWeek } from './sportsWeek'
+import { isEliminatedTeam } from './eliminatedTeam'
 
 /**
  * Your flagged starters across every league — the finder's game-day home.
@@ -44,6 +45,9 @@ import { resolveSportsWeek } from './sportsWeek'
  * (559c56580), so a repeated id cannot spend the bound.
  */
 const MAX_LEAGUES = 250
+
+/** An unfilled starting slot, as every other roster reader spells it. */
+const EMPTY_SLOT = '0'
 
 export async function loadGameDayTriage(userId: string | null | undefined, leagueIds: string[], nowIso: string = new Date().toISOString()): Promise<SectionState<GameDayTriage>> {
   if (!userId) return { available: false, reason: 'sign in to see your flagged starters' }
@@ -81,6 +85,7 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     guillotineMode: boolean | null
     leagueType: string | null
     settings: unknown
+    sport: string | null
   }
   const [leagues, rawRosters, chopped, eliminations] = await Promise.all([
     prisma.league
@@ -99,6 +104,7 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
           guillotineMode: true,
           leagueType: true,
           settings: true,
+          sport: true,
         },
       })
       .catch(() => [] as LeagueRow[]),
@@ -108,7 +114,7 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     prisma.guillotineRosterState.findMany({ where: { leagueId: { in: claimedLeagueIds }, choppedAt: { not: null } }, select: { leagueId: true, rosterId: true } }).catch(() => []),
     prisma.guillotineElimination.findMany({
       where: { leagueId: { in: claimedLeagueIds }, eliminatedOwnerId: { in: [userId, ...teams.map((t) => t.platformUserId).filter((id): id is string => Boolean(id))] } },
-      select: { leagueId: true, season: { select: { season: true } } },
+      select: { leagueId: true, eliminatedOwnerId: true, season: { select: { season: true } } },
     }).catch(() => []),
   ])
   const leagueById = new Map<string, LeagueRow>(leagues.map((l) => [l.id, l]))
@@ -151,7 +157,6 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     leagues.filter((l) => !bestBall.has(l.id) && rosterIdSpaceOf(l.platform) === 'other' && !bridgeReadable(l.id)).map((l) => l.id),
   )
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
-  const choppedTeams = new Set(chopped.map((row) => `${row.leagueId}:${row.rosterId}`))
 
   // One roster per league — the first that matches your candidates — and its starters.
   const startersByLeague = new Map<string, string[]>()
@@ -161,11 +166,11 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
    * teams_rosters scope updates every row it writes), so it is when we last saw the lineup.
    */
   let oldestRosterMs: number | null = null
+  const rosterAges: Array<{ leagueId: string; leagueName: string; asOf: string }> = []
+  const emptyByLeague = new Map<string, number>()
   for (const r of readable) {
     if (startersByLeague.has(r.leagueId)) continue
     if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
-    const at = r.updatedAt ? new Date(r.updatedAt).getTime() : NaN
-    if (Number.isFinite(at) && (oldestRosterMs === null || at < oldestRosterMs)) oldestRosterMs = at
     const pd = (r.playerData ?? {}) as Record<string, unknown>
     const league = leagueById.get(r.leagueId)
     if (!league) continue
@@ -180,98 +185,171 @@ export async function loadGameDayTriage(userId: string | null | undefined, leagu
     // A guillotine team already chopped has no lineup left to set (559c56580).
     const team = teamByLeague.get(r.leagueId)
     const guillotine = league.guillotineMode === true || league.leagueVariant === 'guillotine' || String(league.leagueType).toLowerCase() === 'guillotine'
-    const all = Array.isArray(pd.players) ? pd.players.filter((id) => id && id !== '0') : []
-    const eliminated = pd.eliminated === true || pd.chopped === true ||
-      [team?.externalId, team?.id, r.id].some((id) => id && choppedTeams.has(`${r.leagueId}:${id}`)) ||
-      eliminations.some((e) => e.leagueId === r.leagueId && e.season.season === league.season) ||
-      (guillotine && all.length === 0)
+    // The shared rule (eliminatedTeam.ts) — Scout marks rivals out of the league with the same one.
+    // The eliminations query is already narrowed to the viewer's own owner ids, so any row for this
+    // league and season names the viewer; its owner id is passed as one of the team's ids.
+    const eliminated = isEliminatedTeam({
+      playerData: pd,
+      ids: [team?.externalId, team?.id, r.id, ...eliminations.filter((e) => e.leagueId === r.leagueId && e.season.season === league.season).map((e) => e.eliminatedOwnerId)],
+      chopped: new Set(chopped.filter((c) => c.leagueId === r.leagueId).map((c) => c.rosterId)),
+      eliminated: new Set(eliminations.filter((e) => e.leagueId === r.leagueId && e.season.season === league.season).map((e) => e.eliminatedOwnerId)),
+      elimination: guillotine,
+    })
     if (eliminated) continue
-    const raw = Array.isArray(pd.starters) ? pd.starters.map((x) => (x == null ? '' : String(x))).filter((x) => x && x !== '0') : []
+    /*
+     * ⚠ '0' IS AN EMPTY STARTING SLOT, AND IT WAS FILTERED OUT AS NOISE. An empty slot is the
+     * most certain zero a lineup can carry — more urgent than any Questionable tag — and this
+     * list dropped it without a word while the home's urgency badge counted it. Same marker as
+     * every other reader (dash34's countEmptySlots, matchup.ts, nextMatchup.ts). A bridged
+     * roster has already lost its '0's in applyBridge, so those leagues can only under-report.
+     */
+    const empty = Array.isArray(pd.starters) ? pd.starters.filter((x) => String(x ?? '') === EMPTY_SLOT).length : 0
+    if (empty > 0) emptyByLeague.set(r.leagueId, empty)
+    const raw = Array.isArray(pd.starters) ? pd.starters.map((x) => (x == null ? '' : String(x))).filter((x) => x && x !== EMPTY_SLOT) : []
     const isEspn = rosterIdSpaceOf(platformOf.get(r.leagueId)) === 'espn'
     const starters = isEspn ? raw.map((id) => espnMap.get(id) ?? '').filter(Boolean) : raw
     startersByLeague.set(r.leagueId, starters)
+    /*
+     * 🛑 THE AGE IS TAKEN HERE, AFTER EVERY SKIP — IT WAS TAKEN BEFORE THEM. A league skipped as complete,
+     * pre-draft, best ball or chopped still set "Lineups as of …", so a finished season's roster made the
+     * stamp read "Lineups as of 101d ago" over a list of lineups synced minutes earlier (War Room, live,
+     * 2026-10-03). The stamp describes the lineups READ, and only those.
+     */
+    const at = r.updatedAt ? new Date(r.updatedAt).getTime() : NaN
+    if (Number.isFinite(at)) {
+      if (oldestRosterMs === null || at < oldestRosterMs) oldestRosterMs = at
+      rosterAges.push({ leagueId: r.leagueId, leagueName: league.name ?? 'League', asOf: new Date(at).toISOString() })
+    }
   }
   const coverage = {
     leaguesNotRead,
     bestBallLeagues: bestBall.size,
     unsupportedLeagues: otherLeagues.size,
     rostersAsOf: oldestRosterMs === null ? null : new Date(oldestRosterMs).toISOString(),
+    rosterAges,
   }
-  const allIds = [...new Set([...startersByLeague.values()].flat())]
-  if (allIds.length === 0) {
-    return { available: true, data: { rows: [], week: null, leaguesRead: startersByLeague.size, startersRead: 0, ...coverage } }
-  }
-
-  const players = await prisma.sportsPlayer
-    .findMany({
-      where: { sleeperId: { in: allIds } },
-      select: { sleeperId: true, sport: true, externalId: true, name: true, position: true, team: true, imageUrl: true },
-    })
-    .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }>)
-  // The catalog holds several provider rows per Sleeper id. Compose fields, as My Team and
-  // Matchup do; the arbitrary headshot-first row can carry the wrong club or position.
-  const identities = composePlayerIdentities(players)
-  const playerById = new Map<string, (typeof players)[number]>()
-  for (const p of players) {
-    if (!p.sleeperId) continue
-    const cur = playerById.get(p.sleeperId)
-    if (!cur || p.externalId === p.sleeperId) playerById.set(p.sleeperId, p)
-  }
-
-  const sport = [...playerById.values()][0]?.sport ?? 'NFL'
-  // One claim per name, with the club check against namesakes — shared with the shares list (injuryClaims.ts).
-  const [injuries, sportsWeek] = await Promise.all([
-    // Name and club from the COMPOSED identity, not an arbitrary catalog row — the row can carry a
-    // stale club, and a wrong club drops the player's own injury as a namesake's.
-    readInjuryClaims(sport, [...identities.values()].flatMap((p) => (p.name ? [{ name: p.name, team: p.team ?? null }] : []))),
-    resolveSportsWeek(sport).catch(() => null),
-  ])
-
-  const games = sportsWeek
-    ? await prisma.sportsGame
-        .findMany({
-          where: { sport, season: sportsWeek.season, week: sportsWeek.week, seasonType: sportsWeek.seasonType },
-          orderBy: { startTime: 'asc' },
-          take: 400,
-          select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
-        })
-        .catch(() => [])
-    : []
-  const kickoffs = weekKickoffs(games)
-
-  const starters: TriageStarter[] = []
-  for (const [leagueId, ids] of startersByLeague) {
+  const leagueRef = (leagueId: string): TriageLeague => {
     const league = leagueById.get(leagueId)
-    for (const id of ids) {
-      const p = playerById.get(id)
-      if (!p || !p.sleeperId) continue
-      const identity = identities.get(id)
-      if (!identity?.name) continue
-      starters.push({
-        sleeperId: p.sleeperId,
-        sport: identity.sport ?? p.sport,
-        externalId: p.externalId,
-        name: identity.name,
-        position: displayPosition(identity.position),
-        team: identity.team,
-        imageUrl: identity.imageUrl,
-        leagueId,
-        leagueName: league?.name ?? 'League',
-        platform: String(league?.platform ?? 'manual').toLowerCase(),
-        platformLeagueId: league?.platformLeagueId ?? null,
-        season: league?.season ?? null,
-        teamId: teamIdByLeague.get(leagueId) ?? null,
-      })
+    return {
+      leagueId,
+      leagueName: league?.name ?? 'League',
+      platform: String(league?.platform ?? 'manual').toLowerCase(),
+      platformLeagueId: league?.platformLeagueId ?? null,
+      season: league?.season ?? null,
+      teamId: teamIdByLeague.get(leagueId) ?? null,
     }
   }
+  const emptySlots = [...emptyByLeague].map(([leagueId, count]) => ({ ...leagueRef(leagueId), count }))
 
+  /*
+   * 🛑 EACH LEAGUE IS READ IN ITS OWN SPORT. This used to take ONE sport for the whole account —
+   * the sport of whichever catalog row Prisma happened to return first — and use it for the injury
+   * read, the week and the kickoffs. An NBA row first meant NFL injuries were never read, and the
+   * screen then said "No starter in any of your leagues is flagged this week": a false all-clear.
+   * NFL first meant an in-season NBA league's starters were flagged NO GAME, or took an NFL club's
+   * kickoff where the abbreviations collide (LAC, MIA, DAL…). And the catalog lookup was not
+   * filtered by sport at all, so a Sleeper id present in two sports could resolve to the wrong
+   * player. Now starters are grouped by their league's sport and every read is scoped to it.
+   */
+  const sportOf = (leagueId: string) => String(leagueById.get(leagueId)?.sport ?? 'NFL').toUpperCase()
+  const idsBySport = new Map<string, Set<string>>()
+  for (const [leagueId, ids] of startersByLeague) {
+    const set = idsBySport.get(sportOf(leagueId)) ?? new Set<string>()
+    for (const id of ids) set.add(id)
+    idsBySport.set(sportOf(leagueId), set)
+  }
+  for (const [sport, ids] of idsBySport) if (ids.size === 0) idsBySport.delete(sport)
+  if (idsBySport.size === 0) {
+    return { available: true, data: { rows: [], week: null, leaguesRead: startersByLeague.size, startersRead: 0, emptySlots, ...coverage } }
+  }
+
+  const groups = await Promise.all(
+    [...idsBySport].map(async ([sport, ids]) => {
+      const players = await prisma.sportsPlayer
+        .findMany({
+          where: { sport, sleeperId: { in: [...ids] } },
+          select: { sleeperId: true, sport: true, externalId: true, name: true, position: true, team: true, imageUrl: true },
+        })
+        .catch(() => [] as Array<{ sleeperId: string | null; sport: string; externalId: string; name: string; position: string | null; team: string | null; imageUrl: string | null }>)
+      // The catalog holds several provider rows per Sleeper id. Compose fields, as My Team and
+      // Matchup do; the arbitrary headshot-first row can carry the wrong club or position.
+      const identities = composePlayerIdentities(players)
+      const playerById = new Map<string, (typeof players)[number]>()
+      for (const p of players) {
+        if (!p.sleeperId) continue
+        const cur = playerById.get(p.sleeperId)
+        if (!cur || p.externalId === p.sleeperId) playerById.set(p.sleeperId, p)
+      }
+
+      // One claim per name, with the club check against namesakes — shared with the shares list (injuryClaims.ts).
+      const [injuries, sportsWeek] = await Promise.all([
+        // Name and club from the COMPOSED identity, not an arbitrary catalog row — the row can carry a
+        // stale club, and a wrong club drops the player's own injury as a namesake's.
+        readInjuryClaims(sport, [...identities.values()].flatMap((p) => (p.name ? [{ name: p.name, team: p.team ?? null }] : []))),
+        resolveSportsWeek(sport).catch(() => null),
+      ])
+
+      /*
+       * ⚠ KICKOFFS ARE NFL-ONLY, BECAUSE `weekKickoffs` IS. It keys only clubs `getTeamInfo` knows,
+       * and that table is the 32 NFL teams: for another sport it would key the handful of
+       * abbreviations that happen to collide with an NFL club and drop the rest — so "the schedule
+       * is on file" would hold and every other starter would read NO GAME. No kickoff is the honest
+       * answer for a sport we cannot fold clubs for; the row then says "no kickoff on file".
+       */
+      const games =
+        sportsWeek && sport === 'NFL'
+          ? await prisma.sportsGame
+              .findMany({
+                where: { sport, season: sportsWeek.season, week: sportsWeek.week, seasonType: sportsWeek.seasonType },
+                orderBy: { startTime: 'asc' },
+                take: 400,
+                select: { homeTeam: true, awayTeam: true, startTime: true, seasonType: true, venue: true },
+              })
+              .catch(() => [])
+          : []
+      const kickoffs = weekKickoffs(games)
+
+      const starters: TriageStarter[] = []
+      for (const [leagueId, leagueIds] of startersByLeague) {
+        if (sportOf(leagueId) !== sport) continue
+        const ref = leagueRef(leagueId)
+        for (const id of leagueIds) {
+          const p = playerById.get(id)
+          if (!p || !p.sleeperId) continue
+          const identity = identities.get(id)
+          if (!identity?.name) continue
+          starters.push({
+            sleeperId: p.sleeperId,
+            sport: identity.sport ?? p.sport,
+            externalId: p.externalId,
+            name: identity.name,
+            position: displayPosition(identity.position),
+            team: identity.team,
+            imageUrl: identity.imageUrl,
+            ...ref,
+          })
+        }
+      }
+
+      return {
+        sport,
+        sportsWeek,
+        startersRead: starters.length,
+        rows: triageRows({ starters, injuries, kickoffs, nowIso, week: sportsWeek?.week ?? null, unresolved: unresolvedClubNames(games).length }),
+      }
+    }),
+  )
+
+  // The header's week: football's when football is in the account, as it was before; otherwise the first sport that has one.
+  const headline = groups.find((g) => g.sport === 'NFL' && g.sportsWeek) ?? groups.find((g) => g.sportsWeek) ?? null
   return {
     available: true,
     data: {
-      rows: triageRows({ starters, injuries, kickoffs, nowIso, week: sportsWeek?.week ?? null, unresolved: unresolvedClubNames(games).length }),
-      week: sportsWeek ? { season: sportsWeek.season, week: sportsWeek.week } : null,
+      rows: groups.flatMap((g) => g.rows).sort(compareTriageRows(nowIso)),
+      week: headline?.sportsWeek ? { season: headline.sportsWeek.season, week: headline.sportsWeek.week } : null,
       leaguesRead: startersByLeague.size,
-      startersRead: starters.length,
+      startersRead: groups.reduce((n, g) => n + g.startersRead, 0),
+      emptySlots,
       ...coverage,
     },
   }

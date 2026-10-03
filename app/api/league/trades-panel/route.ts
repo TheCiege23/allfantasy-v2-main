@@ -38,6 +38,7 @@ import { gradeInputsFromNativeItems, gradeInputsFromPending } from '@/lib/decisi
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { leagueTypeBasis } from '@/lib/league/leagueTypeGrading'
 import { teamLogoUrl } from '@/lib/core-app/teamLogo'
+import { getStoredTeamLogoResolver } from '@/lib/sport-teams/storedTeamLogos'
 import { getSleeperTradeHistory } from '@/lib/core-app/sleeperTradeHistory'
 import { importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
 
@@ -121,7 +122,27 @@ async function gradeProviderOffers(
   return out
 }
 
-function assetLabel(item: { itemType: string; itemReference: string | null; metadata: unknown }, sport = 'NFL'): {
+type StoredLogo = ((team: string | null | undefined) => string | null) | null
+
+/**
+ * The stored crest lookup for a league's sport, or null for the NFL.
+ *
+ * Outside the NFL the registry cannot build a working crest from what a trade item carries —
+ * "Auburn University", "Memphis Grizzlies", a soccer team id — so those rows drew a broken or
+ * empty badge while the crest sat in `SportsTeam.logo`. NFL codes resolve through the registry
+ * reliably and stay on it. Cached per sport and never rejects (see `storedTeamLogos`).
+ */
+async function storedLogoFor(sport: string | null | undefined): Promise<StoredLogo> {
+  const s = String(sport ?? '').trim().toUpperCase() || 'NFL'
+  if (s === 'NFL') return null
+  return getStoredTeamLogoResolver(s).catch(() => null)
+}
+
+function assetLabel(
+  item: { itemType: string; itemReference: string | null; metadata: unknown },
+  sport = 'NFL',
+  storedLogo: StoredLogo = null,
+): {
   label: string; sublabel: string | null; playerId: string | null; team: string | null; headshotUrl: string | null; teamLogoUrl: string | null
 } {
   const meta = item.metadata && typeof item.metadata === 'object' && !Array.isArray(item.metadata)
@@ -139,7 +160,7 @@ function assetLabel(item: { itemType: string; itemReference: string | null; meta
     playerId,
     team,
     headshotUrl: explicitHeadshot ?? sleeperPlayerHeadshot(playerId),
-    teamLogoUrl: teamLogoUrl(sport, team),
+    teamLogoUrl: storedLogo?.(team) ?? teamLogoUrl(sport, team),
   }
 }
 
@@ -179,7 +200,10 @@ async function buildNativeActiveTrades(
   const trades = await listAfLeagueTrades(leagueId, { take: 50 })
   const active = trades.filter((t) => ACTIVE_STATUSES.has(t.status))
   if (active.length === 0) return []
-  const decisionReceipts = await loadDecisionReceipts(active.map((trade) => trade.id))
+  const [decisionReceipts, storedLogo] = await Promise.all([
+    loadDecisionReceipts(active.map((trade) => trade.id)),
+    storedLogoFor(sport),
+  ])
 
   const rosterIds = [...new Set(active.flatMap((t) => [
     t.proposerRosterId,
@@ -264,10 +288,10 @@ async function buildNativeActiveTrades(
       const partnerName = participantIds.filter((id) => id !== viewRosterId).map((id) => nameByRosterId.get(id) ?? 'Manager').join(' + ')
       const sent: LeagueTradeAsset[] = t.items
         .filter((i) => i.fromRosterId === viewRosterId)
-        .map((i) => ({ id: i.id, ...assetLabel(i, sport), accent: 'blue' as const }))
+        .map((i) => ({ id: i.id, ...assetLabel(i, sport, storedLogo), accent: 'blue' as const }))
       const received: LeagueTradeAsset[] = t.items
         .filter((i) => i.toRosterId === viewRosterId)
-        .map((i) => ({ id: i.id, ...assetLabel(i, sport), accent: 'teal' as const }))
+        .map((i) => ({ id: i.id, ...assetLabel(i, sport, storedLogo), accent: 'teal' as const }))
       /*
        * ⚠ ONLY WHEN THE VIEWER IS A PARTY. A commissioner looking at someone else's offer falls back
        * to `viewerRosterId: t.proposerRosterId` below, and a lineup effect computed there would be
@@ -285,7 +309,11 @@ async function buildNativeActiveTrades(
           isViewer: rosterId === myRosterId,
           assets: t.items
             .filter((item) => item.fromRosterId === rosterId)
-            .map((item) => ({ id: item.id, ...assetLabel(item, sport), accent: rosterId === viewRosterId ? 'blue' as const : 'teal' as const })),
+            .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo), accent: rosterId === viewRosterId ? 'blue' as const : 'teal' as const })),
+          // What this manager GETS — the side a trade card lists under their name and letter.
+          received: t.items
+            .filter((item) => item.toRosterId === rosterId)
+            .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo), accent: item.fromRosterId === viewRosterId ? 'blue' as const : 'teal' as const })),
           grade: frozen?.grade ?? null,
           reason: frozen?.reason ?? null,
         }
@@ -410,7 +438,10 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
   ])
   const terminal = trades.filter((trade) => TERMINAL_STATUSES.has(trade.status))
   if (terminal.length === 0) return []
-  const decisionReceipts = await loadDecisionReceipts(terminal.map((trade) => trade.id))
+  const [decisionReceipts, storedLogo] = await Promise.all([
+    loadDecisionReceipts(terminal.map((trade) => trade.id)),
+    storedLogoFor(league.sport),
+  ])
 
   const rosterIds = [...new Set(terminal.flatMap((trade) => [
     trade.proposerRosterId,
@@ -545,7 +576,10 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
           isViewer: myRosterIds.has(rosterId),
           assets: trade.items
             .filter((item) => item.fromRosterId === rosterId)
-            .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport)), accent: rosterId === trade.proposerRosterId ? 'blue' as const : 'teal' as const })),
+            .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo), accent: rosterId === trade.proposerRosterId ? 'blue' as const : 'teal' as const })),
+          received: trade.items
+            .filter((item) => item.toRosterId === rosterId)
+            .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo), accent: item.fromRosterId === trade.proposerRosterId ? 'blue' as const : 'teal' as const })),
           grade: frozen?.grade ?? null,
           reason: frozen?.reason ?? null,
         }
@@ -564,10 +598,10 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
         executedAt: (trade.processedAt ?? trade.rejectedAt ?? trade.cancelledAt ?? trade.updatedAt ?? trade.createdAt).toISOString(),
         sent: trade.items
           .filter((item) => item.fromRosterId === trade.proposerRosterId)
-          .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport)), accent: 'blue' as const })),
+          .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo), accent: 'blue' as const })),
         received: trade.items
           .filter((item) => item.fromRosterId === trade.receiverRosterId)
-          .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport)), accent: 'teal' as const })),
+          .map((item) => ({ id: item.id, ...assetLabel(item, String(league.sport), storedLogo), accent: 'teal' as const })),
         participantSides,
         status: trade.status,
         proposalGrade: frozenProposer?.grade ?? offer?.grade ?? null,
@@ -608,12 +642,18 @@ async function buildNativeTradeHistory(league: NativeHistoryLeague, userId: stri
  * The caller gates this to NATIVE write authority as well: on an imported (shadow) league the trade
  * happened on the provider, AllFantasy holds no execution record, and there is nothing it may undo.
  */
-async function buildNativeExecutedTrades(leagueId: string, userId: string): Promise<LeagueTradeHistoryItem[]> {
+async function buildNativeExecutedTrades(
+  leagueId: string,
+  userId: string,
+  sport = 'NFL',
+): Promise<LeagueTradeHistoryItem[]> {
   const isCommissioner = await isElevatedCommissioner(leagueId, userId)
   if (!isCommissioner) return []
 
   const trades = await listAfLeagueTrades(leagueId, { status: 'processed', take: 20 })
   if (trades.length === 0) return []
+  // This list used to label every asset as NFL whatever the league played.
+  const storedLogo = await storedLogoFor(sport)
 
   const rosterIds = [...new Set(trades.flatMap((t) => [
     t.proposerRosterId,
@@ -652,10 +692,10 @@ async function buildNativeExecutedTrades(leagueId: string, userId: string): Prom
       // What each side SENT: `sent` is the proposer's outgoing assets, `received` the receiver's.
       sent: t.items
         .filter((i) => i.fromRosterId === t.proposerRosterId)
-        .map((i) => ({ id: i.id, ...assetLabel(i), accent: 'blue' as const })),
+        .map((i) => ({ id: i.id, ...assetLabel(i, sport, storedLogo), accent: 'blue' as const })),
       received: t.items
         .filter((i) => i.fromRosterId === t.receiverRosterId)
-        .map((i) => ({ id: i.id, ...assetLabel(i), accent: 'teal' as const })),
+        .map((i) => ({ id: i.id, ...assetLabel(i, sport, storedLogo), accent: 'teal' as const })),
       participantSides: participantIds.map((rosterId) => ({
         rosterId,
         name: nameOf(rosterId),
@@ -663,7 +703,10 @@ async function buildNativeExecutedTrades(leagueId: string, userId: string): Prom
         isViewer: false,
         assets: t.items
           .filter((item) => item.fromRosterId === rosterId)
-          .map((item) => ({ id: item.id, ...assetLabel(item), accent: rosterId === t.proposerRosterId ? 'blue' as const : 'teal' as const })),
+          .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo), accent: rosterId === t.proposerRosterId ? 'blue' as const : 'teal' as const })),
+        received: t.items
+          .filter((item) => item.toRosterId === rosterId)
+          .map((item) => ({ id: item.id, ...assetLabel(item, sport, storedLogo), accent: item.fromRosterId === t.proposerRosterId ? 'blue' as const : 'teal' as const })),
         grade: null,
         reason: null,
       })),
@@ -1003,7 +1046,7 @@ export async function GET(req: NextRequest) {
     }
 
     const executedTrades =
-      resolveWriteAuthority(league.platform) === 'NATIVE' ? await buildNativeExecutedTrades(leagueId, userId) : []
+      resolveWriteAuthority(league.platform) === 'NATIVE' ? await buildNativeExecutedTrades(leagueId, userId, league.sport ?? undefined) : []
 
     return NextResponse.json({
       draft,

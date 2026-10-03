@@ -293,6 +293,11 @@ const DATA_API_HOST_PATTERNS = [
  */
 const DATA_API_IDENTIFIERS = [
   'ESPN_SITE_API_BASE',
+  // The URL BUILDER next to that constant in `lib/providers/espnUrls.ts`. A caller of the builder
+  // never names the constant, so it was invisible here — found 2026-10-01 when the NCAAB adapter
+  // (its first caller) passed this guard with its allowlist entry REMOVED. Tracking the function
+  // name is the same move as `CFBD_BASE_URL` below: DRY at the call site must not cost coverage.
+  'espnSiteApiUrl',
   'THE_SPORTS_DB_V1_JSON_BASE',
   'THE_SPORTS_DB_V2_JSON_BASE',
   // The six hardcoded CFBD literals now all resolve to `CFBD_BASE_URL`, exported
@@ -466,6 +471,17 @@ const ALLOWED_PATH_PATTERNS = [
    * for a value retires the exemption.
    */
   /^lib\/espn\/espnAthleteFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * `lib/espn/espnNcaabFetch.ts` — ESPN men's college basketball teams + rosters, the adapter
+   * half of the NCAAB headshot source (contract: `contracts/espn/`). Same split as the entry
+   * above: every export is a live fetch or a pure parser for one, and the writing lives in
+   * `lib/espn/ncaabEspnIngest.ts`, which the `lib/.*(ingest|sync)` rule already covers.
+   *
+   * ⚠ RE-CHECK BEFORE TRUSTING THIS. Valid only while the ingestion module is the sole runtime
+   * importer. Censused on 2026-10-01 across all four forms (`from '@/lib/espn/espnNcaabFetch'`,
+   * relative, `require(`, `await import(`): the ingestion module and tests, nothing else.
+   */
+  /^lib\/espn\/espnNcaabFetch\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /*
    * `lib/cfbd-fetch.ts` — the single CFBD request path, and where `CFBD_BASE_URL`
    * is defined. It is an ADAPTER rather than a pure definition site: `cfbdGet`

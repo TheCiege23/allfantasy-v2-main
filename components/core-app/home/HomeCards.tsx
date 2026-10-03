@@ -9,7 +9,6 @@ import { freshnessStamp, type CardFreshnessStamp } from '@/lib/core-app/cardFres
 import { rankDecisions } from '@/lib/core-app/decisionQueue'
 import type { HomeCardOrder } from '@/lib/core-app/homeCardOrder'
 import { homePrefetchTargets } from '@/lib/core-app/homePrefetchTargets'
-import { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 import { ScopeResetLink } from '@/components/core-app/ScopeSwitcher'
 import Dashboard3A, {
   Dash3ACareer,
@@ -23,6 +22,7 @@ import Dashboard3A, {
   Dash3ARivals,
   Dash3ARoutine,
 } from '@/components/core-app/screens/Dashboard3A'
+import { connectedLeagueCount } from '@/lib/core-app/connectedLeagueCount'
 import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { Dash34Carryover, Dash34Coverage } from '@/components/core-app/screens/Dash34Carryover'
 import { DashDraftsBand } from '@/components/core-app/screens/DashDraftsBand'

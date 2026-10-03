@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { ingestBatch, type NotificationEvent } from '@/lib/notification-engine'
 import type { LiveEvent } from '@/lib/live/eventDetector'
 import { headlineFor } from '@/lib/live/playFeedPresentation'
+import { headshotUrl } from '@/lib/media-url'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 
 /**
@@ -406,11 +407,34 @@ function passerSide(event: LiveEvent): LiveEvent | null {
   }
 }
 
+/**
+ * Headshot per Rolling Insights player id, for the push picture. The feed speaks RI ids and the
+ * headshot CDN speaks Sleeper ids, so this crosses PlayerIdentityMap like ownersByPlayerId does.
+ * A player with no Sleeper identity gets no picture — the alert still goes out as text.
+ */
+export async function headshotsByRiId(riIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  const unique = [...new Set(riIds.filter(Boolean))]
+  if (unique.length === 0) return out
+  const identities = await prisma.playerIdentityMap
+    .findMany({
+      where: { rollingInsightsId: { in: unique }, sleeperId: { not: null } },
+      select: { rollingInsightsId: true, sleeperId: true },
+    })
+    .catch(() => [])
+  for (const identity of identities ?? []) {
+    const url = headshotUrl(identity.sleeperId)
+    if (identity.rollingInsightsId && url) out.set(identity.rollingInsightsId, url)
+  }
+  return out
+}
+
 function notificationFor(
   event: LiveEvent,
   userIds: string[],
   side: 'subject' | 'passer',
   impact?: UserImpact,
+  imageUrl?: string | null,
 ): NotificationEvent {
   const leagues = impact?.leagues ?? []
   const leagueLine = leagues.length > 0
@@ -461,6 +485,8 @@ function notificationFor(
        * the phone before anyone read it.
        */
       pushTag: `live-play:${event.idempotencyKey}:${side}`,
+      // The player this side of the play is about — the scorer, or the passer on the passer's side.
+      ...(imageUrl ? { imageUrl } : {}),
     },
   }
 }
@@ -510,16 +536,20 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
     }
   }
 
+  // After the recipient lookups, so a missing picture can never cost anyone the alert.
+  const headshots = await headshotsByRiId([...ids]).catch(() => new Map<string, string>())
+
   const batch: NotificationEvent[] = []
   const enqueue = (event: LiveEvent, userIds: string[], side: 'subject' | 'passer') => {
     const contextual = impacts.get(event.playerId) ?? []
+    const imageUrl = headshots.get(event.playerId) ?? null
     const withoutContext: string[] = []
     for (const userId of userIds) {
       const impact = contextual.find((row) => row.userId === userId)
-      if (impact) batch.push(notificationFor(event, [userId], side, impact))
+      if (impact) batch.push(notificationFor(event, [userId], side, impact, imageUrl))
       else withoutContext.push(userId)
     }
-    if (withoutContext.length > 0) batch.push(notificationFor(event, withoutContext, side))
+    if (withoutContext.length > 0) batch.push(notificationFor(event, withoutContext, side, undefined, imageUrl))
   }
   for (const event of alertable) {
     const subjectUsers = owners.get(event.playerId) ?? []

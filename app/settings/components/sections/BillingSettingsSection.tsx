@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
 import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget"
@@ -8,6 +9,8 @@ import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget"
 export function BillingSettingsSection() {
   const { t, tInterpolate } = useLanguage()
   const ents = useEntitlements()
+  // Set by /api/subscription/billing-portal when Stripe could not open a portal session.
+  const portalError = useSearchParams()?.get("billing") === "portal_error"
 
   if (ents.loading) {
     return <div className="animate-pulse h-20 rounded-xl bg-white/[0.05]" data-testid="settings-billing-loading" />
@@ -37,6 +40,16 @@ export function BillingSettingsSection() {
                 {!ents.hasSupreme && ents.hasPro && <span className="ns-hub-chip">AF Pro</span>}
                 {!ents.hasSupreme && ents.hasWarRoom && <span className="ns-hub-chip">AF Legacy</span>}
               </div>
+            ) : ents.error ? (
+              /*
+               * ⚠ A FAILED LOOKUP IS NOT A FREE PLAN. The hook keeps its booleans at their last-known
+               * value (false on a first-load failure), so this read "AF Free" to a paying subscriber
+               * whenever entitlements failed to load — while Account and the hub said "Unable to
+               * verify". Same words as those two now.
+               */
+              <p className="text-sm font-semibold text-white" data-testid="settings-billing-unverified">
+                Unable to verify
+              </p>
             ) : (
               <p className="text-sm font-semibold text-white">{t("settings.billing.afFree")}</p>
             )}
@@ -54,7 +67,7 @@ export function BillingSettingsSection() {
                     : "border-white/[0.1] bg-white/[0.03] text-white/40",
             ].join(" ")}
           >
-            {status === "none" ? t("settings.billing.statusFree") : status.replace(/_/g, " ")}
+            {status === "none" ? (ents.error ? "Unknown" : t("settings.billing.statusFree")) : status.replace(/_/g, " ")}
           </span>
         </div>
 
@@ -90,10 +103,10 @@ export function BillingSettingsSection() {
       <div data-testid="settings-billing-tokens">
         <TokenBalanceWidget />
         <div className="mt-2 flex items-center justify-between gap-2">
-          {/* Hidden in the iOS app: the /tokens link inside it is hidden there (3.1.1),
-              which left "tokens can be purchased in ." — a sentence about buying,
-              with its link cut out. */}
-          <p className="text-[11px]" style={{ color: "var(--muted2)" }} data-hide-in-ios-app="">
+          {/* Hidden in an iOS build that sells nothing: the /tokens link inside it is hidden
+              there (3.1.1), which left "tokens can be purchased in ." — a sentence about
+              buying, with its link cut out. An IAP build sells tokens and shows it whole. */}
+          <p className="text-[11px]" style={{ color: "var(--muted2)" }} data-ios-purchase="">
             {t("settings.billing.tokensCanBePurchasedIn")}{" "}
             <Link href="/tokens" className="underline hover:text-white/80">
               {t("settings.billing.tokenCenterLabel")}
@@ -110,6 +123,13 @@ export function BillingSettingsSection() {
           </Link>
         </div>
       </div>
+
+      {portalError && (
+        <p className="text-xs text-red-600" role="alert" data-testid="settings-billing-portal-error">
+          We couldn&apos;t open the billing portal just now. Please try again in a minute — if it keeps
+          failing, contact support and we&apos;ll make the change for you.
+        </p>
+      )}
 
       {ents.error && (
         <p className="text-xs text-red-400" data-testid="settings-billing-error">

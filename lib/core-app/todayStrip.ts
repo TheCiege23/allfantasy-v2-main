@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma'
 import { resolveCurrentWeek } from './currentWeek'
 import type { SectionState } from './leagueHome'
 import { getTeamLogoUrl } from '@/lib/player-media-urls'
+import { liveLogoOrNull } from '@/lib/sport-teams/knownDeadLogoGuess'
+import { getStoredTeamLogoResolver } from '@/lib/sport-teams/storedTeamLogos'
 
 /**
  * The three cross-league cards that sit at the top of Dashboard v2: today's
@@ -402,13 +404,75 @@ async function resolveNext24(
    * correct arithmetic waiting on a trustworthy input.
    */
 
-  const seenFixtures = new Set<string>()
+  /*
+   * 🛑 OUTSIDE THE NFL THE LOGO IS THE STORED CREST, NOT A GUESS. `getTeamLogoUrl` builds an ESPN
+   * path from the team string, and ESPN keys college and soccer crests by numeric id — so every
+   * college game here drew a broken-image glyph for both teams (2026-10-01), while the crests sat
+   * in `SportsTeam.logo`. Measured on the test DB that day: 658 of 705 NCAAF game team names, and
+   * every NBA one, resolve to a stored crest; the misses are mostly D-II/D-III schools we hold no
+   * crest for, and they get no image rather than a dead one. The NFL path is unchanged.
+   */
+  const storedLogoBySport = new Map(
+    await Promise.all(
+      [...new Set(games.map((g) => g.sport.toUpperCase()))]
+        .filter((s) => s !== 'NFL')
+        .map(async (s) => [s, await getStoredTeamLogoResolver(s)] as const),
+    ),
+  )
+  const logoFor = (team: string | null, sport: string, key: string | null): string | null => {
+    const stored = storedLogoBySport.get(sport.toUpperCase())
+    if (!stored) return getTeamLogoUrl(key, sport)
+    return stored(team) ?? liveLogoOrNull(getTeamLogoUrl(key, sport))
+  }
+
+  const keyFor = (sport: string, team: string | null) =>
+    sport.toUpperCase() === 'NFL' ? normalizeTeamAbbrev(team) : String(team ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+
+  /*
+   * 🛑 ONE GAME FROM TWO FEEDS IS ONE ROW. The feeds spell teams differently — CFBD writes
+   * "Pittsburgh", ESPN's live feed "PIT" — so an exact name key listed "PIT at VIRGINIA TECH" and
+   * "Pittsburgh at Virginia Tech" as two games (2026-10-01). Two rows are the same fixture when
+   * they share a sport and kickoff and ANY team matches, either way round: a team cannot play two
+   * games at one kickoff. A team matches by its name key, or by resolving to the same stored crest
+   * (so "PIT at VT" still meets "Pittsburgh at Virginia Tech" wherever both resolve). Placeholder
+   * names never match — two "TBD" games at one kickoff are two games.
+   */
+  type Game = (typeof games)[number]
+  const PLACEHOLDER = /^(tbd|tba|bye|-+|—)?$/i
+  const sameTeam = (sport: string, a: string | null, b: string | null): boolean => {
+    const ka = keyFor(sport, a)
+    const kb = keyFor(sport, b)
+    if (!ka || !kb || PLACEHOLDER.test(ka) || PLACEHOLDER.test(kb)) return false
+    if (ka === kb) return true
+    const stored = storedLogoBySport.get(sport.toUpperCase())
+    const ca = stored?.(a) ?? null
+    return ca != null && ca === (stored?.(b) ?? null)
+  }
+  const sameFixture = (x: Game, y: Game): boolean =>
+    x.sport === y.sport &&
+    x.startTime?.getTime() === y.startTime?.getTime() &&
+    [x.homeTeam, x.awayTeam].some((t) => sameTeam(x.sport, t, y.homeTeam) || sameTeam(x.sport, t, y.awayTeam))
+  const fixtures: Game[][] = []
   for (const g of games) {
     if (!g.startTime) continue
-    const teamKey = (team: string | null) => g.sport.toUpperCase() === 'NFL' ? normalizeTeamAbbrev(team) : String(team ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
-    const key = `${g.sport}:${g.startTime.toISOString()}:${teamKey(g.awayTeam)}:${teamKey(g.homeTeam)}`
-    if (seenFixtures.has(key)) continue
-    seenFixtures.add(key)
+    const group = fixtures.find((f) => sameFixture(f[0]!, g))
+    if (group) group.push(g)
+    else fixtures.push([g])
+  }
+  /*
+   * The copy shown is the one that names the teams best: most crests resolved, then (outside the
+   * NFL, whose names are expanded from the code anyway) the fuller spelling. Ties keep the first.
+   */
+  const shownScore = (g: Game): number =>
+    (logoFor(g.homeTeam, g.sport, keyFor(g.sport, g.homeTeam)) ? 1000 : 0) +
+    (logoFor(g.awayTeam, g.sport, keyFor(g.sport, g.awayTeam)) ? 1000 : 0) +
+    (g.sport.toUpperCase() === 'NFL' ? 0 : g.homeTeam.length + g.awayTeam.length)
+
+  for (const fixture of fixtures) {
+    const g = fixture.reduce((best, x) => (shownScore(x) > shownScore(best) ? x : best))
+    if (!g.startTime) continue
+    const teamKey = (team: string | null) => keyFor(g.sport, team)
+    const espnCopy = fixture.find((x) => x.source === 'espn')
     rows.push({
       kind: 'game',
       text: `${g.awayTeam} at ${g.homeTeam}`,
@@ -416,13 +480,13 @@ async function resolveNext24(
       time: g.startTime.toISOString(),
       tone: 'accent',
       game: (() => {
-        const peers = games.filter(peer => peer.sport === g.sport && peer.startTime?.getTime() === g.startTime?.getTime() && teamKey(peer.homeTeam) === teamKey(g.homeTeam) && teamKey(peer.awayTeam) === teamKey(g.awayTeam))
-        const market = odds.find(o => peers.some(peer => o.sport === peer.sport && o.gameExternalId === peer.externalId && o.source === peer.source))
+        // Every feed's copy of this game may hold the line, not only the copy shown.
+        const market = odds.find(o => fixture.some(peer => o.sport === peer.sport && o.gameExternalId === peer.externalId && o.source === peer.source))
         const spread = market?.spreadHome
         const favorite = spread == null ? null : spread === 0 ? 'Pick’em' : `${spread < 0 ? g.homeTeam : g.awayTeam} favored by ${Math.abs(spread)}`
         return { home: g.sport === 'NFL' ? getTeamInfo(g.homeTeam)?.fullName ?? g.homeTeam : g.homeTeam, away: g.sport === 'NFL' ? getTeamInfo(g.awayTeam)?.fullName ?? g.awayTeam : g.awayTeam,
-          homeLogo: getTeamLogoUrl(teamKey(g.homeTeam), g.sport), awayLogo: getTeamLogoUrl(teamKey(g.awayTeam), g.sport),
-          href: `/core/live?sport=${encodeURIComponent(g.sport)}${g.source === 'espn' ? `&game=${encodeURIComponent(g.externalId)}` : ''}`,
+          homeLogo: logoFor(g.homeTeam, g.sport, teamKey(g.homeTeam)), awayLogo: logoFor(g.awayTeam, g.sport, teamKey(g.awayTeam)),
+          href: `/core/live?sport=${encodeURIComponent(g.sport)}${espnCopy ? `&game=${encodeURIComponent(espnCopy.externalId)}` : ''}`,
           odds: [
             favorite,
             market?.totalPoints != null ? `O/U ${market.totalPoints}` : null,

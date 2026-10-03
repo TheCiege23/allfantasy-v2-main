@@ -1,5 +1,8 @@
 import Link from "next/link"
 
+import { CancelSubscriptionPanel } from "@/components/billing/CancelSubscriptionPanel"
+import { liveSubscriptions } from "@/lib/account/liveSubscriptions"
+
 export const dynamic = "force-dynamic"
 
 export default async function GeoBlockedPage(
@@ -15,11 +18,17 @@ export default async function GeoBlockedPage(
   // Set by middleware.ts for an account-level lock (lib/geo/accountGeoLock): the
   // visitor may be anywhere, so the page must say the lock follows the ACCOUNT.
   const accountLocked = sp.reason === "account"
+  /*
+   * A subscriber reaching this page can no longer use the app, and the billing portal is refused
+   * here — so before 2026-10-02 they had no way to stop being charged. Owner's call: the same cancel
+   * button /paid-restricted has (app/api/account/cancel-subscription, exempt from this block).
+   */
+  const subs = await liveSubscriptions()
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-neutral-950 via-slate-950 to-neutral-950 px-4 py-12 text-white sm:px-6">
       <div className="mx-auto max-w-xl text-center">
-        <img src="/af-crest.png" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
+        <img src="/af-crest.svg" alt="" className="mx-auto mb-6 h-16 w-16 object-contain opacity-90" />
         <h1 className="mb-2 text-2xl font-black sm:text-3xl">🚫 AllFantasy.ai Is Not Available in Washington State</h1>
         <p className="mb-6 text-sm leading-7 text-white/70">
           We&apos;re sorry, but Washington state law (RCW 9.46.240) classifies all fantasy sports — including free contests — as
@@ -56,6 +65,12 @@ export default async function GeoBlockedPage(
               </a>{" "}
               from your account&apos;s email address and we&apos;ll review it.
             </p>
+          </div>
+        ) : null}
+
+        {subs.hasStripe || subs.hasApple ? (
+          <div className="text-left">
+            <CancelSubscriptionPanel hasStripe={subs.hasStripe} hasApple={subs.hasApple} />
           </div>
         ) : null}
 

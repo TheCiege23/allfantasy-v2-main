@@ -193,7 +193,13 @@ export type LeagueTradeHistoryItem = {
     name: string
     avatarUrl: string | null
     isViewer: boolean
+    /** What this manager SENT (items leaving their roster). */
     assets: LeagueTradeAsset[]
+    /**
+     * What this manager RECEIVED (items arriving on their roster) — what a trade card lists under
+     * their name and letter. Optional only for rows built before it existed.
+     */
+    received?: LeagueTradeAsset[]
     grade: string | null
     reason: string | null
   }>
