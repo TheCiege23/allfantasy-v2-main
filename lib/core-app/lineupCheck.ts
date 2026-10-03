@@ -23,6 +23,8 @@ export type LineupCheckItem = {
   slotLabel: string
   /** The starter's name; null for an empty slot. */
   name: string | null
+  /** The starter's roster id; null for an empty slot. */
+  playerId: string | null
   /** Row anchor on this page, so the item can jump to it. */
   anchor: string
   /** The bench player who should take the slot, when the row's check found one. */
@@ -44,7 +46,7 @@ export function summariseLineupCheck(starters: readonly LineupSlot[]): LineupChe
     const p = slot.player
     const anchor = p ? `lineup-player-${p.sleeperId}` : `lineup-slot-${i}`
     if (slot.empty) {
-      items.push({ kind: 'empty', slotLabel: slot.slotLabel, name: null, anchor, replacement: null })
+      items.push({ kind: 'empty', slotLabel: slot.slotLabel, name: null, playerId: null, anchor, replacement: null })
       return
     }
     if (!p) return // unresolved id: the identity note already speaks for it
@@ -71,7 +73,7 @@ export function summariseLineupCheck(starters: readonly LineupSlot[]): LineupChe
           : status.includes('question') || status.includes('doubt')
             ? 'questionable'
             : null
-    if (kind) items.push({ kind, slotLabel: slot.slotLabel, name: p.name, anchor, replacement })
+    if (kind) items.push({ kind, slotLabel: slot.slotLabel, name: p.name, playerId: p.sleeperId, anchor, replacement })
   })
   items.sort((a, b) => RANK[a.kind] - RANK[b.kind])
   return { items, locked }

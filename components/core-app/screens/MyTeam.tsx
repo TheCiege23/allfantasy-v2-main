@@ -738,6 +738,98 @@ function ProjHeader() {
  */
 const CHECK_TAG: Record<LineupCheckItem['kind'], string> = { out: 'OUT', bye: 'BYE', empty: 'EMPTY', swap: 'SWAP', questionable: 'Q' }
 
+/** What `/api/idp/players?view=waiver-board` returns, as far as this card reads it. */
+type WaiverBoardPayload = {
+  state: string
+  candidates: Array<{
+    sleeperId: string | null
+    name: string
+    position: string | null
+    team: string | null
+    projectedPoints: number
+    gain: number
+    displaces: { name: string } | null
+  }>
+}
+
+/**
+ * Free agents who would START for you this week, when the roster has a hole nobody on the bench
+ * fills — the one case the bench check cannot answer.
+ *
+ * ⚠ FETCHED ONLY THEN, AND AFTER RENDER. The waiver board reads the league's free-agent pool and
+ * prices it; doing that inside My Team's server render would slow every visit to fix a case most
+ * visits do not have. The OUT and bye starters are sent as `unavailable` so the board prices each
+ * add against the hole, not against a ruled-out player's leftover projection.
+ *
+ * Ranked by the board's own rule (gain to your best lineup), and linked to the league's Waivers
+ * screen, which carries bids, priority and the run clock.
+ */
+function FreeAgentFill({ check, leagueId }: { check: LineupCheck; leagueId: string }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const holes = check.items.filter((i) => (i.kind === 'out' || i.kind === 'bye' || i.kind === 'empty') && !i.replacement)
+  const unavailable = check.items
+    .filter((i) => (i.kind === 'out' || i.kind === 'bye') && i.playerId)
+    .map((i) => i.playerId as string)
+  const key = holes.length > 0 ? `${leagueId}|${unavailable.join(',')}` : null
+  const [board, setBoard] = useState<{ key: string; data: WaiverBoardPayload | null } | null>(null)
+  useEffect(() => {
+    if (!key) return
+    let live = true
+    const qs = new URLSearchParams({ leagueId, view: 'waiver-board', limit: '3' })
+    if (unavailable.length) qs.set('unavailable', unavailable.join(','))
+    fetch(`/api/idp/players?${qs.toString()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: WaiverBoardPayload | null) => {
+        if (live) setBoard({ key, data })
+      })
+      .catch(() => {
+        if (live) setBoard({ key, data: null })
+      })
+    return () => {
+      live = false
+    }
+    // `unavailable` is folded into `key`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, leagueId])
+  if (!key) return null
+  const waiversHref = `/core/waivers?league=${encodeURIComponent(leagueId)}`
+  const current = board?.key === key ? board : null
+  const picks = current?.data?.state === 'ok' ? current.data.candidates : []
+  return (
+    <div className="af-mt-check-fa" aria-live="polite">
+      <span className="af-label">{es ? 'Agentes libres que entrarían' : 'Free agents who would start'}</span>
+      {!current ? (
+        <p className="af-mt-check-fa-note">{es ? 'Revisando agentes libres…' : 'Checking free agents…'}</p>
+      ) : picks.length === 0 ? (
+        <p className="af-mt-check-fa-note">
+          {es ? 'Ningún agente libre mejora tu alineación esta semana.' : 'No free agent improves your lineup this week.'}
+        </p>
+      ) : (
+        <ul className="af-mt-check-fa-list">
+          {picks.map((c) => (
+            <li key={c.sleeperId ?? c.name}>
+              <span className="af-mt-check-fa-name">{c.name}</span>
+              <span className="af-mt-check-fa-meta">
+                {[c.position, c.team].filter(Boolean).join(' · ')}
+              </span>
+              <span className="af-mt-check-fa-gain af-num">+{c.gain.toFixed(1)} pts</span>
+              {c.displaces ? (
+                <span className="af-mt-check-fa-meta">
+                  {es ? `reemplaza a ${c.displaces.name}` : `replaces ${c.displaces.name}`}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      <Link className="af-mt-check-fa-link" href={waiversHref}>
+        {es ? 'Ver todas las altas, ofertas y prioridad' : 'See every add, bids and priority'}
+      </Link>
+    </div>
+  )
+}
+
 function checkLine(item: LineupCheckItem, es: boolean): string {
   const r = item.replacement
   const pts = (n: number) => n.toFixed(1)
@@ -762,7 +854,7 @@ function checkLine(item: LineupCheckItem, es: boolean): string {
  * The roster's verdict, above the roster. Every line links to its row; the rows keep their own
  * detail (and the bench check strip keeps its Chimmy question). See `lineupCheck.ts`.
  */
-function LineupCheckCard({ check, platform, fixHref }: { check: LineupCheck; platform: string; fixHref: string | null }) {
+function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: LineupCheck; platform: string; fixHref: string | null; leagueId: string }) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
   const certain = check.items.some((i) => i.kind !== 'questionable')
@@ -795,6 +887,7 @@ function LineupCheckCard({ check, platform, fixHref }: { check: LineupCheck; pla
             ))}
           </ul>
           {lockedNote ? <p className="af-mt-check-locked">{lockedNote.trim()}</p> : null}
+          <FreeAgentFill check={check} leagueId={leagueId} />
           {certain && fixHref ? (
             <a className="af-btn af-mt-check-fix" href={fixHref} target="_blank" rel="noopener noreferrer">
               {es ? `Corregir en ${platform}` : `Fix in ${platform}`}
@@ -1373,6 +1466,7 @@ export function MyTeam({ data }: MyTeamProps) {
         <LineupCheckCard
           check={summariseLineupCheck(data.starters.data)}
           platform={platform}
+          leagueId={data.league.id}
           fixHref={data.league.sourceLink?.href ?? null}
         />
       ) : null}

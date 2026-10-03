@@ -1942,3 +1942,58 @@ li[data-kind='questionable'] .af-mt-check-tag {
   color: var(--muted);
   font-size: 12px;
 }
+
+/*
+ * ── Lineup check: free agents for a hole the bench cannot fill (2026-10-02) ─
+ * Appended at depth 0. Sits under the check's own list, inside the same card.
+ */
+.af-mt-check-fa {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.af-mt-check-fa-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-mt-check-fa-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-mt-check-fa-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: 13px;
+}
+.af-mt-check-fa-name {
+  font-weight: 700;
+  color: var(--text);
+}
+.af-mt-check-fa-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-mt-check-fa-gain {
+  font-weight: 800;
+  color: var(--accent);
+}
+.af-mt-check-fa-link {
+  font-size: 12px;
+  color: var(--accent);
+}
+@media (pointer: coarse) {
+  .af-mt-check-fa-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
