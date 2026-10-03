@@ -114,6 +114,8 @@ Draft HQ gets this standard first. Extend it to My Team and the remaining Core s
 
 ## Release order and ownership
 
+User-authorized release policy (October 3, 2026): deploy each completed phase to production. Use an isolated branch and protected-main PR; run required checks, merge, verify Railway build success, and confirm the served commit and health before declaring that phase shipped. No additional deployment confirmation is needed within this scope. Incomplete work remains on its own branch and must not be described as a completed phase.
+
 | Milestone | Responsible functions | Release gate |
 |---|---|---|
 | 1. Correctness | Frontend + draft runtime engineering | Regression tests, scoped types/lint, authenticated checks |
