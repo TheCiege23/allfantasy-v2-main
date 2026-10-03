@@ -52,7 +52,7 @@ type TileState =
   | { kind: 'checking' }
   | { kind: 'failed' }
   | { kind: 'unread'; reason: string | null }
-  | { kind: 'waiting'; count: number; from: string | null; last: LastOffer | null; partial: boolean }
+  | { kind: 'waiting'; count: number; nativeCount: number; from: string | null; last: LastOffer | null; partial: boolean }
   | { kind: 'clear'; last: LastOffer | null }
 
 const MAX_LEAGUES_READ = 8
@@ -82,7 +82,7 @@ export function stateOf(panel: PanelLite): TileState {
   const count = incoming.length
   if (count > 0) {
     const from = incoming.find((o) => o.partnerName && o.partnerName !== 'Awaiting response')?.partnerName ?? null
-    return { kind: 'waiting', count, from, last, partial }
+    return { kind: 'waiting', count, nativeCount: native.filter((o) => o.direction === 'incoming').length, from, last, partial }
   }
   if (partial) return { kind: 'unread', reason: panel.pending?.reason ?? null }
   return { kind: 'clear', last }
@@ -106,7 +106,7 @@ function lastOfferLine(last: LastOffer | null): string {
 }
 
 function nextAction(state: TileState, platform: string): string {
-  if (state.kind === 'waiting') return `Review ${state.count === 1 ? 'offer' : 'offers'}`
+  if (state.kind === 'waiting') return state.nativeCount > 0 ? 'Respond in league' : `Review ${state.count === 1 ? 'offer' : 'offers'}`
   if (state.kind === 'checking') return 'Open league trades'
   if (state.kind === 'failed') return 'Open league · retry'
   if (state.kind === 'unread' || platform.toLowerCase() === 'sleeper') return 'Check source offers'
@@ -262,7 +262,9 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
           return (
             <Link
               key={l.id}
-              href={`/core/trades?league=${encodeURIComponent(l.id)}`}
+              href={s.kind === 'waiting' && s.nativeCount > 0
+                ? `/league/${encodeURIComponent(l.id)}?view=trades`
+                : `/core/trades?league=${encodeURIComponent(l.id)}`}
               className="af-tc-tile"
               data-active={active ? 'true' : undefined}
               aria-current={active ? 'true' : undefined}

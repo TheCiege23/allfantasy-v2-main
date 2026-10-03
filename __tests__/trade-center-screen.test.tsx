@@ -502,6 +502,26 @@ describe('core visual upgrade — design-refs/trade-center-handoff', () => {
     expect(screen.getByText('League 10')).toBeTruthy()
   })
 
+  it('takes a native incoming offer to the league response controls', async () => {
+    const original = globalThis.fetch
+    globalThis.fetch = vi.fn(() => Promise.resolve({
+      ok: true,
+      json: async () => ({
+        pending: { scanned: true }, pendingOffers: [],
+        activeTrades: [{ direction: 'incoming', partnerName: 'Manager B', status: 'pending' }],
+      }),
+    } as Response)) as unknown as typeof fetch
+    try {
+      render(<TradeLeagueStrip leagues={[{ id: 'league-1', name: 'League 1', platform: 'af', mark: 'A' }]} activeLeagueId={null} />)
+      await screen.findByText(/1 offer waiting/)
+      const link = screen.getByText('League 1').closest('a')
+      expect(link?.getAttribute('href')).toBe('/league/league-1?view=trades')
+      expect(link?.textContent).toContain('Respond in league')
+    } finally {
+      globalThis.fetch = original
+    }
+  })
+
   /*
    * 🛑 THE PANEL FETCH IS DEDUPED BEHIND A MODULE-LEVEL SHARE WINDOW, so a league read by an
    * EARLIER case in this file is still shared when a later one runs — which showed up as
