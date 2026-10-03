@@ -4,6 +4,7 @@ import '@/components/core-app/af-wr-week.css'
 import type { RailMatchup } from '@/lib/core-app/railMatchups'
 import { lineupProjectionFor, type WeekLineups } from '@/lib/core-app/weekLineups'
 import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * "This week across your leagues" — the War Room's glance at every matchup, on the cross-league view.
@@ -117,17 +118,33 @@ export function WarRoomWeek({
   const otherWeek = rows.filter((r) => r.m.week !== week).length
   const behind = rows.filter((r) => r.margin != null && r.margin < -0.05).length
   const ahead = rows.filter((r) => r.margin != null && r.margin > 0.05).length
+  /* The cut-line "?" only when a row actually prints a rank against the cut (Status above). */
+  const showsCut = rows.some((r) => r.m.unpaired && !r.m.eliminated && r.m.standing?.elimination)
 
   return (
     <section className="af-wrw" aria-labelledby="af-wrw-h">
       <header className="af-wrw-head">
-        <h2 className="af-label" id="af-wrw-h">
-          Week {week} across your leagues
-        </h2>
+        {/*
+          The "?" sits BESIDE the heading, not inside it: the heading names this section through
+          aria-labelledby, and a button inside it would read into that name. Grouped so the head's
+          space-between keeps the tip next to the words it explains.
+        */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <h2 className="af-label" id="af-wrw-h">
+            Week {week} across your leagues
+          </h2>
+          <TopicTip topic="warRoomWeekMargins" />
+        </div>
         <span className="af-wrw-note af-num">
           {rows.length} {rows.length === 1 ? 'matchup' : 'matchups'}
           {ahead + behind > 0 ? ` · ahead in ${ahead}, behind in ${behind}` : ''}
           {otherWeek > 0 ? ` · ${otherWeek} on another week` : ''}
+          {showsCut ? (
+            <>
+              {' '}
+              <TopicTip topic="eliminationCutLine" />
+            </>
+          ) : null}
         </span>
       </header>
       <ul className="af-wrw-list">

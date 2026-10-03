@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import '@/components/core-app/af-connected-war-room.css'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 export type ConnectedFranchiseWarRoomSide = {
   memberId: string
@@ -183,7 +184,8 @@ export function ConnectedFranchiseWarRoom({
     <section className="af-cwr" aria-label={`${franchiseName} connected franchise command center`}>
       <header className="af-cwr-head">
         <div>
-          <span className="af-label">CONNECTED FRANCHISE · COMMAND CENTER</span>
+          <span className="af-label">CONNECTED FRANCHISE · COMMAND CENTER</span>{' '}
+          <TopicTip topic="connectedFranchise" />
           <Title>{franchiseName}</Title>
           <p>Every roster, draft and league pulse in one home. Each league still keeps its own rules, scoring and lineup.</p>
         </div>

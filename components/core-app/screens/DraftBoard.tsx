@@ -6,7 +6,7 @@ import DraftMusicWidget from '@/components/core-app/draft-music/DraftMusicWidget
 import type { BoardCell, BoardColumn, DraftBoardData } from '@/lib/core-app/draftBoard'
 import { draftAfText, draftAfTitle } from '@/lib/core-app/draftAfLabel'
 import { buildDraftBoard, cellForSlot } from '@/lib/draft-board/draftBoardGrid'
-import { ContextHelp } from '../ContextHelp'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * The per-league draft board, clock and queue.
@@ -168,7 +168,7 @@ export function DraftBoard({ data }: DraftBoardProps) {
                 className="af-label af-wr-clock-label"
                 data-yours={data.clock.data.yoursOnClock}
               >
-                {data.clock.data.yoursOnClock ? "You're on the clock" : 'On the clock'} <ContextHelp title="On the clock" body="The active selection belongs to the team resolved from the draft order and recorded pick trades. This countdown shows time remaining for the current selection, not how long a past pick took. Paused drafts show their remaining allowance without counting down." />
+                {data.clock.data.yoursOnClock ? "You're on the clock" : 'On the clock'} <TopicTip topic="onTheClock" />
               </span>
               <Clock
                 endsAt={data.clock.data.endsAt ? new Date(data.clock.data.endsAt) : null}
@@ -192,7 +192,7 @@ export function DraftBoard({ data }: DraftBoardProps) {
       {/* ── Board ───────────────────────────────────────────────────── */}
       <section className="af-frame af-wr-section">
         <header className="af-wr-section-head">
-          <h3 className="af-label">The board <ContextHelp title="Draft board" body="Columns stay in the original draft order. Pick numbers follow this draft’s snake, linear, or third-round reversal rules. A traded pick stays in its original column and names the team that selected the player." /></h3>
+          <h3 className="af-label">The board <TopicTip topic="draftBoardOrder" /></h3>
           <span className="af-wr-legend">
             <span className="af-wr-legend-swatch" data-kind="yours" /> your picks
           </span>
@@ -208,7 +208,7 @@ export function DraftBoard({ data }: DraftBoardProps) {
       {/* ── Recommendations / queue / advice ────────────────────────── */}
       <div className="af-wr-pair">
         <section className="af-card af-wr-section">
-          <h3 className="af-label">Best available for you <ContextHelp title="Best available" body="Recommendations should reflect available players, this league’s scoring, and your roster needs. An unavailable message means this view has not loaded a recommendation; it is not a player ranking." /></h3>
+          <h3 className="af-label">Best available for you</h3>
           {/*
             The handoff ranks undrafted players with a fit score. Nothing stores a
             recommendation output, and a confidence number attached to a name is
@@ -219,7 +219,7 @@ export function DraftBoard({ data }: DraftBoardProps) {
         </section>
 
         <section className="af-card af-wr-section">
-          <h3 className="af-label">Your queue <ContextHelp title="Draft queue" body="A queue is your ordered list of targets. AllFantasy and an external draft platform may maintain separate queues. Check the host platform for the queue that controls its autopick." /></h3>
+          <h3 className="af-label">Your queue</h3>
           <Unavailable reason={data.queue.reason} />
           <p className="af-wr-note">
             The queue that drives autopick lives on{' '}
