@@ -372,6 +372,7 @@ export async function runTradeConsoleAnalysis(
         ? { leagueId: input.leagueId.trim(), userId: input.userId, sport: String(effectiveSport), starters: leagueRow.starters }
         : null,
     withheld: assetPolicy?.pickRefusal([...give, ...get]) ?? null,
+    allowGenericMarketGrade: !input.leagueId?.trim(),
     basisNotes: devyPricedCount > 0 ? [DEVY_BASIS_NOTE] : [],
     mark,
   })

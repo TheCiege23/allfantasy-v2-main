@@ -113,6 +113,8 @@ export async function gradePricedSides(args: {
   need: NeedScope | null
   /** Why this deal cannot be graded at all, when the caller already knows (e.g. no league). */
   withheld?: string | null
+  /** Explicit global analyzer mode: price on the market chart without requiring league settings. */
+  allowGenericMarketGrade?: boolean
   /** Sentences the basis must carry about how some lines were priced (e.g. devy prospects). */
   basisNotes?: readonly string[]
   mark?: (name: string) => void
@@ -173,7 +175,7 @@ export async function gradePricedSides(args: {
   const withheld =
     args.withheld ??
     proposalEligibilityReason(chart.proposalRules, [...args.giveLines, ...args.getLines]) ??
-    (chart.marketCtx ? null : 'No league is selected — a grade is taken on a league’s own values and rules.') ??
+    (chart.marketCtx || args.allowGenericMarketGrade ? null : 'League settings are unavailable, so this league trade cannot be graded.') ??
     (placeholder ? `${placeholder.name} is priced from a placeholder, not a real value.` : null)
 
   const t = leagueGrade.totals
