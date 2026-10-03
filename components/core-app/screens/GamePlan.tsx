@@ -8,6 +8,7 @@ import { lockState } from '@/lib/core-app/lineupLock'
 import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { RefreshLineups } from '@/components/core-app/player-finder/RefreshLineups'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-game-plan.css'
 
 /**
@@ -205,7 +206,9 @@ function Summary({
     <section className="af-gp-summary" aria-label="This week at a glance">
       <dl className="af-gp-stats">
         <div data-tone={actionable.length > 0 ? 'warn' : undefined}>
-          <dt>Flagged starters</dt>
+          <dt>
+            Flagged starters <TopicTip topic="flaggedStarter" />
+          </dt>
           <dd className="af-num">{actionable.length}</dd>
         </div>
         <div data-tone={emptyCount > 0 ? 'bad' : undefined}>
@@ -219,7 +222,9 @@ function Summary({
           </div>
         )}
         <div>
-          <dt>First lock</dt>
+          <dt>
+            First lock <TopicTip topic="lineupLock" />
+          </dt>
           <dd className="af-gp-stat-text">{firstKickoff ? <Lock kickoff={firstKickoff} nowIso={nowIso} /> : <span className="af-gp-lock">—</span>}</dd>
         </div>
       </dl>

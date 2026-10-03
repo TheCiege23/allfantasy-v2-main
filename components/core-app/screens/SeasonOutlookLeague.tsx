@@ -19,6 +19,7 @@ import {
   StatusPill,
 } from '@/components/core-app/outlook/OutlookParts'
 import { OutlookScenarioPanel } from '@/components/core-app/outlook/OutlookScenarioPanel'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-season-outlook-league.css'
 import '@/components/core-app/af-outlook.css'
 
@@ -151,6 +152,8 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
           <h2 id="so-forecast" className="af-label">
             Your forecast · {ordinal(you.seed)} seed, {you.wins}–{you.losses}
           </h2>
+          {/* Beside the heading, not in it: the section is labelled by it. */}
+          <TopicTip topic="outlookPlayoffOdds" />
           <StatusPill status={you.status} />
           <span className="af-olk-g">
             {gamesFromCut == null
@@ -287,7 +290,9 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
           )
         ) : tab === 'moves' ? (
           <>
-            <h3 className="af-label">Recommended moves</h3>
+            <h3 className="af-label">
+              Recommended moves <TopicTip topic="playoffPts" />
+            </h3>
             {focus ? (
               <MoveList moves={focus.moves} />
             ) : (
@@ -391,7 +396,9 @@ function Clinch({ league, swing }: { league: OutlookLeague; swing: SwingMatchup 
   return (
     <section className="af-sol-clinch">
       <header className="af-sol-clinch-head">
-        <h3 className="af-label">How you clinch</h3>
+        <h3 className="af-label">
+          How you clinch <TopicTip topic="swingGame" />
+        </h3>
         <span className="af-sol-clinch-note">
           Week {swing.week}
           {swing.opponentName ? ` · vs ${swing.opponentName}` : ''}
@@ -410,7 +417,9 @@ function Clinch({ league, swing }: { league: OutlookLeague; swing: SwingMatchup 
         </div>
 
         <div className="af-sol-branch" data-tone="bad">
-          <span className="af-label">If you lose</span>
+          <span className="af-label">
+            If you lose <TopicTip topic="clinchHelp" />
+          </span>
           <span className="af-sol-branch-v af-num">{pct(swing.ifLose)}%</span>
           <p className="af-sol-branch-b">
             {/* An empty help list is a real finding — no one other result moves your odds enough. */}
@@ -455,7 +464,7 @@ function Standings({ league, lineups }: { league: OutlookLeague; lineups: Standi
               Points for
             </th>
             <th scope="col" className="af-sol-n">
-              Playoffs
+              Playoffs <TopicTip topic="outlookPlayoffOdds" />
             </th>
             {showBye ? (
               <th scope="col" className="af-sol-n">
@@ -465,7 +474,9 @@ function Standings({ league, lineups }: { league: OutlookLeague; lineups: Standi
             <th scope="col" className="af-sol-n">
               Title
             </th>
-            <th scope="col">What decides it</th>
+            <th scope="col">
+              What decides it <TopicTip topic="whatDecidesIt" />
+            </th>
           </tr>
         </thead>
         <tbody>

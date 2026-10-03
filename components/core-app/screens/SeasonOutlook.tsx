@@ -7,6 +7,7 @@ import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import { band, ordinal, pct, rangeLabel } from '@/lib/core-app/outlookCopy'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import { StatusPill } from '@/components/core-app/outlook/OutlookParts'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-season-outlook.css'
 import '@/components/core-app/af-outlook.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -113,6 +114,8 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
         <p className="af-so-eyebrow af-label">{copy('Across every league you play')}</p>
         <div className="af-olk-titlerow">
           <h1 className="af-display af-so-title">{copy('Season Outlook')}</h1>
+          {/* Beside the title, not in it: the tiles below have no heading of their own to carry it. */}
+          {hasLeagues ? <TopicTip topic="outlookTiles" /> : null}
           {freshness ? (
             <FreshnessChip meta={freshness.meta} initialLabel={freshness.initialLabel} initialWarn={freshness.initialWarn} />
           ) : null}
@@ -159,7 +162,9 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
               )}
             </div>
             <div className="af-olk-drivebox">
-              <h2 className="af-label">{copy('The games that swing your season')}</h2>
+              <h2 className="af-label">
+                {copy('The games that swing your season')} <TopicTip topic="swingGame" />
+              </h2>
               {swings.length === 0 ? (
                 <p className="af-olk-empty">{copy('No single game left moves your odds in a contested league.')}</p>
               ) : (
@@ -200,10 +205,14 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
             <table className="af-so-table">
               <thead>
                 <tr>
-                  <th scope="col">{copy('League')}</th>
+                  <th scope="col">
+                    {copy('League')} <TopicTip topic="strengthOfSchedule" />
+                  </th>
                   <th scope="col" className="af-so-num">{copy('Record')}</th>
                   <th scope="col" className="af-so-num">{copy('Seed')}</th>
-                  <th scope="col" className="af-so-num">{copy('Playoffs')}</th>
+                  <th scope="col" className="af-so-num">
+                    {copy('Playoffs')} <TopicTip topic="outlookPlayoffOdds" />
+                  </th>
                   {anyByes ? <th scope="col" className="af-so-num">{copy('Bye')}</th> : null}
                   <th scope="col" className="af-so-num">{copy('Title')}</th>
                   <th scope="col">{copy('What decides it')}</th>
