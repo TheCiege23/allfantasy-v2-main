@@ -167,3 +167,40 @@ describe('Settings hub', () => {
     expect(onShowHub).toHaveBeenCalled()
   })
 })
+
+describe('settings hub groups (2026-10-02 layout pass)', () => {
+  beforeEach(() => {
+    ents.value = FREE
+  })
+
+  it('puts every tab in exactly one group, under four headings', () => {
+    hub()
+    const groups = screen.getAllByRole('region').filter((r) => r.className.includes('ns-hub-group'))
+    expect(groups).toHaveLength(4)
+    const seen = groups.flatMap((g) =>
+      within(g).getAllByTestId(/^settings-hub-card-/).map((c) => c.dataset.testid),
+    )
+    expect(seen.sort()).toEqual(SETTINGS_NAV.map((n) => `settings-hub-card-${n.id}`).sort())
+    expect(new Set(seen).size).toBe(seen.length)
+  })
+
+  it('drops a group with no match while searching', () => {
+    hub()
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'password' } })
+    const groups = screen.getAllByRole('region').filter((r) => r.className.includes('ns-hub-group'))
+    expect(groups).toHaveLength(1)
+  })
+
+  it('the sidebar search on a tab also matches descriptions', () => {
+    render(
+      <SettingsChrome activeTab="profile" onTabChange={vi.fn()} onShowHub={vi.fn()} profile={profile()}>
+        <p>profile section</p>
+      </SettingsChrome>,
+    )
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'password' } })
+    const nav = screen.getByRole('navigation', { name: /./ })
+    const items = within(nav).getAllByRole('button').map((b) => b.textContent)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatch(/security/i)
+  })
+})

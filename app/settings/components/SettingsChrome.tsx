@@ -242,6 +242,18 @@ const HUB_ORDER: SettingsTabId[] = [
   'account',
 ]
 
+/**
+ * The hub's four groups, in reading order. Twelve flat cards were ~1,300px of scrolling on a phone
+ * with nothing to scan by; grouped, a person looking for "password" or "billing" reads four headings
+ * first. Every tab in HUB_ORDER appears in exactly one group — the hub test pins that.
+ */
+const HUB_GROUPS: ReadonlyArray<{ id: 'account' | 'app' | 'leagues' | 'plan'; tabs: SettingsTabId[] }> = [
+  { id: 'account', tabs: ['profile', 'security', 'account'] },
+  { id: 'app', tabs: ['preferences', 'notifications', 'command'] },
+  { id: 'leagues', tabs: ['connected', 'legacy', 'rank'] },
+  { id: 'plan', tabs: ['billing', 'referral', 'legal'] },
+]
+
 type HubCta = 'edit' | 'manage' | 'review' | 'view' | 'import'
 
 const HUB_CTA: Record<SettingsTabId, HubCta> = {
@@ -381,39 +393,52 @@ function SettingsHub({
         </div>
       </section>
 
-      <ul className="ns-hub-grid" aria-label={t('settings.aria.sections')}>
-        {cards.map((c) => {
-          const Icon = NAV_ICON[c.id]
-          const badge = badges[c.id]
-          return (
-            <li key={c.id}>
-              <button
-                type="button"
-                className="ns-hub-card"
-                data-tone={badge?.tone === 'warn' ? 'warn' : undefined}
-                data-testid={`settings-hub-card-${c.id}`}
-                onClick={() => onOpen(c.id)}
-              >
-                <span className="ns-hub-card-head">
-                  <span className="ns-hub-icon" aria-hidden="true">
-                    <Icon />
-                  </span>
-                  <span className="ns-hub-card-title">{c.title}</span>
-                  {badge ? (
-                    <span className="ns-nav-badge" data-tone={badge.tone}>
-                      {badge.text}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="ns-hub-card-desc">{c.desc}</span>
-                <span className="ns-hub-cta" aria-hidden="true">
-                  {t(`settings.hub.cta.${HUB_CTA[c.id]}`)} →
-                </span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
+      {/* Grouped, and a group with no match drops out while searching. */}
+      {HUB_GROUPS.map((group) => {
+        const groupCards = cards.filter((c) => group.tabs.includes(c.id))
+        if (groupCards.length === 0) return null
+        const headingId = `settings-hub-group-${group.id}`
+        return (
+          <section key={group.id} className="ns-hub-group" aria-labelledby={headingId}>
+            <h2 id={headingId} className="ns-hub-group-title">
+              {t(`settings.hub.group.${group.id}`)}
+            </h2>
+            <ul className="ns-hub-grid" aria-labelledby={headingId}>
+              {groupCards.map((c) => {
+                const Icon = NAV_ICON[c.id]
+                const badge = badges[c.id]
+                return (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      className="ns-hub-card"
+                      data-tone={badge?.tone === 'warn' ? 'warn' : undefined}
+                      data-testid={`settings-hub-card-${c.id}`}
+                      onClick={() => onOpen(c.id)}
+                    >
+                      <span className="ns-hub-card-head">
+                        <span className="ns-hub-icon" aria-hidden="true">
+                          <Icon />
+                        </span>
+                        <span className="ns-hub-card-title">{c.title}</span>
+                        {badge ? (
+                          <span className="ns-nav-badge" data-tone={badge.tone}>
+                            {badge.text}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="ns-hub-card-desc">{c.desc}</span>
+                      <span className="ns-hub-cta" aria-hidden="true">
+                        {t(`settings.hub.cta.${HUB_CTA[c.id]}`)} →
+                      </span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )
+      })}
       {cards.length === 0 ? <p className="ns-hub-empty">No settings match “{query}”.</p> : null}
 
       <section className="ns-hub-plan" aria-label={t('settings.billing.currentPlan')}>
@@ -481,7 +506,8 @@ export function SettingsChrome({
   const filteredNav = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return NAV_DEFS
-    return NAV_DEFS.filter((n) => t(`settings.nav.${n.id}`).toLowerCase().includes(q))
+    // Same rule as the hub's search: a description counts, so "password" finds Security here too.
+    return NAV_DEFS.filter((n) => `${t(`settings.nav.${n.id}`)} ${t(`settings.hub.desc.${n.id}`)}`.toLowerCase().includes(q))
   }, [query, t])
 
   return (
