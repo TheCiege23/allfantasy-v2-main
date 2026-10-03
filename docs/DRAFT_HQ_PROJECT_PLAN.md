@@ -4,7 +4,7 @@ Updated October 3, 2026. Scope: universal Draft HQ, league Draft HQ, linked My T
 
 ## Delivery status
 
-Phase 1 is integrated with current main in an isolated release branch. Verification: 81 tests passed across eight focused and compatibility suites; lint passed for all eight implementation files. TypeScript verification and protected-main CI are in progress. Production deployment and authenticated visual/device checks are not yet confirmed. Existing unrelated workspace changes are outside this delivery. Remaining phases are planned work, not delivered features.
+Phase 1 shipped on October 3, 2026 through PR #1975. All required GitHub checks passed, including all four unit shards, TypeScript ratchet, draft-room regression, mobile smoke and onboarding/referral/retention browser checks. Focused local validation covered 82 tests across eight suites plus implementation lint. Production serves commit 010a01cc60e6a0f8c67abd74bc3ca28dd6e655f4; /api/health returned HTTP 200 with ok=true. Authenticated Draft HQ visual and physical-device checks remain tracked follow-up work. Existing unrelated workspace changes were preserved. Phase 2 has started on its own branch and is not a completed production phase.
 
 ## Phase 1 — Correctness and explanations
 
@@ -118,7 +118,7 @@ User-authorized release policy (October 3, 2026): deploy each completed phase to
 
 | Milestone | Responsible functions | Release gate |
 |---|---|---|
-| 1. Correctness | Frontend + draft runtime engineering | Regression tests, scoped types/lint, authenticated checks |
+| 1. Correctness | Frontend + draft runtime engineering | Regression tests, types/lint, required CI; visual QA tracked |
 | 2. History | Backend/import engineering + commissioner product | Schema review, provider fixtures, staging backfill rehearsal |
 | 3. Preparation/ADP | Data + draft engineering | Snapshot/format validation, source coverage |
 | 4. Analysis | Data/model engineering + Chimmy product | Hindsight checks, reproducibility, cohort validation |
