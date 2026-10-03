@@ -14,7 +14,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
 import { ImpactNowReview, type ImpactNowRef } from './ImpactNowReview'
-import { TradeReaction, TradeReactionSettings } from './TradeReactions'
+import { TradeReaction, TradeReactionSettings, AcceptedTradeReaction } from './TradeReactions'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -911,7 +911,7 @@ export function TradeInbox(props: {
                     {trade.decisionRecommendation ? <p className="af-tc-timeline-advice">{trade.decisionRecommendation}</p> : null}
                     {trade.realizedGrade ? <p className="af-tc-timeline-advice">{copy('Realized outcome:')} {trade.realizedGrade}. {trade.realizedNote}</p> : null}
                     {isCompleted && trade.status !== 'reversed' && leagueId && trade.impactRef ? <ImpactNowReview leagueId={leagueId} trade={trade.impactRef} /> : null}
-                    {isCompleted && trade.status !== 'reversed' ? <TradeReactionSettings /> : null}
+                    {(isCompleted && trade.status !== 'reversed') || trade.status === 'accepted' || trade.status === 'scheduled' ? <><TradeReactionSettings /><AcceptedTradeReaction completed={isCompleted} /></> : null}
                     {lineupLine ? (
                       <p className="af-tc-timeline-lineup" data-direction={lineupImpactDirection(trade.rosterImpact)}>
                         {lineupLine}

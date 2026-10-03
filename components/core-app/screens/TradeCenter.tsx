@@ -51,7 +51,6 @@ import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import { TradeEvidencePanel } from './TradeEvidencePanel'
 import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
-import { TradeEvidencePanel } from './TradeEvidencePanel'
 import { TradeValueChart, LineupImpactChart } from './TradeImpactCharts'
 import { TradeReaction, TradeReactionSettings } from './TradeReactions'
 import { usePlayerCard } from '../player-card/PlayerCardProvider'

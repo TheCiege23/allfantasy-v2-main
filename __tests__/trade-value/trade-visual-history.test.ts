@@ -7,6 +7,9 @@ describe('recorded trade visuals',()=>{
   it('attributes January to the previous NFL season and never invents prior seasons',()=>{
     expect(valueHistoryBuckets([{day:'2026-01-02',value:90},{day:'2026-09-02',value:120}],'seasons')).toEqual([{label:'2025',day:'2026-01-02',value:90},{label:'2026',day:'2026-09-02',value:120}])
   })
+  it('keeps a season with no recorded quotes as a chart gap',()=>{
+    expect(valueHistoryBuckets([{day:'2024-09-02',value:90},{day:'2026-09-02',value:120}],'seasons')[1]).toEqual({label:'2025',day:'2025-03-01',value:null})
+  })
   it('undoes only the original swap while preserving later unrelated roster acquisitions',()=>{
     expect(retrospectiveRoster(['received','other','later'],['sent'],['received']).withoutTrade).toEqual(['other','later','sent'])
   })

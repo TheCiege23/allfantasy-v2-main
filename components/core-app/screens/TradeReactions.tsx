@@ -16,3 +16,7 @@ export function TradeReaction({letter,completed=false}:{letter:string;completed?
   const [emoji,phrase] = reactions[letter.charAt(0)] ?? ['🔍','Review the evidence.']
   return <span className={styles.reaction}><span aria-hidden="true" className={completed ? styles.celebrate : undefined}>{emoji}</span>{phrase}</span>
 }
+export function AcceptedTradeReaction({completed}:{completed:boolean}) {
+  const enabled = useSyncExternalStore(subscribe,snapshot,() => false)
+  return enabled ? <p className={styles.reaction}><span aria-hidden="true" className={styles.celebrate}>🤝✨</span>{completed ? 'Deal sealed. Chimmy has the receipt.' : 'Handshake secured. Execution is still pending.'}</p> : null
+}

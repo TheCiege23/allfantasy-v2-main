@@ -10,7 +10,16 @@ export function valueHistoryBuckets(rows: readonly ValueCapture[], mode: 'weeks'
     date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7))
     buckets.set(mode === 'seasons' ? String(season) : date.toISOString().slice(0,10), row)
   }
-  if (mode === 'seasons') return [...buckets].map(([label,r]) => ({ label, day: r.day, value: r.value }))
+  if (mode === 'seasons') {
+    const seasons=[...buckets.keys()].map(Number)
+    if (!seasons.length) return []
+    const points:ValueBucket[]=[]
+    for (let season=seasons[0];season<=seasons.at(-1)!;season++) {
+      const row=buckets.get(String(season))
+      points.push({label:String(season),day:row?.day??`${season}-03-01`,value:row?.value??null})
+    }
+    return points
+  }
   const keys = [...buckets.keys()]
   if (!keys.length) return []
   const end = Date.parse(keys.at(-1)!)
