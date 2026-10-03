@@ -433,6 +433,38 @@ What is **not** acceptable either way: returning `[]` on a 304 without a
 cache-busted retry. That reports "no data" for what may be a cache hit, and it is
 indistinguishable from a real empty result.
 
+## Running Prisma migrations against production
+
+🛑 **Never run a bare `npx prisma migrate deploy` / `resolve` against production.** Use:
+
+```
+ALLOW_PROD_MIGRATION=1 npm run db:migrate:deploy:prod
+ALLOW_PROD_MIGRATION=1 npm run db:resolve:prod -- --applied <migration>
+railway run node scripts/railway-prod-migrate.cjs                          # deploy
+railway run node scripts/railway-prod-migrate.cjs resolve --applied <name>  # resolve
+```
+
+Both refuse unless the target is positively production, and **both refuse a checkout whose
+`prisma/migrations/*/migration.sql` holds a CR byte**. That is not pedantry. Prisma records each
+migration's checksum as the sha256 of the bytes on disk, and a Windows checkout
+(`core.autocrlf=true`) has CRLF bytes. On 2026-10-03 **four** production `_prisma_migrations` rows
+carried CRLF checksums that no Linux checkout matches. Every one came from a careful,
+target-checked run (two deploys, two hand-run `resolve`s, Claude and Codex both), and every one
+was corrected by hand.
+
+⚠ **The obvious fix does not work.** `git -c core.autocrlf=false checkout -- prisma/migrations`
+and `git restore` leave every CR byte in place, because git skips files it considers unchanged.
+Measured: remove the tracked files, then check them out with `autocrlf=false`, on a clean tree only:
+
+```
+git ls-files -z -- prisma/migrations | xargs -0 rm -f
+git -c core.autocrlf=false checkout -- prisma/migrations
+```
+
+`db:resolve:prod --applied` also reads the ledger back and exits 1 unless the recorded checksum
+equals the LF file's sha256. `--applied` runs no SQL. It asserts the migration's effects are
+**already** live, so verify the objects by effect first; nothing can check that for you.
+
 ## Git
 
 The working tree is sometimes shared with concurrent sessions; HEAD can move
