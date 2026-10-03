@@ -1761,7 +1761,19 @@ export const translations: Record<string, Record<string, string>> = {
       "Authenticator or SMS 2FA is not enabled yet. When it ships, you will be able to turn it on here.",
     "settings.security.sessionsTitle": "Active sessions",
     "settings.security.sessionsBody":
-      "You are signed in on this browser. Use Sign out below or from Account to end this session.",
+      "Lost a phone or signed in on a shared computer? Sign out everywhere ends every session on every device, including this one. To sign out of just this browser, use Sign out in Account.",
+    "settings.security.signOutEverywhere": "Sign out everywhere",
+    "settings.security.signingOutEverywhere": "Signing out…",
+    "settings.security.signOutEverywhereConfirmTitle": "Sign out on every device?",
+    "settings.security.signOutEverywhereConfirmBody":
+      "Every device signed in to your account is signed out, including this one. You'll need to sign in again.",
+    "settings.security.signOutEverywhereFailed": "We couldn't sign out your other devices. Please try again.",
+    "settings.security.removePhone": "Remove phone",
+    "settings.security.removingPhone": "Removing…",
+    "settings.security.removePhoneConfirmTitle": "Remove your phone number?",
+    "settings.security.removePhoneConfirmBody":
+      "You'll stop getting text alerts and can no longer sign in with this number. You can add a phone again anytime.",
+    "settings.security.removePhoneFailed": "Your phone number could not be removed. Please try again.",
     "settings.security.idleTitle": "Auto sign-out when idle",
     "settings.security.idleBody":
       "After no keyboard, mouse, or touch activity for the chosen time, you will be signed out and returned to the home page. Turn off to stay signed in until the normal session expiry.",

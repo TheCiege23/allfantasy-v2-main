@@ -862,7 +862,19 @@ export const translationsEsParity: Record<string, string> = {
     "Tras el tiempo elegido sin actividad de teclado, ratón o toque, se cerrará la sesión y volverás al inicio. Desactívalo para permanecer conectado hasta el vencimiento normal de sesión.",
   "settings.security.idleTitle": "Cerrar sesión por inactividad",
   "settings.security.sessionsBody":
-    "Estás conectado en este navegador. Usa Cerrar sesión abajo o en Cuenta para terminar esta sesión.",
+    "¿Perdiste un teléfono o iniciaste sesión en una computadora compartida? Cerrar sesión en todas partes termina todas las sesiones en todos los dispositivos, incluido este. Para cerrar sesión solo en este navegador, usa Cerrar sesión en Cuenta.",
+  "settings.security.signOutEverywhere": "Cerrar sesión en todas partes",
+  "settings.security.signingOutEverywhere": "Cerrando sesión…",
+  "settings.security.signOutEverywhereConfirmTitle": "¿Cerrar sesión en todos los dispositivos?",
+  "settings.security.signOutEverywhereConfirmBody":
+    "Se cerrará la sesión en todos los dispositivos conectados a tu cuenta, incluido este. Tendrás que iniciar sesión de nuevo.",
+  "settings.security.signOutEverywhereFailed": "No pudimos cerrar la sesión en tus otros dispositivos. Inténtalo de nuevo.",
+  "settings.security.removePhone": "Quitar teléfono",
+  "settings.security.removingPhone": "Quitando…",
+  "settings.security.removePhoneConfirmTitle": "¿Quitar tu número de teléfono?",
+  "settings.security.removePhoneConfirmBody":
+    "Dejarás de recibir alertas por SMS y ya no podrás iniciar sesión con este número. Puedes volver a añadir un teléfono cuando quieras.",
+  "settings.security.removePhoneFailed": "No se pudo quitar tu número de teléfono. Inténtalo de nuevo.",
   "settings.security.sessionsTitle": "Sesiones activas",
   "settings.security.subtitle": "Verificación, contraseña y métodos de contacto.",
   "settings.security.title": "Seguridad",
