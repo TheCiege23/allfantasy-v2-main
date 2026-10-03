@@ -551,3 +551,6 @@
   font-size: 12px;
   color: var(--text2);
 }
+.af-tc-review { margin:14px 0; padding:14px 16px; border:1px solid rgba(34,211,238,.35); border-radius:12px; background:rgba(34,211,238,.05); }
+.af-tc-review h3 { margin:0 0 8px; font-size:17px; }
+.af-tc-review p { margin:6px 0; line-height:1.45; }
