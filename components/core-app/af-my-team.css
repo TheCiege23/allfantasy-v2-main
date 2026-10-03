@@ -2133,3 +2133,77 @@ li[data-kind='questionable'] .af-mt-check-tag {
   font-size: 12px;
   color: var(--muted);
 }
+
+/*
+ * ── Your recent moves (2026-10-02) ──────────────────────────────────────────
+ * Appended at depth 0. Side column on a wide page; after the roster on a narrow one (order: 1).
+ */
+.af-mt-moves {
+  order: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+.af-mt-moves-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-mt-moves-list li + li {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.af-mt-moves-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+.af-mt-moves-tag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.af-mt-moves-list li[data-kind='trade'] .af-mt-moves-tag {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.af-mt-moves-date,
+.af-mt-moves-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-mt-moves-bid {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-mt-moves-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin-top: 4px;
+  font-size: 13px;
+}
+.af-mt-moves-add {
+  color: var(--good);
+}
+.af-mt-moves-drop {
+  color: var(--bad);
+}
+.af-mt-moves-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}

@@ -37,6 +37,7 @@ import { readLineupGameDay, summariseStarterGameDay, type PlayerGameDay, type St
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { isGuillotineLeague, isTeamEliminated } from './teamElimination'
 import { loadDynastyOutlook, type DynastyOutlook } from './dynastyOutlook'
+import { getTeamActivity, type TeamActivity } from './teamActivity'
 import {
   BENCH_SWAP_POINTS,
   isEligibleForSlot,
@@ -280,6 +281,8 @@ export type MyTeamData = {
   unidentified?: { bench: number; ir: number; taxi: number }
   /** Draft capital and lineup age — dynasty leagues only (`dynastyOutlook.ts`). Absent otherwise. */
   dynasty?: DynastyOutlook | null
+  /** Your own recent trades, claims and adds/drops in this league. Null when the feed could not be read. */
+  teamActivity?: TeamActivity | null
   starters: SectionState<LineupSlot[]>
   /**
    * Why the roster carries unnamed rows, said ONCE.
@@ -1593,6 +1596,11 @@ export async function getMyTeamData(
    */
   const isDynastyLeague = league.isDynasty === true || String(league.leagueType ?? '').toLowerCase() === 'dynasty'
   const asPlayer = (p: LineupPlayer) => ({ sleeperId: p.sleeperId, name: p.name, position: p.position })
+  // Your own moves, read beside the matchup like the dynasty card. The claimed team is yours by definition.
+  const teamActivityRead = getTeamActivity({
+    league: { id: leagueId, platform: league.platform ?? null, platformLeagueId: league.platformLeagueId ?? null, sport },
+    team: { externalId: String(myTeamRow.externalId ?? ''), platformUserId: myTeamRow.platformUserId ?? null, claimedByUserId: userId },
+  }).catch(() => null)
   const dynastyRead = isDynastyLeague
     ? loadDynastyOutlook({
         league: {
@@ -1645,6 +1653,7 @@ export async function getMyTeamData(
     team,
     starterGameDay,
     dynasty: await dynastyRead,
+    teamActivity: await teamActivityRead,
     bestBall: base.league.bestBall === true,
     lineupVerification: liveRoster?.verification ?? null,
     projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },

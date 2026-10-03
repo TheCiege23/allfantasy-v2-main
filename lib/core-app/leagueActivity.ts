@@ -172,7 +172,30 @@ function pickLabels(v: unknown): string[] {
     .filter(Boolean) as string[]
 }
 
-const KINDS: ActivityKind[] = ['trade', 'waiver', 'roster_move']
+export const ACTIVITY_KINDS: ActivityKind[] = ['trade', 'waiver', 'roster_move']
+const KINDS = ACTIVITY_KINDS
+
+/**
+ * ⚠ DEDUPED BY EVENT, NOT BY ROW. The emitter writes one row PER ROSTER
+ * involved, so a two-team trade arrives twice and a waiver once. Showing both
+ * halves of a trade as separate items makes a quiet league look busy and
+ * double-counts the feed. Shared by the league feed and My Team's own moves, so
+ * the two can never disagree about what one event is.
+ */
+export function dedupeActivityByEvent<T extends Pick<LeagueActivityItem, 'kind' | 'occurredAt' | 'adds' | 'drops'>>(
+  items: readonly T[],
+): T[] {
+  const seen = new Set<string>()
+  return items.filter((i) => {
+    const key = `${i.kind}:${i.occurredAt.getTime()}:${[...i.adds, ...i.drops]
+      .map((pl) => pl.id)
+      .sort()
+      .join('|')}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
 
 export async function getLeagueActivity(args: {
   /** Internal `League.id`. */
@@ -229,22 +252,7 @@ export async function getLeagueActivity(args: {
     else counts.rosterMove += 1
   }
 
-  /*
-   * ⚠ DEDUPED BY EVENT, NOT BY ROW. The emitter writes one row PER ROSTER
-   * involved, so a two-team trade arrives twice and a waiver once. Showing both
-   * halves of a trade as separate items makes a quiet league look busy and
-   * double-counts the feed.
-   */
-  const seen = new Set<string>()
-  const deduped = items.filter((i) => {
-    const key = `${i.kind}:${i.occurredAt.getTime()}:${[...i.adds, ...i.drops]
-      .map((pl) => pl.id)
-      .sort()
-      .join('|')}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
+  const deduped = dedupeActivityByEvent(items)
 
   return {
     items: deduped.slice(0, limit),
