@@ -272,6 +272,13 @@ jobs:
         # #776 fixed mobile-auth this way (0 restarts after). Judge by the restart line's
         # count in each lane's log, not by a green run.
         NODE_OPTIONS: --max-old-space-size=8192
+        # ⚠ AND THE 8192MB HEAP WAS NOT ENOUGH ON ITS OWN HERE. This lane runs ONE spec
+        # (e2e/engagement-notification-routing-click-audit.spec.ts) yet global setup warmed all
+        # 33 default routes (161s), and the server still restarted mid-test in 6 of 13 runs
+        # measured 2026-10-03 — every one of those 6 flaky or failed, against 6 of 7 clean runs
+        # without a restart. Warm only the four routes the spec visits (one of which, /chimmy,
+        # the default list does not warm at all). If you add a @retention spec, add its routes.
+        E2E_WARM_ROUTES: /e2e/engagement-notification-routing,/trade-analyzer,/chimmy,/tools-hub
       run: npm run test:e2e:retention
     - name: Run Playwright tests (onboarding activation)
       if: matrix.lane == 'onboarding-activation'
