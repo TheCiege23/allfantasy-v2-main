@@ -6,7 +6,8 @@ import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { ProfileImagePreviewController } from "@/components/identity/ProfileImagePreviewController"
 import { setProfileAvatarUrl, uploadProfileImage, AVATAR_PRESET_EMOJI } from "@/lib/avatar"
 import { AvatarCropDialog, shouldCropBeforeUpload } from "@/components/identity/AvatarCropDialog"
-import { AVATAR_PRESETS, AVATAR_PRESET_LABELS, type AvatarPresetId } from "@/lib/signup/avatar-presets"
+import { AVATAR_PRESETS, AVATAR_PRESET_LABELS, AVATAR_PRESET_LABEL_KEYS, type AvatarPresetId } from "@/lib/signup/avatar-presets"
+import { tOr } from "@/lib/i18n/tInterpolate"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import type { SettingsOnSave, SettingsProfile } from "./settings-types"
 import { MAX_DISPLAY_NAME_LENGTH } from "@/lib/user-settings/types"
@@ -239,13 +240,13 @@ export function ProfileSettingsSection({
                 setAvatarSelectionTouched(true)
               }}
               aria-pressed={avatarPreset === id}
-              aria-label={AVATAR_PRESET_LABELS[id]}
+              aria-label={tOr(t, AVATAR_PRESET_LABEL_KEYS[id], AVATAR_PRESET_LABELS[id])}
               className="flex h-11 w-11 items-center justify-center rounded-lg border text-lg"
               style={{
                 borderColor: avatarPreset === id ? "var(--accent-cyan)" : "var(--border)",
                 background: avatarPreset === id ? "color-mix(in srgb, var(--accent-cyan) 18%, transparent)" : "var(--panel2)",
               }}
-              title={AVATAR_PRESET_LABELS[id]}
+              title={tOr(t, AVATAR_PRESET_LABEL_KEYS[id], AVATAR_PRESET_LABELS[id])}
             >
               {AVATAR_PRESET_EMOJI[id]}
             </button>

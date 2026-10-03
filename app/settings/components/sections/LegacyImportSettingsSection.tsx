@@ -9,13 +9,16 @@ import {
   LEGACY_PROVIDER_IDS,
   getLegacyProviderName,
   getImportStatusLabel,
+  getImportStatusLabelKey,
   getProviderStatus,
   getLegacyProviderPrimaryAction,
+  getLegacyPrimaryActionLabelKey,
   SLEEPER_CONNECT_HREF,
   getLegacyProviderHelpHref,
   isImportStatusActive,
   type LegacyImportStatusResponse,
 } from "@/lib/legacy-import-settings"
+import { tOr } from "@/lib/i18n/tInterpolate"
 import { EmptyStateRenderer } from "@/components/ui-states"
 import { resolveNoResultsState } from "@/lib/ui-state"
 import { formatInTimezone } from "@/lib/preferences/TimezoneFormattingResolver"
@@ -130,7 +133,9 @@ export function LegacyImportSettingsSection() {
               const isSleeper = providerId === "sleeper"
               const name = getLegacyProviderName(providerId)
               const linked = status?.linked ?? false
-              const importStatusLabel = status?.importStatus ? getImportStatusLabel(status.importStatus) : "—"
+              const importStatusLabel = status?.importStatus
+                ? tOr(t, getImportStatusLabelKey(status.importStatus), getImportStatusLabel(status.importStatus))
+                : "—"
               const available = status?.available ?? false
               const primaryAction = getLegacyProviderPrimaryAction({ providerId, status })
               const helpHref = getLegacyProviderHelpHref(providerId)
@@ -164,7 +169,7 @@ export function LegacyImportSettingsSection() {
                         className="rounded-lg border px-3 py-2 text-sm font-medium"
                         style={{ borderColor: primaryAction.label.includes("Retry") ? "var(--accent-red)" : "var(--accent-cyan)", color: "var(--text)" }}
                       >
-                        {primaryAction.label}
+                        {tOr(t, getLegacyPrimaryActionLabelKey(primaryAction.label), primaryAction.label)}
                       </Link>
                     ) : (
                       !available && (
