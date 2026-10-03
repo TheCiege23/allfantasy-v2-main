@@ -44,7 +44,7 @@ function h2hRows(): Row[] {
   ]
 }
 
-const db = vi.hoisted(() => ({ rows: [] as unknown[], stated: [] as unknown[], queryRaw: vi.fn() }))
+const db = vi.hoisted(() => ({ rows: [] as unknown[], stated: [] as unknown[], queryRaw: vi.fn(), mine: '1' }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -54,7 +54,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     leagueTeam: {
       findMany: async () => [
-        ...rosters.map((r) => ({ externalId: r, teamName: `G${r}`, ownerName: null, avatarUrl: null, claimedByUserId: r === '1' ? 'user' : null, platformUserId: `g-${r}`, league: { id: 'AF-G', platform: 'sleeper', platformLeagueId: 'G' } })),
+        ...rosters.map((r) => ({ externalId: r, teamName: `G${r}`, ownerName: null, avatarUrl: null, claimedByUserId: r === db.mine ? 'user' : null, platformUserId: `g-${r}`, league: { id: 'AF-G', platform: 'sleeper', platformLeagueId: 'G' } })),
         { externalId: '1', teamName: 'Mine', ownerName: null, avatarUrl: null, claimedByUserId: 'user', platformUserId: 'h-1', league: { id: 'AF-H', platform: 'sleeper', platformLeagueId: 'H' } },
         { externalId: '2', teamName: 'Theirs', ownerName: null, avatarUrl: null, claimedByUserId: null, platformUserId: 'h-2', league: { id: 'AF-H', platform: 'sleeper', platformLeagueId: 'H' } },
       ],
@@ -115,13 +115,65 @@ describe('the rail in a guillotine league', () => {
     expect((await call()).byLeague['AF-G']?.week).toBe(2)
   })
 
-  it('leaves a head-to-head league on the row rule (the control)', async () => {
-    const result = await call()
-    expect(result.byLeague['AF-H']?.week).toBe(4)
-    expect(result.byLeague['AF-H']?.opponentTeam).toBe('Theirs')
-    // Only the elimination league was asked for its stated week.
-    const asked = JSON.stringify(db.queryRaw.mock.calls)
-    expect(asked).toContain('G')
-    expect(asked).not.toContain('"H"')
+  it('marks YOUR team as chopped when it is, with no standing — you are not in the live field', async () => {
+    db.mine = '2' // the week-1 casualty
+    try {
+      const m = (await call()).byLeague['AF-G']
+      expect(m?.eliminated).toBe(true)
+      expect(m?.standing).toBeNull()
+    } finally {
+      db.mine = '1'
+    }
+  })
+
+  it('a live team is not marked chopped (the control)', async () => {
+    expect((await call()).byLeague['AF-G']?.eliminated).toBe(false)
+  })
+})
+
+/*
+ * 🛑 HEAD-TO-HEAD, MID-WEEK (the follow-up, measured the next morning). #1915 left head-to-head on the
+ * row rule as "right for them". It is not: once every matchup in a week has any points, no 0–0 row is
+ * left and the rule jumps to NEXT week's empty fixture while this week is still being played. Four
+ * small leagues were on "week 5" on Saturday of week 4; by Sunday afternoon nearly every league is.
+ */
+describe('the rail in a head-to-head league, mid-week', () => {
+  const midWeekRows = (): Row[] => [
+    // Week 4 under way: every row already has points from Thursday's game.
+    { leagueId: 'H', seasonYear: 2026, week: 4, rosterId: '1', matchupId: 1, pointsFor: 30, pointsAgainst: 12, updatedAt: AT },
+    { leagueId: 'H', seasonYear: 2026, week: 4, rosterId: '2', matchupId: 1, pointsFor: 12, pointsAgainst: 30, updatedAt: AT },
+    { leagueId: 'H', seasonYear: 2026, week: 5, rosterId: '1', matchupId: 1, pointsFor: 0, pointsAgainst: 0, updatedAt: AT },
+    { leagueId: 'H', seasonYear: 2026, week: 5, rosterId: '2', matchupId: 1, pointsFor: 0, pointsAgainst: 0, updatedAt: AT },
+  ]
+  const hOnly = () => getRailMatchups('user', [{ id: 'AF-H', platformLeagueId: 'H' }])
+
+  it('stays on the provider’s week 4 while it is being played, instead of jumping to week 5', async () => {
+    db.rows = [...h2hRows().filter((r) => r.week === 3), ...midWeekRows()]
+    db.queryRaw.mockResolvedValue([{ id: 'AF-H', platformLeagueId: 'H', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: '4' } }])
+    const m = (await hOnly()).byLeague['AF-H']
+    expect(m?.week).toBe(4)
+    expect(m?.yourScore).toBe(30)
+    expect(m?.opponentTeam).toBe('Theirs')
+  })
+
+  it('keeps the row rule where the provider states no week (the old behaviour, unchanged)', async () => {
+    db.rows = [...h2hRows().filter((r) => r.week === 3), ...midWeekRows()]
+    db.queryRaw.mockResolvedValue([])
+    expect((await hOnly()).byLeague['AF-H']?.week).toBe(5)
+  })
+
+  it('ignores a stated week the rows do not carry', async () => {
+    db.rows = [...h2hRows()]
+    db.queryRaw.mockResolvedValue([{ id: 'AF-H', platformLeagueId: 'H', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: '9' } }])
+    expect((await hOnly()).byLeague['AF-H']?.week).toBe(4)
+  })
+
+  it('takes the furthest-along statement when one league has several rows, one of them stale', async () => {
+    db.rows = [...h2hRows().filter((r) => r.week === 3), ...midWeekRows()]
+    db.queryRaw.mockResolvedValue([
+      { id: 'AF-H', platformLeagueId: 'H', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: '4' } },
+      { id: 'AF-H-old', platformLeagueId: 'H', season: 2026, status: 'in_season', sport: 'NFL', settings: { leg: '2' } },
+    ])
+    expect((await hOnly()).byLeague['AF-H']?.week).toBe(4)
   })
 })
