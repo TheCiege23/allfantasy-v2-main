@@ -18,6 +18,7 @@ import { getBaseUrl } from '@/lib/get-base-url'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { weeklyRecapAllowed } from '@/lib/core-app/commissioner/recipes'
 import { notifyWeeklyStories } from '@/lib/core-app/weeklyStoryNotify'
+import { postNativeWeeklyRecap } from '@/lib/league-chat/nativeWeeklyRecap'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -210,6 +211,32 @@ export async function GET(req: NextRequest) {
             errors.push(l.id)
           }
         }
+        const nativeLeagues = await prisma.league.findMany({
+          where: {
+            platform: { in: ['manual', 'allfantasy', 'af', 'native'] },
+            settings: { path: ['commissionerRecipes', 'recipes', 'weeklyRecap'], equals: true },
+          },
+          select: { id: true, name: true, settings: true },
+          take: 100,
+        })
+        let nativePosted = 0
+        for (const league of nativeLeagues) {
+          if (Date.now() - startedAt > TIME_BUDGET_MS) {
+            skippedForTime += 1
+            continue
+          }
+          if (!weeklyRecapAllowed(league.settings, 'manual')) continue
+          try {
+            const result = await postNativeWeeklyRecap({
+              leagueId: league.id,
+              leagueName: league.name ?? 'League',
+              seasonYear: new Date().getUTCFullYear(),
+            })
+            if (result.posted) nativePosted += 1
+          } catch {
+            errors.push(league.id)
+          }
+        }
         /*
          * The weekly-story push rides this Tuesday fire (the cron registry is full). It runs only
          * with 30s of budget left, AFTER every league's recap, so it can never cost a recap its
@@ -219,7 +246,7 @@ export async function GET(req: NextRequest) {
           Date.now() - startedAt < TIME_BUDGET_MS - 30_000
             ? await notifyWeeklyStories()
             : { targeted: 0, sent: 0, skipped: 0, deferred: true as const }
-        return { leagues: leagues.length, posted, emailsSent, skippedForTime, optedOut, errors, stories }
+        return { leagues: leagues.length + nativeLeagues.length, posted: posted + nativePosted, emailsSent, skippedForTime, optedOut, errors, stories }
       },
       (r) => ({
         rowsRead: r.leagues,

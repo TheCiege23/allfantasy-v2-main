@@ -78,7 +78,7 @@ export function AutomationRecipes({
       {!recipes.sendEnabled ? (
         <p className="af-ch-recipes-banner">
           Your choices are saved now. Reminders, check-ins and announcements start posting once AllFantasy
-          switches automated sending on — nothing is sent to your league before then. The weekly recap already runs.
+          switches automated sending on. Weekly recaps use their own Tuesday schedule when enabled.
         </p>
       ) : null}
       <ul className="af-ch-recipe-list">
