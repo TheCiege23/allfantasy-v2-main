@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * count, the dedupe and the kickoffs are unchanged. Re-captured by this test and pasted unchanged.
  * Then again for cache v5: the row gains `runsAtUtc` (null — a Sleeper schedule is not imported)
  * — renamed `runsSchedule` in v6, still null here: this fixture has no observed Sleeper runs —
+ * and for v7 `pricedOn: "current_week"`: no claim week is passed, so the week being played prices it.
  * and `alternatives` (Free Agent Two, +10.0, fills a slot). Nothing previously pinned moved.
  *
  * `GOLDEN` below was first written by THIS test against the pre-change loader (origin/main 812d99199) and
@@ -234,5 +235,6 @@ const GOLDEN = `{
   "weekKickoffs": [
     "2026-09-24T00:15:00.000Z",
     "2026-09-27T17:00:00.000Z"
-  ]
+  ],
+  "pricedOn": "current_week"
 }`

@@ -98,6 +98,19 @@ beforeEach(() => {
 })
 
 describe('runWaiverCheck', () => {
+  it('asks the board for NEXT week when the claim week is next week — and only then', async () => {
+    /* The claim week is the week ahead (lib/core-app/waiverClaimWeek.ts); the board must price it. */
+    deps.latestWeek = vi.fn(async () => ({ season: '2026', week: 4, basis: 'next' as const }))
+    await runWaiverCheck({}, deps)
+    expect(deps.latestWeek).toHaveBeenCalledWith(TUESDAY.getTime())
+    expect(deps.board).toHaveBeenCalledWith('u1', { week: 4 })
+    vi.mocked(deps.board).mockClear()
+    deps.latestWeek = vi.fn(async () => ({ season: '2026', week: 4, basis: 'current' as const }))
+    claimed.clear()
+    await runWaiverCheck({}, deps)
+    expect(deps.board).toHaveBeenCalledWith('u1', {})
+  })
+
   it('does nothing outside the Tuesday window — not even reading the audience', async () => {
     deps.now = () => SATURDAY
     expect(await runWaiverCheck({}, deps)).toMatchObject({ ran: false, reason: 'early', firstKickoff: W4_TNF.toISOString() })

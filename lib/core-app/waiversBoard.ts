@@ -9,17 +9,19 @@ import { leagueDisplayName } from './leagueHome'
 import { myRosterCandidates } from './myRoster'
 import { countRealLeagues, keepBestPerRealLeague } from './realLeague'
 import { sleeperReadableRosters } from './rosterIdSpace'
-import { ruledOutByFact } from './injuryStatus'
+import { isOutDesignation, isRuledOut, ruledOutByFact } from './injuryStatus'
 import { sleeperIdWhere } from '@/lib/player-identity/externalIdNamespace'
 import { isStartableIn, startingSlots } from './slotEligibility'
 import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
-import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import type { WaiverValueBasis } from '@/lib/waivers/waiverSportBasis'
 import { faabRemainingOf, formatOf, rowWaiverSchedule } from './waiverRowMeta'
 import type { WaiverSchedule } from './waiverRunClock'
 import { loadObservedWaiverSchedules, type ObservedWaiverSchedule } from '@/lib/waivers/observedWaiverSchedule'
 import { buildWaiverSportSections } from './waiversBoardSports'
+import { projectionWeekKickoffs } from './waiverClaimWeek'
+import { futureWeekProjectionsReady, futureWeekStoreReader } from '@/lib/projections/futureWeekProjectionStore'
+import { FUTURE_WEEK_SOURCE } from '@/lib/projections/futureWeekIngest'
 import { pickLineupSwap, rosterCapacity, swapReasoning, type SwapCandidate, type SwapRosterPlayer } from './waiverSwap'
 import { valueBookFor, valueBookKey, type ValueBook } from './valueBook'
 import { loadLatestPlayerValueSnapshots } from '@/lib/player-values/latestPlayerValueSnapshots'
@@ -222,6 +224,12 @@ export type WaiversBoardData = {
    */
   weekKickoffs: string[] | null
   /**
+   * Which feed priced the NFL rows: the week being played (`fantasy_projections`), or the NEXT week
+   * (`future_week_projections`) when the caller asked for it and that board was available. Absent on
+   * payloads cached before it existed. See lib/core-app/waiverClaimWeek.ts.
+   */
+  pricedOn?: 'current_week' | 'next_week'
+  /**
    * Every other sport the account holds a team in, one section each — present only when there is
    * at least one, so an NFL-only account's payload is exactly what it was.
    */
@@ -342,7 +350,15 @@ function readClaimedTeams(userId: string) {
 
 export type ClaimedTeam = Awaited<ReturnType<typeof readClaimedTeams>>[number]
 
-export async function getWaiversBoard(userId: string): Promise<WaiversBoardData> {
+export async function getWaiversBoard(
+  userId: string,
+  /**
+   * `week`: the claim week (lib/core-app/waiverClaimWeek.ts). When it is the week AFTER the one being
+   * played, the NFL rows are priced on next week's board if it is on file. The loader stays
+   * clock-free — the caller decides the week — so the cached board stays sound.
+   */
+  opts: { week?: number | null } = {},
+): Promise<WaiversBoardData> {
   const claimed = await readClaimedTeams(userId)
 
   /*
@@ -350,7 +366,7 @@ export async function getWaiversBoard(userId: string): Promise<WaiversBoardData>
    * see `WaiverSportSection`. A section that cannot be built costs the sections, never the NFL rows.
    */
   const [nfl, sports] = await Promise.all([
-    nflWaiversBoard(claimed, userId),
+    nflWaiversBoard(claimed, userId, opts.week ?? null),
     buildWaiverSportSections(claimed, userId).catch(() => [] as WaiverSportSection[]),
   ])
   return sports.length > 0 ? { ...nfl, sports } : nfl
@@ -367,7 +383,11 @@ export async function getWaiverSportSections(userId: string): Promise<WaiverSpor
 }
 
 /** The NFL board, exactly as it was before the other sports joined it. */
-async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string): Promise<WaiversBoardData> {
+async function nflWaiversBoard(
+  claimed: readonly ClaimedTeam[],
+  userId: string,
+  requestedWeek: number | null,
+): Promise<WaiversBoardData> {
   /*
    * ⚠ NFL ONLY, DELIBERATELY. `fantasyProjection` is an NFL feed keyed on Sleeper
    * ids; NCAAF projections live in a different table behind a different lookup
@@ -397,8 +417,32 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
     mine.filter((c) => String(c.league?.platform ?? '').toLowerCase() === 'sleeper').map((c) => c.leagueId),
   ).catch(() => new Map<string, ObservedWaiverSchedule>())
 
-  const at = await latestProjectionWeek()
-  if (!at) return { ...EMPTY, considered: mine.length }
+  const current = await latestProjectionWeek()
+  if (!current) return { ...EMPTY, considered: mine.length }
+
+  /*
+   * 🛑 NEXT WEEK'S BOARD, WHEN THE CLAIM WEEK IS NEXT WEEK. On a Monday the week being played is
+   * mostly over and a claim is for the week after; until 2026-10-02 this board could only price the
+   * week already played. Only ever current+1 (the claim week can be nothing else), and only when
+   * that board has lines — otherwise the current week, with the existing "most of week N has been
+   * played" disclosure. Same rescoring either way: the future line is the same Sleeper component
+   * line the current feed nests under `stats.stats`, stored flat.
+   */
+  const nextLines =
+    requestedWeek != null && requestedWeek === current.week + 1 && (await futureWeekProjectionsReady().catch(() => false))
+      ? await futureWeekStoreReader
+          .readTopLines({
+            sport: 'NFL',
+            season: current.season,
+            source: FUTURE_WEEK_SOURCE,
+            afterWeek: current.week,
+            week: requestedWeek,
+            limit: CANDIDATE_POOL,
+          })
+          .catch(() => null)
+      : null
+  const onNext = nextLines != null && nextLines.length > 0
+  const at = onNext ? { season: current.season, week: requestedWeek as number } : current
 
   type RosterRow = {
     leagueId: string
@@ -431,7 +475,9 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
      * Postgres to an OOM. The pool is ordered by the generic figure purely to
      * bound the set; every number the board PRINTS is re-scored per league below.
      */
-    prisma.fantasyProjection
+    onNext
+      ? Promise.resolve([] as Array<{ playerId: string; projectedPoints: number; stats: unknown }>)
+      : prisma.fantasyProjection
       .findMany({
         where: { season: at.season, week: at.week, source: { not: 'allfantasy' } },
         orderBy: { projectedPoints: 'desc' },
@@ -461,18 +507,15 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
 
   /* Component lines, for the per-league re-scoring. */
   type Proj = { playerId: string; generic: number; components: Record<string, unknown> | null }
-  const pool: Proj[] = topProjections.map((r) => {
-    const s = (r.stats ?? {}) as { stats?: unknown }
-    const inner = s.stats
-    return {
-      playerId: r.playerId,
-      generic: Number(r.projectedPoints),
-      components:
-        inner && typeof inner === 'object' && !Array.isArray(inner)
-          ? (inner as Record<string, unknown>)
-          : null,
-    }
-  })
+  const asLine = (v: unknown): Record<string, unknown> | null =>
+    v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null
+  const pool: Proj[] = onNext
+    ? nextLines!.map((l) => ({ playerId: l.playerId, generic: Number(l.projectedPoints), components: asLine(l.stats) }))
+    : topProjections.map((r) => ({
+        playerId: r.playerId,
+        generic: Number(r.projectedPoints),
+        components: asLine(((r.stats ?? {}) as { stats?: unknown }).stats),
+      }))
   const poolById = new Map(pool.map((p) => [p.playerId, p]))
 
   /*
@@ -577,7 +620,13 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
         : null
     if (injuries) {
       for (const [playerId, lookup] of lookups) {
-        if (ruledOutByFact(injuries.byPlayer.get(normalizeMatchName(lookup.name)))) ruledOut.add(playerId)
+        const fact = injuries.byPlayer.get(normalizeMatchName(lookup.name))
+        /*
+         * On NEXT week's board a game-day "Out" is this week's news — he may well play next week.
+         * Only a season-scale ruling (IR, PUP, NFI, a suspension) still rules him out there.
+         */
+        const out = onNext ? Boolean(fact && isRuledOut(fact.status) && !isOutDesignation(fact.status)) : ruledOutByFact(fact)
+        if (out) ruledOut.add(playerId)
       }
     }
   }
@@ -845,7 +894,8 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
   const multiLeague = multiLeagueAdds(deduped, rankedByLeague)
   /* AllFantasy's own engine beside the provider figures, for the players actually shown. A failed
      read costs the AF figures and nothing else. */
-  await attachAfEngine(shown, at, (id) => poolById.get(id)?.generic ?? null).catch(() => undefined)
+  /* The AF engine projects the week being played only; on next week's board there is nothing to set beside it. */
+  if (!onNext) await attachAfEngine(shown, at, (id) => poolById.get(id)?.generic ?? null).catch(() => undefined)
 
   return {
     rows: shown,
@@ -862,6 +912,7 @@ async function nflWaiversBoard(claimed: readonly ClaimedTeam[], userId: string):
     at,
     /* A schedule read that fails costs the note, never the board. */
     weekKickoffs: await projectionWeekKickoffs(at).catch(() => null),
+    pricedOn: onNext ? 'next_week' : 'current_week',
     ...(multiLeague.length > 0 ? { multiLeague } : {}),
   }
 }
@@ -942,24 +993,4 @@ export async function attachAfEngine(
       r.afNetGain = Math.round((r.add.afProjected - (r.startsOver?.afProjected ?? 0)) * 100) / 100
     }
   }
-}
-
-/** One kickoff per distinct fixture of the projection week. See `weekKickoffs`. */
-async function projectionWeekKickoffs(at: { season: string; week: number }): Promise<string[] | null> {
-  const season = Number(at.season)
-  if (!Number.isFinite(season)) return null
-  const games = await prisma.sportsGame
-    .findMany({
-      where: { sport: 'NFL', season, week: at.week, seasonType: { in: ['regular', 'REG', 'reg', 'Regular', 'regular_season'] } },
-      select: { homeTeam: true, awayTeam: true, startTime: true },
-    })
-    .catch(() => null)
-  if (!games || games.length === 0) return null
-  /* Each game is stored by more than one source; one fixture per club pair. */
-  const kickoffByFixture = new Map<string, Date | null>()
-  for (const g of games) {
-    const key = [normalizeTeamAbbrev(g.homeTeam) ?? g.homeTeam, normalizeTeamAbbrev(g.awayTeam) ?? g.awayTeam].join('|')
-    if (!kickoffByFixture.has(key) || (g.startTime && !kickoffByFixture.get(key))) kickoffByFixture.set(key, g.startTime)
-  }
-  return [...kickoffByFixture.values()].filter((t): t is Date => t != null).map((t) => t.toISOString()).sort()
 }

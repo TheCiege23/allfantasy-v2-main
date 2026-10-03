@@ -134,6 +134,13 @@ export interface LoadWaiverBoardArgs {
    * passes them; omitting it changes nothing for any other caller.
    */
   unavailable?: readonly string[]
+  /**
+   * Set when the claim week is NEXT week (lib/core-app/waiverClaimWeek.ts — the route reads the
+   * clock, this loader does not). The board then prices next week's Sleeper board from
+   * `future_week_projections` instead of the week being played. The route never sets it alongside
+   * `unavailable`, which is about THIS week's lineup.
+   */
+  claimWeek?: { season: string; week: number } | null
 }
 
 export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<WaiverBoard> {
@@ -305,10 +312,24 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    */
   const idpEnrichment = hasIdpScoring(scoring) ? { scoringSettings: scoring } : null
 
-  const [mineProj, poolProj] = await Promise.all([
-    lookupProjections(myIds, null, idpEnrichment),
-    lookupProjections([...poolIds], null, idpEnrichment),
-  ])
+  /*
+   * 🛑 NEXT WEEK'S BOARD WHEN THE CLAIM IS FOR NEXT WEEK — except in a league that scores
+   * defenders: nothing establishes that Sleeper's future board carries IDP lines, and the current
+   * path enriches defenders from its own source, so an IDP league stays on the week being played.
+   * A failed or empty read falls back to the current week too; the response says which it used.
+   */
+  const nextWeek = args.claimWeek && !idpEnrichment ? args.claimWeek : null
+  const nextProj = nextWeek ? await readNextWeekProjections(args.prisma, nextWeek, [...myIds, ...poolIds]).catch(() => null) : null
+  const onNext = nextProj != null && nextProj.size > 0
+  const [mineProj, poolProj] = onNext
+    ? [
+        new Map([...nextProj!].filter(([id]) => myIds.includes(id))),
+        new Map([...nextProj!].filter(([id]) => poolIds.has(id))),
+      ]
+    : await Promise.all([
+        lookupProjections(myIds, null, idpEnrichment),
+        lookupProjections([...poolIds], null, idpEnrichment),
+      ])
 
   /*
    * ONE scoring path for both sides of the comparison. Scoring a candidate under the league and
@@ -348,7 +369,11 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    * and quietly preferring it would trade a forecast for a memory. Every filled gap is marked
    * `basis: 'form'` so the surface can say which it is showing.
    */
-  const missing = [...poolIds].filter((id) => !pool.some((p) => p.sleeperId === id))
+  /*
+   * ⚠ NOT ON NEXT WEEK'S BOARD. A free agent missing from next week's board is very often on BYE,
+   * and recent form would price him as if he plays. There, no line means not shown.
+   */
+  const missing = onNext ? [] : [...poolIds].filter((id) => !pool.some((p) => p.sleeperId === id))
   if (missing.length > 0 && statSeason != null) {
     const form = await projectFromRecentForm({
       prisma: args.prisma,
@@ -407,7 +432,8 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
    * One read for the players actually shown, after the ranking is settled, so it can never change
    * who is recommended. A failed read leaves the AF figures off and the board exactly as it was.
    */
-  const afIds = shown.flatMap((c) => [c.sleeperId, c.displaces?.sleeperId ?? null]).filter((id): id is string => id != null)
+  /* The AF engine projects the week being played only — nothing to set beside next week's board. */
+  const afIds = onNext ? [] : shown.flatMap((c) => [c.sleeperId, c.displaces?.sleeperId ?? null]).filter((id): id is string => id != null)
   if (afIds.length > 0) {
     const engine = await lookupAfEngineProjections(afIds, null).catch(
       (): Awaited<ReturnType<typeof lookupAfEngineProjections>> => new Map(),
@@ -437,6 +463,13 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
     `Ranked by how much each adds to your best starting lineup, not by raw projection — ` +
       `a big name who would not crack your lineup is worth nothing this week.`,
   ]
+  if (onNext) {
+    notes.push(
+      `A claim made now is for week ${nextWeek!.week}, so these are Sleeper's week ${nextWeek!.week} projections, ` +
+        `rescored under this league's scoring — published ahead, they move as injuries and depth charts settle. ` +
+        `A player with no week ${nextWeek!.week} line (most often a bye) is not shown.`,
+    )
+  }
   if (candidates.length > limit) {
     notes.push(`${candidates.length} free agents would improve your lineup; showing the top ${limit}.`)
   }
@@ -459,17 +492,65 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
     myIds,
     slots,
     unfilled: base.unfilled,
+    week: onNext ? nextWeek : null,
   }).catch(() => null)
 
   return {
     state: 'ok',
-    season: statSeason != null ? String(statSeason) : null,
-    week: statWeek,
+    season: onNext ? nextWeek!.season : statSeason != null ? String(statSeason) : null,
+    week: onNext ? nextWeek!.week : statWeek,
     currentLineupPoints: base.total,
     candidates: shown,
     notes,
     ...(needs ? { needs } : {}),
   }
+}
+
+/**
+ * Next week's Sleeper lines for these players, shaped like `lookupProjections` output so the one
+ * scoring path prices them. Name, position and team come from `sportsPlayer` (Sleeper's own row wins a
+ * shared id). Postgres only — `future_week_projections` is written by the projections cron.
+ */
+async function readNextWeekProjections(
+  prisma: PrismaClient,
+  week: { season: string; week: number },
+  playerIds: readonly string[],
+): Promise<Map<string, { projectedPoints: number; name: string | null; position: string | null; team: string | null; componentStats: Record<string, unknown> | null }> | null> {
+  const { futureWeekProjectionsReady, futureWeekStoreReader } = await import('@/lib/projections/futureWeekProjectionStore')
+  const { FUTURE_WEEK_SOURCE } = await import('@/lib/projections/futureWeekIngest')
+  if (!(await futureWeekProjectionsReady())) return null
+  const ids = [...new Set(playerIds)].filter(Boolean)
+  if (ids.length === 0) return null
+  const [lines, rows] = await Promise.all([
+    futureWeekStoreReader.readLines({
+      sport: 'NFL',
+      season: week.season,
+      source: FUTURE_WEEK_SOURCE,
+      afterWeek: week.week - 1,
+      throughWeek: week.week,
+      playerIds: ids,
+    }),
+    prisma.sportsPlayer.findMany({
+      where: { sleeperId: { in: ids } },
+      select: { sleeperId: true, source: true, name: true, position: true, team: true },
+    }),
+  ])
+  const meta = new Map<string, { name: string; position: string | null; team: string | null; sleeper: boolean }>()
+  for (const r of rows) {
+    if (!r.sleeperId) continue
+    const sleeper = r.source === 'sleeper'
+    const cur = meta.get(r.sleeperId)
+    if (cur && (cur.sleeper || !sleeper)) continue
+    meta.set(r.sleeperId, { name: r.name, position: r.position ?? null, team: r.team ?? null, sleeper })
+  }
+  const out = new Map<string, { projectedPoints: number; name: string | null; position: string | null; team: string | null; componentStats: Record<string, unknown> | null }>()
+  for (const l of lines) {
+    if (l.week !== week.week) continue
+    const m = meta.get(l.playerId)
+    const stats = l.stats && typeof l.stats === 'object' && !Array.isArray(l.stats) ? (l.stats as Record<string, unknown>) : null
+    out.set(l.playerId, { projectedPoints: l.projectedPoints, name: m?.name ?? null, position: m?.position ?? null, team: m?.team ?? null, componentStats: stats })
+  }
+  return out
 }
 
 /** How many weeks of byes to look ahead, counting the projection week. */
@@ -481,10 +562,17 @@ const BYE_LOOKAHEAD = 4
  */
 async function readRosterNeeds(
   prisma: PrismaClient,
-  args: { readable: unknown; myIds: string[]; slots: string[]; unfilled: string[] },
+  args: {
+    readable: unknown
+    myIds: string[]
+    slots: string[]
+    unfilled: string[]
+    /** The week the lineup was priced on, when it is not the feed's current week (next-week pricing). */
+    week: { season: string; week: number } | null
+  },
 ): Promise<RosterNeeds | null> {
   const { latestProjectionWeek } = await import('@/lib/core-app/playerProjections')
-  const at = await latestProjectionWeek()
+  const at = args.week ?? (await latestProjectionWeek())
   const d = (args.readable ?? {}) as Record<string, unknown>
   const idsOf = (v: unknown) =>
     new Set(Array.isArray(v) ? v.map((x) => String(x ?? '').trim()).filter((x) => x !== '' && x !== '0') : [])

@@ -231,6 +231,13 @@ export type FutureWeekStoreReader = {
     throughWeek: number
     playerIds: readonly string[]
   }): Promise<FutureWeekLineRow[]>
+  /**
+   * The top of ONE future week's board by generic projection — a waiver board's candidate pool,
+   * which has no player list to filter by. Same `week > afterWeek` guard as the others.
+   */
+  readTopLines(input: { sport: string; season: string; source: string; afterWeek: number; week: number; limit: number }): Promise<
+    FutureWeekLineRow[]
+  >
 }
 
 type RawCheck = {
@@ -286,6 +293,25 @@ export const futureWeekStoreReader: FutureWeekStoreReader = {
       WHERE "sport" = ${input.sport} AND "season" = ${input.season} AND "source" = ${input.source}
         AND "week" > ${input.afterWeek} AND "week" <= ${input.throughWeek}
         AND "player_id" IN (${Prisma.join(ids)})`
+    return rows.map((r) => ({
+      playerId: r.player_id,
+      week: Number(r.week),
+      projectedPoints: Number(r.projected_points),
+      stats: r.stats,
+      opponent: r.opponent,
+      fetchedAt: r.fetched_at,
+    }))
+  },
+
+  async readTopLines(input) {
+    const limit = Math.max(1, Math.min(5000, Math.floor(input.limit)))
+    const rows = await prisma.$queryRaw<RawLine[]>`
+      SELECT "player_id", "week", "projected_points", "stats", "opponent", "fetched_at"
+      FROM "future_week_projections"
+      WHERE "sport" = ${input.sport} AND "season" = ${input.season} AND "source" = ${input.source}
+        AND "week" = ${input.week} AND "week" > ${input.afterWeek}
+      ORDER BY "projected_points" DESC, "player_id"
+      LIMIT ${limit}`
     return rows.map((r) => ({
       playerId: r.player_id,
       week: Number(r.week),

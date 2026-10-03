@@ -18,6 +18,7 @@ import { loadIdpMatchup } from '@/lib/idp-projections/idpMatchup'
 import { loadIdpPlayerCard } from '@/lib/idp-projections/idpPlayerCard'
 import { loadRosterWeekPoints } from '@/lib/idp-projections/rosterWeekPoints'
 import { loadWaiverBoard } from '@/lib/waivers/waiverBoard'
+import { resolveWaiverClaimWeek } from '@/lib/core-app/waiverClaimWeek'
 
 export const dynamic = 'force-dynamic'
 
@@ -140,12 +141,23 @@ export async function GET(req: NextRequest) {
       .map((s) => s.trim())
       .filter((s) => /^[A-Za-z0-9_-]{1,32}$/.test(s))
       .slice(0, 40)
+    /*
+     * The claim week is decided HERE, where there is a clock (lib/core-app/waiverClaimWeek.ts): once
+     * most of the week being played has kicked off, a claim is for next week, and the board prices
+     * next week's projections when they are on file.
+     *
+     * ⚠ NOT FOR A REQUEST THAT NAMES `unavailable`. That is My Team's Lineup check asking who fills
+     * THIS week's hole — its OUT and bye starters are this week's. Zeroing them against next week's
+     * projections would answer a question nobody asked, so that request stays on the week being played.
+     */
+    const claim = unavailable.length === 0 ? await resolveWaiverClaimWeek(Date.now()).catch(() => null) : null
     const payload = await loadWaiverBoard({
       prisma,
       leagueId,
       userId,
       limit: Number.isFinite(lim) && lim > 0 ? lim : undefined,
       unavailable,
+      claimWeek: claim?.basis === 'next' ? { season: claim.season, week: claim.week } : null,
     })
     return NextResponse.json(payload)
   }
