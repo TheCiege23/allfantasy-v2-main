@@ -2592,3 +2592,9 @@ li[data-kind='questionable'] .af-mt-check-tag {
     border-top: 1px solid var(--accent-line);
   }
 }
+.af-mt-decision { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:18px 22px; border:1px solid rgba(34,211,238,.45); background:rgba(34,211,238,.06); }
+.af-mt-decision h2 { margin:5px 0 8px; font-size:clamp(18px,2vw,24px); }
+.af-mt-decision p { margin:0 0 8px; max-width:70ch; }
+.af-mt-decision small { color:var(--muted); }
+.af-mt-decision-actions { display:flex; flex-wrap:wrap; gap:8px; flex-shrink:0; }
+@media (max-width:720px) { .af-mt-decision { display:block; padding:16px; } .af-mt-decision-actions { margin-top:14px; } .af-mt-decision-actions .af-btn { flex:1; text-align:center; } }
