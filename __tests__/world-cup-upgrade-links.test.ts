@@ -168,12 +168,17 @@ describe("Upgrade route target validity", () => {
     expect(upgradeSrc).toContain("MonetizationPurchaseSurface")
   })
 
-  it("/pricing page exists and uses MonetizationPurchaseSurface", () => {
-    const pricingSrc = readFileSync(
-      resolve(process.cwd(), "app/pricing/page.tsx"),
-      "utf-8"
-    )
-    expect(pricingSrc).toContain("MonetizationPurchaseSurface")
+  /*
+   * /pricing moved to the V4 five-lane grid in 584be1a05; MonetizationPurchaseSurface now lives on
+   * /upgrade, /pro and the other upgrade pages. The claim is unchanged — /pricing is a real purchase
+   * surface priced from the catalog, not a dead page — so that is what is pinned now.
+   */
+  it("/pricing page exists, renders the V4 grid priced from the catalog, and reaches checkout", () => {
+    const pricingSrc = readFileSync(resolve(process.cwd(), "app/pricing/page.tsx"), "utf-8")
+    expect(pricingSrc).toContain("PricingV4")
+    expect(pricingSrc).toContain("getMonetizationCatalog")
+    const gridSrc = readFileSync(resolve(process.cwd(), "components/core-app/screens/PricingV4.tsx"), "utf-8")
+    expect(gridSrc).toContain("resolveCheckoutUrl")
   })
 
   it("/upgrade accepts plan query param for focus (af_pro, af_commissioner, etc.)", () => {

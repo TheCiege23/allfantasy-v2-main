@@ -19,11 +19,12 @@ describe("Monetization catalog", () => {
     expect(catalog.all.length).toBe(11)
 
     expect(getMonetizationCatalogItemBySku("af_supreme_monthly")?.amountUsd).toBe(19.99)
-    // Must match subscription-policy.ts's supreme.monthlyIncludedPremiumCredits — the amount
-    // actually granted by the invoice.payment_succeeded webhook (Billing Truth fix).
-    expect(getMonetizationCatalogItemBySku("af_supreme_monthly")?.tokenAmount).toBe(1000)
-    expect(getMonetizationCatalogItemBySku("af_supreme_yearly")?.amountUsd).toBe(199.99)
-    expect(getMonetizationCatalogItemBySku("af_supreme_yearly")?.tokenAmount).toBe(15000)
+    // Subscriptions carry no tokens since e026876bf (2026-08-17): the catalog says null ("this plan
+    // does not deal in tokens") and subscription-policy.ts grants 0. Token packs are the token path.
+    expect(getMonetizationCatalogItemBySku("af_supreme_monthly")?.tokenAmount).toBeNull()
+    // $159.99 since 0decc107e / 928272141 (2026-08-17), verified against live Stripe at the time.
+    expect(getMonetizationCatalogItemBySku("af_supreme_yearly")?.amountUsd).toBe(159.99)
+    expect(getMonetizationCatalogItemBySku("af_supreme_yearly")?.tokenAmount).toBeNull()
     expect(getMonetizationCatalogItemBySku("af_tokens_5")?.tokenAmount).toBe(250)
     expect(getMonetizationCatalogItemBySku("af_tokens_10")?.tokenAmount).toBe(600)
     expect(getMonetizationCatalogItemBySku("af_tokens_25")?.tokenAmount).toBe(1500)

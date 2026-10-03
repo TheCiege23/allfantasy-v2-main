@@ -702,7 +702,7 @@ export function LeagueShell({
       trades: 'trades',
       league: 'league',
       players: 'players',
-      waivers: 'players',
+      waivers: 'waivers',
       settings: 'settings',
       guillotine: 'guillotine',
       bestball: 'bestball',
@@ -748,7 +748,7 @@ export function LeagueShell({
       bb_command: 'bb_command',
       bb_commissioner: 'bb_command',
     }
-    const target = map[key]
+    let target = map[key]
     if (!target) return
 
     // NFL/NCAAF redraft Settings opens the modal. Do not also make it the active tab,
@@ -756,6 +756,14 @@ export function LeagueShell({
     if (target === 'settings' && nflRedraftCore) return
 
     const ids = new Set(tabDefs.map((t) => t.id))
+    /*
+     * ⚠ WAIVERS GOES TO THE WAIVERS TAB WHERE ONE EXISTS. dc41cea0f (2026-06-23) mapped
+     * `?view=waivers` to Players when it removed a Waivers tab; aed9b1977 (2026-07-02) put a Waivers
+     * tab back in the core NFL redraft set, and LeagueTabs.tsx carries one per sport — but the alias
+     * still pointed at Players, so every "waivers" deep link skipped the tab it named. Players (which
+     * holds the waiver experience) is now only the fallback for a tab set without one.
+     */
+    if (target === 'waivers' && !ids.has('waivers')) target = 'players'
     if (ids.has(target)) setActiveTab(target)
   }, [searchParams, tabDefs, league.sport, shouldUseMatchupPrimary, nflRedraftCore])
 
