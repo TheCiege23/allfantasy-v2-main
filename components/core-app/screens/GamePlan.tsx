@@ -6,7 +6,8 @@ import { useEffect, useState } from 'react'
 import type { GameDayTriage, TriageLeague, TriageRow } from '@/lib/core-app/gameDayTriage'
 import { lockState } from '@/lib/core-app/lineupLock'
 import { lineupLink, platformLabel } from '@/lib/core-app/platformLinks'
-import { relativeAge } from '@/lib/core-app/cardFreshness'
+import { playerRef } from '@/lib/core-app/playerRef'
+import { RefreshLineups } from '@/components/core-app/player-finder/RefreshLineups'
 import '@/components/core-app/af-game-plan.css'
 
 /**
@@ -40,11 +41,11 @@ import '@/components/core-app/af-game-plan.css'
  *
  * ── ⚠ WHAT THIS SCREEN DELIBERATELY DOES NOT CLAIM ─────────────────────────
  *
- * It flags a starter who is hurt or has no game. It does NOT rank a replacement,
- * because ranking one needs a projection for the week and BOTH projection tables
- * hold a single week — a bench recommendation would be invented, and invented
- * advice at kickoff minus twenty is the worst possible place to guess. The
- * footer says so rather than leaving the absence to be discovered.
+ * It flags a starter who is hurt or has no game. It does NOT rank a replacement
+ * itself: My Team's bench swaps are the one start/sit answer (owner's ruling,
+ * 2026-09-29), priced with this week's projections under each league's scoring.
+ * A second ranking here would be a second answer that can disagree with the
+ * first, so each row LINKS to My Team for it, and the footer says so.
  */
 
 export type GamePlanProps = {
@@ -184,10 +185,18 @@ function Summary({ data, actionable, nowIso }: { data: GameDayTriage; actionable
           <dd>{firstKickoff ? <Lock kickoff={firstKickoff} nowIso={nowIso} /> : <span className="af-gp-lock">—</span>}</dd>
         </div>
       </dl>
-      <p className="af-gp-summary-note">
-        {Number.isFinite(asOfMs) ? `Lineups as of the last sync, ${relativeAge(asOfMs, new Date(nowIso).getTime())}.` : 'No lineup sync time on file.'}
-        {skipped.length > 0 ? ` ${skipped.join(' · ')}.` : ''}
-      </p>
+      {/*
+        The Player Finder's own control: the OLDEST lineup's time, and a button that refreshes every
+        claimed league through the collector and reloads. A lineup fixed on Sleeper a minute ago stops
+        being flagged here — before, the only way was to wait for the next sync.
+      */}
+      <RefreshLineups asOf={data.rostersAsOf ?? null} nowIso={nowIso} />
+      {!Number.isFinite(asOfMs) || skipped.length > 0 ? (
+        <p className="af-gp-summary-note">
+          {!Number.isFinite(asOfMs) ? 'No lineup sync time on file.' : ''}
+          {skipped.length > 0 ? `${!Number.isFinite(asOfMs) ? ' ' : ''}${skipped.join(' · ')}.` : ''}
+        </p>
+      ) : null}
     </section>
   )
 }
@@ -208,7 +217,13 @@ function Row({ row, nowIso }: { row: TriageRow; nowIso: string }) {
         )}
 
         <span className="af-gp-who">
-          <span className="af-gp-name">{row.player.name}</span>
+          {/* His card: injury detail, depth chart, who starts him — the Player Finder's own link. */}
+          <Link
+            className="af-gp-name"
+            href={`/core/players?q=${encodeURIComponent(row.player.name)}&player=${encodeURIComponent(playerRef(row.player.sport, row.player.externalId))}`}
+          >
+            {row.player.name}
+          </Link>
           <span className="af-gp-meta">
             {[row.player.position, row.player.team].filter(Boolean).join(' · ') || 'club unknown'}
           </span>
@@ -257,6 +272,24 @@ function Row({ row, nowIso }: { row: TriageRow; nowIso: string }) {
           {row.leagues.map((l) => (
             <LeagueLineupLink key={l.leagueId} league={l} />
           ))}
+          {/*
+            WHO TO START INSTEAD lives on My Team — the owner's 2026-09-29 ruling made its bench swaps
+            the one start/sit answer, so this links there rather than ranking a replacement here. One
+            league opens that league's My Team; several open My Team's every-lineup view. A locked row
+            gets no link: nothing of his can move now.
+          */}
+          {locked ? null : (
+            <Link
+              className="af-gp-swap"
+              href={
+                row.leagues.length === 1
+                  ? `/core/my-team?league=${encodeURIComponent(row.leagues[0]!.leagueId)}`
+                  : '/core/my-team'
+              }
+            >
+              Who to start instead &rarr;
+            </Link>
+          )}
         </span>
 
         {row.description ? <p className="af-gp-note">{row.description}</p> : null}
@@ -379,10 +412,15 @@ export function GamePlan({
           Stated, not left to be discovered — see the header note on why no
           replacement is ranked.
         */}
+        {/*
+          🛑 THIS SAID "the projection tables hold a single week — so a suggested swap here would be
+          invented". This week IS the week held, and My Team already ranks the bench against it; the
+          sentence explained an absence that a link now fills. Say where the answer is instead.
+        */}
         <p className="af-gp-limits">
-          This flags who is at risk; it does not pick a replacement. Ranking one needs a projection
-          for the week ahead, and the projection tables hold a single week — so a suggested swap
-          here would be invented rather than measured.
+          This flags who is at risk. Who to start instead is My Team&apos;s call — it ranks your bench
+          with this week&apos;s projections under each league&apos;s scoring. Lineups change on the
+          platform; the league buttons open it.
         </p>
         <div className="af-gp-links">
           <Link className="af-gp-cta" href={weekHref}>

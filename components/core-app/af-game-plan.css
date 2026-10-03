@@ -202,6 +202,35 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text);
+  text-decoration: none;
+}
+
+/* A link to his card; underlined on hover so it reads as one without shouting in a list. */
+.af-core a.af-gp-name:hover,
+.af-core a.af-gp-name:focus-visible {
+  text-decoration: underline;
+}
+
+.af-core .af-gp-swap {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px dashed var(--accent-line, var(--line));
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.af-core .af-gp-swap:hover {
+  border-style: solid;
+}
+
+/* Inside the Summary strip: a little air between the tiles and the refresh control. */
+.af-core .af-gp-summary .af-pf-refresh {
+  margin-top: 2px;
 }
 
 .af-core .af-gp-meta {
@@ -399,7 +428,8 @@
  * ~21px tall. 44px on touch screens (iOS's floor); a mouse keeps the compact chip.
  */
 @media (pointer: coarse) {
-  .af-core .af-gp-league {
+  .af-core .af-gp-league,
+  .af-core .af-gp-swap {
     min-height: 44px;
     padding: 0 12px;
     font-size: 12px;

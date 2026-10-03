@@ -3,6 +3,7 @@
 import { useState } from 'react'
 
 import { LOCK_ZONE } from '@/lib/core-app/lineupLock'
+import '@/components/core-app/af-refresh-lineups.css'
 
 /**
  * "Lineups as of 11:52a ET · Refresh my lineups" — on the game-day list's header.
