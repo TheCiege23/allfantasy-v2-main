@@ -905,8 +905,12 @@ html[data-mode='af'] .af-core {
  * `.af-search-input` has TWO renderers — AfCoreShell and PlayerSearchBox — so a
  * rule qualified on `.af-core` would silently miss any future mount outside the
  * shell. Equal specificity in source order covers both without that assumption.
+ *
+ * ⚠ AND A PHONE HELD SIDEWAYS IS WIDER THAN 720px. An iPhone in landscape is 780–932px, so this
+ * floor never reached it and tapping search zoomed the page there (2026-10-03, measured 13px at
+ * 844×390). The second query is the same "short touch screen" test the shell's bar band uses.
  */
-@media (max-width: 720px) {
+@media (max-width: 720px), (min-width: 721px) and (max-height: 500px) and (hover: none) and (pointer: coarse) {
   .af-search-input {
     font-size: 16px;
   }
@@ -970,8 +974,10 @@ html[data-mode='af'] .af-core {
  *
  * Checkbox, radio, range and color are excluded because they have no text to zoom
  * toward and a 16px floor only changes their box metrics.
+ *
+ * The second query is a phone held sideways — see the `.af-search-input` floor above.
  */
-@media (max-width: 720px) {
+@media (max-width: 720px), (min-width: 721px) and (max-height: 500px) and (hover: none) and (pointer: coarse) {
   .af-core
     :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not(
       [type='range']

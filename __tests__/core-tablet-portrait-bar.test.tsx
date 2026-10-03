@@ -18,7 +18,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
  */
 
 const CSS = readFileSync(resolve(__dirname, '../components/core-app/af-core-shell.css'), 'utf8')
-const BAND = '(min-width: 721px) and (max-width: 900px) and (orientation: portrait)'
+const TABLET_PORTRAIT = '(min-width: 721px) and (max-width: 900px) and (orientation: portrait)'
+/* A phone held sideways: wider than 720, shorter than any tablet, and touch — see the band's header. */
+const PHONE_LANDSCAPE = '(min-width: 721px) and (max-height: 500px) and (hover: none) and (pointer: coarse)'
+const BAND = `${TABLET_PORTRAIT}, ${PHONE_LANDSCAPE}`
 const S = ".af-core.af-shell:not([data-league-first='true'])"
 
 function bandRules(): Rule[] {
@@ -60,9 +63,29 @@ describe('the portrait-tablet band', () => {
     expect(decls(`:root:has(${S})`)['--af-fab-bottom']).toBe('var(--af-fab-inset-phone)')
   })
 
+  it('keeps the bar and the launcher off a landscape notch — side insets, zero in portrait', () => {
+    const pad = decls(`${S} .af-tabbar`).padding
+    expect(pad).toContain('env(safe-area-inset-left, 0px)')
+    expect(pad).toContain('env(safe-area-inset-right, 0px)')
+    expect(decls(`:root:has(${S})`)['--af-fab-inset']).toBe('calc(18px + env(safe-area-inset-right, 0px))')
+  })
+
   it('carries the More sheet with it — a bar whose More opens nothing would strand every other screen', () => {
     expect(decls(`${S} .af-mobile-more`)).toMatchObject({ position: 'fixed', display: 'flex' })
     expect(decls(`${S} .af-mobile-more-scrim`).position).toBe('fixed')
+  })
+
+  it('gives a phone held sideways 16px inputs too — under 16px, iOS zooms the page on focus', () => {
+    const core = readFileSync(resolve(__dirname, '../components/core-app/af-core.css'), 'utf8')
+    const floors: string[] = []
+    postcss.parse(core).walkAtRules('media', (a: AtRule) => {
+      a.walkDecls('font-size', (d) => {
+        if (d.value === '16px') floors.push(`${a.params} :: ${(d.parent as Rule).selector.replace(/\s+/g, ' ')}`)
+      })
+    })
+    const landscape = floors.filter((f) => f.startsWith(`(max-width: 720px), ${PHONE_LANDSCAPE} ::`))
+    expect(landscape.some((f) => f.endsWith(':: .af-search-input'))).toBe(true)
+    expect(landscape.some((f) => f.includes(':is(input, textarea, select)'))).toBe(true)
   })
 
   it('scopes every rule to the standard shell — league-first keeps its own layout', () => {
