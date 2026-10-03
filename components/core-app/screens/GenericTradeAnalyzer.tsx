@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { TradeComparisonSnapshots } from './TradeComparisonSnapshots'
+import styles from './GenericTradeAnalyzer.module.css'
 
 type Result = {
   grade?: TradeGradeView
@@ -79,6 +80,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
   const [extracting, setExtracting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [imageName, setImageName] = useState<string | null>(null)
+  const [reviewNotes, setReviewNotes] = useState<string[]>([])
   const [screenshotConfirmed, setScreenshotConfirmed] = useState(false)
   const [verifiedA, setVerifiedA] = useState<Record<string, string>>({})
   const [verifiedB, setVerifiedB] = useState<Record<string, string>>({})
@@ -119,19 +121,21 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
     setError(null)
     setResult(null)
     setImageName(null)
+    setReviewNotes([])
     setScreenshotConfirmed(false)
     setExtracting(true)
     const form = new FormData()
     form.append('image', file)
     try {
       const response = await fetch('/api/trade-value/extract-screenshot', { method: 'POST', body: form })
-      const data = await response.json() as { teamA?: string[]; teamB?: string[]; error?: string }
+      const data = await response.json() as { teamA?: string[]; teamB?: string[]; reviewNotes?: string[]; error?: string }
       if (!response.ok) throw new Error(data.error || 'Could not read this screenshot.')
       setTeamA((data.teamA ?? []).join('\n'))
       setTeamB((data.teamB ?? []).join('\n'))
       setVerifiedA({})
       setVerifiedB({})
       setImageName(file.name)
+      setReviewNotes(Array.isArray(data.reviewNotes) ? data.reviewNotes : [])
       if (!data.teamA?.length || !data.teamB?.length) {
         setError('The screenshot did not clearly show both sides. Correct the names before analyzing.')
       }
@@ -140,6 +144,16 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
     } finally {
       setExtracting(false)
     }
+  }
+
+  function swapSides() {
+    setTeamA(teamB)
+    setTeamB(teamA)
+    setVerifiedA(verifiedB)
+    setVerifiedB(verifiedA)
+    setScreenshotConfirmed(false)
+    setResult(null)
+    setError(null)
   }
 
   async function analyze() {
@@ -198,7 +212,15 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
           <input type="file" accept="image/png,image/jpeg,image/webp" onChange={importImage} disabled={extracting || busy} />
         </label>
       </div>
-      {imageName ? <p className="af-tc-generic-hint">From {imageName}. Check every extracted name and side before analyzing.</p> : null}
+      {imageName ? (
+        <div className={styles.review} role="status">
+          <strong>Review screenshot import · {imageName}</strong>
+          <p>Extraction is a draft. Edit or remove each line, add missing assets, and check which team sends them.</p>
+          {reviewNotes.length ? <ul aria-label="Screenshot uncertainties">{reviewNotes.map((note, index) => <li key={`${index}-${note}`}>{note}</li>)}</ul>
+            : <p>No specific uncertainty was reported. Still compare every line with the image.</p>}
+          <button type="button" className="af-btn af-btn-ghost" onClick={swapSides}>Swap Team A and Team B</button>
+        </div>
+      ) : null}
       <label className="af-tc-generic-sport">Sport
         <select value={sport} onChange={(event) => { setSport(event.target.value); setResult(null); setVerifiedA({}); setVerifiedB({}) }}>
           {SPORTS.map((value) => <option key={value} value={value}>{value}</option>)}
@@ -257,9 +279,21 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
                 <div><span>Team B</span><strong>{result.grade.partnerLetter}</strong><small>Receives Team A assets</small></div>
               </div>
               <h3>{result.grade.label}</h3>
-              <p>{result.grade.recommendation}</p>
-              <p className="af-tc-generic-hint">Market value: Team A sends {result.grade.giveMarket.toLocaleString()} · Team B sends {result.grade.getMarket.toLocaleString()}. {result.grade.basis}</p>
-              {result.lastUpdated ? <p className="af-tc-generic-hint">Evaluated {new Date(result.lastUpdated).toLocaleString()}.</p> : null}
+              <p>Team A receives {result.grade.getMarket.toLocaleString()} in general market value and sends {result.grade.giveMarket.toLocaleString()}; Team B sees the reverse. The value gap is {Math.abs(result.grade.percentDiff ?? 0)}% of the larger side.</p>
+              <p className="af-tc-generic-hint">This grade compares market value only. Position matters only through each asset’s quoted value; there is no team-specific position adjustment. League scoring, roster needs, injury risk, acceptance likelihood, and future results are not priced separately.</p>
+              <p className="af-tc-generic-hint">Value basis: {result.grade.basis}. Valuation checked {result.lastUpdated && Number.isFinite(Date.parse(result.lastUpdated)) ? new Date(result.lastUpdated).toLocaleString() : 'at analysis time; source date unavailable'}.</p>
+              {result.grade.lines.length ? (
+                <details className={styles.breakdown}>
+                  <summary>Why this grade? View asset values and sources</summary>
+                  <ul>{result.grade.lines.map((line, index) => (
+                    <li key={`${line.side}-${line.name}-${index}`}>
+                      <strong>{line.side === 'give' ? 'Team A sends' : 'Team B sends'} · {line.name}</strong>
+                      <span>{line.marketValue == null ? 'Value unavailable' : `${line.marketValue.toLocaleString()} market value`}</span>
+                      <small>{line.valueSource ?? line.source ?? 'Source unavailable'}{line.valueAsOf && Number.isFinite(Date.parse(line.valueAsOf)) ? ` · as of ${new Date(line.valueAsOf).toLocaleDateString()}` : ' · source date unavailable'}</small>
+                    </li>
+                  ))}</ul>
+                </details>
+              ) : null}
               {result.grade.lines.some((line) => line.marketValue == null || line.leagueValue == null) ? (
                 <p className="af-tc-generic-hint">Some assets could not be priced. Review the names and the data gaps before relying on this grade.</p>
               ) : null}

@@ -783,6 +783,9 @@ export function TradeInbox(props: {
               <span className="af-tc-row-sub">
                 {t.partnerName ?? 'A manager'} — {t.received.length} for {t.sent.length}
               </span>
+              <a className="af-tc-offer-link" href={`/league/${encodeURIComponent(leagueId)}?view=trades`}>
+                Accept or decline in league
+              </a>
               <button
                 type="button"
                 className="af-btn af-btn--ghost"
