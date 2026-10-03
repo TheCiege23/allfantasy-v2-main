@@ -97,6 +97,11 @@ export type GameDayTriage = {
    * Optional so older callers and fixtures need not carry it; absent reads as none found.
    */
   emptySlots?: Array<TriageLeague & { count: number }>
+  /**
+   * When each league's lineup READ was last synced, one entry per league read. Lets a screen name the
+   * leagues behind an old `rostersAsOf` instead of letting one stale league date the whole list.
+   */
+  rosterAges?: Array<{ leagueId: string; leagueName: string; asOf: string }>
 }
 
 const SEVERITY: Record<MoveTone, number> = { bad: 0, warn: 1, good: 2 }
