@@ -211,6 +211,10 @@ const GEO_EXEMPT_PREFIXES = [
   "/api/cron",
   "/api/webhooks",
   "/api/stripe/webhook",
+  // App Store Server Notifications V2 — renewals, refunds, expiries. Every payload is verified
+  // against Apple's signature chain in the route, so nothing here opens it to anyone else. Not
+  // under /api/webhooks because that URL is already configured in App Store Connect.
+  "/api/monetization/apple/notifications",
   "/api/community/discord/webhook",
   "/_next",
   "/favicon.ico",
