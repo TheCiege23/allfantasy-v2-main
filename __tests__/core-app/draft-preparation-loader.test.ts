@@ -225,6 +225,43 @@ describe("draft preparation source binding", () => {
     expect(result.outlook.find((t) => t.id === "b")?.roster).toBeCloseTo(100);
     expect(result.players).toEqual([]);
   });
+  it("counts a materialized keeper only once when checking uncovered roster slots", async () => {
+    const s = {
+      ...session,
+      keeperSelections: [
+        { rosterId: "a", playerName: "Player", position: "WR", roundCost: 1 },
+      ],
+    };
+    db.history.mockResolvedValue({
+      snapshotData: {
+        ...snapshot(s).snapshotData,
+        entries: [
+          entry,
+          {
+            ...entry,
+            playerName: "Other",
+            playerKey: preparationPlayerKey("Other", "WR"),
+            adp: 3,
+          },
+        ],
+      },
+    });
+    db.picks.mockResolvedValue([
+      {
+        overall: 1,
+        playerName: "Player",
+        position: "WR",
+        rosterId: "a",
+        displayName: "A",
+        pickMetadata: null,
+      },
+    ]);
+    const result = await getDraftPreparationData(league, s, "viewer", "a");
+    expect(result.players[0]).toMatchObject({
+      playerName: "Other",
+      rosterFit: true,
+    });
+  });
   it("never uses pick-order ADP for auction prices", async () => {
     const result = await getDraftPreparationData(
       league,

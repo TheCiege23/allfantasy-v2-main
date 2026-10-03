@@ -386,12 +386,15 @@ export async function getDraftPreparationData(
             ),
           ]),
           [
-            ...locks
-              .filter((k) => k.rosterId === myRosterId)
-              .map((k) => k.position),
-            ...validPicks
-              .filter((p) => p.rosterId === myRosterId)
-              .map((p) => p.position),
+            ...new Map(
+              [
+                ...locks.filter((k) => k.rosterId === myRosterId),
+                ...validPicks.filter((p) => p.rosterId === myRosterId),
+              ].map((p) => [
+                preparationPlayerKey(p.playerName, p.position),
+                p.position,
+              ]),
+            ).values(),
           ],
         )
       : [],
