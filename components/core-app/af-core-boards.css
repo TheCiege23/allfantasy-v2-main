@@ -1728,3 +1728,57 @@
   .af-core .af-wvb-multi li { grid-template-columns: minmax(0, 1fr); }
   .af-core .af-wvb-multi-n { white-space: normal; }
 }
+
+/*
+ * ── My Team board: players hurting more than one lineup (2026-10-03) ────────
+ * Appended at depth 0. Sits between the section head and the ranked rows.
+ */
+.af-core .af-bd-xl {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--bad);
+  border-radius: 12px;
+  background: var(--bad-soft);
+}
+.af-core .af-bd-xl-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+.af-core .af-bd-xl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-core .af-bd-xl-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: 13px;
+}
+.af-core .af-bd-xl-name {
+  font-weight: 800;
+  color: var(--text);
+}
+.af-core .af-bd-xl-count {
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-core .af-bd-xl-leagues a {
+  color: var(--accent);
+}
+@media (pointer: coarse) {
+  .af-core .af-bd-xl-leagues a {
+    display: inline-block;
+    padding: 6px 0;
+  }
+}

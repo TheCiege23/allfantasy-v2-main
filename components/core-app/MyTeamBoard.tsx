@@ -6,7 +6,7 @@ import { formatLockLabel } from '@/lib/core-app/lockLabel'
 import { kickoffClock } from '@/lib/core-app/lineupLock'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import { lineupLink } from '@/lib/core-app/platformLinks'
-import type { MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
+import type { CrossLeagueFlag, MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
 import { FOREIGN_IDS_UNREADABLE_CLAUSE } from '@/lib/core-app/foreignIdSpaceCopy'
 import { MyTeamLockClock } from '@/components/core-app/MyTeamLockClock'
 import { LineupIntelligenceActions } from '@/components/core-app/LineupIntelligenceActions'
@@ -312,6 +312,43 @@ function Row({
   )
 }
 
+/**
+ * One player hurting several of your lineups at once — the fact no single row can show.
+ *
+ * The rows already carry "1 ruled out" each; what they cannot say is that it is the SAME player in
+ * three leagues, which is one piece of news with three places to act. Each league links straight
+ * to his row on that league's page. Built from the same status the rows counted (myTeamPulse.ts),
+ * so a player here is always also counted on his rows.
+ */
+function CrossLeagueStrip({ flags }: { flags: CrossLeagueFlag[] }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  return (
+    <div className="af-bd-xl" role="region" aria-label={es ? 'Jugadores en varias alineaciones' : 'Players in more than one lineup'}>
+      <span className="af-bd-xl-label">{es ? 'Afecta a más de una alineación' : 'Hurting more than one lineup'}</span>
+      <ul className="af-bd-xl-list">
+        {flags.map((f) => (
+          <li key={f.id} data-status={f.status}>
+            <RowTag tag={f.status === 'out' ? 'OUT' : 'Q'} sev={f.status === 'out' ? 'bad' : 'warn'} />
+            <span className="af-bd-xl-name">{f.name}</span>
+            <span className="af-bd-xl-count">
+              {es ? `en ${f.leagues.length} alineaciones:` : `in ${f.leagues.length} lineups:`}
+            </span>
+            <span className="af-bd-xl-leagues">
+              {f.leagues.map((l, i) => (
+                <span key={l.leagueId}>
+                  {i > 0 ? ', ' : ''}
+                  <Link href={l.href} prefetch={false}>{l.leagueName}</Link>
+                </span>
+              ))}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -427,6 +464,7 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
             ? `${pulse.checked.toLocaleString()} de ${activeTotal.toLocaleString()} equipos ${pulse.paused ? 'activos ' : ''}revisados`
             : `${pulse.checked.toLocaleString()} of ${activeTotal.toLocaleString()} ${pulse.paused ? 'active ' : ''}teams read`}
         />
+        {pulse.crossLeague && pulse.crossLeague.length > 0 ? <CrossLeagueStrip flags={pulse.crossLeague} /> : null}
         {rows.length > 0 ? (
           <>
             {/*
@@ -567,14 +605,20 @@ export function MyTeamBoard({ pulse, now, allHref }: MyTeamBoardProps) {
             ? hiddenNeeds > 0
               ? `${hidden === 1 ? 'incluye' : 'incluyen'} ${hiddenNeeds} equipos más que necesitan revisar su alineación; abre la lista completa.`
               : unreadable > 0
-                ? hidden === 1 ? 'está lista o no se pudo leer; arriba se explica cuál.' : 'están listas o no se pudieron leer; arriba se explica cuáles.'
+                ? `no se muestran: ${Math.max(0, hidden - unreadable)} ${Math.max(0, hidden - unreadable) === 1 ? 'lista' : 'listas'} y ${unreadable} sin poder leer (arriba se explica por qué).`
                 : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
                   ? hidden === 1 ? 'no tiene tareas manuales de alineación pendientes.' : 'no tienen tareas manuales de alineación pendientes.'
                   : hidden === 1 ? 'está lista; no requiere atención.' : 'están listas; no requieren atención.'
             : hiddenNeeds > 0
               ? `include ${hiddenNeeds} more teams needing lineup review — open the full league list.`
               : unreadable > 0
-                ? 'are either set or could not be read — the line above says which.'
+                /*
+                 * ⚠ SAY THE SPLIT, NOT "EITHER/OR". "45 more leagues are either set or could not be read
+                 * — the line above says which" made the reader do the subtraction (live, 2026-10-02: it
+                 * meant 44 set and 1 unreadable). Every unreadable league is hidden — it never becomes a
+                 * row — so the rest of the hidden ones are the set ones.
+                 */
+                ? `are not shown: ${Math.max(0, hidden - unreadable)} set, ${unreadable} could not be read (the line above says why).`
                 : (pulse.automatic ?? 0) > 0 || (pulse.notChecked.inactive ?? 0) > 0
                   ? 'have no remaining manual lineup task.'
                   : 'are set — nothing needs you there.'
