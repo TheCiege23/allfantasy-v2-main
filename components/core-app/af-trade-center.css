@@ -1417,6 +1417,21 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-tiles::-webkit-scrollbar {
   display: none;
 }
+.af-tc-strip-more {
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-tc-strip-more:hover,
+.af-tc-strip-more:focus-visible { border-color: var(--accent-line); }
 .af-tc-tile {
   flex: 0 0 224px;
   display: flex;
@@ -1474,6 +1489,25 @@ html[data-mode='light'] .af-core .af-tc {
 }
 .af-tc-tile-status[data-tone='clear'] {
   color: var(--muted);
+}
+.af-tc-tile-deadline,
+.af-tc-tile-last {
+  color: var(--text2);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.af-tc-tile-last {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-tc-tile-action {
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 /* ── Context bar, team cards ────────────────────────────────────────── */

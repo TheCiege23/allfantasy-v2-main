@@ -2462,6 +2462,18 @@ model TradeAnalysisSnapshot {
   @@map("trade_analysis_snapshots")
 }
 
+model GenericTradeComparison {
+  id        String   @id @default(cuid())
+  userId    String
+  sourceId  String
+  snapshot  Json
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@unique([userId, sourceId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("generic_trade_comparisons")
+}
+
 model ShareReward {
   id              String    @id @default(uuid())
   sleeperUsername String    @db.VarChar(64)

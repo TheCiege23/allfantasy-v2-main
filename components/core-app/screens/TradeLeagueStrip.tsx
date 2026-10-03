@@ -19,10 +19,9 @@ import { fetchTradesPanel } from '@/components/core-app/screens/tradesPanelFetch
  * Sleeper league says "Nothing waiting"; an ESPN league says it was not read,
  * and why.
  *
- * ⚠ ONE PANEL READ PER LEAGUE, IN PARALLEL, CAPPED. Each read may scan the
- * provider's pending transactions, which is what the league Trades tab already
- * costs per open. Ten leagues at once is ten of those; the cap keeps a manager
- * with thirty leagues from turning a page load into a provider sweep.
+ * ⚠ ONE PANEL READ PER VISIBLE LEAGUE, BATCHED. Each read may scan the
+ * provider's pending transactions. The first eight load on entry; managers can
+ * reveal further batches without turning a many-league page load into a sweep.
  *
  * ⚠ NO NEW API ROUTE. Reads the existing `/api/league/trades-panel`.
  */
@@ -36,42 +35,82 @@ export type StripLeague = {
   /** "NFL · 12 teams" — whatever the caller can say cheaply. */
   meta?: string | null
   syncAge?: 'recent' | 'over-day' | 'unknown'
+  deadlineWeek?: number | null
+  deadlineKnown?: boolean
+  currentWeek?: number | null
 }
 
+type OfferLite = { direction: 'incoming' | 'outgoing'; partnerName?: string; proposedAt?: string | null; timestamp?: string | null; status?: string }
 type PanelLite = {
   pending?: { scanned: boolean; reason: string | null; platform: string }
-  pendingOffers?: Array<{ direction: 'incoming' | 'outgoing'; partnerName: string }>
-  activeTrades?: Array<{ direction: string; status?: string; partnerName?: string }>
+  pendingOffers?: OfferLite[]
+  activeTrades?: OfferLite[]
 }
 
+type LastOffer = { direction: 'incoming' | 'outgoing'; partner: string | null; at: string | null }
 type TileState =
   | { kind: 'checking' }
   | { kind: 'failed' }
   | { kind: 'unread'; reason: string | null }
-  | { kind: 'waiting'; count: number; from: string | null }
-  | { kind: 'clear' }
+  | { kind: 'waiting'; count: number; from: string | null; last: LastOffer | null; partial: boolean }
+  | { kind: 'clear'; last: LastOffer | null }
 
 const MAX_LEAGUES_READ = 8
 
-function stateOf(panel: PanelLite): TileState {
-  /* The order of these branches is the whole point — see the header. */
-  if (panel.pending && !panel.pending.scanned) {
-    return { kind: 'unread', reason: panel.pending.reason }
-  }
-  const incoming = (panel.pendingOffers ?? []).filter((o) => o.direction === 'incoming')
+export function stateOf(panel: PanelLite): TileState {
+  const partial = Boolean(panel.pending && !panel.pending.scanned)
+  const provider = panel.pendingOffers ?? []
   /*
    * AF-native proposals waiting on the viewer count too — they are real offers,
    * they just live in our tables rather than the provider's.
    */
-  const native = (panel.activeTrades ?? []).filter(
-    (t) => t.direction === 'incoming' && t.status !== 'pending_on_sleeper',
-  )
-  const count = incoming.length + native.length
+  // Provider offers appear in both lists. Count and summarize each only once.
+  const native = (panel.activeTrades ?? []).filter((t) => !t.status?.startsWith('pending_on_'))
+  const incoming = [...provider, ...native].filter((o) => o.direction === 'incoming')
+  const lastRow = [...provider, ...native]
+    .filter((o) => o.direction === 'incoming' || o.direction === 'outgoing')
+    .sort((a, b) => {
+      const at = Date.parse(a.proposedAt ?? a.timestamp ?? '')
+      const bt = Date.parse(b.proposedAt ?? b.timestamp ?? '')
+      return (Number.isFinite(bt) ? bt : 0) - (Number.isFinite(at) ? at : 0)
+    })[0]
+  const last: LastOffer | null = lastRow ? {
+    direction: lastRow.direction,
+    partner: lastRow.partnerName && lastRow.partnerName !== 'Awaiting response' ? lastRow.partnerName : null,
+    at: lastRow.proposedAt ?? lastRow.timestamp ?? null,
+  } : null
+  const count = incoming.length
   if (count > 0) {
-    const from = incoming[0]?.partnerName ?? native[0]?.partnerName ?? null
-    return { kind: 'waiting', count, from }
+    const from = incoming.find((o) => o.partnerName && o.partnerName !== 'Awaiting response')?.partnerName ?? null
+    return { kind: 'waiting', count, from, last, partial }
   }
-  return { kind: 'clear' }
+  if (partial) return { kind: 'unread', reason: panel.pending?.reason ?? null }
+  return { kind: 'clear', last }
+}
+
+function deadlineLine(league: StripLeague): string {
+  if (!league.deadlineKnown) return 'Deadline unavailable'
+  if (league.deadlineWeek == null) return 'No trade deadline'
+  const current = league.currentWeek
+  const when = current === league.deadlineWeek ? ' · this week'
+    : current != null && current > league.deadlineWeek ? ' · passed' : ''
+  return `Deadline · week ${league.deadlineWeek}${when}`
+}
+
+function lastOfferLine(last: LastOffer | null): string {
+  if (!last) return 'No recent offer in this feed'
+  const date = last.at && Number.isFinite(Date.parse(last.at))
+    ? ` · ${new Date(last.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : ''
+  if (last.direction === 'outgoing') return `Last sent offer${last.partner ? ` · to ${last.partner}` : ''}${date}`
+  return `Last received offer${last.partner ? ` · from ${last.partner}` : ''}${date}`
+}
+
+function nextAction(state: TileState, platform: string): string {
+  if (state.kind === 'waiting') return `Review ${state.count === 1 ? 'offer' : 'offers'}`
+  if (state.kind === 'checking') return 'Open league trades'
+  if (state.kind === 'failed') return 'Open league · retry'
+  if (state.kind === 'unread' || platform.toLowerCase() === 'sleeper') return 'Check source offers'
+  return 'Build a trade'
 }
 
 function statusLine(s: TileState, platform: string): { text: string; tone: string } {
@@ -87,7 +126,7 @@ function statusLine(s: TileState, platform: string): { text: string; tone: strin
       }
     case 'waiting':
       return {
-        text: `${s.count} ${s.count === 1 ? 'offer' : 'offers'} waiting${s.from ? ` · from ${s.from}` : ''}`,
+        text: `${s.partial ? 'At least ' : ''}${s.count} ${s.count === 1 ? 'offer' : 'offers'} waiting${s.from ? ` · from ${s.from}` : ''}`,
         tone: 'waiting',
       }
     case 'clear':
@@ -102,7 +141,8 @@ function statusLine(s: TileState, platform: string): { text: string; tone: strin
 }
 
 export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId: string | null }) {
-  const leagues = props.leagues.slice(0, MAX_LEAGUES_READ)
+  const [visibleCount, setVisibleCount] = useState(MAX_LEAGUES_READ)
+  const leagues = props.leagues.slice(0, visibleCount)
   const [states, setStates] = useState<Record<string, TileState>>({})
 
   useEffect(() => {
@@ -110,7 +150,8 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
     /* Cancels whichever deferral won — idle callback or timer — on unmount. */
     let cleanupDeferred: () => void = () => {}
     const ids = leagues.map((l) => l.id)
-    setStates(Object.fromEntries(ids.map((id) => [id, { kind: 'checking' as const }])))
+    const idsToRead = ids.filter((id) => !states[id] || states[id].kind === 'checking')
+    setStates((previous) => Object.fromEntries(ids.map((id) => [id, previous[id] ?? { kind: 'checking' as const }])))
 
     /*
      * 🛑 EACH TILE SETTLES ON ITS OWN. This used to be one `Promise.allSettled(...).then()` that
@@ -160,13 +201,13 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
     const start = () => {
       let cursor = 0
       const worker = async (): Promise<void> => {
-        while (!cancelled && cursor < ids.length) {
-          const id = ids[cursor]
+        while (!cancelled && cursor < idsToRead.length) {
+          const id = idsToRead[cursor]
           cursor += 1
           if (id) await runOne(id)
         }
       }
-      void Promise.all(Array.from({ length: STRIP_CONCURRENCY }, () => worker()))
+      void Promise.all(Array.from({ length: Math.min(STRIP_CONCURRENCY, idsToRead.length) }, () => worker()))
     }
 
     /*
@@ -210,7 +251,7 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
         <span className="af-tc-rule" aria-hidden />
         <span className="af-tc-strip-note">
           Sleeper and Yahoo are read · other platforms are not, and say so
-          {beyond > 0 ? ` · ${beyond} more not read here` : ''}
+          {beyond > 0 ? ` · ${beyond} more available below` : ''}
         </span>
       </div>
       <div className="af-tc-tiles">
@@ -240,10 +281,18 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
               <span className="af-tc-tile-status af-num" data-tone={line.tone}>
                 {line.text}
               </span>
+              <span className="af-tc-tile-deadline">{deadlineLine(l)}</span>
+              {(s.kind === 'waiting' || s.kind === 'clear') ? <span className="af-tc-tile-last">{lastOfferLine(s.last)}</span> : null}
+              <span className="af-tc-tile-action">{nextAction(s, l.platform)} <span aria-hidden>→</span></span>
             </Link>
           )
         })}
       </div>
+      {beyond > 0 ? (
+        <button type="button" className="af-tc-strip-more" onClick={() => setVisibleCount((count) => count + MAX_LEAGUES_READ)}>
+          Show {Math.min(beyond, MAX_LEAGUES_READ)} more {beyond === 1 ? 'league' : 'leagues'}
+        </button>
+      ) : null}
     </section>
   )
 }
