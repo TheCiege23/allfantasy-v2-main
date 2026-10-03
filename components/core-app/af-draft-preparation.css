@@ -34,7 +34,7 @@
 }
 .af-prep input,
 .af-prep select,
-.af-prep button {
+.af-prep button:not(.af-context-help) {
   min-height: 44px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -139,3 +139,5 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+.af-prep-rules summary::before{content:"▸"}.af-prep-rules[open] summary::before{content:"▾"}

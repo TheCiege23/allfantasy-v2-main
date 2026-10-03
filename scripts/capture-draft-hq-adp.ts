@@ -1,5 +1,5 @@
 /** Add immutable native ADP observations. Default is dry-run; --apply is explicit.
- * node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/capture-draft-hq-adp.ts [--apply]
+ * node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/capture-draft-hq-adp.ts [--apply --production]
  */
 import { prisma } from "../lib/prisma";
 import { createRequire } from "node:module";
