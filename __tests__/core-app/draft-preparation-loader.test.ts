@@ -55,7 +55,8 @@ const session: PreparationSession = {
   customRankingsEnabled: true,
 };
 const entry = {
-  playerKey: preparationPlayerKey("Player", "WR"),
+  playerId: "player-1",
+  playerKey: preparationPlayerKey("Player", "WR", "player-1"),
   playerName: "Player",
   position: "WR",
   adp: 2,
@@ -93,6 +94,7 @@ describe("draft preparation source binding", () => {
     db.picks.mockResolvedValue([
       {
         overall: 4,
+        playerId: "player-1",
         playerName: "Player",
         position: "WR",
         rosterId: "a",
@@ -116,6 +118,30 @@ describe("draft preparation source binding", () => {
       sampleSize: 10,
     });
     expect(result.outlook).toEqual([]);
+  });
+  it("does not assign a benchmark to a different player with the same name", async () => {
+    db.picks.mockResolvedValue([
+      {
+        playerId: "player-2",
+        overall: 1,
+        playerName: "Player",
+        position: "WR",
+        rosterId: "a",
+        displayName: "A",
+        pickMetadata: null,
+      },
+    ]);
+    const result = await getDraftPreparationData(
+      league,
+      session,
+      "viewer",
+      "a",
+    );
+    expect(result.comparisons[0]).toMatchObject({
+      adp: null,
+      difference: null,
+      sampleSize: null,
+    });
   });
   it("refuses a future snapshot even if a store returns it", async () => {
     db.history.mockResolvedValue({
@@ -152,6 +178,7 @@ describe("draft preparation source binding", () => {
     db.picks.mockResolvedValue([
       {
         overall: 1,
+        playerId: "player-1",
         playerName: "Player",
         position: "WR",
         rosterId: "a",
@@ -211,7 +238,13 @@ describe("draft preparation source binding", () => {
         },
       ],
       keeperSelections: [
-        { rosterId: "a", playerName: "Player", position: "WR", roundCost: 1 },
+        {
+          rosterId: "a",
+          playerId: "player-1",
+          playerName: "Player",
+          position: "WR",
+          roundCost: 1,
+        },
       ],
     };
     db.history.mockResolvedValue(snapshot(s));
@@ -229,7 +262,7 @@ describe("draft preparation source binding", () => {
     const s = {
       ...session,
       keeperSelections: [
-        { rosterId: "a", playerName: "Player", position: "WR", roundCost: 1 },
+        { rosterId: "a", playerId: "player-1", playerName: "Player", position: "WR", roundCost: 1 },
       ],
     };
     db.history.mockResolvedValue({
@@ -239,8 +272,9 @@ describe("draft preparation source binding", () => {
           entry,
           {
             ...entry,
+            playerId: "player-2",
             playerName: "Other",
-            playerKey: preparationPlayerKey("Other", "WR"),
+            playerKey: preparationPlayerKey("Other", "WR", "player-2"),
             adp: 3,
           },
         ],
@@ -249,6 +283,7 @@ describe("draft preparation source binding", () => {
     db.picks.mockResolvedValue([
       {
         overall: 1,
+        playerId: "player-1",
         playerName: "Player",
         position: "WR",
         rosterId: "a",
@@ -277,6 +312,7 @@ describe("draft preparation source binding", () => {
   });
   it("appends immutable observations without updating historical records", async () => {
     const row = {
+      playerId: "player-1",
       playerName: "Player",
       position: "WR",
       overall: 1,

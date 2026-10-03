@@ -9,6 +9,7 @@ import {
   preparationPlayers,
   preDraftOutlook,
   pickAdpDifference,
+  matchingPreparationEntry,
   type PreparationContext,
   type PreparationPlayer,
 } from "./draftPreparationModel";
@@ -182,6 +183,7 @@ export async function getDraftPreparationData(
       orderBy: { overall: "asc" },
       take: 10000,
       select: {
+        playerId: true,
         overall: true,
         playerName: true,
         position: true,
@@ -231,7 +233,9 @@ export async function getDraftPreparationData(
     (p) => !isDraftPickRowEmpty(p) && !isDraftPickSkipped(p),
   );
   const selected = new Set(
-    validPicks.map((p) => preparationPlayerKey(p.playerName, p.position)),
+    validPicks.map((p) =>
+      preparationPlayerKey(p.playerName, p.position, p.playerId),
+    ),
   );
   const queued =
     "order" in queueResult && Array.isArray(queueResult.order)
@@ -277,6 +281,8 @@ export async function getDraftPreparationData(
         playerName: string;
         position: string;
         roundCost: number;
+        playerId?: string | null;
+        team?: string | null;
       }>)
     : [];
   const lookup = new Map(snapshot?.entries.map((e) => [e.playerKey, e]) ?? []);
@@ -298,8 +304,8 @@ export async function getDraftPreparationData(
   const locks = buildKeeperLocks(
     keepers.map((k) => ({
       ...k,
-      team: null,
-      playerId: null,
+      team: k.team ?? null,
+      playerId: k.playerId ?? null,
     })) as KeeperSelection[],
     order,
     trades,
@@ -312,7 +318,8 @@ export async function getDraftPreparationData(
     const inv = inventories.find((i) => i.team.rosterId === k.rosterId);
     const cost = k.overall;
     const adp =
-      lookup.get(preparationPlayerKey(k.playerName, k.position))?.adp ?? null;
+      matchingPreparationEntry(lookup, k.playerName, k.position, k.playerId)
+        ?.adp ?? null;
     return {
       playerName: k.playerName,
       teamName: inv?.team.displayName ?? k.rosterId,
@@ -341,7 +348,12 @@ export async function getDraftPreparationData(
           ? "A complete draft order is required to compare teams."
           : keepers.some(
                 (k) =>
-                  !lookup.has(preparationPlayerKey(k.playerName, k.position)),
+                  !matchingPreparationEntry(
+                    lookup,
+                    k.playerName,
+                    k.position,
+                    k.playerId,
+                  ),
               )
             ? "At least one keeper has no compatible ADP; team outlook is unavailable."
             : null;
@@ -354,16 +366,23 @@ export async function getDraftPreparationData(
       name: team.displayName || team.rosterId,
       capital: free.reduce((sum, p) => sum + 1 / Math.sqrt(p.overall), 0),
       flexibility: free.length,
-      keeperValue: mine.every((k) =>
-        lookup.has(preparationPlayerKey(k.playerName, k.position)),
+      keeperValue: mine.every(
+        (k) =>
+          !!matchingPreparationEntry(
+            lookup,
+            k.playerName,
+            k.position,
+            k.playerId,
+          ),
       )
         ? mine.reduce(
             (sum, k) =>
               sum +
               1 /
                 Math.sqrt(
-                  lookup.get(preparationPlayerKey(k.playerName, k.position))!
-                    .adp,
+                  lookup.get(
+                    preparationPlayerKey(k.playerName, k.position, k.playerId),
+                  )!.adp,
                 ),
             0,
           )
@@ -382,7 +401,7 @@ export async function getDraftPreparationData(
           new Set([
             ...selected,
             ...keepers.map((k) =>
-              preparationPlayerKey(k.playerName, k.position),
+              preparationPlayerKey(k.playerName, k.position, k.playerId),
             ),
           ]),
           [
@@ -391,7 +410,7 @@ export async function getDraftPreparationData(
                 ...locks.filter((k) => k.rosterId === myRosterId),
                 ...validPicks.filter((p) => p.rosterId === myRosterId),
               ].map((p) => [
-                preparationPlayerKey(p.playerName, p.position),
+                preparationPlayerKey(p.playerName, p.position, p.playerId),
                 p.position,
               ]),
             ).values(),
@@ -399,7 +418,12 @@ export async function getDraftPreparationData(
         )
       : [],
     comparisons: validPicks.map((p) => {
-      const entry = lookup.get(preparationPlayerKey(p.playerName, p.position));
+      const entry = matchingPreparationEntry(
+        lookup,
+        p.playerName,
+        p.position,
+        p.playerId,
+      );
       return {
         overall: p.overall,
         playerName: p.playerName,

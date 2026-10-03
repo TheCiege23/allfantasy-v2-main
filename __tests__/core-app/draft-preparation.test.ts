@@ -32,7 +32,8 @@ const session = {
 };
 const context = preparationContext(league, session)!;
 const entry = {
-  playerKey: preparationPlayerKey("Player", "WR"),
+  playerId: "player-1",
+  playerKey: preparationPlayerKey("Player", "WR", "player-1"),
   playerName: "Player",
   position: "WR",
   adp: 10,
@@ -196,6 +197,7 @@ describe("explainable pre-draft outlook", () => {
 });
 describe("immutable native snapshot cohorts", () => {
   const row = {
+    playerId: "player-1",
     playerName: "Player",
     position: "WR",
     overall: 10,
@@ -223,6 +225,40 @@ describe("immutable native snapshot cohorts", () => {
         },
       ],
     });
+  });
+  it("separates same-name players by stored identity and combines aliases of one player", () => {
+    const different = preparationSnapshotGroups(
+      [
+        row,
+        {
+          ...row,
+          playerId: "player-2",
+          overall: 20,
+          session: { ...session, id: "second" },
+        },
+      ],
+      cutoff,
+    );
+    expect(different[0].entries.map((e) => e.adp)).toEqual([10, 20]);
+    const aliases = preparationSnapshotGroups(
+      [
+        row,
+        {
+          ...row,
+          playerName: "Player alias",
+          overall: 20,
+          session: { ...session, id: "second" },
+        },
+      ],
+      cutoff,
+    );
+    expect(aliases[0].entries).toHaveLength(1);
+    expect(aliases[0].entries[0].adp).toBe(15);
+  });
+  it("withholds unidentifiable selections", () => {
+    expect(
+      preparationSnapshotGroups([{ ...row, playerId: null }], cutoff),
+    ).toEqual([]);
   });
   it("does not blend player pools or rookie/startup purposes", () => {
     expect(

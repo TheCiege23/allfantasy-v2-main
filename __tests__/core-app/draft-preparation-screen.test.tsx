@@ -26,6 +26,7 @@ const data: DraftPreparationData = {
   observedAt: "2026-08-01T00:00:00Z",
   historical: false,
   players: ["A", "B"].map((name, i) => ({
+    playerId: "player-1",
     playerKey: name,
     playerName: name,
     position: "WR",
