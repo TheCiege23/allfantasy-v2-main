@@ -61,6 +61,6 @@ export async function POST(req:Request) {
       grade=receipt.grade
     }
     const result=await loadVisualImpact({leagueId,userId,sent,received,completed:true})
-    return NextResponse.json({ok:true,grade,...result,moved:result.moved.map(id=>names.get(id)??id),returned:result.returned.map(id=>names.get(id)??id),nonPlayers,note:'Today’s prices and current roster fit. This hypothetical undo does not measure actual points earned since the trade or predict a championship. Original evaluations remain unchanged.'},{headers:{'Cache-Control':'private, no-store'}})
+    return NextResponse.json({ok:true,grade,...result,moved:result.moved.map(id=>names.get(id)??id),returned:result.returned.map(id=>names.get(id)??id),nonPlayers,note:'Latest recorded prices and current roster fit. This hypothetical undo does not measure actual points earned since the trade or predict a championship. Original evaluations remain unchanged.'},{headers:{'Cache-Control':'private, no-store'}})
   } catch {return NextResponse.json({error:'Current impact is temporarily unavailable. Your original evaluation is unchanged.'},{status:503})}
 }
