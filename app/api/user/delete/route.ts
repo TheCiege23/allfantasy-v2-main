@@ -85,6 +85,7 @@ export async function POST(req: Request) {
 
   try {
     await prisma.$transaction(async (tx) => {
+      await tx.genericTradeComparison.deleteMany({ where: { userId } })
       await tx.authAccount.deleteMany({ where: { userId } })
       await tx.emailVerifyToken.deleteMany({ where: { userId } }).catch(() => undefined)
       await tx.passwordResetToken.deleteMany({ where: { userId } }).catch(() => undefined)

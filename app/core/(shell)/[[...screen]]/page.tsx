@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { toPlayedLeagues } from '@/lib/core-app/playedLeagues'
+import { tradeDeadlineWeek } from '@/lib/core-app/seasonTimeline'
 import { findPlayedAlias } from '@/lib/core-app/leagueRowAlias'
 import { selectResyncCandidates } from '@/lib/core-app/resyncableLeagues'
 import { getPausedSyncKeys } from '@/lib/core-app/syncPreferences'
@@ -919,6 +920,10 @@ export default async function AfCorePage({
     platform: String(l.platform ?? 'manual').toLowerCase(),
     mark: PLATFORM_MARK[String(l.platform ?? '').toLowerCase()] ?? l.name.charAt(0).toUpperCase(),
     meta: [l.sport, l.teamCount ? `${l.teamCount} teams` : null].filter(Boolean).join(' · ') || null,
+    deadlineWeek: tradeDeadlineWeek(l.settings),
+    deadlineKnown: Boolean(l.settings && ['trade_deadline_week', 'trade_deadline', 'tradeDeadline', 'tradeDeadlineWeek']
+      .some((key) => l.settings?.[key] != null)),
+    currentWeek: typeof l.currentWeek === 'number' && l.currentWeek > 0 ? l.currentWeek : null,
     syncAge: (() => {
       if (!l.lastSyncedAt) return 'unknown' as const
       const timestamp = new Date(l.lastSyncedAt).getTime()

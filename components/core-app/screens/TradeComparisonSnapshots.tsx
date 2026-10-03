@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { genericComparisonSchema, type GenericComparison } from '@/lib/trade-value/genericComparison'
 
 export type TradeSnapshot = {
   id: string
@@ -82,39 +83,108 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
   const [saved, setSaved] = useState<TradeSnapshot[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  useEffect(() => { setSaved(readSaved()) }, [])
+  const [historyAvailable, setHistoryAvailable] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [reload, setReload] = useState(0)
+  const account = scope !== 'generic:device'
+  useEffect(() => {
+    let cancelled = false
+    const local = readSaved().filter((item) => item.scope === scope)
+    if (!account) { setSaved(local); setHistoryAvailable(true); return }
+    setHistoryAvailable(false)
+    const load = async () => {
+      let remote: TradeSnapshot[] = []
+      try {
+        const response = await fetch('/api/trade-value/comparisons', { cache: 'no-store' })
+        if (!response.ok) throw new Error('Account history is unavailable. Existing device saves are still shown.')
+        let data = await response.json() as { snapshots: GenericComparison[] }
+        remote = data.snapshots.map((item) => ({ ...item, scope }))
+        const old = local.flatMap((item) => {
+          const parsed = genericComparisonSchema.safeParse(item)
+          return parsed.success ? [parsed.data] : []
+        })
+        if (old.length) {
+          const imported = await fetch('/api/trade-value/comparisons', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snapshots: old }),
+          })
+          if (!imported.ok) throw new Error('Account history loaded, but device saves could not sync. Retry when connected.')
+          data = await imported.json() as { snapshots: GenericComparison[] }
+          const importedIds = new Set(old.map((item) => item.id))
+          const remaining = readSaved().filter((item) => item.scope !== scope || !importedIds.has(item.id))
+          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(remaining))
+        }
+        if (!cancelled) {
+          setSaved(data.snapshots.map((item) => ({ ...item, scope })))
+          setHistoryAvailable(true)
+          setNotice(null)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSaved([...remote, ...local.filter((item) => !remote.some((row) => row.id === item.id))])
+          setHistoryAvailable(false)
+          setNotice(error instanceof Error ? error.message : 'Account history is unavailable.')
+        }
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [scope, account, reload])
   const visible = saved.filter((item) => item.scope === scope)
   const card = visible.find((item) => item.id === selected) ?? snapshot
 
-  function save() {
+  async function save() {
     if (!snapshot) return
+    const item = { ...snapshot, id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}` }
+    const parsed = genericComparisonSchema.safeParse(item)
+    if (!parsed.success) { setNotice('This comparison could not be saved. Reanalyze the trade.'); return }
+    setBusy(true)
     try {
-      const item = { ...snapshot, id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}` }
-      const next = [item, ...readSaved()].slice(0, 30)
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      setSaved(next)
+      if (account) {
+        const response = await fetch('/api/trade-value/comparisons', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ snapshots: [parsed.data] }),
+        })
+        if (!response.ok) throw new Error('Could not save to your account. Try again shortly.')
+        const data = await response.json() as { snapshots: GenericComparison[] }
+        setSaved(data.snapshots.map((row) => ({ ...row, scope })))
+      } else {
+        const next = [item, ...readSaved()].slice(0, 30)
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+        setSaved(next)
+      }
       setSelected(item.id)
-      setNotice('Comparison saved on this device. Reanalyze before acting on older values.')
-    } catch { setNotice('This browser could not save the comparison.') }
+      setNotice(account ? 'Comparison saved to your account. Reanalyze before acting on older values.' : 'Comparison saved on this device. Reanalyze before acting on older values.')
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not save the comparison.') }
+    finally { setBusy(false) }
   }
 
-  function remove(id: string) {
+  async function remove(id: string) {
+    setBusy(true)
     try {
-      const next = readSaved().filter((item) => item.id !== id)
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
-      setSaved(next)
+      if (account) {
+        const response = await fetch(`/api/trade-value/comparisons?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+        if (!response.ok) throw new Error('Could not remove this comparison from your account.')
+        const data = await response.json() as { snapshots: GenericComparison[] }
+        setSaved(data.snapshots.map((row) => ({ ...row, scope })))
+      } else {
+        const next = readSaved().filter((item) => item.id !== id)
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
+        setSaved(next)
+      }
       if (selected === id) setSelected(null)
       setNotice('Saved comparison removed.')
-    } catch { setNotice('This browser could not remove the comparison.') }
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not remove the comparison.') }
+    finally { setBusy(false) }
   }
 
   return (
     <section className="af-tc-snapshots" aria-label="Saved trade comparisons">
       <div className="af-tc-snapshots-head">
-        <div><h3>Trade comparisons</h3><p>Saved on this device. Values are snapshots, not live offers.</p></div>
-        <button type="button" className="af-btn af-btn-ghost" onClick={save} disabled={!snapshot}>Save this comparison</button>
+        <div><h3>Trade comparisons</h3><p>{account ? 'Saved to your account across devices.' : 'Saved on this device.'} Values are snapshots, not live offers.</p></div>
+        <button type="button" className="af-btn af-btn-ghost" onClick={() => void save()} disabled={!snapshot || busy || !historyAvailable}>Save this comparison</button>
       </div>
       {notice ? <p role="status">{notice}</p> : null}
+      {account && !historyAvailable ? <button type="button" className="af-btn af-btn-ghost" onClick={() => setReload((value) => value + 1)}>Retry account sync</button> : null}
       {card ? (
         <div className="af-tc-share-card">
           <div className="af-tc-share-top"><strong>{card.title}</strong><span>{card.sport} · {card.basis}</span></div>
@@ -132,7 +202,7 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
         <details className="af-tc-saved-list"><summary>Saved comparisons ({visible.length})</summary>
           <ul>{visible.map((item) => <li key={item.id}>
             <button type="button" onClick={() => setSelected(item.id)}>{item.title} · {safeDate(item.at)}</button>
-            <button type="button" onClick={() => remove(item.id)} aria-label={`Remove ${item.title} from ${safeDate(item.at)}`}>Remove</button>
+            <button type="button" onClick={() => void remove(item.id)} disabled={busy || (account && !historyAvailable)} aria-label={`Remove ${item.title} from ${safeDate(item.at)}`}>Remove</button>
           </li>)}</ul>
         </details>
       ) : null}

@@ -1475,6 +1475,25 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-tile-status[data-tone='clear'] {
   color: var(--muted);
 }
+.af-tc-tile-deadline,
+.af-tc-tile-last {
+  color: var(--text2);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.af-tc-tile-last {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-tc-tile-action {
+  margin-top: auto;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
 
 /* ── Context bar, team cards ────────────────────────────────────────── */
 

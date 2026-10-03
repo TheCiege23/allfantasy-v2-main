@@ -76,6 +76,7 @@ export const EXPORT_CAPS = {
   tokenReservations: 1000,
   walletLedger: 5000,
   autoCoachSwaps: 2000,
+  tradeComparisons: 30,
 } as const
 
 export const EXPORT_NOT_INCLUDED = [
@@ -158,6 +159,7 @@ export async function buildUserDataExport(db: Db, userId: string, now: Date = ne
     aiConversations,
     aiMessages,
     notifications,
+    tradeComparisons,
     pushDevices,
   ] = await Promise.all([
     section("profile", () =>
@@ -605,6 +607,18 @@ export async function buildUserDataExport(db: Db, userId: string, now: Date = ne
         EXPORT_CAPS.notifications,
       ),
     ),
+    section("tradeComparisons", () =>
+      capped(
+        db.genericTradeComparison.count({ where: { userId } }),
+        db.genericTradeComparison.findMany({
+          where: { userId },
+          orderBy: { createdAt: "desc" },
+          take: EXPORT_CAPS.tradeComparisons,
+          select: { snapshot: true, createdAt: true },
+        }),
+        EXPORT_CAPS.tradeComparisons,
+      ),
+    ),
     section("pushDevices", () =>
       db.webPushSubscription.findMany({ where: { userId }, select: { userAgent: true, createdAt: true } }),
     ),
@@ -636,6 +650,7 @@ export async function buildUserDataExport(db: Db, userId: string, now: Date = ne
     messages: { leagueChat, directMessages },
     aiChat: { conversations: aiConversations, messages: aiMessages },
     notifications,
+    tradeComparisons,
     pushDevices,
   }
 }
