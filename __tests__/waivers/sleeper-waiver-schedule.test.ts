@@ -42,9 +42,20 @@ describe('deriveObservedWaiverSchedule', () => {
     expect([...utcHours].sort()).toEqual([10, 11])
   })
 
-  it('stays weekly on the main day when waivers also clear on other days', () => {
-    const clears = ['2026-10-16T10:00:00Z', '2026-10-30T10:00:00Z'].flatMap(run) // two Friday clears
-    expect(deriveObservedWaiverSchedule([...WEEKLY_ACROSS_DST, ...clears])?.schedule.dayOfWeek).toBe(3)
+  it('reads one fixed time on scattered weekdays as DAILY — the shape real Sleeper history has', () => {
+    /*
+     * Measured on the full-data DB (2026-10-02): each league resolved claims at one Pacific time on
+     * whichever days claims came due — the busiest weekday held 3 of 10 runs. The first version
+     * printed "Thursday 00:05" for exactly this. 00:05 PDT = 07:05 UTC.
+     */
+    const days = ['2026-09-03', '2026-09-06', '2026-09-08', '2026-09-10', '2026-09-13', '2026-09-17', '2026-09-20']
+    const s = deriveObservedWaiverSchedule(days.map((d) => `${d}T07:05:10Z`).flatMap(run))
+    expect(s?.schedule).toEqual({ dayOfWeek: null, time: '00:05', timeZone: 'America/Los_Angeles' })
+  })
+
+  it('a weekday holding most but not 80% of the runs is still daily, not that weekday', () => {
+    const clears = ['2026-10-16T10:00:00Z', '2026-10-30T10:00:00Z'].flatMap(run) // 7 Wednesdays + 2 Fridays: 78%
+    expect(deriveObservedWaiverSchedule([...WEEKLY_ACROSS_DST, ...clears])?.schedule.dayOfWeek).toBeNull()
   })
 
   it('reads a daily league as daily', () => {

@@ -36,6 +36,8 @@ const RUN_WINDOW = 10
 const TIME_TOLERANCE_MIN = 20
 /** Agreeing runs needed before a schedule is shown at all. */
 export const MIN_RUNS = 3
+/** Share of agreeing runs one weekday must hold for the schedule to read as weekly. */
+const WEEKLY_SHARE = 0.8
 
 export type ObservedWaiverSchedule = {
   schedule: WaiverSchedule
@@ -88,15 +90,20 @@ export function deriveObservedWaiverSchedule(resolvedAtIso: readonly string[]): 
   if (best.length < MIN_RUNS) return null
 
   /*
-   * Weekly or daily. A weekly league's main run lands on one weekday every week; a daily league's
-   * runs spread across the week with no day dominating. Anything in between — a weekly league
-   * whose waivers also clear on other days — is read as weekly on its busiest day, provided that
-   * day alone has MIN_RUNS runs.
+   * 🛑 DAILY UNLESS ONE WEEKDAY CLEARLY OWNS THE RUNS — AND THIS WAS FIRST WRITTEN THE OTHER WAY.
+   *
+   * The first version called a league weekly on its busiest weekday whenever that day had MIN_RUNS
+   * runs. Measured on real Sleeper history (full-data DB, 2026-10-02, five leagues, Jan–Sep 2026):
+   * every league resolved claims at ONE fixed Pacific time — 00:05, 09:06, 20:05 — on whichever
+   * days had claims coming due, spread across the week. The busiest weekday held 3 of 10 runs, and
+   * the first version still printed "Thursday 00:05" for a league that processes every night: the
+   * weekday was noise, the time was the fact. So a schedule is daily unless one weekday holds
+   * WEEKLY_SHARE of the agreeing runs.
    */
   const byDow = new Map<number, number>()
   for (const r of best) byDow.set(r.dow, (byDow.get(r.dow) ?? 0) + 1)
   const [topDow, topCount] = [...byDow.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]
-  const daily = byDow.size >= 5 && topCount / best.length < 0.3
+  const daily = topCount / best.length < WEEKLY_SHARE
 
   const pool = daily ? best : best.filter((r) => r.dow === topDow)
   if (pool.length < MIN_RUNS) return null
