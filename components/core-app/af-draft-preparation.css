@@ -34,7 +34,7 @@
 }
 .af-prep input,
 .af-prep select,
-.af-prep button:not(.af-context-help) {
+.af-prep button:not(.af-info-tip) {
   min-height: 44px;
   border: 1px solid var(--border);
   border-radius: 8px;

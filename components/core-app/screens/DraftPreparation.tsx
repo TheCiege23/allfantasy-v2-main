@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ContextHelp } from "../ContextHelp";
+import { InfoTip } from "../InfoTip";
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient";
 import type { DraftPreparationData } from "@/lib/core-app/draftPreparation";
 import "@/components/core-app/af-draft-preparation.css";
@@ -161,7 +161,9 @@ export function DraftPreparation({
     save(keys, spread);
   };
   const help = (title: string, en: string, sp: string) => (
-    <ContextHelp title={t(title)} body={es ? sp : en} />
+    <InfoTip label={`${es ? "Acerca de" : "About"} ${t(title)}`} title={t(title)}>
+      <span className="af-info-para">{es ? sp : en}</span>
+    </InfoTip>
   );
   const reasonTranslations: Record<string, string> = {
     "No compatible observed ADP snapshot is available.":
