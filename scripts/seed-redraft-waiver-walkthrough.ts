@@ -114,6 +114,19 @@ interface SeedLeagueOpts {
 async function seedLeague(opts: SeedLeagueOpts) {
   const { leagueId, name, sport, waiverType, fill } = opts
   await clearLeague(leagueId)
+  if (sport === 'NCAAF') {
+    // The isolated test DB has no provider feed. Give its limited-data waiver
+    // flow one real pool row so the add route can be exercised end to end.
+    await prisma.sportsPlayer.upsert({
+      where: { sport_externalId_source: { sport, externalId: `${leagueId}-available`, source: 'backfill' } },
+      create: {
+        id: `${leagueId}-available`, sport, externalId: `${leagueId}-available`, source: 'backfill',
+        name: 'Staging NCAAF Free Agent', position: 'RB', team: 'ALA',
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      },
+      update: { expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+    })
+  }
 
   const isFaab = waiverType === 'faab'
   await prisma.league.upsert({

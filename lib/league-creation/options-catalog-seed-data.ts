@@ -154,19 +154,20 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     big_brother: ALL_SPORTS,
   },
   allowedDraftTypesByConcept: {
-    redraft: ['snake', 'linear', 'auction', 'slow_draft', 'mock_draft', 'offline', 'auto'],
+    // A slow Redraft is a snake draft with a longer pick clock, not a create API draft type.
+    redraft: ['snake', 'linear', 'auction', 'mock_draft', 'offline', 'auto'],
     dynasty: ['snake', 'linear', 'auction', 'offline', 'auto'],
     keeper: ['snake', 'linear', 'auction', 'slow_draft', 'mock_draft', 'offline', 'auto', 'team'],
     best_ball: ['snake', 'linear', 'auction', 'offline', 'auto'],
     idp: ['snake', 'linear', 'auction', 'offline', 'auto'],
-    salary_cap: ['auction', 'snake', 'offline', 'auto'],
+    salary_cap: ['auction'],
     devy: ['snake', 'linear', 'auction', 'offline', 'auto'],
     c2c: ['snake', 'linear', 'auction', 'offline', 'auto'],
     guillotine: ['snake', 'linear', 'auction', 'offline', 'auto'],
-    zombie: ['snake', 'linear', 'auction', 'offline', 'auto'],
-    survivor: ['snake', 'linear', 'auction', 'real_time', 'by_team', 'offline', 'auto'],
+    zombie: ['snake', 'offline', 'auto'],
+    survivor: ['snake', 'auction', 'offline', 'auto'],
     tournament: ['snake', 'linear', 'auction', 'offline', 'auto'],
-    big_brother: ['snake', 'linear', 'offline', 'auto'],
+    big_brother: ['snake', 'offline', 'auto'],
   },
   allowedScoringPresetsByConceptSport: {
     redraft: {
