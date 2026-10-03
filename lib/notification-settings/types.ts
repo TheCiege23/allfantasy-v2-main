@@ -167,3 +167,28 @@ export const NOTIFICATION_CATEGORY_LABEL_KEYS = Object.fromEntries(
  * subscribe me to every league chat message" — see NotificationsSettingsSection.
  */
 export const OPT_IN_NOTIFICATION_CATEGORY_IDS: readonly NotificationCategoryId[] = ["league_chat"]
+
+/**
+ * Categories whose SMS channel defaults ON once the user has agreed to texts (owner's call,
+ * 2026-10-03: "texts on by default after consent"). Without a live consent record SMS stays off
+ * everywhere — texting without agreement is the line the A2P campaign and the TCPA draw.
+ *
+ * Deliberately the TIME-SENSITIVE alerts only: a text is a phone buzz and a Twilio charge, and the
+ * chatty categories (mentions, DMs, league chat, drama, AI tips, milestones) are what make people
+ * reply STOP. The daily cap (smsDailyCap, 15/user) is a backstop, not the design.
+ *
+ * A row the user saved with an explicit `sms` value keeps it; this only changes the DEFAULT.
+ */
+export const SMS_DEFAULT_ON_AFTER_CONSENT_CATEGORY_IDS: readonly NotificationCategoryId[] = [
+  "lineup_reminders",
+  "lineup_alerts",
+  "injury_alerts",
+  "followed_players",
+  "trade_proposals",
+  "trade_accept_reject",
+  "waiver_processing",
+  "draft_alerts",
+  "commissioner_alerts",
+  "matchup_results",
+  "system_account",
+]

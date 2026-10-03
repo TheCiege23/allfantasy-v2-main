@@ -9,6 +9,7 @@ import { ConnectedLeagueRailGroup } from './ConnectedLeagueNavigation'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { GameDayAlertsBanner } from '@/components/notifications/GameDayAlertsBanner'
+import { SmsOptInCard } from '@/components/notifications/SmsOptInCard'
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import type { ChimmyPlanAllowanceView } from '@/lib/chimmy/planAllowanceView'
@@ -423,6 +424,8 @@ export type AfCoreShellProps = {
    * previously a hardcoded 'G' for every account.
    */
   profile?: { name: string | null; imageUrl: string | null } | null
+  /** No live SMS consent for the current number: show the "Get alerts by text" nudge on home. */
+  smsOptInEligible?: boolean
   /**
    * Games in progress right now, for the Live scores badge. Same rule as every
    * other badge here: only rendered when something is actually live, never a
@@ -2259,6 +2262,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             is exactly one permission flow and it lives in EnableWebPushCard.
           */}
           {active === 'home' ? <GameDayAlertsBanner /> : null}
+          {active === 'home' ? <SmsOptInCard eligible={Boolean(props.smsOptInEligible)} /> : null}
           {/* The iOS push registrar is mounted once, in the root layout, so a tap is handled on every page. */}
           <CoreWelcomeTour leagueCount={leagues.length} />
           {/*
