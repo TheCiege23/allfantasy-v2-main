@@ -2390,3 +2390,28 @@ li[data-kind='questionable'] .af-mt-check-tag {
     min-height: 44px;
   }
 }
+
+/*
+ * ── Phone: the countdown above the Sleeper check strip (2026-10-03, user's call) ──
+ *
+ * The page is a flex column whose first two children are the lineup-verification strip (154px,
+ * "Checked 1 min ago · placement verified · Refresh lineup") and the lock countdown. On a phone
+ * that strip pushed the countdown below the first screen. Measured on the live KBFL page at 375px
+ * (with Chimmy's moves compacted, #1945): countdown block 812px → 646px; its number now sits at
+ * 682–723px against a first screen that ends at 747px above the tab bar.
+ *
+ * `order: -1` puts the countdown first among the page's children, which is exactly a swap with the
+ * strip — the strip is the first child. Visual order only: the DOM (and so Tab and screen-reader
+ * order) still reads strip, then countdown, and both are self-contained, so nothing reads out of
+ * sequence.
+ *
+ * A narrow PAGE, not a narrow viewport: an upright iPad (649px page) and a phone held sideways
+ * (725px) keep the strip first, unchanged.
+ *
+ * Its own top-level block at end of file, per this file's convention.
+ */
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt > .af-mt-lock {
+    order: -1;
+  }
+}

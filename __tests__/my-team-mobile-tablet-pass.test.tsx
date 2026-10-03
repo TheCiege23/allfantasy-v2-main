@@ -124,6 +124,22 @@ describe('the abbreviation key — a touch screen never shows a title', () => {
   })
 })
 
+describe('phone: the countdown above the Sleeper check strip', () => {
+  it('orders the countdown first on a narrow page only', () => {
+    expect(inQuery(MT_CSS, '.af-core .af-mt > .af-mt-lock', NARROW_PAGE).order).toBe('-1')
+    expect(inQuery(MT_CSS, '.af-core .af-mt > .af-mt-lock', '').order).toBeUndefined()
+  })
+
+  it('is a swap because the strip is the first child and the banner the second, both direct', () => {
+    /* `order: -1` lifts the banner above EVERY order-0 child; it reads as a swap only while the
+       strip leads. If anything is ever rendered ahead of the strip, this test says so. */
+    const { container } = render(<MyTeam data={page()} />)
+    const kids = [...container.querySelector('.af-mt')!.children].map((c) => c.classList)
+    expect(kids[0].contains('af-lv')).toBe(true)
+    expect(kids[1].contains('af-mt-lock')).toBe(true)
+  })
+})
+
 const boardRow = (i: number): MyTeamRow => ({
   leagueId: `L${i}`, leagueName: `League ${i}`, platform: 'sleeper', logoUrl: null, leagueBadge: 'LG', teamName: 'Mine',
   starters: 9, empty: 0, out: 0, bye: 0, questionable: 0, unresolved: 0, lockAt: null, locked: false,
