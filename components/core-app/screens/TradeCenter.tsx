@@ -341,6 +341,8 @@ function pctOf(factor: number): string {
  * so no fact on the page depends on a hover a phone cannot do.
  */
 function LeagueMove({ line }: { line: Line }) {
+  const { language } = useOptionalLanguage()
+  const copy = (value:string) => tradeVisualCopy(value,language)
   const league = line.leagueValue
   const market = line.marketValue
   if (league == null || market == null || market === 0 || league === market) return null
