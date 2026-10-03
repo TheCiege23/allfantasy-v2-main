@@ -30,11 +30,9 @@ import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
  * `stat_coverage_below_floor`) rather than sealing zeros; a partial one below the 20% the
  * coverage floor tolerates would not, which is why the first NBA weeks deserve a read.
  *
- * ⚠ MLB JOINED 2026-09-28, AFTER ITS 2026 SEASON, FOR 2027. Its slate is TheSportsDB (measured on
- * production: 2,439 games for 2026, 26 Mar – 1 Oct — the full 2,430-game schedule, so a ranked
- * feed can close its weeks), and its stats are the Rolling Insights box score, normalized per game
- * by `mlbStatNormalization.ts`. No 2027 opener is recorded yet, so every MLB week refuses
- * `season_start_unknown` until one is added to `dailySportSeasonStarts.ts` — deliberately.
+ * MLB stats are Rolling Insights box scores, normalized per game by `mlbStatNormalization.ts`.
+ * Its regular-season opener is recorded for 2026 and 2027. Its complete season slate is read
+ * from the RI cache below; TheSportsDB continues to provide live game scores in SportsGame.
  *
  * ⚠ SOCCER JOINED 2026-09-28, mid-season, with GAMEWEEKS rather than seven-day arithmetic: its
  * windows skip the international breaks, which hold no game and would otherwise never seal
@@ -52,11 +50,14 @@ export const DATE_WINDOWED_SPORTS: readonly string[] = ['NHL', 'NBA', 'NCAAB', '
  * A slate short a game can seal a week whose stats miss that game — so for these sports an
  * unsynced schedule is an EMPTY slate, which refuses, never a fallback to the partial feeds.
  *
+ * MLB only stores an RI slate with at least 2,430 distinct regular games, so a partial response
+ * cannot seal a week early. An unpublished next season stays unsynced and refuses finalization.
+ *
  * SOCCER, measured 2026-09-28: every one of the 133 games with stat lines is `completed` in the
  * Rolling Insights schedules for EPL, La Liga and Serie A, and every game completed since stats began
  * (25 Aug) has lines. `SportsGame` carries only the EPL, so a La Liga or Serie A game would be missed.
  */
-export const RI_SCHEDULE_SLATE_SPORTS: readonly string[] = ['NCAAB', 'SOCCER']
+export const RI_SCHEDULE_SLATE_SPORTS: readonly string[] = ['NCAAB', 'SOCCER', 'MLB']
 
 export type WeekGameRow = {
   status: string | null

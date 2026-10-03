@@ -142,7 +142,7 @@ export const IDP_SUPPORTED_SPORTS: readonly LeagueSport[] = ['NFL', 'NCAAF']
  * and playoff runtimes resolve it; `advance_week` — the roller's path — is refused by the unplayed
  * week (INCOMPLETE_WEEK), not by the sport. With this line reverted all three said not_nfl_redraft.
  */
-export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL', 'NHL', 'NBA', 'NCAAB', 'NCAAF']
+export const SEASON_CAPABLE_SPORTS: readonly LeagueSport[] = ['NFL', 'NHL', 'NBA', 'MLB', 'NCAAB', 'NCAAF']
 
 /** Whether a league in this sport can run a season to completion today. */
 export function canRunSeasonForSport(sport: string | null | undefined): boolean {
