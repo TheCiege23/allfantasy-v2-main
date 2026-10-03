@@ -3380,3 +3380,54 @@ html[data-mode='light'] .af-core {
     opacity: 1;
   }
 }
+
+/*
+ * ── Chimmy's moves on a narrow card: the buttons share the detail's line (2026-10-03) ──
+ *
+ * Measured on the live KBFL page at 375px before this: each move was 112px — the title, the
+ * detail, then "Fix lineup" + ✦ wrapped onto a line of their own, right-aligned under 150px of
+ * nothing. Two moves made the card 294px and put the lock countdown at 860px, below the first
+ * screen. After: 88px a move, the card 246px, the countdown 48px higher (72px with three moves,
+ * which is `MAX_MOVES`).
+ *
+ * The title keeps the whole first line — the rule above exists so a player's name is never
+ * squeezed onto two lines to make room for buttons, and this keeps that promise. Only the detail
+ * ("Out — QB · WAS — locks in 21h 55m") shares its line, and it is the one line that can wrap.
+ *
+ * ⚠ AUDIT 2026-10-02 ASKED FOR THIS CARD TO MOVE BELOW THE COUNTDOWN. It stays above, on purpose:
+ * it holds the page's most actionable line ("Bench Jayden Daniels — Out — Fix lineup"), and a
+ * countdown is not a reason to push the thing it counts down to further away.
+ *
+ * Keyed on the CARD's own width, not the viewport: the card also sits in the league-first home
+ * and matchup screens, at widths the viewport does not predict. At 768px (a 649px card) the rows
+ * are byte-identical with and without this block.
+ *
+ * Its own top-level block at end of file, per this stylesheet's convention.
+ */
+.af-core .af-cmv {
+  container: af-cmv / inline-size;
+}
+@container af-cmv (max-width: 480px) {
+  .af-core .af-cmv-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'move move' 'detail actions';
+    column-gap: 10px;
+    row-gap: 4px;
+    align-items: center;
+  }
+  /* A plain div — the tap targets are the link and the button beside it, which keep their boxes. */
+  .af-core .af-cmv-text {
+    display: contents;
+  }
+  .af-core .af-cmv-move {
+    grid-area: move;
+  }
+  .af-core .af-cmv-detail {
+    grid-area: detail;
+  }
+  .af-core .af-cmv-actions {
+    grid-area: actions;
+    margin-left: 0;
+  }
+}
