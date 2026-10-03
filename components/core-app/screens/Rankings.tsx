@@ -1,3 +1,4 @@
+import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import { getLevelIcon } from '@/lib/rank/levels'
 import {
@@ -218,7 +219,12 @@ function ComponentBars({ score }: { score: ManagerScore }) {
 
 function ConfidenceTag({ c }: { c: ManagerScore['confidence'] }) {
   const text = c === 'high' ? 'High confidence' : c === 'medium' ? 'Medium confidence' : 'Low confidence'
-  return <span className={`af-rk-chip ${c === 'high' ? 'af-rk-chip--good' : c === 'low' ? 'af-rk-chip--warn' : ''}`}>{text}</span>
+  return (
+    <>
+      <span className={`af-rk-chip ${c === 'high' ? 'af-rk-chip--good' : c === 'low' ? 'af-rk-chip--warn' : ''}`}>{text}</span>
+      <TopicTip topic="scoreConfidence" />
+    </>
+  )
 }
 
 /* ─────────────────────────────── community ──────────────────────────────── */
@@ -411,7 +417,7 @@ function CommunityView({ data, g }: { data: RankingsData; g: GlobalView }) {
         </PhoneFold>
 
         <p className="af-rk-eyebrow">
-          {g.label}
+          {g.label} <TopicTip topic="communityBoardColumns" />
           <span className="af-rk-spacer" />
           <span>{g.metricLabel}</span>
         </p>
@@ -726,7 +732,7 @@ function PortfolioBody({ data, p }: { data: RankingsData; p: PortfolioView }) {
           <section className="af-rk-card">
             <div className="af-rk-rank-top">
               <p className="af-rk-eyebrow" style={{ margin: 0 }}>
-                My AF manager score · {data.filtersLabel}
+                My AF manager score <TopicTip topic="afManagerScore" /> · {data.filtersLabel}
               </p>
               <ConfidenceTag c={s.confidence} />
             </div>
@@ -796,7 +802,7 @@ function PortfolioBody({ data, p }: { data: RankingsData; p: PortfolioView }) {
 
       <section className="af-rk-card">
         <p className="af-rk-eyebrow">
-          My league-seasons
+          My league-seasons <TopicTip topic="scoringIndex" />
           <span className="af-rk-spacer" />
           <span>{p.rows.length.toLocaleString()} rows</span>
         </p>
@@ -1175,7 +1181,7 @@ function ClassBody({ view, signedIn }: { view: ClassView; signedIn: boolean }) {
           </div>
         ) : null}
         <p className="af-rk-eyebrow">
-          Class board
+          Class board <TopicTip topic="classRating" />
           <span className="af-rk-spacer" />
           <span>AllFantasy managers with an established Class</span>
         </p>
@@ -1269,7 +1275,7 @@ function LeaguePowerCard({ league }: { league: LeagueView }) {
   return (
     <div className="af-rk-power">
       <p className="af-rk-eyebrow">
-        Power
+        Power <TopicTip topic="storedPowerRanking" />
         <span className="af-rk-spacer" />
         <span>{power ? `week ${power.week}, ${power.season} · run ${fmtStamp(power.computedAt)}` : 'not run yet'}</span>
       </p>

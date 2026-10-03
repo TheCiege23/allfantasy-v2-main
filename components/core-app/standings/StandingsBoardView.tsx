@@ -1,5 +1,6 @@
 'use client'
 
+import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -1467,11 +1468,13 @@ export function StandingsBoardView({
         {view === 'official' ? (
           <p>
             <strong>{board.rules.platformLabel === 'the platform' ? copy('The league table.') : language === 'es' ? `Tabla de ${board.rules.platformLabel}.` : `${board.rules.platformLabel}’s table.`}</strong>{' '}
-            {board.hasHeadToHead ? copy('Record decides the order; this is what seeds the playoffs.') : explanation.record}
+            {board.hasHeadToHead ? copy('Record decides the order; this is what seeds the playoffs.') : explanation.record}{' '}
+            <TopicTip topic="standingsColumns" />
           </p>
         ) : (
           <p>
-            <strong>{copy('AllFantasy analysis — not the league table.')}</strong> {explanation.power}
+            <strong>{copy('AllFantasy analysis — not the league table.')}</strong> {explanation.power}{' '}
+            <TopicTip topic="allPlayLuck" />
           </p>
         )}
       </div>

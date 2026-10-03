@@ -1,5 +1,6 @@
 'use client'
 
+import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { LiveMatchupStrip } from '@/components/core-app/screens/LiveMatchupStrip'
@@ -604,7 +605,8 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           <LockWarning alerts={lockAlerts} now={now} />
 
           <h2 className="af-label af-live-slate-head">
-            {activeSportLabel} · {leagueFilterId ? 'this league' : scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}
+            {activeSportLabel} · {leagueFilterId ? 'this league' : scope === 'my' ? 'your starters, sorted by leagues affected' : 'all games'}{' '}
+            <TopicTip topic="liveGameWinEstimate" />
           </h2>
 
           {visibleGames.length === 0 ? (
@@ -640,7 +642,9 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
 
         <aside className="af-live-side" aria-label="Your live impact">
           <div className="af-live-impact">
-            <h2 className="af-label">Your live impact</h2>
+            <h2 className="af-label">
+              Your live impact <TopicTip topic="liveImpactTotal" />
+            </h2>
             {data.rosterFailed ? (
               /*
                * ⚠ THE SAME RULE AS THE BRANCH BELOW, FOR A DIFFERENT REASON.
@@ -696,7 +700,9 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
 
           {impact.biggestMover ? (
             <div className="af-live-card">
-              <h2 className="af-label">Biggest mover</h2>
+              <h2 className="af-label">
+                Biggest mover <TopicTip topic="biggestMover" />
+              </h2>
               <div className="af-live-mover">
                 <MiniPlayerImg
                   sleeperId={null}

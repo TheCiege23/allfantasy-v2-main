@@ -1,5 +1,6 @@
 'use client'
 
+import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { describeRemaining, nextStripState, type MatchupStrip } from '@/lib/live/matchupStrip'
@@ -96,6 +97,12 @@ export function LiveMatchupStrip({
       <p className="af-live-matchup-meta">
         {strip.isFinal ? 'Final' : lead === 'tied' ? 'Tied' : `You ${lead} by ${Math.abs(strip.margin).toFixed(1)}`}
         {strip.pWin != null && !strip.isFinal ? ` · ${Math.round(strip.pWin * 100)}% to win` : ''}
+        {strip.pWin != null && !strip.isFinal ? (
+          <>
+            {' '}
+            <TopicTip topic="matchupWinProbability" />
+          </>
+        ) : null}
         {strip.remaining && !strip.isFinal
           ? ` · You: ${describeRemaining(strip.remaining.you)} · ${strip.opponent.name}: ${describeRemaining(strip.remaining.opponent)}`
           : ''}

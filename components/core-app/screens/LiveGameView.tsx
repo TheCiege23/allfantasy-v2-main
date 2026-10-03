@@ -1,5 +1,6 @@
 'use client'
 
+import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
@@ -920,9 +921,13 @@ function LastPlay({ detail, play }: { detail: LiveGameDetail; play: GameDetailPl
       <div className="af-gv-lastplay-top">
         <strong className="af-gv-lastplay-title">{title}</strong>
         {favored && favoredPct != null ? (
-          <span className="af-gv-wp af-num" title="ESPN's win probability after this play">
-            ESPN win % · {favored.abbrev} {favoredPct}
-          </span>
+          <>
+            <span className="af-gv-wp af-num">
+              ESPN win % · {favored.abbrev} {favoredPct}
+            </span>
+            {/* Replaces a `title=` a phone never shows; a sibling, so no title sits over the popover. */}
+            <TopicTip topic="espnWinProbability" />
+          </>
         ) : null}
         <span className="af-label af-gv-lastplay-tag">Last play</span>
       </div>
@@ -1149,6 +1154,7 @@ function ShotChart({ detail, basketball }: { detail: LiveGameDetail; basketball:
         <h2 className="af-label" id="af-gv-shots">
           Shot chart
         </h2>
+        <TopicTip topic="shotChartCount" />
         <span className="af-gv-muted af-num">
           {made}/{visible.length} FG
         </span>
@@ -1456,6 +1462,7 @@ function RinkShotMap({ detail, hockey }: { detail: LiveGameDetail; hockey: Hocke
         <h2 className="af-label" id="af-gv-rink">
           Shot map
         </h2>
+        <TopicTip topic="hockeyShotsOnGoal" />
         <span className="af-gv-muted af-num">
           {goals} G · {onGoal} SOG
         </span>
@@ -1557,9 +1564,12 @@ function HockeyPlayByPlay({
 
   return (
     <section className="af-gv-card" aria-labelledby="af-gv-hpbp">
-      <h2 className="af-label" id="af-gv-hpbp">
-        Play-by-play
-      </h2>
+      <div className="af-gv-shots-head">
+        <h2 className="af-label" id="af-gv-hpbp">
+          Play-by-play
+        </h2>
+        <TopicTip topic="hockeyStrength" />
+      </div>
       <div className="af-live-scope af-gv-tabs" role="group" aria-label="Which plays to show">
         <button
           type="button"
@@ -2163,9 +2173,12 @@ function BaseballBoxScore({ detail, baseball }: { detail: LiveGameDetail; baseba
   if (teams.length === 0) return null
   return (
     <section className="af-gv-card af-gv-box" aria-labelledby="af-gv-mlbbox">
-      <h2 className="af-label" id="af-gv-mlbbox">
-        Box score
-      </h2>
+      <div className="af-gv-shots-head">
+        <h2 className="af-label" id="af-gv-mlbbox">
+          Box score
+        </h2>
+        <TopicTip topic="baseballBoxColumns" />
+      </div>
       {teams.map(({ team, box }) => (
         <div key={team.id} className="af-gv-box-team" data-team={team.id}>
           <div className="af-gv-box-team-head">
