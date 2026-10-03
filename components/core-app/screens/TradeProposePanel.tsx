@@ -187,6 +187,9 @@ export function TradeProposePanel(props: {
   const [offerMessage, setOfferMessage] = useState('')
 
   const hasDeal = give.length + get.length > 0
+  const unpriced = [...give, ...get].filter((asset) => asset.kind !== 'faab' && asset.value == null)
+  const playersOut = give.filter((asset) => asset.kind === 'player')
+  const playersIn = get.filter((asset) => asset.kind === 'player')
 
   const rosters = props.rosters ?? []
   const myRosterId = props.viewerRosterId
@@ -270,6 +273,18 @@ export function TradeProposePanel(props: {
   return (
     <section className="af-tc-propose">
       <div className="af-label">{copy(counteringTradeId ? 'Send this as a counter' : 'Send this as a proposal')}</div>
+
+      <div className="af-tc-review" aria-label={copy('Review this trade before sending')}>
+        <h3>{copy('Review this deal')}</h3>
+        <p><strong>{copy('Roster impact')}:</strong> {playersOut.length} {copy('players out')}, {playersIn.length} {copy('players in')}
+          {mine ? ` · ${mine.players.length} players now, ${mine.players.length - playersOut.length + playersIn.length} if completed` : ''}.
+        </p>
+        <p><strong>{copy('Value coverage')}:</strong> {unpriced.length === 0
+          ? copy('Every selected player or pick has a market value on file. Values are estimates, not a guarantee of league approval.')
+          : `${unpriced.length} selected assets have no market value. Do not read a partial total as a complete grade.`}
+        </p>
+        <p><strong>{copy('League rules')}:</strong> {copy('The league validates asset ownership, eligibility and trade rules when you send. Review the result before treating this as a pending offer.')}</p>
+      </div>
 
       {counteringTradeId ? (
         /*
