@@ -3,26 +3,83 @@ import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 export type StarterGameState = 'upcoming' | 'live' | 'final' | 'unknown'
 type Game = { homeTeam: string; awayTeam: string; status: string | null; startTime: Date | null; fetchedAt: Date; seasonType?: string | null }
 
+/**
+ * Each club's newest trusted game row, built from the week's games alone.
+ *
+ * 🛑 CACHED PER GAMES ARRAY, BECAUSE IT DEPENDS ONLY ON THE GAMES. It was rebuilt inside every
+ * `starterGameStates` call — and the all-leagues board calls that once per lineup, both sides of
+ * every league: 136 calls on one 65-league account, each re-deriving the same index from the same
+ * 96 games. Measured 2026-10-03 against production: ~450–570 ms of one board render, more than the
+ * win probabilities, the settings read or any single query on the page.
+ *
+ * The build itself is now one pass — each team normalized once, an untyped row matched through a
+ * (home|away) lookup instead of a scan of every fixture. Same rule, same result, pinned against the
+ * previous implementation in `__tests__/core-app/matchup-game-state-index.test.ts`. ⚠ The CACHE is
+ * the saving: on a 96-game week the one-pass build measured no faster than the old scan, which only
+ * normalized a pair once their kickoffs matched (136 calls: 160 ms before, 25 ms cached, 156 ms
+ * uncached).
+ *
+ * ⚠ KEYED ON THE ARRAY, CHECKED ON ITS LENGTH. Every caller builds its games array once and reads
+ * it; an array that grows after a first call is rebuilt. One mutated in place at the same length
+ * would read a stale index — nothing does that today, and a caller that needs to should pass a new
+ * array.
+ */
+const clubIndexCache = new WeakMap<readonly Game[], { length: number; byClub: Map<string, Game> }>()
+
+function clubIndex(games: readonly Game[]): Map<string, Game> {
+  const hit = clubIndexCache.get(games)
+  if (hit && hit.length === games.length) return hit.byClub
+  const byClub = buildClubIndex(games)
+  clubIndexCache.set(games, { length: games.length, byClub })
+  return byClub
+}
+
+function buildClubIndex(games: readonly Game[]): Map<string, Game> {
+  /*
+   * String keys keep the original comparison exactly, including its edge: two names that BOTH fail
+   * to normalize compared `null === null`, which matched. `String(null)` keeps that; `undefined`
+   * stays distinct from `null`, as `===` had it.
+   */
+  const norm = games.map((g) => ({ home: normalizeTeamAbbrev(g.homeTeam), away: normalizeTeamAbbrev(g.awayTeam) }))
+  const fixtureTimes = new Map<string, number[]>()
+  games.forEach((g, i) => {
+    if (g.seasonType === null || !g.startTime) return
+    const key = `${String(norm[i].home)}|${String(norm[i].away)}`
+    const list = fixtureTimes.get(key)
+    if (list) list.push(g.startTime.getTime())
+    else fixtureTimes.set(key, [g.startTime.getTime()])
+  })
+  // The live-score writer does not persist seasonType. Its updates are safe
+  // only when their clubs and kickoff match a known regular-season fixture.
+  const candidates: number[] = []
+  games.forEach((g, i) => {
+    if (g.seasonType !== null) {
+      candidates.push(i)
+      return
+    }
+    if (!g.startTime) return
+    const at = g.startTime.getTime()
+    const times = fixtureTimes.get(`${String(norm[i].home)}|${String(norm[i].away)}`)
+    if (times?.some((t) => Math.abs(at - t) < 60_000)) candidates.push(i)
+  })
+  // Newest provider row first; a stable sort keeps the input order between equal fetches, as before.
+  candidates.sort((a, b) => games[b].fetchedAt.getTime() - games[a].fetchedAt.getTime())
+  const byClub = new Map<string, Game>()
+  for (const i of candidates) {
+    for (const club of [norm[i].home, norm[i].away]) {
+      if (club && !byClub.has(club)) byClub.set(club, games[i])
+    }
+  }
+  return byClub
+}
+
 /** A kickoff alone never proves that a game has finished. Newest provider row wins. */
 export function starterGameStates(
   players: ReadonlyMap<string, { team: string | null }>,
   games: Game[],
   now = new Date(),
 ): Map<string, StarterGameState> {
-  const byClub = new Map<string, Game>()
-  const canonical = games.filter((game) => game.seasonType !== null)
-  // The live-score writer does not persist seasonType. Its updates are safe
-  // only when their clubs and kickoff match a known regular-season fixture.
-  const candidates = games.filter((game) => game.seasonType !== null || canonical.some((fixture) =>
-    game.startTime && fixture.startTime && Math.abs(game.startTime.getTime() - fixture.startTime.getTime()) < 60_000 &&
-    normalizeTeamAbbrev(game.homeTeam) === normalizeTeamAbbrev(fixture.homeTeam) &&
-    normalizeTeamAbbrev(game.awayTeam) === normalizeTeamAbbrev(fixture.awayTeam)))
-  for (const game of [...candidates].sort((a, b) => b.fetchedAt.getTime() - a.fetchedAt.getTime())) {
-    for (const team of [game.homeTeam, game.awayTeam]) {
-      const club = normalizeTeamAbbrev(team)
-      if (club && !byClub.has(club)) byClub.set(club, game)
-    }
-  }
+  const byClub = clubIndex(games)
   return new Map([...players].map(([id, player]) => {
     const game = byClub.get(normalizeTeamAbbrev(player.team) ?? '')
     const status = String(game?.status ?? '').toLowerCase()
