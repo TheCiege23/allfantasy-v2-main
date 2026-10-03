@@ -586,6 +586,16 @@ export function NotificationsSettingsSection({
             {t("settings.notifications.smsNeedsConsent")}
           </p>
         ) : null}
+        {/* No phone yet: point at the one consent flow (Security), which also turns the time-
+           sensitive alerts on for text the moment the user agrees. */}
+        {!profile?.phoneVerifiedAt ? (
+          <p className="text-xs text-[var(--muted2)]" data-testid="sms-add-phone">
+            {t("settings.notifications.smsAddPhone")}{" "}
+            <a href="/settings?tab=security" className="underline">
+              {t("settings.notifications.smsAddPhoneLink")}
+            </a>
+          </p>
+        ) : null}
         <ul className="space-y-2">
           {VISIBLE_CATEGORY_IDS.map((categoryId) => (
             <li key={categoryId}>

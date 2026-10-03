@@ -2117,6 +2117,15 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.notifications.byCategory": "By category",
     "settings.notifications.smsNeedsConsent":
       "Texts are off: we have no SMS opt-in for your phone. Re-verify your phone in Security settings and tick the SMS box to turn them on.",
+    "settings.notifications.smsAddPhone":
+      "Want the most important alerts by text — lineup locks, injuries, trades? Add your phone and agree to texts, and they turn on automatically.",
+    "settings.notifications.smsAddPhoneLink": "Add your phone",
+    "notifications.smsOptIn.aria": "Get alerts by text",
+    "notifications.smsOptIn.title": "Get your big alerts by text",
+    "notifications.smsOptIn.body":
+      "Lineup locks, injuries and trade offers, straight to your phone. Add your number and agree to texts — you can stop anytime by replying STOP.",
+    "notifications.smsOptIn.cta": "Add my phone",
+    "notifications.smsOptIn.notNow": "Not now",
     "settings.notifications.remotePending":
       "Saved notification preferences changed in another session. Keep editing or reload the latest saved version.",
     "settings.notifications.reloadSaved": "Reload saved",

@@ -1142,6 +1142,15 @@ export const translationsEsParity: Record<string, string> = {
   "settings.notifications.chimmyTitle": "Controles de alertas de Chimmy",
   "settings.notifications.smsNeedsConsent":
     "Los SMS están desactivados: no tenemos tu autorización de SMS para este teléfono. Vuelve a verificar tu teléfono en Seguridad y marca la casilla de SMS para activarlos.",
+  "settings.notifications.smsAddPhone":
+    "¿Quieres las alertas más importantes por SMS — cierres de alineación, lesiones, intercambios? Agrega tu teléfono y acepta los SMS, y se activan solas.",
+  "settings.notifications.smsAddPhoneLink": "Agregar tu teléfono",
+  "notifications.smsOptIn.aria": "Recibe alertas por SMS",
+  "notifications.smsOptIn.title": "Recibe tus alertas importantes por SMS",
+  "notifications.smsOptIn.body":
+    "Cierres de alineación, lesiones y ofertas de intercambio, directo a tu teléfono. Agrega tu número y acepta los SMS; puedes dejarlos cuando quieras respondiendo STOP.",
+  "notifications.smsOptIn.cta": "Agregar mi teléfono",
+  "notifications.smsOptIn.notNow": "Ahora no",
   "settings.notifications.deliveryMasters": "Maestros de entrega",
   "settings.notifications.deliveryMixHint":
     "Si las categorías mezclan estados, el interruptor queda apagado hasta que coincidan todas; al cambiarlo aplica a todas.",
