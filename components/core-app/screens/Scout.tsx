@@ -348,7 +348,7 @@ function EliminationBanner({ data, standing, matchupHref }: { data: ScoutData; s
         <p className="af-sc-vs-h2h af-num">
           You are <strong>#{standing.rank}</strong> of {standing.outOf}
           {standing.overCut == null ? ' — at the cut line.' : ` — ${standing.overCut.toFixed(1)} over the cut.`}
-          {standing.basis === 'projected' ? ' Projected: no snap has been played yet.' : ''}
+          {standing.basis === 'projected' ? ' Projected: most teams have not played yet.' : ''}
         </p>
       ) : (
         <p className="af-sc-vs-h2h">The cut line is not readable yet this week.</p>

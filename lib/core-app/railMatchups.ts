@@ -146,10 +146,10 @@ export type RailStanding = {
    */
   overCut: number | null
   /**
-   * What the rank was computed from. Before a snap has been played every real
-   * score is 0, so ranking on points would order the league arbitrarily — the
-   * projection is the only thing that separates the teams, and the UI must say
-   * which one it drew.
+   * What the rank was computed from. Until most of the field has played, a team
+   * that has not kicked off sits at 0, so ranking on points would put it at the
+   * cut line — the projection separates the teams in that window, and the UI must
+   * say which one it drew. See `standingIn`.
    */
   basis: 'points' | 'projected'
   /** Number of ranking places between this team and the weekly cut position. */
@@ -656,7 +656,6 @@ export async function getRailMatchups(
             field: f.field,
             yourRosterId: String(row.rosterId),
             sides: priced?.sides ?? new Map(),
-            scored,
             elimination: f.elimination || priced?.elimination === true,
           })
         : null,
@@ -988,49 +987,65 @@ export async function loadRailProjections(args: {
   return { byLeague, projectionWeek }
 }
 
+/** "Most teams have played": strictly more than half of the field has points on the board. */
+export function mostHavePlayed(played: number, fieldSize: number): boolean {
+  return played * 2 > fieldSize
+}
+
 /**
  * Where you sit in a league with no head-to-head.
  *
- * ⚠ THE BASIS SWITCHES ON WHETHER ANYTHING HAS BEEN PLAYED, AND IT HAS TO.
- * Before kickoff every `pointsFor` in the league is 0, so ranking on points
- * would sort eighteen identical numbers into whatever order the rows arrived in
- * and print a confident "14th of 18". The projection is the only thing that
- * separates the teams in that window; once a point is scored, the score is the
- * answer and the projection stops being consulted.
+ * ⚠ THE BASIS IS THE PROJECTION UNTIL MOST OF THE FIELD HAS PLAYED, AND IT HAS TO BE.
+ * Before kickoff every `pointsFor` in the league is 0, so ranking on points would sort eighteen
+ * identical numbers into whatever order the rows arrived in and print a confident "14th of 18".
+ * The same is true, less visibly, all of Sunday morning: a team whose players have not kicked off
+ * sits at 0, so a points ranking puts every one of them at the cut line and tells a manager who is
+ * comfortably clear on projection that they are "at the cut". User's ruling 2026-10-03: rank on the
+ * projection until MORE THAN HALF of the field has points on the board (`mostHavePlayed`), then on
+ * points. The projection is the pre-game number — nothing here re-projects a game in progress.
  *
- * ⚠ AND IT REFUSES RATHER THAN RANKS A HALF-MEASURED FIELD. A league where only
- * some lineups priced would rank the priced ones above the rest by construction,
- * which is an artefact of coverage and not of the teams — the same stance
- * `leagueScoreboard.ts` takes before it draws a margin. Null here renders as no
- * rank at all, which is the honest rendering of "we cannot say".
+ * ⚠ AND IT NEVER RANKS A HALF-PRICED FIELD ON PROJECTION. A league where only some lineups priced
+ * would rank the priced ones above the rest by construction, which is an artefact of coverage and
+ * not of the teams — the same stance `leagueScoreboard.ts` takes before it draws a margin. When the
+ * field cannot all be priced it falls back to points if anything has been played (the reading this
+ * had before the ruling, labelled 'points' so the UI never calls it a projection), and to null
+ * before any snap, which renders as no rank at all — the honest rendering of "we cannot say".
+ *
+ * Pure; exported for the test.
  */
-function standingIn(args: {
+export function standingIn(args: {
   field: Array<{ rosterId: string; pointsFor: number }>
   yourRosterId: string
   sides: Map<string, RailSideProjection>
-  scored: boolean
   elimination: boolean
 }): RailStanding | null {
   const { field, yourRosterId } = args
   if (field.length < 2) return null
 
-  const basis: 'points' | 'projected' = args.scored ? 'points' : 'projected'
+  const played = field.filter((r) => r.pointsFor !== 0).length
 
-  const valued: Array<{ rosterId: string; value: number }> = []
+  /* Prefer this league's own rules; the vendor number is the fallback, and a side with neither is
+     not measured and cannot be placed. */
+  const projected: Array<{ rosterId: string; value: number }> = []
   for (const r of field) {
-    const id = String(r.rosterId)
-    if (basis === 'points') {
-      valued.push({ rosterId: id, value: r.pointsFor })
-      continue
-    }
-    const side = args.sides.get(id)
-    /* Prefer this league's own rules; the vendor number is the fallback, and a
-       side with neither is not measured and cannot be placed. */
+    const side = args.sides.get(String(r.rosterId))
     const value = side?.afProjected ?? side?.projected ?? null
-    if (value == null) return null
-    valued.push({ rosterId: id, value })
+    if (value == null) break
+    projected.push({ rosterId: String(r.rosterId), value })
   }
-  if (valued.length !== field.length) return null
+  const fullyPriced = projected.length === field.length
+
+  let basis: 'points' | 'projected'
+  let valued: Array<{ rosterId: string; value: number }>
+  if (!mostHavePlayed(played, field.length) && fullyPriced) {
+    basis = 'projected'
+    valued = projected
+  } else if (played > 0) {
+    basis = 'points'
+    valued = field.map((r) => ({ rosterId: String(r.rosterId), value: r.pointsFor }))
+  } else {
+    return null
+  }
 
   valued.sort((a, b) => b.value - a.value)
   const index = valued.findIndex((v) => v.rosterId === yourRosterId)
