@@ -18,6 +18,7 @@ export async function loadVisualImpact(args:{leagueId:string;userId:string;sent:
   if (!['native','allfantasy','sleeper'].includes(provider)) return {...result,reason:'Weekly impact needs verified Sleeper roster identities; this provider’s roster mapping is not supported yet.'}
   if (!roster || !world.league.rosterSettings.starterSlots?.length) return {...result,reason:'Current roster or starting slots are missing.'}
   if (args.unresolved) return {...result,reason:'Some traded players lack verified roster identities; no lineup change is estimated.'}
+  if (!args.sent.length && !args.received.length) return {...result,reason:'This trade has no original player swap to simulate. Weekly effects of picks and FAAB are not estimated.'}
   const undo = retrospectiveRoster(roster.playerIds,args.sent,args.received)
   if (args.completed && !undo.withoutTrade) return {...result,reason:'Later roster moves prevent a clean comparison. The original acquired assets must still be held and sent assets must not have returned.',moved:undo.moved,returned:undo.returned}
   const basis = await leagueWeekBasis(world.league)

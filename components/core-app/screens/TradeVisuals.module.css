@@ -3,7 +3,7 @@
 .panel p,.panel small {font-size:.8rem;line-height:1.5;color:var(--muted,#94a3b8)}
 .row {display:grid;grid-template-columns:minmax(90px,1fr) minmax(100px,3fr) auto;gap:10px;align-items:center;margin:10px 0;font-size:.85rem}
 .track {height:18px;border-radius:5px;background:rgba(148,163,184,.12);overflow:hidden}
-.bar {height:100%;background:#38bdf8;border-radius:5px;min-width:2px}
+.bar {height:100%;background:#38bdf8;border-radius:5px}
 .row:nth-child(odd) .bar {background:#a78bfa}
 .controls {display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;align-items:center;min-height:44px}
 .controls label {display:inline-flex;align-items:center;gap:6px;min-height:44px}
