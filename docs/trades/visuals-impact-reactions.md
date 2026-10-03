@@ -13,7 +13,7 @@
 
 Weekly lineup projections use persisted component statistics rescored under the league rules. They currently require NFL Sleeper/native roster identities, known starting slots, a matching projection season and projections for the traded players. Unsupported feeds are refused rather than substituted with generic PPR points. This feature does not calculate realized fantasy points earned since the trade, causal wins, championship probability or a calibrated confidence interval.
 
-The focus selector explains how to weigh weekly impact versus current asset value; it does not invent a new price grade. Full transaction-lineage attribution, actual points since completion, multi-sport weekly feeds and externally curated GIF collections remain separate enhancements.
+The focus selector explains how to weigh weekly impact versus current asset value; it does not invent a new price grade. Full transaction-lineage attribution, actual started points since completion, multi-sport weekly feeds and externally curated GIF collections remain separate enhancements. Cached tenure production is described below.
 
 ## Decision summaries, package costs and production receipts
 
@@ -29,3 +29,11 @@ Research basis: [FantasyPros trade analyzer](https://www.fantasypros.com/nfl/myp
 ## Verification
 
 Regression coverage checks missing history weeks, NFL season boundaries, current-roster undo semantics, foreign identity refusal, season mismatch, league membership, completed-party restrictions, preserved original evaluations, exact numeric graph labels, player-depth suppression and reaction opt-in. Repository CI remains the deployment gate.
+
+## English and Spanish verification
+
+The new trade panels use the current language context to translate labels, deterministic explanations, chart titles and accessible text, evidence notices, roster consequences, receipts and optional Chimmy phrases. Language switching re-renders cached evaluations without regrading. Numbers and dates use the selected locale. Spanish draft-pick descriptions are accepted by the generic analyzer.
+
+Downloaded share cards render their embedded text in the language selected at download time. Player identities, photographs, logos and uploaded screenshots remain original; neutral chart shapes and emojis require no separate translated image.
+
+Tests exercise the real language provider through English → Spanish → English, including downloaded canvas text, cached evaluation persistence and Spanish pick parsing. Chromium fixture checks cover 390, 412, 768, 1024 and 1366-pixel layouts with expanded Spanish content and reduced motion. These checks do not certify signed-in production, Safari or native Android behavior. Older screens and arbitrary source or AI prose are not certified as fully translated by this coverage; Spanish support remains partial across the application. Production verification follows the PR's CI and deployment gates.

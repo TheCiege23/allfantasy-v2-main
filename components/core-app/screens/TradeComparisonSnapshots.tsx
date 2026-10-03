@@ -1,4 +1,7 @@
 'use client'
+import { tradeVisualCopy } from '@/lib/core-app/tradeVisualCopy'
+import { getIntlLocale, type LanguageCode } from '@/lib/i18n/constants'
+import { useTradeVisualCopy } from "./useTradeVisualCopy"
 
 import { useEffect, useState } from 'react'
 import { genericComparisonSchema, type GenericComparison } from '@/lib/trade-value/genericComparison'
@@ -28,12 +31,14 @@ function readSaved(): TradeSnapshot[] {
   } catch { return [] }
 }
 
-function safeDate(value: string): string {
+function safeDate(value: string, locale = 'en-US'): string {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? 'Time unavailable' : date.toLocaleString()
+  return Number.isNaN(date.getTime()) ? 'Time unavailable' : date.toLocaleString(locale)
 }
 
-function downloadCard(item: TradeSnapshot) {
+function downloadCard(item: TradeSnapshot, language: LanguageCode) {
+  const copy=(value:string)=>tradeVisualCopy(value,language)
+  const locale=getIntlLocale(language)
   const canvas = document.createElement('canvas')
   canvas.width = 1200
   canvas.height = 630
@@ -43,35 +48,35 @@ function downloadCard(item: TradeSnapshot) {
   ctx.fillRect(0, 0, 1200, 630)
   ctx.fillStyle = '#75e2dc'
   ctx.font = '700 24px Arial'
-  ctx.fillText('ALLFANTASY · TRADE COMPARISON', 48, 64)
+  ctx.fillText(copy('ALLFANTASY · TRADE COMPARISON'), 48, 64)
   ctx.fillStyle = '#eaf1ff'
   ctx.font = '700 36px Arial'
-  ctx.fillText(item.title.slice(0, 48), 48, 120)
+  ctx.fillText(copy(item.title).slice(0, 48), 48, 120)
   ctx.fillStyle = '#aab9d4'
   ctx.font = '22px Arial'
-  ctx.fillText(`${item.sport} · ${item.basis}`.slice(0, 88), 48, 158)
+  ctx.fillText(`${item.sport} · ${copy(item.basis)}`.slice(0, 88), 48, 158)
   item.sides.forEach((side, index) => {
     const x = index === 0 ? 48 : 615
     ctx.fillStyle = '#182442'
     ctx.fillRect(x, 190, 535, 280)
     ctx.fillStyle = '#eaf1ff'
     ctx.font = '700 28px Arial'
-    ctx.fillText(side.slice(0, 25), x + 24, 230)
+    ctx.fillText(copy(side).slice(0, 25), x + 24, 230)
     ctx.fillStyle = '#75e2dc'
     ctx.font = '700 56px Arial'
     ctx.fillText(item.grades[index], x + 24, 300)
     ctx.fillStyle = '#c8d4e7'
     ctx.font = '22px Arial'
-    item.assets[index].slice(0, 4).forEach((asset, row) => ctx.fillText(asset.slice(0, 36), x + 24, 345 + row * 30))
-    if (item.assets[index].length > 4) ctx.fillText(`+${item.assets[index].length - 4} more`, x + 24, 455)
+    item.assets[index].slice(0, 4).forEach((asset, row) => ctx.fillText(copy(asset).slice(0, 36), x + 24, 345 + row * 30))
+    if (item.assets[index].length > 4) ctx.fillText(copy(`+${item.assets[index].length - 4} more`), x + 24, 455)
   })
   ctx.fillStyle = '#eaf1ff'
   ctx.font = '700 25px Arial'
-  ctx.fillText(item.verdict.slice(0, 75), 48, 515)
+  ctx.fillText(copy(item.verdict).slice(0, 75), 48, 515)
   ctx.fillStyle = '#aab9d4'
   ctx.font = '20px Arial'
-  ctx.fillText(`As of ${safeDate(item.at)} · ${item.uncertainty}`.slice(0, 105), 48, 555)
-  ctx.fillText('Value comparison only · Acceptance and future performance are not predicted', 48, 590)
+  ctx.fillText(`${copy('As of')} ${safeDate(item.at,locale)} · ${copy(item.uncertainty)}`.slice(0, 105), 48, 555)
+  ctx.fillText(copy('Value comparison only · Acceptance and future performance are not predicted'), 48, 590,1104)
   const anchor = document.createElement('a')
   anchor.href = canvas.toDataURL('image/png')
   anchor.download = `allfantasy-trade-${item.id}.png`
@@ -80,6 +85,8 @@ function downloadCard(item: TradeSnapshot) {
 }
 
 export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeSnapshot | null; scope: string }) {
+  const {copy,locale,language}=useTradeVisualCopy()
+
   const [saved, setSaved] = useState<TradeSnapshot[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -178,31 +185,31 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
   }
 
   return (
-    <section className="af-tc-snapshots" aria-label="Saved trade comparisons">
+    <section className="af-tc-snapshots" aria-label={copy("Saved trade comparisons")}>
       <div className="af-tc-snapshots-head">
-        <div><h3>Trade comparisons</h3><p>{account ? 'Saved to your account across devices.' : 'Saved on this device.'} Values are snapshots, not live offers.</p></div>
-        <button type="button" className="af-btn af-btn-ghost" onClick={() => void save()} disabled={!snapshot || busy || !historyAvailable}>Save this comparison</button>
+        <div><h3>{copy("Trade comparisons")}</h3><p>{copy(account ? 'Saved to your account across devices.' : 'Saved on this device.')}{copy(" Values are snapshots, not live offers.")}</p></div>
+        <button type="button" className="af-btn af-btn-ghost" onClick={() => void save()} disabled={!snapshot || busy || !historyAvailable}>{copy("Save this comparison")}</button>
       </div>
-      {notice ? <p role="status">{notice}</p> : null}
-      {account && !historyAvailable ? <button type="button" className="af-btn af-btn-ghost" onClick={() => setReload((value) => value + 1)}>Retry account sync</button> : null}
+      {notice ? <p role="status">{copy(notice)}</p> : null}
+      {account && !historyAvailable ? <button type="button" className="af-btn af-btn-ghost" onClick={() => setReload((value) => value + 1)}>{copy("Retry account sync")}</button> : null}
       {card ? (
         <div className="af-tc-share-card">
-          <div className="af-tc-share-top"><strong>{card.title}</strong><span>{card.sport} · {card.basis}</span></div>
+          <div className="af-tc-share-top"><strong>{copy(card.title)}</strong><span>{copy(card.sport)}{copy(" · ")}{copy(card.basis)}</span></div>
           <div className="af-tc-share-sides">{card.sides.map((side, index) => (
-            <div key={`${side}-${index}`}><span>{side}</span><strong>{card.grades[index]}</strong><small>Sends {card.assets[index].join(', ')}</small></div>
+            <div key={`${side}-${index}`}><span>{copy(side)}</span><strong>{copy(card.grades[index])}</strong><small>{copy("Sends ")}{copy(card.assets[index].map(asset=>copy(asset)).join(', '))}</small></div>
           ))}</div>
-          <p>Value verdict: {card.verdict}</p>
-          <small>As of {safeDate(card.at)} · {card.uncertainty}. Fairness does not predict acceptance or future performance.</small>
+          <p>{copy("Value verdict: ")}{copy(card.verdict)}</p>
+          <small>{copy("As of ")}{copy(safeDate(card.at,locale))}{copy(" · ")}{copy(card.uncertainty)}{copy(". Fairness does not predict acceptance or future performance.")}</small>
           <button type="button" className="af-btn af-btn-ghost" onClick={() => {
-            setNotice(downloadCard(card) ? 'Share card downloaded as PNG.' : 'The share card could not be created in this browser.')
-          }}>Download share card</button>
+            setNotice(downloadCard(card,language) ? 'Share card downloaded as PNG.' : 'The share card could not be created in this browser.')
+          }}>{copy("Download share card")}</button>
         </div>
       ) : null}
       {visible.length ? (
-        <details className="af-tc-saved-list"><summary>Saved comparisons ({visible.length})</summary>
+        <details className="af-tc-saved-list"><summary>{copy("Saved comparisons (")}{copy(visible.length)}{copy(")")}</summary>
           <ul>{visible.map((item) => <li key={item.id}>
-            <button type="button" onClick={() => setSelected(item.id)}>{item.title} · {safeDate(item.at)}</button>
-            <button type="button" onClick={() => void remove(item.id)} disabled={busy || (account && !historyAvailable)} aria-label={`Remove ${item.title} from ${safeDate(item.at)}`}>Remove</button>
+            <button type="button" onClick={() => setSelected(item.id)}>{copy(item.title)}{copy(" · ")}{copy(safeDate(item.at,locale))}</button>
+            <button type="button" onClick={() => void remove(item.id)} disabled={busy || (account && !historyAvailable)} aria-label={copy(`Remove ${item.title} from ${safeDate(item.at,locale)}`)}>{copy("Remove")}</button>
           </li>)}</ul>
         </details>
       ) : null}

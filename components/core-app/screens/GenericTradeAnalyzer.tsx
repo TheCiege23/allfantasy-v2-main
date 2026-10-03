@@ -1,4 +1,5 @@
 'use client'
+import { useTradeVisualCopy } from "./useTradeVisualCopy"
 
 import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
@@ -24,13 +25,15 @@ type SearchPlayer = { playerId: string | null; name: string; position: string | 
 
 function assets(text: string, sport: string, verified: Record<string, string>) {
   return text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((name) => {
-    const pick = /^(20\d{2})\s+(?:round\s*)?([1-9]\d?)(?:st|nd|rd|th)?(?:\s+(early|mid|late))?$/i.exec(name)
-    if (pick) return { kind: 'pick' as const, year: Number(pick[1]), round: Number(pick[2]), tier: pick[3]?.toLowerCase() as 'early' | 'mid' | 'late' | undefined, label: name }
+    const pick = /^(20\d{2})\s+(?:(?:round|ronda)\s*)?([1-9]\d?)(?:st|nd|rd|th)?(?:\s+(early|mid|late|temprana|media|tardía|tardia))?$/i.exec(name)
+    if (pick) return { kind: 'pick' as const, year: Number(pick[1]), round: Number(pick[2]), tier: ({early:'early',mid:'mid',late:'late',temprana:'early',media:'mid',tardía:'late',tardia:'late'} as const)[pick[3]?.toLowerCase() as 'early'|'mid'|'late'|'temprana'|'media'|'tardía'|'tardia'], label: name }
     return { kind: 'player' as const, name, ...(verified[name] ? { playerId: verified[name] } : {}), sportHint: sport }
   })
 }
 
 function PlayerSearch(props: { sport: string; onChoose: (player: SearchPlayer) => void }) {
+  const {copy,locale}=useTradeVisualCopy()
+
   const [query, setQuery] = useState('')
   const [rows, setRows] = useState<SearchPlayer[]>([])
   const [loading, setLoading] = useState(false)
@@ -53,17 +56,16 @@ function PlayerSearch(props: { sport: string; onChoose: (player: SearchPlayer) =
   }, [query, props.sport])
   return (
     <div className="af-tc-generic-search">
-      <label>Find a player
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, then add a result" autoComplete="off" />
+      <label>{copy("Find a player ")}<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={copy("Search name, then add a result")} autoComplete="off" />
       </label>
-      {loading ? <span className="af-tc-generic-hint">Searching…</span> : null}
+      {loading ? <span className="af-tc-generic-hint">{copy("Searching…")}</span> : null}
       {rows.length > 0 ? (
-        <ul aria-label="Player search results">
+        <ul aria-label={copy("Player search results")}>
           {rows.map((row, index) => (
             <li key={`${row.playerId ?? row.name}-${index}`}>
               <button type="button" onClick={() => { props.onChoose(row); setQuery(''); setRows([]) }}>
-                <strong>{row.name}</strong><span>{[row.position, row.team].filter(Boolean).join(' · ') || props.sport}</span>
-                <small>{row.value == null ? 'Value unavailable' : row.value.toLocaleString()}</small>
+                <strong>{row.name}</strong><span>{copy([row.position, row.team].filter(Boolean).join(' · ') || props.sport)}</span>
+                <small>{copy(row.value == null ? 'Value unavailable' : row.value.toLocaleString(locale))}</small>
               </button>
             </li>
           ))}
@@ -74,6 +76,8 @@ function PlayerSearch(props: { sport: string; onChoose: (player: SearchPlayer) =
 }
 
 export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } = {}) {
+  const {copy,locale}=useTradeVisualCopy()
+
   const comparisonScope = `generic:${viewerId ?? 'device'}`
   const [sport, setSport] = useState<string>('NFL')
   const [teamA, setTeamA] = useState('')
@@ -207,33 +211,31 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
     <section className="af-tc-generic" aria-labelledby="af-tc-generic-title">
       <div className="af-tc-generic-heading">
         <div>
-          <div className="af-label">No league connection needed</div>
-          <h2 id="af-tc-generic-title">Quick trade analyzer</h2>
-          <p>Compare an outside offer using general market values. Put each player or draft pick a team sends on a separate line.</p>
+          <div className="af-label">{copy("No league connection needed")}</div>
+          <h2 id="af-tc-generic-title">{copy("Quick trade analyzer")}</h2>
+          <p>{copy("Compare an outside offer using general market values. Put each player or draft pick a team sends on a separate line.")}</p>
         </div>
         <label className="af-tc-generic-upload">
-          {extracting ? 'Reading screenshot…' : 'Import screenshot'}
+          {copy(extracting ? 'Reading screenshot…' : 'Import screenshot')}
           <input type="file" accept="image/png,image/jpeg,image/webp" onChange={importImage} disabled={extracting || busy} />
         </label>
       </div>
       {imageName ? (
         <div className={styles.review} role="status">
-          <strong>Review screenshot import · {imageName}</strong>
-          <p>Extraction is a draft. Edit or remove each line, add missing assets, and check which team sends them.</p>
-          {reviewNotes.length ? <ul aria-label="Screenshot uncertainties">{reviewNotes.map((note, index) => <li key={`${index}-${note}`}>{note}</li>)}</ul>
-            : <p>No specific uncertainty was reported. Still compare every line with the image.</p>}
-          <button type="button" className="af-btn af-btn-ghost" onClick={swapSides}>Swap Team A and Team B</button>
+          <strong>{copy("Review screenshot import · ")}{copy(imageName)}</strong>
+          <p>{copy("Extraction is a draft. Edit or remove each line, add missing assets, and check which team sends them.")}</p>
+          {reviewNotes.length ? <ul aria-label={copy("Screenshot uncertainties")}>{reviewNotes.map((note, index) => <li key={`${index}-${note}`}>{copy(note)}</li>)}</ul>
+            : <p>{copy("No specific uncertainty was reported. Still compare every line with the image.")}</p>}
+          <button type="button" className="af-btn af-btn-ghost" onClick={swapSides}>{copy("Swap Team A and Team B")}</button>
         </div>
       ) : null}
-      <label className="af-tc-generic-sport">Sport
-        <select value={sport} onChange={(event) => { setSport(event.target.value); setResult(null); setVerifiedA({}); setVerifiedB({}) }}>
-          {SPORTS.map((value) => <option key={value} value={value}>{value}</option>)}
+      <label className="af-tc-generic-sport">{copy("Sport ")}<select value={sport} onChange={(event) => { setSport(event.target.value); setResult(null); setVerifiedA({}); setVerifiedB({}) }}>
+          {SPORTS.map((value) => <option key={value} value={value}>{copy(value)}</option>)}
         </select>
       </label>
       <div className="af-tc-generic-sides">
         <div className="af-tc-generic-side">
-          <label>Team A sends
-            <textarea value={teamA} onChange={(event) => { setTeamA(event.target.value); setScreenshotConfirmed(false); setResult(null) }} placeholder={'Player name\n2027 round 1'} rows={5} />
+          <label>{copy("Team A sends ")}<textarea value={teamA} onChange={(event) => { setTeamA(event.target.value); setScreenshotConfirmed(false); setResult(null) }} placeholder={copy('Player name\n2027 round 1')} rows={5} />
           </label>
           <PlayerSearch sport={sport} onChoose={(player) => {
             setTeamA((current) => [current.trim(), player.name].filter(Boolean).join('\n'))
@@ -243,8 +245,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
           }} />
         </div>
         <div className="af-tc-generic-side">
-          <label>Team B sends
-            <textarea value={teamB} onChange={(event) => { setTeamB(event.target.value); setScreenshotConfirmed(false); setResult(null) }} placeholder={'Player name\n2027 round 2'} rows={5} />
+          <label>{copy("Team B sends ")}<textarea value={teamB} onChange={(event) => { setTeamB(event.target.value); setScreenshotConfirmed(false); setResult(null) }} placeholder={copy('Player name\n2027 round 2')} rows={5} />
           </label>
           <PlayerSearch sport={sport} onChoose={(player) => {
             setTeamB((current) => [current.trim(), player.name].filter(Boolean).join('\n'))
@@ -256,60 +257,58 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
       </div>
       {imageName ? (
         <label className="af-tc-generic-confirm">
-          <input type="checkbox" checked={screenshotConfirmed} onChange={(event) => setScreenshotConfirmed(event.target.checked)} />
-          I checked the assets and which team sends each one.
-        </label>
+          <input type="checkbox" checked={screenshotConfirmed} onChange={(event) => setScreenshotConfirmed(event.target.checked)} />{copy(" I checked the assets and which team sends each one. ")}</label>
       ) : null}
       <div className="af-tc-generic-pick">
-        <strong>Add a draft pick</strong>
-        <label>Year <input type="number" min={new Date().getFullYear()} max={new Date().getFullYear() + 8} value={pickYear} onChange={(event) => setPickYear(Number(event.target.value))} /></label>
-        <label>Round <input type="number" min={1} max={16} value={pickRound} onChange={(event) => setPickRound(Number(event.target.value))} /></label>
-        <label>Expected range <select value={pickTier} onChange={(event) => setPickTier(event.target.value as 'early' | 'mid' | 'late')}><option value="early">Early</option><option value="mid">Middle</option><option value="late">Late</option></select></label>
-        <label>Overall pick, if known <input type="number" min={1} max={192} value={pickOverall} onChange={(event) => setPickOverall(event.target.value)} placeholder="Optional" /></label>
-        <button type="button" onClick={() => addPick('A')}>Add to A</button>
-        <button type="button" onClick={() => addPick('B')}>Add to B</button>
+        <strong>{copy("Add a draft pick")}</strong>
+        <label>{copy("Year ")}<input type="number" min={new Date().getFullYear()} max={new Date().getFullYear() + 8} value={pickYear} onChange={(event) => setPickYear(Number(event.target.value))} /></label>
+        <label>{copy("Round ")}<input type="number" min={1} max={16} value={pickRound} onChange={(event) => setPickRound(Number(event.target.value))} /></label>
+        <label>{copy("Expected range ")}<select value={pickTier} onChange={(event) => setPickTier(event.target.value as 'early' | 'mid' | 'late')}><option value="early">{copy("Early")}</option><option value="mid">{copy("Middle")}</option><option value="late">{copy("Late")}</option></select></label>
+        <label>{copy("Overall pick, if known ")}<input type="number" min={1} max={192} value={pickOverall} onChange={(event) => setPickOverall(event.target.value)} placeholder={copy("Optional")} /></label>
+        <button type="button" onClick={() => addPick('A')}>{copy("Add to A")}</button>
+        <button type="button" onClick={() => addPick('B')}>{copy("Add to B")}</button>
       </div>
-      <p className="af-tc-generic-hint">A known overall pick maps to an early, middle, or late range using a 12-team reference; the grade remains an estimate. General market grade only: no league scoring, roster needs, trade rules, or acceptance prediction. Screenshot images go to the configured vision provider for asset extraction and are not saved by this tool.</p>
+      <p className="af-tc-generic-hint">{copy("A known overall pick maps to an early, middle, or late range using a 12-team reference; the grade remains an estimate. General market grade only: no league scoring, roster needs, trade rules, or acceptance prediction. Screenshot images go to the configured vision provider for asset extraction and are not saved by this tool.")}</p>
       <button type="button" className="af-btn" onClick={() => void analyze()} disabled={busy || extracting || Boolean(imageName && !screenshotConfirmed)}>
-        {busy ? 'Analyzing…' : 'Analyze trade'}
+        {copy(busy ? 'Analyzing…' : 'Analyze trade')}
       </button>
-      {error ? <p className="af-tc-generic-error" role="alert">{error}</p> : null}
+      {error ? <p className="af-tc-generic-error" role="alert">{copy(error)}</p> : null}
       {result?.grade ? (
         <div className="af-tc-generic-result" aria-live="polite">
           {result.grade.graded ? (
             <>
               <div className="af-tc-generic-grades">
-                <div><span>Team A</span><strong>{result.grade.letter}</strong><small>Receives Team B assets</small><TradeReaction letter={result.grade.letter} /></div>
-                <div><span>Team B</span><strong>{result.grade.partnerLetter}</strong><small>Receives Team A assets</small><TradeReaction letter={result.grade.partnerLetter} /></div>
+                <div><span>{copy("Team A")}</span><strong>{copy(result.grade.letter)}</strong><small>{copy("Receives Team B assets")}</small><TradeReaction letter={result.grade.letter} /></div>
+                <div><span>{copy("Team B")}</span><strong>{copy(result.grade.partnerLetter)}</strong><small>{copy("Receives Team A assets")}</small><TradeReaction letter={result.grade.partnerLetter} /></div>
               </div>
-              <h3>{result.grade.sideAdvantage === 'even' ? 'Near-even market value' : result.grade.sideAdvantage === 'you' ? 'Team A receives more market value' : 'Team B receives more market value'}</h3>
-              <p>Team A receives {result.grade.getMarket.toLocaleString()} in general market value and sends {result.grade.giveMarket.toLocaleString()}; Team B sees the reverse. The value gap is {Math.abs(result.grade.percentDiff ?? 0)}% of the larger side.</p>
-              <p className="af-tc-generic-hint">This grade compares market value only. Position matters only through each asset’s quoted value; there is no team-specific position adjustment. League scoring, roster needs, injury risk, acceptance likelihood, and future results are not priced separately.</p>
-              <p className="af-tc-generic-hint">Value basis: {result.grade.basis}. Valuation checked {result.lastUpdated && Number.isFinite(Date.parse(result.lastUpdated)) ? new Date(result.lastUpdated).toLocaleString() : 'at analysis time; source date unavailable'}.</p>
+              <h3>{copy(result.grade.sideAdvantage === 'even' ? 'Near-even market value' : result.grade.sideAdvantage === 'you' ? 'Team A receives more market value' : 'Team B receives more market value')}</h3>
+              <p>{copy("Team A receives ")}{copy(result.grade.getMarket.toLocaleString(locale))}{copy(" in general market value and sends ")}{copy(result.grade.giveMarket.toLocaleString(locale))}{copy("; Team B sees the reverse. The value gap is ")}{copy(Math.abs(result.grade.percentDiff ?? 0))}{copy("% of the larger side.")}</p>
+              <p className="af-tc-generic-hint">{copy("This grade compares market value only. Position matters only through each asset’s quoted value; there is no team-specific position adjustment. League scoring, roster needs, injury risk, acceptance likelihood, and future results are not priced separately.")}</p>
+              <p className="af-tc-generic-hint">{copy("Value basis: ")}{copy(result.grade.basis)}{copy(". Valuation checked ")}{copy(result.lastUpdated && Number.isFinite(Date.parse(result.lastUpdated)) ? new Date(result.lastUpdated).toLocaleString(locale) : 'at analysis time; source date unavailable')}{copy(".")}</p>
               <TradeDecisionSummary grade={result.grade} evaluatedAt={analyzedAt} gaps={result.dataGaps} generic />
               <TradeEvidencePanel grade={result.grade} evaluatedAt={analyzedAt} gaps={result.dataGaps} generic />
               <TradeValueChart grade={result.grade} generic />
               <TradeReactionSettings />
               {result.grade.lines.length ? (
                 <details className={styles.breakdown}>
-                  <summary>Why this grade? View asset values and sources</summary>
+                  <summary>{copy("Why this grade? View asset values and sources")}</summary>
                   <ul>{result.grade.lines.map((line, index) => (
                     <li key={`${line.side}-${line.name}-${index}`}>
-                      <strong>{line.side === 'give' ? 'Team A sends' : 'Team B sends'} · {line.name}</strong>
-                      <span>{line.marketValue == null ? 'Value unavailable' : `${line.marketValue.toLocaleString()} market value`}</span>
-                      <small>{line.valueSource ?? line.source ?? 'Source unavailable'}{line.valueAsOf && Number.isFinite(Date.parse(line.valueAsOf)) ? ` · as of ${new Date(line.valueAsOf).toLocaleDateString()}` : ' · source date unavailable'}</small>
+                      <strong>{copy(line.side === 'give' ? 'Team A sends' : 'Team B sends')}{copy(" · ")}{line.name}</strong>
+                      <span>{copy(line.marketValue == null ? 'Value unavailable' : `${line.marketValue.toLocaleString(locale)} market value`)}</span>
+                      <small>{copy(line.valueSource ?? line.source ?? 'Source unavailable')}{copy(line.valueAsOf && Number.isFinite(Date.parse(line.valueAsOf)) ? ` · as of ${new Date(line.valueAsOf).toLocaleDateString(locale)}` : ' · source date unavailable')}</small>
                     </li>
                   ))}</ul>
                 </details>
               ) : null}
               {result.grade.lines.some((line) => line.marketValue == null || line.leagueValue == null) ? (
-                <p className="af-tc-generic-hint">Some assets could not be priced. Review the names and the data gaps before relying on this grade.</p>
+                <p className="af-tc-generic-hint">{copy("Some assets could not be priced. Review the names and the data gaps before relying on this grade.")}</p>
               ) : null}
             </>
-          ) : <p>{result.grade.reason}</p>}
-          {result.dataGaps?.length ? <p className="af-tc-generic-hint">Data gaps: {result.dataGaps.join(' · ')}</p> : null}
+          ) : <p>{copy(result.grade.reason)}</p>}
+          {result.dataGaps?.length ? <p className="af-tc-generic-hint">{copy("Data gaps: ")}{copy(result.dataGaps.join(' · '))}</p> : null}
         </div>
-      ) : result ? <p className="af-tc-generic-error">No reliable grade was returned for this trade.</p> : null}
+      ) : result ? <p className="af-tc-generic-error">{copy("No reliable grade was returned for this trade.")}</p> : null}
       <TradeComparisonSnapshots scope={comparisonScope} snapshot={result?.grade?.graded ? {
         id: 'current', scope: comparisonScope, sport, title: 'Team A ↔ Team B',
         at: analyzedAt ?? result.lastUpdated ?? new Date().toISOString(),

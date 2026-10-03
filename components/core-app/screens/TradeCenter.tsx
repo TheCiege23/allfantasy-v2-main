@@ -53,6 +53,8 @@ import { TradeEvidencePanel } from './TradeEvidencePanel'
 import { TradeDecisionSummary } from './TradeDecisionSummary'
 import { TradePackageCost } from './TradePackageCost'
 import { counterDecision } from '@/lib/decision-os/trade/decisionSummary'
+import { tradeVisualCopy } from '@/lib/core-app/tradeVisualCopy'
+import { getIntlLocale as tradeIntlLocale } from '@/lib/i18n/constants'
 import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import { TradeValueChart, LineupImpactChart } from './TradeImpactCharts'
 import { TradeReaction, TradeReactionSettings } from './TradeReactions'
@@ -383,7 +385,7 @@ function AllLeaguesTradeHub(props: {
   viewerId?: string | null
 }) {
   const language = useOptionalLanguage().language
-  const copy = (value: string) => coreUiCopy(value, language)
+  const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
   const [query, setQuery] = useState('')
   const needle = query.trim().toLowerCase()
   const visibleLeagues = needle
@@ -581,7 +583,7 @@ export function TradeCenter(props: {
   startWithOfferEntry?: boolean
 }) {
   const language = useOptionalLanguage().language
-  const copy = (value: string) => coreUiCopy(value, language)
+  const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
   const depthAccess = props.depthAccess ?? null
   const depthLocked = depthAccess?.unlocked === false
   const [result, setResult] = useState<AnalyzeResult | null>(null)
@@ -2292,15 +2294,15 @@ export function TradeCenter(props: {
           {result.valueBasis ? (
             <p className="af-tc-basis">
               <b>{copy(result.valueBasis.graded === 'league' ? 'Graded on league value' : 'Graded on market value')}</b>
-              <span>{result.valueBasis.label}</span>
+              <span>{copy(result.valueBasis.label)}</span>
             </p>
           ) : null}
           <details className="af-tc-grade-method">
-            <summary>How this was graded</summary>
-            <p>{result.grade?.basis ?? result.valueBasis?.label ?? 'Current available market values.'}</p>
-            <p>The grade compares trade value. Roster fit, acceptance, and realized production are separate.</p>
-            {analyzedAt ? <p>Evaluated {new Date(analyzedAt).toLocaleString()}.</p> : null}
-            {serverGrade?.graded ? <ul>{serverGrade.lines.map((line, index) => <li key={`${line.side}-${line.name}-${index}`}>{line.side === 'give' ? 'You send' : 'You receive'} {line.name}: {line.leagueValue == null ? 'unpriced' : money(line.leagueValue)}</li>)}</ul> : null}
+            <summary>{copy('How this was graded')}</summary>
+            <p>{copy(result.grade?.basis ?? result.valueBasis?.label ?? 'Current available market values.')}</p>
+            <p>{copy('The grade compares trade value. Roster fit, acceptance, and realized production are separate.')}</p>
+            {analyzedAt ? <p>{copy('Evaluated')} {new Date(analyzedAt).toLocaleString(tradeIntlLocale(language))}.</p> : null}
+            {serverGrade?.graded ? <ul>{serverGrade.lines.map((line, index) => <li key={`${line.side}-${line.name}-${index}`}>{copy(line.side === 'give' ? 'You send' : 'You receive')} {line.name}: {line.leagueValue == null ? copy('unpriced') : money(line.leagueValue)}</li>)}</ul> : null}
           </details>
           {/*
             Which league type that chart is for, and whether anyone confirmed it. The league-type
@@ -2309,26 +2311,26 @@ export function TradeCenter(props: {
           {serverGrade ? <TradeDecisionSummary grade={serverGrade} evaluatedAt={analyzedAt} gaps={result.dataGaps} visual={result.visualImpact} /> : null}
           {serverGrade?.graded ? <TradeEvidencePanel grade={serverGrade} evaluatedAt={analyzedAt} gaps={result.dataGaps} /> : null}
           {serverGrade ? <TradeValueChart grade={serverGrade} /> : null}
-          {result.visualImpact ? <><LineupImpactChart impact={result.visualImpact.impact} /><p className="af-tc-row-sub">{result.visualImpact.reason} {result.visualImpact.rostersStale ? 'Roster data may be stale; sync before acting.' : ''} Picks and FAAB are outside the weekly lineup simulation.</p></> : null}
+          {result.visualImpact ? <><LineupImpactChart impact={result.visualImpact.impact} /><p className="af-tc-row-sub">{copy(result.visualImpact.reason??'')} {result.visualImpact.rostersStale ? copy('Roster data may be stale; sync before acting.') : ''} {copy('Picks and FAAB are outside the weekly lineup simulation.')}</p></> : null}
           <TradeReactionSettings />
           <TradePackageCost cost={result.visualImpact?.packageCost} />
-          {serverGrade?.graded ? <div className="af-tc-grade-row"><span>Your grade {serverGrade.letter} <TradeReaction letter={serverGrade.letter} /></span><span>Their grade {serverGrade.partnerLetter} <TradeReaction letter={serverGrade.partnerLetter} /></span></div> : null}
+          {serverGrade?.graded ? <div className="af-tc-grade-row"><span>{copy('Your grade')} {serverGrade.letter} <TradeReaction letter={serverGrade.letter} /></span><span>{copy('Their grade')} {serverGrade.partnerLetter} <TradeReaction letter={serverGrade.partnerLetter} /></span></div> : null}
           <LeagueTypeGradeNote basis={result.grade?.leagueType} confirmHref="#league-type" />
           {serverGrade?.graded ? (
             <p className="af-tc-row-sub" data-testid="trade-value-grade-basis">
               {copy('This trade-value grade uses the same league scoring and asset-price rules as trade history and email. Roster fit does not change the letter. Refreshed market values can change a later evaluation.')}
             </p>
           ) : null}
-          {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>Open this saved evaluation</Link> · Original values preserved at {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString()}.</p>
-            : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">This evaluation could not be saved. Keep a copy before relying on it later.</p> : null}
+          {result?.evaluationReceipt?.status === 'saved' ? <p><Link href={result.evaluationReceipt.href}>{copy('Open this saved evaluation')}</Link> · {copy('Original values preserved at')} {new Date(result.evaluationReceipt.evaluatedAt).toLocaleString(tradeIntlLocale(language))}.</p>
+            : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">{copy('This evaluation could not be saved. Keep a copy before relying on it later.')}</p> : null}
           {serverGrade?.graded && serverGrade.rosterFit ? (
             <div className="af-tc-cap-check" data-testid="trade-roster-fit">
-              <div className="af-label">Your roster fit · separate from the trade-value grade</div>
-              <p>Personal utility: {money(serverGrade.rosterFit.giveValue)} given, {money(serverGrade.rosterFit.getValue)} received.
-                {' '}This is a roster-fit estimate, not a win probability or the grade sent by email.</p>
+              <div className="af-label">{copy('Your roster fit · separate from the trade-value grade')}</div>
+              <p>{copy('Personal utility:')} {money(serverGrade.rosterFit.giveValue)} {copy('given,')} {money(serverGrade.rosterFit.getValue)} {copy('received.')}
+                {' '}{copy('This is a roster-fit estimate, not a win probability or the grade sent by email.')}</p>
               {serverGrade.rosterFit.moves.map((move, index) => (
                 <p key={`${move.side}:${move.name}:${index}`}>
-                  {move.name}: {money(move.base)} base → {money(move.leagueValue)} personal utility. {move.reasons.join('; ')}.
+                  {move.name}: {money(move.base)} {copy('base →')} {money(move.leagueValue)} {copy('personal utility.')} {move.reasons.map(reason=>copy(reason)).join('; ')}.
                 </p>
               ))}
             </div>
@@ -2487,7 +2489,7 @@ export function TradeCenter(props: {
                 {result.counterOffers!.map(counter => (
                   <li key={`${counter.addTo}-${counter.rosterPlayerId}`}>
                     <strong>{copy(counter.addTo === 'get' ? 'Ask for' : 'Offer')} {counter.name}</strong>
-                    {serverGrade ? <p className="af-tc-row-sub">{counterDecision({before:serverGrade,after:counter.grade,addTo:counter.addTo,cost:result.visualImpact?.packageCost})}</p> : null}
+                    {serverGrade ? <p className="af-tc-row-sub">{copy(counterDecision({before:serverGrade,after:counter.grade,addTo:counter.addTo,cost:result.visualImpact?.packageCost,language}))}</p> : null}
                     <span className="af-tc-row-sub">{copy('Base value')} {money(counter.marketValue)} · {copy('League value in this package')} {money(counter.assetLeagueValue)}</span>
                     <span className="af-tc-row-sub">
                       {copy('You')} {counter.grade.letter} / {theirLabel} {counter.grade.partnerLetter} · {counter.balanced ? copy('Within the even-value band') : `${Math.abs(counter.grade.percentDiff)}% ${copy('apart')}`} · {money(counter.remainingGap)} {copy('value gap remaining')}
