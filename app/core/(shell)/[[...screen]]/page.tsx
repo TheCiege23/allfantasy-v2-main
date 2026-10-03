@@ -4584,6 +4584,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           <>
             {connectedFranchise && selectedLeagueId ? (
               <ConnectedFranchiseWarRoom
+                headingLevel={scout ? 2 : 1}
                 linkId={connectedFranchise.linkId}
                 franchiseName={connectedFranchise.franchiseName}
                 primaryMemberId={connectedFranchise.primaryMemberId}

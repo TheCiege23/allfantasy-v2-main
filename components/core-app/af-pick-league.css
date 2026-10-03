@@ -152,11 +152,19 @@
   white-space: nowrap;
 }
 
+/*
+ * ⚠ BOUNDED, WITH AN ELLIPSIS. It was `nowrap` and nothing else, so a long league name pushed the
+ * row wider than a 375px screen. The full name is still the row's accessible text.
+ */
 .af-pl-row-league {
   font-size: 12px;
   font-weight: 700;
   color: var(--accent);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 24ch;
+  min-width: 0;
 }
 
 /* ── League picker ───────────────────────────────────────────────────── */
@@ -220,20 +228,25 @@
   font-weight: 800;
   color: var(--text2);
 }
+/*
+ * The shell's per-platform tokens (af-core.css `--p-*`), defined for every theme. These were
+ * hard-coded dark-theme pastels (#b394ff, #fb5b78, #a685ff) that fell below contrast on the light
+ * theme's white tiles.
+ */
 .af-pl-league-crest--none[data-platform='sleeper'] {
-  background: rgba(147, 90, 255, 0.16);
-  border-color: rgba(147, 90, 255, 0.3);
-  color: #b394ff;
+  background: var(--p-sleeper-bg);
+  border-color: var(--p-sleeper-bg);
+  color: var(--p-sleeper-fg);
 }
 .af-pl-league-crest--none[data-platform='espn'] {
-  background: rgba(251, 91, 120, 0.16);
-  border-color: rgba(251, 91, 120, 0.3);
-  color: #fb5b78;
+  background: var(--p-espn-bg);
+  border-color: var(--p-espn-bg);
+  color: var(--p-espn-fg);
 }
 .af-pl-league-crest--none[data-platform='yahoo'] {
-  background: rgba(148, 88, 255, 0.16);
-  border-color: rgba(148, 88, 255, 0.3);
-  color: #a685ff;
+  background: var(--p-yahoo-bg);
+  border-color: var(--p-yahoo-bg);
+  color: var(--p-yahoo-fg);
 }
 
 /*
@@ -291,7 +304,8 @@
   /* The league name moves under the text rather than being squeezed out of it. */
   .af-pl-row-league {
     grid-column: 2;
-    font-size: 11px;
+    font-size: 12px;
+    max-width: 100%;
   }
 
   .af-pl-grid {

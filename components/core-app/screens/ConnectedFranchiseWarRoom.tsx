@@ -75,13 +75,20 @@ export function ConnectedFranchiseWarRoom({
   primaryMemberId,
   selectedLeagueId,
   sides,
+  headingLevel = 1,
 }: {
   linkId: string
   franchiseName: string
   primaryMemberId: string | null
   selectedLeagueId: string
   sides: ConnectedFranchiseWarRoomSide[]
+  /**
+   * 2 when the page already has its `<h1>` — the War Room renders Scout's below this block, and two
+   * top-level headings tell a screen-reader user the page is two pages.
+   */
+  headingLevel?: 1 | 2
 }) {
+  const Title = headingLevel === 2 ? 'h2' : 'h1'
   const router = useRouter()
   const [savingTeam, setSavingTeam] = useState<string | null>(null)
   const [mappingError, setMappingError] = useState<string | null>(null)
@@ -177,7 +184,7 @@ export function ConnectedFranchiseWarRoom({
       <header className="af-cwr-head">
         <div>
           <span className="af-label">CONNECTED FRANCHISE · COMMAND CENTER</span>
-          <h1>{franchiseName}</h1>
+          <Title>{franchiseName}</Title>
           <p>Every roster, draft and league pulse in one home. Each league still keeps its own rules, scoring and lineup.</p>
         </div>
         <div className="af-cwr-head-actions">
@@ -216,7 +223,7 @@ export function ConnectedFranchiseWarRoom({
 
       <nav className="af-cwr-mobile-switcher" aria-label="Connected league switcher">
         {sides.map((side) => (
-          <button key={side.memberId} type="button" data-current={expanded.has(side.memberId) || undefined} onClick={() => toggleExpanded(side.memberId)}>
+          <button key={side.memberId} type="button" data-current={expanded.has(side.memberId) || undefined} aria-pressed={expanded.has(side.memberId)} onClick={() => toggleExpanded(side.memberId)}>
             {side.name}
           </button>
         ))}
@@ -234,7 +241,7 @@ export function ConnectedFranchiseWarRoom({
         </nav>
       </section>
 
-      <div className="af-cwr-pipeline" aria-label="Connected league dashboard">
+      <div className="af-cwr-pipeline" role="group" aria-label="Connected league dashboard">
         {sides.map((side, index) => {
           const current = side.leagueId === selectedLeagueId
           const selectedTeam = side.teamCandidates.find((team) => team.label === side.teamLabel || team.id === side.teamLabel)?.id ?? ''
@@ -307,7 +314,7 @@ export function ConnectedFranchiseWarRoom({
       </div>
 
       {positions.length > 0 ? (
-        <div className="af-cwr-positions" aria-label="Combined roster positions">
+        <div className="af-cwr-positions" role="group" aria-label="Combined roster positions">
           {positions.map(([position, count]) => <span key={position}><strong>{count}</strong> {position}</span>)}
         </div>
       ) : null}
