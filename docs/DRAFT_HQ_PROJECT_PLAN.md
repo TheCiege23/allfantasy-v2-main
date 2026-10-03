@@ -25,7 +25,7 @@ Remaining phase-1 follow-up: check real provider fixtures for every supported dr
 
 ## Phase 2 — Durable history and archive
 
-Started on `codex/draft-hq-phase2-archive-20261003`. First slice preserves Sleeper source draft/league IDs, immutable raw selection ownership, player identity, draft settings/order, season settings snapshots and full provider traded-pick ownership records. Provider start and last-picked times retain their original meaning; exact per-pick OTC remains unavailable. The shared draft snapshot is stored once per draft. Verification: 22 importer/provenance tests passed; implementation lint passed. This is foundation work, not a completed phase or a production release. Explicit selectors, uniform section binding, native timing events, correction/trade histories and controlled legacy backfill remain outstanding.
+Started on `codex/draft-hq-phase2-archive-20261003`. First slice preserves Sleeper source draft/league IDs, immutable raw selection ownership, player identity, draft settings/order, season settings snapshots and full provider traded-pick ownership records. Provider start and last-picked times retain their original meaning; exact per-pick OTC remains unavailable. The shared draft snapshot is stored once per draft. Verification: 23 importer/provenance tests passed; metadata typecheck and implementation lint passed. Failed provider reads now preserve stored history and report an error. This is foundation work, not a completed phase or a production release. Explicit selectors, uniform section binding, native timing events, correction/trade histories and controlled legacy backfill remain outstanding.
 
 Dependency: phase 1. Effort: large. User/business value: complete league history and trustworthy commissioner archives.
 
