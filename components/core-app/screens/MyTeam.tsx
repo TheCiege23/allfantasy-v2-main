@@ -1738,7 +1738,9 @@ export function MyTeam({ data }: MyTeamProps) {
                         ? (language === 'es'
                           ? 'La puntuación de esta liga no favorece la opción de banca. No se recomienda un cambio con estas proyecciones.'
                           : "This league's scoring does not favor the bench option. These projections do not support a swap.")
-                        : copy('The standard projection favors the bench option. A reliable league-scored difference is unavailable, so review before swapping.')
+                        : (language === 'es'
+                          ? 'La comparación sugiere una revisión, pero no se pudo confirmar la identidad o las proyecciones de esta liga. Actualiza antes de considerar un cambio.'
+                          : 'The bench check suggests a review, but the player identity or league-scored values could not be confirmed. Refresh before considering a swap.')
                     : data.starters.available
                       ? copy('No empty, out, or bye slot was identified among the players we could read. Unresolved players and missing news may hide issues; confirm the lineup on your platform.')
                       : data.starters.reason}
