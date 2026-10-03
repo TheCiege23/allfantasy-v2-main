@@ -179,7 +179,7 @@ export function BracketChallenge({ data }: BracketChallengeProps) {
         <p className="af-bk-pending" role="note">
           Seeding is not published yet, so every slot is open. That is deliberate — the bracket is
           playable now so pools can form early, and slots fill as teams clinch rather than being
-          guessed at. Nothing you pick is lost when the field locks.
+          guessed at.
         </p>
       ) : null}
 
@@ -223,6 +223,19 @@ export function BracketChallenge({ data }: BracketChallengeProps) {
               ))}
             </select>
           </label>
+
+          {/*
+           * ⚠ THESE PICKS ARE NOT SAVED, AND THE SCREEN MUST SAY SO. Champion and length live in
+           * `useState` only — no route, no table, no entry — so a reload clears them. This screen
+           * is a preview of the shell; picks that count live in a pool (PlayoffBracketEntry /
+           * PlayoffBracketPick), entered from /brackets. It once said "Nothing you pick is lost
+           * when the field locks"; pinned by __tests__/core-app/bracket-challenge-picks-not-saved.
+           * Wire persistence and change this copy in the same commit, or neither.
+           */}
+          <p className="af-bk-unsaved" role="note" data-testid="af-bk-unsaved">
+            Picks here are a preview and are not saved — a reload clears them. To make picks that
+            count, <Link href="/brackets">join or start a pool</Link>.
+          </p>
 
           {/* Length pick — only where the final is a series. */}
           {shell.finalLength ? (
