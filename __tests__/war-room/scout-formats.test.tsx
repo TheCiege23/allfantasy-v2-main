@@ -173,6 +173,7 @@ const render = (data: Record<string, unknown>, standing: unknown = null) =>
       data={{ league: { id: 'lg1', name: 'The Axe', sport: 'NFL' }, you: null, week: { seasonYear: 2026, week: 5 }, opponent: null, basis: { available: false, reason: 'x' }, ...data } as never}
       gamePlanHref="/p"
       matchupHref="/core/matchup?league=lg1"
+      standingsHref="/core/standings?league=lg1"
       tradesHref="/t"
       eliminationStanding={standing as never}
     />,
@@ -188,6 +189,15 @@ describe('Scout draws each format', () => {
     expect(html).toContain('<strong>#11</strong> of 12 — 3.2 over the cut.')
     expect(html).toContain('Projected: most teams have not played yet.')
     expect(html).not.toContain('You have not played them')
+  })
+
+  it('elimination: "Every team against the cut" opens the standings — the Matchup screen lists no teams in a guillotine league', () => {
+    const html = render(
+      { format: fmt({ kind: 'guillotine', elimination: true }), managers: { available: true, data: [mgr('1', { isYou: true }), mgr('2')] } },
+      { rank: 3, outOf: 12, overCut: 9, basis: 'points', placesAboveCut: 9, cutLine: 60, elimination: true },
+    )
+    expect(html).toMatch(/href="\/core\/standings\?league=lg1"[^>]*>Every team against the cut/)
+    expect(html).not.toMatch(/href="\/core\/matchup\?league=lg1"[^>]*>Every team against the cut/)
   })
 
   it('elimination: says so when you are the one chopped', () => {

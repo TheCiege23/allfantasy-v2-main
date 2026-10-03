@@ -222,7 +222,7 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   for (const r of allRosters) for (const id of rosterPlayerIds(r.playerData)) rostered.add(id)
   for (const id of myIds) rostered.add(id)
 
-  const { afEngineForLeague, lookupAfEngineProjections, lookupProjections } = await import('@/lib/core-app/playerProjections')
+  const { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } = await import('@/lib/core-app/playerProjections')
 
   /*
    * The candidate pool is players who ACTUALLY PLAYED in the most recent scored week, plus
@@ -355,6 +355,31 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   }
 
   const out = new Set(args.unavailable ?? [])
+  /*
+   * 🛑 RULED-OUT AND BYE PLAYERS ARE READ HERE, NOT ONLY WHEN A CALLER HAPPENS TO PASS THEM.
+   * `unavailable` came only from My Team's Lineup check, so the Waivers screen — the one place a
+   * manager goes to decide whether to add someone — priced an injured-reserve back at his stale
+   * projection and called the result "your lineup". Measured on Elimination Station 2 (2026-10-03):
+   * Breece Hall (IR, out) and Rachaad White (out) put the board at 97.68 against a lineup projected
+   * 81.5; zeroing them gave 86.85. The inflated base also sank every free agent's gain, so "nobody on
+   * the wire would improve your lineup" was being measured against two players who are not playing.
+   *
+   * Same reader and rule as the rail and the all-leagues board (`loadUnavailableBySport`), so the
+   * three cannot disagree about who plays. Only for the week being played — a current injury says
+   * nothing about next week's board. Fails open to the caller's list: a failed read changes nothing.
+   */
+  if (!onNext) {
+    try {
+      const at = await latestProjectionWeek()
+      if (at) {
+        const { loadUnavailableBySport } = await import('@/lib/core-app/unavailableStarters')
+        const bySport = await loadUnavailableBySport({ sleeperIds: myIds, sports: ['NFL'], season: Number(at.season), week: at.week })
+        for (const id of bySport.get('NFL') ?? []) out.add(id)
+      }
+    } catch {
+      // Fail open: the board as it was, priced on the caller's list alone.
+    }
+  }
   // Kept on the roster at zero (not dropped), so `displaces` can still name him.
   const roster = score(mineProj as never).map((p) => (p.sleeperId && out.has(p.sleeperId) ? { ...p, points: 0 } : p))
   const pool = score(poolProj as never)

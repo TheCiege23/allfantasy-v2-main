@@ -53,6 +53,12 @@ import type { RailMatchup } from '@/lib/core-app/railMatchups'
 const NOW = '2026-10-02T17:00:00.000Z'
 
 describe('1 · the page resolves the paywall for the War Room', () => {
+  it('the page hands Scout the league standings for the elimination banner (not the matchup screen)', () => {
+    const page = readFileSync('app/core/(shell)/[[...screen]]/page.tsx', 'utf8')
+    const scout = page.slice(page.indexOf('<Scout'), page.indexOf('/>', page.indexOf('<Scout')))
+    expect(scout).toContain('standingsHref={`/core/standings?league=${encodeURIComponent(scout.league.id)}`}')
+  })
+
   it('includes war-room in the corePaywall read, which Scout’s Competitive Edge depends on', () => {
     const page = readFileSync('app/core/(shell)/[[...screen]]/page.tsx', 'utf8')
     const block = page.slice(page.indexOf('const corePaywallRead ='), page.indexOf('resolveCorePaywall(userId'))

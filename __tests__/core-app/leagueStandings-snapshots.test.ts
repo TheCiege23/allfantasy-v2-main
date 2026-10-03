@@ -207,6 +207,28 @@ describe('getLeagueStandings — weekly snapshots', () => {
     expect(result.board.teams.map((t) => t.rosterId)).toEqual(['4', '3', '2', '1'])
   })
 
+  it('does not call a guillotine league finished in week 4 — no head-to-head is no schedule, not no season', async () => {
+    // One matchupId per roster (the guillotine shape), weeks 1–3 scored, week 4 not yet.
+    db.rows = [1, 2, 3, 4].flatMap((w) =>
+      [1, 2, 3, 4].map((i) => ({
+        seasonYear: 2026,
+        week: w,
+        rosterId: String(i),
+        matchupId: i,
+        pointsFor: w <= 3 ? 90 + i * 5 + w : 0,
+        pointsAgainst: 0,
+      })),
+    )
+    db.teams = [team('1', 0, 0), team('2', 0, 0), team('3', 0, 0), team('4', 0, 0)]
+    const result = await getLeagueStandings(LEAGUE, USER, ctx())
+    if (!result.available) throw new Error('expected a board')
+    expect(result.board.hasHeadToHead).toBe(false)
+    expect(result.projection.available).toBe(false)
+    if (result.projection.available) return
+    expect(result.projection.reason).not.toMatch(/regular season is over/)
+    expect(result.projection.reason).toMatch(/no head-to-head schedule/)
+  })
+
   it('still refuses a season with nothing scored', async () => {
     db.rows = [...week(1, null), ...week(2, null)]
     const result = await getLeagueStandings(LEAGUE, USER, ctx())

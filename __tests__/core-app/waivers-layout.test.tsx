@@ -91,4 +91,30 @@ describe('Waivers screen layout', () => {
     /* The folded rules still say the two facts people check most. */
     expect(screen.getByTestId('waiver-rules').querySelector('summary')?.textContent).toContain('Rolling waiver priority · Wednesday')
   })
+
+  /*
+   * The /waiver-wire board decides who is taken from AllFantasy's own Roster rows. An imported league has
+   * none, so it showed every player in the sport as available, every projection as 0.0 and a $100 budget
+   * against a real $1,000 (Elimination Station 2, 2026-10-03). Only a league AllFantasy runs links to it.
+   */
+  it.each([
+    ['sleeper', 'S1', false],
+    ['manual', null, false],
+    ['allfantasy', null, true],
+  ] as const)('a %s league links to the AllFantasy free-agent board: %s', (platform, platformLeagueId, linked) => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})) as never)
+    const data: WaiversData = {
+      league: { id: 'L1', name: 'The Axe', platform, format: null, platformLeagueId },
+      budget: { available: false, reason: 'x' },
+      waiverPriority: { available: false, reason: 'x' },
+      rosterLoad: { available: false, reason: 'x' },
+      claimsQueued: { available: false, reason: 'x' },
+      waiverType: { available: true, data: { kind: 'rolling', label: 'Rolling waiver priority', budget: null } },
+      processTime: { available: false, reason: 'x' },
+      tiebreak: { available: false, reason: 'x' },
+      claimLimits: { available: false, reason: 'x' },
+    }
+    const { container } = render(<Waivers data={data} edge={null} edgeAccess={null} />)
+    expect(container.querySelector('a[href^="/waiver-wire"]') != null).toBe(linked)
+  })
 })

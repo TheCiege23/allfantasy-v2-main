@@ -110,7 +110,8 @@ export function WaiverLineupBoard({ leagueId, faab = null, rollingPriority = nul
         <h2 className="af-label">Worth adding</h2>
         {board.state === 'ok' && board.currentLineupPoints != null ? (
           <span className="af-wv-section-note af-num">
-            your lineup {board.currentLineupPoints}
+            {/* The BEST lineup your roster can field — not the one set on the platform. */}
+            your best lineup {board.currentLineupPoints}
             {perGame ? ' per game' : board.week ? ` · wk ${board.week}` : ''}
           </span>
         ) : null}
