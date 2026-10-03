@@ -60,9 +60,18 @@ database built from history. Parking is load-bearing for them, not housekeeping.
 does not match this file (`f06fd2fa23…`) — see its `PROVENANCE.md`. Moving it would show as a
 modified applied migration. The other nine have **no** ledger row, so moving any of them would make
 the next `migrate deploy` RUN it: `t101b` (do not apply yet), `fact_table_uniqueness` (deletes
-duplicate rows), `league_max_pf_freeze`, the three `manager_psych_*`, `league_last_viewed_at`, and
-the two applied by hand but never recorded — `domain_os_facts` and
-`weekly_matchup_roster_id_text`.
+duplicate rows), `league_max_pf_freeze`, the three `manager_psych_*` and `league_last_viewed_at`.
+
+✅ **Two of the original nine are now RECORDED (2026-10-03, on the owner's instruction):**
+`domain_os_facts` (16:08:55Z) and `weekly_matchup_roster_id_text` (16:09:03Z). Both had been
+applied by hand and never recorded. Production was first verified to match each file exactly —
+`domain_os_facts`' 10 column types, lengths, nullability and defaults plus its pkey and three
+indexes; `WeeklyMatchup.rosterId` = `text` over 106,704 rows, 0 null, 0 non-numeric, four indexes —
+with a positive control (planted wrong expectations were all reported). Then
+`prisma migrate resolve --applied` from an LF export, so each ledger checksum equals the sha256 of
+the committed LF file (`91be26727c…`, `91305477aa…`). A later `migrate deploy` now matches and
+SKIPS them instead of re-running them. They stay parked: moving them is a separate step that needs
+its own shadow-replay check, like the four above.
 
 ## ✅ ALL SEVEN ARE APPLIED TO PRODUCTION (2026-08-31)
 
@@ -141,6 +150,9 @@ role", but "the app's role is a MEMBER of the migration role".
 ## ⚠ A THIRD CASE: applied to production, but NOT through Prisma
 
 ### `20260901220000_domain_os_facts`
+
+✅ **RECORDED 2026-10-03 16:08:55Z** — see the 2026-10-03 section at the top. The table below
+describes the state before that: the "RUNS it" row no longer applies.
 
 **Applied to production 2026-09-01 by the owner, as raw SQL in a console.** So it
 is neither "pending approval" nor recorded in `_prisma_migrations` — it is a
@@ -351,7 +363,8 @@ then update `schema.prisma`, then ship writers.
 
 ### `20260903222531_weekly_matchup_roster_id_text`
 
-✅ **APPLIED TO PRODUCTION 2026-09-03.** `WeeklyMatchup.rosterId Int` → `String`.
+✅ **APPLIED TO PRODUCTION 2026-09-03, and RECORDED 2026-10-03 16:09:03Z** (it had no
+`_prisma_migrations` row until then — see the 2026-10-03 section at the top). `WeeklyMatchup.rosterId Int` → `String`.
 One statement: `ALTER COLUMN "rosterId" TYPE TEXT USING "rosterId"::text` —
 lossless, every existing Int becomes its exact text form. Verified before (44,538
 rows, 0 nulls) and after (44,538 rows, 0 nulls, 0 non-numeric values, all four
