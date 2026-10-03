@@ -30,9 +30,10 @@ import type { Record3, ResultCode, Zone } from './standingsModel'
  * reached through the render's shared league context. A second ranking rule here would disagree
  * with Standings on exactly the tiebreak a manager is looking at.
  *
- * ⚠ NOTHING HERE IS COMPETITIVE EDGE. A manager's trade and waiver history is the paid Competitive
- * Edge depth (coreDepthAccess.ts), surfaced inside the decision it bears on. This screen carries the
- * free table and points at the Trade Center; it does not lift the paid facts onto a free screen.
+ * ⚠ NOTHING THIS LOADER RETURNS IS COMPETITIVE EDGE. A manager's trade and waiver history is the
+ * paid depth (coreDepthAccess.ts). Scout shows it to a plan holder (owner's decision 2026-10-02), but
+ * it is loaded separately and gated on the server — lib/competitive-edge/scoutEdgeLoader.ts — so
+ * this free read can never carry it by accident.
  *
  * ── 🛑 THE MEMBERSHIP GATE IS NOT OPTIONAL ──────────────────────────────────
  *

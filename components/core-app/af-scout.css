@@ -385,6 +385,29 @@
   padding: 16px 18px;
 }
 
+/* ── Competitive Edge (plan holders) ─────────────────────────────────── */
+
+.af-core .af-sc-edge-basis {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+  max-width: 90ch;
+}
+
+.af-core .af-sc-edge {
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
 /* ── Narrow ──────────────────────────────────────────────────────────── */
 /* The file's ONLY media query, kept last — see the header note. */
 

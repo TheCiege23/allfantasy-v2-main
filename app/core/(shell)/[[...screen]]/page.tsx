@@ -98,6 +98,7 @@ import FormatHub from '@/components/core-app/screens/FormatHub'
 import { getFormatHub, parseHubFormat } from '@/lib/core-app/formatHubs'
 import { getWaiversData } from '@/lib/core-app/waivers'
 import { loadWaiverEdgeForScreen } from '@/lib/competitive-edge/waiverEdgeLoader'
+import { loadScoutEdgeForScreen } from '@/lib/competitive-edge/scoutEdgeLoader'
 import { getWaiversBoard } from '@/lib/core-app/waiversBoard'
 import { readWaiversBoardSummary } from '@/lib/core-app/waiversBoardSummary'
 import { readPortfolioSummary } from '@/lib/core-app/portfolioSummary'
@@ -2782,7 +2783,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * War Room's picker fallback is reached through.
    */
   let scoutLoadFailed = false
-  const [scout, connectedFranchise] = await Promise.all([
+  /*
+   * Scout's Competitive Edge — every manager's trade and waiver record, for a plan that includes it
+   * (owner's decision 2026-10-02). `loadScoutEdgeForScreen` returns null to a locked viewer, so the
+   * counts are never sent; the lock card only draws the gate.
+   */
+  const scoutEdgeAccess =
+    activeKey === 'war-room' && !gamePlanView && selectedLeagueId ? (corePaywall?.competitive_edge ?? null) : null
+  const [scout, connectedFranchise, scoutEdge] = await Promise.all([
     activeKey === 'war-room' && !gamePlanView && selectedLeagueId
       ? getScoutData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
           console.error('[core/war-room] scout read failed', e)
@@ -2796,6 +2804,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           leagueContext: leagueCtx,
         }).catch(() => null)
       : Promise.resolve(null),
+    loadScoutEdgeForScreen({ leagueId: scoutEdgeAccess ? selectedLeagueId : null, access: scoutEdgeAccess, userId }),
   ])
 
   /*
@@ -4615,6 +4624,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 }
                 matchupHref={`/core/matchup?league=${encodeURIComponent(scout.league.id)}`}
                 tradesHref={`/core/trades?league=${encodeURIComponent(scout.league.id)}`}
+                edge={scoutEdge}
+                edgeAccess={scoutEdgeAccess}
               />
             ) : scoutLoadFailed ? (
               /*
