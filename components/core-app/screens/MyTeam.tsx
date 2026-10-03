@@ -282,13 +282,16 @@ function VenueMark({
   indoors: boolean | null
   weather: LineupPlayer['weather']
 }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
+  const es = language === 'es'
   if (weather?.indoors || indoors === true) {
     return (
       <span
         className="af-mt-venue"
         data-indoors="true"
-        title="Indoor or roofed stadium — weather is not a factor. Retractable roofs count as roofed; we do not track whether the roof is open."
-        aria-label="Indoor stadium"
+        title={copy('Indoor or roofed stadium — weather is not a factor. Retractable roofs count as roofed; we do not track whether the roof is open.')}
+        aria-label={copy('Indoor stadium')}
       >
         ⌂
       </span>
@@ -299,10 +302,10 @@ function VenueMark({
     const bits = [
       weather.temperatureF != null ? `${Math.round(weather.temperatureF)}°F` : null,
       weather.windSpeedMph != null && weather.windSpeedMph >= 8
-        ? `${Math.round(weather.windSpeedMph)} mph wind`
+        ? es ? `viento de ${Math.round(weather.windSpeedMph)} mph` : `${Math.round(weather.windSpeedMph)} mph wind`
         : null,
       weather.precipChancePct != null && weather.precipChancePct >= 20
-        ? `${Math.round(weather.precipChancePct)}% precip`
+        ? es ? `${Math.round(weather.precipChancePct)}% de lluvia` : `${Math.round(weather.precipChancePct)}% precip`
         : null,
       weather.conditionLabel,
     ].filter(Boolean)
@@ -311,8 +314,8 @@ function VenueMark({
         className="af-mt-venue"
         data-indoors="false"
         data-forecast="true"
-        title={bits.join(' · ') || 'Open-air stadium'}
-        aria-label={bits.join(', ') || 'Outdoor stadium'}
+        title={bits.join(' · ') || copy('Open-air stadium')}
+        aria-label={bits.join(', ') || copy('Outdoor stadium')}
       >
         {weather.symbol}
         {weather.temperatureF != null ? (
@@ -327,8 +330,8 @@ function VenueMark({
       <span
         className="af-mt-venue"
         data-indoors="false"
-        title="Open-air stadium — no forecast yet for this kickoff"
-        aria-label="Outdoor stadium, forecast not available yet"
+        title={copy('Open-air stadium — no forecast yet for this kickoff')}
+        aria-label={copy('Outdoor stadium, forecast not available yet')}
       >
         ☁
       </span>
@@ -532,6 +535,8 @@ function WinForecast({ forecast }: { forecast: NonNullable<NextMatchup['forecast
 
 /** One side of the projected matchup. */
 function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   return (
     <div className="af-mt-mu-side">
       <div className="af-mt-mu-who">
@@ -551,7 +556,7 @@ function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) 
       </div>
       {/* AllFantasy's own engine for the same lineup, beside the provider total. */}
       {side.afProjected != null ? (
-        <div className="af-mt-mu-af af-num" title="AllFantasy engine projection, adjusted to this league's scoring">
+        <div className="af-mt-mu-af af-num" title={copy("AllFantasy engine projection, adjusted to this league's scoring")}>
           AF {side.afProjected.toFixed(1)}
         </div>
       ) : null}
@@ -562,7 +567,7 @@ function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) 
       */}
       {side.projected != null && side.projectedFrom < side.starterCount ? (
         <div className="af-mt-mu-cov">
-          from {side.projectedFrom} of {side.starterCount}
+          {language === 'es' ? `con ${side.projectedFrom} de ${side.starterCount}` : `from ${side.projectedFrom} of ${side.starterCount}`}
         </div>
       ) : null}
     </div>
@@ -719,19 +724,32 @@ function abbreviate(status: string): { short: string; tone: string; full: string
   return { short: status.slice(0, 3).toUpperCase(), tone: 'none', full: status }
 }
 
+/**
+ * The status in Spanish, by its abbreviation — the same words as `RosterKey`. `full` is the
+ * provider's own text ("Questionable"), so without this a screen reader said English in Spanish.
+ * An unfamiliar designation keeps the provider's text, as `abbreviate` does.
+ */
+const STATUS_ES: Record<string, string> = {
+  H: 'sano', Q: 'dudoso', D: 'poco probable', O: 'fuera', IR: 'reserva de lesionados', DNP: 'no entrenó',
+  P: 'probable', SUS: 'suspendido', PUP: 'no apto físicamente', INA: 'inactivo',
+}
+
 function StatusChip({ status }: { status: string | null }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   if (!status) {
     return (
       <span
         className="af-mt-status"
         data-tone="none"
-        title="No injury designation reported, which is not the same as confirmed healthy"
+        title={copy('No injury designation reported, which is not the same as confirmed healthy')}
       >
         &mdash;
       </span>
     )
   }
-  const { short, tone, full } = abbreviate(status)
+  const { short, tone, full: provider } = abbreviate(status)
+  const full = language === 'es' ? STATUS_ES[short] ?? provider : provider
   return (
     <span className="af-mt-status" data-tone={tone} title={full} aria-label={full}>
       {short}
@@ -753,6 +771,8 @@ function StatusChip({ status }: { status: string | null }) {
  * own scoring could not be applied, and the caveat under the roster says so.
  */
 function Projections({ player }: { player: LineupPlayer }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const fmt = (v: number | null) =>
     v == null ? <span className="af-mt-proj--none">&mdash;</span> : v.toFixed(1)
   const pct = (v: number | null | undefined) =>
@@ -769,8 +789,8 @@ function Projections({ player }: { player: LineupPlayer }) {
       */}
       <span
         className="af-mt-proj af-mt-proj--af af-num"
-        title={`Provider (Sleeper) projection scored under YOUR league's rules${
-          player.projectedPoints != null ? ` · standard PPR ${player.projectedPoints.toFixed(1)}` : ''
+        title={`${copy("Provider (Sleeper) projection scored under YOUR league's rules")}${
+          player.projectedPoints != null ? ` · ${copy('standard PPR')} ${player.projectedPoints.toFixed(1)}` : ''
         }`}
       >
         {fmt(player.afProjectedPoints)}
@@ -782,7 +802,7 @@ function Projections({ player }: { player: LineupPlayer }) {
       */}
       <span
         className="af-mt-proj af-mt-proj--engine af-num"
-        title="AllFantasy's own projection engine, adjusted to your league's scoring"
+        title={copy("AllFantasy's own projection engine, adjusted to your league's scoring")}
       >
         {fmt(player.afEngineProjectedPoints ?? null)}
       </span>
@@ -793,13 +813,13 @@ function Projections({ player }: { player: LineupPlayer }) {
       */}
       <span
         className="af-mt-share af-num"
-        title="Share of AllFantasy leagues rostering this player"
+        title={copy('Share of AllFantasy leagues rostering this player')}
       >
         {pct(player.market?.ownPct)}
       </span>
       <span
         className="af-mt-share af-num"
-        title="Of the leagues that roster him, how many are starting him this week. Byes and injuries move this on their own."
+        title={copy('Of the leagues that roster him, how many are starting him this week. Byes and injuries move this on their own.')}
       >
         {pct(player.market?.startPct)}
       </span>
@@ -1236,6 +1256,8 @@ function SlotRow({
   leagueId: string
   sourceLink: MyTeamData['league']['sourceLink']
 }) {
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   return (
     /*
       ⚠ A STARTER ON BYE IS TREATED LIKE AN EMPTY SLOT, because it is one — a
@@ -1273,8 +1295,8 @@ function SlotRow({
           */}
           <div className="af-mt-player af-mt-empty-text">
             <div>
-              <div className="af-mt-player-name">Empty</div>
-              <div className="af-mt-player-meta">Nobody is starting in this slot</div>
+              <div className="af-mt-player-name">{copy('Empty')}</div>
+              <div className="af-mt-player-meta">{copy('Nobody is starting in this slot')}</div>
             </div>
             {/*
               ⚠ NO LINK IS BETTER THAN THE WRONG ONE. With no platform link on file (a native
