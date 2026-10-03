@@ -585,6 +585,34 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
         blurb={copy('Review remaining lineup problems across your leagues, as of your last sync — opening a league checks its live lineup. Deadlines follow individual players; confirm locks and AutoSubs on your platform.')}
       />
 
+      {needsView.length > 0 ? (
+        <section className="af-bd-action-queue" aria-labelledby="af-mt-action-queue">
+          <div>
+            <span className="af-label">{copy('Before lock')}</span>
+            <h2 id="af-mt-action-queue">{needsView.length} {needsView.length === 1 ? copy('lineup needs a look') : copy('lineups need a look')}</h2>
+            <p>{copy('Open a team to inspect the issue and confirm player locks on your platform.')}</p>
+          </div>
+          <ol>
+            {needsView.slice(0, 3).map((row) => {
+              const source = lineupLink({
+                id: row.leagueId, platform: row.platform, platformLeagueId: row.platformLeagueId,
+                season: row.leagueSeason, name: row.leagueName, teamId: row.teamId,
+              })
+              return (
+                <li key={row.leagueId}>
+                  <Link href={row.href}>
+                    <strong>{row.leagueName}</strong>
+                    <span>{[row.empty ? `${row.empty} empty` : null, row.out ? `${row.out} out` : null, row.bye ? `${row.bye} on bye` : null].filter(Boolean).join(' · ') || copy('Lineup risk')} · <Lock row={row} now={nowMs} /></span>
+                    <span aria-hidden>{copy('Review')} →</span>
+                  </Link>
+                  {source?.external ? <a className="af-bd-action-source" href={source.href} target="_blank" rel="noopener noreferrer">{copy('Open in')} {row.platform} ↗</a> : null}
+                </li>
+              )
+            })}
+          </ol>
+        </section>
+      ) : null}
+
       <section className="af-bd-sec" aria-labelledby="af-mt-board">
         <SectionHead
           id="af-mt-board"
