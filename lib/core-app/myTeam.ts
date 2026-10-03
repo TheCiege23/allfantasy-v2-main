@@ -36,6 +36,7 @@ import { kickoffClock, LOCK_ZONE } from './lineupLock'
 import { readLineupGameDay, summariseStarterGameDay, type PlayerGameDay, type StarterGameDaySummary } from './myTeamGameDay'
 import { leagueContextFor, type LeagueContext } from './leagueContext'
 import { isGuillotineLeague, isTeamEliminated } from './teamElimination'
+import { loadDynastyOutlook, type DynastyOutlook } from './dynastyOutlook'
 import {
   BENCH_SWAP_POINTS,
   isEligibleForSlot,
@@ -277,6 +278,8 @@ export type MyTeamData = {
   starterGameDay?: StarterGameDaySummary | null
   /** Roster ids in each non-starting section that resolve to no player we hold. Absent on early returns. */
   unidentified?: { bench: number; ir: number; taxi: number }
+  /** Draft capital and lineup age — dynasty leagues only (`dynastyOutlook.ts`). Absent otherwise. */
+  dynasty?: DynastyOutlook | null
   starters: SectionState<LineupSlot[]>
   /**
    * Why the roster carries unnamed rows, said ONCE.
@@ -1583,6 +1586,30 @@ export async function getMyTeamData(
     ]))
   }
 
+  /*
+   * Started before the matchup read and awaited after it, so a dynasty league pays for the
+   * pick and age reads in parallel rather than in series. Dynasty only: a redraft roster has no
+   * future picks and no reason to be judged on age.
+   */
+  const isDynastyLeague = league.isDynasty === true || String(league.leagueType ?? '').toLowerCase() === 'dynasty'
+  const asPlayer = (p: LineupPlayer) => ({ sleeperId: p.sleeperId, name: p.name, position: p.position })
+  const dynastyRead = isDynastyLeague
+    ? loadDynastyOutlook({
+        league: {
+          id: leagueId,
+          platform: league.platform ?? null,
+          leagueType: league.leagueType ?? null,
+          isDynasty: league.isDynasty ?? null,
+          season: league.season ?? null,
+          status: league.status ?? null,
+        },
+        teamExternalId: myTeamRow.externalId ?? null,
+        rosterCandidates: candidates,
+        starters: starterSlots.flatMap((sl) => (sl.player ? [asPlayer(sl.player)] : [])),
+        roster: [...resolved.values()].map(asPlayer),
+      }).catch(() => null)
+    : Promise.resolve(null)
+
   const matchup = leagueWeek
     ? await getNextMatchup({
         leagueId,
@@ -1617,6 +1644,7 @@ export async function getMyTeamData(
     ...base,
     team,
     starterGameDay,
+    dynasty: await dynastyRead,
     bestBall: base.league.bestBall === true,
     lineupVerification: liveRoster?.verification ?? null,
     projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },

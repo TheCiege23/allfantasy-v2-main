@@ -1997,3 +1997,68 @@ li[data-kind='questionable'] .af-mt-check-tag {
     min-height: 44px;
   }
 }
+
+/*
+ * ── Dynasty outlook (2026-10-02) ────────────────────────────────────────────
+ * Appended at depth 0. Lives in the side column on a wide page; on a narrow one it follows the
+ * roster, like byes and the scoring basis (order: 1) — it explains seasons, the lineup is the week.
+ */
+.af-mt-dynasty {
+  order: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+}
+.af-mt-dynasty-h {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-mt-dynasty-picks,
+.af-mt-dynasty-aging {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.af-mt-dynasty-picks li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 13px;
+}
+.af-mt-dynasty-season {
+  flex: 0 0 auto;
+  min-width: 40px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.af-mt-dynasty-list {
+  min-width: 0;
+  color: var(--text);
+}
+.af-mt-dynasty-line {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text2);
+}
+.af-mt-dynasty-num {
+  font-weight: 800;
+  color: var(--text);
+}
+.af-mt-dynasty-aging li {
+  font-size: 13px;
+}
+.af-mt-dynasty-name {
+  font-weight: 700;
+  color: var(--text);
+}
+.af-mt-dynasty-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}

@@ -738,6 +738,86 @@ function ProjHeader() {
  */
 const CHECK_TAG: Record<LineupCheckItem['kind'], string> = { out: 'OUT', bye: 'BYE', empty: 'EMPTY', swap: 'SWAP', questionable: 'Q' }
 
+/**
+ * Draft capital and lineup age, side by side — the two facts that decide a dynasty team's next
+ * three seasons, which this page never showed. See `dynastyOutlook.ts`. Each half degrades on its
+ * own: no picks synced says so, no ages on file says so, neither hides the other.
+ */
+function DynastyCard({ outlook }: { outlook: NonNullable<MyTeamData['dynasty']> }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const { picks, ages } = outlook
+  return (
+    <section className="af-frame af-mt-dynasty" aria-label={es ? 'Panorama dinastía' : 'Dynasty outlook'}>
+      <h2 className="af-label">{es ? 'Panorama dinastía' : 'Dynasty outlook'}</h2>
+
+      <h3 className="af-mt-dynasty-h">{es ? 'Selecciones de draft' : 'Draft capital'}</h3>
+      {picks.available ? (
+        picks.bySeason.length === 0 ? (
+          <p className="af-mt-dynasty-note">{es ? 'No tienes selecciones en los próximos drafts.' : 'You hold no picks in the upcoming drafts.'}</p>
+        ) : (
+          <>
+            <ul className="af-mt-dynasty-picks">
+              {picks.bySeason.map((s) => (
+                <li key={s.season}>
+                  <span className="af-mt-dynasty-season af-num">{s.season}</span>
+                  <span className="af-mt-dynasty-list">
+                    {s.picks
+                      .map((p) => (p.fromTeamName ? `${p.label} (${es ? 'vía' : 'via'} ${p.fromTeamName})` : p.label))
+                      .join(' · ')}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {picks.coverage === 'traded_only' ? (
+              <p className="af-mt-dynasty-note">
+                {es
+                  ? 'Solo se listan las selecciones que cambiaron de manos: el tamaño del draft de esta liga no está registrado.'
+                  : 'Only picks that changed hands are listed — this league’s draft size is not on file.'}
+              </p>
+            ) : null}
+          </>
+        )
+      ) : (
+        <p className="af-mt-dynasty-note">{picks.reason}.</p>
+      )}
+
+      <h3 className="af-mt-dynasty-h">{es ? 'Edad de la alineación' : 'Lineup age'}</h3>
+      {ages.available ? (
+        <>
+          <p className="af-mt-dynasty-line">
+            {es ? 'Edad mediana de titulares' : 'Starters’ median age'}{' '}
+            <span className="af-num af-mt-dynasty-num">{ages.medianStarterAge}</span>
+            {ages.known < ages.total ? (
+              <span className="af-mt-dynasty-note"> ({ages.known} {es ? 'de' : 'of'} {ages.total} {es ? 'con edad registrada' : 'with an age on file'})</span>
+            ) : null}
+            {' · '}
+            <span className="af-num">{ages.youngCore}</span> {es ? 'jugadores de 24 años o menos' : 'players 24 or younger'}
+          </p>
+          {ages.aging.length === 0 ? (
+            <p className="af-mt-dynasty-note">
+              {es ? 'Ningún titular ha pasado la edad en que su posición suele declinar.' : 'No starter is past the age his position usually declines.'}
+            </p>
+          ) : (
+            <ul className="af-mt-dynasty-aging">
+              {ages.aging.map((a) => (
+                <li key={a.sleeperId}>
+                  <span className="af-mt-dynasty-name">{a.name}</span>{' '}
+                  <span className="af-mt-dynasty-note">
+                    {a.position} · {a.age} — {es ? `los ${a.position} suelen declinar desde los ${a.threshold}` : `${a.position}s usually decline from ${a.threshold}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <p className="af-mt-dynasty-note">{ages.reason}.</p>
+      )}
+    </section>
+  )
+}
+
 /** What `/api/idp/players?view=waiver-board` returns, as far as this card reads it. */
 type WaiverBoardPayload = {
   state: string
@@ -1458,6 +1538,9 @@ export function MyTeam({ data }: MyTeamProps) {
           </button>
         </section>
       ) : null}
+
+      {/* ── Dynasty outlook: the next three seasons, not this week ────── */}
+      {data.dynasty ? <DynastyCard outlook={data.dynasty} /> : null}
 
       </div>
       <div className="af-mt-main">
