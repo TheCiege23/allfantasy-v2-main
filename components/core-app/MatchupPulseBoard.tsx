@@ -15,6 +15,7 @@ import '@/components/core-app/af-matchup-pulse.css'
 import '@/components/core-app/af-core-boards.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { InfoTip } from '@/components/core-app/InfoTip'
 
 /**
  * `/core/matchup` with no league held — "where you stand" across every league.
@@ -225,6 +226,83 @@ function WinRing({ p }: { p: number }) {
   )
 }
 
+/**
+ * How to read "Where you stand" — one "?" beside its heading, never one per row.
+ *
+ * ⚠ THE CONFUSION IT EXISTS FOR: the columns are chosen by WIN PROBABILITY when the model priced
+ * anything (`byOdds`), while each row's number is its own MARGIN — so "+30.9" in green under
+ * "Underdog" is correct and reads as a bug. Every sentence restates code in this file: the column
+ * words (`aheadWord`), `Row`'s sign/tone, `WinRing` (absent on a final row or a refused one), the
+ * bar (`scale`, the largest |margin|), `metaOf`'s "proj final", and the expected-record and
+ * closest-games blocks — each sentence only when its thing is on screen.
+ */
+function StandTip({
+  es,
+  byOdds,
+  done,
+  expected,
+  closest,
+  anyProjected,
+}: {
+  es: boolean
+  byOdds: boolean
+  done: boolean
+  expected: boolean
+  closest: boolean
+  /** Some row on screen is a projection (`pulse.basis` is 'projected' or 'mixed'). */
+  anyProjected: boolean
+}) {
+  const t = es ? 'Cómo leer este tablero' : 'How to read this board'
+  return (
+    <InfoTip label={t} title={t}>
+      <span className="af-info-para">
+        {done
+          ? es
+            ? 'Todos los partidos terminaron: Ganados y Perdidos son resultados, los cinco primeros de cada lado.'
+            : 'Every game is final: Won and Lost are results, five shown on each side.'
+          : byOdds
+            ? es
+              ? 'Favorito y En desventaja ordenan tus ligas por probabilidad de ganar, cinco de cada lado. Por eso una liga que ganas por 30 puede estar en En desventaja si el modelo espera que se dé vuelta.'
+              : 'Favoured and Underdog sort your leagues by chance to win, five on each side — so a league you lead by 30 can sit under Underdog if the model expects it to turn.'
+            : es
+              ? 'Ganando y Perdiendo ordenan tus ligas por margen, cinco de cada lado.'
+              : 'Leading and Trailing sort your leagues by margin, five on each side.'}
+      </span>
+      <span className="af-info-para">
+        {/*
+          ⚠ THE PROJ CLAUSE ONLY WHEN A ROW IS PROJECTED. A fully scored board says nothing about
+          projections (`matchup-pulse-board.test.tsx` pins exactly that) — a sentence about a tag that
+          is nowhere on screen invites the reader to doubt numbers that are real scores.
+        */}
+        {es
+          ? `El número de cada fila es tu margen, con su propio signo: + en verde si vas arriba, − en rojo si vas abajo. Son puntos anotados${anyProjected ? ', o una proyección donde dice PROY.' : '.'} La barra bajo la fila muestra qué tan grande es ese margen frente a los demás.`
+          : `Each row’s number is your margin, with its own sign: + in green when you are ahead, − in red when behind. It is points scored${anyProjected ? ', or a projection where tagged PROJ.' : '.'} The bar under a row shows how big that margin is next to the others.`}
+      </span>
+      {byOdds && !done ? (
+        <span className="af-info-para">
+          {es
+            ? 'El anillo es tu probabilidad de ganar. No aparece en un partido terminado ni cuando el modelo no puede calcular ambas alineaciones. «final proy.» en una fila en vivo es dónde el modelo espera que termine.'
+            : 'The ring is your chance to win — absent on a finished game, or when the model can’t price both lineups. “proj final” on a live row is where the model expects it to end.'}
+        </span>
+      ) : null}
+      {expected ? (
+        <span className="af-info-para">
+          {es
+            ? 'El récord esperado es la suma de tus probabilidades: 23.4–17.6 significa que esperarías ganar unos 23 de esos enfrentamientos.'
+            : 'Expected record is your chances added up: 23.4–17.6 means you would expect to win about 23 of those matchups.'}
+        </span>
+      ) : null}
+      {closest ? (
+        <span className="af-info-para">
+          {es
+            ? 'Partidos más reñidos: los casi empates que no están ya entre los cinco de cada lado.'
+            : 'Closest games: the near coin-flips not already in the five on each side.'}
+        </span>
+      ) : null}
+    </InfoTip>
+  )
+}
+
 /** One sentence naming what the whole board is measured in. */
 function basisNote(pulse: MatchupPulse, language: string): string | null {
   if (pulse.basis === 'projected') {
@@ -374,6 +452,23 @@ export function MatchupPulseBoard({
           <h2 className="af-label" id="af-mp-head">
             {copy('Where you stand')}
           </h2>
+          {/*
+            Beside the heading, not in it: the section is `aria-labelledby` this <h2>. Shares the
+            boards' `.af-bd-sec-info` wrapper — the same baseline row, the same quiet colour.
+            Only over rows: an empty board has nothing to read.
+          */}
+          {pulse.ranked > 0 ? (
+            <span className="af-bd-sec-info">
+              <StandTip
+                es={language === 'es'}
+                byOdds={byOdds}
+                done={done}
+                expected={!done && pulse.expectedWins != null && (pulse.withOdds ?? 0) > 0}
+                closest={closest.length > 0}
+                anyProjected={pulse.basis !== 'scored'}
+              />
+            </span>
+          ) : null}
           <span className="af-mp-rule" aria-hidden />
           <span className="af-mp-count">
             {pulse.leadingTotal ?? pulse.leading.length} {copy(aheadWord)} · {pulse.trailingTotal ?? pulse.trailing.length} {copy(behindWord)}
