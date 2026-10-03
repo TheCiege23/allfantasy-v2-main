@@ -162,6 +162,20 @@ function seededRandom(seed: string): () => number {
 
 /**
  * Select eligible teams for lottery based on config.
+ *
+ * `rows` arrive BEST-first: rank 1 = best (`LeagueTeam.currentRank`, which every standings read
+ * orders ascending), sorted by `applyTiebreak` — or the Standings table's seeds, for its preview.
+ * The playoff teams are the head of that list, and the lottery pool is always its WORST
+ * `lotteryTeamCount` teams.
+ *
+ * 🛑 UNTIL 2026-10-03 `non_playoff` and `all_teams` took the HEAD of the pool (`slice(0, N)`), so
+ * when more teams sat outside the playoff line than the lottery had places — 12 teams, 4 in the
+ * playoffs, 6 in the lottery — the worst records in the league got no ticket at all, and the best
+ * non-playoff teams drew instead. `bottom_n` was right, except that a count of 0 (`slice(-0)`)
+ * returned every team.
+ *
+ * The output keeps the input's order, so a league whose pool already fit gets exactly the list,
+ * draw and seed-reproducible result it got before.
  */
 export function selectEligibleTeams(
   rows: StandingsRow[],
@@ -170,15 +184,22 @@ export function selectEligibleTeams(
   playoffTeamCount: number
 ): StandingsRow[] {
   const mode = eligibilityMode === 'custom' ? 'all_teams' : eligibilityMode
-  if (mode === 'all_teams') {
-    return rows.slice(0, lotteryTeamCount)
+  if (mode === 'all_teams' || mode === 'bottom_n') {
+    return worstOf(rows, lotteryTeamCount)
   }
-  if (mode === 'bottom_n') {
-    return rows.slice(-lotteryTeamCount)
-  }
-  const nonPlayoffCount = Math.max(0, rows.length - playoffTeamCount)
-  const eligible = rows.slice(playoffTeamCount, playoffTeamCount + nonPlayoffCount)
-  return eligible.slice(0, lotteryTeamCount)
+  return worstOf(rows.slice(Math.max(0, playoffTeamCount)), lotteryTeamCount)
+}
+
+/**
+ * The `n` worst rows, in their input order. Worst = highest rank; within a tied rank, the row
+ * `applyTiebreak` placed first counts as the worse finish — the same reading the fallback order
+ * (`buildFullSlotOrder`, a stable sort by rank descending) gives a tie.
+ */
+function worstOf(rows: StandingsRow[], n: number): StandingsRow[] {
+  if (!(n > 0)) return []
+  if (rows.length <= n) return rows.slice()
+  const worst = new Set([...rows].sort((a, b) => b.rank - a.rank).slice(0, n))
+  return rows.filter((r) => worst.has(r))
 }
 
 /**
