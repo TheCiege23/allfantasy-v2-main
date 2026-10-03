@@ -13,6 +13,7 @@ import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react'
+import { InfoTip } from '@/components/core-app/InfoTip'
 import type {
   MatchupData,
   MatchupPlayerCell,
@@ -42,6 +43,80 @@ import type {
 
 export type MatchupProps = {
   data: MatchupData
+}
+
+/**
+ * How to read the banner: the two big numbers, the AF line, the win probability and the margin chip.
+ * One "?" beside the "Win probability" label — the banner's centre — never one per team card.
+ *
+ * ⚠ EACH SENTENCE RESTATES CODE, so it changes with it: the score-vs-projection switch is `scored`
+ * in `Matchup` (no score until a starter has played), "proj" is `projectedFinalFor` (banked points
+ * plus non-AllFantasy — i.e. Sleeper — projections rescored by this league), the model and its
+ * never-HIGH confidence are `lib/projections/winProbability.ts`. The AF sentence only appears when
+ * an AF figure is on screen.
+ */
+function BannerTip({ es, showsAf }: { es: boolean; showsAf: boolean }) {
+  const t = es ? 'Cómo leer este marcador' : 'How to read this scoreboard'
+  return (
+    <InfoTip label={t} title={t}>
+      <span className="af-info-para">
+        {es
+          ? 'Los números grandes son los puntos anotados en cuanto juega un titular. Antes de eso son el total final proyectado de cada alineación —la proyección de Sleeper recalculada con la configuración de esta liga—, marcado «proj».'
+          : 'The big numbers are points scored, once any starter has played. Before that they are each lineup’s projected final — Sleeper’s projection, re-scored under this league’s settings — marked “proj”.'}
+      </span>
+      {showsAf ? (
+        <span className="af-info-para">
+          {es
+            ? 'AF debajo es el motor propio de AllFantasy con la misma alineación, para comparar.'
+            : 'AF beneath it is AllFantasy’s own engine on the same lineup, for comparison.'}
+        </span>
+      ) : null}
+      <span className="af-info-para">
+        {es
+          ? 'La probabilidad de victoria suma los puntos ya anotados y la proyección de cada titular pendiente, con una dispersión medida en puntuaciones semanales reales; una posición vacía o un titular descartado cuenta como cero. Trata a los jugadores como independientes, aunque un mariscal y su receptor anotan juntos, así que tiende a ser demasiado segura: por eso la confianza nunca es ALTA mientras quede alguien por jugar. Si a un titular pendiente le falta la proyección, o no se puede confirmar el estado de un partido, no se muestra un porcentaje en vez de adivinarlo.'
+          : 'Win probability adds the points already scored to each remaining starter’s projection, with a spread measured from real weekly scores; an empty slot or a starter ruled out counts as zero. It treats players as independent — though a quarterback and his receiver score together — so it leans too sure, which is why confidence never reads HIGH while anyone is still to play. If a starter still to play has no projection, or a game’s state can’t be confirmed, no percentage is shown rather than a guess.'}
+      </span>
+      <span className="af-info-para">
+        {es
+          ? 'La etiqueta de abajo es la diferencia entre los dos números grandes: «proyectada» hasta que juega un titular.'
+          : 'The chip below it is the gap between the two big numbers — “Projected” until a starter has played.'}
+      </span>
+    </InfoTip>
+  )
+}
+
+/**
+ * How to read the slot-by-slot board. Beside the section's heading, never in a row or in the
+ * `columnheader` (a button there would join the column's accessible name).
+ *
+ * ⚠ RESTATES `slotEdges` (Sleeper projection before kickoff, scored points live; no tint when either
+ * side has no number) and the tally above the board.
+ */
+function BoardTip({ es, live }: { es: boolean; live: boolean }) {
+  const t = es ? 'Cómo leer esta tabla' : 'How to read this board'
+  return (
+    <InfoTip label={t} title={t}>
+      <span className="af-info-para">
+        {live
+          ? es
+            ? 'PTS son los puntos de cada jugador esta semana, tal como los anotó la plataforma.'
+            : 'PTS is each player’s points this week, as the platform scored them.'
+          : es
+            ? 'Antes del inicio cada jugador muestra dos proyecciones: SLPR es la de Sleeper, recalculada con la configuración de esta liga; AF es el motor propio de AllFantasy con la misma configuración.'
+            : 'Before kickoff each player shows two projections: SLPR is Sleeper’s, re-scored under this league’s settings; AF is AllFantasy’s own engine on the same settings.'}
+      </span>
+      <span className="af-info-para">
+        {es
+          ? `Cada fila empareja tu titular con el suyo, posición por posición, y se tiñe del lado que la gana${live ? '' : ' según la proyección de Sleeper'}. Sin tinte cuando a un lado le falta el número: no se puede comparar.`
+          : `Each row pairs your starter with theirs, slot by slot, and is tinted on the side winning it${live ? '' : ' on Sleeper’s projection'}. No tint when one side has no number — there is nothing to compare.`}
+      </span>
+      <span className="af-info-para">
+        {es
+          ? 'El recuento de arriba cuenta esas posiciones; «de N comparables» significa que en algunas faltaba el número de un lado.'
+          : 'The tally above counts those slots; “of N comparable” means some slots were missing a number on one side.'}
+      </span>
+    </InfoTip>
+  )
 }
 
 /** Two letters for a team with no crest. Never blank, never a broken image. */
@@ -949,7 +1024,10 @@ export function Matchup({ data }: MatchupProps) {
             />
 
             <div className="af-mu-centre">
-              <div className="af-label af-mu-centre-label">{copy('Win probability')}</div>
+              <div className="af-label af-mu-centre-label">
+                {copy('Win probability')}
+                <BannerTip es={language === 'es'} showsAf={!scored && afTotals != null && (afTotals.you != null || afTotals.opponent != null)} />
+              </div>
               {data.winProbability.available ? (
                 <>
                   <div
@@ -1054,6 +1132,8 @@ export function Matchup({ data }: MatchupProps) {
       <section className="af-frame af-mu-section">
         <header className="af-mu-section-head">
           <h2 className="af-label">{copy('Head to head, slot by slot')}</h2>
+          {/* Only over a board: an unavailable lineup renders its reason instead, with nothing to read. */}
+          {data.lineups.available ? <BoardTip es={language === 'es'} live={data.playerScoring.available} /> : null}
         </header>
         <LineupBoard data={data} />
       </section>

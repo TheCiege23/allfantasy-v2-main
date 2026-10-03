@@ -1583,3 +1583,15 @@
     min-height: 44px;
   }
 }
+
+/*
+ * ── The section heading's "?" (`BoardTip` in Matchup.tsx, 2026-10-03) ──
+ *
+ * The head was a plain block, so a tip after the <h2> dropped to a line of its own. A row keeps it
+ * beside the heading; a head holding only its <h2> renders exactly as before. Its own top-level
+ * block at end of file — never inside a media query.
+ */
+.af-mu-section-head {
+  display: flex;
+  align-items: center;
+}
