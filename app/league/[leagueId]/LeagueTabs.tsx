@@ -35,6 +35,7 @@ const FOOTBALL_REDRAFT_COMPACT_TABS: TabDef[] = [
   { id: 'waivers', label: 'Waivers' },
   { id: 'trades', label: 'Trades' },
   { id: 'standings', label: 'Standings' },
+  { id: 'war_room', label: 'AF Legacy' },
   { id: 'league_chat', label: 'League Chat' },
   { id: 'commissioner', label: 'Commissioner' },
 ]

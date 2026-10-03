@@ -170,7 +170,8 @@ test.describe('@db Guillotine War Room runtime', () => {
     // Trades disabled → analyze returns a truthful disabled state (200, not crash).
     const tradeRes = await page.request.post(`/api/leagues/${seed.leagueId}/guillotine-war-room/trade-analyze`, { data: { incomingPlayerIds: [], outgoingPlayerIds: [] } })
     expect(tradeRes.status()).toBe(200)
-    expect(((await tradeRes.json()) as { tradeAnalysis: { verdict: string } }).tradeAnalysis.verdict).toBe('disabled')
+    expect(((await tradeRes.json()) as { tradeGrade: { graded: boolean; reason: string } }).tradeGrade)
+      .toEqual({ graded: false, reason: 'Trades are disabled in this league.' })
 
     // Ask gated; member lacks entitlement.
     const askRes = await page.request.post(`/api/leagues/${seed.leagueId}/guillotine-war-room/ask`, { data: { question: 'Am I at risk of elimination?' } })
