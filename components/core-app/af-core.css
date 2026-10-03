@@ -1064,7 +1064,8 @@ html[data-mode='af'] .af-core {
   background: transparent;
   color: inherit;
   font-family: inherit;
-  font-size: 10px;
+  /* 11px is the app floor (__tests__/core-app/type-floor.test.ts) — the glyph too, not only body text. */
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0;
@@ -1091,6 +1092,8 @@ html[data-mode='af'] .af-core {
   outline-offset: 2px;
 }
 .af-core .af-info-pop {
+  /* Not left to Tailwind preflight: content-box adds the padding ON TOP of max-width (390px edge to edge at 390). */
+  box-sizing: border-box;
   max-width: min(360px, calc(100vw - 32px));
   padding: 14px 16px;
   border: 1px solid var(--accent-line);
