@@ -291,7 +291,10 @@ export async function readWeekSlate(
      * it is played it lands in a later gameweek under its new id, so it is off this slate — the FPL
      * convention.
      */
-    const postponedIsBlank = args.sport.toUpperCase() === 'SOCCER'
+    // MLB's original postponed fixture is also a blank: RI keeps it under the old date,
+    // then lists the makeup separately. Measured 2026: all 27 postponed originals have only
+    // zero placeholder boxes, and all 2,429 completed regular games have ingested stat lines.
+    const postponedIsBlank = ['SOCCER', 'MLB'].includes(args.sport.toUpperCase())
     let final = 0
     let cancelled = 0
     let unfinished = 0

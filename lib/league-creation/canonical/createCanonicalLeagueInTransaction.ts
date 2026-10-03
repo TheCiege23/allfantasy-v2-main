@@ -1,4 +1,5 @@
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
+import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 /**
  * Single-transaction canonical league creation (concept-first preset pipeline).
  * Mirrors redraft shell: League + settings + commissioner + draft + homepage + slots + draft session.
@@ -410,7 +411,7 @@ export async function createCanonicalLeagueInTransaction(
   const joinCode = await uniqueJoinCode(tx)
   const platformLeagueId = `manual-${randomUUID()}`
   /** Calendar season year for list badges / filters (must not rely on Prisma's static default). */
-  const seasonYear = new Date().getFullYear()
+  const seasonYear = resolveLeagueCreationSeason(sport)
 
   const isGuillotine = formatId === 'guillotine'
   const guillotineEndgame = resolveGuillotineEndgame({ settings: { ...mergedSettings, conceptSetup: body.conceptSetup } })

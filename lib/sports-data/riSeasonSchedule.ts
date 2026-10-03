@@ -136,7 +136,8 @@ export async function syncRiSeasonSchedule(opts: {
   // A partial vendor response could otherwise seal a fantasy week before its missing games
   // finish. Keep the previous complete cache (or no cache) until the whole slate is published.
   if (sport === 'MLB') {
-    const regularIds = new Set(games.filter((g) => g.seasonType === 'regular').map((g) => g.gameId))
+    const regularIds = new Set(games.filter((g) => g.seasonType === 'regular' &&
+      !g.replacedBy && !['postponed', 'replaced'].includes(String(g.status ?? '').toLowerCase())).map((g) => g.gameId))
     if (regularIds.size < 2430) {
       result.error = `MLB schedule-season has ${regularIds.size} distinct regular games; expected at least 2430 — refusing a partial slate`
       return result

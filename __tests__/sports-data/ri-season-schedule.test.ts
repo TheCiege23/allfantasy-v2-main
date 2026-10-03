@@ -23,9 +23,11 @@ import {
 } from '@/lib/sports-data/riSeasonSchedule'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { readWeekSlate } from '@/lib/redraft/weekFinalizer'
+import { buildWeekKickoffMap } from '@/lib/redraft/lineupLock'
 
 const FIXTURE = path.join(process.cwd(), 'contracts', 'rolling-insights', 'fixtures', 'schedule-season.NCAABB.json')
 const rows = (JSON.parse(readFileSync(FIXTURE, 'utf8')) as { data: { NCAABB: unknown[] } }).data.NCAABB
+const mlbRows = JSON.parse(readFileSync(path.join(process.cwd(), 'contracts/rolling-insights/fixtures/schedule-season.MLB.json'), 'utf8')).data.MLB as unknown[]
 
 /** An in-memory SportsDataCache with the four calls the module makes. */
 function memoryCache(seed: Record<string, unknown> = {}) {
@@ -142,22 +144,37 @@ describe('syncRiSeasonSchedule', () => {
   })
 
   it('publishes a complete MLB season for the week finalizer without reading SportsGame', async () => {
-    const mlbRows = Array.from({ length: 2430 }, (_, i) => ({
-      game_ID: `20270325-${i + 1}-2`, game_time: '2027-03-25T23:00:00Z',
-      season_type: 'Regular Season', status: 'scheduled',
-      home_team: 'New York Yankees', away_team: 'Boston Red Sox',
-    }))
     h.riFetchRows.mockResolvedValue(ok(mlbRows))
     const { db } = memoryCache()
-    const synced = await syncRiSeasonSchedule({ sport: 'MLB', season: 2027, db: db as never })
-    expect(synced).toMatchObject({ fetched: true, games: 2430, days: 1 })
+    const synced = await syncRiSeasonSchedule({ sport: 'MLB', season: 2026, db: db as never })
+    expect(synced).toMatchObject({ fetched: true, games: 2943 })
     const sportsGame = { findMany: vi.fn() }
     const slate = await readWeekSlate({ ...db, sportsGame } as never, {
-      sport: 'MLB', season: 2027, week: 1, seasonType: 'regular',
-      dateWindow: { start: new Date('2027-03-24T00:00:00Z'), end: new Date('2027-03-31T00:00:00Z') },
+      sport: 'MLB', season: 2026, week: 1, seasonType: 'regular',
+      dateWindow: { start: new Date('2026-03-25T00:00:00Z'), end: new Date('2026-04-01T00:00:00Z') },
     })
-    expect(slate).toMatchObject({ games: 2430, unfinished: 2430, source: 'rolling_insights_schedule' })
+    expect(slate).toMatchObject({ games: 76, final: 76, unfinished: 0, source: 'rolling_insights_schedule' })
     expect(sportsGame.findMany).not.toHaveBeenCalled()
+
+    const postponedWeek = await readWeekSlate({ ...db, sportsGame } as never, {
+      sport: 'MLB', season: 2026, week: 2, seasonType: 'regular',
+      dateWindow: { start: new Date('2026-04-01T00:00:00Z'), end: new Date('2026-04-08T00:00:00Z') },
+    })
+    expect(postponedWeek).toMatchObject({ games: 94, final: 91, cancelled: 3, unfinished: 0 })
+  })
+
+  it('a postponed MLB original does not lock players before the makeup game starts', async () => {
+    const postponed = { gameId: '20260325-1-2', day: '2026-03-25', startTime: '2026-03-25T19:00:00Z',
+      seasonType: 'regular', status: 'postponed', homeTeam: 'New York Yankees', awayTeam: 'Boston Red Sox' }
+    const makeup = { ...postponed, gameId: '20260326-1-2', day: '2026-03-26', startTime: '2026-03-26T23:00:00Z', status: 'scheduled' }
+    const { db } = memoryCache({
+      'MLB:rischedule:2026:meta': { games: 2430 },
+      'MLB:rischedule:2026:2026-03-25': { games: [postponed] },
+      'MLB:rischedule:2026:2026-03-26': { games: [makeup] },
+    })
+    const locks = await buildWeekKickoffMap(db as never, { sport: 'MLB', season: 2026, week: 1 })
+    expect(locks.byTeam.get('NEW YORK YANKEES')?.toISOString()).toBe(new Date(makeup.startTime).toISOString())
+    expect(locks.firstKickoff?.toISOString()).toBe(new Date(makeup.startTime).toISOString())
   })
 
   it('fetches the season that started this autumn, or last year before August', () => {
