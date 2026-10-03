@@ -978,3 +978,83 @@
     display: none !important;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   Layout pass, 2026-10-02 — grouped hub, notch, tablet two-pane, phone
+   chrome. Its own top-level @media blocks, appended — never nested inside an
+   earlier one (CLAUDE.md: an inserted @media closes the outer query early).
+   Selectors are `.nocturne-settings .ns-*` (0,2,0) so they outrank the bare
+   `.ns-*` rules above whatever their order.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* Hub group headings (all widths). */
+.nocturne-settings .ns-hub-group { display: flex; flex-direction: column; gap: 10px; }
+.nocturne-settings .ns-hub-group-title {
+  margin: 0;
+  font: 700 11px/1.2 var(--ns-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ns-muted);
+}
+
+/* Notch and home indicator. app/layout.tsx sets `viewportFit: 'cover'`, so the
+   iOS app and a home-screen PWA draw under both; the sticky bar sat under the
+   status bar. With no inset (every desktop) these resolve to the old values. */
+.nocturne-settings .ns-topbar {
+  padding-top: calc(12px + env(safe-area-inset-top, 0px));
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
+}
+.nocturne-settings .ns-sidebar { top: calc(78px + env(safe-area-inset-top, 0px)); }
+.nocturne-settings .ns-shell,
+.nocturne-settings .ns-hub { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+
+/* Wide desktop: the content column was capped at 880px, leaving most of a
+   1440px+ screen empty to its right. */
+@media (min-width: 1440px) {
+  .nocturne-settings .ns-main { max-width: 1000px; }
+}
+
+/* Small laptop / tablet landscape: a slimmer sidebar gives the form room. */
+@media (min-width: 861px) and (max-width: 1024px) {
+  .nocturne-settings .ns-sidebar { width: 232px; }
+}
+
+/* Tablet portrait (iPad 768/810/820): two panes again. The ≤860px block above
+   stacks everything, which put a tab's content ~394px down a 768px screen
+   behind a sideways chip strip. Above 720px there is room for a 200px rail. */
+@media (min-width: 721px) and (max-width: 860px) {
+  .nocturne-settings .ns-shell { flex-direction: row; align-items: flex-start; }
+  .nocturne-settings .ns-sidebar { width: 200px; position: sticky; }
+  .nocturne-settings .ns-nav { flex-direction: column; overflow-x: visible; }
+  .nocturne-settings .ns-nav-item { width: 100%; white-space: normal; }
+}
+
+/* Phone, inside a tab: the search only filters the nav, and on a phone it
+   wrapped onto its own row and made the sticky bar 113px tall. The hub keeps it. */
+@media (max-width: 720px) {
+  .nocturne-settings[data-view='tab'] .ns-search { display: none; }
+}
+
+/* Phone hub: compact rows instead of tall cards — one-line description, a
+   chevron in place of the "Edit →" text, the whole row still the button. */
+@media (max-width: 560px) {
+  .nocturne-settings .ns-hub-grid { gap: 8px; }
+  .nocturne-settings .ns-hub-card { position: relative; gap: 4px; padding: 12px 40px 12px 14px; }
+  .nocturne-settings .ns-hub-card-desc {
+    padding-left: 44px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .nocturne-settings .ns-hub-cta { display: none; }
+  .nocturne-settings .ns-hub-card::after {
+    content: '›';
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    font: 400 22px/1 var(--ns-sans);
+    color: var(--ns-muted);
+  }
+}
