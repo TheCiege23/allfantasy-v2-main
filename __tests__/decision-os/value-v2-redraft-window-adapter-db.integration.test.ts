@@ -54,8 +54,9 @@ function requireMatchups(ctx: { skip: () => void }): void {
   if (STRICT_DB) {
     throw new Error(
       'M19_DB_STRICT=1 but the Prisma client cannot read WeeklyMatchup here, so the populated-' +
-      'fixture coverage this suite exists for did not run. Most likely the pending migration ' +
-      '20260903222531_weekly_matchup_roster_id_text is unapplied on this non-production database.',
+      'fixture coverage this suite exists for did not run. Most likely migration ' +
+      '20260903222531_weekly_matchup_roster_id_text is unapplied on this non-production database ' +
+      '(run `prisma migrate deploy` against it).',
     )
   }
   ctx.skip()
