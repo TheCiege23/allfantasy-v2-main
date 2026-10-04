@@ -6,6 +6,7 @@ import { getEffectiveLeagueWaiverSettings, upsertLeagueWaiverSettings } from '@/
 import { getPendingClaims, getProcessedClaimsAndTransactions } from '@/lib/waiver-wire'
 import { processWaiverClaimsForLeague } from '@/lib/waiver-wire/process-engine'
 import { setWaiverProcessingLocked } from '@/lib/waiver-wire/waiver-state-service'
+import { waiverSettingsRequestSchema } from '@/lib/waiver-wire/settings-request'
 
 export async function GET(req: NextRequest, props: { params: Promise<{ leagueId: string }> }) {
   const params = await props.params
@@ -49,29 +50,9 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const body = await req.json().catch(() => ({}))
-  const settings = await upsertLeagueWaiverSettings(params.leagueId, {
-    waiverType: body.waiverType,
-    processingDayOfWeek: body.processingDayOfWeek,
-    processingTimeUtc: body.processingTimeUtc,
-    claimLimitPerPeriod: body.claimLimitPerPeriod,
-    claimLimitPerWeek: body.claimLimitPerWeek,
-    claimLimitPerRun: body.claimLimitPerRun,
-    faabBudget: body.faabBudget,
-    faabResetDate: body.faabResetDate,
-    faabResetType: body.faabResetType,
-    waiverOrderResetPolicy: body.waiverOrderResetPolicy,
-    postGameWaiverBehavior: body.postGameWaiverBehavior,
-    processingDays: body.processingDays,
-    freeAgentWindowRules: body.freeAgentWindowRules,
-    dropRestrictions: body.dropRestrictions,
-    commissionerOverrideRules: body.commissionerOverrideRules,
-    specialtyConceptOverrides: body.specialtyConceptOverrides,
-    tiebreakRule: body.tiebreakRule,
-    lockType: body.lockType,
-    instantFaAfterClear: body.instantFaAfterClear,
-    waiverEngineConfig: body.waiverEngineConfig,
-  })
+  const parsed = waiverSettingsRequestSchema.safeParse(await req.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid waiver settings', details: parsed.error.flatten() }, { status: 400 })
+  const settings = await upsertLeagueWaiverSettings(params.leagueId, parsed.data)
   return NextResponse.json(settings)
 }
 

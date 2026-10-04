@@ -1,18 +1,34 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
-const h = vi.hoisted(() => ({ session: vi.fn(), authorize: vi.fn(), process: vi.fn(), lock: vi.fn(), history: vi.fn() }))
+const h = vi.hoisted(() => ({ session: vi.fn(), authorize: vi.fn(), process: vi.fn(), lock: vi.fn(), history: vi.fn(), settings: vi.fn() }))
 vi.mock('next-auth', () => ({ getServerSession: h.session }))
 vi.mock('@/lib/auth', () => ({ authOptions: {} }))
 vi.mock('@/lib/commissioner/permissions', () => ({ assertCommissioner: h.authorize }))
-vi.mock('@/lib/waiver-wire', () => ({ getEffectiveLeagueWaiverSettings: vi.fn(), upsertLeagueWaiverSettings: vi.fn(), getPendingClaims: vi.fn(), getProcessedClaimsAndTransactions: h.history }))
+vi.mock('@/lib/waiver-wire', () => ({ getEffectiveLeagueWaiverSettings: vi.fn(), upsertLeagueWaiverSettings: h.settings, getPendingClaims: vi.fn(), getProcessedClaimsAndTransactions: h.history }))
 vi.mock('@/lib/waiver-wire/process-engine', () => ({ processWaiverClaimsForLeague: h.process }))
 vi.mock('@/lib/waiver-wire/waiver-state-service', () => ({ setWaiverProcessingLocked: h.lock }))
-import { GET, POST } from '@/app/api/commissioner/leagues/[leagueId]/waivers/route'
+import { GET, POST, PUT } from '@/app/api/commissioner/leagues/[leagueId]/waivers/route'
 const ctx = () => ({ params: Promise.resolve({ leagueId: 'L1' }) })
 const request = (body?: string) => new NextRequest('https://example.test/api/commissioner/leagues/L1/waivers', { method: 'POST', ...(body === undefined ? {} : { body }) })
 beforeEach(() => { vi.clearAllMocks(); h.session.mockResolvedValue({ user: { id: 'U1' } }); h.authorize.mockResolvedValue(undefined); h.process.mockResolvedValue([]); h.history.mockResolvedValue({ claims: [], transactions: [] }) })
 describe('commissioner waiver action boundary', () => {
+  it.each(['{', 'null', '[]', '{}', '{"faabBudget":-1}', '{"claimLimitPerWeek":1.5}', '{"processingTimeUtc":"25:72"}', '{"faabResetDate":"2026-02-30"}', '{"processingDays":[8]}', '{"waiverEngineConfig":[]}', '{"waiverEngineConfig":{"allow_zero_faab_bid":"false"}}', '{"freeAgentWindowRules":{"submissionLocked":"true"}}', '{"typo":3}'])('rejects invalid settings before storage: %s', async body => {
+    const req = new NextRequest('https://example.test/api/commissioner/leagues/L1/waivers', { method: 'PUT', body })
+    expect((await PUT(req, ctx())).status).toBe(400)
+    expect(h.settings).not.toHaveBeenCalled()
+  })
+  it('preserves zero/null overrides and omitted fields', async () => {
+    const input = { faabBudget: 0, claimLimitPerPeriod: null, processingTimeUtc: '00:05', processingDays: [0, 7], waiverEngineConfig: { allow_zero_faab_bid: false } }
+    h.settings.mockResolvedValue({ leagueId: 'L1', waiverType: 'faab' })
+    expect((await PUT(new NextRequest('https://example.test/api/commissioner/leagues/L1/waivers', { method: 'PUT', body: JSON.stringify(input) }), ctx())).status).toBe(200)
+    expect(h.settings).toHaveBeenCalledWith('L1', input)
+  })
+  it('rejects settings for non-commissioners before writing', async () => {
+    h.authorize.mockRejectedValue(new Error('Forbidden'))
+    expect((await PUT(new NextRequest('https://example.test/api/commissioner/leagues/L1/waivers', { method: 'PUT', body: '{"faabBudget":0}' }), ctx())).status).toBe(403)
+    expect(h.settings).not.toHaveBeenCalled()
+  })
   it.each(['{"action":"typo"}', '{', 'null', '[]', '{"action":7}', '{"unexpected":true}'])('does not process invalid input %s', async body => {
     expect((await POST(request(body), ctx())).status).toBe(400)
     expect(h.process).not.toHaveBeenCalled()

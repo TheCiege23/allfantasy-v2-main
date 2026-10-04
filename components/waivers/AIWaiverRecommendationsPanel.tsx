@@ -3,6 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, Sparkles } from 'lucide-react'
+import { z } from 'zod'
+
+const recommendationSchema = z.object({
+  addPlayerId: z.string().min(1), addPlayerName: z.string().min(1),
+  dropPlayerId: z.string().nullable().optional(), dropPlayerName: z.string().nullable().optional(),
+  priority: z.number().int().min(1), suggestedFaabBid: z.number().finite().min(0).nullable().optional(),
+  confidence: z.enum(['high', 'medium', 'low']), risk: z.enum(['high', 'medium', 'low']),
+  reasoning: z.string(), tags: z.array(z.string()),
+  deeperAnalysisPath: z.string().regex(/^\/(?!\/)/).optional(),
+})
 
 type Recommendation = {
   addPlayerId: string
@@ -157,7 +167,8 @@ function LeagueWaiverRecommendationsPanel({
         return
       }
 
-      if (payload?.ok !== true || !Array.isArray(payload.recommendations)) {
+      if (payload?.ok !== true || !Array.isArray(payload.recommendations) ||
+          !payload.recommendations.every((row: unknown) => recommendationSchema.safeParse(row).success)) {
         setError("Chimmy's waiver result could not be verified. Please try again.")
         return
       }

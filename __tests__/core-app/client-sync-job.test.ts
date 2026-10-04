@@ -1,9 +1,29 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
-import { claimClientSyncRefresh, getClientSyncSnapshot, startClientSync, subscribeClientSync } from '@/lib/core-app/clientSyncJob'
+import { bindClientSyncAccount, claimClientSyncRefresh, getClientSyncSnapshot, startClientSync, subscribeClientSync } from '@/lib/core-app/clientSyncJob'
 import type { SyncPostResult } from '@/lib/core-app/syncRunLoop'
 
 describe('shared client sync job', () => {
+  it('discards old-account results without clearing a new-account job', async () => {
+    bindClientSyncAccount('A')
+    let finishOld!: (result: SyncPostResult) => void
+    const oldPost = vi.fn(() => new Promise<SyncPostResult>(resolve => { finishOld = resolve }))
+    const oldJob = startClientSync('sleeper:old', oldPost)
+    bindClientSyncAccount('B')
+    expect(getClientSyncSnapshot().phase).toBe('idle')
+    let finishNew!: (result: SyncPostResult) => void
+    const newPost = vi.fn(() => new Promise<SyncPostResult>(resolve => { finishNew = resolve }))
+    const newJob = startClientSync('sleeper:new', newPost)
+    finishOld({ httpOk: true, round: { ok: true, totalCandidates: 2, attempted: 1, synced: 1, remaining: ['sleeper:old-next'] } })
+    await oldJob
+    expect(oldPost).toHaveBeenCalledTimes(1)
+    expect(getClientSyncSnapshot().phase).toBe('busy')
+    expect(startClientSync('sleeper:duplicate', newPost)).toBe(newJob)
+    finishNew({ httpOk: true, round: { ok: true, totalCandidates: 1, attempted: 1, synced: 1 } })
+    await newJob
+    expect(getClientSyncSnapshot().message).toBe('Synced 1')
+    bindClientSyncAccount(null)
+  })
   it('retries only confirmed remaining work after a no-progress stop', async () => {
     const post = vi.fn()
       .mockResolvedValueOnce({ httpOk: true, round: { ok: true, totalCandidates: 2, attempted: 1, synced: 1, remaining: ['sleeper:two'] } })

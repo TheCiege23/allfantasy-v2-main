@@ -53,3 +53,18 @@ This verifies the public scoreboard's source agreement and advancing freshness, 
 - P2: Validate each recommendation row, not only the response envelope/array, before rendering.
 
 Signed-in browser runtime remains blocked by Windows sandbox `apply deny-read ACLs` after restart. Physical device checks and signed-in refresh/recovery, personalized live fantasy totals and complete nested flows remain unverified.
+
+## Follow-up implementation — October 4
+
+The post-final schedule, account isolation, settings validation and recommendation-row items above are now implemented in the follow-up patch:
+
+- The points cron includes stored live/final NFL games from either provider within eight hours of kickoff. Existing two-minute cadence, rotating league slice and time budget remain enforced. This catches early final corrections; later corrections still rely on ordinary sync.
+- Final game views make ten checks at two-minute intervals, then stop; each request has a fifteen-second budget.
+- The session provider supplies the authenticated account to sync controls. Checkpoints use an account-specific v2 key; old unbound checkpoints are discarded. Account changes abort production requests and invalidate late results, progress and continuation before a new job starts.
+- Commissioner settings PUT validates nonnegative integer limits, weekdays, UTC times, dates, rule objects and known engine values before storage. Omitted overrides retain existing values; explicit zero/null remain supported.
+- Settings panels remount on league changes, verify configuration and permission/save responses, ignore late saves and report unconfirmed saves for recovery.
+- Recommendation rows validate display values and local analysis paths, preserving verified advice on malformed refreshes.
+
+The original PR's TypeScript and Playwright gates passed. Its unit ratchet found one newly failing layout fixture that omitted the required API success flag; the fixture now matches the response contract. No failure baseline was relaxed. Signed-in/device verification and commissioner claim-override/notification race follow-ups remain outstanding.
+
+Follow-up verification: 235 tests passed across 24 selected files on the published PR base, including original correctness coverage and English/Spanish sync regressions. Five focused settings scope/recovery tests also passed, including late-save and malformed-success handling. Required CI is restarted for the updated commit; these local results do not certify production or physical devices.

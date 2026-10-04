@@ -6,6 +6,16 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 const response = (recommendations: unknown) => ({ ok: true, json: async () => ({ ok: true, recommendations }) })
 const rec = { addPlayerId: 'p1', addPlayerName: 'League A player', priority: 1, confidence: 'high', risk: 'low', reasoning: 'League A need', tags: [] }
 describe('league-scoped waiver suggestions', () => {
+  it.each([null, { ...rec, tags: {} }, { ...rec, priority: -1 }, { ...rec, suggestedFaabBid: -1 }, { ...rec, deeperAnalysisPath: '//foreign.test' }])('preserves verified advice when a row is malformed', async malformed => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response([rec])).mockResolvedValueOnce(response([malformed])))
+    render(<Panel leagueId="A" surface="core" />)
+    fireEvent.click(screen.getByTestId('ai-waiver-recommendations-load'))
+    await act(async () => {})
+    fireEvent.click(screen.getByTestId('ai-waiver-recommendations-load'))
+    await act(async () => {})
+    expect(screen.getByText('League A player')).toBeInTheDocument()
+    expect(screen.getByTestId('ai-waiver-recommendations-error')).toBeInTheDocument()
+  })
   it('clears completed suggestions when changing leagues', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response([rec])))
     const view = render(<Panel leagueId="A" surface="core" />)
