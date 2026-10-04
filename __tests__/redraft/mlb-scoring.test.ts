@@ -46,8 +46,8 @@ describe('normalizeMlbGameStats — against the captured Rolling Insights respon
     expect([...unmapped]).toEqual([])
   })
 
-  it('every emitted key is a real MLB engine category — nothing is scored under a name the engine ignores', () => {
-    for (const l of LINES) for (const k of Object.keys(normalizeMlbGameStats(stored(l)).stats)) expect(MLB_CATEGORY_KEYS.has(k)).toBe(true)
+  it('every emitted key is an MLB points category or a rate-category component', () => {
+    for (const l of LINES) for (const k of Object.keys(normalizeMlbGameStats(stored(l)).stats)) expect(MLB_CATEGORY_KEYS.has(k) || ['h','ab'].includes(k)).toBe(true)
   })
 
   it('🛑 the group decides the key: a pitcher’s hits and walks ALLOWED never land on batting keys', () => {

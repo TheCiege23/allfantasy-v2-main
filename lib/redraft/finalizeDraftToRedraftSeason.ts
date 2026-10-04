@@ -182,7 +182,7 @@ async function ensureRedraftSeason(leagueId: string) {
   // It used to be the sport default always, while the bracket read the league setting — so the
   // regular season and the playoffs could overlap or leave a gap.
   const leaguePlayoffStart = Number(league.playoffStartWeek)
-  const playoffStartWeek = isNativeTournamentLeague(league) ? totalWeeks + 1 :
+  const playoffStartWeek = isNativeTournamentLeague(league) || (league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto' ? totalWeeks + 1 :
     Number.isInteger(leaguePlayoffStart) && leaguePlayoffStart >= 2 && leaguePlayoffStart <= totalWeeks
       ? leaguePlayoffStart
       : cfg?.defaultPlayoffStartWeek ?? 15

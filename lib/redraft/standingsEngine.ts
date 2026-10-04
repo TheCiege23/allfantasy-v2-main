@@ -1,3 +1,4 @@
+import { accumulateTeamTotals, getCategoryPresetDefinitions, rankRotisserieTeams, type TeamStatTotals } from '@/lib/category-scoring'
 import { isPointsOnlySeeding, resolveConfiguredPlayoffSeedingRule } from '@/lib/playoff-defaults/seedingRule'
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
@@ -26,6 +27,9 @@ export async function updateStandings(
       ties: number
       pointsFor: number
       pointsAgainst: number
+      categoryWinsFor: number
+      categoryLossesFor: number
+      categoryTiesFor: number
       /** In week order; within a week the head-to-head game comes before the median game. */
       streakEvents: Array<{ week: number; result: 'W' | 'L' | 'T' }>
     }
@@ -38,6 +42,7 @@ export async function updateStandings(
       ties: 0,
       pointsFor: 0,
       pointsAgainst: 0,
+      categoryWinsFor: 0,categoryLossesFor: 0,categoryTiesFor: 0,
       streakEvents: [],
     })
   }
@@ -47,6 +52,8 @@ export async function updateStandings(
     orderBy: [{ week: 'asc' }, { id: 'asc' }],
   })
 
+  const rotoStats = new Map<string, TeamStatTotals[]>()
+  const seenRotoPeriods = new Set<string>()
   let matchupsCounted = 0
   for (const matchup of matchups) {
     if (!matchup.awayRosterId) continue
@@ -59,12 +66,37 @@ export async function updateStandings(
 
     const homeScore = Number(matchup.homeScore ?? 0)
     const awayScore = Number(matchup.awayScore ?? 0)
+    const scoringSnapshot = matchup.lineupSnapshots as Record<string, any> | null
+    if(scoringSnapshot?.categoryRecordMode === 'roto') {
+      for(const [id,side] of [[matchup.homeRosterId,'home'],[matchup.awayRosterId,'away']] as const) {
+        const key=`${id}:${matchup.week}`
+        if(!seenRotoPeriods.has(key)) {
+          const stats=scoringSnapshot.redraftScoring?.[side]?.statTotals
+          if(!stats) throw new Error('Rotisserie period is missing team stat components.')
+          rotoStats.set(id,[...(rotoStats.get(id)??[]),stats])
+          seenRotoPeriods.add(key)
+        }
+      }
+      matchupsCounted++; continue
+    }
     home.pointsFor += homeScore
     home.pointsAgainst += awayScore
     away.pointsFor += awayScore
     away.pointsAgainst += homeScore
 
-    if (homeScore > awayScore) {
+    const snapshot = matchup.lineupSnapshots as Record<string, any> | null
+    const categoryResult = snapshot?.categoryMatchup
+    if(categoryResult) {
+      home.categoryWinsFor+=categoryResult.aWins; home.categoryLossesFor+=categoryResult.bWins; home.categoryTiesFor+=categoryResult.ties
+      away.categoryWinsFor+=categoryResult.bWins; away.categoryLossesFor+=categoryResult.aWins; away.categoryTiesFor+=categoryResult.ties
+    }
+    if (categoryResult && snapshot?.categoryRecordMode === 'each') {
+      home.wins += categoryResult.aWins; home.losses += categoryResult.bWins; home.ties += categoryResult.ties
+      away.wins += categoryResult.bWins; away.losses += categoryResult.aWins; away.ties += categoryResult.ties
+      const result = homeScore > awayScore ? 'W' : homeScore < awayScore ? 'L' : 'T'
+      home.streakEvents.push({week:matchup.week,result})
+      away.streakEvents.push({week:matchup.week,result:result === 'W' ? 'L' : result === 'L' ? 'W' : 'T'})
+    } else if (homeScore > awayScore) {
       home.wins += 1
       away.losses += 1
       home.streakEvents.push({ week: matchup.week, result: 'W' })
@@ -118,8 +150,33 @@ export async function updateStandings(
     for (const row of rows.values()) row.streakEvents.sort((a, b) => a.week - b.week)
   }
 
+  const categorySeasonRow = await prisma.redraftSeason.findUnique({where:{id:seasonId},include:{league:{select:{settings:true}}}})
+  const categorySettings = categorySeasonRow?.league?.settings as Record<string,any> | null
+  if(categorySettings?.scoring_mode === 'roto' && categorySeasonRow) {
+    const genericRosters=await prisma.roster.findMany({where:{leagueId:categorySeasonRow.leagueId},select:{id:true,redraftRosterId:true}})
+    const nativeId=new Map(genericRosters.map(r=>[r.id,r.redraftRosterId]))
+    const periods=await prisma.teamWeekResult.findMany({where:{leagueId:categorySeasonRow.leagueId,season:categorySeasonRow.season,week:{lte:week},status:'final'}})
+    rotoStats.clear()
+    for(const period of periods) {
+      const id=nativeId.get(period.rosterId); const stats=(period.categoryBreakdown as Record<string,any> | null)?.teamStats
+      if(id && stats) rotoStats.set(id,[...(rotoStats.get(id)??[]),stats])
+    }
+  }
+  if(rotoStats.size) {
+    const season = await prisma.redraftSeason.findUnique({where:{id:seasonId},include:{league:{select:{settings:true}}}})
+    const settings=season?.league?.settings as Record<string,any> | null
+    const categories=getCategoryPresetDefinitions(settings?.category_preset_id ?? settings?.scoringSettings?.categoryPresetId)
+    if(!categories) throw new Error('Rotisserie category preset is missing.')
+    const ranked=rankRotisserieTeams([...rows.keys()].map(id=>({id,stats:accumulateTeamTotals(rotoStats.get(id)??[])})),categories)
+    for(const [id,value] of ranked) rows.get(id)!.pointsFor=value.total
+  }
   const ordered = [...rows.entries()].sort(([aId, a], [bId, b]) => {
-    if (pointsOnlySeeding) return b.pointsFor - a.pointsFor || aId.localeCompare(bId)
+    if (pointsOnlySeeding || rotoStats.size) return b.pointsFor - a.pointsFor || aId.localeCompare(bId)
+    const categorySeason = matchups.some(m => (m.lineupSnapshots as any)?.categoryRecordMode === 'each')
+    if (categorySeason) {
+      const pct = (r: typeof a) => (r.wins + .5*r.ties) / Math.max(1,r.wins+r.losses+r.ties)
+      if (pct(a) !== pct(b)) return pct(b)-pct(a)
+    }
     if (b.wins !== a.wins) return b.wins - a.wins
     if (a.losses !== b.losses) return a.losses - b.losses
     if (b.pointsFor !== a.pointsFor) return b.pointsFor - a.pointsFor
@@ -186,13 +243,13 @@ export async function updateStandings(
  */
 async function mirrorNativeLeagueTeamRecords(
   seasonId: string,
-  rows: Map<string, { wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number }>,
+  rows: Map<string, { wins: number; losses: number; ties: number; pointsFor: number; pointsAgainst: number; categoryWinsFor?:number;categoryLossesFor?:number;categoryTiesFor?:number }>,
   seedByRoster: Map<string, number>,
 ): Promise<void> {
   try {
-    const season = await prisma.redraftSeason.findUnique({ where: { id: seasonId }, select: { leagueId: true } })
+    const season = await prisma.redraftSeason.findUnique({ where: { id: seasonId }, select: { leagueId: true, season:true } })
     if (!season) return
-    const league = await prisma.league.findFirst({ where: { id: season.leagueId }, select: { platform: true } })
+    const league = await prisma.league.findFirst({ where: { id: season.leagueId }, select: { platform: true, settings:true } })
     if (!league || !isNativePlatform(league.platform)) return
 
     const seasonRosters = await prisma.redraftRoster.findMany({ where: { seasonId }, select: { id: true, ownerId: true } })
@@ -206,6 +263,11 @@ async function mirrorNativeLeagueTeamRecords(
       const row = rows.get(sr.id)
       const externalId = rosterIdByOwner.get(sr.ownerId)
       if (!row || !externalId) continue
+      const mode=(league.settings as Record<string,unknown> | null)?.scoring_mode
+      if(mode === 'h2h_category' || mode === 'roto') {
+        const record={wins:row.wins,losses:row.losses,ties:row.ties,pointsFor:row.pointsFor,pointsAgainst:row.pointsAgainst,rank:seedByRoster.get(sr.id)??null,categoryWinsFor:row.categoryWinsFor??0,categoryLossesFor:row.categoryLossesFor??0,categoryTiesFor:row.categoryTiesFor??0}
+        await prisma.fantasyStanding.upsert({where:{leagueId_season_rosterId:{leagueId:season.leagueId,season:season.season,rosterId:externalId}},create:{leagueId:season.leagueId,season:season.season,rosterId:externalId,...record},update:record})
+      }
       await prisma.leagueTeam.updateMany({
         where: { leagueId: season.leagueId, externalId },
         data: {

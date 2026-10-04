@@ -22,9 +22,9 @@ export function isScoringMode(value: unknown): value is ScoringMode {
  * resolves to a category definition list at runtime via
  * `getCategoryPresetDefinitions(id)`.
  */
-export type CategoryPresetId = 'nba_8cat' | 'nba_9cat'
+export type CategoryPresetId = 'nba_8cat' | 'nba_9cat' | 'mlb_5x5' | 'mlb_6x6'
 
-export const CATEGORY_PRESET_IDS = ['nba_8cat', 'nba_9cat'] as const
+export const CATEGORY_PRESET_IDS = ['nba_8cat', 'nba_9cat', 'mlb_5x5', 'mlb_6x6'] as const
 
 export function isCategoryPresetId(value: unknown): value is CategoryPresetId {
   return (
@@ -65,6 +65,10 @@ export type CategoryComputation =
        */
       kind: 'ratio'
       numeratorStatKey: string
+      additionalNumeratorStatKeys?: string[]
+      multiplier?: number
+      /** Undefined preserves NBA's existing zero-denominator semantics. */
+      unqualifiedWhenZero?: boolean
       denominatorStatKey: string
     }
 
@@ -85,8 +89,8 @@ export type TeamStatTotals = Record<string, number>
 export interface CategoryMatchupCategoryResult {
   categoryId: string
   label: string
-  aValue: number
-  bValue: number
+  aValue: number | null
+  bValue: number | null
   /** 'a' | 'b' | 'tie' */
   winner: 'a' | 'b' | 'tie'
 }

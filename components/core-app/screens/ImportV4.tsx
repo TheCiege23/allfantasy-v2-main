@@ -331,7 +331,7 @@ const FIELD_BY_PROVIDER: Partial<
   },
   espn: {
     label: 'ESPN league ID',
-    placeholder: '123456, or paste the league URL',
+    placeholder: 'NFL ID, baseball URL, or MLB:2026:123456',
     /*
      * ⚠ "Public leagues import directly" WAS NOT TRUE, and it cost a real user a
      * long detour. ESPN import is gated on finding YOUR team in the league, which

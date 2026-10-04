@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { carryOverImportedLeague } from '@/lib/league-creation/canonical/carryOverImportedLeague'
 import fixture from './fixtures/fantrax/mlb-points-public.json'
 
-function transaction() {
+export function transaction() {
   const teams = [
     { id: 'source-team-1', externalId: 'seat-1', platformUserId: 'manager-1', claimedByUserId: 'creator', teamName: 'Aces', ownerName: 'Alice', avatarUrl: null, isCommissioner: true },
     { id: 'source-team-2', externalId: 'seat-2', platformUserId: 'manager-2', claimedByUserId: 'friend', teamName: 'Bears', ownerName: 'Bob', avatarUrl: null, isCommissioner: false },
@@ -137,4 +137,29 @@ describe('standalone carryover transaction', () => {
     })).rejects.toThrow(/Claim your commissioner team/)
     expect(tx.roster.update).not.toHaveBeenCalled()
   })
+})
+
+import espnFixture from '../contracts/espn/fixtures/fantasy-league.MLB.2026.json'
+import { parseEspnMlbPayload } from '@/lib/league-import/espn/EspnMlbLeagueFetchService'
+vi.mock('@/lib/league-sync-core', () => ({ getDecryptedAuth: vi.fn() }))
+it('converts a fixture-based ESPN MLB category league with all teams and claimed managers', async () => {
+  const raw = structuredClone(espnFixture) as any
+  // Synthetic representable settings. The real captured custom league remains blocked.
+  raw.settings.scoringSettings.scoringItems = [20,5,21,23,2,53,57,48,47,41].map(statId=>({statId,points:1,isReverseItem:[47,41].includes(statId)}))
+  raw.settings.scoringSettings.matchupTieRule='NONE'
+  delete raw.settings.scoringSettings.statQualificationMinimum
+  delete raw.settings.rosterSettings.lineupSlotStatLimits
+  raw.settings.rosterSettings.isBenchUnlimited=false
+  const payload=parseEspnMlbPayload(raw,'MLB:2026:13262','fixture-manager-1')
+  const tx=transaction()
+  tx.league.findUnique.mockImplementation(({where})=>where.id==='source' ? {platform:'espn',sport:'MLB',season:2026,settings:{espn_settings:raw.settings,scoringSettings:{format:'H2H_MOST_CATEGORIES',rules:{}}}} as never : {season:2027,settings:{}})
+  tx.leagueTeam.findMany.mockResolvedValue(payload.teams.map((t,i)=>({id:`source-${i}`,externalId:t.teamId,platformUserId:t.managerId,claimedByUserId:i===0?'creator':null,teamName:t.teamName,ownerName:t.managerName,avatarUrl:t.logoUrl,isCommissioner:i===0})) as never)
+  tx.roster.findMany.mockResolvedValue(payload.teams.map((t,i)=>({id:`sr-${i}`,platformUserId:t.managerId,playerData:{source_team_id:t.teamId,players:t.rosterPlayerIds,starters:t.starterPlayerIds,reserve:t.reservePlayerIds},faabRemaining:t.faabRemaining,waiverPriority:t.waiverPriority})) as never)
+  tx.leagueEntrySlot.findMany.mockResolvedValue(payload.teams.map((t,i)=>({slotNumber:i+1,rosterId:`native-${i}`})))
+  tx.playerIdentityMap.findMany.mockResolvedValue(payload.teams.flatMap(t=>Object.entries(t.playerMap).map(([id,p])=>({espnId:id,rollingInsightsId:`ri-${id}`,canonicalName:p.name,position:p.position,currentTeam:p.team}))) as never)
+  expect(await carryOverImportedLeague(tx as never,{sourceLeagueId:'source',targetLeagueId:'native',creatorUserId:'creator',sport:'MLB',teamCount:12})).toBe(395)
+  expect(tx.roster.update).toHaveBeenCalledTimes(12)
+  expect(tx.draftPick.createMany.mock.calls[0][0].data).toHaveLength(395)
+  expect(tx.draftSession.update).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({status:'completed',draftModeLabel:'imported_rosters'})}))
+  expect(tx.league.update).toHaveBeenCalledWith(expect.objectContaining({data:{settings:expect.objectContaining({scoring_mode:'h2h_category',category_preset_id:'mlb_5x5',category_record_mode:'most',roster:expect.objectContaining({irSlots:4,benchSlots:10})})}}))
 })

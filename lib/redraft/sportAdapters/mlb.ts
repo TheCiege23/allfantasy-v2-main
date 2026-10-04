@@ -6,6 +6,8 @@ export const MLB_SCORING_CATEGORY_KEYS = MLB_CONFIG.scoringCategories.map((c) =>
 export const mlbAdapter: SportAdapter = {
   parseRawStats(raw: Record<string, number>): ParsedStats {
     return {
+      ab: raw.ab ?? 0,
+      h: raw.h ?? 0,
       r: raw.r ?? 0,
       hr: raw.hr ?? 0,
       rbi: raw.rbi ?? 0,

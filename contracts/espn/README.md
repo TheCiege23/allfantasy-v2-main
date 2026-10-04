@@ -80,3 +80,5 @@ cover; refuses to drop a key path) rather than a second copy of that tool.
 3. **Rolling Insights NCAAB `ACT` is not "current roster"** (`GAPS.md` M-01). Match ESPN athletes
    against RI rows on the same school by name AND jersey — never by name alone, never across
    schools — or a former player's row inherits a current player's face.
+
+MLB fantasy imports use the separately captured `fantasy_mlb` contract. Capture command: `scripts/probe.sh fantasy-league MLB <league_id> <season>`. The fixture anonymizes manager and team identity; player/stat identifiers remain provider evidence.

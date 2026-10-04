@@ -1,3 +1,4 @@
+import { buildScoringFromPresetId, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
 import { tournamentRoundEnds } from '@/lib/bestball/tournamentCalendar'
 import { resolveLeagueCreationSeason } from '@/lib/season-week/leagueCreationSeason'
 /**
@@ -198,6 +199,12 @@ export async function createCanonicalLeagueInTransaction(
     managerCount: body.teamCount,
     scoringPreset: body.scoringPreset,
   })
+  if (sport === 'MLB' && /^mlb_[56]x[56]_/.test(body.scoringPreset ?? '')) {
+    const ctx = { sport: 'MLB' as const, leagueType: formatId as any, idpSelected: false }
+    if (!isScoringPresetValidForContext(body.scoringPreset!, ctx)) throw new Error('MLB category scoring requires redraft, dynasty or keeper.')
+    Object.assign(foundationDefaults.scoringSettings, buildScoringFromPresetId(body.scoringPreset!, ctx).scoringSettings)
+  }
+  if (foundationDefaults.scoringSettings.scoringMode === 'roto') Object.assign(foundationDefaults.playoffSettings, { playoffTeams: 0, playoff_team_count: 0, playoffStartWeek: null, playoff_start_week: null, seedingRule: 'points_only' })
   const managerCount = foundationDefaults.managerCount
   const draftSettings = foundationDefaults.draftSettings
   const dynastySetup = formatId === 'dynasty' ? body.conceptSetup ?? {} : {}
@@ -300,11 +307,15 @@ export async function createCanonicalLeagueInTransaction(
 
   const mergedSettings: Record<string, unknown> = {
     ...engine.settingsSnapshot,
+    scoring_mode: foundationDefaults.scoringSettings.scoringMode ?? 'points',
+    category_preset_id: foundationDefaults.scoringSettings.categoryPresetId ?? null,
+    category_record_mode: foundationDefaults.scoringSettings.categoryRecordMode ?? 'most',
     league_type: formatId,
     leagueType: formatId,
     sport_type: sport,
     trade_review_mode: tradeReview,
     requested_draft_type: body.draftType,
+    ...(foundationDefaults.scoringSettings.scoringMode !== 'points' && sport === 'MLB' ? {sportConfig:{...((engine.settingsSnapshot.sportConfig as Record<string,unknown>)??{}),lineupLockType:'first_game_of_week'}} : {}),
     canonical_draft_mode: body.draftType,
     third_round_reversal: thirdRoundReversal,
     draft_third_round_reversal: thirdRoundReversal,
@@ -521,7 +532,8 @@ export async function createCanonicalLeagueInTransaction(
       // without keepers has decided: none.
       ...(keeperBootstrap ? keeperBootstrap.league : { keeperCount: 0 }),
       // League-median game — the standings engine plays it when this is on.
-      medianGame: conceptSetupForPrivacy.medianGame === true,
+      medianGame: scoringMode === 'points' && conceptSetupForPrivacy.medianGame === true,
+      ...(scoringMode === 'roto' ? {playoffTeams:0,playoffStartWeek:null} : {}),
       ...(isGuillotine
         ? {
             playoffStartWeek: null,

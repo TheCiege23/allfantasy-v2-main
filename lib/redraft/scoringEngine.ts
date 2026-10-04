@@ -1,3 +1,4 @@
+import { accumulateTeamTotals, getCategoryPresetDefinitions, resolveCategoryMatchup, type TeamStatTotals } from '@/lib/category-scoring'
 import type { SportConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
@@ -267,6 +268,7 @@ export type RosterScoreSummary = {
   points: number
   missingPlayerIds: string[]
   allFinal: boolean
+  statTotals?: TeamStatTotals
   /** Best ball only: the lineup the system started this week, and any seat nobody could fill. */
   bestBall?: { assignments: OptimalSlotAssignment[]; unfilledSlots: { slot: string; seat: number }[] }
 }
@@ -320,6 +322,7 @@ async function scoreRosterStarters(args: {
   )
 
   let pts = 0
+  const statMaps: TeamStatTotals[] = []
   let scoredStarterCount = 0
   let allFinal = true
   const missingPlayerIds: string[] = []
@@ -340,6 +343,7 @@ async function scoreRosterStarters(args: {
       allFinal = false
       continue
     }
+    statMaps.push(row.stats as TeamStatTotals)
     pts += await calculateScoreFromSportConfig(
       args.leagueId,
       p.playerId,
@@ -356,6 +360,7 @@ async function scoreRosterStarters(args: {
     starterCount: activeStarters.length,
     scoredStarterCount,
     points: Math.round(pts * 100) / 100,
+    statTotals: accumulateTeamTotals(statMaps),
     missingPlayerIds,
     allFinal,
   }
@@ -477,6 +482,12 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   if (!season) return null
   const seasonYear = season.season
 
+  const scoringLeague = await prisma.league.findFirst({ where: { id: leagueId }, select: { settings: true } })
+  const scoringSettings = scoringLeague?.settings as Record<string, any> | null
+  const scoringMode = scoringSettings?.scoring_mode ?? scoringSettings?.scoringSettings?.scoringMode ?? 'points'
+  const categoryId = scoringSettings?.category_preset_id ?? scoringSettings?.scoringSettings?.categoryPresetId
+  const categories = scoringMode === 'h2h_category' || scoringMode === 'roto' ? getCategoryPresetDefinitions(categoryId) : null
+  if (scoringMode !== 'points' && !categories) throw new Error('Category scoring requires a supported native category preset.')
   const useDevyEngine = await leagueUsesDevyEngine(leagueId)
   const bestBall = useDevyEngine ? null : await loadBestBallContext(leagueId)
 
@@ -496,6 +507,12 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     useDevyEngine,
     bestBall,
   })
+  const categoryMatchup = categories ? resolveCategoryMatchup(home.statTotals ?? {}, away.statTotals ?? {}, categories) : null
+  if (categoryMatchup) {
+    if (bestBall || useDevyEngine) throw new Error('Category scoring is not supported for this concept.')
+    home.points = categoryMatchup.aWins
+    away.points = categoryMatchup.bWins
+  }
   const missingPlayerIds = [...home.missingPlayerIds, ...away.missingPlayerIds]
   const isComplete =
     missingPlayerIds.length === 0 &&
@@ -529,10 +546,12 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   await prisma.redraftMatchup.update({
     where: { id: matchupId },
     data: {
-      homeScore: home.points,
-      awayScore: away.points,
+      homeScore: scoringMode === 'roto' ? 0 : home.points,
+      awayScore: scoringMode === 'roto' ? 0 : away.points,
       status: isFinal ? 'final' : 'active',
       lineupSnapshots: {
+        ...(m.lineupSnapshots && typeof m.lineupSnapshots === 'object' && !Array.isArray(m.lineupSnapshots) ? m.lineupSnapshots : {}),
+        ...(categoryMatchup ? { categoryMatchup: JSON.parse(JSON.stringify(categoryMatchup)), categoryRecordMode: scoringMode === 'roto' ? 'roto' : scoringSettings?.category_record_mode ?? scoringSettings?.scoringSettings?.categoryRecordMode ?? 'most' } : {}),
         redraftScoring: {
           scoredAt: new Date().toISOString(),
           isComplete,
@@ -551,6 +570,7 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
   //    wire now that the G15.3 relay drains the outbox.
   //  • score.updated (per-player) stays DEFERRED — per-player-per-sync volume would grow
   //    the permanent domain_events log unbounded; needs coalescing/retention (G15.4+).
+  if (scoringMode === 'roto') return {matchupId,week,homeScore:0,awayScore:0,isComplete,missingPlayerIds}
   const scoreChanged = home.points !== m.homeScore || away.points !== m.awayScore
   if (isFinal) {
     const winnerRosterId =
@@ -595,6 +615,25 @@ export async function recalculateMatchupsForSeasonWeek(
   seasonId: string,
   week: number,
 ): Promise<{ updated: number; incomplete: number; summaries: MatchupScoreUpdateSummary[] }> {
+  const season = await prisma.redraftSeason.findUnique({where:{id:seasonId},include:{league:{select:{settings:true}}}})
+  const settings = season?.league.settings as Record<string,any> | null
+  if (settings?.scoring_mode === 'roto' && season) {
+    const categories=getCategoryPresetDefinitions(settings.category_preset_id)
+    if(!categories) throw new Error('Rotisserie category preset is missing.')
+    const rosters=await prisma.roster.findMany({where:{leagueId:season.leagueId,redraftRosterId:{not:null}},select:{id:true,redraftRosterId:true}})
+    let incomplete=0
+    for(const roster of rosters) {
+      const result=await scoreRosterStarters({leagueId:season.leagueId,rosterId:roster.redraftRosterId!,week,seasonYear:season.season,useDevyEngine:false})
+      const complete=!result.missingPlayerIds.length && result.starterCount>0 && result.allFinal
+      if(!complete) incomplete++
+      const data={totalPoints:0,opponentRosterId:null,winLoss:null,status:complete?'final':'active',categoryBreakdown:{teamStats:result.statTotals??{}}}
+      await prisma.teamWeekResult.upsert({where:{leagueId_season_week_rosterId:{leagueId:season.leagueId,season:season.season,week,rosterId:roster.id}},create:{leagueId:season.leagueId,season:season.season,week,rosterId:roster.id,...data},update:data})
+    }
+    await prisma.redraftMatchup.updateMany({where:{seasonId,week},data:{homeScore:0,awayScore:0,status:incomplete?'active':'final'}})
+    const {updateStandings}=await import('./standingsEngine')
+    await updateStandings(seasonId,week)
+    return {updated:rosters.length,incomplete,summaries:[]}
+  }
   const matchups = await prisma.redraftMatchup.findMany({
     where: { seasonId, week },
     select: { id: true },

@@ -26,7 +26,7 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
   supportedSports: readonly ImportSupportedSport[];
 }[] = [
   { provider: 'sleeper', label: 'Sleeper', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
-  { provider: 'espn', label: 'ESPN', available: true, supportedSports: ['NFL'] },
+  { provider: 'espn', label: 'ESPN', available: true, supportedSports: ['NFL', 'MLB'] },
   /*
    * yahoo: NOT AVAILABLE — switched back off 2026-09-13, the same day it was switched on (#795).
    *
