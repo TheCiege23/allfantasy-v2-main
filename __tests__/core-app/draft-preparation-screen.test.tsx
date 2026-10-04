@@ -62,9 +62,17 @@ const data: DraftPreparationData = {
   },
   customRankingsEnabled: true,
 };
-beforeEach(() => localStorage.clear());
+beforeEach(() => { localStorage.clear(); vi.clearAllMocks(); });
 afterEach(cleanup);
 describe("draft preparation accessible controls", () => {
+  it("preserves existing local planning preferences until the first explicit account save", () => {
+    localStorage.setItem('af-draft-preparation-v1:viewer-s', JSON.stringify({ order: ['id:1', 'id:0'], spread: 'adp' }));
+    const players = data.players.map((p, i) => ({ ...p, playerKey: `id:${i}` }));
+    render(<DraftPreparation data={{ ...data, players, planningPreferenceState: 'ready', planningPreference: null }} leagueId="l" />);
+    expect(screen.getAllByRole('row')[1].textContent).toContain('B');
+    expect(screen.getByRole('status').textContent).toContain('Local copy');
+    expect(saveDraftPlanningPreference).not.toHaveBeenCalled();
+  });
   it("loads private account ordering and saves changes without touching the live queue", async () => {
     const players = data.players.map((p, i) => ({ ...p, playerKey: `id:${i}` }));
     render(<DraftPreparation data={{ ...data, players, planningPreferenceState: 'ready', planningPreference: { version: 1, order: ['id:1', 'id:0'], spread: 'adp' } }} leagueId="l" />);
