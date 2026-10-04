@@ -20,7 +20,7 @@ Saved probabilities are per user, team, league, season and period in SportsDataC
 
 ## Validation and limitations
 
-Regression tests cover native and canonical identity, format classification, zero-point ties, scale-invariant odds, mathematical status, action scope, lock timing, copied briefs, Chimmy prefill, English/Spanish controls, snapshots, failure states and cache reuse. Browser fixture checks at 375, 768 and 1440 pixels found no horizontal overflow and verified 44-pixel primary buttons.
+Regression tests cover native and canonical identity, format classification, zero-point ties, scale-invariant odds, mathematical status, action scope, lock timing, copied briefs, Chimmy prefill, English/Spanish controls, snapshots, failure states and cache reuse. Browser fixture checks at 375, 768 and 1440 pixels in AF, light and dark themes found no horizontal overflow and verified 44-pixel primary buttons. The component uses the existing Core theme tokens.
 
 Authenticated production flows and physical iOS/Android testing require release verification. Historical simulations do not model divisions, head-to-head tiebreaks, correlated scoring, injuries, trades or alternate qualification systems; unsupported exact-status claims are withheld. Provider feeds determine current projection and lineup-check coverage. Legacy external IDs cannot establish provenance outside known requested-provider collisions without a schema/writer change.
 
