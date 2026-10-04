@@ -50,6 +50,8 @@ export type ArchiveDetail = {
     correctionsMore: boolean;
     trades: unknown[];
     tradesMore: boolean;
+    playerTrades?: unknown[];
+    playerTradesMore?: boolean;
     coverage: string[];
     sessionId: string | null;
     analysis?: ReturnType<typeof analysisReadiness>;
@@ -73,7 +75,8 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
         return null;
     const sessionId = native ? string(object(session).id) : null;
     const boundary = reset?.createdAt;
-    const nativeStart = iso(object(session).startedAt);
+    const unstarted = ['pre_draft', 'scheduled', 'configuring', 'configured'].includes(String(object(session).status));
+    const nativeStart = unstarted ? null : iso(object(session).startedAt);
     const skip = (Math.max(1, Math.min(10000, Math.floor(timelinePage) || 1)) - 1) * 100;
     const [startEvent, lastEvent, gate] = native && sessionId ? await Promise.all([
         nativeStart ? prisma.leagueAuditLog.findFirst({ where: { leagueId, entityId: sessionId, actionType: ARCHIVE_EVENT, afterState: { path: ['event'], equals: 'start' }, createdAt: { gte: new Date(nativeStart), ...(boundary ? { lte: boundary } : {}) } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }) : Promise.resolve(null),
@@ -100,8 +103,8 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     if (rows.length > 10000)
         throw new Error('Draft exceeds archive display bound; no partial report is returned');
     const nativeSnap = object(snapshot), providerSnap = object(snapshot);
-    const startedAt = iso(native ? object(session).startedAt : providerSnap.startTime);
-    const endedAt = iso(native ? object(session).completedAt : providerSnap.lastPickedTime);
+    const startedAt = native ? nativeStart : iso(providerSnap.startTime);
+    const endedAt = native ? unstarted ? null : iso(object(session).completedAt) : iso(providerSnap.lastPickedTime);
     const clock = object(object(lastEvent?.afterState).clock);
     const ids = rows.map(r => string(r.playerId)).filter((v): v is string => !!v);
     const platform = native ? 'sleeper' : string(object(rows[0]?.metadata).provider) ?? (await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } }))?.platform ?? '';
@@ -146,8 +149,26 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
         coverage.push(choice.format === 'auction' ? 'Auction prices require a compatible observed bid-value benchmark; pick-order ADP is not used.' : 'No verified compatible ADP observation from before this draft is available.');
     const [corrections, trades] = await Promise.all([
         native && sessionId && gate ? prisma.draftPickAuditLog.findMany({ where: { leagueId, draftSessionId: sessionId, createdAt: range }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip, take: 101 }) : Promise.resolve([]),
-        native && sessionId ? prisma.draftPickTradeProposal.findMany({ where: { sessionId, status: 'accepted', respondedAt: range }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip, take: 101 }) : choice.season ? prisma.transactionFact.findMany({ where: { leagueId, season: choice.season, type: 'trade' }, orderBy: [{ createdAt: 'desc' }, { transactionId: 'desc' }], skip, take: 101 }) : Promise.resolve([]),
+        native && sessionId ? prisma.draftPickTradeProposal.findMany({ where: { sessionId, status: 'accepted', respondedAt: boundary ? { lte: boundary } : undefined }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip, take: 101 }) : choice.season ? prisma.transactionFact.findMany({ where: { leagueId, season: choice.season, type: 'trade' }, orderBy: [{ createdAt: 'desc' }, { transactionId: 'desc' }], skip, take: 101 }) : Promise.resolve([]),
     ]);
+    const playerTradeRows = native && startedAt ? await (async () => prisma.tradeExecutionSnapshot.findMany({
+        where: { leagueId, executedAt: { gte: new Date(startedAt), lte: endedAt ? new Date(endedAt) : boundary ?? new Date() } },
+        orderBy: [{ executedAt: 'desc' }, { id: 'desc' }], skip, take: 101,
+        select: { tradeId: true, executedAt: true, assetSummary: true, completeness: true, reversal: { select: { reversedAt: true } } },
+    }))().catch(() => null) : [];
+    if (native && startedAt) coverage.push(playerTradeRows === null
+        ? 'Native executed-player trade history is unavailable.'
+        : 'Native player trade packages cover recorded executions during this draft window; timing does not prove linkage to a particular pick.');
+    const playerTrades = (playerTradeRows ?? []).slice(0, 100).map(row => {
+        const summary = object(row.assetSummary);
+        const assets = Array.isArray(summary.assets) ? summary.assets.map(object) : [];
+        return { tradeId: row.tradeId, executedAt: row.executedAt, reversedAt: row.reversal?.reversedAt ?? null, completeness: row.completeness,
+            recordedAssetCount: typeof summary.items === 'number' ? summary.items : assets.length,
+            assets: assets.map(asset => ({ assetType: asset.assetType ?? asset.itemType, itemReference: asset.itemReference, faabAmount: asset.faabAmount, fromRosterId: asset.fromRosterId, toRosterId: asset.toRosterId,
+                playerId: asset.playerId ?? (String(asset.itemType).toLowerCase() === 'player' ? asset.itemReference : null), playerName: asset.playerName ?? object(asset.metadata).playerName,
+                pickSeason: asset.pickSeason ?? object(asset.metadata).season, pickRound: asset.pickRound ?? object(asset.metadata).round,
+                pickNumber: asset.pickNumber ?? object(asset.metadata).pickNumber })) };
+    });
     if (!native)
         coverage.push('Transaction packages are season-level records; exact linkage to this individual draft is not inferred.');
     if (native && !gate)
@@ -187,5 +208,5 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
         return { transactionId: trade.transactionId, season: trade.season, week: trade.weekOrPeriod, adds: payload.adds, drops: payload.drops, draftPicks: payload.draft_picks, rosterIds: payload.roster_ids, providerCreatedAt: payload.created, providerStatusUpdatedAt: payload.status_updated };
     });
     const analysis = analysisReadiness(nativeSnap.analysisBasis, picks.length);
-    return JSON.parse(JSON.stringify({ analysis, choice: publicChoice, picks, snapshot: publicSnapshot, startedAt, endedAt, endMeaning: native ? 'Completed at' : 'Provider last selection time', elapsedMs: duration(startedAt, endedAt), activeMs: native && clock.complete === true ? number(clock.totalActiveMs) : null, events: publicEvents, eventsMore: events.length > 100, corrections: corrections.slice(0, 100), correctionsMore: corrections.length > 100, trades: publicTrades, tradesMore: trades.length > 100, coverage, sessionId })) as ArchiveDetail;
+    return JSON.parse(JSON.stringify({ analysis, choice: publicChoice, picks, snapshot: publicSnapshot, startedAt, endedAt, endMeaning: native ? 'Completed at' : 'Provider last selection time', elapsedMs: duration(startedAt, endedAt), activeMs: native && clock.complete === true ? number(clock.totalActiveMs) : null, events: publicEvents, eventsMore: events.length > 100, corrections: corrections.slice(0, 100), correctionsMore: corrections.length > 100, trades: publicTrades, tradesMore: trades.length > 100, playerTrades, playerTradesMore: (playerTradeRows?.length ?? 0) > 100, coverage, sessionId })) as ArchiveDetail;
 }
