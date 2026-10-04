@@ -12,9 +12,12 @@ import {
   saveFrozenCompletedGrades,
   sleeperTradeKey,
   withFrozenOriginal,
+  frozenAssetKeys,
   type FrozenCompletedGrade,
+  type FrozenCompletedGradeV1,
   type TradeDatePrice,
 } from './frozenCompletedGrade'
+import type { RepriceOutcome } from './repriceFrozenTradeGrades'
 import { chooseTradeTimeCapture, tradeTimeOf } from './tradeTimeCapture'
 import { loadCaptureDays, loadDatedMarket, type DatedMarket, type MarketBook } from './datedMarket'
 import type { TradeValueSource } from './valueSource'
@@ -218,6 +221,42 @@ export async function completedOriginal(args: {
     dated,
     tradeAt: args.tradeAt?.toISOString() ?? null,
   })
+}
+
+/**
+ * One existing v1 original, re-priced at the time of its trade (Decision 2) — by the same
+ * `gradeAtTradeTime` every new freeze uses, oriented exactly as the stored row. For
+ * `scripts/reprice-frozen-trade-grades-at-trade-time.ts`; see `repriceFrozenTradeGrades.ts`.
+ *
+ * `deal` is the trade as a surface reads it today (to match the row's asset keys) and at the time of
+ * the trade (what is priced). A deal that matches the row neither way is a different deal: skipped.
+ */
+export async function repriceFrozenOriginalAtTradeTime(args: {
+  grader: LeagueTradeGrader | null
+  row: FrozenCompletedGradeV1
+  deal: { today: { give: GradeInputs; get: GradeInputs }; atTradeTime: { give: GradeInputs; get: GradeInputs } } | null
+  tradeAt: Date | null
+  deps?: TradeTimeDeps
+}): Promise<RepriceOutcome> {
+  if (!args.deal) return { kind: 'skip', why: 'the trade is not on record' }
+  const same = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i])
+  const give = frozenAssetKeys(args.deal.today.give)
+  const get = frozenAssetKeys(args.deal.today.get)
+  const atTradeTime = same(give, args.row.give) && same(get, args.row.get)
+    ? args.deal.atTradeTime
+    : same(give, args.row.get) && same(get, args.row.give)
+      ? { give: args.deal.atTradeTime.get, get: args.deal.atTradeTime.give }
+      : null
+  if (!atTradeTime) return { kind: 'skip', why: 'the recorded assets do not match the frozen row' }
+  if (!args.grader) return { kind: 'skip', why: 'the league could not be read' }
+  if (!args.tradeAt) return { kind: 'skip', why: 'no trade time' }
+  const tradeAt = args.tradeAt.toISOString()
+  if (!args.grader.book) return { kind: 'first_graded', tradeAt, why: 'the league prices on no stored market book' }
+  const days = await (args.deps?.captureDays ?? loadCaptureDays)(args.grader.book)
+  if (!chooseTradeTimeCapture(days, args.tradeAt)) return { kind: 'first_graded', tradeAt, why: 'no capture within a day before the trade' }
+  const dated = await gradeAtTradeTime(args.grader, atTradeTime, args.tradeAt, args.deps)
+  if (!dated) return { kind: 'first_graded', tradeAt, why: 'an asset has no record on the trade date' }
+  return { kind: 'trade_date', grade: dated.grade, pricedAsOf: dated.pricedAsOf, tradeAt }
 }
 
 // Pure, in its own module so the email renderer reads the same answer. Re-exported for callers here.
@@ -446,6 +485,24 @@ export async function gradeArchivedTradeWithInputs(
     }),
     give,
     get,
+  }
+}
+
+/**
+ * An archived row's deal in the grader's terms, both ways: as a surface reads it today (a used pick
+ * as the drafted player) and at the time of the trade (every pick as a pick). For the re-price job,
+ * which grades stored rows exactly as `gradeArchivedTrade` would.
+ */
+export function archivedTradeInputs(args: {
+  received: ReadonlyArray<ArchivedPlayer>
+  gave: ReadonlyArray<ArchivedPlayer>
+  picksIn: ReadonlyArray<ArchivedPick>
+  picksOut: ReadonlyArray<ArchivedPick>
+  currentSeason: number
+}): { today: { give: GradeInputs; get: GradeInputs }; atTradeTime: { give: GradeInputs; get: GradeInputs } } {
+  return {
+    today: { give: archivedSide(args.gave, args.picksOut, args.currentSeason), get: archivedSide(args.received, args.picksIn, args.currentSeason) },
+    atTradeTime: { give: archivedSideAtTradeTime(args.gave, args.picksOut), get: archivedSideAtTradeTime(args.received, args.picksIn) },
   }
 }
 
