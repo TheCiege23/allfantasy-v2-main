@@ -97,27 +97,27 @@ export function CommissionerControlPanel({ leagueId }: Props) {
       .then(([data, locksData]) => {
         if (!active) return
         const rawTeams = (data.teams ?? []) as Array<Record<string, unknown>>
-        setTeams(rawTeams.map((t) => ({
-          id: t.id as string,
-          teamName: (t.teamName as string) ?? 'Unknown',
-          ownerName: (t.ownerName as string) ?? '',
-          avatarUrl: (t.avatarUrl as string) ?? null,
-          wins: (t.wins as number) ?? 0,
-          losses: (t.losses as number) ?? 0,
-          isCommissioner: (t.isCommissioner as boolean) ?? false,
-          isCoCommissioner: (t.isCoCommissioner as boolean) ?? false,
-          isLocked: locksData.lockedRosters?.[t.id as string] === true,
-          platformUserId: (t.platformUserId as string) ?? null,
+        setTeams(rawTeams.map((row) => ({
+          id: row.id as string,
+          teamName: (row.teamName as string) ?? t('commControl.unknownTeam'),
+          ownerName: (row.ownerName as string) ?? '',
+          avatarUrl: (row.avatarUrl as string) ?? null,
+          wins: (row.wins as number) ?? 0,
+          losses: (row.losses as number) ?? 0,
+          isCommissioner: (row.isCommissioner as boolean) ?? false,
+          isCoCommissioner: (row.isCoCommissioner as boolean) ?? false,
+          isLocked: locksData.lockedRosters?.[row.id as string] === true,
+          platformUserId: (row.platformUserId as string) ?? null,
         })))
         // Init commissioner selections
         const cs: Record<string, boolean> = {}
-        rawTeams.forEach((t) => {
-          cs[t.id as string] = Boolean(t.isCommissioner) || Boolean(t.isCoCommissioner)
+        rawTeams.forEach((row) => {
+          cs[row.id as string] = Boolean(row.isCommissioner) || Boolean(row.isCoCommissioner)
         })
         setCommissionerSelections(cs)
         setLockedSelections(locksData.lockedRosters ?? {})
       })
-      .catch(() => { if (active) setError('Failed to load') })
+      .catch(() => { if (active) setError(t('commControl.loadFailed')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [leagueId])
@@ -165,7 +165,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
           })
           if (!res.ok) {
             const body = await res.json().catch(() => ({})) as { error?: string }
-            throw new Error(body.error ?? `Failed to update ${team.teamName}`)
+            throw new Error(body.error ?? t('commControl.updateTeamFailed').replace('{{team}}', team.teamName))
           }
         }
       }
@@ -173,9 +173,9 @@ export function CommissionerControlPanel({ leagueId }: Props) {
         ...team,
         isCoCommissioner: team.isCommissioner ? team.isCoCommissioner : Boolean(commissionerSelections[team.id]),
       })))
-      setSuccess('Commissioners updated.')
+      setSuccess(t('commControl.commissionersUpdated'))
       setTimeout(() => setSuccess(null), 3000)
-    } catch (err) { setError(err instanceof Error ? err.message : 'Failed to update commissioners') }
+    } catch (err) { setError(err instanceof Error ? err.message : t('commControl.updateCommissionersFailed')) }
     finally { setActionLoading(false) }
   }, [leagueId, teams, commissionerSelections])
 
@@ -192,12 +192,12 @@ export function CommissionerControlPanel({ leagueId }: Props) {
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string }
-        setError(body.error ?? 'Failed to save')
+        setError(body.error ?? t('commControl.saveFailed'))
         return
       }
-      setSuccess('Roster locks saved.')
+      setSuccess(t('commControl.locksSaved'))
       setTimeout(() => setSuccess(null), 3000)
-    } catch { setError('Request failed') }
+    } catch { setError(t('commControl.requestFailed')) }
     finally { setActionLoading(false) }
   }, [leagueId, lockedSelections])
 
@@ -217,13 +217,13 @@ export function CommissionerControlPanel({ leagueId }: Props) {
       )
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string }
-        setError(j.error ?? 'Recalc failed')
+        setError(j.error ?? t('commControl.recalcFailed'))
         return
       }
-      setSuccess(`Recalculated matchup records for week ${selectedWeek}.`)
+      setSuccess(t('commControl.recalculated').replace('{{week}}', String(selectedWeek)))
       setTimeout(() => setSuccess(null), 3000)
     } catch {
-      setError('Recalc failed')
+      setError(t('commControl.recalcFailed'))
     } finally {
       setActionLoading(false)
     }
@@ -244,7 +244,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
     return { starters, bench, taxi, ir, devy }
   }, [rosterPlayers])
 
-  if (loading) return <div className="py-8 text-center text-sm text-white/50">Loading commissioner controls...</div>
+  if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('commControl.loading')}</div>
 
   // ===== SUB-VIEW: Edit Lineups =====
   if (subView === 'edit-lineups') {
@@ -291,14 +291,14 @@ export function CommissionerControlPanel({ leagueId }: Props) {
           {/* Roster content */}
           <div className="min-w-0 flex-1">
             {!selectedTeamId ? (
-              <p className="py-8 text-center text-[13px] text-white/30">Select a team to view roster</p>
+              <p className="py-8 text-center text-[13px] text-white/30">{t('commControl.selectTeam')}</p>
             ) : rosterLoading ? (
-              <p className="py-8 text-center text-[13px] text-white/30">Loading roster...</p>
+              <p className="py-8 text-center text-[13px] text-white/30">{t('commControl.loadingRoster')}</p>
             ) : (
               <div className="space-y-4">
                 {/* Week selector */}
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold uppercase text-white/40">Week</span>
+                  <span className="text-[11px] font-bold uppercase text-white/40">{t('commControl.week')}</span>
                   <div className="flex gap-0.5">
                     {Array.from({ length: 17 }, (_, i) => i + 1).map((w) => (
                       <button key={w} type="button" onClick={() => setSelectedWeek(w)}
@@ -311,9 +311,9 @@ export function CommissionerControlPanel({ leagueId }: Props) {
 
                 {/* Total Points + Edit */}
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-white/50">Total Points: <span className="text-white/80">N/A</span></span>
+                  <span className="text-[12px] text-white/50">{t('commControl.totalPoints')}: <span className="text-white/80">{t('commControl.notAvailable')}</span></span>
                   <button type="button" className="rounded border border-white/15 bg-white/5 px-3 py-1 text-[11px] font-medium text-white/60 hover:bg-white/10">
-                    Edit
+                    {t('commControl.edit')}
                   </button>
                 </div>
 
@@ -346,7 +346,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                 {/* Taxi */}
                 {slotGroups.taxi.length > 0 && (
                   <div>
-                    <p className="mb-1 text-[11px] font-bold uppercase text-white/30">Taxi Squad</p>
+                    <p className="mb-1 text-[11px] font-bold uppercase text-white/30">{t('commControl.taxiSquad')}</p>
                     {slotGroups.taxi.map((p) => (
                       <PlayerRow key={p.playerId} player={p} />
                     ))}
@@ -356,7 +356,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                 {/* IR */}
                 {slotGroups.ir.length > 0 && (
                   <div>
-                    <p className="mb-1 text-[11px] font-bold uppercase text-white/30">IR</p>
+                    <p className="mb-1 text-[11px] font-bold uppercase text-white/30">{t('commControl.ir')}</p>
                     {slotGroups.ir.map((p) => (
                       <PlayerRow key={p.playerId} player={p} />
                     ))}
@@ -366,7 +366,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                 {/* Devy */}
                 {slotGroups.devy.length > 0 && (
                   <div>
-                    <p className="mb-1 text-[11px] font-bold uppercase text-white/30">Devy Stash</p>
+                    <p className="mb-1 text-[11px] font-bold uppercase text-white/30">{t('commControl.devyStash')}</p>
                     {slotGroups.devy.map((p) => (
                       <PlayerRow key={p.playerId} player={p} />
                     ))}
@@ -376,7 +376,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                 {/* Draft Picks */}
                 {draftPicks.length > 0 && (
                   <div>
-                    <p className="mb-1 text-[11px] font-bold uppercase text-white/40">Draft Picks</p>
+                    <p className="mb-1 text-[11px] font-bold uppercase text-white/40">{t('commControl.draftPicks')}</p>
                     <div className="space-y-0.5">
                       {draftPicks.map((pick, i) => (
                         <div key={i} className="py-1 text-[13px] font-medium text-white/80">
@@ -388,7 +388,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                 )}
 
                 {rosterPlayers.length === 0 && draftPicks.length === 0 && (
-                  <p className="py-4 text-center text-[12px] text-white/30">No roster data available for this team.</p>
+                  <p className="py-4 text-center text-[12px] text-white/30">{t('commControl.noRosterData')}</p>
                 )}
               </div>
             )}
@@ -445,7 +445,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                   <p className="text-[13px] font-semibold text-white">{team.teamName}</p>
                   <p className="text-[11px] text-white/40">{team.ownerName}</p>
                   <p className={`text-[11px] ${team.isCommissioner ? 'text-amber-300' : 'text-white/30'}`}>
-                    {team.isCommissioner ? 'Commissioner' : 'Member'}
+                    {team.isCommissioner ? t('commControl.roleCommissioner') : t('commControl.roleMember')}
                   </p>
                 </div>
               </button>
@@ -522,8 +522,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
           <p className="mt-0.5 text-[12px] text-white/40">{t('commControl.editScheduleDesc')}</p>
         </div>
         <p className="text-[12px] text-white/50">
-          Schedule editing is available through the league schedule API. Changes will be reflected
-          across all matchups, standings, and projections.
+          {t('commControl.scheduleNote')}
         </p>
         <button type="button"
           onClick={async () => {
@@ -534,14 +533,14 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ regenerate: true }),
               })
-              setSuccess('Schedule updated.')
+              setSuccess(t('commControl.scheduleUpdated'))
               setTimeout(() => setSuccess(null), 3000)
-            } catch { setError('Failed to update schedule') }
+            } catch { setError(t('commControl.scheduleFailed')) }
             finally { setActionLoading(false) }
           }}
           disabled={actionLoading}
           className="w-full rounded-lg bg-[#1a2744] px-4 py-3 text-[12px] font-bold uppercase tracking-wide text-white hover:bg-[#1e2d52] disabled:opacity-50 border border-white/10">
-          Edit Schedule Matchups
+          {t('commControl.editSchedule')}
         </button>
         {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">{success}</div>}
       </div>
