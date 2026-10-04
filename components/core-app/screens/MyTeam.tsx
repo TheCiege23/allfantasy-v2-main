@@ -875,6 +875,12 @@ const MATCHUP_NUMBERS_EXPLAINER =
 const MATCHUP_COVERAGE_EXPLAINER =
   '“from 5 of 9” means only five starters have a projection yet, so that total reads low.'
 
+/** The two market columns' headings, per language — one source for the header and the key. */
+export const MARKET_COLUMN_LABELS = {
+  en: { own: 'OWN', start: 'START' },
+  es: { own: 'PROP.', start: 'TIT.' },
+} as const
+
 /** What OWN and START are — the two market columns the explainer used to leave to a hover title. */
 const MARKET_COLUMNS_EXPLAINER =
   'OWN is the share of AllFantasy leagues that roster him. START is, of those leagues, how many ' +
@@ -909,14 +915,20 @@ function ProjHeader() {
       <span className="af-label af-mt-projhead--engine" title={copy("AllFantasy's own projection engine, adjusted to your league's scoring")}>
         AF
       </span>
+      {/*
+        «PROP.» (propiedad) and «TIT.» (titular) in Spanish — the abbreviations Spanish fantasy
+        sites use for "% owned" / "% started". ⚠ MEASURED TO FIT, not guessed: these columns are
+        44px and 46px, and on production at 1280px «TIENEN» needed 48px, «TITUL.» 48 and «TITULAR»
+        55 (2026-10-03). The "?" above and the key below spell both out.
+      */}
       <span className="af-label" title={copy('Share of AllFantasy leagues rostering this player')}>
-        OWN
+        {MARKET_COLUMN_LABELS[language === 'es' ? 'es' : 'en'].own}
       </span>
       <span
         className="af-label"
         title={copy('Of the leagues rostering him, how many start him this week')}
       >
-        START
+        {MARKET_COLUMN_LABELS[language === 'es' ? 'es' : 'en'].start}
       </span>
     </div>
   )
@@ -961,10 +973,10 @@ function RosterKey() {
           <dd>{copy(AF_PTS_EXPLAINER)}</dd>
         </div>
         <div>
-          <dt>OWN · START</dt>
+          <dt>{MARKET_COLUMN_LABELS[es ? 'es' : 'en'].own} · {MARKET_COLUMN_LABELS[es ? 'es' : 'en'].start}</dt>
           <dd>
             {es
-              ? 'cuántas ligas de AllFantasy lo tienen, y de esas cuántas lo alinean esta semana (en pantallas anchas)'
+              ? 'propiedad y titular: cuántas ligas de AllFantasy lo tienen, y de esas cuántas lo alinean esta semana (en pantallas anchas)'
               : 'how many AllFantasy leagues roster him, and of those how many start him this week (wide screens)'}
           </dd>
         </div>
