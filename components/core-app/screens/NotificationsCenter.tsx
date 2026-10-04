@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useClientSyncAccount } from '@/components/providers/ClientSyncAccountProvider'
 import { groupNotificationRows } from '@/lib/core-app/notificationGroups'
 import type {
   NotificationFilter,
@@ -157,6 +158,13 @@ function Row({
 }
 
 export function NotificationsCenter({ data }: NotificationsCenterProps) {
+  const accountId = useClientSyncAccount()
+  const { language } = useOptionalLanguage()
+  if (data.viewerId && data.viewerId !== accountId) return <p role="status">{language === 'es' ? 'Cargando notificaciones…' : 'Loading notifications…'}</p>
+  return <ScopedNotificationsCenter key={`${accountId ?? ''}:${data.leagueId ?? ''}`} data={data} />
+}
+
+function ScopedNotificationsCenter({ data }: NotificationsCenterProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const [filter, setFilter] = useState<NotificationFilter>('all')
@@ -164,6 +172,17 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
   const [marking, setMarking] = useState(false)
   const [markedAll, setMarkedAll] = useState(false)
   const [readError, setReadError] = useState<string | null>(null)
+  const seq = useRef(0)
+  const busy = useRef(false)
+  useEffect(() => {
+    seq.current += 1
+    busy.current = false
+    setReadIds(new Set())
+    setMarkedAll(false)
+    setMarking(false)
+    setReadError(null)
+    return () => { seq.current += 1 }
+  }, [data.rest, data.unread])
 
   const match = useCallback(
     (r: NotificationRow) => filter === 'all' || r.kind === filter,
@@ -189,19 +208,26 @@ export function NotificationsCenter({ data }: NotificationsCenterProps) {
    * they are filtered out of the request rather than sent and silently ignored.
    */
   const markRead = useCallback(async (ids: string[] | 'all') => {
+    if (busy.current) return
     const payload =
       ids === 'all' ? 'all' : [...new Set(ids.flatMap((id) =>
         groupNotificationRows(data.rest).find((r) => r.id === id)?.relatedIds ?? [id],
       ))].filter((id) => !id.startsWith('issue:'))
     if (payload !== 'all' && payload.length === 0) return
+    busy.current = true
+    const mine = ++seq.current
     setMarking(true)
     setReadError(null)
     const response = await fetch('/api/user/notifications', {
       method: 'PATCH',
+      signal: AbortSignal.timeout(15_000),
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: payload, ...(data.leagueId ? { leagueId: data.leagueId } : {}) }),
     }).catch(() => null)
-    if (!response?.ok) {
+    const result = await response?.json?.().catch(() => null)
+    if (mine !== seq.current) return
+    busy.current = false
+    if (!response?.ok || result?.success !== true) {
       setReadError('Could not mark notifications read. Please try again.')
       setMarking(false)
       return

@@ -20,6 +20,7 @@ import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invaria
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { isCommissionerRosterLocked } from '@/lib/league/commissioner-roster-lock'
+import { claimSnapshotWhere, isClaimSnapshotConflict } from './claim-snapshot'
 
 type ClaimRow = {
   id: string
@@ -182,6 +183,7 @@ export async function processWaiverClaimsForLeague(
   }> = []
 
   for (const claim of ordered) {
+    try {
     const roster = claim.roster
     const pushFail = async (msg: string, extra?: Record<string, unknown>) => {
       const oc = outcomeFromFailureMessage(msg)
@@ -190,7 +192,7 @@ export async function processWaiverClaimsForLeague(
           ? (claim.metadata as Record<string, unknown>)
           : {}
       await (prisma as any).waiverClaim.update({
-        where: { id: claim.id },
+        where: claimSnapshotWhere(claim),
         data: {
           status: 'failed',
           processedAt: new Date(),
@@ -304,7 +306,7 @@ export async function processWaiverClaimsForLeague(
 
     await (prisma as any).$transaction([
       (prisma as any).waiverClaim.update({
-        where: { id: claim.id },
+        where: claimSnapshotWhere(claim),
         data: { status: 'processed', processedAt: new Date(), resultMessage: 'Awarded' },
       }),
       (prisma as any).roster.update({
@@ -391,6 +393,12 @@ export async function processWaiverClaimsForLeague(
       claim.roster.faabRemaining = fresh.faabRemaining
       claim.roster.waiverPriority = fresh.waiverPriority
       claim.roster.playerData = fresh.playerData
+    }
+    } catch (error) {
+      // A newer override/cancellation or another processor won. The guarded
+      // award transaction rolls back its roster and ledger writes. Leave a
+      // changed pending claim for the next run to evaluate with fresh metadata.
+      if (!isClaimSnapshotConflict(error)) throw error
     }
   }
 
