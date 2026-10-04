@@ -21,6 +21,10 @@ describe('causal draft replay',()=>{
     expect(before.teams[0].benchValue).toBeGreaterThan(0);
     expect(after.teams[0].benchValue).toBe(before.teams[0].benchValue);
   });
+  it('does not replay an existing keeper as a second copy of the same player',()=>{
+    const kept=[{...picks[0],keeper:true},...picks.slice(1)],data=buildReplay(basis,context,start,kept,[picks[0]]),at=replayAt(data,1)!;
+    expect(at.actual.gain).toBe(0);expect(at.opportunityGap).toBeNull();expect(at.candidates.some(p=>p.playerId==='w')).toBe(false);
+  });
   it('preserves negative gains when a candidate must fill a vacant legal slot',()=>{
     const b={...basis,entries:basis.entries.map(e=>({...e,perGameRates:{rec:-Number(e.perGameRates.rec)}}))},data=buildReplay(b,context,start,picks,[]),at=replayAt(data,1)!;
     for(const p of at.candidates)expect(p.gain).toBeCloseTo(fillLineup([p],data.slots).points,8);
