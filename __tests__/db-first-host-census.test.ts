@@ -87,6 +87,7 @@ function spendGuardExceptions(): string[] {
  * A host matching one of these is examined and dismissed, not ignored.
  */
 const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
+  { name: 'share-link', why: 'Stats Guy public attribution website; the separate API host is monitored', test: /^statsguyfantasy\.com$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)allfantasy\.(ai|app|com|io|local)$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)clawship\.ai$/i },
   /*
@@ -385,6 +386,11 @@ describe('DB-first boundary — outbound host census', () => {
     // If this drops to zero the guard was renamed or restructured, and every
     // "monitored" classification below would silently become "unclassified".
     expect(monitoredPatterns().length).toBeGreaterThan(5)
+  })
+
+  it('monitors the draft market API separately from its public attribution link', () => {
+    expect(classify('api.statsguyfantasy.com', monitoredPatterns())).toBe('monitored')
+    expect(classify('statsguyfantasy.com', monitoredPatterns())).toBe('share-link')
   })
 
   it('every outbound host is classified', () => {

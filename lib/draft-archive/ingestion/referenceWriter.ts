@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { preparationFormatKey, type PreparationContext } from '@/lib/core-app/draftPreparationModel';
 const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
-import { validDraftReference, type DraftReference } from '../referenceModel';
+import { STATS_GUY_ATTRIBUTION_URL, validDraftReference, type DraftReference } from '../referenceModel';
 import { referenceStorageKey } from '../references';
 
 export async function preserveReference(formatKey: string, snapshot: DraftReference, apply: boolean) {
@@ -34,7 +34,7 @@ export async function syncMarketReferences(date: string, apply: boolean, now = n
       // Historical API dates have day precision. The end of that day is the conservative cutoff.
       if (!/^\d{4}-\d{2}-\d{2}$/.test(payload.asOf) || payload.asOf > date || !Number.isFinite(Date.parse(payload.asOf)) || new Date(payload.asOf).toISOString().slice(0,10) !== payload.asOf || Date.parse(date) - Date.parse(payload.asOf) > 14 * 86400000) throw new Error('Unverified source date');
       const snapshot: DraftReference = {
-        version: 'draft-reference-v1', kind: 'market_value', provider: 'Stats Guy Fantasy', attributionUrl: 'https://statsguyfantasy.com',
+        version: 'draft-reference-v1', kind: 'market_value', provider: 'Stats Guy Fantasy', attributionUrl: STATS_GUY_ATTRIBUTION_URL,
         observedAt: now.toISOString(), effectiveAt: payload.asOf + 'T23:59:59.999Z', historical: true,
         season: format.endsWith('redraft') ? Number(payload.asOf.slice(0, 4)) : null, identitySpace: 'sleeper', format,
         entries: payload.rankings.map(raw => { const row = object(raw); return { playerId: String(row.id ?? ''), name: String(row.name ?? ''), position: String(row.position ?? ''), value: Number(row.value), sample: null }; }),
