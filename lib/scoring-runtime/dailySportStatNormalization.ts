@@ -81,7 +81,9 @@ const NBA_STAT_ALIASES: Readonly<Record<string, readonly string[]>> = {
   // one letter out, which scores every made three as nothing.
   threes: ['three_points_made', 'threes', 'tpm', 'fg3m', '3pm'],
   fgm: ['field_goals_made', 'fgm', 'FGM'], //                    measured: field_goals_made
-  ftm: ['free_throws_made', 'ftm', 'FTM'], //                    measured: free_throws_made
+  ftm: ['free_throws_made', 'ftm', 'FTM'],
+  fga: ['field_goals_attempted', 'fga', 'FGA'],
+  fta: ['free_throws_attempted', 'fta', 'FTA'],
 }
 
 /**

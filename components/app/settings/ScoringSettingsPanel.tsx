@@ -21,6 +21,7 @@ type ScoringConfig = {
   leagueVariant: string | null
   formatType: string
   templateId: string
+  categoryScoring?: { mode: string; presetId: string; recordMode: string; categories: Array<{ id: string; label: string; direction: string }> }
   rules: ScoringRuleConfig[]
 }
 
@@ -163,7 +164,7 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
     <section className="rounded-xl border border-white/10 bg-black/20 p-4">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-white">Scoring Settings</h3>
-        {canEdit && (
+        {canEdit && !config.categoryScoring && (
           <button
             type="button"
             data-testid="scoring-settings-edit-toggle"
@@ -192,6 +193,13 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
         <p className="mt-1 text-[11px] text-white/45">Checking commissioner access…</p>
       )}
 
+      {config.categoryScoring && (
+        <div data-testid="category-scoring-settings" className="mt-3 rounded border border-white/15 p-3 text-sm">
+          <p>{config.categoryScoring.recordMode === 'each' ? 'Each category counts toward the record.' : config.categoryScoring.recordMode === 'roto' ? 'Season totals determine category standings.' : 'The team winning the most categories wins the matchup.'}</p>
+          <ul className="mt-2 flex flex-wrap gap-3">{config.categoryScoring.categories.map(category => <li key={category.id}>{category.label} ({category.direction === 'lower' ? 'lower wins' : 'higher wins'})</li>)}</ul>
+          <p className="mt-2 text-xs text-white/65">Percentage categories use total makes divided by total attempts. Point weights do not apply.</p>
+        </div>
+      )}
       <div className="mt-3 grid gap-2 text-[11px] sm:grid-cols-3">
         <div className="rounded border border-white/10 bg-black/35 px-2.5 py-2">
           <p className="text-white/50">Template</p>
@@ -200,7 +208,7 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
         <div className="rounded border border-white/10 bg-black/35 px-2.5 py-2">
           <p className="text-white/50">Enabled categories</p>
           <p className="font-medium text-white/85">
-            {rules.filter((r) => r.enabled).length} / {rules.length}
+            {config.categoryScoring ? config.categoryScoring.categories.length : rules.filter((r) => r.enabled).length} / {config.categoryScoring ? config.categoryScoring.categories.length : rules.length}
           </p>
         </div>
         <div className="rounded border border-white/10 bg-black/35 px-2.5 py-2">

@@ -226,3 +226,12 @@ describe('readWeekSlate — NCAAB reads the RI schedule, never the partial Sport
     expect(postseason.games).toBe(post)
   })
 })
+
+ it('refuses a wrong-season NCAAB response without replacing the cache', async () => {
+  h.riFetchRows.mockResolvedValue(ok(rows))
+  const { db } = memoryCache()
+  const r = await syncRiSeasonSchedule({ sport: 'NCAAB', season: 2026, db: db as never })
+  expect(r.error).toMatch(/partial or wrong-season/)
+  expect(db.sportsDataCache.upsert).not.toHaveBeenCalled()
+  expect(db.sportsDataCache.deleteMany).not.toHaveBeenCalled()
+})

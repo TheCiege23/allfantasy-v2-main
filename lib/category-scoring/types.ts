@@ -22,9 +22,9 @@ export function isScoringMode(value: unknown): value is ScoringMode {
  * resolves to a category definition list at runtime via
  * `getCategoryPresetDefinitions(id)`.
  */
-export type CategoryPresetId = 'nba_8cat' | 'nba_9cat' | 'mlb_5x5' | 'mlb_6x6'
+export type CategoryPresetId = 'nba_8cat' | 'nba_8cat_standard' | 'nba_9cat' | 'mlb_5x5' | 'mlb_6x6'
 
-export const CATEGORY_PRESET_IDS = ['nba_8cat', 'nba_9cat', 'mlb_5x5', 'mlb_6x6'] as const
+export const CATEGORY_PRESET_IDS = ['nba_8cat', 'nba_8cat_standard', 'nba_9cat', 'mlb_5x5', 'mlb_6x6'] as const
 
 export function isCategoryPresetId(value: unknown): value is CategoryPresetId {
   return (
