@@ -68,6 +68,18 @@ describe('POST /api/share/proposal-card', () => {
     findFirst.mockResolvedValue({ name: 'AFC Dreaming!' })
   })
 
+  it('draws Spanish image text without translating manager or player identities', async () => {
+    const result=await post({...CARD,language:'es',basis:'Dynasty · Superflex',uncertainty:'Some assets unpriced'})
+    const words=texts((result as unknown as {node:unknown}).node).join(' | ')
+    expect(words).toContain('ANÁLISIS DEL INTERCAMBIO')
+    expect(words).toContain('RECIBE')
+    expect(words).toContain('Intercambio propuesto')
+    expect(words).toContain('Dinastía · Superflex')
+    expect(words).toContain('Braelon Allen')
+    expect(words).toContain('TheCiege26')
+    expect(words).not.toContain('TRADE CHECK')
+  })
+
   it('401 signed out, 400 on a bad body, 404 for a league the user is not in', async () => {
     getServerSession.mockResolvedValueOnce(null)
     expect((await post(CARD)).status).toBe(401)

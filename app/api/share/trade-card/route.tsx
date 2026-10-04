@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma'
 import { getTradeGrades, type TradeSideGrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { hasNoSignal } from '@/lib/trade-intel/tradeGradeEmail'
 import { resultMark } from '@/lib/trade-intel/tradeResultMark'
+import { resolveLanguage, LANG_COOKIE_KEY, getIntlLocale, type LanguageCode } from '@/lib/i18n/constants'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -29,7 +30,11 @@ function initials(name: string): string {
   return name.trim().slice(0, 2).toUpperCase() || '??'
 }
 
-function SideCol({ side, provisional, tie }: { side: TradeSideGrade; provisional: boolean; tie: boolean }) {
+function SideCol({ side, provisional, tie, language }: { side: TradeSideGrade; provisional: boolean; tie: boolean; language:LanguageCode }) {
+  const es=language==='es'
+  const marks:Record<string,string>={WON:'GANÓ',LOST:'PERDIÓ',EVEN:'EMPATE'}
+  const trends:Record<string,string>={improving:'mejorando',worsening:'empeorando',steady:'estable'}
+  const number=(value:number)=>value.toLocaleString(getIntlLocale(language),{minimumFractionDigits:1,maximumFractionDigits:1})
   const topIn = [
     ...side.playersIn.map((a) => ({
       name: a.name,
@@ -99,7 +104,7 @@ function SideCol({ side, provisional, tie }: { side: TradeSideGrade; provisional
       <div
         style={{
           display: 'flex',
-          fontSize: 96,
+          fontSize: es?64:96,
           fontWeight: 900,
           fontStyle: 'italic',
           color: display.color,
@@ -107,9 +112,9 @@ function SideCol({ side, provisional, tie }: { side: TradeSideGrade; provisional
           lineHeight: 1,
         }}
       >
-        {display.mark}
+        {es?(marks[display.mark]??display.mark):display.mark}
       </div>
-      <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf', marginTop: 6 }}>{display.caption}</div>
+      <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf', marginTop: 6 }}>{es?(provisional?'sin puntos registrados todavía':`resultado hasta ahora · ${trends[side.trend]??'estable'}`):display.caption}</div>
       {provisional ? null : (
         <div
           style={{
@@ -120,8 +125,8 @@ function SideCol({ side, provisional, tie }: { side: TradeSideGrade; provisional
             marginTop: 4,
           }}
         >
-          net {side.cumulativeNet > 0 ? '+' : ''}
-          {side.cumulativeNet.toFixed(1)} pts
+          {es?'saldo':'net'} {side.cumulativeNet > 0 ? '+' : ''}
+          {number(side.cumulativeNet)} pts
         </div>
       )}
       {trail && !provisional ? (
@@ -130,7 +135,7 @@ function SideCol({ side, provisional, tie }: { side: TradeSideGrade; provisional
       <div style={{ display: 'flex', flexDirection: 'column', marginTop: 14, alignItems: 'center' }}>
         {topIn.map((a) => (
           <div key={a.name} style={{ display: 'flex', fontSize: 16, color: '#c6cbf5' }}>
-            {a.name} · {a.pts.toFixed(1)}
+            {a.name} · {number(a.pts)}
           </div>
         ))}
       </div>
@@ -139,6 +144,8 @@ function SideCol({ side, provisional, tie }: { side: TradeSideGrade; provisional
 }
 
 export async function GET(req: NextRequest) {
+  const language=resolveLanguage(req.nextUrl.searchParams?.get('lang')??req.cookies?.get(LANG_COOKIE_KEY)?.value)
+  const es=language==='es'
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -213,22 +220,22 @@ export async function GET(req: NextRequest) {
                 letterSpacing: 1,
               }}
             >
-              WHO WON THIS TRADE?
+              {es?'¿QUIÉN GANÓ EL INTERCAMBIO?':'WHO WON THIS TRADE?'}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
               <div style={{ display: 'flex', fontSize: 22, fontWeight: 700, color: '#c6cbf5' }}>
                 {league.name}
               </div>
               <div style={{ display: 'flex', fontSize: 17, color: '#8b93cf' }}>
-                {trade.season} · week {trade.week}
+                {trade.season} · {es?'semana':'week'} {trade.week}
                 {/* "Dead even" is a result. With nothing credited there is no result yet. */}
-                {provisional ? ' · not scored yet' : trade.tie ? ' · DEAD EVEN (so far)' : ''}
+                {provisional ? (es?' · sin puntos todavía':' · not scored yet') : trade.tie ? (es?' · EMPATE (hasta ahora)':' · DEAD EVEN (so far)') : ''}
               </div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 22, marginTop: 24, flex: 1 }}>
             {trade.sides.slice(0, 3).map((side) => (
-              <SideCol key={side.rosterId} side={side} provisional={provisional} tie={Boolean(trade.tie)} />
+              <SideCol key={side.rosterId} side={side} provisional={provisional} tie={Boolean(trade.tie)} language={language} />
             ))}
           </div>
           <div
@@ -240,7 +247,7 @@ export async function GET(req: NextRequest) {
             }}
           >
             <div style={{ display: 'flex', fontSize: 15, color: '#5d64a3' }}>
-              Scored on real points while each asset was held · picks tracked to who they became
+              {es?'Puntos reales mientras se conservó cada activo · selecciones vinculadas al jugador elegido':'Scored on real points while each asset was held · picks tracked to who they became'}
             </div>
             <div style={{ display: 'flex', fontSize: 18, fontWeight: 800, color: '#c6cbf5' }}>
               AllFantasy.ai · a Brown Pig LLC product

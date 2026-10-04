@@ -1,0 +1,26 @@
+.panel { border:1px solid var(--border,#334155);border-radius:16px;padding:16px;margin:12px 0;background:rgba(15,23,42,.18);min-width:0;color:inherit }
+.panel h4 {margin:0 0 10px;font-size:1rem}
+.decisionGrid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;overflow-wrap:anywhere}
+.decisionGrid ul {padding-left:18px;margin:8px 0;font-size:.85rem;line-height:1.55}
+.decisionGrid li {margin:8px 0}
+@media(max-width:900px){.decisionGrid{grid-template-columns:1fr}}
+.panel p,.panel small {font-size:.8rem;line-height:1.5;color:var(--muted,#94a3b8)}
+.row {display:grid;grid-template-columns:minmax(90px,1fr) minmax(100px,3fr) auto;gap:10px;align-items:center;margin:10px 0;font-size:.85rem}
+.track {height:18px;border-radius:5px;background:rgba(148,163,184,.12);overflow:hidden}
+.bar {height:100%;background:#38bdf8;border-radius:5px}
+.row:nth-child(odd) .bar {background:#a78bfa}
+.controls {display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;align-items:center;min-height:44px}
+.controls label {display:inline-flex;align-items:center;gap:6px;min-height:44px}
+.controls button,.controls select,.button {color:inherit;background:rgba(148,163,184,.1);border:1px solid var(--border,#475569);border-radius:9px;min-height:44px;padding:8px 12px;cursor:pointer}
+.controls button[aria-pressed=true] {border-color:#38bdf8;background:rgba(56,189,248,.15)}
+.chart {width:100%;height:auto;max-height:240px;color:#38bdf8;display:block}
+.axis {display:flex;justify-content:space-between;gap:12px;font-size:.75rem;color:var(--muted,#94a3b8)}
+.axis span:last-child {text-align:right}
+.table {overflow:auto;max-height:220px;font-size:.8rem}
+.table table {width:100%;border-collapse:collapse}
+.table th,.table td {padding:7px;text-align:left;border-bottom:1px solid rgba(148,163,184,.15)}
+.reaction {display:inline-flex;align-items:center;gap:5px;font-size:.75rem;line-height:1.4}
+.celebrate {display:inline-block;font-size:1.2rem;animation:celebrate 2s ease-in-out 2}
+@keyframes celebrate {50%{transform:translateY(-5px) rotate(8deg)}}
+@media(prefers-reduced-motion:reduce){.celebrate{animation:none}}
+@media(max-width:480px){.panel{padding:12px}.row{grid-template-columns:minmax(78px,1fr) minmax(70px,2fr) auto;gap:6px}}

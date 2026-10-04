@@ -17,7 +17,25 @@ import {
   type PirateBaseFormat,
 } from '@/lib/league/leagueConceptOptions'
 import { LEAGUE_TYPE_DECIDES_GRADES } from '@/lib/league/leagueTypeGrading'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { ageText, leagueConceptText, SURFACE_LABEL_ES } from '@/lib/core-app/shellCopy'
 import '@/components/core-app/af-league-tabs.css'
+
+/**
+ * The bar's words in the reader's language (2026-10-03). It heads every in-league /core screen, and
+ * a live Spanish check found its chips, league-type control and statuses all English.
+ */
+function useBarCopy() {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const surfaceLabel = (surface: CoreSurfaceKey) => {
+    const english = CORE_SURFACE_LABELS[surface]
+    return es ? (SURFACE_LABEL_ES[english] ?? coreUiCopy(english, language)) : english
+  }
+  const concept = (label: string) => leagueConceptText(label, language)
+  return { language, es, surfaceLabel, concept }
+}
 
 export type CoreLeagueRecommendationValue = { action: string; rationale: string }
 
@@ -70,11 +88,14 @@ export type CoreLeagueContextBarProps = {
  * in-league screen. The internal module name stays `decision-os`; only the label changed.
  */
 export function CoreLeagueDecisionChip({ available }: { available: boolean | null }) {
+  const { es } = useBarCopy()
   const tone = available === null ? 'muted' : available ? 'decision' : 'muted'
-  const label = available === null ? 'checking' : available ? 'ready' : 'building'
+  const label = es
+    ? available === null ? 'comprobando' : available ? 'listo' : 'en preparación'
+    : available === null ? 'checking' : available ? 'ready' : 'building'
   return (
     <span className="af-lctx-chip" data-tone={tone}>
-      League insights {label}
+      {es ? 'Análisis de la liga' : 'League insights'} {label}
     </span>
   )
 }
@@ -88,12 +109,16 @@ export function CoreLeagueRecommendation({
   surface: CoreSurfaceKey
   recommendation: CoreLeagueRecommendationValue
 }) {
+  const { es, surfaceLabel } = useBarCopy()
   const askChimmy = () => {
     window.dispatchEvent(
       new CustomEvent(COMMS_OPEN_EVENT, {
         detail: {
           tab: 'chimmy',
-          prefill: `Review ${leagueName}'s ${CORE_SURFACE_LABELS[surface]} and tell me the most important action to take next.`,
+          // The question lands in the reader's own composer, so it is asked in their language.
+          prefill: es
+            ? `Revisa ${surfaceLabel(surface)} de ${leagueName} y dime la acción más importante que debo tomar ahora.`
+            : `Review ${leagueName}'s ${CORE_SURFACE_LABELS[surface]} and tell me the most important action to take next.`,
         },
       }),
     )
@@ -104,7 +129,7 @@ export function CoreLeagueRecommendation({
         <strong>{recommendation.action}</strong>
         <span>{recommendation.rationale}</span>
       </span>
-      <button type="button" onClick={askChimmy}>Ask Chimmy</button>
+      <button type="button" onClick={askChimmy}>{es ? 'Preguntar a Chimmy' : 'Ask Chimmy'}</button>
     </div>
   )
 }
@@ -125,6 +150,7 @@ export default function CoreLeagueContextBar({
   decisionSlot,
   recommendationSlot,
 }: CoreLeagueContextBarProps) {
+  const { language, es, surfaceLabel, concept } = useBarCopy()
   const selectId = useId()
   const baseSelectId = useId()
   const [leagueType, setLeagueType] = useState<LeagueConceptType | null>(null)
@@ -221,7 +247,7 @@ export default function CoreLeagueContextBar({
   const busy = typeStatus === 'loading' || typeStatus === 'saving'
   const pirateBaseLabel = leagueType === 'pirate' ? pirateBaseFormatLabel(pirateBase) : null
   return (
-    <section className="af-lctx" aria-label={`${leagueName} system status`}>
+    <section className="af-lctx" aria-label={es ? `Estado del sistema de ${leagueName}` : `${leagueName} system status`}>
       {/*
         The league, named once.
 
@@ -266,25 +292,29 @@ export default function CoreLeagueContextBar({
             className="af-lctx-chip af-lctx-chip--link"
             data-tone="source"
             href={coverageHref}
-            title="What’s on file from this import"
+            title={es ? 'Qué hay registrado de esta importación' : 'What’s on file from this import'}
           >
-            {platform.toUpperCase()} import · what’s on file
+            {es
+              ? `Importación de ${platform.toUpperCase()} · qué hay registrado`
+              : `${platform.toUpperCase()} import · what’s on file`}
           </Link>
         ) : (
           <span className="af-lctx-chip" data-tone="source">
-            {platform.toUpperCase()} import
+            {es ? `Importación de ${platform.toUpperCase()}` : `${platform.toUpperCase()} import`}
           </span>
         )}
         <span className="af-lctx-chip" data-tone={gameDayActive ? 'live' : syncStale ? 'warn' : 'fresh'}>
-          {gameDayActive ? 'Game-day view refresh · 20s' : `Synced ${syncLabel}`}
+          {gameDayActive
+            ? es ? 'Actualización de día de partido · 20 s' : 'Game-day view refresh · 20s'
+            : es ? `Sincronizado ${ageText(syncLabel, language)}` : `Synced ${syncLabel}`}
         </span>
         {decisionSlot !== undefined ? decisionSlot : <CoreLeagueDecisionChip available={Boolean(decisionAvailable)} />}
         <span className="af-lctx-chip" data-tone="chimmy">
-          Chimmy · {CORE_SURFACE_LABELS[surface]}
+          Chimmy · {surfaceLabel(surface)}
         </span>
         {/* `#league-type`: every trade grade's "Confirm your league type" link lands here. */}
         <div className="af-lctx-type" id="league-type" data-confirmed={confirmed ? 'true' : 'false'}>
-          <label htmlFor={selectId}>League type</label>
+          <label htmlFor={selectId}>{es ? 'Tipo de liga' : 'League type'}</label>
           {canConfirm ? (
             <select
               id={selectId}
@@ -294,18 +324,18 @@ export default function CoreLeagueContextBar({
                 if (isLeagueConceptType(event.target.value)) chooseLeagueType(event.target.value)
               }}
             >
-              <option value="" disabled>Choose league type</option>
+              <option value="" disabled>{concept('Choose league type')}</option>
               {LEAGUE_CONCEPT_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>{option.label}</option>
+                <option key={option.id} value={option.id}>{concept(option.label)}</option>
               ))}
             </select>
           ) : (
             <span>
               {typeStatus === 'loading'
-                ? 'Loading…'
+                ? es ? 'Cargando…' : 'Loading…'
                 : pirateBaseLabel
-                  ? `${leagueConceptLabel(leagueType)} · ${pirateBaseLabel}`
-                  : leagueConceptLabel(leagueType)}
+                  ? `${concept(leagueConceptLabel(leagueType))} · ${concept(pirateBaseLabel)}`
+                  : concept(leagueConceptLabel(leagueType))}
             </span>
           )}
           {askPirateBase ? (
@@ -315,7 +345,7 @@ export default function CoreLeagueContextBar({
              * and it picks up the same select styling.
              */
             <>
-              <label htmlFor={baseSelectId}>Rosters carry over?</label>
+              <label htmlFor={baseSelectId}>{es ? '¿Las plantillas se mantienen?' : 'Rosters carry over?'}</label>
               <select
                 id={baseSelectId}
                 value={pirateDraft ? '' : (pirateBase ?? '')}
@@ -324,9 +354,9 @@ export default function CoreLeagueContextBar({
                   if (isPirateBaseFormat(event.target.value)) void saveLeagueType('pirate', event.target.value)
                 }}
               >
-                <option value="" disabled>Choose</option>
+                <option value="" disabled>{es ? 'Elige' : 'Choose'}</option>
                 {PIRATE_BASE_FORMAT_OPTIONS.map((option) => (
-                  <option key={option.id} value={option.id}>{option.label}</option>
+                  <option key={option.id} value={option.id}>{concept(option.label)}</option>
                 ))}
               </select>
             </>
@@ -342,21 +372,33 @@ export default function CoreLeagueContextBar({
               onClick={() => void saveLeagueType(leagueType, leagueType === 'pirate' ? pirateBase : null)}
               disabled={leagueType === 'pirate' && !pirateBase}
             >
-              Confirm {leagueConceptLabel(leagueType)}
+              {es ? 'Confirmar' : 'Confirm'} {concept(leagueConceptLabel(leagueType))}
             </button>
           ) : null}
           <small role="status" aria-live="polite">
-            {typeStatus === 'saving'
-              ? 'Saving…'
-              : typeStatus === 'saved'
-                ? `Saved — trades here are graded as ${leagueConceptLabel(leagueType)}`
-                : typeStatus === 'error'
-                  ? 'Could not load or save'
-                  : pirateDraft
-                    ? 'Pick dynasty or redraft to save'
-                    : typeStatus === 'ready' && !confirmed
-                      ? `Not confirmed — ${LEAGUE_TYPE_DECIDES_GRADES.charAt(0).toLowerCase()}${LEAGUE_TYPE_DECIDES_GRADES.slice(1)}`
-                      : ''}
+            {es
+              ? typeStatus === 'saving'
+                ? 'Guardando…'
+                : typeStatus === 'saved'
+                  ? `Guardado: los intercambios de esta liga se califican como ${concept(leagueConceptLabel(leagueType))}`
+                  : typeStatus === 'error'
+                    ? 'No se pudo cargar ni guardar'
+                    : pirateDraft
+                      ? 'Elige dynasty o redraft para guardar'
+                      : typeStatus === 'ready' && !confirmed
+                        ? 'Sin confirmar: tu tipo de liga decide cómo se califica cada intercambio de esta liga.'
+                        : ''
+              : typeStatus === 'saving'
+                ? 'Saving…'
+                : typeStatus === 'saved'
+                  ? `Saved — trades here are graded as ${leagueConceptLabel(leagueType)}`
+                  : typeStatus === 'error'
+                    ? 'Could not load or save'
+                    : pirateDraft
+                      ? 'Pick dynasty or redraft to save'
+                      : typeStatus === 'ready' && !confirmed
+                        ? `Not confirmed — ${LEAGUE_TYPE_DECIDES_GRADES.charAt(0).toLowerCase()}${LEAGUE_TYPE_DECIDES_GRADES.slice(1)}`
+                        : ''}
           </small>
         </div>
       </div>

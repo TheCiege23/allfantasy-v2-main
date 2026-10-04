@@ -986,6 +986,15 @@ export function Dash3ACareer({ career, freshness = null }: { career: CareerData 
   )
 }
 
+/**
+ * W–L, or W–L–T once a meeting has finished level — the same format as Rivalry
+ * Radar's `seriesRecord`, so one head-to-head never reads two ways. `ties` is read
+ * defensively: a payload serialized before the field existed reads as no ties.
+ */
+function rivalRecord(r: { wins: number; losses: number; ties?: number }): string {
+  return (r.ties ?? 0) > 0 ? `${r.wins}–${r.losses}–${r.ties}` : `${r.wins}–${r.losses}`
+}
+
 /*
  * RIVALRY RADAR — real. WeeklyMatchup.matchupId pairs the two rosters in
  * a week, so every past meeting is stored and the record is counted, not
@@ -1007,6 +1016,7 @@ export function Dash3ARivals({
                   <b>Who actually beats you.</b>
                   Counted from every scored week stored for leagues where you have
                   claimed a team. Ranked by losses to them, not by how often you play.
+                  A meeting that finished level is a tie, shown as a third number, never a loss.
                 </Help>
               </header>
               {rivals?.available ? (
@@ -1023,7 +1033,7 @@ export function Dash3ARivals({
                         </em>
                       </span>
                       <b className={`af3a-mono ${r.wins >= r.losses ? 'af3a-good' : 'af3a-bad'}`}>
-                        {r.wins}–{r.losses}
+                        {rivalRecord(r)}
                       </b>
                     </div>
                   ))}

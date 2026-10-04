@@ -47,6 +47,7 @@ export function importedTradeTimelineRows(trades: readonly TradeRecord[]) {
     const date = new Date(trade.at)
     return [{
       id: `sleeper:${trade.transactionId.split(':').at(-1)}`,
+      impactRef: first.isYou ? {kind:'archive' as const,transactionId:trade.transactionId} : undefined,
       direction: 'complete' as const, status: 'completed_on_sleeper',
       partnerName: `${first.manager ?? 'Side A'} ↔ ${second.manager ?? 'Side B'}`,
       sideAName: first.manager ?? 'Side A', sideBName: second.manager ?? 'Side B',

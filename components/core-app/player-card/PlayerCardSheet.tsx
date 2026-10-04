@@ -17,6 +17,7 @@ import { scheduleProjectionNote, scheduleRowValue } from '@/lib/core-app/schedul
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { PlayerValueHistoryChart } from './PlayerValueHistoryChart'
 
 /**
  * STATE 6 / STATE 7 of the design handoff, in one component.
@@ -760,6 +761,7 @@ export default function PlayerCardSheet({
           {data && !market?.available ? <Absent reason={market?.reason ?? 'No market price.'} /> : null}
 
           {/* two columns ───────────────────────────────────────── */}
+          {data ? <PlayerValueHistoryChart sleeperId={p?.sleeperId ?? subject.sleeperId} sport={p?.sport ?? subject.sport} leagueId={league?.leagueId} unlocked={!depthLocked} /> : null}
           {data ? (
             <div className="af-pc-cols">
               <div className="af-pc-col">

@@ -40,6 +40,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { ageText, platformsPhraseText, scopeLabelText } from '@/lib/core-app/shellCopy'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
@@ -932,6 +933,9 @@ type TopSearchHit = PlayerSearchHit | LeagueSearchHit
  */
 function TopSearch({ leagues }: { leagues: RailLeague[] }) {
   const router = useRouter()
+  // The search box sits on every /core screen; its words follow the language switch (2026-10-03).
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
   const [q, setQ] = useState('')
   const [playerHits, setPlayerHits] = useState<PlayerSearchHit[]>([])
   const [open, setOpen] = useState(false)
@@ -1023,8 +1027,8 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
           className="af-search-input"
           name="q"
           type="search"
-          placeholder="Find a player or jump to a league"
-          aria-label="Search any player or league"
+          placeholder={es ? 'Busca un jugador o ve a una liga' : 'Find a player or jump to a league'}
+          aria-label={es ? 'Busca cualquier jugador o liga' : 'Search any player or league'}
           autoComplete="off"
           role="combobox"
           aria-expanded={showList}
@@ -1044,10 +1048,17 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
       </form>
 
       {showList ? (
-        <ul className="af-search-ac" id={listId} role="listbox" aria-label="Player and league results">
+        <ul
+          className="af-search-ac"
+          id={listId}
+          role="listbox"
+          aria-label={es ? 'Resultados de jugadores y ligas' : 'Player and league results'}
+        >
           {hits.length === 0 ? (
             <li className="af-search-ac-empty" role="presentation">
-              {loading ? 'Searching…' : 'No players or leagues match that.'}
+              {loading
+                ? es ? 'Buscando…' : 'Searching…'
+                : es ? 'Ningún jugador ni liga coincide.' : 'No players or leagues match that.'}
             </li>
           ) : (
             hits.map((hit, i) => (
@@ -1069,8 +1080,8 @@ function TopSearch({ leagues }: { leagues: RailLeague[] }) {
                     <span className="af-search-ac-name">{hit.name}</span>
                     <span className="af-search-ac-meta">
                       {hit.kind === 'league'
-                        ? `League · ${hit.platform}`
-                        : [hit.position, hit.team].filter(Boolean).join(' · ') || 'Player'}
+                        ? `${es ? 'Liga' : 'League'} · ${hit.platform}`
+                        : [hit.position, hit.team].filter(Boolean).join(' · ') || (es ? 'Jugador' : 'Player')}
                     </span>
                   </span>
                 </button>
@@ -1252,10 +1263,12 @@ function HelpDot({ title, body }: { title: string; body: string }) {
 
 /**
  * The top bar's sync chip. `describeAge` says "never synced" when nothing has synced, so prefixing
- * "synced" to it read "synced never synced".
+ * "synced" to it read "synced never synced". In Spanish the age itself is translated too ("hace 4 min").
  */
-export function syncChipText(ageLabel: string): string {
-  return /^never\b/i.test(ageLabel.trim()) ? 'Never synced' : `synced ${ageLabel}`
+export function syncChipText(ageLabel: string, language = 'en'): string {
+  const never = /^never\b/i.test(ageLabel.trim())
+  if (language === 'es') return never ? 'Nunca sincronizado' : `sincronizado ${ageText(ageLabel, 'es')}`
+  return never ? 'Never synced' : `synced ${ageLabel}`
 }
 
 export function AfCoreShell(incoming: AfCoreShellProps) {
@@ -1762,7 +1775,11 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
           aria-expanded={railOpen}
           aria-controls="af-rail-scroll"
           onClick={toggleRail}
-          title={railOpen ? 'Collapse the league rail' : 'Expand the league rail'}
+          title={
+            railOpen
+              ? language === 'es' ? 'Contraer la barra de ligas' : 'Collapse the league rail'
+              : language === 'es' ? 'Expandir la barra de ligas' : 'Expand the league rail'
+          }
         >
           <span className="af-rail-toggle-icon" aria-hidden>
             {railOpen ? '«' : '»'}
@@ -2078,7 +2095,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
         <div className="af-nav-foot">
         <div className="af-import-cta">
           <div className="af-import-title">{copy('Import a league')}</div>
-          <p className="af-import-body">{availableImportPlatformsPhrase()}. Read-only, takes about a minute.</p>
+          <p className="af-import-body">
+            {platformsPhraseText(availableImportPlatformsPhrase(), language)}.{' '}
+            {language === 'es' ? 'Solo lectura, tarda cerca de un minuto.' : 'Read-only, takes about a minute.'}
+          </p>
           <Link href="/import" className="af-btn af-import-btn">
             {copy('Connect a platform')}
           </Link>
@@ -2193,16 +2213,24 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
 
           <div className="af-topbar-right">
             {props.isAdmin ? (
-              <Link className="af-admin-shortcut" href="/admin" aria-label="Open AllFantasy administration">
+              <Link
+                className="af-admin-shortcut"
+                href="/admin"
+                aria-label={language === 'es' ? 'Abrir la administración de AllFantasy' : 'Open AllFantasy administration'}
+              >
                 <span aria-hidden>⬢</span>
-                Admin
+                {copy('Admin')}
               </Link>
             ) : null}
             <span className="af-readonly">
-              Read-only
+              {language === 'es' ? 'Solo lectura' : 'Read-only'}
               <HelpDot
-                title="Read-only by design"
-                body={`AllFantasy never changes anything on ${availableImportPlatformsPhrase()}. We read your leagues and point you to the exact league and screen where you make the change.`}
+                title={language === 'es' ? 'Solo lectura, por diseño' : 'Read-only by design'}
+                body={
+                  language === 'es'
+                    ? `AllFantasy nunca cambia nada en ${platformsPhraseText(availableImportPlatformsPhrase(), 'es')}. Leemos tus ligas y te llevamos a la liga y la pantalla exactas donde haces el cambio.`
+                    : `AllFantasy never changes anything on ${availableImportPlatformsPhrase()}. We read your leagues and point you to the exact league and screen where you make the change.`
+                }
               />
             </span>
 
@@ -2212,9 +2240,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               `describeAge` says "never synced" for an account with no sync at all; prefixing
               "synced" to that read "⚠ synced never synced".
             */}
-            <span className="af-sync af-num" data-stale={syncAge.stale} title="Last sync">
+            <span
+              className="af-sync af-num"
+              data-stale={syncAge.stale}
+              title={language === 'es' ? 'Última sincronización' : 'Last sync'}
+            >
               {syncAge.stale ? '⚠ ' : ''}
-              {syncChipText(syncAge.label)}
+              {syncChipText(syncAge.label, language)}
             </span>
 
             {/* The theme switch lives here on /core; the floating pill steps aside (GlobalModeToggle). */}
@@ -2234,12 +2266,16 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                 {plan.tokensLeft != null ? (
                   <>
                     <span className="af-plan-tokens af-num">{plan.tokensLeft.toLocaleString()}</span>
-                    <span className="af-label">tokens left</span>
+                    <span className="af-label">{language === 'es' ? 'tokens restantes' : 'tokens left'}</span>
                   </>
                 ) : null}
                 <HelpDot
-                  title="Plan tokens"
-                  body="Your plan includes a monthly allowance of Chimmy requests — grades, projections and recommendations. Resets on your billing date."
+                  title={language === 'es' ? 'Tokens del plan' : 'Plan tokens'}
+                  body={
+                    language === 'es'
+                      ? 'Tu plan incluye una cantidad mensual de solicitudes a Chimmy: calificaciones, proyecciones y recomendaciones. Se renueva en tu fecha de facturación.'
+                      : 'Your plan includes a monthly allowance of Chimmy requests — grades, projections and recommendations. Resets on your billing date.'
+                  }
                 />
               </span>
             ) : null}
@@ -2423,7 +2459,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             type="button"
             ref={mobileMoreScrimRef}
             className="af-mobile-more-scrim"
-            aria-label="Close more menu"
+            aria-label={language === 'es' ? 'Cerrar el menú' : 'Close more menu'}
             onClick={() => setMobileMoreOpen(false)}
           />
           {/*
@@ -2443,9 +2479,13 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             <header className="af-mobile-more-head">
               <span>
                 <span className="af-label">{copy(props.leagueFirst ? (mobileSheet === 'play' ? 'Play' : 'Me') : 'More')}</span>
-                <strong>{selectedLeagueName ?? props.scope?.label ?? copy('All leagues')}</strong>
+                <strong>
+                  {selectedLeagueName ?? (props.scope?.label ? scopeLabelText(props.scope.label, language) : copy('All leagues'))}
+                </strong>
               </span>
-              <button type="button" aria-label="Close more menu" onClick={() => setMobileMoreOpen(false)}>×</button>
+              <button type="button" aria-label={language === 'es' ? 'Cerrar el menú' : 'Close more menu'} onClick={() => setMobileMoreOpen(false)}>
+                ×
+              </button>
             </header>
             {props.leagueFirst && mobileSheet === 'play' ? (
               <div className="af-mobile-more-list">

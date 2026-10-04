@@ -158,7 +158,7 @@ function CompletedTradeView({ card }: { card: TradeCard }) {
           {card.grade.graded ? 'Grade: ' : ''}
           {tradeCardGradeLine(card.manager, card.partner, card.grade)}
           {card.grade.graded ? (
-            <span className="af-cm-trade-when"> · {tradeCardGradeBasisLabel(card.grade.basis)}</span>
+            <span className="af-cm-trade-when"> · {tradeCardGradeBasisLabel(card.grade)}</span>
           ) : null}
         </p>
       ) : null}

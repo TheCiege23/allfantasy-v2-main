@@ -1,4 +1,6 @@
 'use client'
+import { useTradeVisualCopy } from "./useTradeVisualCopy"
+import { TradeTranslationStatus } from './TradeTranslationStatus'
 
 import { useCallback, useState } from 'react'
 import { readableApiError } from '@/lib/http/readableApiError'
@@ -49,7 +51,9 @@ function money(v: number | null): string {
 }
 
 export function TradeFinderPanel(props: { leagueId: string | null }) {
+
   const [data, setData] = useState<FinderResponse | null>(null)
+  const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy(data)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
@@ -72,64 +76,54 @@ export function TradeFinderPanel(props: { leagueId: string | null }) {
 
   return (
     <section className="af-tc-dos">
+      <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       {/* "Decision OS · " dropped: internal name, and the section is plainly the finder. */}
-      <div className="af-label">Trade Finder</div>
+      <div className="af-label">{copy("Trade Finder")}</div>
 
       {data == null ? (
         <>
-          <p className="af-tc-row-sub">
-            Look across this league for managers whose roster shape fits yours.
-          </p>
+          <p className="af-tc-row-sub">{copy(" Look across this league for managers whose roster shape fits yours. ")}</p>
           <button type="button" className="af-btn af-btn--ghost" onClick={load} disabled={busy}>
-            {busy ? 'Looking…' : 'Find trade partners'}
+            {copy(busy ? 'Looking…' : 'Find trade partners')}
           </button>
         </>
       ) : null}
 
       {/* Each refusal says which one it is. */}
       {data?.supported === false ? (
-        <p className="af-tc-row-sub">
-          Trade Finder reads a Sleeper league&rsquo;s rosters directly, so it does not run on this
-          platform yet. That is a gap in what we can see, not a verdict about your league.
-        </p>
+        <p className="af-tc-row-sub">{copy(" Trade Finder reads a Sleeper league's rosters directly, so it does not run on this platform yet. That is a gap in what we can see, not a verdict about your league. ")}</p>
       ) : null}
 
       {data?.supported === true && data.linked === false ? (
-        <p className="af-tc-row-sub">
-          Link your Sleeper account to use this — it needs to know which team is yours before it
-          can suggest anyone to trade with.
-        </p>
+        <p className="af-tc-row-sub">{copy(" Link your Sleeper account to use this — it needs to know which team is yours before it can suggest anyone to trade with. ")}</p>
       ) : null}
 
       {data?.error ? (
         <p className="af-tc-nosignal">
-          {readableApiError(data, 'The trade finder could not load for this league. Try again in a moment.')}
+          {copy(readableApiError(data, 'The trade finder could not load for this league. Try again in a moment.'))}
         </p>
       ) : null}
 
       {data?.finder ? (
         <>
           {data.finder.proposals.length === 0 ? (
-            <p className="af-tc-row-sub">
-              Nothing worth suggesting in this league right now. That is a real answer — no roster
-              here has a shape that pairs cleanly with yours.
-            </p>
+            <p className="af-tc-row-sub">{copy(" Nothing worth suggesting in this league right now. That is a real answer — no roster here has a shape that pairs cleanly with yours. ")}</p>
           ) : (
             <div className="af-tc-pairs">
               {data.finder.proposals.slice(0, 6).map((p) => (
                 <div key={`${p.partner.name}-${p.get.name}`} className="af-tc-pair">
                   <div className="af-tc-pair-label">
-                    {p.partner.teamName || p.partner.name}
-                    {p.partner.completedTrades > 0
+                    {copy(p.partner.teamName || p.partner.name)}
+                    {copy(p.partner.completedTrades > 0
                       ? ` · ${p.partner.completedTrades} trades made`
-                      : ' · never traded'}
+                      : ' · never traded')}
                   </div>
                   <div className="af-tc-pair-value" style={{ fontSize: 13 }}>
-                    {p.get.name} <span style={{ opacity: 0.5 }}>for</span> {p.give.name}
+                    {p.get.name} <span style={{ opacity: 0.5 }}>{copy("for")}</span> {p.give.name}
                   </div>
                   <p className="af-tc-row-sub">
-                    {money(p.get.marketValue)} for {money(p.give.marketValue)}
-                    {p.valueGapPct != null ? ` · ${Math.abs(Math.round(p.valueGapPct))}% apart` : ''}
+                    {copy(money(p.get.marketValue))}{copy(" for ")}{copy(money(p.give.marketValue))}
+                    {copy(p.valueGapPct != null ? ` · ${Math.abs(Math.round(p.valueGapPct))}% apart` : '')}
                   </p>
                   {/*
                     Rationale is checkable facts only — the service's own type says
@@ -138,7 +132,7 @@ export function TradeFinderPanel(props: { leagueId: string | null }) {
                   */}
                   {p.rationale.slice(0, 2).map((r) => (
                     <p key={r} className="af-tc-row-sub">
-                      {r}
+                      {copy(r)}
                     </p>
                   ))}
                 </div>
@@ -147,15 +141,12 @@ export function TradeFinderPanel(props: { leagueId: string | null }) {
           )}
 
           {data.finder.missing.length > 0 ? (
-            <p className="af-tc-row-sub">
-              Working without: {data.finder.missing.join(', ')}. Suggestions are thinner than they
-              would be with those.
-            </p>
+            <p className="af-tc-row-sub">{copy(" Working without: ")}{copy(data.finder.missing.join(', '))}{copy(". Suggestions are thinner than they would be with those. ")}</p>
           ) : null}
 
           {data.finder.contextNotes.slice(0, 2).map((n) => (
             <p key={n} className="af-tc-row-sub">
-              {n}
+              {copy(n)}
             </p>
           ))}
         </>

@@ -1,4 +1,6 @@
 'use client'
+import { useTradeVisualCopy } from "./useTradeVisualCopy"
+import { TradeTranslationStatus } from './TradeTranslationStatus'
 
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import type { LeagueRoster } from '@/components/core-app/screens/useLeagueRosters'
@@ -90,47 +92,46 @@ export function TradePartnerSuggestions(props: {
   /** How many cards to show. The chip row below lists everyone. */
   limit?: number
 }) {
+  const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy(props.ranking)
+
   const ranking = props.ranking
   if (!ranking) return null
   const top = ranking.partners.slice(0, props.limit ?? 3)
 
   return (
     <section className="af-tc-fits" aria-labelledby="af-tc-fits-title">
+      <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <div className="af-tc-fits-head">
-        <span className="af-label" id="af-tc-fits-title">Best trade partners</span>
-        <span className="af-tc-row-sub">
-          Ranked by what they have spare for you, what you have spare for them, whether a fair deal
-          exists, and how they trade.
-        </span>
+        <span className="af-label" id="af-tc-fits-title">{copy("Best trade partners")}</span>
+        <span className="af-tc-row-sub">{copy(" Ranked by what they have spare for you, what you have spare for them, whether a fair deal exists, and how they trade. ")}</span>
       </div>
 
       {top.length === 0 ? (
-        <p className="af-tc-row-sub">No other team in this league could be ranked.</p>
+        <p className="af-tc-row-sub">{copy("No other team in this league could be ranked.")}</p>
       ) : (
         <ol className="af-tc-fits-list">
           {top.map((p) => (
             <li key={p.rosterId} className="af-tc-fit" data-fit={p.label.split(' ')[0]!.toLowerCase()} data-on={props.selectedRosterId === p.rosterId}>
               <div className="af-tc-fit-head">
-                <span className="af-tc-fit-rank af-num" aria-label={`Rank ${p.rank}`}>{p.rank}</span>
-                <span className="af-tc-fit-name">{p.ownerName ?? 'Another manager'}</span>
+                <span className="af-tc-fit-rank af-num" aria-label={copy(`Rank ${p.rank}`)}>{copy(p.rank)}</span>
+                <span className="af-tc-fit-name">{copy(p.ownerName ?? 'Another manager')}</span>
                 <span className="af-tc-spacer" />
-                <span className="af-tc-fit-label">{p.label}</span>
+                <span className="af-tc-fit-label">{copy(p.label)}</span>
                 <span className="af-tc-fit-score af-num">
-                  {p.score}
-                  <small>/100</small>
+                  {copy(p.score)}
+                  <small>{copy("/100")}</small>
                 </span>
               </div>
               {p.reasons.length > 0 ? (
                 <ul className="af-tc-fit-reasons">
                   {p.reasons.slice(0, 3).map((r) => (
-                    <li key={r}>{r}</li>
+                    <li key={r}>{copy(r)}</li>
                   ))}
                 </ul>
               ) : null}
               {p.suggestion ? (
-                <p className="af-tc-fit-deal af-num">
-                  You send {p.suggestion.give.map((a) => `${a.name} (${money(a.value)})`).join(' + ')} · You get{' '}
-                  {p.suggestion.get.map((a) => `${a.name} (${money(a.value)})`).join(' + ')}
+                <p className="af-tc-fit-deal af-num">{copy("You send ")}{copy(p.suggestion.give.map((a) => `${a.name} (${money(a.value)})`).join(' + '))}{copy(" · You get")}{copy(' ')}
+                  {copy(p.suggestion.get.map((a) => `${a.name} (${money(a.value)})`).join(' + '))}
                 </p>
               ) : null}
               {/*
@@ -139,15 +140,13 @@ export function TradePartnerSuggestions(props: {
               */}
               {p.suggestion?.grade?.graded ? (
                 <p className="af-tc-fit-grade" data-letter={p.suggestion.grade.letter}>
-                  <strong className="af-num">{p.suggestion.grade.letter}</strong>
-                  <span>
-                    for you · {p.ownerName ?? 'They'} {p.suggestion.grade.partnerLetter} · {p.suggestion.grade.label} — you get{' '}
-                    {money(p.suggestion.grade.getValue)} for {money(p.suggestion.grade.giveValue)} in league value
-                  </span>
+                  <strong className="af-num">{copy(p.suggestion.grade.letter)}</strong>
+                  <span>{copy("for you · ")}{copy(p.ownerName ?? 'They')} {copy(p.suggestion.grade.partnerLetter)}{copy(" · ")}{copy(p.suggestion.grade.label)}{copy(" — you get")}{copy(' ')}
+                    {copy(money(p.suggestion.grade.getValue))}{copy(" for ")}{copy(money(p.suggestion.grade.giveValue))}{copy(" in league value")}</span>
                 </p>
               ) : p.suggestion?.grade && !p.suggestion.grade.graded ? (
                 <p className="af-tc-fit-grade" data-letter="none">
-                  <span>Not graded: {p.suggestion.grade.reason}</span>
+                  <span>{copy("Not graded: ")}{copy(p.suggestion.grade.reason)}</span>
                 </p>
               ) : null}
               <div className="af-tc-fit-actions">
@@ -157,12 +156,10 @@ export function TradePartnerSuggestions(props: {
                   aria-pressed={props.selectedRosterId === p.rosterId}
                   onClick={() => props.onChoose(p.rosterId)}
                 >
-                  {props.selectedRosterId === p.rosterId ? 'Trading with them' : 'Trade with them'}
+                  {copy(props.selectedRosterId === p.rosterId ? 'Trading with them' : 'Trade with them')}
                 </button>
                 {p.suggestion ? (
-                  <button type="button" className="af-btn" onClick={() => props.onStartWith(p)}>
-                    Start with this deal
-                  </button>
+                  <button type="button" className="af-btn" onClick={() => props.onStartWith(p)}>{copy(" Start with this deal ")}</button>
                 ) : null}
               </div>
             </li>
@@ -173,7 +170,7 @@ export function TradePartnerSuggestions(props: {
       {ranking.gaps.length > 0 ? (
         <ul className="af-tc-fits-gaps">
           {ranking.gaps.map((g) => (
-            <li key={g}>{g}</li>
+            <li key={g}>{copy(g)}</li>
           ))}
         </ul>
       ) : null}

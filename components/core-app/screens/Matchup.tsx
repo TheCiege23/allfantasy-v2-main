@@ -62,7 +62,12 @@ function BannerTip({ es, showsAf }: { es: boolean; showsAf: boolean }) {
     <InfoTip label={t} title={t}>
       <span className="af-info-para">
         {es
-          ? 'Los números grandes son los puntos anotados en cuanto juega un titular. Antes de eso son el total final proyectado de cada alineación —la proyección de Sleeper recalculada con la configuración de esta liga—, marcado «proj».'
+          /*
+            The tag is quoted AS IT RENDERS — `copy('proj')`, the same lookup the banner uses — so the
+            tip cannot drift from it. It said «proj» while the banner showed «proy.» (live check,
+            2026-10-03).
+          */
+          ? `Los números grandes son los puntos anotados en cuanto juega un titular. Antes de eso son el total final proyectado de cada alineación —la proyección de Sleeper recalculada con la configuración de esta liga—, marcado «${coreUiCopy('proj', 'es')}».`
           : 'The big numbers are points scored, once any starter has played. Before that they are each lineup’s projected final — Sleeper’s projection, re-scored under this league’s settings — marked “proj”.'}
       </span>
       {showsAf ? (

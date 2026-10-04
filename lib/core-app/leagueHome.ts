@@ -308,6 +308,8 @@ export type LeagueHomeData = {
       name: string
       wins: number
       losses: number
+      /** Meetings that finished level — never folded into `losses`. */
+      ties: number
       meetings: number
       lastResult: string | null
     }>
@@ -924,6 +926,7 @@ export async function getLeagueHomeData(
             name: r.name,
             wins: r.wins,
             losses: r.losses,
+            ties: r.ties,
             meetings: r.meetings,
             lastResult: r.lastResult,
           })),

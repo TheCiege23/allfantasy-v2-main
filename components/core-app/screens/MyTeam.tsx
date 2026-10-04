@@ -23,14 +23,16 @@ import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import { InfoTip } from '@/components/core-app/InfoTip'
-import { myTeamCardReasonText } from '@/lib/core-app/myTeamReasonText'
+import { myTeamCardReasonText, myTeamReasonText, scoringNoteText } from '@/lib/core-app/myTeamReasonText'
 
 export type MyTeamProps = {
   data: MyTeamData
 }
 
+/** A section the loader could not fill, in the reader's language — `myTeamReasonText` has why. */
 function Unavailable({ reason }: { reason: string }) {
-  return <p className="af-mt-unavailable">{reason}</p>
+  const { language } = useOptionalLanguage()
+  return <p className="af-mt-unavailable">{myTeamReasonText(reason, language)}</p>
 }
 
 /**
@@ -343,7 +345,9 @@ function VenueMark({
   return null
 }
 
-function ordinal(n: number): string {
+/** "2nd", or «2.º» in Spanish — it sits inside Spanish sentences too ("terminó 2.º de 12"). */
+function ordinal(n: number, es = false): string {
+  if (es) return `${n}.º`
   const s = ['th', 'st', 'nd', 'rd']
   const v = n % 100
   return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`
@@ -357,20 +361,28 @@ function ordinal(n: number): string {
  * names its comparison; a letter invents a scale and hides its inputs. When
  * coverage is partial that is stated here rather than folded into the number.
  */
-function gradeSubtitle(g: RosterGrade): string {
+function gradeSubtitle(g: RosterGrade, es = false): string {
   const parts: string[] = []
   const vsMedian = g.value - g.median
   parts.push(
     Math.abs(vsMedian) < g.median * 0.03
-      ? 'right on the league median'
-      : `${Math.abs(vsMedian).toLocaleString()} ${vsMedian > 0 ? 'above' : 'below'} the median`,
+      ? es ? 'justo en la mediana de la liga' : 'right on the league median'
+      : es
+        ? `${Math.abs(vsMedian).toLocaleString('es')} ${vsMedian > 0 ? 'por encima' : 'por debajo'} de la mediana`
+        : `${Math.abs(vsMedian).toLocaleString()} ${vsMedian > 0 ? 'above' : 'below'} the median`,
   )
-  if (g.strongest) parts.push(`${g.strongest.position} is your best (${ordinal(g.strongest.rank)})`)
+  if (g.strongest) {
+    parts.push(es
+      ? `${g.strongest.position} es tu mejor posición (${ordinal(g.strongest.rank, true)})`
+      : `${g.strongest.position} is your best (${ordinal(g.strongest.rank)})`)
+  }
   if (g.weakest && g.weakest.position !== g.strongest?.position) {
-    parts.push(`${g.weakest.position} your thinnest (${ordinal(g.weakest.rank)})`)
+    parts.push(es
+      ? `${g.weakest.position} la más débil (${ordinal(g.weakest.rank, true)})`
+      : `${g.weakest.position} your thinnest (${ordinal(g.weakest.rank)})`)
   }
   if (g.pricedPlayers < g.totalPlayers) {
-    parts.push(`priced ${g.pricedPlayers} of your ${g.totalPlayers}`)
+    parts.push(es ? `valorados ${g.pricedPlayers} de tus ${g.totalPlayers}` : `priced ${g.pricedPlayers} of your ${g.totalPlayers}`)
   }
   /*
    * WHICH CLAIM THIS RANK IS MAKING. Repriced under your league's scoring is a
@@ -380,8 +392,8 @@ function gradeSubtitle(g: RosterGrade): string {
    */
   parts.push(
     g.basis.leagueScored
-      ? 'valued under your scoring'
-      : 'market prices, not adjusted for your scoring',
+      ? es ? 'valorado con tu puntuación' : 'valued under your scoring'
+      : es ? 'precios de mercado, sin ajustar a tu puntuación' : 'market prices, not adjusted for your scoring',
   )
   return parts.join(' · ')
 }
@@ -475,7 +487,7 @@ function PositionStrengthCard({ grade }: { grade: RosterGrade }) {
                 <span style={{ width: `${pct}%` }} />
               </span>
               <span className="af-mt-posstr-rank af-num">
-                {ordinal(p.rank)} {es ? 'de' : 'of'} {p.outOf}
+                {ordinal(p.rank, es)} {es ? 'de' : 'of'} {p.outOf}
               </span>
               {p.median != null ? (
                 <span className="af-mt-posstr-meta">
@@ -584,21 +596,27 @@ function MatchupSideView({ side, label }: { side: MatchupSide; label: string }) 
  * of coverage — and "you are favoured by 12" is exactly the sentence someone
  * would act on.
  */
-function edge(m: NextMatchup, bestBall: boolean): string | null {
+function edge(m: NextMatchup, bestBall: boolean, es = false): string | null {
   const you = m.you
   const them = m.opponent
   if (!them || you.projected == null || them.projected == null) return null
   if (you.projectedFrom < you.starterCount || them.projectedFrom < them.starterCount) return null
 
   const diff = Math.round((you.projected - them.projected) * 10) / 10
-  if (bestBall) return `Listed starters project ${Math.abs(diff).toFixed(1)} ${diff >= 0 ? 'ahead' : 'behind'}; eligible Best Ball bench replacements are not included.`
-  if (Math.abs(diff) < 3) return 'Projected within three points — this is a coin flip.'
+  const by = Math.abs(diff).toFixed(1)
+  if (bestBall) {
+    return es
+      ? `Los titulares mostrados proyectan ${by} ${diff >= 0 ? 'a favor' : 'en contra'}; no incluye los reemplazos elegibles del banquillo de Best Ball.`
+      : `Listed starters project ${by} ${diff >= 0 ? 'ahead' : 'behind'}; eligible Best Ball bench replacements are not included.`
+  }
+  if (Math.abs(diff) < 3) return es ? 'Proyección a menos de tres puntos: es una moneda al aire.' : 'Projected within three points — this is a coin flip.'
   return diff > 0
-    ? `You are projected ahead by ${Math.abs(diff).toFixed(1)}.`
-    : `You are projected behind by ${Math.abs(diff).toFixed(1)}.`
+    ? es ? `Tienes una ventaja proyectada de ${by}.` : `You are projected ahead by ${by}.`
+    : es ? `Tienes una desventaja proyectada de ${by}.` : `You are projected behind by ${by}.`
 }
 
 function PlayerCell({ player }: { player: LineupPlayer }) {
+  const { language } = useOptionalLanguage()
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null)
   const [failedLogoUrls, setFailedLogoUrls] = useState<string[]>([])
   const imageUrl = player.imageUrl && player.imageUrl !== failedImageUrl ? player.imageUrl : null
@@ -669,9 +687,9 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
           {player.onBye ? (
             <span
               className="af-mt-bye"
-              title="His team is not playing this week. A starter on bye is a guaranteed zero."
+              title={coreUiCopy('His team is not playing this week. A starter on bye is a guaranteed zero.', language)}
             >
-              BYE
+              {language === 'es' ? 'DESCANSO' : 'BYE'}
             </span>
           ) : null}
         </div>
@@ -958,6 +976,8 @@ function RosterKey() {
  * Saying so out loud is the whole value of running the check every week.
  */
 const CHECK_TAG: Record<LineupCheckItem['kind'], string> = { out: 'OUT', bye: 'BYE', empty: 'EMPTY', swap: 'SWAP', questionable: 'Q' }
+/** The same tags in Spanish — Q stays Q, as in the abbreviation key. */
+const CHECK_TAG_ES: Record<LineupCheckItem['kind'], string> = { out: 'FUERA', bye: 'DESCANSO', empty: 'VACÍO', swap: 'CAMBIO', questionable: 'Q' }
 
 /**
  * Draft capital and lineup age, side by side — the two facts that decide a dynasty team's next
@@ -984,7 +1004,7 @@ function DynastyCard({ outlook }: { outlook: NonNullable<MyTeamData['dynasty']> 
                   <span className="af-mt-dynasty-season af-num">{s.season}</span>
                   <span className="af-mt-dynasty-list">
                     {s.picks
-                      .map((p) => (p.fromTeamName ? `${p.label} (${es ? 'vía' : 'via'} ${p.fromTeamName})` : p.label))
+                      .map((p) => (p.fromTeamName ? `${p.label} (${es ? 'vía' : 'via'} ${myTeamReasonText(p.fromTeamName, language)})` : p.label))
                       .join(' · ')}
                   </span>
                 </li>
@@ -1000,7 +1020,7 @@ function DynastyCard({ outlook }: { outlook: NonNullable<MyTeamData['dynasty']> 
           </>
         )
       ) : (
-        <p className="af-mt-dynasty-note">{picks.reason}.</p>
+        <p className="af-mt-dynasty-note">{myTeamReasonText(picks.reason, language)}.</p>
       )}
 
       <h3 className="af-mt-dynasty-h">{es ? 'Edad de la alineación' : 'Lineup age'}</h3>
@@ -1033,7 +1053,7 @@ function DynastyCard({ outlook }: { outlook: NonNullable<MyTeamData['dynasty']> 
           )}
         </>
       ) : (
-        <p className="af-mt-dynasty-note">{ages.reason}.</p>
+        <p className="af-mt-dynasty-note">{myTeamReasonText(ages.reason, language)}.</p>
       )}
     </section>
   )
@@ -1180,7 +1200,7 @@ function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: Lineup
             {check.items.map((item) => (
               <li key={`${item.kind}-${item.anchor}`} data-kind={item.kind}>
                 <a href={`#${item.anchor}`} className="af-mt-check-item">
-                  <span className="af-mt-check-tag">{CHECK_TAG[item.kind]}</span>
+                  <span className="af-mt-check-tag">{(es ? CHECK_TAG_ES : CHECK_TAG)[item.kind]}</span>
                   <span className="af-mt-check-slot af-num">{item.slotLabel}</span>
                   <span className="af-mt-check-text">{checkLine(item, es)}</span>
                 </a>
@@ -1202,11 +1222,22 @@ function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: Lineup
 
 function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: string }) {
   const gap = check.benchProjected - check.starterProjected
+  const es = useOptionalLanguage().language === 'es'
   return (
     <div className="af-mt-bench-check" data-verdict={check.verdict}>
-      <span className="af-label af-mt-bench-check-tag">Bench check</span>
+      <span className="af-label af-mt-bench-check-tag">{es ? 'Revisión del banquillo' : 'Bench check'}</span>
       <span className="af-mt-bench-check-text">
-        {check.verdict === 'swap' ? (
+        {es ? (
+          /* The same two numbers and the same threshold, in Spanish word order. */
+          <>
+            <strong>{check.benchName}</strong> (suplente) proyecta{' '}
+            <span className="af-num">{check.benchProjected.toFixed(1)}</span> frente a los{' '}
+            <span className="af-num">{check.starterProjected.toFixed(1)}</span> de {check.starterName}
+            {check.verdict === 'swap'
+              ? ': la mejor opción esta semana.'
+              : `: dentro del margen de ${BENCH_SWAP_POINTS} puntos que estas proyecciones pueden distinguir, así que tu titular está bien así.`}
+          </>
+        ) : check.verdict === 'swap' ? (
           <>
             <strong>{check.benchName}</strong> (bench) projects{' '}
             <span className="af-num">{check.benchProjected.toFixed(1)}</span> against{' '}
@@ -1234,9 +1265,16 @@ function BenchCheckStrip({ check, leagueId }: { check: BenchCheck; leagueId: str
         tab: 'chimmy', leagueId,
         // No internal system names in text the user sends as their own question — see
         // LineupIntelligenceActions for the same correction.
-        prefill: `Should I start ${check.benchName} instead of ${check.starterName} in this league? Compare league-scored projections, injuries, positional eligibility and kickoff locks.`,
-      } }))}>Ask Chimmy about this swap</button>
-      <span className="af-mt-bench-caveat">Projection comparison · confirm injury updates, kickoff locks and AutoSubs on your platform.</span>
+        // In the reader's language too: it lands in their own composer as the question they send.
+        prefill: es
+          ? `¿Debería poner de titular a ${check.benchName} en lugar de ${check.starterName} en esta liga? Compara las proyecciones con la puntuación de la liga, lesiones, elegibilidad de posición y cierres por inicio de partido.`
+          : `Should I start ${check.benchName} instead of ${check.starterName} in this league? Compare league-scored projections, injuries, positional eligibility and kickoff locks.`,
+      } }))}>{es ? 'Preguntar a Chimmy por este cambio' : 'Ask Chimmy about this swap'}</button>
+      <span className="af-mt-bench-caveat">
+        {es
+          ? 'Comparación de proyecciones · confirma lesiones, cierres por inicio y cambios automáticos en tu plataforma.'
+          : 'Projection comparison · confirm injury updates, kickoff locks and AutoSubs on your platform.'}
+      </span>
     </div>
   )
 }
@@ -1423,7 +1461,7 @@ function OffseasonView({ data }: MyTeamProps) {
    * header). A finished season's rank is the final standing, which is worth saying.
    */
   const standing = team && team.recordKnown
-    ? `${team.record}${team.rank != null && phase === 'complete' ? (es ? ` · terminó ${ordinal(team.rank)} de ${team.teamCount}` : ` · finished ${ordinal(team.rank)} of ${team.teamCount}`) : ''}`
+    ? `${team.record}${team.rank != null && phase === 'complete' ? (es ? ` · terminó ${ordinal(team.rank, true)} de ${team.teamCount}` : ` · finished ${ordinal(team.rank)} of ${team.teamCount}`) : ''}`
     : null
   const actions: Array<{ href: string; label: string; primary?: boolean }> = []
   if (phase === 'predraft') actions.push({ href: `/core/draft-hq?league=${id}`, label: es ? 'Abrir Draft HQ' : 'Open Draft HQ', primary: true })
@@ -1450,7 +1488,7 @@ function OffseasonView({ data }: MyTeamProps) {
             {grade ? (
               <span className="af-mt-off-team-meta">
                 {' · '}
-                {es ? 'valor de plantilla' : 'roster value'} {ordinal(grade.rank)} {es ? 'de' : 'of'} {grade.outOf}
+                {es ? 'valor de plantilla' : 'roster value'} {ordinal(grade.rank, es)} {es ? 'de' : 'of'} {grade.outOf}
               </span>
             ) : null}
           </p>
@@ -1591,6 +1629,7 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
 export function MyTeam({ data }: MyTeamProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const es = language === 'es'
   const [decisionNow, setDecisionNow] = useState(() => data.lock?.available ? data.lock.data.asOf ?? Date.now() : Date.now())
   useEffect(() => {
     setDecisionNow(Date.now())
@@ -1702,7 +1741,7 @@ export function MyTeam({ data }: MyTeamProps) {
       ) : (
         <div className="af-mt-lock" data-urgent={false} data-locked={false}>
           <span className="af-label af-mt-lock-label">{copy('Lineup lock')}</span>
-          <span className="af-mt-lock-note">{data.lock.reason}</span>
+          <span className="af-mt-lock-note">{myTeamReasonText(data.lock.reason, language)}</span>
         </div>
       )}
 
@@ -1714,13 +1753,15 @@ export function MyTeam({ data }: MyTeamProps) {
               {decisionStarted
                 ? (language === 'es' ? `Revisa el cierre de ${decisionSlot?.player?.name}` : `Review ${decisionSlot?.player?.name}'s lock`)
                 : decisionSlot?.empty
-                ? `Fill your ${decisionSlot.slotLabel} slot`
+                ? es ? `Cubre tu posición ${decisionSlot.slotLabel}` : `Fill your ${decisionSlot.slotLabel} slot`
                 : decisionSlot?.player?.ruledOut
-                  ? `Replace ${decisionSlot.player.name}`
+                  ? es ? `Reemplaza a ${decisionSlot.player.name}` : `Replace ${decisionSlot.player.name}`
                   : decisionSlot?.player?.onBye
-                    ? `Cover ${decisionSlot.player.name}'s bye`
+                    ? es ? `Cubre la semana de descanso de ${decisionSlot.player.name}` : `Cover ${decisionSlot.player.name}'s bye`
                     : decisionSlot?.benchCheck?.verdict === 'swap'
-                      ? `Review ${decisionSlot.benchCheck.starterName} vs ${decisionSlot.benchCheck.benchName}`
+                      ? es
+                        ? `Revisa ${decisionSlot.benchCheck.starterName} frente a ${decisionSlot.benchCheck.benchName}`
+                        : `Review ${decisionSlot.benchCheck.starterName} vs ${decisionSlot.benchCheck.benchName}`
                       : copy('Review your starting lineup')}
             </h2>
             <p>
@@ -1731,10 +1772,14 @@ export function MyTeam({ data }: MyTeamProps) {
                 : decisionSlot?.empty
                 ? copy('An empty starting slot is a certain zero. Check eligibility and the player lock on your platform.')
                 : decisionSlot?.player?.ruledOut || decisionSlot?.player?.onBye
-                  ? `${decisionSlot.player.name} is ${decisionSlot.player.onBye ? 'on a bye' : 'ruled out'}. Review replacement eligibility, individual locks, and AutoSubs on your platform.`
+                  ? es
+                    ? `${decisionSlot.player.name} está ${decisionSlot.player.onBye ? 'en semana de descanso' : 'descartado'}. Revisa la elegibilidad del reemplazo, los cierres individuales y los cambios automáticos en tu plataforma.`
+                    : `${decisionSlot.player.name} is ${decisionSlot.player.onBye ? 'on a bye' : 'ruled out'}. Review replacement eligibility, individual locks, and AutoSubs on your platform.`
                   : decisionSlot?.benchCheck?.verdict === 'swap'
                     ? leagueDelta != null && leagueDelta > 0
-                      ? `${decisionSlot.benchCheck.benchName} projects ${leagueDelta.toFixed(1)} more points under this league's scoring. Confirm injury status and eligibility first.`
+                      ? es
+                        ? `${decisionSlot.benchCheck.benchName} proyecta ${leagueDelta.toFixed(1)} puntos más con la puntuación de esta liga. Confirma primero su estado de lesión y su elegibilidad.`
+                        : `${decisionSlot.benchCheck.benchName} projects ${leagueDelta.toFixed(1)} more points under this league's scoring. Confirm injury status and eligibility first.`
                       : leagueDelta != null
                         ? (language === 'es'
                           ? 'La puntuación de esta liga no favorece la opción de banca. No se recomienda un cambio con estas proyecciones.'
@@ -1744,9 +1789,15 @@ export function MyTeam({ data }: MyTeamProps) {
                           : 'The bench check suggests a review, but the player identity or league-scored values could not be confirmed. Refresh before considering a swap.')
                     : data.starters.available
                       ? copy('No empty, out, or bye slot was identified among the players we could read. Unresolved players and missing news may hide issues; confirm the lineup on your platform.')
-                      : data.starters.reason}
+                      : myTeamReasonText(data.starters.reason, language)}
             </p>
-            <small>{proj ? `Week ${proj.week} · ${proj.afProjected} of ${proj.projected + proj.unprojected} starters priced for this league` : copy('Projection coverage unavailable')}</small>
+            <small>
+              {proj
+                ? es
+                  ? `Semana ${proj.week} · ${proj.afProjected} de ${proj.projected + proj.unprojected} titulares valorados para esta liga`
+                  : `Week ${proj.week} · ${proj.afProjected} of ${proj.projected + proj.unprojected} starters priced for this league`
+                : copy('Projection coverage unavailable')}
+            </small>
           </div>
           <div className="af-mt-decision-actions">
             <a className="af-btn af-btn--ghost" href="#af-mt-starters">{copy('Review starters')}</a>
@@ -1845,19 +1896,19 @@ export function MyTeam({ data }: MyTeamProps) {
               {data.rosterGrade.available ? (
                 <div className="af-mt-tile af-mt-tile--grade">
                   <div className="af-mt-tile-value af-num">
-                    {ordinal(data.rosterGrade.data.rank)}
+                    {ordinal(data.rosterGrade.data.rank, language === 'es')}
                     <span className="af-mt-grade-of"> {copy('of')} {data.rosterGrade.data.outOf}</span>
                   </div>
                   <div className="af-label">{copy('Roster value in this league')}</div>
                   <div className="af-mt-tile-why">
-                    {gradeSubtitle(data.rosterGrade.data)}
+                    {gradeSubtitle(data.rosterGrade.data, language === 'es')}
                   </div>
                 </div>
               ) : (
                 <div className="af-mt-tile" data-missing="true">
                   <div className="af-mt-tile-value af-num">—</div>
                   <div className="af-label">{copy('Roster value')}</div>
-                  <div className="af-mt-tile-why">{data.rosterGrade.reason}</div>
+                  <div className="af-mt-tile-why">{myTeamReasonText(data.rosterGrade.reason, language)}</div>
                 </div>
               )}
             </div>
@@ -1921,7 +1972,7 @@ export function MyTeam({ data }: MyTeamProps) {
             )}
           </div>
           {edge(data.nextMatchup.data, bestBall) ? (
-            <p className="af-mt-mu-edge">{edge(data.nextMatchup.data, bestBall)}</p>
+            <p className="af-mt-mu-edge">{edge(data.nextMatchup.data, bestBall, language === 'es')}</p>
           ) : data.nextMatchup.data.unpricedReason ? (
             // Two dashes and nothing else read as a broken screen; say why, where the read goes.
             <p className="af-mt-mu-edge">
@@ -1968,7 +2019,7 @@ export function MyTeam({ data }: MyTeamProps) {
                   </p>
                   <ul className="af-mt-basis-list">
                     {data.projectionBasis.notes.map((n) => (
-                      <li key={n}>{n}</li>
+                      <li key={n}>{scoringNoteText(n, language)}</li>
                     ))}
                   </ul>
                 </>
@@ -2136,7 +2187,7 @@ export function MyTeam({ data }: MyTeamProps) {
         </p>
       ) : (
         <p className="af-mt-footnote">
-          {copy('Projections are not shown because')} {data.projections.reason}.
+          {copy('Projections are not shown because')} {myTeamReasonText(data.projections.reason, language)}.
         </p>
       )}
       </div>

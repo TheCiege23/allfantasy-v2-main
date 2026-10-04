@@ -9,6 +9,7 @@
  * whenever the one grade can be read, the card carries both teams' letters and the message is worded
  * FROM them. The market take remains only for a trade that has no grade at all to read.
  */
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 
 export type TradeCardGrade =
   | {
@@ -17,8 +18,14 @@ export type TradeCardGrade =
       letter: string
       /** The partner's letter. Always the mirror of `letter`. */
       partnerLetter: string
-      /** 'today' = on the league's values now; 'at-proposal' = frozen into the trade's receipt when proposed. */
-      basis: 'today' | 'at-proposal'
+      /**
+       * 'today' = on the league's values now; 'at-proposal' = frozen into the trade's receipt when
+       * proposed; 'first-graded' = a completed trade's frozen original, taken when AllFantasy first
+       * graded it (`frozenCompletedGrade.ts`), with `frozenAt` saying when.
+       */
+      basis: 'today' | 'at-proposal' | 'first-graded'
+      /** With 'first-graded': when the original was taken (ISO). */
+      frozenAt?: string | null
       /** League value `manager` sent and received — the totals the letter was taken on, when known. */
       valueGave?: number | null
       valueGot?: number | null
@@ -43,11 +50,15 @@ export function readTradeCardGrade(raw: unknown): TradeCardGrade | null {
   const partnerLetter = typeof g.partnerLetter === 'string' ? g.partnerLetter.trim().toUpperCase() : ''
   if (!(letter in RANK) || !(partnerLetter in RANK)) return null
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null)
+  const frozenAt = typeof g.frozenAt === 'string' && Number.isFinite(Date.parse(g.frozenAt)) ? g.frozenAt : null
   return {
     graded: true,
     letter,
     partnerLetter,
-    basis: g.basis === 'at-proposal' ? 'at-proposal' : 'today',
+    // 'first-graded' only with a readable moment: an original that cannot say when it was taken is not one.
+    ...(g.basis === 'first-graded' && frozenAt
+      ? { basis: 'first-graded' as const, frozenAt }
+      : { basis: g.basis === 'at-proposal' ? ('at-proposal' as const) : ('today' as const) }),
     valueGave: num(g.valueGave),
     valueGot: num(g.valueGot),
   }
@@ -57,8 +68,10 @@ function rank(letter: string): number {
   return RANK[letter.trim().charAt(0).toUpperCase()] ?? 0
 }
 
-export function tradeCardGradeBasisLabel(basis: 'today' | 'at-proposal'): string {
-  return basis === 'at-proposal' ? 'graded when it was proposed' : "on this league's values today"
+/** When the card's letters were taken, in the `gradeMoment` words every completed-trade surface uses. */
+export function tradeCardGradeBasisLabel(grade: { basis: 'today' | 'at-proposal' | 'first-graded'; frozenAt?: string | null }): string {
+  if (grade.basis === 'at-proposal') return 'graded when it was proposed'
+  return `on this league's values ${gradeMoment(grade.basis === 'first-graded' ? grade : null)}`
 }
 
 /** "Casey D · Jordan B" — both letters, the card's first side first. */
@@ -115,7 +128,7 @@ export function gradedTradeTakeText(input: {
   if (!grade.graded) return null
   const partner = input.partner || 'their trade partner'
   const letters = `${input.manager} ${grade.letter}, ${partner} ${grade.partnerLetter}`
-  const basis = tradeCardGradeBasisLabel(grade.basis)
+  const basis = tradeCardGradeBasisLabel(grade)
   const a = rank(grade.letter)
   const b = rank(grade.partnerLetter)
   if (a === b) {

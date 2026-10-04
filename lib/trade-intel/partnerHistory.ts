@@ -74,9 +74,8 @@ export function summarizeTradeHistory(args: {
   }
 
   for (const f of args.facts) {
-    if (f.status && NOT_COMPLETED.has(f.status.toLowerCase())) continue
-    // A row with no transaction id is still one trade for its own roster — it just cannot be paired.
-    const key = f.tradeKey ? `fact:${f.tradeKey}` : `row:${f.factId}`
+    if (!isCompletedFact(f)) continue
+    const key = tradeGroupKey(f)
     if (f.rosterId != null) add(key, args.rosterIdByProviderId.get(String(f.rosterId)))
     if (Array.isArray(f.rosterIds)) {
       for (const id of f.rosterIds) add(key, args.rosterIdByProviderId.get(String(id)))
@@ -100,6 +99,58 @@ export function summarizeTradeHistory(args: {
   return { tradesByRoster, tradesWithViewer }
 }
 
+function isCompletedFact(f: TradeFactRow): boolean {
+  return !(f.status && NOT_COMPLETED.has(f.status.toLowerCase()))
+}
+
+/** Which trade a fact row belongs to. A row with no transaction id is its own trade — it cannot be paired. */
+function tradeGroupKey(f: TradeFactRow): string {
+  return f.tradeKey ? `fact:${f.tradeKey}` : `row:${f.factId}`
+}
+
+/**
+ * How many distinct completed trades — the LEAGUE-wide figure, which `summarizeTradeHistory`'s
+ * per-roster counts cannot give (summing them counts every trade once per party). The same grouping:
+ * rows under one provider transaction id are one trade, whether they are its two Sleeper sides, its
+ * moved assets on another provider, or a sibling importer's copy of it. Native trades are one row each.
+ */
+export function countCompletedTrades(args: { facts: TradeFactRow[]; nativeTrades: Array<{ id: string }> }): number {
+  const trades = new Set<string>()
+  for (const f of args.facts) if (isCompletedFact(f)) trades.add(tradeGroupKey(f))
+  for (const t of args.nativeTrades) trades.add(`native:${t.id}`)
+  return trades.size
+}
+
+/** The one status a native `AfLeagueTrade` has once it has actually moved players. */
+export const NATIVE_COMPLETED_TRADE_STATUS = 'processed'
+
+/**
+ * Trade fact rows in the shape `summarizeTradeHistory` reads — the key columns only, in SQL.
+ *
+ * `leagueIds` takes several ids because one provider league is N AF `leagues` rows (one per
+ * importer) and its facts sit under whichever of them synced: a caller that wants a manager's whole
+ * history passes the sibling set. Copies of one trade under two siblings share the provider
+ * transaction id, so `summarizeTradeHistory` still counts them once. `season` narrows to one year.
+ */
+export async function loadTradeFacts(args: { leagueIds: string[]; season?: number | null }): Promise<TradeFactRow[]> {
+  if (args.leagueIds.length === 0) return []
+  const keyExpr = Prisma.raw(
+    `COALESCE(${TRANSACTION_ID_KEYS.map((k) => `payload->>'${k}'`).join(', ')})`,
+  )
+  const seasonClause = args.season != null ? Prisma.sql`AND season = ${args.season}` : Prisma.empty
+  return prisma.$queryRaw<TradeFactRow[]>(Prisma.sql`
+    SELECT "transactionId" AS "factId",
+           "rosterId",
+           ${keyExpr} AS "tradeKey",
+           payload->'rosterIds' AS "rosterIds",
+           payload->>'status' AS status
+    FROM "dw_transaction_facts"
+    WHERE "leagueId" = ANY(${args.leagueIds}) AND type = 'trade' ${seasonClause}
+    ORDER BY "createdAt" DESC
+    LIMIT ${FACT_LIMIT}
+  `)
+}
+
 /**
  * Load and summarise. Returns `null` — "history not on file" — when the league has NO transaction
  * facts of any type and no native trades: that is a league whose history was never synced, and
@@ -117,23 +168,10 @@ export async function loadLeagueTradeHistory(args: {
   /** `{ externalId, rosterId }` for every team in the league. */
   teams: Array<{ externalId: string; rosterId: string }>
 }): Promise<RankingTradeHistory | null> {
-  const keyExpr = Prisma.raw(
-    `COALESCE(${TRANSACTION_ID_KEYS.map((k) => `payload->>'${k}'`).join(', ')})`,
-  )
   const [facts, nativeTrades, anyFact] = await Promise.all([
-    prisma.$queryRaw<TradeFactRow[]>(Prisma.sql`
-      SELECT "transactionId" AS "factId",
-             "rosterId",
-             ${keyExpr} AS "tradeKey",
-             payload->'rosterIds' AS "rosterIds",
-             payload->>'status' AS status
-      FROM "dw_transaction_facts"
-      WHERE "leagueId" = ${args.leagueId} AND type = 'trade'
-      ORDER BY "createdAt" DESC
-      LIMIT ${FACT_LIMIT}
-    `),
+    loadTradeFacts({ leagueIds: [args.leagueId] }),
     prisma.afLeagueTrade.findMany({
-      where: { leagueId: args.leagueId, status: 'processed' },
+      where: { leagueId: args.leagueId, status: NATIVE_COMPLETED_TRADE_STATUS },
       select: { id: true, proposerRosterId: true, receiverRosterId: true },
       take: 1000,
     }),

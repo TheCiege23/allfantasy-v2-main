@@ -1,4 +1,5 @@
 'use client'
+import { useTradeVisualCopy } from "./useTradeVisualCopy"
 
 import { useRef, useSyncExternalStore, type ReactNode, type RefObject } from 'react'
 import { useOverlayContainment } from '@/components/core-app/useOverlayContainment'
@@ -68,6 +69,8 @@ export function TradeAssetSheet(props: {
   openerRef: RefObject<HTMLElement | null>
   children: ReactNode
 }) {
+  const {copy,locale}=useTradeVisualCopy()
+
   const panelRef = useRef<HTMLDivElement | null>(null)
   useOverlayContainment({
     active: true,
@@ -89,7 +92,7 @@ export function TradeAssetSheet(props: {
         className="af-tc-sheet"
         role="dialog"
         aria-modal="true"
-        aria-label={props.label}
+        aria-label={copy(props.label)}
         /*
           ⚠ NO tabIndex. The hook focuses the container on open when it can; a focusable container
           would take focus FROM the search box the picker autofocuses, and on a phone that is the
@@ -97,7 +100,7 @@ export function TradeAssetSheet(props: {
         */
       >
         <span className="af-tc-sheet-grip" aria-hidden />
-        {props.children}
+        {copy(props.children)}
       </div>
     </div>
   )

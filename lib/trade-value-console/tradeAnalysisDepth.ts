@@ -68,6 +68,8 @@ export const TRADE_VERDICT_FIELDS = [
   /* The letter itself, and the same free verdict on every surface — see `lib/decision-os/trade/tradeGrade.ts`. */
   'grade',
   'evaluationReceipt',
+  // Observable lineup/capacity consequences accompany the free value verdict.
+  'visualImpact',
   'salaryCap',
   'degraded',
   'dataGaps',
