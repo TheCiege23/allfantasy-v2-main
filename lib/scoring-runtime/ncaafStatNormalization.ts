@@ -40,6 +40,14 @@ export const NCAAF_STAT_ALIASES: Readonly<Record<string, string>> = {
   'fumbles.LOST': 'fum_lost',
   'kicking.XPM': 'xp_made',
   'kicking.FGM': 'fg_made',
+  'defensive.SOLO': 'idp_solo',
+  'defensive.TOT': 'idp_tackle',
+  'defensive.SACKS': 'idp_sack',
+  'defensive.PD': 'idp_pd',
+  'defensive.TFL': 'idp_tfl',
+  'defensive.TD': 'idp_td',
+  'interceptions.INT': 'idp_int',
+  'interceptions.YDS': 'idp_int_return_yards',
 }
 
 /** Categories CFBD reports that NCAAF fantasy scoring does not read, wholesale. */

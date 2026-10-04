@@ -77,7 +77,7 @@ describe('normalizeCfbdGameStats — against the captured CFBD response', () => 
 
   it('a player who appeared and produced nothing counts as a game — a real zero, not missing data', () => {
     const week = aggregateNcaafWeek([{ 'defensive.TOT': 3, name: 'x' }])
-    expect(week).toEqual({ stats: {}, gamesCounted: 1, unmappedKeys: [] })
+    expect(week).toEqual({ stats: { idp_tackle: 3 }, gamesCounted: 1, unmappedKeys: [] })
     expect(aggregateNcaafWeek([{ name: 'x', _team: 'Vanderbilt' }]).gamesCounted).toBe(0)
   })
 

@@ -51,9 +51,11 @@ export const NCAAF_DST_KEYS = [
   'dst_pa_0', 'dst_pa_1_6', 'dst_pa_7_13', 'dst_pa_14_20', 'dst_pa_21_27', 'dst_pa_28_34', 'dst_pa_35_plus',
 ] as const
 
+export const NCAAF_IDP_KEYS = ['idp_solo_tackle', 'idp_tackle', 'idp_sack', 'idp_pass_defended', 'idp_tackle_for_loss', 'idp_td', 'idp_interception', 'idp_int_return_yards'] as const
+
 export const NCAAF_STAT_KEYS = [
   ...NCAAF_PASSING_KEYS, ...NCAAF_RUSHING_KEYS, ...NCAAF_RECEIVING_KEYS,
-  ...NCAAF_MISC_KEYS, ...NCAAF_KICKING_KEYS, ...NCAAF_DST_KEYS,
+  ...NCAAF_MISC_KEYS, ...NCAAF_KICKING_KEYS, ...NCAAF_DST_KEYS, ...NCAAF_IDP_KEYS,
 ] as const
 
 export type NcaafStatKey = (typeof NCAAF_STAT_KEYS)[number]
@@ -172,6 +174,7 @@ export function buildFullNcaafScoringConfig(presetKey: NcaafScoringPresetKey): R
   const preset = getNcaafScoringPreset(presetKey)
   const config: Record<string, number> = {}
   for (const key of NCAAF_STAT_KEYS) config[key] = preset.rules[key] ?? 0
+  for (const [key, points] of Object.entries({ idp_solo_tackle: 1, idp_tackle: 0, idp_sack: 3, idp_pass_defended: 1, idp_tackle_for_loss: 1, idp_td: 6, idp_interception: 4, idp_int_return_yards: 0 })) config[key] = preset.rules[key] ?? points
   config.fg_made = preset.rules.fg_made ?? 3
   return config
 }

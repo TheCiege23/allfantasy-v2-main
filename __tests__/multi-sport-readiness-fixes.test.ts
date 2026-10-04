@@ -49,3 +49,7 @@ describe('multisport scoring readiness', () => {
     expect(planNcaafFantraxIdentityLinks([{ ...ref, team: 'University of Miami' }], [{ ...row, currentTeam: 'Miami University' }]).links).toEqual([])
   })
 })
+
+ it('maps captured college defensive fields without guessing assisted tackles or forced fumbles', () => {
+  expect(normalizeCfbdGameStats({ 'defensive.SOLO': 3, 'defensive.TOT': 5, 'defensive.SACKS': 1.5, 'defensive.TFL': 2, 'defensive.PD': 1, 'interceptions.INT': 1 }).stats).toEqual({ idp_solo: 3, idp_tackle: 5, idp_sack: 1.5, idp_tfl: 2, idp_pd: 1, idp_int: 1 })
+})

@@ -2,7 +2,7 @@
 
 NBA: category creation/persistence, short weekly stat aliases, weighted percentages, commissioner display and OS/Chimmy context. New 8-cat excludes turnovers; stored legacy 8-cat rules remain unchanged.
 
-NCAAF: explicit Fantrax ID provenance, weekly conservative CFB identity ingestion, CFBD kicker makes and verified misses, commissioner scoring bridge. Production refresh added 389 verified links without overwrites; 2,504 identities carry both source IDs. This does not establish full roster coverage. CFBD player logs do not supply field-goal distances, two-point conversions or team-defense lines; comprehensive IDP/advanced scoring remains uncertified.
+NCAAF: explicit Fantrax ID provenance, weekly conservative CFB identity ingestion, CFBD kicker makes and verified misses, verified defender stat fields gated by IDP, and commissioner scoring bridges. Production refresh added 389 verified links without overwrites; 2,504 identities carry both source IDs. This does not establish full roster coverage. CFBD player logs do not supply field-goal distances, two-point conversions or team-defense lines; assisted tackles, forced fumbles, safeties and advanced scoring remain uncertified when their underlying stat fields are absent.
 
 NCAAB: reject wrong-season and opening-month-only schedules, preserve cache on 304. The actual 2026 schedule is still unpublished (304 after client retry); upcoming-season readiness remains dependent on provider publication.
 

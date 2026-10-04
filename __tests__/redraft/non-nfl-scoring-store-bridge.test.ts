@@ -44,7 +44,7 @@ describe('the key maps are real on both sides', () => {
   for (const [sport, store] of Object.entries(UI_SCORING_STORES)) {
     it(`${sport}: every panel key exists in the panel's own config, every engine key is an engine category`, () => {
       const uiKeys = new Set(Object.keys(UI_DEFAULTS[sport]!))
-      const engineKeys = new Set(getScoringCategories(sport).map((c) => c.key))
+      const engineKeys = new Set(getScoringCategories(sport, ['IDP']).map((c) => c.key))
       const badUi = Object.keys(store.keyMap).filter((k) => !uiKeys.has(k))
       const badEngine = Object.values(store.keyMap).filter((k) => !engineKeys.has(k))
       expect({ badUi, badEngine }).toEqual({ badUi: [], badEngine: [] })
@@ -183,4 +183,12 @@ describe('NCAAF', () => {
  it('college kicker commissioner settings score makes and verified misses', async () => {
   league('NCAAF', { ncaaf_scoring_config: { rules: { fg_made: 4, pat_made: 2, fg_missed: -1, pat_missed: -2 }, lastUpdatedBy: 'commissioner' } })
   expect(await score({ fg_made: 2, xp_made: 3, fg_miss: 1, xp_miss: 1 })).toBe(11)
+})
+
+ it('college IDP weights use verified defender stats only when IDP is enabled', async () => {
+  const rules = { idp_solo_tackle: 2, idp_sack: 4, idp_interception: 5 }
+  league('NCAAF', { sportConfig: { enableIDP: true }, ncaaf_scoring_config: { rules, lastUpdatedBy: 'commissioner' } })
+  expect(await score({ idp_solo: 3, idp_sack: 1, idp_int: 1 })).toBe(15)
+  league('NCAAF', { ncaaf_scoring_config: { rules, lastUpdatedBy: 'commissioner' } })
+  expect(await score({ idp_solo: 3, idp_sack: 1, idp_int: 1 })).toBe(0)
 })
