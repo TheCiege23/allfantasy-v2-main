@@ -37,13 +37,15 @@ describe('help keyboard dismissal', () => {
     const trigger = screen.getByRole('button', { name: 'About ADP' })
     act(() => trigger.focus())
     expect(trigger.getAttribute('aria-expanded')).toBe('true')
-    const close = screen.getByRole('button', { name: 'Close' })
+    // JSDOM's UA stylesheet still hides native popovers despite the API polyfill.
+    const close = document.querySelector<HTMLButtonElement>('.af-info-close')!
+    const popover = document.querySelector<HTMLElement>('.af-info-pop')!
     act(() => close.focus())
     const defaultAllowed = fireEvent.keyDown(close, { key: 'Escape', cancelable: true })
     // Simulate the native default action when the component did not consume Escape.
-    if (defaultAllowed) act(() => (screen.getByRole('note') as HTMLElement & { hidePopover(): void }).hidePopover())
+    if (defaultAllowed) act(() => (popover as HTMLElement & { hidePopover(): void }).hidePopover())
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(document.activeElement).toBe(trigger)
-    expect(opened.has(screen.getByRole('note'))).toBe(false)
+    expect(opened.has(popover)).toBe(false)
   })
 })
