@@ -95,8 +95,19 @@ async function loginUser(page: Page, credentials: TestCredentials): Promise<void
   expect(signInRes.ok(), `Sign in failed: ${signInBody}`).toBeTruthy()
   expect(signInBody.includes("CredentialsSignin")).toBeFalsy()
 
-  await page.goto("/core", { waitUntil: "domcontentloaded" })
-  await expect(page).toHaveURL(/\/core/)
+  /*
+   * ⚠ CONFIRM THE SESSION, DON'T RENDER /core (2026-10-04). This used to `page.goto("/core")`
+   * purely to prove the sign-in took. The suite runs on `next dev`, /core is the heaviest route in
+   * the app, and on CI its on-demand compile (recompiled repeatedly — `next dev` evicts idle pages)
+   * ate the whole 240s test budget: the first attempt of "real backend" kept dying right here with
+   * "page.goto: Test ended", on branches with and without the change under test. Nothing after this
+   * needs the browser on /core — the caller uses `page.request` and then opens /referral — so the
+   * session API proves the same thing without compiling a page.
+   */
+  const sessionRes = await page.request.get("/api/auth/session", { timeout: 20_000 })
+  expect(sessionRes.ok()).toBeTruthy()
+  const session = (await sessionRes.json()) as { user?: { id?: string; email?: string | null } }
+  expect(session.user, "signed in after the credentials callback").toBeTruthy()
 }
 
 test.describe.configure({ timeout: 240_000, mode: "serial" })
@@ -334,11 +345,18 @@ test.describe("@growth @db referral system + growth incentives", () => {
     const visitorContext = await browser.newContext()
     const visitorPage = await visitorContext.newPage()
 
+    /*
+     * 60s, not 20s (2026-10-04). The click is posted by `ReferralTracker` only after `/` hydrates,
+     * and on `next dev` this window includes compiling `/` and the track-click route on demand —
+     * both of which `next dev` may have evicted since the earlier test warmed them. 20s was routinely
+     * exceeded on CI (both retries of a failing run timed out here). Still well inside the 240s
+     * test budget, and a click that never fires still fails.
+     */
     const trackClickPromise = visitorPage.waitForResponse(
       (response) =>
         response.url().includes("/api/referral/track-click") &&
         response.request().method() === "POST",
-      { timeout: 20_000 }
+      { timeout: 60_000 }
     )
 
     await visitorPage.goto(`/?ref=${encodeURIComponent(referralCode)}`, {
