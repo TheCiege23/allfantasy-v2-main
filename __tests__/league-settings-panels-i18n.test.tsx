@@ -38,20 +38,15 @@ import { LeagueDuesTrackerPanel } from '@/components/league-settings/LeagueDuesT
 import { MemberSettingsCommissionerPanel } from '@/components/league-settings/MemberSettingsCommissionerPanel'
 
 const DIR = resolve(__dirname, '../components/league-settings')
-/*
- * CommissionerControlPanel's `commControl.*` keys get their English in #2032, which carries its own
- * equivalent guard (commissioner-control-panel-i18n). Excluded here only until that lands, so this
- * change does not depend on it.
- */
-const PENDING_ELSEWHERE = new Set(['CommissionerControlPanel.tsx'])
 
+/** Every file in the directory, no exclusions — the commissioner control panel included (#2032). */
 function keysByFile(): Map<string, string[]> {
   const out = new Map<string, string[]>()
   const walk = (dir: string) => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
       const p = join(dir, e.name)
       if (e.isDirectory()) walk(p)
-      else if (/\.tsx?$/.test(e.name) && !PENDING_ELSEWHERE.has(e.name)) {
+      else if (/\.tsx?$/.test(e.name)) {
         const keys = [...new Set([...readFileSync(p, 'utf8').matchAll(/\bt\(\s*['"]([A-Za-z0-9_]+\.[A-Za-z0-9_.]+)['"]/g)].map((m) => m[1]!))]
         if (keys.length) out.set(p.slice(DIR.length + 1).replace(/\\/g, '/'), keys)
       }
@@ -64,8 +59,8 @@ function keysByFile(): Map<string, string[]> {
 describe('every key a league-settings panel uses resolves in both languages', () => {
   it('🛑 read from the panels’ own source — a key English lacks renders as the raw key', () => {
     const files = keysByFile()
-    // The scan must see the five panels and their real calls, or it asserts nothing.
-    for (const f of ['CoOwnerSettingsPanel.tsx', 'DivisionSettingsCommissionerPanel.tsx', 'LeagueDuesTrackerPanel.tsx', 'LeagueHistoryPanel.tsx', 'MemberSettingsCommissionerPanel.tsx']) {
+    // The scan must see the panels and their real calls, or it asserts nothing.
+    for (const f of ['CommissionerControlPanel.tsx', 'CoOwnerSettingsPanel.tsx', 'DivisionSettingsCommissionerPanel.tsx', 'LeagueDuesTrackerPanel.tsx', 'LeagueHistoryPanel.tsx', 'MemberSettingsCommissionerPanel.tsx']) {
       expect(files.has(f), f).toBe(true)
     }
     const missing = (lng: 'en' | 'es') => [...files].flatMap(([f, keys]) => keys.filter((k) => !translations[lng][k]).map((k) => `${f}: ${k}`))
