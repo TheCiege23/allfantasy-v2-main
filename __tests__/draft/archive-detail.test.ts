@@ -75,4 +75,15 @@ describe('draft archive authorization and attempt boundaries', () => {
     const result = await draftArchiveDetail('l', 'viewer', 'native:d')
     expect(result?.picks[0]).toMatchObject({ originalTeamName: 'Original recorded team', actorName: 'Recorded manager', teamName: 'Receiving recorded team' })
   })
+  it('bounds a reset attempt by mutation sequence when its observed timestamp moved backward', async () => {
+    const startedAt = new Date('2026-09-01T00:00:10Z');
+    db.catalog.mockResolvedValue({ choices: [{ key: 'reset:r', source: 'reset', sourceId: 'r', format: 'snake', sport: 'NFL', season: 2026 }] });
+    const start = { createdAt: startedAt, afterState: { sequence: 10, event: 'start' } };
+    db.audit.mockImplementation(async options => options.where?.id === 'r'
+      ? { createdAt: new Date('2026-09-01T00:00:09Z'), afterState: { sequence: 20, details: { priorSession: { id: 'd', status: 'in_progress', startedAt: startedAt.toISOString() }, archivedPicks: [] } } }
+      : start);
+    await draftArchiveDetail('l', 'viewer', 'reset:r');
+    expect(db.audit.mock.calls[1][0]).toMatchObject({ event: 'start', startAt: startedAt.toISOString(), beforeSequence: 20 });
+    expect(db.events.mock.calls[0][0]).toMatchObject({ fromSequence: 10, beforeSequence: 20 });
+  })
 })
