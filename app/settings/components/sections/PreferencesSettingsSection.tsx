@@ -327,7 +327,7 @@ export function PreferencesSettingsSection({
           {t("settings.actions.cancelChanges")}
         </button>
         <p role="status" aria-live="polite" className="text-sm font-semibold" style={{ color: "#34d399" }}>
-          {savedFlash.saved ? "✓ Preferences saved" : ""}
+          {savedFlash.saved ? t("settings.preferences.saved") : ""}
         </p>
       </div>
     </form>
