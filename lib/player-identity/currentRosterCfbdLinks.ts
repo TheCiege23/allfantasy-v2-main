@@ -7,6 +7,22 @@ export type CurrentCfbdRosterProof = { externalId: string; name: string; positio
 const nameKey = (value: string) => { const p=value.split(','); return normalizePlayerName(p.length===2?`${p[1]} ${p[0]}`:value).replace(/['’-]/g,'') }
 const roles = (value: string | null) => String(value??'').toUpperCase().split(/[,/\s]+/).map(p=>p==='FB'?'RB':p==='PK'?'K':p).filter(p=>['QB','RB','WR','TE','K','P','DL','DE','DT','LB','DB','CB','S'].includes(p))
 
+// Verified 2026-10-04 through the RotoWire IDs supplied by Fantrax itself. Each public
+// provider profile names the alternate spelling; this is not a generic nickname expansion.
+const documentedSourceNames:Record<string,{rotowireId:string;sourceName:string;officialName:string;url:string}>={
+ '06982':{rotowireId:'41891',sourceName:'Cook, Cameron',officialName:'Cam Cook',url:'https://www.rotowire.com/cfootball/player/cam-cook-41891'},
+ '06jaw':{rotowireId:'47073',sourceName:'Barnes, Christopher',officialName:'Chris Barnes',url:'https://www.rotowire.com/cfootball/player/chris-barnes-47073'},
+ '06ajd':{rotowireId:'41448',sourceName:'Alexander, Hilton',officialName:'Deuce Alexander',url:'https://www.rotowire.com/cfootball/player/deuce-alexander-41448'},
+ '06fo4':{rotowireId:'42002',sourceName:'Winfield, DWayne Lunch',officialName:'Lunch Winfield',url:'https://www.rotowire.com/cfootball/player/lunch-winfield-42002'},
+ '069ol':{rotowireId:'40941',sourceName:'Baxter, Cedric',officialName:'CJ Baxter',url:'https://www.rotowire.com/cfootball/player/cj-baxter-40941'},
+ '06ks2':{rotowireId:'45156',sourceName:'Bailey, Cedrick',officialName:'CJ Bailey',url:'https://www.rotowire.com/cfootball/player/cj-bailey-45156'},
+ '06ks3':{rotowireId:'46363',sourceName:'Scott, Duke',officialName:'Jayden Scott',url:'https://gopack.com/sports/football/roster'},
+}
+const sourceNameKey=(ref:FantraxPlayerRef)=>{
+ const proof=documentedSourceNames[ref.fantraxId]
+ return proof && String(ref.rotowireId??'')===proof.rotowireId && nameKey(ref.name)===nameKey(proof.sourceName)?nameKey(proof.officialName):nameKey(ref.name)
+}
+
 /** Only a completed current-season roster snapshot may be handed to this planner.
  * Links an existing, explicitly Fantrax-owned identity to an official athlete; creates missing imported identities only when no CFBD owner exists; never overwrites links. Both directions must be unique across the full source pool.
  */
@@ -33,7 +49,7 @@ export function planCurrentRosterCfbdLinks(refs: FantraxPlayerRef[], identities:
   sourceCounts.set(ref.fantraxId,(sourceCounts.get(ref.fantraxId)??0)+1)
   const school=aliases[exactKey(ref.team)]??cfbdScheduleTeamKeys(ref.team).exact
   const ids=new Set<string>()
-  for(const role of roles(ref.position))for(const id of index.get(`${nameKey(ref.name)}|${school}|${role}`)??[])ids.add(id)
+  for(const role of roles(ref.position))for(const id of index.get(`${sourceNameKey(ref)}|${school}|${role}`)??[])ids.add(id)
   candidates.set(ref.fantraxId,ids)
   for(const id of ids){const sources=claims.get(id)??new Set<string>();sources.add(ref.fantraxId);claims.set(id,sources)}
  }
@@ -55,7 +71,7 @@ export function planCurrentRosterCfbdLinks(refs: FantraxPlayerRef[], identities:
    if(targets.some(t=>t.fantraxId) || targets.length>1){conflicts++;continue}
    const target=targets[0]
    if(target){
-    if(!proof.names.has(nameKey(target.canonicalName)) || !roles(target.position).some(p=>roles(ref.position).includes(p)&&proof.roles.includes(p))){conflicts++;continue}
+    if(!(proof.names.has(nameKey(target.canonicalName)) || (proof.names.has(sourceNameKey(ref)) && nameKey(target.canonicalName)===nameKey(ref.name))) || !roles(target.position).some(p=>roles(ref.position).includes(p)&&proof.roles.includes(p))){conflicts++;continue}
     sourceLinks.push({id:target.id,fantraxId:ref.fantraxId,cfbdId:id})
    }else{
     const athlete=pool.find(p=>p.externalId===id)!
@@ -64,7 +80,7 @@ export function planCurrentRosterCfbdLinks(refs: FantraxPlayerRef[], identities:
    continue
   }
   const row=owned[0]!
-  if(!proof.names.has(nameKey(row.canonicalName)) || !roles(row.position).some(p=>roles(ref.position).includes(p)&&proof.roles.includes(p)))continue
+  if(!(proof.names.has(nameKey(row.canonicalName)) || (proof.names.has(sourceNameKey(ref)) && nameKey(row.canonicalName)===nameKey(ref.name))) || !roles(row.position).some(p=>roles(ref.position).includes(p)&&proof.roles.includes(p)))continue
   if((cfbdOwners.get(id)??[]).some(other=>other.fantraxId&&other.fantraxId!==ref.fantraxId)){conflicts++;continue}
   links.push({id:row.id,fantraxId:ref.fantraxId,cfbdId:id,name:row.canonicalName,position:row.position})
  }
@@ -92,7 +108,7 @@ export function verifiedCurrentRosterSchoolAliases(refs: FantraxPlayerRef[], poo
  const candidates=new Map<FantraxPlayerRef,Set<string>>(),reverse=new Map<string,Set<string>>(),counts=new Map<string,number>()
  for(const ref of refs){
   counts.set(ref.fantraxId,(counts.get(ref.fantraxId)??0)+1)
-  const ids=new Set<string>();for(const role of roles(ref.position))for(const id of index.get(`${nameKey(ref.name)}|${role}`)??[])ids.add(id)
+  const ids=new Set<string>();for(const role of roles(ref.position))for(const id of index.get(`${sourceNameKey(ref)}|${role}`)??[])ids.add(id)
   candidates.set(ref,ids);for(const id of ids){const owners=reverse.get(id)??new Set<string>();owners.add(ref.fantraxId);reverse.set(id,owners)}
  }
  const claims=new Map<string,Map<string,Set<string>>>()

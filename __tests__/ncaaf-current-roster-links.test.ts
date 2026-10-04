@@ -59,3 +59,20 @@ it('bootstraps source school codes from three mutually unique athletes and rejec
  const other={fantraxId:'other',name:'Another Athlete',position:'RB',team:'UtSt'}
  expect(verifiedCurrentRosterSchoolAliases([...refs,other],[...pool,{externalId:'other',name:other.name,position:'RB',college:'Utah',team:'Utah'}])).toEqual({})
 })
+
+
+it('accepts a documented nickname only with the exact Fantrax and explicit RotoWire source IDs',()=>{
+ const ref={fantraxId:'06982',name:'Cook, Cameron',rotowireId:41891,position:'RB',team:'West Virginia'}
+ const p={externalId:'4918103',name:'Cam Cook',position:'RB',college:'West Virginia',team:'West Virginia'}
+ expect(planCurrentRosterCfbdLinks([ref],[],[p],[],{},new Set([ref.fantraxId])).creates).toHaveLength(1)
+ for(const wrong of [{...ref,rotowireId:1},{...ref,fantraxId:'other'},{...ref,name:'Cook, Connor'},{...ref,team:'Texas'},{...ref,position:'WR'}])expect(planCurrentRosterCfbdLinks([wrong],[],[p],[],{},new Set([wrong.fantraxId])).creates).toHaveLength(0)
+})
+
+
+it('keeps an existing official-ID identity when its canonical name uses the documented full name',()=>{
+ const ref={fantraxId:'06982',name:'Cook, Cameron',rotowireId:41891,position:'RB',team:'West Virginia'}
+ const p={externalId:'4918103',name:'Cam Cook',position:'RB',college:'West Virginia',team:'West Virginia'}
+ const row={id:'owned',canonicalName:'Cameron Cook',currentTeam:'West Virginia',position:'RB',fantraxId:null,cfbdId:'4918103'}
+ expect(planCurrentRosterCfbdLinks([ref],[row],[p],[],{},new Set([ref.fantraxId])).sourceLinks).toHaveLength(1)
+ expect(planCurrentRosterCfbdLinks([{...ref,rotowireId:1}],[row],[p],[],{},new Set([ref.fantraxId])).sourceLinks).toHaveLength(0)
+})

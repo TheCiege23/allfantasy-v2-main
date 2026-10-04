@@ -75,6 +75,7 @@ export type FantraxFailure = {
 export type FantraxResult<T> = { ok: true; data: T } | { ok: false; failure: FantraxFailure }
 
 export type FantraxPlayerRef = {
+  rotowireId?: string | number
   fantraxId: string
   name: string
   team: string
