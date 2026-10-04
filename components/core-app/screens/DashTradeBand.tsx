@@ -173,7 +173,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                   </span>
                   <span className="af-trade-conf af-num">
                     {' '}
-                    · on this league’s values {gradeMoment({ frozenAt: t.gradedAt })}
+                    · on this league’s values {gradeMoment(t.gradedMoment ?? { frozenAt: t.gradedAt })}
                     {t.verdict.confidence > 0 ? ` · ${t.verdict.confidence}% confidence` : ''}
                   </span>
                 </p>

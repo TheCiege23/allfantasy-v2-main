@@ -946,7 +946,7 @@ export function TradeInbox(props: {
                     <div
                       className="af-tc-timeline-grades"
                       data-mode="teams"
-                      aria-label={`${copy('Grade for each team, on league value')} ${gradeMoment(teamGrades)}`}
+                      aria-label={`${copy('Grade for each team, on league value')} ${gradeMoment(teamGrades, language)}`}
                     >
                       <div data-letter={teamGrades.letter}>
                         <span title={sideAName}>{sideAName}</span>

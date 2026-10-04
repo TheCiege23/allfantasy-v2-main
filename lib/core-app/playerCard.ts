@@ -175,6 +175,10 @@ export type PlayerCardTrade = {
         graded: true; acquirerLetter: 'A' | 'B' | 'C' | 'D' | 'F'; senderLetter: 'A' | 'B' | 'C' | 'D' | 'F'; got: number; gave: number
         /** When these letters were frozen as the trade's original grade (`frozenCompletedGrade.ts`). */
         frozenAt?: string | null
+        /** How they were priced — at the time of the trade, or first-graded (`gradeMoment`). */
+        frozenBasis?: 'trade_date' | 'first_graded' | null
+        pricedAsOf?: string | null
+        tradeAt?: string | null
       }
     | { graded: false; withheld: string }
     | null
@@ -916,7 +920,10 @@ export async function loadTrades(sleeperId: string | null, scope: TradeScope): P
       grade: !view
         ? null
         : view.graded
-          ? { graded: true, acquirerLetter: view.letter, senderLetter: view.partnerLetter, got: view.getValue, gave: view.giveValue, frozenAt: view.frozenAt ?? null }
+          ? {
+              graded: true, acquirerLetter: view.letter, senderLetter: view.partnerLetter, got: view.getValue, gave: view.giveValue,
+              frozenAt: view.frozenAt ?? null, frozenBasis: view.frozenBasis ?? null, pricedAsOf: view.pricedAsOf ?? null, tradeAt: view.tradeAt ?? null,
+            }
           : { graded: false, withheld: view.reason },
     }
   })

@@ -5,7 +5,7 @@ import type { TradeGradesPayload } from '@/lib/trade-intel/sleeperTradeGradeServ
 import type { ImportedTradeLedgerPayload } from '@/lib/trade-intel/importedTradeLedgerService'
 import type { LeagueTradeHistoryItem } from '@/components/league/types'
 import { assetValues, gradeReasons, type importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
-import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
+import { gradeMoment, type GradeMomentInput } from '@/lib/decision-os/trade/gradeMoment'
 
 type Proposal = { id: string; title: string; status: string; involvesYou: boolean; assets: string[]; grade: string | null; explanation: string }
 type History = { supported: boolean; grades?: TradeGradesPayload; ledger?: ImportedTradeLedgerPayload; viewerSleeperUserId?: string | null; sync?: { incomplete: boolean } }
@@ -25,7 +25,7 @@ type TradeCenter = {
 function gradeFact(
   aName: string,
   bName: string,
-  g: { letter: string; partnerLetter: string; getValue: number; giveValue: number; frozenAt?: string | null } | null,
+  g: ({ letter: string; partnerLetter: string; getValue: number; giveValue: number } & GradeMomentInput) | null,
 ): string {
   if (!g) return ''
   // A completed trade's letter is its frozen original — tell Chimmy WHEN, so it does not call it today's.

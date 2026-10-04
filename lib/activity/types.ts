@@ -49,7 +49,16 @@ export type ActivityTradeGrade =
    * `first-graded`: a completed provider trade's frozen original (`frozenCompletedGrade.ts`), taken the
    * first time AllFantasy graded it; `today`: the live grade when nothing is frozen yet.
    */
-  | { graded: true; basis: 'today' | 'at-proposal' | 'first-graded'; sides: Array<{ name: string; letter: 'A' | 'B' | 'C' | 'D' | 'F' }> }
+  | {
+      graded: true
+      basis: 'today' | 'at-proposal' | 'first-graded'
+      sides: Array<{ name: string; letter: 'A' | 'B' | 'C' | 'D' | 'F' }>
+      /**
+       * With `first-graded`: when and how the frozen original was priced — at the time of the trade,
+       * or first-graded where no market record covers the trade date (`gradeMoment`).
+       */
+      moment?: { frozenAt: string | null; frozenBasis: 'trade_date' | 'first_graded' | null; pricedAsOf: string | null; tradeAt: string | null }
+    }
   | { graded: false; reason: string }
 
 /** Minimal league shape the activity sources need — a slice of the dashboard league list. */

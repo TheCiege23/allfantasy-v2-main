@@ -10,7 +10,7 @@ import { attachPlayerMediaBatch, buildPlayerMedia, type ResolvedPlayerMedia } fr
 import { sleeperAvatarUrl } from '@/lib/sleeper-avatar'
 import { completedTradeGraderFor, completedTradeInputs, gradeArchivedTrade, oneGradeForCompletedTrade, type ArchivedPlayer } from '@/lib/decision-os/trade/completedTradeGrade'
 import { receiptIdForGrade } from '@/lib/decision-os/trade/recordTradeGrade'
-import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
+import { gradeMoment, gradeMomentOf, type GradeMomentInput } from '@/lib/decision-os/trade/gradeMoment'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { PUBLIC_RECEIPT_SELECT, publicTradeDecisionReceipt } from '@/lib/league-trade-engine/tradeDecisionReceipt'
@@ -149,6 +149,11 @@ export type RecentTrade = {
    * the band says WHEN rather than "today". Absent: a live grade.
    */
   gradedAt?: string | null
+  /**
+   * With `gradedAt`: how those letters were priced — at the time of the trade, or first-graded where
+   * no market record covers the trade date (`gradeMoment`). Absent: a live grade, or an older payload.
+   */
+  gradedMoment?: GradeMomentInput | null
 }
 
 export type RecentTradesLeague = {
@@ -498,6 +503,7 @@ function applyOneGrade(
   realizedNote: (side: RecentTradeSide) => string | null = () => null,
 ): void {
   trade.gradedAt = grade.frozenAt ?? null
+  trade.gradedMoment = grade.frozenAt ? gradeMomentOf(grade) : null
   for (const side of trade.sides) {
     const isA = String(side.rosterId) === String(a)
     const got = isA ? grade.getValue : grade.giveValue
