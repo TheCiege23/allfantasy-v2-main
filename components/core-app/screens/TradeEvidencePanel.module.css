@@ -9,7 +9,7 @@
   overflow-wrap: anywhere;
 }
 .heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1rem; }
-.heading span { opacity: .8; }
+.heading > span { opacity: .8; } /* direct child only: the label's "?" popover is a span too */
 .panel p { margin: .5rem 0; line-height: 1.5; }
 .panel details { margin-block-start: .75rem; }
 .panel summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; }

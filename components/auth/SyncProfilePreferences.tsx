@@ -4,10 +4,7 @@ import { useEffect, useRef } from "react"
 import { useOptionalSession } from "@/components/auth/useOptionalSession"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useThemeMode } from "@/components/theme/ThemeProvider"
-import {
-  getStoredLanguage,
-  setStoredLanguage,
-} from "@/lib/preferences/LanguagePreferenceService"
+import { getStoredLanguage } from "@/lib/preferences/LanguagePreferenceService"
 import {
   getStoredThemePreference,
   setStoredTheme,
@@ -20,7 +17,7 @@ import { resolveSharedSessionBootstrap } from "@/lib/auth/SharedSessionBootstrap
  */
 export default function SyncProfilePreferences() {
   const { data: session, status } = useOptionalSession()
-  const { language, setLanguage } = useOptionalLanguage()
+  const { setLanguage } = useOptionalLanguage()
   const { mode, setMode } = useThemeMode()
   const syncedSessionKeyRef = useRef<string | null>(null)
 
@@ -55,10 +52,22 @@ export default function SyncProfilePreferences() {
           storedThemePreference: getStoredThemePreference(),
         })
 
-        if (language !== bootstrap.language) {
-          setLanguage(bootstrap.language)
-        }
-        setStoredLanguage(bootstrap.language)
+        /*
+         * 🛑 ALWAYS THROUGH `setLanguage`, NEVER A STALE COMPARISON PLUS A DIRECT STORAGE WRITE
+         * (2026-10-03). This read `if (language !== bootstrap.language) setLanguage(...)` and then
+         * `setStoredLanguage(...)` unconditionally. `language` is captured when the effect starts —
+         * before the provider has read localStorage, so still the default "en" — and the profile fetch
+         * resolves later. With a Spanish browser and an English account, the stale "en" equalled the
+         * account's "en", `setLanguage` was skipped, and `setStoredLanguage` rewrote localStorage,
+         * the cookie and <html lang> to English under a page that stayed Spanish. Found by the My Team
+         * session in a live check.
+         *
+         * `setLanguage` writes storage and cookie itself, and compares against the LIVE language
+         * (`activeLanguageRef`), refreshing server text only on a real change — so calling it every
+         * time is both correct and cheap. The account still wins when it has a language
+         * (`resolveLanguagePreferenceSync`); this only makes the page agree with what is stored.
+         */
+        setLanguage(bootstrap.language)
 
         if (mode !== bootstrap.theme) {
           setMode(bootstrap.theme)
@@ -86,7 +95,7 @@ export default function SyncProfilePreferences() {
         }
       })
       .catch(() => {})
-  }, [status, session?.user, language, mode, setLanguage, setMode])
+  }, [status, session?.user, mode, setLanguage, setMode])
 
   return null
 }

@@ -2778,6 +2778,14 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-review h3 { margin:0 0 8px; font-size:17px; }
 .af-tc-review p { margin:6px 0; line-height:1.45; }
 
+/*
+ * The shared "?" (TopicTip) on the Trade Center. The score's word and its tip share one row of the
+ * column-flex score block, and the value alerts' how-measured line sits under the <summary>, where a
+ * tap would otherwise toggle the panel.
+ */
+.af-tc-score-labelrow { display: inline-flex; align-items: center; }
+.af-tc-value-actions > .af-tc-value-actions-how { margin: 0; padding: 0 13px; }
+
 /* Saved/current variants retain readable, keyboard-accessible controls on narrow screens. */
 .af-tc-comparison-state { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
 .af-tc-variant-comparison { margin-top:16px; overflow-wrap:anywhere; }
