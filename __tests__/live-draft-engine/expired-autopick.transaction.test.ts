@@ -113,6 +113,11 @@ const ctx = vi.hoisted(() => {
 
   function buildTx() {
     return {
+      $queryRaw: vi.fn(async () => []),
+      leagueAuditLog: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'archive-event', ...data })),
+      },
       draftSession: {
         // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
         findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },
@@ -136,6 +141,12 @@ const ctx = vi.hoisted(() => {
         }),
       },
       draftPick: {
+        update: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+          const row = store.picks.find(p => p.id === where.id)
+          if (!row) throw new Error('Pick missing')
+          Object.assign(row, data)
+          return row
+        }),
         delete: vi.fn(async ({ where }: { where: { id: string } }) => {
           store.picks = store.picks.filter((p) => p.id !== where.id)
         }),

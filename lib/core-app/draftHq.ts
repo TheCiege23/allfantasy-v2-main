@@ -503,6 +503,7 @@ type ResolvedDraftPlayer = {
 export async function resolvePlayerNames(
   playerIds: string[],
   platform: string,
+  sport?: string,
 ): Promise<Map<string, ResolvedDraftPlayer>> {
   const out = new Map<string, ResolvedDraftPlayer>()
   if (playerIds.length === 0) return out
@@ -534,7 +535,7 @@ export async function resolvePlayerNames(
     scoped
       ? prisma.playerProviderIdentity
           .findMany({
-            where: { provider: scoped, providerPlayerId: { in: playerIds } },
+            where: { provider: scoped, providerPlayerId: { in: playerIds }, ...(sport ? { sportKey: { equals: sport, mode: 'insensitive' as const } } : {}) },
             select: { providerPlayerId: true, displayName: true },
           })
           .catch(() => [])
@@ -543,7 +544,7 @@ export async function resolvePlayerNames(
     scoped === 'sleeper'
       ? prisma.sportsPlayer
           .findMany({
-            where: { sleeperId: { in: playerIds } },
+            where: { sleeperId: { in: playerIds }, ...(sport ? { sport: { equals: sport, mode: 'insensitive' as const } } : {}) },
             // `sport` is required by `composePlayerIdentities` — it gates the
             // NFL-only club fold. `imageUrl` is what puts a face on the board.
             select: {

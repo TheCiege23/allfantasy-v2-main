@@ -1,5 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { getDraftPlanningPreference } from './draftPlanningPreferenceStore';
+import type { DraftPlanningPreference } from './draftPlanningPreferenceModel';
 import { createHash } from "node:crypto";
 import {
   preparationContext,
@@ -26,6 +28,8 @@ import {
 } from "@/lib/live-draft-engine/draftPickEmpty";
 
 export type DraftPreparationData = {
+  planningPreference?: DraftPlanningPreference | null;
+  planningPreferenceState?: 'ready' | 'error';
   state: "ready" | "empty" | "unsupported" | "error";
   reason: string | null;
   sessionId: string | null;
@@ -175,7 +179,7 @@ export async function getDraftPreparationData(
       reason:
         "This draft has no verified start time, so a draft-time ADP comparison cannot be made.",
     };
-  const [history, picks, queueResult] = await Promise.all([
+  const [history, picks, queueResult, planning] = await Promise.all([
     prisma.aiAdpSnapshotHistory.findFirst({
       where: {
         sport: context.sport,
@@ -236,6 +240,7 @@ export async function getDraftPreparationData(
             autopick:
               "Queue or autopick settings could not be loaded. Retry this page.",
           })),
+    getDraftPlanningPreference(userId, league.id, session.id).then(value => ({ value, state: 'ready' as const })).catch(() => ({ value: null, state: 'error' as const })),
   ]);
   const validPicks = picks.filter(
     (p) => !isDraftPickRowEmpty(p) && !isDraftPickSkipped(p),
@@ -399,6 +404,8 @@ export async function getDraftPreparationData(
   });
   return {
     ...base,
+    planningPreference: planning.value,
+    planningPreferenceState: planning.state,
     state: snapshot ? "ready" : "empty",
     reason: snapshot ? null : base.reason,
     observedAt: snapshot?.observedAt ?? null,

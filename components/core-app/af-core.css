@@ -1118,6 +1118,23 @@ html[data-mode='af'] .af-core {
 .af-core .af-info-pop-body {
   display: block;
 }
+.af-core .af-info-close {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.af-core .af-info-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .af-core .af-info-para {
   display: block;
   margin: 0 0 6px;

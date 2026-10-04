@@ -16,14 +16,15 @@ export async function getDraftArchiveScreen(authorizedLeagueIds: string[], leagu
     }) : null;
     const requested = value('draft');
     const timelinePage = Math.max(1, Math.min(10000, Number(value('timelinePage')) || 1));
-    const key = requested || (current?.sessionKind === 'live' ? (current.sleeperDraftId ? 'imported:' + current.sleeperDraftId : 'native:' + current.id) : catalog.choices[0]?.key);
+    const filtering = !!query || season != null;
+    const key = requested || (filtering ? catalog.choices[0]?.key : current?.sessionKind === 'live' ? (current.sleeperDraftId ? 'imported:' + current.sleeperDraftId : 'native:' + current.id) : catalog.choices[0]?.key);
     const detail = leagueId && scope.length && key ? await draftArchiveDetail(leagueId, userId, key, timelinePage) : null;
-    const isCurrent = !!current && (!requested || requested === 'native:' + current.id);
+    const isCurrent = !!current && key === 'native:' + current.id;
     return {
         choices: catalog.choices.map(({ createdAt, total, ...choice }) => { void createdAt; void total; return choice; }),
         detail, leagueId, page: catalog.page, more: catalog.more, total: catalog.total, query, season: seasonText, timelinePage,
         error: requested && !detail ? 'This draft is unavailable in this league.' : null,
         // An explicit archive selection must never render the current draft's live controls.
-        showCurrent: (!detail && !requested) || (isCurrent && !current?.sleeperDraftId && current?.status !== 'completed'),
+        showCurrent: (!detail && !requested && !filtering && !current) || (isCurrent && !current?.sleeperDraftId && current?.status !== 'completed'),
     };
 }

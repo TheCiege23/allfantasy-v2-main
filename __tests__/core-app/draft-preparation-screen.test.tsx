@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 vi.mock("@/components/i18n/LanguageProviderClient", () => ({
   useOptionalLanguage: () => ({ language: "en" }),
 }));
+vi.mock("@/lib/core-app/draftPlanningActions", () => ({ saveDraftPlanningPreference: vi.fn(async () => ({ ok: true })) }));
 import { DraftPreparation } from "@/components/core-app/screens/DraftPreparation";
 import type { DraftPreparationData } from "@/lib/core-app/draftPreparation";
 const data: DraftPreparationData = {

@@ -380,7 +380,7 @@ async function _resolveAuctionWinCore(
           source: 'user',
           amount,
           pickedAt: now,
-          pickMetadata: json({ archive: { eventId: archived.eventId, context: archived.context, timing: archived.selected, clockAllowanceSeconds: session.timerSeconds, selectionRosterId: winnerRosterId } }),
+          pickMetadata: json({ archive: { eventId: archived.eventId, context: archived.context, timing: archived.selected, clockAllowanceSeconds: session.timerSeconds, selectionRosterId: winnerRosterId, auctionBudgetPerTeam: session.auctionBudgetPerTeam ?? DEFAULT_BUDGET } }),
         },
       })
 
@@ -392,6 +392,7 @@ async function _resolveAuctionWinCore(
           timerEndAt: nextNominationTimerEndAt,
           pausedRemainingSeconds: null,
           status: shouldCompleteAfterResolution ? 'completed' : 'in_progress',
+          ...(shouldCompleteAfterResolution ? { completedAt: now } : {}),
           version: { increment: 1 },
           updatedAt: new Date(),
         },
@@ -405,10 +406,14 @@ async function _resolveAuctionWinCore(
           timerEndAt: nextNominationTimerEndAt,
           pausedRemainingSeconds: null,
           status: shouldCompleteAfterResolution ? 'completed' : 'in_progress',
+          ...(shouldCompleteAfterResolution ? { completedAt: now } : {}),
           version: { increment: 1 },
           updatedAt: new Date(),
         },
       })
+    }
+    if (shouldCompleteAfterResolution) {
+      await recordArchiveEvent(tx, { ...session, status: 'completed' }, 'complete', {}, now)
     }
   })
 

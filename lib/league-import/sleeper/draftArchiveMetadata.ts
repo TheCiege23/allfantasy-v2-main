@@ -26,7 +26,7 @@ export function sleeperDraftArchiveMetadata(args: {
     selectionRosterId: id(pick.roster_id), providerPickedBy: id(pick.picked_by),
     originalDraftSlot: typeof pick.draft_slot === 'number' ? pick.draft_slot : null,
     auctionAmount: typeof player.amount === 'number' && Number.isFinite(player.amount) ? player.amount : typeof player.amount === 'string' && /^\d+(\.\d+)?$/.test(player.amount) ? Number(player.amount) : null,
-    isKeeper: pick.is_keeper === true,
+    ...(pick.is_keeper === true ? { isKeeper: true } : {}),
     playerSnapshot: {
       name: [text(player.first_name), text(player.last_name)].filter(Boolean).join(' ') || null,
       position: text(player.position), team: text(player.team), sport: text(player.sport),

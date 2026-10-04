@@ -103,18 +103,22 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     const clock = object(object(lastEvent?.afterState).clock);
     const ids = rows.map(r => string(r.playerId)).filter((v): v is string => !!v);
     const platform = native ? 'sleeper' : string(object(rows[0]?.metadata).provider) ?? (await prisma.league.findUnique({ where: { id: leagueId }, select: { platform: true } }))?.platform ?? '';
-    const names = await resolvePlayerNames([...new Set(ids)], platform);
+    // Native selections already carry their identity. No provider namespace is inferred
+    // from a native numeric ID; imported fallbacks require both provider and sport.
+    const names = native ? new Map<string, { name: string; position: string }>() : await resolvePlayerNames([...new Set(ids)], platform, choice.sport);
     const order = Array.isArray(object(nativeSnap.session).slotOrder) ? object(nativeSnap.session).slotOrder as Record<string, unknown>[] : [];
     const sourceSlotMap = object(providerSnap.slotToRosterId);
+    const providerRosters = Array.isArray(providerSnap.observedSeasonRosters) ? providerSnap.observedSeasonRosters.map(object) : [];
     const picks: ArchivePick[] = rows.map(r => {
         const meta = object(r.metadata), archive = object(object(r.pickMetadata).archive), player = object(meta.playerSnapshot), timing = object(archive.timing);
         const overall = number(native ? r.overall : r.pickNumber) ?? 0, round = number(r.round) ?? 0;
-        const slot = number(native ? r.slot : meta.originalDraftSlot);
+        const slot = choice.format === 'auction' ? null : number(native ? r.slot : meta.originalDraftSlot);
         const original = string(native ? r.originalRosterId : sourceSlotMap[String(slot)]) ?? (native ? string(archive.originalRosterId) : null);
         const roster = string(native ? r.rosterId : meta.selectionRosterId);
         const id = string(r.playerId), resolved = id ? names.get(id) : null;
         const name = string(native ? r.playerName : player.name);
-        return { id: String(native ? r.id : r.draftId), overall, round, slot, originalRosterId: original, rosterId: roster, teamName: string(r.displayName) ?? (native ? string(order.find(e => String(e.rosterId) === roster)?.displayName) : null), actor: string(native ? r.ownerUserId : meta.providerPickedBy), playerId: id, playerName: name ?? resolved?.name ?? ('Player ' + (id ?? 'unknown')), position: string(native ? r.position : player.position) ?? resolved?.position ?? 'Unknown', club: string(native ? r.team : player.team), selectedAt: native ? iso(r.pickedAt) : null, source: string(r.source) ?? (native ? null : platform), keeper: r.source === 'keeper' || meta.isKeeper === true, amount: number(native ? r.amount : meta.auctionAmount), allowanceSeconds: number(archive.clockAllowanceSeconds), activeMs: number(timing.activeMs), ownerTime: timing.byOwner && typeof timing.byOwner === 'object' ? timing.byOwner as Record<string, number> : null, identityBasis: name ? 'Recorded at selection' : 'Current identity mapping by provider ID' };
+        const providerTeam = providerRosters.find(t => string(t.roster_id) === roster);
+        return { id: String(native ? r.id : r.draftId), overall, round, slot, originalRosterId: original, rosterId: roster, teamName: string(r.displayName) ?? (native ? string(order.find(e => String(e.rosterId) === roster)?.displayName) : string(object(providerTeam?.metadata).team_name)), actor: string(native ? r.ownerUserId : meta.providerPickedBy), playerId: id, playerName: name ?? resolved?.name ?? ('Player ' + (id ?? 'unknown')), position: string(native ? r.position : player.position) ?? resolved?.position ?? 'Unknown', club: string(native ? r.team : player.team), selectedAt: native ? iso(r.pickedAt) : null, source: string(r.source) ?? (native ? null : platform), keeper: r.source === 'keeper' || meta.isKeeper === true, amount: number(native ? r.amount : meta.auctionAmount), allowanceSeconds: number(archive.clockAllowanceSeconds), activeMs: number(timing.activeMs), ownerTime: timing.byOwner && typeof timing.byOwner === 'object' ? timing.byOwner as Record<string, number> : null, identityBasis: name ? 'Recorded at selection' : native ? 'Recorded native ID; display identity unavailable' : 'Current identity mapping by provider ID and sport' };
     });
     const frozen = object(nativeSnap.context);
     const context = typeof frozen.sport === 'string' && typeof frozen.season === 'number' && Array.isArray(frozen.rosterSlots) ? frozen as unknown as PreparationContext : null;
@@ -148,8 +152,26 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     void createdAt;
     // Publish only settings and clock facts. Internal roster JSON, actor IDs and correction
     // reasons are retained durably but must not leak through the public snapshot/timeline.
-    const publicSnapshot = native ? { context: nativeSnap.context ?? null, capturedAt: nativeSnap.capturedAt ?? null, teams: Array.isArray(nativeSnap.teams) ? nativeSnap.teams.map(t => ({ externalId: object(t).externalId, teamName: object(t).teamName })) : [], rules: { draftType: object(nativeSnap.session).draftType, rounds: object(nativeSnap.session).rounds, teamCount: object(nativeSnap.session).teamCount, timerSeconds: object(nativeSnap.session).timerSeconds, thirdRoundReversal: object(nativeSnap.session).thirdRoundReversal } } : snapshot;
-    const publicEvents = events.slice(0, 100).map(e => ({ id: e.id, at: e.createdAt.toISOString(), event: object(e.afterState).event, clock: object(e.afterState).clock }));
+    const publicSnapshot = native ? { context: nativeSnap.context ?? null, capturedAt: nativeSnap.capturedAt ?? null, teams: Array.isArray(nativeSnap.teams) ? nativeSnap.teams.map(t => ({ externalId: object(t).externalId, teamName: object(t).teamName })) : [], rules: { draftType: object(nativeSnap.session).draftType, rounds: object(nativeSnap.session).rounds, teamCount: object(nativeSnap.session).teamCount, timerSeconds: object(nativeSnap.session).timerSeconds, thirdRoundReversal: object(nativeSnap.session).thirdRoundReversal } } : {
+        provider: providerSnap.provider, draftType: providerSnap.draftType, settings: providerSnap.settings,
+        startTime: providerSnap.startTime, lastPickedTime: providerSnap.lastPickedTime, slotToRosterId: providerSnap.slotToRosterId,
+        teams: providerRosters.map(t => ({ rosterId: t.roster_id, teamName: object(t.metadata).team_name })),
+    };
+    const publicEvents = events.slice(0, 100).map(e => {
+        const state = object(e.afterState), details = object(state.details);
+        const selection = object(details.pick);
+        return { id: e.id, at: e.createdAt.toISOString(), event: state.event, clock: state.clock, allowanceSeconds: details.timerSeconds ?? null,
+            nomination: details.nomination ?? null, bidderRosterId: details.rosterId ?? null, amount: details.amount ?? null, ownershipChanges: details.trades ?? null,
+            selection: state.event === 'selection' ? { overall: details.overall, playerId: selection.playerId, playerName: selection.playerName, position: selection.position, team: selection.team, rosterId: selection.rosterId, displayName: selection.displayName, originalRosterId: selection.originalRosterId, source: selection.source, actorId: details.actorUserId } : null };
+    });
+    const publicTrades = trades.slice(0, 100).map(t => {
+        const trade = object(t);
+        if (native) return { id: trade.id, proposerRosterId: trade.proposerRosterId, receiverRosterId: trade.receiverRosterId, proposerName: trade.proposerName, receiverName: trade.receiverName,
+            give: { round: trade.giveRound, slot: trade.giveSlot, originalRosterId: trade.giveOriginalRosterId },
+            receive: { round: trade.receiveRound, slot: trade.receiveSlot, originalRosterId: trade.receiveOriginalRosterId }, acceptedAt: trade.respondedAt };
+        const payload = object(trade.payload);
+        return { transactionId: trade.transactionId, season: trade.season, week: trade.weekOrPeriod, adds: payload.adds, drops: payload.drops, draftPicks: payload.draft_picks, rosterIds: payload.roster_ids, providerCreatedAt: payload.created, providerStatusUpdatedAt: payload.status_updated };
+    });
     const analysis = analysisReadiness(nativeSnap.analysisBasis, picks.length);
-    return JSON.parse(JSON.stringify({ analysis, choice: publicChoice, picks, snapshot: publicSnapshot, startedAt, endedAt, endMeaning: native ? 'Completed at' : 'Provider last selection time', elapsedMs: duration(startedAt, endedAt), activeMs: native && clock.complete === true ? number(clock.totalActiveMs) : null, events: publicEvents, eventsMore: events.length > 100, corrections: corrections.slice(0, 100), correctionsMore: corrections.length > 100, trades: trades.slice(0, 100), tradesMore: trades.length > 100, coverage, sessionId })) as ArchiveDetail;
+    return JSON.parse(JSON.stringify({ analysis, choice: publicChoice, picks, snapshot: publicSnapshot, startedAt, endedAt, endMeaning: native ? 'Completed at' : 'Provider last selection time', elapsedMs: duration(startedAt, endedAt), activeMs: native && clock.complete === true ? number(clock.totalActiveMs) : null, events: publicEvents, eventsMore: events.length > 100, corrections: corrections.slice(0, 100), correctionsMore: corrections.length > 100, trades: publicTrades, tradesMore: trades.length > 100, coverage, sessionId })) as ArchiveDetail;
 }
