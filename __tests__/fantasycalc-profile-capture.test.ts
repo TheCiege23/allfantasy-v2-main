@@ -24,12 +24,17 @@ const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     sportsDataCache: {
-      findMany: vi.fn(async ({ where, take }: { where: { cacheKey: { startsWith: string } }; take?: number }) =>
-        [...h.table.values()]
-          .filter((r) => r.cacheKey.startsWith(where.cacheKey.startsWith))
+      findMany: vi.fn(async ({ where, take }: { where: { cacheKey: { startsWith?: string; endsWith?: string; in?: string[] } }; take?: number }) => {
+        const k = where.cacheKey
+        for (const op of Object.keys(k)) if (!['startsWith', 'endsWith', 'in'].includes(op)) throw new Error(`fake: unsupported ${op}`)
+        return [...h.table.values()]
+          .filter((r) => (k.startsWith === undefined || r.cacheKey.startsWith(k.startsWith))
+            && (k.endsWith === undefined || r.cacheKey.endsWith(k.endsWith))
+            && (k.in === undefined || k.in.includes(r.cacheKey)))
           .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
           .slice(0, take ?? Infinity)
-          .map((r) => ({ cacheKey: r.cacheKey, data: clone(r.data) }))),
+          .map((r) => ({ cacheKey: r.cacheKey, data: clone(r.data) }))
+      }),
       upsert: vi.fn(async ({ where, create, update }: { where: { cacheKey: string }; create: Row; update: Omit<Row, 'cacheKey'> }) => {
         const prev = h.table.get(where.cacheKey)
         h.table.set(where.cacheKey, prev ? { ...prev, ...update, data: clone(update.data) } : { ...create, data: clone(create.data) })
@@ -56,7 +61,7 @@ vi.mock('@/lib/fantasycalc-fetch', () => ({ fetchFantasyCalcValues: h.fetch }))
 vi.mock('@/lib/player-analytics', () => ({ getPlayerAnalytics: vi.fn(async () => null) }))
 
 import type { FantasyCalcPlayer, FantasyCalcSettings } from '@/lib/fantasycalc'
-import { captureFantasyCalcProfileDaily, warmFantasyCalcCache } from '@/lib/fantasycalc-db'
+import { captureFantasyCalcProfileDaily, catchUpFantasyCalcProfileCaptures, warmFantasyCalcCache } from '@/lib/fantasycalc-db'
 import {
   PROFILE_CAPTURE_EXPIRES_AT,
   PROFILE_CAPTURE_PREFIX,
@@ -197,6 +202,107 @@ describe('the warm cron writes ONE capture per profile per UTC day', () => {
   it('an empty board never takes the day’s only slot', async () => {
     expect(await captureFantasyCalcProfileDaily(SETTINGS, [], new Date('2026-10-04T00:05:00.000Z'))).toBe(false)
     expect(captures()).toEqual([])
+  })
+})
+
+/*
+ * THE DAILY CATCH-UP (owner's ruling 2026-10-04: "daily copy only"). The warm reaches 60 profiles;
+ * production holds 73, the rest kept fresh by the on-demand read-through, which writes no capture.
+ */
+describe('the daily catch-up captures every profile the warm did not reach', () => {
+  const NOW = new Date('2026-10-04T14:00:00.000Z')
+  const profile = (numTeams: number): FantasyCalcSettings => ({ ...SETTINGS, numTeams })
+  /** A cached `fantasycalc:values:` row, as the warm or the read-through writes it. */
+  function cached(s: FantasyCalcSettings, syncedAt: string, players: FantasyCalcPlayer[] = LIVE) {
+    h.table.set(buildFantasyCalcCacheKey(s), {
+      cacheKey: buildFantasyCalcCacheKey(s),
+      data: clone({ players, settings: s, syncedAt }),
+      expiresAt: new Date(Date.parse(syncedAt) + 6 * 3600_000),
+      createdAt: new Date(syncedAt),
+    })
+  }
+  const FETCHED = LIVE.map((p) => ({ ...p, value: p.value + 777 }))
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+    h.fetch.mockResolvedValue(FETCHED)
+  })
+
+  it('a profile synced TODAY is captured from its cached row — no vendor call, its real sync time', async () => {
+    cached(profile(14), '2026-10-04T09:30:00.000Z')
+    const r = await catchUpFantasyCalcProfileCaptures({ now: NOW })
+    expect(h.fetch).not.toHaveBeenCalled()
+    expect(r).toMatchObject({ day: '2026-10-04', profiles: 1, capturedFromCache: 1, fetched: 0, deferred: 0, captureFailed: 0 })
+    const row = h.table.get(profileCaptureKey(profile(14), '2026-10-04'))!
+    const capture = parseProfileCapture(row.data)!
+    // The board as it was read at 09:30 — the capture-time rule needs the real time, not the catch-up's.
+    expect(capture.capturedAt).toBe('2026-10-04T09:30:00.000Z')
+    expect(row.createdAt.toISOString()).toBe('2026-10-04T09:30:00.000Z')
+    expect(unpackProfileCapture(capture).map((p) => p.value)).toEqual(LIVE.map((p) => p.value))
+  })
+
+  it('a profile last synced BEFORE today triggers exactly one fetch, then is captured from it', async () => {
+    cached(profile(16), '2026-10-03T23:00:00.000Z')
+    const r = await catchUpFantasyCalcProfileCaptures({ now: NOW })
+    expect(h.fetch).toHaveBeenCalledTimes(1)
+    expect(h.fetch).toHaveBeenCalledWith(profile(16))
+    expect(r).toMatchObject({ capturedFromCache: 0, fetched: 1, deferred: 0, fetchFailed: 0 })
+    const capture = parseProfileCapture(h.table.get(profileCaptureKey(profile(16), '2026-10-04'))!.data)!
+    expect(capture.capturedAt).toBe(NOW.toISOString())
+    expect(unpackProfileCapture(capture).map((p) => p.value)).toEqual(FETCHED.map((p) => p.value))
+    // The live row is refreshed too — the same fetch + write the warm does.
+    expect((h.table.get(buildFantasyCalcCacheKey(profile(16)))!.data as { syncedAt: string }).syncedAt).toBe(NOW.toISOString())
+  })
+
+  it('a profile already captured today is untouched — no fetch, no write; yesterday’s capture does not count', async () => {
+    cached(profile(8), '2026-10-03T20:00:00.000Z')
+    await captureFantasyCalcProfileDaily(profile(8), LIVE, new Date('2026-10-04T00:05:00.000Z'))
+    cached(profile(10), '2026-10-04T08:00:00.000Z')
+    await captureFantasyCalcProfileDaily(profile(10), LIVE, new Date('2026-10-03T00:05:00.000Z')) // yesterday's
+    const before = clone(h.table.get(profileCaptureKey(profile(8), '2026-10-04'))!)
+    const r = await catchUpFantasyCalcProfileCaptures({ now: NOW })
+    expect(h.fetch).not.toHaveBeenCalled()
+    expect(r).toMatchObject({ profiles: 2, alreadyCaptured: 1, capturedFromCache: 1, fetched: 0 })
+    expect(clone(h.table.get(profileCaptureKey(profile(8), '2026-10-04'))!)).toEqual(before)
+    // And a second run the same day does nothing at all.
+    const again = await catchUpFantasyCalcProfileCaptures({ now: NOW })
+    expect(again).toMatchObject({ alreadyCaptured: 2, capturedFromCache: 0, fetched: 0 })
+  })
+
+  it('respects the per-run fetch cap, and the next run continues where it stopped', async () => {
+    for (const t of [4, 6, 8, 10, 14]) cached(profile(t), '2026-10-02T12:00:00.000Z')
+    const first = await catchUpFantasyCalcProfileCaptures({ now: NOW, maxFetches: 2 })
+    expect(h.fetch).toHaveBeenCalledTimes(2)
+    expect(first).toMatchObject({ fetched: 2, deferred: 3 })
+    const second = await catchUpFantasyCalcProfileCaptures({ now: NOW, maxFetches: 2 })
+    expect(h.fetch).toHaveBeenCalledTimes(4)
+    expect(second).toMatchObject({ alreadyCaptured: 2, fetched: 2, deferred: 1 })
+  })
+
+  it('a failed fetch counts against the cap and is reported; it never captures', async () => {
+    cached(profile(4), '2026-10-02T12:00:00.000Z')
+    cached(profile(6), '2026-10-02T12:00:00.000Z')
+    h.fetch.mockRejectedValue(new Error('FantasyCalc API error: 503'))
+    const r = await catchUpFantasyCalcProfileCaptures({ now: NOW, maxFetches: 1 })
+    expect(r).toMatchObject({ fetched: 0, fetchFailed: 1, deferred: 1 })
+    expect(r.errors[0]).toContain('503')
+    expect(captures()).toEqual([])
+  })
+
+  it('an EMPTY row synced today is fetched rather than captured empty; an unreadable row is skipped, never fetched', async () => {
+    cached(profile(4), '2026-10-04T09:00:00.000Z', [])
+    h.table.set('fantasycalc:values:dynasty:1:qbs:2:teams:6:ppr:0.5', {
+      cacheKey: 'fantasycalc:values:dynasty:1:qbs:2:teams:6:ppr:0.5',
+      // The payload names another profile: capturing it would file it under the wrong key.
+      data: { players: LIVE, settings: profile(99), syncedAt: '2026-10-04T09:00:00.000Z' },
+      expiresAt: NOW, createdAt: NOW,
+    })
+    const r = await catchUpFantasyCalcProfileCaptures({ now: NOW })
+    expect(h.fetch).toHaveBeenCalledTimes(1)
+    expect(h.fetch).toHaveBeenCalledWith(profile(4))
+    expect(r).toMatchObject({ fetched: 1, capturedFromCache: 0, skippedUnreadable: 1 })
+    expect(captures().map((c) => c.cacheKey)).toEqual([profileCaptureKey(profile(4), '2026-10-04')])
   })
 })
 

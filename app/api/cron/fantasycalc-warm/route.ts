@@ -38,7 +38,9 @@
  *
  * ⚠ IT ALSO WRITES EACH PROFILE'S DAILY CAPTURE (2026-10-04). The first successful warm of a UTC day
  * stores that profile's board once (`captureFantasyCalcProfileDaily`), so a completed trade graded
- * later is priced on its league's own profile from the trade date. If this cron stops, the captures
+ * later is priced on its league's own profile from the trade date. Profiles the warm does not reach
+ * (its limit is 60) get the same daily copy from `catchUpFantasyCalcProfileCaptures` after the warm:
+ * from their cached row when it was synced today, else one capped fetch. If this cron stops, the captures
  * stop with it and those trades fall back to the 12-team `PlayerValueSnapshot` book — never wrong,
  * just less exact.
  *
@@ -50,7 +52,11 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
-import { warmFantasyCalcCache } from '@/lib/fantasycalc-db'
+import {
+  catchUpFantasyCalcProfileCaptures,
+  warmFantasyCalcCache,
+  type FantasyCalcCaptureCatchUpResult,
+} from '@/lib/fantasycalc-db'
 import { recordSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 export const runtime = 'nodejs'
@@ -77,6 +83,25 @@ async function handle(req: NextRequest) {
       deadlineMs: 210_000,
     })
 
+    /*
+     * The daily capture for every profile the warm did not reach (its limit is 60; production holds
+     * 73). Contained: a failed catch-up never fails the warm that already succeeded. Its fetches stop
+     * at 270 s into this run, inside `maxDuration`; a capture from a row synced today costs no fetch.
+     */
+    let catchUp: FantasyCalcCaptureCatchUpResult | { error: string }
+    try {
+      const c = await catchUpFantasyCalcProfileCaptures({ deadlineMs: Math.max(0, 270_000 - (Date.now() - startedAt)) })
+      console.log(
+        `[fantasycalc-warm] capture catch-up ${c.day}: fromCache=${c.capturedFromCache} fetched=${c.fetched} ` +
+          `deferred=${c.deferred} fetchFailed=${c.fetchFailed} captureFailed=${c.captureFailed} ` +
+          `alreadyCaptured=${c.alreadyCaptured}/${c.profiles}`,
+      )
+      catchUp = c
+    } catch (error) {
+      catchUp = { error: error instanceof Error ? error.message : 'unknown error' }
+    }
+    const catchUpErrors = 'error' in catchUp ? [`capture catch-up: ${catchUp.error}`] : catchUp.errors
+
     await recordSyncJobRun(
       { jobName: JOB_NAME, jobScope: 'fantasycalc', trigger: 'cron' },
       {
@@ -86,6 +111,7 @@ async function handle(req: NextRequest) {
         errors: [
           ...result.profiles.filter((p) => !p.ok).map((p) => `${p.cacheKey}: ${p.error}`),
           ...result.profiles.filter((p) => p.captureError).map((p) => `${p.cacheKey} (daily capture): ${p.captureError}`),
+          ...catchUpErrors,
         ],
         // A truncated run is `partial`, not `success` — otherwise a vendor slow enough to eat the
         // deadline every time would report green forever while half the profiles went cold.
@@ -97,6 +123,18 @@ async function handle(req: NextRequest) {
           // successful warm of each UTC day, so most runs report 0 here, and that is correct.
           profileCaptures: result.captured,
           profileCaptureFailures: result.captureFailed,
+          // Profiles the warm did not reach, captured once a day (`catchUpFantasyCalcProfileCaptures`).
+          captureCatchUp: 'error' in catchUp
+            ? { error: catchUp.error }
+            : {
+                capturedFromCache: catchUp.capturedFromCache,
+                fetched: catchUp.fetched,
+                deferred: catchUp.deferred,
+                fetchFailed: catchUp.fetchFailed,
+                captureFailed: catchUp.captureFailed,
+                alreadyCaptured: catchUp.alreadyCaptured,
+                profiles: catchUp.profiles,
+              },
         },
       },
       Date.now() - startedAt,
@@ -105,6 +143,7 @@ async function handle(req: NextRequest) {
     return NextResponse.json({
       ok: result.failed === 0 && !result.timedOut,
       ...result,
+      captureCatchUp: catchUp,
       durationMs: Date.now() - startedAt,
     })
   } catch (error) {
