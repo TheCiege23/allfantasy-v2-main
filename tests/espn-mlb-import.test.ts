@@ -1,3 +1,4 @@
+import { buildProviderSourceRef } from '@/lib/league-import/sourceRef'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import fixture from '../contracts/espn/fixtures/fantasy-league.MLB.2026.json'
 vi.mock('@/lib/league-sync-core', () => ({ getDecryptedAuth: vi.fn() }))
@@ -61,4 +62,16 @@ describe('ESPN MLB captured contract', () => {
     expect(await fetchEspnActivityForSync('test','MLB:13262',2026)).toEqual({teams:[],transactions:[],transactionsFetched:false})
     expect(f).not.toHaveBeenCalled()
   })
+})
+
+
+it.each(['13262','MLB:13262'])('restores saved sport/year before refreshing ESPN baseball %s', externalLeagueId => {
+  const source=buildProviderSourceRef({provider:'espn',externalLeagueId,sport:'MLB',season:2024})
+  expect(source).toBe('MLB:2024:13262')
+  expect(parseEspnMlbSource(source)).toEqual({leagueId:'13262',season:2024})
+})
+it('preserves explicitly scoped MLB inputs and existing football/MFL source encoding', () => {
+  expect(buildProviderSourceRef({provider:'espn',externalLeagueId:'MLB:2023:13262',sport:'MLB',season:2024})).toBe('MLB:2023:13262')
+  expect(buildProviderSourceRef({provider:'espn',externalLeagueId:'13262',sport:'NFL',season:2024})).toBe('13262:2024')
+  expect(buildProviderSourceRef({provider:'mfl',externalLeagueId:'13262',sport:'NFL',season:2024})).toBe('13262:2024')
 })
