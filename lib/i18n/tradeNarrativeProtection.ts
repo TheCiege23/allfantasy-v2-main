@@ -6,7 +6,7 @@ export function tradeIdentityTerms(context: unknown): string[] {
     if (!value || typeof value !== 'object' || depth > 12 || seen.has(value)) return
     seen.add(value)
     for (const [key, child] of Object.entries(value)) {
-      if (typeof child === 'string' && /^(name|playerName|managerName|ownerName|displayName|teamName|leagueName|username|id|playerId|rosterId)$/i.test(key) && child.trim()) terms.add(child.trim())
+      if (typeof child === 'string' && /^(name|playerName|managerName|partnerName|ownerName|displayName|teamName|leagueName|username|opponentLabel|id|playerId|rosterId)$/i.test(key) && child.trim()) terms.add(child.trim())
       else visit(child, depth + 1)
     }
   }

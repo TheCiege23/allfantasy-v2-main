@@ -30,7 +30,7 @@ describe('trade narrative display translation',()=>{
     expect(p.restore(translated.replace('AFKEEP000000','Josh'))).toBeNull()
     expect(p.restore(translated+' 99')).toBeNull()
     expect(p.restore(translated+' AFKEEP000000')).toBeNull()
-    expect(tradeIdentityTerms({give:[{name:'José Ramírez'}],managerName:'quiet fox',grade:{letter:'A'}})).toEqual(['José Ramírez','quiet fox'])
+    expect(tradeIdentityTerms({give:[{name:'José Ramírez'}],partnerName:'quiet fox',grade:{letter:'A'}})).toEqual(['José Ramírez','quiet fox'])
     const accents=protectTradeNarrative('José Ramírez helps quiet fox score 100,0.', ['José Ramírez','quiet fox'])
     expect(accents.masked).not.toContain('quiet fox');expect(accents.restore(accents.masked)).toBe('José Ramírez helps quiet fox score 100,0.')
   })
