@@ -13,7 +13,7 @@ export type LeagueWeekMetadata = {
 }
 
 /** Read the period marker once per league, without copying large settings blobs per team. */
-export async function readLeagueWeekMetadata(ids: string[], idSpace: 'internal' | 'platform' = 'internal'): Promise<LeagueWeekMetadata[]> {
+export async function readLeagueWeekMetadata(ids: string[], idSpace: 'internal' | 'platform' = 'internal', onError?: () => void): Promise<LeagueWeekMetadata[]> {
   if (!ids.length) return []
   try {
     const rows = await prisma.$queryRaw<LeagueWeekMetadata[]>(Prisma.sql`
@@ -28,6 +28,7 @@ export async function readLeagueWeekMetadata(ids: string[], idSpace: 'internal' 
     `)
     return Array.isArray(rows) ? rows : []
   } catch {
+    onError?.()
     return []
   }
 }
