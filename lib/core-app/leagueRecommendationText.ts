@@ -3,8 +3,8 @@
  *
  * On a league's Overview, the context bar shows the top Decision OS recommendation — its first action
  * and rationale (`page.tsx` → `LeagueRecommendation`). Those come from the manager builders in
- * `lib/decision-os/phase6/recommendations/recommendations.ts` (`assembleManagerRecommendations`),
- * which write deterministic English templates, and the bar printed them raw: the last English a
+ * `lib/decision-os/phase6/recommendations/recommendations.ts` (the per-manager assembler), which
+ * write deterministic English templates, and the bar printed them raw: the last English a
  * Spanish reader met on a league's Overview. Translated at render, in the client, where the language
  * is known.
  *
