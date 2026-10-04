@@ -1,3 +1,5 @@
+import { kickoffText } from './kickoffText'
+
 /** Shared Core navigation copy. The source labels remain the English fallback. */
 const spanish: Record<string, string> = {
   Home: 'Inicio',
@@ -1099,6 +1101,19 @@ const spanish: Record<string, string> = {
   'the regular season is over — this is the final total': 'la temporada regular terminó: este es el total final',
   'this league has no head-to-head schedule, so there is no fixed number of weeks left to project':
     'esta liga no tiene enfrentamientos directos, así que no hay un número fijo de semanas que proyectar',
+  // Game Plan — injury designations on a flagged starter's chip (the feed's own words; IR, PUP and NFI
+  // are abbreviations a Spanish-reading manager sees on the platform too, so they stay).
+  Questionable: 'Dudoso',
+  Doubtful: 'Poco probable',
+  Probable: 'Probable',
+  Flagged: 'Señalado',
+  'lock time unknown': 'hora de bloqueo desconocida',
+  // Refresh my lineups (components/core-app/player-finder/RefreshLineups.tsx — Game Plan and Player Finder).
+  'Refresh my lineups': 'Actualizar mis alineaciones',
+  'Refreshing…': 'Actualizando…',
+  'Refreshing your lineups…': 'Actualizando tus alineaciones…',
+  'Could not refresh right now. Your platforms are still the source of truth.':
+    'No se pudo actualizar ahora. Tus plataformas siguen siendo la fuente de verdad.',
   // Standings in an elimination league — no playoffs, so Safe / On the bubble / Eliminated
   // (components/core-app/standings/StandingsBoardView.tsx, screens/Standings.tsx).
   Safe: 'A salvo',
@@ -1175,6 +1190,18 @@ const spanish: Record<string, string> = {
   'Injured Reserve': 'Lista de lesionados',
 }
 
+/** "3 min ago" / "2h 5m ago" / "4d ago" / "just now" (RefreshLineups `asOfLabel`) → Spanish. */
+function spanishAgo(ago: string): string | null {
+  if (ago === 'just now') return 'ahora mismo'
+  let m = ago.match(/^(\d+) min ago$/)
+  if (m) return `hace ${m[1]} min`
+  m = ago.match(/^(\d+)h (\d+)m ago$/)
+  if (m) return `hace ${m[1]} h ${m[2]} min`
+  m = ago.match(/^(\d+)d ago$/)
+  if (m) return `hace ${m[1]} d`
+  return null
+}
+
 /** One part of the waiver board's lock sentence ("Games already kicked off are locked in: A, B and C."). */
 const LOCK_PARTS: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   [/^1 of your starters keeps his slot$/, () => '1 de tus titulares conserva su puesto'],
@@ -1234,6 +1261,29 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
     /^Competitive Edge reads Sleeper waiver history today\. (.+) leagues aren't connected yet\.$/,
     (m) => `Competitive Edge lee hoy el historial de agentes libres de Sleeper. Las ligas de ${m[1]} todavía no están conectadas.`,
   ],
+  // Lineup lock labels (lib/core-app/lineupLock.ts `lockState`) — Game Plan, Player Finder. The weekday
+  // and date inside go through `kickoffText`, the shared kickoff translator. "locks in" before "locks".
+  [/^locks in (.+)$/, (m) => `se bloquea en ${m[1]}`],
+  [/^locked · kicked off (.+)$/, (m) => `bloqueado · empezó ${kickoffText(m[1]!, 'es')}`],
+  [/^locks (.+)$/, (m) => `se bloquea ${kickoffText(m[1]!, 'es')}`],
+  // RefreshLineups — the stamp and its progress notes.
+  [
+    /^Lineups as of (.+) · (.+)$/,
+    (m) => {
+      const ago = spanishAgo(m[2]!)
+      return ago ? `Alineaciones a las ${m[1]} · ${ago}` : m[0]!
+    },
+  ],
+  [
+    /^Lineups as of (.+)$/,
+    (m) => {
+      const ago = spanishAgo(m[1]!)
+      return ago ? `Alineaciones de ${ago}` : m[0]!
+    },
+  ],
+  [/^Refreshing your lineups… (\d+) of (\d+)$/, (m) => `Actualizando tus alineaciones… ${m[1]} de ${m[2]}`],
+  [/^1 league could not be refreshed — reloading the rest$/, () => '1 liga no se pudo actualizar: recargando el resto'],
+  [/^(\d+) leagues could not be refreshed — reloading the rest$/, (m) => `${m[1]} ligas no se pudieron actualizar: recargando el resto`],
   // Waivers — "Worth adding" board notes.
   [
     /^A claim made now is for week (\d+), so these are Sleeper's week \1 projections, rescored under this league's scoring — published ahead, they move as injuries and depth charts settle\. A player with no week \1 line \(most often a bye\) is not shown\.$/,
