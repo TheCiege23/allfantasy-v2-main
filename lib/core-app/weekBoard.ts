@@ -377,6 +377,7 @@ export type MatchupRow = {
 }
 
 type History = {
+  knownRosterIds: Map<string, Set<string>>
   nativeRules: Map<string, { season: number; playoffStartWeek: number; medianGame: boolean }>
   periodsByLeague: Map<string, { season: number; week: number }>
   historyIncomplete: boolean
@@ -577,6 +578,13 @@ export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], 
     if (avatar) rosterAvatars.set(`${pid}:${t.externalId}`, avatar)
   }
 
+  const knownRosterIds = new Map<string, Set<string>>()
+  for (const t of teams) {
+    const scope = scopeForTeam(t)
+    if (!scope || !t.externalId) continue
+    const ids = knownRosterIds.get(scope) ?? new Set<string>()
+    ids.add(t.externalId); knownRosterIds.set(scope, ids)
+  }
   const myRosters = new Map<string, string>()
   for (const t of mine) {
     const pid = scopeForTeam(t)
@@ -596,6 +604,12 @@ export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], 
     return null
   }) : null
   if (native) {
+    for (const key of native.names.keys()) {
+      const at = key.lastIndexOf(':')
+      const scope = key.slice(0, at), id = key.slice(at + 1)
+      const ids = knownRosterIds.get(scope) ?? new Set<string>()
+      ids.add(id); knownRosterIds.set(scope, ids)
+    }
     const covered = new Set(native.rows.map(r => r.leagueId))
     priorRows = priorRows.filter(r => !covered.has(r.leagueId))
     rows.push(...native.rows)
@@ -639,6 +653,7 @@ export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], 
     ? periods[0] : null
 
   return {
+    knownRosterIds,
     nativeRules: native?.rules ?? new Map(),
     rows: (priorRows.length > 0 ? [...rows, ...priorRows] : rows).map((r) => {
       const progress = progressByLeague.get(r.leagueId)

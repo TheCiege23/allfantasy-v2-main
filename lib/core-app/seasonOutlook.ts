@@ -437,6 +437,7 @@ function describeWhatDecidesIt(
 export { describeTeamOutlook } from './outlookCopy'
 
 export type Prepared = {
+  statusCanBeCertified: boolean
   league: LeagueInput
   pid: string
   leagueName: string
@@ -623,6 +624,13 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
       ;(p.scored ? played : remaining).push({ week: p.week, a: p.ids[0], b: p.ids[1] })
     }
     const weeks = [...new Set(remaining.map((g) => g.week))].sort((a, b) => a - b)
+    const knownIds = history.knownRosterIds.get(pid)
+    // Missing teams, weeks or unpaired future games must never prove a clinch.
+    const completeQualificationSchedule = endWeek != null && endWeek > 0 && endWeek <= 100
+      && knownIds != null && knownIds.size === byRoster.size && [...knownIds].every(id => byRoster.has(id))
+      && [...byRoster].every(([id, list]) => Array.from({ length: endWeek }, (_, i) => i + 1).every(week =>
+        list.some(r => r.week === week && ((final(r) && (r.scored === true || r.pointsFor > 0 || r.pointsAgainst > 0))
+          || remaining.some(g => g.week === week && (g.a === id || g.b === id))))))
 
     /*
      * 🛑 NO UPCOMING ROW IS NOT THE SAME AS NO UPCOMING GAME. Sleeper, ESPN and Yahoo write a 0-0
@@ -671,6 +679,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
     missing.push('Weekly scores are independent draws: bye weeks, injuries and trades only enter through the scenario tools.')
 
     prepared.push({
+      statusCanBeCertified: Boolean(completeQualificationSchedule) && canCertifyWeeklyPlayoffStatus(effectiveLeague.settings, format.playoffTeamsSource),
       league: effectiveLeague,
       pid,
       leagueName,
@@ -789,7 +798,7 @@ export async function getSeasonOutlook(
       const playoffPct = pctOf(c.playoff, n)
       const byePct = pctOf(c.bye, n)
       const titlePct = pctOf(c.title, n)
-      const status = canCertifyWeeklyPlayoffStatus(p.league.settings, p.format.playoffTeamsSource) ? mathStatus(p.sim, s.rosterId) : null
+      const status = p.statusCanBeCertified ? mathStatus(p.sim, s.rosterId) : null
       return {
         rosterId: s.rosterId,
         name: nameByRoster.get(`${p.pid}:${s.rosterId}`) ?? null,
@@ -990,7 +999,7 @@ export async function getSeasonOutlook(
       ifWin,
       ifLose,
       swing: ifWin - ifLose,
-      clinchOnWin: canCertifyWeeklyPlayoffStatus(p.league.settings, p.format.playoffTeamsSource) && mathStatus({ ...p.sim, teams: p.sim.teams.map(t => t.rosterId === league.you!.rosterId ? { ...t, wins: t.wins + 1 } : t), remaining: p.sim.remaining.filter(g => !(g.week === game.week && ((g.a === game.a && g.b === game.b) || (g.a === game.b && g.b === game.a)))) }, league.you.rosterId) === 'clinched',
+      clinchOnWin: p.statusCanBeCertified && mathStatus({ ...p.sim, teams: p.sim.teams.map(t => t.rosterId === league.you!.rosterId ? { ...t, wins: t.wins + 1 } : t), remaining: p.sim.remaining.filter(g => !(g.week === game.week && ((g.a === game.a && g.b === game.b) || (g.a === game.b && g.b === game.a)))) }, league.you.rosterId) === 'clinched',
       helpIfLose,
       rooting,
     }

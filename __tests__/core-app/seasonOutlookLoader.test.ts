@@ -108,6 +108,19 @@ beforeEach(() => {
 })
 
 describe('getSeasonOutlook', () => {
+  it('withholds exact status when any regular-season period is missing',async()=>{
+    const fullField={...LEAGUE,settings:{...LEAGUE.settings,playoff_teams:8}}
+    expect((await getSeasonOutlook('me',[fullField])).leagues[0].you?.status).toBe('clinched')
+    h.matchups=h.matchups.filter(r=>r.week!==6)
+    const partial=await getSeasonOutlook('me',[fullField])
+    expect(partial.leagues[0].you).toMatchObject({playoffPct:100,status:null})
+    expect(partial.summary.clinched).toBe(0)
+  })
+  it('withholds exact status when a known team has no schedule rows',async()=>{
+    h.teams.push({externalId:'9',teamName:null,claimedByUserId:null,league:{id:'L1',platformLeagueId:PID}})
+    const fullField={...LEAGUE,settings:{...LEAGUE.settings,playoff_teams:8}}
+    expect((await getSeasonOutlook('me',[fullField])).leagues[0].you?.status).toBeNull()
+  })
   it('never calls a 100% sampled forecast mathematically clinched',async()=>{
     await getSeasonOutlook('me',[LEAGUE])
     const held=h.cache.get(leagueSimCacheKey(`sleeper:${PID}`)) as {iterations:number;counts:Record<string,{playoff:number}>}

@@ -5,7 +5,7 @@ Both `/core/week` and its league scope now present verified weekly facts, a copy
 ## Correctness
 
 - Priorities and unitless matchup closeness order the universal board. Unlike sports are never ranked by raw point gaps; trailing games nearest contention appear first.
-- Low and unknown playoff odds no longer hide leagues. A 99% forecast does not mean clinched; exact status requires conservative arithmetic and supported league-stated rules.
+- Low and unknown playoff odds no longer hide leagues. A 99% forecast does not mean clinched; exact status requires conservative arithmetic, supported league-stated rules, all known teams and a complete regular-season schedule.
 - Historical scoring estimates, live scores and current lineup projections have distinct labels. Historical spread scales with scoring units.
 - Canonical league IDs constrain team ownership reads. Provider-qualified external IDs prevent collisions within the requested portfolio. Ambiguous legacy WeeklyMatchup rows are withheld because that table lacks provider provenance; canonical facts remain usable.
 - Native AF leagues use RedraftSeason, RedraftRoster and real RedraftMatchup rows without requiring external IDs. The season's stated playoff start determines the regular-season boundary; native median-game seasons are withheld from this forecast. Final zero-point ties remain final, preserve rivalry records and count in season totals. Forecast standings assume half-win credit per final tie, then points for, as disclosed.

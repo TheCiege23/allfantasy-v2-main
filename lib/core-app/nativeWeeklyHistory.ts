@@ -28,7 +28,7 @@ export async function readNativeWeeklyHistory(userId: string, leagueIds: string[
     const home = byId.get(g.homeRosterId), away = g.awayRosterId ? byId.get(g.awayRosterId) : null
     if (!home) continue
     const rosterId = (r: typeof home) => currentRoster.get(`${r.leagueId}:${r.ownerId}`) ?? r.id
-    const common = { leagueId: scope, seasonYear: g.season.season, week: g.week, matchupId: away ? i + 1 : null, finalized: g.status === 'final', scored: g.status === 'final' || g.homeScore !== 0 || g.awayScore !== 0 }
+    const common = { leagueId: scope, seasonYear: g.season.season, week: g.week, matchupId: away ? i + 1 : null, finalized: g.status === 'final', scored: Boolean(away && g.status === 'final') || g.homeScore !== 0 || g.awayScore !== 0 }
     rows.push({ ...common, rosterId: rosterId(home), pointsFor: g.homeScore, pointsAgainst: g.awayScore, win: g.status === 'final' && g.homeScore > g.awayScore ? 1 : 0 })
     if (away) rows.push({ ...common, rosterId: rosterId(away), pointsFor: g.awayScore, pointsAgainst: g.homeScore, win: g.status === 'final' && g.awayScore > g.homeScore ? 1 : 0 })
   }
