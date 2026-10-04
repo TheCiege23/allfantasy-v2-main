@@ -5,7 +5,7 @@ import CoreCardBoundary from '@/components/core-app/CoreCardBoundary'
 import { CardFreshness } from '@/components/core-app/home/CardFreshness'
 import { DecisionQueue } from '@/components/core-app/home/DecisionQueue'
 import { HomeActivity, HomePrefetch } from '@/components/core-app/home/HomeClientEffects'
-import { freshnessStamp, type CardFreshnessStamp } from '@/lib/core-app/cardFreshness'
+import { freshnessStamp, leagueDataStamp, type CardFreshnessStamp } from '@/lib/core-app/cardFreshness'
 import { rankDecisions } from '@/lib/core-app/decisionQueue'
 import type { HomeCardOrder } from '@/lib/core-app/homeCardOrder'
 import { homePrefetchTargets } from '@/lib/core-app/homePrefetchTargets'
@@ -184,40 +184,6 @@ function injuriesAt(data: Dash34Result | null): string | null {
 }
 
 /**
- * The stamp on every card built from league syncs.
- *
- * ⚠ THE OLDEST SYNC, NOT THE NEWEST. These cards cover every league in view at once, so one league
- * synced a minute ago said "updated 1m ago" over a portfolio whose other 59 leagues were days old —
- * a fresh timestamp laundering stale ones. The oldest is the only instant every row is at least as
- * new as. A league that has never synced makes the stamp stale whatever the others say; with none
- * synced at all it reads "not read yet". AllFantasy-native leagues have nothing to sync and are not
- * counted.
- */
-function leagueDataStamp(
-  input: { oldestAt: string | null; neverSynced: number; syncable: number; paused?: number },
-  now: Date,
-): CardFreshnessStamp {
-  if (input.syncable === 0 && input.paused) {
-    return { source: 'Account sync paused', asOf: null, label: null, stale: false, missingLabel: 'history retained' }
-  }
-  /*
-   * The warning has to say WHY. "⚠ Oldest league data updated 7 min ago" is a contradiction on its
-   * face when the reason is a league that has never been read — so that case names the count.
-   */
-  const unread = input.neverSynced > 0 && input.oldestAt
-    ? `${input.neverSynced} ${input.neverSynced === 1 ? 'league' : 'leagues'} never read · `
-    : ''
-  const scope = input.paused ? 'active league data' : 'league data'
-  const excluded = input.paused ? ` · ${input.paused} paused ${input.paused === 1 ? 'connection' : 'connections'} excluded` : ''
-  const source = `${unread}${input.syncable > 1 ? `Oldest ${scope}` : `${scope[0].toUpperCase()}${scope.slice(1)}`}${excluded}`
-  const stamp = freshnessStamp(source, input.oldestAt, now, {
-    staleRule: 'fantasy_league',
-    missing: input.syncable === 0 ? 'none-yet' : 'never-read',
-  })
-  return unread ? { ...stamp, stale: true } : stamp
-}
-
-/**
  * "Summary updated 2m ago" — only when the queue was served from the stored portfolio summary. A
  * summary built for this very render is not worth a line. One served past its TTL while it rebuilds
  * (`last-known`) is marked stale, whatever its age: its rows may already be out of date.
@@ -225,7 +191,7 @@ function leagueDataStamp(
 function summaryStamp(data: { summary?: PortfolioSummaryMeta } | null, now: Date): CardFreshnessStamp | null {
   const meta = data?.summary
   if (!meta || meta.source === 'live') return null
-  return { ...freshnessStamp('Summary', meta.builtAt, now), stale: meta.source === 'last-known' }
+  return { ...freshnessStamp('Summary', meta.builtAt, now, { parts: { kind: 'summary' } }), stale: meta.source === 'last-known' }
 }
 
 function Stamps({ stamps }: { stamps: CardFreshnessStamp[] }) {
@@ -278,7 +244,7 @@ async function DecisionsCard({
         <Stamps
           stamps={[
             rostersStamp,
-            freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries' }),
+            freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries', parts: { kind: 'injuries' } }),
             ...(summaryStamp(data, now) ? [summaryStamp(data, now)!] : []),
           ]}
         />
@@ -340,7 +306,9 @@ async function TriageCard({ dash34, now }: { dash34: HomeLoads['dash34']; now: D
       book={(data.book ?? null) as unknown as TriageBookRow[] | null}
       now={now}
       valueBasis={data.valueBasis ?? null}
-      freshness={<Stamps stamps={[freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries' })]} />}
+      freshness={
+        <Stamps stamps={[freshnessStamp('Injury feed checked', injuriesAt(data), now, { staleRule: 'injuries', parts: { kind: 'injuries' } })]} />
+      }
     />
   )
 }
@@ -380,7 +348,9 @@ async function MatchupsCard({
       week={weekAll}
       winProb={probabilities}
       weekLabel={data.weekLabel ?? null}
-      freshness={<Stamps stamps={[freshnessStamp('Scores', weekAll?.scoresAt ?? null, now, { missing: 'none-yet' })]} />}
+      freshness={
+        <Stamps stamps={[freshnessStamp('Scores', weekAll?.scoresAt ?? null, now, { missing: 'none-yet', parts: { kind: 'scores' } })]} />
+      }
     />
   )
 }
@@ -489,7 +459,7 @@ export function CoreHomeCards({
   scope: HomeScopeInfo
   /**
    * The "League data" stamp's inputs, over the syncable leagues in scope: the OLDEST sync, and how
-   * many have never synced at all. See `leagueDataStamp`.
+   * many have never synced at all. See `leagueDataStamp` (lib/core-app/cardFreshness.ts).
    */
   leagueData: { oldestAt: string | null; neverSynced: number; syncable: number; paused?: number }
   /** Per-viewer card order — lib/core-app/homeCardOrder.ts. */
