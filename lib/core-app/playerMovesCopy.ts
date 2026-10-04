@@ -26,8 +26,12 @@ const SCREEN_ES: Record<MoveScreen, string> = {
   Waivers: coreUiCopy('Waivers', 'es'),
 }
 
-/** The lineup slot a player sits in (playerImpact.ts `slot`); a position ("TE", "SUPER_FLEX") stays. */
-const SLOT_ES: Record<string, string> = { STARTER: 'TITULAR', BENCH: 'BANCA', 'IR SLOT': 'PUESTO IR' }
+/**
+ * The lineup slot a player sits in (playerImpact.ts `slot`, playerFinder.ts `LeagueSlot.slot`); a
+ * position ("TE", "SUPER_FLEX") and TAXI stay — the help topics keep TAXI too. NOT YOURS is the
+ * finder table's chip on a league where another manager has him (2026-10-04).
+ */
+const SLOT_ES: Record<string, string> = { STARTER: 'TITULAR', BENCH: 'BANCA', 'IR SLOT': 'PUESTO IR', 'NOT YOURS': 'NO ES TUYO' }
 
 export function slotText(slot: string, language: string): string {
   return language === 'es' ? (SLOT_ES[slot] ?? slot) : slot
