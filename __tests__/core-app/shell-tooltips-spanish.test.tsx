@@ -37,7 +37,7 @@ import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
 import { Dashboard3A } from '@/components/core-app/screens/Dashboard3A'
 import { TriageLineupLinks } from '@/components/core-app/player-finder/TriageLineupLinks'
 import { publishRailCareerLines } from '@/lib/core-app/railCareerChannel'
-import { careerLineText } from '@/lib/core-app/shellCopy'
+import { badgeText, careerLineText } from '@/lib/core-app/shellCopy'
 
 afterEach(() => {
   cleanup()
@@ -164,6 +164,46 @@ describe('the expanded rail, every row shape', () => {
       'ESPN did not return a matchup schedule for this league', 'Your account', 'Profile & settings', 'Skip to content', '3 leagues']) {
       expect(t, en).toContain(en)
     }
+  })
+})
+
+describe('badges — LIVE and the rankings level', () => {
+  const withLive = (language: 'en' | 'es') => {
+    h.language = language
+    return render(
+      <AfCoreShell
+        active="home"
+        leagues={LEAGUES as never}
+        syncAge={{ label: 'just now', stale: false }}
+        syncEligibleCount={0}
+        liveGameCount={3}
+        draftLive
+        rankingsLevel={12}
+      >
+        <div>screen</div>
+      </AfCoreShell>,
+    ).container
+  }
+  const badges = (c: HTMLElement) => [...c.querySelectorAll('.af-nav-badge')].map((e) => e.textContent)
+
+  it('reads Spanish: the rail’s live state, Draft HQ’s running draft and the level', () => {
+    const c = withLive('es')
+    expect(c.querySelector('.af-rail-live-state')?.textContent).toMatch(/^EN VIVO/)
+    expect(badges(c)).toEqual(expect.arrayContaining(['EN VIVO', 'NIV 12', '3']))
+    expect(c.textContent).not.toMatch(/\bLIVE\b|\bLVL\b/)
+  })
+
+  it('CONTROL — English badges unchanged', () => {
+    const c = withLive('en')
+    expect(c.querySelector('.af-rail-live-state')?.textContent).toMatch(/^LIVE/)
+    expect(badges(c)).toEqual(expect.arrayContaining(['LIVE', 'LVL 12', '3']))
+  })
+
+  it('badgeText: words translate, counts pass through', () => {
+    expect(badgeText('LIVE', 'es')).toBe('EN VIVO')
+    expect(badgeText('LVL 7', 'es')).toBe('NIV 7')
+    expect(badgeText('12', 'es')).toBe('12')
+    expect(badgeText('LIVE', 'en')).toBe('LIVE')
   })
 })
 
