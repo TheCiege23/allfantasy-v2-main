@@ -65,6 +65,8 @@ const { withSyncJobRunMock, syncRuns, prismaMock, fetchGamesForSportMock, syncAP
   })
 
 vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({ withSyncJobRun: withSyncJobRunMock }))
+const scoreAlertsMock = vi.hoisted(() => vi.fn(async () => ({ games: 1, events: 1, sent: 1, recipients: 2, capped: 0, alreadySent: 0 })))
+vi.mock('@/lib/follows/teamScoreAlerts', () => ({ dispatchTeamScoreAlerts: scoreAlertsMock }))
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('@/lib/api-sports', () => ({
   syncAPISportsGamesToDb: syncAPISportsGamesToDbMock,
@@ -165,6 +167,26 @@ describe('import-scores heartbeat contract', () => {
     expect(outcome.warnings ?? []).toHaveLength(0)
     expect(outcome.errors ?? []).toHaveLength(0)
     expect(outcome.metadata?.gatedSports?.length).toBeGreaterThan(0)
+  })
+
+  it('runs the followed-team score alerts after the sports and reports them in metadata', async () => {
+    gateIsClosed()
+    await importScoresGET(req('/api/cron/import-scores'))
+
+    expect(scoreAlertsMock).toHaveBeenCalledTimes(1)
+    const outcome = syncRuns[0]!.outcome as { metadata?: { scoreAlerts?: { sent?: number } } }
+    expect(outcome.metadata?.scoreAlerts?.sent).toBe(1)
+  })
+
+  it('a failing score-alert path never fails the scores run', async () => {
+    gateIsClosed()
+    scoreAlertsMock.mockRejectedValueOnce(new Error('boom'))
+    const res = await importScoresGET(req('/api/cron/import-scores'))
+
+    expect(res.status).toBe(200)
+    const outcome = syncRuns[0]!.outcome as { errors?: string[]; metadata?: { scoreAlerts?: { error?: string } } }
+    expect(outcome.errors ?? []).toHaveLength(0)
+    expect(outcome.metadata?.scoreAlerts?.error).toBe('boom')
   })
 
   it('keeps the single-sport response shape for explicit ?sport= callers', async () => {

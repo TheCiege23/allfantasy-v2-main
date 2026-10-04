@@ -55,13 +55,24 @@ export const TEAM_FOLLOW_ALERTS_PER_DAY = 8
 
 /** The subset of `userIds` still under today's team-alert cap; each one kept is counted. */
 export async function withinTeamFollowDailyCap(userIds: readonly string[]): Promise<string[]> {
+  return withinDailyCap(userIds, { provider: 'team_follow_alerts', limit: TEAM_FOLLOW_ALERTS_PER_DAY })
+}
+
+/**
+ * The subset of `userIds` still under today's cap for one alert family (`provider` keys the counter,
+ * so news and scores are capped separately). Each id kept is counted.
+ */
+export async function withinDailyCap(
+  userIds: readonly string[],
+  cap: { provider: string; limit: number },
+): Promise<string[]> {
   const kept: string[] = []
   for (const id of userIds) {
     try {
       const r = await consumeDailyLimit({
-        provider: 'team_follow_alerts',
+        provider: cap.provider,
         endpoint: `tf:${createHash('sha256').update(id).digest('hex').slice(0, 24)}`,
-        callsLimit: TEAM_FOLLOW_ALERTS_PER_DAY,
+        callsLimit: cap.limit,
       })
       if (r.success) kept.push(id)
     } catch {

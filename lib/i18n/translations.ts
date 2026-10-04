@@ -2195,9 +2195,10 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.notifications.category.autocoach": "Chimmy AutoCoach lineup swaps",
     "settings.notifications.category.followed_players": "Players you follow — injuries & news",
     "settings.notifications.category.followed_teams": "Teams you follow — news & injuries",
+    "settings.notifications.category.followed_team_scores": "Teams you follow — scores",
     "follows.prompt.title": "Follow your teams",
     "follows.prompt.body":
-      "Pick the teams you root for. We'll send news and injury updates for them and their players — not the whole league.",
+      "Pick the teams you root for. We'll send news and injury updates for them and their players, and scores for football teams — not the whole league.",
     "follows.prompt.sportsAria": "Sports",
     "follows.prompt.search": "Search teams",
     "follows.prompt.loading": "Loading teams…",
@@ -2214,7 +2215,7 @@ export const translations: Record<string, Record<string, string>> = {
     "follows.sport.NCAAB": "College Basketball",
     "follows.settings.title": "Teams you follow",
     "follows.settings.body":
-      "News and injury updates for these teams and their players — not the whole league. Turn them on or off with the \"Teams you follow\" alert below. At most 8 a day.",
+      "News and injury updates for these teams and their players, plus halftime and final scores for NFL and college football — not the whole league. News and scores each have their own \"Teams you follow\" switch below.",
     "follows.settings.none": "You're not following any teams yet.",
     "follows.settings.add": "Add teams",
     "follows.settings.retry": "Try again",
