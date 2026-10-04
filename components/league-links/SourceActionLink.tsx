@@ -9,8 +9,14 @@
  */
 import type { CSSProperties } from 'react'
 import { ExternalLink } from 'lucide-react'
-import { resolveSourceLink, type SourceLink, type SourceLinkContext } from '@/lib/league-links/sourceLinkResolver'
+import {
+  resolveSourceLink,
+  sourceLinkLabel,
+  type SourceLink,
+  type SourceLinkContext,
+} from '@/lib/league-links/sourceLinkResolver'
 import { IMPORTED_LEAGUE_READONLY_NOTE } from '@/lib/league-links/readOnlyNote'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * ⚠ THE CONTEXT IS `Partial` BECAUSE `link` AND `platform` ARE ALTERNATIVES, NOT
@@ -33,9 +39,12 @@ export function SourceActionLink({ className, style, link, hideIcon, ...ctx }: S
    * A caller with neither a link nor a platform gets nothing rendered, which is
    * the same outcome as a native league — never a broken or guessed href.
    */
+  const { language } = useOptionalLanguage()
   const resolved =
     link ?? (ctx.platform != null ? resolveSourceLink(ctx as SourceLinkContext) : null)
   if (!resolved) return null
+  // The label in the reader's language — the visible text and the tooltip (2026-10-03).
+  const label = sourceLinkLabel(resolved, language)
   return (
     <a
       href={resolved.href}
@@ -46,8 +55,10 @@ export function SourceActionLink({ className, style, link, hideIcon, ...ctx }: S
       data-source-fallback={resolved.isFallback ? 'true' : 'false'}
       title={
         resolved.isFallback
-          ? `${resolved.label} — a direct league link wasn't available, opening the platform home`
-          : resolved.label
+          ? language === 'es'
+            ? `${label} — no había un enlace directo a la liga; se abre la página principal de la plataforma`
+            : `${label} — a direct league link wasn't available, opening the platform home`
+          : label
       }
       className={
         className ??
@@ -55,7 +66,7 @@ export function SourceActionLink({ className, style, link, hideIcon, ...ctx }: S
       }
       style={style}
     >
-      <span className="truncate">{resolved.label}</span>
+      <span className="truncate">{label}</span>
       {hideIcon ? null : <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
     </a>
   )
@@ -63,9 +74,12 @@ export function SourceActionLink({ className, style, link, hideIcon, ...ctx }: S
 
 /** Concise, reusable read-only disclosure. Use once per surface — never on every card. */
 export function ReadOnlyLeagueNote({ className, style }: { className?: string; style?: CSSProperties }) {
+  const { language } = useOptionalLanguage()
   return (
     <p className={className} style={style}>
-      {IMPORTED_LEAGUE_READONLY_NOTE}
+      {language === 'es'
+        ? 'AllFantasy analiza y recomienda. Los cambios en las ligas importadas se hacen en la plataforma original.'
+        : IMPORTED_LEAGUE_READONLY_NOTE}
     </p>
   )
 }
