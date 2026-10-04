@@ -9,8 +9,9 @@ import type { TradeCardGrade } from '@/lib/league-chat/tradeCardGradeView'
  * Reading THE grade for a league chat trade card (see `tradeCardGradeView.ts` for why). The same two
  * reads League Buzz uses (`lib/activity/tradeGrades.ts`), so a trade reads the same letter in the
  * chat and in the feed:
- *   - an IMPORTED trade (a `LeagueTrade` row) — graded on the league's values today by the archived-trade
- *     grader, from the row's own side;
+ *   - an IMPORTED trade (a `LeagueTrade` row) — its FROZEN ORIGINAL grade, taken the first time
+ *     AllFantasy graded it (`frozenCompletedGrade.ts`), from the row's own side, players priced by
+ *     Sleeper id — the same letter /core Trades, the grade email and League Buzz show;
  *   - a NATIVE AllFantasy trade — the letters frozen into its receipt when it was proposed.
  *
  * Never throws: null means there is no grade to show, and the writer posts exactly what it did before.
@@ -31,12 +32,19 @@ function picks(raw: unknown): Array<{ season: number | null; round: number | nul
  * An imported trade, from the side of the `LeagueTrade` row the card is written from: what that
  * manager received against what they gave. Only two-team trades are graded; a player the row names by
  * an id we cannot resolve withholds the grade (the grader says which), never a guess.
+ *
+ * 🛑 UNTIL 2026-10-03 THIS RE-GRADED ON TODAY'S VALUES, BY NAME. No `original`, so a card posted after
+ * the market moved could carry a different letter from the one every other surface showed for the same
+ * trade — and name-only players could not have matched a frozen row, which is keyed by Sleeper id.
  */
 export async function gradeImportedTradeCard(args: {
+  /** The AllFantasy league row — the copy the grade is priced and frozen on. */
   leagueId: string
-  /** Player NAMES, null where the id did not resolve. */
-  received: ReadonlyArray<string | null>
-  gave: ReadonlyArray<string | null>
+  /** Sleeper's transaction id (`LeagueTrade.transactionId`) — what the frozen original is keyed on. */
+  tradeId: string
+  /** Each player by NAME (null where the id did not resolve) and the Sleeper id the row keys him by. */
+  received: ReadonlyArray<{ name: string | null; sleeperId: string }>
+  gave: ReadonlyArray<{ name: string | null; sleeperId: string }>
   picksReceived: unknown
   picksGiven: unknown
   teams: number
@@ -50,13 +58,16 @@ export async function gradeImportedTradeCard(args: {
       picksIn: picks(args.picksReceived),
       picksOut: picks(args.picksGiven),
       currentSeason: args.now.getUTCFullYear(),
+      // The trade's frozen original — the same letter its email, history and League Buzz show.
+      original: { afLeagueId: args.leagueId, tradeId: args.tradeId, now: args.now },
     })
     if (!g.graded) return { graded: false, reason: g.reason }
     return {
       graded: true,
       letter: g.letter,
       partnerLetter: g.partnerLetter,
-      basis: 'today',
+      // No `frozenAt` means the original could not be stored, so the letter is today's and says so.
+      ...(g.frozenAt ? { basis: 'first-graded' as const, frozenAt: g.frozenAt } : { basis: 'today' as const }),
       valueGave: g.giveValue,
       valueGot: g.getValue,
     }
