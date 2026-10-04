@@ -23,6 +23,7 @@ import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import { InfoTip } from '@/components/core-app/InfoTip'
+import { kickoffText } from '@/lib/core-app/kickoffText'
 import { myTeamCardReasonText, myTeamReasonText, scoringNoteText } from '@/lib/core-app/myTeamReasonText'
 
 export type MyTeamProps = {
@@ -205,15 +206,21 @@ function posGroup(label: string | null | undefined): string {
  * reads "WAS vs IND" over "Sun 9:30a ET ☁ 61°" at the same 31px height, with no
  * overflow. Desktop keeps the one line and its separator (af-my-team.css).
  */
+/**
+ * "DEN vs MIA · Thu 10/1 8:15p ET". Built on the server (`formatKickoff` in myTeam.ts) with the
+ * locale pinned so it hydrates, so the kickoff is translated here, at render — «jue 1/10 8:15p ET».
+ * The team codes and "vs"/"@" read the same in Spanish.
+ */
 function GameContext({ text }: { text: string | null }) {
-  if (!text) return <>no game found for this week</>
+  const { language } = useOptionalLanguage()
+  if (!text) return <>{language === 'es' ? 'no se encontró partido esta semana' : 'no game found for this week'}</>
   const at = text.indexOf(' · ')
-  if (at < 0) return <>{text}</>
+  if (at < 0) return <>{kickoffText(text, language)}</>
   return (
     <>
       <span className="af-mt-opp">{text.slice(0, at)}</span>
       <span className="af-mt-sep"> · </span>
-      <span className="af-mt-when">{text.slice(at + 3)}</span>
+      <span className="af-mt-when">{kickoffText(text.slice(at + 3), language)}</span>
     </>
   )
 }
