@@ -17,6 +17,13 @@ beforeEach(() => {
   db.rosters.mockResolvedValue([{ id: 'roster', playerData: { players: ['existing'] } }])
 })
 describe('durable draft archive events', () => {
+  it('uses the verified start timestamp as the projection cutoff and clock origin', async () => {
+    const startedAt = new Date('2026-09-01T00:00:00Z')
+    db.update.mockResolvedValue({ ...session, startedAt })
+    await updateSessionWithArchive(session, { status: 'in_progress' }, 'start')
+    expect(tx.aFProjectionSnapshot.findMany.mock.calls[0][0].where.computedAt.lte).toEqual(startedAt)
+    expect(db.create.mock.calls[0][0].data.createdAt).toEqual(startedAt)
+  })
   it('freezes original rules and existing roster data inside the start transaction', async () => {
     await updateSessionWithArchive(session, { status: 'in_progress' }, 'start')
     expect(db.transaction).toHaveBeenCalledOnce()

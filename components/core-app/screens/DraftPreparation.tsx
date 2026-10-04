@@ -98,8 +98,11 @@ export function DraftPreparation({
     "af-draft-preparation-v1:" + (data.preferenceScope ?? "unavailable");
   const pending = useRef(Promise.resolve());
   const revision = useRef(0);
+  const activeScope = useRef({ active: true });
   const [sync, setSync] = useState("idle");
   useEffect(() => {
+    const scope = { active: true };
+    activeScope.current = scope;
     revision.current++;
     setSync(data.planningPreferenceState === "error" ? "error" : "idle");
     try {
@@ -112,7 +115,7 @@ export function DraftPreparation({
       setPersonal([]);
       setSpread("adp");
     }
-    return () => { revision.current++; };
+    return () => { scope.active = false; };
   }, [storageKey, data.planningPreference, data.planningPreferenceState]);
   const save = (order: string[], mode: string) => {
     setPersonal(order);
@@ -129,11 +132,12 @@ export function DraftPreparation({
     const value = draftPlanningPreference({ order, spread: mode });
     if (!value || !data.sessionId || !data.preferenceScope) return;
     const sequence = ++revision.current;
+    const scope = activeScope.current;
     setSync("saving");
     // Serialize writes so an earlier request cannot overwrite the latest order.
     pending.current = pending.current.then(async () => {
       const result = await saveDraftPlanningPreference(leagueId, data.sessionId!, value).catch(() => ({ ok: false }));
-      if (revision.current === sequence) setSync(result.ok ? "saved" : "error");
+      if (scope.active && revision.current === sequence) setSync(result.ok ? "saved" : "error");
     });
   };
   const ordered = useMemo(() => {
