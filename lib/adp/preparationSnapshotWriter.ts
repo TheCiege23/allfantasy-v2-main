@@ -6,6 +6,7 @@ import {
   preparationFormatKey,
   preparationPlayerKey,
   type PreparationSnapshot,
+  type PreparationContext,
 } from "@/lib/core-app/draftPreparationModel";
 import { isDraftPickRowEmpty } from "@/lib/live-draft-engine/draftPickEmpty";
 
@@ -76,14 +77,19 @@ export function preparationSnapshotGroups(
       !["snake", "linear"].includes(row.session.draftType)
     )
       continue;
-    const context = preparationContext(row.session.league, row.session);
+    const metadata = row.pickMetadata && typeof row.pickMetadata === 'object' ? row.pickMetadata as Record<string, unknown> : {};
+    const archive = metadata.archive && typeof metadata.archive === 'object' ? metadata.archive as Record<string, unknown> : {};
+    const frozen = typeof archive.eventId === 'string' && archive.context ? archive.context as PreparationContext : null;
+    const context = frozen ?? preparationContext(row.session.league, row.session);
     if (!context) continue;
-    const key = preparationFormatKey(context);
+    const proof = frozen ? 'draft_start_snapshot' : 'observed_settings';
+    const key = preparationFormatKey(context) + ':' + proof;
     let group = groups.get(key);
     if (!group) {
       group = {
         snapshot: {
           version: 1,
+          contextProvenance: proof,
           provider: "AllFantasy",
           context,
           observedAt: observedAt.toISOString(),
@@ -150,6 +156,8 @@ export async function persistPreparationSnapshotHistory(
 ): Promise<string[]> {
   const errors: string[] = [];
   for (const snapshot of preparationSnapshotGroups(rows, observedAt)) {
+    // Older native rows cannot establish original rules from the league's current settings.
+    if (snapshot.contextProvenance !== 'draft_start_snapshot') continue;
     try {
       await prisma.aiAdpSnapshotHistory.create({
         data: {
@@ -164,7 +172,7 @@ export async function persistPreparationSnapshotHistory(
             0,
           ),
           runMeta: {
-            schemaVersion: "hq-adp-v1",
+            schemaVersion: "hq-adp-v2",
             provider: "AllFantasy",
             coverage: "native_observed_context",
             externalRights: "not_applicable",

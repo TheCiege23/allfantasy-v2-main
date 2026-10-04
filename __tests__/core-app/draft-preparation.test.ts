@@ -44,6 +44,7 @@ const entry = {
 };
 const snapshot: PreparationSnapshot = {
   version: 1,
+  contextProvenance: 'draft_start_snapshot',
   provider: "AllFantasy",
   context,
   observedAt: "2026-08-01T00:00:00Z",

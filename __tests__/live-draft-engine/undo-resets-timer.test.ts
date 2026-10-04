@@ -13,6 +13,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+// This suite isolates timer policy. Archive transaction persistence has its own suite.
+vi.mock('@/lib/draft-archive/events', () => ({ recordArchiveEvent: vi.fn().mockResolvedValue({}) }))
 
 // ---------------------------------------------------------------------------
 // Hoisted store + Prisma mock

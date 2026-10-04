@@ -115,6 +115,8 @@ import WaiversBoard from '@/components/core-app/boards/WaiversBoard'
 import DraftHqBoard from '@/components/core-app/boards/DraftHqBoard'
 import { getLiveDraftPicks } from '@/lib/core-app/warRoomBoard'
 import { getDraftHqData } from '@/lib/core-app/draftHq'
+import { getDraftArchiveScreen } from '@/lib/draft-archive/screen'
+import { DraftArchive } from '@/components/core-app/screens/DraftArchive'
 import { loadDraftEdgeForScreen } from '@/lib/competitive-edge/draftEdgeLoader'
 import { getDraftBoardData } from '@/lib/core-app/draftBoard'
 import Scout from '@/components/core-app/screens/Scout'
@@ -2830,8 +2832,16 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
 
   /* Same split: on null this screen renders the cross-league board or the picker. */
   let draftHqLoadFailed = false
+  const draftArchive = activeKey === 'draft-hq'
+    ? await getDraftArchiveScreen(playedLeagues.map(l => l.id), selectedLeagueId ?? null, userId, sp).catch((e: unknown) => {
+        console.error('[core/draft-archive] read failed', e)
+        draftHqLoadFailed = true
+        return null
+      })
+    : null
+  const draftArchiveSlot = draftArchive ? <DraftArchive {...draftArchive} /> : null
   const draftHq =
-    activeKey === 'draft-hq' && selectedLeagueId
+    activeKey === 'draft-hq' && selectedLeagueId && !draftHqLoadFailed && draftArchive?.showCurrent !== false
       ? await getDraftHqData(selectedLeagueId, userId, leagueCtx).catch((e: unknown) => {
           console.error('[core/draft-hq] read failed', e)
           draftHqLoadFailed = true
@@ -2851,7 +2861,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * board settings — see `draftBoard.ts` for why it moved off the War Room.
    */
   const draftBoard =
-    activeKey === 'draft-hq' && selectedLeagueId
+    activeKey === 'draft-hq' && selectedLeagueId && !draftHqLoadFailed && draftArchive?.showCurrent !== false
       ? await getDraftBoardData(selectedLeagueId, userId, leagueCtx).catch(() => null)
       : null
 
@@ -4614,25 +4624,28 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
                 said "no draft has been set up" — three times above Draft HQ's own record of the
                 draft the league already ran. */}
             {draftBoard?.session.available ? <DraftBoard data={draftBoard} /> : null}
+            {draftArchiveSlot}
             <DraftHq data={draftHq} edge={draftEdge} edgeAccess={draftEdgeAccess} />
           </>
+        ) : selectedLeagueId && draftArchiveSlot ? (
+          draftArchiveSlot
         ) : draftHqLoadFailed ? (
           <ScreenLoadError screen="Draft HQ" retryHref={retryHref} />
         ) : showAllLeagues || !homeDrafts ? (
-          <PickALeague
+          <>{draftArchiveSlot}<PickALeague
             tabKey="draft-hq"
             title="Draft HQ"
             blurb="Draft order, pick slots and board settings are all per-league."
             issues={issues}
             leagues={rail}
-          />
+          /></>
         ) : (
-          <DraftHqBoard
+          <>{draftArchiveSlot}<DraftHqBoard
             data={homeDrafts}
             allHref="/core/draft-hq?all=1"
             totalLeagues={playedLeagues.length}
             picks={liveDraftPicks}
-          />
+          /></>
         )
       ) : activeKey === 'war-room' ? (
         /*

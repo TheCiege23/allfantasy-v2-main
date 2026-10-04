@@ -17,6 +17,7 @@ import { computeTimerEndAt } from '@/lib/live-draft-engine/DraftTimerService'
 import { getSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
 import { processWinningContractBid } from '@/lib/salary-cap/ContractBidService'
 import { CURRENT_DRAFT_SESSION_ORDER } from '@/lib/draft-room/currentDraftSession'
+import { recordArchiveEvent, updateSessionWithArchive, json } from '@/lib/draft-archive/events'
 
 const DEFAULT_BUDGET = 200
 const DEFAULT_MIN_BID = 1
@@ -175,16 +176,10 @@ async function _nominatePlayerCore(
     minNextBid,
   }
 
-  await prisma.draftSession.update({
-    where: { id: session.id },
-    data: {
-      auctionState: newState as any,
-      timerEndAt: bidTimerEndAt,
-      pausedRemainingSeconds: null,
-      version: { increment: 1 },
-      updatedAt: new Date(),
-    },
-  })
+  await updateSessionWithArchive(session, {
+    auctionState: newState as any, timerEndAt: bidTimerEndAt,
+    pausedRemainingSeconds: null, version: { increment: 1 }, updatedAt: new Date(),
+  }, 'auction_nomination', { nomination: newState.currentNomination, nominatorRosterId })
   return { success: true }
 }
 
@@ -258,16 +253,10 @@ async function _placeBidCore(
     minNextBid: amount + config.minBidIncrement,
   }
 
-  await prisma.draftSession.update({
-    where: { id: session.id },
-    data: {
-      auctionState: newState as any,
-      timerEndAt: bidTimerEndAt,
-      pausedRemainingSeconds: null,
-      version: { increment: 1 },
-      updatedAt: new Date(),
-    },
-  })
+  await updateSessionWithArchive(session, {
+    auctionState: newState as any, timerEndAt: bidTimerEndAt,
+    pausedRemainingSeconds: null, version: { increment: 1 }, updatedAt: new Date(),
+  }, 'auction_bid', { rosterId, amount })
   return { success: true }
 }
 
@@ -373,6 +362,7 @@ async function _resolveAuctionWinCore(
       const round = Math.ceil(overall / teamCount)
       const slot = ((overall - 1) % teamCount) + 1
 
+      const archived = await recordArchiveEvent(tx, session, 'selection', { overall, nextOverall: overall + 1, winnerRosterId, amount }, now)
       await (tx as any).draftPick.create({
         data: {
           sessionId: session.id,
@@ -389,6 +379,8 @@ async function _resolveAuctionWinCore(
           playerId: nomination.playerId ?? null,
           source: 'user',
           amount,
+          pickedAt: now,
+          pickMetadata: json({ archive: { eventId: archived.eventId, context: archived.context, timing: archived.selected, clockAllowanceSeconds: session.timerSeconds, selectionRosterId: winnerRosterId } }),
         },
       })
 
@@ -405,6 +397,7 @@ async function _resolveAuctionWinCore(
         },
       })
     } else {
+      await recordArchiveEvent(tx, session, 'auction_pass', { nomination }, now)
       await (tx as any).draftSession.update({
         where: { id: session.id },
         data: {

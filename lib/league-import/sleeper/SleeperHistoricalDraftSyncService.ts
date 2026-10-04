@@ -302,7 +302,7 @@ async function collectSleeperDraftFacts(args: {
         const metadata = {
           ...sleeperDraftArchiveMetadata({ sourceDraftId,
             sourceLeagueId: seasonLeague.externalLeagueId, season: seasonLeague.season,
-            draft: sourceDraft, league: seasonLeague.league, pick, tradedPicks,
+            draft: sourceDraft, league: seasonLeague.league, pick, tradedPicks, rosters: seasonRosters,
             includeDraftSnapshot: !draftProducedRows }),
           ...(ownerSleeperId ? { ownerSleeperId } : {}),
           ...(ownerSleeperId && coOwnerSleeperIds ? { coOwnerSleeperIds } : {}),

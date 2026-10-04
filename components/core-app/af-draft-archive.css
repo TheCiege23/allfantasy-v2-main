@@ -1,0 +1,22 @@
+.af-archive{padding:1rem;min-width:0;margin-bottom:1rem}
+.af-archive form,.af-archive-filters,.af-archive nav{display:flex;flex-wrap:wrap;gap:1rem;align-items:end;margin:1rem 0}
+.af-archive label{display:grid;gap:.4rem;min-width:0}
+.af-archive :is(input,select,button:not(.af-info-tip)){min-height:44px;max-width:100%;border:1px solid var(--border);border-radius:8px;padding:.5rem;background:var(--surface2);color:var(--text)}
+.af-archive-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem}
+.af-archive-table{overflow:auto;max-width:100%;overscroll-behavior-x:contain}
+.af-archive table{border-collapse:collapse;width:100%;min-width:1000px}
+.af-archive :is(th,td){text-align:left;padding:.6rem;border-bottom:1px solid var(--border);vertical-align:top}
+.af-archive small{display:block;opacity:.75}
+.af-archive pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:350px;overflow:auto;font-size:12px}
+.af-archive details{margin:.5rem 0}
+.af-archive summary{min-height:44px;cursor:pointer}
+.af-archive :is(a,button,input,select,summary):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.af-archive nav a{min-height:44px;display:inline-flex;align-items:center}
+.af-archive button:disabled{opacity:.4}
+.af-archive li{margin:.8rem 0}
+.af-archive-coverage{color:var(--text2);overflow-wrap:anywhere}
+@media(max-width:767px){.af-archive-summary{grid-template-columns:1fr}
+.af-archive form label{width:100%}
+.af-archive select{width:100%}
+.af-archive{padding:.75rem}
+}
