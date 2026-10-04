@@ -45,4 +45,12 @@ describe('draft archive authorization and attempt boundaries', () => {
     expect(JSON.stringify(result)).not.toContain('private-note')
     expect(db.corrections).not.toHaveBeenCalled()
   })
+  it('uses recorded team and actor names without loading current roster identities', async () => {
+    const startedAt = new Date('2026-09-01T00:00:00Z')
+    db.session.mockResolvedValue({ id: 'd', leagueId: 'l', status: 'completed', startedAt })
+    db.audit.mockResolvedValue({ createdAt: startedAt, afterState: { snapshot: { session: { slotOrder: [{ rosterId: 'original', displayName: 'Original recorded team' }] }, teams: [{ claimedByUserId: 'actor', ownerName: 'Recorded manager' }] } } })
+    db.picks.mockResolvedValue([{ id: 'p', overall: 1, round: 1, slot: 1, originalRosterId: 'original', rosterId: 'receiver', displayName: 'Receiving recorded team', ownerUserId: 'actor', playerName: 'Player', position: 'QB' }])
+    const result = await draftArchiveDetail('l', 'viewer', 'native:d')
+    expect(result?.picks[0]).toMatchObject({ originalTeamName: 'Original recorded team', actorName: 'Recorded manager', teamName: 'Receiving recorded team' })
+  })
 })

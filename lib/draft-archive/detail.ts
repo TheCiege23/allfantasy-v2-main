@@ -13,9 +13,11 @@ export type ArchivePick = {
     round: number;
     slot: number | null;
     originalRosterId: string | null;
+    originalTeamName?: string | null;
     rosterId: string | null;
     teamName: string | null;
     actor: string | null;
+    actorName?: string | null;
     playerId: string | null;
     playerName: string;
     position: string;
@@ -129,6 +131,11 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     const benchmark = context && startedAt ? validPreparationSnapshot(historicalBenchmark?.snapshotData, context, new Date(startedAt)) : null;
     const entries = new Map(benchmark?.entries.map(e => [e.playerKey, e]) ?? []);
     for (const pick of picks) {
+        pick.originalTeamName = native
+            ? string(order.find(t => string(t.rosterId) === pick.originalRosterId)?.displayName)
+            : string(object(providerRosters.find(t => string(t.roster_id) === pick.originalRosterId)?.metadata).team_name);
+        const recordedTeams = Array.isArray(nativeSnap.teams) ? nativeSnap.teams.map(object) : [];
+        pick.actorName = native && pick.actor ? string(recordedTeams.find(t => string(t.claimedByUserId) === pick.actor || string(t.platformUserId) === pick.actor)?.ownerName) : null;
         const entry = pick.playerId ? entries.get(preparationPlayerKey(pick.playerName, pick.position, pick.playerId)) : null;
         pick.adp = entry?.adp ?? null;
         pick.adpDifference = entry ? pick.overall - entry.adp : null;

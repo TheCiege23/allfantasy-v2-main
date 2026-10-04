@@ -14,7 +14,11 @@ async function main() {
     if (!detail || detail.choice.key !== choice.key) throw new Error('Archive binding check failed')
     checked++
   }
-  console.log(JSON.stringify({ leaguesScanned: leagues.length, archiveRecords: catalog.total, detailsChecked: checked }))
+  const coverage = await prisma.$queryRaw<Array<{ unresolvedPicks: number; unresolvedLeagues: number }>>`
+    SELECT COUNT(*)::int AS "unresolvedPicks",COUNT(DISTINCT f."leagueId")::int AS "unresolvedLeagues"
+    FROM dw_draft_facts f JOIN leagues l ON l.id=f."leagueId"
+    WHERE lower(l.platform)='sleeper' AND NULLIF(f.metadata->>'sourceDraftId','') IS NULL`
+  console.log(JSON.stringify({ leaguesScanned: leagues.length, archiveRecords: catalog.total, detailsChecked: checked, ...coverage[0] }))
 }
 main().catch((error: unknown) => {
   // Only print known schema/binding categories; DB errors can include connection identifiers.

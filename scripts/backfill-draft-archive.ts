@@ -16,12 +16,13 @@ async function main() {
   const apply = process.argv.includes('--apply')
   const target = identifyTarget(getDatabaseUrlOrThrow())
   if (apply && (target.kind === 'production' ? !process.argv.includes('--production') : target.kind !== 'safe')) throw new Error('Verified target required')
-  const limit = Math.max(1, Math.min(20, Number(process.argv.find(v => v.startsWith('--limit='))?.split('=')[1]) || 2))
+  const all = process.argv.includes('--all')
+  const limit = Math.max(1, Math.min(all ? 500 : 20, Number(process.argv.find(v => v.startsWith('--limit='))?.split('=')[1]) || (all ? 500 : 2)))
   const leagues = await prisma.$queryRaw<Array<{ id: string; platformLeagueId: string }>>(Prisma.sql`
     SELECT l.id,l."platformLeagueId" FROM leagues l WHERE lower(l.platform)='sleeper' AND l."platformLeagueId" IS NOT NULL
     AND EXISTS (SELECT 1 FROM dw_draft_facts f WHERE f."leagueId"=l.id AND NULLIF(f.metadata->>'sourceDraftId','') IS NULL)
     ORDER BY l.id LIMIT ${limit}`)
-  const report = { mode: apply ? 'apply' : 'dry-run', target: target.kind, leagues: leagues.length, examined: 0, matched: 0, unresolved: 0, updated: 0, conflicts: 0, failures: 0 }
+  const report = { mode: apply ? 'apply' : 'dry-run', target: target.kind, leagues: leagues.length, processed: 0, examined: 0, matched: 0, unresolved: 0, updated: 0, conflicts: 0, failures: 0 }
   for (const league of leagues) {
     try {
       const facts = await prisma.draftFact.findMany({ where: { leagueId: league.id }, orderBy: { draftId: 'asc' }, take: 10001 })
@@ -70,6 +71,8 @@ async function main() {
         report.updated += count; report.conflicts += Math.min(25, updates.length - offset) - count
       }
     } catch { report.failures++ }
+    report.processed++
+    if (all && report.processed % 20 === 0) console.log(JSON.stringify({ progress: true, ...report }))
   }
   console.log(JSON.stringify(report))
   if (report.failures || report.conflicts) process.exitCode = 1
