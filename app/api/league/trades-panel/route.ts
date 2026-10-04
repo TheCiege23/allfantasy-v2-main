@@ -41,6 +41,7 @@ import { teamLogoUrl } from '@/lib/core-app/teamLogo'
 import { getStoredTeamLogoResolver } from '@/lib/sport-teams/storedTeamLogos'
 import { getSleeperTradeHistory } from '@/lib/core-app/sleeperTradeHistory'
 import { importedTradeTimelineRows } from '@/lib/core-app/importedTradeTimeline'
+import { gradeProviderCompletedTrades } from '@/lib/provider-trades/providerCompletedGrades'
 
 export const dynamic = 'force-dynamic'
 
@@ -96,10 +97,10 @@ function openGradeFields(grade: TradeGradeView, side: 'viewer' | 'proposer') {
 }
 
 /**
- * Grade provider trades from the viewer's side (their `assetsGiven` is what they send).
+ * Grade OPEN provider offers from the viewer's side (their `assetsGiven` is what they send).
  *
- * `completed: true` grades a trade that already happened: on today's league values and WITHOUT roster
- * need — both rosters already hold the result, so "does this fill a hole" has no honest answer.
+ * A COMPLETED provider trade is not graded here: it shows its frozen original grade, as every other
+ * completed-trade surface does — see `gradeProviderCompletedTrades`.
  */
 /** Shown when the league grader could not run at all — a withheld grade, never another scale's letter. */
 const GRADE_UNAVAILABLE_REASON = 'This trade could not be graded just now.'
@@ -107,7 +108,6 @@ const GRADE_UNAVAILABLE_REASON = 'This trade could not be graded just now.'
 async function gradeProviderOffers(
   trades: PendingProviderTrade[],
   grader: GraderSource,
-  opts: { completed?: boolean } = {},
 ): Promise<Map<string, TradeGradeView>> {
   const out = new Map<string, TradeGradeView>()
   if (trades.length === 0) return out
@@ -116,7 +116,7 @@ async function gradeProviderOffers(
     out.set(t.transactionId, await gradeDeal(g, {
       give: gradeInputsFromPending(t.assetsGiven, t.provider ?? 'sleeper'),
       get: gradeInputsFromPending(t.assetsReceived, t.provider ?? 'sleeper'),
-      viewerSide: !opts.completed,
+      viewerSide: true,
     }))
   }))
   return out
@@ -825,10 +825,11 @@ function mapProviderTrades(
       const f = openGradeFields(g, 'viewer')
       if (trade.lifecycleStatus === 'complete') {
         /*
-         * A COMPLETED provider trade: THE grade on today's values is its "Now". It has no "Then" —
-         * nothing recorded a grade when it was proposed on the provider, and the canonical letter
-         * that used to sit here was computed today and labelled as the past. And it gets no
-         * accept/decline advice: the trade is done.
+         * A COMPLETED provider trade: its "Now" is THE grade — the frozen original, taken the first
+         * time AllFantasy graded it, with today's re-evaluation riding beside it as `current`
+         * (`gradeProviderCompletedTrades`). It has no "Then": nothing recorded a grade when it was
+         * proposed on the provider, and the canonical letter that used to sit here was computed today
+         * and labelled as the past. And it gets no accept/decline advice: the trade is done.
          */
         return {
           leagueGrade: f.leagueGrade,
@@ -1197,7 +1198,8 @@ export async function GET(req: NextRequest) {
   ])
   const [completedEvaluations, completedGrades] = await Promise.all([
     evaluatePendingProviderTrades({ leagueId, trades: providerCompleted }).catch(() => new Map()),
-    gradeProviderOffers(providerCompleted, grader, { completed: true }).catch(() => new Map<string, TradeGradeView>()),
+    // The frozen ORIGINAL, as /core Trades, the email and League Buzz show it — never re-graded on today's values.
+    gradeProviderCompletedTrades({ afLeagueId: leagueId, trades: providerCompleted }).catch(() => new Map<string, TradeGradeView>()),
   ])
 
   // Native first (the viewer can act on those); provider proposals follow.
