@@ -6,6 +6,7 @@ import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
 import { useEffect, useId, useState } from 'react'
 import '@/components/core-app/af-my-team.css'
+import { lineupDecision } from '@/lib/core-app/lineupDecision'
 import { BENCH_SWAP_POINTS } from '@/lib/core-app/rosterSlots'
 import { summariseLineupCheck, type LineupCheck, type LineupCheckItem } from '@/lib/core-app/lineupCheck'
 import { DISTANT_LOCK_DAYS } from '@/lib/core-app/lockLabel'
@@ -1590,6 +1591,12 @@ function ProjectionTiles({ proj, bestBall }: { proj: WeekProjection | null; best
 export function MyTeam({ data }: MyTeamProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
+  const [decisionNow, setDecisionNow] = useState(() => data.lock?.available ? data.lock.data.asOf ?? Date.now() : Date.now())
+  useEffect(() => {
+    setDecisionNow(Date.now())
+    const timer = setInterval(() => setDecisionNow(Date.now()), 30_000)
+    return () => clearInterval(timer)
+  }, [])
   // A streamed roster can arrive after the browser's native fragment lookup.
   // Re-check on mount/hash changes, never on routine lineup refreshes.
   useEffect(() => {
@@ -1621,17 +1628,11 @@ export function MyTeam({ data }: MyTeamProps) {
 
 
   const proj = data.projections.available ? data.projections.data : null
-  const decisionSlot = data.starters.available
-    ? data.starters.data.find((slot) => slot.empty || slot.player?.ruledOut || slot.player?.onBye)
-      ?? data.starters.data.find((slot) => slot.benchCheck?.verdict === 'swap')
-      ?? null
-    : null
-  const suggestedBench = decisionSlot?.benchCheck && data.bench.available
-    ? data.bench.data.find((player) => player.name === decisionSlot.benchCheck?.benchName) ?? null
-    : null
-  const leagueDelta = decisionSlot?.player?.afProjectedPoints != null && suggestedBench?.afProjectedPoints != null
-    ? suggestedBench.afProjectedPoints - decisionSlot.player.afProjectedPoints
-    : null
+  const { slot: decisionSlot, started: decisionStarted, replacementStarted, delta: leagueDelta } = lineupDecision(
+    data.starters.available ? data.starters.data : [],
+    data.bench.available ? data.bench.data : [],
+    decisionNow,
+  )
 
 
 
@@ -1710,7 +1711,9 @@ export function MyTeam({ data }: MyTeamProps) {
           <div>
             <span className="af-label">{copy('Lineup decision')}</span>
             <h2 id="af-mt-decision-title">
-              {decisionSlot?.empty
+              {decisionStarted
+                ? (language === 'es' ? `Revisa el cierre de ${decisionSlot?.player?.name}` : `Review ${decisionSlot?.player?.name}'s lock`)
+                : decisionSlot?.empty
                 ? `Fill your ${decisionSlot.slotLabel} slot`
                 : decisionSlot?.player?.ruledOut
                   ? `Replace ${decisionSlot.player.name}`
@@ -1721,19 +1724,29 @@ export function MyTeam({ data }: MyTeamProps) {
                       : copy('Review your starting lineup')}
             </h2>
             <p>
-              {decisionSlot?.empty
+              {decisionStarted || replacementStarted
+                ? (language === 'es'
+                  ? 'El partido del titular o de la opción de banca ya comenzó. Confirma los cierres y AutoSubs en tu plataforma; este aviso no garantiza que puedas cambiar la alineación.'
+                  : 'The starter or bench option has already reached kickoff. Confirm locks and AutoSubs on your platform; this notice does not establish that a lineup change is allowed.')
+                : decisionSlot?.empty
                 ? copy('An empty starting slot is a certain zero. Check eligibility and the player lock on your platform.')
                 : decisionSlot?.player?.ruledOut || decisionSlot?.player?.onBye
-                  ? `${decisionSlot.player.name} is ${decisionSlot.player.onBye ? 'on a bye' : 'ruled out'}. Check an eligible replacement before that player locks.`
+                  ? `${decisionSlot.player.name} is ${decisionSlot.player.onBye ? 'on a bye' : 'ruled out'}. Review replacement eligibility, individual locks, and AutoSubs on your platform.`
                   : decisionSlot?.benchCheck?.verdict === 'swap'
                     ? leagueDelta != null && leagueDelta > 0
                       ? `${decisionSlot.benchCheck.benchName} projects ${leagueDelta.toFixed(1)} more points under this league's scoring. Confirm injury status and eligibility first.`
-                      : copy('The standard projection favors the bench option. A reliable league-scored difference is unavailable, so review before swapping.')
+                      : leagueDelta != null
+                        ? (language === 'es'
+                          ? 'La puntuación de esta liga no favorece la opción de banca. No se recomienda un cambio con estas proyecciones.'
+                          : "This league's scoring does not favor the bench option. These projections do not support a swap.")
+                        : (language === 'es'
+                          ? 'La comparación sugiere una revisión, pero no se pudo confirmar la identidad o las proyecciones de esta liga. Actualiza antes de considerar un cambio.'
+                          : 'The bench check suggests a review, but the player identity or league-scored values could not be confirmed. Refresh before considering a swap.')
                     : data.starters.available
-                      ? copy('No certain empty, out, or bye slot was found in the lineup we could read. Check late injury news before lock.')
+                      ? copy('No empty, out, or bye slot was identified among the players we could read. Unresolved players and missing news may hide issues; confirm the lineup on your platform.')
                       : data.starters.reason}
             </p>
-            <small>{proj ? `Week ${proj.week} · ${proj.afProjected} of ${proj.projected} projected starters priced for this league` : copy('Projection coverage unavailable')}</small>
+            <small>{proj ? `Week ${proj.week} · ${proj.afProjected} of ${proj.projected + proj.unprojected} starters priced for this league` : copy('Projection coverage unavailable')}</small>
           </div>
           <div className="af-mt-decision-actions">
             <a className="af-btn af-btn--ghost" href="#af-mt-starters">{copy('Review starters')}</a>

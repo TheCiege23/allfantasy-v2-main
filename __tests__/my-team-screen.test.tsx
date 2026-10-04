@@ -874,3 +874,31 @@ it('shows automatic lineup guidance for a confirmed Best Ball league',()=>{
  expect(view.container.textContent).toContain('manual start/sit swaps are not needed')
  view.unmount()
 })
+
+describe('lineup decision card', () => {
+  const card = (value: MyTeamData) => render(<MyTeam data={value} />).container.querySelector('.af-mt-decision')?.textContent ?? ''
+  const swap = { verdict: 'swap' as const, starterName: 'Bo Nix', starterProjected: 19.8, benchName: 'Bench QB', benchProjected: 25 }
+  it('shows provider lock review for an out starter after kickoff', () => {
+    const t = card(data({ starters: { available: true, data: [{ slotLabel: 'QB', empty: false, unresolvedId: null, benchCheck: null, player: player({ ruledOut: true, kickoff: new Date(NOW.getTime() - 1) }) }] } }))
+    expect(t).toContain("Review Bo Nix's lock")
+    expect(t).toContain('does not establish that a lineup change is allowed')
+    expect(t).not.toContain('Replace Bo Nix')
+  })
+  it('says when league scoring disagrees with the standard bench check', () => {
+    const t = card(data({
+      starters: { available: true, data: [{ slotLabel: 'QB', empty: false, unresolvedId: null, benchCheck: swap, player: player() }] },
+      bench: { available: true, data: [player({ sleeperId: 'b1', name: 'Bench QB', afProjectedPoints: 18 })] },
+    }))
+    expect(t).toContain("This league's scoring does not favor the bench option")
+    expect(t).not.toContain('difference is unavailable')
+  })
+  it('includes unpriced starters in league projection coverage', () => {
+    const d = data()
+    if (!d.projections.available) throw new Error('fixture')
+    const t = card(data({ projections: { available: true, data: { ...d.projections.data, projected: 5, unprojected: 3, afProjected: 4 } } }))
+    expect(t).toContain('4 of 8 starters priced for this league')
+  })
+  it('does not show manual decisions for Best Ball', () => {
+    expect(card(data({ bestBall: true }))).toBe('')
+  })
+})
