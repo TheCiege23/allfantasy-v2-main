@@ -27,7 +27,7 @@
  *   SKIPPED (no row) — it keeps the v1 letter and the v1 wording. It is never guessed.
  */
 import type { TradeGradeView } from './tradeGrade'
-import type { FrozenCompletedGradeV1, FrozenCompletedGradeV2 } from './frozenCompletedGrade'
+import type { FrozenCompletedGradeV1, FrozenCompletedGradeV2, TradeDateBook } from './frozenCompletedGrade'
 
 type Graded = Extract<TradeGradeView, { graded: true }>
 
@@ -35,7 +35,7 @@ export type V1Pair = { afLeagueId: string; tradeId: string; row: FrozenCompleted
 
 /** What the grading step decided for one pair. A `trade_date` grade is oriented as `pair.row`. */
 export type RepriceOutcome =
-  | { kind: 'trade_date'; grade: Graded; pricedAsOf: string; tradeAt: string }
+  | { kind: 'trade_date'; grade: Graded; pricedAsOf: string; tradeAt: string; pricedBook?: TradeDateBook }
   | { kind: 'carried'; tradeAt: string }
   | { kind: 'first_graded'; tradeAt: string | null; why: string }
   | { kind: 'skip'; why: string }
@@ -135,7 +135,10 @@ export async function planFrozenGradeReprice(args: {
     const { current: _c, frozenAt: _f, frozenBasis: _b, pricedAsOf: _p, tradeAt: _t, ...grade } = outcome.grade
     rows.push({
       afLeagueId: pair.afLeagueId,
-      v2: { ...base, grade: grade as Graded, basis: 'trade_date', pricedAsOf: outcome.pricedAsOf, tradeAt: outcome.tradeAt },
+      v2: {
+        ...base, grade: grade as Graded, basis: 'trade_date', pricedAsOf: outcome.pricedAsOf, tradeAt: outcome.tradeAt,
+        ...(outcome.pricedBook ? { pricedBook: outcome.pricedBook } : {}),
+      },
     })
     report.tradeDate += 1
     const to = outcome.grade.letter

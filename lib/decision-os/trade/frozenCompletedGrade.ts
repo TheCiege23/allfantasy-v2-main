@@ -59,6 +59,16 @@ type Graded = Extract<TradeGradeView, { graded: true }>
 /** How a frozen original was priced: on the trade's own date, or on the values of the day it was first read. */
 export type FrozenGradeBasis = 'trade_date' | 'first_graded'
 
+/**
+ * WHICH BOARD priced a `trade_date` original — for audit; no surface reads it, and the label does not
+ * change with it:
+ *   - `league_live` — the league's own live chart (graded within a day of the trade);
+ *   - `league_profile` — the league's own FantasyCalc profile, captured daily (from 2026-10-04);
+ *   - `standard_12_ppr1` — FantasyCalc's 12-team PPR-1 book (`PlayerValueSnapshot`), the fallback.
+ * Absent on rows written before 2026-10-04 (all of which are `league_live` or `standard_12_ppr1`).
+ */
+export type TradeDateBook = 'league_live' | 'league_profile' | 'standard_12_ppr1'
+
 /** A v1 original: frozen on today's values the first time a surface read the trade. Read-only now. */
 export type FrozenCompletedGradeV1 = {
   v: 1
@@ -88,6 +98,8 @@ export type FrozenCompletedGradeV2 = {
   pricedAsOf: string
   /** When the trade happened (ISO), or null when it could not be told. */
   tradeAt: string | null
+  /** `trade_date` only: which board priced it (`TradeDateBook`). */
+  pricedBook?: TradeDateBook
   /**
    * NOT STORED. Set on read: the v1 original for the same trade, consulted only when this v2 row does
    * not match the reader's deal.
@@ -199,6 +211,8 @@ export type TradeDatePrice = {
   grade: Graded
   /** The capture day (YYYY-MM-DD) every asset was priced on, or the live-chart moment (ISO). */
   pricedAsOf: string
+  /** Which board priced it. Recorded on the frozen row. */
+  pricedBook?: TradeDateBook
 }
 
 /** The fields a surface needs to SAY when and how a frozen letter was priced (`gradeMoment`). */
@@ -271,6 +285,7 @@ export function withFrozenOriginal(args: {
     const { current: _c, frozenAt: _f, frozenBasis: _b, pricedAsOf: _p, tradeAt: _t, ...grade } = args.dated.grade
     const row: FrozenCompletedGradeV2 = {
       v: 2, tradeId, give, get, grade: grade as Graded, frozenAt, basis: 'trade_date', pricedAsOf: args.dated.pricedAsOf, tradeAt,
+      ...(args.dated.pricedBook ? { pricedBook: args.dated.pricedBook } : {}),
     }
     return { view: { ...row.grade, ...momentOf(row, tradeAt), current: today }, toFreeze: row }
   }

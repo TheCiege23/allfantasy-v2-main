@@ -36,6 +36,12 @@
  * minutes; that is why a demand-derived list is affordable where a per-request fetch was not.
  * If that ever changes, `limit` is the dial.
  *
+ * ⚠ IT ALSO WRITES EACH PROFILE'S DAILY CAPTURE (2026-10-04). The first successful warm of a UTC day
+ * stores that profile's board once (`captureFantasyCalcProfileDaily`), so a completed trade graded
+ * later is priced on its league's own profile from the trade date. If this cron stops, the captures
+ * stop with it and those trades fall back to the 12-team `PlayerValueSnapshot` book — never wrong,
+ * just less exact.
+ *
  * ⚠ A DEAD CRON HERE DEGRADES SAFELY, WHICH IS THE OPPOSITE OF THE `ingestCFBDStats` CASE.
  * `getFantasyCalcValuesDbFirst` is read-through: if this stops running, the tolerance lapses and
  * the next request fetches live — slower, but still FRESH and still correct. Nothing silently
@@ -77,11 +83,21 @@ async function handle(req: NextRequest) {
         rowsRead: result.attempted,
         rowsWritten: result.refreshed,
         rowsSkipped: result.skippedFresh,
-        errors: result.profiles.filter((p) => !p.ok).map((p) => `${p.cacheKey}: ${p.error}`),
+        errors: [
+          ...result.profiles.filter((p) => !p.ok).map((p) => `${p.cacheKey}: ${p.error}`),
+          ...result.profiles.filter((p) => p.captureError).map((p) => `${p.cacheKey} (daily capture): ${p.captureError}`),
+        ],
         // A truncated run is `partial`, not `success` — otherwise a vendor slow enough to eat the
         // deadline every time would report green forever while half the profiles went cold.
         ...(result.timedOut ? { status: 'partial' as const } : {}),
-        metadata: { timedOut: result.timedOut, profileCount: result.profiles.length },
+        metadata: {
+          timedOut: result.timedOut,
+          profileCount: result.profiles.length,
+          // The daily league-profile capture (`captureFantasyCalcProfileDaily`): written by the first
+          // successful warm of each UTC day, so most runs report 0 here, and that is correct.
+          profileCaptures: result.captured,
+          profileCaptureFailures: result.captureFailed,
+        },
       },
       Date.now() - startedAt,
     )

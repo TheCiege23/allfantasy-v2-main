@@ -15,7 +15,8 @@ import {
   withDatedMarket,
   type LeagueTradeChart,
 } from '@/lib/trade-value-console/leagueTradePricing'
-import { marketBookFor, type DatedMarket, type MarketBook } from './datedMarket'
+import { marketBookFor, type ChartProfile, type DatedMarket, type MarketBook } from './datedMarket'
+import { fantasyCalcSettingsForChart } from '@/lib/fantasycalc-profile-capture'
 import { snapshotFromLoaded } from '@/lib/trade-value-console/quick-badges'
 import type { TradeAssetInput, TradeConsolePlayerLine } from '@/lib/trade-value-console/types'
 import { gradeTrade, type TradeGradeLine, type TradeGradeMove, type TradeGradeView } from './tradeGrade'
@@ -243,6 +244,13 @@ export type LeagueTradeGrader = {
    */
   book?: MarketBook | null
   /**
+   * The league's OWN FantasyCalc profile — the exact board its chart requests (dynasty, QBs, teams,
+   * PPR; `fantasyCalcSettingsForChart`). A completed trade graded later is priced on this profile's
+   * daily capture first, and on `book`'s 12-team capture only when that is missing. Present only
+   * with `book`.
+   */
+  profile?: ChartProfile | null
+  /**
    * The SAME grader on one day's stored market (`withDatedMarket`) — how a completed trade is priced
    * at the time of the trade. Not a second grader: the same `gradeOnce`, the same pricer and the same
    * `gradeTrade`, on a chart whose market rows are that day's. Present only with `book`.
@@ -412,12 +420,16 @@ export async function createLeagueTradeGrader(args: {
    * grades on its own model (`ncaafLeagueGrader`) and has no dated book to be priced on.
    */
   const book = baseChart.marketCtx && sport === 'NFL' ? marketBookFor(baseChart) : null
+  // From the BASE chart's settings, which a `marketless` chart resolves too — the same profile today's
+  // chart is (or would be) fetched with.
+  const profile = book ? fantasyCalcSettingsForChart(baseChart) : null
   const graderOn = (chart: LeagueTradeChart, floorWindow: () => FloorWindow, dated: boolean): LeagueTradeGrader => ({
     leagueId: args.leagueId,
     chart,
     leagueType,
     pirateLeague,
     book,
+    profile,
     async grade(deal) {
       // A dated grade is never priced for roster need: the roster it would read is today's.
       return withType(await gradeOnce(chart, floorWindow, dated ? { ...deal, viewerSide: false, needRoster: undefined } : deal))
