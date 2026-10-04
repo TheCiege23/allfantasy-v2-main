@@ -324,11 +324,13 @@ export async function getMyTeamPulse(
   pausedLeagueIds?: ReadonlySet<string>,
   /** `?format=` / `?sport=` / `?platform=` from the URL; ignored unless it names a chip here. */
   requestedFilter: BoardFilter | null = null,
+  /** Apply a selected league before reads and display caps. */
+  focusLeagueId?: string | null,
 ): Promise<MyTeamPulse> {
   /* ── 1. Every team this user has claimed, with its league. ─────────────── */
   const claimed = await prisma.leagueTeam
     .findMany({
-      where: { claimedByUserId: userId },
+      where: { claimedByUserId: userId, ...(focusLeagueId ? { leagueId: focusLeagueId } : {}) },
       select: {
         leagueId: true,
         teamName: true,

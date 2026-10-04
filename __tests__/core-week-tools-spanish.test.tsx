@@ -36,7 +36,7 @@ describe('Spanish Core week and tools surfaces', () => {
     } as unknown as LeagueWeekBoard
     render(<YourWeekLeague board={board} allWeeksHref="/core/week" />)
     expect(screen.getByRole('heading', { name: 'Tu semana' })).toBeTruthy()
-    expect(screen.getByText(/Puede ser una semana de descanso/)).toBeTruthy()
+    expect(screen.getByText(/Puede ser un descanso o un calendario incompleto/)).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Todas las ligas a la vez →' })).toHaveAttribute('href', '/core/week')
   })
 

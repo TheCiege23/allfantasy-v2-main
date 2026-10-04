@@ -242,7 +242,7 @@ export function SeasonOutlook({ data, freshness = null }: SeasonOutlookProps) {
                       {l.you ? (
                         <>
                           <td className="af-so-num" data-label={copy('Record')}>
-                            {l.you.wins}–{l.you.losses}
+                            {l.you.wins}–{l.you.losses}{l.you.ties ? `–${l.you.ties}` : ''}
                           </td>
                           <td className="af-so-num" data-label={copy('Seed')}>
                             {l.you.seed}

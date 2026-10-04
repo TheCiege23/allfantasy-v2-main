@@ -93,11 +93,11 @@ export const OUTLOOK_TOPICS = {
   outlookTiles: {
     en: {
       title: 'Your odds across leagues',
-      body: 'On track: 50% or better to make the playoffs. Clinched: in by arithmetic, or 99%+. On the bubble: between 25% and 75%. On pace for a bye: 50% or better to earn one.',
+      body: 'On track: 50% or better to make the playoffs. Clinched: guaranteed by arithmetic under supported, league-stated qualification rules. A 99% forecast alone is not a clinch. On the bubble: between 25% and 75%. On pace for a bye: 50% or better to earn one.',
     },
     es: {
       title: 'Tus probabilidades en todas las ligas',
-      body: 'Con opciones: 50% o más de llegar a playoffs. Clasificado: dentro por aritmética, o con 99%+. En la burbuja: entre 25% y 75%. En ritmo de descanso: 50% o más de conseguir uno.',
+      body: 'Con opciones: 50% o más de llegar a playoffs. Clasificado: asegurado por aritmética según reglas compatibles y declaradas por la liga. Un pronóstico del 99% no garantiza la clasificación. En la burbuja: entre 25% y 75%. En ritmo de descanso: 50% o más de conseguir uno.',
     },
   },
   swingGame: {
@@ -163,11 +163,11 @@ export const OUTLOOK_TOPICS = {
   whatDecidesIt: {
     en: {
       title: 'What decides it',
-      body: 'A plain reading of each team’s playoff odds. 99%+ counts as clinched; 85%+ is in barring a collapse; 60%+ needs to win about a third of the games left; 30%+ needs about half, plus help; 5%+ must win out and get help; 1–5% is alive, barely; 1% or less is out in all but a rounding error. A team with too few completed weeks is not read at all.',
+      body: 'A plain reading of each team’s playoff odds. 99%+ is very likely, but only an explicit arithmetic status counts as clinched; 85%+ is in barring a collapse; 60%+ needs to win about a third of the games left; 30%+ needs about half, plus help; 5%+ must win out and get help; 1–5% is alive, barely; 1% or less is a long shot, not mathematical elimination. A team with too few completed weeks is not read at all.',
     },
     es: {
       title: 'Qué lo decide',
-      body: 'Una lectura simple de la probabilidad de playoffs de cada equipo. Con 99%+ cuenta como clasificado; con 85%+ está dentro salvo un derrumbe; con 60%+ necesita ganar cerca de un tercio de los partidos restantes; con 30%+, cerca de la mitad y ayuda; con 5%+, ganarlo todo y recibir ayuda; entre 1 y 5%, sigue vivo a duras penas; con 1% o menos, está fuera salvo por redondeo. Un equipo con muy pocas semanas jugadas no se evalúa.',
+      body: 'Una lectura simple de la probabilidad de playoffs de cada equipo. Con 99%+ es muy probable, pero solo un estado aritmético explícito asegura la clasificación; con 85%+ está dentro salvo un derrumbe; con 60%+ necesita ganar cerca de un tercio de los partidos restantes; con 30%+, cerca de la mitad y ayuda; con 5%+, ganarlo todo y recibir ayuda; entre 1 y 5%, sigue vivo a duras penas; con 1% o menos, es poco probable, sin afirmar eliminación matemática. Un equipo con muy pocas semanas jugadas no se evalúa.',
     },
   },
   rivalrySeries: {
@@ -183,11 +183,11 @@ export const OUTLOOK_TOPICS = {
   weekWinProbability: {
     en: {
       title: 'This week’s win probability',
-      body: 'A simple estimate from each team’s average weekly score and how much it varies, over every completed week on file — earlier seasons included. The “projected” scores are those averages, not lineup projections, and it knows nothing about injuries or byes. A team needs 3 completed weeks; a coin flip is two teams within 12 points.',
+      body: 'A simple estimate from each team’s average weekly score and how much it varies, over every completed week on file — earlier seasons included. The “projected” scores are those averages, not lineup projections, and it knows nothing about injuries or byes. A team needs 3 completed weeks; a coin flip means a history-based win probability between 40% and 60%, so different sports are not compared using raw points.',
     },
     es: {
       title: 'Probabilidad de ganar esta semana',
-      body: 'Una estimación sencilla a partir de la anotación semanal promedio de cada equipo y de cuánto varía, con todas las semanas completadas que tenemos, incluidas temporadas anteriores. Las puntuaciones «proyectadas» son esos promedios, no proyecciones de alineación, y no tiene en cuenta lesiones ni descansos. Cada equipo necesita 3 semanas completadas; un partido ajustado es el de dos equipos separados por 12 puntos o menos.',
+      body: 'Una estimación sencilla a partir de la anotación semanal promedio de cada equipo y de cuánto varía, con todas las semanas completadas que tenemos, incluidas temporadas anteriores. Las puntuaciones «proyectadas» son esos promedios, no proyecciones de alineación, y no tiene en cuenta lesiones ni descansos. Cada equipo necesita 3 semanas completadas; un partido ajustado tiene una probabilidad histórica de ganar entre el 40% y el 60%, sin comparar deportes por puntos brutos.',
     },
   },
   formGap: {

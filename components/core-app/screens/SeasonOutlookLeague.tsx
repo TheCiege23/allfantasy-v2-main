@@ -150,7 +150,7 @@ export function SeasonOutlookLeague({ league, swing, basis, priorities = [], fre
       <section className="af-olk-hero" aria-labelledby="so-forecast">
         <header className="af-olk-hero-head">
           <h2 id="so-forecast" className="af-label">
-            Your forecast · {ordinal(you.seed)} seed, {you.wins}–{you.losses}
+            Your forecast · {ordinal(you.seed)} seed, {you.wins}–{you.losses}{you.ties ? `–${you.ties}` : ''}
           </h2>
           {/* Beside the heading, not in it: the section is labelled by it. */}
           <TopicTip topic="outlookPlayoffOdds" />
@@ -488,7 +488,7 @@ function Standings({ league, lineups }: { league: OutlookLeague; lineups: Standi
                 {t.isYou ? <span className="af-sol-you af-label">You</span> : null}
               </th>
               <td className="af-sol-n af-num">
-                {t.wins}—{t.losses}
+                {t.wins}—{t.losses}{t.ties ? `—${t.ties}` : ''}
               </td>
               <td className="af-sol-n af-num">{t.pointsFor.toFixed(1)}</td>
               {/* An unmodelled team showing "0%" would read as eliminated rather than as unknown. */}

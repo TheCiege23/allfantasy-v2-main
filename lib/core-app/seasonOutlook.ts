@@ -1,6 +1,9 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { historicalScoringSpread } from './historicalScoringSpread'
+import { readWeeklyHistory } from './weekBoard'
+import { weeklyScopeKey, weeklyFormat, canCertifyWeeklyPlayoffStatus } from './weeklyCapabilities'
 import { leagueWeekProgress } from './leagueWeekProgress'
 import { getFirstStatedKickoff } from './seasonPhase'
 import {
@@ -100,7 +103,6 @@ function chooseIterations(costAtOneIteration: number): number {
 }
 
 /** Floor on σ — see the identical constant in weekBoard.ts for the reasoning. */
-const SIGMA_FLOOR = 12
 
 /** Below this many completed weeks a team is not modelled. */
 const MIN_WEEKS = 3
@@ -113,6 +115,7 @@ export type OutlookTeam = {
   isYou: boolean
   wins: number
   losses: number
+  ties?: number
   pointsFor: number
   /** Current seed by the same rule the sim uses: wins, then points for. */
   seed: number
@@ -233,7 +236,7 @@ export type SeasonOutlook = {
   summary: {
     /** Leagues where your playoff % is at or above 50. */
     makingPlayoffs: number
-    /** Clinched by arithmetic, or at or above 99%. */
+    /** Clinched by conservative arithmetic under the supported league rules. */
     clinched: number
     /** Between 25% and 75% — genuinely undecided. */
     onTheBubble: number
@@ -272,10 +275,13 @@ export type LeagueInput = {
   platformLeagueId?: string | null
   settings?: unknown
   sport?: string | null
+  leagueType?: string | null
 }
 
 /** The row shape Season Outlook simulates from — `weeklyMatchup`, narrowed. */
 type OutlookMatchupRow = {
+  finalized?: boolean
+  scored?: boolean
   leagueId: string
   seasonYear: number
   week: number
@@ -391,20 +397,16 @@ function describeWhatDecidesIt(
   }
   if (you.status === 'eliminated') return 'Eliminated — no remaining result gets you into the field.'
   if (weeksRemaining === 0) {
-    return you.playoffPct >= 99
-      ? 'Settled — you are in.'
-      : you.playoffPct <= 1
-        ? 'Settled — the regular season is over and you are out.'
-        : 'The regular season is over; the seeding is already what it is.'
+    return 'The modeled schedule is complete. Verify final standings and qualification rules.'
   }
-  if (you.playoffPct >= 99) return `In all but a rounding error. The last ${weeksRemaining} are about seeding.`
+  if (you.playoffPct >= 99) return `Very likely to qualify in the model; not mathematically clinched. ${weeksRemaining} periods remain.`
   /*
    * ⚠ THIS READ "Out in all but ${100 - pct}% of runs" — i.e. "Out in all but 99% of runs" at 1%
    * and "Out in all but 100% of runs" at 0%, which says the opposite of what it means. Measured on
    * the production standings screen 2026-09-28.
    */
   if (you.playoffPct <= 1) {
-    return you.playoffPct < 0.5 ? 'Out in every simulated run.' : 'In the field in about 1 run in 100.'
+    return you.playoffPct === 0 ? 'No qualifying simulated runs; this alone does not establish mathematical elimination.' : 'A long-shot forecast; a nonzero probability is not mathematical elimination.'
   }
 
   if (m) {
@@ -455,8 +457,7 @@ export type Prepared = {
 function fitProfile(values: number[]): SimTeam['profile'] {
   if (values.length < MIN_WEEKS) return null
   const mu = values.reduce((a, b) => a + b, 0) / values.length
-  const variance = values.reduce((acc, v) => acc + (v - mu) ** 2, 0) / Math.max(1, values.length - 1)
-  return { mu, sigma: Math.max(SIGMA_FLOOR, Math.sqrt(variance)), n: values.length }
+  return { mu, sigma: historicalScoringSpread(values), n: values.length }
 }
 
 /** All-play: each week, the share of the league a team outscored. Summed over weeks. */
@@ -501,82 +502,15 @@ export type OutlookInputs = {
  * never hash different inputs for the same league. Null when no league has anything to read.
  */
 export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]): Promise<OutlookInputs | null> {
-  const platformIds = leagues
-    .map((l) => l.platformLeagueId)
-    .filter((v): v is string => typeof v === 'string' && v.length > 0)
-  if (platformIds.length === 0) return null
-
-  const [liveRows, teams, mine, importedHistory, sports] = await Promise.all([
-    prisma.weeklyMatchup.findMany({
-      where: { leagueId: { in: platformIds } },
-      select: {
-        leagueId: true,
-        seasonYear: true,
-        week: true,
-        rosterId: true,
-        matchupId: true,
-        pointsFor: true,
-        pointsAgainst: true,
-        win: true,
-      },
-    }),
-    prisma.leagueTeam.findMany({
-      where: { league: { platformLeagueId: { in: platformIds } } },
-      select: {
-        externalId: true,
-        teamName: true,
-        ownerName: true,
-        league: { select: { platformLeagueId: true } },
-      },
-    }),
-    prisma.leagueTeam.findMany({
-      where: { league: { platformLeagueId: { in: platformIds } }, claimedByUserId: userId },
-      select: { externalId: true, league: { select: { platformLeagueId: true } } },
-    }),
-    /* Keyed on the AllFantasy league id — see mergeImportedMatchupHistory. */
-    prisma.matchupFact.findMany({
-      where: { leagueId: { in: leagues.map((l) => l.id) } },
-      select: {
-        leagueId: true,
-        season: true,
-        weekOrPeriod: true,
-        teamA: true,
-        teamB: true,
-        scoreA: true,
-        scoreB: true,
-      },
-    }),
-    prisma.league.findMany({
-      where: { id: { in: leagues.map((l) => l.id) } },
-      select: { id: true, sport: true, season: true, settings: true, status: true },
-    }),
-  ]).catch(() => [[], [], [], [], []] as const)
-
-  const sportOf = new Map<string, string>(sports.map((l) => [l.id, String(l.sport)]))
-
-  /*
-   * History folded in before anything reads `rows`, so the scoring fit, the records and
-   * the schedule all see one set of weeks rather than two sources that disagree.
-   */
-  const merged = mergeImportedMatchupHistory(liveRows, importedHistory, leagues)
-  const rows = merged.rows
-  if (rows.length === 0) return null
-
-  const nameByRoster = new Map<string, string>()
-  for (const t of teams) {
-    const pid = t.league?.platformLeagueId
-    if (!pid || !t.externalId) continue
-    const label = t.teamName?.trim() || t.ownerName?.trim()
-    if (label) nameByRoster.set(`${pid}:${t.externalId}`, label)
-  }
-
-  const myRosters = new Set<string>()
-  for (const t of mine) {
-    const pid = t.league?.platformLeagueId
-    if (!pid || !t.externalId) continue
-    myRosters.add(`${pid}:${t.externalId}`)
-  }
-
+  const [history, sports] = await Promise.all([
+    readWeeklyHistory(userId, leagues),
+    prisma.league.findMany({ where: { id: { in: leagues.map(l => l.id) } }, select: { id: true, sport: true, season: true, settings: true, status: true, leagueType: true } }),
+  ])
+  if (!history) return null
+  const rows = history.rows
+  const nameByRoster = history.rosterNames
+  const myRosters = new Set(history.myRosters.keys())
+  const sportOf = new Map<string, string>(sports.map(l => [l.id, String(l.sport)]))
   const rowsByLeague = new Map<string, OutlookMatchupRow[]>()
   for (const r of rows) {
     const list = rowsByLeague.get(r.leagueId)
@@ -588,21 +522,34 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
   const prepared: Prepared[] = []
 
   for (const league of leagues) {
-    const pid = league.platformLeagueId
+    const pid = weeklyScopeKey(league)
     const leagueName = league.name?.trim() || 'League'
-    if (!pid) continue
-
+    const storedLeague = sports.find(l => l.id === league.id)
+    const formatMode = weeklyFormat({ ...league, leagueType: storedLeague?.leagueType ?? league.leagueType, settings: storedLeague?.settings ?? league.settings })
+    if (formatMode !== 'head-to-head') {
+      withheld.push({ leagueName, reason: 'This format needs a category, season-table or survival model; head-to-head points playoff odds are unavailable.' })
+      continue
+    }
     const leagueRows = rowsByLeague.get(pid) ?? []
     if (leagueRows.length === 0) {
       withheld.push({ leagueName, reason: 'No matchups have been synced for this league.' })
       continue
     }
 
-    // The season being played is the latest one on file.
-    const season = leagueRows.reduce((max, r) => Math.max(max, r.seasonYear), 0)
+    // A stated current season wins over an older season that happens to have scores.
+    const season = history.periodsByLeague.get(pid)?.season ?? storedLeague?.season ?? leagueRows.reduce((max, r) => Math.max(max, r.seasonYear), 0)
     const seasonRows = leagueRows.filter((r) => r.seasonYear === season)
+    if (!seasonRows.length) {
+      withheld.push({ leagueName, reason: `No current-season schedule is on file for ${season}. Historical scoring alone cannot establish this season's playoff path.` })
+      continue
+    }
+    const nativeRule = history.nativeRules.get(pid)
+    if (nativeRule?.season === season && nativeRule.medianGame) {
+      withheld.push({ leagueName, reason: 'This native season uses median games. Its additional qualification results are not supported by this playoff model.' })
+      continue
+    }
     const progress = leagueWeekProgress(sports.find((l) => l.id === league.id) ?? { settings: league.settings, season })
-    const final = (r: OutlookMatchupRow) => progress.currentWeek == null || progress.isFinal(r.seasonYear, r.week)
+    const final = (r: OutlookMatchupRow) => r.finalized ?? (progress.currentWeek == null || progress.isFinal(r.seasonYear, r.week))
 
     /*
      * ⚠ SCORING PROFILES ARE FITTED ACROSS EVERY SEASON ON FILE, NOT JUST THIS
@@ -613,7 +560,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
     const scores = new Map<string, number[]>()
     const seasonsFitted = new Set<number>()
     for (const r of leagueRows) {
-      if (!final(r) || (r.pointsFor <= 0 && r.pointsAgainst <= 0)) continue
+      if (!final(r) || (r.scored !== true && r.pointsFor <= 0 && r.pointsAgainst <= 0)) continue
       seasonsFitted.add(r.seasonYear)
       const list = scores.get(r.rosterId)
       if (list) list.push(r.pointsFor)
@@ -627,17 +574,22 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
       else byRoster.set(r.rosterId, [r])
     }
 
-    const format = readPlayoffFormat(league.settings, byRoster.size)
+    const inputSettings = league.settings && typeof league.settings === 'object' ? league.settings : {}
+    const storedSettings = storedLeague?.settings && typeof storedLeague.settings === 'object' ? storedLeague.settings : {}
+    const effectiveLeague = { ...league, settings: { ...inputSettings, ...storedSettings } }
+    const format = readPlayoffFormat(effectiveLeague.settings, byRoster.size)
+    if (nativeRule?.season === season && nativeRule.playoffStartWeek > 1) format.regularSeasonEndWeek = nativeRule.playoffStartWeek - 1
     const endWeek = format.regularSeasonEndWeek
     const regular = (week: number) => endWeek == null || week <= endWeek
 
     const simTeams: SimTeam[] = []
     for (const [rosterId, list] of byRoster) {
-      const played = list.filter((x) => final(x) && regular(x.week) && (x.pointsFor > 0 || x.pointsAgainst > 0))
+      const played = list.filter((x) => final(x) && regular(x.week) && (x.scored === true || x.pointsFor > 0 || x.pointsAgainst > 0))
       simTeams.push({
         rosterId,
         wins: played.filter((x) => x.win === 1).length,
-        losses: played.filter((x) => x.win !== 1).length,
+        losses: played.filter((x) => x.pointsFor < x.pointsAgainst).length,
+        ties: played.filter((x) => x.pointsFor === x.pointsAgainst).length,
         pointsFor: played.reduce((a, x) => a + x.pointsFor, 0),
         profile: fitProfile(scores.get(rosterId) ?? []),
       })
@@ -657,7 +609,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
     const unscored: OutlookMatchupRow[] = []
     for (const r of seasonRows) {
       if (r.matchupId == null || !regular(r.week)) continue
-      const scored = final(r) && (r.pointsFor > 0 || r.pointsAgainst > 0)
+      const scored = final(r) && (r.scored === true || r.pointsFor > 0 || r.pointsAgainst > 0)
       if (!scored) unscored.push(r)
       const key = `${r.week}|${r.matchupId}|${scored ? 1 : 0}`
       const entry = pairs.get(key)
@@ -669,12 +621,6 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
     for (const p of pairs.values()) {
       if (p.ids.length !== 2) continue
       ;(p.scored ? played : remaining).push({ week: p.week, a: p.ids[0], b: p.ids[1] })
-    }
-    for (const f of merged.pairs) {
-      if (f.leagueId !== pid || f.season !== season || !regular(f.week)) continue
-      if (progress.currentWeek != null && !progress.isFinal(f.season, f.week)) continue
-      if (played.some((g) => g.week === f.week && (g.a === f.a || g.b === f.a))) continue
-      played.push({ week: f.week, a: f.a, b: f.b })
     }
     const weeks = [...new Set(remaining.map((g) => g.week))].sort((a, b) => a - b)
 
@@ -691,7 +637,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
      */
     if (weeks.length === 0) {
       const lastScoredWeek = seasonRows.reduce(
-        (max, r) => (r.pointsFor > 0 || r.pointsAgainst > 0 ? Math.max(max, r.week) : max),
+        (max, r) => (final(r) && (r.scored === true || r.pointsFor > 0 || r.pointsAgainst > 0) ? Math.max(max, r.week) : max),
         0,
       )
       if (endWeek == null || lastScoredWeek < endWeek) {
@@ -721,11 +667,11 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]):
       missing.push(`First-round byes are not stated; a standard ${format.playoffTeams}-team bracket (${format.byeTeams} byes) is assumed.`)
     }
     if (endWeek == null) missing.push('The last regular-season week is not stated, so every paired unplayed week counts as regular season.')
-    missing.push('Divisions and head-to-head tiebreaks are not modelled: seeding is wins, then points for.')
+    missing.push('Divisions and head-to-head tiebreaks are not modelled: seeding is wins plus half a win per final tie, then points for.')
     missing.push('Weekly scores are independent draws: bye weeks, injuries and trades only enter through the scenario tools.')
 
     prepared.push({
-      league,
+      league: effectiveLeague,
       pid,
       leagueName,
       season,
@@ -834,20 +780,21 @@ export async function getSeasonOutlook(
     const n = result.iterations
     const strength = scheduleStrength(p.sim, p.played)
 
-    const ordered = [...p.sim.teams].sort((a, b) => b.wins - a.wins || b.pointsFor - a.pointsFor)
+    const ordered = [...p.sim.teams].sort((a, b) => (b.wins + (b.ties ?? 0) / 2) - (a.wins + (a.ties ?? 0) / 2) || b.pointsFor - a.pointsFor)
     const outlookTeams: OutlookTeam[] = ordered.map((s, i) => {
       const c = result.counts[s.rosterId] ?? { playoff: 0, bye: 0, title: 0 }
       const b = result.bands[s.rosterId]
       const playoffPct = pctOf(c.playoff, n)
       const byePct = pctOf(c.bye, n)
       const titlePct = pctOf(c.title, n)
-      const status = mathStatus(p.sim, s.rosterId)
+      const status = canCertifyWeeklyPlayoffStatus(p.league.settings, p.format.playoffTeamsSource) ? mathStatus(p.sim, s.rosterId) : null
       return {
         rosterId: s.rosterId,
         name: nameByRoster.get(`${p.pid}:${s.rosterId}`) ?? null,
         isYou: myRosters.has(`${p.pid}:${s.rosterId}`),
         wins: s.wins,
         losses: s.losses,
+        ...(s.ties ? { ties: s.ties } : {}),
         pointsFor: s.pointsFor,
         seed: i + 1,
         playoffPct,
@@ -922,7 +869,7 @@ export async function getSeasonOutlook(
 
   const summary: SeasonOutlook['summary'] = {
     makingPlayoffs: withYou.filter((l) => l.you!.playoffPct >= 50).length,
-    clinched: withYou.filter((l) => l.you!.status === 'clinched' || l.you!.playoffPct >= 99).length,
+    clinched: withYou.filter((l) => l.you!.status === 'clinched').length,
     onTheBubble: withYou.filter((l) => l.you!.playoffPct > 25 && l.you!.playoffPct < 75).length,
     onByePace: withYou.filter((l) => l.byeTeams > 0 && l.you!.byePct >= 50).length,
     bestTitle: bestTitleLeague ? { pct: bestTitleLeague.you!.titlePct, leagueName: bestTitleLeague.leagueName } : null,
@@ -960,7 +907,7 @@ export async function getSeasonOutlook(
      */
     const nextWeek = p.weeks.find((w) => {
       const r = p.unscored.find((x) => x.week === w && x.rosterId === league.you!.rosterId)
-      return r != null && !(r.pointsFor > 0 || r.pointsAgainst > 0)
+      return r != null && !(r.scored === true || r.pointsFor > 0 || r.pointsAgainst > 0)
     })
     if (nextWeek == null) continue
     const mineRow = p.unscored.find((r) => r.week === nextWeek && r.rosterId === league.you!.rosterId)
@@ -1041,7 +988,7 @@ export async function getSeasonOutlook(
       ifWin,
       ifLose,
       swing: ifWin - ifLose,
-      clinchOnWin: ifWin >= 99,
+      clinchOnWin: canCertifyWeeklyPlayoffStatus(p.league.settings, p.format.playoffTeamsSource) && mathStatus({ ...p.sim, teams: p.sim.teams.map(t => t.rosterId === league.you!.rosterId ? { ...t, wins: t.wins + 1 } : t), remaining: p.sim.remaining.filter(g => !(g.week === game.week && ((g.a === game.a && g.b === game.b) || (g.a === game.b && g.b === game.a)))) }, league.you.rosterId) === 'clinched',
       helpIfLose,
       rooting,
     }

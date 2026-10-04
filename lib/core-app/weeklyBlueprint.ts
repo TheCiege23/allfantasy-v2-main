@@ -1,0 +1,85 @@
+import type { MyTeamPulse } from './myTeamPulse'
+import type { WeekBoard } from './weekBoard'
+import type { SeasonOutlook } from './seasonOutlook'
+import { lineupProjectionFor } from './weekLineups'
+import type { WeekLineups } from './weekLineups'
+
+export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context' }
+export type WeeklyBlueprint = {
+  name: string | null; teamName: string | null; leagueCount: number; sports: string[]; focusLeagueId: string | null
+  actions: WeeklyAction[]; actionCount: number; attentionLeagueIds: string[]; lineupReadFailed: boolean
+  coverage: Array<{ leagueId: string; leagueName: string; af: boolean; provider: boolean; partial: boolean }>
+  matchup?: { opponent: string; period: number; leagueName: string }
+  playoff?: { probability: number; leagueName: string }
+}
+export function buildWeeklyBlueprint(input: {
+  name?: string | null; leagues: Array<{ id: string; name?: string | null; sport?: string | null }>
+  board: WeekBoard; pulse: MyTeamPulse | null; outlook: SeasonOutlook | null; lineups?: WeekLineups | null
+  favoriteIds?: ReadonlySet<string>; focusLeagueId?: string | null; now: Date
+}): WeeklyBlueprint {
+  const focus = input.focusLeagueId ?? null
+  const leagues = input.leagues.filter(l => !focus || l.id === focus)
+  const allowed = new Set(leagues.map(l => l.id))
+  const rows = [...input.pulse?.needs ?? [], ...input.pulse?.set ?? []].filter(r => allowed.has(r.leagueId))
+  const cards = [...input.board.coinFlips, ...input.board.leaning, ...input.board.unprojected].filter(m => allowed.has(m.leagueId))
+  const actions: WeeklyAction[] = []
+  const now = input.now.getTime()
+  for (const row of rows) {
+    if (row.bestBall) continue
+    const game = row.lockAt ? Date.parse(row.lockAt) : NaN
+    const card = cards.find(m => m.leagueId === row.leagueId)
+    const periodMismatch = card && (row.season !== card.season || row.week !== card.week)
+    const unreadable = row.syncFailed || row.unresolved > 0 || periodMismatch
+    const count = row.actionableSeverity ?? (row.locked ? 0 : row.severity)
+    const kind = unreadable ? 'sync' : !row.locked && count > 0 ? 'lineup' : !row.locked && row.questionable > 0 ? 'monitor' : null
+    if (!kind) continue
+    actions.push({ id: `${row.leagueId}:${kind}`, leagueId: row.leagueId, leagueName: row.leagueName, kind,
+      count: kind === 'lineup' ? count : kind === 'monitor' ? row.questionable : row.unresolved,
+      href: `/core/${kind === 'sync' ? 'league-sync' : 'my-team'}?league=${encodeURIComponent(row.leagueId)}`,
+      gameAt: !unreadable && game > now ? new Date(game).toISOString() : null, source: 'stored-lineup' })
+  }
+  const priority = { lineup: 0, monitor: 1, sync: 2, playoff: 3, review: 4 }
+  actions.sort((a, b) => priority[a.kind] - priority[b.kind] || (a.gameAt ? Date.parse(a.gameAt) : Infinity) - (b.gameAt ? Date.parse(b.gameAt) : Infinity) || b.count - a.count || a.leagueName.localeCompare(b.leagueName))
+  const swings = Object.values(input.outlook?.swingByLeague ?? {}).filter(s => allowed.has(s.leagueId)).sort((a,b) => b.swing - a.swing)
+  for (const swing of swings) if (!actions.some(a => a.leagueId === swing.leagueId)) actions.push({ id: `${swing.leagueId}:playoff`, leagueId: swing.leagueId, leagueName: swing.leagueName, kind: 'playoff', count: swing.week,
+    href: `/core/season-outlook?league=${encodeURIComponent(swing.leagueId)}`, gameAt: null, source: 'season-outlook' })
+  if (!actions.length && leagues.length) {
+    const l = leagues.find(l => input.favoriteIds?.has(l.id)) ?? leagues[0]
+    actions.push({ id: `${l.id}:review`, leagueId: l.id, leagueName: l.name?.trim() || 'League', kind: 'review', count: 0,
+      href: `/core/my-team?league=${encodeURIComponent(l.id)}`, gameAt: null, source: 'league-context' })
+  }
+  const attentionLeagueIds = [...new Set([...actions.map(a => a.leagueId), ...leagues.filter(l => input.favoriteIds?.has(l.id)).map(l => l.id), ...swings.map(s => s.leagueId)])]
+  const coverage = cards.map(m => {
+    const p = lineupProjectionFor(input.lineups, m.leagueId, m.season, m.week)
+    return { leagueId: m.leagueId, leagueName: m.leagueName, af: p?.af?.you != null, provider: p?.api?.you != null, partial: p?.partial ?? false }
+  })
+  const featured = cards.find(m => m.leagueId === attentionLeagueIds[0]) ?? cards[0]
+  const outlook = input.outlook?.leagues.find(l => allowed.has(l.leagueId) && l.you?.modelled && cards.some(m => m.leagueId === l.leagueId && m.season === l.season))
+  const probability = outlook?.you?.playoffPct
+  return { name: input.name?.trim() || null, teamName: input.board.leagueBoard?.yourTeamName ?? null, leagueCount: leagues.length,
+    sports: [...new Set(leagues.map(l => l.sport?.trim()).filter((s): s is string => Boolean(s)))], focusLeagueId: focus,
+    actions: actions.slice(0, 3), actionCount: actions.length, attentionLeagueIds, lineupReadFailed: input.pulse == null || (leagues.length > 0 && rows.length === 0), coverage,
+    ...(featured?.opponent.name ? { matchup: { opponent: featured.opponent.name, period: featured.week, leagueName: featured.leagueName } } : {}),
+    ...(outlook && probability != null && Number.isFinite(probability) && probability >= 0 && probability <= 100 ? { playoff: { probability, leagueName: outlook.leagueName } } : {}) }
+}
+export function weeklyActionText(action: WeeklyAction, es = false): string {
+  if (es) return ({ lineup: `Revisa ${action.count} problema${action.count === 1 ? '' : 's'} en tu alineación`, monitor: `Vigila ${action.count} titular${action.count === 1 ? '' : 'es'} con dudas`, sync: 'Actualiza los datos de tu equipo', playoff: `Explora los escenarios del período ${action.count}`, review: 'Revisa tu equipo y sus reglas' })[action.kind]
+  return ({ lineup: `Review ${action.count} lineup issue${action.count === 1 ? '' : 's'}`, monitor: `Monitor ${action.count} questionable starter${action.count === 1 ? '' : 's'}`, sync: 'Refresh your team data', playoff: `Explore period ${action.count} playoff scenarios`, review: 'Review your team and its rules' })[action.kind]
+}
+export function weeklyBrief(data: WeeklyBlueprint, es = false): string {
+  const scope = data.teamName ?? (es ? `${data.leagueCount} liga${data.leagueCount === 1 ? '' : 's'}` : `${data.leagueCount} league${data.leagueCount === 1 ? '' : 's'}`)
+  const sports = data.sports.length ? ` (${data.sports.join(', ')})` : ''
+  const next = data.actions[0]
+  const matchup = data.matchup ? es ? `Período ${data.matchup.period}: frente a ${data.matchup.opponent} en ${data.matchup.leagueName}. ` : `Period ${data.matchup.period}: facing ${data.matchup.opponent} in ${data.matchup.leagueName}. ` : ''
+  const playoff = data.playoff ? es ? `Probabilidad estimada de playoffs en ${data.playoff.leagueName}: ${data.playoff.probability.toFixed(1)}%. ` : `Estimated playoff probability in ${data.playoff.leagueName}: ${data.playoff.probability.toFixed(1)}%. ` : ''
+  return es ? `Tu plan para ${scope}${sports}. ${matchup}${playoff}${next ? `Primero: ${weeklyActionText(next, true)} en ${next.leagueName}. ` : ''}Chimmy puede ayudarte a evaluar tus opciones con el contexto de tus ligas.`
+    : `Your plan for ${scope}${sports}. ${matchup}${playoff}${next ? `First: ${weeklyActionText(next)} in ${next.leagueName}. ` : ''}Chimmy can help you weigh your options with your league context.`
+}
+/** Unitless closeness; raw scoring scales never order a multi-sport portfolio. */
+export function matchupCloseness(m: { live?: { margin: number; you: number; them: number } | null; projection?: { winProbability: number } | null }): number {
+  if (m.live) {
+    const total = Math.abs(m.live.you) + Math.abs(m.live.them)
+    return total > 0 ? Math.abs(m.live.margin) / total : 0
+  }
+  return m.projection ? Math.abs(m.projection.winProbability - 0.5) : 1
+}

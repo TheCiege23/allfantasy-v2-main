@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { FormatWeekCards } from '@/components/core-app/FormatWeekCards'
 import { WeekDateRange } from '@/components/core-app/WeekDateRange'
 import type { WeekBoard, WeekMatchup } from '@/lib/core-app/weekBoard'
 import type { WeekLineups } from '@/lib/core-app/weekLineups'
@@ -15,7 +16,6 @@ import { settleBadge } from '@/lib/core-app/eliminationSettle'
  * client bundle and 500'd every screen on the /core route. See the header of
  * lib/core-app/weekBoardRules.ts.
  */
-import { COIN_FLIP_POINTS } from '@/lib/core-app/weekBoardRules'
 import { rosterLabel } from '@/lib/core-app/managerName'
 import '@/components/core-app/af-week.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -77,8 +77,9 @@ function CoinFlipCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: We
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
   const p = matchup.projection!
-  const gap = Math.abs(p.margin)
-  const favoured = p.margin >= 0
+  const score = matchup.live ?? p
+  const gap = Math.abs(score.margin)
+  const favoured = score.margin >= 0
   return (
     <Link href={matchup.href} className="af-wk-flip">
       <div className="af-wk-flip-head">
@@ -90,9 +91,9 @@ function CoinFlipCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: We
 
       <div className="af-wk-flip-prob">
         <span className="af-wk-prob af-num" data-favoured={favoured}>
-          {pct(p.winProbability)}
+          {matchup.live ? matchup.live.final ? matchup.live.margin > 0 ? language === 'es' ? 'Victoria' : 'Won' : matchup.live.margin < 0 ? language === 'es' ? 'Derrota' : 'Lost' : language === 'es' ? 'Empate' : 'Tied' : language === 'es' ? 'En juego' : 'Live' : pct(p.winProbability)}
         </span>
-        <span className="af-wk-prob-label">{copy('to win')}</span>
+        <span className="af-wk-prob-label">{matchup.live ? copy('current score') : language === 'es' ? 'según el historial' : 'from history'}</span>
       </div>
 
       <div className="af-wk-flip-line">
@@ -115,10 +116,10 @@ function CoinFlipCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: We
       </div>
 
       <div className="af-wk-flip-score af-num">
-        <b>{p.you.toFixed(1)}</b>
+        <b>{score.you.toFixed(1)}</b>
         <i>–</i>
-        <b>{p.them.toFixed(1)}</b>
-        <span className="af-wk-projtag">{copy('projected')}</span>
+        <b>{score.them.toFixed(1)}</b>
+        <span className="af-wk-projtag">{matchup.live ? language === 'es' ? 'marcador' : 'scoreboard' : language === 'es' ? 'estimación histórica' : 'historical estimate'}</span>
       </div>
       <WeekLineupLine lineups={lineups} leagueId={matchup.leagueId} season={matchup.season} week={matchup.week} />
     </Link>
@@ -129,17 +130,18 @@ function CoinFlipCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: We
 function LeaningCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: WeekLineups | null }) {
   const { language } = useOptionalLanguage()
   const p = matchup.projection!
-  const favoured = p.margin >= 0
+  const score = matchup.live ?? p
+  const favoured = score.margin >= 0
   return (
     <Link href={matchup.href} className="af-wk-lean">
       <span className="af-wk-lean-league" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} data-platform={matchup.platform}>
         {matchup.leagueName} · {matchup.season} · {language === 'es' ? 'Período' : 'Period'} {matchup.week}
       </span>
       <span className="af-wk-lean-prob af-num" data-favoured={favoured}>
-        {pct(p.winProbability)}
+        {matchup.live ? matchup.live.final ? matchup.live.margin > 0 ? language === 'es' ? 'Victoria' : 'Won' : matchup.live.margin < 0 ? language === 'es' ? 'Derrota' : 'Lost' : language === 'es' ? 'Empate' : 'Tied' : language === 'es' ? 'En juego' : 'Live' : pct(p.winProbability)}
       </span>
       <span className="af-wk-lean-score af-num">
-        {p.you.toFixed(1)}–{p.them.toFixed(1)}
+        {score.you.toFixed(1)}–{score.them.toFixed(1)}
       </span>
       <WeekLineupLine lineups={lineups} leagueId={matchup.leagueId} season={matchup.season} week={matchup.week} />
     </Link>
@@ -158,7 +160,7 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
     data.coinFlips.length +
     data.leaning.length +
     data.unprojected.length +
-    data.eliminationWeeks.length
+    data.eliminationWeeks.length + (data.formatWeeks?.length ?? 0)
   /*
    * Phase-aware empty state — before the first stated regular-season kickoff,
    * "import or re-sync" is the wrong advice. Null when no source states a
@@ -216,8 +218,8 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
             </h2>
             <p className="af-wk-sectionnote">
               {language === 'es'
-                ? `Separados por ${COIN_FLIP_POINTS} puntos proyectados o menos. Una decisión de alineación puede cambiar estos resultados.`
-                : `Projected within ${COIN_FLIP_POINTS} points. These are the ones a lineup decision actually swings.`}
+                ? 'Probabilidad histórica de ganar entre el 40% y el 60%; no es un pronóstico de la alineación actual.'
+                : 'History-based win probability between 40% and 60%; this is not a current lineup forecast.'}
             </p>
           </div>
           <div className="af-wk-flips">
@@ -234,8 +236,8 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
             <h2 className="af-wk-sectiontitle">{copy('The rest')}</h2>
             <p className="af-wk-sectionnote">
               {language === 'es'
-                ? `Ya favorecen a un equipo por más de ${COIN_FLIP_POINTS} puntos proyectados.`
-                : `Already leaning one way by more than ${COIN_FLIP_POINTS} projected points.`}
+                ? 'El historial favorece más a un equipo. Revisa tu alineación actual por separado.'
+                : 'History favors one side more strongly. Review your current lineup separately.'}
             </p>
           </div>
           <div className="af-wk-leans">
@@ -429,6 +431,7 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       ) : null}
 
       {/* The model basis. Always rendered when any probability was shown. */}
+      <FormatWeekCards weeks={data.formatWeeks ?? []} />
       {data.coinFlips.length + data.leaning.length > 0 ? (
         <footer className="af-wk-foot">
           <p>
