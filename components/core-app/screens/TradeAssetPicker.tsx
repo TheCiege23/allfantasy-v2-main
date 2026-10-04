@@ -1,4 +1,5 @@
 'use client'
+import { useTradeVisualCopy } from "./useTradeVisualCopy"
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PickCoverage, RosterPick, RosterPlayer } from '@/components/core-app/screens/useLeagueRosters'
@@ -87,9 +88,11 @@ export type PickedAsset =
  * otherwise print the same sentence on a third of every roster.
  */
 export function UnpricedValue(props: { reason?: UnpricedReason | null }) {
+  const {copy,locale}=useTradeVisualCopy()
+
   const label = props.reason ? `No value: ${props.reason.label}` : 'No value'
   return (
-    <span className="af-tc-row-value" data-unpriced="true" title={label} aria-label={label}>
+    <span className="af-tc-row-value" data-unpriced="true" title={copy(label)} aria-label={copy(label)}>
       {'—'}
     </span>
   )
@@ -132,17 +135,19 @@ const MIN_QUERY = 2
  * player must not be rising in the picker and flat two inches away in the deal.
  */
 export function StockMark(props: { stock?: 'up' | 'down' | 'flat' | null; delta?: number | null }) {
+  const {copy,locale}=useTradeVisualCopy()
+
   if (!props.stock) return null
   const glyph = props.stock === 'up' ? '\u2191' : props.stock === 'down' ? '\u2193' : '\u2194'
   const label =
     props.stock === 'flat'
       ? '30-day value: no real change'
       : `30-day value ${props.stock === 'up' ? 'up' : 'down'}${
-          typeof props.delta === 'number' ? ` ${Math.abs(Math.round(props.delta)).toLocaleString()}` : ''
+          typeof props.delta === 'number' ? ` ${Math.abs(Math.round(props.delta)).toLocaleString(locale)}` : ''
         }`
   return (
-    <span className="af-tc-stock" data-dir={props.stock} title={label} aria-label={label}>
-      {glyph}
+    <span className="af-tc-stock" data-dir={props.stock} title={copy(label)} aria-label={copy(label)}>
+      {copy(glyph)}
     </span>
   )
 }
@@ -162,6 +167,8 @@ export function RosterPlayerRow(props: {
   /** Already in the deal — shown, but not addable twice. */
   added?: boolean
 }) {
+  const {copy,locale}=useTradeVisualCopy()
+
   const p = props.player
   const logo = teamLogoUrl(p.team, props.sport)
   return (
@@ -171,7 +178,7 @@ export function RosterPlayerRow(props: {
       onClick={props.onAdd}
       disabled={props.added}
       data-added={props.added ? 'true' : undefined}
-      aria-label={props.added ? `${p.name} is already in this trade` : `Add ${p.name}`}
+      aria-label={copy(props.added ? `${p.name} is already in this trade` : `Add ${p.name}`)}
     >
       {/*
         A headshot is optional and often absent. The initial keeps row height and alignment
@@ -181,12 +188,12 @@ export function RosterPlayerRow(props: {
         {p.imageUrl ? (
           <FallbackImg
             src={p.imageUrl}
-            alt=""
+            alt={copy("")}
             loading="lazy"
-            fallback={<span className="af-tc-headshot-fallback">{p.name.slice(0, 1)}</span>}
+            fallback={<span className="af-tc-headshot-fallback">{copy(p.name.slice(0, 1))}</span>}
           />
         ) : (
-          <span className="af-tc-headshot-fallback">{p.name.slice(0, 1)}</span>
+          <span className="af-tc-headshot-fallback">{copy(p.name.slice(0, 1))}</span>
         )}
       </span>
 
@@ -194,13 +201,13 @@ export function RosterPlayerRow(props: {
         <span className="af-tc-row-name">
           {p.name}
           {p.injuryStatus ? (
-            <span className="af-tc-injury" title={p.injuryStatus}>
-              {p.injuryStatus}
+            <span className="af-tc-injury" title={copy(p.injuryStatus)}>
+              {copy(p.injuryStatus)}
             </span>
           ) : null}
         </span>
         <span className="af-tc-row-sub">
-          {p.position ? <span className="af-tc-pos">{p.position}</span> : null}
+          {p.position ? <span className="af-tc-pos">{copy(p.position)}</span> : null}
           {/*
             ⚠ `af-tc-row-team`, NOT `af-tc-team` — the latter is the TEAM CARD in TradeCenter.
             Carrying it here inherited `flex-direction: column`, 14px of padding and a border from
@@ -210,22 +217,21 @@ export function RosterPlayerRow(props: {
           */}
           {p.team ? (
             <span className="af-tc-row-team">
-              {logo ? <FallbackImg src={logo} alt="" loading="lazy" fallback={null} /> : null}
-              {p.team}
+              {logo ? <FallbackImg src={logo} alt={copy("")} loading="lazy" fallback={null} /> : null}
+              {copy(p.team)}
             </span>
           ) : null}
           {/*
             ⚠ ONLY WHEN KNOWN. A null bye means "we do not know"; rendering it as a week — or as
             0 — states a fact a manager could plan around and be wrong.
           */}
-          {p.byeWeek != null ? <span className="af-tc-bye">BYE {p.byeWeek}</span> : null}
+          {p.byeWeek != null ? <span className="af-tc-bye">{copy("BYE ")}{copy(p.byeWeek)}</span> : null}
           {/* AllFantasy's own projection for this week, under this league's scoring. */}
           {p.afProjection != null ? (
-            <span className="af-tc-af" title="AllFantasy projection this week, under this league's scoring">
-              AF {p.afProjection.toFixed(1)}
+            <span className="af-tc-af" title={copy("AllFantasy projection this week, under this league's scoring")}>{copy(" AF ")}{copy(p.afProjection.toFixed(1))}
             </span>
           ) : null}
-          {props.added ? <span className="af-tc-tag">In this trade</span> : null}
+          {props.added ? <span className="af-tc-tag">{copy("In this trade")}</span> : null}
         </span>
       </span>
 
@@ -234,7 +240,7 @@ export function RosterPlayerRow(props: {
       {p.value == null ? (
         <UnpricedValue reason={p.unpricedReason} />
       ) : (
-        <span className="af-tc-row-value">{p.value.toLocaleString()}</span>
+        <span className="af-tc-row-value">{copy(p.value.toLocaleString(locale))}</span>
       )}
     </button>
   )
@@ -309,6 +315,8 @@ export function TradeAssetPicker(props: {
   managerAvatarUrl?: string | null
   managerRecord?: { wins: number; losses: number; ties: number } | null
 }) {
+  const {copy,locale}=useTradeVisualCopy()
+
   const [tab, setTab] = useState<'player' | 'pick' | 'faab'>('player')
   const [query, setQuery] = useState('')
   const [rows, setRows] = useState<SearchRow[]>([])
@@ -405,13 +413,11 @@ export function TradeAssetPicker(props: {
             data-on={tab === t}
             onClick={() => setTab(t)}
           >
-            {t === 'faab' ? 'FAAB' : t === 'pick' ? 'Pick' : 'Player'}
+            {copy(t === 'faab' ? 'FAAB' : t === 'pick' ? 'Pick' : 'Player')}
           </button>
         ))}
         <span className="af-tc-spacer" />
-        <button type="button" className="af-tc-remove" onClick={props.onClose} aria-label="Close">
-          ×
-        </button>
+        <button type="button" className="af-tc-remove" onClick={props.onClose} aria-label={copy("Close")}>{copy(" × ")}</button>
       </div>
 
       {/*
@@ -429,22 +435,22 @@ export function TradeAssetPicker(props: {
             {props.managerAvatarUrl ? (
               <FallbackImg
                 src={props.managerAvatarUrl}
-                alt=""
+                alt={copy("")}
                 loading="lazy"
-                fallback={<span className="af-tc-headshot-fallback">{(props.managerName ?? '?').slice(0, 1)}</span>}
+                fallback={<span className="af-tc-headshot-fallback">{copy((props.managerName ?? '?').slice(0, 1))}</span>}
               />
             ) : (
               <span className="af-tc-headshot-fallback">
-                {(props.managerName ?? '?').slice(0, 1)}
+                {copy((props.managerName ?? '?').slice(0, 1))}
               </span>
             )}
           </span>
           <span className="af-tc-manager-body">
-            <span className="af-tc-manager-name">{props.managerName ?? 'This manager'}</span>
+            <span className="af-tc-manager-name">{copy(props.managerName ?? 'This manager')}</span>
             {props.managerRecord ? (
               <span className="af-tc-row-sub">
-                {props.managerRecord.wins}-{props.managerRecord.losses}
-                {props.managerRecord.ties > 0 ? `-${props.managerRecord.ties}` : ''}
+                {copy(props.managerRecord.wins)}{copy("-")}{copy(props.managerRecord.losses)}
+                {copy(props.managerRecord.ties > 0 ? `-${props.managerRecord.ties}` : '')}
               </span>
             ) : null}
           </span>
@@ -457,7 +463,7 @@ export function TradeAssetPicker(props: {
             className="af-tc-input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={roster.length > 0 ? 'Filter this roster, or search anyone…' : 'Search a player…'}
+            placeholder={copy(roster.length > 0 ? 'Filter this roster, or search anyone…' : 'Search a player…')}
             autoFocus
           />
 
@@ -470,13 +476,13 @@ export function TradeAssetPicker(props: {
           {roster.length > 0 ? (
             <>
               <span className="af-label">
-                {rosterHeading}
-                {filteredRoster.length === roster.length
+                {copy(rosterHeading)}
+                {copy(filteredRoster.length === roster.length
                   ? ` · ${roster.length}`
-                  : ` · ${filteredRoster.length} of ${roster.length}`}
+                  : ` · ${filteredRoster.length} of ${roster.length}`)}
               </span>
               {filteredRoster.length === 0 ? (
-                <p className="af-tc-row-sub">Nobody on this roster matches that.</p>
+                <p className="af-tc-row-sub">{copy("Nobody on this roster matches that.")}</p>
               ) : null}
               {filteredRoster.map((p) => (
                 <RosterPlayerRow
@@ -503,9 +509,7 @@ export function TradeAssetPicker(props: {
               ))}
             </>
           ) : props.rosterKnown ? (
-            <p className="af-tc-row-sub">
-              No players are listed on this roster yet. You can still search for anyone below.
-            </p>
+            <p className="af-tc-row-sub">{copy(" No players are listed on this roster yet. You can still search for anyone below. ")}</p>
           ) : null}
 
           {/*
@@ -514,14 +518,11 @@ export function TradeAssetPicker(props: {
             the list above.
           */}
           {roster.length > 0 && query.trim().length >= MIN_QUERY ? (
-            <span className="af-label">Anyone else</span>
+            <span className="af-label">{copy("Anyone else")}</span>
           ) : null}
-          {searching ? <p className="af-tc-row-sub">Searching…</p> : null}
+          {searching ? <p className="af-tc-row-sub">{copy("Searching…")}</p> : null}
           {!searching && query.trim().length >= MIN_QUERY && rows.length === 0 ? (
-            <p className="af-tc-row-sub">
-              Nobody matched that. Search covers players our value feed knows — a defender or
-              kicker may not appear even though he is rosterable.
-            </p>
+            <p className="af-tc-row-sub">{copy(" Nobody matched that. Search covers players our value feed knows — a defender or kicker may not appear even though he is rosterable. ")}</p>
           ) : null}
           {rows.map((r) => (
             <button
@@ -549,16 +550,16 @@ export function TradeAssetPicker(props: {
                 <span className="af-tc-headshot" aria-hidden="true">
                   <FallbackImg
                     src={r.headshotUrl}
-                    alt=""
+                    alt={copy("")}
                     loading="lazy"
-                    fallback={<span className="af-tc-headshot-fallback">{r.name.slice(0, 1)}</span>}
+                    fallback={<span className="af-tc-headshot-fallback">{copy(r.name.slice(0, 1))}</span>}
                   />
                 </span>
               ) : null}
               <span className="af-tc-row-body">
                 <span className="af-tc-row-name">{r.name}</span>
                 <span className="af-tc-row-sub">
-                  {[r.position, r.team].filter(Boolean).join(' · ')}
+                  {copy([r.position, r.team].filter(Boolean).join(' · '))}
                 </span>
               </span>
               <StockMark stock={r.stock} delta={r.stockDelta} />
@@ -566,7 +567,7 @@ export function TradeAssetPicker(props: {
               {r.value == null ? (
                 <UnpricedValue reason={r.unpricedReason} />
               ) : (
-                <span className="af-tc-row-value">{r.value.toLocaleString()}</span>
+                <span className="af-tc-row-value">{copy(r.value.toLocaleString(locale))}</span>
               )}
             </button>
           ))}
@@ -584,11 +585,11 @@ export function TradeAssetPicker(props: {
             <>
               <span className="af-label">
                 {/* The builder passes 'Your' for the viewer's own side: "Your's picks" is not English. */}
-                {props.rosterLabel === 'Your'
+                {copy(props.rosterLabel === 'Your'
                   ? 'Your picks'
                   : props.rosterLabel
                     ? `${props.rosterLabel}'s picks`
-                    : 'Picks on this roster'}
+                    : 'Picks on this roster')}
               </span>
               {(props.rosterPicks ?? []).map((p) => {
                 const value = props.leagueId ? (p.round == null ? null : readPickPreviewValue({
@@ -619,7 +620,7 @@ export function TradeAssetPicker(props: {
                   <span className="af-tc-row-body">
                     <span className="af-tc-row-name">{p.label}</span>
                     <span className="af-tc-row-sub">
-                      {p.proposable === false ? 'On the roster' : 'On the roster — can be proposed'}
+                      {copy(p.proposable === false ? 'On the roster' : 'On the roster — can be proposed')}
                     </span>
                   </span>
                   {/*
@@ -630,7 +631,7 @@ export function TradeAssetPicker(props: {
                   {value == null ? (
                     <UnpricedValue reason={reason} />
                   ) : (
-                    <span className="af-tc-row-value">{value.toLocaleString()}</span>
+                    <span className="af-tc-row-value">{copy(value.toLocaleString(locale))}</span>
                   )}
                 </button>
                 )
@@ -638,23 +639,20 @@ export function TradeAssetPicker(props: {
             </>
           ) : props.rosterKnown ? (
             <p className="af-tc-row-sub">
-              {props.pickCoverage === 'complete'
+              {copy(props.pickCoverage === 'complete'
                 ? 'This team holds no picks in the next three drafts.'
                 : props.pickCoverage === 'traded_only'
                   ? 'No traded picks are on file for this team.'
-                  : 'No picks with an id on this roster. A pick can still be added below for the verdict, but it cannot be sent as part of an offer.'}
+                  : 'No picks with an id on this roster. A pick can still be added below for the verdict, but it cannot be sent as part of an offer.')}
             </p>
           ) : null}
           {props.rosterKnown && props.pickCoverage === 'traded_only' ? (
-            <p className="af-tc-row-sub">
-              Only picks that have changed hands are listed: we could not tell how many rounds this
-              league&rsquo;s rookie draft has, so a team&rsquo;s own picks are not shown.
-            </p>
+            <p className="af-tc-row-sub">{copy(" Only picks that have changed hands are listed: we could not tell how many rounds this league's rookie draft has, so a team's own picks are not shown. ")}</p>
           ) : null}
 
-          <span className="af-label">Add a pick by hand</span>
+          <span className="af-label">{copy("Add a pick by hand")}</span>
           <label className="af-tc-field">
-            <span className="af-label">Year</span>
+            <span className="af-label">{copy("Year")}</span>
             <input
               className="af-tc-input"
               type="number"
@@ -665,7 +663,7 @@ export function TradeAssetPicker(props: {
             />
           </label>
           <label className="af-tc-field">
-            <span className="af-label">Round</span>
+            <span className="af-label">{copy("Round")}</span>
             <input
               className="af-tc-input"
               type="number"
@@ -704,18 +702,13 @@ export function TradeAssetPicker(props: {
                 }),
               })
             }
-          >
-            Add pick
-          </button>
+          >{copy(" Add pick ")}</button>
           {/*
             ⚠ NO SLOT FIELD ON PURPOSE. A pick's slot is projected from the
             sending team's record — see pickOutlook.ts — and asking a manager to
             guess it would override a computed answer with a hunch.
           */}
-          <p className="af-tc-row-sub">
-            Future picks use the league&rsquo;s current round value until an actual slot is known.
-            You can analyze a manually entered pick; proposals require a pick listed on the roster.
-          </p>
+          <p className="af-tc-row-sub">{copy(" Future picks use the league's current round value until an actual slot is known. You can analyze a manually entered pick; proposals require a pick listed on the roster. ")}</p>
         </div>
       ) : null}
 
@@ -729,20 +722,16 @@ export function TradeAssetPicker(props: {
             for a manager who is genuinely at zero hides a true fact.
           */}
           {props.faabAvailable == null ? (
-            <p className="af-tc-row-sub">
-              This league does not track a FAAB budget, so there is no balance to offer from. You
-              can still enter an amount if you are pricing a hypothetical.
-            </p>
+            <p className="af-tc-row-sub">{copy(" This league does not track a FAAB budget, so there is no balance to offer from. You can still enter an amount if you are pricing a hypothetical. ")}</p>
           ) : (
             <p className="af-tc-row-sub">
-              <strong>${props.faabAvailable.toLocaleString()}</strong> available
-              {props.managerName ? ` to ${props.managerName}` : ''}
-              {props.faabAvailable === 0 ? ' — nothing left to offer.' : ''}
+              <strong>{copy("$")}{copy(props.faabAvailable.toLocaleString(locale))}</strong>{copy(" available ")}{copy(props.managerName ? ` to ${props.managerName}` : '')}
+              {copy(props.faabAvailable === 0 ? ' — nothing left to offer.' : '')}
             </p>
           )}
 
           <label className="af-tc-field">
-            <span className="af-label">Amount</span>
+            <span className="af-label">{copy("Amount")}</span>
             <input
               className="af-tc-input"
               type="number"
@@ -774,7 +763,7 @@ export function TradeAssetPicker(props: {
             disabled={effectiveFaab <= 0}
             onClick={() => props.onPick({ kind: 'faab', amount: effectiveFaab })}
           >
-            {effectiveFaab > 0 ? `Add $${effectiveFaab.toLocaleString()} FAAB` : 'Enter an amount'}
+            {copy(effectiveFaab > 0 ? `Add $${effectiveFaab.toLocaleString(locale)} FAAB` : 'Enter an amount')}
           </button>
         </div>
       ) : null}
@@ -785,10 +774,7 @@ export function TradeAssetPicker(props: {
         the legend — but `TradeConsoleAnalyzeInput` accepts player, pick and faab
         only. A control that built one would produce an asset the engine rejects.
       */}
-      <p className="af-tc-row-sub">
-        Idols, weapons and serums are tradeable in Survivor and Zombie leagues but cannot be added
-        here yet — the analyzer accepts players, picks and FAAB.
-      </p>
+      <p className="af-tc-row-sub">{copy(" Idols, weapons and serums are tradeable in Survivor and Zombie leagues but cannot be added here yet — the analyzer accepts players, picks and FAAB. ")}</p>
     </div>
   )
 }

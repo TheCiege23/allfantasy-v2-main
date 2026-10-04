@@ -4,7 +4,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { consumeRateLimit } from '@/lib/rate-limit'
-import { formatValue, ProposalCardInput, sideTotal } from '@/lib/share/proposalCard'
+import { ProposalCardInput, sideTotal } from '@/lib/share/proposalCard'
+import { tradeVisualCopy } from '@/lib/core-app/tradeVisualCopy'
+import { getIntlLocale } from '@/lib/i18n/constants'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -17,13 +19,15 @@ export const runtime = 'nodejs'
 
 const CARDS_PER_MINUTE = 10
 
-function Side({ title, letter, assets }: { title: string; letter: string | null; assets: ProposalCardInput['give'] }) {
+function Side({ title, letter, assets, language }: { title: string; letter: string | null; assets: ProposalCardInput['give']; language:'en'|'es' }) {
+  const copy=(value:string)=>tradeVisualCopy(value,language)
+  const format=(n:number)=>Math.round(n).toLocaleString(getIntlLocale(language))
   const total = sideTotal(assets)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, background: '#12163e', border: '1px solid #262c6a', borderRadius: 18, padding: '22px 28px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <div style={{ display: 'flex', fontSize: 16, color: '#8b93cf', letterSpacing: 2 }}>GETS</div>
+          <div style={{ display: 'flex', fontSize: 16, color: '#8b93cf', letterSpacing: 2 }}>{language==='es'?'RECIBE':'GETS'}</div>
           <div style={{ display: 'flex', fontSize: 28, fontWeight: 800, color: '#f0f2ff' }}>{title}</div>
         </div>
         {letter ? <div style={{ display: 'flex', fontSize: 64, fontWeight: 900, color: '#ff8a3d' }}>{letter}</div> : null}
@@ -32,12 +36,12 @@ function Side({ title, letter, assets }: { title: string; letter: string | null;
         {assets.map((a, i) => (
           <div key={`${a.name}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 22, color: '#c6cbf5', marginTop: 6 }}>
             <span style={{ display: 'flex' }}>{a.name}</span>
-            <span style={{ display: 'flex', color: '#8b93cf' }}>{a.value == null ? '—' : formatValue(a.value)}</span>
+            <span style={{ display: 'flex', color: '#8b93cf' }}>{a.value == null ? '—' : format(a.value)}</span>
           </div>
         ))}
       </div>
       <div style={{ display: 'flex', marginTop: 'auto', paddingTop: 12, fontSize: 18, color: '#8b93cf' }}>
-        {total == null ? 'Some assets unpriced' : `Total ${formatValue(total)}`}
+        {total == null ? copy('Some assets unpriced') : `Total ${format(total)}`}
       </div>
     </div>
   )
@@ -56,6 +60,8 @@ export async function POST(req: NextRequest) {
   const parsed = ProposalCardInput.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return NextResponse.json({ error: 'Invalid card' }, { status: 400 })
   const card = parsed.data
+  const copy=(value:string)=>tradeVisualCopy(value,card.language)
+  const es=card.language==='es'
 
   const league = await prisma.league.findFirst({
     where: { id: card.leagueId, OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }] },
@@ -70,8 +76,8 @@ export async function POST(req: NextRequest) {
         <div style={{ display: 'flex', flexDirection: 'column', padding: '28px 44px', flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', fontSize: 40, fontWeight: 900, fontStyle: 'italic', color: '#f0f2ff' }}>TRADE CHECK</div>
-              <div style={{ display: 'flex', fontSize: 18, color: '#8b93cf' }}>{league.name ?? 'Fantasy league'} · {league.sport?.toUpperCase() ?? 'FANTASY'}</div>
+              <div style={{ display: 'flex', fontSize: es?32:40, fontWeight: 900, fontStyle: 'italic', color: '#f0f2ff' }}>{es?'ANÁLISIS DEL INTERCAMBIO':'TRADE CHECK'}</div>
+              <div style={{ display: 'flex', fontSize: 18, color: '#8b93cf' }}>{league.name ?? (es?'Liga fantasy':'Fantasy league')} · {league.sport?.toUpperCase() ?? 'FANTASY'}</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
               {card.score != null ? (
@@ -80,17 +86,17 @@ export async function POST(req: NextRequest) {
                   <span style={{ display: 'flex', fontSize: 22, marginBottom: 10, color: '#8b93cf' }}>/100</span>
                 </div>
               ) : null}
-              <div style={{ display: 'flex', fontSize: 22, fontWeight: 700, color: '#f0f2ff' }}>{card.verdict}</div>
+              <div style={{ display: 'flex', fontSize: 22, fontWeight: 700, color: '#f0f2ff' }}>{copy(card.verdict)}</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 22, marginTop: 22, flex: 1 }}>
-            <Side title={card.myLabel} letter={card.myLetter} assets={card.get} />
-            <Side title={card.theirLabel} letter={card.theirLetter} assets={card.give} />
+            <Side title={card.myLabel} letter={card.myLetter} assets={card.get} language={card.language} />
+            <Side title={card.theirLabel} letter={card.theirLetter} assets={card.give} language={card.language} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16, alignItems: 'center' }}>
             <div style={{ display: 'flex', flexDirection: 'column', fontSize: 14, color: '#9ba8cf' }}>
-              <span style={{ display: 'flex' }}>Proposed trade · {(card.basis ?? 'League value').slice(0, 65)} · {card.uncertainty ?? 'Value estimate'}</span>
-              <span style={{ display: 'flex' }}>As of {card.asOf ? new Date(card.asOf).toLocaleString('en-US', { timeZone: 'UTC' }) + ' UTC' : 'time unavailable'} · Projected value, not a result or acceptance prediction</span>
+              <span style={{ display: 'flex' }}>{es?'Intercambio propuesto':'Proposed trade'} · {copy(card.basis ?? 'League value').slice(0, 65)} · {copy(card.uncertainty ?? 'Value estimate')}</span>
+              <span style={{ display: 'flex', maxWidth:960 }}>{es?'A fecha de':'As of'} {card.asOf ? new Date(card.asOf).toLocaleString(getIntlLocale(card.language), { timeZone: 'UTC' }) + ' UTC' : (es?'hora desconocida':'time unavailable')} · {es?'Valor estimado, no resultado ni predicción de aceptación':'Projected value, not a result or acceptance prediction'}</span>
             </div>
             <div style={{ display: 'flex', fontSize: 18, fontWeight: 800, color: '#c6cbf5' }}>AllFantasy.ai</div>
           </div>

@@ -172,6 +172,7 @@ export type LeagueTradeAsset = {
 }
 
 export type LeagueTradeHistoryItem = {
+  impactRef?: import('@/components/core-app/screens/ImpactNowReview').ImpactNowRef
   id: string
   /**
    * The saved `evaluateTrade()` receipt for the letter this row shows NOW (Trade OS, design step 5). Null
