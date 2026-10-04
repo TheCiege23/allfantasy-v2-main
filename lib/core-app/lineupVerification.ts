@@ -10,9 +10,10 @@ export function verificationAge(checkedAt: string, now: number, language: 'en' |
 }
 
 /** Static alerts use an absolute time so an open dashboard never says 'just now' forever. */
-export function verificationStamp(checkedAt: string): string {
+export function verificationStamp(checkedAt: string, language: 'en' | 'es' = 'en'): string {
+  const es = language === 'es'
   const date = new Date(checkedAt)
-  if (!Number.isFinite(date.getTime())) return 'Verification time unavailable'
+  if (!Number.isFinite(date.getTime())) return es ? 'Hora de verificación no disponible' : 'Verification time unavailable'
   const iso = date.toISOString()
-  return `Checked ${iso.slice(11, 16)} UTC · ${iso.slice(0, 10)}`
+  return `${es ? 'Revisada' : 'Checked'} ${iso.slice(11, 16)} UTC · ${iso.slice(0, 10)}`
 }

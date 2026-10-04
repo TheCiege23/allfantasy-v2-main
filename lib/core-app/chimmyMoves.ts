@@ -26,7 +26,28 @@ export type ChimmyMove = {
   href: string
   actionLabel: string
   ask: string
+  /**
+   * What `title`, `detail` and `ask` were built from, so the card can say them in the reader's language
+   * (2026-10-04). This module runs on the SERVER (page.tsx composes it), which does not know the reader's
+   * language, so the English fields above stay exactly as they were and the card rebuilds Spanish from
+   * these at render. `lock` is `lockState`'s own English label — the card translates it with the same
+   * `coreUiCopy` lock patterns every other lock label in /core goes through.
+   */
+  parts?: ChimmyMoveParts
 }
+
+export type ChimmyMoveParts =
+  | {
+      verb: 'bench' | 'check'
+      name: string
+      /** inactive / on bye / no game, or the injury designation as the feed wrote it ("Out", "Questionable"). */
+      reason: { kind: 'inactive' | 'bye' | 'no-game' } | { kind: 'status'; label: string }
+      /** "WR · KC", or '' when neither is on file. */
+      where: string
+      /** `lockState(...).label` in English, or null when his kickoff is not on file. */
+      lock: string | null
+    }
+  | { verb: 'fill'; slotLabel: string }
 
 export type ChimmyMoves = {
   leagueId?: string
@@ -39,14 +60,17 @@ export type ChimmyMoves = {
 
 const MAX_MOVES = 3
 
-function describe(row: TriageRow): { title: string; reason: string } {
+type ReasonPart = Extract<ChimmyMoveParts, { verb: 'bench' | 'check' }>['reason']
+
+function describe(row: TriageRow): { title: string; reason: string; verb: 'bench' | 'check'; reasonPart: ReasonPart } {
   const name = row.player.name
-  if (row.inactive) return { title: `Bench ${name}`, reason: 'inactive' }
-  if (row.bye) return { title: `Bench ${name}`, reason: 'on bye' }
-  if (row.noGame && !row.status) return { title: `Bench ${name}`, reason: 'has no game this week' }
+  if (row.inactive) return { title: `Bench ${name}`, reason: 'inactive', verb: 'bench', reasonPart: { kind: 'inactive' } }
+  if (row.bye) return { title: `Bench ${name}`, reason: 'on bye', verb: 'bench', reasonPart: { kind: 'bye' } }
+  if (row.noGame && !row.status) return { title: `Bench ${name}`, reason: 'has no game this week', verb: 'bench', reasonPart: { kind: 'no-game' } }
   const label = row.status?.label ?? 'flagged'
-  if (row.status?.tone === 'bad') return { title: `Bench ${name}`, reason: label.toLowerCase() }
-  return { title: `Check ${name}`, reason: label.toLowerCase() }
+  const reasonPart: ReasonPart = { kind: 'status', label: row.status?.label ?? 'Flagged' }
+  if (row.status?.tone === 'bad') return { title: `Bench ${name}`, reason: label.toLowerCase(), verb: 'bench', reasonPart }
+  return { title: `Check ${name}`, reason: label.toLowerCase(), verb: 'check', reasonPart }
 }
 
 export function composeChimmyMoves(args: {
@@ -65,7 +89,7 @@ export function composeChimmyMoves(args: {
     const lock = row.kickoff ? lockState(row.kickoff, nowIso) : null
     if (lock?.state === 'locked') continue
 
-    const { title, reason } = describe(row)
+    const { title, reason, verb, reasonPart } = describe(row)
     const tone: MoveTone = row.status?.tone === 'warn' && !row.noGame && !row.inactive ? 'warn' : 'bad'
     const where = [row.player.position, row.player.team].filter(Boolean).join(' · ')
     const detail = [reason.charAt(0).toUpperCase() + reason.slice(1), where, lock?.label].filter(Boolean).join(' — ')
@@ -81,6 +105,7 @@ export function composeChimmyMoves(args: {
         tone === 'bad'
           ? `${row.player.name} is ${reason}. Who should I start instead in ${leagueName}?`
           : `${row.player.name} is ${reason}. Should I start him in ${leagueName}, and who is my best backup?`,
+      parts: { verb, name: row.player.name, reason: reasonPart, where, lock: lock?.label ?? null },
     })
   }
 
@@ -117,6 +142,7 @@ export function composeMyTeamMoves(args: {
     href: `/core/my-team?league=${league}#lineup-slot-${index}`,
     actionLabel: 'Fix lineup',
     ask: `My ${slotLabel} slot in ${args.leagueName} is empty. Who should I start there?`,
+    parts: { verb: 'fill', slotLabel },
   }))
   const triaged = composeMyTeamPlayerMoves(args)
   return { ...triaged, moves: [...emptyMoves, ...triaged.moves].slice(0, MAX_MOVES) }
