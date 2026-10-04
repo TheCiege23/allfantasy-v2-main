@@ -196,3 +196,31 @@ describe('Settings › Your leagues', () => {
     expect(screen.getByTestId('league-fav-a').getAttribute('aria-pressed')).toBe('false')
   })
 })
+
+describe('Settings league save ordering', () => {
+  it('blocks another edit while saving, then restores and allows retry after failure', async () => {
+    let finish!: (value: Response) => void
+    const posts: unknown[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        posts.push(JSON.parse(String(init.body)))
+        if (posts.length === 1) return new Promise<Response>(resolve => { finish = resolve })
+        return new Response('{}')
+      }
+      if (url.startsWith('/api/league/list')) return new Response(JSON.stringify({ leagues: LIST.map(l => ({ ...l, platform: 'sleeper', hasUnifiedRecord: true })) }))
+      return new Response(JSON.stringify({ favorites: [], hidden: [], order: [] }))
+    }))
+    render(<LeagueListPreferencesCard />)
+    fireEvent.click(await screen.findByTestId('league-fav-a'))
+    fireEvent.click(screen.getByTestId('league-fav-b'))
+    fireEvent.click(screen.getByTestId('league-hide-c'))
+    expect(posts).toEqual([{ field: 'favorites', leagueIds: ['a'] }])
+    expect(screen.getByTestId('league-hide-c').hasAttribute('disabled')).toBe(true)
+    finish(new Response('{}', { status: 503 }))
+    await screen.findByRole('alert')
+    expect(screen.getByTestId('league-fav-a').getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByTestId('league-hide-c').hasAttribute('disabled')).toBe(false)
+    fireEvent.click(screen.getByTestId('league-fav-b'))
+    await waitFor(() => expect(posts).toEqual([{ field: 'favorites', leagueIds: ['a'] }, { field: 'favorites', leagueIds: ['b'] }]))
+  })
+})

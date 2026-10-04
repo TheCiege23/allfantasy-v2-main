@@ -34,10 +34,24 @@ type State =
 async function readStoredPreferences(): Promise<NotificationPreferences | null | 'failed'> {
   const res = await fetch('/api/user/profile', { cache: 'no-store' }).catch(() => null)
   if (!res?.ok) return 'failed'
-  const data = (await res.json().catch(() => null)) as { notificationPreferences?: unknown } | null
-  if (!data) return 'failed'
-  const raw = data.notificationPreferences
-  return raw && typeof raw === 'object' ? (raw as NotificationPreferences) : null
+  const data: unknown = await res.json().catch(() => null)
+  if (!data || typeof data !== 'object' || Array.isArray(data)
+    || !Object.prototype.hasOwnProperty.call(data, 'notificationPreferences')) return 'failed'
+  const raw = (data as Record<string, unknown>).notificationPreferences
+  if (raw === null) return null // Explicitly absent stored preferences is a valid read.
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return 'failed'
+  const leagues = (raw as Record<string, unknown>).leagues
+  if (leagues !== undefined) {
+    if (!leagues || typeof leagues !== 'object' || Array.isArray(leagues)) return 'failed'
+    for (const entry of Object.values(leagues)) {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return 'failed'
+      const row = entry as Record<string, unknown>
+      if (row.enabled !== undefined && typeof row.enabled !== 'boolean') return 'failed'
+      if (row.mutedCategories !== undefined && (!Array.isArray(row.mutedCategories)
+        || !row.mutedCategories.every(value => typeof value === 'string'))) return 'failed'
+    }
+  }
+  return raw as NotificationPreferences
 }
 
 async function savePatch(patch: LeagueOverridePatch): Promise<boolean> {
