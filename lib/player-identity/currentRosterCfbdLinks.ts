@@ -9,14 +9,15 @@ const roles = (value: string | null) => String(value??'').toUpperCase().split(/[
 
 // Verified 2026-10-04 through the RotoWire IDs supplied by Fantrax itself. Each public
 // provider profile names the alternate spelling; this is not a generic nickname expansion.
-const documentedSourceNames:Record<string,{rotowireId:string;sourceName:string;officialName:string;url:string;canonicalNames?:string[]}>={
- '06982':{rotowireId:'41891',sourceName:'Cook, Cameron',officialName:'Cam Cook',url:'https://www.rotowire.com/cfootball/player/cam-cook-41891'},
- '06jaw':{rotowireId:'47073',sourceName:'Barnes, Christopher',officialName:'Chris Barnes',url:'https://www.rotowire.com/cfootball/player/chris-barnes-47073'},
- '06ajd':{rotowireId:'41448',sourceName:'Alexander, Hilton',officialName:'Deuce Alexander',url:'https://www.rotowire.com/cfootball/player/deuce-alexander-41448'},
- '06fo4':{rotowireId:'42002',sourceName:'Winfield, DWayne Lunch',officialName:'Lunch Winfield',canonicalNames:["D'Wanye Winfield","D'Wanye' Winfield"],url:'https://www.rotowire.com/cfootball/player/lunch-winfield-42002'},
- '069ol':{rotowireId:'40941',sourceName:'Baxter, Cedric',officialName:'CJ Baxter',url:'https://www.rotowire.com/cfootball/player/cj-baxter-40941'},
- '06ks2':{rotowireId:'45156',sourceName:'Bailey, Cedrick',officialName:'CJ Bailey',url:'https://www.rotowire.com/cfootball/player/cj-bailey-45156'},
- '06ks3':{rotowireId:'46363',sourceName:'Scott, Duke',officialName:'Jayden Scott',url:'https://gopack.com/sports/football/roster'},
+// Biography evidence: docs/readiness/ncaaf-alternate-name-proofs.md (never fetched at runtime).
+const documentedSourceNames:Record<string,{rotowireId:string;sourceName:string;officialName:string;canonicalNames?:string[]}>={
+ '06982':{rotowireId:'41891',sourceName:'Cook, Cameron',officialName:'Cam Cook'},
+ '06jaw':{rotowireId:'47073',sourceName:'Barnes, Christopher',officialName:'Chris Barnes'},
+ '06ajd':{rotowireId:'41448',sourceName:'Alexander, Hilton',officialName:'Deuce Alexander'},
+ '06fo4':{rotowireId:'42002',sourceName:'Winfield, DWayne Lunch',officialName:'Lunch Winfield',canonicalNames:["D'Wanye Winfield","D'Wanye' Winfield"]},
+ '069ol':{rotowireId:'40941',sourceName:'Baxter, Cedric',officialName:'CJ Baxter'},
+ '06ks2':{rotowireId:'45156',sourceName:'Bailey, Cedrick',officialName:'CJ Bailey'},
+ '06ks3':{rotowireId:'46363',sourceName:'Scott, Duke',officialName:'Jayden Scott'},
 }
 const sourceNameKey=(ref:FantraxPlayerRef)=>{
  const proof=documentedSourceNames[ref.fantraxId]
