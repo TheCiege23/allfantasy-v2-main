@@ -345,6 +345,14 @@ export async function rollPostseason(
   for (const season of seasons) {
     const base = { seasonId: season.id, leagueId: season.leagueId, status: season.status }
 
+    if ((season.league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto') {
+      try {
+        const outcome=await finalizeSeasonAndEnterOffseason({seasonId:season.id,leagueId:season.leagueId,actorUserId:WEEK_ROLLER_ACTOR})
+        if(outcome.ok) {finalized++;outcomes.push({...base,step:'finalized',championRosterId:outcome.championRosterId,offseasonEntered:outcome.offseasonEntered})}
+        else {held++;outcomes.push({...base,step:'held',detail:outcome.code})}
+      } catch(error) {held++;outcomes.push({...base,step:'held',detail:messageOf(error)})}
+      continue
+    }
     if (isNativeTournamentLeague(season.league)) {
       held += 1
       outcomes.push({ ...base, step: 'held', detail: 'contest_advancement_owns_season' })

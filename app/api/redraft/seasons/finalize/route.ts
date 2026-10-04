@@ -85,6 +85,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    if(outcome.result.ok && 'format' in outcome.result && outcome.result.format === 'roto') {
+      const champion=outcome.result.finalStandings.find(r=>r.champion)
+      return NextResponse.json({seasonId,status:'complete',scoringMode:'roto',championRosterId:outcome.championRosterId,runnerUpRosterId:outcome.runnerUpRosterId,championTeamName:champion?.teamName??null,finalStandings:outcome.result.finalStandings,playoffs:null,events:[],alreadyFinalized:outcome.alreadyFinalized,offseasonEntered:outcome.offseasonEntered})
+    }
     const champion = outcome.result.ok
       ? outcome.result.state.teams.find((team) => team.rosterId === outcome.championRosterId)
       : undefined
