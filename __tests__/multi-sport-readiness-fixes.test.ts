@@ -53,3 +53,10 @@ describe('multisport scoring readiness', () => {
  it('maps captured college defensive fields without guessing assisted tackles or forced fumbles', () => {
   expect(normalizeCfbdGameStats({ 'defensive.SOLO': 3, 'defensive.TOT': 5, 'defensive.SACKS': 1.5, 'defensive.TFL': 2, 'defensive.PD': 1, 'interceptions.INT': 1 }).stats).toEqual({ idp_solo: 3, idp_tackle: 5, idp_sack: 1.5, idp_tfl: 2, idp_pd: 1, idp_int: 1 })
 })
+
+ it('uses only unambiguous current-season school suffixes, keeping Illinois and Illinois College separate', () => {
+  const row = { id: 'p1', canonicalName: 'Jane Smith', currentTeam: 'University of Florida', position: 'WR', cfbdId: '42', fantraxId: null }
+  const ref = { fantraxId: 'fx1', name: 'Smith, Jane', team: 'Florida', position: 'WR' }
+  expect(planNcaafFantraxIdentityLinks([ref], [row], ['Florida', 'Illinois', 'Illinois College']).links).toHaveLength(1)
+  expect(planNcaafFantraxIdentityLinks([{ ...ref, team: 'Illinois University' }], [{ ...row, currentTeam: 'Illinois' }], ['Illinois', 'Illinois College']).links).toEqual([])
+})
