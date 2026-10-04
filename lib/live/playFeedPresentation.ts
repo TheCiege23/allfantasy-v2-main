@@ -63,6 +63,11 @@ export type PlayFeedItem = {
    * The row renders the name itself as a player-card button, then this.
    */
   action: string
+  /**
+   * What `action` was built from (2026-10-04), so a surface can say it in Spanish
+   * (lib/core-app/homeBandsCopy.ts `playActionText`). `action` and `headline` are unchanged.
+   */
+  actionParts?: PlayActionParts
   /** Yards on THIS play, or null when the event carries no play yardage. */
   yards: number | null
   detectedAt: string
@@ -180,6 +185,60 @@ function unitOf(event: LiveEvent): 'rushing' | 'receiving' | 'passing' | null {
 }
 
 /**
+ * Which play it was, and the values its sentence names — one kind per sentence
+ * `playActionFor` can write (2026-10-04). A Spanish surface rebuilds its own
+ * sentence from the same parts (lib/core-app/homeBandsCopy.ts `playActionText`),
+ * so the two can never disagree about which play happened.
+ */
+export type PlayActionParts = {
+  kind:
+    | 'rushing-td' | 'receiving-td' | 'passing-td' | 'touchdown'
+    | 'run' | 'catch' | 'completion' | 'gain'
+    | 'field-goal'
+    | 'intercepted' | 'recovered' | 'threw-int' | 'lost-fumble' | 'turnover'
+    | 'pick-six' | 'fumble-return-td' | 'safety' | 'defensive-td'
+    | 'kickoff-return-td' | 'punt-return-td' | 'special-teams-td'
+  yards: number | null
+  /** The passer, on a play told from the receiver's side. */
+  from: string | null
+  /** The receiver, on a play told from the passer's side. */
+  to: string | null
+}
+
+export function playActionParts(event: LiveEvent): PlayActionParts | null {
+  const unit = unitOf(event)
+  const kind = ((): PlayActionParts['kind'] | null => {
+    switch (event.type) {
+      case 'TOUCHDOWN':
+        return unit === 'rushing' ? 'rushing-td' : unit === 'receiving' ? 'receiving-td' : unit === 'passing' ? 'passing-td' : 'touchdown'
+      case 'BIG_PLAY':
+        return unit === 'rushing' ? 'run' : unit === 'receiving' ? 'catch' : unit === 'passing' ? 'completion' : 'gain'
+      case 'FIELD_GOAL':
+        return 'field-goal'
+      case 'TURNOVER':
+        if (event.role === 'interceptor') return 'intercepted'
+        if (event.role === 'recoverer') return 'recovered'
+        if (event.stat === 'passing_interceptions') return 'threw-int'
+        if (event.stat === 'fumbles_lost') return 'lost-fumble'
+        return 'turnover'
+      case 'DEFENSIVE_SCORE':
+        if (event.stat === 'interception' || event.stat === 'interception_touchdowns') return 'pick-six'
+        if (event.stat === 'fumble' || event.stat === 'fumble_return_touchdowns') return 'fumble-return-td'
+        if (event.stat === 'safety') return 'safety'
+        return 'defensive-td'
+      case 'SPECIAL_TEAMS_SCORE':
+        if (event.stat === 'kickoff' || event.stat === 'kick_return_touchdowns') return 'kickoff-return-td'
+        if (event.stat === 'punt' || event.stat === 'punt_return_touchdowns') return 'punt-return-td'
+        return 'special-teams-td'
+      default:
+        return null
+    }
+  })()
+  if (!kind) return null
+  return { kind, yards: playYards(event), from: event.passerName || null, to: event.receiverName || null }
+}
+
+/**
  * What the player did, without his name: "34-yard rushing TD",
  * "34-yard receiving TD from Kirk Cousins", "33-yard catch from Kyler Murray".
  *
@@ -187,42 +246,56 @@ function unitOf(event: LiveEvent): 'rushing' | 'receiving' | 'passing' | null {
  * prose we do not control and names teams in a format that does not match ours.
  */
 export function playActionFor(event: LiveEvent): string {
-  const y = playYards(event)
+  const p = playActionParts(event)
+  if (!p) return ''
+  const y = p.yards
   const yd = y != null ? `${y}-yard ` : ''
-  const from = event.passerName ? ` from ${event.passerName}` : ''
-  const to = event.receiverName ? ` to ${event.receiverName}` : ''
-  const unit = unitOf(event)
+  const from = p.from ? ` from ${p.from}` : ''
+  const to = p.to ? ` to ${p.to}` : ''
 
-  switch (event.type) {
-    case 'TOUCHDOWN':
-      if (unit === 'rushing') return `${yd}rushing TD`
-      if (unit === 'receiving') return `${yd}receiving TD${from}`
-      if (unit === 'passing') return `${yd}TD pass${to}`
+  switch (p.kind) {
+    case 'rushing-td':
+      return `${yd}rushing TD`
+    case 'receiving-td':
+      return `${yd}receiving TD${from}`
+    case 'passing-td':
+      return `${yd}TD pass${to}`
+    case 'touchdown':
       return 'scored a touchdown'
-    case 'BIG_PLAY':
-      if (unit === 'rushing') return y != null ? `${y}-yard run` : 'long run'
-      if (unit === 'receiving') return y != null ? `${y}-yard catch${from}` : `long catch${from}`
-      if (unit === 'passing') return y != null ? `${y}-yard completion${to}` : `long completion${to}`
+    case 'run':
+      return y != null ? `${y}-yard run` : 'long run'
+    case 'catch':
+      return y != null ? `${y}-yard catch${from}` : `long catch${from}`
+    case 'completion':
+      return y != null ? `${y}-yard completion${to}` : `long completion${to}`
+    case 'gain':
       return y != null ? `${y}-yard gain` : 'big gain'
-    case 'FIELD_GOAL':
+    case 'field-goal':
       return 'made a field goal'
-    case 'TURNOVER':
-      if (event.role === 'interceptor') return 'intercepted a pass'
-      if (event.role === 'recoverer') return 'recovered a fumble'
-      if (event.stat === 'passing_interceptions') return 'threw an interception'
-      if (event.stat === 'fumbles_lost') return 'lost a fumble'
+    case 'intercepted':
+      return 'intercepted a pass'
+    case 'recovered':
+      return 'recovered a fumble'
+    case 'threw-int':
+      return 'threw an interception'
+    case 'lost-fumble':
+      return 'lost a fumble'
+    case 'turnover':
       return 'turned it over'
-    case 'DEFENSIVE_SCORE':
-      if (event.stat === 'interception' || event.stat === 'interception_touchdowns') return 'pick-six'
-      if (event.stat === 'fumble' || event.stat === 'fumble_return_touchdowns') return 'fumble return TD'
-      if (event.stat === 'safety') return 'safety'
+    case 'pick-six':
+      return 'pick-six'
+    case 'fumble-return-td':
+      return 'fumble return TD'
+    case 'safety':
+      return 'safety'
+    case 'defensive-td':
       return 'defensive TD'
-    case 'SPECIAL_TEAMS_SCORE':
-      if (event.stat === 'kickoff' || event.stat === 'kick_return_touchdowns') return 'kickoff return TD'
-      if (event.stat === 'punt' || event.stat === 'punt_return_touchdowns') return 'punt return TD'
+    case 'kickoff-return-td':
+      return 'kickoff return TD'
+    case 'punt-return-td':
+      return 'punt return TD'
+    case 'special-teams-td':
       return 'special teams TD'
-    default:
-      return ''
   }
 }
 
@@ -275,6 +348,7 @@ export async function getPlayFeed(limit = 12): Promise<PlayFeedItem[]> {
       position,
       headline: headlineFor(event, position),
       action: playActionFor(event),
+      actionParts: playActionParts(event) ?? undefined,
       yards: playYards(event),
       detectedAt:
         event.detectedAt instanceof Date

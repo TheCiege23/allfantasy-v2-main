@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { Suspense, isValidElement, type ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { HomeReadFailure } from '@/components/core-app/home/HomePanels'
 
 /**
  * The /core home streams each card on its own.
@@ -376,7 +378,10 @@ describe('/core home cards stream independently', () => {
     g.gate('career').open({ marker: 'career' })
 
     const issues = (await within(render(cards.get('issues')!))) as AnyElement
-    expect(JSON.stringify(issues.props)).toContain('We could not read your leagues just now')
+    // The panel's words are said by a client component now (2026-10-04, Spanish) — assert the panel,
+    // then what it says in English, so the check still fails if the card renders anything else.
+    expect(issues.type).toBe(HomeReadFailure)
+    expect(renderToStaticMarkup(issues)).toContain('We could not read your leagues just now')
 
     for (const name of ['chimmy', 'leagues', 'portfolio-chart', 'matchups', 'triage']) {
       expect(await within(render(cards.get(name)!)), `${name} rendered without the summary`).toBeNull()
@@ -630,6 +635,9 @@ describe('/core home cards stream independently', () => {
     expect(panels).toContain('Ice Kings')
     expect(panels).toContain('your other leagues are unaffected')
     expect(panels).not.toContain('We could not read your leagues just now')
+    // …and the account-wide panel is its own component now, so look for IT as well: the string check
+    // above can no longer see it, and would pass with the league branch rendering it.
+    expect(findAll(tree, (el) => el.type === HomeReadFailure)).toHaveLength(0)
     expect(findAll(tree, (el) => typeof el.props?.loads === 'object')).toHaveLength(0)
   })
 

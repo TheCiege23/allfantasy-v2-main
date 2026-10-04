@@ -106,7 +106,26 @@ export type RecentTradeSide = {
    */
   gradeBasis: 'League' | 'Market' | 'Realized' | null
   gradeReason: string
+  /**
+   * What `gradeReason` was built from, for the two lines the home's trade band can say in Spanish
+   * (lib/core-app/homeBandsCopy.ts). The English is unchanged; a line without parts stays English.
+   */
+  gradeParts?: RecentTradeGradeParts
 }
+
+export type RecentTradeGradeParts =
+  | {
+      kind: 'league'
+      got: number
+      gave: number
+      /** The `gradeMoment` input the English phrase was written from. */
+      moment: GradeMomentInput
+      /** Today's letter, only when the frozen original has since moved. */
+      nowLetter: string | null
+      /** Net fantasy points while the assets were held, when the ledger has them. */
+      realizedNet: number | null
+    }
+  | { kind: 'realized'; net: number }
 
 /**
  * A prospective verdict on the deal as struck — market value of what each side
@@ -500,7 +519,8 @@ function applyOneGrade(
   trade: RecentTrade,
   grade: Extract<TradeGradeView, { graded: true }>,
   a: number | string,
-  realizedNote: (side: RecentTradeSide) => string | null = () => null,
+  /** Net fantasy points the side realised while holding the assets, or null. */
+  realizedNet: (side: RecentTradeSide) => number | null = () => null,
 ): void {
   trade.gradedAt = grade.frozenAt ?? null
   trade.gradedMoment = grade.frozenAt ? gradeMomentOf(grade) : null
@@ -510,11 +530,13 @@ function applyOneGrade(
     const gave = isA ? grade.giveValue : grade.getValue
     side.grade = isA ? grade.letter : grade.partnerLetter
     side.gradeBasis = 'League'
-    const realized = realizedNote(side)
+    const net = realizedNet(side)
+    const realized = net != null ? `Realized so far: net ${net.toFixed(1)} fantasy points while the assets were held.` : null
     // A frozen original says WHEN; today's letter rides beside it only when it moved (`frozenCompletedGrade.ts`).
     const nowLetter = grade.current ? (isA ? grade.current.letter : grade.current.partnerLetter) : null
     const moved = nowLetter && nowLetter !== side.grade ? ` On today’s values: ${nowLetter}.` : ''
     side.gradeReason = `Got ${got.toLocaleString()} for ${gave.toLocaleString()} on this league’s values ${gradeMoment(grade)}.${moved}${realized ? ` ${realized}` : ''}`
+    side.gradeParts = { kind: 'league', got, gave, moment: gradeMomentOf(grade), nowLetter: moved ? nowLetter : null, realizedNet: net }
   }
 }
 
@@ -572,7 +594,11 @@ export async function gradeProviderRecentTrade(t: RecentTrade, now: Date = new D
     applyOneGrade(t, g, a.rosterId)
     t.verdict = verdictFromGrade(g, a.rosterId, b.rosterId)
   } else if (g) {
-    for (const side of t.sides) side.gradeReason = `League grade withheld: ${g.reason}`
+    for (const side of t.sides) {
+      side.gradeReason = `League grade withheld: ${g.reason}`
+      // A withheld line has no parts: it renders whole, in English, rather than half-translated.
+      delete side.gradeParts
+    }
   }
 }
 
@@ -861,9 +887,7 @@ export async function getRecentTrades(
       const noSignal = (() => { try { return hasNoSignal(src) } catch { return true } })()
       applyOneGrade(t, oneGrade, src.sides[0]!.rosterId, (side) => {
         const realized = srcByRoster.get(String(side.rosterId))
-        return !noSignal && realized && typeof realized.cumulativeNet === 'number'
-          ? `Realized so far: net ${realized.cumulativeNet.toFixed(1)} fantasy points while the assets were held.`
-          : null
+        return !noSignal && realized && typeof realized.cumulativeNet === 'number' ? realized.cumulativeNet : null
       })
     } else if (live?.enrichLeagueContext && hasNoSignal(src)) {
       const expectation = await loadTradeExpectation(t.platformLeagueId, src, { afLeagueId: t.leagueId }).catch(() => null)
@@ -877,6 +901,7 @@ export async function getRecentTrades(
           : exp.starterGaps.length === 0
             ? 'No required starter gaps detected.'
             : `Starter gaps: ${exp.starterGaps.map((g) => `${g.position} ${g.rostered}/${g.required}`).join(', ')}.`
+        delete side.gradeParts
         side.gradeReason = expectation?.evaluation.withheldReason
           ?? (edge == null
             ? `No complete market grade is available for ${expectation?.leagueNote ?? 'this league'}.`
@@ -892,6 +917,7 @@ export async function getRecentTrades(
         side.gradeReason = hasRealizedGrade
           ? `Net ${realized!.cumulativeNet.toFixed(1)} fantasy points under this league's scoring while the assets were held.`
           : 'No grade is available for this side.'
+        if (hasRealizedGrade) side.gradeParts = { kind: 'realized', net: realized!.cumulativeNet }
       }
     }
   }

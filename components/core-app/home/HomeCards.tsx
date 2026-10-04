@@ -9,7 +9,7 @@ import { freshnessStamp, leagueDataStamp, type CardFreshnessStamp } from '@/lib/
 import { rankDecisions } from '@/lib/core-app/decisionQueue'
 import type { HomeCardOrder } from '@/lib/core-app/homeCardOrder'
 import { homePrefetchTargets } from '@/lib/core-app/homePrefetchTargets'
-import { ScopeResetLink } from '@/components/core-app/ScopeSwitcher'
+import { HomeReadFailure, HomeScopeEmpty, HomeScopeNote } from '@/components/core-app/home/HomePanels'
 import Dashboard3A, {
   Dash3ACareer,
   Dash3AChimmy,
@@ -220,18 +220,9 @@ async function DecisionsCard({
 }) {
   const [data, list] = await Promise.all([dash34, issues])
   if (!data) {
-    // The panel that used to replace the whole home when this read failed — see the header.
-    return (
-      <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-        <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-          Your leagues
-        </h1>
-        <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-          We could not read your leagues just now. This is a read failure on our side, not a sign
-          that you have none.
-        </p>
-      </div>
-    )
+    // The panel that used to replace the whole home when this read failed — see the header. Its
+    // words are said in the reader's language by a client panel (HomePanels.tsx).
+    return <HomeReadFailure />
   }
   return (
     <DecisionQueue
@@ -422,17 +413,9 @@ async function CoverageCard({ dash34 }: { dash34: HomeLoads['dash34'] }) {
 
 /* ── The home ─────────────────────────────────────────────────────────────────────────────── */
 
-/** A filtered home says so above everything, with the way back to every league. */
+/** A filtered home says so above everything, with the way back to every league (HomePanels.tsx). */
 function ScopeNote({ scope }: { scope: HomeScopeInfo }) {
-  return (
-    <p className="af-home-scope" role="status">
-      <span>
-        Showing <b>{scope.label}</b> — {scope.count} of {scope.total} {scope.total === 1 ? 'league' : 'leagues'}.
-        Everything below covers only these.
-      </span>
-      <ScopeResetLink>Show all leagues</ScopeResetLink>
-    </p>
-  )
+  return <HomeScopeNote label={scope.label} count={scope.count} total={scope.total} />
 }
 
 export function CoreHomeCards({
@@ -533,14 +516,7 @@ export function CoreHomeCards({
          * device. Said plainly, rather than rendering a home of cards that each claim "nothing here"
          * about leagues that were simply filtered out.
          */
-        <div className="af-frame af-home-scope-empty">
-          <h2>No leagues in this view</h2>
-          <p>
-            None of your leagues match &ldquo;{scope.label}&rdquo;
-            {scope.key === 'fav' ? ' — star a league in the league picker at the top to add it here' : ''}.{' '}
-            <ScopeResetLink>Show all leagues</ScopeResetLink>
-          </p>
-        </div>
+        <HomeScopeEmpty label={scope.label} scopeKey={scope.key} />
       ) : (
         <>
           {/* No `data-home-card`: that feeds the per-viewer card ORDER, and this card is not one of them. */}

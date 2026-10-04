@@ -1,8 +1,7 @@
-import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-brief.css'
-import type { BriefStanding, SinceLastVisitBrief } from '@/lib/core-app/sinceLastVisit'
-import { TopicTip } from '@/components/core-app/TopicTip'
+import type { SinceLastVisitBrief } from '@/lib/core-app/sinceLastVisit'
+import { DashSinceLastVisitView, type BriefSpan } from '@/components/core-app/screens/DashSinceLastVisitView'
 
 /**
  * "Since your last visit" — the top of the Core home.
@@ -19,12 +18,17 @@ import { TopicTip } from '@/components/core-app/TopicTip'
  * check this repo runs, and a brief nobody expands is not a brief.
  */
 
-function agoLabel(from: string, now: Date): string {
-  const mins = Math.round((now.getTime() - new Date(from).getTime()) / 60000)
-  if (mins < 60) return `${Math.max(1, mins)}m`
+/** A span rounded the way the brief always has: minutes under an hour, hours under two days, else days. */
+function spanOf(mins: number): BriefSpan {
+  if (mins < 60) return { n: mins, unit: 'm' }
   const hours = Math.round(mins / 60)
-  if (hours < 48) return `${hours}h`
-  return `${Math.round(hours / 24)}d`
+  if (hours < 48) return { n: hours, unit: 'h' }
+  return { n: Math.round(hours / 24), unit: 'd' }
+}
+
+function agoSpan(from: string, now: Date): BriefSpan {
+  const mins = Math.round((now.getTime() - new Date(from).getTime()) / 60000)
+  return spanOf(Math.max(1, mins))
 }
 
 /**
@@ -39,18 +43,10 @@ function agoLabel(from: string, now: Date): string {
  * floored it. A gap cannot do either: it is monotone in the thing it describes, it is never
  * comparable to the header, and it needs no materiality constant to stay honest.
  */
-function gapLabel(fromMs: number, toMs: number): string | null {
+function gapSpan(fromMs: number, toMs: number): BriefSpan | null {
   const mins = Math.round((toMs - fromMs) / 60000)
   if (mins < 1) return null
-  if (mins < 60) return `${mins}m`
-  const hours = Math.round(mins / 60)
-  if (hours < 48) return `${hours}h`
-  return `${Math.round(hours / 24)}d`
-}
-
-function whenLabel(brief: SinceLastVisitBrief, now: Date): string {
-  if (brief.firstVisit || brief.windowCapped) return 'last 7 days'
-  return `since ${agoLabel(brief.sinceAt, now)} ago`
+  return spanOf(mins)
 }
 
 /**
@@ -62,7 +58,7 @@ function whenLabel(brief: SinceLastVisitBrief, now: Date): string {
  * Null whenever the two round to the same minute, which is the normal case: the boundary tracks
  * the visit window exactly unless a read came back blind.
  */
-function tradeReachLabel(brief: SinceLastVisitBrief): string | null {
+function tradeReach(brief: SinceLastVisitBrief): BriefSpan | null {
   /*
    * ⚠ GUARDED AGAINST A VALUE THE TYPE SAYS CANNOT HAPPEN — in two different ways, because they
    * are two different inputs. Tests are not typechecked in this repo, so a fixture built before
@@ -76,164 +72,52 @@ function tradeReachLabel(brief: SinceLastVisitBrief): string | null {
   const since = new Date(brief.sinceAt).getTime()
   if (!Number.isFinite(reach) || !Number.isFinite(since) || reach >= since) return null
   // No `now`: a gap between two stored instants does not depend on when it is rendered.
-  const gap = gapLabel(reach, since)
-  return gap && `reaches ${gap} further back`
-}
-
-function statusText(status: string | null): string {
-  return status ?? 'no designation'
-}
-
-function resultText(s: BriefStanding): string {
-  const parts: string[] = []
-  const games = s.won + s.lost + s.tied
-  if (games > 0) {
-    const tie = s.tied > 0 ? `–${s.tied}` : ''
-    parts.push(`went ${s.won}–${s.lost}${tie}, now ${s.wins}–${s.losses}${s.ties > 0 ? `–${s.ties}` : ''}`)
-  }
-  if (s.rank != null && s.previousRank != null && s.rank !== s.previousRank) {
-    parts.push(`${s.rank < s.previousRank ? 'up' : 'down'} to #${s.rank} (was #${s.previousRank})`)
-  }
-  return parts.join(', ')
+  return gapSpan(reach, since)
 }
 
 export function DashSinceLastVisit({ brief, now }: { brief: SinceLastVisitBrief | null; now: Date }) {
   if (!brief) return null
   const { trades, injuries, standings, alerts } = brief
-  const tradeReach = tradeReachLabel(brief)
 
+  /*
+   * ⚠ THE WORDS ARE SAID IN THE CLIENT (2026-10-04). This brief keeps the decisions — how far back
+   * the window reaches against the server's `now`, every link — and DashSinceLastVisitView says them
+   * in the reader's language.
+   */
   return (
-    <section className="af-core af-brief" aria-label="Since your last visit">
-      <details open>
-        <summary className="af-brief-head">
-          <span className="af-label af-brief-kicker">Since your last visit</span>
-          {/* Inside the <summary> on purpose: a button there opens its popover without toggling the details. */}
-          <TopicTip topic="sinceLastVisit" />
-          <span className="af-brief-when af-num">{whenLabel(brief, now)}</span>
-        </summary>
-
-        <ul className="af-brief-list">
-          {trades.items.length > 0 ? (
-            <li className="af-brief-row" data-kind="trades">
-              <span className="af-brief-what">
-                {trades.atLeast ? `${trades.items.length}+` : trades.items.length} new trade
-                {trades.items.length === 1 && !trades.atLeast ? '' : 's'}
-                {tradeReach ? <span className="af-brief-reach"> ({tradeReach})</span> : null}
-              </span>
-              <ul className="af-brief-sub">
-                {trades.items.map((t) => (
-                  <li key={`${t.leagueId}:${t.acceptedAt}:${t.summary}`}>
-                    <Link href={`/league/${t.leagueId}?view=trades`} className="af-brief-link">
-                      {t.leagueName}
-                    </Link>
-                    <span className="af-brief-detail"> — {t.summary}</span>
-                    {t.handoff ? (
-                      <>
-                        {' '}
-                        <a
-                          className="af-brief-handoff"
-                          href={t.handoff.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={`${t.handoff.label} · ${t.handoff.screen}`}
-                        >
-                          {t.handoff.label} <span aria-hidden>↗</span>
-                        </a>
-                      </>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ) : null}
-
-          {injuries.length > 0 ? (
-            <li className="af-brief-row" data-kind="injuries">
-              <span className="af-brief-what">
-                {injuries.length} injury change{injuries.length === 1 ? '' : 's'}{' '}
-                {injuries.some((i) => i.followed && i.leagues.length === 0)
-                  ? 'on your rosters and players you follow'
-                  : 'on your rosters'}
-              </span>
-              <ul className="af-brief-sub">
-                {injuries.slice(0, 6).map((i) => (
-                  <li key={i.playerId}>
-                    <b>{i.name}</b>
-                    {i.position ? <span className="af-brief-pos af-num"> {i.position}</span> : null}
-                    <span className="af-brief-detail">
-                      {' '}
-                      {statusText(i.from)} → <b>{statusText(i.to)}</b> ·{' '}
-                      {/* A followed player on none of your rosters has no league to name (2026-09-14). */}
-                      {i.leagues.length === 0
-                        ? 'Following'
-                        : i.leagues.length === 1
-                          ? i.leagues[0]
-                          : `${i.leagues.length} of your leagues`}
-                    </span>
-                    {i.handoff ? (
-                      <>
-                        {' '}
-                        <a
-                          className="af-brief-handoff"
-                          href={i.handoff.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={`${i.handoff.label} · ${i.handoff.screen}`}
-                        >
-                          {i.handoff.label} <span aria-hidden>↗</span>
-                        </a>
-                      </>
-                    ) : null}
-                  </li>
-                ))}
-                {injuries.length > 6 ? <li className="af-brief-more">+{injuries.length - 6} more</li> : null}
-              </ul>
-            </li>
-          ) : null}
-
-          {standings.length > 0 ? (
-            <li className="af-brief-row" data-kind="standings">
-              <span className="af-brief-what">
-                Results in {standings.length} league{standings.length === 1 ? '' : 's'}
-              </span>
-              <ul className="af-brief-sub">
-                {standings.map((s) => (
-                  <li key={s.leagueId}>
-                    <Link href={`/core/standings?league=${encodeURIComponent(s.leagueId)}`} className="af-brief-link">
-                      {s.leagueName}
-                    </Link>
-                    <span className="af-brief-detail"> — {resultText(s)}</span>
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ) : null}
-
-          {alerts.total > 0 ? (
-            <li className="af-brief-row" data-kind="alerts">
-              <span className="af-brief-what">
-                {alerts.total} unread alert{alerts.total === 1 ? '' : 's'}
-              </span>
-              <span className="af-brief-detail">
-                {' '}
-                {alerts.groups
-                  .slice(0, 4)
-                  .map((g) => `${g.count} ${g.label}`)
-                  .join(', ')}
-              </span>{' '}
-              <Link href="/core/notifications" className="af-brief-link">
-                Open alerts
-              </Link>
-            </li>
-          ) : null}
-        </ul>
-
-        {brief.comparisonPending ? (
-          <p className="af-brief-note">
-            Injury and standings changes appear from your next visit — this is the first time we have a picture to compare against.
-          </p>
-        ) : null}
-      </details>
-    </section>
+    <DashSinceLastVisitView
+      when={brief.firstVisit || brief.windowCapped ? { kind: 'week' } : { kind: 'since', span: agoSpan(brief.sinceAt, now) }}
+      tradeReach={tradeReach(brief)}
+      trades={{
+        count: trades.items.length,
+        atLeast: trades.atLeast,
+        items: trades.items.map((t) => ({
+          key: `${t.leagueId}:${t.acceptedAt}:${t.summary}`,
+          href: `/league/${t.leagueId}?view=trades`,
+          leagueName: t.leagueName,
+          summary: t.summary,
+          parts: t.parts ?? null,
+          handoff: t.handoff ?? null,
+        })),
+      }}
+      injuries={injuries.slice(0, 6).map((i) => ({
+        key: i.playerId,
+        name: i.name,
+        position: i.position,
+        from: i.from,
+        to: i.to,
+        leagues: i.leagues,
+        handoff: i.handoff ?? null,
+      }))}
+      injuryCount={injuries.length}
+      anyFollowedOnly={injuries.some((i) => i.followed && i.leagues.length === 0)}
+      standings={standings.map((s) => ({
+        key: s.leagueId,
+        href: `/core/standings?league=${encodeURIComponent(s.leagueId)}`,
+        standing: s,
+      }))}
+      alerts={{ total: alerts.total, groups: alerts.groups.slice(0, 4).map((g) => ({ type: g.type, label: g.label, count: g.count })) }}
+      comparisonPending={brief.comparisonPending}
+    />
   )
 }

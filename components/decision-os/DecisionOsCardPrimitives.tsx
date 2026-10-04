@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { CheckCircle2, Clock3, Info, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { kickoffText } from '@/lib/core-app/kickoffText'
 
 export type DecisionOsConfidenceLabel = 'High' | 'Medium' | 'Low'
 
@@ -36,8 +37,16 @@ const evidenceColumnClass: Record<1 | 2 | 3, string> = {
 export const decisionOsCardClassName =
   'card-premium overflow-hidden p-0 transition duration-200 hover:border-brand-primary/25 hover:shadow-popover motion-reduce:transition-none'
 
-export function formatDecisionOsUpdated(value: string, includeTime = false) {
+/** `language: 'es'` (2026-10-04, the /core home's User OS card) says it in Spanish; English is unchanged. */
+export function formatDecisionOsUpdated(value: string, includeTime = false, language = 'en') {
   const date = new Date(value)
+  if (language === 'es') {
+    if (Number.isNaN(date.getTime())) return 'Actualizado justo ahora'
+    // "Oct 4" → "4 oct" through /core's one date translator (Intl's own 'es' writes "sept").
+    const day = kickoffText(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), 'es')
+    if (!includeTime) return `Actualizado ${day}`
+    return `Actualizado ${day} a las ${date.toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' })}`
+  }
   if (Number.isNaN(date.getTime())) return 'Updated just now'
   const datePart = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   if (!includeTime) return `Updated ${datePart}`
@@ -96,11 +105,19 @@ export function DecisionOsConfidenceBadge({ label }: { label: DecisionOsConfiden
   )
 }
 
-export function DecisionOsUpdatedStamp({ value, includeTime = false }: { value: string; includeTime?: boolean }) {
+export function DecisionOsUpdatedStamp({
+  value,
+  includeTime = false,
+  language,
+}: {
+  value: string
+  includeTime?: boolean
+  language?: string
+}) {
   return (
     <span className="ml-auto inline-flex min-h-7 items-center gap-1.5 text-[11px] font-medium text-muted">
       <Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      {formatDecisionOsUpdated(value, includeTime)}
+      {formatDecisionOsUpdated(value, includeTime, language)}
     </span>
   )
 }

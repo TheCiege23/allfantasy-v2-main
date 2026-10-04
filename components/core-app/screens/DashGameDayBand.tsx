@@ -1,11 +1,8 @@
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-gameday.css'
-import { Dash34Time, Dash34Countdown } from '@/components/core-app/screens/Dashboard34Live'
-import Link from 'next/link'
 import type { PlayFeedItem } from '@/lib/live/playFeedPresentation'
 import type { TodayStripData } from '@/lib/core-app/todayStrip'
-import { FallbackImg } from '@/components/core-app/FallbackImg'
-import { TopicTip } from '@/components/core-app/TopicTip'
+import { DashGameDayBandView } from '@/components/core-app/screens/DashGameDayBandView'
 
 /**
  * Game day — the band that only exists while games are being played.
@@ -52,21 +49,6 @@ const LIVE_WINDOW_MS = 4 * 60 * 60 * 1000
 const PLAY_CAP = 6
 const NEXT_CAP = 8
 
-const TYPE_LABEL: Record<PlayFeedItem['type'], string> = {
-  TOUCHDOWN: 'TD',
-  BIG_PLAY: 'BIG',
-  TURNOVER: 'TO',
-  FIELD_GOAL: 'FG',
-  DEFENSIVE_SCORE: 'DEF TD',
-  SPECIAL_TEAMS_SCORE: 'ST TD',
-}
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase()
-}
-
 export function DashGameDayBand({
   strip,
   plays,
@@ -101,95 +83,33 @@ export function DashGameDayBand({
    */
   const upcoming = (strip?.next24 ?? []).slice(0, NEXT_CAP)
 
+  /*
+   * ⚠ THE WORDS ARE SAID IN THE CLIENT (2026-10-04). This band keeps the decisions — both gates, the
+   * play window against the server's `now`, the caps — and DashGameDayBandView says them in the
+   * reader's language. Only the fields a row shows cross the boundary.
+   */
   return (
-    <section className="af-core af-gd" aria-label="Game day">
-      <div className="af-gd-head">
-        <span className="af-label af-gd-kicker">Game day</span>
-        {record ? (
-          <>
-            <span className="af-gd-record af-num">
-              <b>{record.wins} ahead</b>
-              <span className="af-gd-sep">·</span>
-              <i>{record.losses} behind</i>
-              <span className="af-gd-recmeta">
-                {' '}
-                right now · week {record.week}
-              </span>
-            </span>
-            {/* A sibling of the record, not inside it: one "?" for the line, never per number. */}
-            <TopicTip topic="gameDayRecord" />
-          </>
-        ) : (
-          /*
-           * Plays are landing but no matchup of yours is scored yet. Saying so
-           * beats an absent tile, which reads as a broken scoreboard, and beats
-           * a 0–0, which reads as a day played and lost.
-           */
-          <span className="af-gd-recmeta">none of your matchups have scored yet</span>
-        )}
-      </div>
-
-      {visible.length > 0 ? (
-        <p className="af-gd-scope">Every NFL scoring play — not only your players</p>
-      ) : null}
-
-      {visible.length > 0 ? (
-        <ul className="af-gd-plays">
-          {visible.map((p) => (
-            <li key={p.id} className="af-gd-play">
-              <span className="af-gd-face" aria-hidden>
-                {p.imageUrl ? (
-                  <FallbackImg src={p.imageUrl} alt="" loading="lazy" fallback={initialsOf(p.playerName)} />
-                ) : (
-                  initialsOf(p.playerName)
-                )}
-              </span>
-              <span className="af-gd-type af-num" data-type={p.type}>
-                {TYPE_LABEL[p.type] ?? 'PLAY'}
-              </span>
-              <span className="af-gd-line">
-                {p.headline}
-                {p.team ? <span className="af-gd-team af-num"> {p.team}</span> : null}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {/*
-        One key for the betting lines, above the list — it replaces a per-row `title=` ("Odds checked
-        <ISO>") a phone never showed. The row already prints "line as of …" once a line is over an hour old.
-      */}
-      {upcoming.some((row) => row.game) ? (
-        <p className="af-gd-scope">
-          Next 24 hours · betting lines <TopicTip topic="bettingLine" />
-        </p>
-      ) : null}
-
-      {upcoming.length > 0 ? (
-        <ul className="af-gd-next">
-          {upcoming.map((row, i) => (
-            <li key={`${row.kind}:${row.time}:${i}`} className="af-gd-nextrow" data-tone={row.tone ?? undefined}>
-              <span className="af-gd-nexttime af-num">
-                {/* ISO instant localised after hydration — the server cannot
-                    know the reader's zone, and a server paint would mismatch. */}
-                <Dash34Time iso={row.time} />
-              </span>
-              <div className="af-gd-nexttext">
-                <div className="af-gd-matchup">
-                  {/* A crest that fails to load disappears, like one we never had — never a broken glyph. */}
-                  {row.game?.awayLogo ? <FallbackImg src={row.game.awayLogo} fallback={null} alt="" width={24} height={24} loading="lazy" /> : null}
-                  <span>{row.game?.away ?? row.text}</span>
-                  {row.game ? <><span>at</span>{row.game.homeLogo ? <FallbackImg src={row.game.homeLogo} fallback={null} alt="" width={24} height={24} loading="lazy" /> : null}<span>{row.game.home}</span></> : null}
-                </div>
-                {row.game ? <div className="af-gd-market">{row.game.odds}</div> : null}
-                <div className="af-gd-nextsub">{row.sub} · Starts in <Dash34Countdown to={row.time} initial="—" /></div>
-              </div>
-              {row.game ? <Link className="af-gd-scoring" href={row.game.href}>Live scoring →</Link> : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </section>
+    <DashGameDayBandView
+      record={record ? { wins: record.wins, losses: record.losses, week: record.week } : null}
+      plays={visible.map((p) => ({
+        id: p.id,
+        type: p.type,
+        playerName: p.playerName,
+        position: p.position,
+        team: p.team,
+        imageUrl: p.imageUrl,
+        headline: p.headline,
+        actionParts: p.actionParts,
+      }))}
+      upcoming={upcoming.map((row, i) => ({
+        key: `${row.kind}:${row.time}:${i}`,
+        time: row.time,
+        tone: row.tone,
+        text: row.text,
+        sub: row.sub,
+        parts: row.parts,
+        game: row.game,
+      }))}
+    />
   )
 }
