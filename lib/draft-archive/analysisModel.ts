@@ -5,12 +5,12 @@ const object = (v: unknown): Record<string, unknown> => v && typeof v === 'objec
 export type AnalysisSelection = { playerId: string | null; rosterId: string | null; playerName: string; position: string; keeper: boolean };
 export type DraftAnalysisReport = {
   version: 'draft-report-v2'; state: 'ready' | 'partial' | 'unavailable'; reason: string;
-  teams: Array<{ rosterId: string; name: string; covered: number; selections: number; starterPoints: number | null; benchValue: number | null; rank: number | null; missingSlots: string[] }>;
+  teams: Array<{ rosterId: string; name: string; covered: number; selections: number; starterPoints: number | null; benchValue: number | null; rank: number | null; missingSlots: string[]; rosterPlayers?: number; existingCovered?: number; starterGain?: number | null }>;
   players: Array<{ playerId: string; name: string; position: string; points: number; replacement: number | null; valueOverReplacement: number | null; unrepresentedScoring: string[] }>;
   replacementBasis: string; computedBefore: string | null;
 };
 /** Descriptive ranks only. These stat-rate baselines are not calibrated win odds or letter grades. */
-export function draftDayReport(basis: unknown, context: PreparationContext | null, selections: AnalysisSelection[], teams: Array<{ rosterId: string; name: string }>, start: string | null): DraftAnalysisReport {
+export function draftDayReport(basis: unknown, context: PreparationContext | null, selections: AnalysisSelection[], teams: Array<{ rosterId: string; name: string }>, start: string | null, existing: AnalysisSelection[] | null = null): DraftAnalysisReport {
   const base: DraftAnalysisReport = { version: 'draft-report-v2', state: 'unavailable', reason: 'Verified draft-time component baselines, identities and rules are required.', teams: [], players: [], replacementBasis: 'League-wide starting-slot demand proxy; not a waiver availability claim.', computedBefore: start };
   const raw = object(basis);
   if (!context || context.sport !== 'NFL' || !start || raw.version !== 'draft-analysis-basis-v2' || raw.state !== 'captured' || !Array.isArray(raw.entries) || raw.entries.length > 5000 || !Number.isFinite(Date.parse(start)) || !Number.isFinite(Date.parse(String(raw.capturedAt))) || Date.parse(String(raw.capturedAt)) > Date.parse(start)) return base;
@@ -40,25 +40,32 @@ export function draftDayReport(basis: unknown, context: PreparationContext | nul
   for (const p of pool) if (!leagueStarters.has(p.playerId)) replacement.set(p.position, Math.max(replacement.get(p.position) ?? -Infinity, p.projectedPoints!));
   const selectedPlayers = new Map<string, DraftAnalysisReport['players'][number]>();
   const globalGaps = Object.keys(rules).filter(key => typeof rules[key] === 'number' && rules[key] !== 0 && pool.every(p => gaps.get(p.playerId)?.includes(key)));
+  const allRosterSelections = [...(existing ?? []), ...selections];
+  const standardRedraft = context.leagueType === 'redraft' && context.purpose === 'standard' && !selections.some(p => p.keeper);
+  const verifiedExisting = existing !== null && new Set(existing.map(p=>p.playerId?byAlias.get(p.playerId)?.playerId:undefined)).size===existing.length && existing.every(p => p.playerId && byAlias.has(p.playerId) && p.rosterId && teams.some(t => t.rosterId === p.rosterId));
+  const rosterOwners = new Map<string,string>();
+  let rosterConflict = false;
+  for (const pick of allRosterSelections) { const canonical = pick.playerId ? byAlias.get(pick.playerId)?.playerId : undefined; if (canonical && pick.rosterId) { if (rosterOwners.has(canonical) && rosterOwners.get(canonical) !== pick.rosterId) rosterConflict = true; rosterOwners.set(canonical,pick.rosterId); } }
   const reports = teams.map(team => {
-    const picks = selections.filter(p => p.rosterId === team.rosterId), mapped = picks.flatMap(p => p.playerId && byAlias.has(p.playerId) ? [byAlias.get(p.playerId)!] : []);
+    const picks = selections.filter(p => p.rosterId === team.rosterId), rosterPicks = allRosterSelections.filter(p => p.rosterId === team.rosterId), mapped = rosterPicks.flatMap(p => p.playerId && byAlias.has(p.playerId) ? [byAlias.get(p.playerId)!] : []);
     const unique = [...new Map(mapped.map(p => [p.playerId, p])).values()];
     const lineup = fillLineup(unique, slots), starters = new Set(lineup.starterIds);
     let benchValue = 0;
-    for (const pick of picks) {
-      const p = pick.playerId ? byAlias.get(pick.playerId) : null;
-      if (!p) continue;
+    for (const p of unique) {
+      const pick = rosterPicks.find(k => k.playerId && byAlias.get(k.playerId)?.playerId === p.playerId)!;
       const rep = replacement.get(p.position) ?? null, vor = rep === null ? null : p.projectedPoints! - rep;
       selectedPlayers.set(p.playerId, { playerId: p.playerId, name: pick.playerName, position: p.position, points: p.projectedPoints!, replacement: rep, valueOverReplacement: vor, unrepresentedScoring: gaps.get(p.playerId) ?? [] });
       if (!starters.has(p.playerId) && vor !== null) benchValue += Math.max(0, vor);
     }
-    return { rosterId: team.rosterId, name: team.name, covered: unique.length, selections: picks.length, starterPoints: unique.length === picks.length ? lineup.points : null, benchValue: unique.length === picks.length ? benchValue : null, rank: null as number | null, missingSlots: [...lineup.unknownSlots, ...lineup.unfilledSlots] };
+    const covered = picks.filter(p => p.playerId && byAlias.has(p.playerId)).length, completeRoster = rosterPicks.every(p => p.playerId && byAlias.has(p.playerId));
+    const beforePlayers = (existing ?? []).filter(p => p.rosterId === team.rosterId).flatMap(p => p.playerId && byAlias.has(p.playerId) ? [byAlias.get(p.playerId)!] : []);
+    return { rosterId: team.rosterId, name: team.name, covered, selections: picks.length, rosterPlayers:unique.length, existingCovered:beforePlayers.length, starterGain: verifiedExisting && completeRoster ? lineup.points-fillLineup(beforePlayers,slots).points : null, starterPoints: completeRoster ? lineup.points : null, benchValue: completeRoster ? benchValue : null, rank: null as number | null, missingSlots: [...lineup.unknownSlots, ...lineup.unfilledSlots] };
   });
   // Rookie/keeper/dynasty drafts require the pre-existing roster; drafted players alone are incomplete.
   const canonicalSelections = selections.map(p => p.playerId ? byAlias.get(p.playerId)?.playerId : undefined);
-  const complete = !globalGaps.length && new Set(canonicalSelections).size === selections.length && context.leagueType === 'redraft' && context.purpose === 'standard' && context.playerPool === 'all' && !selections.some(p => p.keeper) && teams.length === context.teamCount && new Set(teams.map(t => t.rosterId)).size === teams.length && reports.every(t => t.selections > 0 && t.covered === t.selections && !t.missingSlots.length) && selections.every(p => p.rosterId && teams.some(t => t.rosterId === p.rosterId));
+  const complete = !globalGaps.length && new Set(canonicalSelections).size === selections.length && !rosterConflict && ((standardRedraft && (existing===null||verifiedExisting)) || (verifiedExisting && ['dynasty','keeper','redraft'].includes(context.leagueType))) && teams.length === context.teamCount && new Set(teams.map(t => t.rosterId)).size === teams.length && reports.every(t => t.rosterPlayers! > 0 && t.starterPoints !== null && t.benchValue !== null && t.covered === t.selections && !t.missingSlots.length) && selections.every(p => p.rosterId && teams.some(t => t.rosterId === p.rosterId));
   if (complete) for (const t of reports) t.rank = 1 + reports.filter(other => other.starterPoints! > t.starterPoints! + 0.000001).length;
-  return { ...base, state: complete ? 'ready' : 'partial', reason: complete ? 'Relative rank by optimal starter stat-rate baseline under frozen scoring. Unrepresented scoring keys remain disclosed; no empirical grade calibration is claimed.' : 'Covered selections are shown; incomplete identities, rosters or starting slots prevent comparable team ranks.', teams: reports, players: [...selectedPlayers.values()] };
+  return { ...base, state: complete ? 'ready' : 'partial', reason: complete ? 'Relative rank by optimal starter stat-rate baseline under frozen scoring, including verified frozen existing rosters when required. Unrepresented scoring keys remain disclosed; no empirical grade calibration is claimed.' : 'Covered selections are shown; incomplete identities, rosters or starting slots prevent comparable team ranks.', teams: reports, players: [...selectedPlayers.values()] };
 }
 export type ResultsReport = { provisional?: boolean; state: 'ready' | 'partial' | 'unavailable'; teams: Array<{ rosterId: string; name: string; rank: number | null; points: number; starterPoints: number; starts: number; weeks: number[]; coveredPicks: number }>; coverage: string };
 export function resultsReport(picks: AnalysisSelection[], teams: Array<{ rosterId: string; name: string }>, rows: Array<{ rosterId: string; playerId: string; points: number; isStarter: boolean; week: number }>, finalWeeks: number[]): ResultsReport {

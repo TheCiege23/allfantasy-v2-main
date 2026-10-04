@@ -12,6 +12,11 @@ import { draftDayReport, resultsReport, type DraftAnalysisReport, type ResultsRe
 import { draftReferences } from './references';
 import type { DraftReference } from './referenceModel';
 import { readImportedResults } from './importedResults';
+import { buildReplay, frozenExistingRoster, decisionComponents, type ReplayData, type DecisionComponents } from './phase4Model';
+import { calibratedScores, type CalibrationModel } from './calibrationModel';
+import { readCalibration, loadAssetLineage, dynastyMarks, type LineageReport, type DynastyMark } from './phase4Loader';
+import { playerContributions, type PlayerContribution } from './resultsDecisionModel';
+
 export type ArchivePick = {
     id: string;
     overall: number;
@@ -44,6 +49,7 @@ export type ArchivePick = {
     adpObservedAt?: string | null;
 };
 export type ArchiveDetail = {
+    phase4?: { components:DecisionComponents[]; replay:ReplayData; calibration:CalibrationModel|null; scores:ReturnType<typeof calibratedScores>; lineage:LineageReport; dynasty:DynastyMark[]; contributions?:PlayerContribution[] };
     canReconcile?: boolean;
     canRefreshResults?: boolean;
     resultsObservedAt?: string | null;
@@ -232,8 +238,10 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     });
     const analysis = analysisReadiness(nativeSnap.analysisBasis, picks.length);
     const analysisTeams = native ? order.flatMap(t => string(t.rosterId) ? [{ rosterId: string(t.rosterId)!, name: string(t.displayName) ?? string(t.rosterId)! }] : []) : providerRosters.flatMap(t => string(t.roster_id) ? [{ rosterId: string(t.roster_id)!, name: string(object(t.metadata).team_name) ?? string(t.roster_id)! }] : []);
-    const analysisReport = draftDayReport(nativeSnap.analysisBasis, context, picks, analysisTeams, startedAt);
+    const existingRoster = native ? frozenExistingRoster(nativeSnap,context,analysisTeams) : null;
+    const analysisReport = draftDayReport(nativeSnap.analysisBasis, context, picks, analysisTeams, startedAt,existingRoster);
     let results: ResultsReport | undefined;
+    let contributions:PlayerContribution[]=[];
     if (native && choice.sport === 'NFL' && choice.season && startedAt) {
       try {
         const [scores, finalRows, games] = await Promise.all([
@@ -242,7 +250,7 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
             prisma.sportsGame.findMany({where:{sport:'NFL',season:choice.season,seasonType:'regular'},take:1001,select:{week:true,startTime:true}}),
         ]);
         const finalWeeks = [...new Set(finalRows.map(r => r.week))].filter(week => games.some(g=>g.week===week) && games.filter(g=>g.week===week).every(g=>g.startTime && g.startTime.getTime()>Date.parse(startedAt)) && analysisTeams.length > 1 && analysisTeams.every(team => finalRows.some(row => row.week === week && row.rosterId === team.rosterId)));
-        if (scores.length <= 10000 && finalRows.length <= 1000 && games.length <= 1000) results = resultsReport(picks, analysisTeams, scores, finalWeeks);
+        if (scores.length <= 10000 && finalRows.length <= 1000 && games.length <= 1000) { results = resultsReport(picks, analysisTeams, scores, finalWeeks); contributions=playerContributions(picks,scores,finalWeeks); }
         else coverage.push('Weekly result data exceeds the analysis bound; no partial team rank is returned.');
       } catch { coverage.push('Recorded weekly starter results are temporarily unavailable.'); }
     }
@@ -287,5 +295,17 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
         catch { coverage.push('Historical result observations are temporarily unavailable.'); }
     }
     const canRefreshResults = choice.source === 'imported' && choice.sport === 'NFL' && platform.toLowerCase() === 'sleeper' && await isElevatedCommissioner(leagueId,userId);
-    return JSON.parse(JSON.stringify({ canReconcile, canRefreshResults, resultsObservedAt, references, analysisReport, resultsReport: results, analysis, choice: publicChoice, picks, snapshot: publicSnapshot, startedAt, endedAt, endMeaning: native ? 'Completed at' : 'Provider last selection time', elapsedMs: duration(startedAt, endedAt), activeMs: native && clock.complete === true ? number(clock.totalActiveMs) : null, events: publicEvents, eventsMore: events.length > 100, corrections: corrections.slice(0, 100), correctionsMore: corrections.length > 100, trades: publicTrades, tradesMore: trades.length > 100, playerTrades, playerTradesMore: (playerTradeRows?.length ?? 0) > 100, coverage, sessionId })) as ArchiveDetail;
+    const replay = buildReplay(nativeSnap.analysisBasis,context,startedAt,picks,existingRoster);
+    const components = decisionComponents(analysisReport,replay);
+    let calibration:CalibrationModel|null=null;
+    let lineage:LineageReport={state:'unavailable',lineages:[],pending:[],reason:'Trade lineage is temporarily unavailable.',observedAt:new Date().toISOString()};
+    let dynasty:DynastyMark[]=[];
+    try { calibration = await readCalibration(context,startedAt); } catch { coverage.push('Draft model calibration is temporarily unavailable.'); }
+    try {
+      const inventory=await draftArchiveCatalog([leagueId],{season:choice.season,limit:2});
+      lineage=await loadAssetLineage(leagueId,choice.source,choice.sourceId,sessionId,choice.season,choice.sport,picks,inventory.choices.length===1,nativeSnap.analysisBasis,context,startedAt,boundary);
+    } catch { coverage.push('Recorded trade lineage is temporarily unavailable.'); }
+    try { dynasty=await dynastyMarks(referenceContext,picks,nativeSnap.analysisBasis,startedAt,references); } catch { coverage.push('Current dynasty market references are temporarily unavailable.'); }
+    const phase4={contributions,components,replay,calibration,scores:calibratedScores(components,calibration,choice.season,startedAt),lineage,dynasty};
+    return JSON.parse(JSON.stringify({ phase4, canReconcile, canRefreshResults, resultsObservedAt, references, analysisReport, resultsReport: results, analysis, choice: publicChoice, picks, snapshot: publicSnapshot, startedAt, endedAt, endMeaning: native ? 'Completed at' : 'Provider last selection time', elapsedMs: duration(startedAt, endedAt), activeMs: native && clock.complete === true ? number(clock.totalActiveMs) : null, events: publicEvents, eventsMore: events.length > 100, corrections: corrections.slice(0, 100), correctionsMore: corrections.length > 100, trades: publicTrades, tradesMore: trades.length > 100, playerTrades, playerTradesMore: (playerTradeRows?.length ?? 0) > 100, coverage, sessionId })) as ArchiveDetail;
 }

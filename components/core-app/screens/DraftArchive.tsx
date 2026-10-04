@@ -9,6 +9,7 @@ import type { ArchiveDetail } from '@/lib/draft-archive/detail';
 import { DraftHistoryReview } from './DraftHistoryReview';
 import { DraftReferences } from './DraftReferences';
 import { DraftAnalysis } from './DraftAnalysis';
+import { DraftPhase4 } from './DraftPhase4';
 import { DraftResultsRefresh } from './DraftResultsRefresh';
 import '@/components/core-app/af-draft-archive.css';
 type Choice = Omit<ArchiveChoice, 'createdAt' | 'total'>;
@@ -81,6 +82,7 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
    <nav><button disabled={pickPage === 0} onClick={() => setPickPage(v => v - 1)}>{t('Previous picks', 'Selecciones anteriores')}</button><span>{picks.length} {t('picks', 'selecciones')}</span><button disabled={(pickPage + 1) * 25 >= picks.length} onClick={() => setPickPage(v => v + 1)}>{t('Next picks', 'Siguientes selecciones')}</button></nav>
    <DraftReferences references={detail.references}/>
    <DraftAnalysis report={detail.analysisReport} results={detail.resultsReport}/>
+   <DraftPhase4 key={detail.choice.key} detail={detail}/>
    {detail.canRefreshResults && <DraftResultsRefresh key={detail.choice.key} leagueId={detail.choice.leagueId} archiveKey={detail.choice.key} observedAt={detail.resultsObservedAt}/>}
    {!detail.analysisReport && detail.analysis && <section aria-label={t('Draft analysis coverage', 'Cobertura del análisis')}>
     <h3>{t('Draft analysis', 'Análisis del draft')} {help(t('Analysis basis', 'Base del análisis'), 'Draft-day analysis requires projections preserved before the draft, matching scoring, verified player identities and replacement levels. Results analysis requires separate weekly production and contribution data. Missing inputs do not receive an average letter grade.', 'El análisis del día del draft requiere proyecciones previas, puntuación compatible, identidades verificadas y niveles de reemplazo. Los resultados requieren datos semanales de producción y contribución. La falta de datos no recibe una calificación promedio.')}</h3>
