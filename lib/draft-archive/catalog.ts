@@ -32,7 +32,7 @@ export async function draftArchiveCatalog(leagueIds: string[], options: {
  MAX(f.metadata->'archiveDraft'->>'format') AS format, MAX(f.metadata->'archiveDraft'->>'status') AS status, MIN(f."createdAt") AS created_at
  FROM dw_draft_facts f WHERE f."leagueId" IN (${Prisma.join(leagueIds)}) GROUP BY f."leagueId",f.season,f.sport,source_id
  ), drafts AS (
- SELECT 'native:'||s.id AS key,s."leagueId",l.name AS "leagueName",'native'::text AS source,s.id AS "sourceId",CASE WHEN s."startedAt" IS NULL THEN l.season ELSE (a."afterState"->'context'->>'season')::int END AS season,l.sport::text AS sport,s."draftType" AS format,s.status,s."createdAt" AS "createdAt"
+ SELECT 'native:'||s.id AS key,s."leagueId",l.name AS "leagueName",'native'::text AS source,s.id AS "sourceId",CASE WHEN s."startedAt" IS NULL OR s.status IN ('pre_draft','scheduled','configuring','configured') THEN l.season ELSE (a."afterState"->'context'->>'season')::int END AS season,l.sport::text AS sport,s."draftType" AS format,s.status,s."createdAt" AS "createdAt"
  FROM draft_sessions s JOIN leagues l ON l.id=s."leagueId"
  LEFT JOIN LATERAL (SELECT "afterState" FROM audit_logs WHERE "entityId"=s.id AND "leagueId"=s."leagueId" AND "actionType"='draft_archive_event' AND "afterState"->>'event'='start' ORDER BY "createdAt" DESC,id DESC LIMIT 1) a ON true
  WHERE s."leagueId" IN (${Prisma.join(leagueIds)}) AND s."sessionKind"='live' AND NOT EXISTS (SELECT 1 FROM imported i WHERE i."leagueId"=s."leagueId" AND i.source_id=s."sleeperDraftId")

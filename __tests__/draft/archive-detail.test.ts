@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const db = vi.hoisted(() => ({ gate: vi.fn(), commissioner: vi.fn(), catalog: vi.fn(), session: vi.fn(), audit: vi.fn(), events: vi.fn(), corrections: vi.fn(), picks: vi.fn(), trades: vi.fn() }))
+const db = vi.hoisted(() => ({ gate: vi.fn(), commissioner: vi.fn(), catalog: vi.fn(), session: vi.fn(), audit: vi.fn(), events: vi.fn(), corrections: vi.fn(), picks: vi.fn(), trades: vi.fn(), executions: vi.fn() }))
 vi.mock('@/server/services/permissionService', () => ({ canViewLeague: db.gate, isElevatedCommissioner: db.commissioner }))
 vi.mock('@/lib/core-app/draftHq', () => ({ resolvePlayerNames: vi.fn(async () => new Map()) }))
 vi.mock('@/lib/draft-archive/catalog', () => ({ draftArchiveCatalog: db.catalog }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   draftSession: { findFirst: db.session }, leagueAuditLog: { findFirst: db.audit, findMany: db.events },
   draftPickAuditLog: { findMany: db.corrections }, draftPick: { findMany: db.picks }, draftPickTradeProposal: { findMany: db.trades },
+  tradeExecutionSnapshot: { findMany: db.executions },
 } }))
 import { draftArchiveDetail } from '@/lib/draft-archive/detail'
 beforeEach(() => {
@@ -18,8 +19,18 @@ beforeEach(() => {
   db.events.mockResolvedValue([])
   db.picks.mockResolvedValue([])
   db.trades.mockResolvedValue([])
+  db.executions.mockResolvedValue([])
 })
 describe('draft archive authorization and attempt boundaries', () => {
+  it('shows executed player packages in the draft window without exposing private metadata', async () => {
+    const startedAt = new Date('2026-09-01'), completedAt = new Date('2026-09-02')
+    db.session.mockResolvedValue({ id: 'd', leagueId: 'l', status: 'completed', startedAt, completedAt })
+    db.executions.mockResolvedValue([{ tradeId: 'trade', executedAt: startedAt, completeness: 'complete', reversal: null, assetSummary: { items: 1, assets: [{ itemType: 'player', itemReference: 'player-id', fromRosterId: 'a', toRosterId: 'b', metadata: { playerName: 'Recorded player', privateNote: 'secret' } }] } }])
+    const result = await draftArchiveDetail('l', 'viewer', 'native:d')
+    expect(db.executions.mock.calls[0][0].where).toEqual({ leagueId: 'l', executedAt: { gte: startedAt, lte: completedAt } })
+    expect(result?.playerTrades).toMatchObject([{ assets: [{ assetType: 'player', playerId: 'player-id', playerName: 'Recorded player' }] }])
+    expect(JSON.stringify(result)).not.toContain('secret')
+  })
   it('denies access before reading private archive data', async () => {
     db.gate.mockResolvedValue(false)
     expect(await draftArchiveDetail('l', 'stranger', 'native:d')).toBeNull()
@@ -27,12 +38,15 @@ describe('draft archive authorization and attempt boundaries', () => {
     expect(db.session).not.toHaveBeenCalled()
   })
   it('a reset unstarted draft cannot inherit its previous attempt snapshot or clock', async () => {
+    db.session.mockResolvedValue({ id: 'd', leagueId: 'l', status: 'pre_draft', startedAt: new Date('2025-09-01'), completedAt: new Date('2025-09-02') })
     const result = await draftArchiveDetail('l', 'viewer', 'native:d')
     expect(result?.startedAt).toBeNull()
     expect(result?.activeMs).toBeNull()
+    expect(result?.endedAt).toBeNull()
     expect(db.audit).not.toHaveBeenCalled()
     expect(db.events).not.toHaveBeenCalled()
     expect(db.corrections).not.toHaveBeenCalled()
+    expect(db.trades.mock.calls[0][0].where.respondedAt).toBeUndefined()
   })
   it('bounds timeline reads to the selected attempt and hides private correction notes', async () => {
     const startedAt = new Date('2026-09-01T00:00:00Z')

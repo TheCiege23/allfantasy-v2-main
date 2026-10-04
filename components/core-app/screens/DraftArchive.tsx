@@ -9,6 +9,8 @@ import type { ArchiveDetail } from '@/lib/draft-archive/detail';
 import '@/components/core-app/af-draft-archive.css';
 type Choice = Omit<ArchiveChoice, 'createdAt' | 'total'>;
 const coverageSpanish: Record<string, string> = {
+    'Native executed-player trade history is unavailable.': 'El historial de intercambios de jugadores ejecutados no está disponible.',
+    'Native player trade packages cover recorded executions during this draft window; timing does not prove linkage to a particular pick.': 'Los paquetes nativos cubren ejecuciones registradas durante este draft; la hora no demuestra una relación con una selección específica.',
     'Original draft-time settings were not archived for this older native draft.': 'Las reglas originales de este draft nativo antiguo no se archivaron.',
     'Draft-time settings and clock coverage will be captured when this draft starts.': 'Las reglas y el reloj se conservarán cuando este draft comience.',
     'Exact per-pick selection timestamps and active OTC were not supplied by this provider.': 'El proveedor no suministró horas exactas por selección ni OTC activo.',
@@ -72,11 +74,11 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
      <p>{t('Results-to-date grade: Insufficient data', 'Calificación de resultados: Datos insuficientes')}<small>{detail.analysis.resultsToDate.coveredPicks}/{detail.analysis.totalPicks} {t('selections with verified contribution coverage', 'selecciones con contribución verificada')}</small></p>
     </div>
    </section>}
-   {[[t('Draft-time snapshot', 'Instantánea del draft'), detail.snapshot], [t('Clock timeline', 'Cronología del reloj'), detail.events], [t('Commissioner corrections', 'Correcciones del comisionado'), detail.corrections], [t('Trade packages', 'Paquetes de intercambios'), detail.trades]].map(([title, data]) => <details key={String(title)}><summary>{String(title)}</summary><pre>{JSON.stringify(data, null, 2)}</pre></details>)}
+   {[[t('Draft-time snapshot', 'Instantánea del draft'), detail.snapshot], [t('Clock timeline', 'Cronología del reloj'), detail.events], [t('Commissioner corrections', 'Correcciones del comisionado'), detail.corrections], [t('Trade packages', 'Paquetes de intercambios'), detail.trades], [t('Executed trades during draft', 'Intercambios ejecutados durante el draft'), detail.playerTrades ?? []]].map(([title, data]) => <details key={String(title)}><summary>{String(title)}</summary><pre>{JSON.stringify(data, null, 2)}</pre></details>)}
    <nav aria-label={t('Timeline pages', 'Páginas de cronología')}>
     {timelinePage > 1 && <Link href={timelineHref(timelinePage - 1)}>{t('Newer records', 'Registros más recientes')}</Link>}
     <span>{t('Timeline page', 'Página de cronología')} {timelinePage}</span>
-    {(detail.eventsMore || detail.correctionsMore || detail.tradesMore) && <Link href={timelineHref(timelinePage + 1)}>{t('Older records', 'Registros anteriores')}</Link>}
+    {(detail.eventsMore || detail.correctionsMore || detail.tradesMore || detail.playerTradesMore) && <Link href={timelineHref(timelinePage + 1)}>{t('Older records', 'Registros anteriores')}</Link>}
    </nav>
    <p>{t('Each timeline page shows up to 100 records per section. Pick filters cover every archived selection.', 'Cada página muestra hasta 100 registros por sección. Los filtros cubren todas las selecciones archivadas.')}</p>
   </>}
