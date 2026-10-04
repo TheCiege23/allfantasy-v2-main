@@ -115,6 +115,9 @@ describe("draft preparation source binding", () => {
     expect(db.history.mock.calls[0][0].where.computedAt).toEqual({
       lte: started.startedAt,
     });
+    expect(db.start.mock.calls[0][0].where.AND).toContainEqual({
+      afterState: { path: ['snapshot', 'session', 'startedAt'], equals: started.startedAt.toISOString() },
+    });
     expect(db.picks.mock.calls[0][0].where).toEqual({ sessionId: "selected" });
     expect(result.comparisons[0]).toMatchObject({
       adp: 2,
@@ -177,6 +180,7 @@ describe("draft preparation source binding", () => {
       ).state,
     ).toBe("unsupported");
     expect(db.history).not.toHaveBeenCalled();
+    expect(db.start).not.toHaveBeenCalled();
   });
   it("filters taken queue names and distinguishes empty from failed reads", async () => {
     db.picks.mockResolvedValue([

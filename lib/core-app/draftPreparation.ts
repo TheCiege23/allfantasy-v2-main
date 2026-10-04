@@ -130,10 +130,13 @@ export async function getDraftPreparationData(
     "configured",
   ].includes(session.status);
   if (historical) {
-    const start = await prisma.leagueAuditLog.findFirst({
-      where: { leagueId: league.id, entityId: session.id, actionType: 'draft_archive_event', afterState: { path: ['event'], equals: 'start' } },
+    const start = session.startedAt ? await prisma.leagueAuditLog.findFirst({
+      where: { leagueId: league.id, entityType: 'draft_session', entityId: session.id, actionType: 'draft_archive_event', AND: [
+        { afterState: { path: ['event'], equals: 'start' } },
+        { afterState: { path: ['snapshot', 'session', 'startedAt'], equals: session.startedAt.toISOString() } },
+      ] },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { afterState: true },
-    });
+    }) : null;
     const state = start?.afterState && typeof start.afterState === 'object' ? start.afterState as Record<string, unknown> : {};
     context = state.context ? state.context as PreparationContext : null;
   }
