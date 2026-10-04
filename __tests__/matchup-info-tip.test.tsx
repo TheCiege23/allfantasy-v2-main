@@ -114,6 +114,17 @@ describe('both', () => {
     lang.language = 'en'
   })
 
+  it('⚠ quotes the banner’s labels as they RENDER — it said «proj» over a banner showing «proy.»', () => {
+    for (const language of ['en', 'es'] as const) {
+      lang.language = language
+      const c = render(<Matchup data={data()} />).container
+      const tag = c.querySelector('.af-mu-score-tag')!.textContent!.trim()
+      const tip = tipIn(c, '.af-mu-centre-label')!
+      expect(tip, language).toContain(language === 'es' ? `«${tag}»` : `“${tag}”`)
+    }
+    lang.language = 'en'
+  })
+
   it('keep the board’s "?" on the heading’s line — the head is a row', () => {
     const css = readFileSync(resolve(__dirname, '../components/core-app/af-matchup.css'), 'utf8')
     const out: Record<string, string> = {}
