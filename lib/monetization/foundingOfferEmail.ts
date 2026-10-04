@@ -28,7 +28,11 @@ export function buildFoundingOfferEmail(input: FoundingOfferEmailInput): { subje
 }
 
 function english({ label, couponForever, baseUrl }: FoundingOfferEmailInput) {
-  const offer = label ? `${label}, applied automatically at checkout` : 'your founding discount is applied automatically at checkout'
+  // A colon, not ", and": the draft's "…a founding member, and {{OFFER_LABEL}}, applied…" has no verb
+  // once a real label goes in ("…and 20% off your first year, applied…"). The colon reads for any label.
+  const offer = label
+    ? `: ${label}, applied automatically at checkout`
+    : ', and your founding discount is applied automatically at checkout'
   const keep = couponForever
     ? "Your founding pricing doesn't expire and it doesn't need claiming — it's attached to the account you already have."
     : "Your founding pricing doesn't need claiming — it's attached to the account you already have."
@@ -36,7 +40,7 @@ function english({ label, couponForever, baseUrl }: FoundingOfferEmailInput) {
     subject: "You're a founding member — here's what that means on October 15",
     bodyText: [
       "You were here first. That's the whole offer.",
-      `On October 15 AllFantasy starts charging for the deep end of the product. You already have an account, which means you signed up before launch — so you're a founding member, and ${offer}. No code to enter, nothing to claim.`,
+      `On October 15 AllFantasy starts charging for the deep end of the product. You already have an account, which means you signed up before launch — so you're a founding member${offer}. No code to enter, nothing to claim.`,
       `Here's exactly what changes. Three things that are open to everyone right now become AF Pro: ${PRO_DEPTH_EN}. That's it — that's the list.`,
       [
         "And here's what doesn't change, because I'd rather tell you than let you find out:",
