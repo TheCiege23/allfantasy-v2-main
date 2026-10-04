@@ -1084,11 +1084,13 @@ export function LeagueHome({
                       <b>{r.name}</b>
                       <em>
                         {r.meetings} {copy(r.meetings === 1 ? 'meeting' : 'meetings')}
-                        {r.lastResult ? ` · ${copy('last:')} ${r.lastResult}` : ''}
+                        {/* `copy` turns a tied last meeting's 'a tie' into 'empate'; margins pass through as before. */}
+                        {r.lastResult ? ` · ${copy('last:')} ${copy(r.lastResult)}` : ''}
                       </em>
                     </span>
                     <b className={r.wins >= r.losses ? 'af-lh-good' : 'af-lh-bad'}>
-                      {r.wins}–{r.losses}
+                      {/* W–L, or W–L–T once a meeting finished level — Rivalry Radar's format. */}
+                      {(r.ties ?? 0) > 0 ? `${r.wins}–${r.losses}–${r.ties}` : `${r.wins}–${r.losses}`}
                     </b>
                   </div>
                 ))}
