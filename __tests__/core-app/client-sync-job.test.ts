@@ -4,6 +4,17 @@ import { claimClientSyncRefresh, getClientSyncSnapshot, startClientSync, subscri
 import type { SyncPostResult } from '@/lib/core-app/syncRunLoop'
 
 describe('shared client sync job', () => {
+  it('retries only confirmed remaining work after a no-progress stop', async () => {
+    const post = vi.fn()
+      .mockResolvedValueOnce({ httpOk: true, round: { ok: true, totalCandidates: 2, attempted: 1, synced: 1, remaining: ['sleeper:two'] } })
+      .mockResolvedValueOnce({ httpOk: true, round: { ok: true, totalCandidates: 1, attempted: 0, synced: 0, remaining: ['sleeper:two'] } })
+    expect((await startClientSync(null, post)).status).toBe('incomplete')
+    const retry = vi.fn(async () => ({ httpOk: true, round: { ok: true, totalCandidates: 1, attempted: 1, synced: 1 } }))
+    const result = await startClientSync(null, retry)
+    expect(retry).toHaveBeenCalledWith(['sleeper:two'])
+    expect(result.synced).toBe(2)
+    expect(result.status).toBe('done')
+  })
   it('keeps one running job when another control is clicked and screens change', async () => {
     let resolve!: (result: SyncPostResult) => void
     const post = vi.fn(() => new Promise<SyncPostResult>((done) => { resolve = done }))

@@ -15,12 +15,13 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 
 const getLeagueMatchups = vi.fn()
 const upsert = vi.fn()
+const findFirst = vi.fn()
 
 vi.mock('@/lib/sleeper-client', () => ({
   getLeagueMatchups: (...a: unknown[]) => getLeagueMatchups(...a),
 }))
 vi.mock('@/lib/prisma', () => ({
-  prisma: { leaguePlayerWeeklyScore: { upsert: (...a: unknown[]) => upsert(...a) } },
+  prisma: { leaguePlayerWeeklyScore: { upsert: (...a: unknown[]) => upsert(...a), findFirst: (...a: unknown[]) => findFirst(...a) } },
 }))
 
 import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleeperPlayerScores'
@@ -39,6 +40,7 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
     getLeagueMatchups.mockReset()
     upsert.mockReset()
     upsert.mockResolvedValue({})
+    findFirst.mockReset().mockResolvedValue(null)
   })
 
   it('writes each scored player once, with the platform points verbatim', async () => {
@@ -62,6 +64,31 @@ describe('ingestSleeperPlayerScoresForWeek', () => {
     expect(created('p1')?.points).toBe(20.5)
     expect(created('p3')?.points).toBe(3.1)
     expect(created('p1')?.rosterId).toBe(7)
+  })
+
+  it('stores negative-only scoring rather than treating it as an unplayed week', async () => {
+    getLeagueMatchups.mockResolvedValue([{ roster_id: 7, points: -2, starters: ['p1'], starters_points: [-2], players_points: { p1: -2 } }])
+    const result = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+    expect(result.scoresUpserted).toBe(1)
+    expect(created('p1')?.points).toBe(-2)
+  })
+
+  it('applies an all-zero correction when this roster-week has recorded scoring', async () => {
+    findFirst.mockResolvedValue({ playerId: 'p1' })
+    getLeagueMatchups.mockResolvedValue([{ roster_id: 7, points: 0, starters: ['p1'], starters_points: [0], players_points: { p1: 0 } }])
+    await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+    expect(created('p1')?.points).toBe(0)
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { leagueId: 'L1', seasonYear: 2026, week: 12, rosterId: 7, source: 'sleeper' } }))
+  })
+
+  it('rejects arrays as score maps and never coerces booleans or blank values to points', async () => {
+    getLeagueMatchups.mockResolvedValue([
+      { roster_id: 7, points: 2, starters: [], players_points: [2] },
+      { roster_id: 8, points: 2, starters: [], players_points: { p1: 2, p2: true, p3: [], p4: '   ' } },
+    ])
+    const result = await ingestSleeperPlayerScoresForWeek('L1', 2026, 12)
+    expect(written()).toEqual(['p1'])
+    expect(result.rostersMalformed).toBe(1)
   })
 
   it('marks only the players in `starters` as starters', async () => {

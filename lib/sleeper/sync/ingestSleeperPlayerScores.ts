@@ -66,8 +66,18 @@ export type IngestSleeperPlayerScoresResult = {
  * already documents. Borrowed from the replay framework's
  * `ingestSleeperLineupsForLeague`, which hit this first.
  */
-function hasRealScoring(points: number, startersPoints: number[]): boolean {
-  return points > 0 || startersPoints.some((p) => p > 0)
+function scoreNumber(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null
+  if (typeof value === 'string' && value.trim() === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function hasRealScoring(points: unknown, startersPoints: unknown[]): boolean {
+  return [points, ...startersPoints].some(value => {
+    const score = scoreNumber(value)
+    return score !== null && score !== 0
+  })
 }
 
 /**
@@ -111,15 +121,26 @@ export async function ingestSleeperPlayerScoresForWeek(
 
   for (const m of matchups) {
     const startersPoints = Array.isArray(m.starters_points) ? m.starters_points : []
-    if (!hasRealScoring(Number(m.points) || 0, startersPoints)) {
-      result.rostersSkippedUnscored += 1
+    const pointsByPlayer = m.players_points
+    if (!pointsByPlayer || typeof pointsByPlayer !== 'object' || Array.isArray(pointsByPlayer)) {
+      result.rostersMalformed += 1
       continue
     }
 
-    const pointsByPlayer = m.players_points
-    if (!pointsByPlayer || typeof pointsByPlayer !== 'object') {
-      result.rostersMalformed += 1
-      continue
+    if (!hasRealScoring(m.points, startersPoints)) {
+      // A previously scored roster can legitimately be corrected back to zero.
+      // Unknown/future roster-weeks still have no evidence of actual scoring.
+      const rosterId = scoreNumber(m.roster_id)
+      const recorded = rosterId !== null && Number.isSafeInteger(rosterId) && rosterId > 0
+        ? await prisma.leaguePlayerWeeklyScore.findFirst({
+            where: { leagueId: platformLeagueId, seasonYear: season, week, rosterId, source: 'sleeper' },
+            select: { playerId: true },
+          })
+        : null
+      if (!recorded) {
+        result.rostersSkippedUnscored += 1
+        continue
+      }
     }
 
     // Starters are identified by position in `starters`, which is how Sleeper
@@ -149,9 +170,8 @@ export async function ingestSleeperPlayerScoresForWeek(
        * the same direction of harm — a fabricated zero drags a lineup total down
        * and makes someone bench a player they should start.
        */
-      if (raw === null || raw === undefined || raw === '') continue
-      const points = Number(raw)
-      if (!Number.isFinite(points)) continue
+      const points = scoreNumber(raw)
+      if (points === null) continue
 
       /*
        * ⚠ SLEEPER USES "0" AS THE EMPTY-SLOT MARKER in `starters`. It is not a

@@ -132,12 +132,15 @@ export async function runSyncRounds(deps: RunSyncRoundsDeps): Promise<SyncRunOut
     }
 
     // A malformed or truncated success payload cannot establish completion.
-    const counts = [round.totalCandidates, round.synced ?? 0, round.locked ?? 0, round.failed ?? 0]
+    const counts = [round.totalCandidates, round.attempted ?? 0, round.synced ?? 0, round.locked ?? 0, round.failed ?? 0]
     const validCounts = counts.every(value => Number.isSafeInteger(value) && value! >= 0)
     const validRemaining = round.remaining === undefined || (Array.isArray(round.remaining)
       && round.remaining.every(key => typeof key === 'string' && key.length > 0)
       && new Set(round.remaining).size === round.remaining.length)
-    if (!validCounts || !validRemaining) {
+    const nextChecked = synced + locked + failed + (round.synced ?? 0) + (round.locked ?? 0) + (round.failed ?? 0)
+    const denominator = rounds === 1 && !deps.initialCheckpoint ? round.totalCandidates! : total
+    const validScope = !only || !Array.isArray(round.remaining) || round.remaining.every(key => only?.includes(key) === true)
+    if (!validCounts || !validRemaining || !validScope || nextChecked > denominator) {
       return { status: 'failed', tone: 'attention',
         message: synced > 0 ? `Stopped after ${synced} of ${total} — the next sync result could not be verified` : 'The sync result could not be verified. Check league status before retrying.',
         total, synced, locked, failed, rounds, exhausted }
@@ -145,7 +148,7 @@ export async function runSyncRounds(deps: RunSyncRoundsDeps): Promise<SyncRunOut
 
     /* The denominator is fixed by the first round: later rounds recompute the
        same candidate set server-side, so it should not move under us. */
-    if (rounds === 1) total = round.totalCandidates ?? deps.initialOnly?.length ?? 0
+    if (rounds === 1 && !deps.initialCheckpoint) total = round.totalCandidates ?? deps.initialOnly?.length ?? 0
     synced += round.synced ?? 0
     locked += round.locked ?? 0
     failed += round.failed ?? 0

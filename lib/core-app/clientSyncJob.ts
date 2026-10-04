@@ -93,6 +93,7 @@ async function postSync(only: string[] | null): Promise<SyncPostResult> {
 function runJob(onlyKey: string | null | undefined, post: (only: string[] | null) => Promise<SyncPostResult>, checkpoint?: SyncCheckpoint): Promise<SyncRunOutcome> {
   if (state.active) return state.active
   state.pending = null
+  let confirmed = checkpoint ?? null
   saveCheckpoint(checkpoint ?? (onlyKey ? { only: [onlyKey], total: 1, synced: 0, locked: 0, failed: 0, rounds: 0 } : null))
   publish({ ...state.snapshot, phase: 'busy', message: checkpoint ? 'Continuing your unfinished league sync…' : onlyKey ? 'Refreshing this league…' : 'Refreshing your connected leagues…' })
   state.active = runSyncRounds({
@@ -100,9 +101,14 @@ function runJob(onlyKey: string | null | undefined, post: (only: string[] | null
     initialCheckpoint: checkpoint,
     post,
     onProgress: message => publish({ ...state.snapshot, message }),
-    onCheckpoint: saveCheckpoint,
+    onCheckpoint: next => { confirmed = next; saveCheckpoint(next) },
   }).then(outcome => {
-    if (!state.leaving) saveCheckpoint(null)
+    // A verified no-progress/budget stop can resume without re-syncing completed
+    // leagues. An unverified/network failure still requires checking status first.
+    state.pending = outcome.status === 'incomplete' && confirmed?.only?.length
+      ? { ...confirmed, rounds: 0 }
+      : null
+    if (!state.leaving) saveCheckpoint(state.pending)
     publish({ phase: outcome.tone === 'ok' ? 'done' : 'error', message: outcome.message, completion: state.snapshot.completion + 1 })
     return outcome
   }).catch(() => {
@@ -115,7 +121,7 @@ function runJob(onlyKey: string | null | undefined, post: (only: string[] | null
 
 /** One browser job survives screen navigation; every sync control observes it. */
 export function startClientSync(onlyKey?: string | null, post: (only: string[] | null) => Promise<SyncPostResult> = postSync): Promise<SyncRunOutcome> {
-  return runJob(onlyKey, post)
+  return runJob(onlyKey, post, onlyKey ? undefined : state.pending ?? undefined)
 }
 
 /** Resume only confirmed remaining keys; the server rechecks account ownership. */

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, Sparkles } from 'lucide-react'
 
@@ -90,7 +90,13 @@ const SKIN_CORE: Record<keyof typeof SKIN_DEFAULT, string> = {
   deeper: 'af-wvai-link',
 }
 
-export default function AIWaiverRecommendationsPanel({
+export default function AIWaiverRecommendationsPanel(props: { leagueId: string; surface?: 'default' | 'core' }) {
+  // Results, locks and pending requests belong to one league. Changing the
+  // selected league starts a fresh panel rather than relabelling old advice.
+  return <LeagueWaiverRecommendationsPanel key={props.leagueId} {...props} />
+}
+
+function LeagueWaiverRecommendationsPanel({
   leagueId,
   surface = 'default',
 }: {
@@ -105,6 +111,12 @@ export default function AIWaiverRecommendationsPanel({
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [remindersEnabled, setRemindersEnabled] = useState(false)
+  const mounted = useRef(true)
+  const busy = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
   const hasResults = recommendations.length > 0
 
@@ -115,6 +127,8 @@ export default function AIWaiverRecommendationsPanel({
   }, [hasResults, recommendations])
 
   async function loadRecommendations() {
+    if (busy.current) return
+    busy.current = true
     setLoading(true)
     setError('')
     setLocked(null)
@@ -130,6 +144,7 @@ export default function AIWaiverRecommendationsPanel({
       })
 
       const payload = (await response.json().catch(() => ({}))) as RecommendResponse & LockedResponse
+      if (!mounted.current) return
 
       if (!response.ok) {
         if (payload?.error === 'AF_PRO_REQUIRED') {
@@ -142,12 +157,18 @@ export default function AIWaiverRecommendationsPanel({
         return
       }
 
-      setRecommendations(Array.isArray(payload.recommendations) ? payload.recommendations : [])
+      if (payload?.ok !== true || !Array.isArray(payload.recommendations)) {
+        setError("Chimmy's waiver result could not be verified. Please try again.")
+        return
+      }
+      setRecommendations(payload.recommendations)
       setGeneratedAt(payload.generatedAt ?? null)
     } catch {
+      if (!mounted.current) return
       setError("Network error while loading Chimmy's waiver recommendations.")
     } finally {
-      setLoading(false)
+      busy.current = false
+      if (mounted.current) setLoading(false)
     }
   }
 
