@@ -83,6 +83,7 @@ import { getFinderLeaguePicks } from '@/lib/core-app/finderLeaguePicksStore'
 import { getLeaguePreferences } from '@/lib/core-app/leaguePreferencesStore'
 import { hasSmsConsent } from '@/lib/sms/smsConsent'
 import { shouldShowTeamFollowPrompt } from '@/lib/follows/teamFollows'
+import { teamFollowPromptSport } from '@/lib/follows/teamFollowPromptSport'
 import { applyLeagueOrder } from '@/lib/core-app/leaguePreferences'
 import { listRecentPlayerSearches, recordRecentPlayerSearch } from '@/lib/core-app/recentPlayerSearches'
 import ScreenLoadError from '@/components/core-app/ScreenLoadError'
@@ -1622,6 +1623,8 @@ export default async function AfCorePage({
       profile={shellProfile}
       smsOptInEligible={smsOptInEligible}
       teamFollowPromptEligible={teamFollowPromptEligible}
+      // College fans (an NCAAF, devy or C2C league) land on College Football; everyone else on NFL.
+      teamFollowPromptSport={teamFollowPromptEligible ? teamFollowPromptSport(leagues) : undefined}
       /*
        * The activity snapshot's count, on every screen. The Live screen itself publishes the
        * count from the slate it loaded, which replaces this one while that screen is open.

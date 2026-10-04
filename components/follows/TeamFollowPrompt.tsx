@@ -16,16 +16,17 @@ import { dismissTeamFollowPrompt, sportLabelKey, useTeamFollows } from '@/compon
  * A real modal: focus lands inside, Escape means "Not now", the page does not scroll behind it.
  */
 
-export function TeamFollowPrompt({ eligible }: { eligible: boolean }) {
+export function TeamFollowPrompt({ eligible, initialSport }: { eligible: boolean; initialSport?: string }) {
   const [open, setOpen] = useState(eligible)
   useEffect(() => setOpen(eligible), [eligible])
   if (!open) return null
-  return <TeamFollowPromptDialog onClose={() => setOpen(false)} />
+  return <TeamFollowPromptDialog onClose={() => setOpen(false)} initialSport={initialSport} />
 }
 
-function TeamFollowPromptDialog({ onClose }: { onClose: () => void }) {
+function TeamFollowPromptDialog({ onClose, initialSport }: { onClose: () => void; initialSport?: string }) {
   const { t, tInterpolate } = useOptionalLanguage()
-  const tf = useTeamFollows('NFL')
+  // Chosen on the server from the account's leagues: College Football for college fans, else NFL.
+  const tf = useTeamFollows(initialSport || 'NFL')
   const [query, setQuery] = useState('')
   const panelRef = useRef<HTMLDivElement>(null)
 

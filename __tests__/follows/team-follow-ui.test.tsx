@@ -32,11 +32,13 @@ beforeEach(() => {
       const teams =
         sport === 'NBA'
           ? [{ abbr: 'BOS', name: 'Boston Celtics' }]
-          : [
+          : sport === 'NCAAF'
+            ? [{ abbr: 'ALA', name: 'Alabama' }]
+            : [
               { abbr: 'CHI', name: 'Chicago Bears' },
               { abbr: 'GB', name: 'Green Bay Packers' },
             ]
-      return new Response(JSON.stringify({ sports: ['NFL', 'NBA'], max: 30, teams, follows }))
+      return new Response(JSON.stringify({ sports: ['NFL', 'NBA', 'NCAAF'], max: 30, teams, follows }))
     }),
   )
 })
@@ -60,6 +62,14 @@ describe('the My Team prompt', () => {
     expect(screen.getByTestId('team-follow-count').textContent).toMatch(/1/)
     fireEvent.click(screen.getByTestId('team-follow-sport-NBA'))
     expect(await screen.findByTestId('team-follow-NBA-BOS')).toBeTruthy()
+  })
+
+  it('opens on the sport the server chose — College Football for a college fan', async () => {
+    render(<TeamFollowPrompt eligible initialSport="NCAAF" />)
+    expect(await screen.findByTestId('team-follow-NCAAF-ALA')).toBeTruthy()
+    const first = String((fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0])
+    expect(new URL(first, 'https://x.test').searchParams.get('sport')).toBe('NCAAF')
+    expect(screen.queryByTestId('team-follow-NFL-GB')).toBeNull()
   })
 
   it('"Done", "Not now" and Escape all record it as seen and close it', async () => {
