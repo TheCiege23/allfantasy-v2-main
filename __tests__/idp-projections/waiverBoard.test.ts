@@ -422,6 +422,54 @@ describe('loadWaiverBoard — the free-agent pool', () => {
     }
   })
 
+  /*
+   * "229 of 422 startable free agents could not be projected" read as a coverage failure. Measured on
+   * Elimination Station 2: ~206 of them had no line and no game this season that fantasy scoring
+   * counts. The note now says those apart from the real gap — one counting game, too few for form.
+   */
+  it('says apart "nothing to rank them on" from "only one counting game"', async () => {
+    const { projectFromRecentForm } = await import('@/lib/waivers/recentFormProjection')
+    vi.mocked(projectFromRecentForm).mockImplementation(async (a: any) =>
+      // The form fallback (2+ games) prices nobody; asked again at one game, only 'one' comes back.
+      a.minGames === 1 ? new Map([['one', { points: 2, games: 1 }]]) : new Map(),
+    )
+    try {
+      const board = await loadWaiverBoard({
+        prisma: prisma(
+          [{ playerId: 'never1', weekOrRound: 3 }, { playerId: 'never2', weekOrRound: 3 }, { playerId: 'one', weekOrRound: 3 }],
+          [{ sleeperId: 'never1', team: 'NYJ' }, { sleeperId: 'never2', team: 'NYJ' }, { sleeperId: 'one', team: 'NYJ' }],
+        ),
+        leagueId: 'L1',
+        userId: 'u-1',
+      })
+      expect(board.notes).toContain(
+        '2 of 3 startable free agents have no projection and no game this season that this league’s scoring counts, so there is nothing to rank them on.',
+      )
+      expect(board.notes).toContain('1 more has no projection and only one counting game this season — too few to rank, so he is not shown.')
+      expect(board.notes.join(' ')).not.toMatch(/could not be projected/)
+    } finally {
+      vi.mocked(projectFromRecentForm).mockImplementation(async () => new Map())
+    }
+  })
+
+  it('a failed one-game read falls back to the old sentence, never to silence', async () => {
+    const { projectFromRecentForm } = await import('@/lib/waivers/recentFormProjection')
+    vi.mocked(projectFromRecentForm).mockImplementation(async (a: any) => {
+      if (a.minGames === 1) throw new Error('db down')
+      return new Map()
+    })
+    try {
+      const board = await loadWaiverBoard({
+        prisma: prisma([{ playerId: 'never1', weekOrRound: 3 }], [{ sleeperId: 'never1', team: 'NYJ' }]),
+        leagueId: 'L1',
+        userId: 'u-1',
+      })
+      expect(board.notes).toContain('1 of 1 startable free agents could not be projected under this league’s scoring and are not shown.')
+    } finally {
+      vi.mocked(projectFromRecentForm).mockImplementation(async () => new Map())
+    }
+  })
+
   it('does not offer a free agent who is out or on IR this week, and does not call him unprojected', async () => {
     const { loadUnavailableBySport } = await import('@/lib/core-app/unavailableStarters')
     vi.mocked(loadUnavailableBySport).mockResolvedValueOnce(new Map([['NFL', new Set(['irPriced', 'irBare'])]]))

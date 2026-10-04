@@ -602,8 +602,44 @@ export async function loadWaiverBoard(args: LoadWaiverBoardArgs): Promise<Waiver
   /* Counted over the free agents who can play — a known absence is not a projection gap. */
   const playable = [...poolIds].filter((id) => !outFreeAgents.has(id))
   const priced = new Set(scoredPool.map((p) => p.sleeperId))
-  const unpriced = playable.filter((id) => !priced.has(id)).length
-  if (unpriced > 0) {
+  const unpricedIds = playable.filter((id) => !priced.has(id))
+  const unpriced = unpricedIds.length
+  /*
+   * ⚠ "COULD NOT BE PROJECTED" READ AS A COVERAGE FAILURE, AND ALMOST NONE OF IT WAS. Measured on
+   * Elimination Station 2 (2026-10-03): of 229 such free agents, ~206 had no vendor line AND no game
+   * this season that fantasy scoring counts — depth tight ends, special-teamers, third quarterbacks.
+   * There is nothing to rank them on, which is a fact about them, not a gap in the board. The real gap
+   * is the few with exactly ONE counting game: too few for form, no line. Say the two apart.
+   *
+   * Same rule as the form fallback above, re-asked at one game: whoever comes back has one counting
+   * game (two or more would already be priced); whoever does not has none. On the next-week board
+   * there is no form fallback, so the old sentence stands; a failed read falls back to it as well.
+   */
+  let split: { never: number; once: number } | null = null
+  if (unpriced > 0 && !onNext && statSeason != null) {
+    const onceForm = await projectFromRecentForm({
+      prisma: args.prisma,
+      season: statSeason,
+      playerIds: unpricedIds,
+      scoring,
+      minGames: 1,
+    }).catch(() => null)
+    if (onceForm) split = { never: unpriced - onceForm.size, once: onceForm.size }
+  }
+  if (split) {
+    if (split.never > 0) {
+      notes.push(
+        `${split.never} of ${playable.length} startable free agents have no projection and no game this season ` +
+          `that this league’s scoring counts, so there is nothing to rank them on.`,
+      )
+    }
+    if (split.once > 0) {
+      notes.push(
+        `${split.once} more ${split.once === 1 ? 'has' : 'have'} no projection and only one counting game this season — ` +
+          `too few to rank, so ${split.once === 1 ? 'he is' : 'they are'} not shown.`,
+      )
+    }
+  } else if (unpriced > 0) {
     notes.push(
       `${unpriced} of ${playable.length} startable free agents could not be ` +
         `projected under this league’s scoring and are not shown.`,

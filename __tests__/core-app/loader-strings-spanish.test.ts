@@ -91,6 +91,13 @@ describe('Waivers "Worth adding" notes, in Spanish', () => {
     ['74 free agents are ruled out, on injured reserve or on a bye this week and not shown.', BOARD, 'ruled out, on injured reserve or on a bye this week and not shown.'],
     ['1 free agent is ruled out, on injured reserve or on a bye this week and not shown.', BOARD, "outFreeAgents.size === 1 ? ' is' : 's are'"],
     ['229 of 422 startable free agents could not be projected under this league’s scoring and are not shown.', BOARD, 'startable free agents could not be '],
+    [
+      '206 of 422 startable free agents have no projection and no game this season that this league’s scoring counts, so there is nothing to rank them on.',
+      BOARD,
+      'that this league’s scoring counts, so there is nothing to rank them on.',
+    ],
+    ['1 more has no projection and only one counting game this season — too few to rank, so he is not shown.', BOARD, "no projection and only one counting game this season — "],
+    ['23 more have no projection and only one counting game this season — too few to rank, so they are not shown.', BOARD, "too few to rank, so ${split.once === 1 ? 'he is' : 'they are'} not shown."],
     ['1620 other active players were skipped because no slot in this league can hold them.', BOARD, 'other active players were skipped because no slot in this league can hold them.'],
     ['12 other projected players were skipped because no slot in this league can hold them.', RATE_BOARD, 'other projected players were skipped because no slot in this league can hold them.'],
     [
