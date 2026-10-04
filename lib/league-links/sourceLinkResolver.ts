@@ -91,6 +91,13 @@ export interface SourceLink {
   label: string
   isFallback: boolean
   opensExternally: true
+  /**
+   * The parts `label` was built from, so a client can say it in the reader's language without parsing
+   * the English back apart (a league name can itself contain " in "). Optional: a link serialised
+   * before these existed simply keeps its English label. See `sourceLinkLabel`.
+   */
+  action?: SourceActionType
+  leagueName?: string
 }
 
 interface ProviderConfig {
@@ -334,7 +341,31 @@ function makeLink(
     label: buildLabel(action, leagueName, cfg, isHomepage),
     isFallback: isHomepage,
     opensExternally: true,
+    action,
+    leagueName,
   }
+}
+
+const ACTION_VERB_ES: Record<Exclude<SourceActionType, 'league' | 'open'>, string> = {
+  lineup: 'Arreglar la alineación en',
+  trade: 'Revisar el intercambio en',
+  waiver: 'Gestionar agentes libres en',
+  matchup: 'Ver el enfrentamiento en',
+  roster: 'Abrir la plantilla en',
+}
+
+/**
+ * The link's label in the reader's language (2026-10-03). English is `link.label` unchanged; Spanish
+ * is rebuilt from the same parts `buildLabel` used. A link without those parts (serialised before
+ * they existed) keeps its English label rather than guessing.
+ */
+export function sourceLinkLabel(link: SourceLink, language: string): string {
+  if (language !== 'es' || link.leagueName == null) return link.label
+  if (link.destinationType === 'homepage') return `Ir a ${link.providerLabel}`
+  if (!link.action || link.action === 'open' || link.action === 'league') {
+    return `Abrir ${link.leagueName} en ${link.providerLabel}`
+  }
+  return `${ACTION_VERB_ES[link.action]} ${link.leagueName}`
 }
 
 /**

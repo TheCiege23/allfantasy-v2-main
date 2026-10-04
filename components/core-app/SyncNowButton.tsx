@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { claimClientSyncRefresh, getClientSyncSnapshot, getServerSyncSnapshot, resumeClientSync, startClientSync, subscribeClientSync } from '@/lib/core-app/clientSyncJob'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * "Sync now" — the shell's one write-shaped control, and it is not a write.
@@ -65,10 +66,20 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: Sync
     void startClientSync(onlyKey).catch(() => undefined)
   }, [phase, nothingToSync, onlyKey])
 
-  const label = phase === 'busy' ? 'Syncing…' : onlyKey ? 'Sync this league' : 'Sync now'
+  /* In the reader's language — the chip is in the top bar of every /core screen (2026-10-03). */
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const label =
+    phase === 'busy'
+      ? es ? 'Sincronizando…' : 'Syncing…'
+      : onlyKey
+        ? es ? 'Sincronizar esta liga' : 'Sync this league'
+        : es ? 'Sincronizar' : 'Sync now'
   const hint = nothingToSync
-    ? 'Import a league first — there is nothing to sync yet'
-    : onlyKey ? 'Refresh rosters, scores and activity for this league' : 'Pick up new activity in your connected leagues'
+    ? es ? 'Importa una liga primero: aún no hay nada que sincronizar' : 'Import a league first — there is nothing to sync yet'
+    : onlyKey
+      ? es ? 'Actualiza plantillas, marcadores y actividad de esta liga' : 'Refresh rosters, scores and activity for this league'
+      : es ? 'Trae la actividad nueva de tus ligas conectadas' : 'Pick up new activity in your connected leagues'
 
   const button = (
     <button
@@ -92,7 +103,7 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: Sync
      is watching — it does not need to interrupt what they are reading. */
   const status = (
     <span className="af-syncnow-msg" role="status" aria-live="polite" data-phase={phase}>
-      {phase === 'busy' ? (message ?? 'Re-reading your leagues…') : (message ?? '')}
+      {phase === 'busy' ? (message ?? (es ? 'Releyendo tus ligas…' : 'Re-reading your leagues…')) : (message ?? '')}
     </span>
   )
 
@@ -106,9 +117,9 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: Sync
   }
 
   return (
-    <section className="af-syncnow-panel" aria-label="Sync your leagues">
+    <section className="af-syncnow-panel" aria-label={es ? 'Sincroniza tus ligas' : 'Sync your leagues'}>
       <div className="af-syncnow-panel-text">
-        <span className="af-label af-syncnow-panel-title">Leagues out of date?</span>
+        <span className="af-label af-syncnow-panel-title">{es ? '¿Ligas desactualizadas?' : 'Leagues out of date?'}</span>
         <span className="af-syncnow-panel-sub">
           {nothingToSync ? (
             /*
@@ -116,9 +127,15 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: Sync
               A greyed control with no reason beside it reads as broken, and the
               person's next move is to press it repeatedly.
             */
-            <>
-              Nothing to sync yet — <a href="/import">import a league</a> and this turns on.
-            </>
+            es ? (
+              <>
+                Aún no hay nada que sincronizar: <a href="/import">importa una liga</a> y esto se activa.
+              </>
+            ) : (
+              <>
+                Nothing to sync yet — <a href="/import">import a league</a> and this turns on.
+              </>
+            )
           ) : (
             <>
               {/*
@@ -128,9 +145,21 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: Sync
                 re-read would be a promise the incremental path does not keep —
                 and would make the run look broken when it finishes quickly.
               */}
-              Pick up new activity in {eligibleCount == null ? 'your' : eligibleCount} connected{' '}
-              {eligibleCount === 1 ? 'league' : 'leagues'}. We only read — nothing changes on
-              Sleeper, ESPN or Fantrax.
+              {es ? (
+                <>
+                  Trae la actividad nueva de{' '}
+                  {eligibleCount == null
+                    ? 'tus ligas conectadas'
+                    : `tu${eligibleCount === 1 ? '' : 's'} ${eligibleCount} liga${eligibleCount === 1 ? '' : 's'} conectada${eligibleCount === 1 ? '' : 's'}`}
+                  . Solo leemos: nada cambia en Sleeper, ESPN o Fantrax.
+                </>
+              ) : (
+                <>
+                  Pick up new activity in {eligibleCount == null ? 'your' : eligibleCount} connected{' '}
+                  {eligibleCount === 1 ? 'league' : 'leagues'}. We only read — nothing changes on
+                  Sleeper, ESPN or Fantrax.
+                </>
+              )}
             </>
           )}
         </span>
