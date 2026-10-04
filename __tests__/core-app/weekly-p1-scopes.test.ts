@@ -7,7 +7,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
 } }))
 vi.mock('@/lib/core-app/leagueWeekMetadata', () => ({ readLeagueWeekMetadata: h.metadata }))
 vi.mock('@/lib/core-app/seasonPhase', () => ({ getFirstStatedKickoff: async () => null }))
-import { getWeekBoard, buildProfiles, winProbabilityOf } from '@/lib/core-app/weekBoard'
+import { getWeekBoard, readWeeklyHistory, buildProfiles, winProbabilityOf } from '@/lib/core-app/weekBoard'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import { weeklyFormat, weeklyScopeKey, canCertifyWeeklyPlayoffStatus } from '@/lib/core-app/weeklyCapabilities'
 const cards = (b: Awaited<ReturnType<typeof getWeekBoard>>) => [...b.coinFlips, ...b.leaning, ...b.unprojected]
@@ -37,6 +37,9 @@ describe('canonical and native weekly coverage', () => {
     expect(cards(board).map(c => [c.leagueId,c.live?.you,c.opponent.name])).toEqual([['A',100,'ESPN 2'],['B',120,'Yahoo 2']])
     expect(board.historyIncomplete).toBe(true)
     expect(h.teams.mock.calls[0][0].where.leagueId.in).toEqual(['A','B'])
+    const focused=await readWeeklyHistory('u',[leagues[0]],leagues)
+    expect(focused?.rows.find(r=>r.rosterId==='1')?.pointsFor).toBe(100)
+    expect(focused?.historyIncomplete).toBe(true)
   })
   it('reads an AF native league with no external IDs, including zero-point final ties', async () => {
     const league = { id:'N', name:'Native NBA', platform:'allfantasy', sport:'NBA' }

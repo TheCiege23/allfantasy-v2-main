@@ -403,14 +403,14 @@ type LeagueMeta = {
   imageUrl: string | null
 }
 
-export async function readWeeklyHistory(userId: string, leagues: LeagueInput[]): Promise<History | null> {
+export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], identityLeagues: LeagueInput[] = leagues): Promise<History | null> {
   const platformIds = leagues
     .map((l) => l.platformLeagueId)
     .filter((v): v is string => typeof v === 'string' && v.length > 0)
   const nativeIds = leagues.filter(nativeWeeklyLeague).map(l => l.id)
   if (platformIds.length === 0 && nativeIds.length === 0) return null
   const scopesByPid = new Map<string, Set<string>>()
-  for (const l of leagues) if (l.platformLeagueId && !nativeWeeklyLeague(l)) {
+  for (const l of identityLeagues) if (l.platformLeagueId && !nativeWeeklyLeague(l)) {
     const scopes = scopesByPid.get(l.platformLeagueId) ?? new Set<string>()
     scopes.add(weeklyScopeKey(l)); scopesByPid.set(l.platformLeagueId, scopes)
   }

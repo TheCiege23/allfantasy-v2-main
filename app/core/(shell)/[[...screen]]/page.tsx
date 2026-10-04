@@ -3321,7 +3321,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const weeklyOutlookLeague = activeKey === 'week' && selectedLeagueId && !rivalriesView
     ? outlookLeagues.find(l => l.id === selectedLeagueId) ?? null : null
   const weeklyOutlook = weeklyOutlookLeague
-    ? await getSeasonOutlook(userId, [weeklyOutlookLeague], selectedLeagueId).catch(error => {
+    ? await getSeasonOutlook(userId, [weeklyOutlookLeague], selectedLeagueId, ctx.now, outlookLeagues).catch(error => {
         console.error('[core/week] playoff outlook failed', error)
         return null
       }) : outlook

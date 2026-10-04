@@ -501,9 +501,9 @@ export type OutlookInputs = {
  * (`getSeasonOutlook`) and the scheduled pre-compute (`seasonOutlookPrewarm.ts`), so the two can
  * never hash different inputs for the same league. Null when no league has anything to read.
  */
-export async function loadOutlookInputs(userId: string, leagues: LeagueInput[]): Promise<OutlookInputs | null> {
+export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], identityLeagues: LeagueInput[] = leagues): Promise<OutlookInputs | null> {
   const [history, sports] = await Promise.all([
-    readWeeklyHistory(userId, leagues),
+    readWeeklyHistory(userId, leagues, identityLeagues),
     prisma.league.findMany({ where: { id: { in: leagues.map(l => l.id) } }, select: { id: true, sport: true, season: true, settings: true, status: true, leagueType: true } }),
   ])
   if (!history) return null
@@ -700,6 +700,8 @@ export async function getSeasonOutlook(
    */
   focusLeagueId?: string | null,
   now: Date = new Date(),
+  /** Keep portfolio identity checks when computing just one selected league. */
+  identityLeagues: LeagueInput[] = leagues,
 ): Promise<SeasonOutlook> {
   const describeBasis = (minIterations: number, maxIterations: number) =>
     `${minIterations === maxIterations ? minIterations.toLocaleString() : `${minIterations.toLocaleString()}–${maxIterations.toLocaleString()}`} simulations per league, played over each league's own ` +
@@ -727,7 +729,7 @@ export async function getSeasonOutlook(
     runs: { reused: 0, computed: 0 },
   }
 
-  const inputs = await loadOutlookInputs(userId, leagues)
+  const inputs = await loadOutlookInputs(userId, leagues, identityLeagues)
   if (!inputs) return empty
   const { prepared, withheld, nameByRoster, myRosters, sportOf } = inputs
 
