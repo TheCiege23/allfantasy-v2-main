@@ -18,8 +18,16 @@ import {
   type TradeDatePrice,
 } from './frozenCompletedGrade'
 import type { RepriceOutcome } from './repriceFrozenTradeGrades'
-import { chooseTradeTimeCapture, gradedAtTradeTime, MAX_CAPTURE_AGE_MS, tradeTimeOf } from './tradeTimeCapture'
-import { loadCaptureDays, loadDatedMarket, type DatedMarket, type MarketBook } from './datedMarket'
+import { chooseCaptureTakenAt, chooseTradeTimeCapture, gradedAtTradeTime, MAX_CAPTURE_AGE_MS, tradeTimeOf } from './tradeTimeCapture'
+import {
+  loadCaptureDays,
+  loadDatedMarket,
+  loadProfileCaptures,
+  loadProfileMarket,
+  type ChartProfile,
+  type DatedMarket,
+  type MarketBook,
+} from './datedMarket'
 import type { TradeValueSource } from './valueSource'
 
 /**
@@ -143,6 +151,9 @@ const TRADE_DATE_SOURCES: ReadonlySet<TradeValueSource> = new Set(['fantasycalc'
 export type TradeTimeDeps = {
   captureDays?: (book: MarketBook) => Promise<string[]>
   market?: (book: MarketBook, day: string) => Promise<DatedMarket | null>
+  /** The league's own profile captures: when each was taken, and one day's board. */
+  profileCaptures?: (profile: ChartProfile) => Promise<Array<{ day: string; takenAt: string }>>
+  profileMarket?: (profile: ChartProfile, day: string) => Promise<DatedMarket | null>
   /**
    * Price a trade graded within a day of happening on the grader's own LIVE chart (default true).
    * Off only for a grader built `marketless`, which has no live chart — the re-price script.
@@ -163,9 +174,11 @@ export type TradeTimeDeps = {
  *      `pricedAsOf` is `now`.
  *   2. GRADED LATER → one day's stored market in place of today's (`LeagueTradeGrader.atMarket` →
  *      `withDatedMarket`): the latest capture taken at or before the trade, at most a day old.
- *      `pricedAsOf` is that capture's day.
+ *      `pricedAsOf` is that capture's day. Since 2026-10-04 that is the league's OWN profile capture
+ *      when one covers the trade (`tradeTimeMarket`), and the 12-team book only when none does.
+ *      `pricedBook` on the result (and the frozen row) says which.
  *
- * 🛑 WHY THE LIVE CHART FIRST. The capture is FantasyCalc's 12-team PPR-1 book, not the league's.
+ * 🛑 WHY THE LIVE CHART FIRST. The 12-team capture is FantasyCalc's generic PPR-1 book, not the league's.
  * Team count and PPR move that book almost uniformly, but not exactly — and at a letter boundary
  * "almost" is a different letter. The production dry run of 2026-10-03 found 13 frozen originals
  * (12 of them emailed) taken on the trade day on the league's own chart whose letter the 12-team
@@ -207,28 +220,66 @@ export async function gradeAtTradeTime(
         const synced = line.valueAsOf ? Date.parse(line.valueAsOf) : NaN
         if (!Number.isFinite(synced) || synced > now.getTime() || tradeAt.getTime() - synced > MAX_CAPTURE_AGE_MS) return null
       }
-      return { grade: view, pricedAsOf: now.toISOString() }
+      return { grade: view, pricedAsOf: now.toISOString(), pricedBook: 'league_live' }
     }
 
-    // 2. Graded later: the stored capture from the trade's own date.
-    const days = await (deps.captureDays ?? loadCaptureDays)(grader.book)
-    const capture = chooseTradeTimeCapture(days, tradeAt)
-    if (!capture) return null
-    const market = await (deps.market ?? loadDatedMarket)(grader.book, capture.day)
-    if (!market || market.capturedOn !== capture.day) return null
+    // 2. Graded later: ONE stored capture from the trade's own date — the league's own profile first.
+    const dated = await tradeTimeMarket(grader, tradeAt, deps)
+    if (!dated) return null
+    const { market, day } = dated
     const view = await gradeDeal(grader.atMarket(market), { give: inputs.give, get: inputs.get, viewerSide: false })
     if (!view.graded) return null
     // Every asset on a line, and every line from that day's rows.
     if (view.lines.length !== assets.length) return null
-    const asOf = `${capture.day}T00:00:00.000Z`
+    const asOf = `${day}T00:00:00.000Z`
     for (const line of view.lines) {
       if (!line.valueSource || !TRADE_DATE_SOURCES.has(line.valueSource)) return null
       if (line.valueSource !== 'faab_formula' && line.valueAsOf !== asOf) return null
     }
-    return { grade: view, pricedAsOf: capture.day }
+    return { grade: view, pricedAsOf: day, pricedBook: market.source ?? 'standard_12_ppr1' }
   } catch {
     return null
   }
+}
+
+/**
+ * THE ONE STORED MARKET a trade graded more than a day after it happened is priced on, or null.
+ *
+ *   1. The league's OWN profile capture (`grader.profile` — the exact board its chart requests), by
+ *      the capture rule on its real capture time (`chooseCaptureTakenAt`).
+ *   2. ONLY IF THAT IS MISSING — no capture within the rule, or one that cannot be read — the 12-team
+ *      PPR-1 `PlayerValueSnapshot` book, exactly as before 2026-10-04.
+ *
+ * Whichever is chosen prices the WHOLE trade: one source, one date. A profile capture that exists but
+ * cannot price an asset is not "missing" — the trade then keeps its first-graded original rather than
+ * being re-tried on a second board until one gives a letter.
+ */
+async function tradeTimeMarket(
+  grader: LeagueTradeGrader,
+  tradeAt: Date,
+  deps: TradeTimeDeps,
+): Promise<{ market: DatedMarket; day: string } | null> {
+  if (grader.profile) {
+    const captures = await (deps.profileCaptures ?? loadProfileCaptures)(grader.profile)
+    const pick = chooseCaptureTakenAt(captures, tradeAt)
+    if (pick) {
+      const market = await (deps.profileMarket ?? loadProfileMarket)(grader.profile, pick.day)
+      if (market && market.capturedOn === pick.day) return { market: { ...market, source: 'league_profile' }, day: pick.day }
+    }
+  }
+  if (!grader.book) return null
+  const days = await (deps.captureDays ?? loadCaptureDays)(grader.book)
+  const capture = chooseTradeTimeCapture(days, tradeAt)
+  if (!capture) return null
+  const market = await (deps.market ?? loadDatedMarket)(grader.book, capture.day)
+  if (!market || market.capturedOn !== capture.day) return null
+  return { market: { ...market, source: 'standard_12_ppr1' }, day: capture.day }
+}
+
+/** Whether ANY stored capture (the league's own profile, or the 12-team book) covers the trade. Boards are not read. */
+async function hasTradeTimeCapture(grader: LeagueTradeGrader, tradeAt: Date, deps: TradeTimeDeps): Promise<boolean> {
+  if (grader.profile && chooseCaptureTakenAt(await (deps.profileCaptures ?? loadProfileCaptures)(grader.profile), tradeAt)) return true
+  return grader.book ? chooseTradeTimeCapture(await (deps.captureDays ?? loadCaptureDays)(grader.book), tradeAt) !== null : false
 }
 
 /**
@@ -298,12 +349,13 @@ export async function repriceFrozenOriginalAtTradeTime(args: {
   if (!args.tradeAt) return { kind: 'skip', why: 'no trade time' }
   const tradeAt = args.tradeAt.toISOString()
   if (!args.grader.book) return { kind: 'first_graded', tradeAt, why: 'the league prices on no stored market book' }
-  const days = await (args.deps?.captureDays ?? loadCaptureDays)(args.grader.book)
-  if (!chooseTradeTimeCapture(days, args.tradeAt)) return { kind: 'first_graded', tradeAt, why: 'no capture within a day before the trade' }
+  if (!(await hasTradeTimeCapture(args.grader, args.tradeAt, args.deps ?? {}))) {
+    return { kind: 'first_graded', tradeAt, why: 'no capture within a day before the trade' }
+  }
   // The capture only: a marketless grader has no live chart, and these trades are long past.
   const dated = await gradeAtTradeTime(args.grader, atTradeTime, args.tradeAt, { ...args.deps, liveChart: false })
   if (!dated) return { kind: 'first_graded', tradeAt, why: 'an asset has no record on the trade date' }
-  return { kind: 'trade_date', grade: dated.grade, pricedAsOf: dated.pricedAsOf, tradeAt }
+  return { kind: 'trade_date', grade: dated.grade, pricedAsOf: dated.pricedAsOf, tradeAt, ...(dated.pricedBook ? { pricedBook: dated.pricedBook } : {}) }
 }
 
 // Pure, in its own module so the email renderer reads the same answer. Re-exported for callers here.

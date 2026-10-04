@@ -2,6 +2,13 @@ import { prisma } from '@/lib/prisma'
 import type { FantasyCalcPlayer, FantasyCalcPlayerIdentity, FantasyCalcSettings, PlayerValueLookup } from '@/lib/fantasycalc'
 import { buildPlayerValuesForNames } from '@/lib/fantasycalc'
 import { fetchFantasyCalcValues } from '@/lib/fantasycalc-fetch'
+import {
+  buildFantasyCalcCacheKey,
+  packProfileCapture,
+  profileCaptureDay,
+  profileCaptureKey,
+  PROFILE_CAPTURE_EXPIRES_AT,
+} from '@/lib/fantasycalc-profile-capture'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 
 const KEY_PREFIX = 'fantasycalc:values:'
@@ -12,9 +19,8 @@ type CachedFantasyCalcPayload = {
   syncedAt: string
 }
 
-export function buildFantasyCalcCacheKey(settings: FantasyCalcSettings): string {
-  return `${KEY_PREFIX}dynasty:${settings.isDynasty ? '1' : '0'}:qbs:${settings.numQbs}:teams:${settings.numTeams}:ppr:${settings.ppr}`
-}
+// The key format lives with the profile capture, which needs it without importing this module.
+export { buildFantasyCalcCacheKey }
 
 function parseCachedPayload(data: unknown): CachedFantasyCalcPayload | null {
   if (!data || typeof data !== 'object' || Array.isArray(data)) return null
@@ -121,13 +127,49 @@ export async function listCachedFantasyCalcProfiles(
   return out
 }
 
+/**
+ * Store today's board for one profile — ONCE per profile per UTC day, never overwritten. The first
+ * successful warm of the day is the capture, with its real time recorded (`capturedAt`); every later
+ * warm that day is a no-op here. See `lib/fantasycalc-profile-capture.ts` for the key and payload,
+ * and `lib/decision-os/trade/datedMarket.ts` for the reader (a completed trade graded more than a day
+ * after it happened is priced on its league's own profile from the trade date).
+ *
+ * `createMany` + `skipDuplicates` is `INSERT … ON CONFLICT DO NOTHING`: two overlapping warms cannot
+ * both write, and neither can replace the other's row. Ingestion only — the warm cron is its caller.
+ *
+ * Resolves `true` when this call wrote the day's capture, `false` when one already existed.
+ */
+export async function captureFantasyCalcProfileDaily(
+  settings: FantasyCalcSettings,
+  players: FantasyCalcPlayer[],
+  capturedAt: Date,
+): Promise<boolean> {
+  // An empty board is a vendor hiccup, not a market: it must not take the day's only slot.
+  if (players.length === 0) return false
+  const payload = packProfileCapture(settings, players, capturedAt)
+  const written = await prisma.sportsDataCache.createMany({
+    data: [{
+      cacheKey: profileCaptureKey(settings, profileCaptureDay(capturedAt)),
+      data: toPrismaJsonInput(payload),
+      expiresAt: PROFILE_CAPTURE_EXPIRES_AT,
+      createdAt: capturedAt,
+    }],
+    skipDuplicates: true,
+  })
+  return written.count > 0
+}
+
 export type FantasyCalcWarmResult = {
   attempted: number
   refreshed: number
   failed: number
   skippedFresh: number
   timedOut: boolean
-  profiles: Array<{ cacheKey: string; ok: boolean; count?: number; error?: string }>
+  /** Profiles whose daily capture this run wrote (the first successful warm of the UTC day). */
+  captured: number
+  /** Capture writes that FAILED — the warm itself still succeeded. */
+  captureFailed: number
+  profiles: Array<{ cacheKey: string; ok: boolean; count?: number; error?: string; captured?: boolean; captureError?: string }>
 }
 
 /**
@@ -155,7 +197,7 @@ export async function warmFantasyCalcCache(options?: {
   const profiles = await listCachedFantasyCalcProfiles({ limit: options?.limit })
 
   const result: FantasyCalcWarmResult = {
-    attempted: 0, refreshed: 0, failed: 0, skippedFresh: 0, timedOut: false, profiles: [],
+    attempted: 0, refreshed: 0, failed: 0, skippedFresh: 0, timedOut: false, captured: 0, captureFailed: 0, profiles: [],
   }
 
   for (const profile of profiles) {
@@ -171,11 +213,22 @@ export async function warmFantasyCalcCache(options?: {
     result.attempted += 1
     try {
       const players = await fetchFantasyCalcValues(profile.settings)
+      const syncedAt = new Date()
       const written = await writeFantasyCalcValuesToDb(profile.settings, players, {
         ttlMs: options?.ttlMs,
+        syncedAt,
       })
       result.refreshed += 1
-      result.profiles.push({ cacheKey: written.cacheKey, ok: true, count: written.count })
+      const entry: FantasyCalcWarmResult['profiles'][number] = { cacheKey: written.cacheKey, ok: true, count: written.count }
+      // After the warm landed, and contained: a failed capture must not mark a good warm as failed.
+      try {
+        entry.captured = await captureFantasyCalcProfileDaily(profile.settings, players, syncedAt)
+        if (entry.captured) result.captured += 1
+      } catch (error) {
+        result.captureFailed += 1
+        entry.captureError = error instanceof Error ? error.message : 'unknown error'
+      }
+      result.profiles.push(entry)
     } catch (error) {
       // One vendor failure must not abandon the remaining profiles.
       result.failed += 1

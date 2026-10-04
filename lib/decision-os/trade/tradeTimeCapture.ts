@@ -101,13 +101,30 @@ export function chooseTradeTimeCapture(
   days: ReadonlyArray<string>,
   tradeAt: Date | null,
 ): { day: string; takenAt: string } | null {
+  return chooseCaptureTakenAt(
+    days.filter((day) => DAY_RE.test(day)).map((day) => ({ day, takenAt: captureTakenAt(day).toISOString() })),
+    tradeAt,
+  )
+}
+
+/**
+ * THE SAME RULE, for captures that record when they were really taken — a league's own FantasyCalc
+ * profile, captured by the first successful warm of each UTC day (`lib/fantasycalc-profile-capture.ts`)
+ * at whatever time that was, not at a fixed hour. The latest capture taken at or before the trade,
+ * never after it, at most `MAX_CAPTURE_AGE_MS` older than it.
+ */
+export function chooseCaptureTakenAt(
+  captures: ReadonlyArray<{ day: string; takenAt: string }>,
+  tradeAt: Date | null,
+): { day: string; takenAt: string } | null {
   if (!tradeAt || !Number.isFinite(tradeAt.getTime())) return null
   let best: { day: string; taken: number } | null = null
-  for (const day of days) {
-    if (!DAY_RE.test(day)) continue
-    const taken = captureTakenAt(day).getTime()
+  for (const c of captures) {
+    if (!DAY_RE.test(c.day)) continue
+    const taken = Date.parse(c.takenAt)
+    if (!Number.isFinite(taken)) continue
     if (taken > tradeAt.getTime()) continue // taken after the trade: never
-    if (!best || taken > best.taken) best = { day, taken }
+    if (!best || taken > best.taken) best = { day: c.day, taken }
   }
   if (!best || tradeAt.getTime() - best.taken > MAX_CAPTURE_AGE_MS) return null
   return { day: best.day, takenAt: new Date(best.taken).toISOString() }

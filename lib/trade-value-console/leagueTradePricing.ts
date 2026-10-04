@@ -4,6 +4,7 @@ import type { SportsPlayerRecord } from '@prisma/client'
 import { getPlayer, searchPlayers } from '@/lib/data/players'
 import { resolvePlayer } from '@/lib/shared-services/player-identity/PlayerIdentityResolver'
 import { findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { fantasyCalcSettingsForChart } from '@/lib/fantasycalc-profile-capture'
 import { leagueValueForPlayer, valuePositionsAgree } from '@/lib/league-values/playerValueIdentity'
 import { getFantasyCalcChartDbFirst } from '@/lib/fantasycalc-db'
 import { pricePlayer, pricePick, compositeScore, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
@@ -655,12 +656,7 @@ export async function resolveLeagueTradeChart(args: {
   const { players: fcPlayers, syncedAt: fcSyncedAt } = args.marketless
     ? { players: [] as FantasyCalcPlayer[], syncedAt: null }
     : await getFantasyCalcChartDbFirst(
-        {
-          isDynasty: chartIsDynasty,
-          numQbs: isSuperFlex ? 2 : 1,
-          numTeams: leagueSize,
-          ppr: pprNfl,
-        },
+        fantasyCalcSettingsForChart({ chartIsDynasty, isSuperFlex, leagueSize, pprNfl }),
         { maxStaleMs: 1000 * 60 * 60 * 2 },
       )
   args.mark?.('fantasycalc')
