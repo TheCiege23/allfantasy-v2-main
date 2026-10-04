@@ -15,8 +15,9 @@
 .af-draft-phase4 :is(button,input,a){min-height:44px;border-radius:8px;padding:.5rem;background:var(--surface2);color:var(--text);border:1px solid var(--line)}
 .af-draft-phase4 button[aria-pressed=true]{border-color:var(--accent);background:var(--surface)}
 .af-draft-phase4 button:disabled{opacity:.5}
+.af-draft-phase4 .af-info-tip{width:44px;height:44px;min-width:44px;border-radius:50%;padding:0;box-sizing:border-box}
 .af-draft-phase4 label{display:grid;gap:.4rem;margin:.6rem 0;max-width:28rem}
-.af-draft-phase4 input{max-width:100%;min-width:0;box-sizing:border-box}
+.af-draft-phase4 input{max-width:100%;min-width:0;box-sizing:border-box;font-size:16px}
 .af-draft-phase4 small{display:block;margin-top:.3rem}
 .af-draft-phase4 summary{cursor:pointer;min-height:44px;padding:.6rem 0}
 .af-phase4-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:.75rem}
