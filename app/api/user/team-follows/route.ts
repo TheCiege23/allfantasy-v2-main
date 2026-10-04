@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
     listTeamFollows(auth.userId).catch(() => null),
   ])
   return NextResponse.json(
-    { sports: TEAM_FOLLOW_SPORTS, max: MAX_TEAM_FOLLOWS, teams, follows },
+    // Only what the picker shows: college teams also carry mascots and alternate names for matching.
+    { sports: TEAM_FOLLOW_SPORTS, max: MAX_TEAM_FOLLOWS, teams: teams.map((t) => ({ abbr: t.abbr, name: t.name })), follows },
     { headers: { 'Cache-Control': 'private, no-store, max-age=0' } },
   )
 }

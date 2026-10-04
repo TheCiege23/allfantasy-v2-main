@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { isMissingDatabaseObjectError } from '@/lib/canonical/getCanonicalPlayer'
 import { buildTeamIndex, type CanonicalTeam, type TeamIndex } from '@/lib/follows/teamResolver'
+import { COLLEGE_TEAM_DIRECTORY_CACHE_KEY, parseDirectoryPayload } from '@/lib/sport-teams/collegeTeamIndexStore'
 
 /**
  * Follow a real-world team (owner's call, 2026-10-03): news and injury alerts for that team and the
@@ -15,9 +16,21 @@ import { buildTeamIndex, type CanonicalTeam, type TeamIndex } from '@/lib/follow
  *     surface hides the feature instead of claiming you follow nobody; writes report `unavailable`.
  *   RAW SQL, so the follow is one `INSERT … ON CONFLICT DO NOTHING`.
  *
- * THE KEY IS THE CANONICAL ABBREVIATION from `sports_core_teams` (DB-first, cached). News carries
- * free-text team names; lib/follows/teamResolver maps those onto this key. A follow is only accepted
- * for an abbreviation that table actually has, so a client cannot store a key nothing will match.
+ * THE KEY IS THE CANONICAL ABBREVIATION from `sports_core_teams` (DB-first, cached) — except college
+ * football, below. News carries free-text team names; lib/follows/teamResolver maps those onto this
+ * key. A follow is only accepted for an abbreviation the list actually has, so a client cannot store a
+ * key nothing will match.
+ *
+ * 🛑 COLLEGE FOOTBALL READS CFBD'S DIRECTORY, NOT `sports_core_teams`. That table is a one-time
+ * snapshot (its backfill has no scheduled caller) and, measured 2026-10-03, its NCAAF rows used
+ * official names no feed writes — "Alabama Agricultural and Mechanical University", "Gardner–Webb
+ * University" (en dash), "California Polytechnic State University" — so those schools resolved
+ * nowhere; it lacked 8 current FCS programs (Mercyhurst, Merrimack, New Haven, St. Thomas, Stonehill,
+ * West Florida, West Georgia, UTRGV), still listed Houston Baptist and Savannah State, and carried
+ * San Diego State / South Dakota State under the opposite codes from every CFBD/ESPN feed. CFBD's
+ * directory (lib/sport-teams/ingestCollegeTeams, refreshed weekly by /api/cron/import-players) has
+ * all 266 FBS+FCS programs under the names feeds use, plus mascots and alternate names. Switched while
+ * no one followed a college football team (0 rows), so no stored key changed meaning.
  */
 
 /**
@@ -56,6 +69,7 @@ async function teamsAndIndex(sport: string): Promise<{ teams: CanonicalTeam[]; i
   const hit = teamCache.get(S)
   if (hit && Date.now() - hit.at < TEAM_CACHE_MS) return hit
   try {
+    if (S === 'NCAAF') return cache(S, await loadCollegeFootballTeams())
     const rows = await prisma.$queryRaw<Array<{ abbr: string; name: string }>>`
       SELECT DISTINCT ON (abbreviation) abbreviation AS abbr, canonical_name AS name
       FROM sports_core_teams
@@ -66,13 +80,42 @@ async function teamsAndIndex(sport: string): Promise<{ teams: CanonicalTeam[]; i
       .filter((r) => r.abbr && r.name && !NOT_A_TEAM.test(r.abbr) && !NOT_A_TEAM.test(r.name))
       .map((r) => ({ abbr: r.abbr, name: r.name }))
       .sort((a, b) => a.name.localeCompare(b.name))
-    const entry = { at: Date.now(), teams, index: buildTeamIndex(S, teams) }
-    // An empty read is not cached: it is far more likely a transient failure than a sport with no teams.
-    if (teams.length > 0) teamCache.set(S, entry)
-    return entry
+    return cache(S, teams)
   } catch {
     return null
   }
+}
+
+function cache(S: string, teams: CanonicalTeam[]): { teams: CanonicalTeam[]; index: TeamIndex } {
+  const entry = { at: Date.now(), teams, index: buildTeamIndex(S, teams) }
+  // An empty read is not cached: it is far more likely a transient failure than a sport with no teams.
+  if (teams.length > 0) teamCache.set(S, entry)
+  return entry
+}
+
+/** Divisions offered for college football follows: the programs news and score feeds actually cover. */
+const COLLEGE_FOOTBALL_DIVISIONS = new Set(['fbs', 'fcs'])
+
+/**
+ * FBS + FCS from CFBD's stored directory. DB-first: reads our own cache row, never CFBD. ⚠ No fallback
+ * to `sports_core_teams` when the row is missing — the two lists use different codes (SDSU means a
+ * different school in each), so a fallback would silently re-point stored follows. An empty list
+ * makes college follows unavailable, which is honest.
+ */
+async function loadCollegeFootballTeams(): Promise<CanonicalTeam[]> {
+  const row = await prisma.sportsDataCache.findUnique({
+    where: { cacheKey: COLLEGE_TEAM_DIRECTORY_CACHE_KEY },
+    select: { data: true },
+  })
+  const seen = new Set<string>()
+  const teams: CanonicalTeam[] = []
+  for (const t of parseDirectoryPayload(row?.data)) {
+    const abbr = t.abbreviation?.trim()
+    if (!abbr || !COLLEGE_FOOTBALL_DIVISIONS.has(String(t.classification ?? '').toLowerCase()) || seen.has(abbr)) continue
+    seen.add(abbr)
+    teams.push({ abbr, name: t.school, mascot: t.mascot ?? null, aliases: t.alternateNames ?? null })
+  }
+  return teams.sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export type TeamFollow = { sport: string; teamAbbr: string; teamName: string; createdAt: Date }
