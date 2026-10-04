@@ -1,3 +1,4 @@
+import { hasStarted } from './lineupDecision'
 import type { LineupSlot } from './myTeam'
 
 /**
@@ -9,11 +10,11 @@ import type { LineupSlot } from './myTeam'
  * down. This rolls them into one list, ordered by how certain the loss is.
  *
  * Rules, each borrowed from the row it summarises, never re-derived:
- *  - OUT, bye and empty are certain zeros (the board's rule — `MyTeamBoard.tsx`).
+ *  - OUT, bye and empty are issues to review, subject to provider locks and AutoSubs.
  *  - Questionable is a warning, not a loss: he probably plays.
  *  - A bench swap is offered only when the per-row check said `swap` — past the
  *    BENCH_SWAP_POINTS margin. `close` is the row's own "starter is fine".
- *  - A starter whose game has kicked off is skipped: he is locked, so advice about him is noise.
+ *  - Past kickoff is reported separately; provider locks and AutoSubs remain unverified.
  *
  * Pure and client-safe (type-only import).
  */
@@ -33,15 +34,18 @@ export type LineupCheckItem = {
 
 export type LineupCheck = {
   items: LineupCheckItem[]
-  /** Starters already past kickoff — reported, never advised on. */
+  /** Past kickoff; retained field name for callers, not proof of a provider lock. */
   locked: number
+  /** Filled slots whose player identity could not be resolved. */
+  unresolved?: number
 }
 
 const RANK: Record<LineupCheckItem['kind'], number> = { out: 0, bye: 1, empty: 2, swap: 3, questionable: 4 }
 
-export function summariseLineupCheck(starters: readonly LineupSlot[]): LineupCheck {
+export function summariseLineupCheck(starters: readonly LineupSlot[], now: number = Date.now()): LineupCheck {
   const items: LineupCheckItem[] = []
   let locked = 0
+  let unresolved = 0
   starters.forEach((slot, i) => {
     const p = slot.player
     const anchor = p ? `lineup-player-${p.sleeperId}` : `lineup-slot-${i}`
@@ -49,8 +53,8 @@ export function summariseLineupCheck(starters: readonly LineupSlot[]): LineupChe
       items.push({ kind: 'empty', slotLabel: slot.slotLabel, name: null, playerId: null, anchor, replacement: null })
       return
     }
-    if (!p) return // unresolved id: the identity note already speaks for it
-    if (p.gameDay && p.gameDay.state !== 'upcoming') {
+    if (!p) { unresolved++; return }
+    if (hasStarted(p, now)) {
       locked++
       return
     }
@@ -76,5 +80,5 @@ export function summariseLineupCheck(starters: readonly LineupSlot[]): LineupChe
     if (kind) items.push({ kind, slotLabel: slot.slotLabel, name: p.name, playerId: p.sleeperId, anchor, replacement })
   })
   items.sort((a, b) => RANK[a.kind] - RANK[b.kind])
-  return { items, locked }
+  return { items, locked, unresolved }
 }

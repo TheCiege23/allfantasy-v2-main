@@ -1134,7 +1134,7 @@ function FreeAgentFill({ check, leagueId }: { check: LineupCheck; leagueId: stri
 function checkLine(item: LineupCheckItem, es: boolean): string {
   const r = item.replacement
   const pts = (n: number) => n.toFixed(1)
-  const start = r ? (es ? ` — alinea a ${r.name} (${pts(r.projected)})` : ` — start ${r.name} (${pts(r.projected)})`) : es ? ' — busca un reemplazo' : ' — find a replacement'
+  const start = r ? (es ? ` — revisa a ${r.name} (${pts(r.projected)})` : ` — review ${r.name} (${pts(r.projected)})`) : es ? ' — busca un reemplazo' : ' — find a replacement'
   switch (item.kind) {
     case 'out':
       return (es ? `${item.name} está descartado` : `${item.name} is ruled out`) + start
@@ -1144,8 +1144,8 @@ function checkLine(item: LineupCheckItem, es: boolean): string {
       return es ? `El puesto ${item.slotLabel} está vacío` : `${item.slotLabel} is empty`
     case 'swap':
       return es
-        ? `Alinea a ${r!.name} en lugar de ${item.name} (+${pts(r!.gain ?? 0)})`
-        : `Start ${r!.name} over ${item.name} (+${pts(r!.gain ?? 0)})`
+        ? `Compara a ${r!.name} con ${item.name} (+${pts(r!.gain ?? 0)})`
+        : `Compare ${r!.name} with ${item.name} (+${pts(r!.gain ?? 0)})`
     case 'questionable':
       return es ? `${item.name} es duda — ten un suplente listo` : `${item.name} is questionable — have a backup ready`
   }
@@ -1161,17 +1161,19 @@ function LineupCheckCard({ check, platform, fixHref, leagueId }: { check: Lineup
   const certain = check.items.some((i) => i.kind !== 'questionable')
   const lockedNote = check.locked
     ? es
-      ? ` ${check.locked} ${check.locked === 1 ? 'titular ya está bloqueado' : 'titulares ya están bloqueados'}.`
-      : ` ${check.locked} ${check.locked === 1 ? 'starter is' : 'starters are'} already locked.`
+      ? ` ${check.locked} ${check.locked === 1 ? 'titular ya llegó al inicio del partido' : 'titulares ya llegaron al inicio del partido'}.`
+      : ` ${check.locked} ${check.locked === 1 ? 'starter has' : 'starters have'} reached kickoff; confirm individual locks on your platform.`
     : ''
   return (
-    <section className="af-frame af-mt-check" aria-label={es ? 'Revisión de alineación' : 'Lineup check'} data-clear={check.items.length === 0}>
+    <section className="af-frame af-mt-check" aria-label={es ? 'Revisión de alineación' : 'Lineup check'} data-clear={check.items.length === 0 && !check.unresolved}>
       <h2 className="af-label">{es ? 'Revisión de alineación' : 'Lineup check'}</h2>
+      {check.unresolved ? <p role="status">{es ? `${check.unresolved} puesto(s) ocupado(s) no pudieron revisarse porque no identificamos al jugador.` : `${check.unresolved} filled slot(s) could not be checked because the player identity is unresolved.`}</p> : null}
+      <p className="af-mt-footnote">{es ? 'Estas son opciones para revisar. Confirma elegibilidad, cierres y AutoSubs en tu plataforma antes de cambiar la alineación.' : 'These are candidates for review. Confirm eligibility, locks, and AutoSubs on your platform before changing the lineup.'}</p>
       {check.items.length === 0 ? (
         <p className="af-mt-check-clear">
           {es
-            ? `Nada que cambiar: ningún titular está descartado, en descanso o superado por más de ${BENCH_SWAP_POINTS} pts por un suplente.`
-            : `Nothing to change — no starter is out, on bye, or beaten by a bench player by more than ${BENCH_SWAP_POINTS} pts.`}
+            ? `No se identificaron problemas entre los titulares que pudimos revisar. Confirma las noticias y las reglas en tu plataforma.`
+            : `No issues were identified among the starters we could check. Confirm current news and rules on your platform.`}
           {lockedNote}
         </p>
       ) : (
@@ -1729,7 +1731,7 @@ export function MyTeam({ data }: MyTeamProps) {
                   ? 'El partido del titular o de la opción de banca ya comenzó. Confirma los cierres y AutoSubs en tu plataforma; este aviso no garantiza que puedas cambiar la alineación.'
                   : 'The starter or bench option has already reached kickoff. Confirm locks and AutoSubs on your platform; this notice does not establish that a lineup change is allowed.')
                 : decisionSlot?.empty
-                ? copy('An empty starting slot is a certain zero. Check eligibility and the player lock on your platform.')
+                ? copy('This starting slot was empty when checked. Confirm the current lineup, eligibility, locks, and AutoSubs on your platform.')
                 : decisionSlot?.player?.ruledOut || decisionSlot?.player?.onBye
                   ? `${decisionSlot.player.name} is ${decisionSlot.player.onBye ? 'on a bye' : 'ruled out'}. Review replacement eligibility, individual locks, and AutoSubs on your platform.`
                   : decisionSlot?.benchCheck?.verdict === 'swap'
@@ -2012,7 +2014,7 @@ export function MyTeam({ data }: MyTeamProps) {
       {/* ── Lineup check: the whole roster's verdict in one place ─────── */}
       {!bestBall && data.starters.available ? (
         <LineupCheckCard
-          check={summariseLineupCheck(data.starters.data)}
+          check={summariseLineupCheck(data.starters.data, decisionNow)}
           platform={platform}
           leagueId={data.league.id}
           fixHref={data.league.sourceLink?.href ?? null}
