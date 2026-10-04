@@ -18,6 +18,7 @@ const findUniqueRedraftSeason = vi.fn()
 const findFirstLeague = vi.fn()
 const findUniqueLeague = vi.fn()
 const finalizeNflRedraftPlayoffRuntimeSeason = vi.fn()
+const finalizeRotoSeason = vi.fn()
 const enterRedraftOffseason = vi.fn()
 const triggerKeeperOffseason = vi.fn()
 
@@ -37,6 +38,9 @@ vi.mock('@/lib/playoff-runtime', () => ({
 }))
 vi.mock('@/lib/redraft/offseason/RedraftOffseasonService', () => ({
   enterRedraftOffseason: (...args: unknown[]) => enterRedraftOffseason(...args),
+}))
+vi.mock('@/lib/redraft/offseason/finalizeRotoSeason', () => ({
+  finalizeRotoSeason: (...args: unknown[]) => finalizeRotoSeason(...args),
 }))
 vi.mock('@/lib/keeper/offseasonEngine', () => ({
   triggerKeeperOffseason: (...args: unknown[]) => triggerKeeperOffseason(...args),
@@ -105,4 +109,17 @@ describe('POST /api/redraft/seasons/finalize — offseason wiring', () => {
     expect(body.offseasonEntered).toBe(false)
     expect(triggerKeeperOffseason).toHaveBeenCalledWith('league-1', 'season-1')
   })
+})
+
+
+it.each([false, true])('archives roto standings on initial completion or repair (%s)', async (alreadyFinalized) => {
+  findUniqueLeague.mockResolvedValueOnce({settings:{scoring_mode:'roto'},leagueType:'keeper',isDynasty:false})
+  finalizeRotoSeason.mockResolvedValueOnce({ok:true,format:'roto',alreadyFinalized,championRosterId:'a',runnerUpRosterId:'b',finalStandings:[{rosterId:'a',teamName:'Aces',rank:1,points:19,champion:true},{rosterId:'b',teamName:'Bears',rank:2,points:11,champion:false}],events:[]})
+  enterRedraftOffseason.mockResolvedValueOnce({ok:true,snapshotId:'roto-archive',alreadyInOffseason:alreadyFinalized})
+  const response = await POST(request({seasonId:'roto-season',tiebreakerRosterId:'a'}))
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({scoringMode:'roto',playoffs:null,championTeamName:'Aces',offseasonEntered:true,offseasonSnapshotId:'roto-archive'})
+  expect(finalizeRotoSeason).toHaveBeenCalledWith('roto-season','commish-1','a')
+  expect(enterRedraftOffseason).toHaveBeenCalledWith('roto-season','commish-1',{finishOrder:['a','b']})
+  expect(triggerKeeperOffseason).toHaveBeenCalledTimes(alreadyFinalized ? 0 : 1)
 })

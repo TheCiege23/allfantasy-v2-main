@@ -77,7 +77,8 @@ export async function finalizeSeasonAndEnterOffseason(input: {
   let offseasonSnapshotId: string | null = null
   let keeperOffseasonTriggered = false
 
-  if (!alreadyFinalized) {
+  // Roto retries repair a failed archive; the archive service is idempotent.
+  if (!alreadyFinalized || isRoto) {
     try {
       const offseason = 'format' in result && result.format === 'roto'
         ? await enterRedraftOffseason(input.seasonId, input.actorUserId, {finishOrder:result.finalStandings.map(r=>r.rosterId)})
@@ -104,7 +105,7 @@ export async function finalizeSeasonAndEnterOffseason(input: {
     const keeperEligible =
       !!leagueMeta && (supportsKeeperDeclarations(leagueMeta.leagueType) || leagueMeta.isDynasty === true)
 
-    if (keeperEligible) {
+    if (keeperEligible && !alreadyFinalized) {
       keeperOffseasonTriggered = true
       // ⚠ NOT AWAITED, MATCHING THE ROUTE. This opens a keeper window and can
       // create next season's shell plus a full generated schedule — real work

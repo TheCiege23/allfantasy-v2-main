@@ -1,3 +1,4 @@
+import { transitionLeagueStateInTransaction } from '@/server/services/leagueLifecycleService'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { prisma } from '@/lib/prisma'
 import { updateStandings } from '../standingsEngine'
@@ -29,6 +30,7 @@ export async function finalizeRotoSeason(seasonId:string, actorUserId?:string, t
   const currentSettings=current?.settings as Record<string,any> | null
   await tx.league.update({where:{id:season.leagueId},data:{settings:{...(currentSettings??{}),roto_season_results:{...(currentSettings?.roto_season_results??{}),[String(season.season)]:{championRosterId,runnerUpRosterId,finalStandings,tiebreakerRosterId:tiebreakerRosterId??null}}}}})
   await tx.redraftSeason.update({where:{id:seasonId},data:{status:'complete'}})
+  await transitionLeagueStateInTransaction(tx,{leagueId:season.leagueId,nextState:'completed',actorUserId,source:'engine:roto',idempotencyKey:`roto.lifecycle.completed:${seasonId}`})
  })
  await getPlatformEvents().emit(EVENT.CHAMPION_CROWNED,{leagueId:season.leagueId,seasonId,actor:actorUserId?{type:'commissioner',id:actorUserId}:{type:'system'},source:'engine:roto',idempotencyKey:`roto.champion:${seasonId}`,subjects:[{kind:'roster',id:championRosterId}],payload:{seasonId,championRosterId}})
  await getPlatformEvents().emit(EVENT.SEASON_COMPLETED,{leagueId:season.leagueId,seasonId,actor:actorUserId?{type:'commissioner',id:actorUserId}:{type:'system'},source:'engine:roto',idempotencyKey:`roto.season.completed:${seasonId}`,subjects:[{kind:'season',id:seasonId}],payload:{seasonId}})

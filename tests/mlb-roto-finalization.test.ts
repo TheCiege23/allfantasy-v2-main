@@ -10,13 +10,14 @@ beforeEach(()=>{
  db.roster.findMany.mockResolvedValue([{id:'generic-a'},{id:'generic-b'}])
  db.teamWeekResult.findMany.mockResolvedValue([{rosterId:'generic-a'},{rosterId:'generic-b'}])
  db.redraftRoster.findMany.mockResolvedValue([{id:'native-a',teamName:'Aces',pointsFor:19},{id:'native-b',teamName:'Bears',pointsFor:11}])
- db.league.findUnique.mockResolvedValue({settings:{scoring_mode:'roto',existing:'preserved'}})
+ db.league.findUnique.mockResolvedValue({lifecycleState:'in_season',settings:{scoring_mode:'roto',existing:'preserved'}})
  db.$transaction.mockImplementation(async(fn)=>fn(db))
 })
 it('crowns the cumulative winner and saves an idempotent result without creating a bracket',async()=>{
  const r=await finalizeRotoSeason('s')
  expect(r).toMatchObject({ok:true,format:'roto',championRosterId:'native-a',runnerUpRosterId:'native-b',alreadyFinalized:false})
  expect(db.redraftSeason.update).toHaveBeenCalledWith({where:{id:'s'},data:{status:'complete'}})
+ expect(db.league.update).toHaveBeenCalledWith(expect.objectContaining({data:expect.objectContaining({lifecycleState:'completed'})}))
  expect(db.league.update).toHaveBeenCalledWith(expect.objectContaining({data:{settings:expect.objectContaining({existing:'preserved',roto_season_results:{'2027':expect.objectContaining({championRosterId:'native-a'})}})}}))
  if(r.ok) {
   db.redraftSeason.findUnique.mockResolvedValue({season:2027,status:'complete',league:{settings:{scoring_mode:'roto',roto_season_results:{'2027':{championRosterId:r.championRosterId,runnerUpRosterId:r.runnerUpRosterId,finalStandings:r.finalStandings}}}}})

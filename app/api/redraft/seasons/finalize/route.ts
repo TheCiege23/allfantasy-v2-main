@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     const runtimeResult = outcome.result
     if(runtimeResult.ok && 'format' in runtimeResult) {
       const champion=runtimeResult.finalStandings.find(r=>r.champion)
-      return NextResponse.json({seasonId,status:'complete',scoringMode:'roto',championRosterId:outcome.championRosterId,runnerUpRosterId:outcome.runnerUpRosterId,championTeamName:champion?.teamName??null,finalStandings:runtimeResult.finalStandings,playoffs:null,events:[],alreadyFinalized:outcome.alreadyFinalized,offseasonEntered:outcome.offseasonEntered})
+      return NextResponse.json({seasonId,status:'complete',scoringMode:'roto',championRosterId:outcome.championRosterId,runnerUpRosterId:outcome.runnerUpRosterId,championTeamName:champion?.teamName??null,finalStandings:runtimeResult.finalStandings,playoffs:null,events:[],alreadyFinalized:outcome.alreadyFinalized,offseasonEntered:outcome.offseasonEntered,offseasonSnapshotId:outcome.offseasonSnapshotId,keeperOffseasonTriggered:outcome.keeperOffseasonTriggered})
     }
     if(!runtimeResult.ok) throw new Error('Season finalization did not return a completed result.')
     const champion = runtimeResult.state.teams.find((team) => team.rosterId === outcome.championRosterId)
