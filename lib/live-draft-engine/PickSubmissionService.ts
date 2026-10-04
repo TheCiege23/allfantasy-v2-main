@@ -4,6 +4,7 @@
  */
 
 import { Prisma } from '@prisma/client'
+import { recordArchiveEvent, json } from '@/lib/draft-archive/events'
 import { prisma } from '@/lib/prisma'
 import { assertDraftSessionBelongsToLeague } from '@/lib/engine-testing/hardening/engineInvariants'
 import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invariantRuntime'
@@ -23,7 +24,7 @@ import { buildKeeperLocks } from './keeper/KeeperDraftOrder'
 import type { KeeperConfig, KeeperSelection } from './keeper/types'
 import { getSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
 import { assignRookieContract } from '@/lib/salary-cap/RookieContractService'
-import { isDraftBoardFull, isDraftPickRowEmpty } from './draftPickEmpty'
+import { isDraftBoardFull, isDraftPickRowEmpty, resolveNextOpenPickOverall } from './draftPickEmpty'
 import {
   DRAFT_PICK_NOT_LIVE,
   DRAFT_PICK_RACE_RETRY,
@@ -369,6 +370,17 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
               updatedAt: new Date(),
             },
       })
+      const selectedAt = new Date()
+      const nextOverall = resolveNextOpenPickOverall([...locked.picks, created], session.rounds * session.teamCount) ?? session.rounds * session.teamCount + 1
+      const archived = await recordArchiveEvent(tx, {...locked, status:keepPaused?'paused':'in_progress'}, 'selection', {
+        overall, nextOverall, actorUserId:input.madeByUserId??null,
+        owner:effectiveRosterId, originalRosterId:slotOriginalRosterId, pick:created,
+      }, selectedAt)
+      await tx.draftPick.update({where:{id:created.id},data:{pickedAt:selectedAt,pickMetadata:json({
+        ...input.pickMetadata,
+        archive:{eventId:archived.eventId,context:archived.context,timing:archived.selected,clockAllowanceSeconds:timerSeconds,
+          selectionRosterId:effectiveRosterId,originalRosterId:slotOriginalRosterId,actorUserId:input.madeByUserId??null},
+      })}})
       return created
     })
   } catch (error) {

@@ -26,6 +26,7 @@ export type PreparationEntry = {
 };
 export type PreparationSnapshot = {
   version: 1;
+  contextProvenance?: 'draft_start_snapshot' | 'observed_settings';
   provider: "AllFantasy";
   context: PreparationContext;
   observedAt: string;
@@ -141,7 +142,7 @@ export function preparationContext(
 }
 export function preparationFormatKey(context: PreparationContext): string {
   return (
-    "hq-v1:" +
+    "hq-v2:" +
     createHash("sha256")
       .update(JSON.stringify(stable(context)))
       .digest("hex")
@@ -165,6 +166,7 @@ export function validPreparationSnapshot(
   const s = record(raw);
   if (
     s.version !== 1 ||
+    s.contextProvenance !== 'draft_start_snapshot' ||
     s.provider !== "AllFantasy" ||
     !s.context ||
     JSON.stringify(stable(s.context)) !== JSON.stringify(stable(context))
@@ -219,6 +221,7 @@ export function validPreparationSnapshot(
     return null;
   return {
     version: 1,
+    contextProvenance: 'draft_start_snapshot',
     provider: "AllFantasy",
     context,
     observedAt: s.observedAt as string,

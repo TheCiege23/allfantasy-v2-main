@@ -500,7 +500,7 @@ type ResolvedDraftPlayer = {
   imageUrl: string | null
 }
 
-async function resolvePlayerNames(
+export async function resolvePlayerNames(
   playerIds: string[],
   platform: string,
 ): Promise<Map<string, ResolvedDraftPlayer>> {
@@ -1131,19 +1131,14 @@ export async function getDraftHqData(
               : 'no picks recorded for your team in this draft',
         }
 
-  /* A live session and a completed board are not exclusive: a league can be mid-draft in
-     one season and hold a finished board from the last one. */
-  const board = await loadCompletedDraftBoard(lc).catch(() => ({
-    available: false as const,
-    reason: 'no completed draft has been imported for this league',
-  }))
-
-  const grades = await loadDraftGrades(leagueId, league.platform, league.platformLeagueId ?? null).catch(
-    () => ({
-      available: false as const,
-      reason: 'the draft report could not be built for this league',
-    }),
-  )
+  // Imported reports are not bound to this native session. The archive selector owns
+  // historical reports; do not place another draft's board or grades beside this session.
+  const board: SectionState<CompletedDraft> = {
+    available: false, reason: 'Choose a completed draft in the archive to review its selections',
+  }
+  const grades: SectionState<DraftGrades> = {
+    available: false, reason: 'Analysis requires data bound to this individual draft',
+  }
 
   const queue = await loadPreparedQueue(session.id, userId).catch(() => ({
     available: false as const,

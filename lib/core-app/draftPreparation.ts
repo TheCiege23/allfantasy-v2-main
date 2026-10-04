@@ -118,13 +118,21 @@ export async function getDraftPreparationData(
     return unavailablePreparation(
       "Choose a draft scheduled in AllFantasy to prepare. Historical imported ADP needs a preserved draft-time context.",
     );
-  const context = preparationContext(league, session);
+  let context = preparationContext(league, session);
   const historical = ![
     "pre_draft",
     "scheduled",
     "configuring",
     "configured",
   ].includes(session.status);
+  if (historical) {
+    const start = await prisma.leagueAuditLog.findFirst({
+      where: { leagueId: league.id, entityId: session.id, actionType: 'draft_archive_event', afterState: { path: ['event'], equals: 'start' } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { afterState: true },
+    });
+    const state = start?.afterState && typeof start.afterState === 'object' ? start.afterState as Record<string, unknown> : {};
+    context = state.context ? state.context as PreparationContext : null;
+  }
   const base = {
     ...unavailablePreparation(
       "No compatible observed ADP snapshot is available.",

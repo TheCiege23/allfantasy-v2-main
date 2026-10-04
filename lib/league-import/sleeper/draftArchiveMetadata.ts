@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client'
 export function sleeperDraftArchiveMetadata(args: {
   sourceDraftId: string; sourceLeagueId: string; season: number;
   draft: unknown; league: unknown; pick: unknown; tradedPicks: unknown[] | null;
+  rosters?: unknown[] | null;
   includeDraftSnapshot: boolean;
 }): Prisma.InputJsonObject {
   const record = (value: unknown): Record<string, unknown> =>
@@ -24,6 +25,8 @@ export function sleeperDraftArchiveMetadata(args: {
     sourceLeagueId: args.sourceLeagueId, season: args.season,
     selectionRosterId: id(pick.roster_id), providerPickedBy: id(pick.picked_by),
     originalDraftSlot: typeof pick.draft_slot === 'number' ? pick.draft_slot : null,
+    auctionAmount: typeof player.amount === 'number' && Number.isFinite(player.amount) ? player.amount : typeof player.amount === 'string' && /^\d+(\.\d+)?$/.test(player.amount) ? Number(player.amount) : null,
+    isKeeper: pick.is_keeper === true,
     playerSnapshot: {
       name: [text(player.first_name), text(player.last_name)].filter(Boolean).join(' ') || null,
       position: text(player.position), team: text(player.team), sport: text(player.sport),
@@ -41,6 +44,7 @@ export function sleeperDraftArchiveMetadata(args: {
     observedSeasonScoring: json(league.scoring_settings),
     observedSeasonRosterPositions: json(league.roster_positions),
     tradedPicks: json(args.tradedPicks),
+    observedSeasonRosters: json(args.rosters),
     tradeCoverage: args.tradedPicks === null ? 'unavailable' : 'provider_ownership_snapshot',
   }
   return metadata

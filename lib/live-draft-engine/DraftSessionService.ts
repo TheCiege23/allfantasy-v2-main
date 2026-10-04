@@ -3,6 +3,7 @@
  */
 
 import { Prisma } from '@prisma/client'
+import { updateSessionWithArchive, recordArchiveEvent } from '@/lib/draft-archive/events'
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { logAction } from '@/server/services/auditService'
@@ -99,14 +100,6 @@ export async function reconcileOvernightDraftTimerForLeague(leagueId: string, no
   const session = await prisma.draftSession.findFirst({
     where: { leagueId },
     orderBy: CURRENT_DRAFT_SESSION_ORDER,
-    select: {
-      id: true,
-      status: true,
-      draftType: true,
-      timerEndAt: true,
-      overnightFrozenPickSeconds: true,
-      version: true,
-    },
   })
   if (!session || session.status !== 'in_progress' || session.draftType === 'auction') return
 
@@ -121,14 +114,11 @@ export async function reconcileOvernightDraftTimerForLeague(leagueId: string, no
   if (!window) {
     if (frozen != null) {
       const sec = Math.max(0, frozen)
-      await prisma.draftSession.update({
-        where: { id: session.id },
-        data: {
+      await updateSessionWithArchive(session, {
           overnightFrozenPickSeconds: null,
           timerEndAt: sec > 0 ? new Date(now.getTime() + sec * 1000) : null,
           version: { increment: 1 },
-        },
-      })
+      }, 'resume', { overnight: true })
     }
     return
   }
@@ -138,28 +128,22 @@ export async function reconcileOvernightDraftTimerForLeague(leagueId: string, no
   if (!inside) {
     if (frozen != null) {
       const sec = Math.max(0, frozen)
-      await prisma.draftSession.update({
-        where: { id: session.id },
-        data: {
+      await updateSessionWithArchive(session, {
           overnightFrozenPickSeconds: null,
           timerEndAt: sec > 0 ? new Date(now.getTime() + sec * 1000) : null,
           version: { increment: 1 },
-        },
-      })
+      }, 'resume', { overnight: true })
     }
     return
   }
 
   if (frozen == null && session.timerEndAt) {
     const rem = Math.max(0, Math.ceil((session.timerEndAt.getTime() - now.getTime()) / 1000))
-    await prisma.draftSession.update({
-      where: { id: session.id },
-      data: {
+    await updateSessionWithArchive(session, {
         overnightFrozenPickSeconds: rem,
         timerEndAt: null,
         version: { increment: 1 },
-      },
-    })
+    }, 'pause', { overnight: true })
   }
 }
 
@@ -710,16 +694,10 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
     } catch (e) {
       console.warn('[startDraftSession] Salary cap startup ledger init non-fatal:', e)
     }
-    await prisma.draftSession.update({
-      where: { id: session.id },
-      data: {
-        status: 'in_progress',
-        pausedRemainingSeconds: null,
-        overnightFrozenPickSeconds: null,
-        startedAt: session.startedAt ?? startedAtNow,
-        version: { increment: 1 },
-      },
-    })
+    await updateSessionWithArchive(session, {
+      status: 'in_progress', pausedRemainingSeconds: null, overnightFrozenPickSeconds: null,
+      startedAt: session.startedAt ?? startedAtNow, version: { increment: 1 },
+    }, 'start')
     await ensureDraftingLifecycleForActiveSession(leagueId)
     return { ok: true }
   }
@@ -727,18 +705,11 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
   const timerSeconds = computeEffectivePickTimerSeconds(ls, config, uiSettings)
   const timerEndAt =
     timerSeconds != null && timerSeconds > 0 ? new Date(Date.now() + timerSeconds * 1000) : null
-  await prisma.draftSession.update({
-    where: { id: session.id },
-    data: {
-      status: 'in_progress',
-      timerSeconds,
-      timerEndAt,
-      pausedRemainingSeconds: null,
-      overnightFrozenPickSeconds: null,
-      startedAt: session.startedAt ?? startedAtNow,
-      version: { increment: 1 },
-    },
-  })
+  await updateSessionWithArchive(session, {
+    status: 'in_progress', timerSeconds, timerEndAt, pausedRemainingSeconds: null,
+    overnightFrozenPickSeconds: null, startedAt: session.startedAt ?? startedAtNow,
+    version: { increment: 1 },
+  }, 'start')
   await ensureDraftingLifecycleForActiveSession(leagueId)
   return { ok: true }
 }
@@ -755,17 +726,11 @@ export async function pauseDraftSession(leagueId: string, pausedByUserId?: strin
         : session.timerEndAt
           ? Math.max(0, Math.ceil((session.timerEndAt.getTime() - now.getTime()) / 1000))
           : session.timerSeconds ?? 0
-    await prisma.draftSession.update({
-      where: { id: session.id },
-      data: {
-        status: 'paused',
-        timerEndAt: null,
-        overnightFrozenPickSeconds: null,
-        pausedRemainingSeconds: remaining,
-        pausedByUserId: pausedByUserId ?? null,
-        version: { increment: 1 },
-      },
-    })
+    await updateSessionWithArchive(session, {
+      status: 'paused', timerEndAt: null, overnightFrozenPickSeconds: null,
+      pausedRemainingSeconds: remaining, pausedByUserId: pausedByUserId ?? null,
+      version: { increment: 1 },
+    }, 'pause', {actorUserId:pausedByUserId??null})
     return true
   })
   if (!lockResult.acquired) {
@@ -801,9 +766,7 @@ export async function resumeDraftSession(leagueId: string): Promise<boolean> {
       !Array.isArray(session.auctionState)
         ? (session.auctionState as Record<string, unknown>)
         : null
-    await prisma.draftSession.update({
-      where: { id: session.id },
-      data: {
+    await updateSessionWithArchive(session, {
         status: 'in_progress',
         timerSeconds: effectiveStored,
         timerEndAt,
@@ -819,8 +782,7 @@ export async function resumeDraftSession(leagueId: string): Promise<boolean> {
             }
           : {}),
         version: { increment: 1 },
-      },
-    })
+    }, 'resume')
     return true
   })
   if (!lockResult.acquired) {
@@ -843,15 +805,12 @@ export async function resetTimer(leagueId: string): Promise<boolean> {
 
     /** Full clock refresh while commissioner-paused: stay paused; only refresh stored remainder (do not resume). */
     if (session.status === 'paused') {
-      await prisma.draftSession.update({
-        where: { id: session.id },
-        data: {
+      await updateSessionWithArchive(session, {
           timerSeconds,
           overnightFrozenPickSeconds: null,
           pausedRemainingSeconds: timerSeconds ?? session.pausedRemainingSeconds,
           version: { increment: 1 },
-        },
-      })
+      }, 'reset_timer')
       return true
     }
 
@@ -864,9 +823,7 @@ export async function resetTimer(leagueId: string): Promise<boolean> {
       !Array.isArray(session.auctionState)
         ? (session.auctionState as Record<string, unknown>)
         : null
-    await prisma.draftSession.update({
-      where: { id: session.id },
-      data: {
+    await updateSessionWithArchive(session, {
         status: 'in_progress',
         timerSeconds,
         timerEndAt,
@@ -882,8 +839,7 @@ export async function resetTimer(leagueId: string): Promise<boolean> {
             }
           : {}),
         version: { increment: 1 },
-      },
-    })
+    }, 'reset_timer')
     return true
   })
   if (!lockResult.acquired) {
@@ -934,10 +890,7 @@ export async function setTimerSeconds(
       }
     }
   }
-  await prisma.draftSession.update({
-    where: { id: session.id },
-    data: { ...data, updatedAt: new Date() },
-  })
+  await updateSessionWithArchive(session, { ...data, updatedAt: new Date() }, 'reset_timer')
   return true
 }
 
@@ -973,8 +926,9 @@ export async function undoLastPick(
 
   await prisma.$transaction(async (tx) => {
     await tx.draftPick.delete({ where: { id: last.id } })
+    let updatedSession: Parameters<typeof recordArchiveEvent>[1] = session
     if (freshTimerEndAt !== null) {
-      await tx.draftSession.update({
+      updatedSession = await tx.draftSession.update({
         where: { id: session.id },
         data: {
           version: { increment: 1 },
@@ -985,11 +939,12 @@ export async function undoLastPick(
         },
       })
     } else {
-      await tx.draftSession.update({
+      updatedSession = await tx.draftSession.update({
         where: { id: session.id },
         data: { version: { increment: 1 }, updatedAt: new Date() },
       })
     }
+    await recordArchiveEvent(tx, updatedSession, 'reset_timer', { actorUserId, correction: 'undo_pick' })
     if (actorUserId) {
       await tx.draftPickAuditLog.create({
         data: {
@@ -1118,6 +1073,7 @@ export async function swapDraftManagers(
         updatedAt: new Date(),
       },
     })
+    await recordArchiveEvent(tx, { ...session, slotOrder: nextSlotOrder }, 'ownership', { actorUserId })
     await tx.draftPickAuditLog.create({
       data: {
         leagueId,
@@ -1180,6 +1136,7 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
       },
     })
 
+    await recordArchiveEvent(tx, {...session, status:'completed'}, 'complete', {}, completedAt)
     const lifecycle = await applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId)
     return { ok: true as const, transitioned: true as const, lifecycle, sessionId: session.id }
   })
@@ -1258,6 +1215,8 @@ export async function resetDraftSession(
   if (!session) return false
   if (session.status === COMPLETED_DRAFT_SESSION_STATUS && !options?.allowCompleted) return false
   const outcome = await prisma.$transaction(async (tx) => {
+    const archivedPicks = await tx.draftPick.findMany({where:{sessionId:session.id},orderBy:{overall:'asc'}})
+    await recordArchiveEvent(tx, session, 'reset_draft', {priorSession:session, archivedPicks})
     await tx.draftPick.deleteMany({ where: { sessionId: session.id } })
     await tx.draftSession.update({
       where: { id: session.id },

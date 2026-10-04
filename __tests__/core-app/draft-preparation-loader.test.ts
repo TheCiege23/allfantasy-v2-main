@@ -5,10 +5,12 @@ const db = vi.hoisted(() => ({
   queue: vi.fn(),
   preference: vi.fn(),
   create: vi.fn(),
+  start: vi.fn(),
 }));
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     aiAdpSnapshotHistory: { findFirst: db.history, create: db.create },
+    leagueAuditLog: { findFirst: db.start },
     draftPick: { findMany: db.picks },
     draftQueue: { findUnique: db.queue },
     liveDraftAutopickPreference: { findUnique: db.preference },
@@ -69,6 +71,7 @@ function snapshot(s = session) {
   return {
     snapshotData: {
       version: 1,
+      contextProvenance: 'draft_start_snapshot',
       provider: "AllFantasy",
       context: preparationContext(league, s),
       observedAt: "2026-08-01T00:00:00Z",
@@ -83,6 +86,7 @@ beforeEach(() => {
   db.queue.mockResolvedValue({ order: [] });
   db.preference.mockResolvedValue({ enabled: false, mode: "standard" });
   db.create.mockResolvedValue({});
+  db.start.mockResolvedValue({ afterState: { context: preparationContext(league, session) } });
 });
 describe("draft preparation source binding", () => {
   it("pins the query and comparisons before native draft start", async () => {
@@ -318,7 +322,7 @@ describe("draft preparation source binding", () => {
       overall: 1,
       source: "user",
       assetType: "player",
-      pickMetadata: null,
+      pickMetadata: { archive: { eventId: 'event', context: preparationContext(league, session) } },
       session: { ...session, sessionKind: "live", league },
     };
     await persistPreparationSnapshotHistory(
