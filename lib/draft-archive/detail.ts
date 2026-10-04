@@ -5,9 +5,13 @@ import { resolvePlayerNames } from '@/lib/core-app/draftHq';
 import { canViewLeague, isElevatedCommissioner } from '@/server/services/permissionService';
 import { draftArchiveCatalog, type ArchiveChoice } from './catalog';
 import { object, ARCHIVE_EVENT } from './events';
-import { preparationFormatKey, preparationPlayerKey, validPreparationSnapshot, type PreparationContext } from '@/lib/core-app/draftPreparationModel';
+import { preparationContext, preparationFormatKey, preparationPlayerKey, validPreparationSnapshot, type PreparationContext } from '@/lib/core-app/draftPreparationModel';
 import { analysisReadiness } from './analysisBasis';
 import { archiveLedger, archiveSequence } from './ledger';
+import { draftDayReport, resultsReport, type DraftAnalysisReport, type ResultsReport } from './analysisModel';
+import { draftReferences } from './references';
+import type { DraftReference } from './referenceModel';
+import { readImportedResults } from './importedResults';
 export type ArchivePick = {
     id: string;
     overall: number;
@@ -40,6 +44,12 @@ export type ArchivePick = {
     adpObservedAt?: string | null;
 };
 export type ArchiveDetail = {
+    canReconcile?: boolean;
+    canRefreshResults?: boolean;
+    resultsObservedAt?: string | null;
+    references?: DraftReference[];
+    analysisReport?: DraftAnalysisReport;
+    resultsReport?: ResultsReport;
     choice: Omit<ArchiveChoice, 'total' | 'createdAt'>;
     picks: ArchivePick[];
     snapshot: unknown;
@@ -221,5 +231,61 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
         return { transactionId: trade.transactionId, season: trade.season, week: trade.weekOrPeriod, adds: payload.adds, drops: payload.drops, draftPicks: payload.draft_picks, rosterIds: payload.roster_ids, providerCreatedAt: payload.created, providerStatusUpdatedAt: payload.status_updated };
     });
     const analysis = analysisReadiness(nativeSnap.analysisBasis, picks.length);
-    return JSON.parse(JSON.stringify({ analysis, choice: publicChoice, picks, snapshot: publicSnapshot, startedAt, endedAt, endMeaning: native ? 'Completed at' : 'Provider last selection time', elapsedMs: duration(startedAt, endedAt), activeMs: native && clock.complete === true ? number(clock.totalActiveMs) : null, events: publicEvents, eventsMore: events.length > 100, corrections: corrections.slice(0, 100), correctionsMore: corrections.length > 100, trades: publicTrades, tradesMore: trades.length > 100, playerTrades, playerTradesMore: (playerTradeRows?.length ?? 0) > 100, coverage, sessionId })) as ArchiveDetail;
+    const analysisTeams = native ? order.flatMap(t => string(t.rosterId) ? [{ rosterId: string(t.rosterId)!, name: string(t.displayName) ?? string(t.rosterId)! }] : []) : providerRosters.flatMap(t => string(t.roster_id) ? [{ rosterId: string(t.roster_id)!, name: string(object(t.metadata).team_name) ?? string(t.roster_id)! }] : []);
+    const analysisReport = draftDayReport(nativeSnap.analysisBasis, context, picks, analysisTeams, startedAt);
+    let results: ResultsReport | undefined;
+    if (native && choice.sport === 'NFL' && choice.season && startedAt) {
+      try {
+        const [scores, finalRows, games] = await Promise.all([
+            prisma.weeklyScore.findMany({ where: { leagueId, season: choice.season }, take: 10001, select: { rosterId: true, playerId: true, points: true, isStarter: true, week: true } }),
+            prisma.teamWeekResult.findMany({ where: { leagueId, season: choice.season, status: 'final' }, take: 1001, select: { week: true, rosterId: true } }),
+            prisma.sportsGame.findMany({where:{sport:'NFL',season:choice.season,seasonType:'regular'},take:1001,select:{week:true,startTime:true}}),
+        ]);
+        const finalWeeks = [...new Set(finalRows.map(r => r.week))].filter(week => games.some(g=>g.week===week) && games.filter(g=>g.week===week).every(g=>g.startTime && g.startTime.getTime()>Date.parse(startedAt)) && analysisTeams.length > 1 && analysisTeams.every(team => finalRows.some(row => row.week === week && row.rosterId === team.rosterId)));
+        if (scores.length <= 10000 && finalRows.length <= 1000 && games.length <= 1000) results = resultsReport(picks, analysisTeams, scores, finalWeeks);
+        else coverage.push('Weekly result data exceeds the analysis bound; no partial team rank is returned.');
+      } catch { coverage.push('Recorded weekly starter results are temporarily unavailable.'); }
+    }
+    let references: DraftReference[] = [];
+    let referenceContext = context;
+    if (!native && choice.source === 'imported' && platform.toLowerCase() === 'sleeper' && choice.season && startedAt) {
+      try {
+        const sourceIds = new Set(rows.map(r => string(object(r.metadata).sourceLeagueId)));
+        const sourceId = sourceIds.size === 1 ? [...sourceIds][0] : null;
+        const seasonRow = sourceId ? await prisma.leagueDynastySeason.findFirst({ where: { leagueId,season:choice.season,platformLeagueId:sourceId,provider:'sleeper' },select:{metadata:true} }) : null;
+        const seasonMeta = object(seasonRow?.metadata), settings = object(seasonMeta.rawSettings), leagueType = settings.type === 2 ? 'dynasty' : settings.type === 0 ? 'redraft' : null;
+        if (leagueType && seasonMeta.sourceProvider === 'sleeper' && number(seasonMeta.season) === choice.season && Array.isArray(seasonMeta.rosterPositions)) referenceContext = preparationContext({sport:'NFL',season:choice.season,leagueVariant:leagueType,scoring:string(seasonMeta.scoringFormat)?.toLowerCase(),settings:{roster_positions:seasonMeta.rosterPositions,scoring_settings:seasonMeta.scoringSettings}},{draftType:choice.format,teamCount:number(seasonMeta.totalRosters) ?? 0,playerPool:'all'});
+      } catch { coverage.push('Historical season format references are temporarily unavailable.'); }
+    }
+    if (referenceContext && startedAt) {
+        try {
+            const aliases = new Map<string, string>();
+            const basis = object(nativeSnap.analysisBasis);
+            if (basis.version === 'draft-analysis-basis-v2' && Array.isArray(basis.entries)) for (const raw of basis.entries) {
+                const e = object(raw); if (string(e.playerId) && string(e.sleeperId)) { aliases.set(string(e.playerId)!, string(e.sleeperId)!); aliases.set(string(e.sleeperId)!, string(e.sleeperId)!); }
+            }
+            if (!native) for (const playerId of ids) aliases.set(playerId,playerId);
+            else if (basis.version !== 'draft-analysis-basis-v2') {
+                const mappings = await prisma.playerIdentityMap.findMany({where:{sport:'NFL',OR:[{id:{in:ids}},{sleeperId:{in:ids}}]},take:5001,select:{id:true,sleeperId:true}});
+                if (mappings.length > 5000) throw new Error('Identity reference bound exceeded');
+                const conflicts = new Set<string>();
+                for (const mapping of mappings) if (mapping.sleeperId) for (const alias of [mapping.id,mapping.sleeperId]) { if (aliases.has(alias) && aliases.get(alias)!==mapping.sleeperId) conflicts.add(alias); else aliases.set(alias,mapping.sleeperId); }
+                for (const alias of conflicts) aliases.delete(alias);
+            }
+            const playerIds = new Set(picks.flatMap(p => p.playerId ? [p.playerId] : []));
+            const sleeperIds = new Set(picks.flatMap(p => p.playerId && aliases.has(p.playerId) ? [aliases.get(p.playerId)!] : []));
+            references = (await draftReferences(referenceContext, new Date(startedAt), number(object(session).auctionBudgetPerTeam))).map(r => ({ ...r, displayScope:'draft_selections' as const,identityBasis:!native ? 'provider_recorded_id' as const : basis.version === 'draft-analysis-basis-v2' ? 'draft_start_mapping' as const : 'current_verified_mapping' as const,formatBasis:context ? 'frozen_draft_context' as const : 'observed_historical_season' as const, entries: r.entries.filter(e => (r.identitySpace === 'native' ? playerIds : sleeperIds).has(e.playerId)).map(e => {
+                const pick = picks.find(p => p.playerId && (r.identitySpace === 'native' ? p.playerId : aliases.get(p.playerId)) === e.playerId);
+                return { ...e, name: pick?.playerName ?? e.name, ...(r.kind === 'adp' && pick ? { draftedOverall: pick.overall, difference: pick.overall - e.value } : {}) };
+            }) })).filter(r => r.entries.length);
+        } catch { coverage.push('Market reference data is temporarily unavailable.'); }
+    }
+    const canReconcile = choice.source === 'legacy' && await isElevatedCommissioner(leagueId, userId);
+    let resultsObservedAt: string | null = null;
+    if (choice.source === 'imported' && choice.sport === 'NFL') {
+        try { const observation = await readImportedResults(leagueId,key); if (observation) { results = observation.report; resultsObservedAt = observation.observedAt; } }
+        catch { coverage.push('Historical result observations are temporarily unavailable.'); }
+    }
+    const canRefreshResults = choice.source === 'imported' && choice.sport === 'NFL' && platform.toLowerCase() === 'sleeper' && await isElevatedCommissioner(leagueId,userId);
+    return JSON.parse(JSON.stringify({ canReconcile, canRefreshResults, resultsObservedAt, references, analysisReport, resultsReport: results, analysis, choice: publicChoice, picks, snapshot: publicSnapshot, startedAt, endedAt, endMeaning: native ? 'Completed at' : 'Provider last selection time', elapsedMs: duration(startedAt, endedAt), activeMs: native && clock.complete === true ? number(clock.totalActiveMs) : null, events: publicEvents, eventsMore: events.length > 100, corrections: corrections.slice(0, 100), correctionsMore: corrections.length > 100, trades: publicTrades, tradesMore: trades.length > 100, playerTrades, playerTradesMore: (playerTradeRows?.length ?? 0) > 100, coverage, sessionId })) as ArchiveDetail;
 }

@@ -1,5 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { draftReferences } from '@/lib/draft-archive/references';
+import type { DraftReference } from '@/lib/draft-archive/referenceModel';
 import { getDraftPlanningPreference } from './draftPlanningPreferenceStore';
 import type { DraftPlanningPreference } from './draftPlanningPreferenceModel';
 import { createHash } from "node:crypto";
@@ -28,6 +30,8 @@ import {
 } from "@/lib/live-draft-engine/draftPickEmpty";
 
 export type DraftPreparationData = {
+  references?: DraftReference[];
+  referenceError?: boolean;
   planningPreference?: DraftPlanningPreference | null;
   planningPreferenceState?: 'ready' | 'error';
   state: "ready" | "empty" | "unsupported" | "error";
@@ -64,6 +68,7 @@ export type DraftPreparationData = {
   customRankingsEnabled: boolean;
 };
 export type PreparationSession = {
+  auctionBudgetPerTeam?: number | null;
   id: string;
   status: string;
   draftType: string;
@@ -153,7 +158,14 @@ export async function getDraftPreparationData(
     context,
     historical,
     customRankingsEnabled: session.customRankingsEnabled !== false,
+    references: [] as DraftReference[],
+    referenceError: false,
   };
+  const referenceCutoff = historical ? session.startedAt : new Date();
+  if (context && referenceCutoff) {
+    try { base.references = (await draftReferences(context, referenceCutoff, session.auctionBudgetPerTeam)).map(r => ({ ...r, displayScope: 'preparation_top100' as const, entries: [...r.entries].sort((a,b) => r.kind === 'adp' ? a.value - b.value : b.value - a.value).slice(0,100) })); }
+    catch { base.referenceError = true; }
+  }
   if (!["snake", "linear", "auction"].includes(session.draftType))
     return {
       ...base,

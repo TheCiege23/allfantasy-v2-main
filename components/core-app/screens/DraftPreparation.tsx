@@ -7,6 +7,7 @@ import { InfoTip } from "../InfoTip";
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient";
 import type { DraftPreparationData } from "@/lib/core-app/draftPreparation";
 import "@/components/core-app/af-draft-preparation.css";
+import { DraftReferences } from './DraftReferences';
 
 const spanish: Record<string, string> = {
   "Draft preparation": "Preparación del draft",
@@ -229,6 +230,7 @@ export function DraftPreparation({
           {t("Open a what-if mock")} →
         </Link>
       </header>
+      <DraftReferences references={data.references} error={data.referenceError}/>
       {data.context && (
         <p className="af-prep-context">
           {data.context.sport} · {data.context.season} ·{" "}
