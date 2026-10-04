@@ -16,7 +16,7 @@ const require = createRequire(import.meta.url)
 vi.mock("next-auth/react", () => ({
   SessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   signOut: vi.fn(),
-  useSession: () => undefined,
+  useSession: () => ({ data: null, status: 'unauthenticated' }),
 }))
 
 vi.mock("next/navigation", () => ({
@@ -834,3 +834,4 @@ describe("root language provider layout", () => {
     expect(layoutSource).not.toContain("--font-inter")
   })
 })
+
