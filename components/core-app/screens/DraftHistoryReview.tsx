@@ -14,7 +14,7 @@ export function DraftHistoryReview({ leagueId, archiveKey }: { leagueId: string;
     try {
       if (action === 'list') { const result = await listHistorySources(leagueId, archiveKey); if (!result.ok) throw new Error(); setDrafts(result.drafts); setPreview(null); }
       if (action === 'preview') { const result = await previewHistorySource(leagueId, archiveKey, source); if (!result.ok) throw new Error(); setPreview(result); }
-      if (action === 'apply' && preview) { const result = await confirmHistorySource(leagueId, archiveKey, source, preview.digest, reason); if (!result.ok) throw new Error(); setPreview(null); setMessage(t(`${result.count} historical picks verified. Review again for remaining records.`, `${result.count} selecciones verificadas. Revisa los registros restantes.`)); router.refresh(); }
+      if (action === 'apply' && preview) { const result = await confirmHistorySource(leagueId, archiveKey, source, preview.digest, reason); if (!result.ok) throw new Error(); setPreview(null); setMessage(t(`${result.count} historical picks verified. Review again for remaining records.`, `${result.count} selecciones verificadas. Revisa los registros restantes.`)); router.push('/core/draft-hq?league=' + encodeURIComponent(leagueId) + '&draft=' + encodeURIComponent('imported:' + source)); }
     } catch { setPreview(null); setMessage(t('Review unavailable or records changed. Retry; no source is guessed. Commissioners only.', 'Revisión no disponible o registros cambiados. Vuelve a intentar; no se adivina el origen. Solo comisionados.')); }
     finally { setBusy(false); }
   }
