@@ -1123,6 +1123,13 @@ const spanish: Record<string, string> = {
   'He is ruled out, and no bench player here can come in for him now.': 'Está descartado, y ningún jugador de la banca puede entrar por él ahora.',
   'Nobody on your bench out-projects him here.': 'Nadie de tu banca lo supera en proyección aquí.',
   'He does not out-project a starter here.': 'No supera en proyección a ningún titular aquí.',
+  // Player Finder — why "Recommended moves" is empty (lib/core-app/playerFinder.ts `impact` reasons, and
+  // components/core-app/screens/PlayerFinder.tsx's own line). Whole sentences, so a new reason stays whole English.
+  'sign in to see which of your leagues this affects': 'inicia sesión para ver a cuáles de tus ligas afecta',
+  'we hold no Sleeper id for this player, so we cannot locate him on your rosters':
+    'no tenemos el identificador de Sleeper de este jugador, así que no podemos ubicarlo en tus plantillas',
+  'we could not read your rosters for this player': 'no pudimos leer tus plantillas para este jugador',
+  'He is not on any of your rosters, so there is no lineup to fix.': 'No está en ninguna de tus plantillas, así que no hay alineación que corregir.',
   // Refresh my lineups (components/core-app/player-finder/RefreshLineups.tsx — Game Plan and Player Finder).
   'Refresh my lineups': 'Actualizar mis alineaciones',
   'Refreshing…': 'Actualizando…',
@@ -1284,6 +1291,10 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   // A LOCKED player's read from lib/core-app/swapLegality.ts `playerLock` — "kicked off Sun 1:00p ET" (Player
   // Finder's swap candidates; the league calls splice it into a sentence, matched whole below).
   [/^kicked off (.+)$/, (m) => `empezó ${kickoffText(m[1]!, 'es')}`],
+  // Player Finder — why a recommended move cannot be made now (swapLegality.ts `swapLegality`/`moveLegality`
+  // `reason`): "locked — Ferguson’s game kicked off Sun 1:00p ET". The name is a surname, left as written.
+  [/^locked — both games have kicked off$/, () => 'bloqueado: ya empezaron los dos partidos'],
+  [/^locked — (.+)’s game kicked off (.+)$/, (m) => `bloqueado: el partido de ${m[1]} empezó ${kickoffText(m[2]!, 'es')}`],
   // Player Finder — the not-playing chip (byeStatus.ts `byeChip`), the feed's report time (injuryReport.ts
   // `reportedLabel`) and the pregame inactive line (pregameInactive.ts `inactiveSentence`).
   [/^Bye · wk (\d+)$/, (m) => `Descanso · sem. ${m[1]}`],
