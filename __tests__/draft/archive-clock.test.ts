@@ -8,12 +8,18 @@ describe('archived active pick clock',()=>{
   clock=advanceArchiveClock(clock,'resume',at(100),1,'a',true).clock
   clock=advanceArchiveClock(clock,'ownership',at(110),1,'b',true).clock
   const result=advanceArchiveClock(clock,'selection',at(120),1,'b',true)
-  expect(result.selected).toEqual({activeMs:30000,byOwner:{a:20000,b:10000}})
+  expect(result.selected).toEqual({openedAt:at(0).toISOString(),elapsedMs:120000,pausedMs:90000,activeMs:30000,byOwner:{a:20000,b:10000}})
   expect(result.clock.totalActiveMs).toBe(30000)
  })
  it('does not invent exact OTC for a draft without its start event',()=>{
   const clock=advanceArchiveClock(null,'resume',at(0),1,'a',true).clock
   expect(advanceArchiveClock(clock,'selection',at(10),1,'a',true).selected).toBeNull()
+ })
+ it('does not invent elapsed OTC for a stored legacy clock without its opening timestamp',()=>{
+  const clock=advanceArchiveClock(null,'start',at(0),1,'a',true).clock
+  delete clock.openedAt
+  const result=advanceArchiveClock(clock,'selection',at(10),1,'a',true)
+  expect(result.selected).toMatchObject({activeMs:10000,elapsedMs:null,pausedMs:null,openedAt:null})
  })
  it('a clock allowance reset does not erase elapsed OTC',()=>{
   let clock=advanceArchiveClock(null,'start',at(0),1,'a',true).clock

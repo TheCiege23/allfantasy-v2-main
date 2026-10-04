@@ -7,6 +7,7 @@ import { draftArchiveCatalog, type ArchiveChoice } from './catalog';
 import { object, ARCHIVE_EVENT } from './events';
 import { preparationFormatKey, preparationPlayerKey, validPreparationSnapshot, type PreparationContext } from '@/lib/core-app/draftPreparationModel';
 import { analysisReadiness } from './analysisBasis';
+import { archiveLedger, archiveSequence } from './ledger';
 export type ArchivePick = {
     id: string;
     overall: number;
@@ -28,6 +29,9 @@ export type ArchivePick = {
     amount: number | null;
     allowanceSeconds: number | null;
     activeMs: number | null;
+    elapsedMs?: number | null;
+    pausedMs?: number | null;
+    onClockAt?: string | null;
     ownerTime: Record<string, number> | null;
     identityBasis: string;
     adp?: number | null;
@@ -78,13 +82,16 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     const unstarted = ['pre_draft', 'scheduled', 'configuring', 'configured'].includes(String(object(session).status));
     const nativeStart = unstarted ? null : iso(object(session).startedAt);
     const skip = (Math.max(1, Math.min(10000, Math.floor(timelinePage) || 1)) - 1) * 100;
-    const [startEvent, lastEvent, gate] = native && sessionId ? await Promise.all([
-        nativeStart ? prisma.leagueAuditLog.findFirst({ where: { leagueId, entityId: sessionId, actionType: ARCHIVE_EVENT, afterState: { path: ['event'], equals: 'start' }, createdAt: { gte: new Date(nativeStart), ...(boundary ? { lte: boundary } : {}) } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }) : Promise.resolve(null),
-        nativeStart ? prisma.leagueAuditLog.findFirst({ where: { leagueId, entityId: sessionId, actionType: ARCHIVE_EVENT, createdAt: { gte: new Date(nativeStart), ...(boundary ? { lt: boundary } : {}) } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }) : Promise.resolve(null),
+    const beforeSequence = archiveSequence(reset?.afterState);
+    const [starts, gate] = native && sessionId ? await Promise.all([
+        nativeStart ? archiveLedger(prisma, leagueId, sessionId, { event: 'start', startAt: nativeStart, beforeSequence, beforeTime: boundary }) : Promise.resolve([]),
         isElevatedCommissioner(leagueId, userId),
-    ]) : [null, null, false];
+    ]) : [[], false];
+    const startEvent = starts[0] ?? null;
+    const attempt = { fromSequence: archiveSequence(startEvent?.afterState), fromTime: startEvent?.createdAt ?? (nativeStart ? new Date(nativeStart) : undefined), beforeSequence, beforeTime: boundary };
+    const [lastEvent] = native && sessionId && nativeStart ? await archiveLedger(prisma, leagueId, sessionId, attempt) : [];
     const range = { ...(startEvent ? { gte: startEvent.createdAt } : {}), ...(boundary ? { lte: boundary } : {}) };
-    const events = native && sessionId && nativeStart ? await prisma.leagueAuditLog.findMany({ where: { leagueId, entityId: sessionId, actionType: ARCHIVE_EVENT, createdAt: range }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip, take: 101, select: { id: true, createdAt: true, afterState: true } }) : [];
+    const events = native && sessionId && nativeStart ? await archiveLedger(prisma, leagueId, sessionId, { ...attempt, skip, take: 101 }) : [];
     let rows: Record<string, unknown>[] = [];
     let snapshot: unknown = object(startEvent?.afterState).snapshot ?? null;
     let coverage: string[] = [];
@@ -133,7 +140,13 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     }) : null;
     const benchmark = context && startedAt ? validPreparationSnapshot(historicalBenchmark?.snapshotData, context, new Date(startedAt)) : null;
     const entries = new Map(benchmark?.entries.map(e => [e.playerKey, e]) ?? []);
+    const rowsById = new Map(rows.map(r => [String(native ? r.id : r.draftId), r]));
     for (const pick of picks) {
+        const row = rowsById.get(pick.id);
+        const timing = object(object(object(row?.pickMetadata).archive).timing);
+        pick.elapsedMs = number(timing.elapsedMs);
+        pick.pausedMs = number(timing.pausedMs);
+        pick.onClockAt = iso(timing.openedAt);
         pick.originalTeamName = native
             ? string(order.find(t => string(t.rosterId) === pick.originalRosterId)?.displayName)
             : string(object(providerRosters.find(t => string(t.roster_id) === pick.originalRosterId)?.metadata).team_name);
