@@ -74,6 +74,12 @@ export type ExposureData = {
   rostersRead: number
   /** Plain-language concentration callout, or null when nothing is concentrated. */
   note: string | null
+  /**
+   * What `note` was built from (2026-10-04), so the card can say it in the reader's language: `note`
+   * stays the English as written and lib/core-app/dashboard3aCopy.ts rebuilds the Spanish from this.
+   * Absent whenever `note` is null.
+   */
+  noteParts?: { kind: 'every' | 'some'; name: string; count: number; of: number }
 }
 
 export type RivalRow = {
@@ -91,6 +97,11 @@ export type RivalRow = {
    * coreUiCopy key Rivalry Radar uses, so the bilingual League Home can translate it).
    */
   lastResult: string | null
+  /**
+   * What `lastResult` was built from (2026-10-04): the home's rivalry card rebuilds it in the
+   * reader's language from this (lib/core-app/dashboard3aCopy.ts). `lastResult` stays the English.
+   */
+  lastParts?: { kind: 'won' | 'lost' | 'tie'; margin: number } | null
 }
 
 export type RivalsData = { rows: RivalRow[]; leaguesRead: number }
@@ -259,14 +270,16 @@ export async function getCrossLeagueExposure(
   })
 
   const top = rows[0]
+  const noteKind: 'every' | 'some' | null = top && top.count > 1 ? (top.count === rostersRead ? 'every' : 'some') : null
   const note =
-    top && top.count > 1 && top.count === rostersRead
-      ? `${top.name} is on every roster you own — one hamstring and your whole Sunday moves.`
-      : top && top.count > 1
-        ? `${top.name} is on ${top.count} of your ${rostersRead} rosters.`
+    noteKind === 'every'
+      ? `${top!.name} is on every roster you own — one hamstring and your whole Sunday moves.`
+      : noteKind === 'some'
+        ? `${top!.name} is on ${top!.count} of your ${rostersRead} rosters.`
         : null
+  const noteParts = noteKind ? { noteParts: { kind: noteKind, name: top!.name, count: top!.count, of: rostersRead } } : {}
 
-  return { available: true, data: { rows, rostersRead, note } }
+  return { available: true, data: { rows, rostersRead, note, ...noteParts } }
 }
 
 /**
@@ -316,7 +329,15 @@ export async function getRivalRecords(
 
   const agg = new Map<
     string,
-    { name: string; wins: number; losses: number; ties: number; leagues: Set<string>; last: string | null }
+    {
+      name: string
+      wins: number
+      losses: number
+      ties: number
+      leagues: Set<string>
+      last: string | null
+      lastParts: RivalRow['lastParts']
+    }
   >()
   let leaguesRead = 0
 
@@ -435,7 +456,15 @@ export async function getRivalRecords(
        * silently fragments every real rival.
        */
       const key = name.trim().toLowerCase()
-      const prev = agg.get(key) ?? { name, wins: 0, losses: 0, ties: 0, leagues: new Set<string>(), last: null }
+      const prev = agg.get(key) ?? {
+        name,
+        wins: 0,
+        losses: 0,
+        ties: 0,
+        leagues: new Set<string>(),
+        last: null,
+        lastParts: null,
+      }
       const margin = mineRow.pointsFor - opp.pointsFor
       /*
        * ⚠ A LEVEL MEETING IS A TIE, NOT A LOSS. Counting "not won" as lost added
@@ -453,6 +482,11 @@ export async function getRivalRecords(
           : margin < 0
             ? `beat you by ${(-margin).toFixed(1)}`
             : 'a tie'
+      prev.lastParts = {
+        kind: margin > 0 ? 'won' : margin < 0 ? 'lost' : 'tie',
+        // Unrounded, so the Spanish formats it with the same `toFixed(1)` as the English above.
+        margin: Math.abs(margin),
+      }
       agg.set(key, prev)
     }
   }
@@ -489,6 +523,7 @@ export async function getRivalRecords(
       meetings: v.wins + v.losses + v.ties,
       sharedLeagues: v.leagues.size,
       lastResult: v.last,
+      lastParts: v.lastParts,
     }))
     .sort((a, b) => b.losses - a.losses || b.meetings - a.meetings)
     .slice(0, limit)

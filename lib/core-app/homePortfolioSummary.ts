@@ -74,10 +74,12 @@ export const HOME_RIVALS_SCREEN = 'home-rivals'
  * v2: the envelope field was renamed `result` → `data` when the exposure and rivals records joined.
  * v3: retire kickoff actions that could target a league in a different sport.
  * rivals v3: rows carry `ties`, and a tied meeting left `losses` (it had been counted as one).
+ * exposure v2 / rivals v4 (2026-10-04): the note and the last meeting carry `noteParts` / `lastParts`,
+ * so the home can say them in Spanish — a record built before them would render English for its TTL.
  */
 export const HOME_PORTFOLIO_VERSION = 3
-export const HOME_EXPOSURE_VERSION = 1
-export const HOME_RIVALS_VERSION = 3
+export const HOME_EXPOSURE_VERSION = 2
+export const HOME_RIVALS_VERSION = 4
 export const HOME_PORTFOLIO_TTL_MS = 3 * 60_000
 export const HOME_PORTFOLIO_SWR_MS = 10 * 60_000
 /**
