@@ -8,11 +8,11 @@ export function rivalryNarrative(data: WeeklyBlueprint, es = false): string {
   const r = data.rivalry
   if (!r) return ''
   if (r.winningStreak > 0) return es
-    ? `Antes de este período, ganaste ${r.winningStreak} encuentros seguidos contra ${r.opponent}.${r.final ? '' : ` ¡Vamos por ${r.winningStreak + 1}!`}`
-    : `Before this period, you beat ${r.opponent} ${r.winningStreak} straight time${r.winningStreak === 1 ? '' : 's'}.${r.final ? '' : ` Let’s make it ${r.winningStreak + 1}!`}`
+    ? `En los encuentros importados anteriores a este período, ganaste ${r.winningStreak} veces seguidas contra ${r.opponent}.${r.final ? '' : ` ¡Vamos por ${r.winningStreak + 1}!`}`
+    : `In imported meetings before this period, you beat ${r.opponent} ${r.winningStreak} straight time${r.winningStreak === 1 ? '' : 's'}.${r.final ? '' : ` Let’s make it ${r.winningStreak + 1}!`}`
   if (r.losingStreak > 0 && !r.final) return es
-    ? `${r.opponent} ganó los últimos ${r.losingStreak} encuentros anteriores. Esta semana es una oportunidad para cambiar la historia.`
-    : `${r.opponent} won the last ${r.losingStreak} meetings before this period. This week is a chance to change the story.`
+    ? `En el historial importado, ${r.opponent} ganó los últimos ${r.losingStreak} encuentros anteriores. Esta semana es una oportunidad para cambiar la historia.`
+    : `In imported history, ${r.opponent} won the last ${r.losingStreak} meetings before this period. This week is a chance to change the story.`
   return es ? `Historial importado contra ${r.opponent}: ${r.wins}-${r.losses}-${r.ties} (victorias-derrotas-empates).`
     : `Imported series against ${r.opponent}: ${r.wins}-${r.losses}-${r.ties} (wins-losses-ties).`
 }
