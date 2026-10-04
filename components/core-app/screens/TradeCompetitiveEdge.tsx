@@ -1,5 +1,6 @@
 'use client'
 import { useTradeVisualCopy } from "./useTradeVisualCopy"
+import { TradeTranslationStatus } from './TradeTranslationStatus'
 
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
@@ -37,7 +38,7 @@ export function TradeCompetitiveEdge({
   edge: TradeEdgeState | null | undefined
   partnerName: string
 }) {
-  const {copy,locale}=useTradeVisualCopy()
+  const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy({edge,partnerName})
 
   if (access && !access.unlocked) return <CoreDepthLock access={access} what="Competitive Edge" />
   if (!edge) return null
@@ -45,6 +46,7 @@ export function TradeCompetitiveEdge({
   if (!edge.available) {
     return (
       <section className="af-tc-dos" data-testid="trade-competitive-edge" aria-label={copy(`Competitive Edge · ${partnerName}`)}>
+        <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
         <div className="af-label">{copy("Competitive Edge · ")}{copy(partnerName)}</div>
         <p className="af-tc-row-sub">{copy(edge.reason)}</p>
       </section>
@@ -58,6 +60,7 @@ export function TradeCompetitiveEdge({
 
   return (
     <section className="af-tc-dos" data-testid="trade-competitive-edge" aria-label={copy(`Competitive Edge · ${manager.name}`)}>
+      <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <div className="af-label">{copy("Competitive Edge · ")}{manager.name}</div>
       {access ? <FreeUntilNote access={access} /> : null}
 
@@ -83,7 +86,7 @@ export function TradeCompetitiveEdge({
       {coverage.gaps.length > 0 ? (
         <p className="af-tc-row-sub">{copy(" Some of this league's history could not be read (")}{copy(coverage.gaps.join('; '))}{copy("), so these counts may be low. ")}</p>
       ) : null}
-      <p className="af-tc-row-sub" data-testid="trade-competitive-edge-basis">{copy(" Counted from completed trades in this league's Sleeper history ")}{copy(coverage.seasons.length > 0 ? ` (${coverage.seasons[0]}–${coverage.seasons[coverage.seasons.length - 1]})` : '')}
+      <p className="af-tc-row-sub" data-testid="trade-competitive-edge-basis">{copy("Counted from completed trades in this league's Sleeper history")}{copy(coverage.seasons.length > 0 ? ` (${coverage.seasons[0]}–${coverage.seasons[coverage.seasons.length - 1]})` : '')}
         {copy(asOf ? `, as of ${asOf} ET` : '')}
         {copy(coverage.stale ? ' — may be out of date' : '')}{copy(". It shows what they did, not whether they will accept. ")}</p>
     </section>

@@ -54,6 +54,8 @@ import { TradeDecisionSummary } from './TradeDecisionSummary'
 import { TradePackageCost } from './TradePackageCost'
 import { counterDecision } from '@/lib/decision-os/trade/decisionSummary'
 import { tradeVisualCopy } from '@/lib/core-app/tradeVisualCopy'
+import { useTradeVisualCopy } from './useTradeVisualCopy'
+import { TradeTranslationStatus } from './TradeTranslationStatus'
 import { getIntlLocale as tradeIntlLocale } from '@/lib/i18n/constants'
 import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import { TradeValueChart, LineupImpactChart } from './TradeImpactCharts'
@@ -585,7 +587,6 @@ export function TradeCenter(props: {
   startWithOfferEntry?: boolean
 }) {
   const language = useOptionalLanguage().language
-  const copy = (value: string) => tradeVisualCopy(coreUiCopy(value, language), language)
   const depthAccess = props.depthAccess ?? null
   const depthLocked = depthAccess?.unlocked === false
   const [result, setResult] = useState<AnalyzeResult | null>(null)
@@ -865,6 +866,7 @@ export function TradeCenter(props: {
   const myRoster =
     rosterData?.rosters.find((r) => r.rosterId === rosterData.viewerTeamRosterId) ?? null
   const partnerRoster = rosterData?.rosters.find((r) => r.rosterId === partnerRosterId) ?? null
+  const {copy,translationState,retryTranslation}=useTradeVisualCopy({result,giveAssets,getAssets,myRoster,partnerRoster,league:props.league})
   /*
    * ⚠ RANKED WHEN A RANKING ARRIVED, IN ROSTER ORDER OTHERWISE. The chip row lists everyone either
    * way; the ranking only changes who comes first. A team the ranking did not cover keeps its place
@@ -1607,6 +1609,7 @@ export function TradeCenter(props: {
 
   return (
     <div className="af-tc" data-mobile-step={mobileStep}>
+      <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <Suspense fallback={null}><TradeEvaluationReceipt leagueId={props.league?.id ?? null} viewerId={props.viewerId} /></Suspense>
       <header className="af-tc-head">
         <div className="af-label">{copy("Core · ")}{copy('Trades')}</div>
@@ -1976,7 +1979,7 @@ export function TradeCenter(props: {
                       */}
                       {/* AllFantasy's own projection for this week — display only, never graded. */}
                       {l.afProjection != null ? (
-                        <span className="af-tc-af" title={copy("AllFantasy projection this week, under this league's scoring")}>{copy(" AF ")}{l.afProjection.toFixed(1)}
+                        <span className="af-tc-af" title={copy("AllFantasy projection this week, under this league's scoring")}>{copy("AF ")}{l.afProjection.toFixed(1)}
                         </span>
                       ) : null}
                       {l.marketValue == null && kindOf(l) !== 'faab' ? (

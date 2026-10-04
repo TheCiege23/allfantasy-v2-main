@@ -1,5 +1,6 @@
 'use client'
 import { useTradeVisualCopy } from "./useTradeVisualCopy"
+import { TradeTranslationStatus } from './TradeTranslationStatus'
 
 import { useEffect, useState } from 'react'
 import type { ChangeEvent } from 'react'
@@ -76,13 +77,13 @@ function PlayerSearch(props: { sport: string; onChoose: (player: SearchPlayer) =
 }
 
 export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } = {}) {
-  const {copy,locale}=useTradeVisualCopy()
 
   const comparisonScope = `generic:${viewerId ?? 'device'}`
   const [sport, setSport] = useState<string>('NFL')
   const [teamA, setTeamA] = useState('')
   const [teamB, setTeamB] = useState('')
   const [result, setResult] = useState<Result | null>(null)
+  const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy({result,assets:[...teamA.split(/\r?\n/),...teamB.split(/\r?\n/)].map(name=>({name}))})
   const [analyzedAt, setAnalyzedAt] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [extracting, setExtracting] = useState(false)
@@ -209,6 +210,7 @@ export function GenericTradeAnalyzer({ viewerId }: { viewerId?: string | null } 
 
   return (
     <section className="af-tc-generic" aria-labelledby="af-tc-generic-title">
+      <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <div className="af-tc-generic-heading">
         <div>
           <div className="af-label">{copy("No league connection needed")}</div>

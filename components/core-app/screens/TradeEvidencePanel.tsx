@@ -1,5 +1,6 @@
 'use client'
 import { useTradeVisualCopy } from "./useTradeVisualCopy"
+import { TradeTranslationStatus } from './TradeTranslationStatus'
 
 import { useState } from 'react'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
@@ -13,7 +14,7 @@ export function TradeEvidencePanel({ grade, evaluatedAt, gaps = [], generic = fa
   gaps?: readonly string[]
   generic?: boolean
 }) {
-  const {copy,locale}=useTradeVisualCopy()
+  const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy(grade)
 
   const [swing, setSwing] = useState(10)
   const evidence = tradeEvidence(grade.lines, evaluatedAt ?? '', gaps)
@@ -24,6 +25,7 @@ export function TradeEvidencePanel({ grade, evaluatedAt, gaps = [], generic = fa
   const high = range ? projectedLetterFor({ percentDiff: range.high, hasSignal: true }) : null
   return (
     <aside className={styles.panel} aria-label={copy("Trade evidence quality")} data-testid="trade-evidence-panel">
+      <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <div className={styles.heading}><strong>{copy(evidence.label)}</strong><span>{copy(evidence.priced)}{copy("/")}{copy(evidence.total)}{copy(" assets priced · ")}{copy(evidence.dated)}{copy("/")}{copy(evidence.total)}{copy(" dated")}</span></div>
       <p>{copy("This describes the recorded evidence. It is not a probability of winning the trade.")}</p>
       {evidence.oldest && evidence.newest ? <p>{copy("Source dates: ")}{copy(formatDate(evidence.oldest))}{copy(evidence.oldest !== evidence.newest ? ` – ${formatDate(evidence.newest)}` : '')}{copy(". Sources older than 7 days are flagged.")}</p> : null}

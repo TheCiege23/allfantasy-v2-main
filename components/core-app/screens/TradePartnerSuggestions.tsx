@@ -1,5 +1,6 @@
 'use client'
 import { useTradeVisualCopy } from "./useTradeVisualCopy"
+import { TradeTranslationStatus } from './TradeTranslationStatus'
 
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import type { LeagueRoster } from '@/components/core-app/screens/useLeagueRosters'
@@ -91,7 +92,7 @@ export function TradePartnerSuggestions(props: {
   /** How many cards to show. The chip row below lists everyone. */
   limit?: number
 }) {
-  const {copy,locale}=useTradeVisualCopy()
+  const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy(props.ranking)
 
   const ranking = props.ranking
   if (!ranking) return null
@@ -99,6 +100,7 @@ export function TradePartnerSuggestions(props: {
 
   return (
     <section className="af-tc-fits" aria-labelledby="af-tc-fits-title">
+      <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <div className="af-tc-fits-head">
         <span className="af-label" id="af-tc-fits-title">{copy("Best trade partners")}</span>
         <span className="af-tc-row-sub">{copy(" Ranked by what they have spare for you, what you have spare for them, whether a fair deal exists, and how they trade. ")}</span>

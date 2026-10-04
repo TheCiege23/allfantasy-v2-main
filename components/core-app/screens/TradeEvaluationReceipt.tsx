@@ -1,5 +1,6 @@
 'use client'
 import { useTradeVisualCopy } from "./useTradeVisualCopy"
+import { TradeTranslationStatus } from './TradeTranslationStatus'
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { TradeEvaluationReceipt as Receipt } from '@/lib/decision-os/trade/evaluationReceipt'
@@ -8,9 +9,10 @@ import { evaluationReceiptSchema } from '@/lib/decision-os/trade/evaluationRecei
 const number = (value: number | null, locale: string) => value == null ? 'Unpriced' : value.toLocaleString(locale)
 
 function Evaluation({ title, grade }: { title: string; grade: Receipt['grade'] }) {
-  const {copy,locale}=useTradeVisualCopy()
+  const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy(grade)
 
   return <div>
+    <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
     <h3>{copy(title)}</h3>
     {grade.graded ? <>
       <p>{copy("Your value grade: ")}<strong>{copy(grade.letter)}</strong>{copy(" · Other team: ")}<strong>{copy(grade.partnerLetter)}</strong>{copy(" · ")}{copy(grade.percentDiff > 0 ? '+' : '')}{copy(grade.percentDiff)}{copy("%")}</p>
@@ -32,12 +34,12 @@ function Evaluation({ title, grade }: { title: string; grade: Receipt['grade'] }
 
 /** Deep links from a calculator or email reopen the original, not a freshly repriced deal. */
 export function TradeEvaluationReceipt({ leagueId, viewerId }: { leagueId: string | null; viewerId?: string | null }) {
-  const {copy,locale}=useTradeVisualCopy()
 
   const search = useSearchParams()
   const evaluationQuery = search?.get('evaluation') ?? null
   const comparisonAbort = useRef<AbortController | null>(null)
   const [receipt, setReceipt] = useState<Receipt | null>(null)
+  const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy(receipt)
   const [id, setId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [current, setCurrent] = useState<Receipt['grade'] | null>(null)
@@ -78,6 +80,7 @@ export function TradeEvaluationReceipt({ leagueId, viewerId }: { leagueId: strin
     finally { if (!abort.signal.aborted) setBusy(false) }
   }
   return <section className="af-tc-panel" aria-label={copy("Saved trade evaluation")} style={{ padding: 16, overflowWrap: 'anywhere' }}>
+    <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
     <h2>{copy("Saved trade evaluation")}</h2>
     {receipt ? <>
       <p>{copy("Original evaluation: ")}{copy(new Date(receipt.evaluatedAt).toLocaleString(locale))}{copy(". This record stays unchanged.")}</p>

@@ -1,5 +1,6 @@
 'use client'
 import { useTradeVisualCopy } from "./useTradeVisualCopy"
+import { TradeTranslationStatus } from './TradeTranslationStatus'
 
 import { useCallback, useState } from 'react'
 import { readableApiError } from '@/lib/http/readableApiError'
@@ -50,9 +51,9 @@ function money(v: number | null): string {
 }
 
 export function TradeFinderPanel(props: { leagueId: string | null }) {
-  const {copy,locale}=useTradeVisualCopy()
 
   const [data, setData] = useState<FinderResponse | null>(null)
+  const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy(data)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
@@ -75,6 +76,7 @@ export function TradeFinderPanel(props: { leagueId: string | null }) {
 
   return (
     <section className="af-tc-dos">
+      <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       {/* "Decision OS · " dropped: internal name, and the section is plainly the finder. */}
       <div className="af-label">{copy("Trade Finder")}</div>
 
