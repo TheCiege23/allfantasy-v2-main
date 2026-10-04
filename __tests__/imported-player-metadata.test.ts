@@ -17,3 +17,10 @@ describe('source roster metadata', () => {
   expect(map.fx2.position).toBeNull()
   expect(fantraxSnapshotPlayerMap([{ fantraxId:'fx1', name:'Jane Smith' }, { fantraxId:'fx1', name:'Other Person' }])).toEqual({})
 })
+
+ it('refuses occupied roster slots passed through an old normalized import map', () => {
+  for (const slot of ['BENCH', 'RWT', 'SFX', 'FLEX', 'IR', 'UTIL']) {
+   expect(snapshotImportedPlayerMetadata(['fx1'], {fx1:{name:'Jane Smith',position:slot,team:'Florida'}}).fx1).toEqual({name:'Jane Smith',position:null,team:'Florida'})
+  }
+  expect(snapshotImportedPlayerMetadata(['fx1'], {fx1:{name:'Jane Smith',position:'WR'}}).fx1.position).toBe('WR')
+ })
