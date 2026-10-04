@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { WeekDateRange } from '@/components/core-app/WeekDateRange'
 
 import type { SeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import type { WeekBoard as WeekBoardData, WeekMatchup } from '@/lib/core-app/weekBoard'
@@ -138,6 +139,7 @@ function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?:
         <LeagueCrest imageUrl={m.leagueImageUrl} name={m.leagueName} platform={m.platform} size="sm" />
         <span className="af-bd-league">
           <span className="af-bd-name">{m.leagueName}</span>
+          <span className="af-bd-sub">{m.season} · {es ? 'Período' : 'Period'} {m.week}</span>
           <span className="af-bd-sub">
             {/*
               ⚠ NEVER AN INVENTED MANAGER. `WeekOpponent.name` is null when no
@@ -297,6 +299,7 @@ export function WeekBoard({
   if (totalLeagues === 0) {
     return (
       <div className="af-bd">
+        <div className="af-label" style={{ marginBottom: 8 }}><WeekDateRange /></div>
         <BoardHead eyebrow={copy('Core · Your week')} title={copy('Your week')} blurb={copy('The five leagues you are furthest ahead in, against the five you are behind in that a playoff run still depends on.')} />
         <NoLeaguesYet what={copy("Once one is, this board shows the leagues you lead and trail in this week's matchups.")} language={language} />
       </div>
@@ -305,10 +308,9 @@ export function WeekBoard({
 
   return (
     <div className="af-bd">
+      <div className="af-label" style={{ marginBottom: 8 }}><WeekDateRange /></div>
       <BoardHead
-        eyebrow={
-          board.week != null ? es ? `Core · Tu semana · semana ${board.week}` : `Core · Your week · week ${board.week}` : copy('Core · Your week')
-        }
+        eyebrow={copy('Core · Your week')}
         title={copy('Your week')}
         blurb={copy('The five leagues you are furthest ahead in, against the five you are behind in that a playoff run still depends on.')}
       />
@@ -389,6 +391,7 @@ export function WeekBoard({
                   />
                   <span className="af-bd-league">
                     <span className="af-bd-name">{m.leagueName}</span>
+                    <span className="af-bd-sub">{m.season} · {es ? 'Período' : 'Period'} {m.week}</span>
                     <span className="af-bd-sub">
                       {/* Same rule as MatchRow: a real name, else the roster's own "Team N". */}
                       {`${copy('vs')} ${rosterLabel([m.opponent.name], m.opponent.rosterId)}`}
@@ -484,6 +487,7 @@ export function WeekBoard({
                   />
                   <span className="af-bd-league">
                     <span className="af-bd-name">{e.leagueName}</span>
+                    <span className="af-bd-sub">{e.season} · {es ? 'Período' : 'Period'} {e.week}</span>
                     <span className="af-bd-sub">
                       {e.fieldSize === 0
                         ? copy('no scores in yet this week')

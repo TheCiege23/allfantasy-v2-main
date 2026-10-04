@@ -186,6 +186,7 @@ import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
 import { getWeekAll, scoredMatchupLeagueIds } from '@/lib/core-app/weekAll'
 import { buildWeeklyRoutine, getRoutineFacts } from '@/lib/core-app/weeklyRoutine'
 import YourWeek from '@/components/core-app/screens/YourWeek'
+import { WeekHistoryNotice } from '@/components/core-app/WeekHistoryNotice'
 import WeekBoard from '@/components/core-app/boards/WeekBoard'
 import RivalryRadar from '@/components/core-app/screens/RivalryRadar'
 import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
@@ -3229,11 +3230,17 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ? // 38a·3 — the focused league gets its own board (hero + the league's
         // other matchups). Passing null keeps the cross-league board exactly as
         // it was and pays nothing for the extra pairing.
-        await getWeekBoard(userId, weekLeagues, selectedLeagueId).catch(() => null)
+        await getWeekBoard(userId, weekLeagues, selectedLeagueId).catch((error) => {
+          console.error('[core/week] history read failed', error)
+          return null
+        })
       : null
 
   const rivalries = rivalriesView
-    ? await getRivalryRadar(userId, weekLeagues).catch(() => null)
+    ? await getRivalryRadar(userId, weekLeagues).catch((error) => {
+        console.error('[core/week] rivalry history read failed', error)
+        return null
+      })
     : null
 
   /*
@@ -4887,57 +4894,44 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * sibling routes for one data layer is the spend that pushed this repo
          * against the route ceiling.
          */
-        rivalriesView ? (
-          rivalries ? (
-            <RivalryRadar data={rivalries} weekHref="/core/week" />
-          ) : (
-            <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-              <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-                Rivalry Radar
-              </h1>
-              <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-                We could not read your matchup history just now. This is a read failure on our side,
-                not a sign that you have never played anybody.
-              </p>
-            </div>
-          )
-        ) : weekBoard ? (
-          /*
-           * 38a·3. A league in the rail renders that league's own week; without
-           * one the cross-league board is what you get. `leagueBoard` is null
-           * unless a focus league was asked for AND found, so this falls back
-           * rather than rendering an empty hero.
-           */
-          weekBoard.leagueBoard ? (
-            <YourWeekLeague board={weekBoard.leagueBoard} allWeeksHref="/core/week" lineups={ctx.weekLineups} />
-          ) : showAllLeagues ? (
+        <>
+          {weekBoard?.historyIncomplete || rivalries?.historyIncomplete ? <WeekHistoryNotice retryHref={retryHref} /> : null}
+          {rivalriesView ? (
+            rivalries ? (
+              <RivalryRadar data={rivalries} weekHref="/core/week" />
+            ) : (
+              <ScreenLoadError screen="Rivalry Radar" retryHref={retryHref} />
+            )
+          ) : weekBoard ? (
             /*
-             * The full cross-league table, kept whole behind `?all=1`. The two
-             * ranked columns above it are a summary, not a replacement — a
-             * manager who wants every game still has one page that lists them.
+             * 38a·3. A league in the rail renders that league's own week; without
+             * one the cross-league board is what you get. `leagueBoard` is null
+             * unless a focus league was asked for AND found, so this falls back
+             * rather than rendering an empty hero.
              */
-            <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" lineups={ctx.weekLineups} />
+            weekBoard.leagueBoard ? (
+              <YourWeekLeague board={weekBoard.leagueBoard} allWeeksHref="/core/week" lineups={ctx.weekLineups} />
+            ) : showAllLeagues ? (
+              /*
+               * The full cross-league table, kept whole behind `?all=1`. The two
+               * ranked columns above it are a summary, not a replacement — a
+               * manager who wants every game still has one page that lists them.
+               */
+              <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" lineups={ctx.weekLineups} />
+            ) : (
+              <WeekBoard
+                board={weekBoard}
+                outlook={outlook}
+                rivalriesHref="/core/week?view=rivalries"
+                allHref="/core/week?all=1"
+                totalLeagues={playedLeagues.length}
+                lineups={ctx.weekLineups}
+              />
+            )
           ) : (
-            <WeekBoard
-              board={weekBoard}
-              outlook={outlook}
-              rivalriesHref="/core/week?view=rivalries"
-              allHref="/core/week?all=1"
-              totalLeagues={playedLeagues.length}
-              lineups={ctx.weekLineups}
-            />
-          )
-        ) : (
-          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
-            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
-              Your week
-            </h1>
-            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
-              We could not read this week&apos;s matchups just now. This is a read failure on our
-              side, not a week with no games.
-            </p>
-          </div>
-        )
+            <ScreenLoadError screen="Your Week" retryHref={retryHref} />
+          )}
+        </>
       ) : activeKey === 'commissioner' ? (
         /*
          * 38a·9. `segment === 'discord'` also maps to this nav key and is

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { WeekDateRange } from '@/components/core-app/WeekDateRange'
 import type { WeekBoard, WeekMatchup } from '@/lib/core-app/weekBoard'
 import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
@@ -81,8 +82,8 @@ function CoinFlipCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: We
   return (
     <Link href={matchup.href} className="af-wk-flip">
       <div className="af-wk-flip-head">
-        <span className="af-wk-league" data-platform={matchup.platform}>
-          {matchup.leagueName}
+        <span className="af-wk-league" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} data-platform={matchup.platform}>
+          {matchup.leagueName} · {matchup.season} · {language === 'es' ? 'Período' : 'Period'} {matchup.week}
         </span>
         <span className="af-wk-gap af-num">{language === 'es' ? `${gap.toFixed(1)} pts de diferencia` : `${gap.toFixed(1)} pt gap`}</span>
       </div>
@@ -126,12 +127,13 @@ function CoinFlipCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: We
 
 /** Compact card — the leaning tier. */
 function LeaningCard({ matchup, lineups }: { matchup: WeekMatchup; lineups?: WeekLineups | null }) {
+  const { language } = useOptionalLanguage()
   const p = matchup.projection!
   const favoured = p.margin >= 0
   return (
     <Link href={matchup.href} className="af-wk-lean">
-      <span className="af-wk-lean-league" data-platform={matchup.platform}>
-        {matchup.leagueName}
+      <span className="af-wk-lean-league" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} data-platform={matchup.platform}>
+        {matchup.leagueName} · {matchup.season} · {language === 'es' ? 'Período' : 'Period'} {matchup.week}
       </span>
       <span className="af-wk-lean-prob af-num" data-favoured={favoured}>
         {pct(p.winProbability)}
@@ -172,7 +174,7 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       <header className="af-wk-head">
         <div>
           <p className="af-wk-eyebrow af-label">
-            {data.season && data.week ? `${data.season} · ${copy('Week')} ${data.week}` : copy('Your week')}
+            <WeekDateRange />
           </p>
           <h1 className="af-display af-wk-title">{copy('Your week, every matchup')}</h1>
           <p className="af-wk-sub">
@@ -267,8 +269,8 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
                 className="af-wk-lean"
                 data-unprojected="true"
               >
-                <span className="af-wk-lean-league" data-platform={m.platform}>
-                  {m.leagueName}
+                <span className="af-wk-lean-league" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} data-platform={m.platform}>
+                  {m.leagueName} · {m.season} · {language === 'es' ? 'Período' : 'Period'} {m.week}
                 </span>
                 {/*
                   ⚠ THE DASH IS THE FALLBACK NOW, NOT THE DEFAULT. This section
@@ -341,8 +343,8 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
                 data-elimination="true"
                 data-on-the-block={e.onTheBlock ? 'true' : undefined}
               >
-                <span className="af-wk-lean-league" data-platform={e.platform}>
-                  {e.leagueName}
+                <span className="af-wk-lean-league" style={{ whiteSpace: 'normal', overflowWrap: 'anywhere' }} data-platform={e.platform}>
+                  {e.leagueName} · {e.season} · {language === 'es' ? 'Período' : 'Period'} {e.week}
                 </span>
 
                 {/*
