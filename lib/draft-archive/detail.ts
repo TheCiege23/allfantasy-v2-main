@@ -153,7 +153,14 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     // Publish only settings and clock facts. Internal roster JSON, actor IDs and correction
     // reasons are retained durably but must not leak through the public snapshot/timeline.
     const publicSnapshot = native ? { context: nativeSnap.context ?? null, capturedAt: nativeSnap.capturedAt ?? null, teams: Array.isArray(nativeSnap.teams) ? nativeSnap.teams.map(t => ({ externalId: object(t).externalId, teamName: object(t).teamName })) : [], rules: { draftType: object(nativeSnap.session).draftType, rounds: object(nativeSnap.session).rounds, teamCount: object(nativeSnap.session).teamCount, timerSeconds: object(nativeSnap.session).timerSeconds, thirdRoundReversal: object(nativeSnap.session).thirdRoundReversal } } : {
-        provider: providerSnap.provider, draftType: providerSnap.draftType, settings: providerSnap.settings,
+        format: providerSnap.format, status: providerSnap.status, sport: providerSnap.sport, name: providerSnap.name,
+        draftSettings: providerSnap.draftSettings, draftOrder: providerSnap.draftOrder,
+        observedSeasonScoring: providerSnap.observedSeasonScoring, observedSeasonRosterPositions: providerSnap.observedSeasonRosterPositions,
+        tradeCoverage: providerSnap.tradeCoverage,
+        tradedPicks: Array.isArray(providerSnap.tradedPicks) ? providerSnap.tradedPicks.map(t => {
+            const trade = object(t);
+            return { season: trade.season, round: trade.round, rosterId: trade.roster_id, previousOwnerId: trade.previous_owner_id, ownerId: trade.owner_id };
+        }) : null,
         startTime: providerSnap.startTime, lastPickedTime: providerSnap.lastPickedTime, slotToRosterId: providerSnap.slotToRosterId,
         teams: providerRosters.map(t => ({ rosterId: t.roster_id, teamName: object(t.metadata).team_name })),
     };

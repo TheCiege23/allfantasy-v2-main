@@ -1,6 +1,7 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { saveDraftPlanningPreference } from "@/lib/core-app/draftPlanningActions";
 vi.mock("@/components/i18n/LanguageProviderClient", () => ({
   useOptionalLanguage: () => ({ language: "en" }),
 }));
@@ -64,6 +65,14 @@ const data: DraftPreparationData = {
 beforeEach(() => localStorage.clear());
 afterEach(cleanup);
 describe("draft preparation accessible controls", () => {
+  it("loads private account ordering and saves changes without touching the live queue", async () => {
+    const players = data.players.map((p, i) => ({ ...p, playerKey: `id:${i}` }));
+    render(<DraftPreparation data={{ ...data, players, planningPreferenceState: 'ready', planningPreference: { version: 1, order: ['id:1', 'id:0'], spread: 'adp' } }} leagueId="l" />);
+    expect(screen.getAllByRole('row')[1].textContent).toContain('B');
+    fireEvent.click(screen.getByRole('button', { name: 'Move up A' }));
+    await waitFor(() => expect(saveDraftPlanningPreference).toHaveBeenCalledWith('l', 's', { version: 1, order: ['id:0', 'id:1'], spread: 'adp' }));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Saved to your account'));
+  });
   it("supports touch/keyboard planning reorders and saves per-draft preferences", () => {
     render(<DraftPreparation data={data} leagueId="l" />);
     fireEvent.click(screen.getByRole("button", { name: "Move down A" }));

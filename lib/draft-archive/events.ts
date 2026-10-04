@@ -76,7 +76,7 @@ export async function recordArchiveEvent(tx: Prisma.TransactionClient, session: 
 export async function updateSessionWithArchive(session: Parameters<typeof recordArchiveEvent>[1], data: Prisma.DraftSessionUpdateInput, event: ClockEvent, details: Record<string, unknown> = {}) {
     return prisma.$transaction(async (tx) => {
         const updated = await tx.draftSession.update({ where: { id: session.id }, data });
-        await recordArchiveEvent(tx, updated, event, details);
+        await recordArchiveEvent(tx, updated, event, details, event === 'start' && updated.startedAt ? updated.startedAt : new Date());
         return updated;
     });
 }
