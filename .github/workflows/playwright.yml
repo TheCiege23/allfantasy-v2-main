@@ -299,6 +299,16 @@ jobs:
         NEXTAUTH_URL: http://localhost:3000
         # 8192MB heap: see the note on the retention-engagement step above.
         NODE_OPTIONS: --max-old-space-size=8192
+        # ⚠ THE SAME RESTART THE RETENTION LANE HAD, AND THE SAME FIX (2026-10-04). Global setup
+        # warmed all 33 default routes ("warmed 33 routes in 239s", /core among them) for a spec that
+        # renders two pages, and next dev then restarted on its memory line ("Server is approaching
+        # the used memory threshold, restarting...") just as the tests began. Every referral log
+        # measured that day had exactly one restart — the failed run on #2010 and the "1 flaky" runs on
+        # #2007 and #2035 — and the symptoms were the restart's: a /core goto that never finished,
+        # a track-click wait that timed out, an API call that died with ECONNRESET. Warm only what
+        # the spec touches: its two pages, and the API routes it calls (a POST-only route answers a
+        # GET with 405, which still compiles it). If you add a referral spec, add its routes.
+        E2E_WARM_ROUTES: /,/referral,/api/auth/csrf,/api/auth/session,/api/auth/register,/api/referral/link,/api/referral/stats,/api/referral/rewards,/api/referral/track-click
       run: npx playwright test e2e/referral-growth-suite.spec.ts --project=chromium
     # The phone gate. Two device projects over the public routes only — no login,
     # no fixture league, nothing that makes the core shards slow and flaky.
