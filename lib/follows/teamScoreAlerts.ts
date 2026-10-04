@@ -20,17 +20,24 @@ import { withinDailyCap } from '@/lib/follows/teamFollowAlerts'
  *
  * ⚠ ONE GAME IS 4–6 ROWS. Every provider writes its own row with its own team spelling — measured
  * 2026-10-03: "BUF" (api_sports), "Buffalo Bills" (espn, thesportsdb), "ALABAMA" / "Alabama Crimson
- * Tide" / "ALA" for one college team. Rows are collapsed to one game by (sport, Eastern date,
- * resolved home, resolved away) through lib/follows/teamResolver, or every final would buzz five
- * times. A team that does not resolve drops the row: no alert beats a wrong one.
+ * Tide" / "ALA" for one college team. Rows are collapsed to one game by (sport, Eastern date, the
+ * resolved PAIR of teams — unordered, because providers disagree on home/away at neutral sites)
+ * through lib/follows/teamResolver, or every final would buzz five times.
+ *
+ * ⚠ ONE SIDE MAY BE UNKNOWN. A dry run over the 2026-09-26 slate found 22 games of a followable team
+ * against a school outside our team list (Western Kentucky vs Mercyhurst) — requiring both sides to
+ * resolve silently skipped all of them. Such a game is keyed on the one team we know; a team plays at
+ * most once a day, so (sport, date, team) names one game.
  *
  * ⚠ A FINAL IS SENT ONLY WHEN EVERY PROVIDER REPORTING A FINAL AGREES ON THE SCORE. Providers settle
  * at different moments and occasionally publish a stale number with a final status; disagreement
- * waits for the next tick rather than announcing a score that is then corrected.
+ * waits for the next tick rather than announcing a score that is then corrected. And a team that
+ * lands in TWO games on one date is a mis-merge or a mis-map — none of its games is sent.
  *
- * ONCE PER GAME, ATOMICALLY: each alert claims a `SportsDataCache` key (primary key) before sending,
- * so concurrent cron runs cannot both send it — and adjacent dates are checked too, because providers
- * disagree on a game's calendar date when its kickoff time is TBD.
+ * ONCE PER TEAM PER DAY, ATOMICALLY: each alert claims one `SportsDataCache` key (primary key) per
+ * team before sending, so concurrent runs cannot both send it, and a game first seen with one side
+ * unknown cannot be re-sent to that team when a later row names both. Adjacent dates are checked too,
+ * because providers disagree on a game's calendar date when its kickoff time is TBD.
  */
 
 export const SCORE_ALERT_SPORTS = ['NFL', 'NCAAF'] as const
@@ -38,10 +45,10 @@ export const SCORE_ALERT_SPORTS = ['NFL', 'NCAAF'] as const
 /** Score alerts per person per day (separate from news). A Saturday of 30 college follows is 60 events. */
 export const TEAM_SCORE_ALERTS_PER_DAY = 20
 
-/** Only games that started recently: a final from a cron outage hours ago is history, not news. */
 /** Sources whose team field is always "<School> <Mascot>", so a school-name prefix is safe. */
 const PREFIX_SOURCES = new Set(['espn', 'espn_live'])
 
+/** Only games that started recently: a final from a cron outage hours ago is history, not news. */
 const FINAL_WINDOW_MS = 9 * 60 * 60 * 1000
 const HALFTIME_WINDOW_MS = 4 * 60 * 60 * 1000
 const LEDGER_TTL_MS = 14 * 24 * 60 * 60 * 1000
@@ -62,8 +69,12 @@ export type ScoreEvent = {
   kind: 'final' | 'halftime'
   sport: string
   dateKey: string
-  home: string
-  away: string
+  /** Canonical abbreviation, or null when that side is a school outside our team list. */
+  home: string | null
+  away: string | null
+  /** The provider's spelling, for a side that did not resolve. */
+  homeName?: string
+  awayName?: string
   homeScore: number
   awayScore: number
 }
@@ -85,8 +96,31 @@ export function espnSaysHalftime(raw: unknown): boolean {
   return name === 'STATUS_HALFTIME'
 }
 
-export function ledgerKey(e: Pick<ScoreEvent, 'kind' | 'sport' | 'dateKey' | 'home' | 'away'>, dateKey = e.dateKey): string {
-  return `team-follow-alert:${e.kind}:${e.sport}:${dateKey}:${e.home}:${e.away}`
+/** The ledger key for one team's alert of one kind on one date. */
+export function ledgerKey(kind: ScoreEvent['kind'], sport: string, dateKey: string, team: string): string {
+  return `team-follow-alert:${kind}:${sport}:${dateKey}:${team}`
+}
+
+/** A row oriented to its game: scores flipped when this provider has home and away the other way round. */
+type Oriented = { row: GameRow; homeScore: number | null; awayScore: number | null }
+
+type Game = {
+  sport: string
+  dateKey: string
+  home: string | null
+  away: string | null
+  start: Date
+  rows: Oriented[]
+  /** Provider spellings of the unresolved side, for display. */
+  otherNames: Array<{ source: string; name: string }>
+}
+
+/** Whose spelling of an unlisted school reads best: CFBD writes "Alabama A&M", TheSportsDB "Alabama A and M", api-sports "ALABAMA A&M". */
+const NAME_SOURCE_ORDER = ['cfbd', 'espn', 'espn_live', 'thesportsdb', 'rolling_insights', 'api_sports']
+
+function displayName(names: Array<{ source: string; name: string }>): string | undefined {
+  const rank = (s: string) => (NAME_SOURCE_ORDER.indexOf(s) + NAME_SOURCE_ORDER.length + 1) % (NAME_SOURCE_ORDER.length + 1)
+  return [...names].sort((a, b) => rank(a.source) - rank(b.source))[0]?.name
 }
 
 /**
@@ -94,56 +128,90 @@ export function ledgerKey(e: Pick<ScoreEvent, 'kind' | 'sport' | 'dateKey' | 'ho
  * was already sent — the ledger does that.
  */
 export function detectScoreEvents(rows: readonly GameRow[], indexBySport: Map<string, TeamIndex>, now: Date): ScoreEvent[] {
-  const games = new Map<string, { sport: string; dateKey: string; home: string; away: string; start: Date; rows: GameRow[] }>()
+  const full = new Map<string, Game>()
+  const half = new Map<string, Game & { conflict?: boolean }>()
   for (const r of rows) {
     if (!r.startTime) continue
     const index = indexBySport.get(r.sport)
     if (!index) continue
-    // Schedule fields name one team each, so bare school names/codes are accepted; only ESPN, which
-    // always writes "<School> <Mascot>", may match by prefix (see resolveTeam's `noPrefix`).
+    // Schedule fields name one team each, so bare school names are accepted; only ESPN, which always
+    // writes "<School> <Mascot>", may match by prefix (see resolveTeam's `noPrefix`).
     const opts = { exactNames: true, noPrefix: !PREFIX_SOURCES.has(r.source) }
-    const home = resolveTeam(index, r.homeTeam, opts)
-    const away = resolveTeam(index, r.awayTeam, opts)
-    if (!home || !away || home === away) continue
+    const h = resolveTeam(index, r.homeTeam, opts)
+    const a = resolveTeam(index, r.awayTeam, opts)
+    if ((!h && !a) || h === a) continue
     const dateKey = easternDateKey(r.startTime)
-    const key = `${r.sport}|${dateKey}|${home}|${away}`
-    const g = games.get(key) ?? { sport: r.sport, dateKey, home, away, start: r.startTime, rows: [] }
-    g.rows.push(r)
-    games.set(key, g)
+    if (h && a) {
+      const key = `${r.sport}|${dateKey}|${[h, a].sort().join('|')}`
+      const g = full.get(key) ?? { sport: r.sport, dateKey, home: h, away: a, start: r.startTime, rows: [], otherNames: [] }
+      const same = g.home === h
+      g.rows.push({ row: r, homeScore: same ? r.homeScore : r.awayScore, awayScore: same ? r.awayScore : r.homeScore })
+      full.set(key, g)
+    } else {
+      const team = (h ?? a)!
+      const key = `${r.sport}|${dateKey}|${team}`
+      const g = half.get(key) ?? { sport: r.sport, dateKey, home: h, away: a, start: r.startTime, rows: [], otherNames: [] }
+      // The known team must sit on the same side in every row, or the scores cannot be lined up.
+      if ((g.home === null) !== (h === null)) g.conflict = true
+      g.rows.push({ row: r, homeScore: r.homeScore, awayScore: r.awayScore })
+      g.otherNames.push({ source: r.source, name: h ? r.awayTeam : r.homeTeam })
+      half.set(key, g)
+    }
+  }
+
+  // A team in two games on one date is a mis-merge or a mis-map: send none of its games.
+  const gamesPerTeamDay = new Map<string, number>()
+  for (const g of full.values()) {
+    for (const t of [g.home!, g.away!]) {
+      const k = `${g.sport}|${g.dateKey}|${t}`
+      gamesPerTeamDay.set(k, (gamesPerTeamDay.get(k) ?? 0) + 1)
+    }
+  }
+  const games: Game[] = [...full.values()].filter(
+    (g) => gamesPerTeamDay.get(`${g.sport}|${g.dateKey}|${g.home}`) === 1 && gamesPerTeamDay.get(`${g.sport}|${g.dateKey}|${g.away}`) === 1,
+  )
+  // A one-sided game is only used when no source named both teams — the full game already covers it.
+  for (const [key, g] of half) {
+    if (g.conflict || gamesPerTeamDay.has(key)) continue
+    games.push(g)
   }
 
   const events: ScoreEvent[] = []
-  for (const g of games.values()) {
+  for (const g of games) {
     const age = now.getTime() - g.start.getTime()
     if (age < 0) continue
-    const finals = g.rows.filter(
-      (r) => normalizeGameStatus(r.status) === 'final' && r.homeScore != null && r.awayScore != null,
-    )
+    const other = displayName(g.otherNames)
+    const names = g.home ? (g.away ? {} : { awayName: other }) : { homeName: other }
+    const base = { sport: g.sport, dateKey: g.dateKey, home: g.home, away: g.away, ...names }
+    const finals = g.rows.filter((o) => normalizeGameStatus(o.row.status) === 'final' && o.homeScore != null && o.awayScore != null)
     if (finals.length > 0) {
       if (age > FINAL_WINDOW_MS) continue
-      const agreed = finals.every((r) => r.homeScore === finals[0].homeScore && r.awayScore === finals[0].awayScore)
+      const agreed = finals.every((o) => o.homeScore === finals[0].homeScore && o.awayScore === finals[0].awayScore)
       if (!agreed) continue
-      events.push({ kind: 'final', sport: g.sport, dateKey: g.dateKey, home: g.home, away: g.away, homeScore: finals[0].homeScore!, awayScore: finals[0].awayScore! })
+      events.push({ kind: 'final', ...base, homeScore: finals[0].homeScore!, awayScore: finals[0].awayScore! })
       continue
     }
     if (age > HALFTIME_WINDOW_MS) continue
-    const half = g.rows.find((r) => r.source === 'espn' && espnSaysHalftime(r.raw) && r.homeScore != null && r.awayScore != null)
+    const half = g.rows.find((o) => o.row.source === 'espn' && espnSaysHalftime(o.row.raw) && o.homeScore != null && o.awayScore != null)
     if (half) {
-      events.push({ kind: 'halftime', sport: g.sport, dateKey: g.dateKey, home: g.home, away: g.away, homeScore: half.homeScore!, awayScore: half.awayScore! })
+      events.push({ kind: 'halftime', ...base, homeScore: half.homeScore!, awayScore: half.awayScore! })
     }
   }
   return events
 }
 
-/** Claim an alert so no other run sends it. false = already claimed (here or on an adjacent date). */
-async function claim(e: ScoreEvent, now: Date): Promise<boolean> {
-  const adjacent = [-1, 1].map((d) => ledgerKey(e, shiftDateKey(e.dateKey, d)))
+/**
+ * Claim one team's alert so no other run sends it. false = already claimed (here or on an adjacent
+ * date — providers disagree on the calendar day of a TBD kickoff).
+ */
+async function claimTeam(e: ScoreEvent, team: string, now: Date): Promise<boolean> {
+  const adjacent = [-1, 1].map((d) => ledgerKey(e.kind, e.sport, shiftDateKey(e.dateKey, d), team))
   const existing = await prisma.sportsDataCache.findFirst({ where: { cacheKey: { in: adjacent } }, select: { cacheKey: true } })
   if (existing) return false
   try {
     await prisma.sportsDataCache.create({
       data: {
-        cacheKey: ledgerKey(e),
+        cacheKey: ledgerKey(e.kind, e.sport, e.dateKey, team),
         expiresAt: new Date(now.getTime() + LEDGER_TTL_MS),
         data: { sentAt: now.toISOString(), homeScore: e.homeScore, awayScore: e.awayScore } as Prisma.InputJsonValue,
       },
@@ -156,8 +224,8 @@ async function claim(e: ScoreEvent, now: Date): Promise<boolean> {
 }
 
 export function scoreAlertText(e: ScoreEvent, names: Map<string, string>): { title: string; body: string } {
-  const home = names.get(e.home) ?? e.home
-  const away = names.get(e.away) ?? e.away
+  const home = e.home ? names.get(e.home) ?? e.home : e.homeName ?? 'Home'
+  const away = e.away ? names.get(e.away) ?? e.away : e.awayName ?? 'Away'
   const line = `${away} ${e.awayScore}, ${home} ${e.homeScore}`
   if (e.kind === 'halftime') {
     const lead = e.homeScore === e.awayScore ? 'Tied at the half.' : `${e.homeScore > e.awayScore ? home : away} lead at the half.`
@@ -203,23 +271,37 @@ export async function dispatchTeamScoreAlerts(input: { now?: Date; budget?: RunB
 
   const events = detectScoreEvents(rows, indexBySport, now)
   out.events = events.length
-  out.games = new Set(events.map((e) => `${e.sport}|${e.dateKey}|${e.home}|${e.away}`)).size
+  out.games = new Set(events.map((e) => `${e.sport}|${e.dateKey}|${e.home ?? e.homeName}|${e.away ?? e.awayName}`)).size
 
   for (const e of events) {
     if (input.budget?.exhausted()) break
-    const [h, a] = await Promise.all([
-      listFollowerIdsForTeam(e.sport, e.home).catch(() => null),
-      listFollowerIdsForTeam(e.sport, e.away).catch(() => null),
-    ])
-    // Someone following BOTH teams gets one alert, not two.
-    const followers = [...new Set([...(h ?? []), ...(a ?? [])])]
-    if (followers.length === 0) continue
-    if (!(await claim(e, now).catch(() => false))) {
-      out.alreadySent++
+    const teams = [e.home, e.away].filter((t): t is string => t != null)
+    // Claim only teams someone follows, so a later follower is not locked out of today's alert.
+    const claimed: string[] = []
+    const followers = new Set<string>()
+    // Followers of a team whose alert already went out (e.g. from a row that named only that team):
+    // someone following both teams was told then and must not be told again now.
+    const toldAlready = new Set<string>()
+    let followed = false
+    for (const team of teams) {
+      const ids = await listFollowerIdsForTeam(e.sport, team).catch(() => null)
+      if (!ids?.length) continue
+      followed = true
+      if (!(await claimTeam(e, team, now).catch(() => false))) {
+        for (const id of ids) toldAlready.add(id)
+        continue
+      }
+      claimed.push(team)
+      // Someone following BOTH teams gets one alert, not two.
+      for (const id of ids) followers.add(id)
+    }
+    for (const id of toldAlready) followers.delete(id)
+    if (claimed.length === 0) {
+      if (followed) out.alreadySent++
       continue
     }
-    const allowed = await withinDailyCap(followers, { provider: 'team_score_alerts', limit: TEAM_SCORE_ALERTS_PER_DAY })
-    out.capped += followers.length - allowed.length
+    const allowed = await withinDailyCap([...followers], { provider: 'team_score_alerts', limit: TEAM_SCORE_ALERTS_PER_DAY })
+    out.capped += followers.size - allowed.length
     if (allowed.length === 0) continue
     const { title, body } = scoreAlertText(e, namesBySport.get(e.sport) ?? new Map())
     await dispatchNotification({
@@ -230,7 +312,7 @@ export async function dispatchTeamScoreAlerts(input: { now?: Date; budget?: RunB
       body,
       leagueId: null,
       severity: 'medium',
-      dedupePrefix: `team-score:${ledgerKey(e)}`,
+      dedupePrefix: `team-score:${e.kind}:${e.sport}:${e.dateKey}:${claimed.join('-')}`,
       meta: { sport: e.sport, home: e.home, away: e.away, homeScore: e.homeScore, awayScore: e.awayScore, kind: e.kind },
     }).catch(() => {})
     out.sent++
