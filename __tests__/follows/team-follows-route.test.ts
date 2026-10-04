@@ -52,6 +52,11 @@ describe('GET', () => {
     const res = await get('?sport=NFL')
     expect(await res.json()).toMatchObject({ sports: ['NFL', 'NBA'], max: 30, teams: [{ abbr: 'GB' }], follows: [] })
   })
+  it('sends the picker only abbr + name — college matching data (mascots, alternate names) stays on the server', async () => {
+    h.teams.mockImplementationOnce(async () => [{ abbr: 'ALA', name: 'Alabama', mascot: 'Crimson Tide', aliases: ['Bama'] }] as never)
+    const body = await (await get('?sport=NFL')).json() // the mock list stands in for college's richer rows
+    expect(body.teams).toEqual([{ abbr: 'ALA', name: 'Alabama' }])
+  })
   it('follows: null when the table is missing — so the UI hides, not claims "none"', async () => {
     h.list.mockImplementation(async () => null)
     expect((await (await get('?sport=NFL')).json()).follows).toBeNull()
