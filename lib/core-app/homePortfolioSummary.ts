@@ -73,10 +73,11 @@ export const HOME_RIVALS_SCREEN = 'home-rivals'
  * Bump on ANY change to `StoredSummary` or to a record's data shape — it is in the cache key.
  * v2: the envelope field was renamed `result` → `data` when the exposure and rivals records joined.
  * v3: retire kickoff actions that could target a league in a different sport.
+ * rivals v3: rows carry `ties`, and a tied meeting left `losses` (it had been counted as one).
  */
 export const HOME_PORTFOLIO_VERSION = 3
 export const HOME_EXPOSURE_VERSION = 1
-export const HOME_RIVALS_VERSION = 2
+export const HOME_RIVALS_VERSION = 3
 export const HOME_PORTFOLIO_TTL_MS = 3 * 60_000
 export const HOME_PORTFOLIO_SWR_MS = 10 * 60_000
 /**
