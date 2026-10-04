@@ -1669,6 +1669,9 @@ export const translationsEsParity: Record<string, string> = {
   "commControl.updateLockedRosters": "Actualizar Plantillas Bloqueadas",
   "commControl.updateLockedDesc": "Actualizar los miembros que deseas que tengan sus plantillas bloqueadas",
   "commControl.save": "Guardar",
+  "commControl.starters": "Titulares",
+  "commControl.ownPct": "% PROP.",
+  "commControl.startPct": "% TIT.",
 
   // ─── LEAGUE DUES TRACKER ───
   "dues.title": "Seguimiento de Cuotas de Liga",

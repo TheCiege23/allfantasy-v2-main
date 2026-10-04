@@ -321,10 +321,10 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                 {slotGroups.starters.length > 0 && (
                   <div>
                     <div className="mb-1 flex items-center justify-between">
-                      <span className="text-[11px] font-bold uppercase text-white/40">Starters</span>
+                      <span className="text-[11px] font-bold uppercase text-white/40">{t('commControl.starters')}</span>
                       <div className="flex gap-8 text-[11px] font-semibold text-white/30">
-                        <span>OWN %</span>
-                        <span>START %</span>
+                        <span>{t('commControl.ownPct')}</span>
+                        <span>{t('commControl.startPct')}</span>
                       </div>
                     </div>
                     {slotGroups.starters.map((p) => (
@@ -336,7 +336,7 @@ export function CommissionerControlPanel({ leagueId }: Props) {
                 {/* Bench */}
                 {slotGroups.bench.length > 0 && (
                   <div>
-                    <p className="mb-1 text-[11px] font-bold uppercase text-white/30">Bench</p>
+                    <p className="mb-1 text-[11px] font-bold uppercase text-white/30">{t('commControl.bench')}</p>
                     {slotGroups.bench.map((p) => (
                       <PlayerRow key={p.playerId} player={p} />
                     ))}
