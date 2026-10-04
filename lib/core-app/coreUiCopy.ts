@@ -1259,6 +1259,18 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
     (m) => `No se pudo proyectar a ${m[1]} de ${m[2]} agentes libres alineables con la puntuación de esta liga, y no se muestran.`,
   ],
   [
+    /^(\d+) of (\d+) startable free agents have no projection and no game this season that this league’s scoring counts, so there is nothing to rank them on\.$/,
+    (m) => `${m[1]} de ${m[2]} agentes libres alineables no tienen proyección ni ningún partido esta temporada que cuente para la puntuación de esta liga, así que no hay con qué ordenarlos.`,
+  ],
+  [
+    /^1 more has no projection and only one counting game this season — too few to rank, so he is not shown\.$/,
+    () => '1 jugador más no tiene proyección y solo un partido que cuenta esta temporada: es muy poco para ordenarlo, así que no se muestra.',
+  ],
+  [
+    /^(\d+) more have no projection and only one counting game this season — too few to rank, so they are not shown\.$/,
+    (m) => `${m[1]} jugadores más no tienen proyección y solo un partido que cuenta esta temporada: es muy poco para ordenarlos, así que no se muestran.`,
+  ],
+  [
     /^(\d+) other active players were skipped because no slot in this league can hold them\.$/,
     (m) => `Se omitieron otros ${m[1]} jugadores activos porque ningún puesto de esta liga los admite.`,
   ],
