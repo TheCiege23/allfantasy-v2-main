@@ -11,7 +11,7 @@
 
 Native creation atomically copies current teams, verified rosters, claimed AllFantasy memberships, FAAB balance and waiver priority. Unclaimed managers keep their named teams and must claim seats.
 
-Available LeagueSeason, LeagueDynastySeason, SeasonResult, matchup/draft/transaction/standing facts and historical roster snapshots are copied as archives. New IDs are assigned to archive rows; source provenance is retained. Historical results are never inserted into the live native matchup schedule or rescored. Chat remains in the source import. History arriving in the source after conversion is not automatically copied.
+Available LeagueSeason, LeagueDynastySeason, SeasonResult, matchup/draft/transaction/standing facts and historical roster snapshots are copied as archives. New IDs are assigned to archive rows; source provenance is retained. Known historical team references are remapped to native teams, while roster references are mapped separately to native rosters. Original roster IDs are retained in copied season records; former managers without a current native seat retain their archived references. Historical results are never inserted into the live native matchup schedule or rescored. Chat remains in the source import. History arriving in the source after conversion is not automatically copied.
 
 Baseball points imports use a complete zero-based rule set in engine, commissioner UI, template overrides and scoring snapshots. Missing player identities, unresolved weights and unsupported roster constraints refuse creation and roll back the transaction. Bootstrap does not overwrite imported baseball settings.
 

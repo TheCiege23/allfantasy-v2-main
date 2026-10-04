@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 
 /** Archive provider facts without turning them into live native matchups or transactions. */
-export async function copyImportedHistory(tx: Prisma.TransactionClient, sourceLeagueId: string, targetLeagueId: string, teamIds: Map<string, string>) {
+export async function copyImportedHistory(tx: Prisma.TransactionClient, sourceLeagueId: string, targetLeagueId: string, teamIds: Map<string, string>, rosterIds = new Map<string, string>()) {
   const [seasons, matchups, drafts, transactions, standings, dynastySeasons, rosterSnapshots, results] = await Promise.all([
     tx.leagueSeason.findMany({ where: { leagueId: sourceLeagueId } }),
     tx.matchupFact.findMany({ where: { leagueId: sourceLeagueId } }),
@@ -14,10 +14,26 @@ export async function copyImportedHistory(tx: Prisma.TransactionClient, sourceLe
     tx.seasonResult.findMany({ where: { leagueId: sourceLeagueId } }),
   ])
   const team = (id: string) => teamIds.get(id) ?? id
+  const remapRecords = (value: unknown): Prisma.InputJsonValue => {
+    if (!Array.isArray(value)) return value as Prisma.InputJsonValue
+    return value.map((entry) => {
+      const row = record(entry)
+      if (!Object.keys(row).length) return entry
+      const next = { ...row }
+      // These fields have distinct namespaces: a LeagueTeam ID is not a Roster ID.
+      for (const key of ['teamId', 'team_id']) {
+        const mapped = row[key] != null ? teamIds.get(String(row[key])) : undefined
+        if (mapped) next[key] = mapped
+      }
+      const mapped = row.rosterId != null ? rosterIds.get(String(row.rosterId)) : undefined
+      if (mapped) { next.rosterId = mapped; next.sourceRosterId = row.rosterId }
+      return next
+    }) as Prisma.InputJsonValue
+  }
   if (seasons.length) await tx.leagueSeason.createMany({ data: seasons.map(({ id: _id, leagueId: _leagueId, championTeamId, teamRecords, ...row }) => ({
     ...row, leagueId: targetLeagueId,
     championTeamId: championTeamId ? teamIds.get(championTeamId) ?? null : null,
-    teamRecords: teamRecords == null ? Prisma.JsonNull : teamRecords as Prisma.InputJsonValue,
+    teamRecords: teamRecords == null ? Prisma.JsonNull : remapRecords(teamRecords),
   })) })
   if (matchups.length) await tx.matchupFact.createMany({ data: matchups.map(({ matchupId: _id, ...row }) => ({
     ...row, leagueId: targetLeagueId, teamA: team(row.teamA), teamB: team(row.teamB), winnerTeamId: row.winnerTeamId ? team(row.winnerTeamId) : null,
@@ -37,7 +53,7 @@ export async function copyImportedHistory(tx: Prisma.TransactionClient, sourceLe
     status: record(record(row.metadata).league).isFinished === true || record(row.metadata).isFinished === true ? 'complete' : 'imported',
     teamCount: typeof record(row.metadata).size === 'number' ? Number(record(row.metadata).size) : null,
   })) })
-  if (results.length) await tx.seasonResult.createMany({ data: results.map(({ id: _id, ...row }) => ({ ...row, leagueId: targetLeagueId })) })
+  if (results.length) await tx.seasonResult.createMany({ data: results.map(({ id: _id, ...row }) => ({ ...row, leagueId: targetLeagueId, rosterId: rosterIds.get(row.rosterId) ?? row.rosterId })) })
   if (rosterSnapshots.length) await tx.rosterSnapshot.createMany({ data: rosterSnapshots.map(({ snapshotId: _id, rosterPlayers, lineupPlayers, benchPlayers, ...row }) => ({ ...row, leagueId: targetLeagueId, teamId: team(row.teamId), rosterPlayers: rosterPlayers as Prisma.InputJsonValue, lineupPlayers: lineupPlayers as Prisma.InputJsonValue, benchPlayers: benchPlayers as Prisma.InputJsonValue })) })
   return { seasons: seasons.length + missingSeasons.length, matchups: matchups.length, drafts: drafts.length, transactions: transactions.length, standings: standings.length, dynastySeasons: dynastySeasons.length, rosterSnapshots: rosterSnapshots.length, results: results.length }
 }

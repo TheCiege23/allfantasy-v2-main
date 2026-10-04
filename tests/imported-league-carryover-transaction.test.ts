@@ -76,6 +76,7 @@ describe('standalone carryover transaction', () => {
       { fantraxId: 'sleeper-2', rollingInsightsId: 'native-2', canonicalName: 'Second Player', position: 'SP', currentTeam: 'NYY' },
     ] as never)
     tx.matchupFact.findMany.mockResolvedValue([{ matchupId: 'old-matchup', leagueId: 'source', sport: 'MLB', season: 2026, weekOrPeriod: 12, teamA: 'seat-1', teamB: 'seat-2', scoreA: 10, scoreB: 8, winnerTeamId: 'seat-1' }] as never)
+    tx.seasonResult.findMany.mockResolvedValue([{ id: 'source-result', leagueId: 'source', season: '2026', rosterId: 'seat-1', wins: 10, champion: true }] as never)
     expect(await carryOverImportedLeague(tx as never, { sourceLeagueId: 'source', targetLeagueId: 'native', creatorUserId: 'creator', sport: 'MLB', teamCount: 2 })).toBe(2)
     expect(tx.roster.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ playerData: expect.objectContaining({ players: ['native-1'] }) }) }))
     expect(tx.leagueScoringOverride.createMany).toHaveBeenCalledWith({ data: expect.arrayContaining([
@@ -83,6 +84,7 @@ describe('standalone carryover transaction', () => {
       expect.objectContaining({ statKey: 'hold', pointsValue: 0 }),
     ]) })
     expect(tx.matchupFact.createMany).toHaveBeenCalledWith({ data: [expect.objectContaining({ leagueId: 'native', season: 2026, scoreA: 10, scoreB: 8 })] })
+    expect(tx.seasonResult.createMany).toHaveBeenCalledWith({ data: [expect.objectContaining({ leagueId: 'native', season: '2026', rosterId: 'native-roster-1', wins: 10, champion: true })] })
     expect(tx.league.update).toHaveBeenCalledWith(expect.objectContaining({ data: { settings: expect.objectContaining({
       mlb_scoring_config: expect.objectContaining({ presetKey: 'custom', rules: expect.objectContaining({ home_runs: 1, holds: 0 }) }),
       mlb_roster_config: expect.objectContaining({ slots: expect.objectContaining({ UTIL: 1, P: 9, BN: 8 }) }),

@@ -64,7 +64,7 @@ function mapPlayerRows(rows: unknown, idMap: Map<string, string>): unknown {
 
 function rowIds(rows: unknown): string[] {
   if (!Array.isArray(rows)) return []
-  return rows.map((row) => typeof row === 'string' ? row : String(asRecord(row).id ?? asRecord(row).player_id ?? ''))
+  return rows.map((row) => typeof row === 'string' || typeof row === 'number' ? String(row) : String(asRecord(row).id ?? asRecord(row).player_id ?? ''))
     .filter(Boolean)
 }
 
@@ -191,6 +191,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   const playerPicksBySlot: Array<Array<{ nativeId: string; name: string; position: string; team: string | null }>> = []
   const draftSlotOrder: Array<{ slot: number; rosterId: string; displayName: string; open: boolean }> = []
   const teamIds = new Map<string, string>()
+  const rosterIds = new Map<string, string>()
   for (let i = 0; i < orderedTeams.length; i++) {
     const team = orderedTeams[i]!
     const sourceRoster = sourceRosters[i]!
@@ -226,6 +227,8 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     })
     teamIds.set(team.id, nativeTeam.id)
     teamIds.set(team.externalId, nativeTeam.id)
+    rosterIds.set(sourceRoster.id, targetRoster.id)
+    rosterIds.set(team.externalId, targetRoster.id)
     if (claimedUserId && i > 0) {
       await tx.redraftLeagueMember.create({ data: { leagueId: args.targetLeagueId, userId: claimedUserId, role: 'MEMBER', teamNumber: slot.slotNumber } })
       await tx.leagueEntrySlot.updateMany({ where: { leagueId: args.targetLeagueId, slotNumber: slot.slotNumber }, data: { status: 'FILLED' } })
@@ -260,7 +263,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
     nextOverallPick: picks.length + 1, slotOrder: draftSlotOrder as Prisma.InputJsonValue,
   } })
   if (picks.length) await tx.draftPick.createMany({ data: picks })
-  const history = await copyImportedHistory(tx, args.sourceLeagueId, args.targetLeagueId, teamIds)
+  const history = await copyImportedHistory(tx, args.sourceLeagueId, args.targetLeagueId, teamIds, rosterIds)
   if (mlbScoring) {
     const slots = mlbRoster!.config.sections[0]!.slots
     await tx.leagueRosterConfig.upsert({ where: { leagueId: args.targetLeagueId }, create: { leagueId: args.targetLeagueId, templateId: `custom-MLB-${args.targetLeagueId}`, overrides: { customSlots: slots, customTemplateKey: 'imported', isCustom: true } }, update: { overrides: { customSlots: slots, customTemplateKey: 'imported', isCustom: true } } })
