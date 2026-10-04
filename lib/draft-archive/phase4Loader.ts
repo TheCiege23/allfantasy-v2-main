@@ -39,7 +39,7 @@ export async function loadAssetLineage(leagueId:string,source:'native'|'imported
         if(!at)continue;
         const transfer:AssetTransfer={transactionId:String(row.tradeId),at,kind:type==='player'?'player':'pick',from,to,reversedAt:obj(row.reversal).reversedAt instanceof Date && (obj(row.reversal).reversedAt as Date).getTime()<=until.getTime() ? (obj(row.reversal).reversedAt as Date).toISOString():null,packageAssets:assets.length};
         if(type==='player'&&playerId){transfer.playerId=selectionId(playerId);transfers.push(transfer);}
-        else if(['pick','draft_pick'].includes(type)){const year=integer(a.pickSeason??meta.season),round=integer(a.pickRound??meta.round),original=text(a.originalRosterId??meta.originalRosterId);if(year&&round&&original)transfers.push({...transfer,season:year,round,originalRosterId:original,draftId:text(meta.draftSessionId)??undefined});else incomplete=true;}
+        else if(['pick','draft_pick','future_pick','rookie_pick','devy_pick'].includes(type)){const year=integer(a.pickSeason??meta.pickSeason??meta.season),round=integer(a.pickRound??meta.pickRound??meta.round),original=text(a.originalRosterId??meta.originalRosterId);if(year&&round&&original)transfers.push({...transfer,season:year,round,originalRosterId:original,draftId:text(meta.draftSessionId)??undefined,...(['future_pick','rookie_pick','devy_pick'].includes(type)?{draftPurpose:type==='devy_pick'?'devy' as const:'rookie' as const}:{})});else incomplete=true;}
       }
     }else{
       const payload=obj(row.payload),atMs=typeof payload.status_updated==='number'?payload.status_updated:payload.created;
@@ -54,7 +54,8 @@ export async function loadAssetLineage(leagueId:string,source:'native'|'imported
   for(const p of proposals)for(const leg of [{round:p.giveRound,original:p.giveOriginalRosterId,from:p.proposerRosterId,to:p.receiverRosterId},{round:p.receiveRound,original:p.receiveOriginalRosterId,from:p.receiverRosterId,to:p.proposerRosterId}]){
     if(p.respondedAt&&leg.original&&season)transfers.push({transactionId:p.id,at:p.respondedAt.toISOString(),kind:'pick',season,round:leg.round,originalRosterId:leg.original,from:leg.from,to:leg.to,draftId:sourceId,packageAssets:2});
   }
-  const lineages=assetLineages(picks,transfers,season,sourceId,oneDraft), linked=new Set(lineages.flatMap(l=>l.edges.filter(e=>e.kind==='pick').map(e=>`${e.transactionId}:${e.season}:${e.round}:${e.originalRosterId}`)));
+  const compatible=transfers.filter(t=>!t.draftPurpose||t.draftId===sourceId||(context&&new RegExp(t.draftPurpose,'i').test(context.purpose)));
+  const lineages=assetLineages(picks,compatible,season,sourceId,oneDraft), linked=new Set(lineages.flatMap(l=>l.edges.filter(e=>e.kind==='pick').map(e=>`${e.transactionId}:${e.season}:${e.round}:${e.originalRosterId}`)));
   return {...base,state:incomplete||lineages.some(l=>l.state==='ambiguous')?'partial':'ready',lineages,pending:transfers.filter(t=>t.kind==='pick'&&!linked.has(`${t.transactionId}:${t.season}:${t.round}:${t.originalRosterId}`)),reason:'Recorded packages only. Asset identity links do not allocate a multi-asset trade price to one player. Reversed trades remain visible. Missing transaction history, unresolved future picks and ambiguous same-season drafts prevent a complete ownership chain.'};
 }
 export type DynastyMark={playerName:string;draftValue:number|null;currentValue:number|null;draftAt:string|null;currentAt:string;source:string;attributionUrl:string|null};

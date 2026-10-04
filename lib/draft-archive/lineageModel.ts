@@ -1,5 +1,5 @@
 import type { ArchivePick } from './detail';
-export type AssetTransfer={transactionId:string;at:string;kind:'pick'|'player';playerId?:string;season?:number;round?:number;originalRosterId?:string;draftId?:string;from:string;to:string;reversedAt?:string|null;packageAssets:number};
+export type AssetTransfer={transactionId:string;at:string;kind:'pick'|'player';playerId?:string;season?:number;round?:number;originalRosterId?:string;draftId?:string;draftPurpose?:'rookie'|'devy';from:string;to:string;reversedAt?:string|null;packageAssets:number};
 export type AssetLineage={pickId:string;overall:number;playerName:string;originalRosterId:string|null;selectingRosterId:string|null;edges:Array<AssetTransfer&{phase:'before_selection'|'after_selection'|'selection_time_unknown'}>;state:'linked'|'no_recorded_links'|'ambiguous';};
 /** A season/round asset may belong to multiple drafts. Never resolve it by player name or nearest time. */
 export function assetLineages(picks:ArchivePick[],transfers:AssetTransfer[],season:number|null,draftId:string,oneDraftInSeason:boolean):AssetLineage[]{

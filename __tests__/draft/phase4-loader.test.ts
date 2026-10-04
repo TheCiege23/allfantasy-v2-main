@@ -9,6 +9,15 @@ const pick={id:'p',overall:1,round:1,originalRosterId:'a',rosterId:'b',playerId:
 const context={sport:'NFL',season:2026,leagueType:'redraft',purpose:'standard',draftType:'snake',teamCount:2,playerPool:'all',scoring:'ppr',scoringRules:{rec:1},rosterSlots:['WR']} as PreparationContext;
 beforeEach(()=>{vi.resetAllMocks();db.executions.mockResolvedValue([]);db.proposals.mockResolvedValue([]);db.transactions.mockResolvedValue([]);db.model.mockResolvedValue(null);});
 describe('bounded stored asset history',()=>{
+  it('reads native pick identity from persisted trade item metadata',async()=>{
+    db.executions.mockResolvedValue([{tradeId:'t',executedAt:new Date('2026-08-01'),completeness:'complete',assetSummary:{assets:[{itemType:'pick',fromRosterId:'a',toRosterId:'b',metadata:{pickSeason:2026,pickRound:1,originalRosterId:'a'}}]}}]);
+    const result=await loadAssetLineage('l','native','d',null,2026,'NFL',[pick],true,null,null,null);expect(result.lineages[0].edges).toHaveLength(1);expect(result.state).toBe('ready');
+  });
+  it('does not assign a typed rookie future pick to a startup selection',async()=>{
+    db.executions.mockResolvedValue([{tradeId:'t',executedAt:new Date('2026-08-01'),completeness:'complete',assetSummary:{assets:[{itemType:'future_pick',fromRosterId:'a',toRosterId:'b',metadata:{pickSeason:2026,pickRound:1,originalRosterId:'a'}}]}}]);
+    const result=await loadAssetLineage('l','native','d',null,2026,'NFL',[pick],true,null,context,null);expect(result.lineages[0].edges).toEqual([]);expect(result.pending).toHaveLength(1);
+    const rookie=await loadAssetLineage('l','native','d',null,2026,'NFL',[pick],true,null,{...context,purpose:'rookie'},null);expect(rookie.lineages[0].edges).toHaveLength(1);
+  });
   it('retains package size without private metadata and respects reversal observation boundaries',async()=>{
     db.executions.mockResolvedValue([{tradeId:'t',executedAt:new Date('2026-08-01'),completeness:'complete',assetSummary:{assets:[{itemType:'player',itemReference:'player',fromRosterId:'a',toRosterId:'b',metadata:{privateNote:'secret'}},{itemType:'faab',fromRosterId:'a',toRosterId:'b'}]},reversal:{reversedAt:new Date('2026-10-01')}}]);
     const result=await loadAssetLineage('l','reset','d','s',2026,'NFL',[pick],true,null,context,null,new Date('2026-09-02'));
