@@ -80,7 +80,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
         setCurrentSeason(data.currentSeason ?? 2025)
         setIsMultiSeason(data.isMultiSeason ?? false)
       })
-      .catch(() => { if (active) setError('Failed to load dues settings') })
+      .catch(() => { if (active) setError(t('dues.loadFailed')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [leagueId])
@@ -139,11 +139,11 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
         body: JSON.stringify(config),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Save failed'); return }
+      if (!res.ok) { setError(data.error ?? t('leagueSettings.saveFailed')); return }
       setConfig(data.config)
-      setSuccess('Dues tracker saved!')
+      setSuccess(t('dues.saved'))
       setTimeout(() => setSuccess(null), 3000)
-    } catch { setError('Request failed') }
+    } catch { setError(t('leagueSettings.requestFailed')) }
     finally { setSaving(false) }
   }, [leagueId, config])
 
@@ -154,7 +154,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
     return years
   }, [currentSeason])
 
-  if (loading) return <div className="py-8 text-center text-sm text-white/50">Loading dues tracker...</div>
+  if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('dues.loading')}</div>
 
   return (
     <div className="space-y-5">
@@ -206,7 +206,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
               placeholder="0"
               className="w-24 rounded-lg border border-white/15 bg-[#0d1526] px-3 py-2 text-[14px] font-medium text-white placeholder:text-white/20 focus:border-cyan-500/40 focus:outline-none"
             />
-            <span className="text-[12px] text-white/30">per team</span>
+            <span className="text-[12px] text-white/30">{t('dues.perTeam')}</span>
           </div>
         </div>
       )}
@@ -233,7 +233,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
 
       {/* Member payment list */}
       <div className="space-y-1">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">Member Payment Status</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-white/40">{t('dues.paymentStatus')}</p>
         {teams.map((team) => {
           const entry = getEntry(team.id)
           const isPaid = entry.paid
@@ -261,7 +261,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
                 </span>
                 {isPaid && (
                   <span className="ml-2 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[11px] font-bold uppercase text-emerald-300">
-                    Paid
+                    {t('dues.paid')}
                   </span>
                 )}
               </div>
@@ -274,7 +274,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
                     onClick={() => setSeasonDropdownOpen(seasonDropdownOpen === team.id ? null : team.id)}
                     className="flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-1 text-[11px] text-white/50 hover:bg-white/10"
                   >
-                    {entry.paidSeasons.length > 0 ? entry.paidSeasons.join(', ') : 'Seasons'}
+                    {entry.paidSeasons.length > 0 ? entry.paidSeasons.join(', ') : t('dues.seasons')}
                     <ChevronDown className="h-3 w-3" />
                   </button>
                   {seasonDropdownOpen === team.id && (
@@ -308,7 +308,7 @@ export function LeagueDuesTrackerPanel({ leagueId }: Props) {
                       ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
                       : 'border border-white/20 bg-white/5 text-white/40 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-emerald-300'
                   }`}
-                  title={isPaid ? 'Mark unpaid' : 'Mark paid'}
+                  title={isPaid ? t('dues.markUnpaid') : t('dues.markPaid')}
                 >
                   P
                 </button>
