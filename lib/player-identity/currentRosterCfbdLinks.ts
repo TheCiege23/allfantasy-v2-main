@@ -59,7 +59,7 @@ export function planCurrentRosterCfbdLinks(refs: FantraxPlayerRef[], identities:
     sourceLinks.push({id:target.id,fantraxId:ref.fantraxId,cfbdId:id})
    }else{
     const athlete=pool.find(p=>p.externalId===id)!
-    creates.push({fantraxId:ref.fantraxId,cfbdId:id,canonicalName:athlete.name,normalizedName:nameKey(athlete.name),currentTeam:athlete.college??athlete.team!,position:proof.roles.find(p=>roles(ref.position).includes(p))!})
+    creates.push({fantraxId:ref.fantraxId,cfbdId:id,canonicalName:athlete.name,normalizedName:normalizePlayerName(athlete.name),currentTeam:athlete.college??athlete.team!,position:proof.roles.find(p=>roles(ref.position).includes(p))!})
    }
    continue
   }
@@ -79,4 +79,32 @@ export function currentCfbdRosterProofStart(state: unknown, now=new Date()): Dat
  if(value.season!==now.getUTCFullYear() || typeof value.cycleStartedAt!=='string' || typeof value.completedAt!=='string')return null
  const started=Date.parse(value.cycleStartedAt),completed=Date.parse(value.completedAt)
  return Number.isFinite(started)&&Number.isFinite(completed)&&started<=completed&&completed<=now.getTime()&&now.getTime()-started<30*86400000?new Date(started):null
+}
+
+
+/** Bootstrap a school code only from three distinct mutually unique current roster athletes.
+ * Every current roster match bearing that source code must agree on the same school.
+ */
+export function verifiedCurrentRosterSchoolAliases(refs: FantraxPlayerRef[], pool: CurrentCfbdRosterProof[]) {
+ const index=new Map<string,Set<string>>(),byId=new Map(pool.map(p=>[p.externalId,p]))
+ const poolCounts=new Map<string,number>();for(const p of pool)poolCounts.set(p.externalId,(poolCounts.get(p.externalId)??0)+1)
+ for(const p of pool)for(const role of roles(p.position)){const k=`${nameKey(p.name)}|${role}`;const ids=index.get(k)??new Set<string>();ids.add(p.externalId);index.set(k,ids)}
+ const candidates=new Map<FantraxPlayerRef,Set<string>>(),reverse=new Map<string,Set<string>>(),counts=new Map<string,number>()
+ for(const ref of refs){
+  counts.set(ref.fantraxId,(counts.get(ref.fantraxId)??0)+1)
+  const ids=new Set<string>();for(const role of roles(ref.position))for(const id of index.get(`${nameKey(ref.name)}|${role}`)??[])ids.add(id)
+  candidates.set(ref,ids);for(const id of ids){const owners=reverse.get(id)??new Set<string>();owners.add(ref.fantraxId);reverse.set(id,owners)}
+ }
+ const claims=new Map<string,Map<string,Set<string>>>()
+ for(const ref of refs){
+  const ids=candidates.get(ref)!,code=exactKey(ref.team)
+  if(ids.size!==1 || !code || counts.get(ref.fantraxId)!==1)continue
+  const id=[...ids][0]!,p=byId.get(id)!
+  if(reverse.get(id)?.size!==1 || poolCounts.get(id)!==1)continue
+  const school=cfbdScheduleTeamKeys(p.college??p.team).exact;if(!school)continue
+  const schools=claims.get(code)??new Map<string,Set<string>>();const athletes=schools.get(school)??new Set<string>();athletes.add(id);schools.set(school,athletes);claims.set(code,schools)
+ }
+ const result:Record<string,string>={}
+ for(const [code,schools] of claims)if(schools.size===1){const [school,athletes]=[...schools][0]!;if(athletes.size>=3)result[code]=school}
+ return result
 }

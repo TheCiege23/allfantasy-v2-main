@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planCurrentRosterCfbdLinks, currentCfbdRosterProofStart } from '@/lib/player-identity/currentRosterCfbdLinks'
+import { planCurrentRosterCfbdLinks, currentCfbdRosterProofStart, verifiedCurrentRosterSchoolAliases } from '@/lib/player-identity/currentRosterCfbdLinks'
 import type { NcaafIdentityRow } from '@/lib/player-identity/ncaafFantraxIdentityPlan'
 const source={fantraxId:'fx1',name:'Smith, Alex',team:'OSU',position:'WR'}
 const pool={externalId:'cf1',name:'Alex Smith Jr.',position:'WR',college:'Ohio State',team:'Ohio State University'}
@@ -44,6 +44,18 @@ it('treats name punctuation consistently, with school/role and both-direction un
 it('refuses stale, previous-year, partial and future roster snapshot proofs',()=>{
  const now=new Date('2026-10-04T18:00:00Z')
  const state={season:2026,cycleStartedAt:'2026-10-01T15:00:00Z',completedAt:'2026-10-01T16:00:00Z'}
- expect(currentCfbdRosterProofStart(state,now)?.toISOString()).toBe(state.cycleStartedAt)
+ expect(currentCfbdRosterProofStart(state,now)?.toISOString()).toBe(new Date(state.cycleStartedAt).toISOString())
  for(const bad of [null,{...state,season:2025},{...state,completedAt:null},{...state,cycleStartedAt:'2026-09-01T00:00:00Z'},{...state,completedAt:'2026-10-05T00:00:00Z'},{...state,completedAt:'invalid'},{...state,completedAt:'2026-09-30T00:00:00Z'}])expect(currentCfbdRosterProofStart(bad,now)).toBeNull()
+})
+
+
+it('bootstraps source school codes from three mutually unique athletes and rejects contradictory schools',()=>{
+ const refs=[1,2,3].map(n=>({fantraxId:`fx${n}`,name:`Unique Player ${n}`,position:'RB',team:'UtSt'}))
+ const pool=refs.map((r,n)=>({externalId:`cf${n}`,name:r.name,position:'RB',college:'Utah State',team:'Utah State'}))
+ expect(verifiedCurrentRosterSchoolAliases(refs,pool)).toEqual({utst:'utah state'})
+ expect(verifiedCurrentRosterSchoolAliases(refs.slice(0,2),pool)).toEqual({})
+ expect(verifiedCurrentRosterSchoolAliases(refs,[...pool,{...pool[0]!,externalId:'duplicate',college:'Utah'}])).toEqual({})
+ expect(verifiedCurrentRosterSchoolAliases([...refs,{...refs[0]!,fantraxId:'duplicate'}],pool)).toEqual({})
+ const other={fantraxId:'other',name:'Another Athlete',position:'RB',team:'UtSt'}
+ expect(verifiedCurrentRosterSchoolAliases([...refs,other],[...pool,{externalId:'other',name:other.name,position:'RB',college:'Utah',team:'Utah'}])).toEqual({})
 })

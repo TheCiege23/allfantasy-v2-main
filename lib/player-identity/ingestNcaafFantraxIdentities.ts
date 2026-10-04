@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { planCurrentRosterCfbdLinks, currentCfbdRosterProofStart } from './currentRosterCfbdLinks'
+import { planCurrentRosterCfbdLinks, currentCfbdRosterProofStart, verifiedCurrentRosterSchoolAliases } from './currentRosterCfbdLinks'
 import { prisma } from '@/lib/prisma'
 import { getFantraxPlayerIds } from '@/lib/league-import/fantrax/fantraxApi'
 import { planNcaafFantraxIdentityLinks, verifiedFantraxSchoolAliases, currentCfbdSchoolIdentities, type CfbdSchoolFact } from './ncaafFantraxIdentityPlan'
@@ -37,8 +37,11 @@ export async function ingestNcaafFantraxIdentities(dryRun = false, forceRefresh 
   const pool = currentProof ? await prisma.sportsPlayer.findMany({where:{sport:'NCAAF',source:'cfbd',status:'active',fetchedAt:{gte:started!},expiresAt:{gt:new Date()}},select:{externalId:true,name:true,position:true,college:true,team:true}}) : []
   const poolFacts = pool.map(p=>({cfbdId:p.externalId,name:p.name,school:p.college??p.team??''}))
   const rosterAliases = verifiedFantraxSchoolAliases(Object.values(map.data),currentCfbdSchoolIdentities(registryRows,poolFacts,schools),poolFacts,schools)
-  const agreedAliases = {...aliases,...rosterAliases}
-  for(const code of Object.keys(aliases))if(rosterAliases[code] && rosterAliases[code]!==aliases[code])delete agreedAliases[code]
+  const bootstrapAliases = verifiedCurrentRosterSchoolAliases(Object.values(map.data),pool)
+  const agreedAliases:Record<string,string> = {}
+  const claims=new Map<string,Set<string>>()
+  for(const learned of [aliases,rosterAliases,bootstrapAliases])for(const [code,school] of Object.entries(learned)){const schools=claims.get(code)??new Set<string>();schools.add(school);claims.set(code,schools)}
+  for(const [code,schools] of claims)if(schools.size===1)agreedAliases[code]=[...schools][0]!
   const imported = await prisma.redraftRosterPlayer.findMany({where:{droppedAt:null,roster:{is:{season:{is:{season:year,sport:{in:['NCAAF','NCAAFB']},league:{is:{platform:'fantrax'}}}}}}},select:{playerId:true}})
   // Base links attach the Fantrax ID first. Include them in the planner's view even during a dry run.
   const baseById = new Map(links.map(l=>[l.id,l]))
