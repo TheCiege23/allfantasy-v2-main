@@ -59,6 +59,7 @@ import { TradeTranslationStatus } from './TradeTranslationStatus'
 import { getIntlLocale as tradeIntlLocale } from '@/lib/i18n/constants'
 import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { TradePartnerEvidence } from './TradePartnerEvidence'
 import { TradeValueChart, LineupImpactChart } from './TradeImpactCharts'
 import { TradeReaction, TradeReactionSettings } from './TradeReactions'
 import { usePlayerCard } from '../player-card/PlayerCardProvider'
@@ -2450,6 +2451,7 @@ export function TradeCenter(props: {
             <div><strong>{copy("Why ")}{theirLabel}{copy(" might accept")}</strong><p>{copy(theirIncentive)}</p></div>
             <p>{copy(agreementBlocker)}</p>
             <small>{copy("Value fairness and acceptance are separate. Manager preference and roster needs can change the answer.")}</small>
+            {!depthLocked ? <TradePartnerEvidence notes={result.leverageNotes ?? []} copy={copy} /> : null}
             {!depthLocked && result.counterOffers?.[0] ? <div className="af-tc-partner-counter">
               <strong>{copy("Closer value package: ")}{copy(result.counterOffers[0].addTo === 'get' ? 'ask for' : 'offer')} {result.counterOffers[0].name}</strong>
               <span>{result.counterOffers[0].balanced ? 'Within the even-value band' : `${Math.abs(result.counterOffers[0].grade.percentDiff)}% apart`}{copy(" after regrading the package.")}</span>

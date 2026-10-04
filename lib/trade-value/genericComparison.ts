@@ -18,3 +18,9 @@ export const genericComparisonSchema = z.object({
 })
 
 export type GenericComparison = z.infer<typeof genericComparisonSchema>
+
+/** Reject malformed account history instead of presenting it as an empty successful read. */
+export function parseGenericComparisons(value: unknown): GenericComparison[] | null {
+  const parsed = z.array(genericComparisonSchema).max(30).safeParse(value)
+  return parsed.success ? parsed.data : null
+}

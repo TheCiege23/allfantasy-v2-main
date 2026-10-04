@@ -3,8 +3,8 @@ import { tradeVisualCopy } from '@/lib/core-app/tradeVisualCopy'
 import { getIntlLocale, type LanguageCode } from '@/lib/i18n/constants'
 import { useTradeVisualCopy } from "./useTradeVisualCopy"
 
-import { useEffect, useState } from 'react'
-import { genericComparisonSchema, type GenericComparison } from '@/lib/trade-value/genericComparison'
+import { useEffect, useRef, useState } from 'react'
+import { genericComparisonSchema, parseGenericComparisons, type GenericComparison } from '@/lib/trade-value/genericComparison'
 
 export type TradeSnapshot = {
   id: string
@@ -25,10 +25,20 @@ const STORAGE_KEY = 'af-trade-comparisons:v1'
 function readSaved(): TradeSnapshot[] {
   try {
     const parsed: unknown = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? '[]')
-    return Array.isArray(parsed) ? parsed.filter((item): item is TradeSnapshot =>
-      Boolean(item && typeof item.id === 'string' && typeof item.scope === 'string' &&
-        typeof item.at === 'string' && Array.isArray(item.sides) && Array.isArray(item.assets))) : []
+    if (!Array.isArray(parsed)) return []
+    return parsed.flatMap((item) => {
+      if (!item || typeof item.scope !== 'string' || !item.scope || item.scope.length > 300) return []
+      const valid = genericComparisonSchema.safeParse(item)
+      return valid.success ? [{ ...valid.data, scope: item.scope }] : []
+    }).slice(0, 30)
   } catch { return [] }
+}
+
+function accountHistory(body: unknown): GenericComparison[] {
+  const rows = body && typeof body === 'object' && 'snapshots' in body
+    ? parseGenericComparisons(body.snapshots) : null
+  if (!rows) throw new Error('Account history could not be verified. Retry when connected.')
+  return rows
 }
 
 function safeDate(value: string, locale = 'en-US'): string {
@@ -93,35 +103,42 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
   const [historyAvailable, setHistoryAvailable] = useState(false)
   const [busy, setBusy] = useState(false)
   const [reload, setReload] = useState(0)
+  const scopeRef = useRef(scope)
+  scopeRef.current = scope
   const account = scope !== 'generic:device'
   useEffect(() => {
     let cancelled = false
+    const abort = new AbortController()
+    setSelected(null); setNotice(null); setBusy(false)
     const local = readSaved().filter((item) => item.scope === scope)
     if (!account) { setSaved(local); setHistoryAvailable(true); return }
     setHistoryAvailable(false)
     const load = async () => {
       let remote: TradeSnapshot[] = []
       try {
-        const response = await fetch('/api/trade-value/comparisons', { cache: 'no-store' })
+        const response = await fetch('/api/trade-value/comparisons', { cache: 'no-store', signal: abort.signal })
         if (!response.ok) throw new Error('Account history is unavailable. Existing device saves are still shown.')
-        let data = await response.json() as { snapshots: GenericComparison[] }
-        remote = data.snapshots.map((item) => ({ ...item, scope }))
+        let rows = accountHistory(await response.json())
+        if (cancelled) return
+        remote = rows.map((item) => ({ ...item, scope }))
         const old = local.flatMap((item) => {
           const parsed = genericComparisonSchema.safeParse(item)
           return parsed.success ? [parsed.data] : []
         })
         if (old.length) {
           const imported = await fetch('/api/trade-value/comparisons', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snapshots: old }),
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ snapshots: old }), signal: abort.signal,
           })
           if (!imported.ok) throw new Error('Account history loaded, but device saves could not sync. Retry when connected.')
-          data = await imported.json() as { snapshots: GenericComparison[] }
+          rows = accountHistory(await imported.json())
+          if (cancelled) return
+          if (!old.every(item => rows.some(row => row.id === item.id))) throw new Error('Account history loaded, but device saves could not sync. Retry when connected.')
           const importedIds = new Set(old.map((item) => item.id))
           const remaining = readSaved().filter((item) => item.scope !== scope || !importedIds.has(item.id))
           window.localStorage.setItem(STORAGE_KEY, JSON.stringify(remaining))
         }
         if (!cancelled) {
-          setSaved(data.snapshots.map((item) => ({ ...item, scope })))
+          setSaved(rows.map((item) => ({ ...item, scope })))
           setHistoryAvailable(true)
           setNotice(null)
         }
@@ -134,7 +151,7 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
       }
     }
     void load()
-    return () => { cancelled = true }
+    return () => { cancelled = true; abort.abort() }
   }, [scope, account, reload])
   const visible = saved.filter((item) => item.scope === scope)
   const card = visible.find((item) => item.id === selected) ?? snapshot
@@ -152,8 +169,10 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
           body: JSON.stringify({ snapshots: [parsed.data] }),
         })
         if (!response.ok) throw new Error('Could not save to your account. Try again shortly.')
-        const data = await response.json() as { snapshots: GenericComparison[] }
-        setSaved(data.snapshots.map((row) => ({ ...row, scope })))
+        const rows = accountHistory(await response.json())
+        if (scopeRef.current !== scope) return
+        if (!rows.some(row => row.id === item.id)) throw new Error('The saved comparison could not be verified. Retry when connected.')
+        setSaved(rows.map((row) => ({ ...row, scope })))
       } else {
         const next = [item, ...readSaved()].slice(0, 30)
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
@@ -161,8 +180,8 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
       }
       setSelected(item.id)
       setNotice(account ? 'Comparison saved to your account. Reanalyze before acting on older values.' : 'Comparison saved on this device. Reanalyze before acting on older values.')
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not save the comparison.') }
-    finally { setBusy(false) }
+    } catch (error) { if (scopeRef.current === scope) setNotice(error instanceof Error ? error.message : 'Could not save the comparison.') }
+    finally { if (scopeRef.current === scope) setBusy(false) }
   }
 
   async function remove(id: string) {
@@ -171,8 +190,10 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
       if (account) {
         const response = await fetch(`/api/trade-value/comparisons?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
         if (!response.ok) throw new Error('Could not remove this comparison from your account.')
-        const data = await response.json() as { snapshots: GenericComparison[] }
-        setSaved(data.snapshots.map((row) => ({ ...row, scope })))
+        const rows = accountHistory(await response.json())
+        if (scopeRef.current !== scope) return
+        if (rows.some(row => row.id === id)) throw new Error('The removal could not be verified. Retry when connected.')
+        setSaved(rows.map((row) => ({ ...row, scope })))
       } else {
         const next = readSaved().filter((item) => item.id !== id)
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
@@ -180,8 +201,8 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
       }
       if (selected === id) setSelected(null)
       setNotice('Saved comparison removed.')
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'Could not remove the comparison.') }
-    finally { setBusy(false) }
+    } catch (error) { if (scopeRef.current === scope) setNotice(error instanceof Error ? error.message : 'Could not remove the comparison.') }
+    finally { if (scopeRef.current === scope) setBusy(false) }
   }
 
   return (
@@ -194,6 +215,10 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
       {account && !historyAvailable ? <button type="button" className="af-btn af-btn-ghost" onClick={() => setReload((value) => value + 1)}>{copy("Retry account sync")}</button> : null}
       {card ? (
         <div className="af-tc-share-card">
+          <div className="af-tc-comparison-state">
+            <strong>{copy(selected ? 'Saved comparison' : 'Current analysis')}</strong>
+            {selected && snapshot ? <button type="button" className="af-btn af-btn-ghost" onClick={() => setSelected(null)}>{copy('Show current analysis')}</button> : null}
+          </div>
           <div className="af-tc-share-top"><strong>{copy(card.title)}</strong><span>{copy(card.sport)}{copy(" · ")}{copy(card.basis)}</span></div>
           <div className="af-tc-share-sides">{card.sides.map((side, index) => (
             <div key={`${side}-${index}`}><span>{copy(side)}</span><strong>{copy(card.grades[index])}</strong><small>{copy("Sends ")}{copy(card.assets[index].map(asset=>copy(asset)).join(', '))}</small></div>
@@ -201,9 +226,28 @@ export function TradeComparisonSnapshots({ snapshot, scope }: { snapshot: TradeS
           <p>{copy("Value verdict: ")}{copy(card.verdict)}</p>
           <small>{copy("As of ")}{copy(safeDate(card.at,locale))}{copy(" · ")}{copy(card.uncertainty)}{copy(". Fairness does not predict acceptance or future performance.")}</small>
           <button type="button" className="af-btn af-btn-ghost" onClick={() => {
-            setNotice(downloadCard(card,language) ? 'Share card downloaded as PNG.' : 'The share card could not be created in this browser.')
+            try { setNotice(downloadCard(card,language) ? 'Share card downloaded as PNG.' : 'The share card could not be created in this browser.') }
+            catch { setNotice('The share card could not be created in this browser.') }
           }}>{copy("Download share card")}</button>
         </div>
+      ) : null}
+      {selected && card && snapshot && card.id !== snapshot.id ? (
+        card.sport === snapshot.sport ? <details className="af-tc-variant-comparison">
+          <summary>{copy('Compare saved and current variants')}</summary>
+          <p>{copy('Compare the assets and value basis before comparing grades. These are separate snapshots, not an acceptance forecast.')}</p>
+          <div className="af-tc-variant-grid">
+            {[card, snapshot].map((variant, index) => <section key={index} aria-label={copy(index === 0 ? 'Saved variant' : 'Current variant')}>
+              <h4>{copy(index === 0 ? 'Saved variant' : 'Current variant')}</h4>
+              <p>{variant.sport}{copy(' · ')}{copy(variant.basis)}</p>
+              {variant.sides.map((side, sideIndex) => <div key={sideIndex}>
+                <strong>{copy(side)}{copy(' · ')}{variant.grades[sideIndex]}</strong>
+                <p>{variant.assets[sideIndex].join(', ')}</p>
+              </div>)}
+              <p>{copy('As of ')}{safeDate(variant.at, locale)}</p>
+              <small>{copy(variant.uncertainty)}</small>
+            </section>)}
+          </div>
+        </details> : <p role="status">{copy('Choose a saved comparison for the current sport before comparing variants.')}</p>
       ) : null}
       {visible.length ? (
         <details className="af-tc-saved-list"><summary>{copy("Saved comparisons (")}{copy(visible.length)}{copy(")")}</summary>
