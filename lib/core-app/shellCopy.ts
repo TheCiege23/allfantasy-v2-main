@@ -55,6 +55,18 @@ export function careerLineText(line: string, language: string): string {
   return line.replace(/\b(\d+) (titles?)$/, (_m, n: string) => `${n} ${n === '1' ? 'título' : 'títulos'}`)
 }
 
+/**
+ * A nav badge's own words: "LIVE" (Draft HQ while a draft runs, and the league rail's live state) and
+ * "LVL 12" (Rankings). Counts are numbers and pass through.
+ */
+export function badgeText(text: string, language: string): string {
+  if (language !== 'es') return text
+  if (text === 'LIVE') return 'EN VIVO'
+  const level = text.match(/^LVL (\d+)$/)
+  if (level) return `NIV ${level[1]}`
+  return text
+}
+
 /** "Sleeper, ESPN, Fantrax, MFL or Fleaflicker" — `availableImportPlatformsPhrase` joins with " or ". */
 export function platformsPhraseText(phrase: string, language: string): string {
   if (language !== 'es') return phrase

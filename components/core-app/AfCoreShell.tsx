@@ -40,7 +40,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, useTransition
 import { LeagueChatBar } from '@/components/core-app/LeagueChatBar'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import { ageText, careerLineText, platformsPhraseText, scopeLabelText } from '@/lib/core-app/shellCopy'
+import { ageText, badgeText, careerLineText, platformsPhraseText, scopeLabelText } from '@/lib/core-app/shellCopy'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { LeagueChatPreview } from '@/lib/core-app/leagueChatPreviewPick'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
@@ -1811,7 +1811,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
             {hiddenRailCount > 0 ? (language === 'es' ? ` · ${hiddenRailCount} ocultas` : ` · ${hiddenRailCount} hidden`) : ''}
             {railWeekLabel ? ` · ${language === 'es' ? railWeekLabel.replace(/^Week (\d+)/, 'Semana $1') : railWeekLabel}` : ''}
             {props.liveGameCount && props.liveGameCount > 0 ? (
-              <span className="af-rail-live-state">LIVE{railFreshLabel ? ` · ${railFreshLabel}` : ''}</span>
+              <span className="af-rail-live-state">
+                {badgeText('LIVE', language)}
+                {railFreshLabel ? ` · ${railFreshLabel}` : ''}
+              </span>
             ) : null}
           </span>
         </button>
@@ -2115,7 +2118,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                     <span className="af-nav-label">{copy(item.label)}</span>
                     {item.badge ? (
                       <span className="af-nav-badge" data-tone={item.badge.tone}>
-                        {item.badge.text}
+                        {badgeText(item.badge.text, language)}
                       </span>
                     ) : null}
                   </Link>
@@ -2569,7 +2572,7 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
                         <CoreNavIcon navKey={item.key} />
                       </span>
                       <span>{copy(item.label)}</span>
-                      {item.badge ? <b>{item.badge.text}</b> : null}
+                      {item.badge ? <b>{badgeText(item.badge.text, language)}</b> : null}
                     </Link>
                   ))}
                 </div>
