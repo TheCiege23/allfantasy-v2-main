@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { formatLockLabel } from '@/lib/core-app/lockLabel'
 import { kickoffClock } from '@/lib/core-app/lineupLock'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
+import { kickoffText } from '@/lib/core-app/kickoffText'
 import { lineupLink } from '@/lib/core-app/platformLinks'
 import type { CrossLeagueFlag, MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
 import { FOREIGN_IDS_UNREADABLE_CLAUSE } from '@/lib/core-app/foreignIdSpaceCopy'
@@ -232,7 +233,8 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
   const atMs = new Date(row.lockAt).getTime()
   const label = formatLockLabel(atMs, now)
   /* Eastern, like every other kickoff on /core — UTC moved night games to the next day. Pinned, so it hydrates. */
-  const kickoff = `${kickoffClock(row.lockAt)} (${kickoffDayLabel(row.lockAt) ?? ''})`
+  /* …and translated at render, after the pin: "Sun 1:00p ET (Oct 4)" → «dom 1:00p ET (4 oct)». */
+  const kickoff = kickoffText(`${kickoffClock(row.lockAt)} (${kickoffDayLabel(row.lockAt) ?? ''})`, language)
 
   /*
    * ⚠ A DATE, NOT A COUNTDOWN, PAST `DISTANT_LOCK_DAYS`. The next kickoff we
@@ -248,7 +250,7 @@ function Lock({ row, now }: { row: MyTeamRow; now: number }) {
       : `The next kickoff we hold for these starters is ${kickoff}, further out than a lineup lock should be — this week’s schedule has probably not been ingested yet.`
     return (
       <span className="af-bd-stat" title={why} aria-label={why}>
-        {label.text}
+        {kickoffText(label.text, language)}
       </span>
     )
   }
@@ -386,7 +388,7 @@ function Row({
    * column away — so every row read as a label with its value missing.
    * Eastern and pinned, like every kickoff on /core, so it hydrates.
    */
-  const nextDeadline = row.lockAt && Date.parse(row.lockAt) > now ? kickoffClock(row.lockAt) || null : null
+  const nextDeadline = row.lockAt && Date.parse(row.lockAt) > now ? kickoffText(kickoffClock(row.lockAt), language) || null : null
   /*
    * ⚠ THE CTA GOES TO THE PLATFORM, NOT INTO AllFantasy. AllFantasy is
    * read-only; the lineup is changed on Sleeper. `lineupLink` falls back to the
