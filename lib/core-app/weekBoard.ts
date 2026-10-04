@@ -587,9 +587,10 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
       periodsByLeague.set(pid, { season: metadata.season, week: currentWeek })
       continue
     }
-    const liveRows = rows.filter((r) => r.leagueId === pid)
-    const candidates = (liveRows.length > 0 ? liveRows : priorRows.filter((r) => r.leagueId === pid))
-      .filter((r) => metadata?.season == null || r.seasonYear === metadata.season)
+    const inLeagueSeason = (r: MatchupRow) =>
+      r.leagueId === pid && (metadata?.season == null || r.seasonYear === metadata.season)
+    const liveRows = rows.filter(inLeagueSeason)
+    const candidates = liveRows.length > 0 ? liveRows : priorRows.filter(inLeagueSeason)
     const resolved = resolveCurrentWeekFrom(candidates)
     if (resolved) periodsByLeague.set(pid, { season: resolved.season, week: resolved.week })
   }

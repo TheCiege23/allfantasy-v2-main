@@ -77,6 +77,16 @@ describe('Your Week uses each league scoring calendar', () => {
     expect(board.historyIncomplete).toBe(false)
   })
 
+  it('uses imported results in the stated season when only an older season has live rows', async () => {
+    mocks.metadata.mockResolvedValue([{ ...metadata('NBA', 2026, 1), settings: {} }])
+    mocks.rows.mockResolvedValue(meeting('NBA', 2025, 20, 100, 90))
+    mocks.facts.mockResolvedValue([{ leagueId: 'NBA', season: 2026, weekOrPeriod: 8, teamA: '1', teamB: '2', scoreA: 110, scoreB: 95 }])
+    const board = await getWeekBoard('u1', [leagues[1]], 'NBA')
+    expect(cards(board).map((c) => [c.leagueId, c.season, c.week])).toEqual([['NBA', 2026, 8]])
+    expect(board.leagueBoard).toMatchObject({ season: 2026, week: 8, records: { '1': { wins: 1, losses: 0 } } })
+    expect(board.withoutSchedule).toBe(0)
+  })
+
   it('falls back to imported history per league without letting it move another league slate', async () => {
     mocks.rows.mockResolvedValue(meeting('NFL', 2026, 4))
     mocks.facts.mockResolvedValue([{ leagueId: 'NBA', season: 2030, weekOrPeriod: 8, teamA: '1', teamB: '2', scoreA: 100, scoreB: 90 }])
