@@ -20,6 +20,7 @@ import { LEAGUE_TYPE_DECIDES_GRADES } from '@/lib/league/leagueTypeGrading'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { ageText, leagueConceptText, SURFACE_LABEL_ES } from '@/lib/core-app/shellCopy'
+import { leagueRecommendationText } from '@/lib/core-app/leagueRecommendationText'
 import '@/components/core-app/af-league-tabs.css'
 
 /**
@@ -109,7 +110,7 @@ export function CoreLeagueRecommendation({
   surface: CoreSurfaceKey
   recommendation: CoreLeagueRecommendationValue
 }) {
-  const { es, surfaceLabel } = useBarCopy()
+  const { language, es, surfaceLabel } = useBarCopy()
   const askChimmy = () => {
     window.dispatchEvent(
       new CustomEvent(COMMS_OPEN_EVENT, {
@@ -126,8 +127,9 @@ export function CoreLeagueRecommendation({
   return (
     <div className="af-lctx-action">
       <span className="af-lctx-action-copy">
-        <strong>{recommendation.action}</strong>
-        <span>{recommendation.rationale}</span>
+        {/* The Decision OS writes these in English; translated here, where the language is known. */}
+        <strong>{leagueRecommendationText(recommendation.action, language)}</strong>
+        <span>{leagueRecommendationText(recommendation.rationale, language)}</span>
       </span>
       <button type="button" onClick={askChimmy}>{es ? 'Preguntar a Chimmy' : 'Ask Chimmy'}</button>
     </div>
