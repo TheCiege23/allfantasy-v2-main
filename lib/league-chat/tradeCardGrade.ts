@@ -67,7 +67,9 @@ export async function gradeImportedTradeCard(args: {
       letter: g.letter,
       partnerLetter: g.partnerLetter,
       // No `frozenAt` means the original could not be stored, so the letter is today's and says so.
-      ...(g.frozenAt ? { basis: 'first-graded' as const, frozenAt: g.frozenAt } : { basis: 'today' as const }),
+      ...(g.frozenAt
+        ? { basis: 'first-graded' as const, frozenAt: g.frozenAt, frozenBasis: g.frozenBasis ?? null, pricedAsOf: g.pricedAsOf ?? null, tradeAt: g.tradeAt ?? null }
+        : { basis: 'today' as const }),
       valueGave: g.giveValue,
       valueGot: g.getValue,
     }

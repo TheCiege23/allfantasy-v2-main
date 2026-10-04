@@ -12,8 +12,10 @@ import {
   applyChartTePremium,
   resolveAssets,
   resolveLeagueTradeChart,
+  withDatedMarket,
   type LeagueTradeChart,
 } from '@/lib/trade-value-console/leagueTradePricing'
+import { marketBookFor, type DatedMarket, type MarketBook } from './datedMarket'
 import { snapshotFromLoaded } from '@/lib/trade-value-console/quick-badges'
 import type { TradeAssetInput, TradeConsolePlayerLine } from '@/lib/trade-value-console/types'
 import { gradeTrade, type TradeGradeLine, type TradeGradeMove, type TradeGradeView } from './tradeGrade'
@@ -234,7 +236,23 @@ export type LeagueTradeGrader = {
     /** Price roster fit for this roster (the `give` side's) rather than the grader's user's. */
     needRoster?: { playerData: unknown }
   }): Promise<TradeGradeView>
+  /**
+   * The stored market book this league prices on (`marketContextFor` → dynasty/redraft × SF/1QB).
+   * Absent when the league has no market context or does not price on the NFL market chart (a
+   * college league) — such a grader cannot be priced at the time of a trade.
+   */
+  book?: MarketBook | null
+  /**
+   * The SAME grader on one day's stored market (`withDatedMarket`) — how a completed trade is priced
+   * at the time of the trade. Not a second grader: the same `gradeOnce`, the same pricer and the same
+   * `gradeTrade`, on a chart whose market rows are that day's. Present only with `book`.
+   */
+  atMarket?(market: DatedMarket): LeagueTradeGrader
 }
+
+/** Where "listed on another FantasyCalc chart" evidence is read from — a 7-day window, or one capture day. */
+type FloorWindow = { gte: Date; lt?: Date }
+const recentFloorWindow = (): FloorWindow => ({ gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) })
 
 /**
  * Load a league's chart once and grade deals on it.
@@ -258,6 +276,12 @@ export async function createLeagueTradeGrader(args: {
   /** Supply these when the caller already has them, so the league is not read twice. */
   leagueRow?: LoadedTradeLeague | null
   leagueNormCtx?: NormalizedLeagueContext | null
+  /**
+   * Build the league's chart without today's market (`resolveLeagueTradeChart({ marketless })`): only
+   * `atMarket` grades meaningfully. For a job that prices completed trades at the time of the trade
+   * and must not read today's values or trigger the FantasyCalc fetch behind them.
+   */
+  marketless?: boolean
 }): Promise<LeagueTradeGrader | null> {
   const leagueRow =
     args.leagueRow ??
@@ -274,7 +298,7 @@ export async function createLeagueTradeGrader(args: {
             .then((lc) => (lc.ok ? lc.context : null))
             .catch(() => null)
         : null
-  const chart = await resolveLeagueTradeChart({ leagueRow, leagueSnapshot, leagueNormCtx })
+  const baseChart = await resolveLeagueTradeChart({ leagueRow, leagueSnapshot, leagueNormCtx, marketless: args.marketless })
   const sport = normalizeToSupportedSport(leagueSnapshot.sport)
   /*
    * The league type every grade from this grader is priced under, and how we know it — carried ON
@@ -306,17 +330,21 @@ export async function createLeagueTradeGrader(args: {
   })
 
   // An arrow, not a function declaration: a hoisted declaration loses the `leagueRow` null narrowing.
-  const gradeOnce = async ({
-    give,
-    get,
-    viewerSide,
-    needRoster,
-  }: {
-    give: TradeAssetInput[]
-    get: TradeAssetInput[]
-    viewerSide: boolean
-    needRoster?: { playerData: unknown }
-  }): Promise<TradeGradeView> => {
+  const gradeOnce = async (
+    chart: LeagueTradeChart,
+    floorWindow: () => FloorWindow,
+    {
+      give,
+      get,
+      viewerSide,
+      needRoster,
+    }: {
+      give: TradeAssetInput[]
+      get: TradeAssetInput[]
+      viewerSide: boolean
+      needRoster?: { playerData: unknown }
+    },
+  ): Promise<TradeGradeView> => {
     try {
       const collegeView = college ? await college.grade(give, get) : null
       if (collegeView) return collegeView
@@ -340,7 +368,7 @@ export async function createLeagueTradeGrader(args: {
       // `?? []`: a pricing double (or an older caller's shape) may not carry the floor fields.
       const candidates = [...(g.floorCandidates ?? []), ...(t.floorCandidates ?? [])]
       if (candidates.length > 0) {
-        const onAnotherChart = await loadOnAnotherFantasyCalcChart(candidates)
+        const onAnotherChart = await loadOnAnotherFantasyCalcChart(candidates, floorWindow())
         if (onAnotherChart.size > 0) {
           const floorOpts = { ...opts, onAnotherChart }
           ;[g, t] = await Promise.all([resolveAssets(give, floorOpts), resolveAssets(get, floorOpts)])
@@ -378,15 +406,34 @@ export async function createLeagueTradeGrader(args: {
     }
   }
 
-  return {
+  const pirateLeague = isPirateLeague({ name: leagueRow.name, settings: leagueRow.settings })
+  /*
+   * Only an NFL league with a market context prices on the stored FantasyCalc books. A college league
+   * grades on its own model (`ncaafLeagueGrader`) and has no dated book to be priced on.
+   */
+  const book = baseChart.marketCtx && sport === 'NFL' ? marketBookFor(baseChart) : null
+  const graderOn = (chart: LeagueTradeChart, floorWindow: () => FloorWindow, dated: boolean): LeagueTradeGrader => ({
     leagueId: args.leagueId,
     chart,
     leagueType,
-    pirateLeague: isPirateLeague({ name: leagueRow.name, settings: leagueRow.settings }),
+    pirateLeague,
+    book,
     async grade(deal) {
-      return withType(await gradeOnce(deal))
+      // A dated grade is never priced for roster need: the roster it would read is today's.
+      return withType(await gradeOnce(chart, floorWindow, dated ? { ...deal, viewerSide: false, needRoster: undefined } : deal))
     },
-  }
+    ...(book
+      ? {
+          atMarket(market: DatedMarket) {
+            // "Below this chart" evidence from the SAME capture day, never from the week before today.
+            const day = new Date(`${market.capturedOn}T00:00:00.000Z`)
+            const window = { gte: day, lt: new Date(day.getTime() + 24 * 60 * 60 * 1000) }
+            return graderOn(withDatedMarket(baseChart, market), () => window, true)
+          },
+        }
+      : {}),
+  })
+  return graderOn(baseChart, recentFloorWindow, false)
 }
 
 /**
@@ -395,12 +442,12 @@ export async function createLeagueTradeGrader(args: {
  * at 0. Never throws: an unreadable table means no evidence, and the player stays unpriced (the grade
  * withholds, exactly as before).
  */
-async function loadOnAnotherFantasyCalcChart(sleeperIds: readonly string[]): Promise<Set<string>> {
+async function loadOnAnotherFantasyCalcChart(sleeperIds: readonly string[], window: FloorWindow): Promise<Set<string>> {
   const ids = [...new Set(sleeperIds)].filter(Boolean)
   if (ids.length === 0) return new Set()
   const rows = await prisma.playerValueSnapshot
     .findMany({
-      where: { sleeperId: { in: ids }, source: 'FANTASYCALC', capturedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+      where: { sleeperId: { in: ids }, source: 'FANTASYCALC', capturedAt: { gte: window.gte, ...(window.lt ? { lt: window.lt } : {}) } },
       select: { sleeperId: true },
       distinct: ['sleeperId'],
     })

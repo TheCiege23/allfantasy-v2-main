@@ -85,7 +85,7 @@ const FROZEN_SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string
   { file: 'lib/core-app/sleeperTradeHistory.ts', entry: /oneGradeForCompletedTrade\([^)]*\{\s*frozen/, what: 'the Trade Center / Chimmy completed history' },
   { file: 'lib/core-app/archivedTradeGrade.ts', entry: /original:/, what: 'the /core Trades list and the player card' },
   { file: 'lib/activity/tradeGrades.ts', entry: /original:\s*\{\s*afLeagueId/, what: 'League Buzz' },
-  { file: 'lib/provider-trades/providerCompletedGrades.ts', entry: /withFrozenOriginal\(/, what: 'the Trade Center’s provider-completed rows' },
+  { file: 'lib/provider-trades/providerCompletedGrades.ts', entry: /completedOriginal\(/, what: 'the Trade Center’s provider-completed rows' },
   { file: 'app/api/league/trades-panel/route.ts', entry: /gradeProviderCompletedTrades\(/, what: 'the trades panel wiring for those rows' },
   { file: 'lib/league-chat/tradeCardGrade.ts', entry: /gradeArchivedTrade\([\s\S]*?original:\s*\{\s*afLeagueId/, what: 'league chat trade cards' },
 ]
@@ -93,6 +93,30 @@ const FROZEN_SURFACES: ReadonlyArray<{ file: string; entry: RegExp; what: string
 describe.each(FROZEN_SURFACES)('$what', ({ file, entry }) => {
   it('reaches the frozen-original path', () => {
     expect(entry.test(code(file))).toBe(true)
+  })
+})
+
+/*
+ * 🛑 AND THE FROZEN PATH PRICES THE ORIGINAL AT THE TIME OF THE TRADE (Guap's ruling, 2026-10-03). Every
+ * first freeze — batch (`completedOriginal`) or one at a time (`frozenOriginalFor` with
+ * `priceAtTradeTime`) — asks `gradeAtTradeTime` first; behaviour in `completed-trade-time-pricing.test.ts`.
+ */
+describe('the frozen path prices a new original at the time of the trade', () => {
+  const src = code('lib/decision-os/trade/completedTradeGrade.ts')
+  it('the batch decision asks the trade-date grader before falling back to today’s', () => {
+    expect(src).toMatch(/export async function completedOriginal[\s\S]*?gradeAtTradeTime\(/)
+  })
+  it('both completed entry points reach it, in both their batch and one-at-a-time forms', () => {
+    const one = src.slice(src.indexOf('export async function oneGradeForCompletedTrade'), src.indexOf('function pirateStealView'))
+    const archived = src.slice(src.indexOf('export async function gradeArchivedTradeWithInputs'))
+    for (const body of [one, archived]) {
+      expect(body).toMatch(/completedOriginal\(/)
+      expect(body).toMatch(/priceAtTradeTime: \(\) => gradeAtTradeTime\(/)
+    }
+  })
+  it('the trade-date grade is the league grader on a dated chart — not a second grader', () => {
+    expect(src).toMatch(/gradeDeal\(grader\.atMarket\(market\)/)
+    expect(code('lib/decision-os/trade/leagueTradeGrader.ts')).toMatch(/graderOn\(withDatedMarket\(baseChart, market\)/)
   })
 })
 

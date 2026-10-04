@@ -124,6 +124,17 @@ export type TradeGradeView =
        */
       frozenAt?: string | null
       /**
+       * With `frozenAt`: how the frozen original was priced (`frozenCompletedGrade.ts`, 2026-10-03) —
+       * `trade_date` on the stored market from the trade's own date, `first_graded` on the values of
+       * the day AllFantasy first graded it because no market record covers the trade date. Every
+       * surface says which (`gradeMoment`). Absent on a live grade.
+       */
+      frozenBasis?: 'trade_date' | 'first_graded' | null
+      /** The day the frozen letter's values are from: the capture day (`trade_date`) or first-graded moment. */
+      pricedAsOf?: string | null
+      /** When the trade happened (ISO), when known — so a first-graded label can say how long after. */
+      tradeAt?: string | null
+      /**
        * Today's re-evaluation of the same deal, beside a frozen original — never merged into it. Null
        * when today's grade is the original (just frozen) or could not be taken.
        */

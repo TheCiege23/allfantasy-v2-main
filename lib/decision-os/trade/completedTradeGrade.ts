@@ -13,7 +13,11 @@ import {
   sleeperTradeKey,
   withFrozenOriginal,
   type FrozenCompletedGrade,
+  type TradeDatePrice,
 } from './frozenCompletedGrade'
+import { chooseTradeTimeCapture, tradeTimeOf } from './tradeTimeCapture'
+import { loadCaptureDays, loadDatedMarket, type DatedMarket, type MarketBook } from './datedMarket'
+import type { TradeValueSource } from './valueSource'
 
 /**
  * THE grade for a COMPLETED provider trade — the grade email, the /core history and the dashboard
@@ -28,11 +32,16 @@ import {
  * has happened and both rosters already hold its result, so "does this fill a hole" has no honest
  * answer.
  *
- * 🛑 A USED PICK IS GRADED AS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25). Once its draft
- * is held a pick no longer exists as a pick: pricing it as one priced a 2026 pick off a February
- * board months after the rookies were taken, and an older used pick withheld the letter outright.
- * The pick became a player, and that player's value today is what the pick is worth. Only a pick the
- * draft results cannot resolve, and whose season has passed, still withholds.
+ * 🛑 A USED PICK IS GRADED AS THE PLAYER DRAFTED WITH IT (Guap's ruling, 2026-09-25) — ON TODAY'S
+ * LINE (`current`). Once its draft is held a pick no longer exists as a pick: pricing it as one priced
+ * a 2026 pick off a February board months after the rookies were taken, and an older used pick
+ * withheld the letter outright. The pick became a player, and that player's value today is what the
+ * pick is worth. Only a pick the draft results cannot resolve, and whose season has passed, still
+ * withholds.
+ *
+ * 🛑 THE ORIGINAL IS PRICED AT THE TIME OF THE TRADE (Guap's ruling, 2026-10-03) — see
+ * `gradeAtTradeTime` below. There a pick traded before its draft is priced AS THE PICK it was on the
+ * trade date (Decision 3), from that day's stored pick rows; the drafted player stays on `current`.
  */
 
 /*
@@ -97,6 +106,120 @@ export function completedTradeInputs(trade: GradedTrade, currentSeason: number):
   return { give: side(a.playersOut, a.picksOut, a.faabOut), get: side(a.playersIn, a.picksIn, a.faabIn) }
 }
 
+/**
+ * What side one sent and received AT THE TIME OF THE TRADE: every pick as the pick it was then
+ * (Decision 3, 2026-10-03), never the player later drafted with it — a pick is only ever traded
+ * before its draft. Players and FAAB exactly as `completedTradeInputs` sends them.
+ */
+export function completedTradeInputsAtTradeTime(trade: GradedTrade): { give: GradeInputs; get: GradeInputs } | null {
+  const [a] = trade.sides
+  if (!a) return null
+  const side = (players: Side['playersIn'], picks: Side['picksIn'], faab: number | undefined): GradeInputs => {
+    const out: GradeInputs = { assets: players.map((p) => sleeperPlayerInput(p.name, p.playerId, p.position)), unpriceable: [] }
+    for (const pick of picks) pushPickAtTradeTime(out, pick.season, pick.round, pick.label)
+    if (faab != null && Number.isFinite(faab) && faab > 0) out.assets.push({ kind: 'faab', amount: faab })
+    return out
+  }
+  return { give: side(a.playersOut, a.picksOut, a.faabOut), get: side(a.playersIn, a.picksIn, a.faabIn) }
+}
+
+function pushPickAtTradeTime(out: GradeInputs, season: string | number | null, round: number | null, label: string): void {
+  const year = Number(season)
+  if (Number.isFinite(year) && year > 0 && round != null && round > 0) out.assets.push({ kind: 'pick', year, round })
+  else out.unpriceable.push(label)
+}
+
+/*
+ * The only evidence a trade-date grade may stand on: that day's FantasyCalc rows (players, below-chart
+ * floor at 0, pick rows) and the league's own FAAB formula, which has no date. Anything else on a line
+ * — a defender's league board, a devy option, a sports-db row, the historical file, a curve — is a
+ * second source, and one is enough to send the whole trade back to its first-graded original.
+ */
+const TRADE_DATE_SOURCES: ReadonlySet<TradeValueSource> = new Set(['fantasycalc', 'fantasycalc_pick', 'faab_formula'])
+
+export type TradeTimeDeps = {
+  captureDays?: (book: MarketBook) => Promise<string[]>
+  market?: (book: MarketBook, day: string) => Promise<DatedMarket | null>
+}
+
+/**
+ * THE GRADE OF A COMPLETED TRADE PRICED AT THE TIME OF THE TRADE (Guap's ruling, 2026-10-03), or null
+ * when it cannot be — and then the caller keeps the first-graded original (Decision 1).
+ *
+ * Not a second grader: the league's own grader, on the same pricer and the same `gradeTrade`, with one
+ * day's stored market in place of today's (`LeagueTradeGrader.atMarket` → `withDatedMarket`). The
+ * day is the latest capture taken at or before the trade, at most a day old (`tradeTimeCapture.ts`).
+ *
+ * 🛑 ONE DATE, ONE SCALE, OR NOTHING. A trade is never priced partly on its date and partly on today's
+ * values or the historical file. Null when ANY of these holds — and the whole trade falls back:
+ *   - no grader, no league book (no market context, or a college league), no trade time;
+ *   - no capture within a day before the trade (gaps in the series, anything before 2026-08-16);
+ *   - a player without a Sleeper id (the dated rows are keyed by it; a name join is not a price);
+ *   - an asset the grade withholds on (a defender, kicker or team defense — no dated source; a pick
+ *     before 2026-09-20, or in a redraft book, which stores no picks);
+ *   - any line priced from anything but that day's rows (`TRADE_DATE_SOURCES`).
+ */
+export async function gradeAtTradeTime(
+  grader: LeagueTradeGrader | null,
+  inputs: { give: GradeInputs; get: GradeInputs } | null,
+  tradeAt: Date | null,
+  deps: TradeTimeDeps = {},
+): Promise<TradeDatePrice | null> {
+  try {
+    if (!grader?.atMarket || !grader.book || !inputs || !tradeAt) return null
+    if (inputs.give.unpriceable.length + inputs.get.unpriceable.length > 0) return null
+    const assets = [...inputs.give.assets, ...inputs.get.assets]
+    if (assets.some((a) => a.kind === 'player' && a.providerIdentity?.provider !== 'sleeper')) return null
+    const days = await (deps.captureDays ?? loadCaptureDays)(grader.book)
+    const capture = chooseTradeTimeCapture(days, tradeAt)
+    if (!capture) return null
+    const market = await (deps.market ?? loadDatedMarket)(grader.book, capture.day)
+    if (!market || market.capturedOn !== capture.day) return null
+    const view = await gradeDeal(grader.atMarket(market), { give: inputs.give, get: inputs.get, viewerSide: false })
+    if (!view.graded) return null
+    // Every asset on a line, and every line from that day's rows.
+    if (view.lines.length !== assets.length) return null
+    const asOf = `${capture.day}T00:00:00.000Z`
+    for (const line of view.lines) {
+      if (!line.valueSource || !TRADE_DATE_SOURCES.has(line.valueSource)) return null
+      if (line.valueSource !== 'faab_formula' && line.valueAsOf !== asOf) return null
+    }
+    return { grade: view, pricedAsOf: capture.day }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The original a completed-trade surface shows, and the row to freeze — the one decision every
+ * surface makes the same way. A frozen original wins; otherwise the deal is priced at the time of the
+ * trade when it can be, and on today's values (`current`) when it cannot.
+ */
+export async function completedOriginal(args: {
+  grader: LeagueTradeGrader | null
+  tradeId: string
+  inputs: { give: GradeInputs; get: GradeInputs }
+  /** The same deal at the time of the trade (picks as picks). Null: it cannot be priced on its date. */
+  tradeTimeInputs: { give: GradeInputs; get: GradeInputs } | null
+  tradeAt: Date | null
+  current: TradeGradeView
+  frozen: FrozenCompletedGrade | undefined
+  now: Date
+  deps?: TradeTimeDeps
+}): Promise<{ view: TradeGradeView; toFreeze: FrozenCompletedGrade | null }> {
+  // Pricing on the trade date costs a capture read; a frozen original never needs one.
+  const dated = args.frozen ? null : await gradeAtTradeTime(args.grader, args.tradeTimeInputs, args.tradeAt, args.deps)
+  return withFrozenOriginal({
+    tradeId: args.tradeId,
+    inputs: args.inputs,
+    current: args.current,
+    frozen: args.frozen,
+    now: args.now,
+    dated,
+    tradeAt: args.tradeAt?.toISOString() ?? null,
+  })
+}
+
 // Pure, in its own module so the email renderer reads the same answer. Re-exported for callers here.
 export { giveawayReason } from '@/lib/trade-intel/tradeGiveaway'
 
@@ -116,6 +239,7 @@ export async function oneGradeForCompletedTrade(
     /** With `frozen`: collects the originals to write, so the caller saves them in one insert. */
     onFreeze?: (f: FrozenCompletedGrade) => void
     now?: Date
+    tradeTime?: TradeTimeDeps
   } = {},
 ): Promise<TradeGradeView> {
   if (trade.sides.length !== 2 || trade.multiTeam) {
@@ -133,9 +257,13 @@ export async function oneGradeForCompletedTrade(
   const giveaway = giveawayReason(trade)
   if (giveaway) return { graded: false, reason: giveaway, basis: null }
   const current = await gradeDeal(grader, { ...inputs, viewerSide: false })
+  // The ledger's `createdIso` is Sleeper's `status_updated` — the completion time.
+  const tradeAt = tradeTimeOf({ completedAt: trade.createdIso, tradeId: trade.id })
+  const tradeTimeInputs = completedTradeInputsAtTradeTime(trade)
   if (deps.frozen) {
-    const { view, toFreeze } = withFrozenOriginal({
-      tradeId: trade.id, inputs, current, frozen: deps.frozen.get(sleeperTradeKey(trade.id)), now: deps.now ?? new Date(),
+    const { view, toFreeze } = await completedOriginal({
+      grader, tradeId: trade.id, inputs, tradeTimeInputs, tradeAt, current,
+      frozen: deps.frozen.get(sleeperTradeKey(trade.id)), now: deps.now ?? new Date(), deps: deps.tradeTime,
     })
     if (toFreeze) {
       if (deps.onFreeze) deps.onFreeze(toFreeze)
@@ -143,7 +271,10 @@ export async function oneGradeForCompletedTrade(
     }
     return view
   }
-  return frozenOriginalFor({ afLeagueId: leagueId, tradeId: trade.id, inputs, current, now: deps.now })
+  return frozenOriginalFor({
+    afLeagueId: leagueId, tradeId: trade.id, inputs, current, now: deps.now, tradeAt: tradeAt?.toISOString() ?? null,
+    priceAtTradeTime: () => gradeAtTradeTime(grader, tradeTimeInputs, tradeAt, deps.tradeTime),
+  })
 }
 
 /** The withheld view for a Pirate steal, or null when this is not one. */
@@ -252,6 +383,12 @@ export async function gradeArchivedTrade(
       /** With `frozen`: collects originals to write, so the caller saves them in one insert. */
       onFreeze?: (f: FrozenCompletedGrade) => void
       now?: Date
+      /**
+       * When the trade COMPLETED, when the caller has it. Absent: the Sleeper transaction id's own
+       * timestamp (`tradeTimeCapture.tradeTimeOf`).
+       */
+      tradeAt?: string | Date | null
+      tradeTime?: TradeTimeDeps
     }
   },
 ): Promise<TradeGradeView> {
@@ -286,9 +423,15 @@ export async function gradeArchivedTradeWithInputs(
   const current = await gradeDeal(grader, { give, get, viewerSide: false })
   const o = args.original
   if (!o) return { grade: current, give, get }
+  const tradeAt = tradeTimeOf({ completedAt: o.tradeAt ?? null, tradeId: o.tradeId })
+  const tradeTimeInputs = {
+    give: archivedSideAtTradeTime(args.gave, args.picksOut),
+    get: archivedSideAtTradeTime(args.received, args.picksIn),
+  }
   if (o.frozen) {
-    const { view, toFreeze } = withFrozenOriginal({
-      tradeId: o.tradeId, inputs: { give, get }, current, frozen: o.frozen.get(sleeperTradeKey(o.tradeId)), now: o.now ?? new Date(),
+    const { view, toFreeze } = await completedOriginal({
+      grader, tradeId: o.tradeId, inputs: { give, get }, tradeTimeInputs, tradeAt, current,
+      frozen: o.frozen.get(sleeperTradeKey(o.tradeId)), now: o.now ?? new Date(), deps: o.tradeTime,
     })
     if (toFreeze) {
       if (o.onFreeze) o.onFreeze(toFreeze)
@@ -296,5 +439,19 @@ export async function gradeArchivedTradeWithInputs(
     }
     return { grade: view, give, get }
   }
-  return { grade: await frozenOriginalFor({ afLeagueId: o.afLeagueId, tradeId: o.tradeId, inputs: { give, get }, current, now: o.now }), give, get }
+  return {
+    grade: await frozenOriginalFor({
+      afLeagueId: o.afLeagueId, tradeId: o.tradeId, inputs: { give, get }, current, now: o.now, tradeAt: tradeAt?.toISOString() ?? null,
+      priceAtTradeTime: () => gradeAtTradeTime(grader, tradeTimeInputs, tradeAt, o.tradeTime),
+    }),
+    give,
+    get,
+  }
+}
+
+/** An archived side AT THE TIME OF THE TRADE: every pick as the pick it was (Decision 3). */
+function archivedSideAtTradeTime(players: ReadonlyArray<ArchivedPlayer>, picks: ReadonlyArray<ArchivedPick>): GradeInputs {
+  const out = archivedSide(players, [], 0)
+  for (const p of picks) pushPickAtTradeTime(out, p.season, p.round, p.label)
+  return out
 }
