@@ -1,3 +1,4 @@
+import type { NativeMlbScoringContext } from '@/lib/category-scoring/nativeMlbScoringContext'
 /**
  * Universal League Hub — canonical, provider-agnostic types.
  *
@@ -258,4 +259,5 @@ export interface ActiveLeagueContext {
   syncFreshness: SyncFreshness
   /** Real `League.scoring` string (e.g. "PPR", "Half-PPR") — never invented. */
   scoring: string | null
+  categoryScoring?: NativeMlbScoringContext
 }

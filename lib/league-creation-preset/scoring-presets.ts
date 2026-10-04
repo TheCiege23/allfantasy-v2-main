@@ -251,6 +251,15 @@ const RULES: PresetRule[] = [
       }),
     }),
   ),
+  ...(['mlb_5x5', 'mlb_6x6'] as const).flatMap(preset => (['each', 'most', 'roto'] as const).map(recordMode => ({
+    id: `${preset}_${recordMode}`,
+    label: `${preset === 'mlb_5x5' ? '5×5' : '6×6'} ${recordMode === 'roto' ? 'Rotisserie' : `H2H (${recordMode === 'each' ? 'each category' : 'most categories'})`}`,
+    hint: 'Weekly lineups. AVG uses total hits / at bats; ERA and WHIP use total pitching outs. 6×6 adds total bases and holds.',
+    matches: (ctx: PresetCtx) => ctx.sport === 'MLB' && !ctx.idpSelected && ['redraft', 'dynasty', 'keeper'].includes(ctx.leagueType),
+    build: () => ({ scoring: 'default', isSuperflex: false, scoringSettings: {
+      preset, source: 'af', scoringMode: recordMode === 'roto' ? 'roto' : 'h2h_category', categoryPresetId: preset, categoryRecordMode: recordMode,
+    } }),
+  }))),
   // NBA H2H-category presets. Matchups are resolved per category (PTS, REB,
   // AST, STL, BLK, TO, FG%, FT%, optional 3PM) instead of by summed points.
   // Standings track category wins/losses. Category-mode leagues still share

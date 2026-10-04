@@ -18,7 +18,7 @@ import type {
   TeamStatTotals,
 } from './types'
 
-function computeCategoryValue(totals: TeamStatTotals, category: CategoryDefinition): number {
+export function computeCategoryValue(totals: TeamStatTotals, category: CategoryDefinition): number | null {
   const comp = category.computation
   if (comp.kind === 'sum') {
     const v = totals[comp.statKey]
@@ -29,16 +29,19 @@ function computeCategoryValue(totals: TeamStatTotals, category: CategoryDefiniti
   const den = totals[comp.denominatorStatKey]
   const n = typeof num === 'number' && Number.isFinite(num) ? num : 0
   const d = typeof den === 'number' && Number.isFinite(den) ? den : 0
-  if (d === 0) return 0
-  return n / d
+  if (d <= 0) return comp.unqualifiedWhenZero ? null : 0
+  const extra = (comp.additionalNumeratorStatKeys ?? []).reduce((s, k) => s + (Number.isFinite(totals[k]) ? totals[k] : 0), 0)
+  return (n + extra) * (comp.multiplier ?? 1) / d
 }
 
 function compareValues(
-  aValue: number,
-  bValue: number,
+  aValue: number | null,
+  bValue: number | null,
   direction: CategoryDefinition['direction'],
 ): 'a' | 'b' | 'tie' {
   if (aValue === bValue) return 'tie'
+  if (aValue === null) return 'b'
+  if (bValue === null) return 'a'
   if (direction === 'higher') return aValue > bValue ? 'a' : 'b'
   return aValue < bValue ? 'a' : 'b'
 }

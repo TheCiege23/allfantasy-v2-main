@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  let body: { seasonId?: string }
+  let body: { seasonId?: string; tiebreakerRosterId?: string }
   try {
     body = (await req.json()) as typeof body
   } catch {
@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
       seasonId,
       leagueId: season.leagueId,
       actorUserId: userId,
+      tiebreakerRosterId: typeof body.tiebreakerRosterId === 'string' ? body.tiebreakerRosterId.trim() : undefined,
     })
 
     if (!outcome.ok) {
@@ -85,9 +86,13 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const champion = outcome.result.ok
-      ? outcome.result.state.teams.find((team) => team.rosterId === outcome.championRosterId)
-      : undefined
+    const runtimeResult = outcome.result
+    if(runtimeResult.ok && 'format' in runtimeResult) {
+      const champion=runtimeResult.finalStandings.find(r=>r.champion)
+      return NextResponse.json({seasonId,status:'complete',scoringMode:'roto',championRosterId:outcome.championRosterId,runnerUpRosterId:outcome.runnerUpRosterId,championTeamName:champion?.teamName??null,finalStandings:runtimeResult.finalStandings,playoffs:null,events:[],alreadyFinalized:outcome.alreadyFinalized,offseasonEntered:outcome.offseasonEntered,offseasonSnapshotId:outcome.offseasonSnapshotId,keeperOffseasonTriggered:outcome.keeperOffseasonTriggered})
+    }
+    if(!runtimeResult.ok) throw new Error('Season finalization did not return a completed result.')
+    const champion = runtimeResult.state.teams.find((team) => team.rosterId === outcome.championRosterId)
 
     return NextResponse.json({
       status: outcome.alreadyFinalized ? 'already_finalized' : 'ok',
@@ -98,9 +103,9 @@ export async function POST(req: NextRequest) {
       championUserId: champion?.ownerId ?? null,
       championTeamName: champion?.displayName ?? null,
       runnerUpRosterId: outcome.runnerUpRosterId,
-      finalStandings: outcome.result.ok ? outcome.result.finalStandings : [],
-      playoffs: outcome.result.ok ? outcome.result.state : null,
-      events: outcome.result.ok ? outcome.result.events : [],
+      finalStandings: runtimeResult.finalStandings,
+      playoffs: runtimeResult.state,
+      events: runtimeResult.events,
     })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to finalize redraft season'

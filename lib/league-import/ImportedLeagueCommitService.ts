@@ -931,6 +931,13 @@ export async function persistImportedLeagueFromNormalization(
 
   /* Collected across every post-create step and returned; see `runBootstrapStep`. */
   const incompleteSteps: ImportWarningRecord[] = []
+  if (provider === 'espn' && normalized.league.sport === 'MLB') {
+    await runBootstrapStep('BOOTSTRAP_PLAYER_IDENTITIES_FAILED', 'Baseball player identities need review before native conversion', 'error', incompleteSteps, async () => {
+      const { ingestMlbEspnImportIdentities } = await import('@/lib/player-identity/ingestMlbEspnImportIdentities')
+      await ingestMlbEspnImportIdentities(normalized.player_map ?? {})
+    })
+  }
+
 
   /*
    * ⚠ THE ONE THAT MATTERS MOST. This writes every LeagueTeam and Roster row. When it threw,

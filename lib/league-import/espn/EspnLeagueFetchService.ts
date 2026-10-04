@@ -1,3 +1,4 @@
+import { isEspnMlbSource } from './EspnMlbSource'
 import { getDecryptedAuth } from '@/lib/league-sync-core'
 import type {
   EspnImportDraftPick,
@@ -1323,6 +1324,10 @@ export async function fetchEspnLeagueForImport(
   sourceInput: string,
   options: EspnFetchOptions = {}
 ): Promise<EspnImportPayload> {
+  if (isEspnMlbSource(sourceInput)) {
+    const { fetchEspnMlbLeagueForImport } = await import('./EspnMlbLeagueFetchService')
+    return fetchEspnMlbLeagueForImport(userId, sourceInput, options)
+  }
   const opts = { ...DEFAULT_FETCH_OPTIONS, ...options }
   const { leagueId, season } = parseEspnSourceInput(sourceInput)
   const auth = await getEspnAuthForUser(userId)
@@ -1420,6 +1425,10 @@ export async function fetchEspnScheduleForSync(
   leagueId: string,
   season: number
 ): Promise<EspnImportScheduleWeek[]> {
+  if (isEspnMlbSource(leagueId)) {
+    const { fetchEspnMlbLeagueForImport } = await import('./EspnMlbLeagueFetchService')
+    return (await fetchEspnMlbLeagueForImport(userId, `${season}:${leagueId}`, { includePreviousSeasons: false })).schedule
+  }
   const auth = await getEspnAuthForUser(userId)
   const raw = await loadEspnLeagueRaw({
     leagueId,
@@ -1469,6 +1478,10 @@ export async function fetchEspnActivityForSync(
   transactions: EspnImportTransaction[]
   transactionsFetched: boolean
 }> {
+  if (isEspnMlbSource(leagueId)) {
+    // MLB communication is not covered by the captured contract. Never poll NFL for this id.
+    return { teams: [], transactions: [], transactionsFetched: false }
+  }
   const auth = await getEspnAuthForUser(userId)
   const raw = await loadEspnLeagueRaw({ leagueId, season, auth, views: ['mTeam'] })
   const teams = parseEspnTeams(raw, null)
@@ -1480,3 +1493,5 @@ export async function fetchEspnActivityForSync(
     transactionsFetched: transactionsRaw != null,
   }
 }
+
+export { buildEspnMemberDirectory, resolveEspnOwners, resolveEspnCommissionerTeamIds, parseEspnSettings }

@@ -114,6 +114,17 @@ export async function processLeagueWeek(params: {
     ? buildRoundRobinPairsForWeek(rosterIds, week)
     : new Map<string, string | null>()
 
+  if (writesMatchups && isCategoryMode) {
+    const nativeRosters = await prisma.roster.findMany({where:{leagueId},select:{id:true,redraftRosterId:true}})
+    const nativeToGeneric = new Map(nativeRosters.filter(r=>r.redraftRosterId).map(r=>[r.redraftRosterId!,r.id]))
+    const schedule = await prisma.redraftMatchup.findMany({where:{leagueId,week,season:{season}},select:{homeRosterId:true,awayRosterId:true}})
+    pairMap.clear()
+    for(const m of schedule) {
+      const a=nativeToGeneric.get(m.homeRosterId), b=m.awayRosterId ? nativeToGeneric.get(m.awayRosterId) : null
+      if(a) pairMap.set(a,b??null)
+      if(a && b) pairMap.set(b,a)
+    }
+  }
   await prisma.$transaction(async (tx) => {
     await tx.weeklyScore.deleteMany({ where: { leagueId, season, week } })
     // Runs for BOTH kinds, and means two different things. Native: the usual
@@ -330,7 +341,7 @@ export async function processLeagueWeek(params: {
 
     for (const roster of league.rosters) {
       const total = teamTotals.get(roster.id) ?? 0
-      const opp = isBestBallCumulative ? null : (pairMap.get(roster.id) ?? null)
+      const opp = isBestBallCumulative || scoringMode === 'roto' ? null : (pairMap.get(roster.id) ?? null)
       // Category mode: seed the categoryBreakdown column with this team's raw
       // stat totals. matchupEngine.resolveMatchupOutcomesForWeek reads this
       // column from both sides, resolves per-category winners, and rewrites

@@ -66,11 +66,7 @@ async function resolveCategoryOutcomesForWeek(
 ): Promise<void> {
   const categories = getCategoryPresetDefinitions(categoryPresetId)
   if (!categories) {
-    console.warn(
-      '[matchupEngine] category preset not found, falling back to no-op',
-      { leagueId, categoryPresetId },
-    )
-    return
+    throw new Error(`Unsupported category scoring preset: ${categoryPresetId}`)
   }
 
   const rows = await prisma.teamWeekResult.findMany({
@@ -79,7 +75,7 @@ async function resolveCategoryOutcomesForWeek(
   const byId = new Map(rows.map((r) => [r.rosterId, r]))
 
   // Cache resolved matchups by unordered pair so we don't recompute on each side.
-  const resolved = new Map<string, { forA: CategoryMatchupResult; forB: CategoryMatchupResult }>()
+  const resolved = new Map<string, { aId: string; forA: CategoryMatchupResult; forB: CategoryMatchupResult }>()
   const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`)
 
   for (const r of rows) {
@@ -112,15 +108,16 @@ async function resolveCategoryOutcomesForWeek(
         bWins: forA.aWins,
         ties: forA.ties,
       }
-      pairResult = { forA, forB }
+      pairResult = { aId: r.rosterId, forA, forB }
       resolved.set(key, pairResult)
     }
 
     // Row `r` may be either side of the pair depending on hash order.
-    const mine = r.rosterId < oppId ? pairResult.forA : pairResult.forB
+    const mine = r.rosterId === pairResult.aId ? pairResult.forA : pairResult.forB
     let wl: string
     if (mine.aWins > mine.bWins) wl = 'W'
     else if (mine.aWins < mine.bWins) wl = 'L'
+    else if (categoryPresetId.startsWith('mlb_')) wl = 'T'
     else {
       // Equal category wins — fall back to fantasy points (preserved on
       // TeamWeekResult.totalPoints alongside category stats).
@@ -159,16 +156,14 @@ export async function resolveMatchupOutcomesForWeek(
     select: { settings: true },
   })
   const scoringMode = resolveScoringMode(league?.settings ?? null)
-  if (scoringMode === 'h2h_category' || scoringMode === 'roto') {
+  if (scoringMode === 'roto') return // Cumulative category ranks are computed by standingsEngine.
+  if (scoringMode === 'h2h_category') {
     const presetId = resolveCategoryPresetId(league?.settings ?? null)
     if (presetId) {
       await resolveCategoryOutcomesForWeek(leagueId, season, week, presetId)
       return
     }
-    console.warn(
-      '[matchupEngine] category scoring mode without category_preset_id; falling back to points',
-      { leagueId, scoringMode },
-    )
+    throw new Error('Category scoring requires a category preset; points cannot replace it.')
   }
 
   const snap = parseSettingsSnapshot(league?.settings ?? null)

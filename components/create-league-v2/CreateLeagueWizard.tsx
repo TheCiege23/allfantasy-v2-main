@@ -50,6 +50,8 @@ type WizardProps = {
   submitting: boolean
   importSourceName?: string
   importCarryover?: boolean
+  acceptWeeklyLineups?: boolean
+  onAcceptWeeklyLineups?: (accepted: boolean) => void
   createdLeagueHref?: string | null
   creationWarning?: string | null
   retryingFinalization?: boolean
@@ -202,8 +204,14 @@ export function CreateLeagueWizard(props: WizardProps) {
             <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} priority className="h-auto w-44 max-w-full sm:w-52" />
             {props.importSourceName ? (
               <p className="rounded-xl border border-violet-500/35 bg-violet-600/10 p-3 text-sm leading-6" data-testid="standalone-import-template-notice">
-                Creating a native AllFantasy league from {props.importSourceName}. Teams, current player rosters, and available season history carry over. Claimed managers keep their seats; other managers must claim theirs. Baseball points rules are preserved exactly or creation stops for review. The imported roster snapshot is recorded separately from historical drafts. Baseball imports after the regular season prepare for next season; past results remain archived. Chat stays in the original import. Keep the sport and team count the same to preserve every roster.
+                Creating a native AllFantasy league from {props.importSourceName}. Teams, current player rosters, and available season history carry over. Claimed managers keep their seats; other managers must claim theirs. Supported baseball points rules or standard category rules are preserved; unsupported rules stop creation for review. The imported roster snapshot is recorded separately from historical drafts. Baseball imports after the regular season prepare for next season; past results remain archived. Chat stays in the original import. Keep the sport and team count the same to preserve every roster.
               </p>
+            ) : null}
+            {props.importCarryover && props.state.sport === 'MLB' ? (
+              <label className="flex items-start gap-3 rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm leading-6">
+                <input type="checkbox" className="mt-1" checked={props.acceptWeeklyLineups ?? false} onChange={(event) => props.onAcceptWeeklyLineups?.(event.target.checked)} />
+                <span>Use weekly lineups in this native baseball league. One lineup locks at the first game of each week and scores the entire week. Daily lineup changes from the source platform remain in the archive.</span>
+              </label>
             ) : null}
             {props.creationWarning && props.createdLeagueHref ? (
               <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-sm leading-6" role="status">

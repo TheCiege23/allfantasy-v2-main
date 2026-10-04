@@ -343,7 +343,7 @@ function summarizeSubmittedPayload(payload: unknown): Record<string, unknown> {
 
 // ── Main submit ─────────────────────────────────────────────────────
 
-export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLeagueId?: string): Promise<CreateLeagueV2Result> {
+export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLeagueId?: string, acceptWeeklyLineups = false): Promise<CreateLeagueV2Result> {
   if (!getEffectiveLeagueType(state)) {
     return { ok: false, error: 'Choose a league concept to continue.' }
   }
@@ -360,7 +360,8 @@ export async function submitCreateLeagueV2(state: CreateLeagueV2State, sourceLea
   if (endpoint === '/api/tournament/create') {
     payload = buildTournamentPayload(state)
   } else {
-    payload = { ...buildCanonicalPayload(state), ...(sourceLeagueId ? { sourceLeagueId } : {}) }
+    const canonical = buildCanonicalPayload(state)
+    payload = { ...canonical, ...(sourceLeagueId ? { sourceLeagueId, conceptSetup: { ...(canonical.conceptSetup as Record<string, unknown>), acceptWeeklyLineups } } : {}) }
   }
 
   if (process.env.NODE_ENV === 'development') {

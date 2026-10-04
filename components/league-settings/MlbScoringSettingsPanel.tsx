@@ -22,6 +22,7 @@ import {
   type MlbScoringCategory,
   type MlbScoringRow,
 } from '@/lib/mlb-scoring/MlbScoringCategories'
+import { getCategoryPresetDefinitions } from '@/lib/category-scoring'
 import type { MlbScoringPresetKey } from '@/lib/mlb-scoring/MlbScoringPresets'
 
 // ---------------------------------------------------------------------------
@@ -98,6 +99,8 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   const [config, setConfig] = useState<MlbScoringConfig | null>(null)
   const [isPremium, setIsPremium] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [scoringMode,setScoringMode]=useState('points')
+  const [categoryPresetId,setCategoryPresetId]=useState<string|null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -120,6 +123,8 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       .then((r) => r.json())
       .then((data) => {
         if (!active) return
+        setScoringMode(data.scoringMode ?? 'points')
+        setCategoryPresetId(data.categoryPresetId ?? null)
         setPresets(data.presets ?? [])
         setConfig(data.config ?? null)
         setIsPremium(data.isPremium ?? false)
@@ -230,6 +235,12 @@ export function MlbScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   }
 
   // ----- render -----
+  if(scoringMode !== 'points') return <section className="rounded-xl border border-white/10 p-5">
+    <h3 className="font-semibold">{scoringMode === 'roto' ? 'Rotisserie' : 'Head-to-head categories'}</h3>
+    <p className="mt-2 text-sm text-white/70">Categories: {(getCategoryPresetDefinitions(categoryPresetId) ?? []).map(c=>c.label).join(', ')}.</p>
+    <p className="mt-2 text-sm text-white/70">Rate categories use combined stat totals. Teams with no at bats or pitching outs do not win those rate categories. The league keeps its selected scoring format.</p>
+  </section>
+
   return (
     <div className="space-y-5">
       {/* Header */}

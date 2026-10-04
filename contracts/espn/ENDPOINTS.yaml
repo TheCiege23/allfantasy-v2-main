@@ -116,3 +116,28 @@ headshot_cdn:
     exactly as lib/devy/devyHeadshotRefresh.ts already does for the college
     football path. The CDN host is NOT monitored by the DB-first guard
     (images, not data) — same reasoning as media.api-sports.io.
+
+# Public fantasy baseball contract captured 2026-10-03, distinct from site API above.
+fantasy_mlb:
+  base_url: https://lm-api-reads.fantasy.espn.com/apis/v3/games/flb
+  path: /seasons/{season}/segments/0/leagues/{league_id}
+  query: view=mTeam&view=mRoster&view=mSettings&view=mMatchup&view=mDraftDetail
+  captured_season: 2026
+  captured_league: 13262
+  http_status: 200
+  full_body_bytes: 8967208
+  full_counts: {members: 12, teams: 12, roster_entries: 395, draft_picks: 360, schedule_entries: 151}
+  fixture: fixtures/fantasy-league.MLB.2026.json
+  sanitization: Synthetic manager ids/names, team names and logos; owner references recursively remapped.
+  trim: Key-union-preserving trimmer; teams/entries/scoringItems/members/eligibleSlots/picks/schedule kept in full. JSON compacted afterwards.
+  scoring_type: H2H_MOST_CATEGORIES
+  evidence:
+    mapping_implementation: https://raw.githubusercontent.com/cwendt94/espn-api/master/espn_api/baseball/constant.py
+    formats: https://support.espn.com/hc/en-us/articles/360003946651-Scoring-Formats
+  notes:
+    - MLB ids differ from NFL. Slot 0 is C, bench 16, injured list 17.
+    - Stat 53 is pitcher wins, not NFL receptions. Stat 34 counts outs, not decimal innings.
+    - matchupPeriodId is the fantasy week; scoringPeriodId is a daily period.
+    - Scoring items include reverse flags; raw settings must be preserved.
+    - This custom 20-category league includes pitching qualifications and slot stat limits; do not silently convert it to native points.
+    - Current-season only. Private cookie access, activity communication and prior seasons have not been live-verified.

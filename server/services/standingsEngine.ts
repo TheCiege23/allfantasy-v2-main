@@ -1,3 +1,4 @@
+import { accumulateTeamTotals, getCategoryPresetDefinitions, rankRotisserieTeams, type TeamStatTotals } from '@/lib/category-scoring'
 /**
  * Aggregate season standings from `team_week_results` (deterministic).
  * Tie order from `scoringSettings.rules.standingsTiebreakerOrder` when present.
@@ -143,9 +144,22 @@ export async function recomputeStandingsForSeason(leagueId: string, season: numb
     }
   }
 
+  if (scoringMode === 'roto') {
+    const settings=league?.settings as Record<string,any> | null
+    const categories=getCategoryPresetDefinitions(settings?.category_preset_id)
+    if(!categories) throw new Error('Rotisserie category preset is missing.')
+    const stats=new Map<string,TeamStatTotals[]>()
+    for(const r of results) {
+      const raw=(r.categoryBreakdown as Record<string,any> | null)?.teamStats
+      if(raw) stats.set(r.rosterId,[...(stats.get(r.rosterId)??[]),raw])
+    }
+    const ranked=rankRotisserieTeams([...rosterIds].map(id=>({id,stats:accumulateTeamTotals(stats.get(id)??[])})),categories)
+    for(const [id,r] of ranked) {const row=aggMap.get(id)!;row.pf=r.total;row.w=0;row.l=0;row.t=0;row.pa=0}
+  }
+  const eachCategory = (league?.settings as Record<string,unknown> | null)?.category_record_mode !== 'most'
   const sorted = [...aggMap.values()].sort((x, y) =>
-    isCategoryMode
-      ? compareAggCategory(x, y)
+    scoringMode === 'roto' ? y.pf-x.pf || x.rosterId.localeCompare(y.rosterId) : isCategoryMode
+      ? eachCategory ? ((y.cw + .5*y.ct)/Math.max(1,y.cw+y.cl+y.ct) - (x.cw + .5*x.ct)/Math.max(1,x.cw+x.cl+x.ct) || compareAggCategory(x,y)) : compareAgg(x,y,tieOrder)
       : isBestBallCumulative
         ? compareAggBestBallCumulative(x, y)
         : compareAgg(x, y, tieOrder),

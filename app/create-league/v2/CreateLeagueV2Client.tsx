@@ -58,6 +58,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
   const { t } = useLanguage()
   const router = useRouter()
   const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(importTemplate ?? DEFAULT_V2_STATE))
+  const [acceptWeeklyLineups, setAcceptWeeklyLineups] = useState(false)
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -143,11 +144,15 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
   }, [router])
 
   const handleSubmit = useCallback(async () => {
+    if (importSourceLeagueId && state.sport === 'MLB' && !acceptWeeklyLineups) {
+      setSubmitError('Confirm weekly lineups for your native baseball league before creating it.')
+      return
+    }
     setSubmitting(true)
     setSubmitError(null)
     setFieldErrors(null)
     try {
-      const result = await submitCreateLeagueV2(state, importSourceLeagueId)
+      const result = await submitCreateLeagueV2(state, importSourceLeagueId, acceptWeeklyLineups)
       if (!result.ok) {
         setSubmitError(result.error ?? t('createLeague.v2.submitError'))
         if (result.fieldErrors && Object.keys(result.fieldErrors).length > 0) {
@@ -170,7 +175,7 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
     } finally {
       setSubmitting(false)
     }
-  }, [router, state, t, importSourceLeagueId, finishImportedLeague])
+  }, [router, state, t, importSourceLeagueId, finishImportedLeague, acceptWeeklyLineups])
 
   const retryFinalization = useCallback(async () => {
     if (!createdLeagueId || retryingFinalization) return
@@ -187,6 +192,8 @@ export function CreateLeagueV2Client({ userId: _userId, importTemplate, importSo
       submitting={submitting}
       importSourceName={importSourceName}
       importCarryover={Boolean(importSourceLeagueId)}
+      acceptWeeklyLineups={acceptWeeklyLineups}
+      onAcceptWeeklyLineups={setAcceptWeeklyLineups}
       createdLeagueHref={createdLeagueHref}
       creationWarning={creationWarning}
       retryingFinalization={retryingFinalization}

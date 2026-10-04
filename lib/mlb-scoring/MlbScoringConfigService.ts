@@ -57,6 +57,7 @@ export async function getLeagueMlbScoringConfig(leagueId: string): Promise<Leagu
 export async function saveLeagueMlbScoringConfig(leagueId: string, config: { presetKey: MlbScoringPresetKey; rules: Record<string, number>; source?: MlbScoringSource; userId?: string; premiumFeaturesUsed?: boolean }): Promise<void> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   const currentSettings = (league?.settings as Record<string, unknown>) ?? {}
+  if (currentSettings.scoring_mode === 'h2h_category' || currentSettings.scoring_mode === 'roto') throw new Error('This league uses categories. Points presets cannot change its scoring format.')
   const preset = getMlbScoringPreset(config.presetKey)
   const warningFlags: string[] = []
   if (preset.warning) warningFlags.push('external_preset')
@@ -76,5 +77,7 @@ export async function saveLeagueMlbScoringConfig(leagueId: string, config: { pre
 }
 
 export async function applyDefaultMlbScoringOnCreate(leagueId: string): Promise<void> {
+  const league = await prisma.league.findUnique({where:{id:leagueId},select:{settings:true}})
+  if ((league?.settings as Record<string,unknown>)?.scoring_mode !== undefined && (league?.settings as Record<string,unknown>).scoring_mode !== 'points') return
   await saveLeagueMlbScoringConfig(leagueId, { presetKey: 'af_default', rules: buildFullMlbScoringConfig('af_default'), source: 'AF_DEFAULT' })
 }

@@ -1,3 +1,4 @@
+import type { NativeMlbScoringContext } from '@/lib/category-scoring/nativeMlbScoringContext'
 /**
  * User OS League-Specific Intelligence Wiring phase — Part 4.
  *
@@ -58,6 +59,7 @@ export interface UserOsContext {
   season: number | string | null
   isDynasty: boolean
   scoring: string | null
+  categoryScoring?: NativeMlbScoringContext
   currentWeek: number
   /** Real `League.playoffTeams`/`playoffStartWeek` — never assumed as 6-team/week-14 defaults by a consumer. */
   playoffTeams: number | null
@@ -243,6 +245,7 @@ export async function assembleUserOsContext(args: {
     season: active.season,
     isDynasty: league?.isDynasty ?? false,
     scoring: active.scoring,
+    categoryScoring: active.categoryScoring ?? null,
     currentWeek: resolveRedraftCurrentWeek({ redraftSeasonCurrentWeek: null, legacySettingsWeek: null }),
     playoffTeams: league?.playoffTeams ?? null,
     playoffStartWeek: league?.playoffStartWeek ?? null,
