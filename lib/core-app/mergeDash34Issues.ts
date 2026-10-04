@@ -111,6 +111,13 @@ export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | nul
             href: `/core/my-team?league=${encodeURIComponent(l.id)}`,
             external: false,
           },
+          parts: {
+            kind: 'empty-slot',
+            count: n,
+            leagueName: l.name,
+            platform: titleCasePlatform(l.platform),
+            checkedAt: l.lineupVerification?.checkedAt ?? null,
+          },
         })
       }
     }
@@ -120,7 +127,8 @@ export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | nul
         title: `Best Ball roster coverage — ${l.name}`,
         meta: `Eligible roster cannot cover ${l.bestBallMissing.join(', ')}. Review waiver replacements; your lineup is selected automatically.`,
         leagueId: l.id, leagueName: l.name, platform: l.platform, deadline: null,
-        action: { label: 'Review waivers', href: `/core/waivers?league=${encodeURIComponent(l.id)}`, external: false } })
+        action: { label: 'Review waivers', href: `/core/waivers?league=${encodeURIComponent(l.id)}`, external: false },
+        parts: { kind: 'best-ball', leagueName: l.name, missing: [...l.bestBallMissing] } })
     }
     if (l.priority === 'urgent') {
       const id = `${l.id}:starter-out`
@@ -158,6 +166,17 @@ export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | nul
           href: `/core/my-team?league=${encodeURIComponent(l.id)}${flagged && !multiple ? `#lineup-player-${encodeURIComponent(flagged.playerId)}` : ''}`,
           external: false,
         },
+        /* The kickoff travels as the INSTANT; the reader's clock is built at render (decisionQueueCopy.ts). */
+        parts: {
+          kind: 'starter-out',
+          leagueName: l.name,
+          platform: titleCasePlatform(l.platform),
+          flaggedCount,
+          flagged: flagged ? { name: flagged.name, slot: flagged.slot, status: flagged.status } : null,
+          week: checked?.week ?? null,
+          kickoffAt: kickoff ? kickoff.toISOString() : null,
+          checkedAt: checked?.checkedAt ?? null,
+        },
       })
     } else if (l.priority === 'draft') {
       const id = `${l.id}:drafting`
@@ -177,6 +196,7 @@ export function mergeDash34Issues(derived: CoreIssue[], dash34: Dash34Data | nul
           href: `/core/draft-hq?league=${encodeURIComponent(l.id)}`,
           external: false,
         },
+        parts: { kind: 'drafting', leagueName: l.name, platform: titleCasePlatform(l.platform) },
       })
     }
   }

@@ -1,10 +1,8 @@
-import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-schedule.css'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import type { WeekBoard, WeekMatchup } from '@/lib/core-app/weekBoard'
-import { rosterLabel } from '@/lib/core-app/managerName'
-import { TopicTip } from '@/components/core-app/TopicTip'
+import { DashScheduleBandView } from '@/components/core-app/screens/DashScheduleBandView'
 
 /**
  * Who you play this week — the schedule half of the matchup question.
@@ -47,11 +45,6 @@ import { TopicTip } from '@/components/core-app/TopicTip'
  */
 
 const VISIBLE_CAP = 6
-
-function OpponentLabel({ matchup }: { matchup: WeekMatchup }) {
-  /* Never invent a manager. An unnamed roster says which roster it is. */
-  return <>{rosterLabel([matchup.opponent.name], matchup.opponent.rosterId)}</>
-}
 
 export function DashScheduleBand({
   board,
@@ -99,77 +92,29 @@ export function DashScheduleBand({
    * past. "This week · who you play" is true whatever the ingestion is doing;
    * "Week 1" in December is not.
    */
-  const weekLabel =
-    board.week != null && kickoff != null ? `Week ${board.week}` : 'This week'
+  const week = board.week != null && kickoff != null ? board.week : null
 
+  /*
+   * ⚠ THE WORDS ARE SAID IN THE CLIENT (2026-10-04). This band decides what to say — and `Date.now()`
+   * stays HERE, on the server, so the "kickoff still ahead" call is made once and both sides of
+   * hydration agree on it. DashScheduleBandView says it in the reader's language.
+   */
   return (
-    <section className="af-core af-sched" aria-label="Who you play this week">
-      <div className="af-sched-head">
-        <span className="af-label af-sched-kicker">{weekLabel} · who you play</span>
-        {/* One "?" for the ELIM chip, at the heading — the cards are links, and a tip may not sit in one. */}
-        {visible.some((m) => m.elimination) ? <TopicTip topic="eliminationFormat" /> : null}
-        <span className="af-sched-when af-num">
-          {[
-            matchups.length === 1 ? '1 matchup' : `${matchups.length} matchups`,
-            /* "next", not "first": only a FUTURE kickoff is shown, and on a Monday that is the
-               Monday-night game, not the week's first (it read "first kickoff Sep 28" for week 3). */
-            kickoff ? `next kickoff ${kickoff}` : null,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-        </span>
-      </div>
-
-      <div className="af-sched-grid">
-        {visible.map((m) => (
-          <Link key={`${m.leagueId}:${m.week}`} className="af-sched-card" href={m.href}>
-            <span className="af-sched-league">{m.leagueName}</span>
-            <span className="af-sched-vs">
-              vs <b><OpponentLabel matchup={m} /></b>
-            </span>
-            <span className="af-sched-plat af-num">
-              {/*
-                Guillotine and survivor leagues eliminate the lowest score each
-                week — an existential stake a head-to-head card does not carry,
-                and the one thing about this matchup that changes how you play
-                it. The chip states the format; the chop-line distance needs
-                scoring that does not exist yet, so it is not implied here.
-              */}
-              {m.elimination ? (
-                <span className="af-sched-elim">ELIM</span>
-              ) : null}
-              {m.platform.toUpperCase()}
-            </span>
-          </Link>
-        ))}
-      </div>
-
-      <p className="af-sched-foot af-num">
-        {[
-          overflow > 0 ? `+${overflow} more` : null,
-          /*
-           * Leagues whose schedule we hold nothing for — stated, not hidden,
-           * so "6 matchups" on a 61-league account reads as coverage rather
-           * than as a claim that the other 55 have no games.
-           */
-          board.withoutSchedule > 0
-            ? `no schedule yet for your other ${board.withoutSchedule} ${
-                board.withoutSchedule === 1 ? 'league' : 'leagues'
-              }`
-            : null,
-          syncLabel,
-        ]
-          .filter(Boolean)
-          .join(' · ')}
-        {overflow > 0 || board.withoutSchedule > 0 ? (
-          <>
-            {' '}
-            <Link className="af-sched-all" href="/core/week">
-              Open your week
-            </Link>
-          </>
-        ) : null}
-      </p>
-    </section>
+    <DashScheduleBandView
+      week={week}
+      kickoff={kickoff}
+      total={matchups.length}
+      visible={visible.map((m: WeekMatchup) => ({
+        key: `${m.leagueId}:${m.week}`,
+        href: m.href,
+        leagueName: m.leagueName,
+        opponent: { name: m.opponent.name ?? null, rosterId: m.opponent.rosterId ?? null },
+        elimination: Boolean(m.elimination),
+        platform: m.platform,
+      }))}
+      overflow={overflow}
+      withoutSchedule={board.withoutSchedule}
+      syncLabel={syncLabel}
+    />
   )
 }
