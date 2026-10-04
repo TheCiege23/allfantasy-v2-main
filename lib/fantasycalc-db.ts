@@ -8,6 +8,7 @@ import {
   profileCaptureDay,
   profileCaptureKey,
   PROFILE_CAPTURE_EXPIRES_AT,
+  PROFILE_CAPTURE_PREFIX,
 } from '@/lib/fantasycalc-profile-capture'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 
@@ -240,6 +241,124 @@ export async function warmFantasyCalcCache(options?: {
     }
   }
 
+  return result
+}
+
+export type FantasyCalcCaptureCatchUpResult = {
+  /** The UTC day caught up. */
+  day: string
+  /** Live profiles in the table (every one, no warm limit). */
+  profiles: number
+  /** Already had today's capture — untouched. */
+  alreadyCaptured: number
+  /** Captured from the cached row, synced today — no vendor call. */
+  capturedFromCache: number
+  /** Fetched (cached row older than today, or empty), then captured. */
+  fetched: number
+  /** Still uncaptured because the per-run fetch cap or the deadline was reached; the next run continues. */
+  deferred: number
+  /** A row whose payload will not parse, or whose settings do not build its own key — never guessed at. */
+  skippedUnreadable: number
+  fetchFailed: number
+  captureFailed: number
+  errors: string[]
+}
+
+/** Per-run vendor-call cap for the catch-up. Steady state needs ~0–13 a day; this bounds a bad day. */
+export const CAPTURE_CATCH_UP_MAX_FETCHES = 20
+
+/**
+ * THE DAILY CATCH-UP: every cached profile gets today's capture, not only the ones the warm reached.
+ *
+ * The warm reads at most `limit` (60) profiles, newest sync first; production holds 73 (measured
+ * 2026-10-04), and the extras are kept fresh by the on-demand read-through (`getFantasyCalcChartDbFirst`),
+ * which writes no capture. Owner's ruling (2026-10-04): those get the DAILY COPY only — not an hourly
+ * warm. So, after the warm, for each live profile with no capture for today's UTC day:
+ *
+ *   - its cached row was synced TODAY and is non-empty → capture FROM THAT ROW, `capturedAt` = its real
+ *     `syncedAt`. No vendor call, and the capture-time rule still holds: the capture says when the board
+ *     was really read.
+ *   - otherwise → ONE fetch for that profile (the same fetch + write the warm does), then capture.
+ *     At most `maxFetches` per run, and never past the deadline; the rest wait for the next hourly run.
+ *
+ * Idempotent per day by capture existence: once every profile has today's capture, a run is two
+ * key-only reads. ⚠ Which profiles are missing is decided by KEYS — a capture key is the values key plus
+ * the day — so the boards themselves are read only for the profiles that need one.
+ */
+export async function catchUpFantasyCalcProfileCaptures(options?: {
+  now?: Date
+  maxFetches?: number
+  deadlineMs?: number
+}): Promise<FantasyCalcCaptureCatchUpResult> {
+  const startedAt = Date.now()
+  const now = options?.now ?? new Date()
+  const day = profileCaptureDay(now)
+  const maxFetches = options?.maxFetches ?? CAPTURE_CATCH_UP_MAX_FETCHES
+  const deadlineMs = options?.deadlineMs ?? 60_000
+  const result: FantasyCalcCaptureCatchUpResult = {
+    day, profiles: 0, alreadyCaptured: 0, capturedFromCache: 0, fetched: 0, deferred: 0,
+    skippedUnreadable: 0, fetchFailed: 0, captureFailed: 0, errors: [],
+  }
+
+  const [valueKeys, capturedRows] = await Promise.all([
+    prisma.sportsDataCache.findMany({ where: { cacheKey: { startsWith: KEY_PREFIX } }, select: { cacheKey: true } }),
+    prisma.sportsDataCache.findMany({
+      where: { cacheKey: { startsWith: PROFILE_CAPTURE_PREFIX, endsWith: `:${day}` } },
+      select: { cacheKey: true },
+    }),
+  ])
+  result.profiles = valueKeys.length
+  const captured = new Set(capturedRows.map((r) => r.cacheKey))
+  const missing = valueKeys.map((r) => r.cacheKey).filter((k) => !captured.has(`${PROFILE_CAPTURE_PREFIX}${k}:${day}`))
+  result.alreadyCaptured = valueKeys.length - missing.length
+  if (missing.length === 0) return result
+
+  const rows = await prisma.sportsDataCache.findMany({
+    where: { cacheKey: { in: missing } },
+    select: { cacheKey: true, data: true },
+  })
+  for (const row of rows) {
+    const payload = parseCachedPayload(row.data)
+    // The settings come from the payload (see `listCachedFantasyCalcProfiles`), and must build this
+    // row's own key — otherwise the capture would land under another profile's name.
+    if (!payload || buildFantasyCalcCacheKey(payload.settings) !== row.cacheKey) {
+      result.skippedUnreadable += 1
+      continue
+    }
+    const syncedMs = Date.parse(payload.syncedAt)
+    const syncedToday = Number.isFinite(syncedMs) && profileCaptureDay(new Date(syncedMs)) === day && syncedMs <= now.getTime()
+    if (syncedToday && payload.players.length > 0) {
+      try {
+        if (await captureFantasyCalcProfileDaily(payload.settings, payload.players, new Date(syncedMs))) result.capturedFromCache += 1
+        else result.alreadyCaptured += 1 // a concurrent run got there first
+      } catch (error) {
+        result.captureFailed += 1
+        result.errors.push(`${row.cacheKey} (daily capture): ${error instanceof Error ? error.message : 'unknown error'}`)
+      }
+      continue
+    }
+    if (result.fetched + result.fetchFailed >= maxFetches || Date.now() - startedAt > deadlineMs) {
+      result.deferred += 1
+      continue
+    }
+    let players: FantasyCalcPlayer[]
+    const fetchedAt = new Date()
+    try {
+      players = await fetchFantasyCalcValues(payload.settings)
+      await writeFantasyCalcValuesToDb(payload.settings, players, { syncedAt: fetchedAt })
+      result.fetched += 1
+    } catch (error) {
+      result.fetchFailed += 1
+      result.errors.push(`${row.cacheKey}: ${error instanceof Error ? error.message : 'unknown error'}`)
+      continue
+    }
+    try {
+      await captureFantasyCalcProfileDaily(payload.settings, players, fetchedAt)
+    } catch (error) {
+      result.captureFailed += 1
+      result.errors.push(`${row.cacheKey} (daily capture): ${error instanceof Error ? error.message : 'unknown error'}`)
+    }
+  }
   return result
 }
 
