@@ -61,7 +61,8 @@ describe('post-merge redraft league UX contracts', () => {
   })
 
   it('settings modals have close button, overlay, Escape, and scroll-lock cleanup paths', () => {
-    expect(leagueSettingsModal).toContain('aria-label="Close settings"')
+    // The label is a dictionary key since 2026-10-04 (the frame reads Spanish too) — same close button.
+    expect(leagueSettingsModal).toContain("aria-label={t('lsModal.closeSettings')}")
     expect(leagueSettingsModal).toContain("if (e.key !== 'Escape') return")
     expect(leagueSettingsModal).toContain('const handleCloseAll = useCallback')
     expect(leagueSettingsModal).toContain("document.body.style.overflow = 'hidden'")
