@@ -58,6 +58,9 @@ function clean(raw: string): string {
     .replace(/\((FORMER|FORMERLY)[^)]*\)/g, ' ')
     .replace(/\b(FORMER|FORMERLY)\b/g, ' ')
     .replace(/[.’']/g, '')
+    // "Texas A and M", "North Carolina A and T", "William and Mary" (provider spellings, 2026-10-03)
+    .replace(/\bA (AND|&) ([MT])\b/g, 'A&$2')
+    .replace(/ AND /g, ' & ')
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -132,7 +135,22 @@ export function buildTeamIndex(sport: string, teams: readonly CanonicalTeam[]): 
 }
 
 /** The canonical abbreviation, or null when the string names no single team of this sport. */
-export function resolveTeam(index: TeamIndex, raw: string | null | undefined): string | null {
+/**
+ * `exactNames`: the input is a SCHEDULE field (a game's home/away), which always names exactly one
+ * team, so a bare school name or code ("ALABAMA", "Akron", "ALA") is trustworthy there — most game
+ * providers write college teams that way (measured 2026-10-03). In NEWS text it is not: the college
+ * feed carries NFL noise ("CIN") and so news keeps the stricter default.
+ *
+ * `noPrefix`: EXACT matches only — never "starts with a school name". Schedule sources that write
+ * bare school names also list hundreds of lower-division schools, and a prefix would turn "Texas
+ * Lutheran" into Texas, "Ohio Wesleyan" into Ohio and "Kentucky Wesleyan" into Kentucky — an alert to
+ * the wrong team's followers. Only a source that always writes "<School> <Mascot>" (ESPN) may prefix.
+ */
+export function resolveTeam(
+  index: TeamIndex,
+  raw: string | null | undefined,
+  opts: { exactNames?: boolean; noPrefix?: boolean } = {},
+): string | null {
   if (!raw) return null
   const text = String(raw)
   if (NOT_ONE_TEAM.test(text.trim())) return null
@@ -156,7 +174,8 @@ export function resolveTeam(index: TeamIndex, raw: string | null | undefined): s
   // "ALABAMA STATE HORNETS" matches "ALABAMA STATE", not "ALABAMA". A prefix needs a mascot after
   // it (or to be the whole school name) — never a bare code, see the note in buildTeamIndex.
   for (const [core, abbr] of index.schoolCores) {
-    if (c.startsWith(core + ' ') || (c === core && core.includes(' '))) return abbr
+    if (c === core && (core.includes(' ') || opts.exactNames)) return abbr
+    if (!opts.noPrefix && c.startsWith(core + ' ')) return abbr
   }
   return null
 }

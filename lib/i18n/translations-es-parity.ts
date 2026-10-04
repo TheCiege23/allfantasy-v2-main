@@ -1118,9 +1118,10 @@ export const translationsEsParity: Record<string, string> = {
   "settings.notifications.category.draft_intel_alerts": "Inteligencia del draft (cola de IA, DMs de Chimmy, resumen)",
   "settings.notifications.category.followed_players": "Jugadores que sigues — lesiones y noticias",
   "settings.notifications.category.followed_teams": "Equipos que sigues — noticias y lesiones",
+  "settings.notifications.category.followed_team_scores": "Equipos que sigues — marcadores",
   "follows.prompt.title": "Sigue a tus equipos",
   "follows.prompt.body":
-    "Elige los equipos que apoyas. Te enviaremos noticias y novedades de lesiones de ellos y sus jugadores — no de toda la liga.",
+    "Elige los equipos que apoyas. Te enviaremos noticias y novedades de lesiones de ellos y sus jugadores, y marcadores de los equipos de fútbol americano — no de toda la liga.",
   "follows.prompt.sportsAria": "Deportes",
   "follows.prompt.search": "Buscar equipos",
   "follows.prompt.loading": "Cargando equipos…",
@@ -1137,7 +1138,7 @@ export const translationsEsParity: Record<string, string> = {
   "follows.sport.NCAAB": "Básquetbol universitario",
   "follows.settings.title": "Equipos que sigues",
   "follows.settings.body":
-    "Noticias y novedades de lesiones de estos equipos y sus jugadores — no de toda la liga. Actívalas o desactívalas con la alerta \"Equipos que sigues\" de abajo. Máximo 8 al día.",
+    "Noticias y novedades de lesiones de estos equipos y sus jugadores, además de marcadores al medio tiempo y finales de la NFL y del fútbol americano universitario — no de toda la liga. Noticias y marcadores tienen cada uno su propio interruptor \"Equipos que sigues\" abajo.",
   "follows.settings.none": "Todavía no sigues a ningún equipo.",
   "follows.settings.add": "Agregar equipos",
   "follows.settings.retry": "Reintentar",
