@@ -8,6 +8,7 @@ import type { PlayerGame } from '@/lib/core-app/playerGame'
 import { kickoffClock, lockState } from '@/lib/core-app/lineupLock'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { kickoffText } from '@/lib/core-app/kickoffText'
+import { designationText } from '@/lib/core-app/playerFinderCopy'
 import { reportedLabel } from '@/lib/core-app/injuryReport'
 import { inactiveSentence, type PregameInactive } from '@/lib/core-app/pregameInactive'
 import { platformLabel, type PlatformLink } from '@/lib/core-app/platformLinks'
@@ -142,7 +143,9 @@ export function GameDayBanner({
       <div className="af-pf-gameday-top">
         {status ? (
           <span className="af-chip af-num af-pf-ready" data-tone={status.tone}>
-            {copy(status.label)}
+            {/* One player's designation: «Inactivo», not coreUiCopy's plural column heading «Inactivos».
+                designationText falls back to coreUiCopy for every other label. */}
+            {designationText(status.label, language)}
             {detail ? ` · ${detail}` : ''}
           </span>
         ) : null}

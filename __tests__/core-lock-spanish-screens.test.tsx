@@ -161,6 +161,31 @@ describe('Player Finder — GameDayBanner', () => {
     expect(container.textContent).toContain('Descanso · sem. 9')
     expectSpanish(text(container), /\b(Bye|bench|league)\b/, 'bye')
   })
+
+  /*
+   * A player on the pregame inactive list carries the status label 'Inactive' (PlayerFinder.tsx builds
+   * it). Through coreUiCopy that is the PLURAL column heading, «Inactivos»; one player is «Inactivo».
+   * designationText (playerFinderCopy.ts) is the singular reading the page itself already uses.
+   */
+  it('a player on the inactive list reads «Inactivo», singular — not the column heading «Inactivos»', () => {
+    lang.language = 'es'
+    const k = AHEAD[0]!
+    const { container } = render(
+      <GameDayBanner
+        {...base}
+        status={{ label: 'Inactive', tone: 'bad' }}
+        inactive={{ announcedAt: k, minutesBeforeKickoff: 88, clock: '11:32a ET' }}
+        game={{ kickoff: k, opponent: 'MIA', home: true, week: 5, season: 2026, preseason: false }}
+      />,
+    )
+    const chip = container.querySelector('.af-pf-ready')!
+    expect(chip.textContent).toBe('Inactivo')
+    lang.language = 'en'
+    const en = render(
+      <GameDayBanner {...base} status={{ label: 'Inactive', tone: 'bad' }} game={{ kickoff: k, opponent: 'MIA', home: true, week: 5, season: 2026, preseason: false }} />,
+    )
+    expect(en.container.querySelector('.af-pf-ready')!.textContent).toBe('Inactive')
+  })
 })
 
 describe('Player Finder — GameDayTriage', () => {
