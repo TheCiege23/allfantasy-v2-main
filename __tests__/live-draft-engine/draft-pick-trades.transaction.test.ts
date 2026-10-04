@@ -36,11 +36,17 @@ const slotOrder = [
 
 const tradeStore = vi.hoisted(() => ({
   id: 'session-1',
+  leagueId: 'league-1', status: 'in_progress', draftType: 'snake', rounds: 3, teamCount: 2,
+  slotOrder: [{ slot: 1, rosterId: 'roster-a', displayName: 'Team A' }, { slot: 2, rosterId: 'roster-b', displayName: 'Team B' }],
   tradedPicks: [] as TradedPickRecord[],
   version: 3,
 }))
 
 const tradePrisma = vi.hoisted(() => ({
+  $queryRaw: vi.fn(async () => []),
+  $transaction: vi.fn(),
+  leagueAuditLog: { findFirst: vi.fn(async () => null), create: vi.fn(async () => ({ id: 'archive-event' })) },
+  draftPick: { findMany: vi.fn(async () => []) },
   draftSession: {
     // leagueId reads are findFirst now (DraftSession.leagueId is not unique); answer them from findUnique
     findFirst(...a: unknown[]) { return (this as any).findUnique(...a) },
@@ -54,8 +60,9 @@ vi.mock('@/lib/prisma', () => ({
 }))
 
 function wireTradePrismaMocks() {
+  tradePrisma.$transaction.mockImplementation(async fn => fn(tradePrisma))
   tradePrisma.draftSession.findUnique.mockImplementation(async () => ({
-    id: tradeStore.id,
+    ...tradeStore,
     tradedPicks: tradeStore.tradedPicks as unknown[],
   }))
   tradePrisma.draftSession.update.mockImplementation(

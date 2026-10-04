@@ -43,7 +43,7 @@ export async function draftArchiveCatalog(leagueIds: string[], options: {
  SELECT 'reset:'||a.id,a."leagueId",l.name,'reset',a.id,(a."afterState"->'context'->>'season')::int,l.sport::text,COALESCE(a."afterState"->'details'->'priorSession'->>'draftType','unknown'),'archived',a."createdAt"
  FROM audit_logs a JOIN leagues l ON l.id=a."leagueId" WHERE a."leagueId" IN (${Prisma.join(leagueIds)}) AND a."actionType"='draft_archive_event' AND a."afterState"->>'event'='reset_draft'
  ), filtered AS (SELECT * FROM drafts WHERE (${options.key ?? null}::text IS NULL OR key=${options.key ?? null}) AND (${options.season ?? null}::int IS NULL OR season=${options.season ?? null}) AND CONCAT_WS(' ',"leagueName",season::text,sport,format,status) ILIKE ${query})
- SELECT *,COUNT(*) OVER() AS total FROM filtered ORDER BY "createdAt" DESC,key,"leagueId" OFFSET ${(page - 1) * limit} LIMIT ${limit + 1}
+ SELECT *,COUNT(*) OVER() AS total FROM filtered ORDER BY season DESC NULLS LAST,"createdAt" DESC,key,"leagueId" OFFSET ${(page - 1) * limit} LIMIT ${limit + 1}
  `);
     return { choices: rows.slice(0, limit), more: rows.length > limit, page, total: Number(rows[0]?.total ?? 0) };
 }

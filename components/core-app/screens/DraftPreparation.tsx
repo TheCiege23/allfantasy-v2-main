@@ -1,5 +1,7 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { saveDraftPlanningPreference } from "@/lib/core-app/draftPlanningActions";
+import { draftPlanningPreference } from "@/lib/core-app/draftPlanningPreferenceModel";
 import Link from "next/link";
 import { InfoTip } from "../InfoTip";
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient";
@@ -54,8 +56,8 @@ const spanish: Record<string, string> = {
   "Consensus ADP: unavailable": "ADP de consenso: no disponible",
   "No grade is assigned when ADP is missing.":
     "Sin ADP, no se asigna calificación.",
-  "Planning preferences are saved in this browser for this draft. They do not change your live queue or autopick.":
-    "Las preferencias se guardan en este navegador para este draft. No cambian tu cola ni la selección automática.",
+  "Planning preferences sync privately to your account for this draft. They do not change your live queue or autopick.":
+    "Las preferencias se sincronizan de forma privada con tu cuenta para este draft. No cambian tu cola ni la selección automática.",
   "Observed market order, not a projected-points ranking.":
     "Orden del mercado observado; no es una clasificación de puntos proyectados.",
   "Relative planning heuristic v1; not a win forecast. Equivalent fresh redraft teams tie.":
@@ -94,24 +96,24 @@ export function DraftPreparation({
     [comparisonPage, setComparisonPage] = useState(0);
   const storageKey =
     "af-draft-preparation-v1:" + (data.preferenceScope ?? "unavailable");
+  const pending = useRef(Promise.resolve());
+  const revision = useRef(0);
+  const [sync, setSync] = useState("idle");
   useEffect(() => {
+    revision.current++;
+    setSync(data.planningPreferenceState === "error" ? "error" : "idle");
     try {
-      const saved = JSON.parse(localStorage.getItem(storageKey) ?? "{}");
-      setPersonal(
-        Array.isArray(saved.order)
-          ? saved.order
-              .filter((x: unknown) => typeof x === "string")
-              .slice(0, 3000)
-          : [],
-      );
-      setSpread(
-        ["adp", "tight", "broad"].includes(saved.spread) ? saved.spread : "adp",
-      );
+      const saved = data.planningPreferenceState === "ready"
+        ? data.planningPreference
+        : draftPlanningPreference(JSON.parse(localStorage.getItem(storageKey) ?? "{}"));
+      setPersonal(saved?.order ?? []);
+      setSpread(saved?.spread ?? "adp");
     } catch {
       setPersonal([]);
       setSpread("adp");
     }
-  }, [storageKey]);
+    return () => { revision.current++; };
+  }, [storageKey, data.planningPreference, data.planningPreferenceState]);
   const save = (order: string[], mode: string) => {
     setPersonal(order);
     setSpread(mode);
@@ -124,6 +126,15 @@ export function DraftPreparation({
     } catch {
       /* Browser storage may be disabled; planning still works for this view. */
     }
+    const value = draftPlanningPreference({ order, spread: mode });
+    if (!value || !data.sessionId || !data.preferenceScope) return;
+    const sequence = ++revision.current;
+    setSync("saving");
+    // Serialize writes so an earlier request cannot overwrite the latest order.
+    pending.current = pending.current.then(async () => {
+      const result = await saveDraftPlanningPreference(leagueId, data.sessionId!, value).catch(() => ({ ok: false }));
+      if (revision.current === sequence) setSync(result.ok ? "saved" : "error");
+    });
   };
   const ordered = useMemo(() => {
     const ranks = new Map(personal.map((key, i) => [key, i]));
@@ -399,9 +410,12 @@ export function DraftPreparation({
           </p>
           <p>
             {t(
-              "Planning preferences are saved in this browser for this draft. They do not change your live queue or autopick.",
+              "Planning preferences sync privately to your account for this draft. They do not change your live queue or autopick.",
             )}
           </p>
+          <p role="status">{es
+            ? (({ saving: "Guardando…", saved: "Guardado en tu cuenta.", error: "No se pudo sincronizar. La copia local sigue disponible." } as Record<string, string>)[sync] ?? "")
+            : (({ saving: "Saving…", saved: "Saved to your account.", error: "Account sync unavailable. Your local copy remains available." } as Record<string, string>)[sync] ?? "")}</p>
           <div
             className="af-prep-table"
             tabIndex={0}

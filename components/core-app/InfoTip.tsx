@@ -1,6 +1,7 @@
 'use client'
 
-import { useId, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * The "?" — one way, everywhere in /core, to explain a term, a number or where a figure comes from.
@@ -43,19 +44,64 @@ export function InfoTip({
   popClassName?: string
 }) {
   const id = useId()
+  const popover = useRef<HTMLSpanElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const pinned = useRef(false)
+  const suppressFocus = useRef(false)
+  const [expanded, setExpanded] = useState(false)
+  const es = useOptionalLanguage().language === 'es'
+  const show = () => {
+    const node = popover.current
+    if (!node || typeof node.showPopover !== 'function') return
+    node.showPopover()
+    setExpanded(true)
+  }
+  const hide = () => {
+    popover.current?.hidePopover?.()
+    pinned.current = false
+    setExpanded(false)
+  }
+  useEffect(() => {
+    const node = popover.current
+    const onToggle = (event: Event) => {
+      if ('newState' in event && event.newState === 'closed') {
+        pinned.current = false
+        setExpanded(false)
+      }
+    }
+    node?.addEventListener('toggle', onToggle)
+    return () => node?.removeEventListener('toggle', onToggle)
+  }, [])
   return (
-    <span className="af-info-tip-wrap">
+    <span className="af-info-tip-wrap"
+      onMouseEnter={() => { if (window.matchMedia?.('(hover: hover)')?.matches) show() }}
+      onMouseLeave={() => { if (!pinned.current && !trigger.current?.matches(':focus-visible')) hide() }}
+      onBlur={event => { if (!pinned.current && !event.currentTarget.contains(event.relatedTarget as Node | null)) hide() }}
+    >
       <button
+        ref={trigger}
         type="button"
         className={`af-info-tip${className ? ` ${className}` : ''}`}
         popoverTarget={id}
         aria-label={label}
+        aria-expanded={expanded}
+        aria-controls={id}
+        onFocus={() => { if (suppressFocus.current) { suppressFocus.current = false; return }; show() }}
+        onClick={event => {
+          // Clicking a hover preview pins it. A second click closes it.
+          event.preventDefault()
+          if (pinned.current) hide()
+          else { pinned.current = true; show() }
+        }}
       >
         ?
       </button>
-      <span id={id} popover="auto" className={`af-info-pop${popClassName ? ` ${popClassName}` : ''}`} role="note">
+      <span ref={popover} id={id} popover="auto" className={`af-info-pop${popClassName ? ` ${popClassName}` : ''}`} role="note">
         {title ? <strong>{title}</strong> : null}
         <span className="af-info-pop-body">{children}</span>
+        <button type="button" hidden={!expanded} className="af-info-close" onClick={() => { suppressFocus.current = true; hide(); trigger.current?.focus() }}>
+          {es ? 'Cerrar' : 'Close'}
+        </button>
       </span>
     </span>
   )

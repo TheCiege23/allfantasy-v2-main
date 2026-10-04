@@ -1065,7 +1065,7 @@ export async function swapDraftManagers(
   const effectiveFromOverall = session.picks.length + 1
 
   await prisma.$transaction(async (tx) => {
-    await tx.draftSession.update({
+    const updatedSession = await tx.draftSession.update({
       where: { id: session.id },
       data: {
         slotOrder: nextSlotOrder as unknown as Prisma.InputJsonValue,
@@ -1073,7 +1073,7 @@ export async function swapDraftManagers(
         updatedAt: new Date(),
       },
     })
-    await recordArchiveEvent(tx, { ...session, slotOrder: nextSlotOrder }, 'ownership', { actorUserId })
+    await recordArchiveEvent(tx, updatedSession, 'ownership', { actorUserId })
     await tx.draftPickAuditLog.create({
       data: {
         leagueId,
