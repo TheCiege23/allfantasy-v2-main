@@ -52,6 +52,22 @@ export function planNcaafFantraxIdentityLinks(refs: FantraxPlayerRef[], identiti
 
 export type CfbdSchoolFact = { cfbdId: string; name: string; school: string }
 
+/** Current CFBD game affiliation overrides an older registry school only with matching athlete-name proof.
+ * Contradictory game names/schools refuse a match; athletes without games retain registry metadata.
+ */
+export function currentCfbdSchoolIdentities(rows: NcaafIdentityRow[], facts: CfbdSchoolFact[], seasonSchools: string[]) {
+  const byId=new Map<string,CfbdSchoolFact[]>()
+  for(const fact of facts)byId.set(fact.cfbdId,[...(byId.get(fact.cfbdId)??[]),fact])
+  const scheduled=new Set(seasonSchools.map(s=>cfbdScheduleTeamKeys(s).exact))
+  return rows.map(row=>{
+    const games=row.cfbdId?byId.get(row.cfbdId):undefined
+    if(!games?.length)return row
+    const schools=new Set(games.map(f=>cfbdScheduleTeamKeys(f.school).exact))
+    const school=[...schools][0]!
+    return {...row,currentTeam:schools.size===1 && scheduled.has(school) && games.every(f=>nameKey(f.name)===nameKey(row.canonicalName))?school:null}
+  })
+}
+
 /** Learn a provider school code only from three distinct, already-linked current-season athletes.
  * Every anchor must agree on identity, name, position, registry school and CFBD game school.
  * Conflicting codes, duplicate IDs and transferred/ambiguous game affiliations teach nothing.
@@ -63,7 +79,8 @@ export function verifiedFantraxSchoolAliases(refs: FantraxPlayerRef[], identitie
   for (const row of identities) if (row.fantraxId) identitiesBySource.set(row.fantraxId, [...(identitiesBySource.get(row.fantraxId) ?? []), row])
   const scheduled = new Map<string, Set<string>>()
   for (const name of seasonSchools) {const k=cfbdScheduleTeamKeys(name); const set=scheduled.get(k.loose)??new Set<string>();set.add(k.exact);scheduled.set(k.loose,set)}
-  const resolve = (value: string|null) => {const k=cfbdScheduleTeamKeys(value);const options=scheduled.get(k.loose);return options?.size===1?[...options][0]!:''}
+  const exactSchools=new Set(seasonSchools.map(name=>cfbdScheduleTeamKeys(name).exact))
+  const resolve = (value: string|null) => {const k=cfbdScheduleTeamKeys(value);if(exactSchools.has(k.exact))return k.exact;const options=scheduled.get(k.loose);return options?.size===1?[...options][0]!:''}
   const claims = new Map<string, Map<string, Set<string>>>()
   const sourceCounts = new Map<string,number>()
   for (const ref of refs) sourceCounts.set(ref.fantraxId,(sourceCounts.get(ref.fantraxId)??0)+1)

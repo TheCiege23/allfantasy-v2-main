@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planNcaafFantraxIdentityLinks, verifiedFantraxSchoolAliases } from '@/lib/player-identity/ncaafFantraxIdentityPlan'
+import { planNcaafFantraxIdentityLinks, verifiedFantraxSchoolAliases, currentCfbdSchoolIdentities } from '@/lib/player-identity/ncaafFantraxIdentityPlan'
 const schools=['Oregon','Oregon State']
 const refs=[1,2,3].map(i=>({fantraxId:`fx${i}`,name:`Player ${i}`,team:'Oreg',position:'WR'}))
 const rows=refs.map((r,i)=>({id:`p${i}`,canonicalName:r.name,currentTeam:'University of Oregon',position:'WR',fantraxId:r.fantraxId,cfbdId:`cf${i}`}))
@@ -29,4 +29,13 @@ describe('verified provider school aliases',()=>{
   expect(verifiedFantraxSchoolAliases(refs,rows.map(r=>({...r,cfbdId:'same'})),facts.map(f=>({...f,cfbdId:'same'})),schools)).toEqual({})
   expect(verifiedFantraxSchoolAliases(refs,rows,[...facts,{...facts[0]!,school:'Oregon State'}],schools)).toEqual({})
  })
+})
+
+it('uses current CFBD affiliation for transfers and refuses contradictory names or schools',()=>{
+ const old={...rows[0]!,currentTeam:'Oregon State University'}
+ expect(currentCfbdSchoolIdentities([old],facts,schools)[0]!.currentTeam).toBe('oregon')
+ expect(currentCfbdSchoolIdentities([old],[],schools)[0]!.currentTeam).toBe('Oregon State University')
+ expect(currentCfbdSchoolIdentities([old],[{...facts[0]!,name:'Different Player'}],schools)[0]!.currentTeam).toBeNull()
+ expect(currentCfbdSchoolIdentities([old],[facts[0]!,{...facts[0]!,school:'Oregon State'}],schools)[0]!.currentTeam).toBeNull()
+ expect(currentCfbdSchoolIdentities([old],[{...facts[0]!,school:'Unscheduled School'}],schools)[0]!.currentTeam).toBeNull()
 })
