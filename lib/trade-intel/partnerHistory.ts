@@ -74,9 +74,8 @@ export function summarizeTradeHistory(args: {
   }
 
   for (const f of args.facts) {
-    if (f.status && NOT_COMPLETED.has(f.status.toLowerCase())) continue
-    // A row with no transaction id is still one trade for its own roster — it just cannot be paired.
-    const key = f.tradeKey ? `fact:${f.tradeKey}` : `row:${f.factId}`
+    if (!isCompletedFact(f)) continue
+    const key = tradeGroupKey(f)
     if (f.rosterId != null) add(key, args.rosterIdByProviderId.get(String(f.rosterId)))
     if (Array.isArray(f.rosterIds)) {
       for (const id of f.rosterIds) add(key, args.rosterIdByProviderId.get(String(id)))
@@ -98,6 +97,28 @@ export function summarizeTradeHistory(args: {
     }
   }
   return { tradesByRoster, tradesWithViewer }
+}
+
+function isCompletedFact(f: TradeFactRow): boolean {
+  return !(f.status && NOT_COMPLETED.has(f.status.toLowerCase()))
+}
+
+/** Which trade a fact row belongs to. A row with no transaction id is its own trade — it cannot be paired. */
+function tradeGroupKey(f: TradeFactRow): string {
+  return f.tradeKey ? `fact:${f.tradeKey}` : `row:${f.factId}`
+}
+
+/**
+ * How many distinct completed trades — the LEAGUE-wide figure, which `summarizeTradeHistory`'s
+ * per-roster counts cannot give (summing them counts every trade once per party). The same grouping:
+ * rows under one provider transaction id are one trade, whether they are its two Sleeper sides, its
+ * moved assets on another provider, or a sibling importer's copy of it. Native trades are one row each.
+ */
+export function countCompletedTrades(args: { facts: TradeFactRow[]; nativeTrades: Array<{ id: string }> }): number {
+  const trades = new Set<string>()
+  for (const f of args.facts) if (isCompletedFact(f)) trades.add(tradeGroupKey(f))
+  for (const t of args.nativeTrades) trades.add(`native:${t.id}`)
+  return trades.size
 }
 
 /** The one status a native `AfLeagueTrade` has once it has actually moved players. */

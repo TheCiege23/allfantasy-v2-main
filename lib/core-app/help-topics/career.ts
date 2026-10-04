@@ -121,11 +121,11 @@ export const CAREER_TOPICS = {
   wrappedRecap: {
     en: {
       title: 'Season recap',
-      body: 'Built from this league’s stored history for its current season. Record and rank come from the stored standings. In the manager edition, Trades and Drafted are yours alone for that season (the commissioner edition counts the whole league): each completed trade you were part of counts once, and Drafted is the picks your team made, keepers included. The best measured trade is the one in your saved trade history rated most in your favor. The outlook reads your rank: top quarter is a contender, top 60% is in the mix, and below that it is a retool in dynasty or a reset otherwise.',
+      body: 'Built from this league’s stored history for its current season. Record and rank come from the stored standings. In the manager edition, Trades and Drafted are yours alone for that season (the commissioner edition counts the whole league, each completed trade once): each completed trade you were part of counts once, and Drafted is the picks your team made, keepers included. The best measured trade is the one in your saved trade history rated most in your favor. The outlook reads your rank: top quarter is a contender, top 60% is in the mix, and below that it is a retool in dynasty or a reset otherwise.',
     },
     es: {
       title: 'Resumen de la temporada',
-      body: 'Se construye con el historial guardado de esta liga para su temporada actual. El récord y la posición salen de la clasificación guardada. En la edición de mánager, «Trades» y «Drafted» son solo tuyos en esa temporada (la edición de comisionado cuenta toda la liga): cada traspaso completado en el que participaste cuenta una vez, y «Drafted» son las selecciones que hizo tu equipo, keepers incluidos. El mejor traspaso medido es el de tu historial guardado que más te favorece. La perspectiva lee tu posición: el primer cuarto es candidato, el 60% superior está en la pelea, y por debajo toca reconstruir en dinastía o reiniciar en los demás formatos.',
+      body: 'Se construye con el historial guardado de esta liga para su temporada actual. El récord y la posición salen de la clasificación guardada. En la edición de mánager, «Trades» y «Drafted» son solo tuyos en esa temporada (la edición de comisionado cuenta toda la liga, cada traspaso completado una vez): cada traspaso completado en el que participaste cuenta una vez, y «Drafted» son las selecciones que hizo tu equipo, keepers incluidos. El mejor traspaso medido es el de tu historial guardado que más te favorece. La perspectiva lee tu posición: el primer cuarto es candidato, el 60% superior está en la pelea, y por debajo toca reconstruir en dinastía o reiniciar en los demás formatos.',
     },
   },
   devy: {

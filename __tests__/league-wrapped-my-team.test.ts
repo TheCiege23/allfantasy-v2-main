@@ -219,3 +219,46 @@ describe('/api/league/wrapped — My team counts', () => {
     expect(body.manager.draftPicks).toBe(0)
   })
 })
+
+/*
+ * The commissioner edition's Trades is the LEAGUE's, for the recap's season — and a trade is a trade
+ * once, however many fact rows or importer copies carry it. It summed every trade fact row under
+ * this row only (two per Sleeper trade, and none of a sibling importer's) plus every native trade of
+ * any status from any season: 5 for a league that made 3.
+ */
+describe('/api/league/wrapped — commissioner edition Trades', () => {
+  async function commissionerTrades() {
+    const res = await GET({ nextUrl: new URL('http://x/api/league/wrapped?leagueId=L1') } as never)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { commissioner: { trades: number } | null }
+    expect(body.commissioner).not.toBeNull()
+    return body.commissioner!.trades
+  }
+
+  beforeEach(() => {
+    session.userId = 'user-me'
+    seed()
+    db.teams[0].isCommissioner = true
+  })
+
+  it('counts each completed league trade this season once — sibling importer included, last season and pending offers not', async () => {
+    // tx-mine (under the sibling L2), tx-other-a, and the native n-other.
+    expect(await commissionerTrades()).toBe(3)
+  })
+
+  it('a copy of one trade under a sibling importer still counts once', async () => {
+    db.tradeFacts.push(...sleeperTrade('L2', 'tx-other-a', 2025, '1', '2'))
+    expect(await commissionerTrades()).toBe(3)
+  })
+
+  it('a trade the provider never completed does not count', async () => {
+    db.tradeFacts.push(...sleeperTrade('L1', 'tx-vetoed', 2025, '4', '6').map((r) => ({ ...r, status: 'vetoed' })))
+    expect(await commissionerTrades()).toBe(3)
+  })
+
+  it('a manager who is not a commissioner gets no commissioner edition', async () => {
+    db.teams[0].isCommissioner = false
+    const res = await GET({ nextUrl: new URL('http://x/api/league/wrapped?leagueId=L1') } as never)
+    expect(((await res.json()) as { commissioner: unknown }).commissioner).toBeNull()
+  })
+})

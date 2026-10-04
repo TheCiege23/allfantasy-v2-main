@@ -6,8 +6,10 @@ import { assertLeagueMember } from '@/lib/league/league-access'
 import { buildRosterIdMap } from '@/lib/core-app/rosterIdMatch'
 import {
   NATIVE_COMPLETED_TRADE_STATUS,
+  countCompletedTrades,
   loadTradeFacts,
   summarizeTradeHistory,
+  type TradeFactRow,
 } from '@/lib/trade-intel/partnerHistory'
 
 export const dynamic = 'force-dynamic'
@@ -44,24 +46,20 @@ async function nativeSeasonWindow(leagueId: string, season: number): Promise<{ g
   }
 }
 
+type SeasonTrades = {
+  facts: TradeFactRow[]
+  native: Array<{ id: string; proposerRosterId: string; receiverRosterId: string }>
+}
+
 /**
- * The viewer's completed trades this season — the partner ranking's rule (`summarizeTradeHistory`):
- * a trade is a GROUP of fact rows under one provider transaction id (one row per side for Sleeper,
- * one per moved asset elsewhere) and counts once per party; a native trade counts once it is
- * processed. Fact rows are the viewer's when their roster id is the claimed team's `externalId`;
- * native trades when the proposer or receiver is the viewer's own `Roster`.
+ * The league's completed trades this season, read ONCE for both editions: trade fact rows across
+ * every sibling importer row, and native trades processed inside the season's window. Both counts
+ * below read this same set, so "My team" can never exceed the league total.
  */
-async function countManagerTrades(args: {
-  leagueId: string
-  factLeagueIds: string[]
-  season: number
-  teamExternalId: string | null
-  userId: string
-}): Promise<number> {
+async function loadSeasonTrades(args: { leagueId: string; factLeagueIds: string[]; season: number }): Promise<SeasonTrades> {
   const window = await nativeSeasonWindow(args.leagueId, args.season)
-  const [facts, myRoster, native] = await Promise.all([
-    args.teamExternalId ? loadTradeFacts({ leagueIds: args.factLeagueIds, season: args.season }).catch(() => []) : Promise.resolve([]),
-    prisma.roster.findFirst({ where: { leagueId: args.leagueId, platformUserId: args.userId }, select: { id: true } }).catch(() => null),
+  const [facts, native] = await Promise.all([
+    loadTradeFacts({ leagueIds: args.factLeagueIds, season: args.season }).catch(() => [] as TradeFactRow[]),
     prisma.afLeagueTrade
       .findMany({
         where: {
@@ -72,9 +70,31 @@ async function countManagerTrades(args: {
         select: { id: true, proposerRosterId: true, receiverRosterId: true },
         take: 1000,
       })
-      .catch(() => [] as Array<{ id: string; proposerRosterId: string; receiverRosterId: string }>),
+      .catch(() => [] as SeasonTrades['native']),
   ])
+  return { facts, native }
+}
+
+/**
+ * The viewer's completed trades this season — the partner ranking's rule (`summarizeTradeHistory`):
+ * a trade is a GROUP of fact rows under one provider transaction id (one row per side for Sleeper,
+ * one per moved asset elsewhere) and counts once per party; a native trade counts once it is
+ * processed. Fact rows are the viewer's when their roster id is the claimed team's `externalId`;
+ * native trades when the proposer or receiver is the viewer's own `Roster`.
+ */
+async function countManagerTrades(args: {
+  leagueId: string
+  trades: SeasonTrades
+  teamExternalId: string | null
+  userId: string
+}): Promise<number> {
+  const myRoster = await prisma.roster
+    .findFirst({ where: { leagueId: args.leagueId, platformUserId: args.userId }, select: { id: true } })
+    .catch(() => null)
   if (!args.teamExternalId && !myRoster) return 0
+  // Fact rows are mine only through my claimed team's provider id; without one, none of them are.
+  const facts = args.teamExternalId ? args.trades.facts : []
+  const native = args.trades.native
   // One key for "me" in both spaces: my native Roster id when I have one, else a key no native trade can carry.
   const viewer = myRoster?.id ?? `team:${args.teamExternalId}`
   const { tradesByRoster } = summarizeTradeHistory({
@@ -118,7 +138,7 @@ export async function GET(req: NextRequest) {
   const league = gate.league
   const factLeagueIds = [...new Set([league.id, league.platformLeagueId].filter(Boolean))]
   const season = league.season
-  const [team, transactionGroups, draftPicks, nativeTrades, rosterMoves, standings, profile] = await Promise.all([
+  const [team, transactionGroups, draftPicks, rosterMoves, standings, profile] = await Promise.all([
     prisma.leagueTeam.findFirst({
       where: { leagueId, OR: [{ claimedByUserId: userId }, { platformUserId: userId }] },
       select: { externalId: true, legacyRosterId: true, currentRank: true, wins: true, losses: true, ties: true, isCommissioner: true, isCoCommissioner: true },
@@ -129,7 +149,6 @@ export async function GET(req: NextRequest) {
       _count: { _all: true },
     }).catch(() => []),
     prisma.draftFact.count({ where: { leagueId: { in: factLeagueIds }, season } }).catch(() => 0),
-    prisma.afLeagueTrade.count({ where: { leagueId } }).catch(() => 0),
     prisma.afRosterMoveHistory.count({ where: { leagueId, season } }).catch(() => 0),
     prisma.seasonStandingFact.findMany({
       where: { leagueId: { in: factLeagueIds }, season },
@@ -141,25 +160,24 @@ export async function GET(req: NextRequest) {
   ])
 
   const byType = new Map(transactionGroups.map((row) => [row.type.toLowerCase(), row._count._all]))
-  const providerTrades = [...byType.entries()]
-    .filter(([type]) => type.includes('trade'))
-    .reduce((sum, [, count]) => sum + count, 0)
   const acquisitions = [...byType.entries()]
     .filter(([type]) => /add|waiver|free_agent|claim/.test(type))
     .reduce((sum, [, count]) => sum + count, 0)
   const commissioner = league.userId === userId || Boolean(team?.isCommissioner || team?.isCoCommissioner)
 
   /*
-   * "My team" figures are the VIEWER's, for this season. The league-wide `providerTrades`,
-   * `nativeTrades` and `draftPicks` above are the commissioner edition's and stay there.
+   * "My team" figures are the VIEWER's, for this season; the commissioner edition's are the
+   * LEAGUE's. Trades in both come from one read of the season's completed trades, across every
+   * sibling importer row. `draftPicks` above is the league's and is the commissioner edition's.
    */
   const teamExternalId = team?.externalId != null && String(team.externalId) !== '' ? String(team.externalId) : null
-  const myFactLeagueIds = [
+  const seasonFactLeagueIds = [
     ...new Set([...factLeagueIds.filter((id): id is string => Boolean(id)), ...(await siblingLeagueIds(league))]),
   ]
+  const seasonTrades = await loadSeasonTrades({ leagueId, factLeagueIds: seasonFactLeagueIds, season })
   const [myTrades, myDraftPicks] = await Promise.all([
-    countManagerTrades({ leagueId, factLeagueIds: myFactLeagueIds, season, teamExternalId, userId }),
-    countManagerPicks({ factLeagueIds: myFactLeagueIds, season, teamExternalId }),
+    countManagerTrades({ leagueId, trades: seasonTrades, teamExternalId, userId }),
+    countManagerPicks({ factLeagueIds: seasonFactLeagueIds, season, teamExternalId }),
   ])
 
   let bestTrade: { partner: string | null; differential: number | null; season: number } | null = null
@@ -206,7 +224,8 @@ export async function GET(req: NextRequest) {
     },
     commissioner: commissioner ? {
       teams: teamCount,
-      trades: providerTrades + nativeTrades,
+      // Each completed trade once — not one per Sleeper side, not one per importer copy.
+      trades: countCompletedTrades({ facts: seasonTrades.facts, nativeTrades: seasonTrades.native }),
       rosterChanges: rosterMoves + acquisitions,
       draftPicks,
       leader: standings[0] ? { teamId: standings[0].teamId, record: `${standings[0].wins}-${standings[0].losses}`, pointsFor: standings[0].pointsFor } : null,
