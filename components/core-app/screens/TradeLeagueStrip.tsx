@@ -253,7 +253,7 @@ export function TradeLeagueStrip(props: { leagues: StripLeague[]; activeLeagueId
       <div className="af-tc-strip-head">
         <span className="af-label">{copy("Offers across your leagues")}</span>
         <span className="af-tc-rule" aria-hidden />
-        <span className="af-tc-strip-note">{copy(" Sleeper and Yahoo are read · other platforms are not, and say so ")}{copy(beyond > 0 ? ` · ${beyond} more available below` : '')}
+        <span className="af-tc-strip-note">{copy(" Yahoo offers are read · Sleeper shows a trade only once it’s accepted · other platforms are not, and say so ")}{copy(beyond > 0 ? ` · ${beyond} more available below` : '')}
         </span>
       </div>
       <div className="af-tc-tiles">

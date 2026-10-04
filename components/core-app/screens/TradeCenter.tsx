@@ -58,6 +58,7 @@ import { useTradeVisualCopy } from './useTradeVisualCopy'
 import { TradeTranslationStatus } from './TradeTranslationStatus'
 import { getIntlLocale as tradeIntlLocale } from '@/lib/i18n/constants'
 import { TradeEvaluationReceipt } from './TradeEvaluationReceipt'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import { TradeValueChart, LineupImpactChart } from './TradeImpactCharts'
 import { TradeReaction, TradeReactionSettings } from './TradeReactions'
 import { usePlayerCard } from '../player-card/PlayerCardProvider'
@@ -2140,9 +2141,17 @@ export function TradeCenter(props: {
               <b className="af-num">{totalOf(side.lines)}</b>
             </div>
             {/* This week's AllFantasy points on this side, beside the value total. Not part of the grade. */}
+            {/*
+              The explanation was a `title` on this row — hover-only, so a phone never showed it. It is
+              the shared "?" now, on the first card that has the total (two identical tips side by side
+              are noise; see InfoTip).
+            */}
             {afWeekTotal(side.lines) != null ? (
-              <div className="af-tc-total af-tc-total--af" title="AllFantasy's weekly projection for the players on this side, under this league's scoring. Not part of the grade.">
-                <span>{copy("AF this week")}</span>
+              <div className="af-tc-total af-tc-total--af">
+                <span>
+                  {copy("AF this week")}
+                  {side.side === (afWeekTotal(give) != null ? 'give' : 'get') ? <TopicTip topic="tradeAfThisWeek" /> : null}
+                </span>
                 <b className="af-num">{afWeekTotal(side.lines)!.toFixed(1)}</b>
               </div>
             ) : null}
@@ -2224,6 +2233,7 @@ export function TradeCenter(props: {
         <div className="af-tc-balance" data-mstep="review">
           <div className="af-tc-balance-head">
             <span className="af-label">{copy('Value balance')}</span>
+            <TopicTip topic="tradeValueBalance" />
             <span className="af-tc-row-sub">{copy('priced assets only')}</span>
             <span className="af-tc-spacer" />
             <span
@@ -2280,6 +2290,7 @@ export function TradeCenter(props: {
             <span className="af-tc-row-sub">
               {copy('trade value today — roster fit and realized production are separate')}
             </span>
+            <TopicTip topic="tradeGrade" />
           </div>
 
           {/*
@@ -2321,7 +2332,7 @@ export function TradeCenter(props: {
             : result?.evaluationReceipt?.status === 'unavailable' ? <p role="status">{copy('This evaluation could not be saved. Keep a copy before relying on it later.')}</p> : null}
           {serverGrade?.graded && serverGrade.rosterFit ? (
             <div className="af-tc-cap-check" data-testid="trade-roster-fit">
-              <div className="af-label">{copy('Your roster fit · separate from the trade-value grade')}</div>
+              <div className="af-label">{copy('Your roster fit · separate from the trade-value grade')} <TopicTip topic="tradeRosterFit" /></div>
               <p>{copy('Personal utility:')} {money(serverGrade.rosterFit.giveValue)} {copy('given,')} {money(serverGrade.rosterFit.getValue)} {copy('received.')}
                 {' '}{copy('This is a roster-fit estimate, not a win probability or the grade sent by email.')}</p>
               {serverGrade.rosterFit.moves.map((move, index) => (
@@ -2377,9 +2388,12 @@ export function TradeCenter(props: {
                   <small>{copy("/100")}</small>
                 </span>
               ) : null}
-              <strong className="af-tc-score-label">
-                {noSignal ? copy('Grade unavailable') : result.labels?.fairnessLabel ? copy(result.labels.fairnessLabel) : copy('No verdict')}
-              </strong>
+              <span className="af-tc-score-labelrow">
+                <strong className="af-tc-score-label">
+                  {noSignal ? copy('Grade unavailable') : result.labels?.fairnessLabel ? copy(result.labels.fairnessLabel) : copy('No verdict')}
+                </strong>
+                {!noSignal && typeof result.fairnessScore === 'number' ? <TopicTip topic="tradeFairnessScore" /> : null}
+              </span>
               {!noSignal && !serverGrade?.graded && result.labels?.confidenceLabel ? (
                 <span className="af-tc-conf">{copy(result.labels.confidenceLabel)}</span>
               ) : null}
@@ -2452,7 +2466,7 @@ export function TradeCenter(props: {
 
           {movedLines.length > 0 || result.valueBasis?.needGap ? (
             <div className="af-tc-moves">
-              <div className="af-label">{copy('Why the values moved')}</div>
+              <div className="af-label">{copy('Why the values moved')} <TopicTip topic="tradeLeagueValue" /></div>
               {movedLines.length > 0 ? (
                 <ul>
                   {movedLines.map((l) => (
@@ -2587,7 +2601,7 @@ export function TradeCenter(props: {
 
           <div className="af-tc-pairs">
             <div className="af-tc-pair">
-              <div className="af-tc-pair-label">{copy('Asset production lean')}</div>
+              <div className="af-tc-pair-label">{copy('Asset production lean')} <TopicTip topic="tradeProductionLean" /></div>
               <div className="af-tc-pair-value">{intel.whoWinsNow === 'unknown' ? copy('Unavailable') : intel.whoWinsNow ?? '—'}</div>
             </div>
             <div className="af-tc-pair">
@@ -2746,6 +2760,8 @@ export function TradeCenter(props: {
       {valueActions.length > 0 ? (
         <details className="af-tc-value-actions" data-mstep="review">
           <summary><span>{copy("Value change alerts")}</span><b>{valueActions.length}{copy(" players across your leagues")}</b></summary>
+          {/* Not in the <summary>: a tap there toggles the panel. */}
+          <p className="af-tc-row-sub af-tc-value-actions-how">{copy('How these moves are measured')} <TopicTip topic="tradeValueAlerts" /></p>
           <div className="af-tc-value-action-list">
             {valueActions.map((player) => (
               <div key={player.playerId} className="af-tc-value-action" data-direction={player.stock}>

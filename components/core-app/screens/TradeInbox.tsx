@@ -15,6 +15,7 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
 import { ImpactNowReview, type ImpactNowRef } from './ImpactNowReview'
 import { TradeReaction, TradeReactionSettings, AcceptedTradeReaction } from './TradeReactions'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Inbox & Sent on the Trade Center.
@@ -282,6 +283,10 @@ function assetGlyph(asset: TimelineAsset): string {
  * One side of a timeline row: face, name, and the league value THE grade priced it at. A value is
  * drawn only where the grade supplied one (`assetValues`) — no number is better than a guessed one
  * beside a real letter.
+ *
+ * ⚠ NO `title` ON THE NUMBER. It said "League value today", which was wrong for a completed trade
+ * (its grade's lines are the ones it was given, not today's), and a hover is invisible on a phone
+ * anyway. What the number is lives in the timeline's one "?" (`tradeTimeline`), at its heading.
  */
 function TimelineAssetList({ assets, values, language }: { assets: TimelineAsset[]; values: Array<number | null>; language: string }) {
   if (assets.length === 0) return <b>{coreUiCopy('Nothing', language)}</b>
@@ -300,7 +305,7 @@ function TimelineAssetList({ assets, values, language }: { assets: TimelineAsset
               <b>{asset.label}</b>
               {asset.sublabel ? <small>{asset.sublabel}</small> : null}
             </span>
-            {value != null ? <em className="af-num" title={coreUiCopy('League value today', language)}>{Math.round(value).toLocaleString()}</em> : null}
+            {value != null ? <em className="af-num">{Math.round(value).toLocaleString()}</em> : null}
           </li>
         )
       })}
@@ -817,9 +822,15 @@ export function TradeInbox(props: {
       <section className="af-tc-timeline" aria-labelledby="trade-timeline-title">
         <header className="af-tc-timeline-head">
           <div>
-            <div className="af-label">{copy('Unified trade timeline')}</div>
+            {/* The "?" sits beside the labelling <h2>, never inside it: it would join the region's name. */}
+            <div className="af-label">{copy('Unified trade timeline')} <TopicTip topic="tradeTimeline" /></div>
             <h2 id="trade-timeline-title">{copy('Every offer, outcome and regrade')}</h2>
-            <p>{copy('Proposal-time grades stay beside today’s value so you can measure how the decision aged.')}</p>
+            {/*
+              Conditional on purpose. "Then" is a proposal-time grade only where one was saved; without
+              one the trades-panel route repeats today's grade there (or leaves it empty), so "proposal-time
+              grades stay beside today's" promised a comparison many rows do not have.
+            */}
+            <p>{copy('Where a grade was saved when an offer was made, it stays beside today’s so you can see how the decision aged.')}</p>
           </div>
           <div className="af-tc-timeline-filters" aria-label={copy('Filter trade timeline')}>
             {([
