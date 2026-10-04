@@ -8,6 +8,8 @@ import { parseChangedLineNumbers } from "./db-first-diff-lines.mjs";
 import { listGitVisibleFiles } from "./git-visible-files.mjs";
 
 const DATA_API_HOST_PATTERNS = [
+  // Draft market references: only ingestion workers may read this provider.
+  /^api\.statsguyfantasy\.com$/i,
   // ⚠ FANTRAX WAS INVISIBLE TO THIS GUARD ENTIRELY, and it is a full data API:
   // rosters, standings, schedules, live matchup scores and college ADP, all from
   // www.fantrax.com/fxea/general. It has been read by the import stack since

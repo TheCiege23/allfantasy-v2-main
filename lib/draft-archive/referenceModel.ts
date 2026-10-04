@@ -1,4 +1,5 @@
 import type { PreparationContext } from '@/lib/core-app/draftPreparationModel'
+export const STATS_GUY_ATTRIBUTION_URL = 'https://statsguyfantasy.com'
 
 export type DraftReference = {
   version: 'draft-reference-v1';
@@ -40,7 +41,7 @@ export function validDraftReference(raw: unknown, cutoff: Date): DraftReference 
       typeof s.observedAt !== 'string' || typeof s.effectiveAt !== 'string' || !Array.isArray(s.entries) || s.entries.length > 5000) return null;
   if (typeof s.historical !== 'boolean' || !(s.season === null || (Number.isInteger(s.season) && s.season! >= 1900 && s.season! <= 2100)) ||
       (s.kind === 'adp' && (s.provider !== 'Sleeper / RotoWire' || s.identitySpace !== 'sleeper' || s.attributionUrl !== 'https://sleeper.com')) ||
-      (s.kind === 'market_value' && (s.provider !== 'Stats Guy Fantasy' || s.identitySpace !== 'sleeper' || s.attributionUrl !== 'https://statsguyfantasy.com')) ||
+      (s.kind === 'market_value' && (s.provider !== 'Stats Guy Fantasy' || s.identitySpace !== 'sleeper' || s.attributionUrl !== STATS_GUY_ATTRIBUTION_URL)) ||
       (s.kind === 'auction_price' && (s.provider !== 'AllFantasy' || s.identitySpace !== 'native' || s.attributionUrl !== null || !s.contextKey || !Number.isFinite(s.budget) || s.budget! <= 0))) return null;
   const effective = Date.parse(s.effectiveAt), observed = Date.parse(s.observedAt);
   if (!Number.isFinite(effective) || !Number.isFinite(observed) || effective > cutoff.getTime() || observed > Date.now()) return null;
