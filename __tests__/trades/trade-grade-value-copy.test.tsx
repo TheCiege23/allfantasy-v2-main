@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import type { TradesData, TradeRecord } from '@/lib/core-app/trades'
 import type { TradesBoardData } from '@/lib/core-app/tradesBoard'
-import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { HELP_TOPICS } from '@/lib/core-app/helpTopics'
 
 /*
  * 🛑 A COMPLETED TRADE'S NUMBERS ARE ITS FROZEN ORIGINAL GRADE'S, NOT TODAY'S (2026-10-03).
@@ -13,6 +13,10 @@ import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
  * trade that grade is `oneGradeForCompletedTrade`, whose view is the frozen original's `lines`
  * (`frozenCompletedGrade.ts` `withFrozenOriginal`: `{ ...original, frozenAt, current }`, where
  * `current` carries letters and totals only, never lines). The hover said "League value today".
+ *
+ * Then (2026-10-03) the hover went altogether: a `title` is invisible on a phone. What the number is
+ * now lives in the Completed trades heading's "?" (`completedTradeGrade` in help-topics/trades.ts),
+ * and that is what is pinned here — still the grade's value, never today's.
  *
  * And the cross-league Trades board said its grades "price both sides against current market
  * rank" — rank space was retired on 2026-09-25 and the letter is the frozen league-value grade
@@ -37,7 +41,7 @@ afterEach(() => {
   lang.value = 'en'
 })
 
-const NEW_TITLE = 'League value used by this grade'
+const TIP = HELP_TOPICS.completedTradeGrade
 
 // A frozen original: `frozenAt` set, today's re-grade beside it as `current` (letters and totals only).
 const FROZEN = {
@@ -75,6 +79,7 @@ function tradesData(): TradesData {
 
 const valueTitles = (container: HTMLElement) =>
   [...container.querySelectorAll('em.af-tr-asset-value')].map((n) => n.getAttribute('title'))
+const tipText = (container: HTMLElement) => container.querySelector('.af-tr-history-head .af-info-pop')?.textContent ?? ''
 
 describe('/core Trades — the value beside each asset', () => {
   it('names it as the grade’s value, never as today’s, on a frozen completed trade', () => {
@@ -82,16 +87,19 @@ describe('/core Trades — the value beside each asset', () => {
     const titles = valueTitles(container)
     // Both assets carry the grade's own line value — the frozen original's, not today's.
     expect([...container.querySelectorAll('em.af-tr-asset-value')].map((n) => n.textContent)).toEqual(['1,500', '2,000'])
-    expect(titles).toEqual([NEW_TITLE, NEW_TITLE])
+    // No hover-only title; the heading's "?" says what the number is.
+    expect(titles).toEqual([null, null])
+    expect(tipText(container)).toContain(TIP.en.body)
+    expect(TIP.en.body).toContain('a number beside an asset is the value that grade used for it')
     expect(container.innerHTML).not.toMatch(/value today/i)
   })
 
   it('says the same in Spanish, and the Spanish no longer claims "actual"', () => {
     lang.value = 'es'
     const { container } = render(<Trades data={tradesData()} />)
-    const es = coreUiCopy(NEW_TITLE, 'es')
-    expect(es).toBe('Valor de liga usado en esta calificación')
-    expect(valueTitles(container)).toEqual([es, es])
+    expect(valueTitles(container)).toEqual([null, null])
+    expect(tipText(container)).toContain(TIP.es.body)
+    expect(TIP.es.body).toContain('el valor que usó esa calificación')
     expect(container.innerHTML).not.toContain('Valor actual en esta liga')
   })
 })

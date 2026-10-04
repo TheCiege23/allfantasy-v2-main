@@ -1,6 +1,7 @@
 'use client'
 import { useTradeVisualCopy } from "./useTradeVisualCopy"
 import { TradeTranslationStatus } from './TradeTranslationStatus'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 import { useState } from 'react'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
@@ -26,7 +27,7 @@ export function TradeEvidencePanel({ grade, evaluatedAt, gaps = [], generic = fa
   return (
     <aside className={styles.panel} aria-label={copy("Trade evidence quality")} data-testid="trade-evidence-panel">
       <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
-      <div className={styles.heading}><strong>{copy(evidence.label)}</strong><span>{copy(evidence.priced)}{copy("/")}{copy(evidence.total)}{copy(" assets priced · ")}{copy(evidence.dated)}{copy("/")}{copy(evidence.total)}{copy(" dated")}</span></div>
+      <div className={styles.heading}><strong>{copy(evidence.label)} <TopicTip topic="tradeEvidence" /></strong><span>{copy(evidence.priced)}{copy("/")}{copy(evidence.total)}{copy(" assets priced · ")}{copy(evidence.dated)}{copy("/")}{copy(evidence.total)}{copy(" dated")}</span></div>
       <p>{copy("This describes the recorded evidence. It is not a probability of winning the trade.")}</p>
       {evidence.oldest && evidence.newest ? <p>{copy("Source dates: ")}{copy(formatDate(evidence.oldest))}{copy(evidence.oldest !== evidence.newest ? ` – ${formatDate(evidence.newest)}` : '')}{copy(". Sources older than 7 days are flagged.")}</p> : null}
       {evidence.issues.length ? <details><summary>{copy("What limits this evaluation? (")}{copy(evidence.issues.length)}{copy(")")}</summary><ul>{evidence.issues.map(issue => <li key={issue}>{copy(issue)}</li>)}</ul></details> : null}

@@ -11,6 +11,7 @@ import { assetValues, gradeReasons } from '@/lib/core-app/importedTradeTimeline'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { tradeUiCopy } from '@/lib/core-app/tradeUiCopy'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * The Sleeper transaction id a row stands for — the id a trade email or push links to.
@@ -156,7 +157,7 @@ function AgentIdeas({ state }: { state: NonNullable<TradesData['agentIdeas']> })
   const copy = (value: string) => tradeUiCopy(value, language)
   return (
     <section className="af-card af-tr-ideas" aria-label={copy('Trade ideas')}>
-      <h2 className="af-label">{copy('Trade ideas')}</h2>
+      <h2 className="af-label">{copy('Trade ideas')} <TopicTip topic="tradeIdeas" /></h2>
       <p className="af-tr-ideas-why">
         {copy('Near-even on this league’s values, and each roster comes out ahead. Only you see these; nothing is sent.')}
       </p>
@@ -283,7 +284,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                       team={p.team}
                     />
                     {p.team ? <TeamLogo teamAbbr={p.team} sport="NFL" logoUrl={p.teamLogoUrl} size={20} /> : null}
-                    {values[j] != null ? <em className="af-tr-asset-value af-num" title={copy('League value used by this grade')}>{Math.round(values[j]!).toLocaleString()}</em> : null}
+                    {values[j] != null ? <em className="af-tr-asset-value af-num">{Math.round(values[j]!).toLocaleString()}</em> : null}
                   </span>
                 ))}
                 {side.picks?.map((pick, j) => {
@@ -293,7 +294,7 @@ function TradeCard({ trade }: { trade: TradeRecord }) {
                     <span key={`${pick}-${j}`}>
                       {side.received.length > 0 || j > 0 ? ', ' : ''}{pick}
                       {drafted ? <span className="af-tr-pick-drafted"> ({copy('drafted')} {drafted})</span> : null}
-                      {value != null ? <em className="af-tr-asset-value af-num" title={copy('League value used by this grade')}>{Math.round(value).toLocaleString()}</em> : null}
+                      {value != null ? <em className="af-tr-asset-value af-num">{Math.round(value).toLocaleString()}</em> : null}
                     </span>
                   )
                 })}
@@ -421,6 +422,11 @@ export function Trades({ data, hidePending = false }: TradesProps) {
         {data.historyNotice ? <p className="af-tr-grade-why" role="status">{copy(data.historyNotice)}</p> : null}
         <header className="af-tr-history-head">
           <h2 className="af-display af-tr-history-title">{copy('Completed trades')}</h2>
+          {/*
+            What a completed trade's letter and the number beside each asset are. The numbers used to
+            carry a per-asset `title` saying so — hover-only, so a phone never showed it.
+          */}
+          <TopicTip topic="completedTradeGrade" />
           {data.history.available ? (
             <span className="af-chip af-num">{data.history.data.length}</span>
           ) : null}
@@ -443,7 +449,7 @@ export function Trades({ data, hidePending = false }: TradesProps) {
 
       {/* ── Grades ──────────────────────────────────────────────────── */}
       {!data.canonicalHistory ? <section className="af-card af-tr-section">
-        <h2 className="af-label">{copy('Trade grades')}</h2>
+        <h2 className="af-label">{copy('Trade grades')} <TopicTip topic="tradeGrade" /></h2>
         {data.grades.available ? (
           <ul className="af-tr-graderows">
             {data.grades.data.slice(0, 12).map((g) => (

@@ -1,6 +1,7 @@
 'use client'
 import { useTradeVisualCopy } from "./useTradeVisualCopy"
 import { TradeTranslationStatus } from './TradeTranslationStatus'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 import { useCallback, useState } from 'react'
 import { readableApiError } from '@/lib/http/readableApiError'
@@ -78,7 +79,7 @@ export function TradeFinderPanel(props: { leagueId: string | null }) {
     <section className="af-tc-dos">
       <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       {/* "Decision OS · " dropped: internal name, and the section is plainly the finder. */}
-      <div className="af-label">{copy("Trade Finder")}</div>
+      <div className="af-label">{copy("Trade Finder")} <TopicTip topic="tradeFinderMatches" /></div>
 
       {data == null ? (
         <>

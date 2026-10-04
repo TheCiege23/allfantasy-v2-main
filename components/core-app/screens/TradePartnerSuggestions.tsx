@@ -1,6 +1,7 @@
 'use client'
 import { useTradeVisualCopy } from "./useTradeVisualCopy"
 import { TradeTranslationStatus } from './TradeTranslationStatus'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 import type { PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import type { LeagueRoster } from '@/components/core-app/screens/useLeagueRosters'
@@ -102,7 +103,11 @@ export function TradePartnerSuggestions(props: {
     <section className="af-tc-fits" aria-labelledby="af-tc-fits-title">
       <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <div className="af-tc-fits-head">
-        <span className="af-label" id="af-tc-fits-title">{copy("Best trade partners")}</span>
+        {/* The "?" beside the labelling span, not inside it, so it never joins the section's name. */}
+        <span>
+          <span className="af-label" id="af-tc-fits-title">{copy("Best trade partners")}</span>
+          <TopicTip topic="tradePartnerFit" />
+        </span>
         <span className="af-tc-row-sub">{copy(" Ranked by what they have spare for you, what you have spare for them, whether a fair deal exists, and how they trade. ")}</span>
       </div>
 

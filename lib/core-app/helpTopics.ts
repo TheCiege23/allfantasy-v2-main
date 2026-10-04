@@ -17,6 +17,7 @@ import { DRAFT_TOPICS } from './help-topics/draft'
 import { OUTLOOK_TOPICS } from './help-topics/outlook'
 import { CAREER_TOPICS } from './help-topics/career'
 import { HOME_TOPICS } from './help-topics/home'
+import { TRADES_TOPICS } from './help-topics/trades'
 
 export type HelpText = { title: string; body: string }
 export type HelpTopic = { en: HelpText; es: HelpText }
@@ -33,6 +34,7 @@ export const HELP_TOPIC_AREAS = {
   outlook: OUTLOOK_TOPICS,
   career: CAREER_TOPICS,
   home: HOME_TOPICS,
+  trades: TRADES_TOPICS,
 } as const
 
 export const HELP_TOPICS = {
@@ -42,6 +44,7 @@ export const HELP_TOPICS = {
   ...OUTLOOK_TOPICS,
   ...CAREER_TOPICS,
   ...HOME_TOPICS,
+  ...TRADES_TOPICS,
 } satisfies Record<string, HelpTopic>
 
 /** Derived, so a misspelt `topic=` fails the typecheck rather than rendering an empty bubble. */

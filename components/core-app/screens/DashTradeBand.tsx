@@ -5,6 +5,7 @@ import type { RecentTrade } from '@/lib/core-app/recentTrades'
 import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import { PlayerImage } from '@/app/components/PlayerImage'
 import { TeamLogo } from '@/app/components/TeamLogo'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Latest trade activity in your leagues.
@@ -94,6 +95,7 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
     <section className="af-core af-trade" aria-label="Latest league trades">
       <div className="af-trade-head">
         <span className="af-label af-trade-kicker">Latest league trades</span>
+        <TopicTip topic="completedTradeGrade" />
         <span className="af-trade-count af-num">
           {`${trades.length} latest · past 2 weeks`}
         </span>
