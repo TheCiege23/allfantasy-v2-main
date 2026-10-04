@@ -16,6 +16,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+import { translations } from '@/lib/i18n/translations'
+
 const root = resolve(__dirname, '..')
 function read(rel: string): string {
   return readFileSync(resolve(root, rel), 'utf8')
@@ -24,19 +26,24 @@ function read(rel: string): string {
 describe('NFL redraft core — settings modal cards', () => {
   const src = read('app/league/[leagueId]/components/LeagueSettingsModal.tsx')
 
+  // Card titles and descriptions are dictionary keys since 2026-10-04 (the frame reads Spanish too),
+  // so these pin the card's id → key → icon in source and the English the key resolves to.
   it('GENERAL_CARDS includes the History card (read-only league history reachable from gear)', () => {
     // Phase 1: History is not a primary tab — it lives inside the settings
     // modal under the General card grid as `league-history`.
     expect(src).toMatch(
-      /\{\s*id:\s*'league-history',\s*title:\s*'League History'/,
+      /\{\s*id:\s*'league-history',\s*titleKey:\s*'lsModal\.card\.leagueHistory'/,
     )
+    expect(translations.en['lsModal.card.leagueHistory']).toBe('League History')
   })
 
   it('GENERAL_CARDS includes the new Audit Log card', () => {
     // Audit log is a placeholder card in Phase 1 — backend wiring lands later.
     expect(src).toMatch(
-      /\{\s*id:\s*'audit-log',\s*title:\s*'Audit Log',\s*description:\s*'Commissioner & league change history',\s*icon:\s*History\s*\}/,
+      /\{\s*id:\s*'audit-log',\s*titleKey:\s*'lsModal\.card\.auditLog',\s*descKey:\s*'lsModal\.card\.auditLogDesc',\s*icon:\s*History\s*\}/,
     )
+    expect(translations.en['lsModal.card.auditLog']).toBe('Audit Log')
+    expect(translations.en['lsModal.card.auditLogDesc']).toBe('Commissioner & league change history')
   })
 
   it('the COMMISH card grid still surfaces Commish Controls (commissioner tools)', () => {
@@ -45,8 +52,9 @@ describe('NFL redraft core — settings modal cards', () => {
     // Belt-and-suspenders: the COMMISH_CARDS list still names commish-controls
     // so the card-grid fallback works for any future code path that needs it.
     expect(src).toMatch(
-      /\{\s*id:\s*'commish-controls',\s*title:\s*'Commish Controls'/,
+      /\{\s*id:\s*'commish-controls',\s*titleKey:\s*'lsModal\.card\.commishControls'/,
     )
+    expect(translations.en['lsModal.card.commishControls']).toBe('Commish Controls')
   })
 
   it('CommissionerLeagueSettingsShell only renders when isCommissioner is true', () => {
