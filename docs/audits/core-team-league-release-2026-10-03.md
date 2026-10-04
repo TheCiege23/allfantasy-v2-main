@@ -10,6 +10,10 @@ PR #2015 adds partner roster evidence, saved/current variant comparison, verifie
 Reviewed the Core waiver handoffs/unknown-budget states, Draft HQ entry points, commissioner server role gate, portfolio league links, league-list preferences and notification actions. This was source review, not authenticated end-to-end certification.
 A confirmed notification error was fixed: HTTP success with missing or malformed stored preferences previously fell through as empty settings, allowing a mute to replace an existing league override. The read now requires explicit preference evidence and validates league override structure before any write. Explicit null remains valid for a first-time setting. 23 notification regressions passed, including eight malformed-success cases which must send no PATCH.
 
+League-list preferences also allowed overlapping full-list saves. Saves are now serialized so an older failed response cannot revert a newer edit; controls unlock after completion/failure. Favorite, hide and reorder targets are 44px. 19 preference UI/API regressions passed, including an overlapping-action and failed-save retry case.
+
+CI found the new P0/P1 empty-slot sentence missing from Spanish copy. Added the translation; all 12 rendered My Team Spanish checks passed. No failure baseline relaxed.
+
 ## Live-score evidence
 Production ESPN college game rows matched six current provider games across two polls at 02:04 and 02:06 UTC. TCU's recorded home score changed from 7 to 10 and matched the provider. This verifies sampled backend ingestion; it does not verify signed-in My Team / League Home NFL fantasy totals or their browser polling.
 

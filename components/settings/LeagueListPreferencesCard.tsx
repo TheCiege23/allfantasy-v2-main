@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowDown, ArrowUp, Eye, EyeOff, Star } from "lucide-react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { toPlayedLeagues } from "@/lib/core-app/playedLeagues"
@@ -39,6 +39,8 @@ export default function LeagueListPreferencesCard() {
   const [prefs, setPrefs] = useState<{ favorites: string[]; hidden: string[]; order: string[] } | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [saveError, setSaveError] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
   const [query, setQuery] = useState("")
 
   const load = useCallback(async () => {
@@ -80,6 +82,8 @@ export default function LeagueListPreferencesCard() {
   const shown = q ? ordered.filter((r) => r.name.toLowerCase().includes(q)) : ordered
 
   const save = async (field: "favorites" | "hidden" | "order", leagueIds: string[], revert: () => void) => {
+    savingRef.current = true
+    setSaving(true)
     setSaveError(false)
     try {
       const res = await fetch("/api/core/league-preferences", {
@@ -91,11 +95,14 @@ export default function LeagueListPreferencesCard() {
     } catch {
       revert()
       setSaveError(true)
+    } finally {
+      savingRef.current = false
+      setSaving(false)
     }
   }
 
   const toggleIn = (field: "favorites" | "hidden", id: string) => {
-    if (!prefs) return
+    if (!prefs || savingRef.current) return
     const before = prefs
     const list = prefs[field]
     const next = list.includes(id) ? list.filter((x) => x !== id) : [...list, id]
@@ -105,7 +112,7 @@ export default function LeagueListPreferencesCard() {
 
   /** Move by one place in the FULL order (not the search-filtered view), then save the whole order. */
   const move = (id: string, delta: -1 | 1) => {
-    if (!prefs) return
+    if (!prefs || savingRef.current) return
     const before = prefs
     const ids = ordered.map((r) => r.id)
     const i = ids.indexOf(id)
@@ -117,7 +124,7 @@ export default function LeagueListPreferencesCard() {
   }
 
   const resetOrder = () => {
-    if (!prefs) return
+    if (!prefs || savingRef.current) return
     const before = prefs
     setPrefs({ ...prefs, order: [] })
     void save("order", [], () => setPrefs(before))
@@ -128,6 +135,7 @@ export default function LeagueListPreferencesCard() {
       className="space-y-3 rounded-xl border p-4"
       style={{ borderColor: "var(--border)", background: "var(--panel2)" }}
       aria-labelledby="league-list-prefs-title"
+      aria-busy={saving}
       data-testid="settings-league-list-card"
     >
       <div>
@@ -147,7 +155,7 @@ export default function LeagueListPreferencesCard() {
           <button
             type="button"
             onClick={() => void load()}
-            className="rounded-lg border px-3 py-1.5 text-xs font-medium"
+            className="min-h-11 rounded-lg border px-3 py-1.5 text-xs font-medium"
             style={{ borderColor: "var(--border)", color: "var(--text)" }}
           >
             {t("settings.leagues.retry")}
@@ -173,7 +181,8 @@ export default function LeagueListPreferencesCard() {
               <button
                 type="button"
                 onClick={resetOrder}
-                className="rounded-lg border px-3 py-1.5 text-xs font-medium"
+                disabled={saving}
+                className="min-h-11 rounded-lg border px-3 py-1.5 text-xs font-medium"
                 style={{ borderColor: "var(--border)", color: "var(--text)" }}
                 data-testid="league-list-reset-order"
               >
@@ -198,7 +207,8 @@ export default function LeagueListPreferencesCard() {
                     aria-pressed={fav}
                     aria-label={`${fav ? t("settings.leagues.unfavorite") : t("settings.leagues.favorite")}: ${r.name}`}
                     onClick={() => toggleIn("favorites", r.id)}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
+                    disabled={saving}
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-lg"
                     style={{ color: fav ? "#fbbf24" : "var(--muted)" }}
                     data-testid={`league-fav-${r.id}`}
                   >
@@ -218,7 +228,8 @@ export default function LeagueListPreferencesCard() {
                     aria-pressed={hidden}
                     aria-label={`${hidden ? t("settings.leagues.show") : t("settings.leagues.hide")}: ${r.name}`}
                     onClick={() => toggleIn("hidden", r.id)}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
+                    disabled={saving}
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-lg"
                     style={{ color: "var(--muted)" }}
                     data-testid={`league-hide-${r.id}`}
                   >
@@ -230,9 +241,9 @@ export default function LeagueListPreferencesCard() {
                       <button
                         type="button"
                         aria-label={`${t("settings.leagues.moveUp")}: ${r.name}`}
-                        disabled={pos <= 0}
+                        disabled={saving || pos <= 0}
                         onClick={() => move(r.id, -1)}
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg disabled:opacity-30"
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-lg disabled:opacity-30"
                         style={{ color: "var(--muted)" }}
                         data-testid={`league-up-${r.id}`}
                       >
@@ -241,9 +252,9 @@ export default function LeagueListPreferencesCard() {
                       <button
                         type="button"
                         aria-label={`${t("settings.leagues.moveDown")}: ${r.name}`}
-                        disabled={pos >= ordered.length - 1}
+                        disabled={saving || pos >= ordered.length - 1}
                         onClick={() => move(r.id, 1)}
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg disabled:opacity-30"
+                        className="grid h-11 w-11 shrink-0 place-items-center rounded-lg disabled:opacity-30"
                         style={{ color: "var(--muted)" }}
                         data-testid={`league-down-${r.id}`}
                       >
