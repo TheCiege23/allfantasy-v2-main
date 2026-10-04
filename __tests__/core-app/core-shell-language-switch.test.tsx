@@ -49,6 +49,14 @@ describe('shell copy helpers', () => {
     expect(ageText('45s ago', 'es')).toBe('hace 45 s')
     expect(ageText('2d ago', 'es')).toBe('hace 2 d')
     expect(ageText('4m ago', 'en')).toBe('4m ago')
+    // relativeAge's forms (cardFreshness.ts) — month and year must not fall through as English.
+    expect(ageText('4 min ago', 'es')).toBe('hace 4 min')
+    expect(ageText('3w ago', 'es')).toBe('hace 3 sem')
+    expect(ageText('1mo ago', 'es')).toBe('hace 1 mes')
+    expect(ageText('2mo ago', 'es')).toBe('hace 2 meses')
+    expect(ageText('1y ago', 'es')).toBe('hace 1 año')
+    expect(ageText('3y ago', 'es')).toBe('hace 3 años')
+    expect(ageText('just now', 'es')).toBe('justo ahora')
     expect(platformsPhraseText('Sleeper, ESPN, Fantrax, MFL or Fleaflicker', 'es')).toBe('Sleeper, ESPN, Fantrax, MFL o Fleaflicker')
     expect(leagueConceptText('Guillotine', 'es')).toBe('Guillotina')
     expect(leagueConceptText('Dynasty', 'es')).toBe('Dynasty') // a format name kept as is

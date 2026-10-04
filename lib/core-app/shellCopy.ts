@@ -54,17 +54,39 @@ export function platformsPhraseText(phrase: string, language: string): string {
 }
 
 /**
- * A relative age the shell prints ("4m ago", "3h ago", "2d ago", "just now", "never") in the reader's
- * language. Anything it does not recognise passes through.
+ * A relative age in the reader's language. Covers both formatters /core uses: `describeAge`
+ * ("45s ago", "4m ago", "3h ago", "2d ago", "never synced") and `relativeAge` in cardFreshness.ts
+ * ("just now", "4 min ago", "3w ago", "2mo ago", "1y ago"). Anything it does not recognise passes
+ * through.
+ *
+ * ⚠ `min` AND `mo` MUST BE TRIED BEFORE `m` — with `m` first, "2mo ago" matches `m` and then fails on
+ * the "o", so the month and year ages (the long-stale leagues a stale stamp exists to flag) passed
+ * through as English. Caught by the My Team session before this shipped. Month and year are written
+ * out, so they take a plural; the abbreviated units do not.
  */
 export function ageText(age: string, language: string): string {
   if (language !== 'es') return age
   const a = age.trim()
   if (/^just now$/i.test(a)) return 'justo ahora'
   if (/^never\b/i.test(a)) return 'nunca'
-  const m = a.match(/^(\d+)\s*(s|m|min|h|d|w)\s+ago$/i)
+  const m = a.match(/^(\d+)\s*(min|mo|s|m|h|d|w|y)\s+ago$/i)
   if (!m) return age
-  const unit = m[2]!.toLowerCase()
-  const es = unit === 's' ? 's' : unit === 'm' || unit === 'min' ? 'min' : unit === 'h' ? 'h' : unit === 'd' ? 'd' : 'sem'
-  return `hace ${m[1]} ${es}`
+  const n = Number(m[1])
+  switch (m[2]!.toLowerCase()) {
+    case 's':
+      return `hace ${n} s`
+    case 'm':
+    case 'min':
+      return `hace ${n} min`
+    case 'h':
+      return `hace ${n} h`
+    case 'd':
+      return `hace ${n} d`
+    case 'w':
+      return `hace ${n} sem`
+    case 'mo':
+      return `hace ${n} ${n === 1 ? 'mes' : 'meses'}`
+    default:
+      return `hace ${n} ${n === 1 ? 'año' : 'años'}`
+  }
 }
