@@ -68,6 +68,12 @@ describe('the scorer applies each sport’s panel store', () => {
     expect(await score({ pts: 20, threes: 2 })).toBe(11)
   })
 
+  it('NBA: ESPN points subtract field-goal and free-throw attempts', async () => {
+    league('NBA', { nba_scoring_config: { rules: buildFullNbaScoringConfig('espn_default') } })
+    // ESPN: points 20 + made field goals 8*2 - attempts 16 + made FT 4 - attempts 5.
+    expect(await score({ pts: 20, fgm: 8, fga: 16, ftm: 4, fta: 5 })).toBe(19)
+  })
+
   it('NCAAB: a steal at the panel’s 2', async () => {
     league('NCAAB', { ncaab_scoring_config: { rules: UI_DEFAULTS.NCAAB } })
     expect(await score({ stl: 1 })).toBe(2)

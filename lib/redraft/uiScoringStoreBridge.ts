@@ -85,6 +85,8 @@ export const UI_SCORING_STORES: Readonly<Record<string, Store>> = {
       three_point_made: 'threes',
       field_goals_made: 'fgm',
       free_throws_made: 'ftm',
+      field_goals_attempted: 'fga',
+      free_throws_attempted: 'fta',
       double_double: 'dbl_dbl',
       triple_double: 'trpl_dbl',
     },
