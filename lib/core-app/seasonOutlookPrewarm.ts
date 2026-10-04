@@ -9,6 +9,7 @@ import {
   readLeagueSims,
   writeLeagueSimMarker,
   writeLeagueSims,
+  writeLeagueSimCheck,
 } from './seasonOutlookSims'
 
 /**
@@ -142,15 +143,17 @@ export async function runOutlookPrewarm(
           await writeLeagueSimMarker(c.leagueId, 'unsimulated', now)
           continue
         }
-        const held = stored.get(c.leagueId)
+        const held = p.pid === c.leagueId ? stored.get(c.leagueId) : (await readLeagueSims([p.pid], now)).get(p.pid)
         const checkedAt = new Date().toISOString()
         if (held && held.hash === leagueSimHash(p.sim, p.seed) && held.iterations >= ITERATIONS) {
           await writeLeagueSims([[p.pid, { ...held, checkedAt }]], now)
+          if (p.pid !== c.leagueId) await writeLeagueSimCheck(c.leagueId, now)
           out.unchanged += 1
           continue
         }
         const result = computeLeagueSim(p.sim, p.seed, ITERATIONS, now)
         await writeLeagueSims([[p.pid, { ...result, checkedAt }]], now)
+        if (p.pid !== c.leagueId) await writeLeagueSimCheck(c.leagueId, now)
         out.computed += 1
       } catch (e) {
         out.failed += 1

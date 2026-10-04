@@ -87,6 +87,7 @@ function spendGuardExceptions(): string[] {
  * A host matching one of these is examined and dismissed, not ignored.
  */
 const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
+  { name: 'namespace', why: 'OOXML chart, drawing and relationship identifiers in locally generated Excel files; never fetched', test: /^schemas\.openxmlformats\.org$/i },
   { name: 'share-link', why: 'Stats Guy public attribution website; the separate API host is monitored', test: /^statsguyfantasy\.com$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)allfantasy\.(ai|app|com|io|local)$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)clawship\.ai$/i },

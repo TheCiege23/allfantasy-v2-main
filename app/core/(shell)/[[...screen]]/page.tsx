@@ -193,6 +193,9 @@ import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
 import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
 import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
+import { buildWeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
+import { readWeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
+import { WeeklyBlueprint } from '@/components/core-app/WeeklyBlueprint'
 import { toStandingsOdds } from '@/lib/core-app/standingsOdds'
 import { getLineupEfficiency } from '@/lib/core-app/lineupEfficiency'
 import { buildDraftOrderPreview, readDraftOrderRule } from '@/lib/core-app/standingsDraftOrder'
@@ -1539,6 +1542,7 @@ export default async function AfCorePage({
         activeKey,
         userId,
         viewerEmail: session?.user?.email ?? null,
+        viewerName: shellProfile.name,
         selectedLeagueId,
         playerQuery,
         selectedPlayerId,
@@ -1845,6 +1849,7 @@ type CoreScreenContext = {
   activeKey: CoreNavKey
   userId: string
   /** For the plan lookup only — admin and QA accounts bypass the paywall by email. */
+  viewerName: string | null
   viewerEmail: string | null
   selectedLeagueId: string | null
   playerQuery: string
@@ -2643,9 +2648,9 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   /* Started before the pulse is awaited, so its two small reads overlap the board's. Null on failure: the line is omitted. */
   const lineupReminderPromise = onMyTeamBoard ? getLineupReminderStatus(userId).catch(() => null) : Promise.resolve(null)
   const myTeamPulse =
-    onMyTeamBoard
+    (onMyTeamBoard || (activeKey === 'week' && sp.view !== 'rivalries'))
       /* `?format=` / `?sport=` / `?platform=` — the board's filter chips, applied before the cap. */
-      ? await getMyTeamPulse(userId, new Date(), pausedSyncLeagueIds ?? undefined, boardFilterFromParams(sp)).catch((error: unknown) => {
+      ? await getMyTeamPulse(userId, new Date(), pausedSyncLeagueIds ?? undefined, activeKey === 'week' ? undefined : boardFilterFromParams(sp), activeKey === 'week' ? selectedLeagueId : null).catch((error: unknown) => {
           console.error('[core/my-team] pulse read failed', error)
           myTeamLoadFailed = true
           return null
@@ -3179,6 +3184,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const weekLeagues = playedLeagues.map((l) => ({
     id: l.id,
     name: l.name,
+    sport: String(l.sport ?? ''),
+    settings: (l as { settings?: unknown }).settings ?? null,
     platform: String(l.platform ?? ''),
     platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
     /* Only to flag elimination formats — the list already carries it. */
@@ -3278,6 +3285,8 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const outlookLeagues = playedLeagues.map((l) => ({
     id: l.id,
     name: l.name,
+    sport: String(l.sport ?? ''),
+    leagueType: (l as { leagueType?: string | null }).leagueType ?? null,
     platform: String(l.platform ?? ''),
     platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
     settings: (l as { settings?: unknown }).settings ?? null,
@@ -3306,6 +3315,24 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     ? outlookOnSummary
       ? (outlookFresh?.data ?? null)
       : await getSeasonOutlook(userId, outlookLeagues, selectedLeagueId).catch(() => null)
+    : null
+
+  // Your Week reads only the selected league's existing model, including its scenarios.
+  const weeklyOutlookLeague = activeKey === 'week' && selectedLeagueId && !rivalriesView
+    ? outlookLeagues.find(l => l.id === selectedLeagueId) ?? null : null
+  const weeklyOutlook = weeklyOutlookLeague
+    ? await getSeasonOutlook(userId, [weeklyOutlookLeague], selectedLeagueId, ctx.now, outlookLeagues).catch(error => {
+        console.error('[core/week] playoff outlook failed', error)
+        return null
+      }) : outlook
+  const weeklyBlueprint = activeKey === 'week' && !rivalriesView && weekBoard ? buildWeeklyBlueprint({
+    name: ctx.viewerName, leagues: weekLeagues, board: weekBoard, pulse: myTeamPulse, outlook: weeklyOutlook,
+    lineups: ctx.weekLineups, favoriteIds: ctx.favoriteIds, focusLeagueId: selectedLeagueId, now: ctx.now,
+    commissionerLeagueIds: playedLeagues.filter(l => l.isCommissioner).map(l => l.id),
+  }) : null
+  const weeklyPath = weeklyBlueprint && selectedLeagueId && weekBoard?.leagueBoard
+    ? { ...await readWeeklyPlayoffPath(userId, weeklyOutlook?.leagues.find(l => l.leagueId === selectedLeagueId) ?? null,
+        weeklyOutlook?.swingByLeague[selectedLeagueId] ?? null, weekBoard.leagueBoard.season, weekBoard.leagueBoard.week, ctx.now), leagueId: selectedLeagueId }
     : null
 
   /*
@@ -4895,6 +4922,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * against the route ceiling.
          */
         <>
+          {weeklyBlueprint ? <WeeklyBlueprint data={weeklyBlueprint} path={weeklyPath} /> : null}
           {weekBoard?.historyIncomplete || rivalries?.historyIncomplete ? <WeekHistoryNotice retryHref={retryHref} /> : null}
           {rivalriesView ? (
             rivalries ? (
@@ -4920,6 +4948,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
               <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" lineups={ctx.weekLineups} />
             ) : (
               <WeekBoard
+                priorityLeagueIds={weeklyBlueprint?.attentionLeagueIds}
                 board={weekBoard}
                 outlook={outlook}
                 rivalriesHref="/core/week?view=rivalries"

@@ -108,6 +108,27 @@ beforeEach(() => {
 })
 
 describe('getSeasonOutlook', () => {
+  it('withholds exact status when any regular-season period is missing',async()=>{
+    const fullField={...LEAGUE,settings:{...LEAGUE.settings,playoff_teams:8}}
+    expect((await getSeasonOutlook('me',[fullField])).leagues[0].you?.status).toBe('clinched')
+    h.matchups=h.matchups.filter(r=>r.week!==6)
+    const partial=await getSeasonOutlook('me',[fullField])
+    expect(partial.leagues[0].you).toMatchObject({playoffPct:100,status:null})
+    expect(partial.summary.clinched).toBe(0)
+  })
+  it('withholds exact status when a known team has no schedule rows',async()=>{
+    h.teams.push({externalId:'9',teamName:null,claimedByUserId:null,league:{id:'L1',platformLeagueId:PID}})
+    const fullField={...LEAGUE,settings:{...LEAGUE.settings,playoff_teams:8}}
+    expect((await getSeasonOutlook('me',[fullField])).leagues[0].you?.status).toBeNull()
+  })
+  it('never calls a 100% sampled forecast mathematically clinched',async()=>{
+    await getSeasonOutlook('me',[LEAGUE])
+    const held=h.cache.get(leagueSimCacheKey(`sleeper:${PID}`)) as {iterations:number;counts:Record<string,{playoff:number}>}
+    held.counts['5'].playoff=held.iterations
+    const out=await getSeasonOutlook('me',[LEAGUE])
+    expect(out.leagues[0].you).toMatchObject({playoffPct:100,status:null})
+    expect(out.summary.clinched).toBe(0)
+  })
   it('keeps a partially scored current week in the remaining schedule', async () => {
     h.leagueMetadata = { season: 2026, settings: { leg: 4 } }
     for (const r of h.matchups) {
@@ -163,7 +184,7 @@ describe('getSeasonOutlook', () => {
   it('🛑 stores each league run and reuses it while the inputs are unchanged', async () => {
     const first = await getSeasonOutlook('me', [LEAGUE])
     expect(first.runs).toEqual({ reused: 0, computed: 1 })
-    expect(h.cache.has(leagueSimCacheKey(PID))).toBe(true)
+    expect(h.cache.has(leagueSimCacheKey(`sleeper:${PID}`))).toBe(true)
 
     const second = await getSeasonOutlook('me', [LEAGUE])
     expect(second.runs).toEqual({ reused: 1, computed: 0 })

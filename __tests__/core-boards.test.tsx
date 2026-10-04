@@ -465,12 +465,8 @@ describe('WeekBoard', () => {
     expect(text).not.toMatch(/not enough history to call/i)
   })
 
-  /*
-   * The trailing column's whole purpose. Being 20 points down in a league you
-   * cannot reach the playoffs in is not something to spend a Sunday on, and a
-   * board that lists it anyway is back to being the 47-tile grid this replaced.
-   */
-  it('drops a trailing league with no realistic playoff path, and says how many', () => {
+  // A long shot remains playable; an estimate cannot remove a user's league.
+  it('keeps a trailing league with low playoff odds and labels the long shot', () => {
     const behind = weekMatchup({
       leagueId: 'dead',
       leagueName: 'World Football Draft',
@@ -487,15 +483,16 @@ describe('WeekBoard', () => {
       />,
     )
     const text = container.textContent ?? ''
-    expect(text).not.toContain('World Football Draft')
-    expect(text).toMatch(/1 league is behind with no realistic\s+playoff path/i)
+    expect(text).toContain('World Football Draft')
+    expect(text).toContain('long shot')
+    expect(text).not.toMatch(/no realistic\s+playoff path/i)
   })
 
   /*
    * ⚠ WITHOUT AN OUTLOOK THE FILTER CANNOT RUN, AND EXCLUDING EVERYTHING WOULD BE
    * WORSE THAN SHOWING AN UNFILTERED COLUMN. The board says which it did.
    */
-  it('shows an unfiltered trailing column when the simulation is unavailable, and says so', () => {
+  it('keeps trailing leagues when the simulation is unavailable without invented odds', () => {
     const behind = weekMatchup({
       leagueId: 'x',
       leagueName: 'Cream Bowl',
@@ -512,7 +509,7 @@ describe('WeekBoard', () => {
     )
     const text = container.textContent ?? ''
     expect(text).toContain('Cream Bowl')
-    expect(text).toMatch(/playoff filter did not run/i)
+    expect(text).not.toMatch(/\d+% playoff odds/i)
   })
 
   /*

@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { matchupCloseness } from '@/lib/core-app/weeklyBlueprint'
+import { FormatWeekCards } from '@/components/core-app/FormatWeekCards'
 import { WeekDateRange } from '@/components/core-app/WeekDateRange'
 
 import type { SeasonOutlook } from '@/lib/core-app/seasonOutlook'
@@ -30,34 +32,10 @@ import '@/components/core-app/af-core-boards.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 
-/**
- * `/core/week` with no league held — the two-column week board.
- *
- * 2026-09-07 handoff (`AF Core Week.dc.html`): "top 5 leagues you're leading /
- * bottom 5 you're trailing but still have a playoff path — leagues with no
- * realistic path are excluded and noted."
- *
- * ── Two loaders, two different questions ────────────────────────────────────
- *
- * `getWeekBoard` answers "how is THIS WEEK going" — a projected margin per
- * matchup, from the real schedule. `getSeasonOutlook` answers "does it still
- * matter" — a simulated playoff percentage over the remaining season. The
- * design needs both: the margin orders the columns, the percentage decides
- * which leagues belong in the trailing one at all.
- *
- * ⚠ THE PLAYOFF FILTER IS THE POINT OF THE TRAILING COLUMN, so a league with no
- * odds is EXCLUDED from it rather than assumed alive. Being 20 points down in a
- * league you cannot reach the playoffs in is not something to spend a Sunday on,
- * and a board that lists it anyway is back to being the 47-tile grid this
- * replaced. The excluded count is stated under the columns — never dropped in
- * silence.
- *
- * ⚠ AND A LEAGUE THE SIMULATION DID NOT COVER IS NOT THE SAME AS ONE IT RULED
- * OUT. An unmodelled league keeps its place in the LEADING column (being ahead
- * is worth knowing regardless) and is named in the note under the board.
- */
+/** Universal weekly priorities, then unitless matchup closeness. No playoff-odds exclusion. */
 
 export type WeekBoardProps = {
+  priorityLeagueIds?: string[]
   board: WeekBoardData
   /**
    * Playoff odds per league. Null when the simulation could not run — the board
@@ -80,8 +58,8 @@ export type WeekBoardProps = {
   lineups?: WeekLineups | null
 }
 
-/** Below this the season is, for practical purposes, decided against you. */
-const DEAD_PATH_PCT = 5
+/** Label a long shot without asserting mathematical elimination. */
+const LONG_SHOT_PCT = 5
 
 /**
  * How many unprojectable matchups the third section lists before it stops and
@@ -102,17 +80,17 @@ type Row = {
 }
 
 function pctLabel(pct: number | null): string {
-  return pct == null ? '—' : `${Math.round(pct)}%`
+  return pct == null ? '—' : pct > 0 && pct < 1 ? '<1%' : pct > 99 && pct < 100 ? '>99%' : `${Math.round(pct)}%`
 }
 
 /*
  * 2026-09-13 handoff: one compact row per matchup — crest, league over
- * "vs opponent · N% playoff odds", and the projected margin as the single value
+ * "vs opponent · N% playoff odds", and the historical scoring estimate as the single value
  * on the right.
  *
  * ⚠ NOTHING THE OLD ROW SAID IS GONE, IT MOVED. The rank numeral is dropped (the
  * section label already states the order); the playoff % moved into the sub
- * line; "% to win" sits under the margin; and "projected margin" is the value's
+ * line; "% to win" sits under the margin; and "historical scoring estimate" is the value's
  * accessible name, because a bare "+38.2" beside a league reads as a score.
  */
 function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?: WeekLineups | null }) {
@@ -130,8 +108,8 @@ function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?:
   const result = live?.final ? (live.margin > 0 ? 'won' : live.margin < 0 ? 'lost' : 'tied') : null
   const valueSub = live ? coreUiCopy(result ?? 'so far', language) : es ? `${win}% de ganar` : `${win}% to win`
   const valueLabel = es
-    ? live ? `${sign}${abs} en el marcador, ${live.you.toFixed(1)} a ${live.them.toFixed(1)}${result ? ` — ${coreUiCopy(result, language)}` : ' hasta ahora'}` : `${sign}${abs} de diferencia proyectada, ${win}% de ganar`
-    : live ? `${sign}${abs} on the scoreboard, ${live.you.toFixed(1)} to ${live.them.toFixed(1)}${result ? ` — you ${result}` : ' so far'}` : `${sign}${abs} projected margin, ${win}% to win`
+    ? live ? `${sign}${abs} en el marcador, ${live.you.toFixed(1)} a ${live.them.toFixed(1)}${result ? ` — ${coreUiCopy(result, language)}` : ' hasta ahora'}` : `${sign}${abs} de diferencia histórica estimada, ${win}% de ganar según el historial`
+    : live ? `${sign}${abs} on the scoreboard, ${live.you.toFixed(1)} to ${live.them.toFixed(1)}${result ? ` — you ${result}` : ' so far'}` : `${sign}${abs} historical scoring estimate, ${win}% to win`
   return (
     <li>
       <Link className="af-bd-row" href={m.href}>
@@ -149,7 +127,7 @@ function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?:
               home and Matchup board print (`rosterLabel`).
             */}
             {`${coreUiCopy('vs', language)} ${rosterLabel([m.opponent.name], m.opponent.rosterId)}`}
-            {row.playoffPct != null ? es ? ` · ${pctLabel(row.playoffPct)} de entrar en playoffs` : ` · ${pctLabel(row.playoffPct)} playoff odds` : ''}
+            {row.playoffPct != null ? es ? ` · ${pctLabel(row.playoffPct)} de entrar en playoffs${row.playoffPct > 0 && row.playoffPct < LONG_SHOT_PCT ? ' · pocas probabilidades' : ''}` : ` · ${pctLabel(row.playoffPct)} playoff odds${row.playoffPct > 0 && row.playoffPct < LONG_SHOT_PCT ? ' · long shot' : ''}` : ''}
             {m.elimination ? es ? ' · se elimina la puntuación más baja' : ' · lowest score is eliminated' : ''}
           </span>
           <WeekLineupLine lineups={lineups} leagueId={m.leagueId} season={m.season} week={m.week} />
@@ -158,7 +136,7 @@ function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?:
           className="af-bd-val"
           data-sev={ahead ? 'good' : 'bad'}
           aria-label={valueLabel}
-          title={coreUiCopy(live ? 'Scored margin this week' : 'Projected margin this week', language)}
+          title={coreUiCopy(live ? 'Scored margin this week' : 'Historical scoring estimate this period', language)}
         >
           <span aria-hidden>
             {sign}
@@ -209,6 +187,7 @@ export function WeekBoard({
   allHref,
   totalLeagues,
   lineups,
+  priorityLeagueIds = [],
 }: WeekBoardProps) {
   const { language } = useOptionalLanguage()
   const es = language === 'es'
@@ -216,7 +195,7 @@ export function WeekBoard({
   const pctByLeague = new Map<string, number>()
   if (outlook) {
     for (const l of outlook.leagues) {
-      if (l.you) pctByLeague.set(l.leagueId, l.you.playoffPct)
+      if (l.you?.modelled) pctByLeague.set(l.leagueId, l.you.playoffPct)
     }
   }
 
@@ -246,28 +225,12 @@ export function WeekBoard({
   /* The "not enough history" section keeps only the matchups that still have nothing to rank on. */
   const unprojected = board.unprojected.filter((m) => m.live == null)
 
-  const leading = projected
-    .filter((r) => r.margin > 0)
-    .sort((a, b) => b.margin - a.margin)
-    .slice(0, 5)
-
-  const behind = projected.filter((r) => r.margin <= 0)
-
-  /*
-   * The filter the design names. With no outlook we cannot apply it, and
-   * excluding everything would be worse than showing an unfiltered column — so
-   * a null percentage passes here and the note below says the filter did not run.
-   */
-  const alive = outlook
-    ? behind.filter((r) => r.playoffPct == null || r.playoffPct >= DEAD_PATH_PCT)
-    : behind
-  const dead = behind.length - alive.length
-
-  const trailing = alive
-    .sort((a, b) => a.margin - b.margin)
-    .slice(0, 5)
-    /* Closest-to-level last, so the column reads from worst to most winnable. */
-    .reverse()
+  const priorityIndex = (id: string) => { const i = priorityLeagueIds.indexOf(id); return i < 0 ? Number.MAX_SAFE_INTEGER : i }
+  const byAttention = (a: Row, b: Row) => priorityIndex(a.m.leagueId) - priorityIndex(b.m.leagueId)
+    || matchupCloseness(a.m) - matchupCloseness(b.m) || a.m.leagueName.localeCompare(b.m.leagueName)
+  const leading = projected.filter(r => r.margin > 0).sort(byAttention).slice(0, 5)
+  const behind = projected.filter(r => r.margin <= 0)
+  const trailing = [...behind].sort(byAttention).slice(0, 5)
 
   /*
    * ⚠ THE THIRD SECTION COUNTS TOWARDS `shown`, OR THE FOOTER LIES. `FooterSummary`
@@ -285,7 +248,7 @@ export function WeekBoard({
      * invisible here AND absent from every term of this sum, so the footer's
      * "N more sit between these two columns" quietly absorbed them.
      */
-    board.eliminationWeeks.length
+    board.eliminationWeeks.length + (board.formatWeeks?.length ?? 0)
   const considered = Math.max(
     totalLeagues,
     board.coinFlips.length +
@@ -300,7 +263,7 @@ export function WeekBoard({
     return (
       <div className="af-bd">
         <div className="af-label" style={{ marginBottom: 8 }}><WeekDateRange /></div>
-        <BoardHead eyebrow={copy('Core · Your week')} title={copy('Your week')} blurb={copy('The five leagues you are furthest ahead in, against the five you are behind in that a playoff run still depends on.')} />
+        <BoardHead eyebrow={copy('Core · Your week')} title={copy('Your week')} blurb={es ? 'Tus prioridades primero; después, enfrentamientos ajustados dentro de la puntuación de cada liga. Todas las ligas siguen disponibles.' : 'Your priorities first, then close matchups within each league’s scoring. Every league stays available.'} />
         <NoLeaguesYet what={copy("Once one is, this board shows the leagues you lead and trail in this week's matchups.")} language={language} />
       </div>
     )
@@ -312,7 +275,7 @@ export function WeekBoard({
       <BoardHead
         eyebrow={copy('Core · Your week')}
         title={copy('Your week')}
-        blurb={copy('The five leagues you are furthest ahead in, against the five you are behind in that a playoff run still depends on.')}
+        blurb={es ? 'Tus prioridades primero; después, enfrentamientos ajustados dentro de la puntuación de cada liga. Todas las ligas siguen disponibles.' : 'Your priorities first, then close matchups within each league’s scoring. Every league stays available.'}
       />
 
       <div
@@ -320,22 +283,18 @@ export function WeekBoard({
         data-stack={columnsTooUneven(leading.length, trailing.length) || undefined}
       >
         <Column
-          label={copy('Leading · top 5')}
+          label={es ? 'Por delante · primeras 5' : 'Leading · first 5'}
           rows={leading}
           ahead
-          quiet={copy('You are not projected ahead in any league this week.')}
+          quiet={es ? 'Ninguna liga está por delante en el marcador o la estimación histórica disponible.' : 'No league is ahead on its available scoreboard or historical estimate.'}
           lineups={lineups}
         />
         <Column
-          label={copy('Trailing · bottom 5, playoffs still live')}
+          label={es ? 'Por detrás · primeras 5' : 'Trailing · first 5'}
           rows={trailing}
           ahead={false}
           lineups={lineups}
-          quiet={
-            behind.length > 0
-              ? copy('Every league you are behind in this week is already out of playoff reach.')
-              : copy('You are not projected behind in any league this week.')
-          }
+          quiet={es ? 'Ninguna liga está por detrás en sus datos disponibles.' : 'No league is behind on its available data.'}
         />
       </div>
 
@@ -356,7 +315,7 @@ export function WeekBoard({
         opponent and a working link, were reduced to a count.
 
         ⚠ AND THEY STILL DO NOT ENTER THE TWO COLUMNS, WHICH IS THE CONSTRAINT
-        THAT SHAPES THIS. Those columns are ordered BY MARGIN and an
+        THAT SHAPES THIS. Those columns require a live score or historical estimate and an
         unprojectable matchup has none; dropping one in would rank it against a
         number it does not have, and defaulting it to 50% would invent the
         projection the loader deliberately refused. So it gets its own section,
@@ -576,9 +535,7 @@ export function WeekBoard({
           : copy(board.model.basis)}{' '}
         {/* Said once, here, because the rows no longer say "projected" once a week has points. */}
         {copy("Once a league's week has points on the board, its margin is the actual score, not a projection.")}{' '}
-        {outlook
-          ? es ? ` Las probabilidades de playoffs se simulan con el calendario restante; una liga por debajo del ${DEAD_PATH_PCT}% no aparece en la columna de abajo.` : ` Playoff odds are a simulated probability over the remaining schedule; a league below ${DEAD_PATH_PCT}% is left out of the trailing column.`
-          : copy(' The playoff filter did not run this time, so the trailing column is every league you are behind in — not only the ones still live.')}
+        {es ? ' Las probabilidades bajas no ocultan ligas ni prueban una eliminación matemática. Los márgenes de deportes distintos no se comparan entre sí.' : ' Low playoff odds never hide leagues or prove mathematical elimination. Point margins from different sports are not compared with each other.'}
       </p>
 
       {/*
@@ -587,16 +544,8 @@ export function WeekBoard({
         below the cut — and collapsing them into one number is how a board stops
         being trustworthy at sixty leagues.
       */}
-      {dead > 0 || unprojected.length > UNPROJECTED_SHOWN || board.withoutSchedule > 0 ? (
+      {unprojected.length > UNPROJECTED_SHOWN || board.withoutSchedule > 0 ? (
         <p className="af-bd-note af-bd-note--plain">
-          {dead > 0 ? (
-            <>
-              <strong>
-                {es ? `${dead} ${dead === 1 ? 'liga está' : 'ligas están'} por detrás sin opciones reales de playoffs` : `${dead} ${dead === 1 ? 'league is' : 'leagues are'} behind with no realistic playoff path`}
-              </strong>{' '}
-              {es ? ' y no aparecen en la columna de abajo. ' : ' and are left out of the trailing column. '}
-            </>
-          ) : null}
           {/*
             ⚠ THE SENTENCE HAD TO CHANGE WHEN THE SECTION ABOVE STARTED LISTING
             THEM. "47 could not be projected" over a list of ten of those very
@@ -613,6 +562,7 @@ export function WeekBoard({
         </p>
       ) : null}
 
+      <FormatWeekCards weeks={board.formatWeeks ?? []} />
       <div className="af-bd-foot">
         <p className="af-bd-foot-text">
           {copy("All-time head-to-head against this week's opponents.")}

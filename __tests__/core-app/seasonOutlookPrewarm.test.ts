@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   stamps: vi.fn(),
   write: vi.fn(),
   marker: vi.fn(),
+  check: vi.fn(),
   compute: vi.fn(),
 }))
 
@@ -22,6 +23,7 @@ vi.mock('@/lib/core-app/seasonOutlookSims', () => ({
   readLeagueSims: h.read,
   readLeagueSimStamps: h.stamps,
   writeLeagueSimMarker: h.marker,
+  writeLeagueSimCheck: h.check,
   writeLeagueSims: h.write,
   computeLeagueSim: h.compute,
   leagueSimHash: (sim: { tag: string }) => `hash-${sim.tag}`,
@@ -60,6 +62,15 @@ beforeEach(() => {
 })
 
 describe('runOutlookPrewarm', () => {
+  it('writes provider-scoped simulations and a separate source queue checkpoint', async () => {
+    h.groupBy.mockResolvedValue([{ leagueId:'new', _max:{updatedAt:at('2026-09-17T14:00:00Z')} }])
+    h.read.mockResolvedValue(new Map())
+    h.load.mockResolvedValue({prepared:[{pid:'sleeper:new',seed:1,sim:{tag:'new'}}]})
+    const out=await runOutlookPrewarm(NOW)
+    expect(out.computed).toBe(1)
+    expect(h.write.mock.calls[0][0][0][0]).toBe('sleeper:new')
+    expect(h.check).toHaveBeenCalledWith('new',NOW)
+  })
   it('🛑 a rewritten-but-unchanged league is stamped checked, not re-run', async () => {
     h.groupBy.mockResolvedValue([{ leagueId: 'same', _max: { updatedAt: at('2026-09-17T14:00:00Z') } }])
     h.read.mockResolvedValue(new Map([['same', stored('hash-same', '2026-09-17T12:00:00Z')]]))

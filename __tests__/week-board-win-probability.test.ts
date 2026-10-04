@@ -32,9 +32,10 @@ describe('buildProfiles / pairRows (exported unchanged)', () => {
     leagueId: 'L', seasonYear: 2026, week, rosterId, matchupId, pointsFor, pointsAgainst: pointsFor ? 1 : 0, win: 0,
   })
 
-  it('profiles need three scored weeks and floor σ at 12; unscored rows do not count', () => {
+  it('profiles need three scored weeks and floor spread relative to scoring units; unscored rows do not count', () => {
     const profiles = buildProfiles([r('a', 1, 100, 1), r('a', 2, 101, 1), r('a', 3, 100, 1), r('a', 4, 0, 1), r('b', 1, 90, 1), r('b', 2, 91, 1)])
-    expect(profiles.get('L:a')).toMatchObject({ n: 3, sigma: 12 })
+    expect(profiles.get('L:a')!.n).toBe(3)
+    expect(profiles.get('L:a')!.sigma).toBeCloseTo(profiles.get('L:a')!.mu * .1)
     expect(profiles.get('L:a')!.mu).toBeCloseTo(100.33, 2)
     expect(profiles.has('L:b')).toBe(false)
   })

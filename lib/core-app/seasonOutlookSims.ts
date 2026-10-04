@@ -36,7 +36,7 @@ import {
  */
 
 /** Bump whenever `outlookSim.ts` changes what a given input produces. */
-export const MODEL_VERSION = 2
+export const MODEL_VERSION = 3
 
 const KEY_PREFIX = 'core-outlook:league:v1:'
 /** Long, because the hash decides validity; the TTL only bounds a league nobody opens again. */
@@ -61,6 +61,17 @@ export function leagueSimCacheKey(platformLeagueId: string): string {
   return `${KEY_PREFIX}${platformLeagueId}`
 }
 
+/** Legacy source-ID queue checkpoint; deliberately not a reusable simulation. */
+export async function writeLeagueSimCheck(sourceLeagueId: string, now = new Date()): Promise<boolean> {
+  const cacheKey = leagueSimCacheKey(sourceLeagueId)
+  const data = { checkedAt: now.toISOString(), computedAt: now.toISOString() }
+  const expiresAt = new Date(now.getTime() + TTL_MS)
+  try {
+    await prisma.sportsDataCache.upsert({ where: { cacheKey }, create: { cacheKey, data, expiresAt }, update: { data, expiresAt } })
+    return true
+  } catch { return false }
+}
+
 const fixed = (n: number, d: number) => (Number.isFinite(n) ? n.toFixed(d) : 'x')
 
 /** A digest of exactly what `computeLeagueSim` reads. */
@@ -72,6 +83,7 @@ export function leagueSimHash(sim: SimInput, seed: number): string {
         t.rosterId,
         t.wins,
         t.losses,
+        t.ties ?? 0,
         fixed(t.pointsFor, 2),
         t.profile ? `${fixed(t.profile.mu, 3)}/${fixed(t.profile.sigma, 3)}/${t.profile.n}` : '-',
       ].join(':'),

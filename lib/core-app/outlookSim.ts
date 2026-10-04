@@ -28,6 +28,8 @@ export type SimTeam = {
   rosterId: string
   wins: number
   losses: number
+  /** Final tied games, counted as half a win for modeled qualification. */
+  ties?: number
   pointsFor: number
   /** Null when the team has too few completed weeks to model. */
   profile: SimProfile | null
@@ -163,6 +165,7 @@ type Prepared = {
   n: Float64Array
   has: Uint8Array
   baseWins: Float64Array
+  baseTies: Float64Array
   basePoints: Float64Array
   ga: Int32Array
   gb: Int32Array
@@ -187,9 +190,11 @@ function prepare(input: SimInput, opts: Pick<SimOptions, 'adjustments' | 'forced
   const n = new Float64Array(size + 1)
   const has = new Uint8Array(size + 1)
   const baseWins = new Float64Array(size)
+  const baseTies = new Float64Array(size)
   const basePoints = new Float64Array(size)
   teams.forEach((t, i) => {
     baseWins[i] = t.wins
+    baseTies[i] = t.ties ?? 0
     basePoints[i] = t.pointsFor
     if (t.profile) {
       mu[i] = t.profile.mu
@@ -291,7 +296,7 @@ function prepare(input: SimInput, opts: Pick<SimOptions, 'adjustments' | 'forced
   for (let i = 0; i < size; i += 1) maxWins = Math.max(maxWins, baseWins[i] + gamesLeft[i])
 
   return {
-    ids, index, mu, sigma, n, has, baseWins, basePoints, ga, gb, adjA, adjB, forcedWinner, slotOf, playoffAdj,
+    ids, index, mu, sigma, n, has, baseWins, baseTies, basePoints, ga, gb, adjA, adjB, forcedWinner, slotOf, playoffAdj,
     playoffTeams, byeTeams, maxWins,
   }
 }
@@ -396,7 +401,7 @@ function runSeasons(
     }
 
     for (let i = 0; i < size; i += 1) order[i] = i
-    order.sort((x, y) => wins[y] - wins[x] || points[y] - points[x])
+    order.sort((x, y) => (wins[y] + p.baseTies[y] / 2) - (wins[x] + p.baseTies[x] / 2) || points[y] - points[x])
 
     const field = order.slice(0, p.playoffTeams)
     for (const i of field) sink.playoff[i] += 1
@@ -594,11 +599,12 @@ export function mathStatus(input: SimInput, rosterId: string): 'clinched' | 'eli
   const me = input.teams.find((t) => t.rosterId === rosterId)
   if (!me) return null
   const left = (id: string) => input.remaining.filter((g) => g.a === id || g.b === id).length
-  const myMax = me.wins + left(rosterId)
+  const recordPoints = (t: SimTeam) => t.wins + (t.ties ?? 0) / 2
+  const myMax = recordPoints(me) + left(rosterId)
   const others = input.teams.filter((t) => t.rosterId !== rosterId)
-  const surelyAbove = others.filter((t) => t.wins > myMax).length
+  const surelyAbove = others.filter((t) => recordPoints(t) > myMax).length
   if (surelyAbove >= input.playoffTeams) return 'eliminated'
-  const canReach = others.filter((t) => t.wins + left(t.rosterId) >= me.wins).length
+  const canReach = others.filter((t) => recordPoints(t) + left(t.rosterId) >= recordPoints(me)).length
   if (canReach < input.playoffTeams) return 'clinched'
   return null
 }
@@ -729,7 +735,7 @@ export function readMilestones(
   }
 
   return {
-    totalGames: me.wins + me.losses + left,
+    totalGames: me.wins + me.losses + (me.ties ?? 0) + left,
     winsForLikely: firstAt(50),
     winsForSafe: firstAt(90),
     cutWinsMedian: histQuantile(tally.cut.winsHist, 0.5),

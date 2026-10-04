@@ -165,15 +165,14 @@ describe('buildEliminationWeeks', () => {
    * `leagueType: 'redraft'` while behaving exactly like the guillotine leagues beside it.
    * Gating on the label would drop the one league the label is wrong about.
    */
-  it('builds the card on the shape of the week, not on leagueType', () => {
+  it('does not infer elimination from a pairless week or a league name', () => {
     const out = buildEliminationWeeks({
       rows: guillotineWeek(),
       pairedLeagueIds: new Set(),
       leagueByPlatformId: leagueMap({ elimination: false, name: 'Elimination Station 2' }),
       myRosters: new Set(['PID:r2']),
     })
-    expect(out).toHaveLength(1)
-    expect(out[0].labelled).toBe(false)
+    expect(out).toHaveLength(0)
   })
 
   it('skips a league the user has no roster in, and one with no meta', () => {

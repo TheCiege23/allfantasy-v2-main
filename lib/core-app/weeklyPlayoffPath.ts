@@ -1,0 +1,28 @@
+import 'server-only'
+import { createHash } from 'node:crypto'
+import { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
+import type { OutlookLeague, SwingMatchup } from './seasonOutlook'
+export type PlayoffPoint = { period: number; probability: number; sampledAt: string }
+export type WeeklyPlayoffPath = { leagueId?: string; league: OutlookLeague | null; swing: SwingMatchup | null; points: PlayoffPoint[]; historyUnavailable: boolean; season: number; period: number }
+export function validPlayoffPoint(value: unknown): value is PlayoffPoint {
+  const p = value as Partial<PlayoffPoint> | null
+  return !!p && Number.isInteger(p.period) && p.period! > 0 && typeof p.probability === 'number' && Number.isFinite(p.probability) && p.probability >= 0 && p.probability <= 100 && typeof p.sampledAt === 'string' && Number.isFinite(Date.parse(p.sampledAt))
+}
+/** Independent per-period snapshots avoid concurrent visits overwriting other weeks. */
+export async function readWeeklyPlayoffPath(userId: string, league: OutlookLeague | null, swing: SwingMatchup | null, season: number, period: number, now = new Date()): Promise<WeeklyPlayoffPath> {
+  const result: WeeklyPlayoffPath = { league, swing, points: [], historyUnavailable: false, season, period }
+  if (!league?.you?.modelled || league.season !== season || period < 1) return result
+  const probability = league.you.playoffPct
+  const point = { period, probability, sampledAt: league.assumptions.computedAt }
+  if (!validPlayoffPoint(point)) return result
+  const scope = createHash('sha256').update(JSON.stringify([userId, league.leagueId, season, league.you.rosterId])).digest('hex')
+  const prefix = `core-week-path:v1:${scope}:`
+  try {
+    const rows = await prisma.sportsDataCache.findMany({ where: { cacheKey: { startsWith: prefix }, expiresAt: { gt: now } }, select: { data: true }, orderBy: { createdAt: 'desc' }, take: 40 })
+    result.points = rows.map(r => r.data).filter(validPlayoffPoint).filter(p => p.period < period).sort((a,b) => a.period - b.period).slice(-15)
+    await prisma.sportsDataCache.upsert({ where: { cacheKey: `${prefix}${period}` }, create: { cacheKey: `${prefix}${period}`, data: point as Prisma.InputJsonValue, expiresAt: new Date(now.getTime() + 400 * 86400000) }, update: { data: point as Prisma.InputJsonValue, expiresAt: new Date(now.getTime() + 400 * 86400000) } })
+  } catch { result.historyUnavailable = true }
+  result.points.push(point)
+  return result
+}
