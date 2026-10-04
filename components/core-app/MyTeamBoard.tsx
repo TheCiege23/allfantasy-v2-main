@@ -650,7 +650,12 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
                 <li key={row.leagueId}>
                   <Link href={row.href}>
                     <strong>{row.leagueName}</strong>
-                    <span>{[row.empty ? `${row.empty} empty` : null, row.out ? `${row.out} out` : null, row.bye ? `${row.bye} on bye` : null].filter(Boolean).join(' · ') || copy('Lineup risk')} · <Lock row={row} now={nowMs} /></span>
+                    {/* The same counts the row's tags carry, in the reader's language (live Spanish check, 2026-10-03). */}
+                    <span>{[
+                      row.empty ? (es ? `${row.empty} ${row.empty === 1 ? 'vacía' : 'vacías'}` : `${row.empty} empty`) : null,
+                      row.out ? (es ? `${row.out} ${row.out === 1 ? 'descartado' : 'descartados'}` : `${row.out} out`) : null,
+                      row.bye ? (es ? `${row.bye} en descanso` : `${row.bye} on bye`) : null,
+                    ].filter(Boolean).join(' · ') || copy('Lineup risk')} · <Lock row={row} now={nowMs} /></span>
                     <span aria-hidden>{copy('Review')} →</span>
                   </Link>
                   {source?.external ? <a className="af-bd-action-source" href={source.href} target="_blank" rel="noopener noreferrer">{copy('Open in')} {row.platform} ↗</a> : null}
