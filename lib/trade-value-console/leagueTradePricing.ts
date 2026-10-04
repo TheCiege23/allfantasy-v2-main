@@ -585,6 +585,13 @@ export async function resolveLeagueTradeChart(args: {
   leagueNormCtx: NormalizedLeagueContext | null
   overrides?: { leagueSize?: number; tePremium?: boolean; isSuperFlex?: boolean; waiverBudget?: number }
   mark?: (name: string) => void
+  /**
+   * Resolve the league's chart SETTINGS without loading today's market or this league's defender
+   * board: no players on it, so nothing prices until `withDatedMarket` puts a dated capture on it.
+   * For a job that prices completed trades at the time of the trade and must not touch today's
+   * values (or the FantasyCalc fetch behind them) at all — the re-price script.
+   */
+  marketless?: boolean
 }): Promise<LeagueTradeChart> {
   const { leagueRow, leagueSnapshot, leagueNormCtx } = args
   const coverage = leagueRow ? tradeFormatCoverage(leagueRow) : { gaps: [], prohibitedReason: null }
@@ -645,15 +652,17 @@ export async function resolveLeagueTradeChart(args: {
    * purpose: it removes the same seconds by serving staler valuations. If the warm cron is ever
    * retired, this number has to come back DOWN to 6 h or lower, not up.
    */
-  const { players: fcPlayers, syncedAt: fcSyncedAt } = await getFantasyCalcChartDbFirst(
-    {
-      isDynasty: chartIsDynasty,
-      numQbs: isSuperFlex ? 2 : 1,
-      numTeams: leagueSize,
-      ppr: pprNfl,
-    },
-    { maxStaleMs: 1000 * 60 * 60 * 2 },
-  )
+  const { players: fcPlayers, syncedAt: fcSyncedAt } = args.marketless
+    ? { players: [] as FantasyCalcPlayer[], syncedAt: null }
+    : await getFantasyCalcChartDbFirst(
+        {
+          isDynasty: chartIsDynasty,
+          numQbs: isSuperFlex ? 2 : 1,
+          numTeams: leagueSize,
+          ppr: pprNfl,
+        },
+        { maxStaleMs: 1000 * 60 * 60 * 2 },
+      )
   args.mark?.('fantasycalc')
 
   /*
@@ -662,7 +671,7 @@ export async function resolveLeagueTradeChart(args: {
    * because the console works in INTERNAL League.id space and Sleeper's roster and
    * settings endpoints do not answer to that id.
    */
-  const leagueValues = leagueRow?.platformLeagueId
+  const leagueValues = leagueRow?.platformLeagueId && !args.marketless
     ? await loadLeagueTradeValues({
         prisma,
         platformLeagueId: leagueRow.platformLeagueId,
@@ -698,6 +707,41 @@ export async function resolveLeagueTradeChart(args: {
     fcSyncedAt,
     nflCtx,
     valuationGaps: coverage.gaps,
+  }
+}
+
+/**
+ * The same league chart, priced on ONE DAY'S stored market instead of today's — for grading a
+ * completed trade at the time of the trade (`lib/decision-os/trade/completedTradeGrade.ts`).
+ *
+ * Everything that describes the LEAGUE is kept: its book (dynasty/redraft × SF/1QB), size, reception
+ * weight (`pprNfl`, which `scoringFit` measures against), scoring settings, waiver budget and
+ * proposal rules. Everything that describes TODAY is removed:
+ *
+ *   - the market rows → the dated capture's rows (players, and pick rows where the capture has them);
+ *   - this league's defender/kicker board (`loadLeagueTradeValues`) → dropped. It is built from the
+ *     CURRENT projection week and has no dated history, so a defender, kicker or team defense is
+ *     unpriced here — and an unpriced asset sends the whole trade back to its first-graded original.
+ *
+ * 🛑 `asOfDate` STAYS TODAY. It is NOT the trade date, on purpose: `pricePlayer` treats a past
+ * `asOfDate` as a hindsight query and routes it to `data/historical-values/*.json` — name-joined,
+ * clamped to 2026-02-05, on another scale, and falling through to today's FantasyCalc value for a
+ * player it lacks. Supplying the dated rows as `fantasyCalcPlayers` is the whole of "on that date".
+ */
+export function withDatedMarket(
+  chart: LeagueTradeChart,
+  market: { capturedOn: string; players: FantasyCalcPlayer[] },
+): LeagueTradeChart {
+  return {
+    ...chart,
+    fcPlayers: market.players,
+    fcSyncedAt: `${market.capturedOn}T00:00:00.000Z`,
+    nflCtx: {
+      asOfDate: chart.nflCtx.asOfDate,
+      isSuperFlex: chart.nflCtx.isSuperFlex,
+      fantasyCalcPlayers: market.players,
+      numTeams: chart.nflCtx.numTeams,
+    },
   }
 }
 

@@ -1,13 +1,13 @@
 import 'server-only'
 
-import { completedTradeGraderFor } from '@/lib/decision-os/trade/completedTradeGrade'
+import { completedOriginal, completedTradeGraderFor, type TradeTimeDeps } from '@/lib/decision-os/trade/completedTradeGrade'
 import {
   loadFrozenCompletedGrades,
   saveFrozenCompletedGrades,
   sleeperTradeKey,
-  withFrozenOriginal,
   type FrozenCompletedGrade,
 } from '@/lib/decision-os/trade/frozenCompletedGrade'
+import { tradeTimeOf } from '@/lib/decision-os/trade/tradeTimeCapture'
 import { gradeDeal, type LeagueTradeGrader } from '@/lib/decision-os/trade/leagueTradeGrader'
 import type { TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { gradeInputsFromPending } from '@/lib/decision-os/trade/tradeGradeInputs'
@@ -37,6 +37,7 @@ export async function gradeProviderCompletedTrades(args: {
   trades: ReadonlyArray<PendingProviderTrade>
   graderFor?: (afLeagueId: string) => Promise<LeagueTradeGrader | null>
   now?: Date
+  tradeTime?: TradeTimeDeps
 }): Promise<Map<string, TradeGradeView>> {
   const out = new Map<string, TradeGradeView>()
   if (args.trades.length === 0) return out
@@ -59,8 +60,11 @@ export async function gradeProviderCompletedTrades(args: {
         out.set(t.transactionId, current)
         return
       }
-      const { view, toFreeze: row } = withFrozenOriginal({
-        tradeId: t.transactionId, inputs, current, frozen: frozen.get(sleeperTradeKey(t.transactionId)), now,
+      // These rows carry picks as picks already: the same inputs price the deal at the time of the trade.
+      const { view, toFreeze: row } = await completedOriginal({
+        grader, tradeId: t.transactionId, inputs, tradeTimeInputs: inputs,
+        tradeAt: tradeTimeOf({ completedAt: t.completedAt ?? null, tradeId: t.transactionId }),
+        current, frozen: frozen.get(sleeperTradeKey(t.transactionId)), now, deps: args.tradeTime,
       })
       if (row) toFreeze.push({ row, transactionId: t.transactionId, current })
       out.set(t.transactionId, view)
