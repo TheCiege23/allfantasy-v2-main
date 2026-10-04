@@ -16,7 +16,11 @@ describe('buildFoundingOfferEmail', () => {
   it('English with a label quotes it verbatim and says the pricing does not expire only for a forever coupon', () => {
     const forever = buildFoundingOfferEmail({ lang: 'en', label: LABEL, couponForever: true, baseUrl: BASE })
     expect(forever.subject).toBe("You're a founding member — here's what that means on October 15")
-    expect(forever.bodyText).toContain(`you're a founding member, and ${LABEL}, applied automatically at checkout.`)
+    // A colon, so the sentence keeps a verb whatever the label says ("…a founding member: 20% off…").
+    expect(forever.bodyText).toContain(`you're a founding member: ${LABEL}, applied automatically at checkout.`)
+    expect(buildFoundingOfferEmail({ lang: 'en', label: '20% off your first year', couponForever: false, baseUrl: BASE }).bodyText).toContain(
+      "so you're a founding member: 20% off your first year, applied automatically at checkout. No code to enter",
+    )
     expect(forever.bodyText).toContain("doesn't expire")
 
     const limited = buildFoundingOfferEmail({ lang: 'en', label: LABEL, couponForever: false, baseUrl: BASE })
@@ -26,7 +30,7 @@ describe('buildFoundingOfferEmail', () => {
 
   it('English without a label names no figure', () => {
     const { bodyText } = buildFoundingOfferEmail({ lang: 'en', label: null, couponForever: true, baseUrl: BASE })
-    expect(bodyText).toContain('your founding discount is applied automatically at checkout')
+    expect(bodyText).toContain("so you're a founding member, and your founding discount is applied automatically at checkout.")
     expect(bodyText).not.toMatch(/\d+\s*%|\$\d/)
   })
 
