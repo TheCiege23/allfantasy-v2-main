@@ -102,7 +102,7 @@ describe('the Lineup check card', () => {
     const links = [...card.querySelectorAll('a.af-mt-check-item')]
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['#lineup-player-daniels', '#lineup-player-sauls'])
     expect(links[0].textContent).toContain('Jayden Daniels is ruled out — find a replacement')
-    expect(card.textContent).toContain('1 starter is already locked.')
+    expect(card.textContent).toContain('1 starter has reached kickoff; confirm individual locks on your platform.')
     expect(card.querySelector('a.af-mt-check-fix')?.getAttribute('href')).toBe('https://example.test/lineup')
     // Every link target exists on the page.
     for (const a of links) expect(container.querySelector(a.getAttribute('href')!)).not.toBeNull()
@@ -112,12 +112,35 @@ describe('the Lineup check card', () => {
     const { container } = render(<MyTeam data={data([slot('WR', player('ok'))])} />)
     const card = container.querySelector('.af-mt-check')!
     expect(card.getAttribute('data-clear')).toBe('true')
-    expect(card.textContent).toContain('Nothing to change')
+    expect(card.textContent).toContain('No issues were identified among the starters we could check')
     expect(card.querySelector('a.af-mt-check-fix')).toBeNull()
   })
 
   it('is absent in a Best Ball league, where the provider sets the lineup', () => {
     const { container } = render(<MyTeam data={data(KBFL, { bestBall: true })} />)
     expect(container.querySelector('.af-mt-check')).toBeNull()
+  })
+})
+
+describe('lineup evidence gaps', () => {
+  it('suppresses change advice at kickoff even when gameDay is absent or stale', () => {
+    const now = Date.parse('2026-10-04T17:00:00Z')
+    const kickedOff = player('past', { ruledOut: true, kickoff: new Date(now), gameDay: { state: 'upcoming', points: null } })
+    expect(summariseLineupCheck([slot('WR', kickedOff)], now)).toMatchObject({ items: [], locked: 1 })
+  })
+  it('does not show an unresolved filled slot as a clear lineup', () => {
+    const unresolved = slot('FLEX', null, { empty: false, unresolvedId: 'unknown' })
+    expect(summariseLineupCheck([unresolved])).toMatchObject({ items: [], unresolved: 1 })
+    const card = render(<MyTeam data={data([unresolved])} />).container.querySelector('.af-mt-check')!
+    expect(card.getAttribute('data-clear')).toBe('false')
+    expect(card.textContent).toContain('filled slot(s) could not be checked')
+    expect(card.textContent).not.toContain('Nothing to change')
+  })
+  it('presents a projected swap as a candidate with provider rules unverified', () => {
+    const starters = [slot('WR', player('one'), { benchCheck: { verdict: 'swap', benchName: 'Bench', benchProjected: 15, starterName: 'Starter', starterProjected: 10 } })]
+    const card = render(<MyTeam data={data(starters)} />).container.querySelector('.af-mt-check')!
+    expect(card.textContent).toContain('Compare Bench with Player one')
+    expect(card.textContent).toContain('Confirm eligibility, locks, and AutoSubs')
+    expect(card.textContent).not.toContain('Start Bench over')
   })
 })

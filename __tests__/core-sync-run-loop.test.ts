@@ -294,3 +294,34 @@ describe('positive control — these tests can fail', () => {
     expect(() => expect(selectResyncCandidates([snapshot])).toHaveLength(1)).toThrow()
   })
 })
+
+describe('sync completion evidence', () => {
+  it('does not claim completion when the remaining list is absent and counts fall short', async () => {
+    const out = await runSyncRounds({ post: async () => ({ httpOk: true, round: { ok: true, totalCandidates: 3, synced: 1 } }) })
+    expect(out.status).toBe('incomplete')
+    expect(out.tone).toBe('attention')
+    expect(out.message).toContain('completion could not be verified')
+  })
+  it('does not claim a clean finish for inconsistent terminal counts', async () => {
+    const out = await runSyncRounds({ post: async () => round({ totalCandidates: 3, synced: 2 }) })
+    expect(out.status).toBe('incomplete')
+    expect(out.synced).toBe(2)
+  })
+  it('rejects malformed counts without adding unverified progress', async () => {
+    const out = await runSyncRounds({ post: async () => round({ synced: -1 }) })
+    expect(out.status).toBe('failed')
+    expect(out.synced).toBe(0)
+  })
+  it('rejects duplicate continuation keys instead of repeating provider requests', async () => {
+    const post = vi.fn(async () => round({ remaining: ['sleeper:a', 'sleeper:a'] }))
+    expect((await runSyncRounds({ post })).status).toBe('failed')
+    expect(post).toHaveBeenCalledTimes(1)
+  })
+  it('preserves verified progress when the next round is malformed', async () => {
+    const post = scriptedPost([round({ totalCandidates: 2, remaining: ['sleeper:b'] }), round({ synced: NaN })])
+    const out = await runSyncRounds({ post })
+    expect(out.status).toBe('failed')
+    expect(out.synced).toBe(1)
+    expect(out.total).toBe(2)
+  })
+})

@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { injuryNameKey, injuryNameVariants } from './injuryNames'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import { priorSeasonCutoff } from '@/lib/injuries/injuryRecency'
 
 /**
  * A player's current injury designation, by Sleeper id — the input to `isRuledOut`.
@@ -45,11 +46,18 @@ export async function readInjuryStatusById(
   const allNames = [...new Set([...namesById.values()].flatMap((names) => names.flatMap(injuryNameVariants)))]
   if (allNames.length === 0) return new Map()
 
+  const now = new Date()
   const injuries = await prisma.sportsInjury
     .findMany({
       // Every vendor spelling, deliberately — see `namesBySleeperId`. A superset costs one `IN`
       // list and is the only way the 39 divergent names both match.
-      where: { sport, playerName: { in: allNames, mode: 'insensitive' } },
+      where: {
+        sport,
+        playerName: { in: allNames, mode: 'insensitive' },
+        // A newly fetched archival report is not current lineup evidence.
+        expiresAt: { gt: now },
+        date: { gte: priorSeasonCutoff(now) },
+      },
       orderBy: { fetchedAt: 'desc' },
       select: { playerName: true, status: true, team: true },
     })
