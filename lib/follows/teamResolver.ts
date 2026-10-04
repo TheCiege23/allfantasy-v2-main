@@ -45,6 +45,12 @@ const COLLEGE_PREFIX_ALIASES: Record<string, string> = {
   // Measured misses/mismatches on production news 2026-10-03: the official name does not START with
   // the short form, so a shorter school won ("GEORGIA TECH" became Georgia, "TENNESSEE TECH" Tennessee).
   "GEORGIA TECH": "GT", "TENNESSEE TECH": "TNTC", "BOWLING GREEN": "BGSU", "MIDDLE TENNESSEE": "MTSU",
+  // Schools whose NAME is an acronym — every provider writes "UCLA", never "California, Los Angeles".
+  // Listed as names on purpose: a bare CODE never matches exactly (providers do not share codes —
+  // see resolveTeam), so without these "UCLA" would resolve nowhere. Measured on the 2026-09-26 slate:
+  // UCLA, VMI, UTSA, UTEP, UNLV, TCU and UCF games each lost their alert until they were listed.
+  UCLA: "UCLA", VMI: "VMI", UTSA: "UTSA", UTEP: "UTEP", UNLV: "UNLV", TCU: "TCU", UCF: "UCF", SMU: "SMU",
+  BYU: "BYU", LSU: "LSU", USC: "USC", UAB: "UAB", FAU: "FAU", FIU: "FIU", ETSU: "ETSU", NIU: "NIU", UTRGV: "UTRGV",
 }
 
 /** Words that mean "not one team". */
@@ -78,8 +84,8 @@ function schoolCore(name: string): string {
 export type TeamIndex = {
   sport: string
   byAlias: Map<string, string>
-  /** College only: [core, abbr] sorted longest core first, for prefix matching. */
-  schoolCores: Array<[string, string]>
+  /** College only: [core, abbr, isCode] sorted longest core first, for prefix matching. */
+  schoolCores: Array<[string, string, boolean]>
 }
 
 export function buildTeamIndex(sport: string, teams: readonly CanonicalTeam[]): TeamIndex {
@@ -130,14 +136,14 @@ export function buildTeamIndex(sport: string, teams: readonly CanonicalTeam[]): 
     }
   }
   prefixes.sort((a, b) => b[0].length - a[0].length || a[2] - b[2])
-  const schoolCores: Array<[string, string]> = prefixes.map(([c, a]) => [c, a])
+  const schoolCores: Array<[string, string, boolean]> = prefixes.map(([c, a, p]) => [c, a, p === 1])
   return { sport: S, byAlias, schoolCores }
 }
 
 /** The canonical abbreviation, or null when the string names no single team of this sport. */
 /**
  * `exactNames`: the input is a SCHEDULE field (a game's home/away), which always names exactly one
- * team, so a bare school name or code ("ALABAMA", "Akron", "ALA") is trustworthy there — most game
+ * team, so a bare school NAME ("ALABAMA", "Akron") is trustworthy there — but not a code (below) — most game
  * providers write college teams that way (measured 2026-10-03). In NEWS text it is not: the college
  * feed carries NFL noise ("CIN") and so news keeps the stricter default.
  *
@@ -173,8 +179,13 @@ export function resolveTeam(
   // College: "ALABAMA CRIMSON TIDE" starts with the school core "ALABAMA". Longest core first, so
   // "ALABAMA STATE HORNETS" matches "ALABAMA STATE", not "ALABAMA". A prefix needs a mascot after
   // it (or to be the whole school name) — never a bare code, see the note in buildTeamIndex.
-  for (const [core, abbr] of index.schoolCores) {
-    if (c === core && (core.includes(' ') || opts.exactNames)) return abbr
+  //
+  // ⚠ A BARE CODE NEVER MATCHES EXACTLY, not even in a schedule field: providers do not share codes.
+  // Measured on the 2026-09-26 slate, ESPN's live feed wrote "SDSU" for San Diego State, and our
+  // canonical SDSU is South Dakota State — Toledo's one game became two alerts, one to the wrong
+  // team's followers. A code still counts as a prefix ("LSU TIGERS"), where a mascot follows it.
+  for (const [core, abbr, isCode] of index.schoolCores) {
+    if (c === core && !isCode && (core.includes(' ') || opts.exactNames)) return abbr
     if (!opts.noPrefix && c.startsWith(core + ' ')) return abbr
   }
   return null

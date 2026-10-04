@@ -1,7 +1,8 @@
 // @vitest-environment node
 /**
  * Score alerts for followed teams (phase 2, owner's call 2026-10-03): a final, and a halftime where
- * ESPN's live state says so — once per game, to the followers of either team, NFL + college football.
+ * ESPN's live state says so — once per team per day, to that team's followers, NFL + college football.
+ * Several cases come from a read-only dry run over the 2026-09-26 production slate.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Prisma } from '@prisma/client'
@@ -53,7 +54,9 @@ const T = (s: string): CanonicalTeam[] =>
 
 const NFL_TEAMS = T('BUF|Buffalo Bills;MIA|Miami Dolphins;KC|Kansas City Chiefs;NYJ|New York Jets')
 const NCAAF_TEAMS = T(
-  'ALA|University of Alabama;TEX|University of Texas at Austin;TAMU|Texas A&M University;OHIO|Ohio University;OSU|Ohio State University;UK|University of Kentucky',
+  'ALA|University of Alabama;TEX|University of Texas at Austin;TAMU|Texas A&M University;OHIO|Ohio University;OSU|Ohio State University;UK|University of Kentucky;' +
+    'TOL|University of Toledo;SDST|San Diego State University;SDSU|South Dakota State University;WKU|Western Kentucky University;' +
+    'UCLA|University of California, Los Angeles;MD|University of Maryland',
 )
 const NFL = buildTeamIndex('NFL', NFL_TEAMS)
 const NCAAF = buildTeamIndex('NCAAF', NCAAF_TEAMS)
@@ -78,6 +81,7 @@ const row = (o: Partial<GameRow>): GameRow => ({
   raw: null,
   ...o,
 })
+const college = (o: Partial<GameRow>) => row({ sport: 'NCAAF', ...o })
 
 /** One NFL game as three providers write it — each with its own team spelling. */
 const BILLS_FINAL = [
@@ -91,6 +95,18 @@ describe('resolveTeam for schedule fields', () => {
     expect(resolveTeam(NCAAF, 'ALABAMA', { exactNames: true, noPrefix: true })).toBe('ALA')
     expect(resolveTeam(NCAAF, 'Alabama', { exactNames: true, noPrefix: true })).toBe('ALA')
     expect(resolveTeam(NCAAF, 'ALABAMA')).toBeNull()
+  })
+
+  it('a bare CODE never matches exactly — providers do not share codes (ESPN "SDSU" is San Diego State)', () => {
+    expect(resolveTeam(NCAAF, 'SDSU', { exactNames: true, noPrefix: true })).toBeNull()
+    expect(resolveTeam(NCAAF, 'ALA', { exactNames: true, noPrefix: true })).toBeNull()
+    expect(resolveTeam(NCAAF, 'San Diego State Aztecs', { exactNames: true })).toBe('SDST')
+    expect(resolveTeam(NCAAF, 'South Dakota State', { exactNames: true, noPrefix: true })).toBe('SDSU')
+  })
+
+  it('a school whose NAME is an acronym still resolves', () => {
+    expect(resolveTeam(NCAAF, 'UCLA', { exactNames: true, noPrefix: true })).toBe('UCLA')
+    expect(resolveTeam(NCAAF, 'UCLA Bruins', { exactNames: true })).toBe('UCLA')
   })
 
   it('a lower-division school that STARTS with a big school name is not that school under noPrefix', () => {
@@ -111,7 +127,7 @@ describe('resolveTeam for schedule fields', () => {
     expect(resolveTeam(NCAAF, 'Texas A and M', { exactNames: true, noPrefix: true })).toBe('TAMU')
     expect(resolveTeam(NCAAF, 'Texas A&M', { exactNames: true, noPrefix: true })).toBe('TAMU')
     expect(resolveTeam(NCAAF, 'Texas A&M Aggies', { exactNames: true })).toBe('TAMU')
-    // "…a AND M…" inside ordinary words must not fuse ("OKLAHOMA AND MISSOURI" → "OKLAHOMA&MISSOURI").
+    // "…a AND M…" inside ordinary words must not fuse ("ALABAMA AND MISSOURI" → "ALABAMA&MISSOURI").
     expect(resolveTeam(NCAAF, 'Alabama and Missouri', { exactNames: true })).toBe('ALA')
   })
 })
@@ -127,6 +143,13 @@ describe('detectScoreEvents', () => {
   it('providers that disagree on the final score send nothing (yet)', () => {
     const rows = [...BILLS_FINAL.slice(0, 2), row({ source: 'thesportsdb', homeTeam: 'Buffalo Bills', awayTeam: 'Miami Dolphins', homeScore: 21 })]
     expect(detectScoreEvents(rows, INDEX, NOW)).toEqual([])
+  })
+
+  it('a provider with home and away swapped (neutral site) is the same game, its scores lined up', () => {
+    const swapped = row({ source: 'thesportsdb', homeTeam: 'Miami Dolphins', awayTeam: 'Buffalo Bills', homeScore: 17, awayScore: 24 })
+    const ev = detectScoreEvents([...BILLS_FINAL.slice(0, 2), swapped], INDEX, NOW)
+    expect(ev).toHaveLength(1)
+    expect(ev[0]).toMatchObject({ home: 'BUF', away: 'MIA', homeScore: 24, awayScore: 17 })
   })
 
   it('a row still live does not veto a final the others agree on', () => {
@@ -150,18 +173,47 @@ describe('detectScoreEvents', () => {
     expect(detectScoreEvents(BILLS_FINAL, INDEX, new Date(KICK.getTime() - 60 * 1000))).toEqual([])
   })
 
-  it('a team that does not resolve drops the row — no alert beats a wrong one', () => {
-    const d3 = row({ sport: 'NCAAF', source: 'cfbd', homeTeam: 'Texas Lutheran', awayTeam: 'Trinity (TX)', homeScore: 31, awayScore: 3 })
+  it('a game where NEITHER side resolves sends nothing — no alert beats a wrong one', () => {
+    const d3 = college({ source: 'cfbd', homeTeam: 'Texas Lutheran', awayTeam: 'Trinity (TX)', homeScore: 31, awayScore: 3 })
     expect(detectScoreEvents([d3], INDEX, NOW)).toEqual([])
-    const mixed = row({ sport: 'NCAAF', source: 'cfbd', homeTeam: 'Kentucky Wesleyan', awayTeam: 'Ohio', homeScore: 7, awayScore: 3 })
-    expect(detectScoreEvents([mixed], INDEX, NOW)).toEqual([])
+  })
+
+  it('a followable team against a school outside our list still gets its final (Western Kentucky vs Mercyhurst, 2026-09-26)', () => {
+    const rows = [
+      college({ source: 'api_sports', homeTeam: 'WESTERN KENTUCKY', awayTeam: 'MERCYHURST', homeScore: 52, awayScore: 7 }),
+      college({ source: 'cfbd', homeTeam: 'Western Kentucky', awayTeam: 'Mercyhurst', homeScore: 52, awayScore: 7, status: 'completed' }),
+    ]
+    expect(detectScoreEvents(rows, INDEX, NOW)).toEqual([
+      { kind: 'final', sport: 'NCAAF', dateKey: '2026-10-03', home: 'WKU', away: null, awayName: 'Mercyhurst', homeScore: 52, awayScore: 7 },
+    ])
+  })
+
+  it('a one-sided row is dropped when another source names both teams — no second alert', () => {
+    const rows = [
+      college({ source: 'cfbd', homeTeam: 'Toledo', awayTeam: 'San Diego State', homeScore: 41, awayScore: 16, status: 'completed' }),
+      // ESPN's live feed: a mascot name on one side, a code (its own "SDSU") on the other → only Toledo resolves.
+      college({ source: 'espn_live', homeTeam: 'Toledo Rockets', awayTeam: 'SDSU', homeScore: 41, awayScore: 16, status: 'final' }),
+    ]
+    const ev = detectScoreEvents(rows, INDEX, NOW)
+    expect(ev).toHaveLength(1)
+    expect(ev[0]).toMatchObject({ home: 'TOL', away: 'SDST' })
+  })
+
+  it('a team that lands in TWO games on one date sends neither (a mis-merge or mis-map)', () => {
+    const rows = [
+      college({ source: 'cfbd', homeTeam: 'Toledo', awayTeam: 'San Diego State', homeScore: 41, awayScore: 16, status: 'completed' }),
+      college({ source: 'thesportsdb', homeTeam: 'Toledo', awayTeam: 'South Dakota State', homeScore: 41, awayScore: 16, status: 'Match Finished' }),
+      college({ source: 'cfbd', homeTeam: 'Alabama', awayTeam: 'Kentucky', homeScore: 30, awayScore: 10, status: 'completed' }),
+    ]
+    const ev = detectScoreEvents(rows, INDEX, NOW)
+    expect(ev.map((e) => `${e.away}@${e.home}`)).toEqual(['UK@ALA'])
   })
 
   it('college rows from bare-name and mascot sources collapse to one game', () => {
     const rows = [
-      row({ sport: 'NCAAF', source: 'cfbd', homeTeam: 'Alabama', awayTeam: 'Texas A&M', homeScore: 27, awayScore: 20, status: 'completed' }),
-      row({ sport: 'NCAAF', source: 'espn', homeTeam: 'Alabama Crimson Tide', awayTeam: 'Texas A&M Aggies', homeScore: 27, awayScore: 20, status: 'STATUS_FINAL' }),
-      row({ sport: 'NCAAF', source: 'api_sports', homeTeam: 'ALABAMA', awayTeam: 'TEXAS A and M', homeScore: 27, awayScore: 20, status: 'FT' }),
+      college({ source: 'cfbd', homeTeam: 'Alabama', awayTeam: 'Texas A&M', homeScore: 27, awayScore: 20, status: 'completed' }),
+      college({ source: 'espn', homeTeam: 'Alabama Crimson Tide', awayTeam: 'Texas A&M Aggies', homeScore: 27, awayScore: 20, status: 'STATUS_FINAL' }),
+      college({ source: 'api_sports', homeTeam: 'ALABAMA', awayTeam: 'TEXAS A and M', homeScore: 27, awayScore: 20, status: 'FT' }),
     ]
     const ev = detectScoreEvents(rows, INDEX, NOW)
     expect(ev).toHaveLength(1)
@@ -177,6 +229,7 @@ describe('scoreAlertText', () => {
   const names = new Map([
     ['BUF', 'Buffalo Bills'],
     ['MIA', 'Miami Dolphins'],
+    ['WKU', 'Western Kentucky University'],
   ])
   it('final names the winner; halftime the leader', () => {
     const e = { kind: 'final' as const, sport: 'NFL', dateKey: '2026-10-03', home: 'BUF', away: 'MIA', homeScore: 24, awayScore: 17 }
@@ -184,9 +237,15 @@ describe('scoreAlertText', () => {
     expect(scoreAlertText({ ...e, kind: 'halftime', homeScore: 7, awayScore: 10 }, names).body).toBe('Miami Dolphins lead at the half.')
     expect(scoreAlertText({ ...e, kind: 'halftime', homeScore: 7, awayScore: 7 }, names).body).toBe('Tied at the half.')
   })
+  it('an unlisted opponent is named as the provider spelled it', () => {
+    const e = { kind: 'final' as const, sport: 'NCAAF', dateKey: '2026-09-26', home: 'WKU', away: null, awayName: 'Mercyhurst', homeScore: 52, awayScore: 7 }
+    expect(scoreAlertText(e, names).title).toBe('Final: Mercyhurst 7, Western Kentucky University 52')
+  })
 })
 
 describe('dispatchTeamScoreAlerts', () => {
+  const key = (team: string, date = '2026-10-03') => ledgerKey('final', 'NFL', date, team)
+
   beforeEach(() => {
     for (const f of Object.values(h)) f.mockReset()
     h.gamesFind.mockResolvedValue(BILLS_FINAL)
@@ -208,23 +267,30 @@ describe('dispatchTeamScoreAlerts', () => {
     expect(p).toMatchObject({ category: 'followed_team_scores', type: 'team_final_score', leagueId: null })
     expect(p.title).toBe('Final: Miami Dolphins 17, Buffalo Bills 24')
     expect(h.cap).toHaveBeenCalledWith(expect.any(Array), { provider: 'team_score_alerts', limit: TEAM_SCORE_ALERTS_PER_DAY })
-    expect(h.ledgerCreate.mock.calls[0][0].data.cacheKey).toBe('team-follow-alert:final:NFL:2026-10-03:BUF:MIA')
+    expect(h.ledgerCreate.mock.calls.map((c) => c[0].data.cacheKey).sort()).toEqual([key('BUF'), key('MIA')])
   })
 
-  it('a game another run already claimed is not sent again', async () => {
+  it('a game whose teams another run already claimed is not sent again', async () => {
     h.ledgerCreate.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }))
     const out = await dispatchTeamScoreAlerts({ now: NOW })
     expect(out.alreadySent).toBe(1)
     expect(h.dispatch).not.toHaveBeenCalled()
   })
 
-  it('a claim on an ADJACENT date (providers disagreeing on the calendar day) also counts as sent', async () => {
-    h.ledgerFind.mockResolvedValue({ cacheKey: ledgerKey({ kind: 'final', sport: 'NFL', dateKey: '2026-10-02', home: 'BUF', away: 'MIA' }) })
+  it('one team already told (from a row that named only it) — only the other team’s followers, minus anyone already told', async () => {
+    h.ledgerCreate.mockImplementation(async ({ data }: { data: { cacheKey: string } }) => {
+      if (data.cacheKey === key('BUF')) throw new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' })
+      return {}
+    })
     await dispatchTeamScoreAlerts({ now: NOW })
-    expect(h.ledgerFind.mock.calls[0][0].where.cacheKey.in).toEqual([
-      'team-follow-alert:final:NFL:2026-10-02:BUF:MIA',
-      'team-follow-alert:final:NFL:2026-10-04:BUF:MIA',
-    ])
+    // u2 follows both and was told with BUF's alert; u3 follows only MIA.
+    expect([...h.dispatch.mock.calls[0][0].userIds]).toEqual(['u3'])
+  })
+
+  it('a claim on an ADJACENT date (providers disagreeing on the calendar day) also counts as sent', async () => {
+    h.ledgerFind.mockResolvedValue({ cacheKey: key('BUF', '2026-10-02') })
+    await dispatchTeamScoreAlerts({ now: NOW })
+    expect(h.ledgerFind.mock.calls[0][0].where.cacheKey.in).toEqual([key('BUF', '2026-10-02'), key('BUF', '2026-10-04')])
     expect(h.ledgerCreate).not.toHaveBeenCalled()
     expect(h.dispatch).not.toHaveBeenCalled()
   })
@@ -241,11 +307,18 @@ describe('dispatchTeamScoreAlerts', () => {
     expect(h.dispatch).not.toHaveBeenCalled()
   })
 
-  it('a game nobody follows is not claimed, so a later follower is not locked out', async () => {
-    h.followers.mockResolvedValue([])
+  it('a team nobody follows is not claimed, so a later follower is not locked out', async () => {
+    h.followers.mockImplementation(async (_s: string, abbr: string) => (abbr === 'BUF' ? ['u1'] : []))
     await dispatchTeamScoreAlerts({ now: NOW })
+    expect(h.ledgerCreate.mock.calls.map((c) => c[0].data.cacheKey)).toEqual([key('BUF')])
+
+    h.ledgerCreate.mockClear()
+    h.dispatch.mockClear()
+    h.followers.mockResolvedValue([])
+    const out = await dispatchTeamScoreAlerts({ now: NOW })
     expect(h.ledgerCreate).not.toHaveBeenCalled()
     expect(h.dispatch).not.toHaveBeenCalled()
+    expect(out.alreadySent).toBe(0)
   })
 
   it('reads only recent NFL + NCAAF games', async () => {
