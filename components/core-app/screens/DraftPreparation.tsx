@@ -106,9 +106,10 @@ export function DraftPreparation({
     revision.current++;
     setSync(data.planningPreferenceState === "error" ? "error" : "idle");
     try {
-      const saved = data.planningPreferenceState === "ready"
+      const saved = data.planningPreferenceState === "ready" && data.planningPreference
         ? data.planningPreference
         : draftPlanningPreference(JSON.parse(localStorage.getItem(storageKey) ?? "{}"));
+      if (data.planningPreferenceState === "ready" && !data.planningPreference && saved) setSync("local");
       setPersonal(saved?.order ?? []);
       setSpread(saved?.spread ?? "adp");
     } catch {
@@ -118,6 +119,7 @@ export function DraftPreparation({
     return () => { scope.active = false; };
   }, [storageKey, data.planningPreference, data.planningPreferenceState]);
   const save = (order: string[], mode: string) => {
+    if (!data.customRankingsEnabled) order = [];
     setPersonal(order);
     setSpread(mode);
     try {
@@ -418,8 +420,8 @@ export function DraftPreparation({
             )}
           </p>
           <p role="status">{es
-            ? (({ saving: "Guardando…", saved: "Guardado en tu cuenta.", error: "No se pudo sincronizar. La copia local sigue disponible." } as Record<string, string>)[sync] ?? "")
-            : (({ saving: "Saving…", saved: "Saved to your account.", error: "Account sync unavailable. Your local copy remains available." } as Record<string, string>)[sync] ?? "")}</p>
+            ? (({ local: "Copia local: cambia una preferencia para sincronizarla con tu cuenta.", saving: "Guardando…", saved: "Guardado en tu cuenta.", error: "No se pudo sincronizar. La copia local sigue disponible." } as Record<string, string>)[sync] ?? "")
+            : (({ local: "Local copy: change a preference to sync it to your account.", saving: "Saving…", saved: "Saved to your account.", error: "Account sync unavailable. Your local copy remains available." } as Record<string, string>)[sync] ?? "")}</p>
           <div
             className="af-prep-table"
             tabIndex={0}
