@@ -73,6 +73,8 @@ export type NotificationRow = {
 }
 
 export type NotificationsCenterData = {
+  /** Authenticated owner of this server snapshot; prevents rendering it after account switches. */
+  viewerId?: string
   /** Urgent, deadline-bound. Rendered first, with a direct action per item. */
   actToday: NotificationRow[]
   /** Everything else, newest first. */
@@ -500,6 +502,7 @@ export async function getNotificationsCenter(input: {
   ])
 
   return {
+    viewerId: input.userId,
     actToday: scopedActToday,
     rest,
     counts,

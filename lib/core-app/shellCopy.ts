@@ -46,6 +46,15 @@ export const SURFACE_LABEL_ES: Record<string, string> = {
   'Sync status': 'Estado de sincronización',
 }
 
+/**
+ * The rail's career line (`railCareerLine`): "23-11 · 2 titles", "1 title". The record is numbers and
+ * stays; only the title count is a word.
+ */
+export function careerLineText(line: string, language: string): string {
+  if (language !== 'es') return line
+  return line.replace(/\b(\d+) (titles?)$/, (_m, n: string) => `${n} ${n === '1' ? 'título' : 'títulos'}`)
+}
+
 /** "Sleeper, ESPN, Fantrax, MFL or Fleaflicker" — `availableImportPlatformsPhrase` joins with " or ". */
 export function platformsPhraseText(phrase: string, language: string): string {
   if (language !== 'es') return phrase

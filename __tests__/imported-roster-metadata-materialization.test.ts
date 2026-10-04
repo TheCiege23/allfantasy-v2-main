@@ -1,0 +1,36 @@
+import { beforeEach, it, expect, vi } from 'vitest'
+const db = vi.hoisted(() => ({ roster:{findMany:vi.fn()}, league:{findUnique:vi.fn()}, fantraxLeague:{findUnique:vi.fn()}, redraftRosterPlayer:{findMany:vi.fn(),create:vi.fn(),updateMany:vi.fn()} }))
+vi.mock('server-only',()=>({}))
+vi.mock('@/lib/prisma',()=>({prisma:db}))
+vi.mock('@/lib/league-runtime/reconcileRosterRedraftLinks',()=>({reconcileRosterRedraftLinks:vi.fn(async()=>undefined)}))
+vi.mock('@/lib/player-identity/resolveProviderRosterPlayers',()=>({providerIdentityColumn:()=> 'fantraxId',resolveProviderRosterPlayers:async()=>new Map()}))
+vi.mock('@/lib/player-identity/resolveSleeperRosterPlayers',()=>({resolveSleeperRosterPlayers:async()=>new Map()}))
+vi.mock('@/lib/schedule/teamByeWeeks',()=>({resolveTeamByeWeeks:async()=>new Map(),byeForTeam:()=>null}))
+vi.mock('@/lib/player-data/getNormalizedPlayerData',()=>({getNormalizedPlayerData:async()=>[]}))
+vi.mock('@/lib/player-data/serializeUnifiedPlayerForApi',()=>({serializeUnifiedPlayerForApi:(x:unknown)=>x}))
+import { materializeRedraftRosterPlayersForLeague } from '@/lib/league-runtime/materializeRedraftRosterPlayers'
+beforeEach(()=>vi.clearAllMocks())
+it('repairs an imported placeholder from its saved Fantrax snapshot without replacing the source player ID or occupied slot', async()=>{
+ db.league.findUnique.mockResolvedValue({sport:'NCAAF',platform:'fantrax',season:2026,platformLeagueId:'snapshot'})
+ db.roster.findMany.mockResolvedValue([{id:'r1',platformUserId:'owner',redraftRosterId:'rd1',playerData:{players:['fx1'],starters:['fx1'],source_provider:'fantrax'}}])
+ db.fantraxLeague.findUnique.mockResolvedValue({roster:[{fantraxId:'fx1',name:'Jane Smith',primaryPosition:'WR',position:'RWT',team:'Florida'}]})
+ db.redraftRosterPlayer.findMany.mockResolvedValue([{playerId:'fx1',acquisitionType:'imported'}])
+ db.redraftRosterPlayer.updateMany.mockResolvedValue({count:1})
+ const result=await materializeRedraftRosterPlayersForLeague('L1')
+ expect(result.playersRepaired).toBe(1)
+ expect(db.redraftRosterPlayer.updateMany).toHaveBeenCalledWith(expect.objectContaining({where:expect.objectContaining({playerId:'fx1',playerName:'fx1'}),data:expect.objectContaining({playerName:'Jane Smith',position:'WR',team:'Florida'})}))
+ expect(db.redraftRosterPlayer.updateMany.mock.calls[0][0].data).not.toHaveProperty('slotType')
+ expect(db.redraftRosterPlayer.create).not.toHaveBeenCalled()
+})
+
+
+it('does not use a source snapshot to enrich a native league', async()=>{
+ db.league.findUnique.mockResolvedValue({sport:'NCAAF',platform:'allfantasy',season:2026,platformLeagueId:'old-snapshot'})
+ db.roster.findMany.mockResolvedValue([{id:'r1',platformUserId:'owner',redraftRosterId:'rd1',playerData:{players:['fx1'],starters:['fx1'],source_provider:'fantrax',player_metadata:{fx1:{name:'Jane Smith',position:'WR',team:'Florida'}}}}])
+ db.redraftRosterPlayer.findMany.mockResolvedValue([{playerId:'fx1',acquisitionType:'draft'}])
+ const result=await materializeRedraftRosterPlayersForLeague('L1')
+ expect(result.playersRepaired).toBe(0)
+ expect(db.fantraxLeague.findUnique).not.toHaveBeenCalled()
+ expect(db.redraftRosterPlayer.updateMany).not.toHaveBeenCalled()
+ expect(db.redraftRosterPlayer.create).not.toHaveBeenCalled()
+})

@@ -1,5 +1,7 @@
 'use client'
 
+import ScoringSettingsPanel from '@/components/app/settings/ScoringSettingsPanel'
+
 /**
  * components/league-settings/NbaScoringSettingsPanel.tsx
  * NBA Commissioner Scoring Settings — full tabbed UI.
@@ -95,6 +97,7 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
 
   const [selectedPreset, setSelectedPreset] = useState<PresetKey>('af_default')
   const [editedRules, setEditedRules] = useState<Record<string, number>>({})
+  const [categoryMode, setCategoryMode] = useState(false)
   const [activeTab, setActiveTab] = useState<string>('general')
 
   // All categories: 9 standard + 1 premium
@@ -110,6 +113,7 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
       .then((r) => r.json())
       .then((data) => {
         if (!active) return
+        setCategoryMode(Boolean(data.categoryScoring))
         setPresets(data.presets ?? [])
         setConfig(data.config ?? null)
         setIsPremium(data.isPremium ?? false)
@@ -194,6 +198,8 @@ export function NbaScoringSettingsPanel({ leagueId, isCommissioner = false }: Pr
   }, [config])
 
   // ----- loading state -----
+  if (categoryMode) return <ScoringSettingsPanel leagueId={leagueId} />
+
   if (loading) {
     return (
       <div className="py-10 text-center text-sm text-white/50">

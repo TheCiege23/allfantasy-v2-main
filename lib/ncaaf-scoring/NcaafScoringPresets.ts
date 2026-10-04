@@ -41,7 +41,7 @@ export const NCAAF_MISC_KEYS = [
 ] as const
 
 export const NCAAF_KICKING_KEYS = [
-  'pat_made', 'pat_missed', 'fg_0_19', 'fg_20_29', 'fg_30_39', 'fg_40_49', 'fg_50_plus',
+  'fg_made', 'fg_missed', 'pat_made', 'pat_missed', 'fg_0_19', 'fg_20_29', 'fg_30_39', 'fg_40_49', 'fg_50_plus',
   'fg_missed_0_39', 'fg_missed_40_49', 'fg_missed_50_plus',
 ] as const
 
@@ -51,9 +51,11 @@ export const NCAAF_DST_KEYS = [
   'dst_pa_0', 'dst_pa_1_6', 'dst_pa_7_13', 'dst_pa_14_20', 'dst_pa_21_27', 'dst_pa_28_34', 'dst_pa_35_plus',
 ] as const
 
+export const NCAAF_IDP_KEYS = ['idp_solo_tackle', 'idp_tackle', 'idp_sack', 'idp_pass_defended', 'idp_tackle_for_loss', 'idp_td', 'idp_interception', 'idp_int_return_yards'] as const
+
 export const NCAAF_STAT_KEYS = [
   ...NCAAF_PASSING_KEYS, ...NCAAF_RUSHING_KEYS, ...NCAAF_RECEIVING_KEYS,
-  ...NCAAF_MISC_KEYS, ...NCAAF_KICKING_KEYS, ...NCAAF_DST_KEYS,
+  ...NCAAF_MISC_KEYS, ...NCAAF_KICKING_KEYS, ...NCAAF_DST_KEYS, ...NCAAF_IDP_KEYS,
 ] as const
 
 export type NcaafStatKey = (typeof NCAAF_STAT_KEYS)[number]
@@ -73,6 +75,7 @@ export const NCAAF_STAT_LABELS: Record<string, string> = {
   one_hundred_yd_rec_bonus: '100+ Rec Yards', two_hundred_yd_rec_bonus: '200+ Rec Yards',
   fumble: 'Fumble', fumble_lost: 'Fumble Lost', fumble_recovery: 'Fumble Recovery',
   off_fumble_recovery_td: 'Off Fumble Rec TD', return_yards: 'Return Yards', return_td: 'Return TD',
+  fg_made: 'FG Made', fg_missed: 'FG Missed',
   pat_made: 'PAT Made', pat_missed: 'PAT Missed',
   fg_0_19: 'FG 0-19', fg_20_29: 'FG 20-29', fg_30_39: 'FG 30-39', fg_40_49: 'FG 40-49', fg_50_plus: 'FG 50+',
   fg_missed_0_39: 'FG Miss 0-39', fg_missed_40_49: 'FG Miss 40-49', fg_missed_50_plus: 'FG Miss 50+',
@@ -171,5 +174,7 @@ export function buildFullNcaafScoringConfig(presetKey: NcaafScoringPresetKey): R
   const preset = getNcaafScoringPreset(presetKey)
   const config: Record<string, number> = {}
   for (const key of NCAAF_STAT_KEYS) config[key] = preset.rules[key] ?? 0
+  for (const [key, points] of Object.entries({ idp_solo_tackle: 1, idp_tackle: 0, idp_sack: 3, idp_pass_defended: 1, idp_tackle_for_loss: 1, idp_td: 6, idp_interception: 4, idp_int_return_yards: 0 })) config[key] = preset.rules[key] ?? points
+  config.fg_made = preset.rules.fg_made ?? 3
   return config
 }

@@ -204,6 +204,10 @@ export async function createCanonicalLeagueInTransaction(
     if (!isScoringPresetValidForContext(body.scoringPreset!, ctx)) throw new Error('MLB category scoring requires redraft, dynasty or keeper.')
     Object.assign(foundationDefaults.scoringSettings, buildScoringFromPresetId(body.scoringPreset!, ctx).scoringSettings)
   }
+  if (sport === 'NBA' && foundationDefaults.scoringSettings.scoringMode === 'h2h_category') {
+    Object.assign(foundationDefaults.scoringSettings, { lineupLockType: 'first_game_of_week' })
+    foundationDefaults.scheduleSettings.lineupLockType = 'first_game_of_week'
+  }
   if (foundationDefaults.scoringSettings.scoringMode === 'roto') Object.assign(foundationDefaults.playoffSettings, { playoffTeams: 0, playoff_team_count: 0, playoffStartWeek: null, playoff_start_week: null, seedingRule: 'points_only' })
   const managerCount = foundationDefaults.managerCount
   const draftSettings = foundationDefaults.draftSettings
@@ -315,7 +319,7 @@ export async function createCanonicalLeagueInTransaction(
     sport_type: sport,
     trade_review_mode: tradeReview,
     requested_draft_type: body.draftType,
-    ...(foundationDefaults.scoringSettings.scoringMode !== 'points' && sport === 'MLB' ? {sportConfig:{...((engine.settingsSnapshot.sportConfig as Record<string,unknown>)??{}),lineupLockType:'first_game_of_week'}} : {}),
+    ...(foundationDefaults.scoringSettings.scoringMode !== 'points' && (sport === 'MLB' || sport === 'NBA') ? {sportConfig:{...((engine.settingsSnapshot.sportConfig as Record<string,unknown>)??{}),lineupLockType:'first_game_of_week'}} : {}),
     canonical_draft_mode: body.draftType,
     third_round_reversal: thirdRoundReversal,
     draft_third_round_reversal: thirdRoundReversal,

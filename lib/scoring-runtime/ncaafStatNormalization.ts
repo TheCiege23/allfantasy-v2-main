@@ -39,6 +39,15 @@ export const NCAAF_STAT_ALIASES: Readonly<Record<string, string>> = {
   'receiving.TD': 'rec_td',
   'fumbles.LOST': 'fum_lost',
   'kicking.XPM': 'xp_made',
+  'kicking.FGM': 'fg_made',
+  'defensive.SOLO': 'idp_solo',
+  'defensive.TOT': 'idp_tackle',
+  'defensive.SACKS': 'idp_sack',
+  'defensive.PD': 'idp_pd',
+  'defensive.TFL': 'idp_tfl',
+  'defensive.TD': 'idp_td',
+  'interceptions.INT': 'idp_int',
+  'interceptions.YDS': 'idp_int_return_yards',
 }
 
 /** Categories CFBD reports that NCAAF fantasy scoring does not read, wholesale. */
@@ -58,7 +67,6 @@ const NON_SCORING_KEYS = new Set([
   'receiving.LONG',
   'fumbles.FUM',
   'fumbles.REC',
-  'kicking.FGM',
   'kicking.FGA',
   'kicking.FG',
   'kicking.XPA',
@@ -102,6 +110,11 @@ export function normalizeCfbdGameStats(raw: unknown): NcaafGameStats {
     const category = key.slice(0, key.indexOf('.'))
     if (NON_SCORING_CATEGORIES.has(category) || NON_SCORING_KEYS.has(key)) continue
     unmapped.push(key)
+  }
+  // Makes/attempts are captured independently; derive misses only when both exist.
+  for (const [made, attempted, missed] of [['kicking.FGM', 'kicking.FGA', 'fg_miss'], ['kicking.XPM', 'kicking.XPA', 'xp_miss']]) {
+    const m = asNumber(record[made]), a = asNumber(record[attempted])
+    if (m != null && a != null && a >= m) stats[missed] = a - m
   }
   return { stats, unmappedKeys: unmapped, appeared }
 }

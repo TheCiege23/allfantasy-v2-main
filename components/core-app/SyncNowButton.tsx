@@ -2,8 +2,10 @@
 
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
-import { claimClientSyncRefresh, getClientSyncSnapshot, getServerSyncSnapshot, resumeClientSync, startClientSync, subscribeClientSync } from '@/lib/core-app/clientSyncJob'
+import { bindClientSyncAccount, claimClientSyncRefresh, getClientSyncSnapshot, getServerSyncSnapshot, resumeClientSync, startClientSync, subscribeClientSync } from '@/lib/core-app/clientSyncJob'
+import { useClientSyncAccount } from '@/components/providers/ClientSyncAccountProvider'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { syncMessageText } from '@/lib/core-app/syncMessageText'
 
 /**
  * "Sync now" — the shell's one write-shaped control, and it is not a write.
@@ -51,20 +53,24 @@ export type SyncNowButtonProps = {
 
 export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: SyncNowButtonProps) {
   const router = useRouter()
+  const accountId = useClientSyncAccount()
   const { phase, message, completion } = useSyncExternalStore(subscribeClientSync, getClientSyncSnapshot, getServerSyncSnapshot)
-  useEffect(() => { void resumeClientSync()?.catch(() => undefined) }, [])
+  useEffect(() => {
+    bindClientSyncAccount(accountId)
+    if (accountId) void resumeClientSync()?.catch(() => undefined)
+  }, [accountId])
   useEffect(() => {
     if (claimClientSyncRefresh(completion)) router.refresh()
   }, [completion, router])
 
   /* Only a counted zero disables. See `eligibleCount` above for why null does not. */
   const nothingToSync = eligibleCount === 0
-  const disabled = phase === 'busy' || nothingToSync
+  const disabled = !accountId || phase === 'busy' || nothingToSync
 
   const run = useCallback(() => {
-    if (phase === 'busy' || nothingToSync) return
+    if (!accountId || phase === 'busy' || nothingToSync) return
     void startClientSync(onlyKey).catch(() => undefined)
-  }, [phase, nothingToSync, onlyKey])
+  }, [accountId, phase, nothingToSync, onlyKey])
 
   /* In the reader's language — the chip is in the top bar of every /core screen (2026-10-03). */
   const { language } = useOptionalLanguage()
@@ -103,7 +109,12 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: Sync
      is watching — it does not need to interrupt what they are reading. */
   const status = (
     <span className="af-syncnow-msg" role="status" aria-live="polite" data-phase={phase}>
-      {phase === 'busy' ? (message ?? (es ? 'Releyendo tus ligas…' : 'Re-reading your leagues…')) : (message ?? '')}
+      {/* The sync loop writes these in English; they are translated here, where the language is known. */}
+      {phase === 'busy'
+        ? message
+          ? syncMessageText(message, language)
+          : es ? 'Releyendo tus ligas…' : 'Re-reading your leagues…'
+        : syncMessageText(message, language)}
     </span>
   )
 

@@ -3,6 +3,7 @@
  * Downstream: `resolveScoringRulesForLeague` → weekly processor / matchup engine; `buildLeagueScoringContextForAi`
  * for start-sit + matchup routes; IDP `getMergedScoringRulesForLeague` overlays `idp_*` from the same rules.
  */
+import { nativeCategoryScoringContext, type NativeCategoryScoringContext } from '@/lib/category-scoring/nativeCategoryScoringContext'
 import { prisma } from '@/lib/prisma'
 import {
   getLeagueSettingsForScoring,
@@ -30,6 +31,7 @@ export interface LeagueScoringConfig {
   formatType: string
   templateId: string
   rules: LeagueScoringRuleConfig[]
+  categoryScoring?: NativeCategoryScoringContext
 }
 
 /**
@@ -38,6 +40,7 @@ export interface LeagueScoringConfig {
 export async function buildLeagueScoringContextForAi(leagueId: string): Promise<string | null> {
   const config = await getLeagueScoringConfig(leagueId)
   if (!config) return null
+  if (config.categoryScoring) return `${config.sport} category scoring: ${JSON.stringify(config.categoryScoring)}. Compare category impact; sum made and attempted stats before calculating percentages.`
   const active = config.rules
     .filter((r) => r.enabled && Math.abs(r.pointsValue) > 1e-9)
     .slice(0, 56)
@@ -56,6 +59,8 @@ export async function getLeagueScoringConfig(
   if (!league) return null
 
   const settings = await getLeagueSettingsForScoring(leagueId)
+  const categoryScoring = nativeCategoryScoringContext(settings, String(league.sport))
+  if (categoryScoring) return { leagueId, sport: league.sport, leagueVariant: league.leagueVariant ?? null, formatType: String(categoryScoring.mode), templateId: categoryScoring.presetId, rules: [], categoryScoring }
   const sportConfig = resolveSportConfigForLeague(league.sport)
   const formatType =
     resolveFormatTypeFromLeagueSettings(league.sport, settings) ??

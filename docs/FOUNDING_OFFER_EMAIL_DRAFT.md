@@ -141,6 +141,11 @@ does on the site.
 
 ## Sending it
 
+**Update 2026-10-04: there is now a sender — `scripts/send-founding-offer.ts`** (copy in
+`lib/monetization/foundingOfferEmail.ts`, rules in `lib/monetization/foundingOfferSend.ts`). It runs under
+`railway run`, so it uses production's Resend key and base URL, and it refuses to send while the coupon
+is unset. The paragraph below describes the situation before it existed.
+
 Out of scope for this draft, and worth flagging because the obvious path does not work: there is **no
 in-app path** that sends this, and the local `RESEND_API_KEY` is invalid. A hand-send renders the
 email locally and goes out through the Resend MCP, and `NEXTAUTH_URL` has to be pinned or every link

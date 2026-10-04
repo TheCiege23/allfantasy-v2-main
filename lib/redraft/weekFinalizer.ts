@@ -1,6 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
 
 import { prisma as defaultPrisma } from '@/lib/prisma'
+import { easternCalendarDay } from '@/lib/sports-data/easternGameDay'
 import { normalizeGameStatus } from '@/lib/sports/gameStatus'
 import { readRiScheduleWindow } from '@/lib/sports-data/riSeasonSchedule'
 import { resolveDailySportWeekWindow } from '@/lib/season-week/dailySportSeasonStarts'
@@ -87,6 +88,7 @@ export type WeekFinalizeRefusal =
   | 'no_games_on_slate'
   | 'games_not_final'
   | 'within_grace_period'
+  | 'week_window_open'
   | 'no_starters'
   | 'stat_coverage_below_floor'
   /**
@@ -429,6 +431,13 @@ export async function finalizeRedraftWeek(
   })
   if (slate.games === 0) return emptyResult(base, 'no_games_on_slate', { slate, matchupsConsidered })
   if (slate.unfinished > 0) return emptyResult(base, 'games_not_final', { slate, matchupsConsidered })
+
+  // A partial feed must never close an active date window, even if all known games are final.
+  // Window bounds represent Eastern calendar days, while now is an instant.
+  const today = easternCalendarDay(now)
+  if (dateWindow && today && today < dateWindow.end) {
+    return emptyResult(base, 'week_window_open', { slate, matchupsConsidered })
+  }
 
   const lastStart = slate.lastStartTime ? new Date(slate.lastStartTime) : null
   if (lastStart && now.getTime() < lastStart.getTime() + graceMs) {

@@ -11,7 +11,7 @@ it('exposes stored category rules and rate components to OS consumers', () => {
 it('grounds Chimmy in categories inside the league reference fence', () => {
   const prompt=buildLeagueRulesGrounding({leagueType:'redraft',sport:'MLB',settings})!
   expect(prompt).toContain('Evaluate category impact, not summed fantasy points')
-  expect(prompt.indexOf('Stored MLB category scoring')).toBeLessThan(prompt.indexOf(RULE_FENCE_END))
+  expect(prompt.indexOf('Stored category scoring')).toBeLessThan(prompt.indexOf(RULE_FENCE_END))
 })
 it('does not infer category rules from points, missing, or inconsistent settings', () => {
   expect(nativeMlbScoringContext({})).toBeNull()

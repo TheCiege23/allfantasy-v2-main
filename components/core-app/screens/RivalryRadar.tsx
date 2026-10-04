@@ -4,6 +4,7 @@ import Link from 'next/link'
 import type { RivalryCard, RivalryRadar as RivalryRadarData } from '@/lib/core-app/weekBoard'
 import { rosterLabel } from '@/lib/core-app/managerName'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
+import { kickoffText } from '@/lib/core-app/kickoffText'
 import '@/components/core-app/af-week.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -183,7 +184,8 @@ export function RivalryRadar({ data, weekHref }: RivalryRadarProps) {
    */
   const preseasonKickoffLabel =
     data.firstKickoffAt && new Date(data.firstKickoffAt).getTime() > Date.now()
-      ? kickoffDayLabel(data.firstKickoffAt)
+      ? /* Pinned en-US so it hydrates; translated at render — "Oct 4" → «4 oct». */
+        kickoffText(kickoffDayLabel(data.firstKickoffAt), language)
       : null
 
   return (
@@ -272,7 +274,7 @@ export function RivalryRadar({ data, weekHref }: RivalryRadarProps) {
           <div className="af-wk-empty">
             <p className="af-wk-empty-t">{copy('The season has not started yet.')}</p>
             <p className="af-wk-empty-b">
-              {es ? `Las rivalidades se basan en semanas puntuadas. Los historiales se formarán al avanzar la temporada; el primer partido comienza ${preseasonKickoffLabel}.` : `Rivalries are read from scored weeks, and none have been played this season. Records build as weeks are scored — first kickoff ${preseasonKickoffLabel}.`}
+              {es ? `Las rivalidades se basan en semanas puntuadas. Los historiales se formarán al avanzar la temporada; el primer partido comienza el ${preseasonKickoffLabel}.` : `Rivalries are read from scored weeks, and none have been played this season. Records build as weeks are scored — first kickoff ${preseasonKickoffLabel}.`}
             </p>
           </div>
         ) : (

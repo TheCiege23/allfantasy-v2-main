@@ -8,6 +8,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { recomputeAllFantasyAdp } from '@/lib/adp/recomputeAllFantasyAdp'
+import { syncMarketReferences, captureCachedReferences, captureProviderAdp } from '@/lib/draft-archive/ingestion/referenceWriter'
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -48,10 +49,21 @@ async function handle(req: NextRequest) {
       includeImportedDrafts: includeImported,
     })
 
-    const hasErrors = report.errors.length > 0
+    let references: unknown = null
+    let referenceErrors = false
+    if (sport === 'NFL' && !includeTest && !dryRun && url.searchParams.get('includeReferences') !== 'false') {
+      try {
+        const date = new Date(Date.now() - 86400000).toISOString().slice(0,10)
+        const market = await syncMarketReferences(date, true)
+        const providerAdp = await captureProviderAdp(true)
+        references = { market, cached: await captureCachedReferences(true), providerAdp }
+        referenceErrors = market.failed > 0 || providerAdp.unavailable
+      } catch { referenceErrors = true }
+    }
+    const hasErrors = report.errors.length > 0 || referenceErrors
     const status = hasErrors ? 207 : 200
 
-    return NextResponse.json({ ok: !hasErrors, report }, { status })
+    return NextResponse.json({ ok: !hasErrors, report, references, referenceErrors }, { status })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ ok: false, error: message }, { status: 500 })

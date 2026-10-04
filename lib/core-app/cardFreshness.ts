@@ -29,7 +29,22 @@ export type CardFreshnessStamp = {
   stale: boolean
   /** What to say when `asOf` is null — see `MissingMeaning`. */
   missingLabel: string
+  /**
+   * What `source` was built from, so the stamp can be said in the reader's language (2026-10-04). The
+   * stamp is built on the SERVER, which does not know the language; `source` stays the English as
+   * written and lib/core-app/cardFreshnessCopy.ts rebuilds the Spanish from this at render. A stamp
+   * without it renders whole English.
+   */
+  parts?: StampSourceParts
 }
+
+export type StampSourceParts =
+  | { kind: 'injuries' }
+  | { kind: 'summary' }
+  | { kind: 'scores' }
+  | { kind: 'sync-paused' }
+  /** `leagueDataStamp`'s pieces: never-read count, "Oldest", "active", and the paused connections left out. */
+  | { kind: 'league-data'; neverRead: number; oldest: boolean; active: boolean; paused: number }
 
 /**
  * What an absent time MEANS, which differs by source and changes the wording and the warning:
@@ -51,19 +66,72 @@ export function freshnessStamp(
      */
     staleRule?: DataClass
     missing?: MissingMeaning
+    /** What `source` was built from — see `CardFreshnessStamp.parts`. */
+    parts?: StampSourceParts
   } = {},
 ): CardFreshnessStamp {
   const missing = options.missing ?? 'never-read'
   const missingLabel = missing === 'never-read' ? 'not read yet' : 'none yet'
+  const parts = options.parts ? { parts: options.parts } : {}
   const date = toDate(at)
-  if (!date) return { source, asOf: null, label: null, stale: missing === 'never-read', missingLabel }
+  if (!date) return { source, asOf: null, label: null, stale: missing === 'never-read', missingLabel, ...parts }
   return {
     source,
     asOf: date.toISOString(),
     label: relativeAge(date.getTime(), now.getTime()),
     stale: options.staleRule ? isStale(options.staleRule, date, now) : false,
     missingLabel,
+    ...parts,
   }
+}
+
+/**
+ * The stamp on every /core home card built from league syncs (moved here from HomeCards.tsx on
+ * 2026-10-04, unchanged, so its Spanish can be tested against its real output).
+ *
+ * ⚠ THE OLDEST SYNC, NOT THE NEWEST. These cards cover every league in view at once, so one league
+ * synced a minute ago said "updated 1m ago" over a portfolio whose other 59 leagues were days old —
+ * a fresh timestamp laundering stale ones. The oldest is the only instant every row is at least as
+ * new as. A league that has never synced makes the stamp stale whatever the others say; with none
+ * synced at all it reads "not read yet". AllFantasy-native leagues have nothing to sync and are not
+ * counted.
+ */
+export function leagueDataStamp(
+  input: { oldestAt: string | null; neverSynced: number; syncable: number; paused?: number },
+  now: Date,
+): CardFreshnessStamp {
+  if (input.syncable === 0 && input.paused) {
+    return {
+      source: 'Account sync paused',
+      asOf: null,
+      label: null,
+      stale: false,
+      missingLabel: 'history retained',
+      parts: { kind: 'sync-paused' },
+    }
+  }
+  /*
+   * The warning has to say WHY. "⚠ Oldest league data updated 7 min ago" is a contradiction on its
+   * face when the reason is a league that has never been read — so that case names the count.
+   */
+  const unread = input.neverSynced > 0 && input.oldestAt
+    ? `${input.neverSynced} ${input.neverSynced === 1 ? 'league' : 'leagues'} never read · `
+    : ''
+  const scope = input.paused ? 'active league data' : 'league data'
+  const excluded = input.paused ? ` · ${input.paused} paused ${input.paused === 1 ? 'connection' : 'connections'} excluded` : ''
+  const source = `${unread}${input.syncable > 1 ? `Oldest ${scope}` : `${scope[0].toUpperCase()}${scope.slice(1)}`}${excluded}`
+  const stamp = freshnessStamp(source, input.oldestAt, now, {
+    staleRule: 'fantasy_league',
+    missing: input.syncable === 0 ? 'none-yet' : 'never-read',
+    parts: {
+      kind: 'league-data',
+      neverRead: unread ? input.neverSynced : 0,
+      oldest: input.syncable > 1,
+      active: Boolean(input.paused),
+      paused: input.paused ?? 0,
+    },
+  })
+  return unread ? { ...stamp, stale: true } : stamp
 }
 
 /** The oldest valid instant in a list — null when none parses. */

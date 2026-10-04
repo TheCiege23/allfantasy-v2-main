@@ -1,0 +1,12 @@
+.af-draft-reference,.af-draft-analysis{min-width:0;margin:1rem 0;padding:1rem;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow-wrap:anywhere}
+:is(.af-draft-reference,.af-draft-analysis) .af-archive-table{max-width:100%;overflow:auto;max-height:60vh}
+:is(.af-draft-reference,.af-draft-analysis) table{width:100%;min-width:640px;border-collapse:collapse}
+:is(.af-draft-reference,.af-draft-analysis) :is(th,td){padding:.7rem;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+:is(.af-draft-reference,.af-draft-analysis) th{position:sticky;top:0;background:var(--surface2);z-index:1}
+.af-draft-reference label{display:grid;gap:.4rem;max-width:28rem;margin:.7rem 0}
+.af-draft-reference :is(input,button){min-height:44px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:.5rem}
+.af-draft-reference nav{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;margin:1rem 0}
+.af-draft-reference summary{min-height:44px;cursor:pointer;padding:.5rem 0}
+:is(.af-draft-reference,.af-draft-analysis) :is(input,button,summary,a):focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.af-archive textarea{width:100%;max-width:32rem;min-height:88px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:.6rem}
+@media(max-width:767px){.af-draft-reference,.af-draft-analysis{padding:.75rem}.af-draft-reference label{max-width:100%}}

@@ -22,6 +22,7 @@
 import * as dotenv from 'dotenv'
 import Stripe from 'stripe'
 import { getMonetizationCatalog } from '../lib/monetization/catalog'
+import { stripePriceShapeProblems } from '../lib/monetization/stripePriceShape'
 
 /*
  * ⚠ tsx DOES NOT LOAD .env — Next.js does that, and a script run with `npx tsx`
@@ -47,7 +48,7 @@ type Row = {
   envVar: string
   advertised: number
   charged: number | null
-  status: 'ok' | 'MISMATCH' | 'ENV UNSET' | 'PRICE MISSING' | 'NOT A PRICE'
+  status: 'ok' | 'MISMATCH' | 'WRONG SHAPE' | 'ENV UNSET' | 'PRICE MISSING' | 'NOT A PRICE'
   detail: string
 }
 
@@ -115,16 +116,23 @@ async function main() {
         continue
       }
 
+      /*
+       * ⚠ THE RIGHT AMOUNT ON THE WRONG KIND OF PRICE IS STILL A WRONG CHARGE. Active, USD, and
+       * recurring on the catalog's interval (or one-time for a token pack) — see stripePriceShape.ts.
+       */
+      const shape = stripePriceShapeProblems(item, price)
+      const amountOk = chargedCents === advertisedCents
+      const details = [
+        ...(amountOk ? [] : [`page says $${item.amountUsd}, Stripe charges $${(chargedCents / 100).toFixed(2)}`]),
+        ...shape,
+      ]
       rows.push({
         sku: item.sku,
         envVar,
         advertised: item.amountUsd,
         charged: chargedCents / 100,
-        status: chargedCents === advertisedCents ? 'ok' : 'MISMATCH',
-        detail:
-          chargedCents === advertisedCents
-            ? ''
-            : `page says $${item.amountUsd}, Stripe charges $${(chargedCents / 100).toFixed(2)}`,
+        status: !amountOk ? 'MISMATCH' : shape.length ? 'WRONG SHAPE' : 'ok',
+        detail: details.join('; '),
       })
     } catch (e) {
       rows.push({

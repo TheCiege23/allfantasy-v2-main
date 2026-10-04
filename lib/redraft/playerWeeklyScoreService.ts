@@ -360,7 +360,9 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
   const ncaafResolvedRosterIds = new Set<string>()
   let ncaafVerdictFor: ((team: string | null | undefined) => NcaafNoRowVerdict) | null = null
   if (isNcaaf) {
-    const bridge = await bridgeNcaafRosterIdsToCfbdIds(prisma as never, playerIds)
+    const sourceLeague = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { platform: true } })
+    const namespace = String(sourceLeague?.platform ?? '').toLowerCase() === 'fantrax' ? 'fantrax' : 'pool'
+    const bridge = await bridgeNcaafRosterIdsToCfbdIds(prisma as never, playerIds, namespace)
     summary.cfbdIdsResolved = bridge.cfbdIds.length
     summary.unresolvedCfbdPlayerIds = bridge.unresolved
     if (bridge.ambiguous.length) {

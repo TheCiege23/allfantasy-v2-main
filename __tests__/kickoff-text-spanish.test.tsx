@@ -16,7 +16,8 @@ vi.mock('next/navigation', () => ({
 const lang = vi.hoisted(() => ({ language: 'en' as 'en' | 'es' }))
 vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useOptionalLanguage: () => ({ language: lang.language }) }))
 
-import { kickoffText } from '@/lib/core-app/kickoffText'
+import { kickoffText, weekdayEs } from '@/lib/core-app/kickoffText'
+import { reportedLabel } from '@/lib/core-app/injuryReport'
 import { kickoffClock } from '@/lib/core-app/lineupLock'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import { formatLockLabel } from '@/lib/core-app/lockLabel'
@@ -38,6 +39,25 @@ describe('kickoffText, on the formatters’ real output', () => {
       expect(es, clock).not.toMatch(EN_DAY)
       expect(es, clock).toMatch(/^(dom|lun|mar|mié|jue|vie|sáb) 1:00p ET$/)
     }
+  })
+
+  it('weekdayEs: every lone weekday the formatters write — kickoffClock’s, and reportedLabel’s date-only "reported Sun"', () => {
+    const seen = new Set<string>()
+    for (let i = 0; i < 7; i++) {
+      // A date-only report (UTC midnight) is the one place a weekday stands alone, with no clock for kickoffText.
+      const iso = new Date(Date.UTC(2026, 9, 4 + i)).toISOString()
+      const reported = reportedLabel(iso, iso)!
+      const day = reported.replace(/^reported /, '')
+      const fromClock = kickoffClock(new Date(Date.UTC(2026, 9, 4 + i, 17)).toISOString()).split(' ')[0]!
+      expect(day, reported).toBe(fromClock)
+      const es = weekdayEs(day)
+      expect(es, day).toMatch(/^(dom|lun|mar|mié|jue|vie|sáb)$/)
+      // ...and it agrees with kickoffText on the same weekday, so the two cannot drift apart.
+      expect(`${es} 1:00p ET`).toBe(kickoffText(`${day} 1:00p ET`, 'es'))
+      seen.add(es)
+    }
+    expect(seen.size).toBe(7)
+    expect(weekdayEs('Sunday')).toBe('Sunday') // anything else passes through
   })
 
   it('every month kickoffDayLabel writes — day first in Spanish', () => {

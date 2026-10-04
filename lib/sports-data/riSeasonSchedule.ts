@@ -143,6 +143,17 @@ export async function syncRiSeasonSchedule(opts: {
       return result
     }
   }
+  if (sport === 'NCAAB' || sport === 'NCAABB') {
+    // A season endpoint returning last season, or only an opening-month preview,
+    // cannot be used as the complete slate that authorizes week finalization.
+    const regularDays = games.filter(g => g.seasonType === 'regular').map(g => g.day).sort()
+    const first = regularDays[0], last = regularDays[regularDays.length - 1]
+    if (!first || first < `${opts.season}-10-01` || first > `${opts.season}-11-30` ||
+        !last || last < `${opts.season + 1}-03-01` || last > `${opts.season + 1}-04-30`) {
+      result.error = `NCAAB schedule-season lacks the requested autumn-to-March regular season (${first ?? 'missing'} to ${last ?? 'missing'}) — refusing a partial or wrong-season slate`
+      return result
+    }
+  }
   result.fetched = true
   result.games = games.length
 

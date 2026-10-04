@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import { CommissionerBadge } from '@/components/core-app/CommissionerBadge'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING. This screen renders at /dashboard
  * OUTSIDE AfCoreShell, which is what imports the token layer for everything
@@ -443,6 +444,7 @@ function cardsFromData(props: Dashboard3AData & Dashboard3AChrome): Dashboard3AS
 
 export function Dashboard3A(props: Dashboard3AProps) {
   const { planName = null, tokensLeft = null, nowLabel = null, commissionerCount = 0 } = props
+  const es = useOptionalLanguage().language === 'es'
   const slots = props.slots ?? cardsFromData(props)
   const mainOrder = props.order?.main ?? (['routine', 'issues', 'matchups'] as const)
   const sideOrder = props.order?.side ?? (['chimmy', 'career', 'rivals'] as const)
@@ -486,16 +488,20 @@ export function Dashboard3A(props: Dashboard3AProps) {
           <Link
             href="/core/portfolio"
             className="af3a-tile af3a-tile-more"
-            title={`${railOverflow} more ${railOverflow === 1 ? 'league' : 'leagues'} — open Portfolio`}
+            title={
+              es
+                ? `${railOverflow} ${railOverflow === 1 ? 'liga más' : 'ligas más'}: abrir Portafolio`
+                : `${railOverflow} more ${railOverflow === 1 ? 'league' : 'leagues'} — open Portfolio`
+            }
           >
             +{railOverflow > 99 ? '99' : railOverflow}
           </Link>
         ) : null}
-        <Link href="/import" className="af3a-tile af3a-tile-add" title="Import a league">
+        <Link href="/import" className="af3a-tile af3a-tile-add" title={es ? 'Importar una liga' : 'Import a league'}>
           +
         </Link>
         <div className="af3a-rail-spacer" />
-        <Link href="/settings" className="af3a-avatar" title="Profile, settings and modes">
+        <Link href="/settings" className="af3a-avatar" title={es ? 'Perfil, ajustes y modos' : 'Profile, settings and modes'}>
           <Mark
             src={career?.avatarUrl}
             alt={career?.handle ?? 'Profile'}

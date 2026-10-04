@@ -3,6 +3,15 @@ import 'server-only'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { LeagueTradeChart } from '@/lib/trade-value-console/leagueTradePricing'
+import {
+  buildFantasyCalcCacheKey,
+  type fantasyCalcSettingsForChart,
+  parseProfileCapture,
+  profileCaptureDayOfKey,
+  profileCaptureKey,
+  profileCaptureKeyPrefix,
+  unpackProfileCapture,
+} from '@/lib/fantasycalc-profile-capture'
 
 /*
  * A chart row, typed through the chart rather than imported from `@/lib/fantasycalc`: Decision OS may
@@ -10,16 +19,21 @@ import type { LeagueTradeChart } from '@/lib/trade-value-console/leagueTradePric
  */
 type FantasyCalcPlayer = LeagueTradeChart['fcPlayers'][number]
 
+/** The FantasyCalc profile a league's chart requests (dynasty, QBs, teams, PPR) — typed through the chart. */
+export type ChartProfile = ReturnType<typeof fantasyCalcSettingsForChart>
+
 /**
  * THE MARKET AS IT STOOD ON ONE DAY, for pricing a completed trade at the time of the trade.
  *
- * Read from `PlayerValueSnapshot` (source FANTASYCALC) and nothing else — the one dated source on the
- * live board's scale. Measured read-only on production 2026-10-03: the same player's stored value over
+ * Two dated sources, both FantasyCalc on the live board's scale: the league's OWN profile captured
+ * daily from 2026-10-04 (`loadProfileMarket`, below — preferred), and `PlayerValueSnapshot` (source
+ * FANTASYCALC, the 12-team PPR-1 books — the fallback, and the only record before that date).
+ * Measured read-only on production 2026-10-03: the same player's stored value over
  * the live board's has a median ratio of 1.00 in all four books, and 0.98–1.03 rank-matched over ranks
  * 1–250. The historical JSON (`data/historical-values`) is NOT a substitute: name-joined, clamped to
  * 2026-02-05, and 1.37–4.5× the live board rank-matched.
  *
- * ── WHY THE 12-TEAM PPR CAPTURE IS THE LEAGUE'S OWN BOARD ────────────────────────────────────
+ * ── WHY THE 12-TEAM PPR CAPTURE IS CLOSE TO THE LEAGUE'S OWN BOARD (BUT NOT IDENTICAL) ─────────
  *
  * `ingestPlayerValues` captures four books — DYNASTY or REDRAFT × SUPERFLEX or ONE_QB — all at 12
  * teams and PPR 1. Team count and reception weight move the FantasyCalc board almost uniformly (8
@@ -34,6 +48,15 @@ type FantasyCalcPlayer = LeagueTradeChart['fcPlayers'][number]
 /** One of the four stored books (`ingestPlayerValues.COMBOS`). */
 export type MarketBook = { format: 'DYNASTY' | 'REDRAFT'; qbFormat: 'SUPERFLEX' | 'ONE_QB' }
 
+/**
+ * Which stored board a dated market came from:
+ *   - `league_profile` — the league's OWN FantasyCalc profile (its team count, QBs and PPR), captured
+ *     daily by the warm cron from 2026-10-04 (`loadProfileMarket`);
+ *   - `standard_12_ppr1` — FantasyCalc's 12-team PPR-1 book for the league's dynasty/SF combination,
+ *     `PlayerValueSnapshot` (`loadDatedMarket`), the fallback when the league's own is missing.
+ */
+export type DatedMarketSource = 'league_profile' | 'standard_12_ppr1'
+
 /** One day's capture of one book, in the shape the league chart prices from. */
 export type DatedMarket = {
   /** The capture stamp, YYYY-MM-DD (UTC midnight). */
@@ -41,6 +64,8 @@ export type DatedMarket = {
   book: MarketBook
   /** Players AND pick rows (position 'PICK' — stored from 2026-09-20 only). */
   players: FantasyCalcPlayer[]
+  /** Absent means `standard_12_ppr1` — every market before the league-profile capture existed. */
+  source?: DatedMarketSource
 }
 
 export function marketBookFor(chart: { chartIsDynasty: boolean; isSuperFlex: boolean }): MarketBook {
@@ -161,8 +186,83 @@ export function loadDatedMarket(book: MarketBook, day: string): Promise<DatedMar
   return load
 }
 
+/* ── THE LEAGUE'S OWN PROFILE, CAPTURED DAILY (2026-10-04) ──────────────────────────────────────
+ *
+ * The `standard_12_ppr1` book above is FantasyCalc's generic board; a league is priced live on its
+ * OWN profile (`fantasyCalcSettingsForChart`). The warm cron now stores each profile once per UTC day
+ * (`lib/fantasycalc-profile-capture.ts`, a `SportsDataCache` row), so a trade graded later is priced on
+ * exactly the board its league's chart would have requested — and on the 12-team book only when that
+ * capture is missing (`completedTradeGrade.gradeAtTradeTime`). Captures exist from deploy onward; no
+ * backfill. Read-only here: the cron is the only writer.
+ */
+
+/** A profile's FantasyCalc book, in `PlayerValueSnapshot`'s terms. */
+export function marketBookForProfile(profile: ChartProfile): MarketBook {
+  return { format: profile.isDynasty ? 'DYNASTY' : 'REDRAFT', qbFormat: profile.numQbs === 2 ? 'SUPERFLEX' : 'ONE_QB' }
+}
+
+/*
+ * The same 30-minute memo as `loadCaptureDays`, and it cannot hide a capture a grade needs: a trade is
+ * priced from a capture only when graded more than a day after it, and the capture it needs was taken
+ * at or before the trade — so it had existed for over a day before any memo that could miss it.
+ */
+const profileCapturesMemo = new Map<string, { at: number; captures: Promise<Array<{ day: string; takenAt: string }>> }>()
+
+/**
+ * When each stored capture of this profile was TAKEN (its real time — the row's `createdAt`, written
+ * as the capture's `capturedAt`). Keys only, never the boards. Never throws: [] means no evidence.
+ */
+export function loadProfileCaptures(profile: ChartProfile): Promise<Array<{ day: string; takenAt: string }>> {
+  const key = buildFantasyCalcCacheKey(profile)
+  const hit = profileCapturesMemo.get(key)
+  if (hit && Date.now() - hit.at < DAYS_TTL_MS) return hit.captures
+  const captures = (async () => {
+    const rows = await prisma.sportsDataCache.findMany({
+      where: { cacheKey: { startsWith: profileCaptureKeyPrefix(profile) } },
+      select: { cacheKey: true, createdAt: true },
+    })
+    const out: Array<{ day: string; takenAt: string }> = []
+    for (const r of rows) {
+      const day = profileCaptureDayOfKey(profile, r.cacheKey)
+      if (day && r.createdAt instanceof Date && Number.isFinite(r.createdAt.getTime())) out.push({ day, takenAt: r.createdAt.toISOString() })
+    }
+    return out.sort((a, b) => a.day.localeCompare(b.day))
+  })().catch(() => {
+    profileCapturesMemo.delete(key) // a failed read is not cached as "no captures"
+    return [] as Array<{ day: string; takenAt: string }>
+  })
+  profileCapturesMemo.set(key, { at: Date.now(), captures })
+  return captures
+}
+
+/**
+ * One profile's capture on one day, as a dated market — or null when there is none, it will not
+ * parse, or it is not this profile's board. Never throws. Memoised with the 12-team captures: a past
+ * day's capture is write-once (`INSERT … ON CONFLICT DO NOTHING`) and never changes.
+ */
+export function loadProfileMarket(profile: ChartProfile, day: string): Promise<DatedMarket | null> {
+  const cacheKey = profileCaptureKey(profile, day)
+  const memoKey = `profile:${cacheKey}`
+  const hit = marketMemo.get(memoKey)
+  if (hit) return hit
+  const load = (async () => {
+    const row = await prisma.sportsDataCache.findUnique({ where: { cacheKey }, select: { data: true } })
+    const capture = row ? parseProfileCapture(row.data) : null
+    // The payload must describe the board the key names — never price a league on another profile.
+    if (!capture || capture.profileKey !== buildFantasyCalcCacheKey(profile)) return null
+    const players = unpackProfileCapture(capture)
+    if (players.length === 0) return null
+    return { capturedOn: day, book: marketBookForProfile(profile), players, source: 'league_profile' as const }
+  })().catch(() => null)
+  marketMemo.set(memoKey, load)
+  void load.then((m) => { if (!m) marketMemo.delete(memoKey) })
+  if (marketMemo.size > MARKET_MEMO_MAX) marketMemo.delete(marketMemo.keys().next().value!)
+  return load
+}
+
 /** Test seam: forget memoised captures. */
 export function clearDatedMarketMemo(): void {
   daysMemo.clear()
   marketMemo.clear()
+  profileCapturesMemo.clear()
 }

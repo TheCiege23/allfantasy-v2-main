@@ -929,7 +929,7 @@ export async function getDraftHqData(
       select: {
         id: true, status: true, draftType: true, rounds: true, teamCount: true, slotOrder: true,
         thirdRoundReversal: true, tradedPicks: true, keeperConfig: true, keeperSelections: true,
-        sleeperDraftId: true, startedAt: true, playerPool: true, draftModeLabel: true, customRankingsEnabled: true,
+        sleeperDraftId: true, startedAt: true, playerPool: true, draftModeLabel: true, customRankingsEnabled: true, auctionBudgetPerTeam: true,
       },
     }),
   ])

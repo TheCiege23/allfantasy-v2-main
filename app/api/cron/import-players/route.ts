@@ -167,6 +167,12 @@ async function handle(req: NextRequest) {
         () => ingestMlbFantraxIdentities(),
         result => ({ rowsWritten: result.updated, metadata: result }),
       ).catch(error => console.error('[cron/import-players] MLB Fantrax identities:', error instanceof Error ? error.message : 'refresh failed'))
+      const { ingestNcaafFantraxIdentities } = await import('@/lib/player-identity/ingestNcaafFantraxIdentities')
+      await withSyncJobRun(
+        { jobName: 'ncaaf-fantrax-identities', sport: 'NCAAF', provider: 'fantrax', trigger: 'cron' },
+        () => ingestNcaafFantraxIdentities(),
+        result => ({ rowsWritten: result.updated, metadata: result }),
+      ).catch(error => console.error('[cron/import-players] NCAAF Fantrax identities:', error instanceof Error ? error.message : 'refresh failed'))
       const { refreshDevyIntelSources } = await import('@/lib/devy/devyIntelRefresh')
       const { refreshDevyHeadshots, refreshCollegeSportsPlayerHeadshots } = await import(
         '@/lib/devy/devyHeadshotRefresh',

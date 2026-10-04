@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleeperPlayerScores'
 import { sleeperScoreTargetWeeks } from '@/lib/sleeper/sync/sleeperScoreTargetWeeks'
-import { inProgressRiGameIds } from '@/lib/live/playByPlayFeed'
+import { pointsRefreshGameIds } from '@/lib/live/pointsRefreshGames'
 import { notifyStarterSwingsForLeagueWeek, snapshotLeagueWeekScores } from '@/lib/live/starterSwings'
 
 /**
@@ -20,7 +20,7 @@ import { notifyStarterSwingsForLeagueWeek, snapshotLeagueWeekScores } from '@/li
  * user has claimed. Other platforms have no per-player weekly writer yet.
  *
  * Bounded three ways so a Sunday cannot run away with the tick:
- *   - only while an NFL game is in progress (a quiet Tuesday costs one query);
+ *   - live games and finals within eight hours of kickoff (quiet days cost one query);
  *   - a rotating slice of leagues per pass, so a large league set is covered
  *     over several passes rather than blowing one;
  *   - a wall-clock budget per pass, checked between leagues.
@@ -78,7 +78,7 @@ export async function refreshLiveSleeperPoints(
     snapshotScores?: typeof snapshotLeagueWeekScores
     notifySwings?: typeof notifyStarterSwingsForLeagueWeek
   } = {
-    liveGameIds: inProgressRiGameIds,
+    liveGameIds: pointsRefreshGameIds,
     clock: () => Date.now(),
   },
 ): Promise<LivePointsResult> {
