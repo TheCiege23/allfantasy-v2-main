@@ -6,6 +6,7 @@ import type { WeekBoard, WeekMatchup } from '@/lib/core-app/weekBoard'
 import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
+import { kickoffText } from '@/lib/core-app/kickoffText'
 // Client-safe: eliminationSettle.ts has no runtime imports (its one import is a type).
 import { settleBadge } from '@/lib/core-app/eliminationSettle'
 /*
@@ -166,7 +167,8 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
    */
   const preseasonKickoffLabel =
     data.firstKickoffAt && new Date(data.firstKickoffAt).getTime() > Date.now()
-      ? kickoffDayLabel(data.firstKickoffAt)
+      ? /* Pinned en-US so it hydrates; translated at render — "Oct 4" → «4 oct». */
+        kickoffText(kickoffDayLabel(data.firstKickoffAt), language)
       : null
 
   return (
@@ -411,7 +413,7 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
             <p className="af-wk-empty-t">{copy('The season has not started yet.')}</p>
             <p className="af-wk-empty-b">
               {language === 'es'
-                ? `Los enfrentamientos aparecerán al avanzar la temporada. El primer partido comienza ${preseasonKickoffLabel}; antes no hay nada que clasificar.`
+                ? `Los enfrentamientos aparecerán al avanzar la temporada. El primer partido comienza el ${preseasonKickoffLabel}; antes no hay nada que clasificar.`
                 : `Matchups fill in as weeks are scored — first kickoff ${preseasonKickoffLabel}. There is nothing to rank before then.`}
             </p>
           </div>
