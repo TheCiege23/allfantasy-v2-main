@@ -2,7 +2,13 @@ import 'server-only'
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import type { FantasyCalcPlayer } from '@/lib/fantasycalc'
+import type { LeagueTradeChart } from '@/lib/trade-value-console/leagueTradePricing'
+
+/*
+ * A chart row, typed through the chart rather than imported from `@/lib/fantasycalc`: Decision OS may
+ * not import a provider client, even for a type (__tests__/fantasy-os/unified-plane-provider-boundary).
+ */
+type FantasyCalcPlayer = LeagueTradeChart['fcPlayers'][number]
 
 /**
  * THE MARKET AS IT STOOD ON ONE DAY, for pricing a completed trade at the time of the trade.
