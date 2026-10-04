@@ -18,6 +18,10 @@ describe('bounded stored asset history',()=>{
     const result=await loadAssetLineage('l','native','d',null,2026,'NFL',[pick],true,null,context,null);expect(result.lineages[0].edges).toEqual([]);expect(result.pending).toHaveLength(1);
     const rookie=await loadAssetLineage('l','native','d',null,2026,'NFL',[pick],true,null,{...context,purpose:'rookie'},null);expect(rookie.lineages[0].edges).toHaveLength(1);
   });
+  it('does not assign an earlier session proposal to a later reused draft attempt',async()=>{
+    db.proposals.mockResolvedValue([{id:'proposal',respondedAt:new Date('2026-08-01'),giveRound:1,giveOriginalRosterId:'a',receiveRound:1,receiveOriginalRosterId:'other',proposerRosterId:'a',receiverRosterId:'b'}]);
+    const result=await loadAssetLineage('l','native','d','session',2026,'NFL',[pick],false,null,context,'2026-09-01');expect(result.lineages[0].state).toBe('ambiguous');expect(result.lineages[0].edges).toEqual([]);expect(result.pending).toHaveLength(2);
+  });
   it('retains package size without private metadata and respects reversal observation boundaries',async()=>{
     db.executions.mockResolvedValue([{tradeId:'t',executedAt:new Date('2026-08-01'),completeness:'complete',assetSummary:{assets:[{itemType:'player',itemReference:'player',fromRosterId:'a',toRosterId:'b',metadata:{privateNote:'secret'}},{itemType:'faab',fromRosterId:'a',toRosterId:'b'}]},reversal:{reversedAt:new Date('2026-10-01')}}]);
     const result=await loadAssetLineage('l','reset','d','s',2026,'NFL',[pick],true,null,context,null,new Date('2026-09-02'));
