@@ -190,6 +190,29 @@ const ZONE_TONE: Record<Zone, 'good' | 'warn' | 'bad' | 'info'> = {
   eliminated: 'bad',
 }
 
+/**
+ * Where a team stands in an ELIMINATION week — the only zones such a league has.
+ *
+ * 🛑 AN ELIMINATION LEAGUE HAS NO PLAYOFFS. The cards labelled every team from the season table's
+ * playoff zones — "Bye spot", "Playoff spot", "Outside the playoffs" — in a guillotine league (owner's
+ * report, 2026-10-03). What a card should speak to is this week's cut: chopped already, in the bottom
+ * of the live field this week (`RailStanding.bubble`, the banner's own ordering), or safe.
+ */
+type ElimStatus = 'safe' | 'bubble' | 'eliminated'
+const ELIM_LABEL: Record<ElimStatus, string> = { safe: 'Safe', bubble: 'On the bubble', eliminated: 'Eliminated' }
+const ELIM_LABEL_ES: Record<ElimStatus, string> = { safe: 'A salvo', bubble: 'En el límite', eliminated: 'Eliminado' }
+const ELIM_TONE: Record<ElimStatus, 'good' | 'warn' | 'bad'> = { safe: 'good', bubble: 'warn', eliminated: 'bad' }
+
+/**
+ * A chopped team is Eliminated. A live team is On the bubble or Safe by THIS week's ordering — and
+ * when the week cannot be ranked yet (no standing from the rail), nothing is said rather than a guess.
+ */
+function elimStatusOf(m: ScoutedManager, standing: RailStanding | null): ElimStatus | null {
+  if (m.eliminated) return 'eliminated'
+  if (!standing?.bubble) return null
+  return standing.bubble.includes(m.managerId) ? 'bubble' : 'safe'
+}
+
 function recordText(r: Record3): string {
   return `${r.wins}-${r.losses}${r.ties > 0 ? `-${r.ties}` : ''}`
 }
@@ -257,7 +280,18 @@ function Facts({ s }: { s: ScoutStanding }) {
   )
 }
 
-function ManagerCard({ m, tradesHref, edge }: { m: ScoutedManager; tradesHref: string; edge: ScoutEdgeManager | null }) {
+function ManagerCard({
+  m,
+  tradesHref,
+  edge,
+  elimination = null,
+}: {
+  m: ScoutedManager
+  tradesHref: string
+  edge: ScoutEdgeManager | null
+  /** Set in an elimination league: the card shows Safe / On the bubble / Eliminated, never a playoff zone. */
+  elimination?: { status: ElimStatus | null } | null
+}) {
   const { es } = useScoutCopy()
   const s = m.standing
   return (
@@ -308,10 +342,19 @@ function ManagerCard({ m, tradesHref, edge }: { m: ScoutedManager; tradesHref: s
           <>
             <Facts s={s} />
             <p className="af-sc-line">
-              <span className="af-sc-zone" data-tone={ZONE_TONE[s.zone]}>
-                {(es ? ZONE_LABEL_ES : ZONE_LABEL)[s.zone]}
-              </span>
-              {s.gamesBack != null ? <span className="af-num">{gamesBackText(s.gamesBack, es)}</span> : null}
+              {elimination ? (
+                elimination.status ? (
+                  <span className="af-sc-zone" data-tone={ELIM_TONE[elimination.status]} data-elim={elimination.status}>
+                    {(es ? ELIM_LABEL_ES : ELIM_LABEL)[elimination.status]}
+                  </span>
+                ) : null
+              ) : (
+                <span className="af-sc-zone" data-tone={ZONE_TONE[s.zone]}>
+                  {(es ? ZONE_LABEL_ES : ZONE_LABEL)[s.zone]}
+                </span>
+              )}
+              {/* Games back is a playoff-line measure; an elimination league has no line to be back of. */}
+              {!elimination && s.gamesBack != null ? <span className="af-num">{gamesBackText(s.gamesBack, es)}</span> : null}
               <Form form={s.form} />
             </p>
           </>
@@ -594,7 +637,13 @@ export function Scout({
       {data.managers.available ? (
         <ul className="af-sc-list">
           {data.managers.data.map((m) => (
-            <ManagerCard key={m.managerId} m={m} tradesHref={tradesHref} edge={m.isYou ? null : (edgeBy?.[m.managerId] ?? null)} />
+            <ManagerCard
+              key={m.managerId}
+              m={m}
+              tradesHref={tradesHref}
+              edge={m.isYou ? null : (edgeBy?.[m.managerId] ?? null)}
+              elimination={data.format.elimination ? { status: elimStatusOf(m, eliminationStanding) } : null}
+            />
           ))}
         </ul>
       ) : (

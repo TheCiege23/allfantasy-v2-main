@@ -1101,6 +1101,15 @@ const spanish: Record<string, string> = {
   'the regular season is over — this is the final total': 'la temporada regular terminó: este es el total final',
   'this league has no head-to-head schedule, so there is no fixed number of weeks left to project':
     'esta liga no tiene enfrentamientos directos, así que no hay un número fijo de semanas que proyectar',
+  // Standings in an elimination league — no playoffs, so Safe / On the bubble / Eliminated
+  // (components/core-app/standings/StandingsBoardView.tsx, screens/Standings.tsx).
+  Safe: 'A salvo',
+  'On the bubble': 'En el límite',
+  'Safe — not in the bottom three this week': 'A salvo: no está entre los tres últimos esta semana',
+  'On the bubble — the bottom three this week': 'En el límite: entre los tres últimos esta semana',
+  'Eliminated — already chopped': 'Eliminado: ya fue eliminado',
+  'safe this week': 'a salvo esta semana',
+  'on the bubble this week': 'en el límite esta semana',
   // Standings — why there is no table at all (lib/core-app/leagueStandings.ts). Scout shows these too.
   'this league has no platform id on file, and the weekly results this board is built from are stored against the provider’s id rather than ours':
     'esta liga no tiene id de plataforma registrado, y los resultados semanales de esta tabla se guardan con el id del proveedor, no con el nuestro',

@@ -142,6 +142,57 @@ export function weekIsBehindLeague(
   return false
 }
 
+/** The league's format kind and whether teams are eliminated — ONE rule for Scout and Standings. */
+function formatKindOf(league: {
+  leagueType?: string | null
+  leagueVariant?: string | null
+  settings?: unknown
+  isDynasty?: boolean | null
+  guillotineMode?: boolean | null
+  bestBallMode?: boolean | null
+}) {
+  const settings =
+    league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+      ? (league.settings as Record<string, unknown>)
+      : undefined
+  const kind = resolveLeagueCardTypeKey({
+    leagueType: league.leagueType,
+    leagueVariant: league.leagueVariant,
+    settings,
+    isDynasty: league.isDynasty,
+    guillotineMode: league.guillotineMode,
+    bestBallMode: league.bestBallMode,
+  })
+  return { kind, elimination: kind === 'guillotine' || kind === 'survivor' }
+}
+
+/**
+ * Who has been chopped in an ELIMINATION league, as platform roster ids (`LeagueTeam.externalId`, the
+ * standings board's `rosterId`). Null for a league that eliminates nobody — the caller then keeps its
+ * playoff vocabulary.
+ *
+ * ⚠ THE SAME READ AS SCOUT'S CARDS (`formatFacts` → `isEliminatedTeam`), so the Standings table and the
+ * War Room cannot disagree about who is out. Standings labelled a guillotine league with playoff zones —
+ * "Bye — top 2", "Playoffs — top 6" — in a format with no playoffs (owner's report, 2026-10-03).
+ */
+export async function getLeagueEliminations(
+  leagueId: string,
+  userId: string,
+  ctx?: LeagueContext | null,
+): Promise<{ eliminated: string[] } | null> {
+  const league = await leagueContextFor(leagueId, userId, ctx).league()
+  if (!league) return null
+  const { kind, elimination } = formatKindOf(league)
+  if (!elimination) return null
+  const teams = await prisma.leagueTeam.findMany({
+    where: { leagueId },
+    select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true, teamName: true },
+  })
+  const format: ScoutFormat = { kind, elimination: true, bestBall: false, dynasty: false, picks: null }
+  const facts = await formatFacts({ leagueId, league, format, teams })
+  return { eliminated: teams.filter((t) => facts.eliminatedByTeamId.has(t.id)).map((t) => t.externalId || t.id) }
+}
+
 export async function getScoutData(
   leagueId: string,
   userId: string,
@@ -153,16 +204,7 @@ export async function getScoutData(
   if (!league) return null
 
   const sport = String(league.sport ?? 'NFL')
-  const settings = league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings) ? (league.settings as Record<string, unknown>) : undefined
-  const kind = resolveLeagueCardTypeKey({
-    leagueType: league.leagueType,
-    leagueVariant: league.leagueVariant,
-    settings,
-    isDynasty: league.isDynasty,
-    guillotineMode: league.guillotineMode,
-    bestBallMode: league.bestBallMode,
-  })
-  const elimination = kind === 'guillotine' || kind === 'survivor'
+  const { kind, elimination } = formatKindOf(league)
   const dynasty = kind === 'dynasty' || league.isDynasty === true
   const format: ScoutFormat = { kind, elimination, bestBall: kind === 'best_ball', dynasty, picks: null }
   const base = {

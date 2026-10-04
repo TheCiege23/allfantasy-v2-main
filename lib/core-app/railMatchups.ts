@@ -169,7 +169,21 @@ export type RailStanding = {
    * never consulted: it is a dynasty league with an axe in its title.
    */
   elimination: boolean
+  /**
+   * The live teams "on the bubble" this week — the bottom `BUBBLE_SIZE` of the same ordering the rank
+   * comes from (projection until most have played, then points), plus anyone tied with the last of
+   * them. Roster ids. Everyone else in the live field is safe this week.
+   *
+   * ⚠ WHY THIS EXISTS: an elimination league has no playoffs, but Scout's cards labelled every team
+   * from the season table's playoff zones — "Bye spot", "Outside the playoffs" — in a guillotine
+   * league (owner's report, 2026-10-03). The week's cut is what a card should speak to.
+   * Optional so callers that build a standing by hand need not carry it.
+   */
+  bubble?: string[]
 }
+
+/** How many teams from the bottom of an elimination week's field count as "on the bubble". */
+export const BUBBLE_SIZE = 3
 
 export type RailMatchup = {
   leagueId: string
@@ -1109,6 +1123,9 @@ export function standingIn(args: {
   const lowest = valued[valued.length - 1]!
   const yours = valued[index]!
   const isLowest = yours.value === lowest.value
+  /* The bottom BUBBLE_SIZE (valued is sorted high → low), widened to include ties with the last of them. */
+  const edge = valued[Math.max(0, valued.length - BUBBLE_SIZE)]!.value
+  const bubble = valued.filter((team) => team.value <= edge).map((team) => team.rosterId)
 
   return {
     rank: 1 + valued.filter(team => team.value > yours.value).length,
@@ -1118,6 +1135,7 @@ export function standingIn(args: {
     placesAboveCut: valued.filter(team => team.value < yours.value).length,
     cutLine: Math.round(lowest.value * 100) / 100,
     elimination: args.elimination,
+    bubble,
   }
 }
 

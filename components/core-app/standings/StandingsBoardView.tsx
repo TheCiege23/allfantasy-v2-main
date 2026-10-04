@@ -2,7 +2,7 @@
 
 import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   explainOrder,
   formatRecord,
@@ -50,6 +50,45 @@ const ZONE: Record<Zone, { label: string; icon: string }> = {
   eliminated: { label: 'Eliminated', icon: '✕' },
 }
 
+/**
+ * 🛑 AN ELIMINATION LEAGUE HAS NO PLAYOFFS. In a guillotine league this table drew "★ Bye — top 2",
+ * "● Playoffs — top 6" and a playoff line (owner's report, 2026-10-03). When the screen passes
+ * `elimination`, every team reads Safe / On the bubble / Eliminated instead — the same three as Scout's
+ * cards, from the same reads: who has been chopped (`getLeagueEliminations`) and this week's bubble
+ * (`RailStanding.bubble`, the cut banner's own ordering). A live team with no ranked week reads nothing.
+ */
+export type EliminationZones = {
+  /** Roster ids already chopped. */
+  eliminated: readonly string[]
+  /** Roster ids in this week's bottom three; null when the week cannot be ranked yet. */
+  bubble: readonly string[] | null
+}
+export type EliminationStatus = 'safe' | 'bubble' | 'eliminated'
+
+export function eliminationStatusOf(rosterId: string, zones: EliminationZones): EliminationStatus | null {
+  if (zones.eliminated.includes(rosterId)) return 'eliminated'
+  if (!zones.bubble) return null
+  return zones.bubble.includes(rosterId) ? 'bubble' : 'safe'
+}
+
+const ELIM: Record<EliminationStatus, { label: string; icon: string; zone: Zone }> = {
+  safe: { label: 'Safe', icon: '●', zone: 'playoff' },
+  bubble: { label: 'On the bubble', icon: '◐', zone: 'bubble' },
+  eliminated: { label: 'Eliminated', icon: '✕', zone: 'eliminated' },
+}
+
+const EliminationContext = createContext<EliminationZones | null>(null)
+
+/** The colour a row or card takes: its elimination status in an elimination league, else its zone. */
+function useZoneOf(): (t: BoardTeam) => Zone | undefined {
+  const zones = useContext(EliminationContext)
+  return (t) => {
+    if (!zones) return t.zone
+    const st = eliminationStatusOf(t.rosterId, zones)
+    return st ? ELIM[st].zone : undefined
+  }
+}
+
 const LAYOUT_STORAGE_KEY = 'af-standings-layout'
 /** Below this the table cannot show a record without a sideways scroll, so the list is the default. */
 const PHONE_QUERY = '(max-width: 640px)'
@@ -78,6 +117,17 @@ function gamesBackText(gb: number | null): string {
 
 function ZoneChip({ team }: { team: BoardTeam }) {
   const language = useOptionalLanguage().language
+  const zones = useContext(EliminationContext)
+  if (zones) {
+    const st = eliminationStatusOf(team.rosterId, zones)
+    if (!st) return null
+    return (
+      <span className="af-stb-zone" data-zone={ELIM[st].zone} data-elim={st}>
+        <span aria-hidden>{ELIM[st].icon}</span>
+        {coreUiCopy(ELIM[st].label, language)}
+      </span>
+    )
+  }
   const zone = ZONE[team.zone]
   const clinched = team.clinched === 'bye' ? 'Clinched bye' : team.clinched === 'playoff' ? 'Clinched' : null
   return (
@@ -381,6 +431,9 @@ function OfficialTable({
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
+  const zoneOf = useZoneOf()
+  /* An elimination league has no bye or playoff line to draw. */
+  const noLines = useContext(EliminationContext) != null
   const explanation = standingsBoardCopy(board, language)
   const hasDiv = board.divisions.length > 0
   const hasProj = board.teams.some((t) => t.projected)
@@ -521,7 +574,7 @@ function OfficialTable({
             {g.teams.map((t, i) => {
               const next = g.teams[i + 1]
               const line =
-                plain && next
+                !noLines && plain && next
                   ? t.seed === byes && byes > 0
                     ? 'bye'
                     : t.seed === field
@@ -530,7 +583,7 @@ function OfficialTable({
                   : null
               return (
                 <FragmentRows key={t.rosterId} line={line} cols={cols} board={board} byes={byes} field={field}>
-                  <tr data-you={t.isYou ? 'true' : undefined} data-zone={t.zone}>
+                  <tr data-you={t.isYou ? 'true' : undefined} data-zone={zoneOf(t)}>
                     <td className="af-stb-sticky af-stb-sticky-rank af-num">{t.seed}</td>
                     <th scope="row" className="af-stb-sticky af-stb-sticky-team">
                       <TeamCell team={t} showTiebreak tiebreakText={language === 'es' ? spanishTiebreak(board, t) : null} />
@@ -808,6 +861,8 @@ function Cards({
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
+  const zoneOf = useZoneOf()
+  const noLines = useContext(EliminationContext) != null
   const field = Math.min(board.rules.playoffTeams, board.teams.length)
   const byes = Math.min(board.rules.byes, field)
   const h2h = board.hasHeadToHead
@@ -821,12 +876,12 @@ function Cards({
           <ol className="af-stb-cards">
             {g.teams.map((t, i) => {
               const rank = view === 'power' ? t.powerRank : t.seed
-              const line = plain && g.teams[i + 1] ? (t.seed === byes && byes > 0 ? 'bye' : t.seed === field ? 'playoff' : null) : null
+              const line = !noLines && plain && g.teams[i + 1] ? (t.seed === byes && byes > 0 ? 'bye' : t.seed === field ? 'playoff' : null) : null
               const headingId = `af-stb-card-${view}-${t.rosterId}`
               return (
                 <Fragment key={t.rosterId}>
                 <li>
-                  <article className="af-stb-card" data-you={t.isYou ? 'true' : undefined} data-zone={t.zone} aria-labelledby={headingId}>
+                  <article className="af-stb-card" data-you={t.isYou ? 'true' : undefined} data-zone={zoneOf(t)} aria-labelledby={headingId}>
                     {/*
                       ⚠ ONE ROW PER TEAM UNTIL TAPPED. Every card used to open as a full stat sheet, ~800px
                       tall on a phone, so twelve teams were a 10,000px page and nobody could see the table.
@@ -1285,6 +1340,7 @@ export function StandingsBoardView({
   odds: finalOdds = null,
   live = null,
   efficiency = null,
+  elimination = null,
 }: {
   board: StandingsBoard
   initial: StandingsViewState
@@ -1297,6 +1353,8 @@ export function StandingsBoardView({
   live?: StandingsBoard | null
   /** Lineup efficiency per team (Sleeper only). Absent draws no efficiency columns. */
   efficiency?: LineupEfficiency | null
+  /** Set for an elimination league: Safe / On the bubble / Eliminated, no playoff zones or lines. */
+  elimination?: EliminationZones | null
 }) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
@@ -1420,6 +1478,7 @@ export function StandingsBoardView({
   }
 
   return (
+    <EliminationContext.Provider value={elimination}>
     <div className="af-stb" ref={containerRef}>
       <div className="af-stb-controls" role="group" aria-label="Standings view">
         <div className="af-stb-seg" role="radiogroup" aria-label="Which table">
@@ -1493,7 +1552,19 @@ export function StandingsBoardView({
         </p>
       ) : null}
 
-      {view === 'official' ? (
+      {view === 'official' && elimination ? (
+        <ul className="af-stb-legend" aria-label={copy('Status key')}>
+          <li data-zone="playoff">
+            <span aria-hidden>●</span> {copy('Safe — not in the bottom three this week')}
+          </li>
+          <li data-zone="bubble">
+            <span aria-hidden>◐</span> {copy('On the bubble — the bottom three this week')}
+          </li>
+          <li data-zone="eliminated">
+            <span aria-hidden>✕</span> {copy('Eliminated — already chopped')}
+          </li>
+        </ul>
+      ) : view === 'official' ? (
         <ul className="af-stb-legend" aria-label={copy('Status key')}>
           {byes > 0 ? (
             <li data-zone="bye">
@@ -1610,5 +1681,6 @@ export function StandingsBoardView({
         <StandingsPointsChart board={board} teams={board.teams} />
       </section>
     </div>
+    </EliminationContext.Provider>
   )
 }
