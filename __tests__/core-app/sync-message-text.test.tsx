@@ -27,6 +27,7 @@ vi.mock('@/lib/core-app/clientSyncJob', () => {
     return cached
   }
   return {
+    bindClientSyncAccount: () => {},
     claimClientSyncRefresh: () => false,
     getClientSyncSnapshot: snap,
     getServerSyncSnapshot: snap,

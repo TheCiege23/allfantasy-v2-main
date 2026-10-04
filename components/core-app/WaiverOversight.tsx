@@ -46,7 +46,7 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
       const res = await fetch(`/api/commissioner/leagues/${encodeURIComponent(data.leagueId)}/waivers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ action: 'process' }),
       })
       const body = (await res.json().catch(() => null)) as { processed?: number; error?: string; message?: string } | null
       if (!res.ok) {

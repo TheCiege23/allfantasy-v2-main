@@ -86,9 +86,14 @@ export function mergeStarters(
 
 const LIVE_POLL_MS = 20_000
 const IDLE_POLL_MS = 120_000
+export const FINAL_CORRECTION_POLLS = 10
 const YARD_MARKS = [10, 20, 30, 40, 50, 60, 70, 80, 90]
 
-export function LiveGameView({
+export function LiveGameView(props: Parameters<typeof ScopedLiveGameView>[0]) {
+  return <ScopedLiveGameView key={`${props.sport}:${props.gameId}`} {...props} />
+}
+
+function ScopedLiveGameView({
   initial,
   sport,
   gameId,
@@ -120,7 +125,7 @@ export function LiveGameView({
     try {
       const res = await fetch(
         `/api/dashboard/live-scores?view=game&sport=${encodeURIComponent(sport)}&game=${encodeURIComponent(gameId)}`,
-        { cache: 'no-store' },
+        { cache: 'no-store', signal: AbortSignal.timeout(15_000) },
       )
       if (!res.ok) throw new Error('Game feed unavailable')
       const next = (await res.json()) as GameViewPayload
@@ -140,10 +145,14 @@ export function LiveGameView({
   }, [sport, gameId])
 
   useEffect(() => {
-    // A final does not change; polling it would only spend requests.
-    if (state === 'post') return
-    const id = window.setInterval(() => void load(), state === 'in' ? LIVE_POLL_MS : IDLE_POLL_MS)
-    return () => window.clearInterval(id)
+    // Final totals and personal points may still be corrected. Stop after ten
+    // slower checks rather than polling a completed game indefinitely.
+    let finalPolls = 0
+    const id = window.setInterval(() => {
+      void load()
+      if (state === 'post' && ++finalPolls >= FINAL_CORRECTION_POLLS) window.clearInterval(id)
+    }, state === 'in' ? LIVE_POLL_MS : IDLE_POLL_MS)
+    return () => { window.clearInterval(id); seq.current += 1 }
   }, [load, state])
 
   if (!detail) {

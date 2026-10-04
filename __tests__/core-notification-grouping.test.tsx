@@ -35,7 +35,7 @@ describe('notification grouping and read receipts', () => {
     expect(source[0].relatedIds).toBeUndefined()
   })
   it('marks every underlying receipt when a grouped action is clicked', async () => {
-    const request = vi.fn().mockResolvedValue({ ok: true })
+    const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) })
     vi.stubGlobal('fetch', request)
     render(<NotificationsCenter data={data()} />)
     expect(screen.getAllByRole('link', { name: 'Review lineup' })).toHaveLength(1)
@@ -52,7 +52,7 @@ describe('notification grouping and read receipts', () => {
     expect((screen.getByRole('button', { name: 'Mark all read' }) as HTMLButtonElement).disabled).toBe(false)
   })
   it('keeps mark-all within the selected league, including receipts outside the loaded window', async () => {
-    const request = vi.fn().mockResolvedValue({ ok: true })
+    const request = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true }) })
     vi.stubGlobal('fetch', request)
     render(<NotificationsCenter data={{ ...data(), leagueId: 'league1', unread: 90, olderNotListed: 88 }} />)
     fireEvent.click(screen.getByRole('button', { name: 'Mark all read' }))

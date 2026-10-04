@@ -5,6 +5,14 @@ import { prisma } from "@/lib/prisma"
 import { getLeagueRole } from "@/lib/league/permissions"
 import { mergeCommissionerOverrides } from "@/lib/waiver-wire/commissioner-claim-override"
 import { logAction } from "@/server/services/auditService"
+import { Prisma } from '@prisma/client'
+import { z } from 'zod'
+
+const overrideSchema = z.object({
+  bypassInsufficientFaab: z.boolean().optional(),
+  bypassWeeklyDropLimit: z.boolean().optional(),
+  note: z.string().trim().max(1000).optional(),
+}).strict().refine(value => Object.keys(value).length > 0)
 
 /**
  * PATCH — commissioner / co-commissioner only: merge `commissionerOverrides` on a pending waiver claim.
@@ -25,7 +33,9 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const body = await req.json().catch(() => ({}))
+  const parsed = overrideSchema.safeParse(await req.json().catch(() => null))
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid claim override' }, { status: 400 })
+  const body = parsed.data
   const claim = await (prisma as any).waiverClaim.findFirst({
     where: { id: claimId, leagueId, status: "pending" },
   })
@@ -42,10 +52,11 @@ export async function PATCH(
 
   const merged = mergeCommissionerOverrides(claim.metadata ?? null, patch)
 
-  const updated = await (prisma as any).waiverClaim.update({
-    where: { id: claimId },
+  const updated = await (prisma as any).waiverClaim.updateMany({
+    where: { id: claimId, leagueId, status: 'pending', metadata: { equals: claim.metadata ?? Prisma.AnyNull } },
     data: { metadata: merged },
   })
+  if (updated.count !== 1) return NextResponse.json({ error: 'Claim changed while saving. Reload before retrying.' }, { status: 409 })
 
   void logAction({
     leagueId,
@@ -56,5 +67,5 @@ export async function PATCH(
     afterState: { commissionerOverrides: (merged as any).commissionerOverrides },
   }).catch(() => {})
 
-  return NextResponse.json({ claim: updated })
+  return NextResponse.json({ claim: { ...claim, metadata: merged } })
 }

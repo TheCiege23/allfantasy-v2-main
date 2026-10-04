@@ -180,6 +180,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
         `/api/dashboard/live-scores?view=live&sport=${encodeURIComponent(nextSport)}&scope=${nextScope}`,
         {
           cache: 'no-store',
+          signal: AbortSignal.timeout(15_000),
           headers: etagRef.current ? { 'If-None-Match': etagRef.current } : undefined,
         },
       )
@@ -193,6 +194,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
        * 304 would fall into the failure path and be indistinguishable from an
        * outage.
        */
+      if (seq !== seqRef.current) return
       if (res.status === 304) {
         // ⚠ A 304 IS A LANDING, NOT A MISS -- the server answered, it just had
         // nothing new. Counting it as a failure would show "Reconnecting" on the
@@ -237,6 +239,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
       setNow(at)
       setConsecutiveFailures(0)
     } catch {
+      if (seq !== seqRef.current) return
       /*
        * A failed poll leaves the last good data on screen and the age label
        * keeps climbing. That is the honest signal — the numbers are getting

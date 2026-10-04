@@ -43,7 +43,8 @@ describe('AIWaiverRecommendationsPanel skins', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        recommendations: [{ priority: 1, addPlayerId: '1', addPlayerName: 'A', confidence: 'high', risk: 'low', reasoning: 'r' }],
+        ok: true,
+        recommendations: [{ priority: 1, addPlayerId: '1', addPlayerName: 'A', confidence: 'high', risk: 'low', reasoning: 'r', tags: [] }],
         generatedAt: null,
       }),
     })) as never)
