@@ -1437,6 +1437,18 @@ export async function getDash34Data(
           ? `/core/my-team?league=${encodeURIComponent(kickoffLeague.id)}`
           : '/core/players',
         openLabel: kickoffLeague ? `Check ${kickoffLeague.name}` : 'Open Player Finder',
+        /*
+         * What the three English strings above were built from — the /core home says them in Spanish
+         * at render (lib/core-app/homeBandsCopy.ts). The English is unchanged.
+         */
+        parts: {
+          sport: nextGame.sport ?? null,
+          slate: nextGameSlate === 'pre' ? ('pre' as const) : nextGameSlate === 'post' ? ('post' as const) : null,
+          week: nextGameWeek,
+          away: nextGame.awayTeam ?? null,
+          home: nextGame.homeTeam ?? null,
+          leagueName: kickoffLeague ? kickoffLeague.name : null,
+        },
       }
     : null
 
@@ -1748,6 +1760,15 @@ export async function getDash34Data(
         `${topRow.name}${topRow.position ? ` (${topRow.position})` : ''} is ` +
         `${topRow.status.toLowerCase()} in ${topRow.exposureCount} of your ` +
         `${totalActive} leagues${startingClause}.`,
+      parts: {
+        kind: 'concentration',
+        name: topRow.name,
+        position: topRow.position ?? null,
+        status: topRow.status,
+        exposureCount: topRow.exposureCount,
+        totalActive,
+        startingIn: topRow.startingIn,
+      },
     })
   }
 
@@ -1762,6 +1783,7 @@ export async function getDash34Data(
       tone: 'plain',
       text: `${topRow.name} plays next at`,
       atIso: topRow.nextKickoffAt,
+      parts: { kind: 'kickoff', name: topRow.name },
     })
   }
 
@@ -1791,6 +1813,13 @@ export async function getDash34Data(
         `${leaguesWithEmptySlots.length} ${leaguesWithEmptySlots.length === 1 ? 'league' : 'leagues'}: ` +
         `${leaguesWithEmptySlots.slice(0, 3).map((l) => leagueDisplayName(l.name)).join(', ')}` +
         `${leaguesWithEmptySlots.length > 3 ? ` and ${leaguesWithEmptySlots.length - 3} more` : ''}.`,
+      parts: {
+        kind: 'empty-slots',
+        totalEmpty,
+        leagueCount: leaguesWithEmptySlots.length,
+        names: leaguesWithEmptySlots.slice(0, 3).map((l) => leagueDisplayName(l.name)),
+        more: Math.max(0, leaguesWithEmptySlots.length - 3),
+      },
     })
   }
 
@@ -1819,6 +1848,7 @@ export async function getDash34Data(
       key: 'flagged',
       tone: 'warn',
       text: `${onlyFlagged} more ${onlyFlagged === 1 ? 'league carries' : 'leagues carry'} a flagged player who can still play.`,
+      parts: { kind: 'flagged', count: onlyFlagged },
     })
   }
 
@@ -1834,6 +1864,15 @@ export async function getDash34Data(
         : flaggedLeagues.length > 0
           ? `${flaggedLeagues.length} ${flaggedLeagues.length === 1 ? 'league has' : 'leagues have'} a player worth a look`
           : 'Nothing is waiting on you'
+  // What the headline was built from, for the /core home's Spanish (lib/core-app/homeBandsCopy.ts).
+  const briefHeadlineParts: Dash34Brief['headlineParts'] =
+    urgentLeagues.length > 0
+      ? { kind: 'urgent', count: urgentLeagues.length }
+      : draftingLeagues.length > 0
+        ? { kind: 'drafting', count: draftingLeagues.length }
+        : flaggedLeagues.length > 0
+          ? { kind: 'flagged', count: flaggedLeagues.length }
+          : { kind: 'quiet' }
 
   /*
    * ⚠ THE CARD SHOWS UP EVEN WHEN THERE IS NOTHING TO SAY, AND THAT IS THE POINT.
@@ -1851,6 +1890,7 @@ export async function getDash34Data(
      */
     label: "CHIMMY'S BRIEF",
     headline: briefHeadline,
+    headlineParts: briefHeadlineParts,
     lines: briefLines,
     countdown:
       firstLock && firstLock.countdownTo
@@ -1869,6 +1909,7 @@ export async function getDash34Data(
     caveat: everSynced
       ? 'Built from the injury feed and the fixture list. Live scores, projections and standings are not part of it.'
       : `Built from the injury feed and the fixture list — not from your leagues. No sync has ever run against ${totalActive === 1 ? 'your league' : `any of your ${totalActive} leagues`}, so there are no scores, records or lineups behind this.`,
+    caveatParts: { everSynced, totalActive },
     askLabel: 'Ask Chimmy',
     /*
      * The second action goes to the full ranked list, which is on this same page —
@@ -1925,6 +1966,7 @@ export async function getDash34Data(
               : `All ${totalActive} of your leagues are imported, but a sync has never run against any of them — so there are no scores, records or lineups behind this screen yet.`,
           href: '/import',
           label: 'Check your connections',
+          parts: { totalActive },
         },
     coverage: [
       { label: 'Live scores', reason: 'no weekly scoring is ingested for imported leagues' },
@@ -1963,6 +2005,11 @@ export async function getDash34Data(
                 ambiguousInjuryNames.size > 3 ? ` and ${ambiguousInjuryNames.size - 3} more` : ''
               }`,
               reason: 'more than one player shares that name and we will not guess which',
+              parts: {
+                kind: 'ambiguous-injury' as const,
+                names: [...ambiguousInjuryNames].slice(0, 3),
+                more: Math.max(0, ambiguousInjuryNames.size - 3),
+              },
             },
           ]
         : []),

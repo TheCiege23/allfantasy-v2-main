@@ -51,12 +51,28 @@ export type HealthReading = {
 
 /* ── Next 24 hours ───────────────────────────────────────────────────────── */
 
+/**
+ * What a game row's `odds` line was built from (2026-10-04) — the /core home's game-day band says it in
+ * Spanish at render (lib/core-app/homeBandsCopy.ts). The English `odds` is unchanged.
+ */
+export type Next24OddsParts = {
+  /** The favoured side's code, with `spread` its margin; both null without a line. */
+  favorite: string | null
+  spread: number | null
+  pickem: boolean
+  total: number | null
+  /** "1:05 PM ET" — set only when the line is over an hour old. */
+  staleClock: string | null
+}
+
 export type Next24Row = {
-  game?: { home: string; away: string; homeLogo: string | null; awayLogo: string | null; href: string; odds: string; oddsAt: string | null }
+  game?: { home: string; away: string; homeLogo: string | null; awayLogo: string | null; href: string; odds: string; oddsParts?: Next24OddsParts; oddsAt: string | null }
   kind: 'game' | 'waiver'
   text: string
   /** League name for a waiver run; sport and week for a game. */
   sub: string | null
+  /** What a GAME row's `sub` was built from, for the home's Spanish. Absent on a waiver row. */
+  parts?: { sport: string; week: number | null }
   /** ISO instant. Localised on the client — never formatted here. */
   time: string
   tone: 'accent' | 'warn' | null
@@ -477,6 +493,7 @@ async function resolveNext24(
       kind: 'game',
       text: `${g.awayTeam} at ${g.homeTeam}`,
       sub: [g.sport, g.week != null ? `Week ${g.week}` : null].filter(Boolean).join(' · ') || null,
+      parts: { sport: g.sport, week: g.week ?? null },
       time: g.startTime.toISOString(),
       tone: 'accent',
       game: (() => {
@@ -484,16 +501,22 @@ async function resolveNext24(
         const market = odds.find(o => fixture.some(peer => o.sport === peer.sport && o.gameExternalId === peer.externalId && o.source === peer.source))
         const spread = market?.spreadHome
         const favorite = spread == null ? null : spread === 0 ? 'Pick’em' : `${spread < 0 ? g.homeTeam : g.awayTeam} favored by ${Math.abs(spread)}`
+        const stale = (favorite || market?.totalPoints != null) && market && now.getTime() - market.fetchedAt.getTime() > ODDS_FRESH_MS
         return { home: g.sport === 'NFL' ? getTeamInfo(g.homeTeam)?.fullName ?? g.homeTeam : g.homeTeam, away: g.sport === 'NFL' ? getTeamInfo(g.awayTeam)?.fullName ?? g.awayTeam : g.awayTeam,
           homeLogo: logoFor(g.homeTeam, g.sport, teamKey(g.homeTeam)), awayLogo: logoFor(g.awayTeam, g.sport, teamKey(g.awayTeam)),
           href: `/core/live?sport=${encodeURIComponent(g.sport)}${espnCopy ? `&game=${encodeURIComponent(espnCopy.externalId)}` : ''}`,
           odds: [
             favorite,
             market?.totalPoints != null ? `O/U ${market.totalPoints}` : null,
-            (favorite || market?.totalPoints != null) && market && now.getTime() - market.fetchedAt.getTime() > ODDS_FRESH_MS
-              ? `line as of ${oddsClock(market.fetchedAt)}`
-              : null,
+            stale && market ? `line as of ${oddsClock(market.fetchedAt)}` : null,
           ].filter(Boolean).join(' · ') || 'Odds unavailable',
+          oddsParts: {
+            favorite: spread == null || spread === 0 ? null : spread < 0 ? g.homeTeam : g.awayTeam,
+            spread: spread == null || spread === 0 ? null : Math.abs(spread),
+            pickem: spread === 0,
+            total: market?.totalPoints ?? null,
+            staleClock: stale && market ? oddsClock(market.fetchedAt) : null,
+          },
           oddsAt: market?.fetchedAt.toISOString() ?? null }
       })(),
     })

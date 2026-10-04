@@ -233,11 +233,18 @@ function isMarker(value: unknown): value is VisitMarker {
 /** "Open in <platform>" for a brief line — a verified provider destination (2026-09-14). */
 export type BriefHandoff = { href: string; label: string; screen: string }
 
+/**
+ * What `summary` was built from, side by side (2026-10-04) — the /core home says it in Spanish at
+ * render (lib/core-app/homeBandsCopy.ts). The English `summary` is unchanged.
+ */
+export type BriefTradeParts = { sides: Array<{ who: string; got: string[]; more: number }> }
+
 export type BriefTrade = {
   leagueId: string
   leagueName: string
   acceptedAt: string
   summary: string
+  parts?: BriefTradeParts
   /** Present only when that league's trade screen (or league page) is a verified destination. */
   handoff?: BriefHandoff
 }
@@ -295,11 +302,17 @@ export type SinceLastVisitBrief = {
   comparisonPending: boolean
 }
 
+function sideParts(side: RecentTrade['sides'][number]): BriefTradeParts['sides'][number] {
+  return {
+    who: side.teamName || side.managerName,
+    got: side.received.slice(0, 2).map((a) => a.name),
+    more: Math.max(0, side.received.length - 2),
+  }
+}
+
 function sideText(side: RecentTrade['sides'][number]): string {
-  const who = side.teamName || side.managerName
-  const got = side.received.slice(0, 2).map((a) => a.name)
-  const more = side.received.length > 2 ? ` +${side.received.length - 2}` : ''
-  return got.length ? `${who} got ${got.join(', ')}${more}` : `${who} got no players or picks on record`
+  const { who, got, more } = sideParts(side)
+  return got.length ? `${who} got ${got.join(', ')}${more > 0 ? ` +${more}` : ''}` : `${who} got no players or picks on record`
 }
 
 /**
@@ -317,6 +330,7 @@ export function tradesSince(trades: RecentTrade[], since: Date, limit: number): 
       leagueName: t.leagueName,
       acceptedAt: t.acceptedAt,
       summary: t.sides.map(sideText).join('; '),
+      parts: { sides: t.sides.map(sideParts) },
     }))
   return { items, atLeast: trades.length >= limit && items.length === trades.length && items.length > 0 }
 }

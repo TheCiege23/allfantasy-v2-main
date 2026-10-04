@@ -14,6 +14,12 @@ import {
 type UserOsCardProps = {
   snapshot: UserOsSnapshot | null
   variant?: 'dashboard' | 'league' | 'commissioner'
+  /**
+   * The reader's language (2026-10-04). The /core home passes it, so its self view reads Spanish; every
+   * other surface omits it and is unchanged. Only the strings the self view can reach are translated —
+   * the retention-risk panel is league/commissioner only.
+   */
+  language?: string
 }
 
 const PARTICIPATION_TIER_LABEL: Record<string, string> = {
@@ -22,6 +28,27 @@ const PARTICIPATION_TIER_LABEL: Record<string, string> = {
   moderate: 'Moderate',
   passive: 'Passive',
   inactive: 'Inactive',
+}
+
+const PARTICIPATION_TIER_LABEL_ES: Record<string, string> = {
+  elite: 'Élite',
+  active: 'Activo',
+  moderate: 'Moderado',
+  passive: 'Pasivo',
+  inactive: 'Inactivo',
+}
+
+const STAT_LABEL_ES: Record<string, string> = {
+  Trades: 'Intercambios',
+  'Waiver claims': 'Reclamaciones de agentes libres',
+  'Lineup activity': 'Actividad de alineación',
+  'Draft picks': 'Selecciones del draft',
+}
+
+const TREND_DIRECTION_ES: Record<string, string> = {
+  increasing: 'en aumento',
+  decreasing: 'en descenso',
+  flat: 'estable',
 }
 
 function StatChip({ label, value }: { label: string; value: number }) {
@@ -33,14 +60,27 @@ function StatChip({ label, value }: { label: string; value: number }) {
   )
 }
 
-function TrendPanel({ trend }: { trend: Extract<UserOsSnapshot, { available: true }>['leagueTrend'] }) {
+function TrendPanel({ trend, es }: { trend: Extract<UserOsSnapshot, { available: true }>['leagueTrend']; es: boolean }) {
+  const title = es ? 'Tendencia de actividad de la liga' : 'League activity trend'
   if (!trend.available) {
+    if (es) {
+      // The English line leads with the reason code; a Spanish reader gets the sentence alone.
+      return (
+        <DecisionOsPanel title={title}>
+          <p className="mt-2 text-sm leading-6 text-muted" data-testid="user-os-trend-unavailable">
+            {trend.reason === 'no_snapshots'
+              ? 'Todavía no se ha capturado ninguna instantánea de actividad de esta liga.'
+              : 'Solo hay una captura hasta ahora: la tendencia necesita al menos dos para comparar.'}
+          </p>
+        </DecisionOsPanel>
+      )
+    }
     const message =
       trend.reason === 'no_snapshots'
         ? 'No activity snapshots have been captured yet for this league.'
         : 'Only one snapshot captured so far — trend needs at least two to compare.'
     return (
-      <DecisionOsPanel title="League activity trend">
+      <DecisionOsPanel title={title}>
         <p className="mt-2 text-sm leading-6 text-muted" data-testid="user-os-trend-unavailable">
           {trend.reason === 'no_snapshots' ? 'no_snapshots' : 'insufficient_history'} — {message}
         </p>
@@ -49,10 +89,10 @@ function TrendPanel({ trend }: { trend: Extract<UserOsSnapshot, { available: tru
   }
   const Icon = trend.direction === 'increasing' ? ArrowUp : trend.direction === 'decreasing' ? ArrowDown : ArrowRight
   return (
-    <DecisionOsPanel title="League activity trend">
+    <DecisionOsPanel title={title}>
       <div className="mt-2 flex items-center gap-2" data-testid="user-os-trend-available">
         <Icon className="h-4 w-4 shrink-0 text-brand-primary" aria-hidden />
-        <p className="text-sm font-bold text-primary">{trend.direction}</p>
+        <p className="text-sm font-bold text-primary">{es ? (TREND_DIRECTION_ES[trend.direction] ?? trend.direction) : trend.direction}</p>
       </div>
     </DecisionOsPanel>
   )
@@ -65,7 +105,9 @@ function TrendPanel({ trend }: { trend: Extract<UserOsSnapshot, { available: tru
  * `DecisionRecommendationsCard` on this same page; this card focuses on what's genuinely new: team
  * health and an activity summary.
  */
-export default function UserOsCard({ snapshot, variant = 'league' }: UserOsCardProps) {
+export default function UserOsCard({ snapshot, variant = 'league', language }: UserOsCardProps) {
+  const es = language === 'es'
+  const yourTeam = es ? 'Tu equipo' : 'Your Team'
   if (!snapshot) {
     return (
       <section data-testid={`user-os-card-${variant}`} className={decisionOsCardClassName}>
@@ -99,6 +141,7 @@ export default function UserOsCard({ snapshot, variant = 'league' }: UserOsCardP
   }
 
   const { teamHealth, activitySummary } = snapshot
+  const tierLabel = (es ? PARTICIPATION_TIER_LABEL_ES : PARTICIPATION_TIER_LABEL)[teamHealth.participationTier] ?? teamHealth.participationTier
 
   /*
    * Self-view honesty (variant="dashboard", the /core home). The event store is
@@ -116,10 +159,10 @@ export default function UserOsCard({ snapshot, variant = 'league' }: UserOsCardP
   ].filter((chip) => !isSelfView || chip.value > 0)
 
   return (
-    <section data-testid={`user-os-card-${variant}`} className={decisionOsCardClassName} aria-label="Your Team">
+    <section data-testid={`user-os-card-${variant}`} className={decisionOsCardClassName} aria-label={yourTeam}>
       <div className="border-b border-subtle bg-surface-muted/60 px-5 py-4">
         <div className="flex flex-wrap items-center gap-2">
-          <DecisionOsBadge>Your Team</DecisionOsBadge>
+          <DecisionOsBadge>{yourTeam}</DecisionOsBadge>
           <span
             data-testid="user-os-participation-tier"
             className="inline-flex items-center gap-1.5 rounded-full border border-subtle bg-surface-muted px-2.5 py-1 text-[11px] font-bold text-primary"
@@ -129,9 +172,9 @@ export default function UserOsCard({ snapshot, variant = 'league' }: UserOsCardP
             ) : (
               <ShieldCheck className="h-3.5 w-3.5 text-status-success" aria-hidden />
             )}
-            {PARTICIPATION_TIER_LABEL[teamHealth.participationTier] ?? teamHealth.participationTier}
+            {tierLabel}
           </span>
-          <DecisionOsUpdatedStamp value={snapshot.generatedAt} includeTime />
+          <DecisionOsUpdatedStamp value={snapshot.generatedAt} includeTime language={language} />
         </div>
       </div>
 
@@ -139,13 +182,13 @@ export default function UserOsCard({ snapshot, variant = 'league' }: UserOsCardP
         <div className="space-y-4">
           {isSelfView ? (
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">
-              Your activity in AllFantasy (last 90 days)
+              {es ? 'Tu actividad en AllFantasy (últimos 90 días)' : 'Your activity in AllFantasy (last 90 days)'}
             </p>
           ) : null}
           {statChips.length > 0 ? (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {statChips.map((chip) => (
-                <StatChip key={chip.label} label={chip.label} value={chip.value} />
+                <StatChip key={chip.label} label={es ? (STAT_LABEL_ES[chip.label] ?? chip.label) : chip.label} value={chip.value} />
               ))}
             </div>
           ) : (
@@ -153,10 +196,10 @@ export default function UserOsCard({ snapshot, variant = 'league' }: UserOsCardP
                elsewhere): every count is 0, which for this event store means
                nothing was recorded — a labeled absence, not four zero chips. */
             <p className="text-sm leading-6 text-muted" data-testid="user-os-activity-none">
-              No activity recorded for this league yet.
+              {es ? 'Todavía no hay actividad registrada en esta liga.' : 'No activity recorded for this league yet.'}
             </p>
           )}
-          <TrendPanel trend={snapshot.leagueTrend} />
+          <TrendPanel trend={snapshot.leagueTrend} es={es} />
         </div>
 
         {isSelfView ? null : (

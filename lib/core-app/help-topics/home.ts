@@ -80,7 +80,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Líneas de apuestas',
-      body: '«Favored by N» es el diferencial de puntos y O/U es la línea de puntos totales; Pick’em significa que no hay favorito. Una línea de más de una hora muestra la hora en que se consultó, y una de más de tres horas no se muestra.',
+      body: '«Favorito por N» es el diferencial de puntos y «total del partido» es la línea de puntos totales; «parejo» significa que no hay favorito. Una línea de más de una hora muestra la hora en que se consultó, y una de más de tres horas no se muestra.',
     },
   },
   eliminationFormat: {
@@ -110,7 +110,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Titulares en duda',
-      body: 'Jugadores en al menos una de tus alineaciones titulares cuyo estado los descarta: Out, IR o IL, PUP, NFI o una suspensión. Los Questionable y Doubtful no aparecen. Los más valiosos van primero; un jugador sin valor de cambio registrado va después de todos los que tienen precio.',
+      body: 'Jugadores en al menos una de tus alineaciones titulares cuyo estado los descarta: Fuera, IR o IL, PUP, NFI o una suspensión. Los marcados como Dudoso o Poco probable no aparecen. Los más valiosos van primero; un jugador sin valor de cambio registrado va después de todos los que tienen precio.',
     },
   },
   participationTier: {
@@ -120,7 +120,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Nivel de actividad',
-      body: 'Elite, Active, Moderate, Passive o Inactive: qué tan activo has estado en esta liga en los últimos 90 días, según la actividad registrada en AllFantasy. Sale de una puntuación de participación más algunos conteos: Elite pide 3+ alineaciones guardadas y 2+ propuestas de cambio o reclamos de waivers, Active al menos una alineación guardada. La señal de aviso aparece tras más de 14 días sin nada registrado.',
+      body: 'Élite, Activo, Moderado, Pasivo o Inactivo: qué tan activo has estado en esta liga en los últimos 90 días, según la actividad registrada en AllFantasy. Sale de una puntuación de participación más algunos conteos: Élite pide 3+ alineaciones guardadas y 2+ propuestas de cambio o reclamos de waivers, Activo al menos una alineación guardada. La señal de aviso aparece tras más de 14 días sin nada registrado.',
     },
   },
   commissionerTiles: {

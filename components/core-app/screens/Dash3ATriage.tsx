@@ -1,8 +1,5 @@
-import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { ClubLogo } from '@/components/core-app/ClubLogo'
-import { FallbackImg } from '@/components/core-app/FallbackImg'
-import { TopicTip } from '@/components/core-app/TopicTip'
+import { Dash3ATriageView } from '@/components/core-app/screens/Dash3ATriageView'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-triage.css'
 
@@ -74,34 +71,12 @@ export type TriageBookRow = {
   tone: 'bad' | 'warn'
 }
 
-function kickoffLabel(iso: string | null, now: Date): string | null {
+/** Minutes from `now` to the kickoff — the server's call, so both sides of hydration agree. */
+function kickoffMins(iso: string | null, now: Date): number | null {
   if (!iso) return null
   const t = new Date(iso).getTime()
   if (Number.isNaN(t)) return null
-  const mins = Math.round((t - now.getTime()) / 60000)
-  if (mins <= 0) return 'kickoff underway'
-  if (mins < 60) return `kickoff in ${mins}m`
-  if (mins < 48 * 60) return `kickoff in ${Math.round(mins / 60)}h`
-  return `kickoff in ${Math.round(mins / (60 * 24))}d`
-}
-
-const SLOT_LABEL: Record<TriageSlot, string> = {
-  starter: 'STARTER',
-  bench: 'bench',
-  ir: 'IR',
-  taxi: 'taxi',
-}
-
-/** "starter in 3 · bench in 5 · IR in 1" — only the counts that are non-zero. */
-function slotSummary(p: TriageBookRow): string {
-  return [
-    p.startingIn > 0 ? `starting in ${p.startingIn}` : null,
-    (p.benchIn ?? 0) > 0 ? `benched in ${p.benchIn}` : null,
-    (p.irIn ?? 0) > 0 ? `on IR in ${p.irIn}` : null,
-    (p.taxiIn ?? 0) > 0 ? `on taxi in ${p.taxiIn}` : null,
-  ]
-    .filter(Boolean)
-    .join(', ')
+  return Math.round((t - now.getTime()) / 60000)
 }
 
 export function Dash3ATriage({
@@ -135,175 +110,51 @@ export function Dash3ATriage({
   const visible = rows.slice(0, 6)
   const overflow = rows.length - visible.length
 
+  /*
+   * ⚠ THE WORDS ARE SAID IN THE CLIENT (2026-10-04). This strip keeps the decisions — which rows,
+   * every link, and each kickoff's distance from the server's `now` — and Dash3ATriageView says them
+   * in the reader's language. Only the fields a row shows cross the boundary.
+   */
   return (
-    <section className="af-core af-triage" aria-label="Starters in doubt">
-      <div className="af-triage-head">
-        <h2 className="af-triage-title">Starters in doubt</h2>
-        <TopicTip topic="startersInDoubt" />
-        <span className="af-triage-sub">
-          may not play this week · most valuable first
-        </span>
-      </div>
-      <ul className="af-triage-list">
-        {visible.map((p) => {
-          const kickoff = kickoffLabel(p.nextKickoffAt, now)
-          return (
-            <li key={`${p.name}|${p.team ?? ''}`} className="af-triage-row" data-tone={p.tone}>
-              {p.imageUrl ? (
-                <FallbackImg
-                  className="af-triage-avatar"
-                  src={p.imageUrl}
-                  alt=""
-                  loading="lazy"
-                  fallback={
-                    <span className="af-triage-avatar af-triage-avatar--initials" aria-hidden>
-                      {p.initials}
-                    </span>
-                  }
-                />
-              ) : (
-                <span className="af-triage-avatar af-triage-avatar--initials" aria-hidden>
-                  {p.initials}
-                </span>
-              )}
-              <div className="af-triage-main">
-                <div className="af-triage-line1">
-                  <Link
-                    className="af-triage-name"
-                    href={`/core/players?q=${encodeURIComponent(p.name)}`}
-                  >
-                    {p.name}
-                  </Link>
-                  <span className="af-triage-meta">
-                    {[p.position, p.team].filter(Boolean).join(' · ')}
-                    {String(p.sport ?? '').toUpperCase() === 'NFL' ? (
-                      <ClubLogo club={p.team} size={14} style={{ marginLeft: 6 }} />
-                    ) : null}
-                  </span>
-                  <span className="af-triage-status" data-tone={p.tone}>
-                    {p.status}
-                  </span>
-                </div>
-                <div className="af-triage-line2">
-                  <span className="af-triage-exposure">
-                    {/*
-                      One sentence, not two overlapping ones. It read
-                      "7 of 61 leagues · starter in 3 · bench in 3 · IR in 1",
-                      which states the total and then its own parts as though
-                      they were separate facts, and leaves the reader adding up
-                      to check.
-                    */}
-                    In {p.exposure} leagues
-                    {slotSummary(p) ? `: ${slotSummary(p)}` : ''}
-                  </span>
-                  {p.value ? (
-                    /*
-                     * Rank leads because it is cross-positional and needs no
-                     * scale to read; the raw price follows it. Absent renders
-                     * nothing at all — a player we hold no price for must not
-                     * look like a player priced at nothing.
-                     */
-                    <span className="af-triage-value af-num">
-                      {/*
-                        "#14 overall · RB4" made the reader guess what the
-                        number ranked. Naming the thing costs three words.
-                      */}
-                      Trade value:{' '}
-                      {p.value.positionRank != null && p.position
-                        ? `${p.position}${p.value.positionRank}`
-                        : null}
-                      {p.value.positionRank != null && p.value.overallRank != null ? ', ' : ''}
-                      {p.value.overallRank != null ? `#${p.value.overallRank} overall` : null}
-                    </span>
-                  ) : null}
-                  {p.reportedAgo ? (
-                    <span className="af-triage-ago">reported {p.reportedAgo}</span>
-                  ) : null}
-                  {kickoff ? <span className="af-triage-kickoff">{kickoff}</span> : null}
-                </div>
-                {p.description ? (
-                  /* The feed's own sentence. Never paraphrased into a timeline —
-                     no injury table here holds an expected return. */
-                  <p className="af-triage-note">{p.description}</p>
-                ) : null}
-                {p.leagues.length > 0 ? (
-                  <div className="af-triage-leagues">
-                    {p.leagues.slice(0, 6).map((l) => (
-                      <Link
-                        key={l.id}
-                        href={`/core?league=${l.id}`}
-                        className="af-triage-league"
-                        data-slot={l.slot ?? undefined}
-                      >
-                        <span className="af-triage-league-platform">
-                          {l.platform.toUpperCase()}
-                        </span>
-                        {l.name}
-                        {/* Where he sits in THIS league — the difference between
-                            "act here" and "no action needed". Absent when the
-                            roster could not be read; never defaulted to bench. */}
-                        {l.slot ? (
-                          <span className="af-triage-slot" data-slot={l.slot}>
-                            {SLOT_LABEL[l.slot]}
-                          </span>
-                        ) : null}
-                        {/*
-                          Cover you already own, in this league. Free agents
-                          need that league's whole player pool and a
-                          rostered-elsewhere exclusion — a per-league scan that
-                          must not run for 61 leagues on a render — so they
-                          live behind the CTA below. An empty bench here is not
-                          a gap in the data; it is the reason to go look.
-                        */}
-                        {l.slot === 'starter' && (l.bench?.length ?? 0) > 0 ? (
-                          <span className="af-triage-bench">
-                            {' '}
-                            swap in {l.bench!.map((b) => b.name).join(' or ')}
-                          </span>
-                        ) : null}
-                      </Link>
-                    ))}
-                    {p.leagues.length > 6 ? (
-                      <span className="af-triage-league af-triage-league--more">
-                        +{p.leagues.length - 6} more
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-              <div className="af-triage-actions">
-                {p.leagues.some((l) => l.slot === 'starter') ? p.leagues.filter((l) => l.slot === 'starter').map((l) => (
-                  <Link key={l.id} className="af-triage-cta" href={`/core/waivers?league=${encodeURIComponent(l.id)}`}>
-                    Find free agents in {l.name}
-                  </Link>
-                )) : (
-                  <Link className="af-triage-cta" href="/core/players">Open Player Finder</Link>
-                )}
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-      {overflow > 0 ? (
-        <Link className="af-triage-overflow" href="/my-players">
-          +{overflow} more starters flagged — full exposure audit
-        </Link>
-      ) : null}
-      {valueBasis && rows.some((r) => r.value) ? (
-        /*
-         * Said once for the panel. The price is captured at 12 teams and full
-         * PPR and varies only dynasty/redraft and 1QB/superflex — it is NOT
-         * tuned to this account's TE-premium or superflex settings, and
-         * pretending otherwise would be the quiet kind of lie this screen
-         * exists to avoid.
-         */
-        <p className="af-triage-basis">
-          Values from FantasyCalc ({valueBasis.format.toLowerCase()},{' '}
-          {valueBasis.qbFormat === 'ONE_QB' ? '1QB' : 'superflex'}, 12-team PPR). Not tuned to
-          your league&rsquo;s settings, and NFL only.
-        </p>
-      ) : null}
-      {freshness}
-    </section>
+    <Dash3ATriageView
+      rows={visible.map((p) => ({
+        key: `${p.name}|${p.team ?? ''}`,
+        name: p.name,
+        initials: p.initials,
+        imageUrl: p.imageUrl,
+        playerHref: `/core/players?q=${encodeURIComponent(p.name)}`,
+        position: p.position,
+        team: p.team,
+        sport: p.sport ?? null,
+        status: p.status,
+        tone: p.tone,
+        exposure: p.exposure,
+        exposureCount: p.exposureCount,
+        exposureTotal: p.exposureTotal,
+        startingIn: p.startingIn,
+        benchIn: p.benchIn ?? 0,
+        irIn: p.irIn ?? 0,
+        taxiIn: p.taxiIn ?? 0,
+        value: p.value ? { overallRank: p.value.overallRank, positionRank: p.value.positionRank } : null,
+        reportedAgo: p.reportedAgo,
+        kickoffMins: kickoffMins(p.nextKickoffAt, now),
+        description: p.description ?? null,
+        leagues: p.leagues.slice(0, 6).map((l) => ({
+          id: l.id,
+          name: l.name,
+          platform: l.platform,
+          href: `/core?league=${l.id}`,
+          slot: l.slot ?? null,
+          bench: l.slot === 'starter' ? (l.bench ?? []).map((b) => b.name) : [],
+        })),
+        leagueCount: p.leagues.length,
+        freeAgentLinks: p.leagues
+          .filter((l) => l.slot === 'starter')
+          .map((l) => ({ id: l.id, name: l.name, href: `/core/waivers?league=${encodeURIComponent(l.id)}` })),
+      }))}
+      overflow={overflow}
+      valueBasis={valueBasis && rows.some((r) => r.value) ? valueBasis : null}
+      freshness={freshness}
+    />
   )
 }
