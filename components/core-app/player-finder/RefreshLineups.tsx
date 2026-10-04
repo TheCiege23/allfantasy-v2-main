@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { LOCK_ZONE } from '@/lib/core-app/lineupLock'
 import '@/components/core-app/af-refresh-lineups.css'
 
@@ -42,6 +44,9 @@ const MAX_ROUNDS = 8
 
 export function RefreshLineups({ asOf, nowIso }: { asOf: string | null | undefined; nowIso: string }) {
   const [state, setState] = useState<{ phase: 'idle' | 'running' | 'error'; note?: string }>({ phase: 'idle' })
+  /* The stamp and notes are built in English (asOfLabel is shared and tested as such) and translated here. */
+  const { language } = useOptionalLanguage()
+  const copy = (english: string) => coreUiCopy(english, language)
   const stamp = asOfLabel(asOf, nowIso)
 
   const run = async () => {
@@ -68,13 +73,13 @@ export function RefreshLineups({ asOf, nowIso }: { asOf: string | null | undefin
 
   return (
     <div className="af-pf-refresh" data-phase={state.phase}>
-      {stamp ? <span className="af-pf-refresh-asof af-num">{stamp}</span> : null}
+      {stamp ? <span className="af-pf-refresh-asof af-num">{copy(stamp)}</span> : null}
       <button type="button" className="af-pf-refresh-btn" onClick={run} disabled={state.phase === 'running'} aria-busy={state.phase === 'running'}>
-        {state.phase === 'running' ? 'Refreshing…' : 'Refresh my lineups'}
+        {copy(state.phase === 'running' ? 'Refreshing…' : 'Refresh my lineups')}
       </button>
       {state.note ? (
         <span className="af-pf-refresh-note" role="status">
-          {state.note}
+          {copy(state.note)}
         </span>
       ) : null}
     </div>
