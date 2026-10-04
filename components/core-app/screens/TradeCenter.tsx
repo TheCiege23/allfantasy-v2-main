@@ -52,6 +52,7 @@ import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
 import { TradeEvidencePanel } from './TradeEvidencePanel'
 import { TradeDecisionSummary } from './TradeDecisionSummary'
 import { TradePackageCost } from './TradePackageCost'
+import { TradePartnerEvidence } from './TradePartnerEvidence'
 import { counterDecision } from '@/lib/decision-os/trade/decisionSummary'
 import { tradeVisualCopy } from '@/lib/core-app/tradeVisualCopy'
 import { useTradeVisualCopy } from './useTradeVisualCopy'
@@ -2436,6 +2437,7 @@ export function TradeCenter(props: {
             <div><strong>{copy("Why ")}{theirLabel}{copy(" might accept")}</strong><p>{copy(theirIncentive)}</p></div>
             <p>{copy(agreementBlocker)}</p>
             <small>{copy("Value fairness and acceptance are separate. Manager preference and roster needs can change the answer.")}</small>
+            {!depthLocked ? <TradePartnerEvidence notes={result.leverageNotes ?? []} copy={copy} /> : null}
             {!depthLocked && result.counterOffers?.[0] ? <div className="af-tc-partner-counter">
               <strong>{copy("Closer value package: ")}{copy(result.counterOffers[0].addTo === 'get' ? 'ask for' : 'offer')} {result.counterOffers[0].name}</strong>
               <span>{result.counterOffers[0].balanced ? 'Within the even-value band' : `${Math.abs(result.counterOffers[0].grade.percentDiff)}% apart`}{copy(" after regrading the package.")}</span>

@@ -2777,3 +2777,18 @@ html[data-mode='light'] .af-core .af-tc {
 .af-tc-review { margin:14px 0; padding:14px 16px; border:1px solid rgba(34,211,238,.35); border-radius:12px; background:rgba(34,211,238,.05); }
 .af-tc-review h3 { margin:0 0 8px; font-size:17px; }
 .af-tc-review p { margin:6px 0; line-height:1.45; }
+
+/* Saved/current variants retain readable, keyboard-accessible controls on narrow screens. */
+.af-tc-comparison-state { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.af-tc-variant-comparison { margin-top:16px; overflow-wrap:anywhere; }
+.af-tc-variant-comparison summary { min-height:44px; display:list-item; align-content:center; cursor:pointer; font-weight:700; }
+.af-tc-variant-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.af-tc-variant-grid section { min-width:0; padding:14px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
+.af-tc-variant-grid h4 { margin:0 0 10px; font-size:16px; }
+.af-tc-variant-grid p, .af-tc-variant-grid small { font-size:14px; line-height:1.5; color:var(--text2); }
+.af-tc-snapshots button:focus-visible, .af-tc-snapshots summary:focus-visible { outline:2px solid var(--accent, #75e2dc); outline-offset:3px; }
+.af-tc-snapshots button { min-height:44px; white-space:normal; overflow-wrap:anywhere; }
+@media(max-width:720px) { .af-tc-variant-grid { grid-template-columns:1fr; } .af-tc-saved-list li { flex-wrap:wrap; } }
+
+.af-tc-saved-list summary, .af-tc-partner-evidence summary { min-height:44px; align-content:center; cursor:pointer; }
+.af-tc-partner-evidence summary:focus-visible { outline:2px solid var(--accent, #75e2dc); outline-offset:3px; }

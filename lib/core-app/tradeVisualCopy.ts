@@ -2,6 +2,20 @@ import { coreUiCopy } from './coreUiCopy'
 
 /** Bundled display translations. Stored evaluations and player identities remain unchanged. */
 export const tradeVisualSpanish: Record<string,string> = {
+  "Account history could not be verified. Retry when connected.":"No se pudo verificar el historial de la cuenta. Reintenta cuando tengas conexión.",
+  "The saved comparison could not be verified. Retry when connected.":"No se pudo verificar la comparación guardada. Reintenta cuando tengas conexión.",
+  "The removal could not be verified. Retry when connected.":"No se pudo verificar la eliminación. Reintenta cuando tengas conexión.",
+  "Saved comparison":"Comparación guardada",
+  "Current analysis":"Análisis actual",
+  "Show current analysis":"Mostrar análisis actual",
+  "Compare saved and current variants":"Comparar variantes guardada y actual",
+  "Compare the assets and value basis before comparing grades. These are separate snapshots, not an acceptance forecast.":"Compara los activos y la base de valor antes de comparar las calificaciones. Son evaluaciones separadas, no una predicción de aceptación.",
+  "Saved variant":"Variante guardada",
+  "Current variant":"Variante actual",
+  "Choose a saved comparison for the current sport before comparing variants.":"Elige una comparación guardada del deporte actual antes de comparar variantes.",
+  "Partner roster evidence":"Datos de la plantilla del otro equipo",
+  "These are roster signals, not the manager’s preferences or an acceptance forecast.":"Son señales de la plantilla; no reflejan las preferencias del mánager ni predicen la aceptación.",
+  "No partner roster evidence was returned for this analysis. Confirm their needs and timeline.":"Este análisis no devolvió datos de la plantilla del otro equipo. Confirma sus necesidades y objetivos.",
   '+ Add asset':'+ Añadir activo','Pick a team above to see what they hold.':'Selecciona un equipo arriba para ver sus activos.','No players are listed on this roster yet.':'Esta plantilla aún no tiene jugadores registrados.','Tap a player to add them':'Toca un jugador para añadirlo','AF this week':'AF esta semana','Salary-cap affordability':'Viabilidad del tope salarial','The value grade does not establish cap legality.':'La nota de valor no confirma el cumplimiento del tope salarial.',': salary':': salario','through':'hasta','· Your post-trade cap room':'· Tu espacio salarial tras el intercambio','Your commitments':'Tus compromisos','/ cap':'/ tope','· Their commitments':'· Compromisos del rival',
   'Includes stored contracts and dead money. Unsigned rookie contracts and future acquisitions are not included. Revalidation is required when accepting.':'Incluye contratos registrados y dinero muerto. Excluye contratos de novatos sin firmar y adquisiciones futuras. Debe validarse de nuevo al aceptar.',
   'Build here, then send the offer on your league platform.':'Crea la propuesta aquí y envíala en la plataforma de tu liga.','Why':'Por qué','might accept':'podría aceptar','Value fairness and acceptance are separate. Manager preference and roster needs can change the answer.':'El equilibrio de valor y la aceptación son distintos. Las preferencias del mánager y las necesidades de plantilla pueden cambiar la respuesta.','Closer value package:':'Paquete más equilibrado:','after regrading the package.':'tras volver a calificar el paquete.','Try this package':'Probar este paquete','Schedule, roster, and format notes':'Notas de calendario, plantilla y formato','Deeper trade strategy and partner context':'Estrategia detallada y contexto del socio',
