@@ -36,7 +36,7 @@ export async function getTeamActivity(args: {
       where: { activityType: { in: ACTIVITY_KINDS }, ...importedActivityLeagueWhere(args.league) },
       orderBy: { occurredAt: 'desc' },
       take: SCAN,
-      select: { id: true, activityType: true, occurredAt: true, rosterId: true, payload: true, normalized: true },
+      select: { id: true, activityType: true, occurredAt: true, rosterId: true, providerEventId: true, payload: true, normalized: true },
     })
     .catch(() => null)
   if (rows == null) return null

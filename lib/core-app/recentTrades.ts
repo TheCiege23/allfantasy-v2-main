@@ -452,7 +452,8 @@ function assetsOf(side: GradedTrade['sides'][number]): RecentTradeAsset[] {
  * `PlayerValueSnapshot` with no format or QB filter — the newest FantasyCalc row per player, dynasty
  * or redraft, 1QB or superflex, whichever was written last — so the band's sentence could disagree
  * with the letter printed on the same card. Now the sentence and the letters come from one grade:
- * `oneGradeForCompletedTrade`, on this league's own chart, today.
+ * `oneGradeForCompletedTrade`, on this league's own chart — the trade's FROZEN ORIGINAL from the
+ * first time it was graded, not a re-price on today's values (`frozenCompletedGrade.ts`).
  *
  * ⚠ NULL WHEN THERE IS NO GRADE — a withheld grade (an unpriced player, a used pick, a three-team
  * deal) publishes no verdict, never a neutral one standing in for missing data.

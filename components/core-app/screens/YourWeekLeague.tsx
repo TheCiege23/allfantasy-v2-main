@@ -7,6 +7,7 @@ import { WeekLineupLine } from '@/components/core-app/screens/WeekLineupLine'
 import '@/components/core-app/af-week-league.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Screen 38a·3 — Your Week, scoped to one league.
@@ -195,7 +196,9 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
           {proj ? (
             <div className="af-wl-prob">
               <div className="af-wl-prob-row">
-                <span className="af-label">{copy('Win probability')}</span>
+                <span className="af-label">
+                  {copy('Win probability')} <TopicTip topic="weekWinProbability" />
+                </span>
                 <span className="af-wl-prob-read af-num">
                   {copy('You')} {pct(proj.winProbability)}% · {yours.opponent.name ?? copy('Them')}{' '}
                   {100 - pct(proj.winProbability)}%
@@ -214,7 +217,9 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
             </div>
           ) : (
             <div className="af-wl-prob" data-missing="true">
-              <span className="af-label">{copy('Win probability')}</span>
+              <span className="af-label">
+                {copy('Win probability')} <TopicTip topic="weekWinProbability" />
+              </span>
               <span className="af-wl-prob-why">
                 {yours.yourSampleWeeks === 0
                   ? copy('neither team has a scored week on file yet, so there is nothing to project from')
@@ -234,7 +239,8 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
             data-tone={rivalry ? rivalryTone(rivalry.wins, rivalry.losses) : 'none'}
           >
             <span className="af-label af-wl-rivalry-tag">
-              {rivalry ? `${copy('All-time')} ${rivalry.wins}—${rivalry.losses}` : copy('All-time')}
+              {rivalry ? `${copy('All-time')} ${rivalryRecord(rivalry)}` : copy('All-time')}{' '}
+              <TopicTip topic="rivalrySeries" />
             </span>
             <p className="af-wl-rivalry-note">
               {rivalry
@@ -260,7 +266,9 @@ export function YourWeekLeague({ board, allWeeksHref, lineups }: YourWeekLeagueP
       {/* ── The rest of the league ──────────────────────────────────── */}
       <section className="af-wl-rest">
         <header className="af-wl-rest-head">
-          <h2 className="af-label">{es ? `Resto de ${board.leagueName}` : `Rest of ${board.leagueName}`}</h2>
+          <h2 className="af-label">
+            {es ? `Resto de ${board.leagueName}` : `Rest of ${board.leagueName}`} <TopicTip topic="weekWinProbability" />
+          </h2>
           <span className="af-wl-rest-note">
             {sidelines.length > 0
               ? es ? `${sidelines.length} ${sidelines.length === 1 ? 'enfrentamiento más' : 'enfrentamientos más'} · más ajustados primero` : `${sidelines.length} other ${sidelines.length === 1 ? 'matchup' : 'matchups'} · closest first`
@@ -343,6 +351,14 @@ function Sideline({ m, board }: { m: LeagueSideline; board: LeagueWeekBoard }) {
       ) : null}
     </article>
   )
+}
+
+/**
+ * W—L, or W—L—T once a meeting has finished level, so a tie never reads as a
+ * loss. Digits and dashes only — the same in English and Spanish.
+ */
+function rivalryRecord(r: { wins: number; losses: number; ties: number }): string {
+  return r.ties > 0 ? `${r.wins}—${r.losses}—${r.ties}` : `${r.wins}—${r.losses}`
 }
 
 function rivalryTone(wins: number, losses: number): 'up' | 'down' | 'even' {

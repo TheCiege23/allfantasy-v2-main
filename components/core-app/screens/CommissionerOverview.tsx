@@ -6,6 +6,7 @@ import { HubSwitcher } from '@/components/core-app/hubs/HubSwitcher'
 import { HubHeroMedia } from '@/components/core-app/hubs/HubHeroMedia'
 import { FocusComposerButton, HubBroadcast } from '@/components/core-app/hubs/HubBroadcast'
 import { OverviewQueue } from '@/components/core-app/hubs/OverviewQueue'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * Commissioner Hub, all leagues — `/core/commissioner` (five-doors restyle, 2026-09-17).
@@ -140,7 +141,8 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
           {has ? (
             <>
               <div className="afh-label">
-                Across the {data.runCount} {data.runCount === 1 ? 'league' : 'leagues'} you run
+                Across the {data.runCount} {data.runCount === 1 ? 'league' : 'leagues'} you run{' '}
+                <TopicTip topic="commissionerOverviewStats" />
               </div>
               <div className="afh-stats">
                 {data.stats.map((s) => (
@@ -169,6 +171,8 @@ export function CommissionerOverview({ data }: { data: CommissionerOverviewData 
               <h2 id="afh-run" className="afh-label" style={{ margin: 0 }}>
                 Leagues you run
               </h2>
+              {/* Beside the heading, not in it: the h2 names this section (aria-labelledby). One key for every card's meter. */}
+              <TopicTip topic="activeManagers" />
             </div>
             <div className="afh-grid">
               {data.leagues.map((l) => (

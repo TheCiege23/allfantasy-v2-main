@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const db = vi.hoisted(() => ({
   league: { findUnique: vi.fn(), update: vi.fn() },
   draftSession: { findFirst: vi.fn() },
-  redraftSeason: { findFirst: vi.fn() },
+  redraftSeason: { findFirst: vi.fn(), updateMany: vi.fn() },
   redraftRosterPlayer: { count: vi.fn() },
 }))
 const finalizeArtifacts = vi.hoisted(() => vi.fn())
@@ -16,12 +16,23 @@ import { finalizeImportedCarryover } from '@/lib/league-creation/canonical/final
 beforeEach(() => {
   vi.clearAllMocks()
   db.league.findUnique.mockResolvedValue({ settings: { importCarryover: { playerCount: 2 } } })
-  db.draftSession.findFirst.mockResolvedValue({ id: 'imported-session' })
+  db.draftSession.findFirst.mockResolvedValue({ id: 'imported-session', status: 'completed', draftModeLabel: 'imported_rosters' })
   db.redraftSeason.findFirst.mockResolvedValue({ id: 'season' })
   finalizeArtifacts.mockResolvedValue(undefined)
 })
 
 describe('imported roster materialization recovery', () => {
+  it('does not label next-season baseball carryover in season before opening day', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-03T12:00:00Z'))
+    try {
+      db.league.findUnique.mockResolvedValue({ sport: 'MLB', season: 2027, settings: { importCarryover: { playerCount: 2 } } })
+      db.redraftRosterPlayer.count.mockResolvedValue(2)
+      expect(await finalizeImportedCarryover('baseball')).toMatchObject({ complete: true })
+      expect(db.league.update).toHaveBeenCalledWith({ where: { id: 'baseball' }, data: { status: 'active', lifecycleState: 'post_draft' } })
+      expect(db.redraftSeason.updateMany).toHaveBeenCalledWith({ where: { id: 'season' }, data: { status: 'setup', currentWeek: 0 } })
+    } finally { vi.useRealTimers() }
+  })
   it('keeps the league in setup until all imported players are present, then activates it on retry', async () => {
     db.redraftRosterPlayer.count.mockResolvedValueOnce(1).mockResolvedValueOnce(2)
 

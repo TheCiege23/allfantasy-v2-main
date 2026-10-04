@@ -510,6 +510,7 @@ const spanish: Record<string, string> = {
   'Closest ever': 'El más ajustado',
   'you won by': 'ganaste por',
   'you lost by': 'perdiste por',
+  'a tie': 'empate',
   'Not on your schedule this week.': 'No está en tu calendario esta semana.',
   'Playing this week — not enough completed weeks on either side to project it.': 'Juegan esta semana, pero faltan semanas completas para pronosticar el resultado.',
   'No head-to-head history is on file yet.': 'Aún no hay historial entre estos equipos.',
@@ -862,6 +863,7 @@ const spanish: Record<string, string> = {
   'You got': 'Recibiste',
   got: 'recibió',
   'League value today': 'Valor actual en esta liga',
+  'League value used by this grade': 'Valor de liga usado en esta calificación',
   drafted: 'seleccionado',
   'Why it graded this way': 'Por qué recibió esta calificación',
   'League grade withheld:': 'Calificación de liga no disponible:',
@@ -1081,8 +1083,169 @@ const spanish: Record<string, string> = {
   'projected, week': 'proyectado, semana',
   'the table above is points already scored.': 'la tabla anterior muestra puntos ya anotados.',
   'the playoff and title odds above are simulated without AF.': 'las probabilidades de playoffs y título anteriores se simularon sin AF.',
+  // Standings — why the projected final total is withheld (lib/core-app/leagueStandings.ts).
+  'we cannot tell which team in this league is yours': 'no podemos identificar cuál es tu equipo en esta liga',
+  'the regular season is over — this is the final total': 'la temporada regular terminó: este es el total final',
+  'this league has no head-to-head schedule, so there is no fixed number of weeks left to project':
+    'esta liga no tiene enfrentamientos directos, así que no hay un número fijo de semanas que proyectar',
+  // Waivers — "Worth adding" board notes and states (lib/waivers/waiverBoard.ts, seasonRateWaiverBoard.ts,
+  // waiverSportBasis.ts) and its empty-state reasons (components/core-app/WaiverLineupBoard.tsx).
+  'Ranked by how much each adds to your best starting lineup, not by raw projection — a big name who would not crack your lineup is worth nothing this week.':
+    'Ordenados por lo que cada uno suma a tu mejor alineación titular, no por su proyección: un nombre grande que no entraría en tu alineación no vale nada esta semana.',
+  'Ranked by how much each adds to your best starting lineup per game, not by raw projection — a big name who would not crack your lineup is worth nothing here.':
+    'Ordenados por lo que cada uno suma por partido a tu mejor alineación titular, no por su proyección: un nombre grande que no entraría en tu alineación no vale nada aquí.',
+  'No recent game data to build a free-agent pool from.': 'No hay datos recientes de partidos para armar la lista de agentes libres.',
+  'No available player can fill a starting slot in this league.': 'Ningún jugador disponible puede ocupar un puesto titular en esta liga.',
+  'None of your rostered players could be projected under this league’s scoring.':
+    'No se pudo proyectar a ninguno de tus jugadores con la puntuación de esta liga.',
+  "Weekly projections, re-scored under each league's own scoring_settings.":
+    'Proyecciones semanales, recalculadas con la puntuación propia de cada liga.',
+  // 'we cannot tell which roster in this league is yours' is already above, with the same Spanish.
+  'no roster rows imported for your team yet': 'todavía no se importó la plantilla de tu equipo',
+  "this league's player ids can't be matched to ours yet": 'todavía no podemos emparejar los ids de jugadores de esta liga con los nuestros',
+  'this league publishes no scoring settings, so nothing here can be priced':
+    'esta liga no publica su puntuación, así que aquí no se puede valorar nada',
+  'this league publishes no starting slots, so there is no lineup to improve':
+    'esta liga no publica sus puestos titulares, así que no hay alineación que mejorar',
+  'nothing on your roster could be projected under this league’s scoring yet':
+    'todavía no se pudo proyectar a nadie de tu plantilla con la puntuación de esta liga',
+  'nothing projects this sport’s players yet, so this wire cannot be priced':
+    'todavía nada proyecta a los jugadores de este deporte, así que estos agentes libres no se pueden valorar',
+  'nobody on the wire would improve your starting lineup this week':
+    'ningún agente libre mejoraría tu alineación titular esta semana',
+  'nobody on the wire would improve your starting lineup per game':
+    'ningún agente libre mejoraría tu alineación titular por partido',
+  // Waiver Intelligence — why a target cannot play this week (lib/waiver-intel/waiverIntelService.ts).
+  'on bye this week — he cannot score for you until next week': 'descansa esta semana: no puede sumarte puntos hasta la próxima',
+  // …its formula notes, shown word for word (the templated one is a pattern below).
+  'Bid suggestions are off until the player value chart syncs.': 'Las ofertas sugeridas se activan cuando se sincronice la tabla de valores.',
+  "The room's history counts every winning claim since this league began. The platform doesn't share losing bids.":
+    'El historial de la liga cuenta todos los reclamos ganados desde que empezó. La plataforma no comparte las ofertas perdidas.',
+  // …and the injury designations that rule a player out (lib/core-app/injuryStatus.ts `isRuledOut`). IR, PUP,
+  // NFI and IL are abbreviations a Spanish-reading manager sees on the platform too, so they stay.
+  // `Out` is already above (the standings zone), with the same Spanish.
+  Suspension: 'Suspendido',
+  Suspended: 'Suspendido',
+  'Injured Reserve': 'Lista de lesionados',
 }
 
+/** One part of the waiver board's lock sentence ("Games already kicked off are locked in: A, B and C."). */
+const LOCK_PARTS: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
+  [/^1 of your starters keeps his slot$/, () => '1 de tus titulares conserva su puesto'],
+  [/^(\d+) of your starters keep their slots$/, (m) => `${m[1]} de tus titulares conservan sus puestos`],
+  [/^1 bench player can no longer come in$/, () => '1 jugador de la banca ya no puede entrar'],
+  [/^(\d+) bench players can no longer come in$/, (m) => `${m[1]} jugadores de la banca ya no pueden entrar`],
+  [/^1 free agent whose game has started is not shown$/, () => 'no se muestra 1 agente libre cuyo partido ya empezó'],
+  [/^(\d+) free agents whose game has started are not shown$/, (m) => `no se muestran ${m[1]} agentes libres cuyo partido ya empezó`],
+]
+
+/** "A, B and C" → each part in Spanish, joined "A, B y C". Null if any part is unknown — never half. */
+function spanishLockList(listed: string): string | null {
+  const parts = listed.split(/,? and |, /)
+  const out: string[] = []
+  for (const part of parts) {
+    const hit = LOCK_PARTS.find(([re]) => re.test(part))
+    if (!hit) return null
+    out.push(hit[1](part.match(hit[0])!))
+  }
+  return out.length === 1 ? out[0]! : `${out.slice(0, -1).join(', ')} y ${out[out.length - 1]}`
+}
+
+/**
+ * Sentences a LOADER writes with numbers in them, which an exact-match table can never hold.
+ *
+ * ⚠ THE LANGUAGE SWITCH IS CLIENT STATE AND NO /core LOADER READS IT, so anything a loader writes
+ * ("74 free agents are ruled out…", "a pace needs at least 3 scored weeks…") arrives in English
+ * whatever the reader chose. Each entry matches the loader's exact English template and rebuilds the
+ * sentence in Spanish around the captured values. Anchored at both ends: a sentence the loader
+ * changes simply stops matching and falls back to English — it can never half-translate.
+ */
+const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
+  [
+    /^a pace needs at least (\d+) scored weeks behind it — you have (\d+)$/,
+    (m) => `un ritmo necesita al menos ${m[1]} semanas jugadas — llevas ${m[2]}`,
+  ],
+  // Waivers — "Worth adding" board notes.
+  [
+    /^A claim made now is for week (\d+), so these are Sleeper's week \1 projections, rescored under this league's scoring — published ahead, they move as injuries and depth charts settle\. A player with no week \1 line \(most often a bye\) is not shown\.$/,
+    (m) =>
+      `Un reclamo hecho ahora es para la semana ${m[1]}, así que estas son las proyecciones de Sleeper para la semana ${m[1]}, ` +
+      `recalculadas con la puntuación de esta liga: se publican por adelantado y cambian con las lesiones y la profundidad de los equipos. ` +
+      `No se muestra a quien no tenga línea para la semana ${m[1]} (casi siempre por descanso).`,
+  ],
+  [
+    /^(\d+) free agents would improve your lineup; showing the top (\d+)\.$/,
+    (m) => `${m[1]} agentes libres mejorarían tu alineación; se muestran los ${m[2]} mejores.`,
+  ],
+  [
+    /^Games already kicked off are locked in: (.+)\.$/,
+    (m) => {
+      const listed = spanishLockList(m[1]!)
+      return listed ? `Los partidos que ya empezaron quedan fijos: ${listed}.` : m[0]!
+    },
+  ],
+  [
+    /^1 free agent is ruled out, on injured reserve or on a bye this week and not shown\.$/,
+    () => 'No se muestra 1 agente libre que está descartado, en la lista de lesionados o descansa esta semana.',
+  ],
+  [
+    /^(\d+) free agents are ruled out, on injured reserve or on a bye this week and not shown\.$/,
+    (m) => `No se muestran ${m[1]} agentes libres que están descartados, en la lista de lesionados o descansan esta semana.`,
+  ],
+  [
+    /^(\d+) of (\d+) startable free agents could not be projected under this league’s scoring and are not shown\.$/,
+    (m) => `No se pudo proyectar a ${m[1]} de ${m[2]} agentes libres alineables con la puntuación de esta liga, y no se muestran.`,
+  ],
+  [
+    /^(\d+) other active players were skipped because no slot in this league can hold them\.$/,
+    (m) => `Se omitieron otros ${m[1]} jugadores activos porque ningún puesto de esta liga los admite.`,
+  ],
+  [
+    /^(\d+) other projected players were skipped because no slot in this league can hold them\.$/,
+    (m) => `Se omitieron otros ${m[1]} jugadores proyectados porque ningún puesto de esta liga los admite.`,
+  ],
+  [
+    /^(\d+) projected (.+) players could not be matched to this league's player ids, so we cannot tell whether they are free agents and they are not shown\.$/,
+    (m) => `No se pudo emparejar a ${m[1]} jugadores proyectados de ${m[2]} con los ids de esta liga, así que no sabemos si son agentes libres y no se muestran.`,
+  ],
+  [
+    /^Per-game rates from AllFantasy's (.+) season projection, re-scored under each league's own scoring_settings\. A season rate, not a projection for this week\.$/,
+    (m) => `Promedios por partido de la proyección de temporada de AllFantasy para ${m[1]}, recalculados con la puntuación propia de cada liga. Es un promedio de temporada, no una proyección para esta semana.`,
+  ],
+  [
+    /^Per-game points from AllFantasy's (.+) season projection, on AllFantasy's default \1 scoring — not each league's own rules, which are written in a stat vocabulary the projection engine does not read yet\. A season rate, not a projection for this week\.$/,
+    (m) => `Puntos por partido de la proyección de temporada de AllFantasy para ${m[1]}, con la puntuación predeterminada de AllFantasy, no con las reglas de cada liga, que usan un vocabulario de estadísticas que el motor todavía no lee. Es un promedio de temporada, no una proyección para esta semana.`,
+  ],
+  // Waiver Intelligence — a ruled-out target's reason line ("IR — he cannot play this week…").
+  [
+    /^(.+) — he cannot play this week, so any bid is a stash$/,
+    (m) => `${coreUiCopy(m[1]!, 'es')}: no puede jugar esta semana, así que cualquier oferta es para guardarlo`,
+  ],
+  // …and each target's reasoning lines (lib/waiver-intel/waiverIntelService.ts).
+  [/^market value ([\d,.]+) \((.+) chart\)$/, (m) => `valor de mercado ${m[1]} (tabla ${m[2]})`],
+  [
+    /^suggested = min\((\d+)% of \$(\d+), \$\2 × value\/anchor\)$/,
+    (m) => `sugerida = mín(${m[1]}% de $${m[2]}, $${m[2]} × valor/ancla)`,
+  ],
+  [
+    /^this league's winning bids: median \$(\d+), p75 \$(\d+) — calibrate against the room$/,
+    (m) => `ofertas ganadoras en esta liga: mediana $${m[1]}, p75 $${m[2]}; compáralas con lo que paga la liga`,
+  ],
+  [/^fills your open (.+) slot$/, (m) => `ocupa tu puesto libre de ${m[1]}`],
+  [
+    /^How a bid is suggested: our own rule, not market data — a full FAAB budget is treated as worth about the (\d+)th-best player, and a player's bid is his share of that\.$/,
+    (m) => `Cómo se sugiere una oferta: es nuestra regla, no datos del mercado. El presupuesto FAAB completo equivale más o menos al jugador número ${m[1]}, y la oferta de cada jugador es su parte de eso.`,
+  ],
+  [/^No suggestion is more than (\d+)% of the budget\.$/, (m) => `Ninguna sugerencia supera el ${m[1]}% del presupuesto.`],
+]
+
 export function coreUiCopy(english: string, language: string): string {
-  return language === 'es' ? spanish[english] ?? english : english
+  if (language !== 'es') return english
+  const exact = spanish[english]
+  if (exact != null) return exact
+  for (const [pattern, build] of spanishPatterns) {
+    const m = english.match(pattern)
+    if (m) return build(m)
+  }
+  return english
 }

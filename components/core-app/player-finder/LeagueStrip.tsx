@@ -1,6 +1,7 @@
 import Link from 'next/link'
 
 import type { StripChip } from '@/lib/core-app/leagueStrip'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * One chip per league you play, under the player's name — START / BENCH / IR / TAXI where he is
@@ -26,7 +27,6 @@ export function LeagueStrip({ chips, leagueHref }: { chips: StripChip[]; leagueH
               className="af-pf-strip-chip"
               data-state={c.state}
               data-tone={c.tone}
-              title={c.sentence}
               aria-label={c.sentence}
             >
               <span className="af-pf-strip-league">{c.leagueName}</span>
@@ -37,7 +37,9 @@ export function LeagueStrip({ chips, leagueHref }: { chips: StripChip[]; leagueH
       </ul>
       <p className="af-pf-strip-sum af-num">
         Yours in {yours} · available in {free} · elsewhere in {count('other')}
-        {count('unknown') > 0 ? ` · can't read ${count('unknown')}` : ''}
+        {count('unknown') > 0 ? ` · can't read ${count('unknown')}` : ''}{' '}
+        {/* One key for every chip — the per-chip `title` it replaces never showed on a phone. */}
+        <TopicTip topic="leagueStripLegend" />
       </p>
     </div>
   )

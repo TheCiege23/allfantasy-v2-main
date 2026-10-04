@@ -44,6 +44,7 @@ export async function GET(
       platformLeagueId: true,
       userId: true,
       settings: true,
+      lifecycleState: true,
       teams: { select: { platformUserId: true } },
     },
   })
@@ -90,7 +91,7 @@ export async function GET(
       teamCount: league.teams.length,
       scoringFormat: null,
       isDynasty: false,
-      status: 'active',
+      status: league.lifecycleState === 'post_draft' || league.lifecycleState === 'pre_draft' || league.lifecycleState === 'setup' ? 'setup' : 'active',
     })
   }
 

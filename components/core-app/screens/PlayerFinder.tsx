@@ -13,6 +13,7 @@ import { TradeVisual } from '@/components/core-app/player-finder/TradeVisual'
 import { TradeWindow } from '@/components/core-app/player-finder/TradeWindow'
 import { TradeWindows } from '@/components/core-app/player-finder/TradeWindows'
 import { HelpDot } from '@/components/core-app/player-finder/HelpDot'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import { PlayerSearchBox } from '@/components/core-app/player-finder/PlayerSearchBox'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 import { PlayerCompare } from '@/components/core-app/player-finder/PlayerCompare'
@@ -1082,6 +1083,8 @@ export function PlayerFinder({
                 <h3 className="af-pf-h3" id="af-pf-leagues-h">
                   {leagueMode ? 'In this league' : 'Every platform, every league'}
                 </h3>
+                {/* Beside the h3, not in it (aria-labelledby). Replaces the column titles a phone never showed. */}
+                <TopicTip topic="leagueTableColumns" />
                 <p className="af-pf-block-sub">
                   {leagueMode ? (
                     <>
@@ -1124,10 +1127,10 @@ export function PlayerFinder({
                         <th className="af-label">League</th>
                         <th className="af-label">Slot</th>
                         <th className="af-label af-pf-col-status">Status</th>
-                        <th className="af-label af-pf-col-proj" title="Provider (Sleeper) projection under this league’s scoring">Proj</th>
-                        <th className="af-label af-pf-col-proj af-pf-col-af" title="AllFantasy’s own projection under this league’s scoring">AF</th>
+                        <th className="af-label af-pf-col-proj">Proj</th>
+                        <th className="af-label af-pf-col-proj af-pf-col-af">AF</th>
                         {leagueValues ? (
-                          <th className="af-label af-pf-col-value" title="What this league’s format and scoring make him worth">
+                          <th className="af-label af-pf-col-value">
                             Value
                           </th>
                         ) : null}
@@ -1184,10 +1187,7 @@ export function PlayerFinder({
                             </td>
                             <td className="af-pf-col-proj">
                               {l.isYours && r.impact?.afPoints.available ? (
-                                <span
-                                  className="af-pf-proj af-num"
-                                  title={`this league’s scoring · ${r.impact.afPoints.data.matchedKeys}/${r.impact.afPoints.data.scoredKeys} keys`}
-                                >
+                                <span className="af-pf-proj af-num">
                                   {r.impact.afPoints.data.points.toFixed(1)}
                                 </span>
                               ) : (
@@ -1205,7 +1205,7 @@ export function PlayerFinder({
                                 const af =
                                   l.isYours && r.impact?.afPoints.available ? afIn(r.impact.afPoints.data.points) : null
                                 return af != null ? (
-                                  <span className="af-pf-proj af-pf-af af-num" title="AllFantasy’s own projection, under this league’s scoring">
+                                  <span className="af-pf-proj af-pf-af af-num">
                                     {af.toFixed(1)}
                                   </span>
                                 ) : (

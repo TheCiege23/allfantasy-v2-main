@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ClubLogo } from '@/components/core-app/ClubLogo'
 import { FallbackImg } from '@/components/core-app/FallbackImg'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-triage.css'
 
@@ -138,6 +139,7 @@ export function Dash3ATriage({
     <section className="af-core af-triage" aria-label="Starters in doubt">
       <div className="af-triage-head">
         <h2 className="af-triage-title">Starters in doubt</h2>
+        <TopicTip topic="startersInDoubt" />
         <span className="af-triage-sub">
           may not play this week · most valuable first
         </span>

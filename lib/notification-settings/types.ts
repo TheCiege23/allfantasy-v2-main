@@ -22,6 +22,7 @@ export type NotificationCategoryId =
   | "draft_intel_alerts"
   | "autocoach"
   | "followed_players"
+  | "followed_teams"
   | "direct_messages"
   | "league_chat"
   | "career_milestones"
@@ -103,6 +104,7 @@ export const NOTIFICATION_CATEGORY_IDS: NotificationCategoryId[] = [
   "draft_intel_alerts",
   "autocoach",
   "followed_players",
+  "followed_teams",
   "direct_messages",
   "league_chat",
   "career_milestones",
@@ -136,6 +138,10 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategoryId, string
   // them, including players on none of your rosters. Its own switch so a follow can stay in the
   // bell and off the phone, or be silenced without touching roster injury alerts.
   followed_players: "Players you follow — injuries & news",
+  // Teams followed from the "follow your teams" prompt or Settings (2026-10-03): news and injuries
+  // for that team and its players, not the whole league. Its own switch, so team chatter can stay in
+  // the bell and off the phone without touching roster or player-follow alerts.
+  followed_teams: "Teams you follow — news & injuries",
   // A DM or huddle message from someone (2026-09-25). Sent by the server when the message is saved
   // (lib/chat-notifications/chatMessageNotifier.ts); at most one alert per conversation per 10 minutes
   // while it is unread, and at most one email per conversation an hour.

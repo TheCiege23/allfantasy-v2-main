@@ -283,6 +283,21 @@
 
 .af-bk-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* The picks above live in component state only — this line says so. */
+.af-bk-unsaved {
+  margin: -4px 0 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+  color: var(--muted);
+}
+
+.af-bk-unsaved a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .af-bk-length { text-align: left; }
 
 .af-bk-bonus {

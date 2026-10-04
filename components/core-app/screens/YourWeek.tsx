@@ -19,6 +19,7 @@ import { rosterLabel } from '@/lib/core-app/managerName'
 import '@/components/core-app/af-week.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * 24a — "Your Week, every matchup".
@@ -208,7 +209,9 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       {data.coinFlips.length > 0 ? (
         <section className="af-wk-section">
           <div className="af-wk-sectionhead">
-            <h2 className="af-wk-sectiontitle">{copy('Coin flips')}</h2>
+            <h2 className="af-wk-sectiontitle">
+              {copy('Coin flips')} <TopicTip topic="weekWinProbability" />
+            </h2>
             <p className="af-wk-sectionnote">
               {language === 'es'
                 ? `Separados por ${COIN_FLIP_POINTS} puntos proyectados o menos. Una decisión de alineación puede cambiar estos resultados.`
@@ -249,7 +252,9 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       {data.unprojected.length > 0 ? (
         <section className="af-wk-section">
           <div className="af-wk-sectionhead">
-            <h2 className="af-wk-sectiontitle">{copy('Not enough history to call')}</h2>
+            <h2 className="af-wk-sectiontitle">
+              {copy('Not enough history to call')} <TopicTip topic="formGap" />
+            </h2>
             <p className="af-wk-sectionnote">
               {copy('These are on the schedule, but one or both teams have fewer than three completed weeks on file, so a win probability here would be invented rather than computed. Where both sides have scored at least once, the weekly scoring gap so far is shown instead — that is form, not a call.')}
             </p>
@@ -282,9 +287,6 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
                   <span
                     className="af-wk-lean-prob af-wk-lean-prob--form"
                     data-tone={m.form.margin >= 0 ? 'up' : 'down'}
-                    title={language === 'es'
-                      ? `Promedias ${m.form.you.toFixed(1)} puntos por semana frente a ${m.form.them.toFixed(1)} de tu rival, durante ${m.form.weeks} ${m.form.weeks === 1 ? 'semana puntuada' : 'semanas puntuadas'}`
-                      : `You have averaged ${m.form.you.toFixed(1)} points a week to their ${m.form.them.toFixed(1)}, over ${m.form.weeks} scored ${m.form.weeks === 1 ? 'week' : 'weeks'}`}
                   >
                     {m.form.margin >= 0 ? '+' : '−'}
                     {Math.abs(m.form.margin).toFixed(1)}
@@ -323,7 +325,9 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       {data.eliminationWeeks.length > 0 ? (
         <section className="af-wk-section">
           <div className="af-wk-sectionhead">
-            <h2 className="af-wk-sectiontitle">{copy('No opponent — lowest score is out')}</h2>
+            <h2 className="af-wk-sectiontitle">
+              {copy('No opponent — lowest score is out')} <TopicTip topic="eliminationCut" />
+            </h2>
             <p className="af-wk-sectionnote">
               {copy('Guillotine and survivor leagues eliminate the week’s lowest score instead of pairing teams off, so these show your points clear of the cut line rather than a win probability. The field is the rosters that have scored this week.')}
             </p>
@@ -358,27 +362,24 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
                   const settle = e.settle
                   const spanishBadge = language === 'es' && settle ? (() => {
                     switch (settle.verdict) {
-                      case 'safe': return { sub: 'decidido', aria: 'A salvo esta semana: tus titulares y suficientes equipos por debajo ya terminaron' }
-                      case 'chopped': return { sub: 'decidido', aria: 'Todos los equipos terminaron y el tuyo quedó eliminado esta semana' }
-                      case 'no_chop': return { sub: 'sin eliminación esta semana', aria: 'Nadie queda eliminado esta semana' }
+                      case 'safe': return { sub: 'decidido' }
+                      case 'chopped': return { sub: 'decidido' }
+                      case 'no_chop': return { sub: 'sin eliminación esta semana' }
                       case 'open': {
                         const pending = settle.yourUpcoming + settle.yourLive
-                        if (pending > 0) return { sub: `${pending} por jugar`, aria: `${pending} de tus titulares aún deben terminar` }
-                        if (settle.cutLinePending) return { sub: 'el último equipo sigue jugando', aria: `Tus titulares terminaron; al equipo más bajo le faltan ${settle.cutLinePending} por terminar` }
+                        if (pending > 0) return { sub: `${pending} por jugar` }
+                        if (settle.cutLinePending) return { sub: 'el último equipo sigue jugando' }
                         return null
                       }
                     }
                   })() : null
                   const margin = e.margin ?? 0 // non-null on this branch; closures lose the narrowing
-                  const title = e.onTheBlock
-                    ? language === 'es' ? `Tus ${e.yourScore?.toFixed(1)} puntos son la puntuación más baja entre ${e.fieldSize} equipos` : `Your ${e.yourScore?.toFixed(1)} is the lowest score in a field of ${e.fieldSize}`
-                    : language === 'es' ? `Tus ${e.yourScore?.toFixed(1)} puntos frente a un corte de ${e.cutLine?.toFixed(1)}` : `Your ${e.yourScore?.toFixed(1)} against a cut line of ${e.cutLine?.toFixed(1)}`
+                  /* The cut line and the settle rule are explained once, by the section's "?" — a per-card `title` never shows on a phone. */
                   return (
                     <span
                       className="af-wk-lean-prob af-wk-lean-prob--form"
                       data-tone={badge?.tone ?? (e.onTheBlock ? 'down' : 'up')}
                       data-settled={badge?.sub === 'decided' ? 'true' : undefined}
-                      title={badge ? `${title}. ${spanishBadge?.aria ?? copy(badge.aria)}` : title}
                     >
                       {badge?.label ? copy(badge.label) : e.onTheBlock ? copy('OUT') : `+${margin.toFixed(1)}`}
                       <span className="af-wk-lean-prob-sub">{spanishBadge?.sub ?? copy(badge?.sub ?? (e.onTheBlock ? 'on the block' : 'clear'))}</span>
@@ -429,7 +430,7 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
       {data.coinFlips.length + data.leaning.length > 0 ? (
         <footer className="af-wk-foot">
           <p>
-            <b>{copy('How these are worked out.')}</b> {copy(data.model.basis)} {copy('Fitted on')}{' '}
+            <b>{copy('How these are worked out.')}</b> <TopicTip topic="lineupProjection" /> {copy(data.model.basis)} {copy('Fitted on')}{' '}
             <span className="af-num">n={data.model.sampleSize}</span> {copy('completed roster-weeks across your leagues.')}
           </p>
           <p>

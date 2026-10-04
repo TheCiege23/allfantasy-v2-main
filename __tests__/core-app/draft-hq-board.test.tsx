@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { Board } from '@/components/core-app/screens/DraftBoard'
-import { ContextHelp } from '@/components/core-app/ContextHelp'
 vi.mock('@/components/core-app/draft-music/DraftMusicWidget', () => ({ default: () => null }))
 const columns = [{ slot: 1, rosterId: 'a', displayName: 'Alpha', isYours: true }, { slot: 2, rosterId: 'b', displayName: 'Beta', isYours: false }]
 const cells = [1, 2].map((overall) => ({ overall, round: 1, pickInRound: overall, originalSlot: overall,
@@ -25,31 +24,5 @@ describe('Draft HQ board', () => {
     render(<Board columns={columns} cells={cells} rounds={3} draftType="auction" thirdRoundReversal={false} />)
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
     expect(screen.queryByRole('table')).toBeNull()
-  })
-})
-describe('Circled question mark explanations', () => {
-  it('opens on hover and dismisses on leaving', async () => {
-    render(<ContextHelp title="ADP" body="Average draft position." />)
-    const button = screen.getByRole('button', { name: 'About ADP' })
-    fireEvent.mouseEnter(button)
-    expect(screen.getByText('Average draft position.')).toBeTruthy()
-    fireEvent.mouseLeave(button)
-    await waitFor(() => expect(screen.queryByText('Average draft position.')).toBeNull())
-  })
-  it('pins on touch/click and closes explicitly', () => {
-    render(<ContextHelp title="ADP" body="Average draft position." />)
-    const button = screen.getByRole('button', { name: 'About ADP' })
-    fireEvent.click(button)
-    fireEvent.mouseLeave(button)
-    expect(screen.getByText('Average draft position.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Close explanation for ADP' }))
-    expect(screen.queryByText('Average draft position.')).toBeNull()
-  })
-  it('opens on keyboard focus and closes on Escape', () => {
-    render(<ContextHelp title="ADP" body="Average draft position." />)
-    fireEvent.focus(screen.getByRole('button', { name: 'About ADP' }))
-    expect(screen.getByText('Average draft position.')).toBeTruthy()
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(screen.queryByText('Average draft position.')).toBeNull()
   })
 })

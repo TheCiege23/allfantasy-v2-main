@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import type {
   CareerSeasonLine,
   CareerTradeMoment,
@@ -11,6 +12,7 @@ import { CareerAskChimmy } from '@/components/core-app/career/CareerAskChimmy'
 import { LegacyStakes } from '@/components/core-app/career/LegacyStakes'
 import { leagueCareerChimmyPrompts, leagueWeeklyCareerChimmyPrompts } from '@/lib/core-app/careerChimmy'
 import { computeLeagueMilestones } from '@/lib/core-app/careerMilestones'
+import { TopicTip } from '@/components/core-app/TopicTip'
 import '@/components/core-app/af-league-career.css'
 import '@/components/core-app/af-career-live.css'
 
@@ -152,6 +154,7 @@ export function LeagueCareer({ data, allLeaguesHref }: LeagueCareerProps) {
           <div className="af-lc-grades">
             <GradeCard
               title="Career trade grade"
+              tip={<TopicTip topic="careerTradeGrade" />}
               state={tradeGrade}
               blurb="Graded on realised value per season — what each side of your trades actually went on to do."
             />
@@ -324,6 +327,7 @@ function WeeklyLeagueCareer({
           <div className="af-lc-grades">
             <GradeCard
               title="Career trade grade"
+              tip={<TopicTip topic="careerTradeGrade" />}
               state={tradeGrade}
               blurb="Graded on realised value per season — what each side of your trades actually went on to do."
             />
@@ -384,7 +388,10 @@ function TradeStory({ story }: { story: CareerTradeStory }) {
     <section className="af-lc-trade-story" aria-labelledby="trade-story-title">
       <header className="af-lc-story-head">
         <div>
-          <p className="af-label">League market history</p>
+          {/* The "?" rides the eyebrow, not the h2: the h2 names the section (aria-labelledby). */}
+          <p className="af-label">
+            League market history <TopicTip topic="tradeJourney" />
+          </p>
           <h2 id="trade-story-title">Your trading journey</h2>
         </div>
         <div className="af-lc-story-total" data-tone={story.finalValue >= 0 ? 'good' : 'bad'}>
@@ -495,15 +502,24 @@ function GradeCard({
   title,
   state,
   blurb,
+  tip,
 }: {
   title: string
   state: SectionState<LeagueGrade>
   blurb: string
+  /** A "?" beside the title — passed per card, so it explains only the grade it sits on. */
+  tip?: ReactNode
 }) {
+  const label = (
+    <span className="af-label">
+      {title}
+      {tip ? <> {tip}</> : null}
+    </span>
+  )
   if (!state.available) {
     return (
       <div className="af-lc-grade" data-missing="true">
-        <span className="af-label">{title}</span>
+        {label}
         <span className="af-lc-grade-letter af-num">—</span>
         <p className="af-lc-grade-why">{state.reason}</p>
       </div>
@@ -511,7 +527,7 @@ function GradeCard({
   }
   return (
     <div className="af-lc-grade" data-band={bandOf(state.data.letter)}>
-      <span className="af-label">{title}</span>
+      {label}
       <span className="af-lc-grade-letter af-num">{state.data.letter}</span>
       <span className="af-lc-grade-sample">{state.data.sample}</span>
       <p className="af-lc-grade-why">{blurb}</p>

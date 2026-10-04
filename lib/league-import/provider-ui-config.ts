@@ -13,6 +13,8 @@
 
 import type { ImportProvider } from './types';
 
+export type ImportSupportedSport = 'NFL' | 'NCAAF' | 'MLB';
+
 export const IMPORT_PROVIDER_UI_OPTIONS: {
   provider: ImportProvider;
   label: string;
@@ -21,7 +23,7 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
   /** True if the import UI can discover leagues from an account identifier. */
   supportsDiscovery?: boolean;
   /** Sports proven by the provider fetch/normalization source path. */
-  supportedSports: readonly ('NFL' | 'NCAAF')[];
+  supportedSports: readonly ImportSupportedSport[];
 }[] = [
   { provider: 'sleeper', label: 'Sleeper', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
   { provider: 'espn', label: 'ESPN', available: true, supportedSports: ['NFL'] },
@@ -59,11 +61,11 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
    * because the import UI can populate a pickable list from an identifier,
    * which is exactly what that flag gates.
    *
-   * NFL as well as NCAAF: the sport is measured by resolving the rosters
-   * against both player maps and keeping whichever names more, because
-   * getLeagueInfo does not report a sport and the two id spaces do not overlap.
+   * NFL, NCAAF and MLB: resolve roster IDs against the three player maps.
+   * A tied or empty result refuses to guess. Public MLB scoring/roster/player
+   * evidence is captured in tests/fixtures/fantrax/mlb-points-public.json.
    */
-  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF'] },
+  { provider: 'fantrax', label: 'Fantrax', available: true, supportsDiscovery: true, supportedSports: ['NFL', 'NCAAF', 'MLB'] },
   /*
    * mfl: FLIPPED 2026-08-27 with the missing piece built. The adapter, the fetch
    * service, the pipeline entry and the storage column all existed; what did not
@@ -136,6 +138,6 @@ export function supportsImportProviderDiscovery(provider: ImportProvider): boole
   );
 }
 
-export function getImportProviderSupportedSports(provider: ImportProvider): readonly ('NFL' | 'NCAAF')[] {
+export function getImportProviderSupportedSports(provider: ImportProvider): readonly ImportSupportedSport[] {
   return IMPORT_PROVIDER_UI_OPTIONS.find((option) => option.provider === provider)?.supportedSports ?? [];
 }

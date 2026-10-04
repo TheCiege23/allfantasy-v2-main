@@ -1872,6 +1872,24 @@ model PlayerFollow {
   @@map("player_follows")
 }
 
+/// Follow a real-world team (owner's call, 2026-10-03): news and injury alerts for the team and its
+/// players, not the whole league. Keyed on the canonical abbreviation from `sports_core_teams`; news
+/// strings are mapped onto it by lib/follows/teamResolver. Read and written by lib/follows/teamFollows.
+model TeamFollow {
+  id        String   @id
+  userId    String   @map("user_id")
+  sport     String   @db.VarChar(16)
+  /// Canonical abbreviation (sports_core_teams.abbreviation), e.g. "GB", "LSU".
+  teamAbbr  String   @map("team_abbr") @db.VarChar(16)
+  /// Display name at follow time, so a list renders without a join.
+  teamName  String   @map("team_name")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, sport, teamAbbr], map: "team_follows_user_id_sport_team_abbr_key")
+  @@index([sport, teamAbbr], map: "team_follows_sport_team_abbr_idx")
+  @@map("team_follows")
+}
+
 model AIUserFeedback {
   id            String   @id @default(uuid())
   userId        String

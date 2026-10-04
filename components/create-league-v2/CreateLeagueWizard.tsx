@@ -202,7 +202,7 @@ export function CreateLeagueWizard(props: WizardProps) {
             <Image src="/brand/allfantasy-wordmark-transparent.png" alt="AllFantasy" width={1198} height={306} priority className="h-auto w-44 max-w-full sm:w-52" />
             {props.importSourceName ? (
               <p className="rounded-xl border border-violet-500/35 bg-violet-600/10 p-3 text-sm leading-6" data-testid="standalone-import-template-notice">
-                Creating a separate AllFantasy league from {props.importSourceName}. Teams and current player rosters carry over. The existing draft is recorded as complete; past matchups, transactions, and chat stay in the imported league. Keep the sport and team count the same to preserve every roster.
+                Creating a native AllFantasy league from {props.importSourceName}. Teams, current player rosters, and available season history carry over. Claimed managers keep their seats; other managers must claim theirs. Baseball points rules are preserved exactly or creation stops for review. The imported roster snapshot is recorded separately from historical drafts. Baseball imports after the regular season prepare for next season; past results remain archived. Chat stays in the original import. Keep the sport and team count the same to preserve every roster.
               </p>
             ) : null}
             {props.creationWarning && props.createdLeagueHref ? (

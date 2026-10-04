@@ -1,5 +1,6 @@
 'use client'
 
+import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import type { LeagueStandingsResult, RankTrendPoint, SeasonHistoryRow } from '@/lib/core-app/leagueStandings'
 import { formatRecord, type BoardTeam, type StandingsBoard, type Zone } from '@/lib/core-app/standingsModel'
@@ -150,6 +151,8 @@ function WeekStakes({ me, board, odds }: { me: BoardTeam; board: StandingsBoard;
         <h2 id="af-st-stakes-title" className="af-label">
           What is at stake
         </h2>
+        {/* Beside the heading, not in it: the section is aria-labelledby this h2. */}
+        <TopicTip topic="playoffOdds" />
         {you && odds ? (
           <p className="af-st-stakes-odds">
             <span className="af-num af-st-stakes-pct">
@@ -443,7 +446,9 @@ export function Standings({
           </div>
 
           <div className="af-st-tile">
-            <span className="af-label">{copy('AF Power')}</span>
+            <span className="af-label">
+              {copy('AF Power')} <TopicTip topic="afPowerScore" />
+            </span>
             <span className="af-st-tile-row">
               <span className="af-st-tile-v af-num" data-tone="accent">
                 {ordinal(me.powerRank)}

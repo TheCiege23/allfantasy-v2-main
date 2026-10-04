@@ -2602,7 +2602,7 @@ export default function WorldCupBracketShell({
               The compact pill caps its width at 12rem so it never pushes
               the Invite CTA off small screens. */}
           <div data-testid="wc-shell-language-toggle">
-            <LanguageToggle variant="compact" refreshOnChange />
+            <LanguageToggle variant="compact" />
           </div>
           <div data-testid="wc-shell-theme-toggle">
             <ThemeModeSelect size="sm" />

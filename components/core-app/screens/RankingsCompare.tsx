@@ -1,3 +1,4 @@
+import { TopicTip } from '@/components/core-app/TopicTip'
 import Link from 'next/link'
 import { getLevelIcon } from '@/lib/rank/levels'
 import {
@@ -203,7 +204,7 @@ function ManagersBody({ data }: { data: CompareData }) {
 
       <p className="af-rk-note af-rk-mono">
         Grade scale {GRADE_SCALE.map((g) => `${g.grade} ${g.min === 0 ? 'below' : g.min}`).join(' · ')} — from the AF manager
-        score
+        score <TopicTip topic="letterGrade" />
       </p>
 
       <section className="af-rk-card" style={{ padding: 0 }}>

@@ -1,9 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import '@/components/core-app/af-bracket.css'
 import type { BracketChallengeData, BracketSide, BracketTeam } from '@/lib/core-app/bracketChallenge'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 /**
  * 28a — Bracket Challenge, on the shared sport shell.
@@ -39,12 +40,10 @@ function SeedSlot({
   seed,
   team,
   bye,
-  reason,
 }: {
   seed: number
   team: BracketTeam | null
   bye: boolean
-  reason: string
 }) {
   return (
     <div className="af-bk-slot" data-bye={bye ? 'true' : undefined} data-open={team ? undefined : 'true'}>
@@ -60,28 +59,27 @@ function SeedSlot({
           <span className="af-bk-team">{team.shortName}</span>
         </>
       ) : (
-        <span className="af-bk-open" title={reason}>
-          ?
-        </span>
+        <span className="af-bk-open">?</span>
       )}
     </div>
   )
 }
 
+/*
+ * ⚠ AN OPEN SLOT'S "WHY" IS ONE "?" AT THE FIRST "Byes" LABEL, NOT A `title=` ON EVERY SLOT. Each "?"
+ * used to carry "Seeding not published yet" / "Winner not decided yet", and each bye's waiting slot
+ * "Seeds 1 and 2 sit out the …" — hover-only, so a phone showed none of it. `bracketBye` says both,
+ * once, for both sides.
+ */
 function SideColumn({
   side,
   mirrored,
-  seedsPending,
-  byeReason,
 }: {
   side: BracketSide
   mirrored: boolean
-  seedsPending: boolean
-  byeReason: string
 }) {
   const bySeed = new Map(side.slots.map((s) => [s.seed, s]))
   const byes = side.slots.filter((s) => s.bye)
-  const reason = seedsPending ? 'Seeding not published yet' : 'Winner not decided yet'
 
   return (
     <div className="af-bk-side" data-mirrored={mirrored ? 'true' : undefined}>
@@ -92,19 +90,28 @@ function SideColumn({
         <span className="af-bk-col-label">Round 1</span>
         {side.pairs.map(([a, b]) => (
           <div key={`${a}-${b}`} className="af-bk-match">
-            <SeedSlot seed={a} team={bySeed.get(a)?.team ?? null} bye={false} reason={reason} />
-            <SeedSlot seed={b} team={bySeed.get(b)?.team ?? null} bye={false} reason={reason} />
+            <SeedSlot seed={a} team={bySeed.get(a)?.team ?? null} bye={false} />
+            <SeedSlot seed={b} team={bySeed.get(b)?.team ?? null} bye={false} />
           </div>
         ))}
       </div>
 
       {/* The byes. Their opponent is genuinely unknown until round one resolves. */}
       <div className="af-bk-col">
-        <span className="af-bk-col-label">Byes</span>
+        <span className="af-bk-col-label">
+          Byes
+          {/* First side only — the mirrored side repeats the same rule. */}
+          {!mirrored ? (
+            <>
+              {' '}
+              <TopicTip topic="bracketBye" />
+            </>
+          ) : null}
+        </span>
         {byes.map((s) => (
           <div key={s.seed} className="af-bk-match af-bk-match--bye">
-            <SeedSlot seed={s.seed} team={s.team} bye reason={reason} />
-            <div className="af-bk-slot af-bk-slot--waiting" title={byeReason}>
+            <SeedSlot seed={s.seed} team={s.team} bye />
+            <div className="af-bk-slot af-bk-slot--waiting">
               <span className="af-bk-open">?</span>
               <span className="af-bk-waiting">awaits Round 1</span>
             </div>
@@ -119,12 +126,6 @@ export function BracketChallenge({ data }: BracketChallengeProps) {
   const { shell } = data
   const [champion, setChampion] = useState<BracketTeam | null>(null)
   const [length, setLength] = useState<number | null>(null)
-
-  const firstRound = shell.rounds[0]
-  const byeReason = useMemo(
-    () => `Seeds ${shell.byeSeeds.join(' and ')} sit out the ${firstRound?.label ?? 'first'} round — their opponent is whoever survives it.`,
-    [shell.byeSeeds, firstRound],
-  )
 
   const maxPoints =
     shell.rounds.reduce((sum, r) => sum + r.points, 0) + (shell.finalLength?.bonus ?? 0)
@@ -179,13 +180,13 @@ export function BracketChallenge({ data }: BracketChallengeProps) {
         <p className="af-bk-pending" role="note">
           Seeding is not published yet, so every slot is open. That is deliberate — the bracket is
           playable now so pools can form early, and slots fill as teams clinch rather than being
-          guessed at. Nothing you pick is lost when the field locks.
+          guessed at.
         </p>
       ) : null}
 
       {/* ── The bracket ─────────────────────────────────────────────── */}
       <div className="af-bk-board">
-        <SideColumn side={data.sides[0]} mirrored={false} seedsPending={data.seedsPending} byeReason={byeReason} />
+        <SideColumn side={data.sides[0]} mirrored={false} />
 
         <div className="af-bk-centre">
           <span className="af-bk-centre-label">{shell.rounds[shell.rounds.length - 1].label}</span>
@@ -224,6 +225,19 @@ export function BracketChallenge({ data }: BracketChallengeProps) {
             </select>
           </label>
 
+          {/*
+           * ⚠ THESE PICKS ARE NOT SAVED, AND THE SCREEN MUST SAY SO. Champion and length live in
+           * `useState` only — no route, no table, no entry — so a reload clears them. This screen
+           * is a preview of the shell; picks that count live in a pool (PlayoffBracketEntry /
+           * PlayoffBracketPick), entered from /brackets. It once said "Nothing you pick is lost
+           * when the field locks"; pinned by __tests__/core-app/bracket-challenge-picks-not-saved.
+           * Wire persistence and change this copy in the same commit, or neither.
+           */}
+          <p className="af-bk-unsaved" role="note" data-testid="af-bk-unsaved">
+            Picks here are a preview and are not saved — a reload clears them. To make picks that
+            count, <Link href="/brackets">join or start a pool</Link>.
+          </p>
+
           {/* Length pick — only where the final is a series. */}
           {shell.finalLength ? (
             <div className="af-bk-length">
@@ -247,7 +261,7 @@ export function BracketChallenge({ data }: BracketChallengeProps) {
           ) : null}
         </div>
 
-        <SideColumn side={data.sides[1]} mirrored seedsPending={data.seedsPending} byeReason={byeReason} />
+        <SideColumn side={data.sides[1]} mirrored />
       </div>
 
       {/* ── One shell, every sport ──────────────────────────────────── */}

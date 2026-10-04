@@ -56,7 +56,7 @@ export const FANTRAX_ENDPOINTS = [
 ] as const
 
 /** Fantrax's own sport codes. 'CFB' and 'NCAAF' are the same 16,886-row map. */
-export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL'
+export type FantraxSport = 'CFB' | 'NCAAF' | 'NFL' | 'MLB'
 
 export type FantraxFailure = {
   /**

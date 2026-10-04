@@ -27,6 +27,7 @@ import {
 import { finalizeSeasonAndEnterOffseason } from '@/lib/redraft/offseason/finalizeSeasonAndEnterOffseason'
 import { REDRAFT_SEASON_STATUS, engineSeasonScope } from '@/lib/redraft/seasonStatus'
 import { resolveRegularSeasonEndWeek } from './leagueSeasonWeek'
+import { activateImportedMlbSeasons } from './activateImportedMlbSeasons'
 import { resolveSeasonWeekForRedraftSeason } from './seasonWeekService'
 import type { LeagueSeasonWeekResolution } from './types'
 
@@ -171,6 +172,7 @@ export async function rollSeasonWeeks(
 ): Promise<WeekRollSummary> {
   const db = options.prisma ?? defaultPrisma
   const now = options.now ?? new Date()
+  if (!options.dryRun) await activateImportedMlbSeasons(db, now, options.limit ?? 200)
 
   const seasons = await db.redraftSeason.findMany({
     where: engineSeasonScope({ includeShadowLeagues: options.includeShadowLeagues }),
@@ -178,10 +180,11 @@ export async function rollSeasonWeeks(
       id: true,
       leagueId: true,
       sport: true,
+      season: true,
       currentWeek: true,
       totalWeeks: true,
       playoffStartWeek: true,
-      league: { select: { bbContestId: true, bestBallMode: true, settings: true } },
+      league: { select: { bbContestId: true, bestBallMode: true, settings: true, lifecycleState: true } },
     },
     take: options.limit ?? 200,
   })

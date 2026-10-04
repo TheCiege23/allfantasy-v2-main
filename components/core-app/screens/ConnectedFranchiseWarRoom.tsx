@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import '@/components/core-app/af-connected-war-room.css'
+import { TopicTip } from '@/components/core-app/TopicTip'
 
 export type ConnectedFranchiseWarRoomSide = {
   memberId: string
@@ -23,7 +24,17 @@ export type ConnectedFranchiseWarRoomSide = {
   players: Array<{ id: string; name: string; position: string | null; team: string | null }>
   draft: { phase: string; headline: string; detail: string | null; href: string | null } | null
   activity:
-    | { available: true; trades: number; waivers: number; rosterMoves: number; newest: Date | string | null }
+    | {
+        available: true
+        trades: number
+        waivers: number
+        rosterMoves: number
+        newest: Date | string | null
+        /** Older moves exist beyond the rows read, and are not in the counts. */
+        capped: boolean
+        /** The earliest move the counts reach back to. */
+        since: Date | string | null
+      }
     | { available: false; reason: string }
     | null
   sync: {
@@ -51,6 +62,18 @@ const SYNC_TIME = new Intl.DateTimeFormat('en-US', {
 export function syncedAtLabel(at: Date | string): string {
   const d = new Date(at)
   return Number.isNaN(d.getTime()) ? 'at an unknown time' : `${SYNC_TIME.format(d)} ET`
+}
+
+const SINCE_DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric' })
+
+/**
+ * ⚠ THE MOVE COUNTS ARE A WINDOW, NOT A SEASON TOTAL. Each league's counts come from its newest
+ * activity rows only (getLeagueActivity reads at most 60), so the lane says how far back they reach.
+ */
+export function activityCountsLabel(a: { trades: number; waivers: number; rosterMoves: number; since: Date | string | null }): string {
+  const counts = `${a.trades} trades · ${a.waivers} waivers · ${a.rosterMoves} roster moves`
+  const d = a.since == null ? null : new Date(a.since)
+  return d && !Number.isNaN(d.getTime()) ? `${counts} since ${SINCE_DAY.format(d)}` : counts
 }
 
 function leagueHref(screen: string, leagueId: string) {
@@ -115,6 +138,8 @@ export function ConnectedFranchiseWarRoom({
       ? sum + side.activity.trades + side.activity.waivers + side.activity.rosterMoves
       : sum
   ), 0)
+  /* A "+" when any league's read stopped at its cap: there are more moves than this counted. */
+  const movesCapped = sides.some((side) => side.activity?.available && side.activity.capped)
 
   async function updateTeam(side: ConnectedFranchiseWarRoomSide, teamExternalId: string) {
     setSavingTeam(side.memberLeagueId)
@@ -183,7 +208,8 @@ export function ConnectedFranchiseWarRoom({
     <section className="af-cwr" aria-label={`${franchiseName} connected franchise command center`}>
       <header className="af-cwr-head">
         <div>
-          <span className="af-label">CONNECTED FRANCHISE · COMMAND CENTER</span>
+          <span className="af-label">CONNECTED FRANCHISE · COMMAND CENTER</span>{' '}
+          <TopicTip topic="connectedFranchise" />
           <Title>{franchiseName}</Title>
           <p>Every roster, draft and league pulse in one home. Each league still keeps its own rules, scoring and lineup.</p>
         </div>
@@ -215,7 +241,7 @@ export function ConnectedFranchiseWarRoom({
         <div><strong>{sides.length}</strong><span>connected leagues</span></div>
         <div><strong>{totalPlayers ?? '—'}</strong><span>players across the franchise</span></div>
         <div><strong>{positions.length}</strong><span>positions represented</span></div>
-        <div><strong>{activeMoves}</strong><span>recorded roster moves</span></div>
+        <div><strong>{activeMoves}{movesCapped ? '+' : ''}</strong><span>recent league moves</span></div>
       </div>
 
       {mappingError ? <p className="af-cwr-error" role="alert">{mappingError}</p> : null}
@@ -246,7 +272,7 @@ export function ConnectedFranchiseWarRoom({
           const current = side.leagueId === selectedLeagueId
           const selectedTeam = side.teamCandidates.find((team) => team.label === side.teamLabel || team.id === side.teamLabel)?.id ?? ''
           const activityText = side.activity?.available
-            ? `${side.activity.trades} trades · ${side.activity.waivers} waivers · ${side.activity.rosterMoves} roster moves`
+            ? activityCountsLabel(side.activity)
             : side.activity?.reason ?? 'Activity will appear after the next sync'
           return (
             <div className="af-cwr-lane-wrap" key={`${side.platform}:${side.memberLeagueId}`}>
