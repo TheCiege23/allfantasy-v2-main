@@ -2,8 +2,8 @@
 import { requireAuth } from '@/lib/auth-guard';
 import { isElevatedCommissioner } from '@/server/services/permissionService';
 import { consumeRateLimit } from '@/lib/rate-limit';
-import { reconciliationSources, reconciliationPreview, applyReconciliation } from './reconciliation';
-import { captureImportedResults } from './importedResults';
+import { reconciliationSources, reconciliationPreview, applyReconciliation } from './ingestion/reconciliation';
+import { captureImportedResults } from './ingestion/importedResults';
 async function gate(leagueId: string, key: string) {
   const auth = await requireAuth();
   if (!auth.ok || typeof leagueId !== 'string' || !leagueId || leagueId.length > 64 || typeof key !== 'string' || !key || key.length > 200) return null;

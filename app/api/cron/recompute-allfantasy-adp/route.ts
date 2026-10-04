@@ -8,7 +8,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { recomputeAllFantasyAdp } from '@/lib/adp/recomputeAllFantasyAdp'
-import { syncMarketReferences, captureCachedReferences, captureProviderAdp } from '@/lib/draft-archive/referenceWriter'
+import { syncMarketReferences, captureCachedReferences, captureProviderAdp } from '@/lib/draft-archive/ingestion/referenceWriter'
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.

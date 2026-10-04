@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const db=vi.hoisted(()=>({catalog:vi.fn(),league:vi.fn(),facts:vi.fn(),update:vi.fn(),audit:vi.fn(),transaction:vi.fn()}));
 vi.mock('@/lib/draft-archive/catalog',()=>({draftArchiveCatalog:db.catalog}));
 vi.mock('@/lib/prisma',()=>({prisma:{league:{findUnique:db.league},draftFact:{findMany:db.facts},$transaction:db.transaction}}));
-import { reconciliationPreview, applyReconciliation } from '@/lib/draft-archive/reconciliation';
+import { reconciliationPreview, applyReconciliation } from '@/lib/draft-archive/ingestion/reconciliation';
 const fact={draftId:'f',leagueId:'l',sport:'NFL',season:2026,round:1,pickNumber:1,playerId:'p',metadata:{ownerSleeperId:'owner'}};
 beforeEach(()=>{
   vi.resetAllMocks();

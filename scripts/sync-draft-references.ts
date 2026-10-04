@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { prisma } from '../lib/prisma';
 import { Prisma } from '@prisma/client';
 import { getDatabaseUrlOrThrow } from '../lib/env/database-url';
-import { syncMarketReferences, captureCachedReferences, captureProviderAdp } from '../lib/draft-archive/referenceWriter';
+import { syncMarketReferences, captureCachedReferences, captureProviderAdp } from '../lib/draft-archive/ingestion/referenceWriter';
 const { identifyTarget } = createRequire(import.meta.url)('./db-target-identity.cjs');
 async function main() {
   const apply = process.argv.includes('--apply'), target = identifyTarget(getDatabaseUrlOrThrow());
