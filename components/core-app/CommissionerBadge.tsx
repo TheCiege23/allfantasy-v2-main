@@ -1,3 +1,7 @@
+'use client'
+
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+
 /**
  * The blue "C" beside a league the viewer commissions — in the crest's own
  * colours (navy fill, cyan ring, white letter) so it reads as AllFantasy's mark.
@@ -17,12 +21,15 @@
  * accessible name comes from aria-label instead.
  */
 export function CommissionerBadge({ className }: { className?: string }) {
+  // Every importer is a client component; the label follows the language switch (2026-10-04).
+  const { language } = useOptionalLanguage()
+  const label = language === 'es' ? 'Eres comisionado' : "You're the commissioner"
   return (
     <span
       className={className ? `af-commish-c ${className}` : 'af-commish-c'}
       role="img"
-      aria-label="You're the commissioner"
-      title="You're the commissioner"
+      aria-label={label}
+      title={label}
       data-testid="commissioner-badge"
     />
   )
