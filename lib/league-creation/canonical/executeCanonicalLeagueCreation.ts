@@ -93,6 +93,7 @@ export async function executeCanonicalLeagueCreation(args: {
             creatorUserId: appUserId,
             sport: String(body.sport),
             teamCount: body.teamCount,
+            acceptWeeklyLineups: body.conceptSetup?.acceptWeeklyLineups === true,
           })
         }
         return created

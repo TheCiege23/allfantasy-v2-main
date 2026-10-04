@@ -112,6 +112,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   creatorUserId: string
   sport: string
   teamCount: number
+  acceptWeeklyLineups?: boolean
 }): Promise<number> {
   const [source, target, teams, rosters, slots, session] = await Promise.all([
     tx.league.findUnique({ where: { id: args.sourceLeagueId }, select: { platform: true, sport: true, settings: true, season: true } }),
@@ -130,6 +131,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
   let mlbScoring: ReturnType<typeof importedMlbScoring> | undefined
   let mlbRoster: ReturnType<typeof importedMlbRoster> | undefined
   if (args.sport === 'MLB') {
+    if (args.acceptWeeklyLineups !== true) refuse('Confirm weekly lineups for the native baseball league. Source daily lineup history stays archived; native scoring uses one lineup per week.')
     try { mlbScoring = importedMlbScoring(source.settings); mlbRoster = importedMlbRoster(source.settings) }
     catch (error) { refuse(error instanceof Error ? error.message : 'Imported scoring cannot be verified.') }
   }
@@ -285,7 +287,7 @@ export async function carryOverImportedLeague(tx: Tx, args: {
         scoring_mode: mlbScoring.scoringMode,
         category_preset_id: mlbScoring.categoryPresetId ?? null,
         category_record_mode: mlbScoring.categoryRecordMode ?? null,
-        sportConfig: { ...asRecord(asRecord(target.settings).sportConfig), scoringMode: mlbScoring.scoringMode, categoryPoints: mlbScoring.categoryPoints, ...(mlbScoring.scoringMode !== 'points' ? {lineupLockType:'first_game_of_week'} : {}) },
+        sportConfig: { ...asRecord(asRecord(target.settings).sportConfig), scoringMode: mlbScoring.scoringMode, categoryPoints: mlbScoring.categoryPoints, lineupLockType:'first_game_of_week' },
         mlb_scoring_config: { presetKey: 'custom', source: 'CUSTOM', rules: mlbScoring.uiRules, lastUpdatedBy: args.creatorUserId, lastUpdatedAt: new Date().toISOString() },
       } : {}),
       importCarryover: { sourceLeagueId: args.sourceLeagueId, sourceSeason: source.season, history, teamCount: teams.length, playerCount: picks.length, copiedAt: new Date().toISOString() },
