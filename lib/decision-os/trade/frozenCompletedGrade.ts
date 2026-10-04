@@ -81,7 +81,10 @@ export type FrozenCompletedGradeV2 = {
   /** When this row was written. */
   frozenAt: string
   basis: FrozenGradeBasis
-  /** `trade_date`: the capture day (YYYY-MM-DD) it was priced on. `first_graded`: when it was first graded (ISO). */
+  /**
+   * `trade_date`: the capture day (YYYY-MM-DD) it was priced on, or — graded within a day of the trade
+   * on the league's own live chart — that moment (ISO). `first_graded`: when it was first graded (ISO).
+   */
   pricedAsOf: string
   /** When the trade happened (ISO), or null when it could not be told. */
   tradeAt: string | null
@@ -194,7 +197,7 @@ export async function saveFrozenCompletedGrades(afLeagueId: string, frozen: Read
 /** A trade priced on its own date (`completedTradeGrade.gradeAtTradeTime`). */
 export type TradeDatePrice = {
   grade: Graded
-  /** The capture day (YYYY-MM-DD) every asset was priced on. */
+  /** The capture day (YYYY-MM-DD) every asset was priced on, or the live-chart moment (ISO). */
   pricedAsOf: string
 }
 

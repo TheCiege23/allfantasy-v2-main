@@ -1,7 +1,8 @@
 /**
  * ONE-TIME: re-price every existing v1 completed-trade original at the time of its trade (Decision 2,
  * Guap 2026-10-03). Plan and report: `lib/decision-os/trade/repriceFrozenTradeGrades.ts`. Grading:
- * `completedTradeGrade.repriceFrozenOriginalAtTradeTime` — the same grader every new freeze uses.
+ * `completedTradeGrade.repriceFrozenOriginalAtTradeTime` — the same grader every new freeze uses. A v1
+ * row frozen within a day after its trade is CARRIED (letter unchanged), never re-priced.
  *
  *   ALLOW_PROD_READONLY=1 npx tsx --conditions=react-server scripts/reprice-frozen-trade-grades-at-trade-time.ts
  *       DRY RUN (the default). Reads only, and prints per-pair old letter → new letter, the counts, and
@@ -83,7 +84,7 @@ async function main() {
   const {
     archivedTradeInputs, completedTradeInputs, completedTradeInputsAtTradeTime, repriceFrozenOriginalAtTradeTime,
   } = await import('@/lib/decision-os/trade/completedTradeGrade')
-  const { tradeTimeOf } = await import('@/lib/decision-os/trade/tradeTimeCapture')
+  const { gradedAtTradeTime, tradeTimeOf } = await import('@/lib/decision-os/trade/tradeTimeCapture')
   const { planFrozenGradeReprice } = await import('@/lib/decision-os/trade/repriceFrozenTradeGrades')
   type GradedTrade = import('@/lib/trade-intel/sleeperTradeGradeService').GradedTrade
   type V1Row = import('@/lib/decision-os/trade/frozenCompletedGrade').FrozenCompletedGradeV1
@@ -172,6 +173,9 @@ async function main() {
       reprice: async (pair) => {
         const t = ledgerByTx.get(pair.tradeId)
         const a = t ? null : archivedByTx.get(pair.tradeId)
+        // A v1 frozen within a day after its trade is carried as it stands — nothing to grade or look up.
+        const when = t ? tradeTimeOf({ completedAt: t.createdIso, tradeId: t.id }) : tradeTimeOf({ tradeId: pair.tradeId })
+        if (gradedAtTradeTime(when, new Date(pair.row.frozenAt))) return { kind: 'carried', tradeAt: when!.toISOString() }
         const playerIds = t
           ? t.sides.flatMap((s) => [...s.playersIn, ...s.playersOut].map((p) => p.playerId))
           : a ? [...ids(a.playersGiven), ...ids(a.playersReceived)] : []
@@ -209,12 +213,8 @@ async function main() {
   for (const c of r.changes) {
     console.log(`  ${c.afLeagueId} · ${c.tradeId} · ${c.from} → ${c.to} (priced ${c.pricedAsOf}; v1 frozen ${c.v1FrozenAt.slice(0, 16)})${c.emailed ? ' · EMAILED' : ''}`)
   }
-  // A change on a pair whose v1 was frozen within a day of the trade is the BOOK moving (the stored
-  // 12-team PPR capture against the league's own live chart), not the market — counted apart.
-  const sameDay = r.changes.filter((c) => Date.parse(c.v1FrozenAt) - Date.parse(`${c.pricedAsOf}T10:00:00Z`) <= 36 * 3600 * 1000)
-  console.log(`  …of which v1 was frozen within ~a day of the capture: ${sameDay.length} (emailed ${sameDay.filter((c) => c.emailed).length})`)
   console.log(`\nSUMMARY ${JSON.stringify({
-    pairs: r.pairs, alreadyV2: r.alreadyV2, tradeDate: r.tradeDate, sameLetter: r.sameLetter, changedLetter: r.changedLetter,
+    pairs: r.pairs, alreadyV2: r.alreadyV2, carried: r.carried, tradeDate: r.tradeDate, sameLetter: r.sameLetter, changedLetter: r.changedLetter,
     changedAndEmailed: r.changedAndEmailed, firstGraded: r.firstGraded, firstGradedWhy: r.firstGradedWhy, skipped: r.skipped, skippedWhy: r.skippedWhy,
     v2RowsToWrite: plan.rows.length,
   }, null, 1)}`)
