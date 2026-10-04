@@ -145,7 +145,7 @@ describe('TradesTab — completed history', () => {
     render(<TradesTab league={imported} teams={[]} />)
     fireEvent.click(await screen.findByRole('button', { name: /History · 1/ }))
     // A completed trade keeps its frozen original grade (frozenCompletedGrade.ts), so the label no longer says "today".
-    expect(screen.getByText('Each trade keeps the grade it got when first graded on this league’s values — the same grade as the Trade Center')).toBeInTheDocument()
+    expect(screen.getByText('Each trade keeps its original grade on this league’s values — priced at the time of the trade where a market record covers that date — the same grade as the Trade Center')).toBeInTheDocument()
   })
 
   it('an unreadable history leaves the live rows and never invents an empty log', async () => {

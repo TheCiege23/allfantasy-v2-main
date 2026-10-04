@@ -8,6 +8,7 @@ import type {
 import type { TradeGradeLine, TradeGradeView } from '@/lib/decision-os/trade/tradeGrade'
 import { assetValues, type DisplayedAsset } from '@/lib/decision-os/trade/gradeLineValues'
 import { giveawaySide } from '@/lib/trade-intel/tradeGiveaway'
+import { gradeMoment } from '@/lib/decision-os/trade/gradeMoment'
 import {
   LEAGUE_TYPE_DECIDES_GRADES,
   LEAGUE_TYPE_GRADES_EXPLAINER,
@@ -561,7 +562,7 @@ export function buildTradeGradeEmail(params: {
 
   const hasPicks = trade.sides.some((s) => s.picksIn.length > 0)
   const how = graded
-    ? `Each side is graded on what it received against what it sent, on ${basis ? `${basis} ` : 'this league’s '}values at email time. The calculator and trade history use the same trade-value rules; refreshed market values can change a later evaluation. Personal roster fit is shown separately and does not change this letter.` +
+    ? `Each side is graded on what it received against what it sent, on ${basis ? `${basis} ` : 'this league’s '}values ${gradeMoment(graded)}. The calculator and trade history use the same trade-value rules; refreshed market values can change a later evaluation. Personal roster fit is shown separately and does not change this letter.` +
       (hasPicks ? ' Unresolved future picks use the chart’s season-and-round value; a specific early, mid or late tier is used only when supplied to the evaluator.' : '')
     : steal || (grade && !grade.graded && giveawaySide(trade))
       // A giveaway has no "part of the deal" a letter could be drawn from — the reason says it all.

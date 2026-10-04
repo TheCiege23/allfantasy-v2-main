@@ -333,7 +333,7 @@ function tradeBuzzGrade(t: RecentTrade): { grades?: Array<{ team: string; letter
       : t.sides.find((sd) => String(sd.rosterId) === String(t.verdict!.favoursRosterId))
     const strength = t.verdict?.verdict.toLowerCase().includes('strongly') ? 'Clearly favours' : 'Slightly favours'
     // The letters are the trade's frozen original when one exists — say when (`frozenCompletedGrade.ts`).
-    const when = gradeMoment({ frozenAt: t.gradedAt })
+    const when = gradeMoment(t.gradedMoment ?? { frozenAt: t.gradedAt })
     return {
       grades: t.sides.map((sd) => ({ team: name(sd), letter: sd.grade! })),
       gradeLine: favoured

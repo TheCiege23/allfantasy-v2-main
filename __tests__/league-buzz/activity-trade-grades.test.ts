@@ -79,7 +79,11 @@ describe('gradeSleeperActivityTrade', () => {
   it('a frozen original is labelled as first graded, never as today’s', async () => {
     gradeArchived.mockResolvedValue({ ...GRADED, frozenAt: '2026-09-20T12:00:00.000Z' })
     const g = await gradeSleeperActivityTrade({ afLeagueId: 'af-1', tx: tx(), rosterNames: NAMES, players: PLAYERS, now: 0 })
-    expect(g).toEqual({ graded: true, basis: 'first-graded', sides: [{ name: 'Hoovi', letter: 'B' }, { name: 'Nicolodeon', letter: 'D' }] })
+    expect(g).toEqual({
+      graded: true, basis: 'first-graded', sides: [{ name: 'Hoovi', letter: 'B' }, { name: 'Nicolodeon', letter: 'D' }],
+      // How the original was priced rides with it, so the feed can say so (`gradeMoment`).
+      moment: { frozenAt: '2026-09-20T12:00:00.000Z', frozenBasis: null, pricedAsOf: null, tradeAt: null },
+    })
   })
 
   it('an unnamed player reaches the grader with a null name, so it withholds rather than prices a raw id', async () => {
