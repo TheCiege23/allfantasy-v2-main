@@ -10,7 +10,7 @@ const prismaMock = vi.hoisted(() => ({
   redraftMatchup: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
   redraftRoster: { findMany: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
   redraftRosterPlayer: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
-  redraftSeason: { findFirst: vi.fn() },
+  redraftSeason: { findFirst: vi.fn(), findUnique: vi.fn() },
   redraftWaiverClaim: { findMany: vi.fn(), update: vi.fn() },
   sportsPlayer: { findFirst: vi.fn() },
 }))
@@ -34,6 +34,7 @@ vi.mock('@/lib/idp/capEngine', () => ({
 describe('NFL redraft launch blockers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    prismaMock.redraftSeason.findUnique.mockResolvedValue({ id: 'season-1', leagueId: 'league-1', sport: 'NFL', season: 2026, league: { settings: { scoring_mode: 'points' } } })
     prismaMock.adminAuditLog.create.mockResolvedValue({ id: 'audit-1' })
     prismaMock.league.findFirst.mockResolvedValue({ sport: 'NFL', settings: { sportConfig: { scoringPreset: 'PPR' } } })
     prismaMock.playerIdentityMap.findFirst.mockResolvedValue(null)

@@ -1,3 +1,4 @@
+import { nativeMlbScoringContext } from '@/lib/category-scoring/nativeMlbScoringContext'
 /**
  * Universal League Hub — Active League Context resolver (Parts 2, 5, 8).
  *
@@ -133,6 +134,7 @@ export async function resolveActiveLeagueContext(args: {
       lastSyncedAt: league.lastSyncedAt,
     }),
     scoring: league.scoring ?? null,
+    categoryScoring: provider === 'allfantasy' ? nativeMlbScoringContext(league.settings) : null,
   }
 }
 

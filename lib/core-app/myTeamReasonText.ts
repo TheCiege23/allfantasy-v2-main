@@ -18,6 +18,8 @@ import { matchupReasonText } from './matchupReasonText'
  * client-safe.
  */
 const EXACT_ES: Record<string, string> = {
+  'This starting slot was empty when checked. Confirm the current lineup, eligibility, locks, and AutoSubs on your platform.':
+    'Esta plaza titular estaba vacía al revisarla. Confirma la alineación actual, la elegibilidad, los bloqueos y AutoSubs en tu plataforma.',
   // lib/core-app/myTeam.ts
   'no lineup found to project': 'no se encontró una alineación que proyectar',
   'no schedule on file for this league yet': 'aún no hay calendario registrado para esta liga',

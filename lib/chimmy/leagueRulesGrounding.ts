@@ -1,3 +1,4 @@
+import { nativeMlbScoringContext, type NativeMlbScoringContext } from '@/lib/category-scoring/nativeMlbScoringContext'
 /**
  * Serialize a league's resolved rules for the Chimmy prompt.
  *
@@ -73,7 +74,7 @@ export function buildLeagueRulesGrounding(league: LeagueRuleInput): string | nul
   if (!hasAnySignal) return null
 
   const resolved = resolveLeagueRules(league)
-  return renderLeagueRulesGrounding(resolved)
+  return renderLeagueRulesGrounding(resolved, nativeMlbScoringContext(league.settings))
 }
 
 /**
@@ -110,7 +111,7 @@ export function buildRuleGroundingGap(reason: RuleGroundingFailure): string {
 }
 
 /** Same, for a caller that already resolved (avoids resolving twice). */
-export function renderLeagueRulesGrounding(resolved: ResolvedLeagueRules): string | null {
+export function renderLeagueRulesGrounding(resolved: ResolvedLeagueRules, categoryScoring?: NativeMlbScoringContext): string | null {
   const { concept, modifiers, formatRules } = resolved
   const lines: string[] = []
 
@@ -247,6 +248,7 @@ export function renderLeagueRulesGrounding(resolved: ResolvedLeagueRules): strin
   lines.push(
     'Rule authority order: this league’s stored settings beat catalog defaults, and catalog defaults beat general fantasy knowledge. A rule marked NOT ON FILE stays unknown — if the user asserts it, treat that as their claim pending commissioner confirmation, not as an established league rule.'
   )
+  if (categoryScoring) lines.push(`Stored MLB category scoring: ${JSON.stringify(categoryScoring)}. Evaluate category impact, not summed fantasy points. Rate categories use accumulated components; a zero denominator is unqualified.`)
   lines.push(RULE_FENCE_END)
 
   /*

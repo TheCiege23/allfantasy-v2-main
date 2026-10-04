@@ -345,7 +345,8 @@ export async function rollPostseason(
   for (const season of seasons) {
     const base = { seasonId: season.id, leagueId: season.leagueId, status: season.status }
 
-    if ((season.league.settings as Record<string,unknown> | null)?.scoring_mode === 'roto') {
+    if ((season.league?.settings as Record<string,unknown> | null)?.scoring_mode === 'roto') {
+      if (options.dryRun) { held++; outcomes.push({...base,step:'held',detail:'dryRun'}); continue }
       try {
         const outcome=await finalizeSeasonAndEnterOffseason({seasonId:season.id,leagueId:season.leagueId,actorUserId:WEEK_ROLLER_ACTOR})
         if(outcome.ok) {finalized++;outcomes.push({...base,step:'finalized',championRosterId:outcome.championRosterId,offseasonEntered:outcome.offseasonEntered})}
