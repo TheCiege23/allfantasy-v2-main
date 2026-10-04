@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import { planCurrentRosterCfbdLinks, currentCfbdRosterProofStart, verifiedCurrentRosterSchoolAliases } from './currentRosterCfbdLinks'
 import { prisma } from '@/lib/prisma'
 import { getFantraxPlayerIds } from '@/lib/league-import/fantrax/fantraxApi'
 import { planNcaafFantraxIdentityLinks, verifiedFantraxSchoolAliases, currentCfbdSchoolIdentities, type CfbdSchoolFact } from './ncaafFantraxIdentityPlan'
@@ -28,7 +30,38 @@ export async function ingestNcaafFantraxIdentities(dryRun = false, forceRefresh 
     FROM links l WHERE p.id=l.id AND p.sport IN ('NCAAF','NCAAFB') AND p."fantraxId" IS NULL AND p."cfbdId"=l."cfbdId"
     AND NOT EXISTS (SELECT 1 FROM "PlayerIdentityMap" other WHERE other.sport IN ('NCAAF','NCAAFB') AND other."fantraxId"=l."fantraxId")
   `
-  const result = { ...coverage, schoolAliasesVerified: Object.keys(aliases).length, proposed: links.length, updated, dryRun }
+  const stateRow = await prisma.sportsDataCache.findUnique({where:{cacheKey:'cfbd-roster-pool:v1'},select:{data:true}})
+  const year = new Date().getUTCFullYear()
+  const started = currentCfbdRosterProofStart(stateRow?.data)
+  const currentProof = started!==null
+  const pool = currentProof ? await prisma.sportsPlayer.findMany({where:{sport:'NCAAF',source:'cfbd',status:'active',fetchedAt:{gte:started!},expiresAt:{gt:new Date()}},select:{externalId:true,name:true,position:true,college:true,team:true}}) : []
+  const poolFacts = pool.map(p=>({cfbdId:p.externalId,name:p.name,school:p.college??p.team??''}))
+  const rosterAliases = verifiedFantraxSchoolAliases(Object.values(map.data),currentCfbdSchoolIdentities(registryRows,poolFacts,schools),poolFacts,schools)
+  const bootstrapAliases = verifiedCurrentRosterSchoolAliases(Object.values(map.data),pool)
+  const agreedAliases:Record<string,string> = {}
+  const claims=new Map<string,Set<string>>()
+  for(const learned of [aliases,rosterAliases,bootstrapAliases])for(const [code,school] of Object.entries(learned)){const schools=claims.get(code)??new Set<string>();schools.add(school);claims.set(code,schools)}
+  for(const [code,schools] of claims)if(schools.size===1)agreedAliases[code]=[...schools][0]!
+  const imported = await prisma.redraftRosterPlayer.findMany({where:{droppedAt:null,roster:{is:{season:{is:{season:year,sport:{in:['NCAAF','NCAAFB']},league:{is:{platform:'fantrax'}}}}}}},select:{playerId:true}})
+  // Base links attach the Fantrax ID first. Include them in the planner's view even during a dry run.
+  const baseById = new Map(links.map(l=>[l.id,l]))
+  const nextRows = registryRows.map(r=>baseById.has(r.id)?{...r,fantraxId:baseById.get(r.id)!.fantraxId}:r)
+  const rosterPlan = planCurrentRosterCfbdLinks(Object.values(map.data),nextRows,pool,facts,agreedAliases,new Set(imported.map(p=>p.playerId)))
+  const rosterUpdated = dryRun ? 0 : await prisma.$transaction(async tx=>{
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('fantrax:ncaaf-current-roster-links'))`
+    let count=0
+    for(const link of rosterPlan.links){
+      count+=await tx.$executeRaw`UPDATE "PlayerIdentityMap" p SET "cfbdId"=${link.cfbdId}, "updatedAt"=NOW(), "lastSyncedAt"=NOW() WHERE p.id=${link.id} AND p.sport IN ('NCAAF','NCAAFB') AND p."fantraxId"=${link.fantraxId} AND p."cfbdId" IS NULL AND p."canonicalName"=${link.name} AND p.position IS NOT DISTINCT FROM ${link.position} AND NOT EXISTS (SELECT 1 FROM "PlayerIdentityMap" other WHERE other.sport IN ('NCAAF','NCAAFB') AND other.id<>p.id AND (other."fantraxId"=${link.fantraxId} OR (other."cfbdId"=${link.cfbdId} AND other."fantraxId" IS NOT NULL AND other."fantraxId"<>${link.fantraxId})))`
+    }
+    for(const link of rosterPlan.sourceLinks){
+      count+=await tx.$executeRaw`UPDATE "PlayerIdentityMap" p SET "fantraxId"=${link.fantraxId}, "updatedAt"=NOW(), "lastSyncedAt"=NOW() WHERE p.id=${link.id} AND p.sport IN ('NCAAF','NCAAFB') AND p."fantraxId" IS NULL AND p."cfbdId"=${link.cfbdId} AND NOT EXISTS (SELECT 1 FROM "PlayerIdentityMap" other WHERE other.sport IN ('NCAAF','NCAAFB') AND other.id<>p.id AND (other."fantraxId"=${link.fantraxId} OR other."cfbdId"=${link.cfbdId}))`
+    }
+    for(const seed of rosterPlan.creates){
+      count+=await tx.$executeRaw`INSERT INTO "PlayerIdentityMap" (id,sport,"canonicalName","normalizedName",position,"currentTeam","fantraxId","cfbdId","createdAt","updatedAt","lastSyncedAt") SELECT ${randomUUID()},'NCAAF',${seed.canonicalName},${seed.normalizedName},${seed.position},${seed.currentTeam},${seed.fantraxId},${seed.cfbdId},NOW(),NOW(),NOW() WHERE NOT EXISTS (SELECT 1 FROM "PlayerIdentityMap" WHERE sport IN ('NCAAF','NCAAFB') AND ("fantraxId"=${seed.fantraxId} OR "cfbdId"=${seed.cfbdId}))`
+    }
+    return count
+  },{timeout:60000,isolationLevel:'Serializable'})
+  const result = { ...coverage, currentRosterProof:currentProof, rosterProposed:rosterPlan.links.length+rosterPlan.sourceLinks.length+rosterPlan.creates.length, rosterUpdated, rosterAmbiguous:rosterPlan.ambiguous, rosterConflicts:rosterPlan.conflicts, schoolAliasesVerified: Object.keys(aliases).length, proposed: links.length, updated, dryRun }
   if (!dryRun) {
     const data = { at: new Date().toISOString(), ...result }
     const expiresAt = new Date(Date.now() + 30 * 86400000)

@@ -514,7 +514,9 @@ export async function finalizeRedraftWeek(
 
   const startersWithStats = existing.size
   const coverage = startersWithStats / starters.size
-  if (coverage < coverageFloor) {
+  // College sync writes explicit rows for verified byes/non-appearances. A missing college
+  // row therefore means missing identity or ingestion evidence, never a zero to invent.
+  if (coverage < (sport === 'NCAAF' ? 1 : coverageFloor)) {
     return emptyResult(base, 'stat_coverage_below_floor', {
       slate,
       matchupsConsidered,

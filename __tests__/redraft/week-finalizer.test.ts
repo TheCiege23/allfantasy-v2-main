@@ -938,3 +938,19 @@ describe('the week sealed is the lineup set for that week', () => {
     expect(sealed(calls)).toEqual(['p1'])
   })
 })
+
+
+describe('NCAAF refuses missing scoring evidence even above the generic floor',()=>{
+ it('never fabricates a zero for an unresolved or un-ingested college starter',async()=>{
+  const {prisma,calls}=makePrisma({season:{...SEASON,sport:'NCAAFB'},games:[game('final',{source:'cfbd'})],rosterPlayers:[1,2,3,4,5].map(n=>starter(`p${n}`,'NCAAF')),existingScores:[1,2,3,4].map(n=>({playerId:`p${n}`,sport:'NCAAF'}))})
+  const result=await finalizeRedraftWeek({seasonId:SEASON.id,week:2,coverageFloor:0.5},{prisma:prisma as never,now:()=>AFTER_GRACE})
+  expect(result.refusal).toBe('stat_coverage_below_floor')
+  expect(result.coverage).toBe(0.8)
+  expect(calls.filter(c=>['playerWeeklyScore.createMany','playerWeeklyScore.updateMany'].includes(c.key))).toHaveLength(0)
+ })
+ it('allows verified college zero rows when every starter has scoring evidence',async()=>{
+  const {prisma}=makePrisma({season:{...SEASON,sport:'NCAAFB'},games:[game('final',{source:'cfbd'})],rosterPlayers:[1,2].map(n=>starter(`p${n}`,'NCAAF')),existingScores:[1,2].map(n=>({playerId:`p${n}`,sport:'NCAAF'}))})
+  const result=await finalizeRedraftWeek({seasonId:SEASON.id,week:2,dryRun:true},{prisma:prisma as never,now:()=>AFTER_GRACE})
+  expect(result.refusal).toBeNull();expect(result.coverage).toBe(1);expect(result.zeroRowsWritten).toBe(0)
+ })
+})

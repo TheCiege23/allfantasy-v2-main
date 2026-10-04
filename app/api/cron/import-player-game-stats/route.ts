@@ -155,6 +155,8 @@ async function handle(req: NextRequest) {
     // MLB's complete slate is required for lineup locks and safe week sealing. Fetch it before
     // the multi-sport stat sweep can spend the whole run budget; no new cron slot is needed.
     await syncSchedule("MLB")
+    // Fetch the complete college slate before daily stat sweeps can exhaust the run budget.
+    await syncSchedule("NCAAB")
 
     // Rotated so a budget cut does not starve the same sport every night.
     for (const s of rotateForFairness(candidates)) {
@@ -223,7 +225,7 @@ async function handle(req: NextRequest) {
      * THE NCAAB SEASON SCHEDULE, for the week finalizer (lib/sports-data/riSeasonSchedule.ts):
      * every SportsGame schedule for college basketball is incomplete, so a week there cannot be
      * judged "all games final". One RI call per scheduled run; skipped for an explicit date-range
-     * backfill, and after the budget. Folded into this daily RI pass rather than a new route or
+     * backfill. It runs before the stat sweep can exhaust the budget. Folded into this daily RI pass rather than a new route or
      * cron slot (cron-budget-check.mjs caps the list). A 304 — the 2026-27 schedule before RI
      * publishes it — writes nothing and is simply reported.
      *
@@ -231,7 +233,7 @@ async function handle(req: NextRequest) {
      * syncRiSeasonSchedule). Its pool spans those three leagues and SportsGame holds only the EPL,
      * and the daily re-sync is also what moves a played game to `completed` for the finalizer.
      */
-    for (const scheduleSport of ["NCAAB", "SOCCER"] as const) await syncSchedule(scheduleSport)
+    await syncSchedule("SOCCER")
 
     const written = Object.values(perSport).reduce<number>(
       (a, r) => a + (typeof (r as { written?: number }).written === "number" ? (r as { written: number }).written : 0),
