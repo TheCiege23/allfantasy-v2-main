@@ -56,8 +56,10 @@ import type { HelpTopic } from '../helpTopics'
  *                                 scored from stat lines with the league's settings (sleeperTradeGradeService.ts), not
  *                                 the platform's own totals. Was "all scored by your league's platform".
  *
- * ⚠ Dashboard3A is an English-only screen, so the Spanish quotes its on-screen labels ("LVL", "N of M", "W–L–T")
- * in English, as the reader sees them — the convention draft.ts records for War Room.
+ * ⚠ The Spanish quotes Dashboard3A's on-screen labels as the Spanish reader sees them. Dashboard3A was English-only
+ * and these quoted "LVL" and "N of M" in English; since its cards became bilingual (2026-10-04,
+ * lib/core-app/dashboard3aCopy.ts) they read «NIV» and «N de M». "W–L–T" is digits and dashes on the card in both
+ * languages, so it is still quoted as written.
  *
  * The home's "League matchups" percentage reuses `matchupWinProbability` (rankings.ts): it is the
  * same `getMatchupData` forecast as the Matchup screen. Do not add a second topic for it.
@@ -270,7 +272,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Tu carrera',
-      body: 'Los títulos y las temporadas cuentan las temporadas terminadas de todas las ligas importadas a tu cuenta, cada temporada de liga una sola vez aunque haya llegado por más de una importación; una temporada que aún se está jugando no cuenta todavía. Tu nivel («LVL») sale de la XP: 10 por victoria, 30 por clasificación a playoffs, 200 por título, 10 por cada temporada distinta, más 2 por cada equipo por encima de 10 en cada liga. Las derrotas nunca restan XP.',
+      body: 'Los títulos y las temporadas cuentan las temporadas terminadas de todas las ligas importadas a tu cuenta, cada temporada de liga una sola vez aunque haya llegado por más de una importación; una temporada que aún se está jugando no cuenta todavía. Tu nivel («NIV») sale de la XP: 10 por victoria, 30 por clasificación a playoffs, 200 por título, 10 por cada temporada distinta, más 2 por cada equipo por encima de 10 en cada liga. Las derrotas nunca restan XP.',
     },
   },
   homeRivalryRadar: {
@@ -290,7 +292,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Cartera y exposición',
-      body: 'Los jugadores que están en más de tus plantillas —el banquillo, la reserva y el taxi cuentan igual que los titulares—, leídos de las plantillas importadas de los equipos que reclamaste. «N of M» cuenta una plantilla por liga, y M incluye las ligas cuyos ids de jugador aún no podemos emparejar, donde no se cuenta a nadie; así que mientras haya una conectada ningún jugador llega a «M of M». Toca un jugador que esté en dos o más plantillas para ver qué pasa si no juega.',
+      body: 'Los jugadores que están en más de tus plantillas —el banquillo, la reserva y el taxi cuentan igual que los titulares—, leídos de las plantillas importadas de los equipos que reclamaste. «N de M» cuenta una plantilla por liga, y M incluye las ligas cuyos ids de jugador aún no podemos emparejar, donde no se cuenta a nadie; así que mientras haya una conectada ningún jugador llega a «M de M». Toca un jugador que esté en dos o más plantillas para ver qué pasa si no juega.',
     },
   },
   homeFollowing: {

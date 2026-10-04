@@ -48,6 +48,12 @@ export type FollowingRow = {
   /** "vs KC · Sun" / "@ BUF · Mon", or null when no fixture is on file in the window. */
   next: string | null
   /**
+   * What `next` was built from (2026-10-04), so the card can say it in the reader's language: `next`
+   * stays the English as written and lib/core-app/dashboard3aCopy.ts rebuilds the Spanish from this.
+   * `weekday` is the pinned en-US short weekday ("Sun"). Absent whenever `next` is null.
+   */
+  nextParts?: { home: boolean; opponent: string; weekday: string; preseason: boolean }
+  /**
    * Your leagues where he is on NO roster (the waiver nudge, 2026-09-14). Empty when he is
    * rostered everywhere, or wherever that cannot be established — see `freeAgentLeaguesFor`.
    */
@@ -198,6 +204,7 @@ export async function getFollowingCard(
   const rows: FollowingRow[] = shown.map((f) => {
     let status: string | null = null
     let next: string | null = null
+    let nextParts: FollowingRow['nextParts'] | null = null
     if (f.sport === 'NFL') {
       if (statusReadable && injuries) {
         const fact = injuries.byPlayer.get(normalizeMatchName(f.name))
@@ -206,7 +213,9 @@ export async function getFollowingCard(
       const club = normalizeTeamAbbrev(f.team)
       const game = club ? nextByClub.get(club) : undefined
       if (game) {
-        next = `${game.home ? 'vs' : '@'} ${game.opponent} · ${weekday.format(game.at)}${game.preseason ? ' (pre)' : ''}`
+        const day = weekday.format(game.at)
+        next = `${game.home ? 'vs' : '@'} ${game.opponent} · ${day}${game.preseason ? ' (pre)' : ''}`
+        nextParts = { home: game.home, opponent: game.opponent, weekday: day, preseason: Boolean(game.preseason) }
       }
     }
     return {
@@ -219,6 +228,7 @@ export async function getFollowingCard(
       team: f.team,
       status,
       next,
+      ...(nextParts ? { nextParts } : {}),
       freeAgentIn: f.sport === 'NFL' && f.sleeperId ? (freeAgents.get(f.sleeperId) ?? []) : [],
     }
   })
