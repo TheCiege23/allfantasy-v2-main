@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { updateStandings } from '../standingsEngine'
 export type RotoFinalizeResult = {ok:true;format:'roto';alreadyFinalized:boolean;championRosterId:string;runnerUpRosterId:string|null;finalStandings:Array<{rosterId:string;teamName:string;rank:number;points:number;champion:boolean}>;events:[]} | {ok:false;code:'FINAL_ROUND_INCOMPLETE'|'NO_WINNER';message:string;events:[]}
 /** A cumulative season ends on its last sealed period, never on a fabricated playoff final. */
-export async function finalizeRotoSeason(seasonId:string, actorUserId?:string):Promise<RotoFinalizeResult> {
+export async function finalizeRotoSeason(seasonId:string, actorUserId?:string, tiebreakerRosterId?:string):Promise<RotoFinalizeResult> {
  const season=await prisma.redraftSeason.findUnique({where:{id:seasonId},include:{league:{select:{settings:true}}}})
  if(!season) throw new Error('season_not_found')
  const settings=season.league.settings as Record<string,any> | null
@@ -16,13 +16,18 @@ export async function finalizeRotoSeason(seasonId:string, actorUserId?:string):P
  if(!generic.length || generic.some(r=>!sealedIds.has(r.id))) return {ok:false,code:'FINAL_ROUND_INCOMPLETE',message:'The final rotisserie period is not fully scored.',events:[]}
  await updateStandings(seasonId,season.totalWeeks)
  const rosters=await prisma.redraftRoster.findMany({where:{seasonId},orderBy:[{pointsFor:'desc'},{id:'asc'}],select:{id:true,teamName:true,pointsFor:true}})
- if(!rosters.length || (rosters[1] && rosters[0].pointsFor===rosters[1].pointsFor)) return {ok:false,code:'NO_WINNER',message:'The rotisserie lead is tied; a commissioner must resolve the league tiebreaker.',events:[]}
+ if(tiebreakerRosterId) {
+  const index=rosters.findIndex(r=>r.id===tiebreakerRosterId && r.pointsFor===rosters[0]?.pointsFor)
+  if(index<0) return {ok:false,code:'NO_WINNER',message:'The selected rotisserie tiebreaker winner must be tied for the lead.',events:[]}
+  rosters.unshift(...rosters.splice(index,1))
+ }
+ if(!rosters.length || (!tiebreakerRosterId && rosters[1] && rosters[0].pointsFor===rosters[1].pointsFor)) return {ok:false,code:'NO_WINNER',message:'The rotisserie lead is tied; a commissioner must resolve the league tiebreaker.',events:[]}
  const championRosterId=rosters[0].id,runnerUpRosterId=rosters[1]?.id??null
  const finalStandings=rosters.map((r,i)=>({rosterId:r.id,teamName:r.teamName??'Team',rank:i+1,points:r.pointsFor,champion:i===0}))
  await prisma.$transaction(async tx=>{
   const current=await tx.league.findUnique({where:{id:season.leagueId},select:{settings:true}})
   const currentSettings=current?.settings as Record<string,any> | null
-  await tx.league.update({where:{id:season.leagueId},data:{settings:{...(currentSettings??{}),roto_season_results:{...(currentSettings?.roto_season_results??{}),[String(season.season)]:{championRosterId,runnerUpRosterId,finalStandings}}}}})
+  await tx.league.update({where:{id:season.leagueId},data:{settings:{...(currentSettings??{}),roto_season_results:{...(currentSettings?.roto_season_results??{}),[String(season.season)]:{championRosterId,runnerUpRosterId,finalStandings,tiebreakerRosterId:tiebreakerRosterId??null}}}}})
   await tx.redraftSeason.update({where:{id:seasonId},data:{status:'complete'}})
  })
  await getPlatformEvents().emit(EVENT.CHAMPION_CROWNED,{leagueId:season.leagueId,seasonId,actor:actorUserId?{type:'commissioner',id:actorUserId}:{type:'system'},source:'engine:roto',idempotencyKey:`roto.champion:${seasonId}`,subjects:[{kind:'roster',id:championRosterId}],payload:{seasonId,championRosterId}})

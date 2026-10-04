@@ -58,16 +58,17 @@ export async function finalizeSeasonAndEnterOffseason(input: {
   seasonId: string
   leagueId: string
   actorUserId: string
+  tiebreakerRosterId?: string
 }): Promise<FinalizeSeasonResult> {
   const leagueScoring=await prisma.league.findUnique({where:{id:input.leagueId},select:{settings:true,leagueType:true,isDynasty:true}})
   const isRoto=(leagueScoring?.settings as Record<string,unknown> | null)?.scoring_mode === 'roto'
-  const result = isRoto ? await finalizeRotoSeason(input.seasonId,input.actorUserId) : await finalizeNflRedraftPlayoffRuntimeSeason({
+  const result = isRoto ? await finalizeRotoSeason(input.seasonId,input.actorUserId,input.tiebreakerRosterId) : await finalizeNflRedraftPlayoffRuntimeSeason({
     seasonId: input.seasonId,
     actorUserId: input.actorUserId,
   })
 
   if (!result.ok) {
-    return { ok: false, code: result.code, message: describe(result.code), result }
+    return { ok: false, code: result.code, message: isRoto ? result.message : describe(result.code), result }
   }
 
   const alreadyFinalized = 'alreadyFinalized' in result && result.alreadyFinalized === true

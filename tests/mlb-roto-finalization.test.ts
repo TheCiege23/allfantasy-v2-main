@@ -34,3 +34,9 @@ it('does not pick a tied champion by roster id',async()=>{
  expect(await finalizeRotoSeason('s')).toMatchObject({ok:false,code:'NO_WINNER'})
  expect(db.$transaction).not.toHaveBeenCalled()
 })
+
+it('accepts an authorized caller choosing among tied leaders and rejects a lower team',async()=>{
+ db.redraftRoster.findMany.mockResolvedValue([{id:'native-a',teamName:'Aces',pointsFor:15},{id:'native-b',teamName:'Bears',pointsFor:15},{id:'native-c',teamName:'Last',pointsFor:10}])
+ expect(await finalizeRotoSeason('s','commish','native-c')).toMatchObject({ok:false,code:'NO_WINNER'})
+ expect(await finalizeRotoSeason('s','commish','native-b')).toMatchObject({ok:true,championRosterId:'native-b'})
+})
