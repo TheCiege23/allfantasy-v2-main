@@ -4,8 +4,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { preparationFormatKey, type PreparationContext } from '@/lib/core-app/draftPreparationModel';
 const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
-import { validDraftReference, type DraftReference } from './referenceModel';
-import { referenceStorageKey } from './references';
+import { validDraftReference, type DraftReference } from '../referenceModel';
+import { referenceStorageKey } from '../references';
 
 export async function preserveReference(formatKey: string, snapshot: DraftReference, apply: boolean) {
   if (!validDraftReference(snapshot, new Date())) throw new Error('Invalid or future reference');

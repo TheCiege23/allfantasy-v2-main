@@ -2,7 +2,7 @@ import 'server-only';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { draftArchiveCatalog } from './catalog';
+import { draftArchiveCatalog } from '../catalog';
 import { normalizePickNumber } from '@/lib/league-import/sleeper/sleeperDraftPickIdentity';
 import { sleeperDraftArchiveMetadata } from '@/lib/league-import/sleeper/draftArchiveMetadata';
 import type { SleeperLeague } from '@/lib/sleeper-client';

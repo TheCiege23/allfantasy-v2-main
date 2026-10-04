@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const db=vi.hoisted(()=>({upsert:vi.fn(),find:vi.fn()}));
 vi.mock('@/lib/prisma',()=>({prisma:{aiAdpSnapshotHistory:{upsert:db.upsert,findFirst:db.find}}}));
-import { preserveReference, syncMarketReferences, auctionPriceReferences } from '@/lib/draft-archive/referenceWriter';
+import { preserveReference, syncMarketReferences, auctionPriceReferences } from '@/lib/draft-archive/ingestion/referenceWriter';
 import type { DraftReference } from '@/lib/draft-archive/referenceModel';
 const reference: DraftReference={version:'draft-reference-v1',kind:'market_value',provider:'Stats Guy Fantasy',attributionUrl:'https://statsguyfantasy.com',effectiveAt:'2026-08-31T23:59:59.999Z',observedAt:'2026-09-02T00:00:00Z',historical:true,season:2026,identitySpace:'sleeper',format:'non_sf_redraft',entries:[{playerId:'1',name:'Name',position:'WR',value:100,sample:null}]};
 beforeEach(()=>{vi.clearAllMocks();db.find.mockResolvedValue(null);});
