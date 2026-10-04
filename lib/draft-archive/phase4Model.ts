@@ -96,7 +96,7 @@ export function replayAt(data: ReplayData, overall: number, includeCandidates=tr
   for (const p of available) if (!bestByPosition.has(p.position) || p.projectedPoints! > bestByPosition.get(p.position)!.projectedPoints!) bestByPosition.set(p.position,p);
   const thresholds = new Map([...bestByPosition].map(([position,p])=>{const after=fillLineup([...roster,p],data.slots),gain=after.points-before.points;return [position,{threshold:p.projectedPoints!-gain,fillsVacancy:after.starterIds.length>before.starterIds.length}] as const;}));
   const candidates = (includeCandidates ? available : [...bestByPosition.values()]).map(p => {const bound=thresholds.get(p.position)!,gain=p.projectedPoints!-bound.threshold;return {...p,gain:bound.fillsVacancy?gain:Math.max(0,gain)};}).sort((a,b) => b.gain-a.gain || b.projectedPoints!-a.projectedPoints! || a.playerId.localeCompare(b.playerId));
-  const actualGain = fillLineup([...roster,actual],data.slots).points-before.points;
+  const actualGain = roster.some(p=>p.playerId===actual.playerId) ? 0 : fillLineup([...roster,actual],data.slots).points-before.points;
   return { pick, before:before.points, actual:{...actual,gain:actualGain}, candidates, opportunityGap: pick.keeper || !candidates.length ? null : actualGain-candidates[0].gain };
 }
 
