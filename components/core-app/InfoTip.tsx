@@ -74,6 +74,17 @@ export function InfoTip({
   }, [])
   return (
     <span className="af-info-tip-wrap"
+      onKeyDownCapture={event => {
+        if (event.key === 'Escape' && typeof popover.current?.hidePopover === 'function' && popover.current.matches(':popover-open')) {
+          // Consume Escape in this open popover before restoring trigger focus.
+          event.preventDefault()
+          event.stopPropagation()
+          suppressFocus.current = true
+          hide()
+          trigger.current?.focus()
+          queueMicrotask(() => { suppressFocus.current = false })
+        }
+      }}
       onMouseEnter={() => { if (window.matchMedia?.('(hover: hover)')?.matches) show() }}
       onMouseLeave={() => { if (!pinned.current && !trigger.current?.matches(':focus-visible')) hide() }}
       onBlur={event => { if (!pinned.current && !event.currentTarget.contains(event.relatedTarget as Node | null)) hide() }}
