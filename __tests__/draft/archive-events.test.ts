@@ -6,6 +6,13 @@ const session = { id: 'draft', leagueId: 'league', status: 'in_progress', draftT
 const tx = { $queryRaw: vi.fn().mockResolvedValue([]), aFProjectionSnapshot: { findMany: vi.fn().mockResolvedValue([]) }, leagueAuditLog: { findFirst: db.latest, create: db.create }, draftPick: { findMany: db.picks }, draftSession: { update: db.update }, league: { findUnique: db.league }, leagueTeam: { findMany: db.teams }, roster: { findMany: db.rosters } }
 beforeEach(() => {
   vi.resetAllMocks()
+  tx.$queryRaw.mockImplementation(async query => {
+    if (query.sql.includes('FROM audit_logs')) {
+      const latest = await db.latest();
+      return latest ? [latest] : [];
+    }
+    return [];
+  })
   tx.aFProjectionSnapshot.findMany.mockResolvedValue([])
   db.latest.mockResolvedValue(null)
   db.create.mockResolvedValue({ id: 'event' })
@@ -49,5 +56,18 @@ describe('durable draft archive events', () => {
     db.picks.mockResolvedValue([{ overall: 1, playerName: 'Keeper', position: 'QB', pickMetadata: null }])
     const result = await recordArchiveEvent(tx as never, { ...session, status: 'paused' }, 'pause')
     expect(result.clock).toMatchObject({ overall: 2, owner: 'b', running: false, complete: false })
+  })
+  it('keeps coverage invalid after a skewed event and subsequent resume and selection', async () => {
+    let latest: unknown = null;
+    db.latest.mockImplementation(async () => latest);
+    db.create.mockImplementation(async ({ data }) => { latest = { afterState: data.afterState }; return { id: 'event' }; });
+    await recordArchiveEvent(tx as never, session, 'start', { overall: 1 }, new Date('2026-08-01T00:00:10Z'));
+    await recordArchiveEvent(tx as never, { ...session, status: 'paused' }, 'pause', { overall: 1 }, new Date('2026-08-01T00:00:09Z'));
+    await recordArchiveEvent(tx as never, session, 'resume', { overall: 1 }, new Date('2026-08-01T00:00:11Z'));
+    const result = await recordArchiveEvent(tx as never, session, 'selection', { overall: 1, nextOverall: 2 }, new Date('2026-08-01T00:00:12Z'));
+    expect(result.selected).toBeNull();
+    expect(result.clock.complete).toBe(false);
+    expect(db.create.mock.calls.map(([arg]) => arg.data.afterState.sequence)).toEqual([1, 2, 3, 4]);
+    expect(db.create.mock.calls[1][0].data.createdAt).toEqual(new Date('2026-08-01T00:00:09Z'));
   })
 })

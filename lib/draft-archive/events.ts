@@ -7,6 +7,7 @@ import type { SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/t
 import { advanceArchiveClock, type ArchiveClock, type ClockEvent } from './clock';
 import { resolveNextOpenPickOverall } from '@/lib/live-draft-engine/draftPickEmpty';
 import { captureDraftAnalysisBasis } from './analysisBasis';
+import { archiveLedger, archiveSequence } from './ledger';
 export const ARCHIVE_EVENT = 'draft_archive_event';
 export const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 export const json = (v: unknown): Prisma.InputJsonValue => JSON.parse(JSON.stringify(v ?? null)) as Prisma.InputJsonValue;
@@ -43,7 +44,8 @@ export async function recordArchiveEvent(tx: Prisma.TransactionClient, session: 
     // Serialize the ledger on the same row as the draft mutation; concurrent events must
     // not both advance the same previous clock state.
     await tx.$queryRaw(Prisma.sql `SELECT id FROM draft_sessions WHERE id=${session.id} AND "leagueId"=${session.leagueId} FOR UPDATE`);
-    const latest = await tx.leagueAuditLog.findFirst({ where: { leagueId: session.leagueId, entityType: 'draft_session', entityId: session.id, actionType: ARCHIVE_EVENT }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: { afterState: true } });
+    const [latest] = await archiveLedger(tx, session.leagueId, session.id);
+    const sequence = (archiveSequence(latest?.afterState) ?? 0) + 1;
     const raw = object(object(latest?.afterState).clock);
     const previous = raw.version === 1 ? raw as unknown as ArchiveClock : null;
     const picks = typeof details.overall === 'number' ? null : await tx.draftPick.findMany({ where: { sessionId: session.id }, select: { overall: true, playerName: true, position: true, pickMetadata: true }, take: 10001 });
@@ -70,7 +72,7 @@ export async function recordArchiveEvent(tx: Prisma.TransactionClient, session: 
     }
     const context = event === 'start' ? object(snapshot).context ?? null : object(latest?.afterState).context ?? null;
     details = { timerSeconds: session.timerSeconds ?? null, status: session.status, overnightFrozenPickSeconds: session.overnightFrozenPickSeconds ?? null, ...details };
-    const row = await tx.leagueAuditLog.create({ data: { leagueId: session.leagueId, entityType: 'draft_session', entityId: session.id, actionType: ARCHIVE_EVENT, userId: typeof details.actorUserId === 'string' ? details.actorUserId : null, createdAt: at, afterState: json({ event, clock: advanced.clock, context, ...(snapshot ? { snapshot } : {}), details }) } });
+    const row = await tx.leagueAuditLog.create({ data: { leagueId: session.leagueId, entityType: 'draft_session', entityId: session.id, actionType: ARCHIVE_EVENT, userId: typeof details.actorUserId === 'string' ? details.actorUserId : null, createdAt: at, afterState: json({ sequence, event, clock: advanced.clock, context, ...(snapshot ? { snapshot } : {}), details }) } });
     return { eventId: row.id, selected: advanced.selected, clock: advanced.clock, context };
 }
 export async function updateSessionWithArchive(session: Parameters<typeof recordArchiveEvent>[1], data: Prisma.DraftSessionUpdateInput, event: ClockEvent, details: Record<string, unknown> = {}) {

@@ -3,6 +3,14 @@ const db = vi.hoisted(() => ({ gate: vi.fn(), commissioner: vi.fn(), catalog: vi
 vi.mock('@/server/services/permissionService', () => ({ canViewLeague: db.gate, isElevatedCommissioner: db.commissioner }))
 vi.mock('@/lib/core-app/draftHq', () => ({ resolvePlayerNames: vi.fn(async () => new Map()) }))
 vi.mock('@/lib/draft-archive/catalog', () => ({ draftArchiveCatalog: db.catalog }))
+vi.mock('@/lib/draft-archive/ledger', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/lib/draft-archive/ledger')>();
+  return { ...actual, archiveLedger: async (_db: unknown, _league: string, _session: string, options: { take?: number }) => {
+    if (options.take === 101) return db.events(options);
+    const row = await db.audit(options);
+    return row ? [row] : [];
+  } };
+})
 vi.mock('@/lib/prisma', () => ({ prisma: {
   draftSession: { findFirst: db.session }, leagueAuditLog: { findFirst: db.audit, findMany: db.events },
   draftPickAuditLog: { findMany: db.corrections }, draftPick: { findMany: db.picks }, draftPickTradeProposal: { findMany: db.trades },
@@ -54,8 +62,8 @@ describe('draft archive authorization and attempt boundaries', () => {
     db.audit.mockResolvedValue({ createdAt: startedAt, afterState: { event: 'start', details: { secret: 'private-note' }, clock: { complete: true, totalActiveMs: 100 } } })
     db.events.mockResolvedValue([{ createdAt: startedAt, afterState: { event: 'pause', details: { reason: 'private-note' } } }])
     const result = await draftArchiveDetail('l', 'viewer', 'native:d')
-    expect(db.audit.mock.calls[0][0].where.createdAt.gte).toEqual(startedAt)
-    expect(db.events.mock.calls[0][0].where.createdAt.gte).toEqual(startedAt)
+    expect(db.audit.mock.calls[0][0].startAt).toEqual(startedAt.toISOString())
+    expect(db.events.mock.calls[0][0].fromTime).toEqual(startedAt)
     expect(JSON.stringify(result)).not.toContain('private-note')
     expect(db.corrections).not.toHaveBeenCalled()
   })

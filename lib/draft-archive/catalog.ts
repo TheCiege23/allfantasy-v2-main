@@ -34,7 +34,7 @@ export async function draftArchiveCatalog(leagueIds: string[], options: {
  ), drafts AS (
  SELECT 'native:'||s.id AS key,s."leagueId",l.name AS "leagueName",'native'::text AS source,s.id AS "sourceId",CASE WHEN s."startedAt" IS NULL OR s.status IN ('pre_draft','scheduled','configuring','configured') THEN l.season ELSE (a."afterState"->'context'->>'season')::int END AS season,l.sport::text AS sport,s."draftType" AS format,s.status,s."createdAt" AS "createdAt"
  FROM draft_sessions s JOIN leagues l ON l.id=s."leagueId"
- LEFT JOIN LATERAL (SELECT "afterState" FROM audit_logs WHERE "entityId"=s.id AND "leagueId"=s."leagueId" AND "actionType"='draft_archive_event' AND "afterState"->>'event'='start' ORDER BY "createdAt" DESC,id DESC LIMIT 1) a ON true
+ LEFT JOIN LATERAL (SELECT "afterState" FROM audit_logs WHERE "entityId"=s.id AND "leagueId"=s."leagueId" AND "actionType"='draft_archive_event' AND "afterState"->>'event'='start' ORDER BY CASE WHEN "afterState"->>'sequence' ~ '^[0-9]{1,15}$' THEN ("afterState"->>'sequence')::bigint ELSE 0 END DESC,"createdAt" DESC,id DESC LIMIT 1) a ON true
  WHERE s."leagueId" IN (${Prisma.join(leagueIds)}) AND s."sessionKind"='live' AND NOT EXISTS (SELECT 1 FROM imported i WHERE i."leagueId"=s."leagueId" AND i.source_id=s."sleeperDraftId")
  UNION ALL
  SELECT CASE WHEN i.source_id LIKE 'legacy:%' THEN i.source_id ELSE 'imported:'||i.source_id END,i."leagueId",l.name,CASE WHEN i.source_id LIKE 'legacy:%' THEN 'legacy' ELSE 'imported' END,i.source_id,i.season,i.sport,COALESCE(i.format,'unknown'),COALESCE(i.status,'unknown'),i.created_at
