@@ -271,6 +271,68 @@ const NOW = new Date('2026-10-03T16:00:00.000Z')
 const V1 = 'completed_trade_grade_v1'
 const V2 = 'completed_trade_grade_v2'
 
+/*
+ * 🛑 GRADED WITHIN A DAY OF THE TRADE: THE LEAGUE'S OWN LIVE CHART, NOT THE CAPTURE. Today's chart is
+ * synced 2026-10-03 09:00 UTC (the mock). A trade at 08:00 that day, graded within 24h, is priced on
+ * it — and the stored 12-team capture (Oct 2, B-valued) must not be used in its place.
+ */
+const LIVE_TRADE_AT = '2026-10-03T08:00:00.000Z'
+const hoursAfter = (h: number) => new Date(Date.parse(LIVE_TRADE_AT) + h * 3600_000)
+
+describe('graded within a day of the trade — the league’s own live chart', () => {
+  beforeEach(() => {
+    // The capture a LATER grading would use: taken Oct 2 10:00, 22h before the trade — the B values.
+    h.captures.set('2026-10-02', [snap(PUKA.id, PUKA.name, 'WR', 6000), snap(DRAKE.id, DRAKE.name, 'WR', 4500), snap('FP_2027_1', '2027 1st', 'PICK', 3000)])
+  })
+
+  it('23h after the trade: priced on the live chart (A), pricedAsOf = now — never the capture (B)', async () => {
+    const g = await grader()
+    const now = hoursAfter(23)
+    const live = await gradeAtTradeTime(g, DEAL, at(LIVE_TRADE_AT), {}, now)
+    expect(live).toMatchObject({ pricedAsOf: now.toISOString(), grade: { letter: 'A', giveValue: 5000, getValue: 7000 } })
+    expect(live!.grade.lines.every((l) => l.valueAsOf === '2026-10-03T09:00:00.000Z')).toBe(true)
+  })
+
+  it('25h after: past the tolerance, so the stored capture from the trade date', async () => {
+    const g = await grader()
+    expect(await gradeAtTradeTime(g, DEAL, at(LIVE_TRADE_AT), {}, hoursAfter(25)))
+      .toMatchObject({ pricedAsOf: '2026-10-02', grade: { letter: 'B', giveValue: 6000, getValue: 7500 } })
+    // And a trade "in the future" of the grading moment is never a live grade.
+    expect((await gradeAtTradeTime(g, DEAL, at(LIVE_TRADE_AT), {}, hoursAfter(-1)))?.pricedAsOf).not.toBe(hoursAfter(-1).toISOString())
+  })
+
+  it('the all-or-nothing rules hold on the live chart too: today’s kicker board is not a market record', async () => {
+    const g = await grader()
+    const deal = { give: side([p(PUKA)]), get: side([p(DRAKE), p(KICKER)]) }
+    expect(await gradeAtTradeTime(g, deal, at(LIVE_TRADE_AT), {}, hoursAfter(2))).toBeNull()
+  })
+
+  it('a live line from any source but the market (dated like the rest) fails the purity check', async () => {
+    const g = await grader()
+    const doctored: LeagueTradeGrader = {
+      ...g,
+      async grade(deal) {
+        const v = await g.grade(deal)
+        return v.graded ? { ...v, lines: v.lines.map((l, i) => (i === 0 ? { ...l, valueSource: 'historical_file' as const } : l)) } : v
+      },
+    }
+    expect(await gradeAtTradeTime(g, DEAL, at(LIVE_TRADE_AT), {}, hoursAfter(2))).not.toBeNull()
+    expect(await gradeAtTradeTime(doctored, DEAL, at(LIVE_TRADE_AT), {}, hoursAfter(2))).toBeNull()
+  })
+
+  it('a first read on the trade day freezes a trade_date original from the live chart', async () => {
+    const league = `L-${++n}`
+    const now = hoursAfter(3)
+    const t = { ...ledgerTrade(), createdIso: LIVE_TRADE_AT } as GradedTrade
+    const view = await oneGradeForCompletedTrade(league, t, 2026, { now })
+    if (!view.graded) throw new Error(view.reason)
+    expect(view).toMatchObject({ letter: 'A', frozenBasis: 'trade_date', pricedAsOf: now.toISOString(), tradeAt: LIVE_TRADE_AT })
+    expect(h.table[0]!.payloadJson).toMatchObject({ v: 2, basis: 'trade_date', pricedAsOf: now.toISOString(), grade: { letter: 'A' } })
+    // The label is the same as a capture-priced trade_date: the TRADE's date.
+    expect(gradeMoment(view)).toBe('at the time of the trade (Oct 3)')
+  })
+})
+
 describe('the frozen original (v2)', () => {
   it('🛑 a first read freezes the TRADE-DATE letter, with today’s beside it', async () => {
     const league = `L-${++n}`

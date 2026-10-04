@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import {
   captureTakenAt,
   chooseTradeTimeCapture,
+  gradedAtTradeTime,
   sleeperTransactionTime,
   tradeTimeOf,
 } from '@/lib/decision-os/trade/tradeTimeCapture'
@@ -51,6 +52,22 @@ describe('which capture prices a trade', () => {
 
   it('order of the day list does not matter, and malformed days are ignored', () => {
     expect(chooseTradeTimeCapture(['2026-09-24', 'nonsense', '2026-09-22', '2026-09-21'], at('2026-09-24T12:00:00Z'))?.day).toBe('2026-09-24')
+  })
+})
+
+describe('graded AT the time of the trade (live chart; a v1 freeze the re-price carries)', () => {
+  const T = at('2026-10-03T08:00:00Z')
+  const after = (h: number) => new Date(T.getTime() + h * 3600_000)
+  it('within 24h after the trade, inclusive — the 23h/25h boundary', () => {
+    expect(gradedAtTradeTime(T, after(0))).toBe(true)
+    expect(gradedAtTradeTime(T, after(23))).toBe(true)
+    expect(gradedAtTradeTime(T, after(24))).toBe(true)
+    expect(gradedAtTradeTime(T, after(25))).toBe(false)
+  })
+  it('never before the trade, and never without both moments', () => {
+    expect(gradedAtTradeTime(T, after(-0.01))).toBe(false)
+    expect(gradedAtTradeTime(null, after(1))).toBe(false)
+    expect(gradedAtTradeTime(T, null)).toBe(false)
   })
 })
 

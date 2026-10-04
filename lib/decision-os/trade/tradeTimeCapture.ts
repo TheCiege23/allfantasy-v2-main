@@ -76,6 +76,18 @@ export function tradeTimeOf(args: { completedAt?: string | number | Date | null;
   return asDate(args.completedAt) ?? sleeperTransactionTime(args.tradeId)
 }
 
+/**
+ * Is a grade taken at `at` a grade AT THE TIME OF THE TRADE? True when the trade happened at most
+ * `MAX_CAPTURE_AGE_MS` before `at` and not after it — the same tolerance a capture is allowed. Then
+ * the league's own live chart is the market at the time of the trade (`gradeAtTradeTime`), and a v1
+ * original frozen then was already priced at trade time (the re-price carries it).
+ */
+export function gradedAtTradeTime(tradeAt: Date | null, at: Date | null): boolean {
+  if (!tradeAt || !at) return false
+  const gap = at.getTime() - tradeAt.getTime()
+  return Number.isFinite(gap) && gap >= 0 && gap <= MAX_CAPTURE_AGE_MS
+}
+
 /** When capture `day` (YYYY-MM-DD, its UTC-midnight stamp) was taken. */
 export function captureTakenAt(day: string): Date {
   return new Date(`${day}T${String(CAPTURE_TAKEN_HOUR_UTC).padStart(2, '0')}:00:00.000Z`)

@@ -18,7 +18,7 @@ import {
   type TradeDatePrice,
 } from './frozenCompletedGrade'
 import type { RepriceOutcome } from './repriceFrozenTradeGrades'
-import { chooseTradeTimeCapture, tradeTimeOf } from './tradeTimeCapture'
+import { chooseTradeTimeCapture, gradedAtTradeTime, MAX_CAPTURE_AGE_MS, tradeTimeOf } from './tradeTimeCapture'
 import { loadCaptureDays, loadDatedMarket, type DatedMarket, type MarketBook } from './datedMarket'
 import type { TradeValueSource } from './valueSource'
 
@@ -143,15 +143,35 @@ const TRADE_DATE_SOURCES: ReadonlySet<TradeValueSource> = new Set(['fantasycalc'
 export type TradeTimeDeps = {
   captureDays?: (book: MarketBook) => Promise<string[]>
   market?: (book: MarketBook, day: string) => Promise<DatedMarket | null>
+  /**
+   * Price a trade graded within a day of happening on the grader's own LIVE chart (default true).
+   * Off only for a grader built `marketless`, which has no live chart — the re-price script.
+   */
+  liveChart?: boolean
 }
 
 /**
  * THE GRADE OF A COMPLETED TRADE PRICED AT THE TIME OF THE TRADE (Guap's ruling, 2026-10-03), or null
  * when it cannot be — and then the caller keeps the first-graded original (Decision 1).
  *
- * Not a second grader: the league's own grader, on the same pricer and the same `gradeTrade`, with one
- * day's stored market in place of today's (`LeagueTradeGrader.atMarket` → `withDatedMarket`). The
- * day is the latest capture taken at or before the trade, at most a day old (`tradeTimeCapture.ts`).
+ * Not a second grader: the league's own grader, on the same pricer and the same `gradeTrade`, in one
+ * of two ways — and the stored capture is only ever the SECOND choice:
+ *
+ *   1. GRADED WITHIN A DAY OF THE TRADE (`gradedAtTradeTime`: the trade happened at most 24h before
+ *      `now`, and not after it) → the market at the time of the trade IS today's market, so it is
+ *      priced on the league's own LIVE chart — its own team count, reception weight and scoring.
+ *      `pricedAsOf` is `now`.
+ *   2. GRADED LATER → one day's stored market in place of today's (`LeagueTradeGrader.atMarket` →
+ *      `withDatedMarket`): the latest capture taken at or before the trade, at most a day old.
+ *      `pricedAsOf` is that capture's day.
+ *
+ * 🛑 WHY THE LIVE CHART FIRST. The capture is FantasyCalc's 12-team PPR-1 book, not the league's.
+ * Team count and PPR move that book almost uniformly, but not exactly — and at a letter boundary
+ * "almost" is a different letter. The production dry run of 2026-10-03 found 13 frozen originals
+ * (12 of them emailed) taken on the trade day on the league's own chart whose letter the 12-team
+ * book would have changed with the market not having moved at all. The capture is the best record
+ * there is of a past market; it is never a substitute for the league's own chart when that chart
+ * is the market at the time of the trade.
  *
  * 🛑 ONE DATE, ONE SCALE, OR NOTHING. A trade is never priced partly on its date and partly on today's
  * values or the historical file. Null when ANY of these holds — and the whole trade falls back:
@@ -167,12 +187,30 @@ export async function gradeAtTradeTime(
   inputs: { give: GradeInputs; get: GradeInputs } | null,
   tradeAt: Date | null,
   deps: TradeTimeDeps = {},
+  /** When the grading happens — decides the live chart (within a day of the trade) or the capture. */
+  now: Date = new Date(),
 ): Promise<TradeDatePrice | null> {
   try {
     if (!grader?.atMarket || !grader.book || !inputs || !tradeAt) return null
     if (inputs.give.unpriceable.length + inputs.get.unpriceable.length > 0) return null
     const assets = [...inputs.give.assets, ...inputs.get.assets]
     if (assets.some((a) => a.kind === 'player' && a.providerIdentity?.provider !== 'sleeper')) return null
+
+    if (deps.liveChart !== false && gradedAtTradeTime(tradeAt, now)) {
+      // 1. Today's market is the market at the time of the trade: the league's own live chart.
+      const view = await gradeDeal(grader, { give: inputs.give, get: inputs.get, viewerSide: false })
+      if (!view.graded || view.lines.length !== assets.length) return null
+      for (const line of view.lines) {
+        if (!line.valueSource || !TRADE_DATE_SOURCES.has(line.valueSource)) return null
+        if (line.valueSource === 'faab_formula') continue
+        // The chart's own sync time must itself sit within the tolerance of the trade.
+        const synced = line.valueAsOf ? Date.parse(line.valueAsOf) : NaN
+        if (!Number.isFinite(synced) || synced > now.getTime() || tradeAt.getTime() - synced > MAX_CAPTURE_AGE_MS) return null
+      }
+      return { grade: view, pricedAsOf: now.toISOString() }
+    }
+
+    // 2. Graded later: the stored capture from the trade's own date.
     const days = await (deps.captureDays ?? loadCaptureDays)(grader.book)
     const capture = chooseTradeTimeCapture(days, tradeAt)
     if (!capture) return null
@@ -211,7 +249,7 @@ export async function completedOriginal(args: {
   deps?: TradeTimeDeps
 }): Promise<{ view: TradeGradeView; toFreeze: FrozenCompletedGrade | null }> {
   // Pricing on the trade date costs a capture read; a frozen original never needs one.
-  const dated = args.frozen ? null : await gradeAtTradeTime(args.grader, args.tradeTimeInputs, args.tradeAt, args.deps)
+  const dated = args.frozen ? null : await gradeAtTradeTime(args.grader, args.tradeTimeInputs, args.tradeAt, args.deps, args.now)
   return withFrozenOriginal({
     tradeId: args.tradeId,
     inputs: args.inputs,
@@ -230,6 +268,11 @@ export async function completedOriginal(args: {
  *
  * `deal` is the trade as a surface reads it today (to match the row's asset keys) and at the time of
  * the trade (what is priced). A deal that matches the row neither way is a different deal: skipped.
+ *
+ * 🛑 A v1 ROW FROZEN WITHIN A DAY AFTER ITS TRADE IS CARRIED, NOT RE-PRICED. It was already priced at
+ * the time of the trade, on the league's OWN live chart — a better record than the 12-team PPR-1
+ * capture, which would move its letter at a boundary with no market move at all. It becomes a
+ * `trade_date` row with the v1 letter and `pricedAsOf` = the v1 `frozenAt`.
  */
 export async function repriceFrozenOriginalAtTradeTime(args: {
   grader: LeagueTradeGrader | null
@@ -238,6 +281,9 @@ export async function repriceFrozenOriginalAtTradeTime(args: {
   tradeAt: Date | null
   deps?: TradeTimeDeps
 }): Promise<RepriceOutcome> {
+  if (args.tradeAt && gradedAtTradeTime(args.tradeAt, new Date(args.row.frozenAt))) {
+    return { kind: 'carried', tradeAt: args.tradeAt.toISOString() }
+  }
   if (!args.deal) return { kind: 'skip', why: 'the trade is not on record' }
   const same = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i])
   const give = frozenAssetKeys(args.deal.today.give)
@@ -254,7 +300,8 @@ export async function repriceFrozenOriginalAtTradeTime(args: {
   if (!args.grader.book) return { kind: 'first_graded', tradeAt, why: 'the league prices on no stored market book' }
   const days = await (args.deps?.captureDays ?? loadCaptureDays)(args.grader.book)
   if (!chooseTradeTimeCapture(days, args.tradeAt)) return { kind: 'first_graded', tradeAt, why: 'no capture within a day before the trade' }
-  const dated = await gradeAtTradeTime(args.grader, atTradeTime, args.tradeAt, args.deps)
+  // The capture only: a marketless grader has no live chart, and these trades are long past.
+  const dated = await gradeAtTradeTime(args.grader, atTradeTime, args.tradeAt, { ...args.deps, liveChart: false })
   if (!dated) return { kind: 'first_graded', tradeAt, why: 'an asset has no record on the trade date' }
   return { kind: 'trade_date', grade: dated.grade, pricedAsOf: dated.pricedAsOf, tradeAt }
 }
@@ -312,7 +359,7 @@ export async function oneGradeForCompletedTrade(
   }
   return frozenOriginalFor({
     afLeagueId: leagueId, tradeId: trade.id, inputs, current, now: deps.now, tradeAt: tradeAt?.toISOString() ?? null,
-    priceAtTradeTime: () => gradeAtTradeTime(grader, tradeTimeInputs, tradeAt, deps.tradeTime),
+    priceAtTradeTime: () => gradeAtTradeTime(grader, tradeTimeInputs, tradeAt, deps.tradeTime, deps.now ?? new Date()),
   })
 }
 
@@ -481,7 +528,7 @@ export async function gradeArchivedTradeWithInputs(
   return {
     grade: await frozenOriginalFor({
       afLeagueId: o.afLeagueId, tradeId: o.tradeId, inputs: { give, get }, current, now: o.now, tradeAt: tradeAt?.toISOString() ?? null,
-      priceAtTradeTime: () => gradeAtTradeTime(grader, tradeTimeInputs, tradeAt, o.tradeTime),
+      priceAtTradeTime: () => gradeAtTradeTime(grader, tradeTimeInputs, tradeAt, o.tradeTime, o.now ?? new Date()),
     }),
     give,
     get,

@@ -78,8 +78,8 @@ describe('re-pricing existing originals at the time of the trade', () => {
   it('no capture within a day, or an asset with no record on that date → first-graded (the v1 letter stays)', async () => {
     expect(await repriceFrozenOriginalAtTradeTime({ grader, row: pair('t2', 'C', GIVE, GET).row, deal, tradeAt: new Date('2026-09-27T15:00:00Z'), deps }))
       .toMatchObject({ kind: 'first_graded', why: 'no capture within a day before the trade' })
-    // Sep 29 is captured, but P3 is not on it.
-    expect(await repriceFrozenOriginalAtTradeTime({ grader, row: pair('t3', 'C', GIVE, GET).row, deal, tradeAt: new Date('2026-09-29T15:00:00Z'), deps }))
+    // Sep 29 is captured, but P3 is not on it. (Traded 25.5h before the v1 freeze, so not carried.)
+    expect(await repriceFrozenOriginalAtTradeTime({ grader, row: pair('t3', 'C', GIVE, GET).row, deal, tradeAt: new Date('2026-09-29T10:30:00Z'), deps }))
       .toMatchObject({ kind: 'first_graded', why: 'an asset has no record on the trade date' })
   })
 
@@ -118,6 +118,26 @@ describe('re-pricing existing originals at the time of the trade', () => {
     // The stored grade carries no read-time fields.
     expect(plan.rows[0]!.v2.grade).not.toHaveProperty('frozenBasis')
     expect(JSON.stringify(pairs)).toBe(v1Before)
+  })
+
+  it('🛑 a v1 frozen within 24h AFTER its trade is CARRIED (v1 letter, priced on the league’s own chart) — never re-priced', async () => {
+    const row = pair('t8', 'D', GIVE, GET).row // frozen 2026-09-30T12:00Z
+    // Traded 23h before the freeze: carried, even though Sep 29's capture would grade it.
+    expect(await repriceFrozenOriginalAtTradeTime({ grader, row, deal, tradeAt: new Date('2026-09-29T13:00:00Z'), deps }))
+      .toEqual({ kind: 'carried', tradeAt: '2026-09-29T13:00:00.000Z' })
+    // 25h before: re-priced from the capture (Sep 29 lacks P3 → first-graded).
+    expect(await repriceFrozenOriginalAtTradeTime({ grader, row, deal, tradeAt: new Date('2026-09-29T11:00:00Z'), deps }))
+      .toMatchObject({ kind: 'first_graded' })
+    // Frozen BEFORE the trade time is not "at trade time" either.
+    expect((await repriceFrozenOriginalAtTradeTime({ grader, row, deal, tradeAt: new Date('2026-09-30T13:00:00Z'), deps })).kind).not.toBe('carried')
+
+    const plan = await planFrozenGradeReprice({
+      pairs: [pair('t8', 'D', GIVE, GET)], hasV2: new Set(), emailed: new Set(['t8']), now: new Date('2026-10-04T00:00:00Z'),
+      reprice: (x) => repriceFrozenOriginalAtTradeTime({ grader, row: x.row, deal, tradeAt: new Date('2026-09-29T13:00:00Z'), deps }),
+    })
+    expect(plan.report).toMatchObject({ carried: 1, tradeDate: 0, changedLetter: 0, changedAndEmailed: 0 })
+    expect(plan.rows.map((r) => [r.v2.basis, r.v2.grade.letter, r.v2.pricedAsOf, r.v2.tradeAt]))
+      .toEqual([['trade_date', 'D', '2026-09-30T12:00:00.000Z', '2026-09-29T13:00:00.000Z']])
   })
 
   it('a grading failure is a skip with its reason, not a first-graded claim', async () => {

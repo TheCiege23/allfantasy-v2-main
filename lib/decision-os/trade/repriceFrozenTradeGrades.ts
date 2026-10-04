@@ -5,8 +5,13 @@
  * Every v1 original (`completed_trade_grade_v1`) was frozen on the values of the day a surface first
  * read the trade. For each (AF league row, trade) pair that has no v2 row yet:
  *
- *   - the trade can be priced on its own date → a v2 `trade_date` row, graded by the same grader
- *     every new freeze uses (`completedTradeGrade.gradeAtTradeTime`), oriented exactly as the v1 row;
+ *   - the v1 row was frozen within a day AFTER its trade → it was already priced at the time of the
+ *     trade, on the league's own live chart: a v2 `trade_date` row CARRYING the v1 letter,
+ *     `pricedAsOf` = the v1 `frozenAt`. Never re-priced from the 12-team PPR-1 capture, which is a
+ *     worse record of that league's market than the league's own chart was;
+ *   - frozen later, and the trade can be priced on its own date → a v2 `trade_date` row, graded from
+ *     the capture by the same grader every new freeze uses (`completedTradeGrade.gradeAtTradeTime`),
+ *     oriented exactly as the v1 row;
  *   - it cannot (no capture within a day before the trade, or an asset with no record on that date)
  *     → a v2 `first_graded` row carrying the v1 LETTER unchanged, `pricedAsOf` = the v1 `frozenAt`.
  *
@@ -31,6 +36,7 @@ export type V1Pair = { afLeagueId: string; tradeId: string; row: FrozenCompleted
 /** What the grading step decided for one pair. A `trade_date` grade is oriented as `pair.row`. */
 export type RepriceOutcome =
   | { kind: 'trade_date'; grade: Graded; pricedAsOf: string; tradeAt: string }
+  | { kind: 'carried'; tradeAt: string }
   | { kind: 'first_graded'; tradeAt: string | null; why: string }
   | { kind: 'skip'; why: string }
 
@@ -50,6 +56,8 @@ export type RepricePlan = {
   report: {
     pairs: number
     alreadyV2: number
+    /** v1 rows frozen within a day after the trade: carried as `trade_date`, letter unchanged. */
+    carried: number
     tradeDate: number
     sameLetter: number
     changedLetter: number
@@ -78,7 +86,7 @@ export async function planFrozenGradeReprice(args: {
   now: Date
 }): Promise<RepricePlan> {
   const report: RepricePlan['report'] = {
-    pairs: args.pairs.length, alreadyV2: 0, tradeDate: 0, sameLetter: 0, changedLetter: 0, changedAndEmailed: 0,
+    pairs: args.pairs.length, alreadyV2: 0, carried: 0, tradeDate: 0, sameLetter: 0, changedLetter: 0, changedAndEmailed: 0,
     firstGraded: 0, firstGradedWhy: {}, skipped: 0, skippedWhy: {}, changes: [], perPair: [],
   }
   const rows: RepricePlan['rows'] = []
@@ -104,6 +112,15 @@ export async function planFrozenGradeReprice(args: {
       continue
     }
     const base = { v: 2 as const, tradeId: pair.tradeId, give: pair.row.give, get: pair.row.get, frozenAt }
+    if (outcome.kind === 'carried') {
+      report.carried += 1
+      rows.push({
+        afLeagueId: pair.afLeagueId,
+        v2: { ...base, grade: pair.row.grade, basis: 'trade_date', pricedAsOf: pair.row.frozenAt, tradeAt: outcome.tradeAt },
+      })
+      report.perPair.push({ afLeagueId: pair.afLeagueId, tradeId: pair.tradeId, outcome: 'carried', from, to: from, why: null })
+      continue
+    }
     if (outcome.kind === 'first_graded') {
       report.firstGraded += 1
       bump(report.firstGradedWhy, outcome.why)
