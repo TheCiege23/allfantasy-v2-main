@@ -118,7 +118,7 @@ import { getDraftHqData } from '@/lib/core-app/draftHq'
 import { loadDraftEdgeForScreen } from '@/lib/competitive-edge/draftEdgeLoader'
 import { getDraftBoardData } from '@/lib/core-app/draftBoard'
 import Scout from '@/components/core-app/screens/Scout'
-import { getScoutData } from '@/lib/core-app/scout'
+import { getLeagueEliminations, getScoutData } from '@/lib/core-app/scout'
 import GamePlan from '@/components/core-app/screens/GamePlan'
 import WarRoomWeek from '@/components/core-app/screens/WarRoomWeek'
 import LandingV4 from '@/components/core-app/screens/LandingV4'
@@ -3104,6 +3104,17 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   /*
+   * An elimination league has no playoffs (owner's report, 2026-10-03): its table reads Safe / On the
+   * bubble / Eliminated. Who is out comes from the same read as Scout's cards; the bubble is the rail's
+   * own ordering for this week, so the table, Scout and the cut banner agree. Null for any other league,
+   * and a failed read keeps the ordinary table rather than inventing a status.
+   */
+  const standingsEliminated =
+    activeKey === 'standings' && selectedLeagueId && standings
+      ? await getLeagueEliminations(selectedLeagueId, userId, leagueCtx).catch(() => null)
+      : null
+
+  /*
    * This week's lineups, projected by AllFantasy's engine (AF) and the provider (API), for every team
    * in the league — only on the standings screen, only when the table itself loaded. A failed read
    * costs that section and nothing else.
@@ -4974,6 +4985,14 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
             odds={standingsOdds}
             efficiency={standingsEfficiency}
             draftOrder={standingsDraftOrder}
+            elimination={
+              standingsEliminated && selectedLeagueId
+                ? {
+                    eliminated: standingsEliminated.eliminated,
+                    bubble: ctx.weekLineups?.byLeague[selectedLeagueId]?.standing?.bubble ?? null,
+                  }
+                : null
+            }
           />
         ) : (
           /* Same split as Commissioner: a read failure is not an unpicked league. */

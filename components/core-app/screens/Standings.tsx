@@ -5,7 +5,12 @@ import Link from 'next/link'
 import type { LeagueStandingsResult, RankTrendPoint, SeasonHistoryRow } from '@/lib/core-app/leagueStandings'
 import { formatRecord, type BoardTeam, type StandingsBoard, type Zone } from '@/lib/core-app/standingsModel'
 import { DEFAULT_STANDINGS_VIEW, type StandingsViewState } from '@/lib/core-app/standingsView'
-import { StandingsBoardView, Move } from '@/components/core-app/standings/StandingsBoardView'
+import {
+  StandingsBoardView,
+  Move,
+  eliminationStatusOf,
+  type EliminationZones,
+} from '@/components/core-app/standings/StandingsBoardView'
 import '@/components/core-app/af-standings.css'
 import { FreshnessChip } from '@/components/sports-os/FreshnessChip'
 import type { FreshnessMeta } from '@/lib/sports-os/freshness'
@@ -66,6 +71,11 @@ export type StandingsProps = {
   efficiency?: LineupEfficiency | null
   /** Next season's draft order if the season ended today — only for a league that drafts from its standings. */
   draftOrder?: DraftOrderPreview | null
+  /**
+   * Set for an elimination league (guillotine, survivor): who has been chopped and this week's bubble.
+   * The table then reads Safe / On the bubble / Eliminated — such a league has no playoffs.
+   */
+  elimination?: EliminationZones | null
 }
 
 function n1(v: number): string {
@@ -85,7 +95,12 @@ const ZONE_WORD: Record<Zone, string> = {
   eliminated: 'eliminated',
 }
 
-function zoneLine(t: BoardTeam): string {
+function zoneLine(t: BoardTeam, elimination: EliminationZones | null): string {
+  /* An elimination league has no playoffs: say where the week's cut leaves you, or nothing. */
+  if (elimination) {
+    const st = eliminationStatusOf(t.rosterId, elimination)
+    return st === 'eliminated' ? 'eliminated' : st === 'bubble' ? 'on the bubble this week' : st === 'safe' ? 'safe this week' : ''
+  }
   if (t.clinched === 'bye') return 'bye clinched'
   if (t.clinched === 'playoff') return 'playoff spot clinched'
   return ZONE_WORD[t.zone]
@@ -363,6 +378,7 @@ export function Standings({
   odds = null,
   efficiency = null,
   draftOrder = null,
+  elimination = null,
 }: StandingsProps) {
   const language = useOptionalLanguage().language
   const copy = (value: string) => coreUiCopy(value, language)
@@ -435,7 +451,8 @@ export function Standings({
               {me.seedMove != null && me.seedMove !== 0 ? <Move value={me.seedMove} /> : null}
             </span>
             <span className="af-st-tile-s">
-              {copy('of')} {n} · {copy(zoneLine(me))}
+              {copy('of')} {n}
+              {zoneLine(me, elimination) ? ` · ${copy(zoneLine(me, elimination))}` : ''}
             </span>
           </div>
 
@@ -477,7 +494,7 @@ export function Standings({
 
       {me && board.hasHeadToHead && board.gamesRemaining > 0 ? <WeekStakes me={me} board={board} odds={odds} /> : null}
 
-      <StandingsBoardView board={board} initial={view} odds={odds} live={data.live ?? null} efficiency={efficiency} />
+      <StandingsBoardView board={board} initial={view} odds={odds} live={data.live ?? null} efficiency={efficiency} elimination={elimination} />
 
       {draftOrder ? <DraftOrderSection order={draftOrder} /> : null}
 

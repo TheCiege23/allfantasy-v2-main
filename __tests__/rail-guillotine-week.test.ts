@@ -66,7 +66,7 @@ vi.mock('@/lib/prisma', async () => {
   }
 })
 
-import { choppedBefore, getRailMatchups, mostHavePlayed, standingIn } from '@/lib/core-app/railMatchups'
+import { BUBBLE_SIZE, choppedBefore, getRailMatchups, mostHavePlayed, standingIn } from '@/lib/core-app/railMatchups'
 
 beforeEach(() => {
   db.rows = [...guillotineRows(), ...h2hRows()]
@@ -256,5 +256,37 @@ describe('getRailMatchups — what it reads', () => {
     const fetched = (await Promise.all(findMany.mock.results.map((r) => r.value))) as Array<Array<{ leagueId: string; week: number }>>
     expect(fetched.flat().some((r) => r.leagueId === 'H' && r.week === 3)).toBe(false)
     findMany.mockRestore()
+  })
+})
+
+/*
+ * The week's bubble (2026-10-03): an elimination league has no playoffs, so Scout's cards now say Safe /
+ * On the bubble / Eliminated by THIS week's ordering. The bubble is the bottom BUBBLE_SIZE of the same
+ * order the rank comes from, widened to ties.
+ */
+describe('standingIn: the bubble', () => {
+  const side = (v: number) => ({ projected: v, afProjected: v, pricedFrom: 9, starterCount: 9 })
+  const field = (ids: string[], points: Record<string, number> = {}) => ids.map((id) => ({ rosterId: id, pointsFor: points[id] ?? 0 }))
+
+  it('is the bottom three of the week, on the rank’s own basis', () => {
+    expect(BUBBLE_SIZE).toBe(3)
+    const proj = new Map([['a', side(130)], ['b', side(120)], ['c', side(110)], ['d', side(100)], ['e', side(90)]])
+    const s = standingIn({ field: field(['a', 'b', 'c', 'd', 'e']), yourRosterId: 'a', sides: proj, elimination: true })
+    expect(s?.basis).toBe('projected')
+    expect([...(s?.bubble ?? [])].sort()).toEqual(['c', 'd', 'e'])
+  })
+
+  it('follows points once most have played — the order the cut is decided on', () => {
+    const proj = new Map([['a', side(130)], ['b', side(120)], ['c', side(110)], ['d', side(100)], ['e', side(90)]])
+    // Three of five have played; a (projected best) has 5 points, e (projected worst) has 60.
+    const s = standingIn({ field: field(['a', 'b', 'c', 'd', 'e'], { a: 5, c: 50, e: 60 }), yourRosterId: 'a', sides: proj, elimination: true })
+    expect(s?.basis).toBe('points')
+    expect([...(s?.bubble ?? [])].sort()).toEqual(['a', 'b', 'd'])
+  })
+
+  it('takes in a tie at its edge rather than pick one side of it', () => {
+    const proj = new Map([['a', side(130)], ['b', side(100)], ['c', side(100)], ['d', side(90)], ['e', side(80)]])
+    const s = standingIn({ field: field(['a', 'b', 'c', 'd', 'e']), yourRosterId: 'a', sides: proj, elimination: true })
+    expect([...(s?.bubble ?? [])].sort()).toEqual(['b', 'c', 'd', 'e'])
   })
 })
