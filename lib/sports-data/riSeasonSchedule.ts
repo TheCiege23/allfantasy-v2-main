@@ -150,7 +150,7 @@ export async function syncRiSeasonSchedule(opts: {
     const first = regularDays[0], last = regularDays[regularDays.length - 1]
     if (!first || first < `${opts.season}-10-01` || first > `${opts.season}-11-30` ||
         !last || last < `${opts.season + 1}-03-01` || last > `${opts.season + 1}-04-30`) {
-      result.error = `NCAAB schedule-season lacks the requested autumn-to-March regular season (${first ?? 'missing'} to ${last ?? 'missing'}) — refusing a partial or wrong-season slate`
+      result.error = `NCAAB schedule-season lacks the requested autumn-to-March regular season (${first ?? 'missing'} to ${last ?? 'missing'}) â€” refusing a partial or wrong-season slate`
       return result
     }
   }

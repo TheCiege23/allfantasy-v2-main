@@ -1,5 +1,7 @@
 type Metadata = { name: string; position: string | null; team: string | null }
 const object = (value: unknown): Record<string, unknown> | null => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null
+// These are occupied roster slots, never an athlete's directory position.
+const rosterSlots = new Set(['UNK','N/A','UNKNOWN','BN','BENCH','IR','IL','IL+','RESERVE','TAXI','RWT','SFX','FLEX','SUPERFLEX','SUPER_FLEX','UTIL','UTILITY'])
 const text = (value: unknown) => typeof value === 'string' ? value.trim() : ''
 
 /** Preserve provider metadata under its source ID; never turn it into an identity crosswalk. */
@@ -10,7 +12,7 @@ export function snapshotImportedPlayerMetadata(ids: readonly string[], playerMap
     const row = object(map[id]), name = text(row?.name)
     if (!name || name === id || /^unknown player/i.test(name)) continue
     const position = text(row?.position).toUpperCase()
-    out[id] = { name, position: !position || ['UNK','N/A','UNKNOWN'].includes(position) ? null : position, team: text(row?.team) || null }
+    out[id] = { name, position: !position || rosterSlots.has(position) ? null : position, team: text(row?.team) || null }
   }
   return out
 }
