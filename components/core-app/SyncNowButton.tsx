@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import { claimClientSyncRefresh, getClientSyncSnapshot, getServerSyncSnapshot, resumeClientSync, startClientSync, subscribeClientSync } from '@/lib/core-app/clientSyncJob'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { syncMessageText } from '@/lib/core-app/syncMessageText'
 
 /**
  * "Sync now" — the shell's one write-shaped control, and it is not a write.
@@ -103,7 +104,12 @@ export function SyncNowButton({ variant = 'chip', eligibleCount, onlyKey }: Sync
      is watching — it does not need to interrupt what they are reading. */
   const status = (
     <span className="af-syncnow-msg" role="status" aria-live="polite" data-phase={phase}>
-      {phase === 'busy' ? (message ?? (es ? 'Releyendo tus ligas…' : 'Re-reading your leagues…')) : (message ?? '')}
+      {/* The sync loop writes these in English; they are translated here, where the language is known. */}
+      {phase === 'busy'
+        ? message
+          ? syncMessageText(message, language)
+          : es ? 'Releyendo tus ligas…' : 'Re-reading your leagues…'
+        : syncMessageText(message, language)}
     </span>
   )
 
