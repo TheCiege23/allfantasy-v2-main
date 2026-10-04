@@ -171,7 +171,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     redraft: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard'],
       NBA: ['nba_points'],
-      MLB: ['mlb_points'],
+      MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
       NHL: ['nhl_points'],
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr', 'ncaaf_standard'],
       NCAAB: ['ncaab_points'],
@@ -180,7 +180,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     dynasty: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_superflex'],
       NBA: ['nba_points'],
-      MLB: ['mlb_points'],
+      MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
       NHL: ['nhl_points'],
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr'],
       NCAAB: ['ncaab_points'],
@@ -189,7 +189,7 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
     keeper: {
       NFL: ['fb_half_ppr', 'fb_ppr', 'fb_standard'],
       NBA: ['nba_points'],
-      MLB: ['mlb_points'],
+      MLB: ['mlb_points', 'mlb_5x5_each', 'mlb_5x5_most', 'mlb_5x5_roto', 'mlb_6x6_each', 'mlb_6x6_most', 'mlb_6x6_roto'],
       NHL: ['nhl_points'],
       NCAAF: ['ncaaf_half_ppr', 'ncaaf_ppr', 'ncaaf_standard'],
       NCAAB: ['ncaab_points'],
