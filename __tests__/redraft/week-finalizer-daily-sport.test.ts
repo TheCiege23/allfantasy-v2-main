@@ -459,3 +459,11 @@ describe('finalizeCompletedWeeksForSeason — a daily-sport week is refreshed on
     expect(out.refusals.games_not_final).toBe(1)
   })
 })
+
+ it('never seals an NHL week while its Eastern date window remains open, even if a partial slate is all final', async () => {
+  const { prisma } = makePrisma([game('FT', '2026-09-29T23:00:00Z', 500)])
+  const r = await finalizeRedraftWeek({ seasonId: NHL_SEASON.id, week: 1 }, { prisma, now: () => new Date('2026-10-02T15:00:00Z') })
+  expect(r.refusal).toBe('week_window_open')
+  expect(prisma.playerWeeklyScore.updateMany).not.toHaveBeenCalled()
+  expect(prisma.playerWeeklyScore.createMany).not.toHaveBeenCalled()
+})

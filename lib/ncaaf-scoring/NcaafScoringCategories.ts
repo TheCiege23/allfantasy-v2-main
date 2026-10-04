@@ -112,7 +112,7 @@ const KICKING: NcaafScoringCategory = {
   id: 'kicking',
   label: 'Kicking',
   rows: [
-    { key: 'fg_made',              label: 'FG Made',                   defaultValue: 0 },
+    { key: 'fg_made',              label: 'FG Made', helper: 'CFBD supplies total makes and attempts. Distance scoring is unavailable from this feed.', defaultValue: 3 },
     { key: 'fg_0_19',             label: 'FG Made (0-19 yards)',       defaultValue: 3 },
     { key: 'fg_20_29',            label: 'FG Made (20-29 yards)',      defaultValue: 3 },
     { key: 'fg_30_39',            label: 'FG Made (30-39 yards)',      defaultValue: 3 },

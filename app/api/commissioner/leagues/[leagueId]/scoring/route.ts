@@ -69,6 +69,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ leagueId:
     )
   }
 
+  if (config.categoryScoring) return NextResponse.json({ error: 'This league uses category scoring; points overrides cannot replace its format.' }, { status: 409 })
+
   const body = (await req.json().catch(() => ({}))) as {
     rules?: IncomingRule[]
   }

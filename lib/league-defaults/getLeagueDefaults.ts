@@ -1,4 +1,5 @@
 import type { LeagueSport } from '@prisma/client'
+import { buildScoringFromPresetId, isScoringPresetValidForContext } from '@/lib/league-creation-preset/scoring-presets'
 import { mapCanonicalDraftTypeToEngineCore } from '@/lib/draft-types/draftTypeRegistry'
 import { CONCEPT_PRESET_CATALOG } from '@/lib/league-concepts/conceptPresetCatalog'
 import type { ConceptPresetSeed } from '@/lib/league-concepts/conceptPresetCatalog'
@@ -247,6 +248,10 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   const format = normalizeFormat(input.format)
   const engineDraftType = mapCanonicalDraftTypeToEngineCore(input.draftType)
   const scoringPreset = String(input.scoringPreset ?? '').trim()
+  const nbaCategory = sport === 'NBA' && ['nba_8cat', 'nba_9cat'].includes(scoringPreset)
+  const categoryContext = { sport, leagueType: format, idpSelected: false }
+  if (nbaCategory && !isScoringPresetValidForContext(scoringPreset, categoryContext)) throw new Error('NBA category scoring requires redraft, dynasty or keeper.')
+  const categorySettings = nbaCategory ? buildScoringFromPresetId(scoringPreset, categoryContext).scoringSettings : {}
   const redraftContract =
     format === 'redraft'
       ? getRedraftDefaultContract({
@@ -401,6 +406,7 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
       preset: scoringPreset || preset?.scoringPreset || scoring.scoringTemplateId,
       scoringTemplateId: scoringPreset || preset?.scoringPreset || scoring.scoringTemplateId,
       scoringMode: scoring.scoringMode ?? 'points',
+      ...categorySettings,
       rules: {
         ...(scoring.rules && typeof scoring.rules === 'object' ? scoring.rules : {}),
         ...(preset?.idpRules ? { idp: preset.idpRules } : {}),

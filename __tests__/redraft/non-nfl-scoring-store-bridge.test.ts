@@ -179,3 +179,8 @@ describe('NCAAF', () => {
     expect((await getLeagueNcaafScoringConfig('L1')).rules.reception).toBe(1)
   })
 })
+
+ it('college kicker commissioner settings score makes and verified misses', async () => {
+  league('NCAAF', { ncaaf_scoring_config: { rules: { fg_made: 4, pat_made: 2, fg_missed: -1, pat_missed: -2 }, lastUpdatedBy: 'commissioner' } })
+  expect(await score({ fg_made: 2, xp_made: 3, fg_miss: 1, xp_miss: 1 })).toBe(11)
+})

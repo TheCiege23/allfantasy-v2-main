@@ -41,7 +41,7 @@ export const NCAAF_MISC_KEYS = [
 ] as const
 
 export const NCAAF_KICKING_KEYS = [
-  'pat_made', 'pat_missed', 'fg_0_19', 'fg_20_29', 'fg_30_39', 'fg_40_49', 'fg_50_plus',
+  'fg_made', 'fg_missed', 'pat_made', 'pat_missed', 'fg_0_19', 'fg_20_29', 'fg_30_39', 'fg_40_49', 'fg_50_plus',
   'fg_missed_0_39', 'fg_missed_40_49', 'fg_missed_50_plus',
 ] as const
 
@@ -73,6 +73,7 @@ export const NCAAF_STAT_LABELS: Record<string, string> = {
   one_hundred_yd_rec_bonus: '100+ Rec Yards', two_hundred_yd_rec_bonus: '200+ Rec Yards',
   fumble: 'Fumble', fumble_lost: 'Fumble Lost', fumble_recovery: 'Fumble Recovery',
   off_fumble_recovery_td: 'Off Fumble Rec TD', return_yards: 'Return Yards', return_td: 'Return TD',
+  fg_made: 'FG Made', fg_missed: 'FG Missed',
   pat_made: 'PAT Made', pat_missed: 'PAT Missed',
   fg_0_19: 'FG 0-19', fg_20_29: 'FG 20-29', fg_30_39: 'FG 30-39', fg_40_49: 'FG 40-49', fg_50_plus: 'FG 50+',
   fg_missed_0_39: 'FG Miss 0-39', fg_missed_40_49: 'FG Miss 40-49', fg_missed_50_plus: 'FG Miss 50+',
@@ -171,5 +172,6 @@ export function buildFullNcaafScoringConfig(presetKey: NcaafScoringPresetKey): R
   const preset = getNcaafScoringPreset(presetKey)
   const config: Record<string, number> = {}
   for (const key of NCAAF_STAT_KEYS) config[key] = preset.rules[key] ?? 0
+  config.fg_made = preset.rules.fg_made ?? 3
   return config
 }
