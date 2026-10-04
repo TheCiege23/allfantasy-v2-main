@@ -9,11 +9,11 @@ const roles = (value: string | null) => String(value??'').toUpperCase().split(/[
 
 // Verified 2026-10-04 through the RotoWire IDs supplied by Fantrax itself. Each public
 // provider profile names the alternate spelling; this is not a generic nickname expansion.
-const documentedSourceNames:Record<string,{rotowireId:string;sourceName:string;officialName:string;url:string}>={
+const documentedSourceNames:Record<string,{rotowireId:string;sourceName:string;officialName:string;url:string;canonicalNames?:string[]}>={
  '06982':{rotowireId:'41891',sourceName:'Cook, Cameron',officialName:'Cam Cook',url:'https://www.rotowire.com/cfootball/player/cam-cook-41891'},
  '06jaw':{rotowireId:'47073',sourceName:'Barnes, Christopher',officialName:'Chris Barnes',url:'https://www.rotowire.com/cfootball/player/chris-barnes-47073'},
  '06ajd':{rotowireId:'41448',sourceName:'Alexander, Hilton',officialName:'Deuce Alexander',url:'https://www.rotowire.com/cfootball/player/deuce-alexander-41448'},
- '06fo4':{rotowireId:'42002',sourceName:'Winfield, DWayne Lunch',officialName:'Lunch Winfield',url:'https://www.rotowire.com/cfootball/player/lunch-winfield-42002'},
+ '06fo4':{rotowireId:'42002',sourceName:'Winfield, DWayne Lunch',officialName:'Lunch Winfield',canonicalNames:["D'Wanye Winfield","D'Wanye' Winfield"],url:'https://www.rotowire.com/cfootball/player/lunch-winfield-42002'},
  '069ol':{rotowireId:'40941',sourceName:'Baxter, Cedric',officialName:'CJ Baxter',url:'https://www.rotowire.com/cfootball/player/cj-baxter-40941'},
  '06ks2':{rotowireId:'45156',sourceName:'Bailey, Cedrick',officialName:'CJ Bailey',url:'https://www.rotowire.com/cfootball/player/cj-bailey-45156'},
  '06ks3':{rotowireId:'46363',sourceName:'Scott, Duke',officialName:'Jayden Scott',url:'https://gopack.com/sports/football/roster'},
@@ -21,6 +21,11 @@ const documentedSourceNames:Record<string,{rotowireId:string;sourceName:string;o
 const sourceNameKey=(ref:FantraxPlayerRef)=>{
  const proof=documentedSourceNames[ref.fantraxId]
  return proof && String(ref.rotowireId??'')===proof.rotowireId && nameKey(ref.name)===nameKey(proof.sourceName)?nameKey(proof.officialName):nameKey(ref.name)
+}
+
+const documentedCanonicalName=(ref:FantraxPlayerRef,value:string)=>{
+ const proof=documentedSourceNames[ref.fantraxId]
+ return Boolean(proof && String(ref.rotowireId??'')===proof.rotowireId && nameKey(ref.name)===nameKey(proof.sourceName) && [proof.sourceName,proof.officialName,...(proof.canonicalNames??[])].some(name=>nameKey(name)===nameKey(value)))
 }
 
 /** Only a completed current-season roster snapshot may be handed to this planner.
@@ -71,7 +76,7 @@ export function planCurrentRosterCfbdLinks(refs: FantraxPlayerRef[], identities:
    if(targets.some(t=>t.fantraxId) || targets.length>1){conflicts++;continue}
    const target=targets[0]
    if(target){
-    if(!(proof.names.has(nameKey(target.canonicalName)) || (proof.names.has(sourceNameKey(ref)) && nameKey(target.canonicalName)===nameKey(ref.name))) || !roles(target.position).some(p=>roles(ref.position).includes(p)&&proof.roles.includes(p))){conflicts++;continue}
+    if(!(proof.names.has(nameKey(target.canonicalName)) || (proof.names.has(sourceNameKey(ref)) && documentedCanonicalName(ref,target.canonicalName))) || !roles(target.position).some(p=>roles(ref.position).includes(p)&&proof.roles.includes(p))){conflicts++;continue}
     sourceLinks.push({id:target.id,fantraxId:ref.fantraxId,cfbdId:id})
    }else{
     const athlete=pool.find(p=>p.externalId===id)!
@@ -80,7 +85,7 @@ export function planCurrentRosterCfbdLinks(refs: FantraxPlayerRef[], identities:
    continue
   }
   const row=owned[0]!
-  if(!(proof.names.has(nameKey(row.canonicalName)) || (proof.names.has(sourceNameKey(ref)) && nameKey(row.canonicalName)===nameKey(ref.name))) || !roles(row.position).some(p=>roles(ref.position).includes(p)&&proof.roles.includes(p)))continue
+  if(!(proof.names.has(nameKey(row.canonicalName)) || (proof.names.has(sourceNameKey(ref)) && documentedCanonicalName(ref,row.canonicalName))) || !roles(row.position).some(p=>roles(ref.position).includes(p)&&proof.roles.includes(p)))continue
   if((cfbdOwners.get(id)??[]).some(other=>other.fantraxId&&other.fantraxId!==ref.fantraxId)){conflicts++;continue}
   links.push({id:row.id,fantraxId:ref.fantraxId,cfbdId:id,name:row.canonicalName,position:row.position})
  }

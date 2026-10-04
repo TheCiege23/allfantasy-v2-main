@@ -76,3 +76,12 @@ it('keeps an existing official-ID identity when its canonical name uses the docu
  expect(planCurrentRosterCfbdLinks([ref],[row],[p],[],{},new Set([ref.fantraxId])).sourceLinks).toHaveLength(1)
  expect(planCurrentRosterCfbdLinks([{...ref,rotowireId:1}],[row],[p],[],{},new Set([ref.fantraxId])).sourceLinks).toHaveLength(0)
 })
+
+
+it('accepts the documented full name behind Lunch Winfield but refuses an undocumented canonical name',()=>{
+ const ref={fantraxId:'06fo4',name:'Winfield, DWayne Lunch',rotowireId:42002,position:'QB',team:'Louisiana'}
+ const p={externalId:'4871091',name:'Lunch Winfield',position:'QB',college:'Louisiana',team:'Louisiana'}
+ const row={id:'owned',canonicalName:"D'Wanye' Winfield",currentTeam:'Louisiana',position:'QB',fantraxId:null,cfbdId:'4871091'}
+ expect(planCurrentRosterCfbdLinks([ref],[row],[p],[],{},new Set([ref.fantraxId])).sourceLinks).toHaveLength(1)
+ expect(planCurrentRosterCfbdLinks([ref],[{...row,canonicalName:'Different Winfield'}],[p],[],{},new Set([ref.fantraxId])).sourceLinks).toHaveLength(0)
+})
