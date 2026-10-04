@@ -25,6 +25,7 @@ import '@/components/core-app/af-core-boards.css'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { relativeAge } from '@/lib/core-app/cardFreshness'
+import { ageText } from '@/lib/core-app/shellCopy'
 import type { WeekLineups } from '@/lib/core-app/weekLineups'
 import { rowScoreOf, summariseWeekScores, type RowScore, type WeekScoreSummary } from '@/lib/core-app/myTeamScoreboard'
 import { boardFilterHref } from '@/lib/core-app/myTeamBoardFilter'
@@ -315,7 +316,13 @@ function SyncStamp({ row, now }: { row: MyTeamRow; now: number }) {
   return (
     <span className="af-bd-sync" data-stale={now - at > STALE_SYNC_MS} suppressHydrationWarning>
       {' · '}
-      {es ? (age === 'just now' ? 'sincronizada ahora' : `sincronizada hace ${age.replace(' ago', '')}`) : `synced ${age}`}
+      {/*
+        The age through the shell's `ageText`, so the board and the shell's sync chip word one age
+        one way. The hand-built form it replaced left half-English on the months and years
+        `relativeAge` writes for a long-unsynced league («hace 2mo»). "sincronizada" agrees with
+        liga — each row is one.
+      */}
+      {es ? `sincronizada ${ageText(age, 'es')}` : `synced ${age}`}
     </span>
   )
 }
