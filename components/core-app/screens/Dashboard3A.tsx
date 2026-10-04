@@ -179,24 +179,14 @@ const SEV_CLASS: Record<CoreIssue['severity'], string> = {
   info: 'af3a-accent',
 }
 
-/**
- * The inline "?" affordance. `af-dash-3a.css` styles `[data-help]` into a 16px
- * badge and `[data-help-body]` into a popover shown on hover or keyboard focus.
- *
- * ⚠ THE WHOLE THING WAS `aria-hidden`, WHICH HID THE EXPLANATION, NOT THE GLYPH.
- * These bodies are the only place "15 of 62" or "LVL 14" is defined — hiding them
- * from assistive tech left a screen of unexplained numbers. Only the decorative
- * "?" is hidden now, and the badge takes focus so the popover is reachable
- * without a pointer.
+/*
+ * Every "?" on this screen is `<TopicTip>` — the shared InfoTip, words from
+ * lib/core-app/help-topics/home.ts (2026-10-03, one explainer control across /core).
+ * It replaced a local `Help`: a CSS hover/focus `<span data-help>` with no
+ * accessible name, which a phone could not reliably open. Its eight texts were
+ * re-checked against the loaders when they moved; home.ts's header lists what
+ * was corrected and why.
  */
-function Help({ children, left = false }: { children: React.ReactNode; left?: boolean }) {
-  return (
-    <span data-help {...(left ? { 'data-help-left': '' } : {})} tabIndex={0}>
-      <span aria-hidden="true">?</span>
-      <span data-help-body>{children}</span>
-    </span>
-  )
-}
 
 /**
  * `PanelState.reason` values are authored as lower-case clauses ("weeks are on
@@ -564,17 +554,11 @@ export function Dashboard3A(props: Dashboard3AProps) {
             READ-ONLY
           </span>
           {/*
-            `left` because this badge sits at the right-hand end of the topbar. A
-            264px popover anchored left ran 67px past the viewport and — since a
-            `visibility: hidden` absolutely-positioned element still extends the
-            document's scroll area — put a horizontal scrollbar on the whole page
-            while showing nothing.
+            This badge sits at the right-hand end of the topbar, which once put the old CSS
+            popover 67px past the viewport. InfoTip's popover opens in the top layer, centred and
+            capped at `min(360px, 100vw - 32px)` (af-core.css `.af-info-pop`), so it cannot overflow.
            */}
-          <Help left>
-            <b>AllFantasy never writes to your leagues.</b>
-            We read your rosters and tell you what to do. Every change happens on the
-            platform itself.
-          </Help>
+          <TopicTip topic="readOnly" />
           {nowLabel ? <span className="af3a-chip af3a-mono">{nowLabel}</span> : null}
           <span className="af3a-chip af3a-plan">
             <b>{planName ?? 'FREE'}</b>
@@ -660,13 +644,7 @@ export function Dash3ARoutine({ routine }: { routine: WeeklyRoutineData | null }
   return (
     <YourWeekRoutine
       data={routine}
-      help={
-        <Help>
-          <b>A fantasy week in five steps.</b>
-          Results on Tuesday, waivers Wednesday, lineups Thursday, game day Sunday and the
-          recap Monday (US Eastern). A check mark means we saw it done in your leagues.
-        </Help>
-      }
+      help={<TopicTip topic="yourWeekRoutine" />}
     />
   )
 }
@@ -680,11 +658,7 @@ export function Dash3AIssues({ issues }: { issues: CoreIssue[] }) {
             <section className="af3a-sec">
               <header className="af3a-sechead">
                 <h2>Outstanding issues</h2>
-                <Help>
-                  <b>Everything with a deadline, across every league.</b>
-                  Unset lineups, waiver runs, trade offers and votes. Sorted by what
-                  expires first.
-                </Help>
+                <TopicTip topic="outstandingIssues" />
                 {openCount > 0 ? <span className="af3a-open">{openCount} OPEN</span> : null}
                 <span className="af3a-note">Soonest deadline first</span>
               </header>
@@ -929,11 +903,7 @@ export function Dash3ACareer({ career, freshness = null }: { career: CareerData 
             <section className="af3a-card">
               <header className="af3a-cardhead">
                 <span className="af3a-label">YOUR CAREER</span>
-                <Help left>
-                  <b>Your record across every league you have ever imported.</b>
-                  Level comes from the XP engine: championships, win rate, tenure,
-                  leagues and playoff appearances.
-                </Help>
+                <TopicTip topic="homeCareer" />
                 <Link className="af3a-cardlink" href="/core/rankings">Rankings →</Link>
               </header>
 
@@ -1012,12 +982,7 @@ export function Dash3ARivals({
             <section className="af3a-card">
               <header className="af3a-cardhead">
                 <span className="af3a-label">RIVALRY RADAR</span>
-                <Help left>
-                  <b>Who actually beats you.</b>
-                  Counted from every scored week stored for leagues where you have
-                  claimed a team. Ranked by losses to them, not by how often you play.
-                  A meeting that finished level is a tie, shown as a third number, never a loss.
-                </Help>
+                <TopicTip topic="homeRivalryRadar" />
               </header>
               {rivals?.available ? (
                 <div className="af3a-rivals">
@@ -1089,11 +1054,7 @@ export function Dash3AExposure({
           <section className="af3a-card">
             <header className="af3a-cardhead">
               <span className="af3a-label">PORTFOLIO &amp; EXPOSURE</span>
-              <Help>
-                <b>How many of your rosters hold the same player.</b>
-                Read from the rosters imported for teams you have claimed. Four of four
-                means every roster we could read has them.
-              </Help>
+              <TopicTip topic="homeExposure" />
             </header>
             {exposure?.available ? (
               <>
@@ -1131,13 +1092,7 @@ export function Dash3AFollowing({ following }: { following: FollowingCardData | 
   return (
           <FollowingCard
             data={following}
-            help={
-              <Help>
-                <b>Players you follow in every league.</b>
-                Tap ☆ on any player card. Status is the latest reported designation; next game is
-                his next fixture on file.
-              </Help>
-            }
+            help={<TopicTip topic="homeFollowing" />}
           />
   )
 }
@@ -1151,15 +1106,7 @@ export function Dash3AReceipts({ receipts }: { receipts: DecisionReceiptsData | 
   return (
           <ReceiptsCard
             data={receipts}
-            help={
-              <Help>
-                <b>How your moves turned out.</b>
-                Trades: points credited to what you got minus what you gave, only while each player
-                stayed on your roster. Waiver adds: what he scored for you after the add. Lineups:
-                the best legal lineup you could have started, minus what your starters scored. All
-                scored by your league&apos;s platform; recent moves wait until they have a result.
-              </Help>
-            }
+            help={<TopicTip topic="homeReceipts" />}
           />
   )
 }

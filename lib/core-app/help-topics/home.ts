@@ -22,6 +22,43 @@ import type { HelpTopic } from '../helpTopics'
  *   bracketBye .................. components/core-app/screens/BracketChallenge.tsx byeReason / SeedSlot reason;
  *                                 lib/brackets/sportShell.ts byeSeeds
  *
+ *
+ * The eight below were Dashboard3A's local `Help` (a CSS-hover `<span data-help>`), folded into the
+ * shared InfoTip on 2026-10-03 and each re-checked against its loader. What changed, and why:
+ *   readOnly .................... lib/league/write-authority.ts WRITE_BACK_CONNECTED_PLATFORMS (empty: imported
+ *                                 = SHADOW, never propagated); lib/launch/launchTruth.ts externalWriteBack false.
+ *                                 Was "never writes to your leagues" — untrue of a NATIVE league, so scoped to imports.
+ *   yourWeekRoutine ............. lib/core-app/weeklyRoutine.ts routineDayFor (DEFAULT_TIME_ZONE America/New_York,
+ *                                 Thu–Sat → lineups), buildWeeklyRoutine `done` rules; loadSeasonAdds (Sleeper only);
+ *                                 startersInDoubt = the triage rule (tone 'bad' && startingIn > 0). Was "we saw it
+ *                                 done": a lineup tick means no starter ruled out, and game day / recap never tick.
+ *   outstandingIssues ........... lib/core-app/outstandingIssues.ts deriveOutstandingIssues (draft_upcoming, stale_sync;
+ *                                 sort: dated first) + mergeDash34Issues (empty slot, starter out, live draft, Best Ball
+ *                                 coverage; PREPENDED). Was "everything with a deadline … waiver runs, trade offers and
+ *                                 votes": none of those three is detected (detectorsUnavailable), and stale rows have
+ *                                 no deadline.
+ *   homeCareer .................. lib/core-app/careerModel.ts buildCareerData (counted = finished seasons only; dedupe
+ *                                 platform+season+name; seasonsPlayed = distinct seasons); level = getLevelFromXp of
+ *                                 user_profiles.xp_total, lib/rank/careerXp.ts + rank-xp-constants.ts. Was "win rate,
+ *                                 tenure, leagues" — those are PRESTIGE's inputs (careerPrestige), not XP's.
+ *   homeRivalryRadar ............ lib/core-app/dash3aPanels.ts getRivalRecords (claimed team, isFinal weeks, all-zero
+ *                                 pairing skipped, keyed on display name, sort losses then meetings, ties); Dashboard3A
+ *                                 rivalRecord (W–L–T only with a tie, #2005).
+ *   homeExposure ................ dash3aPanels.ts getCrossLeagueExposure (players + starters + reserve + taxi; one roster
+ *                                 per league; `of` = rostersRead, foreign-id rosters included but emptied by
+ *                                 rosterIdSpace.ts sleeperReadableRosters); ExposureImpact.tsx canExpand (count > 1).
+ *                                 Was "four of four means every roster we could read" — M also counts rosters we
+ *                                 cannot read.
+ *   homeFollowing ............... lib/core-app/followingCard.ts getFollowingCard (status and next game NFL only;
+ *                                 NEXT_GAME_DAYS 10; a stale or absent report is blank); PlayerCardSheet.tsx ☆.
+ *   homeReceipts ................ lib/core-app/decisionReceipts.ts (isSleeper on every kind; MIN_WEEKS_FOR_RECEIPT 3,
+ *                                 tooEarly/hasNoSignal; LINEUP_RECEIPT_WEEKS 3, computeWeeklyMaxPf); trade points are
+ *                                 scored from stat lines with the league's settings (sleeperTradeGradeService.ts), not
+ *                                 the platform's own totals. Was "all scored by your league's platform".
+ *
+ * ⚠ Dashboard3A is an English-only screen, so the Spanish quotes its on-screen labels ("LVL", "N of M", "W–L–T")
+ * in English, as the reader sees them — the convention draft.ts records for War Room.
+ *
  * The home's "League matchups" percentage reuses `matchupWinProbability` (rankings.ts): it is the
  * same `getMatchupData` forecast as the Matchup screen. Do not add a second topic for it.
  */
@@ -194,6 +231,86 @@ export const HOME_TOPICS = {
     es: {
       title: 'Byes',
       body: 'Las cabezas de serie de esta columna no juegan la primera ronda, así que su rival aparece como «?» hasta que se juega esa ronda; nunca se completa por adelantado. Un «?» en cualquier otro lugar significa que la siembra aún no se publicó o que el ganador de ese partido no está decidido.',
+    },
+  },
+  readOnly: {
+    en: {
+      title: 'Read-only',
+      body: 'AllFantasy never writes to a league you imported. Nothing you do here reaches Sleeper, ESPN, Yahoo or any other platform: we read your rosters and tell you what to do, and every real change happens on the platform itself. Leagues hosted on AllFantasy are the exception — they live here.',
+    },
+    es: {
+      title: 'Solo lectura',
+      body: 'AllFantasy nunca escribe en una liga que importaste. Nada de lo que hagas aquí llega a Sleeper, ESPN, Yahoo ni a ninguna otra plataforma: leemos tus plantillas y te decimos qué hacer, y todo cambio real se hace en la propia plataforma. Las ligas alojadas en AllFantasy son la excepción: viven aquí.',
+    },
+  },
+  yourWeekRoutine: {
+    en: {
+      title: 'Your week',
+      body: 'A fantasy week in five steps, by the day in US Eastern: results Tuesday, waivers Wednesday, lineups Thursday to Saturday, game day Sunday and the recap Monday. A check mark is set only from data — results once your last played week is scored, waivers once you’ve made an add this week in a Sleeper league, lineups when none of your starters is ruled out. Game day and the recap never get one.',
+    },
+    es: {
+      title: 'Tu semana',
+      body: 'Una semana de fantasy en cinco pasos, según el día en la hora del Este de EE. UU.: resultados el martes, waivers el miércoles, alineaciones de jueves a sábado, día de partido el domingo y el resumen el lunes. La marca de verificación solo sale de los datos: resultados cuando tu última semana jugada tiene marcadores, waivers cuando hiciste una incorporación esta semana en una liga de Sleeper, y alineaciones cuando ninguno de tus titulares está descartado. El día de partido y el resumen nunca la llevan.',
+    },
+  },
+  outstandingIssues: {
+    en: {
+      title: 'Outstanding issues',
+      body: 'What needs you across your leagues: a draft coming up or already live, an empty starting slot, a starter ruled out, a Best Ball roster that can’t cover a position, and leagues whose data has gone stale. Problems already happening come first, then upcoming drafts by date, then stale leagues. Waiver claims, trade offers and votes aren’t checked here.',
+    },
+    es: {
+      title: 'Asuntos pendientes',
+      body: 'Lo que necesita tu atención en tus ligas: un draft que se acerca o que ya está en marcha, un puesto titular vacío, un titular descartado, una plantilla de Best Ball que no cubre una posición y las ligas cuyos datos están desactualizados. Primero van los problemas que ya están ocurriendo, luego los drafts próximos por fecha y al final las ligas desactualizadas. Aquí no se revisan reclamos de waivers, ofertas de intercambio ni votaciones.',
+    },
+  },
+  homeCareer: {
+    en: {
+      title: 'Your career',
+      body: 'Titles and seasons count the finished seasons of every league imported to your account, each league-season once even if it came in through more than one import; a season still being played isn’t counted yet. Your level comes from XP: 10 per win, 30 per playoff berth, 200 per title, 10 per distinct season, plus 2 per team above 10 in each league. Losses never take XP away.',
+    },
+    es: {
+      title: 'Tu carrera',
+      body: 'Los títulos y las temporadas cuentan las temporadas terminadas de todas las ligas importadas a tu cuenta, cada temporada de liga una sola vez aunque haya llegado por más de una importación; una temporada que aún se está jugando no cuenta todavía. Tu nivel («LVL») sale de la XP: 10 por victoria, 30 por clasificación a playoffs, 200 por título, 10 por cada temporada distinta, más 2 por cada equipo por encima de 10 en cada liga. Las derrotas nunca restan XP.',
+    },
+  },
+  homeRivalryRadar: {
+    en: {
+      title: 'Rivalry Radar',
+      body: 'Who actually beats you: your record against each manager over every finished, scored week stored for leagues where you’ve claimed a team, with the same display name in several leagues counted as one manager. Ranked by how often they’ve beaten you; the number of meetings only breaks a tie. A meeting that finished level is a tie, never a loss, and the record shows W–L–T only when there is one.',
+    },
+    es: {
+      title: 'Radar de rivales',
+      body: 'Quién te gana de verdad: tu récord contra cada manager en todas las semanas terminadas y con marcador que tenemos de las ligas donde reclamaste un equipo; el mismo nombre visible en varias ligas cuenta como un solo manager. Se ordena por cuántas veces te han ganado, y el número de enfrentamientos solo desempata. Un enfrentamiento que terminó igualado es un empate, nunca una derrota, y el récord se muestra como «W–L–T» solo cuando hay alguno.',
+    },
+  },
+  homeExposure: {
+    en: {
+      title: 'Portfolio & exposure',
+      body: 'The players on the most of your rosters — bench, reserve and taxi count as well as starters — read from the rosters imported for teams you’ve claimed. “N of M” counts one roster per league, and M includes leagues whose player ids we can’t match yet, where nobody is counted, so while one is connected no player reads M of M. Tap a player on two or more rosters to see what happens if he sits.',
+    },
+    es: {
+      title: 'Cartera y exposición',
+      body: 'Los jugadores que están en más de tus plantillas —el banquillo, la reserva y el taxi cuentan igual que los titulares—, leídos de las plantillas importadas de los equipos que reclamaste. «N of M» cuenta una plantilla por liga, y M incluye las ligas cuyos ids de jugador aún no podemos emparejar, donde no se cuenta a nadie; así que mientras haya una conectada ningún jugador llega a «M of M». Toca un jugador que esté en dos o más plantillas para ver qué pasa si no juega.',
+    },
+  },
+  homeFollowing: {
+    en: {
+      title: 'Following',
+      body: 'Players you follow, from the ☆ on any player card. Status is his latest reported designation — a blank means nothing is reported, not that he’s healthy — and next game is his next fixture on file in the coming 10 days. Both are shown for NFL players only.',
+    },
+    es: {
+      title: 'Seguidos',
+      body: 'Los jugadores que sigues, desde la ☆ de cualquier ficha de jugador. El estado es su última designación reportada —un espacio en blanco significa que no hay nada reportado, no que esté sano— y el próximo partido es el siguiente que tenemos registrado en los próximos 10 días. Ambos se muestran solo para jugadores de la NFL.',
+    },
+  },
+  homeReceipts: {
+    en: {
+      title: 'Receipts',
+      body: 'How your moves in Sleeper leagues turned out, in points under your league’s scoring. Trades: what you got minus what you gave, counted only while each player stayed on your roster. Waiver adds: what he scored on your roster after the add. Lineups: the best legal lineup you could have started minus what your starters scored, over the last three finished weeks. Start/sit calls from AutoCoach and Chimmy are checked against what both players scored. A trade or add under three weeks old waits until it has a result.',
+    },
+    es: {
+      title: 'Resultados de tus decisiones',
+      body: 'Cómo salieron tus movimientos en ligas de Sleeper, en puntos según la puntuación de tu liga. Intercambios: lo que recibiste menos lo que diste, contando solo mientras cada jugador siguió en tu plantilla. Incorporaciones de waivers: lo que anotó en tu plantilla después de incorporarlo. Alineaciones: la mejor alineación válida que podías poner menos lo que anotaron tus titulares, en las tres últimas semanas terminadas. Las recomendaciones de titular o banquillo de AutoCoach y Chimmy se comparan con lo que anotaron ambos jugadores. Un intercambio o una incorporación de menos de tres semanas espera hasta tener un resultado.',
     },
   },
 } satisfies Record<string, HelpTopic>
