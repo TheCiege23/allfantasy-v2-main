@@ -1334,6 +1334,7 @@ export const translationsEsParity: Record<string, string> = {
   "settings.profile.removeFailed": "No se pudo quitar la imagen",
   "settings.profile.save": "Guardar perfil",
   "settings.profile.saved": "✓ Perfil guardado",
+  "settings.preferences.saved": "✓ Preferencias guardadas",
   "settings.profile.sports": "Deportes que juegas",
   "settings.profile.sportsHint": "El primero que elegiste es tu deporte predeterminado; cámbialo en Preferencias.",
   "settings.profile.subtitle": "Cómo te muestras en AllFantasy.",

@@ -1732,6 +1732,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.profile.sports": "Sports you play",
     "settings.profile.sportsHint": "The first one you picked is your default sport — change it under Preferences.",
     "settings.profile.saved": "✓ Profile saved",
+    "settings.preferences.saved": "✓ Preferences saved",
     "settings.profile.avatarPreset.crest": "Crest",
     "settings.profile.avatarPreset.bolt": "Bolt",
     "settings.profile.avatarPreset.crown": "Crown",
