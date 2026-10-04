@@ -663,7 +663,7 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
         cpuAutoPick: ls.cpuAutoPick,
         playerPool: ls.playerPool,
         alphabeticalSort: ls.alphabeticalSort,
-        startedAt: session.startedAt ?? startedAtNow,
+        startedAt: startedAtNow,
         version: { increment: 1 },
       },
     })
@@ -696,7 +696,7 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
     }
     await updateSessionWithArchive(session, {
       status: 'in_progress', pausedRemainingSeconds: null, overnightFrozenPickSeconds: null,
-      startedAt: session.startedAt ?? startedAtNow, version: { increment: 1 },
+      startedAt: startedAtNow, completedAt: null, version: { increment: 1 },
     }, 'start')
     await ensureDraftingLifecycleForActiveSession(leagueId)
     return { ok: true }
@@ -707,7 +707,7 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
     timerSeconds != null && timerSeconds > 0 ? new Date(Date.now() + timerSeconds * 1000) : null
   await updateSessionWithArchive(session, {
     status: 'in_progress', timerSeconds, timerEndAt, pausedRemainingSeconds: null,
-    overnightFrozenPickSeconds: null, startedAt: session.startedAt ?? startedAtNow,
+    overnightFrozenPickSeconds: null, startedAt: startedAtNow, completedAt: null,
     version: { increment: 1 },
   }, 'start')
   await ensureDraftingLifecycleForActiveSession(leagueId)
