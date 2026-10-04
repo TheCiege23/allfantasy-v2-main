@@ -225,7 +225,8 @@ export const CAREER_TOPICS = {
     },
     es: {
       title: 'Columnas de la tabla de ligas',
-      body: 'Slot es dónde está en la plantilla de esa liga. En tus propios equipos, Proj son las estadísticas proyectadas del proveedor puntuadas con las reglas de esa liga, y AF es la proyección propia de AllFantasy llevada a la misma puntuación; solo aparece donde hay Proj. Value es su valor de mercado de traspasos para el formato de esa liga; * significa que la puntuación de la liga lo movió.',
+      // The column names are the table's Spanish headers (lib/core-app/playerFinderCopy.ts): Puesto, Proy., AF, Valor.
+      body: 'Puesto es dónde está en la plantilla de esa liga. En tus propios equipos, Proy. son las estadísticas proyectadas del proveedor puntuadas con las reglas de esa liga, y AF es la proyección propia de AllFantasy llevada a la misma puntuación; solo aparece donde hay Proy. Valor es su valor de mercado de traspasos para el formato de esa liga; * significa que la puntuación de la liga lo movió.',
     },
   },
   leagueStripLegend: {

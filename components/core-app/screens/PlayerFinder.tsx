@@ -29,6 +29,11 @@ import { pregameInactive } from '@/lib/core-app/pregameInactive'
 import { byeChip, byeStatus } from '@/lib/core-app/byeStatus'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { ageText } from '@/lib/core-app/shellCopy'
+import { slotText } from '@/lib/core-app/playerMovesCopy'
+import { designationText, finderCopy, platformListText, reasonText, type FinderCopy } from '@/lib/core-app/playerFinderCopy'
 
 /** The loader hands a Date across the server boundary; tests and fixtures may hand an ISO string. */
 function asIso(v: Date | string | null | undefined): string | null {
@@ -114,6 +119,13 @@ import { PlayerNews } from '@/components/core-app/player-finder/PlayerNews'
  *
  * ⚠ THE CHIMMY CARD IS COMPUTED, NOT GENERATED — see PlayerVerdict for why a
  * page-load LLM call was rejected.
+ *
+ * Spanish (2026-10-04): the screen's own words come from lib/core-app/playerFinderCopy.ts, built at
+ * render from `useOptionalLanguage`, which starts at English on server and client alike, so the
+ * first paint agrees. What the loaders hand over stays English in the data — the readiness label,
+ * the bye chip, the report time, the reasons — and is translated only where it is drawn, by the
+ * shared translators (`coreUiCopy`, `ageText`, `slotText`, `reasonText`). The subcomponents carry
+ * their own copy.
  */
 
 export type PlayerFinderProps = {
@@ -274,6 +286,7 @@ function StatTile({
   state,
   value,
   tone,
+  why = (reason) => reason,
 }: {
   label: string
   help?: string
@@ -282,6 +295,8 @@ function StatTile({
   state?: SectionState<unknown>
   value?: string | null
   tone?: 'good' | 'warn' | 'bad'
+  /** A loader's reason in the reader's language (`reasonText`); English as written by default. */
+  why?: (reason: string) => string
 }) {
   const missing = state ? !state.available : value == null
   return (
@@ -292,7 +307,7 @@ function StatTile({
         {tip ? <HelpDot title={tip.title} body={tip.body} /> : null}
       </div>
       {missing && state && !state.available ? (
-        <div className="af-pf-tile-why">{state.reason}</div>
+        <div className="af-pf-tile-why">{why(state.reason)}</div>
       ) : help ? (
         <div className="af-pf-tile-why">{help}</div>
       ) : null}
@@ -300,22 +315,15 @@ function StatTile({
   )
 }
 
-/**
- * The signed-out replacement for a per-league section's reason.
- *
- * One sentence, and it names what is behind the door rather than just asking for
- * a sign-in — the sections it covers are the reason this page is worth an
- * account at all.
+/*
+ * The signed-out replacement for a per-league section's reason is `signInReason` in
+ * playerFinderCopy.ts: one sentence, and it names what is behind the door rather than just asking
+ * for a sign-in — the sections it covers are the reason this page is worth an account at all.
  */
-const SIGN_IN_REASON =
-  'Sign in to see which of your leagues roster him, what slot he is in, and what he is worth under each league’s own scoring.'
 
-/** "Sleeper and ESPN", "Sleeper, ESPN and Yahoo". */
-function listPlatforms(platforms: string[]): string {
-  const names = [...new Set(platforms.map(platformLabel))]
-  if (names.length === 0) return ''
-  if (names.length === 1) return names[0]
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+/** "Sleeper and ESPN", "Sleeper, ESPN and Yahoo" — "y" in Spanish. */
+function listPlatforms(platforms: string[], language: string): string {
+  return platformListText([...new Set(platforms.map(platformLabel))], language)
 }
 
 function slotTone(slot: string, move: PlayerMove | undefined): 'good' | 'warn' | 'bad' | 'none' {
@@ -344,37 +352,37 @@ function rowTone(r: LeagueRow): 'bad' | 'warn' | 'none' | 'good' | 'other' {
   return r.slot.slot === 'STARTER' ? 'good' : 'none'
 }
 
-function rowAction(r: LeagueRow, last: string): ReactNode {
+function rowAction(r: LeagueRow, last: string, t: FinderCopy, language: string): ReactNode {
   if (!r.slot.isYours) {
     return (
       <Link href={`/core/trades?league=${encodeURIComponent(r.slot.leagueId)}`} className="af-pf-link">
-        Trade for {last} →
+        {t.tradeFor(last)}
       </Link>
     )
   }
   if (r.move && r.move.tone !== 'good' && r.move.link) {
     return r.move.link.external ? (
       <a className="af-pf-link" href={r.move.link.href} target="_blank" rel="noopener noreferrer">
-        Where to fix it →
+        {t.whereToFix}
       </a>
     ) : (
       <Link className="af-pf-link" href={r.move.link.href}>
-        Where to fix it →
+        {t.whereToFix}
       </Link>
     )
   }
-  if (r.slot.slot === 'STARTER') return <span className="af-pf-nothing">Nothing to do</span>
+  if (r.slot.slot === 'STARTER') return <span className="af-pf-nothing">{t.nothingToDo}</span>
   if (r.impact?.startOver && r.impact.startOver.delta <= 0) {
     return (
-      <span className="af-pf-nothing" title={`${r.impact.startOver.name} projects higher in that slot`}>
-        Bench is right
+      <span className="af-pf-nothing" title={t.projectsHigher(r.impact.startOver.name)}>
+        {t.benchIsRight}
       </span>
     )
   }
-  if (r.slot.slot === 'IR SLOT') return <span className="af-pf-nothing">On IR — no report says otherwise</span>
+  if (r.slot.slot === 'IR SLOT') return <span className="af-pf-nothing">{t.onIr}</span>
   return (
-    <span className="af-pf-nothing" title={r.impact && !r.impact.afPoints.available ? r.impact.afPoints.reason : undefined}>
-      No call — unpriced
+    <span className="af-pf-nothing" title={r.impact && !r.impact.afPoints.available ? reasonText(r.impact.afPoints.reason, language) : undefined}>
+      {t.noCall}
     </span>
   )
 }
@@ -409,6 +417,10 @@ export function PlayerFinder({
   liveGame = null,
   signedIn = true,
 }: PlayerFinderProps) {
+  const { language } = useOptionalLanguage()
+  const t = finderCopy(language)
+  /** A loader's reason, in the reader's language (whole, or English as written). */
+  const why = (reason: string) => reasonText(reason, language)
   const depthLocked = depthAccess?.unlocked === false
   /*
    * Swap the ingest-level reason for the sign-in one on exactly the sections
@@ -416,7 +428,7 @@ export function PlayerFinder({
    * season statistics — is public sports data and keeps its real reason.
    */
   const gatedReason = (state: SectionState<unknown> | { available: false; reason: string }) =>
-    !signedIn ? SIGN_IN_REASON : (state as { reason: string }).reason
+    !signedIn ? t.signInReason : why((state as { reason: string }).reason)
 
   const leagueParam = selectedLeagueId ? `&league=${encodeURIComponent(selectedLeagueId)}` : ''
 
@@ -591,8 +603,8 @@ export function PlayerFinder({
         "Player Finder" and the player name is h2 — the SEO order the handoff
         specifies.
       */}
-      <aside className="af-pf-rail" aria-label="Search">
-        <h1 className="af-display af-pf-h1">Player Finder</h1>
+      <aside className="af-pf-rail" aria-label={t.railLabel}>
+        <h1 className="af-display af-pf-h1">{t.h1}</h1>
         {/*
           The search box: a GET form as before, with suggestions as you type
           layered on top (2026-09-05). See PlayerSearchBox for the rate-limit
@@ -615,14 +627,12 @@ export function PlayerFinder({
         {signedIn || matches.length > 0 ? (
           <section className={`af-card af-pf-matches${detail ? ' af-pf-d-only' : ''}`}>
             <header className="af-pf-section-head">
-              <h2 className="af-label">Matches · {matches.length}</h2>
+              <h2 className="af-label">{t.matches(matches.length)}</h2>
             </header>
 
             {matches.length === 0 ? (
               <p className="af-pf-unavailable">
-                {query.trim().length < 2
-                  ? 'Type at least two characters to search.'
-                  : `No player matching “${query}”.`}
+                {query.trim().length < 2 ? t.typeTwo : t.noMatch(query)}
               </p>
             ) : (
               <ul className="af-pf-match-list">
@@ -653,14 +663,14 @@ export function PlayerFinder({
                               ) : null}
                             </>
                           ) : (
-                            'no position on file'
+                            t.noPosition
                           )}
                         </span>
                       </span>
                     </Link>
                     {/* The row as the second name — only while another player is open. */}
                     {detail && !(detail.player.externalId === m.externalId && detail.player.sport === m.sport) && vsHref(playerRef(m.sport, m.externalId)) ? (
-                      <Link href={vsHref(playerRef(m.sport, m.externalId)) as string} className="af-pf-match-vs" aria-label={`Compare with ${m.name}`}>
+                      <Link href={vsHref(playerRef(m.sport, m.externalId)) as string} className="af-pf-match-vs" aria-label={t.compareWithName(m.name)}>
                         vs
                       </Link>
                     ) : null}
@@ -681,7 +691,7 @@ export function PlayerFinder({
           <section className="af-card af-pf-recent" aria-labelledby="af-pf-recent-h">
             <header className="af-pf-section-head">
               <h2 className="af-label" id="af-pf-recent-h">
-                Recently searched
+                {t.recentlySearched}
               </h2>
             </header>
             <ul className="af-pf-match-list">
@@ -719,8 +729,8 @@ export function PlayerFinder({
         ) : null}
 
         {detail && otherMatches.length > 0 ? (
-          <div className="af-pf-m-only af-pf-others" aria-label="Other matches">
-            <span className="af-label">Also matched</span>
+          <div className="af-pf-m-only af-pf-others" aria-label={t.otherMatches}>
+            <span className="af-label">{t.alsoMatched}</span>
             {otherMatches.slice(0, 4).map((m) => (
               <span key={`${m.sport}-${m.externalId}`} className="af-pf-other-pair">
                 <Link
@@ -732,7 +742,7 @@ export function PlayerFinder({
                 </Link>
                 {/* The same "vs" the desktop rows carry, joined to the chip so it reads as one pill. */}
                 {vsHref(playerRef(m.sport, m.externalId)) ? (
-                  <Link href={vsHref(playerRef(m.sport, m.externalId)) as string} className="af-chip af-pf-other-vs" aria-label={`Compare with ${m.name}`}>
+                  <Link href={vsHref(playerRef(m.sport, m.externalId)) as string} className="af-chip af-pf-other-vs" aria-label={t.compareWithName(m.name)}>
                     vs
                   </Link>
                 ) : null}
@@ -746,13 +756,10 @@ export function PlayerFinder({
           handoff puts it. It is a claim about every number on this screen, so
           it belongs beside the search rather than buried under one section.
         */}
-        <p className="af-pf-rail-foot af-pf-d-only">
-          Stats, injuries and news come from live sports data — never an invented
-          number.
-        </p>
+        <p className="af-pf-rail-foot af-pf-d-only">{t.railFoot}</p>
       </aside>
 
-      <section className="af-pf-main" aria-label="Player details">
+      <section className="af-pf-main" aria-label={t.mainLabel}>
         {/* ── Game day home: your flagged starters, before any search ──── */}
         {/* Pick the leagues the finder reads — only on the all-leagues home; a held league is the switcher's. */}
         {!detail && signedIn && !selectedLeagueId && pickLeagues.length > 1 ? <LeaguePicker leagues={pickLeagues} saved={savedPicks} /> : null}
@@ -804,7 +811,7 @@ export function PlayerFinder({
                   */}
                   {ready ? (
                     <span className="af-chip af-num af-pf-ready" data-tone={ready.tone}>
-                      {ready.label}
+                      {designationText(ready.label, language)}
                       {detail.injury.available &&
                       detail.injury.data.description &&
                       detail.injury.data.description.length <= 28
@@ -817,7 +824,7 @@ export function PlayerFinder({
                   {/* Not playing this week — beside readiness, since a Ready player on bye still scores nothing. */}
                   {byeMark ? (
                     <span className="af-chip af-num af-pf-ready af-pf-bye" data-tone={byeMark.tone}>
-                      {byeMark.label}
+                      {coreUiCopy(byeMark.label, language)}
                     </span>
                   ) : null}
                 </div>
@@ -836,28 +843,30 @@ export function PlayerFinder({
                   {leagueMode ? (
                     <span className="af-pf-rostered">
                       {' · '}
-                      {leagueView ? `in ${leagueView.leagueName}` : 'in this league'}
+                      {leagueView ? t.inLeague(leagueView.leagueName) : t.inThisLeague}
                       {' · '}
                       <Link href={allLeaguesHref} className="af-pf-all-leagues">
-                        All leagues →
+                        {t.allLeaguesLink}
                       </Link>
                     </span>
                   ) : signedIn && detail.leagues.available ? (
                     <span className="af-pf-rostered">
                       {' · '}
                       {yoursCount > 0
-                        ? `on ${yoursCount} of your ${leagueCount} ${leagueCount === 1 ? 'league' : 'leagues'}${
-                            detail.player.platforms.length > 0 ? `, across ${listPlatforms(detail.player.platforms)}` : ''
-                          }`
-                        : `not on any of your ${leagueCount} ${leagueCount === 1 ? 'league' : 'leagues'}`}
+                        ? t.onLeagues(
+                            yoursCount,
+                            leagueCount,
+                            detail.player.platforms.length > 0 ? listPlatforms(detail.player.platforms, language) : null,
+                          )
+                        : t.notOnAny(leagueCount)}
                       {leagueRows.some((r) => !r.slot.isYours)
-                        ? ` · rostered by others in ${leagueRows.filter((r) => !r.slot.isYours).length}`
+                        ? t.rosteredByOthers(leagueRows.filter((r) => !r.slot.isYours).length)
                         : ''}
                     </span>
                   ) : !signedIn ? (
-                    <span className="af-pf-rostered"> · sign in to see him across your leagues</span>
+                    <span className="af-pf-rostered">{t.signInAcross}</span>
                   ) : (
-                    <span className="af-pf-rostered"> · cross-league lookup unavailable</span>
+                    <span className="af-pf-rostered">{t.crossLeagueUnavailable}</span>
                   )}
                 </div>
                 <LeagueStrip chips={stripChips} leagueHref={stripLeagueHref} />
@@ -865,7 +874,7 @@ export function PlayerFinder({
 
               <span className="af-sync af-num" data-stale={detail.freshness.stale}>
                 {detail.freshness.stale ? '⚠ ' : ''}
-                {detail.freshness.label}
+                {ageText(detail.freshness.label, language)}
               </span>
             </header>
 
@@ -892,7 +901,7 @@ export function PlayerFinder({
             {/* Compare: a second name beside this one. Suggestions link to ?vs= (2026-09-06). */}
             {detailRef ? (
               <div className="af-pf-compare-entry">
-                <span className="af-label">Compare with</span>
+                <span className="af-label">{t.compareWith}</span>
                 <PlayerSearchBox query={query} selectedLeagueId={selectedLeagueId ?? null} signedIn={signedIn} variant="compare" compareWith={detailRef} />
               </div>
             ) : null}
@@ -911,31 +920,23 @@ export function PlayerFinder({
               */}
               {leagueProj ? (
                 <StatTile
-                  label={leagueProj.available ? `Proj wk ${leagueProj.data.week}` : 'Proj this week'}
+                  label={leagueProj.available ? t.projWeek(leagueProj.data.week) : t.projThisWeek}
                   state={leagueProj}
                   value={leagueProj.available ? leagueProj.data.points.toFixed(1) : null}
                   tone="good"
-                  tip={{
-                    title: 'Projection',
-                    body: 'Expected points this week under this league’s own scoring settings — not a generic ranking.',
-                  }}
-                  help={leagueProj.available ? `${leagueView?.leagueName ?? 'This league'}’s scoring` : undefined}
+                  tip={{ title: t.projectionTitle, body: t.projectionLeagueBody }}
+                  help={leagueProj.available ? t.leagueScoringOf(leagueView?.leagueName ?? null) : undefined}
+                  why={why}
                 />
               ) : (
                 <StatTile
-                  label={detail.projection.available ? `Proj wk ${detail.projection.data.week}` : 'Proj this week'}
+                  label={detail.projection.available ? t.projWeek(detail.projection.data.week) : t.projThisWeek}
                   state={detail.projection}
                   value={detail.projection.available ? detail.projection.data.points.toFixed(1) : null}
                   tone="good"
-                  tip={{
-                    title: 'Projection',
-                    body: 'The projection feed’s standard-scoring number for this week. What he is worth in each of YOUR leagues — under that league’s own scoring — is the PROJ column in the table below.',
-                  }}
-                  help={
-                    detail.projection.available
-                      ? `Standard scoring · ${detail.projection.data.season}`
-                      : undefined
-                  }
+                  tip={{ title: t.projectionTitle, body: t.projectionStandardBody }}
+                  help={detail.projection.available ? t.standardScoringSeason(detail.projection.data.season) : undefined}
+                  why={why}
                 />
               )}
               {/*
@@ -945,34 +946,27 @@ export function PlayerFinder({
               */}
               {detail.afProjection ? (
                 <StatTile
-                  label={detail.afProjection.available ? `AF proj wk ${detail.afProjection.data.week}` : 'AF proj'}
+                  label={detail.afProjection.available ? t.afProjWeek(detail.afProjection.data.week) : t.afProj}
                   state={detail.afProjection}
                   value={afTile != null ? afTile.toFixed(1) : null}
                   tone="good"
-                  tip={{
-                    title: 'AllFantasy projection',
-                    body: leagueProj
-                      ? 'AllFantasy’s own projection engine for this week, adjusted to this league’s scoring. The tile beside it is the provider’s (Sleeper) projection.'
-                      : 'AllFantasy’s own projection engine for this week, standard scoring. What he projects in each of YOUR leagues is the AF column in the table below.',
-                  }}
-                  help={detail.afProjection.available ? (leagueProj ? 'this league’s scoring' : 'Standard scoring') : undefined}
+                  tip={{ title: t.afTitle, body: leagueProj ? t.afLeagueBody : t.afStandardBody }}
+                  help={detail.afProjection.available ? (leagueProj ? t.thisLeagueScoring : t.standardScoring) : undefined}
+                  why={why}
                 />
               ) : null}
               {leagueRank ? (
                 <StatTile
-                  label="Pos rank"
+                  label={t.posRank}
                   state={leagueRank}
                   value={leagueRank.available ? `${leagueRank.data.position}${leagueRank.data.rank}` : null}
                   tone="warn"
-                  help={
-                    leagueRank.available
-                      ? `of ${leagueRank.data.outOf} priced ${leagueRank.data.position}s · this league’s scoring`
-                      : undefined
-                  }
+                  help={leagueRank.available ? t.ofPricedHere(leagueRank.data.outOf, leagueRank.data.position) : undefined}
+                  why={why}
                 />
               ) : (
                 <StatTile
-                  label="Pos rank"
+                  label={t.posRank}
                   state={detail.positionRank}
                   value={
                     detail.positionRank.available
@@ -984,9 +978,10 @@ export function PlayerFinder({
                   // reads "WR12 / of 143 projected" — a rank AND its universe.
                   help={
                     detail.positionRank.available
-                      ? `of ${detail.positionRank.data.outOf} projected ${detail.positionRank.data.position}s`
+                      ? t.ofProjected(detail.positionRank.data.outOf, detail.positionRank.data.position)
                       : undefined
                   }
+                  why={why}
                 />
               )}
               {/*
@@ -999,20 +994,14 @@ export function PlayerFinder({
               */}
               {detail.idpValue ? (
                 <StatTile
-                  label="IDP value"
+                  label={t.idpValue}
                   value={detail.idpValue.value.toLocaleString()}
                   tone="good"
-                  tip={{
-                    title: 'IDP value',
-                    body:
-                      'The market chart beside this (FantasyCalc) prices no defenders at all, so this is built from projections against a fixed reference league — ' +
-                      `${detail.idpValue.reference.numTeams} teams, ${detail.idpValue.reference.idpStarters} IDP starters, on the default IDP scoring profile. ` +
-                      'It is NOT on the same scale as the offensive values elsewhere on this page: what a top defender is worth against a top receiver is a separate question this number does not answer.',
-                  }}
+                  tip={{ title: t.idpValue, body: t.idpBody(detail.idpValue.reference.numTeams, detail.idpValue.reference.idpStarters) }}
                   help={
                     [
-                      detail.idpValue.positionRank ? `rank ${detail.idpValue.positionRank}` : null,
-                      `${detail.idpValue.reference.numTeams}-team · ${detail.idpValue.reference.idpStarters} IDP`,
+                      detail.idpValue.positionRank ? t.idpRank(detail.idpValue.positionRank) : null,
+                      t.idpReference(detail.idpValue.reference.numTeams, detail.idpValue.reference.idpStarters),
                     ]
                       .filter(Boolean)
                       .join(' · ') || undefined
@@ -1020,48 +1009,44 @@ export function PlayerFinder({
                 />
               ) : null}
               <StatTile
-                label="Snap share"
+                label={t.snapShare}
                 state={detail.snapShare}
                 value={
                   detail.snapShare.available
                     ? `${Math.round(detail.snapShare.data.share * 100)}%`
                     : null
                 }
-                tip={{
-                  title: 'Snap share',
-                  body: 'Share of his team’s offensive plays he was on the field for, over the games we hold. Rising snap share usually comes before rising points.',
-                }}
-                help={
-                  detail.snapShare.available
-                    ? `${detail.snapShare.data.basis === 'defense' ? 'Defensive' : 'Offensive'} snaps · ${detail.snapShare.data.games} game${detail.snapShare.data.games === 1 ? '' : 's'}`
-                    : undefined
-                }
+                tip={{ title: t.snapShare, body: t.snapShareBody }}
+                help={detail.snapShare.available ? t.snapsHelp(detail.snapShare.data.basis, detail.snapShare.data.games) : undefined}
+                why={why}
               />
               <StatTile
-                label="Age"
+                label={t.age}
                 value={detail.bio.age != null ? String(detail.bio.age) : null}
-                help={detail.bio.age == null ? 'no birth date on file' : undefined}
+                help={detail.bio.age == null ? t.noBirthDate : undefined}
               />
             </div>
 
             {/* ── Injury ────────────────────────────────────────────── */}
             <section className="af-pf-block af-pf-d-only">
-              <h3 className="af-label">Injury</h3>
+              <h3 className="af-label">{t.injury}</h3>
               {detail.injury.available ? (
                 <div className="af-pf-injury">
                   <span className="af-chip af-pf-injury-status">
-                    {detail.injury.data.status ?? 'no designation'}
+                    {detail.injury.data.status != null ? designationText(detail.injury.data.status, language) : t.noDesignation}
                   </span>
                   {detail.injury.data.description ? (
                     <p className="af-pf-injury-note">{detail.injury.data.description}</p>
                   ) : null}
                   {/* When the feed said it — the fact that tells a reader the news is fresh enough to act on. */}
                   {reportedLabel(asIso(detail.injury.data.reportedAt), nowIso) ? (
-                    <span className="af-pf-injury-when af-num">{reportedLabel(asIso(detail.injury.data.reportedAt), nowIso)}</span>
+                    <span className="af-pf-injury-when af-num">
+                      {coreUiCopy(reportedLabel(asIso(detail.injury.data.reportedAt), nowIso)!, language)}
+                    </span>
                   ) : null}
                 </div>
               ) : (
-                <Unavailable reason={detail.injury.reason} />
+                <Unavailable reason={why(detail.injury.reason)} />
               )}
             </section>
 
@@ -1081,20 +1066,20 @@ export function PlayerFinder({
             <section className="af-pf-block af-pf-leagues" aria-labelledby="af-pf-leagues-h">
               <header className="af-pf-block-head">
                 <h3 className="af-pf-h3" id="af-pf-leagues-h">
-                  {leagueMode ? 'In this league' : 'Every platform, every league'}
+                  {leagueMode ? t.inThisLeagueHeading : t.everyLeagueHeading}
                 </h3>
                 {/* Beside the h3, not in it (aria-labelledby). Replaces the column titles a phone never showed. */}
                 <TopicTip topic="leagueTableColumns" />
                 <p className="af-pf-block-sub">
                   {leagueMode ? (
                     <>
-                      Slot and status here ·{' '}
+                      {t.slotStatusHere}{' '}
                       <Link href={allLeaguesHref} className="af-pf-all-leagues">
-                        All leagues →
+                        {t.allLeaguesLink}
                       </Link>
                     </>
                   ) : (
-                    'Slot and status as they stand right now'
+                    t.slotStatusNow
                   )}
                 </p>
               </header>
@@ -1108,32 +1093,26 @@ export function PlayerFinder({
               */}
               {!signedIn ? (
                 <>
-                  <Unavailable reason={SIGN_IN_REASON} />
+                  <Unavailable reason={t.signInReason} />
                   <Link href="/signup" className="af-btn af-pf-signin">
-                    Connect a league — it is free
+                    {t.connectLeague}
                   </Link>
                 </>
               ) : detail.leagues.available ? (
                 leagueRows.length === 0 ? (
                   <p className="af-pf-unavailable">
-                    {leagueMode
-                      ? 'Not on any roster we can read in this league.'
-                      : `He is not on any roster in the ${leagueCount} ${leagueCount === 1 ? 'league' : 'leagues'} you have connected.`}
+                    {leagueMode ? t.notOnRosterHere : t.notOnAnyRoster(leagueCount)}
                   </p>
                 ) : (
                   <table className="af-pf-table">
                     <thead>
                       <tr>
-                        <th className="af-label">League</th>
-                        <th className="af-label">Slot</th>
-                        <th className="af-label af-pf-col-status">Status</th>
-                        <th className="af-label af-pf-col-proj">Proj</th>
+                        <th className="af-label">{t.colLeague}</th>
+                        <th className="af-label">{t.colSlot}</th>
+                        <th className="af-label af-pf-col-status">{t.colStatus}</th>
+                        <th className="af-label af-pf-col-proj">{t.colProj}</th>
                         <th className="af-label af-pf-col-proj af-pf-col-af">AF</th>
-                        {leagueValues ? (
-                          <th className="af-label af-pf-col-value">
-                            Value
-                          </th>
-                        ) : null}
+                        {leagueValues ? <th className="af-label af-pf-col-value">{t.colValue}</th> : null}
                         <th className="af-label" />
                       </tr>
                     </thead>
@@ -1155,23 +1134,23 @@ export function PlayerFinder({
                                 {!l.isYours ? (
                                   <span className="af-pf-owner">
                                     {l.owner
-                                      ? `rostered by ${l.owner.ownerName ? `@${l.owner.ownerName}` : l.owner.teamName}`
-                                      : 'rostered by another manager'}
+                                      ? t.rosteredBy(l.owner.ownerName ? `@${l.owner.ownerName}` : l.owner.teamName)
+                                      : t.rosteredByAnother}
                                   </span>
                                 ) : null}
-                                {r.held ? <span className="af-pf-impact-held af-label">This league</span> : null}
+                                {r.held ? <span className="af-pf-impact-held af-label">{t.thisLeagueBadge}</span> : null}
                                 {/* The phone table has no room for a Value column; the number rides in the league cell there. */}
                                 {leagueValues?.[l.leagueId] ? (
-                                  <span className="af-pf-value-inline af-num">value {leagueValues[l.leagueId]!.value.toLocaleString('en-US')}</span>
+                                  <span className="af-pf-value-inline af-num">{t.valueInline(leagueValues[l.leagueId]!.value.toLocaleString('en-US'))}</span>
                                 ) : null}
                               </span>
                             </td>
                             <td className="af-pf-col-slot">
                               <span className="af-chip af-num af-pf-slot" data-tone={slotTone(l.slot, r.move)}>
-                                {r.impact?.exactSlot ?? l.slot}
+                                {slotText(r.impact?.exactSlot ?? l.slot, language)}
                               </span>
                               {r.impact && !r.impact.slotConfirmed ? (
-                                <span className="af-pf-impact-unconfirmed">slot unconfirmed</span>
+                                <span className="af-pf-impact-unconfirmed">{t.slotUnconfirmed}</span>
                               ) : null}
                               {/* The lineup lock, on every league where he is yours — a bench player can still be moved in. */}
                               {l.isYours && gameKickoff ? <LockClock kickoffIso={gameKickoff} nowIso={nowIso} /> : null}
@@ -1179,7 +1158,7 @@ export function PlayerFinder({
                             <td className="af-pf-col-status">
                               {l.isYours && ready ? (
                                 <span className="af-pf-status af-num" data-tone={ready.tone}>
-                                  {ready.label}
+                                  {designationText(ready.label, language)}
                                 </span>
                               ) : (
                                 <span className="af-pf-nothing">—</span>
@@ -1193,7 +1172,7 @@ export function PlayerFinder({
                               ) : (
                                 <span
                                   className="af-pf-nothing"
-                                  title={l.isYours && r.impact && !r.impact.afPoints.available ? r.impact.afPoints.reason : undefined}
+                                  title={l.isYours && r.impact && !r.impact.afPoints.available ? why(r.impact.afPoints.reason) : undefined}
                                 >
                                   —
                                 </span>
@@ -1216,16 +1195,23 @@ export function PlayerFinder({
                             {leagueValues ? (
                               <td className="af-pf-col-value">
                                 {leagueValues[l.leagueId] ? (
-                                  <span className="af-pf-value af-num" title={leagueValues[l.leagueId]!.fitNote ?? `${leagueValues[l.leagueId]!.mode} · ${leagueValues[l.leagueId]!.numQbs === 2 ? 'superflex' : '1QB'}`}>
+                                  <span
+                                    className="af-pf-value af-num"
+                                    title={
+                                      leagueValues[l.leagueId]!.fitNote != null
+                                        ? why(leagueValues[l.leagueId]!.fitNote!)
+                                        : t.valueBasis(leagueValues[l.leagueId]!.mode, leagueValues[l.leagueId]!.numQbs === 2)
+                                    }
+                                  >
                                     {leagueValues[l.leagueId]!.value.toLocaleString('en-US')}
-                                    {leagueValues[l.leagueId]!.value !== leagueValues[l.leagueId]!.base ? <span className="af-pf-value-fit" aria-label="adjusted for this league’s scoring">*</span> : null}
+                                    {leagueValues[l.leagueId]!.value !== leagueValues[l.leagueId]!.base ? <span className="af-pf-value-fit" aria-label={t.valueAdjusted}>*</span> : null}
                                   </span>
                                 ) : (
                                   <span className="af-pf-nothing">—</span>
                                 )}
                               </td>
                             ) : null}
-                            <td className="af-pf-table-action">{rowAction(r, last)}</td>
+                            <td className="af-pf-table-action">{rowAction(r, last, t, language)}</td>
                           </tr>
                         )
                       })}
@@ -1236,7 +1222,7 @@ export function PlayerFinder({
                 <Unavailable reason={gatedReason(detail.leagues)} />
               )}
               {signedIn && detail.leagues.available && leagueRows.some((r) => r.slot.isYours) && !detail.impact.available ? (
-                <p className="af-pf-unavailable">{detail.impact.reason}</p>
+                <p className="af-pf-unavailable">{why(detail.impact.reason)}</p>
               ) : null}
               {/*
                 Leagues whose rosters do not speak Sleeper ids are named, not
@@ -1245,9 +1231,10 @@ export function PlayerFinder({
               */}
               {signedIn && unmatched.length > 0 ? (
                 <p className="af-pf-unavailable af-pf-unmatched">
-                  Not checked: {unmatched.map((u) => u.leagueName).join(', ')} — {unmatched.length === 1 ? 'its rosters use' : 'their rosters use'}{' '}
-                  {[...new Set(unmatched.map((u) => platformLabel(u.platform)))].join(' and ')} player ids we have not matched to
-                  our player table yet.
+                  {t.notChecked(
+                    unmatched.map((u) => u.leagueName),
+                    [...new Set(unmatched.map((u) => platformLabel(u.platform)))].join(` ${t.and} `),
+                  )}
                 </p>
               ) : null}
             </section>
@@ -1294,7 +1281,7 @@ export function PlayerFinder({
 
             {/* ── Season stats ──────────────────────────────────────── */}
             <section className="af-pf-block af-pf-d-only">
-              <h3 className="af-label">Season statistics</h3>
+              <h3 className="af-label">{t.seasonStatistics}</h3>
               {detail.seasonStats.available ? (
                 <ul className="af-pf-seasons">
                   {detail.seasonStats.data.map((s) => (
@@ -1310,13 +1297,13 @@ export function PlayerFinder({
                   ))}
                 </ul>
               ) : (
-                <Unavailable reason={detail.seasonStats.reason} />
+                <Unavailable reason={why(detail.seasonStats.reason)} />
               )}
             </section>
           </section>
         ) : (
           <section className="af-card af-pf-detail af-pf-detail--empty">
-            <p className="af-pf-unavailable">Pick a match to see slots, injury and season history.</p>
+            <p className="af-pf-unavailable">{t.pickAMatch}</p>
           </section>
         )}
       </section>
@@ -1332,11 +1319,11 @@ export function PlayerFinder({
         free table already shows, so for them the lock is the whole of the gate.
       */}
       {detail && depthAccess && depthLocked && signedIn ? (
-        <aside className="af-pf-side" aria-label="What to do">
+        <aside className="af-pf-side" aria-label={t.sideLabel}>
           <CoreDepthLock access={depthAccess} what="The verdict, bench swaps and trade windows" />
         </aside>
       ) : detail && (impactRows.length > 0 || presence || (windows && windows.length > 0)) ? (
-        <aside className="af-pf-side" aria-label="What to do">
+        <aside className="af-pf-side" aria-label={t.sideLabel}>
           {depthAccess ? <FreeUntilNote access={depthAccess} /> : null}
           {impactRows.length > 0 ? (
             <PlayerVerdict
