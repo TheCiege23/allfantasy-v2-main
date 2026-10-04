@@ -203,6 +203,8 @@ export type LeagueWeekBoard = {
     ties: number
     meetings: number
     averageMargin: number
+    winningStreak?: number
+    losingStreak?: number
   } | null
   /**
    * Current-season W-L by rosterId, from SCORED rows only.
@@ -1333,6 +1335,7 @@ export async function getWeekBoard(
         let ties = 0
         let marginSum = 0
         let meetings = 0
+        const priorResults: Array<{ season: number; week: number; result: number }> = []
         for (const pair of pairRows(history.rows.filter((r) => r.leagueId === pid))) {
           const aMine = myRosters.has(`${pid}:${pair.a.rosterId}`)
           const bMine = myRosters.has(`${pid}:${pair.b.rosterId}`)
@@ -1343,6 +1346,9 @@ export async function getWeekBoard(
           // Only games actually played count as meetings; a scheduled fixture is
           // not a head-to-head result.
           if (you.finalized === false || them.finalized === false || (!hasScore(you) && !hasScore(them))) continue
+          if (you.seasonYear < yours.season || (you.seasonYear === yours.season && you.week < yours.week)) {
+            priorResults.push({ season: you.seasonYear, week: you.week, result: Math.sign(you.pointsFor - them.pointsFor) })
+          }
           meetings += 1
           marginSum += you.pointsFor - them.pointsFor
           if (you.pointsFor > them.pointsFor) wins += 1
@@ -1351,7 +1357,13 @@ export async function getWeekBoard(
           else ties += 1
         }
         if (meetings > 0) {
-          rivalry = { wins, losses, ties, meetings, averageMargin: marginSum / meetings }
+          priorResults.sort((a,b) => b.season - a.season || b.week - a.week)
+          const streak = (result: number) => {
+            let n = 0
+            for (const game of priorResults) { if (game.result !== result) break; n++ }
+            return n
+          }
+          rivalry = { wins, losses, ties, meetings, averageMargin: marginSum / meetings, winningStreak: streak(1), losingStreak: streak(-1) }
         }
       }
 

@@ -36,7 +36,7 @@ import { buildProfiles, pairRows, winProbabilityOf, type MatchupRow } from './we
  * capture. No provider calls anywhere: this is Postgres rows and arithmetic.
  */
 
-export const ODDS_MODEL = 'history_normal_v1'
+export const ODDS_MODEL = 'history_normal_v2'
 
 /** League-weeks per fire. Each is one history read plus arithmetic; the cap keeps the fire's tail. */
 const DEFAULT_LEAGUE_CAP = 25

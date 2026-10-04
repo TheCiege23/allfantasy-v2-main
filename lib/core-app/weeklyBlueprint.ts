@@ -11,11 +11,14 @@ export type WeeklyBlueprint = {
   coverage: Array<{ leagueId: string; leagueName: string; af: boolean; provider: boolean; partial: boolean }>
   matchup?: { opponent: string; period: number; leagueName: string }
   playoff?: { probability: number; leagueName: string }
+  rivalry?: { opponent: string; wins: number; losses: number; ties: number; winningStreak: number; losingStreak: number; final: boolean }
+  commissionerLeagueIds?: string[]
 }
 export function buildWeeklyBlueprint(input: {
   name?: string | null; leagues: Array<{ id: string; name?: string | null; sport?: string | null }>
   board: WeekBoard; pulse: MyTeamPulse | null; outlook: SeasonOutlook | null; lineups?: WeekLineups | null
   favoriteIds?: ReadonlySet<string>; focusLeagueId?: string | null; now: Date
+  commissionerLeagueIds?: string[]
 }): WeeklyBlueprint {
   const focus = input.focusLeagueId ?? null
   const leagues = input.leagues.filter(l => !focus || l.id === focus)
@@ -59,6 +62,12 @@ export function buildWeeklyBlueprint(input: {
   return { name: input.name?.trim() || null, teamName: input.board.leagueBoard?.yourTeamName ?? null, leagueCount: leagues.length,
     sports: [...new Set(leagues.map(l => l.sport?.trim()).filter((s): s is string => Boolean(s)))], focusLeagueId: focus,
     actions: actions.slice(0, 3), actionCount: actions.length, attentionLeagueIds, lineupReadFailed: input.pulse == null || (leagues.length > 0 && rows.length === 0), coverage,
+    commissionerLeagueIds: input.commissionerLeagueIds?.filter(id => allowed.has(id)) ?? [],
+    ...(focus && input.board.leagueBoard?.rivalry && input.board.leagueBoard.yours?.opponent.name ? { rivalry: {
+      opponent: input.board.leagueBoard.yours.opponent.name, ...input.board.leagueBoard.rivalry,
+      winningStreak: input.board.leagueBoard.rivalry.winningStreak ?? 0,
+      losingStreak: input.board.leagueBoard.rivalry.losingStreak ?? 0, final: input.board.leagueBoard.yours.live?.final ?? false,
+    } } : {}),
     ...(featured?.opponent.name ? { matchup: { opponent: featured.opponent.name, period: featured.week, leagueName: featured.leagueName } } : {}),
     ...(outlook && probability != null && Number.isFinite(probability) && probability >= 0 && probability <= 100 ? { playoff: { probability, leagueName: outlook.leagueName } } : {}) }
 }

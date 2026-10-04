@@ -20,6 +20,18 @@ Saved probabilities are per user, team, league, season and period in SportsDataC
 
 ## Validation and limitations
 
+## Sharing, rivalry and Commissioner workflows
+
+The sharing panel previews captions for X, Facebook, Instagram, TikTok, Threads, LinkedIn and YouTube, with clipboard fallback and the device's native share sheet. X opens an unsent draft; Facebook opens its link composer. Other apps accept copied captions and the downloadable 1080 × 1350 PNG card. The shared URL opens the recipient's own weekly view and never grants access to the owner's league. Opponent stories can be excluded before sharing. No connected account posts automatically.
+
+Consecutive rivalry results use completed imported head-to-head meetings before the displayed period, across seasons. Ties break a streak. Final games suppress forward-looking motivation. Missing history never becomes an invented win streak.
+
+Excel downloads contain Brief, Actions, Trend, Scenarios, Coverage and Model sheets, with embedded editable line and column charts on supported league forecasts. Missing periods are not interpolated. Text is stored as literal cells, including imported names beginning with formula characters. The export is generated locally from the visible signed-in user's data.
+
+Commissioners receive a copyable briefing draft, a league-scoped unsent Chimmy prompt, standings review and Commissioner Hub links. The draft asks commissioners to confirm official deadlines and league announcements rather than treating private manager priorities as league-wide facts.
+
+Native sharing follows the [Web Share specification](https://www.w3.org/TR/web-share/): browser support and installed targets vary, and file sharing requires a fresh user gesture. Card generation/download and the subsequent Share card button are separate actions to preserve that gesture.
+
 Regression tests cover native and canonical identity, format classification, zero-point ties, scale-invariant odds, mathematical status, action scope, lock timing, copied briefs, Chimmy prefill, English/Spanish controls, snapshots, failure states and cache reuse. Browser fixture checks at 375, 768 and 1440 pixels in AF, light and dark themes found no horizontal overflow and verified 44-pixel primary buttons. The component uses the existing Core theme tokens.
 
 Authenticated production flows and physical iOS/Android testing require release verification. Historical simulations do not model divisions, head-to-head tiebreaks, correlated scoring, injuries, trades or alternate qualification systems; unsupported exact-status claims are withheld. Provider feeds determine current projection and lineup-check coverage. Legacy external IDs cannot establish provenance outside known requested-provider collisions without a schema/writer change.

@@ -11,7 +11,6 @@
     "__tests__/afchat-threaded-ui.test.tsx",
     "__tests__/awards-routes-contract.test.ts",
     "__tests__/chimmy-global-routing.test.ts",
-    "__tests__/commentary-routes-contract.test.ts",
     "__tests__/commissioner-control-center-timer-ui.test.tsx",
     "__tests__/commissioner-intelligence-preview.test.ts",
     "__tests__/commissioner-os-recommendations.test.tsx",

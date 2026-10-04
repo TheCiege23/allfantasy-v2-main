@@ -48,7 +48,7 @@ describe('canonical and native weekly coverage', () => {
     h.games.mockResolvedValue([1,2,3,4].map(week => ({ id:`g${week}`, leagueId:'N', week, homeRosterId:'r1', awayRosterId:'r2', homeScore:week===4?0:100, awayScore:week===4?0:90, status:'final', season:{season:2026} })))
     const board = await getWeekBoard('u',[league],'N')
     expect(cards(board)).toHaveLength(1)
-    expect(board.leagueBoard).toMatchObject({ yourTeamName:'My native team', yourRosterId:'r1', records:{ r1:{wins:3,losses:0,ties:1} }, rivalry:{wins:3,losses:0,ties:1}, yours:{live:{you:0,them:0,final:true}} })
+    expect(board.leagueBoard).toMatchObject({ yourTeamName:'My native team', yourRosterId:'r1', records:{ r1:{wins:3,losses:0,ties:1} }, rivalry:{wins:3,losses:0,ties:1,winningStreak:3,losingStreak:0}, yours:{live:{you:0,them:0,final:true}} })
     expect(board.withoutSchedule).toBe(0)
     h.games.mockResolvedValue([1,2,3,4].map(week=>({id:`g${week}`,leagueId:'N',week,homeRosterId:'r1',awayRosterId:week===4?null:'r2',homeScore:week===4?0:100,awayScore:week===4?0:90,status:'final',season:{season:2026}})))
     expect((await getWeekBoard('u',[league],'N')).leagueBoard?.records.r1).toEqual({wins:3,losses:0})

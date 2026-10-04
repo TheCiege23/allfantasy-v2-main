@@ -3328,6 +3328,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
   const weeklyBlueprint = activeKey === 'week' && !rivalriesView && weekBoard ? buildWeeklyBlueprint({
     name: ctx.viewerName, leagues: weekLeagues, board: weekBoard, pulse: myTeamPulse, outlook: weeklyOutlook,
     lineups: ctx.weekLineups, favoriteIds: ctx.favoriteIds, focusLeagueId: selectedLeagueId, now: ctx.now,
+    commissionerLeagueIds: playedLeagues.filter(l => l.isCommissioner).map(l => l.id),
   }) : null
   const weeklyPath = weeklyBlueprint && selectedLeagueId && weekBoard?.leagueBoard
     ? { ...await readWeeklyPlayoffPath(userId, weeklyOutlook?.leagues.find(l => l.leagueId === selectedLeagueId) ?? null,
