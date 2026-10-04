@@ -52,7 +52,7 @@ export async function loadAssetLineage(leagueId:string,source:'native'|'imported
     }
   }
   for(const p of proposals)for(const leg of [{round:p.giveRound,original:p.giveOriginalRosterId,from:p.proposerRosterId,to:p.receiverRosterId},{round:p.receiveRound,original:p.receiveOriginalRosterId,from:p.receiverRosterId,to:p.proposerRosterId}]){
-    if(p.respondedAt&&leg.original&&season)transfers.push({transactionId:p.id,at:p.respondedAt.toISOString(),kind:'pick',season,round:leg.round,originalRosterId:leg.original,from:leg.from,to:leg.to,draftId:sourceId,packageAssets:2});
+    if(p.respondedAt&&leg.original&&season)transfers.push({transactionId:p.id,at:p.respondedAt.toISOString(),kind:'pick',season,round:leg.round,originalRosterId:leg.original,from:leg.from,to:leg.to,draftId:start&&Number.isFinite(Date.parse(start))&&p.respondedAt.getTime()>=Date.parse(start)?sourceId:undefined,packageAssets:2});
   }
   const compatible=transfers.filter(t=>!t.draftPurpose||t.draftId===sourceId||(context&&new RegExp(t.draftPurpose,'i').test(context.purpose)));
   const lineages=assetLineages(picks,compatible,season,sourceId,oneDraft), linked=new Set(lineages.flatMap(l=>l.edges.filter(e=>e.kind==='pick').map(e=>`${e.transactionId}:${e.season}:${e.round}:${e.originalRosterId}`)));
