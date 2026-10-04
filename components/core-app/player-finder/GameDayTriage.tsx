@@ -1,4 +1,8 @@
+'use client'
+
 import Link from 'next/link'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { LockClock } from '@/components/core-app/player-finder/LockClock'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 import { RefreshLineups } from '@/components/core-app/player-finder/RefreshLineups'
@@ -21,16 +25,24 @@ import { playerRef } from '@/lib/core-app/playerRef'
  * ⚠ THE BUTTONS LIVE ON THE ROW, NOT ONLY ON THE CARD. Before 2026-09-27 the whole
  * row was one link to the card, so a manager with a flagged starter in twenty
  * leagues made twenty round trips — the exact hour this screen exists to save.
+ *
+ * Spanish (2026-10-04): fixed copy is inline es/en; loader text (the readiness and bye chips, "reported …")
+ * goes through `coreUiCopy`, and each lock through LockClock, which translates its own label.
  */
 
+const TITLE = { en: 'Game day · your flagged starters', es: 'Día de partido · tus titulares señalados' }
+
 export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionState<Triage>; nowIso: string; leagueCount: number }) {
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const copy = (english: string) => coreUiCopy(english, language)
   if (!state.available) {
     return (
       <section className="af-card af-pf-triage af-pf-triage--empty" aria-labelledby="af-pf-triage-h">
         <h3 className="af-label af-pf-triage-title" id="af-pf-triage-h">
-          Game day · your flagged starters
+          {es ? TITLE.es : TITLE.en}
         </h3>
-        <p className="af-pf-unavailable">{state.reason}.</p>
+        <p className="af-pf-unavailable">{copy(state.reason)}.</p>
       </section>
     )
   }
@@ -38,30 +50,44 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
   const bestBall = state.data.bestBallLeagues ?? 0
   const notRead = state.data.leaguesNotRead ?? 0
   const unsupported = state.data.unsupportedLeagues ?? 0
-  const weekLabel = week ? `week ${week.week}` : 'this week'
+  const weekLabel = week ? (es ? `semana ${week.week}` : `week ${week.week}`) : es ? 'esta semana' : 'this week'
   const weekKey = week ? `${week.season}-${week.week}` : 'current'
 
   return (
     <section className="af-card af-pf-triage" aria-labelledby="af-pf-triage-h" data-count={rows.length}>
       <header className="af-pf-triage-head">
         <h3 className="af-label af-pf-triage-title" id="af-pf-triage-h">
-          Game day · your flagged starters
+          {es ? TITLE.es : TITLE.en}
         </h3>
-        <span className="af-pf-triage-sub af-num">
-          {leaguesRead} of {leagueCount} {leagueCount === 1 ? 'lineup' : 'lineups'} read
-          {bestBall > 0 ? ` · ${bestBall} best ball skipped` : ''}
-          {unsupported > 0 ? ` · ${unsupported} on a platform we can't read yet` : ''} · {weekLabel}
-        </span>
+        {es ? (
+          <span className="af-pf-triage-sub af-num">
+            {leaguesRead} de {leagueCount} {leagueCount === 1 ? 'alineación leída' : 'alineaciones leídas'}
+            {bestBall > 0 ? ` · ${bestBall} best ball ${bestBall === 1 ? 'omitida' : 'omitidas'}` : ''}
+            {unsupported > 0 ? ` · ${unsupported} en una plataforma que todavía no podemos leer` : ''} · {weekLabel}
+          </span>
+        ) : (
+          <span className="af-pf-triage-sub af-num">
+            {leaguesRead} of {leagueCount} {leagueCount === 1 ? 'lineup' : 'lineups'} read
+            {bestBall > 0 ? ` · ${bestBall} best ball skipped` : ''}
+            {unsupported > 0 ? ` · ${unsupported} on a platform we can't read yet` : ''} · {weekLabel}
+          </span>
+        )}
       </header>
       <RefreshLineups asOf={state.data.rostersAsOf ?? null} nowIso={nowIso} />
       {notRead > 0 ? (
         <p className="af-pf-triage-warn" role="note">
-          {notRead} {notRead === 1 ? 'league was' : 'leagues were'} not read — more than this list checks at once. Search a player to see every league he is in.
+          {es
+            ? `${notRead} ${notRead === 1 ? 'liga no se leyó' : 'ligas no se leyeron'}: son más de las que esta lista revisa a la vez. Busca un jugador para ver todas las ligas en las que está.`
+            : `${notRead} ${notRead === 1 ? 'league was' : 'leagues were'} not read — more than this list checks at once. Search a player to see every league he is in.`}
         </p>
       ) : null}
 
       {rows.length === 0 ? (
-        <p className="af-pf-triage-clear">No flagged starters across your lineups {weekLabel}. Search any player above.</p>
+        <p className="af-pf-triage-clear">
+          {es
+            ? `No hay titulares señalados en tus alineaciones (${weekLabel}). Busca cualquier jugador arriba.`
+            : `No flagged starters across your lineups ${weekLabel}. Search any player above.`}
+        </p>
       ) : (
         <ul className="af-pf-triage-list">
           {rows.map((r) => {
@@ -78,19 +104,23 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
                       {r.player.name}
                       {r.status ? (
                         <span className="af-chip af-num af-pf-ready af-pf-triage-status" data-tone={r.status.tone}>
-                          {r.status.label}
+                          {copy(r.status.label)}
                           {detail ? ` · ${detail}` : ''}
                         </span>
                       ) : null}
                       {r.noGame ? (
                         <span className="af-chip af-num af-pf-ready af-pf-triage-status af-pf-bye" data-tone={r.bye ? 'bad' : 'warn'}>
-                          {r.bye ? (week ? `Bye · wk ${week.week}` : 'Bye') : 'No game on the schedule'}
+                          {copy(r.bye ? (week ? `Bye · wk ${week.week}` : 'Bye') : 'No game on the schedule')}
                         </span>
                       ) : null}
                       {r.inactive ? (
-                        <span className="af-pf-triage-when af-num">{`declared inactive at ${r.inactive.clock} · ${r.inactive.minutesBeforeKickoff} min before kickoff`}</span>
+                        <span className="af-pf-triage-when af-num">
+                          {es
+                            ? `declarado inactivo a las ${r.inactive.clock} · ${r.inactive.minutesBeforeKickoff} min antes del inicio`
+                            : `declared inactive at ${r.inactive.clock} · ${r.inactive.minutesBeforeKickoff} min before kickoff`}
+                        </span>
                       ) : reportedLabel(r.reportedAt, nowIso) ? (
-                        <span className="af-pf-triage-when af-num">{reportedLabel(r.reportedAt, nowIso)}</span>
+                        <span className="af-pf-triage-when af-num">{copy(reportedLabel(r.reportedAt, nowIso)!)}</span>
                       ) : null}
                     </span>
                     <span className="af-pf-triage-meta">
@@ -102,7 +132,9 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
                           {r.player.team}
                         </>
                       ) : null}
-                      {` · starting in ${count} ${count === 1 ? 'league' : 'leagues'}`}
+                      {es
+                        ? ` · titular en ${count} ${count === 1 ? 'liga' : 'ligas'}`
+                        : ` · starting in ${count} ${count === 1 ? 'league' : 'leagues'}`}
                     </span>
                   </span>
                   <span className="af-pf-triage-lock">
@@ -110,7 +142,13 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
                       <LockClock kickoffIso={r.kickoff} nowIso={nowIso} />
                     ) : (
                       <span className="af-chip af-num af-pf-lock" data-lock="nogame">
-                        {r.bye ? 'bench him before your leagues lock' : 'no kickoff to count down to'}
+                        {r.bye
+                          ? es
+                            ? 'siéntalo antes de que tus ligas se bloqueen'
+                            : 'bench him before your leagues lock'
+                          : es
+                            ? 'sin hora de inicio para la cuenta regresiva'
+                            : 'no kickoff to count down to'}
                       </span>
                     )}
                   </span>
@@ -122,7 +160,9 @@ export function GameDayTriage({ state, nowIso, leagueCount }: { state: SectionSt
         </ul>
       )}
       <p className="af-pf-triage-foot">
-        Flagged means the injury feed reads Questionable, Doubtful or Out, or his club is not playing this week — a bye when the slate has the shape of one, otherwise a gap in the schedule we hold. Best-ball leagues are left out: the platform picks those lineups itself. Locks are his own kickoff; a league that locks every lineup at the first game locks earlier. A ✓ means you opened that lineup here — we cannot see the change you make on the platform until its roster refreshes.
+        {es
+          ? 'Señalado significa que el reporte de lesiones dice Dudoso, Poco probable o Fuera, o que su equipo no juega esta semana: un descanso cuando la jornada tiene esa forma, y si no, un hueco en el calendario que tenemos. Las ligas best ball quedan fuera: la plataforma arma esas alineaciones sola. Cada bloqueo es el inicio de su propio partido; una liga que bloquea todas las alineaciones en el primer partido se bloquea antes. Un ✓ significa que abriste esa alineación aquí: no vemos el cambio que hagas en la plataforma hasta que se actualice su plantel.'
+          : 'Flagged means the injury feed reads Questionable, Doubtful or Out, or his club is not playing this week — a bye when the slate has the shape of one, otherwise a gap in the schedule we hold. Best-ball leagues are left out: the platform picks those lineups itself. Locks are his own kickoff; a league that locks every lineup at the first game locks earlier. A ✓ means you opened that lineup here — we cannot see the change you make on the platform until its roster refreshes.'}
       </p>
     </section>
   )

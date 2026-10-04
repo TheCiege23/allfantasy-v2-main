@@ -1,4 +1,5 @@
-import { kickoffText } from './kickoffText'
+import { kickoffText, weekdayEs } from './kickoffText'
+import { ageText } from './shellCopy'
 
 /** Shared Core navigation copy. The source labels remain the English fallback. */
 const spanish: Record<string, string> = {
@@ -1108,6 +1109,20 @@ const spanish: Record<string, string> = {
   Probable: 'Probable',
   Flagged: 'Señalado',
   'lock time unknown': 'hora de bloqueo desconocida',
+  // Player Finder — the readiness chip (lib/core-app/playerMoves.ts `readiness`) and the not-playing chip
+  // (lib/core-app/byeStatus.ts `byeChip`; "Bye · wk N" is a pattern below).
+  Ready: 'Listo',
+  'No game on the schedule': 'Sin partido en el calendario',
+  // Player Finder — the league-by-league calls (lib/core-app/leagueCall.ts). Names go through patterns below.
+  Locked: 'Bloqueado',
+  'Sit him': 'Siéntalo',
+  'Keep him in': 'Mantenlo',
+  'Keep him in — no backup': 'Mantenlo: no hay suplente',
+  'Bench is right': 'La banca es lo correcto',
+  'He is ruled out.': 'Está descartado.',
+  'He is ruled out, and no bench player here can come in for him now.': 'Está descartado, y ningún jugador de la banca puede entrar por él ahora.',
+  'Nobody on your bench out-projects him here.': 'Nadie de tu banca lo supera en proyección aquí.',
+  'He does not out-project a starter here.': 'No supera en proyección a ningún titular aquí.',
   // Refresh my lineups (components/core-app/player-finder/RefreshLineups.tsx — Game Plan and Player Finder).
   'Refresh my lineups': 'Actualizar mis alineaciones',
   'Refreshing…': 'Actualizando…',
@@ -1266,6 +1281,48 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   [/^locks in (.+)$/, (m) => `se bloquea en ${m[1]}`],
   [/^locked · kicked off (.+)$/, (m) => `bloqueado · empezó ${kickoffText(m[1]!, 'es')}`],
   [/^locks (.+)$/, (m) => `se bloquea ${kickoffText(m[1]!, 'es')}`],
+  // A LOCKED player's read from lib/core-app/swapLegality.ts `playerLock` — "kicked off Sun 1:00p ET" (Player
+  // Finder's swap candidates; the league calls splice it into a sentence, matched whole below).
+  [/^kicked off (.+)$/, (m) => `empezó ${kickoffText(m[1]!, 'es')}`],
+  // Player Finder — the not-playing chip (byeStatus.ts `byeChip`), the feed's report time (injuryReport.ts
+  // `reportedLabel`) and the pregame inactive line (pregameInactive.ts `inactiveSentence`).
+  [/^Bye · wk (\d+)$/, (m) => `Descanso · sem. ${m[1]}`],
+  // The age goes through shellCopy's `ageText`, the one /core translator for "… ago".
+  [/^reported (\d+ min ago)$/, (m) => `reportado ${ageText(m[1]!, 'es')}`],
+  [/^reported (Sun|Mon|Tue|Wed|Thu|Fri|Sat)$/, (m) => `reportado ${weekdayEs(m[1]!)}`],
+  [/^reported (.+)$/, (m) => `reportado ${kickoffText(m[1]!, 'es')}`],
+  [/^Declared inactive at (.+), at kickoff$/, (m) => `Declarado inactivo a las ${m[1]}, al inicio`],
+  [/^Declared inactive at (.+), (\d+) min before kickoff$/, (m) => `Declarado inactivo a las ${m[1]}, ${m[2]} min antes del inicio`],
+  // Player Finder — the league-by-league calls (lib/core-app/leagueCall.ts `leagueCall`). Each template whole,
+  // anchored at both ends: a template the loader changes falls back to English, never half.
+  [/^His game kicked off (.+) — nothing can move now\.$/, (m) => `Su partido empezó ${kickoffText(m[1]!, 'es')}: ya no se puede mover nada.`],
+  [/^He would replace (.+), whose game kicked off (.+)\.$/, (m) => `Reemplazaría a ${m[1]}, cuyo partido empezó ${kickoffText(m[2]!, 'es')}.`],
+  [/^Sit him — start (.+)$/, (m) => `Siéntalo: alinea a ${m[1]}`],
+  [
+    /^He is ruled out\. (.+) is your best bench option here \((-?[\d.]+) projected under this league's scoring\)\.$/,
+    (m) => `Está descartado. ${m[1]} es tu mejor opción de la banca aquí (${m[2]} proyectados con la puntuación de esta liga).`,
+  ],
+  [/^He is ruled out\. (.+) is your best bench option here\.$/, (m) => `Está descartado. ${m[1]} es tu mejor opción de la banca aquí.`],
+  [/^Start him over (.+)$/, (m) => `Alínealo por delante de ${m[1]}`],
+  [/^Start (.+) instead$/, (m) => `Alinea a ${m[1]} en su lugar`],
+  [
+    /^He projects ([+-]?[\d.]+) over (.+?)(?: at (.+))? under this league's scoring\.$/,
+    (m) => `Proyecta ${m[1]} más que ${m[2]}${m[3] ? ` en ${m[3]}` : ''} con la puntuación de esta liga.`,
+  ],
+  [/^(.+) projects ([+-]?[\d.]+) over him under this league's scoring\.$/, (m) => `${m[1]} proyecta ${m[2]} más que él con la puntuación de esta liga.`],
+  [/^Keep him in — have (.+) ready$/, (m) => `Mantenlo: ten listo a ${m[1]}`],
+  [
+    /^He is questionable and nobody on your bench out-projects him here\. If he is ruled out, start (.+?)\.(?: Inactives are announced around (.+)\.)?$/,
+    (m) =>
+      `Es dudoso y nadie de tu banca lo supera en proyección aquí. Si lo descartan, alinea a ${m[1]}.` +
+      (m[2] ? ` La lista de inactivos se anuncia hacia el ${kickoffText(m[2], 'es')}.` : ''),
+  ],
+  [
+    /^He is questionable and no bench player here can come in for him\.(?: Inactives are announced around (.+)\.)?$/,
+    (m) =>
+      'Es dudoso y ningún jugador de la banca puede entrar por él.' +
+      (m[1] ? ` La lista de inactivos se anuncia hacia el ${kickoffText(m[1], 'es')}.` : ''),
+  ],
   // RefreshLineups — the stamp and its progress notes.
   [
     /^Lineups as of (.+) · (.+)$/,

@@ -23,6 +23,10 @@ const MONTH_ES: Record<string, string> = {
   Jan: 'ene', Feb: 'feb', Mar: 'mar', Apr: 'abr', May: 'may', Jun: 'jun',
   Jul: 'jul', Aug: 'ago', Sep: 'sep', Oct: 'oct', Nov: 'nov', Dec: 'dic',
 }
+/** A lone pinned weekday ("Sun") in Spanish ("dom") — "reported Sun" has no clock for `kickoffText` to key on. */
+export function weekdayEs(weekday: string): string {
+  return WEEKDAY_ES[weekday] ?? weekday
+}
 const WD = '(Sun|Mon|Tue|Wed|Thu|Fri|Sat)'
 const MO = '(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)'
 
