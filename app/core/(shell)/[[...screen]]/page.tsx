@@ -3517,14 +3517,28 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
    * after it: reading `issues` any earlier is a temporal-dead-zone crash,
    * not merely a stale list.
    */
+  const wantsCommissionerHub = activeKey === 'commissioner' && segment !== 'discord' && Boolean(selectedLeagueId)
+
+  /*
+   * The one-league hub is a SERVER screen, so it cannot read the client language provider; it is
+   * worded here instead. The toggle writes the `af_lang` cookie and refreshes the route, so the
+   * re-render reads the new language. Resolved before the hub loads — its composed sentences (flags,
+   * task cards, tiles) are written in this language at the source — and only on this screen, so no
+   * other screen pays the session and profile read.
+   */
+  const hubLanguage = wantsCommissionerHub
+    ? ((await resolveServerRenderPreferences().catch(() => null))?.language ?? 'en')
+    : 'en'
+
   const commissionerHub =
-    activeKey === 'commissioner' && segment !== 'discord' && selectedLeagueId
+    wantsCommissionerHub && selectedLeagueId
       ? await getCommissionerHub({
           leagueId: selectedLeagueId,
           userId,
           issues: issues.filter((i) => i.leagueId === selectedLeagueId),
           now,
           depth: corePaywall?.commissioner_depth ?? null,
+          language: hubLanguage,
         }).catch(() => null)
       : null
 
@@ -3540,16 +3554,6 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           .then((league) => (league ? getStandingsLineups({ league, userId }) : null))
           .catch(() => null)
       : null
-
-  /*
-   * The one-league hub is a SERVER screen, so it cannot read the client language provider; it is
-   * worded here instead. The toggle writes the `af_lang` cookie and refreshes the route, so the
-   * re-render reads the new language. Resolved only when the hub is drawn — no other screen pays
-   * the session and profile read.
-   */
-  const hubLanguage = commissionerHub
-    ? ((await resolveServerRenderPreferences().catch(() => null))?.language ?? 'en')
-    : 'en'
 
   /*
    * The all-leagues Commissioner Hub — `/core/commissioner` with no league. Matched on
