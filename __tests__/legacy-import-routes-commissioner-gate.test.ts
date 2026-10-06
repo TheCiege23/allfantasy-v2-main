@@ -252,11 +252,12 @@ describe('POST /api/mfl/import — commissioner gate', () => {
     )
   })
 
-  it('does not gate the no-league-id request, which never writes (501 historical path)', async () => {
+  // The no-league-id request used to fall back to the retired MFL password session (2026-10).
+  it('refuses the no-league-id request without gating or writing anything', async () => {
     const { POST } = await import('@/app/api/mfl/import/route')
     const res = await (POST as any)(post('http://localhost/api/mfl/import', { startYear: 2020, endYear: 2025 }))
 
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(400)
     expect(assertImportCommissionerMock).not.toHaveBeenCalled()
     expect(persistMock).not.toHaveBeenCalled()
   })

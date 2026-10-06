@@ -203,6 +203,9 @@ const DATA_API_HOST_PATTERNS = [
    * — "league-import" does not match `ingest|ingestion|sync`.
    *
    * The three request paths are real exposure, not bookkeeping, and are left REPORTED.
+   * ⚠ 2026-10: all three are gone, not exempted — the MFL password login and the
+   * session-cookie listing behind it were retired, and /api/mfl/import kept only its
+   * API-key path, which reads through the import pipeline.
    */
   /(^|\.)api\.myfantasyleague\.com$/i,
   /*
