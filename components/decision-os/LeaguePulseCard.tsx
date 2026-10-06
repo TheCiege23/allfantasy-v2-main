@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { Activity, ArrowRight, Info, Sparkles } from 'lucide-react'
 import type { LeaguePulseTone, LeaguePulseViewModel } from '@/lib/decision-os/league-pulse'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import {
   DecisionOsBadge,
   DecisionOsConfidenceBadge,
@@ -42,6 +43,7 @@ function statusClasses(status: LeaguePulseViewModel['status']): string {
 }
 
 export default function LeaguePulseCard({ pulse, variant = 'dashboard', compact = false }: LeaguePulseCardProps) {
+  const { t } = useOptionalLanguage()
   const isInsufficient = pulse.status === 'insufficient-data'
   const evidencePreview = pulse.evidence.slice(0, compact ? 3 : 4)
   const derivationPreview = pulse.derivation.slice(0, compact ? 2 : 3)
@@ -70,7 +72,7 @@ export default function LeaguePulseCard({ pulse, variant = 'dashboard', compact 
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary">{pulse.summary}</p>
             <DecisionOsTrustNote>
-              This pulse is evidence-backed and deterministic. Limited league data lowers confidence instead of producing unsupported claims.
+              {t('pulseCard.trustNote')}
             </DecisionOsTrustNote>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:min-w-[280px]">
@@ -96,11 +98,11 @@ export default function LeaguePulseCard({ pulse, variant = 'dashboard', compact 
             />
           ) : null}
 
-          <DecisionOsEvidenceGrid title="Based on" items={evidencePreview} columns={2} />
+          <DecisionOsEvidenceGrid title={t('pulseCard.basedOn')} items={evidencePreview} columns={2} />
         </div>
 
         <aside className="space-y-4">
-          <DecisionOsPanel title="Decision path" className="bg-surface-muted">
+          <DecisionOsPanel title={t('pulseCard.decisionPath')} className="bg-surface-muted">
             <ol className="mt-3 space-y-2">
               {derivationPreview.map((step, index) => (
                 <li key={step} className="flex gap-2 text-sm leading-5 text-secondary">
@@ -114,7 +116,7 @@ export default function LeaguePulseCard({ pulse, variant = 'dashboard', compact 
           </DecisionOsPanel>
 
           <div className="rounded-xl border border-brand-primary/20 bg-brand-primary/10 p-4">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-primary">Next action</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-brand-primary">{t('pulseCard.nextAction')}</p>
             <p className="mt-2 text-sm font-bold text-primary">{pulse.nextAction.label}</p>
             <p className="mt-1 text-sm leading-6 text-secondary">{pulse.nextAction.detail}</p>
             {pulse.nextAction.href ? (
@@ -122,7 +124,7 @@ export default function LeaguePulseCard({ pulse, variant = 'dashboard', compact 
                 href={pulse.nextAction.href}
                 className="focus-ring mt-4 inline-flex min-h-[40px] items-center gap-2 rounded-xl bg-brand-primary px-4 py-2 text-sm font-bold text-content-inverse transition hover:bg-brand-strong"
               >
-                Continue
+                {t('pulseCard.continue')}
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
             ) : null}

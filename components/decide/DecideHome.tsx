@@ -41,6 +41,7 @@ import {
   buildLeagueHomePulse,
   type LeaguePulseViewModel,
 } from '@/lib/decision-os/league-pulse'
+import { localizeLeaguePulse, translatePulseText } from '@/lib/i18n/decision-os/leaguePulse'
 import {
   buildDecisionRecommendationsViewModel,
   type DecisionRecommendationsViewModel,
@@ -196,7 +197,7 @@ export function DecideHome({
   // ── League Pulse: sufficiency decided by the engine, rendered as-is ────────
   const pulse: LeaguePulseViewModel = useMemo(
     () =>
-      buildLeagueHomePulse({
+      localizeLeaguePulse(buildLeagueHomePulse({
         league: {
           id: league.id,
           name: league.name,
@@ -214,8 +215,8 @@ export function DecideHome({
         teams,
         isCommissioner,
         managerDna: intel?.managerDna ?? null,
-      }),
-    [league, teams, isCommissioner, intel],
+      }), language),
+    [league, teams, isCommissioner, intel, language],
   )
 
   const recs: DecisionRecommendationsViewModel = useMemo(
@@ -349,7 +350,7 @@ export function DecideHome({
                       <span className="bar">
                         <span className="fill" style={{ width: `${Math.max(0, Math.min(100, pulse.confidence))}%` }} />
                       </span>
-                      <span className="pct">{pulse.confidence}% · {pulse.confidenceLabel}</span>
+                      <span className="pct">{pulse.confidence}% · {language === 'es' ? translatePulseText(pulse.confidenceLabel) : pulse.confidenceLabel}</span>
                     </span>
                   </div>
                   <div className="bdx-line">{pulse.summary}</div>
