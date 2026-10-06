@@ -43,7 +43,7 @@ function statusClasses(status: LeaguePulseViewModel['status']): string {
 }
 
 export default function LeaguePulseCard({ pulse, variant = 'dashboard', compact = false }: LeaguePulseCardProps) {
-  const { t } = useOptionalLanguage()
+  const { t, language } = useOptionalLanguage()
   const isInsufficient = pulse.status === 'insufficient-data'
   const evidencePreview = pulse.evidence.slice(0, compact ? 3 : 4)
   const derivationPreview = pulse.derivation.slice(0, compact ? 2 : 3)
@@ -61,8 +61,8 @@ export default function LeaguePulseCard({ pulse, variant = 'dashboard', compact 
             {isInsufficient ? <Info className="h-3.5 w-3.5" aria-hidden /> : <Activity className="h-3.5 w-3.5" aria-hidden />}
             {pulse.statusLabel}
           </span>
-          <DecisionOsConfidenceBadge label={pulse.confidenceLabel} />
-          <DecisionOsUpdatedStamp value={pulse.lastUpdatedIso} includeTime />
+          <DecisionOsConfidenceBadge label={pulse.confidenceLabel} language={language} />
+          <DecisionOsUpdatedStamp value={pulse.lastUpdatedIso} includeTime language={language} />
         </div>
         <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
           <div>
@@ -88,17 +88,18 @@ export default function LeaguePulseCard({ pulse, variant = 'dashboard', compact 
 
       <div className="grid gap-4 p-5 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="space-y-4">
-          <DecisionOsWhyPanel>{pulse.why}</DecisionOsWhyPanel>
+          <DecisionOsWhyPanel language={language}>{pulse.why}</DecisionOsWhyPanel>
 
           {isInsufficient && pulse.insufficientData ? (
             <DecisionOsInsufficientDataCallout
               title={pulse.insufficientData.title}
               message={pulse.insufficientData.message}
               missing={pulse.insufficientData.missing}
+              language={language}
             />
           ) : null}
 
-          <DecisionOsEvidenceGrid title={t('pulseCard.basedOn')} items={evidencePreview} columns={2} />
+          <DecisionOsEvidenceGrid title={t('pulseCard.basedOn')} items={evidencePreview} columns={2} language={language} />
         </div>
 
         <aside className="space-y-4">
