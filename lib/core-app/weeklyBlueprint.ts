@@ -3,6 +3,7 @@ import type { WeekBoard, WeekMatchup } from './weekBoard'
 import type { SeasonOutlook, SwingMatchup } from './seasonOutlook'
 import { lineupProjectionFor } from './weekLineups'
 import type { WeekLineups } from './weekLineups'
+import { formatPct1 } from './weeklyPercent'
 
 export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context' }
 export type WeeklyBlueprint = {
@@ -101,7 +102,7 @@ export function weeklyBrief(data: WeeklyBlueprint, es = false): string {
   const sports = data.sports.length ? ` (${data.sports.join(', ')})` : ''
   const next = data.actions[0]
   const matchup = data.matchup ? es ? `Período ${data.matchup.period}: frente a ${data.matchup.opponent} en ${data.matchup.leagueName}. ` : `Period ${data.matchup.period}: facing ${data.matchup.opponent} in ${data.matchup.leagueName}. ` : ''
-  const playoff = data.playoff ? es ? `Probabilidad estimada de playoffs en ${data.playoff.leagueName}: ${data.playoff.probability.toFixed(1)}%. ` : `Estimated playoff probability in ${data.playoff.leagueName}: ${data.playoff.probability.toFixed(1)}%. ` : ''
+  const playoff = data.playoff ? es ? `Probabilidad estimada de playoffs en ${data.playoff.leagueName}: ${formatPct1(data.playoff.probability)}%. ` : `Estimated playoff probability in ${data.playoff.leagueName}: ${formatPct1(data.playoff.probability)}%. ` : ''
   return es ? `Tu plan para ${scope}${sports}. ${matchup}${playoff}${next ? `Primero: ${weeklyActionText(next, true)} en ${next.leagueName}. ` : ''}Chimmy puede ayudarte a evaluar tus opciones con el contexto de tus ligas.`
     : `Your plan for ${scope}${sports}. ${matchup}${playoff}${next ? `First: ${weeklyActionText(next)} in ${next.leagueName}. ` : ''}Chimmy can help you weigh your options with your league context.`
 }
