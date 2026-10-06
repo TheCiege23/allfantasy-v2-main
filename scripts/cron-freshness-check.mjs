@@ -89,6 +89,20 @@ function toleranceForGap(gapMs) {
 const MIN_ALLOWANCE_MS = 20 * 60_000
 
 /**
+ * How old a probe's newest row may be before it reads STALE: the job's own cadence times its
+ * tolerance, never under the global floor, and never under the probe's own `minAllowanceMs`.
+ *
+ * `minAllowanceMs` exists for OUTPUT probes whose data has a natural quiet period longer than the
+ * job's cadence allows. The job can be firing every slot and still write nothing, because nothing
+ * happened upstream. It only RAISES the allowance, and only for the probe that declares it, with
+ * the measurement that justifies it written beside the declaration.
+ */
+export function allowanceFor(gapMs, probe = {}) {
+  const fromCadence = (gapMs ?? 3_600_000) * toleranceForGap(gapMs)
+  return Math.max(MIN_ALLOWANCE_MS, fromCadence, probe.minAllowanceMs ?? 0)
+}
+
+/**
  * cron path (exactly as declared in vercel.json) -> the table it must advance.
  *
  * `column` is optional: when omitted the script introspects information_schema and picks the first
@@ -269,7 +283,17 @@ export const PROBES = {
   // its own job_name or the ingest's heartbeat would report the drain healthy on a day it never
   // ran -- the shared-probe false green fixed for import-scores just above.
   // Every 6h, so 9h allows one missed fire before it goes red.
-  '/api/cron/import-news': { table: 'player_news', column: 'created_at' },
+  /*
+   * Every 15 minutes, so the cadence allowance is 45 minutes. But news has a natural quiet period:
+   * measured on production 2026-10-06, the newest `player_news` row routinely sits 1.4-2.0h old
+   * between ~08:30 and ~10:40 UTC (early morning US Eastern). The longest gap in 35 days was 2.0h.
+   * So with only the cadence allowance, the probe went STALE on a working job most mornings
+   * (#1453: Oct 3, 4 and 6). Three hours clears the longest observed quiet period with an hour of
+   * margin. A feed that has really stopped still reads STALE within three hours.
+   * Stays a TABLE probe, never a heartbeat: see the note in the route on why (a feed that stopped
+   * advancing hid behind 200s for 107 days).
+   */
+  '/api/cron/import-news': { table: 'player_news', column: 'created_at', minAllowanceMs: 3 * 60 * 60_000 },
   /*
    * The X pass writes the same player_news.created_at as the base job above, which runs every 15
    * minutes against this one's six hours -- so a table probe here is satisfied on every check by
@@ -986,7 +1010,7 @@ async function main() {
       }
 
       const gap = maxGapMs(cron.schedule)
-      const allowanceMs = Math.max(MIN_ALLOWANCE_MS, (gap ?? 3_600_000) * toleranceForGap(gap))
+      const allowanceMs = allowanceFor(gap, probe)
       const base = {
         path: cron.path,
         schedule: cron.schedule,
