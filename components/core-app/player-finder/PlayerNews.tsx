@@ -1,4 +1,8 @@
+'use client'
+
 import type { SectionState } from '@/lib/core-app/leagueHome'
+import { finderPlayerInfoCopy, infoReasonText } from '@/lib/core-app/finderPlayerInfoCopy'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { LOCK_ZONE } from '@/lib/core-app/lineupLock'
 import type { PlayerCardNews } from '@/lib/core-app/playerCard'
 
@@ -12,6 +16,11 @@ import type { PlayerCardNews } from '@/lib/core-app/playerCard'
  *
  * ⚠ ON GAME DAY THE TIMESTAMP IS THE STORY. "Out" posted at 11:32 and "Questionable" from
  * Friday are different facts; every item says how old it is.
+ *
+ * Spanish (2026-10-05): the headlines are the feeds' and stay as written. The app's own words — the
+ * heading, the "News" feed label, the age and date, the loader's reasons — come from
+ * finderPlayerInfoCopy.ts at render. `newsSource` / `newsWhen` keep their English output when called
+ * without a language.
  */
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -24,15 +33,20 @@ const SOURCE_LABELS: Record<string, string> = {
 }
 
 /** "ESPN", "Rolling Insights" — a feed key is not something a reader should have to decode. */
-export function newsSource(source: string | null | undefined): string | null {
+export function newsSource(source: string | null | undefined, language: string = 'en'): string | null {
   const key = String(source ?? '').trim().toLowerCase()
   if (!key) return null
   if (SOURCE_LABELS[key]) return SOURCE_LABELS[key]
-  if (key.startsWith('newsapi')) return 'News'
+  if (key.startsWith('newsapi')) return finderPlayerInfoCopy(language).newsFeed
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
-export function newsWhen(iso: string | null, nowIso: string): string | null {
+export function newsWhen(iso: string | null, nowIso: string, language: string = 'en'): string | null {
+  const when = newsWhenEn(iso, nowIso)
+  return when == null ? null : finderPlayerInfoCopy(language).newsWhen(when)
+}
+
+function newsWhenEn(iso: string | null, nowIso: string): string | null {
   if (!iso) return null
   const at = new Date(iso)
   const now = new Date(nowIso)
@@ -48,15 +62,17 @@ export function newsWhen(iso: string | null, nowIso: string): string | null {
 }
 
 export function PlayerNews({ state, nowIso }: { state: SectionState<PlayerCardNews[]>; nowIso: string }) {
+  const { language } = useOptionalLanguage()
+  const t = finderPlayerInfoCopy(language)
   return (
     <section className="af-pf-block af-pf-news" aria-labelledby="af-pf-news-h">
       <h3 className="af-label" id="af-pf-news-h">
-        News
+        {t.news}
       </h3>
       {state.available ? (
         <ul className="af-pf-news-list">
           {state.data.map((item, i) => {
-            const when = newsWhen(item.publishedAt, nowIso)
+            const when = newsWhen(item.publishedAt, nowIso, language)
             return (
               <li key={`${item.title}-${i}`} className="af-pf-news-item">
                 {item.url ? (
@@ -67,14 +83,14 @@ export function PlayerNews({ state, nowIso }: { state: SectionState<PlayerCardNe
                   <span className="af-pf-news-title">{item.title}</span>
                 )}
                 <span className="af-pf-news-meta af-num">
-                  {[newsSource(item.source), when].filter(Boolean).join(' · ')}
+                  {[newsSource(item.source, language), when].filter(Boolean).join(' · ')}
                 </span>
               </li>
             )
           })}
         </ul>
       ) : (
-        <p className="af-pf-unavailable">{state.reason}</p>
+        <p className="af-pf-unavailable">{infoReasonText(state.reason, language)}</p>
       )}
     </section>
   )
