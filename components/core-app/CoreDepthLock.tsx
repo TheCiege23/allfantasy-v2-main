@@ -1,7 +1,8 @@
 import '@/components/core-app/af-core-lock.css'
 
 import type { ReactNode } from 'react'
-import { formatPaywallDay, type CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
+import { coreDepthLockCopy, depthLabelText } from '@/lib/core-app/coreDepthLockCopy'
 
 /*
  * The two faces of the /core depth paywall (lib/core-app/coreDepthAccess.ts).
@@ -11,6 +12,12 @@ import { formatPaywallDay, type CoreDepthAccess } from '@/lib/core-app/coreDepth
  * renders the children when the viewer may see them, and the lock card otherwise. Before
  * launch it also marks the children "Free until Oct 15" for a viewer without the plan — the
  * people who will lose it get told, plan holders do not.
+ *
+ * Spanish (2026-10-06): the words come from lib/core-app/coreDepthLockCopy.ts in the language the
+ * caller passes as `lang` — a prop, not the client provider, because CommissionerHub draws the lock
+ * from a server component that resolves the language itself. The caller hands `what` over in the same
+ * language (`lockSubjectText`); no `lang` reads English, byte for byte as before. Only the WORDS
+ * follow the language: the gate, the depth, the plan and the upgrade link do not read it.
  *
  * ⚠ THE LOCK IS NOT THE GATE. The server loader must not have loaded the locked data in the
  * first place; this only decides what the screen draws. A screen that hides data it was sent
@@ -40,41 +47,36 @@ function LockIcon() {
  * steering, which 3.1.3 forbids. So that build says only what is true there: this part is not
  * included with the account. An account that already has the plan never sees a lock.
  */
-export function CoreDepthLock({ access, what }: { access: CoreDepthAccess; what?: string }) {
-  const subject = what ?? access.label
-  const verb = subject.endsWith('s') ? 'are' : 'is'
+export function CoreDepthLock({ access, what, lang }: { access: CoreDepthAccess; what?: string; lang?: string }) {
+  const c = coreDepthLockCopy(lang)
+  const subject = what ?? depthLabelText(access.depth, access.label, lang)
   return (
     <section className="af-core-lock" data-testid={`core-lock-${access.depth}`} aria-label={`${subject} — ${access.planName}`}>
       <p className="af-core-lock-head">
         <LockIcon />
-        <span data-ios-purchase>
-          {subject} {verb} part of {access.planName}
-        </span>
-        <span data-ios-purchase-alt>
-          {subject} {verb} not included with your account
-        </span>
+        <span data-ios-purchase>{c.head(subject, access.planName)}</span>
+        <span data-ios-purchase-alt>{c.headAlt(subject)}</span>
       </p>
       <p className="af-core-lock-body">
-        <span data-ios-purchase>Your leagues, scores and the basics stay free. Upgrade to see the rest.</span>
-        <span data-ios-purchase-alt>Your leagues, scores and the basics are all here.</span>
+        <span data-ios-purchase>{c.body}</span>
+        <span data-ios-purchase-alt>{c.bodyAlt}</span>
       </p>
       {/* The /upgrade href is hidden in a non-IAP app build by the link rule already; marked too,
           in case the plan's path ever stops starting with /upgrade. */}
       <a className="af-core-lock-cta" href={access.upgradePath} data-ios-purchase>
-        See {access.planName}
+        {c.cta(access.planName)}
       </a>
     </section>
   )
 }
 
-export function FreeUntilNote({ access }: { access: CoreDepthAccess }) {
+export function FreeUntilNote({ access, lang }: { access: CoreDepthAccess; lang?: string }) {
   if (!access.preLaunchFree) return null
-  const day = formatPaywallDay(access.startsAt)
   return (
     // Hidden in an iOS build that sells nothing: "then AF Pro" announces a plan it cannot sell
     // (3.1.3). An IAP build sells AF Pro through Apple, so it shows the note.
     <span className="af-core-free-until" data-testid={`core-free-until-${access.depth}`} data-ios-purchase>
-      Free until {day} — then {access.planName}
+      {coreDepthLockCopy(lang).freeUntil(access.startsAt, access.planName)}
     </span>
   )
 }
@@ -82,11 +84,14 @@ export function FreeUntilNote({ access }: { access: CoreDepthAccess }) {
 export function CoreDepthGate({
   access,
   what,
+  lang,
   children,
   showFreeUntil = true,
 }: {
   access: CoreDepthAccess | null | undefined
   what?: string
+  /** The reader's language, for the lock's and the note's words only. */
+  lang?: string
   children: ReactNode
   /** Set false where several gated blocks sit together and one note is enough. */
   showFreeUntil?: boolean
@@ -94,10 +99,10 @@ export function CoreDepthGate({
   // No access object means the loader ran without the paywall (tests, a surface not wired
   // yet): render as before rather than lock something by accident.
   if (!access) return <>{children}</>
-  if (!access.unlocked) return <CoreDepthLock access={access} what={what} />
+  if (!access.unlocked) return <CoreDepthLock access={access} what={what} lang={lang} />
   return (
     <>
-      {showFreeUntil ? <FreeUntilNote access={access} /> : null}
+      {showFreeUntil ? <FreeUntilNote access={access} lang={lang} /> : null}
       {children}
     </>
   )

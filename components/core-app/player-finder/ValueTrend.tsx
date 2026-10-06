@@ -1,6 +1,7 @@
 'use client'
 
 import { CoreDepthLock } from '@/components/core-app/CoreDepthLock'
+import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { consecutiveRuns, type BookTrend, type Change, type ValueTrend as ValueTrendData } from '@/lib/core-app/valueTrend'
@@ -13,7 +14,7 @@ import { bookLabelText, nudgeText, shortDateText, tradeValueCopy, type TradeValu
  *
  * Spanish (2026-10-05): the words come from finderTradeValueCopy.ts, the nudge is rebuilt from its
  * parts, and the pinned en-US date ("Sep 28") reads "28 sep" through `kickoffText`. The AF Pro lock is
- * the shared CoreDepthLock and keeps its own (English) words.
+ * the shared CoreDepthLock, in the reader's language too (coreDepthLockCopy.ts).
  */
 
 const DATE = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
@@ -107,7 +108,7 @@ export function ValueTrend({ data, access }: { data: ValueTrendData | null; acce
           </span>
         </p>
       ) : null}
-      {data.nudgeLocked && access ? <CoreDepthLock access={access} what="Buy-low and sell-high calls" /> : null}
+      {data.nudgeLocked && access ? <CoreDepthLock access={access} what={lockSubjectText('Buy-low and sell-high calls', language)} lang={language} /> : null}
       <p className="af-pf-vt-foot">{copy.trendFoot}</p>
     </section>
   )

@@ -3,8 +3,14 @@
  * the rail, the header line, the readiness chip, the stat tiles and their "?" tips, the injury block,
  * the league table, the row actions and every empty and error state. The subcomponents #2043 and
  * #2046 translated (GameDayBanner, LockClock, LeagueCalls, SwapCandidates, RecommendedMoves,
- * PlayerVerdict …) render here too and must stay Spanish; the ones still English (the search box,
- * the league card, news, the season card) are cut out of what is scanned, by their root, and named.
+ * PlayerVerdict …) render here too and must stay Spanish.
+ *
+ * ⚠ THE WHOLE PAGE IS SCANNED (2026-10-06). The three subcomponent groups (#2069, #2070, #2071) and the
+ * shared AF Pro lock (CoreDepthLock) are Spanish now, so nothing of the app's own is cut out of the
+ * scan any more. The one thing still cut is PROVIDER text — see `PROVIDER_TEXT`, which says why for
+ * each root. "The whole page" below renders every card the screen can draw — the cross-league view,
+ * league mode, compare, the home, and a viewer without AF Pro, whose page is mostly locks — and reads
+ * all of it against every group's English vocabulary at once.
  *
  * Every formatter value is REAL output: `readiness`, `byeChip`, `reportedLabel`, `pregameInactive`
  * (through the screen), `describeAge` for the freshness stamp, `scoringFit` for the Value cell's note,
@@ -18,6 +24,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 
+vi.mock('server-only', () => ({}))
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => '/core/players',
@@ -43,6 +50,24 @@ import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { scoringFit } from '@/lib/trade-value/scoringFit'
 import { NO_SLEEPER_ID_REASON, missingColumnsReason } from '@/lib/core-app/snapShare'
 import { FINDER_REASON_KEYS, reasonText } from '@/lib/core-app/playerFinderCopy'
+import { decideCoreDepth } from '@/lib/core-app/coreDepthAccess'
+import { reconcileGame, type LiveGameBadge as LiveGameBadgeData } from '@/lib/core-app/liveGameBadge'
+import { buildInjuryTimeline } from '@/lib/core-app/injuryTimeline'
+import { presenceCells, type DepthChartView } from '@/lib/core-app/depthChart'
+import { rankWhoStartsHim, type SellRoster, type WhoStartsHim as WhoStartsHimData } from '@/lib/core-app/whoStartsHim'
+import { summarizeSeason, type SeasonWeek } from '@/lib/core-app/playerSeason'
+import { mergeNewsItems, type PlayerCardNews } from '@/lib/core-app/playerCard'
+import { changeOver, nudgeFor, type BookTrend, type TrendPoint, type ValueTrend as ValueTrendData } from '@/lib/core-app/valueTrend'
+import { describeValueBook } from '@/lib/core-app/valueBook'
+import type { FreeAgentBids as FreeAgentBidsData } from '@/lib/core-app/freeAgentBids'
+import { tradeGradeLabel, tradeGradeRecommendation, type GradeLetter } from '@/lib/decision-os/trade/tradeGrade'
+import type { SectionState } from '@/lib/core-app/leagueHome'
+import type { PlayerTradeVisual, TradeVisualGrade, TradeVisualPackage } from '@/lib/core-app/playerTradeVisual'
+import type { ManagerPresence, PresenceManager } from '@/lib/core-app/managerPresence'
+import { buildTeamSplit } from '@/lib/core-app/teamSplit'
+import type { PlayerShares } from '@/lib/core-app/playerShares'
+import type { LeagueShareView } from '@/lib/core-app/playerSharesLeague'
+import { readiness } from '@/lib/core-app/playerMoves'
 
 const EN_DAY = /\b(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b/
 const EN_MONTH = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/
@@ -54,18 +79,32 @@ const OWN_EN =
   /\b(Search|Player Finder|Matches|Type at least|No player|no position|Compare|Recently|Other matches|Also matched|Stats|Player details|What to do|in this league|All leagues|of your|across|rostered|[Ss]ign in|cross-league|Proj|Projection|Standard|scoring|AF proj|Pos rank|priced|projected|IDP value|Snap share|Offensive|Defensive|games?|Age|birth|Injury|designation|Every platform|Slot|Status|Value|League|This league|value|unconfirmed|Not checked|Trade for|Where to fix|Nothing to do|Bench is right|On IR|No call|unpriced|Season statistics|Pick a match|Ready|Active|Inactive|Questionable|Doubtful|Out|Connect a league|ago|never|adjusted|dynasty|we hold|we have|feed|rank needs|engine|receptions|reported|Bye|No game|Recommended|locked|locks)\b/
 
 /**
- * The subcomponents not yet in Spanish, cut out by their root before scanning: the search box
- * (PlayerSearchBox), the league-in-context card and its phone bar (LeagueOwnershipCard,
- * StickyActionBar), news, the season card and next games (Phase-1 depth cards).
+ * What is cut out before scanning — PROVIDER TEXT ONLY, each with its reason. Nothing of the app's own
+ * words is cut: a card that reads English fails this suite.
  */
-const NOT_YET_SPANISH = ['.af-pf-search-wrap', '.af-pf-lv', '.af-pf-stickybar', '.af-pf-news', '.af-pf-season-card', '.af-pf-next']
+const PROVIDER_TEXT: Record<string, string> = {
+  // A news headline is the feed's own sentence (ESPN, NewsAPI, Rolling Insights, Sleeper), in the
+  // feed's language. PlayerNews prints it verbatim on purpose; translating it would be inventing news.
+  '.af-pf-news-title': 'news headlines are the feed’s own English',
+}
 
-/** Visible text plus every title and aria-label — the reader hears those too. */
+/**
+ * Visible text plus every title, aria-label and placeholder — the reader meets those too. The text is
+ * read twice: whole (for phrase assertions) and node by node with a space between, since `textContent`
+ * glues neighbouring elements together and a glued word has no ``.
+ */
 function ownText(container: HTMLElement): string {
   const root = container.cloneNode(true) as HTMLElement
-  for (const sel of NOT_YET_SPANISH) root.querySelectorAll(sel).forEach((n) => n.remove())
-  const attrs = [...root.querySelectorAll('[title],[aria-label]')].flatMap((n) => [n.getAttribute('title') ?? '', n.getAttribute('aria-label') ?? ''])
-  return [root.textContent ?? '', ...attrs].join(' | ')
+  for (const sel of Object.keys(PROVIDER_TEXT)) root.querySelectorAll(sel).forEach((n) => n.remove())
+  const attrs = [...root.querySelectorAll('[title],[aria-label],[placeholder]')].flatMap((n) => [
+    n.getAttribute('title') ?? '',
+    n.getAttribute('aria-label') ?? '',
+    n.getAttribute('placeholder') ?? '',
+  ])
+  const nodes: string[] = []
+  const walker = root.ownerDocument.createTreeWalker(root, 4 /* NodeFilter.SHOW_TEXT */)
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n.textContent ?? '')
+  return [root.textContent ?? '', nodes.join(' '), ...attrs].join(' | ')
 }
 
 function expectSpanish(out: string, label: string) {
@@ -502,6 +541,354 @@ describe('Player Finder — the screen’s own words, in Spanish', () => {
       expect(container.querySelector('.af-pf-rostered')?.textContent).toBe(count === 1 ? ' · no está en tu única liga' : ' · no está en ninguna de tus 4 ligas')
       unmount()
     }
+  })
+})
+
+/* ── The whole page: every card the screen can draw, read at once ──────────────────────────────── */
+
+/**
+ * Every group's English at once: the screen's own (`OWN_EN`), the player-info cards' (#2069), the
+ * search-and-leagues pieces' (#2070), the trade-and-value cards' (#2071), the AF Pro lock's, and the
+ * plain words any English sentence carries. Kept in the Spanish on purpose, and so absent: PPR, FAAB,
+ * IR, TE/RB/WR/QB, superflex, 1QB, best ball, p75, pts, vs, snaps, "Waiver Intel", AF Pro / AF
+ * Commissioner, AllFantasy and the platform names.
+ */
+const WHOLE_EN = new RegExp(
+  `\\b(${[
+    // plain English
+    'the', 'and', 'your', 'you', 'with', 'from', 'this', 'that', 'is', 'are', 'to', 'in', 'on', 'for', 'of', 'his', 'he', 'who', 'what', 'when', 'which', 'would', 'here',
+    // the AF Pro lock and its note
+    'part of', 'not included', 'Upgrade', 'the rest', 'See', 'Free until', 'then', 'stay free',
+    // #2069 — live badge, injury chip, depth chart, who'd start him, season, news
+    'Live', 'Week', 'week', 'starting', 'bench', 'updated', 'ago', 'just now', 'Improved', 'Worse', 'Was', 'reported', 'Next man up', 'Yours', 'Free', 'Taken',
+    'leagues?', "Can't read", 'Claim', 'Depth', 'this player', 'Who plays', 'Which teams', 'would start', 'teams?', 'more', 'Open', 'Trade Center', 'Ranked',
+    'market value', 'This season', 'scoring', 'Points', 'Per game', 'Games', 'Best', 'wk', 'scored', 'projected', 'Wk', 'Opp', 'Proj', 'Scored', 'no stats', 'News',
+    // #2070 — search box, compare, picker, strip, sticky bar, FA bids
+    'Search', 'Compare', 'Suggestions', 'no team', 'on file', 'Swap', 'Clear', 'Side by side', 'Neither', 'Across', 'League', 'Leagues', 'All', 'None', 'Save',
+    'selected', 'Filter', 'available', 'Available', 'elsewhere', 'START', 'BENCH', 'FA', 'Free agent', 'Bid', 'left', 'winning', 'median', 'claims?', 'bids',
+    // #2071 — trade visual, trade windows, value trend, shares, team split, league card
+    'Trade', 'trades?', 'bid', 'upgrade', 'lineup', 'Up to', 'budget', 'package', 'packages', 'needs', 'deep', 'give', 'get', 'Nothing', 'market', 'value', 'Values',
+    'Grade', 'Other', 'Send', 'never', 'window', 'windows', 'move', 'moves', 'moved', 'reachable', 'usually', 'pitch', 'Pitch', 'Copy', 'owners?', 'soonest',
+    'Market', 'days', 'since', 'month', 'history', 'Sell-high', 'Buy-low', 'Big drop', 'shares', 'players', 'rosters?', 'Another', 'readable', 'stats', 'starters',
+    'slots?', 'clubs?', 'bye', 'Bye', 'roster', 'commissioner', 'THEY', 'THEIR', 'Unrostered', 'proj', 'Read-only', 'Even', 'Slightly', 'favors', 'Favors',
+    'dynasty', 'evenings',
+  ].join('|')})\\b`,
+)
+
+function expectWholeSpanish(out: string, label: string) {
+  expect(out.length, label).toBeGreaterThan(200)
+  expect(out, label).not.toMatch(EN_DAY)
+  expect(out, label).not.toMatch(EN_MONTH)
+  for (const re of [OWN_EN, WHOLE_EN]) {
+    const hit = out.match(re)
+    expect(hit?.[0] ?? null, `${label}: …${hit ? out.slice(Math.max(0, hit.index! - 70), hit.index! + 70) : ''}…`).toBeNull()
+  }
+}
+
+const STARTS = new Date('2026-10-15T04:00:00.000Z')
+/** Before launch, without the plan: every card open, each with its "Free until" note. */
+const PRE_LAUNCH = decideCoreDepth('player_depth', { live: false, startsAt: STARTS, hasPlan: false })
+/** After launch, without the plan: the page a free reader gets — locks. */
+const FREE_READER = decideCoreDepth('player_depth', { live: true, startsAt: STARTS, hasPlan: false })
+
+const PICK_LEAGUES = [
+  { id: 'L-warriors', name: 'Gold Coast', platform: 'yahoo' },
+  { id: 'L-dragons', name: 'Dragones', platform: 'sleeper' },
+  { id: 'L-elites', name: 'Oficina FC', platform: 'espn' },
+  { id: 'L-cafe', name: 'Cafe Con Chimmy', platform: 'sleeper' },
+  { id: 'L-taco', name: 'Taco Tuesday', platform: 'sleeper' },
+  { id: 'L-gang', name: 'Gridiron Gang', platform: 'espn' },
+  { id: 'L-pals', name: 'Los Pals', platform: 'espn' },
+]
+
+/** His game, kicked off 90 minutes before the page's clock: live, scored in two leagues. */
+const LIVE_KICK = new Date(Date.parse(NOW) - 90 * 60_000).toISOString()
+const LIVE: LiveGameBadgeData = {
+  game: reconcileGame({
+    club: 'BUF',
+    rows: [{ homeTeam: 'BUF', awayTeam: 'MIA', homeScore: 14, awayScore: 10, status: 'in_progress', startTime: LIVE_KICK, seasonType: null, week: 12, updatedAt: NOW }],
+    now: new Date(NOW),
+    fold: (t) => t,
+  })!,
+  leagues: [
+    { leagueId: 'L-warriors', leagueName: 'Gold Coast', points: 12.4, isStarter: true, updatedAt: new Date(Date.parse(NOW) - 4 * 60_000).toISOString(), finalized: false },
+    { leagueId: 'L-dragons', leagueName: 'Dragones', points: 3.1, isStarter: false, updatedAt: NOW, finalized: false },
+  ],
+}
+
+const TIMELINE = buildInjuryTimeline({
+  rows: [
+    { status: 'Out', date: new Date('2026-10-12T15:00:00Z'), fetchedAt: new Date('2026-10-12T15:00:00Z'), source: 'espn', returnDate: null },
+    { status: 'Questionable', date: new Date('2026-10-23T15:00:00Z'), fetchedAt: new Date('2026-10-23T15:00:00Z'), source: 'espn', returnDate: '2026-10-26' },
+  ],
+  current: { status: 'Questionable', reportedAt: new Date('2026-10-23T20:00:00.000Z') },
+  now: new Date(NOW),
+})
+
+const claimLinkFor = (leagueId: string) => ({ href: `https://sleeper.com/leagues/${leagueId}/players`, label: 'Open in Sleeper', platformLabel: 'Sleeper', screen: 'Players', external: true })
+const held = (leagueId: string, s: string, isYours: boolean, owner: string | null = null) => ({ leagueId, slot: s, isYours, owner: owner ? { teamName: owner } : null }) as never
+const DC_LEAGUES = PICK_LEAGUES.map(({ id, name }) => ({ id, name }))
+const DEPTH_CHART: DepthChartView = {
+  team: 'BUF',
+  slot: 'TE',
+  asOfIso: '2026-10-22T10:00:00.000Z',
+  hisDepth: 1,
+  entries: [
+    { depth: 1, name: 'Dalton Kincaid', sleeperId: '10236', ref: 'NFL:ri-1', isHim: true },
+    { depth: 2, name: 'Dawson Knox', sleeperId: 'S2', ref: 'NFL:E2', isHim: false },
+    { depth: 3, name: 'Quintin Morris', sleeperId: 'S3', ref: null, isHim: false },
+  ],
+  presence: {
+    S2: presenceCells(DC_LEAGUES, [held('L-warriors', 'STARTER', true), held('L-dragons', 'BENCH', true), held('L-gang', 'NOT YOURS', false, 'Titanes')], [{ leagueId: 'L-pals' }], claimLinkFor),
+    S3: presenceCells(DC_LEAGUES, [held('L-elites', 'IR SLOT', true), held('L-cafe', 'TAXI', true)], [], claimLinkFor),
+  },
+}
+
+const SLOTS = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN', 'BN']
+const sellRoster = (key: string, te: [number, number], teamName: string): SellRoster => ({
+  key,
+  teamName,
+  players: [
+    { id: `${key}qb`, name: `Rojas ${key}`, position: 'QB', value: 60 },
+    { id: `${key}rb1`, name: `Mora ${key}1`, position: 'RB', value: 50 },
+    { id: `${key}rb2`, name: `Mora ${key}2`, position: 'RB', value: 45 },
+    { id: `${key}wr1`, name: `Vega ${key}1`, position: 'WR', value: 50 },
+    { id: `${key}wr2`, name: `Vega ${key}2`, position: 'WR', value: 45 },
+    { id: `${key}te1`, name: `Soto ${key}1`, position: 'TE', value: te[0] },
+    { id: `${key}te2`, name: `Soto ${key}2`, position: 'TE', value: te[1] },
+  ],
+})
+function whoStarts(): WhoStartsHimData {
+  const others = [sellRoster('A', [10, 5], 'Titanes'), sellRoster('B', [30, 20], 'Leones'), sellRoster('C', [90, 80], 'Halcones')]
+  const { teams } = rankWhoStartsHim({ him: { id: 'him', position: 'TE', value: 40 }, others, slots: SLOTS })
+  return {
+    leagues: [
+      { leagueId: 'L-warriors', leagueName: 'Gold Coast', state: 'ranked', note: null, teams, otherTeams: others.length },
+      { leagueId: 'L-taco', leagueName: 'Taco Tuesday', state: 'unmeasured', note: 'this league’s lineup is not on file', teams: [], otherTeams: 0 },
+    ],
+    locked: false,
+  }
+}
+
+const WEEKS: SeasonWeek[] = [
+  { week: 9, opponent: 'ARI', projected: 11.2, actual: 14.3, played: true },
+  { week: 10, opponent: 'NYJ', projected: 10.0, actual: 6.1, played: true },
+  { week: 11, opponent: null, projected: null, actual: null, played: false },
+]
+const NEWS: PlayerCardNews[] = mergeNewsItems(
+  [
+    { title: 'Kincaid limited at practice with a knee issue', source: 'espn', url: 'https://x/1', publishedAt: new Date(Date.parse(NOW) - 40 * 60_000).toISOString() },
+    { title: 'Bills tight end outlook for Sunday', source: 'newsapi_sports', url: 'https://x/2', publishedAt: new Date(Date.parse(NOW) - 5 * 3_600_000).toISOString() },
+  ],
+  [{ title: 'Kincaid returned to a full practice', source: 'sleeper_live', url: null, publishedAt: '2026-10-19T14:00:00.000Z' }],
+  null,
+)
+const FULL_DEPTH: PlayerDepth = {
+  ...DEPTH,
+  season: { available: true, data: { season: 2026, scoring: { kind: 'ppr' }, weeks: WEEKS, summary: summarizeSeason(WEEKS) } },
+  news: { available: true, data: NEWS },
+}
+
+function trendSeries(start: string, values: number[]): TrendPoint[] {
+  const t0 = Date.parse(`${start}T00:00:00Z`)
+  return values.map((v, i) => ({ day: new Date(t0 + i * 86_400_000).toISOString().slice(0, 10), value: v }))
+}
+function valueTrend(nudgeLocked: boolean): ValueTrendData {
+  const points = trendSeries('2026-09-26', Array.from({ length: 30 }, (_, i) => 4000 + i * (i > 22 ? 120 : 10)))
+  const DSF = { source: 'FANTASYCALC' as const, format: 'DYNASTY' as const, qbFormat: 'SUPERFLEX' as const }
+  const book: BookTrend = {
+    book: DSF, label: describeValueBook(DSF), points, value: points[points.length - 1]!.value, lastDay: points[points.length - 1]!.day,
+    change7: changeOver(points, 7), change30: changeOver(points, 28), moverShare: 0.93, leagues: 3, yours: 2,
+  }
+  const nudge = nudgeFor([book])
+  expect(nudge?.kind).toBe('sell-high')
+  return nudgeLocked ? { books: [book], nudge: null, nudgeLocked: true } : { books: [book], nudge, nudgeLocked: false }
+}
+
+const FA_BIDS: FreeAgentBidsData = {
+  bidsLocked: false,
+  rows: [
+    { leagueId: 'L-pals', leagueName: 'Los Pals', platform: 'espn', claim: claimLinkFor('L-pals'), bid: { amount: 23, budget: 100, remaining: 61 }, room: { claims: 14, median: 9, p75: 17 }, note: null },
+    { leagueId: 'L-taco', leagueName: 'Taco Tuesday', platform: 'sleeper', claim: claimLinkFor('L-taco'), bid: null, room: null, note: 'waiver-priority league — no FAAB bid' },
+  ],
+}
+const FA_BIDS_LOCKED: FreeAgentBidsData = { bidsLocked: true, rows: FA_BIDS.rows.map((r) => ({ ...r, bid: null, room: null, note: null })) }
+
+const TV_GRADE = (letter: GradeLetter, giveValue: number, getValue: number, pct: number): SectionState<TradeVisualGrade> => ({
+  available: true,
+  data: { letter, partnerLetter: letter, label: tradeGradeLabel(pct).label, recommendation: tradeGradeRecommendation({ letter, giveValue, getValue }), giveValue, getValue, basis: 'Keeper · 1QB · 12 teams · Half PPR' },
+})
+const KINCAID_ASSET = { kind: 'player' as const, playerId: '10236', name: 'Dalton Kincaid', position: 'TE', value: 3010 }
+const POLLARD = { kind: 'player' as const, playerId: 'rb3', name: 'Tony Pollard', position: 'RB', value: 3140 }
+const PKG_1: TradeVisualPackage = {
+  id: 'p1', give: [POLLARD], receive: [KINCAID_ASSET], giveTotal: 3140, receiveTotal: 3010, delta: -1130, fairness: 'balanced', confidence: 85,
+  reasons: ['Target player is on the trade block'], warnings: [], grade: TV_GRADE('D', 3140, 2610, -17),
+}
+const VISUAL: PlayerTradeVisual = {
+  leagueId: 'L-gang', leagueName: 'Gridiron Gang', platform: 'espn', platformLeagueId: '888', season: 2026,
+  target: { sleeperId: '10236', name: 'Dalton Kincaid', position: 'TE', value: 3010 },
+  you: { teamName: 'Cafe Con Chimmy', ownerName: 'guap', externalId: '2', stance: 'contender', stanceSettled: true, needs: ['TE'], surpluses: ['RB'] },
+  partner: { teamName: "Tasha's Titans", ownerName: 'tashaR', externalId: '1', stance: 'rebuilder', stanceSettled: true, needs: ['RB'], surpluses: ['TE'] },
+  values: { mode: 'dynasty', source: 'fantasycalc', fetchedAt: '2026-10-20T12:00:00Z', ppr: 1, numQbs: 2, scoringAdjustment: null },
+  bidInstead: null,
+  packages: [PKG_1],
+  recommended: PKG_1,
+  grade: PKG_1.grade,
+}
+
+const SUN_MORNING = { weekday: 0, startHour: 8, endHour: 10, daypart: 'morning' as const, precision: 'window' as const, share: 0.8, sample: 12, zone: 'ET' }
+const presenceMgr = (over: Partial<PresenceManager>): PresenceManager => ({
+  role: 'owner', teamName: "Tasha's Titans", ownerName: 'tashaR', avatarUrl: null, externalId: '1', record: '4-2', rank: 3,
+  need: null, startsHim: true, window: SUN_MORNING, lastMove: { at: '2026-10-25T11:00:00.000Z', kind: 'waiver' }, moves: 13, ...over,
+})
+const PRESENCE: ManagerPresence = {
+  leagueId: 'L-gang', leagueName: 'Gridiron Gang', platform: 'espn', platformLeagueId: '888', season: 2026,
+  timeZone: 'America/New_York', zone: 'ET', player: { sleeperId: '10236', position: 'TE' }, holder: 'other',
+  managers: [presenceMgr({})], activityIngested: true, newestMove: '2026-10-25T11:00:00.000Z', unattributed: 1,
+}
+const PRESENCE_2: ManagerPresence = { ...PRESENCE, leagueId: 'L-pals', leagueName: 'Los Pals', managers: [presenceMgr({ ownerName: 'riv', externalId: '3', startsHim: false, window: null, moves: 4 })] }
+
+const SPLIT = buildTeamSplit({
+  starters: [
+    { sleeperId: '1', name: 'Josh Allen', team: 'BUF', position: 'QB', starts: 3 },
+    { sleeperId: '10236', name: 'Dalton Kincaid', team: 'BUF', position: 'TE', starts: 2 },
+    { sleeperId: '3', name: 'Travis Kelce', team: 'KC', position: 'TE', starts: 1 },
+    { sleeperId: '9', name: 'Nadie', team: null, position: 'RB', starts: 1 },
+  ],
+  byes: { BUF: 13, KC: 14 },
+  currentWeek: 12,
+  fold: (t) => t,
+})
+const SHARES: PlayerShares = {
+  rows: [
+    { player: { sport: 'NFL', externalId: 'ri-1', sleeperId: '10236', name: 'Dalton Kincaid', position: 'TE', team: 'BUF', imageUrl: null }, leagues: 3, starts: 2, ir: 1, leagueIds: ['L-warriors'], status: readiness('Questionable', true), description: null },
+    { player: { sport: 'NFL', externalId: 'ri-2', sleeperId: '4984', name: 'Josh Allen', position: 'QB', team: 'BUF', imageUrl: null }, leagues: 1, starts: 1, ir: 0, leagueIds: ['L-warriors'], status: readiness('Active', true), description: null },
+  ],
+  leaguesRead: 6,
+  playersHeld: 31,
+  unsupportedLeagues: 1,
+  teamSplit: SPLIT,
+}
+const LEAGUE_SHARES: LeagueShareView = {
+  leagueId: 'L-gang', leagueName: 'Gridiron Gang', scoringKnown: true, season: 2026,
+  cells: {
+    '10236': { holder: { kind: 'you', slot: 'STARTER' }, value: { value: 3200, base: 3010, fitNote: null, mode: 'dynasty', numQbs: 2 }, season: { points: 88.4, games: 7 } },
+    '4984': { holder: { kind: 'other', teamName: "Tasha's Titans", ownerName: null }, value: null, season: null },
+  },
+}
+
+const COMPARE_B = {
+  ...DETAIL,
+  player: { ...DETAIL.player, externalId: 'ri-7', sleeperId: '4993', name: 'Jake Ferguson', team: 'DAL' },
+} as PlayerDetail
+
+function wholePage(extra: Partial<Props>) {
+  const { container } = renderFinder({
+    detail: { ...DETAIL, injuryTimeline: TIMELINE } as PlayerDetail,
+    depth: FULL_DEPTH,
+    pickLeagues: PICK_LEAGUES,
+    liveGame: LIVE,
+    depthChart: DEPTH_CHART,
+    whoStartsHim: whoStarts(),
+    valueTrend: valueTrend(false),
+    freeAgentBids: FA_BIDS,
+    depthAccess: PRE_LAUNCH,
+    ...extra,
+  })
+  openTips(container)
+  return container
+}
+
+/** Every root the three groups and the lock own; each must be ON the page the scan reads. */
+function expectDrawn(container: HTMLElement, roots: string[], label: string) {
+  for (const sel of roots) expect(container.querySelector(sel), `${label}: ${sel} is not on the page`).not.toBeNull()
+}
+
+describe('Player Finder — the whole page, in Spanish', () => {
+  it('the cross-league view: live badge, injury chip, strip, news, every right-hand card, the windows and the "Free until" notes', () => {
+    lang.language = 'es'
+    const container = wholePage({ windows: [PRESENCE, PRESENCE_2], windowsUnread: 1 })
+    expectDrawn(
+      container,
+      ['section.af-pf-live', 'span.af-pf-injtl', 'form.af-pf-search-wrap', 'div.af-pf-strip', 'section.af-pf-news', 'section.af-pf-dc', 'section.af-pf-ws', 'section.af-pf-season-card', '.af-pf-vt', 'section.af-pf-fa', '.af-pf-tw--multi', '.af-core-free-until'],
+      'core',
+    )
+    // The headline is cut as provider text — and must still come through untouched.
+    expect(container.querySelector('.af-pf-news-title')?.textContent).toBe('Kincaid limited at practice with a knee issue')
+    const out = ownText(container)
+    expectWholeSpanish(out, 'core')
+    expect(out).toContain('Gratis hasta el 15 de octubre — luego, AF Pro')
+    expect(out).toContain('Reclamar a Knox en Sleeper')
+    expect(out).toContain('Reclamar a Kincaid en Sleeper')
+  })
+
+  it('league mode, someone else has him: the league card, the sticky bar, the trade visual and the window', () => {
+    lang.language = 'es'
+    const container = wholePage({ selectedLeagueId: 'L-gang', leagueView: LEAGUE_VIEW, tradeVisual: { available: true, data: VISUAL }, presence: { available: true, data: PRESENCE } })
+    expectDrawn(container, ['.af-pf-lv', 'div.af-pf-stickybar', '.af-pf-tv', '.af-pf-tw'], 'league')
+    const out = ownText(container)
+    expectWholeSpanish(out, 'league')
+    expect(out).toContain('Intercambiar por Kincaid')
+  })
+
+  it('compare: the side-by-side card', () => {
+    lang.language = 'es'
+    const container = wholePage({ compare: COMPARE_B, query: 'Dalton Kincaid' })
+    expectDrawn(container, ['section.af-pf-cmp'], 'compare')
+    expectWholeSpanish(ownText(container), 'compare')
+  })
+
+  it('the home: the league picker and your shares with the team split', () => {
+    lang.language = 'es'
+    const { container } = renderFinder({ detail: null, matches: [], pickLeagues: PICK_LEAGUES, shares: { available: true, data: SHARES }, depthAccess: PRE_LAUNCH })
+    openTips(container)
+    expectDrawn(container, ['div.af-pf-picker', '.af-pf-shares', '.af-pf-split'], 'home')
+    expectWholeSpanish(ownText(container), 'home')
+    const league = renderFinder({ detail: null, matches: [], selectedLeagueId: 'L-gang', shares: { available: true, data: SHARES }, leagueShares: LEAGUE_SHARES, depthAccess: PRE_LAUNCH })
+    expectWholeSpanish(ownText(league.container), 'home, one league')
+  })
+
+  it('a viewer without AF Pro: every lock on the page reads Spanish, and nothing paid is drawn', () => {
+    lang.language = 'es'
+    const container = wholePage({
+      depthAccess: FREE_READER,
+      selectedLeagueId: 'L-gang',
+      leagueView: LEAGUE_VIEW,
+      compareRequested: true,
+      whoStartsHim: { leagues: [], locked: true },
+      valueTrend: valueTrend(true),
+      freeAgentBids: FA_BIDS_LOCKED,
+    })
+    const locks = [...container.querySelectorAll('.af-core-lock')]
+    // The trade visual, compare, who'd start him, the value nudge, the FAAB bids, recommended moves, the verdict column.
+    expect(locks.length).toBe(7)
+    expect(container.querySelector('.af-pf-tv, .af-pf-tw, .af-core-free-until')).toBeNull()
+    for (const l of locks) {
+      expect(l.textContent).toMatch(/: parte de AF Pro/)
+      expect(l.querySelector('a.af-core-lock-cta')?.getAttribute('href')).toBe('/upgrade?plan=pro')
+    }
+    const out = ownText(container)
+    expectWholeSpanish(out, 'locked')
+    for (const subject of ['Intercambiar por Dalton Kincaid', 'Comparación lado a lado', 'Qué equipos pondrían de titular a Kincaid', 'Avisos de comprar barato y vender alto', 'Pujas FAAB sugeridas', 'Movimientos recomendados', 'Veredicto, cambios de banca y ventanas de intercambio']) {
+      expect(out, subject).toContain(`${subject}: parte de AF Pro`)
+    }
+  })
+
+  it('English: the same locked page still reads the lock’s English, byte for byte', () => {
+    const container = wholePage({ depthAccess: FREE_READER, compareRequested: true, whoStartsHim: { leagues: [], locked: true }, valueTrend: valueTrend(true), freeAgentBids: FA_BIDS_LOCKED })
+    const heads = [...container.querySelectorAll('.af-core-lock-head [data-ios-purchase]')].map((n) => n.textContent)
+    expect(heads).toEqual(
+      expect.arrayContaining([
+        'Side-by-side compare is part of AF Pro',
+        'Which teams would start Kincaid is part of AF Pro',
+        'Buy-low and sell-high calls are part of AF Pro',
+        'Suggested FAAB bids are part of AF Pro',
+        'Recommended moves are part of AF Pro',
+        'The verdict, bench swaps and trade windows are part of AF Pro',
+      ]),
+    )
+    expect(container.querySelector('.af-core-lock-body [data-ios-purchase]')?.textContent).toBe('Your leagues, scores and the basics stay free. Upgrade to see the rest.')
+    expect(container.querySelector('a.af-core-lock-cta')?.textContent).toBe('See AF Pro')
   })
 })
 

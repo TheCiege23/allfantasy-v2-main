@@ -11,10 +11,9 @@
  * notes are also held to its source file verbatim: a reworded note fails here rather than silently
  * staying English.
  *
- * Kept English on purpose, and cut out of the scan by root: the AF Pro lock and its "Free until"
- * note (`.af-core-lock`, `.af-core-free-until`) are CoreDepthLock's, shared by every gated surface
- * in the app — Player Finder's own lock (#2051) is English too. Provider text stays as written:
- * player, team and league names, and the platform names.
+ * The AF Pro lock and its "Free until" note are CoreDepthLock's, shared by every gated surface; they
+ * read Spanish too since 2026-10-06 (coreDepthLockCopy.ts), so nothing is cut out of the scan. Provider
+ * text stays as written: player, team and league names, and the platform names.
  */
 import React from 'react'
 import { readFileSync } from 'node:fs'
@@ -76,9 +75,6 @@ const EN_MONTH = /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/
 const OWN_EN =
   /\b(Search|Searches|Compare|another player|Suggestions|Players to compare|no team|on file|platform you|connected|One search|covers|Connect a league|slots|matchups|yours in|has him|owned|free in|leagues?|Swap|Clear|beats|priced|biggest|gap|Gap|split|projects?|standard|Standard|Nothing to price|Side by side|Neither|roster|Across|League|even|Start|over|here|Sign in|Points|minus|tile|someone else|unchecked|Proj|AF proj|Pos rank|Snap share|Age|Ready|Questionable|Leagues|All|of|Pick the|Filter|None|selected|Save|Saving|Could not|try again|Saved|device|ticked|Where he is|Yours|available|Available|elsewhere|can't|START|BENCH|FA|Taken|starting|bench|taxi squad|nobody|another manager|Free agent|Not readable|Trade for|Claim|Open in|Bid|left|winning|median|claims?|waiver|market value|bids|at a time|value chart|syncing|The bid|calibrate|engine|the table below|the room|his)\b/
 
-/** The AF Pro lock is CoreDepthLock's, shared across the app; it stays whole English (see the header). */
-const SHARED_ENGLISH = ['.af-core-lock', '.af-core-free-until']
-
 /**
  * Visible text plus every title, aria-label and placeholder — the reader meets those too. The text
  * appears twice: as `textContent` (for phrase assertions) and node by node with a space between, since
@@ -86,7 +82,6 @@ const SHARED_ENGLISH = ['.af-core-lock', '.af-core-free-until']
  */
 function ownText(container: HTMLElement): string {
   const root = container.cloneNode(true) as HTMLElement
-  for (const sel of SHARED_ENGLISH) root.querySelectorAll(sel).forEach((n) => n.remove())
   const attrs = [...root.querySelectorAll('[title],[aria-label],[placeholder]')].flatMap((n) => [
     n.getAttribute('title') ?? '',
     n.getAttribute('aria-label') ?? '',
@@ -558,12 +553,12 @@ describe('FreeAgentBids in Spanish', () => {
     expectSpanish(out, 'FA bids, AF Pro')
   })
 
-  it('a locked viewer: the leagues and claims read Spanish; the AF Pro lock is the shared one', async () => {
+  it('a locked viewer: the leagues, the claims and the shared AF Pro lock read Spanish', async () => {
     seedEveryNote()
     const data = await loadFreeAgentBids({ userId: 'u1', sleeperId: '9001', freeLeagueIds: ['A01', 'A02'], includeBids: false })
     lang.language = 'es'
     const { container } = render(<FreeAgentBids data={data} playerName="Tank Dell" access={access} />)
-    expect(container.querySelector('.af-core-lock')).not.toBeNull()
+    expect(container.querySelector('.af-core-lock [data-ios-purchase]')?.textContent).toBe('Pujas FAAB sugeridas: parte de AF Pro')
     expectSpanish(ownText(container), 'FA bids, locked')
   })
 

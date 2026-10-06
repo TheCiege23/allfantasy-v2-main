@@ -13,7 +13,7 @@ import { SELL_TEAMS_SHOWN, slotName, type SellTeam, type WhoStartsHim as WhoStar
  *
  * Spanish (2026-10-05): the words come from finderPlayerInfoCopy.ts at render, the loader's notes
  * through `infoReasonText` (whole, or English as written). The lock and the "free until" note are the
- * shared CoreDepthLock's, which is English-only, so its subject stays English too.
+ * shared CoreDepthLock's, in the reader's language, and so is its subject (`wsLockWhat`).
  */
 
 function teamLine(t: SellTeam, c: PlayerInfoCopy): string {
@@ -39,10 +39,10 @@ export function WhoStartsHim({
         {c.wsHeading(last)}
       </h3>
       {data.locked ? (
-        access ? <CoreDepthLock access={access} what={c.wsLockWhat(last)} /> : null
+        access ? <CoreDepthLock access={access} what={c.wsLockWhat(last)} lang={language} /> : null
       ) : (
         <>
-          {access ? <FreeUntilNote access={access} /> : null}
+          {access ? <FreeUntilNote access={access} lang={language} /> : null}
           <ul className="af-pf-ws-list">
             {data.leagues.map((l) => (
               <li key={l.leagueId} className="af-pf-ws-row">
