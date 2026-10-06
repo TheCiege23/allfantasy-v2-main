@@ -81,3 +81,13 @@ it('does not publish an observation when a cached score changes during sealing',
  await expect(captureImportedResults('l','imported:222')).rejects.toThrow('changed during finalization')
  expect(db.create).not.toHaveBeenCalled()
 })
+
+it('keeps the previous aggregate reader compatible when selected-player weeks exceed its v2 bound',async()=>{
+ const large=Array.from({length:1000},(_,i)=>({...facts[0],pickNumber:i+1,playerId:'large'+i,metadata:{...facts[0].metadata,selectionRosterId:String(Math.floor(i/100)+1)}}))
+ const teams=Array.from({length:10},(_,i)=>i+1),weekly=teams.map(roster_id=>{const players=large.filter(p=>Number(p.metadata.selectionRosterId)===roster_id).map(p=>p.playerId);return{roster_id,players,starters:[],players_points:Object.fromEntries(players.map(p=>[p,0]))}})
+ db.facts.mockResolvedValue(large);db.games.mockResolvedValue(Array.from({length:18},(_,i)=>({week:i+1,startTime:new Date('2026-09-10')})))
+ vi.stubGlobal('fetch',vi.fn(async(url:string)=>({ok:true,json:async()=>url.includes('/matchups/')?weekly:url.endsWith('/picks')?large.map(p=>({round:1,pick_no:p.pickNumber,player_id:p.playerId,roster_id:Number(p.metadata.selectionRosterId)})):url.includes('/draft/')?{draft_id:'222',league_id:'111',start_time:Date.parse('2026-08-31'),slot_to_roster_id:Object.fromEntries(teams.map(t=>[t,t]))}:{league_id:'111',season:'2026',settings:{last_scored_leg:18}}})))
+ expect(await captureImportedResults('l','imported:222')).toEqual({weeks:18,state:'ready'})
+ expect(db.create.mock.calls.map(c=>c[0].data.snapshotData.version)).toEqual(['draft-results-v3','draft-results-v1'])
+ expect(db.create.mock.calls[0][0].data.snapshotData.weekly.rows).toHaveLength(18000)
+})

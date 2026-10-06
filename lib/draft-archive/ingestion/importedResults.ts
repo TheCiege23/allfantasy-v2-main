@@ -116,7 +116,8 @@ export async function captureImportedResults(leagueId: string, key: string, appl
     const persist=(db:Pick<typeof prisma,'aiAdpSnapshotHistory'>)=>[
 
       db.aiAdpSnapshotHistory.create({data:{id:'hqr3-'+fingerprint.slice(0,40),sport:'NFL',leagueType:'draft_results',formatKey:storageKey(leagueId,key+':weekly-v3'),computedAt:new Date(observation.observedAt),snapshotData:observation as unknown as Prisma.InputJsonValue,totalDrafts:1,totalPicks:selections.length}}),
-      db.aiAdpSnapshotHistory.create({data:{id:'hqr2-'+fingerprint.slice(0,40),sport:'NFL',leagueType:'draft_results',formatKey:storageKey(leagueId,key+':weekly-v2'),computedAt:new Date(observation.observedAt),snapshotData:JSON.parse(JSON.stringify(compatible)) as unknown as Prisma.InputJsonValue,totalDrafts:1,totalPicks:selections.length}}),
+      // Prior v2 readers cap selected-player rows at 10,000; retain v1 fallback for larger archives.
+      ...(rows.length<=10000?[db.aiAdpSnapshotHistory.create({data:{id:'hqr2-'+fingerprint.slice(0,40),sport:'NFL',leagueType:'draft_results',formatKey:storageKey(leagueId,key+':weekly-v2'),computedAt:new Date(observation.observedAt),snapshotData:JSON.parse(JSON.stringify(compatible)) as unknown as Prisma.InputJsonValue,totalDrafts:1,totalPicks:selections.length}})]:[]),
       db.aiAdpSnapshotHistory.create({data:{id:'hqr1-'+fingerprint.slice(0,40),sport:'NFL',leagueType:'draft_results',formatKey:storageKey(leagueId,key),computedAt:new Date(observation.observedAt),snapshotData:aggregate as unknown as Prisma.InputJsonValue,totalDrafts:1,totalPicks:selections.length}}),
     ];
     if(stableWeeks.length){
