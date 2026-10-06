@@ -346,6 +346,19 @@ a.af-legal-policy:hover {
  * section between paragraphs rather than between sections.
  */
 
+/* Tailwind's preflight sets list-style: none on every list, so without this a clause
+   like Terms 9.3's prohibited-conduct list reads as run-on lines. Scoped to a section's
+   own lists, callouts and the contents list, so .af-legal-box keeps its custom dots. */
+.af-legal-body section > ul,
+.af-legal-callout ul {
+  list-style: disc;
+}
+
+.af-legal-body section > ol,
+.af-legal-toc ol {
+  list-style: decimal;
+}
+
 .af-legal-body section > .af-legal-callout:not(:last-child) {
   margin-bottom: 14px;
 }
