@@ -42,7 +42,7 @@ import {
   type Workflow,
 } from './commissioner/areas'
 import { balanceChart, engagementChart, scoringChart, type HubChart } from './commissioner/charts'
-import { RECIPES, RECIPES_SEND_TOGGLE, readRecipeSettings, type RecipeKey } from './commissioner/recipes'
+import { RECIPES, RECIPES_SEND_TOGGLE, readRecipeSettings, recipeCatalogEntry, type RecipeKey } from './commissioner/recipes'
 import { readChimmySpeaksUp } from '@/lib/league-chat/chimmyIdentity'
 import {
   memberActivityFromReads,
@@ -872,6 +872,7 @@ export async function getCommissionerHub(input: {
         }
       : null,
     polls: open.map((p) => ({ id: p.id, question: p.question, closesAt: p.closesAt })),
+    language,
   })
   // The calendar is free to read; exporting it to a calendar app is AF Commissioner. Null hides both export buttons.
   const ics = depthOpen
@@ -880,6 +881,7 @@ export async function getCommissionerHub(input: {
         leagueName,
         events: calendar.events,
         now,
+        language,
         appUrl: `${getBaseUrl()}/core/commissioner?league=${encodeURIComponent(leagueId)}`,
       })
     : null
@@ -1163,21 +1165,16 @@ export async function getCommissionerHub(input: {
     recipes: {
       ...recipeSettings,
       sendEnabled,
-      catalog: RECIPES.map((r) => ({
-        key: r.key,
-        label: r.label,
-        description: r.description,
-        cadence: r.cadence,
-        unavailable: r.unavailableReason({ platform, sport }),
-      })),
+      catalog: RECIPES.map((r) => recipeCatalogEntry(r, { platform, sport }, language)),
       chimmySpeaksUp: readChimmySpeaksUp(settingsJson),
     },
     charts: {
-      scoring: matchups ? scoringChart(matchups, { currentWeek: statedWeek, complete: seasonComplete }) : null,
+      scoring: matchups ? scoringChart(matchups, { currentWeek: statedWeek, complete: seasonComplete }, language) : null,
       balance: balanceChart(
         teams.map((t) => ({ name: teamLabel(t, language), wins: t.wins, losses: t.losses, ties: t.ties, pointsFor: t.pointsFor })),
+        language,
       ),
-      engagement: memberRows && !activityStale ? engagementChart(memberRows) : null,
+      engagement: memberRows && !activityStale ? engagementChart(memberRows, language) : null,
     },
     settings,
     access,

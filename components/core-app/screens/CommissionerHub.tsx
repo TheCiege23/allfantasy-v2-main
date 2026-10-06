@@ -139,7 +139,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
   // Started here, awaited by the sections that show them — each inside its own boundary.
   // The timeline also feeds the free "Recent changes" panel, so it loads either way; the charts do not.
   const timeline = loadAuditTimeline(data.grant)
-  const activity = depthOpen ? loadActivityCharts(data.grant, now) : null
+  const activity = depthOpen ? loadActivityCharts(data.grant, now, language) : null
   const platformName = platformLabel(league.platform)
   const quiet = data.quietManagers
 

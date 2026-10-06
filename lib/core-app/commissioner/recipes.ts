@@ -112,6 +112,65 @@ export const RECIPES: RecipeDefinition[] = [
   },
 ]
 
+/**
+ * The catalog's words in Spanish (2026-10-05), for the hub's Automations section. `RECIPES` itself stays
+ * English: the recipes job reads it, and the posts it writes into league CHAT are league content, not
+ * this reader's UI — they are deliberately left as written. Only the catalog the hub shows is worded.
+ */
+const RECIPE_COPY_ES: Record<RecipeKey, { label: string; description: string; cadence: string }> = {
+  lineupReminder: {
+    label: 'Recordatorios de alineación',
+    description: 'Cada día de partido de la NFL, una publicación por la mañana que nombra a los equipos con un puesto titular vacío.',
+    cadence: 'Días de partido, temprano por la mañana (ET)',
+  },
+  weeklyRecap: {
+    label: 'Resumen semanal',
+    description: 'Resultados, lo más alto de la tabla y los premios de la semana, calculados con los enfrentamientos reales.',
+    cadence: 'Los martes',
+  },
+  inactivityWarning: {
+    label: 'Avisos de inactividad',
+    description: 'Un aviso semanal amistoso que nombra a los mánagers sin intercambios, solicitudes ni cambios de plantilla en 14 días.',
+    cadence: 'Como mucho una vez por semana',
+  },
+  votingDeadline: {
+    label: 'Fechas límite de votación',
+    description: 'Un recordatorio cuando una encuesta del chat de la liga cierra en el próximo día.',
+    cadence: 'El día antes de que cierre una encuesta',
+  },
+  playoffAnnouncement: {
+    label: 'Anuncio de playoffs',
+    description: 'Cuando empiezan los playoffs, una publicación con los cabezas de serie según la clasificación.',
+    cadence: 'Una vez por temporada',
+  },
+}
+
+const UNAVAILABLE_ES: Record<string, string> = {
+  'Game-day timing is only known for NFL leagues today.': 'Por ahora solo se conoce el horario de los días de partido en las ligas de la NFL.',
+  'MFL imports can’t tell an empty lineup from an unreported one.': 'Las importaciones de MFL no distinguen una alineación vacía de una no reportada.',
+  'Fantrax imports can’t tell an empty lineup from an unreported one.': 'Las importaciones de Fantrax no distinguen una alineación vacía de una no reportada.',
+  'Weekly recaps require a Sleeper week feed or finalized AllFantasy matchups.': 'Los resúmenes semanales necesitan los datos semanales de Sleeper o enfrentamientos finalizados de AllFantasy.',
+}
+
+/** One recipe as the hub's catalog shows it, in the reader's language (default English). */
+export function recipeCatalogEntry(
+  recipe: RecipeDefinition,
+  league: { platform: string; sport: string },
+  language = 'en',
+): { key: RecipeKey; label: string; description: string; cadence: string; unavailable: string | null } {
+  const unavailable = recipe.unavailableReason(league)
+  const es = language === 'es'
+  const copy = es ? RECIPE_COPY_ES[recipe.key] : recipe
+  return {
+    key: recipe.key,
+    label: copy.label,
+    description: copy.description,
+    cadence: copy.cadence,
+    // A reason with no Spanish stays whole English rather than vanishing.
+    unavailable: unavailable == null ? null : es ? (UNAVAILABLE_ES[unavailable] ?? unavailable) : unavailable,
+  }
+}
+
 export type RecipeSettings = {
   values: Record<RecipeKey, boolean>
   /** False when nothing has ever been saved — the values are the defaults. */
