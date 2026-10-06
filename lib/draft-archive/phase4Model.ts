@@ -6,7 +6,7 @@ import type { AnalysisSelection, DraftAnalysisReport } from './analysisModel';
 export const PHASE4_VERSION = 'draft-decision-v1';
 const obj = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
 const id = (v: unknown) => typeof v === 'string' && v ? v : null;
-export type DecisionPick = AnalysisSelection & { overall: number; amount?: number | null; adpDifference?: number | null };
+export type DecisionPick = AnalysisSelection & { overall: number; amount?: number | null; auctionEvidence?: unknown; selectedAt?: string | null; adpDifference?: number | null };
 export type FrozenPlayer = ImpactPlayer & { name: string; aliases: string[] };
 /** Frozen identity evidence remains useful even when projection scoring is incomplete. */
 export function frozenIdentities(basis:unknown,start:string|null):Array<{playerId:string;sleeperId:string|null}>{
@@ -22,7 +22,7 @@ export function frozenIdentities(basis:unknown,start:string|null):Array<{playerI
 }
 export type ReplayData = {
   version: typeof PHASE4_VERSION; state: 'ready' | 'unavailable'; reason: string;
-  players: FrozenPlayer[]; picks: DecisionPick[]; existing: AnalysisSelection[]; slots: string[];
+  players: FrozenPlayer[]; picks: DecisionPick[]; existing: AnalysisSelection[]; slots: string[]; auction?: boolean; eligiblePlayerIds?: string[];
 };
 /** No mutable identity or projection lookup is permitted here. */
 export function frozenUniverse(basis: unknown, context: PreparationContext | null, start: string | null): FrozenPlayer[] {
@@ -64,12 +64,17 @@ export function frozenExistingRoster(snapshot: unknown, context: PreparationCont
 }
 
 export function buildReplay(basis: unknown, context: PreparationContext | null, start: string | null, picks: DecisionPick[], existing: AnalysisSelection[] | null): ReplayData {
-  const base: ReplayData = { version: PHASE4_VERSION, state: 'unavailable', reason: 'Verified draft-time projections, complete pick order and an unrestricted player pool are required.', players: [], picks: [], existing: [], slots: [] };
-  if (!context || !['snake', 'linear'].includes(context.draftType) || context.playerPool !== 'all' || !['standard', 'startup'].includes(context.purpose) || existing === null || !picks.length || picks.length > 1000) return base;
+  const base: ReplayData = { version: PHASE4_VERSION, state: 'unavailable', reason: 'Verified draft-time projections, complete pick order, frozen pool eligibility and (for auctions) recorded award budgets are required.', players: [], picks: [], existing: [], slots: [] };
+  if (!context || !['snake', 'linear', 'auction'].includes(context.draftType) || !['all','rookies_only','veterans_only'].includes(context.playerPool) || !['standard', 'startup','rookie'].includes(context.purpose) || (context.purpose==='rookie'&&!['redraft','dynasty','keeper'].includes(context.leagueType)) || existing === null || !picks.length || picks.length > 1000) return base;
+  if((context.draftType==='auction'||context.playerPool!=='all')&&!['redraft','dynasty','keeper'].includes(context.leagueType))return base;
+  const eligiblePlayerIds = frozenPoolEligibility(basis,context,start);
+  if(context.playerPool!=='all'&&!eligiblePlayerIds)return base;
   const players = frozenUniverse(basis, context, start), byAlias = new Map(players.flatMap(p => p.aliases.map(a => [a,p] as const)));
   const ordered = [...picks].sort((a,b) => a.overall - b.overall), taken = new Set<string>();
   if (!players.length || ordered.some((p,i) => p.overall !== i + 1 || !p.rosterId || !p.playerId || !byAlias.has(p.playerId))) return base;
   for (const p of ordered) { const canonical = byAlias.get(p.playerId!)!.playerId; if (taken.has(canonical)) return base; taken.add(canonical); }
+  if (context.draftType === 'auction' && ordered.some(p => !p.keeper && (!auctionAwardBudget(p)||Date.parse(p.selectedAt!)<Date.parse(start!)))) return base;
+  if (eligiblePlayerIds && ordered.some(p=>!p.keeper&&!eligiblePlayerIds.includes(byAlias.get(p.playerId!)!.playerId)))return base;
   const owned = new Map<string,string>();
   for (const p of existing) {
     const canonical = p.playerId ? byAlias.get(p.playerId)?.playerId : null;
@@ -79,7 +84,7 @@ export function buildReplay(basis: unknown, context: PreparationContext | null, 
   if (ordered.some(p => owned.has(byAlias.get(p.playerId!)!.playerId) && (!p.keeper || owned.get(byAlias.get(p.playerId!)!.playerId) !== p.rosterId))) return base;
   const slots = context.rosterSlots.filter(s => !['BN','BE','BENCH','IR','TAXI'].includes(s));
   if (!slots.length || slots.length > 32 || fillLineup(players,slots).unknownSlots.length) return base;
-  return { ...base, state:'ready', reason:'Replays the recorded order within the preserved projection universe. Existing players and all reserved keepers are excluded. Counterfactuals compare the lineup at that pick only; later opponents, trades and outcomes are not simulated.', players, picks:ordered, existing, slots };
+  return { ...base, state:'ready', auction:context.draftType==='auction', eligiblePlayerIds:eligiblePlayerIds??undefined, reason:'Replays the recorded order within the preserved projection universe. Existing players and all reserved keepers are excluded. Counterfactuals compare the lineup at that pick only; later opponents, trades and outcomes are not simulated.', players, picks:ordered, existing, slots };
 }
 
 export function replayAt(data: ReplayData, overall: number, includeCandidates=true) {
@@ -89,7 +94,7 @@ export function replayAt(data: ReplayData, overall: number, includeCandidates=tr
   const unavailable = new Set([...data.existing, ...data.picks.filter(p => p.keeper || p.overall < overall)].flatMap(p => canonical(p) ? [canonical(p)!.playerId] : []));
   const roster = [...new Map([...data.existing.filter(p => p.rosterId === pick.rosterId), ...data.picks.filter(p => p.overall < overall && p.rosterId === pick.rosterId)].flatMap(p => canonical(p) ? [[canonical(p)!.playerId,canonical(p)!] as const] : [])).values()];
   const before = fillLineup(roster,data.slots), actual = canonical(pick)!;
-  const available = data.players.filter(p => !unavailable.has(p.playerId));
+  const available = data.players.filter(p => !unavailable.has(p.playerId)&&(!data.eligiblePlayerIds||data.eligiblePlayerIds.includes(p.playerId)));
   // One matching per eligibility-equivalent position. For any lower-scoring
   // player with the same edges, the matching gain is max(0, points - threshold).
   const bestByPosition = new Map<string,FrozenPlayer>();
@@ -97,7 +102,7 @@ export function replayAt(data: ReplayData, overall: number, includeCandidates=tr
   const thresholds = new Map([...bestByPosition].map(([position,p])=>{const after=fillLineup([...roster,p],data.slots),gain=after.points-before.points;return [position,{threshold:p.projectedPoints!-gain,fillsVacancy:after.starterIds.length>before.starterIds.length}] as const;}));
   const candidates = (includeCandidates ? available : [...bestByPosition.values()]).map(p => {const bound=thresholds.get(p.position)!,gain=p.projectedPoints!-bound.threshold;return {...p,gain:bound.fillsVacancy?gain:Math.max(0,gain)};}).sort((a,b) => b.gain-a.gain || b.projectedPoints!-a.projectedPoints! || a.playerId.localeCompare(b.playerId));
   const actualGain = roster.some(p=>p.playerId===actual.playerId) ? 0 : fillLineup([...roster,actual],data.slots).points-before.points;
-  return { pick, before:before.points, actual:{...actual,gain:actualGain}, candidates, opportunityGap: pick.keeper || !candidates.length ? null : actualGain-candidates[0].gain };
+  return { pick, before:before.points, actual:{...actual,gain:actualGain}, candidates, auctionBudget: data.auction ? auctionAwardBudget(pick) : null, opportunityGap: data.auction || pick.keeper || !candidates.length ? null : actualGain-candidates[0].gain };
 }
 
 export type DecisionComponents = { rosterId:string; name:string; values:[number|null,number|null,number|null,number|null]; scores:[number|null,number|null,number|null,number|null]; marketDiscount:number|null; benchmarkPicks:number; totalPicks:number };
@@ -112,4 +117,31 @@ export function decisionComponents(report: DraftAnalysisReport, replay: ReplayDa
     r.scores[i] = rows.length > 1 ? 100*(lower+(tied-1)/2)/(rows.length-1) : null;
   }
   return rows;
+}
+
+/** Saved at award time; never reconstruct historical purchasing power from today's budget. */
+export function auctionAwardBudget(pick: DecisionPick) {
+  const e=obj(pick.auctionEvidence), at=typeof e.capturedAt==='string'?Date.parse(e.capturedAt):NaN;
+  if(e.version!=='auction-award-v1'||e.rosterId!==pick.rosterId||!Number.isFinite(at)||typeof pick.selectedAt!=='string'||Date.parse(pick.selectedAt)!==at||
+    [e.budgetBefore,e.slotsRemaining,e.minimumBid,pick.amount].some(v=>typeof v!=='number'||!Number.isFinite(v))||
+    !Number.isInteger(e.slotsRemaining)||Number(e.slotsRemaining)<1||Number(e.slotsRemaining)>100||
+    Number(e.minimumBid)<=0||Number(e.budgetBefore)<0||Number(e.budgetBefore)>1000000)return null;
+  const maxBid=Number(e.budgetBefore)-(Number(e.slotsRemaining)-1)*Number(e.minimumBid);
+  if(Number(pick.amount)<Number(e.minimumBid)||Number(pick.amount)>maxBid)return null;
+  return {budgetBefore:Number(e.budgetBefore),slotsRemaining:Number(e.slotsRemaining),minimumBid:Number(e.minimumBid),maxBid,capturedAt:e.capturedAt as string};
+}
+export function auctionAlternative(data:ReplayData,overall:number,playerId:string,price:number){
+  const replay=replayAt(data,overall),budget=replay?.auctionBudget;
+  if(!data.auction||!replay||!budget||replay.pick.keeper||!Number.isFinite(price)||price<budget.minimumBid||price>budget.maxBid)return null;
+  const player=replay.candidates.find(p=>p.playerId===playerId);
+  return player?{playerName:player.name,assumedPrice:price,remainingBudget:budget.budgetBefore-price,lineupGainDifference:player.gain-replay.actual.gain}:null;
+}
+
+/** Restricted membership is frozen separately from projections, with explicit seasonal provenance. */
+export function frozenPoolEligibility(basis:unknown,context:PreparationContext,start:string|null):string[]|null{
+  if(context.playerPool==='all')return null;
+  const e=obj(obj(basis).eligibility),observed=typeof e.observedAt==='string'?Date.parse(e.observedAt):NaN,captured=typeof e.capturedAt==='string'?Date.parse(e.capturedAt):NaN;
+  if(!start||e.version!=='draft-pool-eligibility-v1'||e.pool!==context.playerPool||e.season!==context.season||e.source!=='Sleeper years_exp by verified ID'||!Number.isFinite(observed)||!Number.isFinite(captured)||observed>captured||captured>Date.parse(start)||captured-observed>86400000||!Array.isArray(e.playerIds)||!e.playerIds.length||e.playerIds.length>5000||e.playerIds.some(p=>!id(p))||new Set(e.playerIds).size!==e.playerIds.length)return null;
+  const identities=frozenIdentities(basis,start),known=new Set(identities.map(p=>p.playerId));
+  return e.playerIds.every(p=>known.has(p))?e.playerIds as string[]:null;
 }

@@ -36,6 +36,7 @@ export type ArchivePick = {
     source: string | null;
     keeper: boolean;
     amount: number | null;
+    auctionEvidence?: unknown;
     allowanceSeconds: number | null;
     activeMs: number | null;
     elapsedMs?: number | null;
@@ -160,6 +161,7 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     for (const pick of picks) {
         const row = rowsById.get(pick.id);
         const timing = object(object(object(row?.pickMetadata).archive).timing);
+        pick.auctionEvidence = object(object(row?.pickMetadata).archive).auctionEvidence ?? null;
         pick.elapsedMs = number(timing.elapsedMs);
         pick.pausedMs = number(timing.pausedMs);
         pick.onClockAt = iso(timing.openedAt);

@@ -20,7 +20,7 @@
  * unavailable" in the UI rather than breaking the pool fetch.
  */
 
-import { getAllPlayers, type SleeperPlayer } from '@/lib/sleeper-client'
+import { getAllPlayers, getNflState, type SleeperPlayer } from '@/lib/sleeper-client'
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { prisma } from '@/lib/prisma'
 
@@ -29,6 +29,8 @@ const DB_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 h
 
 type CompactYearsExpPayload = {
   v: 1
+  observedAt: string
+  season: number | null
   bySleeperId: Record<string, number>
   byNamePos: Record<string, number>
   byName: Record<string, number>
@@ -41,8 +43,12 @@ async function saveYearsExpToDb(
   byName: Map<string, RookieMetadataRow>,
 ): Promise<void> {
   try {
+    const state = await getNflState();
+    const season = Number(state?.season);
     const payload: CompactYearsExpPayload = {
       v: 1,
+      observedAt: new Date().toISOString(),
+      season: Number.isInteger(season) && season >= 1900 && season <= 2100 ? season : null,
       bySleeperId: Object.fromEntries(
         Array.from(bySleeperId.entries())
           .filter(([, v]) => v.yearsExp != null)

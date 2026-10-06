@@ -40,7 +40,7 @@ export function calibrateDraftModel(cohorts:CalibrationCohort[], now=new Date())
 export function validCalibration(value:unknown,now=new Date()):CalibrationModel|null {
   if(!value || typeof value!=='object')return null;
   const m=value as CalibrationModel;
-  if(m.version!==CALIBRATION_VERSION || m.featureVersion!==PHASE4_VERSION || m.target!=='original-team-final-starter-contribution-percentile' || !['validated','insufficient_data','failed_validation'].includes(m.state) || !Number.isFinite(Date.parse(m.observedAt)) || Date.parse(m.observedAt)>now.getTime())return null;
+  if(m.version!==CALIBRATION_VERSION || m.featureVersion!==PHASE4_VERSION || m.target!=='original-team-final-starter-contribution-percentile' || !['validated','insufficient_data','failed_validation'].includes(m.state) || typeof m.observedAt!=='string' || !Number.isFinite(Date.parse(m.observedAt)) || Date.parse(m.observedAt)>now.getTime())return null;
   if(m.state==='validated' && (!Array.isArray(m.weights)||m.weights.length!==4||m.weights.some(v=>!Number.isFinite(v)||v<0||v>1)||Math.abs(m.weights.reduce((s,v)=>s+v,0)-1)>1e-9||m.trainingLeagues<30||m.holdoutLeagues<15||!Number.isFinite(m.modelError)||m.modelError!>20||!Number.isFinite(m.improvement)||m.improvement!<.1))return null;
   const counts=[m.trainingLeagues,m.holdoutLeagues,m.trainingTeams,m.holdoutTeams];
   if(counts.some(v=>!Number.isInteger(v)||v<0||v>16000)||m.trainingTeams<m.trainingLeagues*2||m.holdoutTeams<m.holdoutLeagues*2||!(m.holdoutSeason===null||(Number.isInteger(m.holdoutSeason)&&m.holdoutSeason>=1900&&m.holdoutSeason<=2100))||typeof m.reason!=='string'||m.reason.length>2000)return null;

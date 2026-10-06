@@ -26,3 +26,15 @@ describe('draft-day analysis provenance', () => {
     expect(result.resultsToDate).toEqual({ state: 'insufficient_data', coveredPicks: 0 })
   })
 })
+
+it('freezes restricted membership by verified IDs only from a dated matching-season cache',async()=>{
+  const at=new Date('2026-08-01T00:00:00Z');
+  const cached={data:{v:1,season:2026,observedAt:'2026-07-31T23:00:00Z',bySleeperId:{s1:0,s2:2}},expiresAt:new Date('2026-08-02')};
+  const tx={aFProjectionSnapshot:{findMany:vi.fn().mockResolvedValue(['p1','p2'].map(playerId=>({playerId,computedAt:new Date('2026-07-31')})))},playerIdentityMap:{findMany:vi.fn().mockResolvedValue([{id:'p1',sleeperId:'s1'},{id:'p2',sleeperId:'s2'}])},sportsDataCache:{findUnique:vi.fn().mockResolvedValue(cached)}};
+  const result=await captureDraftAnalysisBasis(tx as never,{sport:'NFL',season:2026},at,'rookies_only');
+  expect(result).toHaveProperty('eligibility.playerIds',['p1']);
+  tx.sportsDataCache.findUnique.mockResolvedValue({...cached,data:{...cached.data,season:2025}});
+  expect(await captureDraftAnalysisBasis(tx as never,{sport:'NFL',season:2026},at,'rookies_only')).toHaveProperty('eligibility',null);
+  tx.sportsDataCache.findUnique.mockResolvedValue({...cached,data:{...cached.data,bySleeperId:{s1:0}}} as typeof cached);
+  expect(await captureDraftAnalysisBasis(tx as never,{sport:'NFL',season:2026},at,'rookies_only')).toHaveProperty('eligibility',null);
+});

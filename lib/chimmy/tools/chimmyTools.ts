@@ -123,6 +123,17 @@ export const CHIMMY_TOOL_SPECS = [
   {
     type: 'function' as const,
     function: {
+      name: 'get_draft_analysis',
+      description: 'Explain a selected Draft HQ historical draft: recorded picks, ADP differences, clock coverage, original-team draft and result rankings, validated grades and asset transfers. Use the exact archive key supplied by the user or Draft HQ. Never guess a source. League access comes from the authenticated selected league. Missing historical evidence remains unavailable.',
+      parameters: { type: 'object', properties: {
+        archiveKey: { type: 'string', description: 'Exact selected archive key from Draft HQ, e.g. native:source.' },
+        fromOverall: { type: 'integer', minimum: 1, maximum: 10000, description: 'First overall pick to read; returns up to 40 picks and nextOverall.' },
+      }, required: ['archiveKey'], additionalProperties: false },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
       name: 'get_league_trade_activity',
       description: 'Read trade-block listings, your pending incoming proposals and completed trade history in the selected league. Use for trade offers, trade-block targets and whether a trade makes sense for this user. Also call get_my_roster for their team and scoring before recommending a trade. Respect missing data and historical snapshot labels. External private offers may not be available; never interpret missing offers as none existing.',
       parameters: { type: 'object', properties: {}, required: [] },
@@ -696,6 +707,10 @@ export async function executeChimmyTool(
 
   try {
     switch (name) {
+      case 'get_draft_analysis': {
+        const { buildDraftAnalysisContext } = await import('@/lib/chimmy/tools/draftAnalysisTool')
+        return await buildDraftAnalysisContext(ctx, args)
+      }
       case 'get_league_trade_activity': {
         if (!ctx.leagueId || !ctx.userId) return NO_LEAGUE
         const [{ buildTradeContextForChimmy }, { buildPendingTradeDecisionContext }, { buildLeagueTradeHistoryContext }] = await Promise.all([
