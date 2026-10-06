@@ -104,7 +104,7 @@
     "draft-pool:cache:audit": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/draft-pool-cache-audit.ts",
     "draft-pool:regression:data-quality": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/regression-draft-pool-data-quality.ts",
     "draft-pool:backfill-blocked-sleeper-ids": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/backfill-blocked-sleeper-ids.ts",
-    "draft-pool:sweep-multi-league": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/sweep-draft-pool-multi-league.ts",
+    "draft-pool:sweep-multi-league": "node --env-file-if-exists=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/sweep-draft-pool-multi-league.ts",
     "repair:player-identity": "tsx scripts/repair-player-identity-drift.ts",
     "test:draft": "vitest run __tests__/draft/",
     "check:draft-env": "node scripts/draft-env-check.mjs",

@@ -25,6 +25,7 @@
  */
 import { commissionerOsText } from '@/lib/core-app/commissionerOsText'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { NETWORKS_LINK_ES } from '@/lib/commissioner-os/i18n/shellCopy'
 import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 
 const plural = (n: string, one: string, many: string) => (n === '1' ? `1 ${one}` : `${n} ${many}`)
@@ -142,7 +143,8 @@ const UI_ES: Record<string, string> = {
   'Reliability:': 'Fiabilidad:',
 
   // CommissionerNetworks
-  'Commissioner networks': 'Redes de comisionado',
+  // The page heading reads the sidebar link's word: one source, in shellCopy.
+  'Commissioner networks': NETWORKS_LINK_ES,
   'Unify leagues you own under one named commissioner workspace. Each item keeps its league-level drilldown.':
     'Une las ligas que son tuyas en un espacio de comisionado con nombre. Cada elemento conserva su detalle por liga.',
   'Edit network': 'Editar red',
@@ -170,22 +172,15 @@ const UI_ES: Record<string, string> = {
   Unauthorized: 'No autorizado',
   'Name and 1–50 league IDs are required': 'Se requieren un nombre y de 1 a 50 IDs de liga',
   'You must own every linked league': 'Debes ser el dueño de todas las ligas vinculadas',
-  'A league already belongs to a commissioner network': 'Una de las ligas ya pertenece a una red de comisionado',
-  'A league already belongs to another commissioner network': 'Una de las ligas ya pertenece a otra red de comisionado',
+  'A league already belongs to a commissioner network': 'Una de las ligas ya pertenece a una red de comisionados',
+  'A league already belongs to another commissioner network': 'Una de las ligas ya pertenece a otra red de comisionados',
   'Could not create network; a league may already be linked': 'No se pudo crear la red; puede que una liga ya esté vinculada',
   'Could not update network; a league may already be linked': 'No se pudo actualizar la red; puede que una liga ya esté vinculada',
   'Invalid network update': 'Actualización de la red no válida',
   'Network not found': 'No se encontró la red',
   'Missing networkId': 'Falta el identificador de la red',
-  // A workspace task's priority, shown lower-case in parentheses. Feminine like `TASK_PRIORITY_ES`
-  // above, but ⚠ it DISAGREES with it on two tiers (advisory "aviso" vs "Informativa", positive
-  // "positiva" vs "Saludable"). Left as shipped on 2026-10-06 — the closing pass changed no output —
-  // pending a decision on which reading both screens should share.
-  critical: 'crítica',
-  elevated: 'elevada',
-  standard: 'estándar',
-  advisory: 'aviso',
-  positive: 'positiva',
+  // A queued task's priority is NOT here: the networks page reads `taskPriorityLabelText`, the
+  // workspace badge's own labels, so the two screens cannot disagree on a tier again.
 }
 
 type Rule = [RegExp, (...groups: string[]) => string]
@@ -231,7 +226,7 @@ const LOADER_ES: Record<string, string> = {
   'No trades have been made this season. Consider hosting a trade block or starting a league chat topic to spark activity.':
     'No se ha hecho ningún intercambio esta temporada. Considera abrir un mercado de intercambios o iniciar un tema en el chat de la liga para animar la actividad.',
   'No waiver claims have been made. Post a waiver wire recap to show managers what is available.':
-    'No se ha hecho ninguna solicitud de agentes libres. Publica un resumen de agentes libres para mostrar a los mánagers lo que hay disponible.',
+    'No se ha hecho ningún reclamo. Publica un resumen de agentes libres para mostrar a los mánagers lo que hay disponible.',
   'Post a weekly recap to highlight top performances and keep managers engaged.':
     'Publica un resumen semanal para destacar las mejores actuaciones y mantener a los mánagers involucrados.',
   // behavioral/league-intelligence.ts — health narrative (League Health's evidence)
@@ -280,7 +275,7 @@ const LOADER_ES: Record<string, string> = {
     'La diferencia entre el 1.º y el 8.º puesto se ha reducido a dos partidos: lo más igualada que ha estado esta liga en toda la temporada.',
   'Worth highlighting in the next league digest': 'Vale la pena destacarlo en el próximo resumen de la liga',
   'Include in Digest': 'Incluir en el resumen',
-  'Routine waiver approvals recurring weekly': 'Aprobaciones rutinarias de agentes libres cada semana',
+  'Routine waiver approvals recurring weekly': 'Aprobaciones rutinarias de reclamos cada semana',
   'A strong candidate for automation': 'Un buen candidato para automatizar',
   'Set Up Automation': 'Configurar automatización',
   Engagement: 'Participación',
@@ -348,7 +343,7 @@ const LOADER_RULES: Rule[] = [
   [/^(.+) has missed lineup deadlines two weeks running$/s, (who) => `${who} no ha enviado su alineación a tiempo dos semanas seguidas`],
   [
     /^The same low-stakes waiver claim pattern has repeated for (\d+) consecutive weeks\.$/,
-    (n) => `El mismo patrón de solicitudes de agentes libres de poca importancia se ha repetido ${plural(n, 'semana seguida', 'semanas seguidas')}.`,
+    (n) => `El mismo patrón de reclamos de poca importancia se ha repetido ${plural(n, 'semana seguida', 'semanas seguidas')}.`,
   ],
   [/^(\d+) of (\d+) teams set a lineup on time this week$/, (a, b) => `${a} de ${b} equipos pusieron su alineación a tiempo esta semana`],
   [

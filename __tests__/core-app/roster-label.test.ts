@@ -18,6 +18,13 @@ describe('rosterLabel', () => {
     expect(rosterLabel(['Unknown', 'Pat'], 8)).toBe('Pat')
   })
 
+  it('never prints a departed Sleeper manager’s internal key as a team number', () => {
+    // Rivalry Radar, production 2026-10-06: "Team former:sleeper:843306215671996416".
+    expect(rosterLabel([null], 'former:sleeper:843306215671996416')).toBe('Former manager')
+    expect(rosterLabel(['Unknown'], 'former:sleeper:slot:2023:7')).toBe('Former manager')
+    expect(rosterLabel(['Gridiron Ghosts'], 'former:sleeper:843306215671996416')).toBe('Gridiron Ghosts')
+  })
+
   it('falls back to the platform’s own "Team N", never an invented manager', () => {
     expect(rosterLabel([], 12)).toBe('Team 12')
     expect(rosterLabel([null, undefined], null)).toBe('Opponent')

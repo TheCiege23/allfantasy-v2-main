@@ -31,6 +31,15 @@ describe('weekly blueprint UI',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Copy my brief'}))
     await waitFor(()=>expect((screen.getByRole('textbox',{name:'Brief to copy'}) as HTMLTextAreaElement).value).toContain('Ice Bears'))
   })
+  it('opens an individual priority in its own league from portfolio view',()=>{
+    const listener=vi.fn();window.addEventListener(COMMS_OPEN_EVENT,listener)
+    render(<WeeklyBlueprint data={{...data,focusLeagueId:null,actions:[{...data.actions[0],leagueId:'B',leagueName:'Other League',season:2026,period:5}]}}/>)
+    fireEvent.click(screen.getByRole('button',{name:'Compare options with Chimmy: Other League'}))
+    expect(listener.mock.calls[0][0].detail).toMatchObject({tab:'chimmy',leagueId:'B',prefill:expect.stringContaining('Period 5 · 2026')})
+    expect(listener.mock.calls[0][0].detail.prefill).toContain('official deadline')
+    expect(screen.getByText(/Empty slots, absences or byes/)).toBeTruthy()
+    window.removeEventListener(COMMS_OPEN_EVENT,listener)
+  })
   it('keeps a long shot actionable and provides accessible trend values',()=>{
     render(<PlayoffPath path={path(3.5)}/> )
     expect(screen.getByText(/Long shot; this is not mathematical elimination/)).toBeTruthy()

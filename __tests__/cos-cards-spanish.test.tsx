@@ -500,7 +500,7 @@ describe('Commissioner networks in Spanish', () => {
     expect(screen.getByText('Cargando redes…')).toBeTruthy()
     await screen.findByText('Sunday Crew')
     for (const s of [
-      'Redes de comisionado',
+      'Redes de comisionados',
       'Crear red',
       'Nombre de la red',
       'Ligas miembro (la primera liga seleccionada es la anfitriona)',

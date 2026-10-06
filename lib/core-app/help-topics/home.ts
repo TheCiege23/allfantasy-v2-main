@@ -122,7 +122,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Nivel de actividad',
-      body: 'Élite, Activo, Moderado, Pasivo o Inactivo: qué tan activo has estado en esta liga en los últimos 90 días, según la actividad registrada en AllFantasy. Sale de una puntuación de participación más algunos conteos: Élite pide 3+ alineaciones guardadas y 2+ propuestas de cambio o reclamos de waivers, Activo al menos una alineación guardada. La señal de aviso aparece tras más de 14 días sin nada registrado.',
+      body: 'Élite, Activo, Moderado, Pasivo o Inactivo: qué tan activo has estado en esta liga en los últimos 90 días, según la actividad registrada en AllFantasy. Sale de una puntuación de participación más algunos conteos: Élite pide 3+ alineaciones guardadas y 2+ propuestas de cambio o reclamos, Activo al menos una alineación guardada. La señal de aviso aparece tras más de 14 días sin nada registrado.',
     },
   },
   commissionerTiles: {
@@ -132,7 +132,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Indicadores de la liga',
-      body: 'La salud de la liga es verde desde 70, ámbar desde 45 y roja por debajo; no se calcula con pocos datos ni en una liga importada sincronizada hace más de dos días. Managers activos cuenta a quienes hicieron un cambio, un reclamo de waivers o un movimiento de plantilla en los últimos 14 días. Los equipos reclamados tienen una cuenta de AllFantasy vinculada. Sync marca Stale cuando la última importación tiene más de 6 horas.',
+      body: 'La salud de la liga es verde desde 70, ámbar desde 45 y roja por debajo; no se calcula con pocos datos ni en una liga importada sincronizada hace más de dos días. Managers activos cuenta a quienes hicieron un cambio, un reclamo o un movimiento de plantilla en los últimos 14 días. Los equipos reclamados tienen una cuenta de AllFantasy vinculada. Sync marca Stale cuando la última importación tiene más de 6 horas.',
     },
   },
   faabBudgetsBar: {
@@ -152,7 +152,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'En todas tus ligas',
-      body: '«Need a commissioner» cuenta cada elemento de la cola de abajo, en todas las ligas que diriges. Managers inactivos cuenta a quienes no hicieron ningún cambio, reclamo de waivers ni movimiento de plantilla en 14 días, en las ligas que se muestran como tarjetas. Una liga necesita resincronizarse cuando su última importación tiene más de dos días.',
+      body: '«Need a commissioner» cuenta cada elemento de la cola de abajo, en todas las ligas que diriges. Managers inactivos cuenta a quienes no hicieron ningún cambio, reclamo ni movimiento de plantilla en 14 días, en las ligas que se muestran como tarjetas. Una liga necesita resincronizarse cuando su última importación tiene más de dos días.',
     },
   },
   activeManagers: {
@@ -162,7 +162,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Managers activos',
-      body: 'Cuántos managers de una liga hicieron un cambio, un reclamo de waivers o un movimiento de plantilla en los últimos 14 días. Verde si no hay nadie inactivo, rojo si lo está una cuarta parte o más. No se mide en una liga que nunca se sincronizó o cuya última sincronización tiene más de dos días.',
+      body: 'Cuántos managers de una liga hicieron un cambio, un reclamo o un movimiento de plantilla en los últimos 14 días. Verde si no hay nadie inactivo, rojo si lo está una cuarta parte o más. No se mide en una liga que nunca se sincronizó o cuya última sincronización tiene más de dos días.',
     },
   },
   zombieHubMeter: {
@@ -252,7 +252,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Tu semana',
-      body: 'Una semana de fantasy en cinco pasos, según el día en la hora del Este de EE. UU.: resultados el martes, waivers el miércoles, alineaciones de jueves a sábado, día de partido el domingo y el resumen el lunes. La marca de verificación solo sale de los datos: resultados cuando tu última semana jugada tiene marcadores, waivers cuando hiciste una incorporación esta semana en una liga de Sleeper, y alineaciones cuando ninguno de tus titulares está descartado. El día de partido y el resumen nunca la llevan.',
+      body: 'Una semana de fantasy en cinco pasos, según el día en la hora del Este de EE. UU.: resultados el martes, procesamiento de reclamos el miércoles, alineaciones de jueves a sábado, día de partido el domingo y el resumen el lunes. La marca de verificación solo sale de los datos: resultados cuando tu última semana jugada tiene marcadores, agentes libres cuando hiciste una incorporación esta semana en una liga de Sleeper, y alineaciones cuando ninguno de tus titulares está descartado. El día de partido y el resumen nunca la llevan.',
     },
   },
   outstandingIssues: {
@@ -262,7 +262,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Asuntos pendientes',
-      body: 'Lo que necesita tu atención en tus ligas: un draft que se acerca o que ya está en marcha, un puesto titular vacío, un titular descartado, una plantilla de Best Ball que no cubre una posición y las ligas cuyos datos están desactualizados. Primero van los problemas que ya están ocurriendo, luego los drafts próximos por fecha y al final las ligas desactualizadas. Aquí no se revisan reclamos de waivers, ofertas de intercambio ni votaciones.',
+      body: 'Lo que necesita tu atención en tus ligas: un draft que se acerca o que ya está en marcha, un puesto titular vacío, un titular descartado, una plantilla de Best Ball que no cubre una posición y las ligas cuyos datos están desactualizados. Primero van los problemas que ya están ocurriendo, luego los drafts próximos por fecha y al final las ligas desactualizadas. Aquí no se revisan reclamos, ofertas de intercambio ni votaciones.',
     },
   },
   homeCareer: {
@@ -312,7 +312,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Resultados de tus decisiones',
-      body: 'Cómo salieron tus movimientos en ligas de Sleeper, en puntos según la puntuación de tu liga. Intercambios: lo que recibiste menos lo que diste, contando solo mientras cada jugador siguió en tu plantilla. Incorporaciones de waivers: lo que anotó en tu plantilla después de incorporarlo. Alineaciones: la mejor alineación válida que podías poner menos lo que anotaron tus titulares, en las tres últimas semanas terminadas. Las recomendaciones de titular o banquillo de AutoCoach y Chimmy se comparan con lo que anotaron ambos jugadores. Un intercambio o una incorporación de menos de tres semanas espera hasta tener un resultado.',
+      body: 'Cómo salieron tus movimientos en ligas de Sleeper, en puntos según la puntuación de tu liga. Intercambios: lo que recibiste menos lo que diste, contando solo mientras cada jugador siguió en tu plantilla. Incorporaciones de agentes libres: lo que anotó en tu plantilla después de incorporarlo. Alineaciones: la mejor alineación válida que podías poner menos lo que anotaron tus titulares, en las tres últimas semanas terminadas. Las recomendaciones de titular o banquillo de AutoCoach y Chimmy se comparan con lo que anotaron ambos jugadores. Un intercambio o una incorporación de menos de tres semanas espera hasta tener un resultado.',
     },
   },
 } satisfies Record<string, HelpTopic>

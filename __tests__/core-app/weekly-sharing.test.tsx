@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import * as XLSX from 'xlsx'
 import { WeeklySharing } from '@/components/core-app/WeeklySharing'
 import { buildWeeklyWorkbook } from '@/lib/core-app/weeklyWorkbook'
-import { rivalryNarrative, weeklySocialPost, WEEK_SOCIALS } from '@/lib/core-app/weeklyShare'
+import { rivalryNarrative, weeklySocialPost, weeklyCardScenarios, drawWeeklyShareCard, WEEK_SOCIALS } from '@/lib/core-app/weeklyShare'
 import type { WeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
 import type { WeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
@@ -12,6 +12,50 @@ const data: WeeklyBlueprint = {name:'Alex',teamName:'Ice Bears',leagueCount:1,sp
 const path = {season:2026,period:4,historyUnavailable:false,points:[{period:2,probability:25,sampledAt:'2026-09-20'},{period:4,probability:52,sampledAt:'2026-10-04'}],swing:{week:4,ifWin:70,ifLose:30},league:{season:2026,period:4,you:{modelled:true,playoffPct:52},assumptions:{iterations:10000,computedAt:'2026-10-04',missing:['No division model']}}} as WeeklyPlayoffPath
 afterEach(()=>{cleanup();vi.restoreAllMocks()})
 describe('weekly sharing and Excel',()=>{
+  const cardData: WeeklyBlueprint={...data,matchup:{leagueId:'A',leagueName:'Ice League',season:2026,period:4,opponent:'Rivals'},playoff:{leagueId:'A',leagueName:'Ice League',season:2026,period:4,probability:52}}
+  const cardPath: WeeklyPlayoffPath={...path,league:{...path.league!,leagueId:'A'},swing:{...path.swing!,leagueId:'A'}}
+  it('shares only scenarios for the exact matchup, including zero-percent outcomes',()=>{
+    expect(weeklyCardScenarios(cardData,cardPath)).toEqual({period:4,ifWin:70,ifLose:30})
+    for (const stale of [
+      {...cardPath,season:2025}, {...cardPath,period:5},
+      {...cardPath,league:{...cardPath.league!,leagueId:'B'}},
+      {...cardPath,swing:{...cardPath.swing!,week:5}},
+      {...cardPath,swing:{...cardPath.swing!,leagueId:'B'}},
+      {...cardPath,swing:{...cardPath.swing!,ifWin:NaN}},
+    ]) expect(weeklyCardScenarios(cardData,stale)).toBeNull()
+    expect(weeklyCardScenarios({...cardData,playoff:{...cardData.playoff!,probability:0}},{...cardPath,swing:{...cardPath.swing!,ifLose:0}})?.ifLose).toBe(0)
+  })
+  it('keeps long names inside the canvas and omits stale result numbers',()=>{
+    const ctx={fillRect:vi.fn(),fillText:vi.fn(),measureText:(text:string)=>({width:Array.from(text).length*20}),beginPath:vi.fn(),arc:vi.fn(),stroke:vi.fn()}
+    const canvas={getContext:()=>ctx} as unknown as HTMLCanvasElement
+    drawWeeklyShareCard(canvas,{...cardData,teamName:'🎉'.repeat(300)},false,cardPath)
+    expect(canvas.width).toBe(1080);expect(canvas.height).toBe(1350)
+    expect(ctx.fillText.mock.calls.some(c=>c[0]==='If I win: 70.0%')).toBe(true)
+    for(const [text,x,y] of ctx.fillText.mock.calls) {
+      expect(y).toBeLessThan(1350);expect(x+ctx.measureText(text).width).toBeLessThanOrEqual(1080)
+    }
+    ctx.fillText.mockClear()
+    drawWeeklyShareCard(canvas,cardData,false,{...cardPath,period:5})
+    expect(ctx.fillText.mock.calls.some(c=>String(c[0]).includes('70.0%'))).toBe(false)
+  })
+  it('previews the current card and invalidates a prepared image when the period changes',async()=>{
+    const ctx={fillRect:vi.fn(),fillText:vi.fn(),measureText:(text:string)=>({width:text.length*18}),beginPath:vi.fn(),arc:vi.fn(),stroke:vi.fn()}
+    vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D)
+    vi.spyOn(HTMLCanvasElement.prototype,'toBlob').mockImplementation(cb=>cb(new Blob(['sample'],{type:'image/png'})))
+    vi.spyOn(HTMLAnchorElement.prototype,'click').mockImplementation(()=>{})
+    Object.defineProperty(URL,'createObjectURL',{configurable:true,value:vi.fn().mockReturnValue('blob:sample')})
+    Object.defineProperty(URL,'revokeObjectURL',{configurable:true,value:vi.fn()})
+    const {rerender}=render(<WeeklySharing data={cardData} path={cardPath}/>)
+    const details=screen.getByText('Share and export my week').closest('details')!
+    details.open=true;fireEvent(details,new Event('toggle'))
+    await waitFor(()=>expect(screen.getByRole('img',{name:'Preview of your weekly share card'})).toBeTruthy())
+    expect(screen.getByText(/Period 4: if you win 70.0%/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button',{name:'Download PNG card'}))
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Share card',exact:true})).toBeTruthy())
+    rerender(<WeeklySharing data={{...cardData,matchup:{...cardData.matchup!,period:5}}} path={cardPath}/>)
+    await waitFor(()=>expect(screen.queryByRole('button',{name:'Share card',exact:true})).toBeNull())
+    expect(screen.getByText(/No verified scenarios for this matchup\./)).toBeTruthy()
+  })
   it('omits charts and scenario numbers when the model belongs to another period',()=>{
     const stale={...path,league:{...path.league!,period:5}}
     const bytes=buildWeeklyWorkbook(data,stale)
@@ -49,7 +93,7 @@ describe('weekly sharing and Excel',()=>{
   it('keeps exports literal and creates real chart relationships with no interpolated periods',()=>{
     const bytes=buildWeeklyWorkbook({...data,teamName:'=HYPERLINK("https://invalid")'},path)
     const wb=XLSX.read(bytes,{type:'array'})
-    expect(wb.SheetNames).toEqual(['Brief','Actions','Trend','Scenarios','Coverage','Model'])
+    expect(wb.SheetNames).toEqual(['Brief','Actions','Trend','Scenarios','Calendar','Calendar gaps','Coverage','Model'])
     expect(XLSX.utils.sheet_to_json(wb.Sheets.Trend,{header:1})).toHaveLength(3)
     expect(wb.Sheets.Brief.B2.f).toBeUndefined()
     const zip=XLSX.CFB.read(bytes,{type:'array'})

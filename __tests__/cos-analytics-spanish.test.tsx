@@ -291,7 +291,7 @@ describe('League Analytics in Spanish', () => {
   it('the error state translates the adapter message and the fallback', () => {
     lang.language = 'es'
     const a = render(<LeagueAnalyticsView snapshot={null} dataMode="live" errorMessage="The live Decision OS backend is not yet integrated in this environment." />)
-    expect(a.container.textContent).toContain('El backend en vivo de Decision OS todavía no está integrado en este entorno.')
+    expect(a.container.textContent).toContain('El backend en vivo de Decision OS aún no está integrado en este entorno.')
     a.unmount()
     const b = render(<LeagueAnalyticsView snapshot={null} dataMode="live" />)
     expect(b.container.textContent).toContain('No se pudo cargar la analítica de la liga en este momento.')

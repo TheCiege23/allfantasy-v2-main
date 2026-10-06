@@ -21,11 +21,17 @@ describe('verified weekly priorities', () => {
     expect(aligned.actions.some(a => a.kind === 'sync')).toBe(false)
   })
   it('excludes locked and automatic lineup actions and keeps at most three priorities', () => {
-    const out=build([row('locked',{locked:true}),row('auto',{bestBall:true}),row('A'),row('B'),row('C'),row('D')])
+    const out=build([row('locked',{locked:true}),row('auto',{bestBall:true}),row('automatic',{automatic:true}),row('A'),row('B'),row('C'),row('D')])
     expect(out.actions.map(a=>a.leagueId)).toEqual(['A','B','C'])
     expect(out.actionCount).toBe(4)
   })
   it('scopes all actions to the selected league', () => expect(build([row('A'),row('B')],'B').actions.map(a=>a.leagueId)).toEqual(['B']))
+  it('keeps repair, watchlist and verified playoff decisions together in a focused league',()=>{
+    const input={leagues:[{id:'A',sport:'NFL'}],focusLeagueId:'A',board:{...board,leaning:[{leagueId:'A',season:2026,week:4,opponent:{name:'Rival'}}]} as unknown as WeekBoard,pulse:{needs:[row('A',{questionable:2})],set:[]} as unknown as MyTeamPulse,outlook:{leagues:[{leagueId:'A',season:2026,period:4,you:{modelled:true}}],swingByLeague:{A:{leagueId:'A',leagueName:'A',week:4,ifWin:70,ifLose:30,swing:40}}} as unknown as SeasonOutlook,now:new Date('2026-10-04')}
+    expect(buildWeeklyBlueprint(input).actions.map(a=>a.kind)).toEqual(['lineup','monitor','playoff'])
+    expect(buildWeeklyBlueprint({...input,outlook:{...input.outlook,leagues:[{...input.outlook.leagues[0],period:5}]}}).actions.map(a=>a.kind)).toEqual(['lineup','monitor'])
+    expect(buildWeeklyBlueprint({...input,pulse:{needs:[row('A',{unresolved:1,questionable:2})],set:[]} as unknown as MyTeamPulse}).actions.map(a=>a.kind)).toEqual(['sync'])
+  })
   it('requests refresh for unresolved data instead of claiming a lineup fault', () => {
     const out=build([row('A',{unresolved:1,severity:8,lockAt:'2026-10-05T12:00:00Z'})])
     expect(out.actions[0]).toMatchObject({kind:'sync',gameAt:null,href:'/core/league-sync?league=A'})
@@ -34,6 +40,7 @@ describe('verified weekly priorities', () => {
     const out=build([row('late',{lockAt:'2026-10-06T12:00:00Z'}),row('soon',{lockAt:'2026-10-05T12:00:00Z'})])
     expect(out.actions[0].leagueId).toBe('soon')
     expect(out.actions[0].gameAt).toBe('2026-10-05T12:00:00.000Z')
+    expect(out.actions[0]).toMatchObject({season:2026,period:4})
   })
   it('copies only known facts in English and Spanish', () => {
     const out=build([row('A')]); out.matchup={opponent:'Sam',period:4,leagueName:'A'}; out.playoff={probability:3.5,leagueName:'A'}

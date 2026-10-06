@@ -356,7 +356,7 @@ describe('server-built sentences are held to their loaders', () => {
       "'Active and engaged'",
     ]) expect(live, s).toContain(s)
     expect(deadlineLabelText('Playoffs start is this week', 'es')).toBe('Inicio de los playoffs: esta semana')
-    expect(deadlineLabelText('Next waiver processing in 1 hours', 'es')).toBe('Próximo procesamiento de agentes libres: en 1 hora')
+    expect(deadlineLabelText('Next waiver processing in 1 hours', 'es')).toBe('Próximo procesamiento de reclamos: en 1 hora')
     expect(deadlineLabelText('Draft on 2026-08-30', 'es')).toBe('Draft: el 2026-08-30')
     expect(deadlineLabelText('No upcoming deadlines configured', 'es')).toBe('No hay fechas límite próximas configuradas')
     expect(healthDriverText('Something new (no league activity has ever been recorded)', 'es')).toBe(

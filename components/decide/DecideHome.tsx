@@ -41,6 +41,8 @@ import {
   buildLeagueHomePulse,
   type LeaguePulseViewModel,
 } from '@/lib/decision-os/league-pulse'
+import { localizeLeaguePulse, translatePulseText } from '@/lib/i18n/decision-os/leaguePulse'
+import { localizeRecommendations, translateRecText } from '@/lib/i18n/decision-os/recommendations'
 import {
   buildDecisionRecommendationsViewModel,
   type DecisionRecommendationsViewModel,
@@ -196,7 +198,7 @@ export function DecideHome({
   // ── League Pulse: sufficiency decided by the engine, rendered as-is ────────
   const pulse: LeaguePulseViewModel = useMemo(
     () =>
-      buildLeagueHomePulse({
+      localizeLeaguePulse(buildLeagueHomePulse({
         league: {
           id: league.id,
           name: league.name,
@@ -214,13 +216,13 @@ export function DecideHome({
         teams,
         isCommissioner,
         managerDna: intel?.managerDna ?? null,
-      }),
-    [league, teams, isCommissioner, intel],
+      }), language),
+    [league, teams, isCommissioner, intel, language],
   )
 
   const recs: DecisionRecommendationsViewModel = useMemo(
-    () => buildDecisionRecommendationsViewModel({ source: intel?.recommendations ?? null }),
-    [intel],
+    () => localizeRecommendations(buildDecisionRecommendationsViewModel({ source: intel?.recommendations ?? null }), language),
+    [intel, language],
   )
 
   // ── KPI row: viewer's real slot, or honest dashes ──────────────────────────
@@ -349,7 +351,7 @@ export function DecideHome({
                       <span className="bar">
                         <span className="fill" style={{ width: `${Math.max(0, Math.min(100, pulse.confidence))}%` }} />
                       </span>
-                      <span className="pct">{pulse.confidence}% · {pulse.confidenceLabel}</span>
+                      <span className="pct">{pulse.confidence}% · {language === 'es' ? translatePulseText(pulse.confidenceLabel) : pulse.confidenceLabel}</span>
                     </span>
                   </div>
                   <div className="bdx-line">{pulse.summary}</div>
@@ -390,7 +392,7 @@ export function DecideHome({
                 <div className={`bdx-card c-${recSev(r.priority)}`} key={r.title}>
                   <div className="bdx-head">
                     <span className="bdx-kind">{t('decide.rec.kind')}</span>
-                    <SevChip sev={recSev(r.priority)}>{r.priority}</SevChip>
+                    <SevChip sev={recSev(r.priority)}>{language === 'es' ? translateRecText(r.priority) : r.priority}</SevChip>
                     <span className="bdx-when">
                       {t('decide.rec.impact').replace('{{impact}}', String(r.expectedImpact)).replace('{{difficulty}}', String(r.difficulty))}
                     </span>

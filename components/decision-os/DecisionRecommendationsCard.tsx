@@ -2,6 +2,8 @@
 
 import { ArrowRight, ListChecks } from 'lucide-react'
 import type { DecisionRecommendationsViewModel } from '@/lib/decision-os/recommendations'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { localizeRecommendations, translateRecText } from '@/lib/i18n/decision-os/recommendations'
 import {
   DecisionOsBadge,
   DecisionOsConfidenceBadge,
@@ -32,28 +34,26 @@ function priorityClass(priority: string): string {
   return decisionOsToneClasses('neutral')
 }
 
-function descriptionForVariant(variant: DecisionRecommendationsCardProps['variant']) {
-  if (variant === 'commissioner') {
-    return 'A commissioner-safe action queue that stays quiet until evidence supports a move.'
-  }
-  if (variant === 'league') {
-    return 'A short league action queue with priority, impact, difficulty, evidence, and one suggested next step.'
-  }
-  return 'A short action queue with priority, impact, difficulty, evidence, and one suggested next step.'
+/** Dictionary key for the card's description line. */
+function descriptionKeyForVariant(variant: DecisionRecommendationsCardProps['variant']) {
+  if (variant === 'commissioner') return 'recCard.desc.commissioner'
+  if (variant === 'league') return 'recCard.desc.league'
+  return 'recCard.desc.default'
 }
 
-function whyCopy(model: DecisionRecommendationsViewModel, isInsufficient: boolean) {
-  if (isInsufficient) {
-    return 'This card is shown to explain why no grounded moves are ready yet. It will not invent an action just to fill the space.'
-  }
-  return `Shown because ${model.recommendations.length} grounded move${model.recommendations.length === 1 ? '' : 's'} passed the deterministic evidence checks for this surface.`
+function whyCopy(model: DecisionRecommendationsViewModel, isInsufficient: boolean, t: (key: string) => string) {
+  if (isInsufficient) return t('recCard.why.insufficient')
+  const count = model.recommendations.length
+  return t(count === 1 ? 'recCard.why.readyOne' : 'recCard.why.readyMany').replace('{{count}}', String(count))
 }
 
 export default function DecisionRecommendationsCard({
-  model,
+  model: rawModel,
   variant = 'dashboard',
   compact = false,
 }: DecisionRecommendationsCardProps) {
+  const { t, language } = useOptionalLanguage()
+  const model = localizeRecommendations(rawModel, language)
   const isInsufficient = model.status === 'insufficient-data'
   const recommendations = model.recommendations.slice(0, compact ? 2 : 3)
 
@@ -65,28 +65,28 @@ export default function DecisionRecommendationsCard({
     >
       <div className="border-b border-subtle bg-surface-muted/60 px-5 py-4">
         <div className="flex flex-wrap items-center gap-2">
-          <DecisionOsBadge icon={ListChecks}>Recommended Moves</DecisionOsBadge>
-          <DecisionOsConfidenceBadge label={model.confidenceLabel} />
-          <DecisionOsUpdatedStamp value={model.lastUpdatedIso} />
+          <DecisionOsBadge icon={ListChecks}>{t('recCard.badge')}</DecisionOsBadge>
+          <DecisionOsConfidenceBadge label={model.confidenceLabel} language={language} />
+          <DecisionOsUpdatedStamp value={model.lastUpdatedIso} language={language} />
         </div>
         <h2 className="mt-4 text-2xl font-black tracking-tight text-primary md:text-3xl">{model.title}</h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary">
-          {descriptionForVariant(variant)}
+          {t(descriptionKeyForVariant(variant))}
         </p>
         <DecisionOsTrustNote>
-          Only grounded recommendations are shown here. If evidence is limited, the card says so instead of filling in guesses.
+          {t('recCard.trustNote')}
         </DecisionOsTrustNote>
       </div>
 
       <div className="grid gap-4 p-5 xl:grid-cols-[0.9fr_1.1fr]">
         <aside className="space-y-4">
-          <DecisionOsWhyPanel>{whyCopy(model, isInsufficient)}</DecisionOsWhyPanel>
+          <DecisionOsWhyPanel language={language}>{whyCopy(model, isInsufficient, t)}</DecisionOsWhyPanel>
 
           <DecisionOsEvidenceGrid
-            title="Evidence checked"
+            title={t('recCard.evidenceChecked')}
             items={model.evidence.slice(0, 3)}
             columns={1}
-            emptyMessage="No recommendation evidence is available yet."
+            emptyMessage={t('recCard.evidenceEmpty')}
           />
 
           {isInsufficient && model.insufficientData ? (
@@ -94,6 +94,7 @@ export default function DecisionRecommendationsCard({
               title={model.insufficientData.title}
               message={model.insufficientData.message}
               missing={model.insufficientData.missing}
+              language={language}
             />
           ) : null}
         </aside>
@@ -107,7 +108,7 @@ export default function DecisionRecommendationsCard({
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold ${priorityClass(item.priority)}`}>
-                    {item.priority}
+                    {language === 'es' ? translateRecText(item.priority) : item.priority}
                   </span>
                   <span className="rounded-full border border-subtle bg-surface px-2.5 py-1 text-[11px] font-semibold text-secondary">
                     {item.difficulty}
@@ -122,7 +123,7 @@ export default function DecisionRecommendationsCard({
                 <p className="mt-1 text-sm leading-6 text-secondary">{item.expectedImpact}</p>
                 <div className="mt-3 rounded-xl border border-brand-primary/20 bg-brand-primary/10 px-3 py-2">
                   <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-brand-primary">
-                    Suggested action
+                    {t('recCard.suggestedAction')}
                   </p>
                   <p className="mt-1 flex items-start gap-2 text-sm font-semibold text-primary">
                     <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-brand-primary" aria-hidden />
@@ -142,8 +143,8 @@ export default function DecisionRecommendationsCard({
             ))
           ) : (
             <DecisionOsEmptyState
-              title="No grounded moves are ready yet."
-              description="Once supported league or manager evidence produces a deterministic action, it will appear here with its source context."
+              title={t('recCard.emptyTitle')}
+              description={t('recCard.emptyDescription')}
             />
           )}
         </div>

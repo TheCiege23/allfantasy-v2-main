@@ -1,0 +1,17 @@
+"use client"
+import { useEffect,useMemo,useState } from 'react'
+import type { MyTeamData } from '@/lib/core-app/myTeam'
+import { parseTeamAlertTarget,teamAlertDecision,type TeamAlertTarget as Target } from '@/lib/core-app/teamAlertTarget'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import LocalDateTime from './LocalDateTime'
+export default function TeamAlertTarget({data,onReview}:{data:MyTeamData;onReview:(slot:number)=>void}){
+  const {language}=useOptionalLanguage(),es=language==='es',t=(en:string,sp:string)=>es?sp:en
+  const [target,setTarget]=useState<Target|null>(null),[now,setNow]=useState(0)
+  useEffect(()=>{const read=()=>{const next=parseTeamAlertTarget(new URL(window.location.href),data.league.id);setTarget(previous=>JSON.stringify(previous)===JSON.stringify(next)?previous:next);setNow(Date.now())};read();window.addEventListener('hashchange',read);window.addEventListener('popstate',read);const timer=setInterval(()=>setNow(Date.now()),30000);return()=>{clearInterval(timer);window.removeEventListener('hashchange',read);window.removeEventListener('popstate',read)}},[data])
+  const decision=useMemo(()=>target?teamAlertDecision(data,target,now):null,[data,target,now])
+  useEffect(()=>{if(decision?.state==='current'&&decision.slotIndex!=null)onReview(decision.slotIndex)},[decision?.state,decision?.slotIndex,onReview])
+  useEffect(()=>{if(!target)return;const panel=document.getElementById('af-team-alert-decision');panel?.focus({preventScroll:true});panel?.scrollIntoView({block:'center'})},[target])
+  if(!target||!decision)return null
+  const reasons={automatic:t('This league selects its scoring lineup automatically. Review roster depth and league rules.','Esta liga selecciona la alineación de puntuación automáticamente. Revisa la profundidad y las reglas.'),unavailable:t('The current lineup could not be checked. Refresh and verify it on your platform.','No se pudo comprobar la alineación actual. Actualiza y verifícala en tu plataforma.'),lineup_changed:t('This player is no longer in the original starting slot. Review your current lineup.','Este jugador ya no está en la plaza titular original. Revisa tu alineación actual.'),expired:t('The original alert deadline has passed. Verify game locks before taking action.','El plazo de la alerta original ya pasó. Verifica los bloqueos antes de actuar.'),schedule_changed:t('The saved kickoff changed or is unavailable. Review the current schedule.','El inicio guardado cambió o no está disponible. Revisa el calendario actual.'),status_changed:t('The current roster no longer marks this starter as out. Verify current injury news.','La plantilla actual ya no marca a este titular de baja. Verifica las noticias actuales.'),current:t('The affected starting slot is selected below. Review eligible backups, current status and individual game locks.','La plaza titular afectada está seleccionada debajo. Revisa las reservas elegibles, el estado actual y los bloqueos.')}
+  return <section id="af-team-alert-decision" className="af-tw-panel" tabIndex={-1} aria-labelledby="af-team-alert-title"><h3 id="af-team-alert-title">{t('Review this injury alert','Revisar esta alerta de lesión')} · {data.league.name}{decision.player?` · ${decision.player.name}`:''}</h3><p role="status">{reasons[decision.state]}</p><p>{t('Original alert deadline','Plazo de la alerta original')}: <LocalDateTime value={target.deadline}/></p><p>{t('Opening an alert does not submit a lineup.','Abrir una alerta no envía una alineación.')}</p></section>
+}

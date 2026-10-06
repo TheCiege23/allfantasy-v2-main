@@ -465,7 +465,7 @@ const spanish: Record<string, string> = {
   'Ranked pickups for a league, priced against your FAAB and waiver order.': 'Opciones de agentes libres ordenadas según tu FAAB y prioridad de reclamo.',
   'Trade Analyzer': 'Analizador de intercambios',
   'Fairness and value on a proposal, graded in that league’s own scoring.': 'Equidad y valor de una propuesta según la puntuación de esa liga.',
-  'No waiver deadline is pending across your leagues.': 'No hay plazos de agentes libres pendientes en tus ligas.',
+  'No waiver deadline is pending across your leagues.': 'No hay plazos de reclamos pendientes en tus ligas.',
   'No trade offer is waiting on you.': 'No tienes ofertas de intercambio pendientes.',
   'Trade Evaluator': 'Evaluador de intercambios',
   'Trade Finder (Sleeper only)': 'Buscador de intercambios (solo Sleeper)',
@@ -609,7 +609,7 @@ const spanish: Record<string, string> = {
   'No waivers — free agents are instant': 'Sin reclamos: agentes libres inmediatos',
   'Highest FAAB bid': 'Oferta FAAB más alta',
   'Highest bid wins': 'Gana la oferta más alta',
-  'Next waiver run': 'Próxima ejecución de reclamos',
+  'Next waiver run': 'Próximo procesamiento de reclamos',
   'How this league runs': 'Cómo funciona esta liga',
   'equal bids go to waiver priority': 'las ofertas iguales se deciden por prioridad de reclamo',
   'highest bid wins — how two equal bids are split was not published':

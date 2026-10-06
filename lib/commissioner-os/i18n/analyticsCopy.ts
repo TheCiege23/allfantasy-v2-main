@@ -35,7 +35,7 @@
  */
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { kickoffText } from '@/lib/core-app/kickoffText'
-import { commissionerSectionName, moduleLabelText } from '@/lib/commissioner-os/i18n/shellCopy'
+import { commissionerSectionName, leagueEventNameText, moduleLabelText } from '@/lib/commissioner-os/i18n/shellCopy'
 import type { CommissionerModuleId } from '@/lib/commissioner-ui/navigation/moduleNav'
 
 const isEs = (language: string | null | undefined): boolean => language === 'es'
@@ -76,9 +76,10 @@ export function cosLinkText(label: string, language: string | null | undefined):
 
 /* ── Errors the adapter hands every screen ────────────────────────────────── */
 
+/** THE translator for these: toolsCopy's screens read the not-integrated message from here too. */
 const ERROR_ES: Record<string, string> = {
   'The live Decision OS backend is not yet integrated in this environment.':
-    'El backend en vivo de Decision OS todavía no está integrado en este entorno.',
+    'El backend en vivo de Decision OS aún no está integrado en este entorno.',
   'No active league could be resolved for this session.': 'No se pudo determinar una liga activa para esta sesión.',
   'Decision OS response failed contract validation.': 'La respuesta de Decision OS no pasó la validación del contrato.',
   'This league has not been scanned yet. The workspace task scan runs daily; an empty list here would claim a clean bill of health nothing has checked.':
@@ -113,6 +114,9 @@ const ANALYTICS_EXACT_ES: Record<string, string> = {
   // warehouseReads.ts — competitive balance
   Blowouts: 'Palizas',
   'One-score games': 'Partidos de una anotación',
+  // NOT coreUiCopy's «Diferencia media»: same English, different number. This is the league's mean
+  // margin of VICTORY (always positive); /core's Rivalry Radar shows your signed point difference
+  // against one rival. Two meanings, so two words, on purpose.
   'Average margin': 'Margen promedio',
   'Scoring spread': 'Diferencia de puntuación',
   'Title spread': 'Reparto de títulos',
@@ -603,7 +607,8 @@ const REPORT_PATTERNS_ES: Array<[RegExp, (...m: string[]) => string]> = [
   ],
   // reportStore.ts — a failed run
   [/^(.+) could not be generated\.$/, (name) => `No se pudo generar ${reportTemplateText(name, 'es')}.`],
-  // ReportsView's preview simulation
+  // ReportsView's preview simulation. Prose, so no colon — deliberately NOT toolsCopy's activity-feed
+  // line ("X: se generó…"), which is a list entry. Same English, two contexts, not a duplicate.
   [/^(.+) generated successfully\.$/, (name) => `${reportTemplateText(name, 'es')} se generó correctamente.`],
   [/^Generating (.+)…$/, (name) => `Generando ${reportTemplateText(name, 'es', true)}…`],
 ]
@@ -747,11 +752,15 @@ export function workspaceCopy(language: string | null | undefined): WorkspaceCop
 
 const daysEs = (n: string) => (n === '1' ? '1 día' : `${n} días`)
 
-/** The dated events `lib/core-app/leagueCalendar.ts` names (only dated ones can raise a deadline task). */
+/**
+ * The dated events `lib/core-app/leagueCalendar.ts` names (only dated ones can raise a deadline task).
+ * The three Mission Control also names come from the shell's `leagueEventNameText`, so the KPI and
+ * the task can never read two different words for one event.
+ */
 const DEADLINE_LABEL_ES: Record<string, string> = {
-  Draft: 'Draft',
-  'Next waiver processing': 'Próximo procesamiento de reclamos',
-  'Trade deadline': coreUiCopy('Trade deadline', 'es'),
+  Draft: leagueEventNameText('Draft', 'es'),
+  'Next waiver processing': leagueEventNameText('Next waiver processing', 'es'),
+  'Trade deadline': leagueEventNameText('Trade deadline', 'es'),
   'Keeper deadline': 'Fecha límite de keepers',
 }
 /** taskSources.ts joins names "A, B and C"; only that last joiner is the app's word. */

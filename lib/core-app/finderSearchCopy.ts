@@ -395,7 +395,7 @@ const FA_ES: FaCopy = {
   room: (median, p75, claims) => `Pujas ganadoras de esta liga: mediana $${median} · p75 $${p75} (${claims} ${claims === 1 ? 'reclamo' : 'reclamos'})`,
   claim: (last, platform) => claimText(last, platform, 'es'),
   foot:
-    'La puja es su valor de mercado en el formato de cada liga frente a su presupuesto, con un tope del 60% del presupuesto: el mismo número que usa Waiver Intel. Las pujas ganadoras de la liga aparecen al lado para comparar con lo que paga el resto; no entran en la puja.',
+    'La puja es su valor de mercado en el formato de cada liga frente a su presupuesto, con un tope del 60% del presupuesto: el mismo número que usa Inteligencia de agentes libres. Las pujas ganadoras de la liga aparecen al lado para comparar con lo que paga el resto; no entran en la puja.',
 }
 
 export function faCopy(language: string): FaCopy {

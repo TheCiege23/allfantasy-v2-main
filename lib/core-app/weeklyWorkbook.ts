@@ -3,6 +3,7 @@ import { weeklyActionText, weeklyBrief, type WeeklyBlueprint } from './weeklyBlu
 import { rivalryNarrative } from './weeklyShare'
 import type { WeeklyPlayoffPath } from './weeklyPlayoffPath'
 import { pct1 } from './weeklyPercent'
+import { weeklyCalendarTitle } from './weeklyCalendar'
 
 const xml = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;')
 /** Real editable Excel data and embedded OOXML charts; no invented earlier odds. */
@@ -27,6 +28,8 @@ export function buildWeeklyWorkbook(data: WeeklyBlueprint, path?: WeeklyPlayoffP
   const scenarioSheet = append('Scenarios',[['Outcome','Estimated playoff probability (%)'],...scenarios])
   for (let row=2;row<=scenarios.length+1;row++) scenarioSheet[`B${row}`].z = '0.0"%"'
   if (!scenarios.length) { scenarioSheet.A2 = {t:'s',v:'No pending win/loss scenario is available in this export. Open a league to review its playoff path.'}; scenarioSheet['!ref']='A1:B2' }
+  append('Calendar', [['League','Event','Time (UTC)','Source'],...(data.calendar?.events??[]).map(e=>[e.leagueName,weeklyCalendarTitle(e,es),e.at,e.source])])
+  append('Calendar gaps', [['League','Missing timing'],...(data.calendar?.gaps??[]).map(g=>[g.leagueName,g.kind])])
   append('Coverage',[['League','AF current forecast','Provider current forecast','Partial'],...data.coverage.map(c=>[c.leagueName,c.af,c.provider,c.partial])])
   append('Model',[['Available',valid],['Season',path?.season ?? ''],['Period',path?.period ?? ''],['Iterations',valid ? path?.league?.assumptions.iterations : ''],['Calculated at',valid ? path?.league?.assumptions.computedAt : ''],...((valid ? path?.league?.assumptions.missing : ['Playoff model unavailable for this format or data.']) ?? []).map(m=>['Assumption',m])])
   const bytes = XLSX.write(wb,{bookType:'xlsx',type:'array'}) as ArrayBuffer

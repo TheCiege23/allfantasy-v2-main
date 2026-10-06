@@ -960,8 +960,9 @@ export async function getMyTeamData(
   userId: string,
   /** The render's shared league context — see `leagueContext.ts`. */
   ctx?: LeagueContext | null,
-  options?: { savedRosterOnly?: boolean },
+  options?: { savedRosterOnly?: boolean; alertPreviewOnly?: boolean },
 ): Promise<MyTeamData | null> {
+  const savedRosterOnly = options?.savedRosterOnly || options?.alertPreviewOnly
   const lc = leagueContextFor(leagueId, userId, ctx)
   /*
    * The shared row. `settings` carries `scoring_settings`, the basis for the league-specific
@@ -1020,9 +1021,10 @@ export async function getMyTeamData(
   }
 
   // The shared claimed-team read; `avatarUrl` is the manager's own, imported and now rendered.
-  const myTeamRow = await lc.claimedTeam()
-
-  const teamCount = await prisma.leagueTeam.count({ where: { leagueId } })
+  const [myTeamRow, teamCount] = await Promise.all([
+    lc.claimedTeam(),
+    prisma.leagueTeam.count({ where: { leagueId } }),
+  ])
 
   if (!myTeamRow) {
     const unknown = {
@@ -1072,7 +1074,7 @@ export async function getMyTeamData(
    */
   const candidates = myRosterCandidates(myTeamRow, userId)
   const isSleeper = String(league.platform).toLowerCase() === 'sleeper'
-  const liveRoster = isSleeper && !options?.savedRosterOnly && league.platformLeagueId
+  const liveRoster = isSleeper && !savedRosterOnly && league.platformLeagueId
     ? await currentSleeperRoster(league.platformLeagueId, myTeamRow)
     : null
   if (liveRoster && typeof liveRoster.bestBall === 'boolean') base.league.bestBall = liveRoster.bestBall
@@ -1098,7 +1100,7 @@ export async function getMyTeamData(
     platform: league.platform, sourceLeagueId: league.platformLeagueId,
     leagueName: leagueDisplayName(league.name), season: league.season, action: 'league',
   })
-  const roster = isSleeper && !options?.savedRosterOnly
+  const roster = isSleeper && !savedRosterOnly
     ? (liveRoster ? { playerData: liveRoster } : null)
     : candidates.length > 0
       ? await prisma.roster.findFirst({
@@ -1164,14 +1166,13 @@ export async function getMyTeamData(
    * a week nobody has written yet returns nothing — which would render "no
    * projections" on a screen whose actual problem was asking the wrong question.
    */
-  const projectionWeek = await latestProjectionWeek()
+  const [projectionWeek, sportsWeek] = await Promise.all([latestProjectionWeek(), resolveSportsWeek(sport)])
 
   /*
    * The REAL-WORLD week, which is a different question from the week the
    * projection feed last wrote. They drift, and conflating them is how a
    * roster ends up showing week-1 projections beside November opponents.
    */
-  const sportsWeek = await resolveSportsWeek(sport)
 
   /*
    * Null here is a real state, not a failure: plenty of imported leagues never
@@ -1278,6 +1279,19 @@ export async function getMyTeamData(
   const benchPlayers = benchIds
     .map((id) => resolved.get(id))
     .filter((p): p is LineupPlayer => p != null)
+
+  // Alerts need the verified roster, eligibility, injury and kickoff evidence above;
+  // grades, market, weather, dynasty, transactions and matchup pricing add no alert evidence.
+  if (options?.alertPreviewOnly) {
+    const unrequested = { available: false as const, reason: 'not requested for alert evaluation' }
+    return {
+      ...base, team, bestBall: base.league.bestBall === true, identityNote: null,
+      starters: { available: true, data: starterSlots.map(slot=>({...slot,benchCheck:null})) },
+      bench: benchIds.length ? { available: true, data: benchPlayers } : { available: false, reason: 'no bench players recorded on this roster' },
+      ir: unrequested, taxi: unrequested, lock: unrequested,
+      projections: unrequested, rosterGrade: unrequested, nextMatchup: unrequested,
+    }
+  }
 
   /*
    * ⚠ ONE BENCH PLAYER IS OFFERED AT ONE SLOT, NOT AT EVERY SLOT HE BEATS.

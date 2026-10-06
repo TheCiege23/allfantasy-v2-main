@@ -48,6 +48,7 @@ import {
   memberActivityFromReads,
   quietManagerNames,
   staleActivityReason,
+  teamDisplayName,
   unownedTeamNames,
   type LeagueMemberActivity,
 } from './commissioner/activity'
@@ -404,10 +405,10 @@ const WAIVER_TYPE_LABEL: Record<string, string> = {
 }
 const WAIVER_TYPE_LABEL_ES: Record<string, string> = {
   faab: 'Pujas FAAB a ciegas',
-  rolling: 'Prioridad de agentes libres rotativa',
+  rolling: 'Prioridad de reclamo rotativa',
   reverse_standings: 'Prioridad por clasificación inversa',
   fcfs: 'Por orden de llegada',
-  standard: 'Prioridad de agentes libres estándar',
+  standard: 'Prioridad de reclamo estándar',
   off: 'Sin agentes libres en espera: los fichajes son inmediatos',
 }
 
@@ -430,8 +431,15 @@ function starterSlots(playerData: unknown): unknown[] | null {
   return null
 }
 
-function teamLabel(t: { teamName?: string | null; ownerName?: string | null }, language = 'en'): string {
-  return t.teamName?.trim() || t.ownerName?.trim() || (language === 'es' ? 'Equipo sin nombre' : 'Unnamed team')
+/**
+ * One naming rule for the whole hub, shared with the abandoned-teams list: the balance chart used
+ * to print an importer's literal "Unknown" three times over for three open slots.
+ */
+function teamLabel(
+  t: { teamName?: string | null; ownerName?: string | null; externalId?: string | null },
+  language = 'en',
+): string {
+  return teamDisplayName(t, language)
 }
 
 /** First regular-season NFL kickoff per week. SportsGame holds up to 4 rows a fixture; min() is safe. */
@@ -612,7 +620,7 @@ export async function getCommissionerHub(input: {
       .catch(() => []),
     // Seven queries (commissionerWaivers.ts), for a panel a locked viewer is not shown.
     depthOpen
-      ? getCommissionerWaiverOversight({ leagueId, platform, role, now }).catch(
+      ? getCommissionerWaiverOversight({ leagueId, platform, role, now, language }).catch(
           (): WaiverOversight => ({
             available: false,
             reason: es
