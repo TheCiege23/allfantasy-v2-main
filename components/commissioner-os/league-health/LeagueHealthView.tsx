@@ -11,6 +11,9 @@ import type { CommissionerRecommendationContract } from '@/lib/commissioner-ui/c
 import type { LeagueHealthDetail, LeagueHealthRisk, LeagueHealthEvidencePoint } from '@/lib/commissioner-ui/league-health/decision-os-client'
 import { ShieldCheck } from 'lucide-react'
 import { allClearCopy } from '@/lib/commissioner-ui/allClear'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { cardsCopy, cosLoaderText, severityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
+import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 
 export interface LeagueHealthViewProps {
   detail: LeagueHealthDetail
@@ -32,15 +35,29 @@ export interface LeagueHealthViewProps {
  * League Health owns all League Health intelligence — this component
  * renders it, it never computes it. Every value arrives already computed
  * as props from the League Health Decision OS client.
+ *
+ * Spanish: the screen's own words through `cardsCopy`. Risks, evidence, the participation legend and
+ * the all-clear sentences are loader output (`league-health/decision-os-client`, `allClear.ts`,
+ * `deriveChartSeries.ts` — each shared with another screen), so they are built in English exactly as
+ * before and translated at render, whole, through `cosLoaderText`.
  */
 export function LeagueHealthView({ detail, risks, evidence, recommendations, dataMode, detailAvailable = true, risksRead = true, recommendationsRead = true }: LeagueHealthViewProps) {
   const scoreStyle = getSeverityStyle(detail.tier)
+  const { language } = useOptionalLanguage()
+  const ui = (english: string) => cardsCopy(english, language)
+  const loader = (text: string) => cosLoaderText(text, language)
+  const severity = (tier: SeverityTier) => severityLabelText(tier, SEVERITY_LABELS[tier], language)
+  /** An all-clear line is either the title/description this view handed in, or a sentence allClear.ts built. */
+  const allClear = (copy: { title: string; description: string }) => ({
+    title: ui(copy.title) === copy.title ? loader(copy.title) : ui(copy.title),
+    description: ui(copy.description) === copy.description ? loader(copy.description) : ui(copy.description),
+  })
   const healthTier = detailAvailable ? detail.tier : null
-  const noRisks = allClearCopy({ emptyTitle: 'No active risks.', healthyDescription: 'The league is in good shape.', listName: 'risks', listRead: risksRead, healthTier })
-  const noRecommendations = allClearCopy({ emptyTitle: 'No open recommendations.', healthyDescription: 'The league is in good shape.', listName: 'recommendations', listRead: recommendationsRead, healthTier })
+  const noRisks = allClear(allClearCopy({ emptyTitle: 'No active risks.', healthyDescription: 'The league is in good shape.', listName: 'risks', listRead: risksRead, healthTier }))
+  const noRecommendations = allClear(allClearCopy({ emptyTitle: 'No open recommendations.', healthyDescription: 'The league is in good shape.', listName: 'recommendations', listRead: recommendationsRead, healthTier }))
   // Only worth a column if at least one risk carries it — see the header comment below.
   const showRiskAge = risks.some((risk) => risk.ageInDays != null)
-  const participation = participationSlices(detail.participation)
+  const participation = participationSlices(detail.participation).map((slice) => ({ ...slice, label: loader(slice.label) }))
 
   return (
     <div>
@@ -53,13 +70,13 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
           style={{ borderColor: scoreStyle.border, background: 'var(--panel)' }}
         >
           <span className="text-xs" style={{ color: 'var(--muted)' }}>
-            League Health Score
+            {ui('League Health Score')}
           </span>
           <span className="text-metric font-bold" style={{ color: scoreStyle.text, fontSize: 'var(--text-display)' }}>
             {detail.score}
           </span>
           <span className="text-xs font-semibold" style={{ color: scoreStyle.text }}>
-            {SEVERITY_LABELS[detail.tier]}
+            {severity(detail.tier)}
           </span>
         </div>
 
@@ -70,19 +87,19 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
           * replaces it is the league's own narrative evidence, which is real and is the closest
           * honest answer to "why is the score what it is".
           */}
-        <InfoCard title="What drives this score">
+        <InfoCard title={ui('What drives this score')}>
           {evidence.length === 0 ? (
             <p className="text-xs" style={{ color: 'var(--muted)' }}>
-              No narrative signals were available for this league.
+              {ui('No narrative signals were available for this league.')}
             </p>
           ) : (
             <ul className="space-y-2">
               {evidence.map((point) => (
                 <li key={point.label}>
                   <span className="block text-xs font-semibold" style={{ color: 'var(--text)' }}>
-                    {point.label}
+                    {loader(point.label)}
                   </span>
-                  <span className="text-xs">{point.detail}</span>
+                  <span className="text-xs">{loader(point.detail)}</span>
                 </li>
               ))}
             </ul>
@@ -98,12 +115,13 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
         * league's team count.
         */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="Engagement score" value={String(detail.score)} />
-        <KpiCard label="Retention risk" value={SEVERITY_LABELS[detail.retentionRisk]} severity={detail.retentionRisk} />
-        <KpiCard label="Commissioner load" value={SEVERITY_LABELS[detail.commissionerWorkload]} severity={detail.commissionerWorkload} />
+        <KpiCard label={ui('Engagement score')} value={String(detail.score)} />
+        <KpiCard label={ui('Retention risk')} value={severity(detail.retentionRisk)} severity={detail.retentionRisk} />
+        {/* Same words as the loader's risk category, so they come from the one place that holds them. */}
+        <KpiCard label={loader('Commissioner load')} value={severity(detail.commissionerWorkload)} severity={detail.commissionerWorkload} />
         <KpiCard
-          label="Managers active in window"
-          value={`${detail.participation.activeManagers} of ${detail.participation.totalManagers}`}
+          label={ui('Managers active in window')}
+          value={ui(`${detail.participation.activeManagers} of ${detail.participation.totalManagers}`)}
         />
       </div>
 
@@ -112,7 +130,7 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
           {/* Risk table */}
           <div>
             <h2 className="mb-2 text-sm font-semibold" style={{ color: 'var(--text)' }}>
-              Risk Analysis
+              {ui('Risk Analysis')}
             </h2>
             {risks.length === 0 ? (
               <EmptyState icon={ShieldCheck} title={noRisks.title} description={noRisks.description} />
@@ -120,15 +138,15 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Risk</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Severity</TableHead>
+                    <TableHead>{ui('Risk')}</TableHead>
+                    <TableHead>{ui('Category')}</TableHead>
+                    <TableHead>{ui('Severity')}</TableHead>
                     {/*
                       * Rendered only when something actually tracks it. Risks are recomputed from the
                       * current window on every request, so there is no first-seen timestamp to age
                       * from — a permanent "0d" column would read as "found today, every day".
                       */}
-                    {showRiskAge ? <TableHead>Age</TableHead> : null}
+                    {showRiskAge ? <TableHead>{ui('Age')}</TableHead> : null}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -136,12 +154,12 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
                     const style = getSeverityStyle(risk.severity)
                     return (
                       <TableRow key={risk.id}>
-                        <TableCell>{risk.description}</TableCell>
-                        <TableCell>{risk.category}</TableCell>
+                        <TableCell>{loader(risk.description)}</TableCell>
+                        <TableCell>{loader(risk.category)}</TableCell>
                         <TableCell>
-                          <span style={{ color: style.text }}>{SEVERITY_LABELS[risk.severity]}</span>
+                          <span style={{ color: style.text }}>{severity(risk.severity)}</span>
                         </TableCell>
-                        {showRiskAge ? <TableCell>{risk.ageInDays == null ? '—' : `${risk.ageInDays}d`}</TableCell> : null}
+                        {showRiskAge ? <TableCell>{risk.ageInDays == null ? '—' : ui(`${risk.ageInDays}d`)}</TableCell> : null}
                       </TableRow>
                     )
                   })}
@@ -153,7 +171,7 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
           {/* Recommendations */}
           <div>
             <h2 className="mb-2 text-sm font-semibold" style={{ color: 'var(--text)' }}>
-              Recommendations
+              {ui('Recommendations')}
             </h2>
             {recommendations.length === 0 ? (
               <EmptyState title={noRecommendations.title} description={noRecommendations.description} />
@@ -191,26 +209,27 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
             * same reason the KPI labels above say "in window".
             */}
           {participation.length > 0 ? (
-            <InfoCard title="Manager participation">
+            <InfoCard title={ui('Manager participation')}>
               <ActivityMixDonut
                 slices={participation}
                 height={200}
-                ariaLabel={`${detail.participation.activeManagers} of ${detail.participation.totalManagers} managers seen active in the intelligence window`}
+                ariaLabel={ui(`${detail.participation.activeManagers} of ${detail.participation.totalManagers} managers seen active in the intelligence window`)}
               />
             </InfoCard>
           ) : null}
 
-          <InfoCard title="Data quality">
+          <InfoCard title={ui('Data quality')}>
             <div className="space-y-2">
               <div className="flex items-baseline justify-between">
-                <span>Inputs available</span>
+                <span>{ui('Inputs available')}</span>
                 <span className="text-metric font-semibold" style={{ color: 'var(--text)' }}>
                   {detail.completeness}%
                 </span>
               </div>
               <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                How much of what the intelligence pipeline wanted for this league it actually had. A
-                property of the inputs, not a confidence rating for any single finding above.
+                {ui(
+                  'How much of what the intelligence pipeline wanted for this league it actually had. A property of the inputs, not a confidence rating for any single finding above.',
+                )}
               </p>
             </div>
           </InfoCard>
