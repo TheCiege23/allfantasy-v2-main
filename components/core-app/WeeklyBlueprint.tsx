@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { COMMS_OPEN_EVENT, type CommsOpenDetail } from './comms/commsEvents'
-import { weeklyBrief, weeklyActionText, type WeeklyBlueprint as Blueprint } from '@/lib/core-app/weeklyBlueprint'
+import { weeklyBrief, weeklyActionText, weeklyActionReason, weeklyActionPrompt, type WeeklyBlueprint as Blueprint, type WeeklyAction } from '@/lib/core-app/weeklyBlueprint'
 import type { WeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import '@/components/core-app/af-week-blueprint.css'
 import { WeeklySharing } from './WeeklySharing'
@@ -17,6 +17,7 @@ export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: Weekly
     const detail: CommsOpenDetail = { tab: 'chimmy', prefill: `${brief}\n${es ? 'Explica los riesgos y las opciones de esta semana. Verifica las reglas y los plazos; no supongas datos que falten.' : 'Explain this week’s risks and options. Verify the rules and deadlines; do not assume missing data.'}`, ...(data.focusLeagueId ? { leagueId: data.focusLeagueId } : {}) }
     window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, { detail }))
   }
+  const askAction = (action: WeeklyAction) => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT, {detail:{tab:'chimmy',leagueId:action.leagueId,prefill:weeklyActionPrompt(action,es)} satisfies CommsOpenDetail}))
   async function copyBrief() { try { await navigator.clipboard.writeText(brief); setCopyState('copied') } catch { setCopyState('manual') } }
   return <section className="af-wbp" aria-label={es ? 'Tu plan semanal' : 'Your weekly blueprint'}>
     <header><p className="af-label">{es ? 'AllFantasy · Tu plan' : 'AllFantasy · Your blueprint'}</p>
@@ -27,9 +28,13 @@ export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: Weekly
       {copyState === 'manual' ? <textarea aria-label={es ? 'Resumen para copiar' : 'Brief to copy'} readOnly value={brief} onFocus={e => e.target.select()} /> : null}
     </header>
     <div className="af-wbp-grid"><section><h3>{es ? 'Tus próximas prioridades' : 'Your next priorities'}</h3>
+      <p>{es ? 'Empieza por una decisión. Abre su liga o compara las opciones con Chimmy.' : 'Start with one decision. Open its league or compare options with Chimmy.'}</p>
       {data.actions.length ? <ol className="af-wbp-actions">{data.actions.map(a => <li key={a.id}>
+        <span className="af-wbp-action-tag">{a.kind === 'monitor' ? es ? 'Vigilar' : 'Watchlist' : a.kind === 'sync' ? es ? 'Datos pendientes' : 'Data check' : a.kind === 'lineup' ? es ? 'Revisar alineación' : 'Lineup review' : es ? 'Planificar' : 'Plan ahead'}</span>
         <Link href={a.href}><strong>{weeklyActionText(a, es)}</strong><span>{a.leagueName}</span></Link>
+        <p>{weeklyActionReason(a,es)}</p>
         {a.gameAt ? <small>{es ? 'Próximo partido: ' : 'Next game: '}<LocalGameTime iso={a.gameAt} language={language} />. {es ? 'Confirma el bloqueo en tu liga.' : 'Confirm your league’s lineup lock.'}</small> : <small>{es ? 'Comprueba las reglas y el horario de tu liga.' : 'Check your league’s rules and timing.'}</small>}
+        <button type="button" onClick={()=>askAction(a)} aria-label={es ? `Comparar opciones con Chimmy: ${a.leagueName}` : `Compare options with Chimmy: ${a.leagueName}`}>{es ? 'Comparar con Chimmy' : 'Compare with Chimmy'}</button>
       </li>)}</ol> : <p>{es ? 'Conecta una liga para preparar tu semana.' : 'Connect a league to build your week.'}</p>}
       {data.actionCount > 3 ? <p>{es ? 'Estas son tus tres primeras prioridades.' : 'These are your first three priorities.'}</p> : null}
       {data.lineupReadFailed ? <p role="status">{es ? 'No pudimos comprobar las alineaciones. Revisa tu equipo antes de decidir.' : 'Lineup checks are unavailable. Review your team before deciding.'}</p> : null}

@@ -21,7 +21,7 @@ describe('verified weekly priorities', () => {
     expect(aligned.actions.some(a => a.kind === 'sync')).toBe(false)
   })
   it('excludes locked and automatic lineup actions and keeps at most three priorities', () => {
-    const out=build([row('locked',{locked:true}),row('auto',{bestBall:true}),row('A'),row('B'),row('C'),row('D')])
+    const out=build([row('locked',{locked:true}),row('auto',{bestBall:true}),row('automatic',{automatic:true}),row('A'),row('B'),row('C'),row('D')])
     expect(out.actions.map(a=>a.leagueId)).toEqual(['A','B','C'])
     expect(out.actionCount).toBe(4)
   })
@@ -34,6 +34,7 @@ describe('verified weekly priorities', () => {
     const out=build([row('late',{lockAt:'2026-10-06T12:00:00Z'}),row('soon',{lockAt:'2026-10-05T12:00:00Z'})])
     expect(out.actions[0].leagueId).toBe('soon')
     expect(out.actions[0].gameAt).toBe('2026-10-05T12:00:00.000Z')
+    expect(out.actions[0]).toMatchObject({season:2026,period:4})
   })
   it('copies only known facts in English and Spanish', () => {
     const out=build([row('A')]); out.matchup={opponent:'Sam',period:4,leagueName:'A'}; out.playoff={probability:3.5,leagueName:'A'}
