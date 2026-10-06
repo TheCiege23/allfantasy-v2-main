@@ -111,7 +111,7 @@ const ES: Record<string, string> = {
     'Cualquiera con el enlace puede ver la clasificación de esta liga sin una cuenta, y los buscadores pueden indexarla. Se publican los nombres de los equipos, no los de los mánagers.',
   'Off. Turning this on gives this league a public page at': 'Desactivada. Al activarla, esta liga tendrá una página pública en',
   '— readable without an account and indexable by search engines. It publishes the league name, team names, records and points. It does not publish manager names.':
-    ': visible sin una cuenta e indexable por los buscadores. Publica el nombre de la liga, los nombres de los equipos, los récords y los puntos. No publica los nombres de los mánagers.',
+    '— visible sin una cuenta e indexable por los buscadores. Publica el nombre de la liga, los nombres de los equipos, los récords y los puntos. No publica los nombres de los mánagers.',
   'Making private…': 'Haciéndola privada…',
   'Make private': 'Hacer privada',
   'Publish standings': 'Publicar la clasificación',

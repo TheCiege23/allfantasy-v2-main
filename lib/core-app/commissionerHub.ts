@@ -612,7 +612,7 @@ export async function getCommissionerHub(input: {
       .catch(() => []),
     // Seven queries (commissionerWaivers.ts), for a panel a locked viewer is not shown.
     depthOpen
-      ? getCommissionerWaiverOversight({ leagueId, platform, role, now }).catch(
+      ? getCommissionerWaiverOversight({ leagueId, platform, role, now, language }).catch(
           (): WaiverOversight => ({
             available: false,
             reason: es
