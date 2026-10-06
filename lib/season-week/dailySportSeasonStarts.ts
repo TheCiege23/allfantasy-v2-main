@@ -56,10 +56,12 @@ const REGULAR_SEASON_START_UTC: Readonly<Record<string, Readonly<Record<number, 
     2026: '2026-03-25T00:00:00.000Z',
     2027: '2027-03-24T00:00:00.000Z',
   },
-  // The first 2026-27 NCAAB game in SportsGame (espn_live; measured 2026-09-24). Opening day is
-  // the first Monday of November. Weeks run Monday-to-Sunday from here.
+  // The 2026-27 regular season opens in Rome on November 1 (Notre Dame v Villanova),
+  // one day before the domestic slate. The official announcement and current RI cache agree.
+  // Evidence: docs/readiness/multisport-blockers-2026-10-05.md. Shared seven-day windows
+  // must include that opener; starting November 2 silently excluded it from scoring.
   NCAAB: {
-    2026: '2026-11-02T00:00:00.000Z',
+    2026: '2026-11-01T00:00:00.000Z',
   },
   // SOCCER (EPL + La Liga + Serie A, one pool): the Friday of the first weekend — La Liga opened Sat
   // 15 Aug 2026, the Premier League Fri 21 Aug, Serie A Sat 22 Aug (Rolling Insights season schedules,
