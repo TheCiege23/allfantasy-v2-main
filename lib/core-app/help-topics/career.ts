@@ -246,7 +246,7 @@ export const CAREER_TOPICS = {
     },
     es: {
       title: 'Puja sugerida',
-      body: 'La puja es su valor de mercado en el formato de esa liga medido frente a su presupuesto de FAAB, con un tope del 60% del presupuesto: el mismo número que usa Waiver Intel. La mediana y el p75 son las pujas ganadoras pasadas de esa liga: la mitad fue igual o menor que la mediana, y tres de cada cuatro igual o menor que el p75. Se muestran para comparar, no entran en la puja.',
+      body: 'La puja es su valor de mercado en el formato de esa liga medido frente a su presupuesto de FAAB, con un tope del 60% del presupuesto: el mismo número que usa Inteligencia de agentes libres. La mediana y el p75 son las pujas ganadoras pasadas de esa liga: la mitad fue igual o menor que la mediana, y tres de cada cuatro igual o menor que el p75. Se muestran para comparar, no entran en la puja.',
     },
   },
   nextGameMarket: {

@@ -252,7 +252,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Tu semana',
-      body: 'Una semana de fantasy en cinco pasos, según el día en la hora del Este de EE. UU.: resultados el martes, waivers el miércoles, alineaciones de jueves a sábado, día de partido el domingo y el resumen el lunes. La marca de verificación solo sale de los datos: resultados cuando tu última semana jugada tiene marcadores, waivers cuando hiciste una incorporación esta semana en una liga de Sleeper, y alineaciones cuando ninguno de tus titulares está descartado. El día de partido y el resumen nunca la llevan.',
+      body: 'Una semana de fantasy en cinco pasos, según el día en la hora del Este de EE. UU.: resultados el martes, procesamiento de reclamos el miércoles, alineaciones de jueves a sábado, día de partido el domingo y el resumen el lunes. La marca de verificación solo sale de los datos: resultados cuando tu última semana jugada tiene marcadores, agentes libres cuando hiciste una incorporación esta semana en una liga de Sleeper, y alineaciones cuando ninguno de tus titulares está descartado. El día de partido y el resumen nunca la llevan.',
     },
   },
   outstandingIssues: {
@@ -312,7 +312,7 @@ export const HOME_TOPICS = {
     },
     es: {
       title: 'Resultados de tus decisiones',
-      body: 'Cómo salieron tus movimientos en ligas de Sleeper, en puntos según la puntuación de tu liga. Intercambios: lo que recibiste menos lo que diste, contando solo mientras cada jugador siguió en tu plantilla. Incorporaciones de waivers: lo que anotó en tu plantilla después de incorporarlo. Alineaciones: la mejor alineación válida que podías poner menos lo que anotaron tus titulares, en las tres últimas semanas terminadas. Las recomendaciones de titular o banquillo de AutoCoach y Chimmy se comparan con lo que anotaron ambos jugadores. Un intercambio o una incorporación de menos de tres semanas espera hasta tener un resultado.',
+      body: 'Cómo salieron tus movimientos en ligas de Sleeper, en puntos según la puntuación de tu liga. Intercambios: lo que recibiste menos lo que diste, contando solo mientras cada jugador siguió en tu plantilla. Incorporaciones de agentes libres: lo que anotó en tu plantilla después de incorporarlo. Alineaciones: la mejor alineación válida que podías poner menos lo que anotaron tus titulares, en las tres últimas semanas terminadas. Las recomendaciones de titular o banquillo de AutoCoach y Chimmy se comparan con lo que anotaron ambos jugadores. Un intercambio o una incorporación de menos de tres semanas espera hasta tener un resultado.',
     },
   },
 } satisfies Record<string, HelpTopic>

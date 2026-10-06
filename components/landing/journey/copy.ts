@@ -320,9 +320,9 @@ export const LANDING_COPY = {
         ],
       },
       waiverWednesday: {
-        eyebrow: 'Miércoles de Waiver',
+        eyebrow: 'Miércoles de reclamos',
         title: 'El mejor equipo\nnunca está terminado.',
-        subtitle: 'Reinicios de prioridad, presupuestos FAAB y un waiver wire que premia a los managers que prestan atención.',
+        subtitle: 'Reinicios de prioridad, presupuestos FAAB y una lista de agentes libres que premia a los managers que prestan atención.',
         priorityLabel: 'Prioridad de reclamo',
         faabLabel: 'Presupuesto FAAB restante',
         mockClaims: [

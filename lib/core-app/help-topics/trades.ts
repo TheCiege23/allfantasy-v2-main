@@ -87,7 +87,7 @@ export const TRADES_TOPICS = {
     },
     es: {
       title: 'Encaje en tu plantilla',
-      body: 'El mismo intercambio, revalorado para tu plantilla. Un jugador que cubre un puesto titular que quedaría vacío vale más para ti, sobre todo si no hay nadie en esa posición en waivers; enviar a un titular que el intercambio no reemplaza cuesta más, y enviar profundidad sobrante cuesta un poco menos. Es un segundo cálculo junto a la calificación: nunca cambia la letra y no es una probabilidad de ganar.',
+      body: 'El mismo intercambio, revalorado para tu plantilla. Un jugador que cubre un puesto titular que quedaría vacío vale más para ti, sobre todo si no hay nadie en esa posición entre los agentes libres; enviar a un titular que el intercambio no reemplaza cuesta más, y enviar profundidad sobrante cuesta un poco menos. Es un segundo cálculo junto a la calificación: nunca cambia la letra y no es una probabilidad de ganar.',
     },
   },
   tradeAfThisWeek: {

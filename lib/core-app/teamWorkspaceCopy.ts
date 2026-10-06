@@ -33,7 +33,7 @@ const ES: Record<string,string> = {
   "No upcoming bye evidence available for this roster.": "No hay datos de próximos descansos para esta plantilla.",
   "Roster planning": "Planificación de plantilla",
   "Schedule and deadlines": "Calendario y plazos",
-  "Waiver claims and roster impact": "Solicitudes de waivers y efecto en la plantilla",
+  "Waiver claims and roster impact": "Reclamos y efecto en la plantilla",
   "Pending trades": "Intercambios pendientes",
   "Future planning does not change your current lineup.": "La planificación futura no cambia tu alineación actual.",
   "Injury contingency preview": "Vista previa de sustitutos por lesión",
@@ -96,7 +96,7 @@ const ES: Record<string,string> = {
   "No readable scheduled opponent starters available.": "No hay titulares de rivales programados con datos legibles.",
   "Weekly planning": "Planificación semanal",
   "Weekly plan": "Plan semanal",
-  "Waiver deadlines": "Plazos de waivers",
+  "Waiver deadlines": "Plazos de reclamos",
   "Roster or starting lineup unavailable; not checked.": "Plantilla o alineación titular no disponible; sin revisar.",
   "Prior-season roster; current-week checks do not apply.": "Plantilla de una temporada anterior; no se aplican las revisiones de esta semana.",
   "Time unavailable": "Hora no disponible"
