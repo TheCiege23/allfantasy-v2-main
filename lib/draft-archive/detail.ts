@@ -298,7 +298,9 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
         catch { coverage.push('Historical result observations are temporarily unavailable.'); }
     }
     const canRefreshResults = choice.source === 'imported' && choice.sport === 'NFL' && platform.toLowerCase() === 'sleeper' && await isElevatedCommissioner(leagueId,userId);
-    const replay = buildReplay(nativeSnap.analysisBasis,context,startedAt,picks,existingRoster);
+    const archivedSession=object(nativeSnap.session);
+    const specializedPool=object(archivedSession.devyConfig).enabled===true||object(archivedSession.c2cConfig).enabled===true||Object.keys(object(archivedSession.dispersalPoolConfig)).length>0;
+    const replay = buildReplay(nativeSnap.analysisBasis,context,startedAt,picks,specializedPool?null:existingRoster);
     const components = decisionComponents(analysisReport,replay);
     let calibration:CalibrationModel|null=null;
     let lineage:LineageReport={state:'unavailable',lineages:[],pending:[],reason:'Trade lineage is temporarily unavailable.',observedAt:new Date().toISOString()};

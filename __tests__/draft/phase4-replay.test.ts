@@ -106,3 +106,8 @@ describe('frozen restricted membership',()=>{
     expect(buildReplay({...eligible,eligibility:{...eligible.eligibility,playerIds:['w']}},rookie,start,picks,[]).state).toBe('unavailable');
   });
 });
+
+it('does not offer ordinary-pool replay for development or salary-contract formats',()=>{
+  expect(buildReplay(basis,{...context,leagueType:'devy'},start,picks,[]).state).toBe('unavailable');
+  expect(buildReplay(basis,{...context,leagueType:'salary_cap'},start,picks,[]).state).toBe('unavailable');
+});
