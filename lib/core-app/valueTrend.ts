@@ -45,7 +45,17 @@ export type BookTrend = {
   yours: number
 }
 
-export type TrendNudge = { kind: 'sell-high' | 'buy-low' | 'check-cause'; text: string; bookLabel: string }
+export type TrendNudge = {
+  kind: 'sell-high' | 'buy-low' | 'check-cause'
+  /** The English sentence, as written below. */
+  text: string
+  bookLabel: string
+  /**
+   * The values `text` was built from, so the card can say it in the reader's language
+   * (finderTradeValueCopy.ts `nudgeText`). Optional: a nudge built before it existed renders its English.
+   */
+  parts?: { up: boolean; pct: number; tenths: number; yours: number }
+}
 
 export type ValueTrend = {
   books: BookTrend[]
@@ -109,8 +119,9 @@ export function nudgeFor(books: readonly BookTrend[]): TrendNudge | null {
   const tenths = Math.floor(b.moverShare * 10)
   const up = b.change7.pct > 0
   const move = `${up ? 'Up' : 'Down'} ${pct(b.change7.pct)} this week — a bigger ${up ? 'jump' : 'drop'} than ${tenths} in 10 players on this chart.`
-  if (up && b.yours > 0) return { kind: 'sell-high', bookLabel: b.label, text: `${move} You hold him in ${leaguesWord(b.yours)}: a sell-high window, if you would move him.` }
-  if (!up && b.yours > 0) return { kind: 'check-cause', bookLabel: b.label, text: `${move} You hold him in ${leaguesWord(b.yours)}: check the cause before selling into the drop.` }
-  if (!up && b.leagues > 0) return { kind: 'buy-low', bookLabel: b.label, text: `${move} He isn’t yours in these leagues: a buy-low window, if the cause is temporary.` }
+  const parts = { up, pct: Math.round(Math.abs(b.change7.pct) * 100), tenths, yours: b.yours }
+  if (up && b.yours > 0) return { kind: 'sell-high', bookLabel: b.label, parts, text: `${move} You hold him in ${leaguesWord(b.yours)}: a sell-high window, if you would move him.` }
+  if (!up && b.yours > 0) return { kind: 'check-cause', bookLabel: b.label, parts, text: `${move} You hold him in ${leaguesWord(b.yours)}: check the cause before selling into the drop.` }
+  if (!up && b.leagues > 0) return { kind: 'buy-low', bookLabel: b.label, parts, text: `${move} He isn’t yours in these leagues: a buy-low window, if the cause is temporary.` }
   return null
 }
