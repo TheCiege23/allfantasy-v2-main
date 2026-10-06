@@ -6,9 +6,11 @@ import { Download, Link as LinkIcon } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { downloadReportCsv, downloadReportPdf } from '@/lib/commissioner-ui/reports/exportUtils'
-import { REPORT_STATUS_LABELS, REPORT_FORMAT_LABELS } from './reportsLabels'
+import { REPORT_FORMAT_LABELS } from './reportsLabels'
 import type { GeneratedReport } from '@/lib/commissioner-ui/reports/decision-os-client'
 import { dateTime } from '@/components/commissioner-os/primitives/pinnedTime'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { cosLinkText, reportsCopy, reportText } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
 export interface ReportDetailDialogProps {
   report: GeneratedReport | null
@@ -27,6 +29,8 @@ export interface ReportDetailDialogProps {
  */
 export function ReportDetailDialog({ report, onOpenChange, onToggleShare }: ReportDetailDialogProps) {
   const [copied, setCopied] = useState(false)
+  const { language } = useOptionalLanguage()
+  const c = reportsCopy(language)
 
   async function handleCopyLink(link: string) {
     await navigator.clipboard.writeText(link)
@@ -45,36 +49,36 @@ export function ReportDetailDialog({ report, onOpenChange, onToggleShare }: Repo
                   className="rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
                   style={{ background: 'var(--panel2)', color: 'var(--muted)', border: '1px solid var(--border)' }}
                 >
-                  {REPORT_STATUS_LABELS[report.status]}
+                  {c.status[report.status]}
                 </span>
                 <span className="text-xs" style={{ color: 'var(--muted2)' }}>
                   {REPORT_FORMAT_LABELS[report.format]} · {report.sizeLabel}
                 </span>
               </div>
-              <DialogTitle>{report.templateName}</DialogTitle>
-              <DialogDescription>{report.summary}</DialogDescription>
+              <DialogTitle>{reportText(report.templateName, language)}</DialogTitle>
+              <DialogDescription>{reportText(report.summary, language)}</DialogDescription>
             </DialogHeader>
 
             {report.status === 'failed' && report.failureReason && (
               <p className="text-sm" role="alert" style={{ color: 'var(--severity-critical-text)' }}>
-                {report.failureReason}
+                {reportText(report.failureReason, language)}
               </p>
             )}
 
             <p className="text-xs" style={{ color: 'var(--muted2)' }}>
-              Generated {dateTime(report.generatedAt)} by {report.generatedByLabel}
+              {c.generatedBy(dateTime(report.generatedAt, language), reportText(report.generatedByLabel, language))}
             </p>
 
             {report.relatedLinks.length > 0 && (
               <div>
                 <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted2)' }}>
-                  Related evidence
+                  {c.relatedEvidence}
                 </h3>
                 <ul className="space-y-1">
                   {report.relatedLinks.map((link) => (
                     <li key={link.href + link.label}>
                       <NextLink href={link.href} className="focus-ring link-themed text-sm">
-                        {link.label}
+                        {cosLinkText(link.label, language)}
                       </NextLink>
                     </li>
                   ))}
@@ -92,17 +96,17 @@ export function ReportDetailDialog({ report, onOpenChange, onToggleShare }: Repo
                 )}
                 <DialogFooter className="flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={() => downloadReportPdf(report)}>
-                    <Download size={14} aria-hidden /> Download PDF
+                    <Download size={14} aria-hidden /> {c.downloadPdf}
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => downloadReportCsv(report)}>
-                    <Download size={14} aria-hidden /> Download CSV
+                    <Download size={14} aria-hidden /> {c.downloadCsv}
                   </Button>
                   <Button size="sm" variant="secondary" onClick={() => onToggleShare(report.id)}>
-                    {report.shareStatus === 'shared' ? 'Unshare' : 'Share'}
+                    {report.shareStatus === 'shared' ? c.unshare : c.share}
                   </Button>
                   {report.shareStatus === 'shared' && report.shareLink && (
                     <Button size="sm" variant="ghost" onClick={() => handleCopyLink(report.shareLink!)}>
-                      {copied ? 'Copied!' : 'Copy Link'}
+                      {copied ? c.copied : c.copyLink}
                     </Button>
                   )}
                 </DialogFooter>
@@ -112,7 +116,7 @@ export function ReportDetailDialog({ report, onOpenChange, onToggleShare }: Repo
             {report.status === 'failed' && (
               <DialogFooter>
                 <Button size="sm" variant="outline">
-                  Retry
+                  {c.retry}
                 </Button>
               </DialogFooter>
             )}

@@ -1,7 +1,7 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { CommissionerDepthLocked } from '@/components/commissioner-os/shell/CommissionerDepthLocked'
-import { FreeUntilNote } from '@/components/core-app/CoreDepthLock'
 import { resolveCommissionerOsDepth } from '@/lib/commissioner-ui/commissionerOsDepth'
+import { CommissionerFreeUntilNote } from '@/components/commissioner-os/shell/CommissionerFreeUntilNote'
 import { LeagueAnalyticsView } from '@/components/commissioner-os/analytics/LeagueAnalyticsView'
 import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
 
@@ -14,7 +14,7 @@ export default async function LeagueAnalyticsPage() {
 
   return (
     <CommissionerPageContainer>
-      <FreeUntilNote access={depth} />
+      <CommissionerFreeUntilNote access={depth} />
       <LeagueAnalyticsView snapshot={response.data} dataMode={adapter.mode} errorMessage={response.error?.message} />
     </CommissionerPageContainer>
   )
