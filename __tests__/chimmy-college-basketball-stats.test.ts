@@ -96,7 +96,9 @@ describe('get_player_season_stats — NCAAB is summed from game logs', () => {
 
   it('says these are LAST season before the opener, and that the new one is not stored after it', async () => {
     const before = await buildPlayerSeasonStatsContext({ playerName: 'Cameron Boozer', sport: 'NCAAB', now: BEFORE_OPENER }, seasonDb().db)
-    expect(before.split('\n')[0]).toMatch(/2026-27 NCAAB season has not started \(it opens 2026-11-02\).*LAST season's 2025-26/)
+    expect(before.split('\n')[0]).toMatch(/2026-27 NCAAB season has not started \(it opens 2026-11-01\).*LAST season's 2025-26/)
+    const onOpeningDay = await buildPlayerSeasonStatsContext({ playerName: 'Cameron Boozer', sport: 'NCAAB', now: new Date('2026-11-01T18:00:00Z') }, seasonDb().db)
+    expect(onOpeningDay.split('\n')[0]).toMatch(/NO 2026-27 NCAAB NUMBERS ARE STORED YET/)
     const after = await buildPlayerSeasonStatsContext({ playerName: 'Cameron Boozer', sport: 'NCAAB', now: AFTER_OPENER }, seasonDb().db)
     expect(after.split('\n')[0]).toMatch(/NO 2026-27 NCAAB NUMBERS ARE STORED YET/)
   })
