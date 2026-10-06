@@ -283,7 +283,7 @@ export type RivalryCard = {
     tied: boolean
   } | null
   /** This week's meeting, when they are on your schedule. */
-  thisWeek: { winProbability: number | null; projectedMargin: number | null } | null
+  thisWeek: { winProbability: number | null; projectedMargin: number | null; status?: 'scheduled' | 'live' | 'final' } | null
   /**
    * ⚠ A SINGLE MEETING IS NOT A RIVALRY, and the copy contract forbids calling
    * it one. Surfaces read this flag rather than re-deriving it from `meetings`,
@@ -1539,7 +1539,8 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
     const period = periodsByLeague.get(pair.leagueId)
     const isThisWeek = pair.season === period?.season && pair.week === period?.week
 
-    if (you.finalized !== false && them.finalized !== false && (hasScore(you) || hasScore(them))) {
+    const explicitlyFinal = you.finalized === true && them.finalized === true
+    if (explicitlyFinal || (!isThisWeek && you.finalized !== false && them.finalized !== false && (hasScore(you) || hasScore(them)))) {
       // A completed meeting contributes to the series.
       const margin = you.pointsFor - them.pointsFor
       const won = margin > 0
@@ -1563,16 +1564,17 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
       }
     }
 
-    if (isThisWeek && !hasScore(you) && !hasScore(them)) {
-      // Scheduled but not played — this is the live half of the card.
+    if (isThisWeek) {
+      // A matchup stays on this period's schedule after scoring begins.
+      const status = you.finalized === true && them.finalized === true ? 'final' : hasScore(you) || hasScore(them) ? 'live' : 'scheduled'
       const mineProfile = profiles.get(`${pair.leagueId}:${you.rosterId}`)
       const theirProfile = profiles.get(key)
-      if (mineProfile && theirProfile) {
+      if (status === 'scheduled' && mineProfile && theirProfile) {
         const margin = mineProfile.mu - theirProfile.mu
         const sigma = Math.sqrt(mineProfile.sigma ** 2 + theirProfile.sigma ** 2)
-        acc.thisWeek = { winProbability: normalCdf(margin / sigma), projectedMargin: margin }
+        acc.thisWeek = { winProbability: normalCdf(margin / sigma), projectedMargin: margin, status }
       } else {
-        acc.thisWeek = { winProbability: null, projectedMargin: null }
+        acc.thisWeek = { winProbability: null, projectedMargin: null, status }
       }
     }
   }

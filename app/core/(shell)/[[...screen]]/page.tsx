@@ -1,3 +1,5 @@
+import LeagueSchedule from '@/components/core-app/screens/LeagueSchedule'
+import LeagueMoves from '@/components/core-app/screens/LeagueMoves'
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -217,6 +219,7 @@ import { normalizeToLiveSport } from '@/lib/sport-scope'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
+import { resolveServerRenderPreferences } from '@/lib/preferences/ServerRenderPreferenceResolver'
 import { resolveCorePaywall } from '@/lib/core-app/corePaywall'
 import type { LaunchOfferView } from '@/lib/monetization/foundingMember'
 import { homeLaunchOfferFor } from '@/components/launch/homeLaunchOffer'
@@ -309,6 +312,8 @@ const HOME_RECENT_TRADES_LIMIT = 20
  */
 
 const SCREEN_KEYS: Record<string, CoreNavKey> = {
+  schedule: 'home',
+  moves: 'home',
   '': 'home',
   players: 'players',
   'my-team': 'my-team',
@@ -403,6 +408,8 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
  * more than two tabs are open, which is the normal state for this product.
  */
 const TAB_META: Record<string, { title: string; description: string }> = {
+  schedule: { title: 'Schedule', description: 'League fixtures, provider deadlines, and future planning.' },
+  moves: { title: 'Moves', description: 'Review waivers, trades, and their roster impact.' },
   '': { title: 'Your leagues', description: 'Every league you play, ordered by what needs you first.' },
   players: { title: 'Player Finder', description: 'Search any player and see what they are worth in your leagues.' },
   /*
@@ -1604,6 +1611,7 @@ export default async function AfCorePage({
 
   return (
     <AfCoreShell
+      nativeLeague={!!selectedLeagueId && !!selectedLeaguePlatform && !isImportedPlatform(selectedLeaguePlatform)}
       active={activeKey}
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
@@ -1697,9 +1705,10 @@ export default async function AfCorePage({
       {selectedRailLeague?.hub && selectedLeagueId ? <ConnectedLeagueContext hub={selectedRailLeague.hub} selectedLeagueId={selectedLeagueId} /> : null}
       {selectedLeagueId && selectedLeagueName ? (
         <LeagueTabs
+          commissionerHref={playedLeagues.some(l => l.id === selectedLeagueId && l.isCommissioner) ? `/core/commissioner?league=${encodeURIComponent(selectedLeagueId!)}` : null}
           leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
-          activeKey={activeKey}
+          activeKey={segment === 'schedule' || segment === 'moves' ? segment : activeKey}
           hasScoredWeek={leagueHasScoredWeek}
           tradeSupported={importCoverageSummary.capabilities.trades !== false}
           draftSupported={importCoverageSummary.capabilities.draft !== false}
@@ -3533,6 +3542,16 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   /*
+   * The one-league hub is a SERVER screen, so it cannot read the client language provider; it is
+   * worded here instead. The toggle writes the `af_lang` cookie and refreshes the route, so the
+   * re-render reads the new language. Resolved only when the hub is drawn — no other screen pays
+   * the session and profile read.
+   */
+  const hubLanguage = commissionerHub
+    ? ((await resolveServerRenderPreferences().catch(() => null))?.language ?? 'en')
+    : 'en'
+
+  /*
    * The all-leagues Commissioner Hub — `/core/commissioner` with no league. Matched on
    * `segment` because /core/discord and /core/hubs share the commissioner nav key. The
    * candidates are the leagues the nav badge counts, so the "All leagues" pill and the
@@ -4361,7 +4380,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : leagueHome ? (
         <>
         {chimmyMovesCard}
-        <LeagueHome
+        {segment === 'schedule' ? <LeagueSchedule data={leagueHome} /> : segment === 'moves' ? <LeagueMoves data={leagueHome} /> :         <LeagueHome
           data={leagueHome}
           identityInShell={leagueHeaderShown}
           lineups={homeLineups}
@@ -4390,7 +4409,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           // deadline inside deriveOutstandingIssues, so the head of this list is
           // the row the screen shows.
           issues={issues.filter((i) => i.leagueId === leagueHome.league.id)}
-        />
+        />}
         </>
       ) : segment === 'model-admin' ? (
         /*
@@ -4972,7 +4991,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * role check to bypass because there is no client-side role check.
          */
         commissionerHub ? (
-          <CommissionerHub data={commissionerHub} lineups={hubLineups} />
+          <CommissionerHub data={commissionerHub} lineups={hubLineups} language={hubLanguage} />
         ) : /*
            * ⚠ TWO DIFFERENT FACTS, TWO DIFFERENT RENDERINGS. "A league is
            * selected and we failed to read it" is a read failure on our side.

@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback } from 'react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { hubCopy } from '@/lib/core-app/commissionerHubCopy'
 
 /**
  * Downloads the league's dated events as an .ics file.
@@ -10,6 +12,7 @@ import { useCallback } from 'react'
  * client-side re-derivation of dates.
  */
 export function CalendarExportButton({ ics, leagueName }: { ics: string; leagueName: string }) {
+  const { language } = useOptionalLanguage()
   const download = useCallback(() => {
     const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -25,7 +28,7 @@ export function CalendarExportButton({ ics, leagueName }: { ics: string; leagueN
 
   return (
     <button type="button" className="af-btn af-ch-ics" onClick={download}>
-      Add to calendar (.ics)
+      {hubCopy('Add to calendar (.ics)', language)}
     </button>
   )
 }

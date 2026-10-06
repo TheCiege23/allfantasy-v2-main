@@ -14,6 +14,8 @@
  */
 export const LEAGUE_SCREEN_KEYS: ReadonlySet<string> = new Set([
   'home',
+  'moves',
+  'schedule',
   'my-team',
   'matchup',
   'trades',

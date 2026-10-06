@@ -3381,6 +3381,7 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
   }
 
   let pecrIntent = 'general'
+  let pecrGroundingText = ''
   /** Set inside `plan` when a described trade resolves against this league's rosters. */
   let scenarioForMeta: ReadyChimmyScenario | null = null
   try {
@@ -4037,6 +4038,10 @@ ${describedTradeCtx}`
               ? buildMemoryPromptSection(legacyMemory.value).trim()
               : ''
 
+          // The model receives these authorized server-side facts in pecrContext.
+          // Validate its answer against the same evidence, not only the earlier packet.
+          pecrGroundingText = [legacyEnrichmentContext,legacyMemorySection].filter(Boolean).join('\n\n')
+
           if (legacyMemory.status === 'fulfilled' && legacyMemorySection.length > 0) {
             const memoryItemsUsedCount =
               legacyMemory.value.recentEvents.length +
@@ -4210,10 +4215,11 @@ ${describedTradeCtx}`
       ? `${displayExplanation}\n\nData freshness: ${staleness.warning}`
       : displayExplanation
     const finalAnswer = [displayWithStaleness, pecrOutput.sanitizedActionPlan].filter(Boolean).join('\n\n')
+    const responseGroundingText = [combinedMemorySection,pecrGroundingText].filter(Boolean).join('\n\n')
 
     // Anti-hallucination check — deterministic scan before the response reaches the client.
     const hallucinationCheck = checkChimmyHallucination(finalAnswer, {
-      groundingText: combinedMemorySection,
+      groundingText: responseGroundingText,
       hasLeagueContext: Boolean(leagueId),
       userMessage: message,
     })
@@ -4260,7 +4266,7 @@ ${describedTradeCtx}`
     const builtInRuleCheck = checkBehaviorRules(modeAdjustedAnswer, {
       input: message,
       featureName: 'chimmy',
-      contextBlock: combinedMemorySection,
+      contextBlock: responseGroundingText,
     })
     const customViolations = checkCustomRules(modeAdjustedAnswer, customRules)
     const allRuleViolations = [...builtInRuleCheck.violations, ...customViolations]
@@ -4362,7 +4368,7 @@ ${describedTradeCtx}`
      * returned; a non-answer is refunded here, before the response or the history row is written,
      * so the cost the drawer shows is the cost the user bore.
      */
-    const delivery = judgeChimmyDelivery({ modelOutputs: pecrOutput.modelOutputs, answer: modeAdjustedAnswer })
+    const delivery = judgeChimmyDelivery({ modelOutputs: pecrOutput.modelOutputs, answer: modeAdjustedAnswer, rejected: hallucinationCheck.action === 'replace' })
     let chargeRefund: { balanceAfter: number; reason: string } | null = null
     if (!delivery.delivered && spendLedger?.id) {
       const refund = await spendService

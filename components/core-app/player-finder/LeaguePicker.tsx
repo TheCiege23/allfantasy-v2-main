@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react'
 
 import { distinctLeagueLabels } from '@/lib/core-app/leagueNameCollision'
 import { platformLabel } from '@/lib/core-app/platformLinks'
+import { pickerCopy } from '@/lib/core-app/finderSearchCopy'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * "Leagues: All 65 ▾" — pick which leagues the Player Finder reads (Phase 2, 2026-09-27).
@@ -13,6 +15,8 @@ import { platformLabel } from '@/lib/core-app/platformLinks'
  * starters, your shares, the leagues on a player's card — reads the picked set.
  *
  * A plain reload rather than the app router: this also renders in tests with no router mounted.
+ *
+ * Spanish (2026-10-05): the words are built at render from `useOptionalLanguage` (finderSearchCopy.ts).
  */
 
 type PickLeague = { id: string; name: string; platform: string | null }
@@ -25,6 +29,8 @@ export function LeaguePicker({
   /** The account's saved pick, already intersected with `leagues`; null = all. */
   saved: string[] | null
 }) {
+  const { language } = useOptionalLanguage()
+  const t = pickerCopy(language)
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('')
   const [chosen, setChosen] = useState<Set<string>>(() => new Set(saved ?? leagues.map((l) => l.id)))
@@ -72,26 +78,26 @@ export function LeaguePicker({
   return (
     <div className="af-pf-picker" data-open={open ? 'true' : undefined}>
       <button type="button" className="af-pf-picker-btn" aria-expanded={open} aria-controls="af-pf-picker-panel" onClick={() => setOpen((o) => !o)}>
-        <span className="af-label">Leagues</span>
-        <span className="af-num">{current === total ? `All ${total}` : `${current} of ${total}`}</span>
+        <span className="af-label">{t.leagues}</span>
+        <span className="af-num">{t.count(current, total)}</span>
         <span aria-hidden>▾</span>
       </button>
       {open ? (
-        <div className="af-pf-picker-panel" id="af-pf-picker-panel" role="group" aria-label="Pick the leagues the Player Finder reads">
+        <div className="af-pf-picker-panel" id="af-pf-picker-panel" role="group" aria-label={t.panelLabel}>
           <div className="af-pf-picker-tools">
             <input
               type="search"
               className="af-pf-picker-filter"
-              placeholder="Filter leagues"
-              aria-label="Filter leagues"
+              placeholder={t.filter}
+              aria-label={t.filter}
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             />
             <button type="button" className="af-pf-picker-mini" onClick={() => setChosen(new Set(leagues.map((l) => l.id)))}>
-              All
+              {t.all}
             </button>
             <button type="button" className="af-pf-picker-mini" onClick={() => setChosen(new Set())}>
-              None
+              {t.none}
             </button>
           </div>
           <ul className="af-pf-picker-list">
@@ -106,17 +112,17 @@ export function LeaguePicker({
             ))}
           </ul>
           <div className="af-pf-picker-foot">
-            <span className="af-num">{chosen.size === 0 || chosen.size === total ? `All ${total}` : `${chosen.size} of ${total}`} selected</span>
+            <span className="af-num">{t.selected(chosen.size === 0 ? total : chosen.size, total)}</span>
             <button type="button" className="af-pf-picker-save" onClick={save} disabled={state === 'saving'}>
-              {state === 'saving' ? 'Saving…' : 'Save'}
+              {state === 'saving' ? t.saving : t.save}
             </button>
           </div>
           {state === 'error' ? (
             <p className="af-pf-picker-error" role="status">
-              Could not save — try again.
+              {t.error}
             </p>
           ) : null}
-          <p className="af-pf-picker-note">Saved to your account, so the same leagues show on every device. None ticked means all.</p>
+          <p className="af-pf-picker-note">{t.note}</p>
         </div>
       ) : null}
     </div>

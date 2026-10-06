@@ -1,3 +1,4 @@
+vi.mock('next/navigation', () => ({ usePathname: () => '/core/live', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {} }) }))
 /**
  * /core/live game card — the 2026-09-13 redesign, pinned as behaviour.
  *
@@ -132,13 +133,13 @@ describe('My games — starters, one row per player, leagues behind a disclosure
     const toggle = container.querySelector('.af-live-mine-toggle') as HTMLButtonElement
 
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    expect(screen.queryByText('Alpha League')).toBeNull()
+    expect(within(container.querySelector('.af-live-mine-row') as HTMLElement).queryByText('Alpha League')).toBeNull()
 
     fireEvent.click(toggle)
 
     expect(toggle.getAttribute('aria-expanded')).toBe('true')
-    expect(screen.getByText('Alpha League')).toBeInTheDocument()
-    expect(screen.getByText('Bravo League')).toBeInTheDocument()
+    expect(within(container.querySelector('.af-live-mine-row') as HTMLElement).getByText('Alpha League')).toBeInTheDocument()
+    expect(within(container.querySelector('.af-live-mine-row') as HTMLElement).getByText('Bravo League')).toBeInTheDocument()
     expect(screen.queryByText('Bench League')).toBeNull()
   })
 
@@ -197,7 +198,7 @@ describe('Live plays — who, what kind of play, how far', () => {
     data.impact.plays = [
       {
         id: 'pbp:1:77:BIG_PLAY',
-        gameId: '1',
+        gameId: '1', canonicalGameId: '401',
         type: 'BIG_PLAY',
         playerName: 'Marvin Harrison Jr.',
         sleeperId: '11632',

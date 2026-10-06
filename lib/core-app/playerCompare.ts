@@ -40,11 +40,39 @@ export type CompareRow = {
   gap: number | null
   /** One sentence when the row asks for something: a lineup swap, or who holds the other one. */
   note: string | null
+  /** What `note` says, before it is put into words (finderSearchCopy.ts builds the Spanish). */
+  noteParts: CompareNoteParts | null
 }
+
+/** `start`: start this side over the other. `held`: this side is another manager's here. */
+export type CompareNoteParts = { kind: 'start'; side: 'a' | 'b' } | { kind: 'held'; side: 'a' | 'b'; ownerName: string }
+
+/**
+ * What `headline` says, before it is put into words — the English is written from these below, and
+ * finderSearchCopy.ts writes the Spanish from the same values, so the verdict cannot differ by language.
+ */
+export type CompareHeadlineParts = {
+  /** Last names, as the headline names them. */
+  a: string
+  b: string
+} & (
+  | {
+      kind: 'priced'
+      /** Priced leagues. */
+      n: number
+      tallyA: number
+      tallyB: number
+      /** The row with the largest gap, when that gap is not zero; `gap` is a − b, signed. */
+      biggest: { leagueName: string; gap: number } | null
+    }
+  | { kind: 'standard'; pointsA: number; pointsB: number }
+  | { kind: 'none' }
+)
 
 export type PlayerCompare = {
   rows: CompareRow[]
   headline: string
+  headlineParts: CompareHeadlineParts
   standard: { a: number | null; b: number | null; week: number | null }
   /** Priced leagues won by each side. */
   tally: { a: number; b: number; priced: number }
@@ -68,16 +96,22 @@ function cellFor(d: PlayerDetail, leagueId: string): CompareCell {
   }
 }
 
-function noteFor(row: Omit<CompareRow, 'note'>, aName: string, bName: string): string | null {
+function notePartsFor(row: Omit<CompareRow, 'note' | 'noteParts'>): CompareNoteParts | null {
   const { a, b } = row
   // Both yours, one benched behind the other while out-projecting him: the lineup fix.
   if (a.isYours && b.isYours && a.points != null && b.points != null) {
-    if (a.slot === 'BENCH' && b.slot === 'STARTER' && a.points > b.points) return `Start ${aName} over ${bName}`
-    if (b.slot === 'BENCH' && a.slot === 'STARTER' && b.points > a.points) return `Start ${bName} over ${aName}`
+    if (a.slot === 'BENCH' && b.slot === 'STARTER' && a.points > b.points) return { kind: 'start', side: 'a' }
+    if (b.slot === 'BENCH' && a.slot === 'STARTER' && b.points > a.points) return { kind: 'start', side: 'b' }
   }
-  if (!a.isYours && a.ownerName && b.isYours) return `${aName} is @${a.ownerName}’s here`
-  if (!b.isYours && b.ownerName && a.isYours) return `${bName} is @${b.ownerName}’s here`
+  if (!a.isYours && a.ownerName && b.isYours) return { kind: 'held', side: 'a', ownerName: a.ownerName }
+  if (!b.isYours && b.ownerName && a.isYours) return { kind: 'held', side: 'b', ownerName: b.ownerName }
   return null
+}
+
+function noteFor(parts: CompareNoteParts | null, aName: string, bName: string): string | null {
+  if (!parts) return null
+  const [self, other] = parts.side === 'a' ? [aName, bName] : [bName, aName]
+  return parts.kind === 'start' ? `Start ${self} over ${other}` : `${self} is @${parts.ownerName}’s here`
 }
 
 export function comparePlayers(a: PlayerDetail, b: PlayerDetail): PlayerCompare {
@@ -100,7 +134,8 @@ export function comparePlayers(a: PlayerDetail, b: PlayerDetail): PlayerCompare 
     const cb = cellFor(b, l.leagueId)
     const gap = ca.points != null && cb.points != null ? Math.round((ca.points - cb.points) * 10) / 10 : null
     const base = { ...l, a: ca, b: cb, gap }
-    return { ...base, note: noteFor(base, aName, bName) }
+    const noteParts = notePartsFor(base)
+    return { ...base, note: noteFor(noteParts, aName, bName), noteParts }
   })
 
   const priced = rows.filter((r) => r.gap != null)
@@ -117,8 +152,18 @@ export function comparePlayers(a: PlayerDetail, b: PlayerDetail): PlayerCompare 
   }
 
   let headline: string
+  let headlineParts: CompareHeadlineParts
   if (priced.length > 0) {
     const biggest = [...priced].sort((x, y) => Math.abs(y.gap ?? 0) - Math.abs(x.gap ?? 0))[0]
+    headlineParts = {
+      a: aName,
+      b: bName,
+      kind: 'priced',
+      n: priced.length,
+      tallyA: tally.a,
+      tallyB: tally.b,
+      biggest: biggest && biggest.gap ? { leagueName: biggest.leagueName, gap: biggest.gap } : null,
+    }
     const where = biggest && biggest.gap ? ` — biggest gap in ${biggest.leagueName} (${biggest.gap > 0 ? '+' : ''}${biggest.gap.toFixed(1)} for ${biggest.gap > 0 ? aName : bName})` : ''
     const n = priced.length
     const leaguesWord = n === 1 ? 'league' : 'leagues'
@@ -128,11 +173,13 @@ export function comparePlayers(a: PlayerDetail, b: PlayerDetail): PlayerCompare 
     else if (tally.b > tally.a) headline = `${bName} beats ${aName} in ${tally.b} of ${n} priced ${leaguesWord}${where}.`
     else headline = `${aName} and ${bName} split the ${n} priced ${leaguesWord} ${tally.a}–${tally.b}${where}.`
   } else if (standard.a != null && standard.b != null) {
+    headlineParts = { a: aName, b: bName, kind: 'standard', pointsA: standard.a, pointsB: standard.b }
     const lead = standard.a === standard.b ? `${aName} and ${bName} project the same` : `${standard.a > standard.b ? aName : bName} projects higher`
     headline = `${lead} this week — ${standard.a.toFixed(1)} to ${standard.b.toFixed(1)}, standard scoring. No league-scored number for either yet.`
   } else {
+    headlineParts = { a: aName, b: bName, kind: 'none' }
     headline = 'Nothing to price for these two yet.'
   }
 
-  return { rows, headline, standard, tally }
+  return { rows, headline, headlineParts, standard, tally }
 }

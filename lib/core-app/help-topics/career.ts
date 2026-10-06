@@ -236,7 +236,7 @@ export const CAREER_TOPICS = {
     },
     es: {
       title: 'Fichas de liga',
-      body: 'Una ficha por cada liga en la que juegas: START, BENCH, IR o TAXI cuando es tuyo, el nombre del otro equipo cuando lo tiene otro, FA cuando no lo tiene nadie y ? cuando no podemos leer las plantillas de esa liga. Toca una ficha para abrir su tarjeta en esa liga.',
+      body: 'Una ficha por cada liga en la que juegas: TITULAR, BANCA, IR o TAXI cuando es tuyo, el nombre del otro equipo cuando lo tiene otro, LIBRE cuando no lo tiene nadie y ? cuando no podemos leer las plantillas de esa liga. Toca una ficha para abrir su tarjeta en esa liga.',
     },
   },
   faabBid: {

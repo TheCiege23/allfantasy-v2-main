@@ -9,8 +9,8 @@ export type WeeklyBlueprint = {
   name: string | null; teamName: string | null; leagueCount: number; sports: string[]; focusLeagueId: string | null
   actions: WeeklyAction[]; actionCount: number; attentionLeagueIds: string[]; lineupReadFailed: boolean
   coverage: Array<{ leagueId: string; leagueName: string; af: boolean; provider: boolean; partial: boolean }>
-  matchup?: { opponent: string; period: number; leagueName: string }
-  playoff?: { probability: number; leagueName: string }
+  matchup?: { opponent: string; period: number; leagueName: string; leagueId?: string; season?: number }
+  playoff?: { probability: number; leagueName: string; leagueId?: string; season?: number }
   rivalry?: { opponent: string; wins: number; losses: number; ties: number; winningStreak: number; losingStreak: number; final: boolean }
   commissionerLeagueIds?: string[]
 }
@@ -57,7 +57,9 @@ export function buildWeeklyBlueprint(input: {
     return { leagueId: m.leagueId, leagueName: m.leagueName, af: p?.af?.you != null, provider: p?.api?.you != null, partial: p?.partial ?? false }
   })
   const featured = cards.find(m => m.leagueId === attentionLeagueIds[0]) ?? cards[0]
-  const outlook = input.outlook?.leagues.find(l => allowed.has(l.leagueId) && l.you?.modelled && cards.some(m => m.leagueId === l.leagueId && m.season === l.season))
+  // The matchup and odds describe one league and season, including in portfolio view.
+  // With no matching model, omit odds rather than borrow another league's probability.
+  const outlook = input.outlook?.leagues.find(l => allowed.has(l.leagueId) && l.leagueId === (featured?.leagueId ?? focus) && l.you?.modelled && (!featured || l.season === featured.season))
   const probability = outlook?.you?.playoffPct
   return { name: input.name?.trim() || null, teamName: input.board.leagueBoard?.yourTeamName ?? null, leagueCount: leagues.length,
     sports: [...new Set(leagues.map(l => l.sport?.trim()).filter((s): s is string => Boolean(s)))], focusLeagueId: focus,
@@ -68,8 +70,8 @@ export function buildWeeklyBlueprint(input: {
       winningStreak: input.board.leagueBoard.rivalry.winningStreak ?? 0,
       losingStreak: input.board.leagueBoard.rivalry.losingStreak ?? 0, final: input.board.leagueBoard.yours.live?.final ?? false,
     } } : {}),
-    ...(featured?.opponent.name ? { matchup: { opponent: featured.opponent.name, period: featured.week, leagueName: featured.leagueName } } : {}),
-    ...(outlook && probability != null && Number.isFinite(probability) && probability >= 0 && probability <= 100 ? { playoff: { probability, leagueName: outlook.leagueName } } : {}) }
+    ...(featured?.opponent.name ? { matchup: { opponent: featured.opponent.name, period: featured.week, leagueName: featured.leagueName, leagueId: featured.leagueId, season: featured.season } } : {}),
+    ...(outlook && probability != null && Number.isFinite(probability) && probability >= 0 && probability <= 100 ? { playoff: { probability, leagueName: outlook.leagueName, leagueId: outlook.leagueId, season: outlook.season } } : {}) }
 }
 export function weeklyActionText(action: WeeklyAction, es = false): string {
   if (es) return ({ lineup: `Revisa ${action.count} problema${action.count === 1 ? '' : 's'} en tu alineación`, monitor: `Vigila ${action.count} titular${action.count === 1 ? '' : 'es'} con dudas`, sync: 'Actualiza los datos de tu equipo', playoff: `Explora los escenarios del período ${action.count}`, review: 'Revisa tu equipo y sus reglas' })[action.kind]

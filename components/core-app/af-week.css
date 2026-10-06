@@ -436,6 +436,8 @@
 }
 
 .af-rr-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: flex;
   flex-direction: column;
   padding: 15px 16px;
@@ -594,6 +596,9 @@
 }
 
 .af-rr-open {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   margin-top: 13px;
   align-self: flex-start;
   font-size: 11.5px;
@@ -615,7 +620,7 @@
   .af-wk-title { font-size: 21px; }
   .af-wk-flips { grid-template-columns: 1fr; }
   .af-wk-leans { grid-template-columns: 1fr 1fr; }
-  .af-rr-grid { grid-template-columns: 1fr; }
+  .af-rr-grid { grid-template-columns: minmax(0, 1fr); }
   .af-wk-headactions { width: 100%; }
   .af-wk-prob { font-size: 30px; }
 }

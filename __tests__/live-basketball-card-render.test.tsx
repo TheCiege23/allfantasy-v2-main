@@ -1,3 +1,4 @@
+vi.mock('next/navigation', () => ({ usePathname: () => '/core/live', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {} }) }))
 /**
  * The basketball score card as rendered: Q1–Q4 / OT (college: 1H 2H / OT) line
  * score headers, and each team's leaders and shooting side by side.

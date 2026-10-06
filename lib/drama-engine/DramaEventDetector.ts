@@ -99,6 +99,24 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
     teamByAnyId.set(t.id, t)
     teamByAnyId.set(t.externalId, t)
   }
+  // The rivalry engine keys a pair by the team's externalId, or by its owner name when it is not
+  // run with `useTeamIds` (HeadToHeadAggregator) — so a rivalry side resolves through either.
+  const teamByOwnerName = new Map<string, TeamRef>()
+  for (const t of teams) if (t.ownerName?.trim()) teamByOwnerName.set(t.ownerName.trim(), t)
+
+  /**
+   * The name a rivalry side is printed under. 🛑 Never the raw id: the headline was built from
+   * `managerAId`/`managerBId` directly, so measured 2026-10-05 across 40 commissioner leagues, 146
+   * of 587 Commissioner OS cards read like "13 vs 9: Emerging rivalry" — roster numbers where every
+   * other storyline in this file names the team.
+   */
+  const rivalSideName = (id: string): string => {
+    const team = teamByAnyId.get(id) ?? teamByOwnerName.get(id.trim())
+    const name = team?.teamName?.trim() || team?.ownerName?.trim()
+    if (name) return name
+    // An unresolved bare number is a roster slot, not a name; anything else already is a name.
+    return /^\d+$/.test(id.trim()) ? `Team ${id.trim()}` : id
+  }
 
   const [platformLeagueIds, prevSeasonChampions] = await Promise.all([
     getPlatformLeagueIds(leagueId),
@@ -205,7 +223,7 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
         .reduce((sum, n) => sum + n, 0) / Math.max(1, managers.length)
     pushCandidate({
       dramaType: 'RIVALRY_CLASH',
-      headline: `${r.managerAId} vs ${r.managerBId}: ${r.rivalryTier} rivalry`,
+      headline: `${rivalSideName(r.managerAId)} vs ${rivalSideName(r.managerBId)}: ${r.rivalryTier} rivalry`,
       summary: `Head-to-head tension (score ${r.rivalryScore.toFixed(0)}/100).`,
       relatedManagerIds: toManagerIds(managers),
       relatedTeamIds: [],

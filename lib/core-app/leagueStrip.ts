@@ -29,6 +29,10 @@ export type StripChip = {
   sentence: string
   tone: MoveTone | 'none'
   bestBall: boolean
+  /** What `badge` and `sentence` were built from — finderSearchCopy.ts builds the Spanish from these. */
+  last: string
+  /** The other manager's team, on an `other` chip that knows it. */
+  team: string | null
 }
 
 const ORDER: Record<StripState, number> = { start: 0, bench: 1, ir: 2, taxi: 3, free: 4, other: 5, unknown: 6 }
@@ -92,6 +96,8 @@ export function buildLeagueStrip(args: {
           sentence: `${l.name}: ${team ? `${team} has ${last}` : `another manager has ${last}`}.`,
           tone: 'none',
           bestBall,
+          last,
+          team,
         })
         continue
       }
@@ -107,16 +113,18 @@ export function buildLeagueStrip(args: {
         sentence: `${l.name}: ${last} is ${where}${bestBall ? ' (best ball — the platform sets the lineup)' : ''}.`,
         tone,
         bestBall,
+        last,
+        team: null,
       })
       continue
     }
     if (unreadable.has(l.id)) {
-      chips.push({ leagueId: l.id, leagueName: l.name, state: 'unknown', badge: BADGE.unknown, sentence: `${l.name}: we can't read this league's rosters, so we can't say where ${last} is.`, tone: 'none', bestBall: false })
+      chips.push({ leagueId: l.id, leagueName: l.name, state: 'unknown', badge: BADGE.unknown, sentence: `${l.name}: we can't read this league's rosters, so we can't say where ${last} is.`, tone: 'none', bestBall: false, last, team: null })
       continue
     }
     // FA only by the shared rule (freeLeagueIds) — the bid list reads the same answer.
     if (!free.has(l.id)) continue
-    chips.push({ leagueId: l.id, leagueName: l.name, state: 'free', badge: BADGE.free, sentence: `${l.name}: nobody has ${last} — he's available.`, tone: 'none', bestBall: false })
+    chips.push({ leagueId: l.id, leagueName: l.name, state: 'free', badge: BADGE.free, sentence: `${l.name}: nobody has ${last} — he's available.`, tone: 'none', bestBall: false, last, team: null })
   }
   return chips.sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.leagueName.localeCompare(b.leagueName))
 }

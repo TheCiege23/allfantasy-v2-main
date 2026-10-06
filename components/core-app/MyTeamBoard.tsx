@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import TeamPortfolioWorkspace from './TeamPortfolioWorkspace'
 
 import { formatLockLabel } from '@/lib/core-app/lockLabel'
 import { kickoffClock } from '@/lib/core-app/lineupLock'
@@ -926,6 +927,7 @@ export function MyTeamBoard({ pulse, now, allHref, lineups = null, baseHref = '/
         }
         language={language}
       />
+      <TeamPortfolioWorkspace pulse={pulse} />
     </div>
   )
 }

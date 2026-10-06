@@ -102,8 +102,8 @@ describe('where the /core loading boundary lives', () => {
     const page = readFileSync(resolve(ROOT, 'app/core/(shell)/[[...screen]]/page.tsx'), 'utf8')
     expect(page).toMatch(/<CoreScreenArea>\s*<CoreScreenErrorBoundary/)
     const tabs = readFileSync(resolve(ROOT, 'components/core-app/LeagueTabs.tsx'), 'utf8')
-    // Both the full strip and the compact (league-first) strip.
-    expect(tabs.match(/className="af-lt-tab"\s+(?:\/\*[\s\S]*?\*\/\s+)?data-core-nav=""/g)?.length).toBe(2)
+    // Full and compact layouts share the same marked link renderer.
+    expect(tabs.match(/className="af-lt-tab"\s+(?:\/\*[\s\S]*?\*\/\s+)?data-core-nav=""/g)?.length).toBe(1)
     const shell = readFileSync(resolve(ROOT, 'components/core-app/AfCoreShell.tsx'), 'utf8')
     for (const cls of ['af-rail-tile af-platform', 'af-nav-item', 'af-tabbar-item']) {
       expect(shell).toMatch(new RegExp(`className="${cls}"\\s+data-core-nav=""`))

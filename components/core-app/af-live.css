@@ -2839,3 +2839,23 @@
 .af-live-matchup-note {
   margin: 0;
 }
+
+/* Live workspace: readable metadata and compact phone impact. */
+.af-core .af-live .af-btn,.af-core .af-live button { min-height:48px; }
+.af-live-refresh-icon { display:none; }
+@media(max-width:720px) { .af-live-refresh-label { display:none; } .af-live-refresh-icon { display:inline; font-size:24px; } .af-core .af-live-refresh { width:48px; padding:8px; } }
+.af-live-contributions summary { min-height:48px; cursor:pointer; font-weight:700; align-content:center; }
+.af-live-contributions p,.af-live-contributions small { font-size:13px; line-height:1.5; }
+.af-live-league-contribution { padding-block:12px; border-top:1px solid var(--line); }
+.af-live-league-contribution a { color:var(--accent); font-size:15px; }
+.af-live-league-contribution dl { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:10px 0; }
+.af-live-league-contribution dt { font-size:12px; color:var(--muted); }
+.af-live-league-contribution dd { margin:4px 0 0; font-size:19px; font-variant-numeric:tabular-nums; }
+@media(max-width:720px) {
+ .af-live-lede,.af-live-next-label,.af-live-impact-sub,.af-live-play-line { font-size:15px; }
+ .af-live-sport,.af-live-scope-btn,.af-live-search input { font-size:14px; }
+ .af-live-scope-btn,.af-live-search { min-height:48px; }
+ .af-live-freshness { font-size:12px; letter-spacing:0; text-transform:none; }
+ .af-live-side .af-live-card:has(.af-live-plays) { max-height:180px; overflow:auto; }
+ .af-live-grid { gap:16px; }
+}

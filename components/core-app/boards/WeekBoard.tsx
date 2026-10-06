@@ -99,7 +99,7 @@ function MatchRow({ row, ahead, lineups }: { row: Row; ahead: boolean; lineups?:
   const { m } = row
   const abs = Math.abs(row.margin).toFixed(1)
   const win = Math.round(m.projection ? m.projection.winProbability * 100 : 0)
-  const sign = ahead ? '+' : '−'
+  const sign = abs === '0.0' ? '' : ahead ? '+' : '−'
   /*
    * A scored week says what happened; it no longer carries the pre-week probability, which
    * describes a game that has since been played. See `WeekMatchup.live`.

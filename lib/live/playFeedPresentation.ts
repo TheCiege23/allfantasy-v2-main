@@ -27,6 +27,8 @@ import { getPrimaryLogoUrlForTeam } from '@/lib/sport-teams/SportTeamMetadataReg
  */
 
 export type PlayFeedItem = {
+  /** Slate ID resolved from provider fixture evidence, never compared across vendors raw. */
+  canonicalGameId?: string | null
   id: string
   gameId: string
   type: LiveEvent['type']

@@ -1,3 +1,5 @@
+import { vi } from 'vitest'
+vi.mock('next/navigation', () => ({ usePathname: () => '/core/live', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {} }) }))
 import React from 'react'
 import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
@@ -92,14 +94,14 @@ describe('/core/live reaches every game', () => {
     expect(container.querySelector('[aria-label="2 games today"]')).toBeNull()
   })
 
-  it('formats upcoming kickoff timestamps with the date and Eastern time zone', () => {
+  it('formats upcoming kickoff timestamps with the date and device-local time zone', () => {
     const data = payload('all')
     data.impact.upNext = [{ playerName: 'Brian Thomas Jr.', matchup: 'NE @ JAX', startTime: '2026-09-27T17:00Z' }]
     const { container } = render(<LiveScores data={data} selectedLeagueId="league-a" />)
     const time = container.querySelector('.af-live-next-time')?.textContent
-    expect(time).toContain('Sep 27')
-    expect(time).toContain('1:00 PM')
-    expect(time).toContain('EDT')
+    // The verified slate fixture wins over the stale unscoped impact timestamp.
+    expect(time).toContain('Sep 20')
+    expect(time).toBe(new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date('2026-09-20T17:00:00Z')))
     expect(time).not.toContain('T17:00')
   })
   it('offers the My/All control even with a league selected', () => {

@@ -5,7 +5,6 @@ import { useEffect, useRef } from 'react'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import { LeagueTabsPrewarm } from '@/components/core-app/LeagueTabsPrewarm'
-import { LeagueTabsScroller } from '@/components/core-app/LeagueTabsScroller'
 import '@/components/core-app/af-league-tabs.css'
 
 /**
@@ -21,10 +20,8 @@ import '@/components/core-app/af-league-tabs.css'
  * moving between views quietly cleared the league you had chosen. The page
  * header names the league once; this control carries that league id forward.
  *
- * ⚠ ONLY KEYS THAT HAVE A BUILT, LEAGUE-SCOPED SCREEN APPEAR HERE. The designs
- * also show a "Schedule" tab; there is no schedule screen, and a tab that lands
- * on "not built yet" is worse than an absent one — that panel is the thing this
- * whole suite exists to remove.
+ * Only built league-scoped screens appear here. Schedule uses recorded
+ * fixtures and saved rule dates; Moves groups the available trade/waiver flows.
  */
 
 export type LeagueTabsProps = {
@@ -47,20 +44,21 @@ export type LeagueTabsProps = {
    */
   platform?: string | null
   /**
-   * League-first phone shell: five tabs (Match · Team · Players · Trades · League) and the rest
+   * League-first shell: five tabs (Overview · My Team · Matchup · Players · Moves) and the rest
    * under a "More" disclosure, instead of a twelve-tab scroller. A native <details>, so it
    * needs no client state.
    */
   compact?: boolean
+  commissionerHref?: string | null
 }
 
 /** The compact strip's five, in order, with their short labels. `''` is the league home. */
 const COMPACT_PRIMARY: Array<{ key: string; label: string; labelEs: string }> = [
-  { key: 'matchup', label: 'Match', labelEs: 'Partido' },
-  { key: 'my-team', label: 'Team', labelEs: 'Equipo' },
+  { key: '', label: 'Overview', labelEs: 'Resumen' },
+  { key: 'my-team', label: 'My Team', labelEs: 'Equipo' },
+  { key: 'matchup', label: 'Matchup', labelEs: 'Partido' },
   { key: 'players', label: 'Players', labelEs: 'Jugad.' },
-  { key: 'trades', label: 'Trades', labelEs: 'Cambios' },
-  { key: '', label: 'League', labelEs: 'Liga' },
+  { key: 'moves', label: 'Moves', labelEs: 'Movimientos' },
 ]
 
 type TabRequirement = 'scores' | 'trades' | 'draft'
@@ -71,6 +69,8 @@ const TABS: Array<{
   requires?: TabRequirement
 }> = [
   { key: '', label: 'Overview' },
+  { key: 'moves', label: 'Moves' },
+  { key: 'schedule', label: 'Schedule' },
   { key: 'my-team', label: 'My team' },
   { key: 'matchup', label: 'Matchup', requires: 'scores' },
   { key: 'trades', label: 'Trades', requires: 'trades' },
@@ -93,6 +93,7 @@ export function LeagueTabs({
   draftSupported = true,
   platform = null,
   compact = false,
+  commissionerHref,
 }: LeagueTabsProps) {
   const { language } = useOptionalLanguage()
   const copy = (english: string) => coreUiCopy(english, language)
@@ -140,11 +141,11 @@ export function LeagueTabs({
         availableKeys={visibleTabs.map((tab) => tab.key)}
       />
 
-      {compact ? (() => {
+      {(() => {
         const visibleKeys = new Set(visibleTabs.map((t) => t.key))
         const primary = COMPACT_PRIMARY.filter((t) => visibleKeys.has(t.key))
         const primaryKeys = new Set(primary.map((t) => t.key))
-        const rest = visibleTabs.filter((t) => !primaryKeys.has(t.key))
+        const rest = visibleTabs.filter((t) => !primaryKeys.has(t.key) && t.key !== 'live')
         const tab = (key: string, label: string) => {
           const active = key ? key === activeKey : activeKey === 'home'
           return (
@@ -163,8 +164,10 @@ export function LeagueTabs({
         const restActive = rest.some((t) => t.key === activeKey)
         const restActiveTab = rest.find((t) => t.key === activeKey)
         return (
-          <div className="af-lt-compact">
+          <div className="af-lt-compact" data-compact={compact}>
             <div className="af-lt-compact-row" style={{ gridTemplateColumns: `repeat(${primary.length}, minmax(0, 1fr))` }}>{primary.map((t) => tab(t.key, language === 'es' ? t.labelEs : t.label))}</div>
+            {tab('live', language === 'es' ? 'En vivo' : 'Live')}
+            {commissionerHref && <Link className="af-lt-tab" href={commissionerHref}>{language === 'es' ? 'Comisionado' : 'Commissioner'}</Link>}
             {rest.length ? (
               <details className="af-lt-more" ref={moreRef}>
                 {/* The active view is its own span so a phone can drop it and keep "More" one tab wide — see af-league-tabs.css. */}
@@ -174,28 +177,7 @@ export function LeagueTabs({
             ) : null}
           </div>
         )
-      })() : (
-        <LeagueTabsScroller activeKey={activeKey}>
-          {visibleTabs.map((t) => {
-            const active = t.key ? t.key === activeKey : activeKey === 'home'
-            const href = t.key ? `/core/${t.key}${q}` : `/core${q}`
-            return (
-              <span key={t.key || 'overview'} role="listitem">
-                <Link
-                  href={href}
-                  className="af-lt-tab"
-                  /* A tab click lights at once and swaps only the screen; see coreNavPending.tsx. */
-                  data-core-nav=""
-                  data-active={active}
-                  aria-current={active ? 'page' : undefined}
-                >
-                  {copy(t.label)}
-                </Link>
-              </span>
-            )
-          })}
-        </LeagueTabsScroller>
-      )}
+      })()}
 
       {/*
         🛑 A TAB THAT VANISHES WITHOUT A REASON IS THE BUG THIS GATING CREATED.

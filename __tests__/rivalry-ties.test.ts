@@ -112,6 +112,12 @@ function allCards(radar: Awaited<ReturnType<typeof getRivalryRadar>>) {
 }
 
 describe('getRivalryRadar — ties', () => {
+  it('keeps a scored current-period opponent on the schedule without a pregame probability', async () => {
+    seed(meeting(1,100,90),meeting(2,80,95),meeting(3,88.5,88.5),meeting(4,12,20))
+    const card = allCards(await getRivalryRadar('u1',LEAGUES)).find(c=>c.opponent.rosterId==='2')!
+    expect(card.thisWeek).toEqual({status:'live',winProbability:null,projectedMargin:null})
+    expect(card.series.meetings).toBe(3)
+  })
   it('counts a tied meeting as a tie, not a loss', async () => {
     const radar = await getRivalryRadar('u1', LEAGUES)
     const card = allCards(radar).find((c) => c.opponent.rosterId === '2')

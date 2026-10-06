@@ -1,4 +1,6 @@
 import 'server-only'
+import { automaticLineup } from './teamWorkspace'
+import { portfolioOpponentExposure, type OpponentExposure } from './portfolioOpponentExposure'
 
 import { prisma } from '@/lib/prisma'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
@@ -108,6 +110,11 @@ function startersOf(playerData: unknown): { ids: string[]; empty: number } {
 }
 
 export type MyTeamRow = {
+  archived?: boolean
+  coverageReason?: string | null
+  automatic?: boolean
+  readAt?: string | null
+  players?: Array<{ id: string; name: string; status: string | null; kickoff: string | null; onBye: boolean; starter: boolean; opponents: number }>
   leagueId: string
   leagueName: string
   platform: string
@@ -201,6 +208,9 @@ export type CrossLeagueFlag = {
 export type MyTeamPulse = {
   /** Starters flagged in 2+ of your lineups, ruled-out first. Locked games and Best Ball excluded. */
   crossLeague?: CrossLeagueFlag[]
+  opponentExposure?: OpponentExposure[]
+  viewerKey?: string
+  inventory?: MyTeamRow[]
   /** Lineups with at least one certain hole, most urgent first. */
   needs: MyTeamRow[]
   /** Lineups with nothing wrong we can see, soonest lock first. */
@@ -416,6 +426,9 @@ export async function getMyTeamPulse(
     sport: string
     format: string
     formatLabel: string
+    automatic: boolean
+    readAt: string | null
+    allIds: string[]
     logoUrl: string | null
     leagueBadge: string
     teamName: string | null
@@ -463,7 +476,8 @@ export async function getMyTeamPulse(
     /* In Sleeper ids: an ESPN lineup translated, a Fleaflicker/MFL/Fantrax/Yahoo one unread — its
        starter ids (and an untranslatable ESPN one: 12483 is Stafford there, Jack Bech in Sleeper's
        space) collide with real Sleeper ids. The raw roster above still decides guillotine status. */
-    const { ids, empty } = startersOf(await sleeperReadablePlayerDataOf(l.platform, roster.playerData))
+    const readablePd = await sleeperReadablePlayerDataOf(l.platform, roster.playerData)
+    const { ids, empty } = startersOf(readablePd)
     if (ids.length === 0 && empty === 0) {
       /* Stripped, not absent: "no starting lineup on file" would be false for a foreign league. */
       if (rosterIdSpaceOf(l.platform) !== 'sleeper') notChecked.idsUnreadable++
@@ -493,6 +507,9 @@ export async function getMyTeamPulse(
       sport: String(l.sport ?? 'NFL').toUpperCase(),
       format,
       formatLabel: getLeagueTypeMedia(format).label,
+      automatic: l.bestBallMode || automaticLineup(l.leagueType, l.settings),
+      readAt: l.lastSyncedAt?.toISOString() ?? null,
+      allIds: [...new Set([...ids, ...((readablePd && typeof readablePd === 'object' && Array.isArray((readablePd as Record<string, unknown>).players)) ? ((readablePd as Record<string, unknown>).players as unknown[]).map(String).filter(id => id && id !== '0') : [])])],
       logoUrl: asImageUrl(l.logoUrl, platform) ?? asImageUrl(l.avatarUrl, platform),
       leagueBadge: initialsOf(leagueName),
       teamName: c.teamName?.trim() || null,
@@ -507,22 +524,24 @@ export async function getMyTeamPulse(
     })
   }
 
+  const unreadableInventory: MyTeamRow[] = mine.map(c => ({ leagueId: c.leagueId, leagueName: leagueDisplayName(c.league!.name), platform: String(c.league!.platform ?? 'manual'), sport: String(c.league!.sport ?? 'NFL'), format: resolveLeagueCardTypeKey({ ...c.league!, settings: c.league!.settings && typeof c.league!.settings === 'object' && !Array.isArray(c.league!.settings) ? c.league!.settings as Record<string,unknown> : undefined }), formatLabel: getLeagueTypeMedia(resolveLeagueCardTypeKey({ ...c.league!, settings: c.league!.settings && typeof c.league!.settings === 'object' && !Array.isArray(c.league!.settings) ? c.league!.settings as Record<string,unknown> : undefined })).label, automatic: automaticLineup(c.league!.leagueType, c.league!.settings), coverageReason: 'Roster or starting lineup unavailable; not checked.', logoUrl: null, leagueBadge: initialsOf(leagueDisplayName(c.league!.name)), teamName: c.teamName, starters: 0, empty: 0, out: 0, bye: null, questionable: 0, unresolved: 0, lockAt: null, locked: false, season: null, week: null, severity: 0, href: `/core/my-team?league=${encodeURIComponent(c.leagueId)}`, platformLeagueId: c.league!.platformLeagueId, leagueSeason: c.league!.season, teamId: c.externalId == null ? null : String(c.externalId) }))
+
   if (pending.length === 0) {
-    return { ...EMPTY_PULSE, considered: mine.length, paused: mine.filter((c) => pausedLeagueIds?.has(c.leagueId)).length, notChecked }
+    return { ...EMPTY_PULSE, viewerKey: userId, inventory: unreadableInventory, considered: mine.length, paused: mine.filter((c) => pausedLeagueIds?.has(c.leagueId)).length, notChecked }
   }
 
   /* ── 3. One player read for every starter on the board. ────────────────── */
-  const everyStarter = [...new Set(pending.flatMap((p) => p.ids))]
+  const everyStarter = [...new Set(pending.flatMap((p) => p.allIds))]
   const players = await prisma.sportsPlayer
     .findMany({
       where: { sleeperId: { in: everyStarter } },
-      select: { sleeperId: true, name: true, team: true },
+      select: { sleeperId: true, name: true, team: true, sport: true },
     })
 
   const playerBy = new Map<string, { name: string; team: string | null }>()
   for (const p of players) {
-    if (!p.sleeperId || playerBy.has(p.sleeperId)) continue
-    playerBy.set(p.sleeperId, { name: p.name, team: p.team })
+    if (!p.sleeperId || playerBy.has(`${p.sport ?? 'NFL'}:${p.sleeperId}`)) continue
+    playerBy.set(`${p.sport ?? 'NFL'}:${p.sleeperId}`, { name: p.name, team: p.team })
   }
 
   const sports = [...new Set(pending.map((p) => p.sport))]
@@ -580,7 +599,7 @@ export async function getMyTeamPulse(
     for (const p of pending) {
       if (p.sport !== sport) continue
       for (const id of p.ids) {
-        const row = playerBy.get(id)
+        const row = playerBy.get(`${p.sport}:${id}`)
         if (row) playerTeams.set(id, row.team)
       }
     }
@@ -605,6 +624,7 @@ export async function getMyTeamPulse(
 
   for (const p of pending) {
     const week = weekBySport.get(p.sport) ?? null
+    const archived = p.leagueSeason != null && week != null && p.leagueSeason < week.season
     const kickoffs = kickoffBySport.get(p.sport) ?? new Map<string, Date>()
     const byeIds = byeIdsBySport.get(p.sport) ?? null
 
@@ -615,7 +635,7 @@ export async function getMyTeamPulse(
     const deadlines: Array<{ kickoff: Date | null; issues: number; bye?: boolean }> = []
 
     for (const id of p.ids) {
-      const row = playerBy.get(id)
+      const row = playerBy.get(`${p.sport}:${id}`)
       if (!row) {
         unresolved += 1
         deadlines.push({ kickoff: null, issues: 0 })
@@ -657,10 +677,20 @@ export async function getMyTeamPulse(
       }
     }
 
-    const severity = p.bestBall ? 0 : p.empty + out + (bye ?? 0)
+    const severity = p.bestBall || archived ? 0 : p.empty + out + (bye ?? 0)
     const deadline = lineupDeadlines(deadlines, p.empty, now.getTime())
 
     rows.push({
+      archived,
+      coverageReason: archived ? 'Prior-season roster; current-week checks do not apply.' : undefined,
+      automatic: p.automatic,
+      readAt: p.readAt,
+      players: p.allIds.flatMap(id => {
+        const player = playerBy.get(`${p.sport}:${id}`)
+        if (!player) return []
+        const club = normalizeTeamAbbrev(player.team)
+        return [{ id, name: player.name, status: archived ? null : injuryByName.get(`${p.sport}:${injuryNameKey(player.name)}`)?.find(injury => !club || !injury.team || normalizeTeamAbbrev(injury.team) === club)?.status ?? null, kickoff: archived ? null : (club ? kickoffs.get(club) : null)?.toISOString() ?? null, onBye: archived ? false : byeIds?.has(id) ?? false, starter: p.ids.includes(id), opponents: 0 }]
+      }),
       leagueId: p.leagueId,
       leagueName: p.leagueName,
       platform: p.platform,
@@ -669,10 +699,10 @@ export async function getMyTeamPulse(
       teamName: p.teamName,
       bestBall: p.bestBall,
       starters: p.ids.length,
-      empty: p.empty,
-      out,
-      bye,
-      questionable,
+      empty: archived ? 0 : p.empty,
+      out: archived ? 0 : out,
+      bye: archived ? null : bye,
+      questionable: archived ? 0 : questionable,
       unresolved,
       lockAt: deadline.lockAt == null ? null : new Date(deadline.lockAt).toISOString(),
       locked: deadline.locked,
@@ -744,7 +774,11 @@ export async function getMyTeamPulse(
     .sort((a, b) => Number(b.status === 'out') - Number(a.status === 'out') || b.leagues.length - a.leagues.length || a.name.localeCompare(b.name))
     .slice(0, 6)
 
+  const opponentExposure=await portfolioOpponentExposure(rows).catch(()=>[])
   return {
+    viewerKey: userId,
+    opponentExposure,
+    inventory: [...rows, ...unreadableInventory.filter(c => !rows.some(r => r.leagueId === c.leagueId))],
     crossLeague,
     needs: needsAll.slice(0, NEEDS_CAP),
     set: setAll.slice(0, SET_CAP),

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import TeamRosterWorkspace from '@/components/core-app/TeamRosterWorkspace'
 import { LineupVerification } from '@/components/core-app/LineupVerification'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { PlayerCardLeagueScope } from '@/components/core-app/player-card/PlayerCardProvider'
@@ -1727,107 +1728,6 @@ export function MyTeam({ data }: MyTeamProps) {
     */
     <PlayerCardLeagueScope leagueId={data.league.id}>
     <div className="af-mt">
-      {platform.toLowerCase() === 'sleeper' && <LineupVerification verification={data.lineupVerification} />}
-      {/* ── Lock banner ─────────────────────────────────────────────── */}
-      {bestBall ? <div className="af-mt-lock" data-urgent={false}>
-        <span className="af-label af-mt-lock-label">{copy('Best Ball · automatic lineup')}</span>
-        <span className="af-mt-lock-note">{copy('Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.')}</span>
-      </div> : data.lock.available ? (
-        data.lock.data.daysAway >= DISTANT_LOCK_DAYS ? (
-          /*
-            ⚠ A LOCK MORE THAN A WEEK OUT IS A COVERAGE GAP, NOT A DEADLINE, and
-            counting down to it is how this banner spent weeks pointing at a
-            November game. Saying so is more useful than a large number.
-          */
-          <div className="af-mt-lock" data-urgent={false} data-locked={false}>
-            <span className="af-label af-mt-lock-label">{copy('Lineup lock')}</span>
-            <span className="af-mt-lock-note">
-              {language === 'es'
-                ? `El próximo partido registrado de tus titulares es en ${data.lock.data.daysAway} días${data.lock.data.week != null ? ` (semana ${data.lock.data.week})` : ''}. Es demasiado pronto para una hora de cierre; probablemente aún falta el calendario de esta semana.`
-                : `The next game we hold for your starters is ${data.lock.data.daysAway} days away${data.lock.data.week != null ? ` (week ${data.lock.data.week})` : ''}. That is further out than a lineup lock should be, so this week's schedule probably has not been ingested yet rather than your lineup being safe for ${data.lock.data.daysAway} days.`}
-            </span>
-          </div>
-        ) : (
-          <LockCountdown
-            at={new Date(data.lock.data.at)}
-            anyEmptySlot={data.lock.data.anyEmptySlot}
-            platform={platform}
-            fixHref={data.league.sourceLink?.href ?? null}
-            week={data.lock.data.week}
-            daysAway={data.lock.data.daysAway}
-            next={data.lock.data.next}
-            asOf={data.lock.data.asOf}
-          />
-        )
-      ) : (
-        <div className="af-mt-lock" data-urgent={false} data-locked={false}>
-          <span className="af-label af-mt-lock-label">{copy('Lineup lock')}</span>
-          <span className="af-mt-lock-note">{myTeamReasonText(data.lock.reason, language)}</span>
-        </div>
-      )}
-
-      {!bestBall ? (
-        <section className="af-frame af-mt-decision" aria-labelledby="af-mt-decision-title">
-          <div>
-            <span className="af-label">{copy('Lineup decision')}</span>
-            <h2 id="af-mt-decision-title">
-              {decisionStarted
-                ? (language === 'es' ? `Revisa el cierre de ${decisionSlot?.player?.name}` : `Review ${decisionSlot?.player?.name}'s lock`)
-                : decisionSlot?.empty
-                ? es ? `Cubre tu posición ${decisionSlot.slotLabel}` : `Fill your ${decisionSlot.slotLabel} slot`
-                : decisionSlot?.player?.ruledOut
-                  ? es ? `Reemplaza a ${decisionSlot.player.name}` : `Replace ${decisionSlot.player.name}`
-                  : decisionSlot?.player?.onBye
-                    ? es ? `Cubre la semana de descanso de ${decisionSlot.player.name}` : `Cover ${decisionSlot.player.name}'s bye`
-                    : decisionSlot?.benchCheck?.verdict === 'swap'
-                      ? es
-                        ? `Revisa ${decisionSlot.benchCheck.starterName} frente a ${decisionSlot.benchCheck.benchName}`
-                        : `Review ${decisionSlot.benchCheck.starterName} vs ${decisionSlot.benchCheck.benchName}`
-                      : copy('Review your starting lineup')}
-            </h2>
-            <p>
-              {decisionStarted || replacementStarted
-                ? (language === 'es'
-                  ? 'El partido del titular o de la opción de banca ya comenzó. Confirma los cierres y AutoSubs en tu plataforma; este aviso no garantiza que puedas cambiar la alineación.'
-                  : 'The starter or bench option has already reached kickoff. Confirm locks and AutoSubs on your platform; this notice does not establish that a lineup change is allowed.')
-                : decisionSlot?.empty
-                ? copy('This starting slot was empty when checked. Confirm the current lineup, eligibility, locks, and AutoSubs on your platform.')
-                : decisionSlot?.player?.ruledOut || decisionSlot?.player?.onBye
-                  ? es
-                    ? `${decisionSlot.player.name} está ${decisionSlot.player.onBye ? 'en semana de descanso' : 'descartado'}. Revisa la elegibilidad del reemplazo, los cierres individuales y los cambios automáticos en tu plataforma.`
-                    : `${decisionSlot.player.name} is ${decisionSlot.player.onBye ? 'on a bye' : 'ruled out'}. Review replacement eligibility, individual locks, and AutoSubs on your platform.`
-                  : decisionSlot?.benchCheck?.verdict === 'swap'
-                    ? leagueDelta != null && leagueDelta > 0
-                      ? es
-                        ? `${decisionSlot.benchCheck.benchName} proyecta ${leagueDelta.toFixed(1)} puntos más con la puntuación de esta liga. Confirma primero su estado de lesión y su elegibilidad.`
-                        : `${decisionSlot.benchCheck.benchName} projects ${leagueDelta.toFixed(1)} more points under this league's scoring. Confirm injury status and eligibility first.`
-                      : leagueDelta != null
-                        ? (language === 'es'
-                          ? 'La puntuación de esta liga no favorece la opción de banca. No se recomienda un cambio con estas proyecciones.'
-                          : "This league's scoring does not favor the bench option. These projections do not support a swap.")
-                        : (language === 'es'
-                          ? 'La comparación sugiere una revisión, pero no se pudo confirmar la identidad o las proyecciones de esta liga. Actualiza antes de considerar un cambio.'
-                          : 'The bench check suggests a review, but the player identity or league-scored values could not be confirmed. Refresh before considering a swap.')
-                    : data.starters.available
-                      ? copy('No empty, out, or bye slot was identified among the players we could read. Unresolved players and missing news may hide issues; confirm the lineup on your platform.')
-                      : myTeamReasonText(data.starters.reason, language)}
-            </p>
-            <small>
-              {proj
-                ? es
-                  ? `Semana ${proj.week} · ${proj.afProjected} de ${proj.projected + proj.unprojected} titulares valorados para esta liga`
-                  : `Week ${proj.week} · ${proj.afProjected} of ${proj.projected + proj.unprojected} starters priced for this league`
-                : copy('Projection coverage unavailable')}
-            </small>
-          </div>
-          <div className="af-mt-decision-actions">
-            <a className="af-btn af-btn--ghost" href="#af-mt-starters">{copy('Review starters')}</a>
-            {data.league.sourceLink ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
-          </div>
-        </section>
-      ) : null}
-
-      {/* ── Team header ─────────────────────────────────────────────── */}
       <header className="af-frame af-mt-head">
         {data.team.available ? (
           <>
@@ -1938,6 +1838,111 @@ export function MyTeam({ data }: MyTeamProps) {
           <Unavailable reason={data.team.reason} />
         )}
       </header>
+
+      {platform.toLowerCase() === 'sleeper' && <LineupVerification verification={data.lineupVerification} />}
+      {/* ── Lock banner ─────────────────────────────────────────────── */}
+      {bestBall ? <div className="af-mt-lock" data-urgent={false}>
+        <span className="af-label af-mt-lock-label">{copy('Best Ball · automatic lineup')}</span>
+        <span className="af-mt-lock-note">{copy('Your provider selects the scoring lineup. Review injuries and roster depth; manual start/sit swaps are not needed.')}</span>
+      </div> : data.lock.available ? (
+        data.lock.data.daysAway >= DISTANT_LOCK_DAYS ? (
+          /*
+            ⚠ A LOCK MORE THAN A WEEK OUT IS A COVERAGE GAP, NOT A DEADLINE, and
+            counting down to it is how this banner spent weeks pointing at a
+            November game. Saying so is more useful than a large number.
+          */
+          <div className="af-mt-lock" data-urgent={false} data-locked={false}>
+            <span className="af-label af-mt-lock-label">{copy('Lineup lock')}</span>
+            <span className="af-mt-lock-note">
+              {language === 'es'
+                ? `El próximo partido registrado de tus titulares es en ${data.lock.data.daysAway} días${data.lock.data.week != null ? ` (semana ${data.lock.data.week})` : ''}. Es demasiado pronto para una hora de cierre; probablemente aún falta el calendario de esta semana.`
+                : `The next game we hold for your starters is ${data.lock.data.daysAway} days away${data.lock.data.week != null ? ` (week ${data.lock.data.week})` : ''}. That is further out than a lineup lock should be, so this week's schedule probably has not been ingested yet rather than your lineup being safe for ${data.lock.data.daysAway} days.`}
+            </span>
+          </div>
+        ) : (
+          <LockCountdown
+            at={new Date(data.lock.data.at)}
+            anyEmptySlot={data.lock.data.anyEmptySlot}
+            platform={platform}
+            fixHref={data.league.sourceLink?.href ?? null}
+            week={data.lock.data.week}
+            daysAway={data.lock.data.daysAway}
+            next={data.lock.data.next}
+            asOf={data.lock.data.asOf}
+          />
+        )
+      ) : (
+        <div className="af-mt-lock" data-urgent={false} data-locked={false}>
+          <span className="af-label af-mt-lock-label">{copy('Lineup lock')}</span>
+          <span className="af-mt-lock-note">{myTeamReasonText(data.lock.reason, language)}</span>
+        </div>
+      )}
+
+      {!bestBall ? (
+        <section className="af-frame af-mt-decision" aria-labelledby="af-mt-decision-title">
+          <div>
+            <span className="af-label">{copy('Lineup decision')}</span>
+            <h2 id="af-mt-decision-title">
+              {decisionStarted
+                ? (language === 'es' ? `Revisa el cierre de ${decisionSlot?.player?.name}` : `Review ${decisionSlot?.player?.name}'s lock`)
+                : decisionSlot?.empty
+                ? es ? `Cubre tu posición ${decisionSlot.slotLabel}` : `Fill your ${decisionSlot.slotLabel} slot`
+                : decisionSlot?.player?.ruledOut
+                  ? es ? `Reemplaza a ${decisionSlot.player.name}` : `Replace ${decisionSlot.player.name}`
+                  : decisionSlot?.player?.onBye
+                    ? es ? `Cubre la semana de descanso de ${decisionSlot.player.name}` : `Cover ${decisionSlot.player.name}'s bye`
+                    : decisionSlot?.benchCheck?.verdict === 'swap'
+                      ? es
+                        ? `Revisa ${decisionSlot.benchCheck.starterName} frente a ${decisionSlot.benchCheck.benchName}`
+                        : `Review ${decisionSlot.benchCheck.starterName} vs ${decisionSlot.benchCheck.benchName}`
+                      : copy('Review your starting lineup')}
+            </h2>
+            <p>
+              {decisionStarted || replacementStarted
+                ? (language === 'es'
+                  ? 'El partido del titular o de la opción de banca ya comenzó. Confirma los cierres y AutoSubs en tu plataforma; este aviso no garantiza que puedas cambiar la alineación.'
+                  : 'The starter or bench option has already reached kickoff. Confirm locks and AutoSubs on your platform; this notice does not establish that a lineup change is allowed.')
+                : decisionSlot?.empty
+                ? copy('This starting slot was empty when checked. Confirm the current lineup, eligibility, locks, and AutoSubs on your platform.')
+                : decisionSlot?.player?.ruledOut || decisionSlot?.player?.onBye
+                  ? es
+                    ? `${decisionSlot.player.name} está ${decisionSlot.player.onBye ? 'en semana de descanso' : 'descartado'}. Revisa la elegibilidad del reemplazo, los cierres individuales y los cambios automáticos en tu plataforma.`
+                    : `${decisionSlot.player.name} is ${decisionSlot.player.onBye ? 'on a bye' : 'ruled out'}. Review replacement eligibility, individual locks, and AutoSubs on your platform.`
+                  : decisionSlot?.benchCheck?.verdict === 'swap'
+                    ? leagueDelta != null && leagueDelta > 0
+                      ? es
+                        ? `${decisionSlot.benchCheck.benchName} proyecta ${leagueDelta.toFixed(1)} puntos más con la puntuación de esta liga. Confirma primero su estado de lesión y su elegibilidad.`
+                        : `${decisionSlot.benchCheck.benchName} projects ${leagueDelta.toFixed(1)} more points under this league's scoring. Confirm injury status and eligibility first.`
+                      : leagueDelta != null
+                        ? (language === 'es'
+                          ? 'La puntuación de esta liga no favorece la opción de banca. No se recomienda un cambio con estas proyecciones.'
+                          : "This league's scoring does not favor the bench option. These projections do not support a swap.")
+                        : (language === 'es'
+                          ? 'La comparación sugiere una revisión, pero no se pudo confirmar la identidad o las proyecciones de esta liga. Actualiza antes de considerar un cambio.'
+                          : 'The bench check suggests a review, but the player identity or league-scored values could not be confirmed. Refresh before considering a swap.')
+                    : data.starters.available
+                      ? copy('No empty, out, or bye slot was identified among the players we could read. Unresolved players and missing news may hide issues; confirm the lineup on your platform.')
+                      : myTeamReasonText(data.starters.reason, language)}
+            </p>
+            <small>
+              {proj
+                ? es
+                  ? `Semana ${proj.week} · ${proj.afProjected} de ${proj.projected + proj.unprojected} titulares valorados para esta liga`
+                  : `Week ${proj.week} · ${proj.afProjected} of ${proj.projected + proj.unprojected} starters priced for this league`
+                : copy('Projection coverage unavailable')}
+            </small>
+          </div>
+          <div className="af-mt-decision-actions">
+            <a className="af-btn af-btn--ghost" href="#af-mt-starters">{copy('Review starters')}</a>
+            {data.league.sourceLink ? <SourceActionLink link={data.league.sourceLink} className="af-btn" /> : null}
+          </div>
+        </section>
+      ) : null}
+
+
+      <TeamRosterWorkspace data={data} />
+     {/* ── Team header ─────────────────────────────────────────────── */}
+
 
       {/*
         ⚠ TWO COLUMNS FROM ONE DOM, NOT TWO LAYOUTS. Wide: the roster is the main column and
@@ -2095,7 +2100,7 @@ export function MyTeam({ data }: MyTeamProps) {
         <header className="af-mt-section-head">
           <h2 className="af-label">{copy('Starters')}</h2>
           <span className="af-mt-section-note">
-            {bestBall
+            {data.nativeLineup ? (language === 'es' ? 'Liga nativa AllFantasy. Guarda cambios válidos en Decisiones de plantilla; se aplican las reglas y cierres del servidor.' : 'Native AllFantasy lineup. Save eligible changes in Roster decisions; server rules and locks apply.') : bestBall
               ? language === 'es' ? `Plantilla Best Ball de ${platform}. Los titulares elegibles se seleccionan automáticamente.` : `Best Ball roster from ${platform}. Scoring selects your eligible starters automatically.`
               : language === 'es' ? `Alineación de ${platform}. Para cambiarla, abre ${platform}; AllFantasy solo la consulta.` : `Lineup from ${platform}. To change it, open ${platform} — AllFantasy only reads.`}
           </span>

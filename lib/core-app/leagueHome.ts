@@ -1,4 +1,5 @@
 import 'server-only'
+import { leagueCalendar, type LeagueCalendarEvent } from './leagueCalendar'
 
 import { prisma } from '@/lib/prisma'
 import {
@@ -133,6 +134,7 @@ export type SeasonStage = TimelinePhase
 export type LeagueHomeData = {
   /** Only a confirmed FAAB rule makes stored roster budgets meaningful. */
   faabEnabled?: boolean
+  calendar?: LeagueCalendarEvent[]
   /**
    * The other league in this one's franchise — the C2C half of an NFL league, or
    * the NFL half of a C2C one.
@@ -952,6 +954,7 @@ export async function getLeagueHomeData(
     stage,
     preSeason,
     pairing,
+    calendar: leagueCalendar(league.settings),
     league: {
       id: league.id,
       name: leagueDisplayName(league.name),

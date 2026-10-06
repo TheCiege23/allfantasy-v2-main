@@ -35,6 +35,7 @@ export type PersistRosterLineupInput = {
   week: number
   source: 'user_save' | 'commissioner_override' | 'import' | 'system'
   skipLockCheck?: boolean
+  expectedStarters?: string[]
 }
 
 function canonicalLineupEventTypeForSource(source: PersistRosterLineupInput['source']): string {
@@ -56,6 +57,10 @@ export async function persistRosterLineupWithEngine(
     where: { id: input.rosterId, leagueId: input.leagueId },
   })
   if (!roster) return { ok: false, error: 'Roster not found', status: 404 }
+  if (input.expectedStarters) {
+    const current=(roster.playerData as Record<string,unknown> | null)?.starters
+    if (!Array.isArray(current) || JSON.stringify(current.map(String))!==JSON.stringify(input.expectedStarters)) return {ok:false,error:'Your lineup changed. Refresh and compare again.',status:409}
+  }
 
   if (input.source === 'user_save' && await isCommissionerRosterLocked(input.leagueId, input.rosterId)) {
     return { ok: false, error: 'This roster is locked by the commissioner.', status: 403 }
@@ -142,8 +147,11 @@ export async function persistRosterLineupWithEngine(
   const redraftRosterId =
     resolveWriteAuthority(league.platform) === 'NATIVE' ? (roster.redraftRosterId ?? null) : null
 
-  await prisma.$transaction(async (tx) => {
-    await tx.roster.update({
+  try { await prisma.$transaction(async (tx) => {
+    if (input.expectedStarters) {
+      const result=await tx.roster.updateMany({ where:{id:input.rosterId,playerData:{equals:before}},data:{playerData:input.nextPlayerData as Prisma.InputJsonValue} })
+      if(result.count!==1) throw new Error('STALE_TEAM_LINEUP')
+    } else await tx.roster.update({
       where: { id: input.rosterId },
       data: { playerData: input.nextPlayerData as Prisma.InputJsonValue },
     })
@@ -160,7 +168,10 @@ export async function persistRosterLineupWithEngine(
     if (redraftRosterId) {
       await syncRedraftSlotTypesForLineup(tx, { redraftRosterId, playerData: input.nextPlayerData })
     }
-  })
+  }) } catch(e) {
+    if(e instanceof Error && e.message==='STALE_TEAM_LINEUP') return {ok:false,error:'Your roster changed while saving. Refresh and compare again.',status:409}
+    throw e
+  }
 
   await recordAfRosterMoveHistory({
     leagueId: input.leagueId,

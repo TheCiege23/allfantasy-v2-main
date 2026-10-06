@@ -2546,3 +2546,24 @@ li[data-kind='questionable'] .af-mt-check-tag {
 .af-mt-decision small { color:var(--muted); }
 .af-mt-decision-actions { display:flex; flex-wrap:wrap; gap:8px; flex-shrink:0; }
 @media (max-width:720px) { .af-mt-decision { display:block; padding:16px; } .af-mt-decision-actions { margin-top:14px; } .af-mt-decision-actions .af-btn { flex:1; text-align:center; } }
+
+/* Essential phone roster metadata stays legible. */
+@media(max-width:720px) {
+ .af-mt-player-name { font-size:16px; }
+ .af-mt-player-meta,.af-mt-status,.af-mt-lock-note { font-size:13px; line-height:1.45; }
+ .af-mt .af-btn { min-height:48px; }
+ .af-mt-projpair { font-variant-numeric:tabular-nums; }
+}
+
+.af-core .af-mt-row .af-pc-trigger { min-height:48px; }
+.af-core .af-mt-source { min-width:0; max-width:min(260px,100%); overflow:hidden; }
+.af-core .af-mt-fix { white-space:normal; overflow-wrap:anywhere; }
+.af-core .af-mt-row[data-empty='true'] .af-mt-fix { grid-column:2 / -1; width:auto; justify-self:start; max-width:100%; padding:10px 14px; }
+.af-core .af-mt-source .truncate,.af-core .af-mt-decision-actions .truncate { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.af-core .af-btn.af-mt-fix,.af-core .af-btn.af-mt-source,.af-core .af-btn.af-mt-ask { min-height:48px; min-width:48px; }
+.af-core .af-mt-decision-actions .af-btn { flex:1 1 160px; min-width:0; width:auto; min-height:48px; white-space:normal; }
+
+/* Keep team context first while retaining the phone countdown above verification. */
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt > .af-mt-head { order: -2; }
+}

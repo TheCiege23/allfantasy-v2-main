@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { hubCopy } from '@/lib/core-app/commissionerHubCopy'
 
 /**
  * The commissioner's publish switch for `/standings/{leagueId}` (38a·7b).
@@ -31,6 +33,8 @@ export type PublishStandingsToggleProps = {
 
 export function PublishStandingsToggle({ leagueId, enabled, url }: PublishStandingsToggleProps) {
   const router = useRouter()
+  const { language } = useOptionalLanguage()
+  const t = (english: string | null | undefined) => hubCopy(english, language)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -84,9 +88,9 @@ export function PublishStandingsToggle({ leagueId, enabled, url }: PublishStandi
           onClick={() => void setPublished(false)}
           disabled={busy}
         >
-          {busy ? 'Making private…' : 'Make private'}
+          {busy ? t('Making private…') : t('Make private')}
         </button>
-        {error ? <p className="af-ch-publish-error">{error}</p> : null}
+        {error ? <p className="af-ch-publish-error">{t(error)}</p> : null}
       </div>
     )
   }
@@ -100,7 +104,7 @@ export function PublishStandingsToggle({ leagueId, enabled, url }: PublishStandi
           onClick={() => setConfirming(true)}
           disabled={busy}
         >
-          Publish standings
+          {t('Publish standings')}
         </button>
       </div>
     )
@@ -108,18 +112,16 @@ export function PublishStandingsToggle({ leagueId, enabled, url }: PublishStandi
 
   return (
     <div className="af-ch-publish-confirm">
-      <p className="af-ch-publish-confirm-t">Publish this league&apos;s standings?</p>
+      <p className="af-ch-publish-confirm-t">{t('Publish this league’s standings?')}</p>
       {/*
         The list is specific on both sides. "Some league data" would be the
         vague version and is exactly what someone would agree to without
         realising what it covered.
       */}
       <ul className="af-ch-publish-list">
-        <li data-in="true">Published: league name, team names, records, points</li>
-        <li data-in="false">Not published: manager names, rosters, trades, chat</li>
-        <li data-in="false">
-          Anyone with the link can read it without an account, and search engines may index it
-        </li>
+        <li data-in="true">{t('Published: league name, team names, records, points')}</li>
+        <li data-in="false">{t('Not published: manager names, rosters, trades, chat')}</li>
+        <li data-in="false">{t('Anyone with the link can read it without an account, and search engines may index it')}</li>
       </ul>
       <div className="af-ch-publish-actions">
         <button
@@ -128,7 +130,7 @@ export function PublishStandingsToggle({ leagueId, enabled, url }: PublishStandi
           onClick={() => void setPublished(true)}
           disabled={busy}
         >
-          {busy ? 'Publishing…' : 'Yes, publish'}
+          {busy ? t('Publishing…') : t('Yes, publish')}
         </button>
         <button
           type="button"
@@ -140,10 +142,10 @@ export function PublishStandingsToggle({ leagueId, enabled, url }: PublishStandi
           }}
           disabled={busy}
         >
-          Cancel
+          {t('Cancel')}
         </button>
       </div>
-      {error ? <p className="af-ch-publish-error">{error}</p> : null}
+      {error ? <p className="af-ch-publish-error">{t(error)}</p> : null}
     </div>
   )
 }
