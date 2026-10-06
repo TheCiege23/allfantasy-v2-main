@@ -50,18 +50,22 @@ export async function verifyAppleTransaction(
   throw new Error("Apple transaction verification failed", { cause: lastError })
 }
 
-export async function getCurrentAppleTransaction(
-  transactionId: string,
-  environment: AppleEnvironment
-): Promise<JWSTransactionDecodedPayload> {
-  const client = new AppStoreServerAPIClient(
+/** The App Store Server API client, signed with our In-App Purchase key. */
+export function appleServerApiClient(environment: AppleEnvironment): AppStoreServerAPIClient {
+  return new AppStoreServerAPIClient(
     required("APPLE_IAP_PRIVATE_KEY").replace(/\\n/g, "\n"),
     required("APPLE_IAP_KEY_ID"),
     required("APPLE_IAP_ISSUER_ID"),
     required("APPLE_IAP_BUNDLE_ID"),
     environment
   )
-  const response = await client.getTransactionInfo(transactionId)
+}
+
+export async function getCurrentAppleTransaction(
+  transactionId: string,
+  environment: AppleEnvironment
+): Promise<JWSTransactionDecodedPayload> {
+  const response = await appleServerApiClient(environment).getTransactionInfo(transactionId)
   if (!response.signedTransactionInfo) throw new Error("Apple returned no signed transaction")
   return verifier(environment).verifyAndDecodeTransaction(response.signedTransactionInfo)
 }
