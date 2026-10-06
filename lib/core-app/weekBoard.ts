@@ -1539,7 +1539,8 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
     const period = periodsByLeague.get(pair.leagueId)
     const isThisWeek = pair.season === period?.season && pair.week === period?.week
 
-    if (you.finalized !== false && them.finalized !== false && (hasScore(you) || hasScore(them))) {
+    const explicitlyFinal = you.finalized === true && them.finalized === true
+    if (explicitlyFinal || (!isThisWeek && you.finalized !== false && them.finalized !== false && (hasScore(you) || hasScore(them)))) {
       // A completed meeting contributes to the series.
       const margin = you.pointsFor - them.pointsFor
       const won = margin > 0
