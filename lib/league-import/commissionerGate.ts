@@ -62,6 +62,8 @@ export interface CommissionerGateResult {
   isCommissioner?: boolean
   /** True when the source league itself doesn't exist/isn't reachable — maps to 404, not 403. */
   notFound?: boolean
+  /** True when the provider lists the league's members and the caller's linked account is not one. */
+  notMember?: boolean
   /**
    * The provider's own HTTP status, when this check made a request and got one back.
    * `null`/`undefined` for everything that isn't a distinguishable provider response —
@@ -198,7 +200,7 @@ async function checkSleeper(appUserId: string, sourceLeagueId: string): Promise<
     }>
     const me = users.find((u) => u.user_id === sleeperUserId)
     if (!me) {
-      return { ok: false, reason: 'You are not a member of that Sleeper league.' }
+      return { ok: false, notMember: true, reason: 'You are not a member of that Sleeper league.' }
     }
     // Sleeper marks commissioners with `is_owner: true` (co-commissioners allowed).
     // `metadata.is_commissioner` is unreliable — verified null on real leagues — so it

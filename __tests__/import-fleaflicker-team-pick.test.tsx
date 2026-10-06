@@ -227,3 +227,54 @@ describe('🛑 a Sleeper handle linked to a different AllFantasy login', () => {
     expect(screen.queryByTestId('import-sleeper-linked-elsewhere')).toBeNull()
   })
 })
+
+describe('🛑 a profile linked to a different Sleeper account than the one discovered', () => {
+  const LEAGUES = [{ sourceId: 'L1', name: 'Main Event', season: '2026', sport: 'nfl', totalTeams: 12 }]
+
+  async function discoverTyped() {
+    render(<ImportV4 defaultProvider="sleeper" />)
+    fireEvent.change(screen.getByTestId('import-discovery-account'), { target: { value: 'newhandle' } })
+    fireEvent.keyDown(screen.getByTestId('import-discovery-account'), { key: 'Enter' })
+    return screen.findByTestId('import-sleeper-account-mismatch')
+  }
+
+  it('names the linked account on the discovered list, before anyone presses Import', async () => {
+    discoverProviderLeagues.mockResolvedValue({
+      ok: true,
+      data: {
+        leagues: LEAGUES,
+        account: { accountIdentifier: 'newhandle' },
+        sleeperAccountMismatch: { linkedUsername: 'oldhandle' },
+      },
+    })
+    const notice = await discoverTyped()
+    expect(notice.textContent).toContain('linked to the Sleeper account oldhandle, not newhandle.')
+    expect(screen.getByTestId('import-sleeper-relink').textContent).toBe('Link newhandle instead')
+  })
+
+  it('"Link … instead" re-runs discovery with relinkSleeper, and the notice clears', async () => {
+    discoverProviderLeagues.mockResolvedValue({
+      ok: true,
+      data: {
+        leagues: LEAGUES,
+        account: { accountIdentifier: 'newhandle' },
+        sleeperAccountMismatch: { linkedUsername: 'oldhandle' },
+      },
+    })
+    await discoverTyped()
+    discoverProviderLeagues.mockResolvedValue({
+      ok: true,
+      data: { leagues: LEAGUES, account: { accountIdentifier: 'newhandle' } },
+    })
+    fireEvent.click(screen.getByTestId('import-sleeper-relink'))
+
+    await waitFor(() =>
+      expect(discoverProviderLeagues).toHaveBeenLastCalledWith('sleeper', 'newhandle', {
+        sport: 'nfl',
+        relinkSleeper: true,
+      }),
+    )
+    await screen.findByText('Main Event')
+    expect(screen.queryByTestId('import-sleeper-account-mismatch')).toBeNull()
+  })
+})
