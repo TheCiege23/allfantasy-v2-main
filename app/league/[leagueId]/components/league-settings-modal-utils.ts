@@ -161,6 +161,17 @@ export function waiverTypeLabel(waiverType: unknown): string {
   return typeof waiverType === 'string' || typeof waiverType === 'number' ? String(waiverType) : '—'
 }
 
+/**
+ * `waiverTypeLabel` in the reader's language: the same three values through the dictionary
+ * (`lsPanel.waiver.*`, English byte-identical), anything else exactly as `waiverTypeLabel` prints it.
+ */
+export function waiverTypeText(waiverType: unknown, t: (key: string) => string): string {
+  if (waiverType === 0 || waiverType === '0') return t('lsPanel.waiver.faab')
+  if (waiverType === 1 || waiverType === '1') return t('lsPanel.waiver.rolling')
+  if (waiverType === 2 || waiverType === '2') return t('lsPanel.waiver.reverse')
+  return waiverTypeLabel(waiverType)
+}
+
 /** Best-effort division count from synced league JSON (host shapes vary). */
 export function getDivisionCount(settings: unknown): number | null {
   const b = getSleeperLikeBundle(settings)
