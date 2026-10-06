@@ -10,7 +10,7 @@ This release adds the five requested follow-ups to the Team / Live workspace.
 
 The new plan and alert readers use saved rosters, and imported alert evaluations hold when roster sync evidence is absent, future-dated or over 30 minutes old. The existing live lineup screen keeps its provider verification requirement.
 
-No migration or provider write integration is introduced. Preferences use atomic single-key JSONB merges in the existing user profile; tasks and receipts use existing deployed tables. Scheduled phases use the existing alert sweep with bounded admission. Website main and worker-release must both carry the change for the scheduled execution to run.
+No migration or provider write integration is introduced. Preferences use atomic single-key JSONB merges in the existing user profile; tasks and receipts use existing deployed tables. Scheduled phases use the existing alert sweep with bounded admission. Native execution has a ten-second admission budget within the phase; account and roster starting order rotates so later entries are not permanently skipped. Website main and worker-release must both carry the change for the scheduled execution to run.
 
 ## Verification
 
