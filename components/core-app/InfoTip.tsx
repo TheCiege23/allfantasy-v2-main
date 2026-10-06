@@ -62,10 +62,13 @@ export function InfoTip({
     setExpanded(true)
   }
   const hide = useCallback(() => {
+    // Native dismissal restores focus; that restoration must not reopen the preview.
+    suppressFocus.current = true
     popover.current?.hidePopover?.()
     pinned.current = false
     setExpanded(false)
     setInteractive(false)
+    queueMicrotask(() => { suppressFocus.current = false })
   }, [])
   useEffect(() => {
     const node = popover.current
