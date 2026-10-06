@@ -219,6 +219,7 @@ import { normalizeToLiveSport } from '@/lib/sport-scope'
 import { getEspnGameSummary } from '@/lib/sports-live-scores-service'
 import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
 import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
+import { resolveServerRenderPreferences } from '@/lib/preferences/ServerRenderPreferenceResolver'
 import { resolveCorePaywall } from '@/lib/core-app/corePaywall'
 import type { LaunchOfferView } from '@/lib/monetization/foundingMember'
 import { homeLaunchOfferFor } from '@/components/launch/homeLaunchOffer'
@@ -3541,6 +3542,16 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       : null
 
   /*
+   * The one-league hub is a SERVER screen, so it cannot read the client language provider; it is
+   * worded here instead. The toggle writes the `af_lang` cookie and refreshes the route, so the
+   * re-render reads the new language. Resolved only when the hub is drawn — no other screen pays
+   * the session and profile read.
+   */
+  const hubLanguage = commissionerHub
+    ? ((await resolveServerRenderPreferences().catch(() => null))?.language ?? 'en')
+    : 'en'
+
+  /*
    * The all-leagues Commissioner Hub — `/core/commissioner` with no league. Matched on
    * `segment` because /core/discord and /core/hubs share the commissioner nav key. The
    * candidates are the leagues the nav badge counts, so the "All leagues" pill and the
@@ -4980,7 +4991,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
          * role check to bypass because there is no client-side role check.
          */
         commissionerHub ? (
-          <CommissionerHub data={commissionerHub} lineups={hubLineups} />
+          <CommissionerHub data={commissionerHub} lineups={hubLineups} language={hubLanguage} />
         ) : /*
            * ⚠ TWO DIFFERENT FACTS, TWO DIFFERENT RENDERINGS. "A league is
            * selected and we failed to read it" is a read failure on our side.
