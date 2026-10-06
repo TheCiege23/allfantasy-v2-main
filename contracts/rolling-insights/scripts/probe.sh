@@ -93,6 +93,10 @@ if [[ "$SPORT" == "SOCCER" ]]; then
   QS="${QS}&league=${LEAGUE}"
 fi
 
+NAME="${ENDPOINT}.${SPORT}"; [[ -n "$LEAGUE" ]] && NAME="${NAME}.${LEAGUE}"
+OUT="${FIXTURE_DIR}/${NAME}.json"
+[[ -e "$OUT" ]] && { echo "ERROR: fixture already exists; use the committed capture." >&2; exit 2; }
+
 URL="${BASE_URL}${PATH_SEG}?${QS}"
 REDACTED="${BASE_URL}${PATH_SEG}?RSC_token=***REDACTED***&_=${BUSTER}"
 [[ -n "$LEAGUE" ]] && REDACTED="${REDACTED}&league=${LEAGUE}"
@@ -153,8 +157,6 @@ fi
 
 # --- write fixture -----------------------------------------------------------
 mkdir -p "$FIXTURE_DIR"
-NAME="${ENDPOINT}.${SPORT}"; [[ -n "$LEAGUE" ]] && NAME="${NAME}.${LEAGUE}"
-OUT="${FIXTURE_DIR}/${NAME}.json"
 python3 - "$TMP" "$OUT" <<'PYWRITE'
 import json, sys
 with open(sys.argv[2], "x", encoding="utf-8") as out:

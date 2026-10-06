@@ -454,3 +454,5 @@ identity before combining these lines with CFBD. No runtime scoring is changed.
 The probe no longer requires jq, refuses to overwrite a committed capture, and
 withholds curl errors and non-200 bodies so a failed request cannot print the
 credential-bearing query URL. Credentials must still be supplied only via env.
+
+Production has no ri.contract_probe_log table (to_regclass returned null). The committed fixture and this contract record the capture; no schema was created merely to log a probe.
