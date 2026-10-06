@@ -22,5 +22,7 @@ export async function getWeeklyCalendar(leagues:Array<WeeklyCalendarLeague&{plat
   if(reads[1].status==='fulfilled')for(const r of reads[1].value)add(r.leagueId+':draft',r.leagueId,'draft',r.draftDateUtc,'league-settings')
   if(reads[2].status==='fulfilled')for(const r of reads[2].value){const poll=readViewerPoll(r.metadata,null);if(poll&&!poll.closedByHand)add(r.id,r.leagueId,'poll',poll.closesAt,'league-chat',poll.question)}
   if(reads[3].status==='fulfilled')for(const r of reads[3].value)add(r.id,r.leagueId,'commissioner',r.dueAt,'commissioner-workspace',r.title)
-  return buildWeeklyCalendar(scoped,now,extra,[...(pulse?.needs??[]),...(pulse?.set??[])].filter(r=>!r.syncFailed&&r.unresolved===0).map(r=>({leagueId:r.leagueId,at:r.lockAt})),focus,reads.some(r=>r.status==='rejected'))
+  const rows=[...(pulse?.needs??[]),...(pulse?.set??[])]
+  const calendarLeagues=scoped.map(l=>({...l,lineupAutomatic:rows.some(r=>r.leagueId===l.id&&(r.bestBall||r.automatic))}))
+  return buildWeeklyCalendar(calendarLeagues,now,extra,[...(pulse?.needs??[]),...(pulse?.set??[])].filter(r=>!r.syncFailed&&r.unresolved===0).map(r=>({leagueId:r.leagueId,at:r.lockAt})),focus,reads.some(r=>r.status==='rejected'))
 }

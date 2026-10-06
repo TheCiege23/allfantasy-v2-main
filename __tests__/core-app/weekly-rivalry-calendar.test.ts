@@ -28,7 +28,7 @@ describe('upcoming opponent evidence',()=>{
 describe('seven-day calendar',()=>{
  const leagues=[{id:'A',name:'Same name',settings:{lineupLockAt:'2026-10-08T20:00:00-04:00',waiver_next_run:'2026-10-07T08:00:00Z',trade_deadline:9}},{id:'B',name:'Same name',settings:{lineupLockAt:'2026-10-08T20:00:00'}}]
  it('normalizes absolute times and never invents dates for naive clocks or week numbers',()=>{
- expect(absoluteCalendarTime('2026-10-08T20:00:00')).toBeNull();expect(absoluteCalendarTime('2026-10-08')).toBeNull();expect(absoluteCalendarTime(5)).toBeNull()
+ expect(absoluteCalendarTime('2026-10-08T20:00:00')).toBeNull();expect(absoluteCalendarTime('2026-10-08')).toBeNull();expect(absoluteCalendarTime('2026-02-30T20:00:00Z')).toBeNull();expect(absoluteCalendarTime(5)).toBeNull()
  const c=buildWeeklyCalendar(leagues,now)
  expect(c.events.map(e=>e.at)).toEqual(['2026-10-07T08:00:00.000Z','2026-10-09T00:00:00.000Z'])
  expect(c.gaps).toContainEqual({leagueId:'B',leagueName:'Same name',kind:'lineup'})
@@ -39,6 +39,7 @@ describe('seven-day calendar',()=>{
  const c=buildWeeklyCalendar(leagues,now,extra,[],'B')
  expect(c.events).toHaveLength(1);expect(c.events[0]).toMatchObject({leagueId:'B',leagueName:'Same name',at:now.toISOString()})
  })
+ it('does not warn automatic lineups about a missing manual lock',()=>{const c=buildWeeklyCalendar([{id:'B',lineupAutomatic:true}],now);expect(c.gaps.some(g=>g.kind==='lineup')).toBe(false)})
  it('never converts a next game into a confirmed lineup lock',()=>{const c=buildWeeklyCalendar([{id:'B'}],now,[],[{leagueId:'B',at:'2026-10-09T00:00:00Z'}])
  expect(c.events[0].kind).toBe('game');expect(c.gaps.map(g=>g.kind)).toContain('lineup')})
  it('exports UTC, escapes injection and enables reminders only by explicit choice',()=>{

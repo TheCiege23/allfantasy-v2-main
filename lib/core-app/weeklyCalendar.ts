@@ -2,7 +2,7 @@ import { foldIcsLine } from './commissioner/calendar'
 export type WeeklyCalendarKind = 'game'|'lineup'|'waivers'|'trade'|'keeper'|'draft'|'poll'|'commissioner'
 export type WeeklyCalendarEvent = { id:string; leagueId:string; leagueName:string; kind:WeeklyCalendarKind; title:string; at:string; source:'league-settings'|'waiver-engine'|'league-chat'|'commissioner-workspace'|'stored-lineup'; href:string }
 export type WeeklyCalendar = { generatedAt:string; through:string; events:WeeklyCalendarEvent[]; gaps:Array<{leagueId:string;leagueName:string;kind:'lineup'|'waivers'|'read'}> }
-export type WeeklyCalendarLeague = { id:string;name?:string|null;settings?:unknown }
+export type WeeklyCalendarLeague = { id:string;name?:string|null;settings?:unknown; lineupAutomatic?:boolean }
 /** A local wall clock without an offset is not an absolute deadline. */
 export function absoluteCalendarTime(raw:unknown):string|null {
   if(typeof raw==='string'){
@@ -24,7 +24,7 @@ export function buildWeeklyCalendar(leagues:WeeklyCalendarLeague[], now:Date, ex
     for(const [kind,keys] of [['lineup',['lineupLockAt','lineup_lock_at']],['waivers',['waiver_next_run','nextWaiverRunAt','waiverProcessAt']],['trade',['tradeDeadlineAt','trade_deadline_at']],['keeper',['keeperDeadlineAt','keeper_deadline_at']],['draft',['draft_start','draftStartTime','draft_date']]] as const){
       const at=keys.map(k=>absoluteCalendarTime(s[k])).find(Boolean)
       if(at)add({id:l.id+':'+kind,leagueId:l.id,leagueName:name,kind,title:'',at,source:'league-settings',href:'/core/'+(kind==='lineup'?'my-team':kind==='waivers'?'waiver-wire':'commissioner')+'?league='+encodeURIComponent(l.id)})
-      if((kind==='lineup'||kind==='waivers')&&(!at || Date.parse(at)<now.getTime())&&!extra.some(e=>e.leagueId===l.id&&e.kind===kind&&absoluteCalendarTime(e.at)&&Date.parse(e.at)>=now.getTime()))gaps.push({leagueId:l.id,leagueName:name,kind})
+      if((kind==='waivers'||kind==='lineup'&&!l.lineupAutomatic)&&(!at || Date.parse(at)<now.getTime())&&!extra.some(e=>e.leagueId===l.id&&e.kind===kind&&absoluteCalendarTime(e.at)&&Date.parse(e.at)>=now.getTime()))gaps.push({leagueId:l.id,leagueName:name,kind})
     }
     if(unavailable)gaps.push({leagueId:l.id,leagueName:name,kind:'read'})
   }
