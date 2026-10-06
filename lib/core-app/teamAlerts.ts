@@ -8,11 +8,13 @@ export type TeamAlert={key:string;kind:'injury'|'deadline';leagueId:string;leagu
 export function buildTeamAlerts(data:MyTeamData,settings:unknown,now:number):TeamAlert[]{
   const league=data.league,alerts:TeamAlert[]=[]
   if(data.preDraft||data.completed||data.eliminated)return alerts
-  for(const comparison of eligibleComparisons(data,now)){
-    const p=comparison.slot.player
+  // Detect starter problems independently; bench evidence only supplies an alternative.
+  const comparisons=eligibleComparisons(data,now)
+  for(const [index,slot] of (data.starters.available?data.starters.data:[]).entries()){
+    const p=slot.player
     if(!p?.ruledOut || !p.kickoff || new Date(p.kickoff).getTime()<=now || new Date(p.kickoff).getTime()-now>7*86400_000)continue
-    const alternative=comparison.candidates.find(c=>!c.started&&!c.player.ruledOut&&!c.player.onBye&&c.player.kickoff&&new Date(c.player.kickoff).getTime()>now)?.player.name??null
-    alerts.push({key:`injury:${p.sleeperId}:${new Date(p.kickoff).toISOString()}`,kind:'injury',leagueId:league.id,leagueName:league.name,playerId:p.sleeperId,playerName:p.name,status:p.injuryStatus,deadline:new Date(p.kickoff).toISOString(),source:'Saved roster and schedule',observedAt:null,alternative,href:teamInjuryAlertHref(league.id,p.sleeperId,new Date(p.kickoff).toISOString(),comparison.index),fresh:false,label:comparison.slot.slotLabel})
+    const alternative=comparisons[index]?.candidates.find(c=>!c.started&&!c.player.ruledOut&&!c.player.onBye&&c.player.kickoff&&new Date(c.player.kickoff).getTime()>now)?.player.name??null
+    alerts.push({key:`injury:${p.sleeperId}:${new Date(p.kickoff).toISOString()}`,kind:'injury',leagueId:league.id,leagueName:league.name,playerId:p.sleeperId,playerName:p.name,status:p.injuryStatus,deadline:new Date(p.kickoff).toISOString(),source:'Saved roster and schedule',observedAt:null,alternative,href:teamInjuryAlertHref(league.id,p.sleeperId,new Date(p.kickoff).toISOString(),index),fresh:false,label:slot.slotLabel})
   }
   for(const event of leagueCalendar(settings)){
     if(!event.at || Date.parse(event.at)<=now || Date.parse(event.at)-now>24*3600_000)continue
