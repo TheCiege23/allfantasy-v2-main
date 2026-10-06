@@ -72,3 +72,9 @@ describe('Fantrax snapshot refresh', () => {
     expect(h.upsert).not.toHaveBeenCalled()
   })
 })
+
+it('retains an owned reserve name omitted from the current directory on a live refresh', async () => {
+  h.findUnique.mockResolvedValue({ id: 'stable-uuid', appUserId: 'owner', sourceLeagueId: 'vendor-id', season: 2026, sport: 'cfb', roster: [{ fantraxId: 'unknown-reserve', name: 'Archived Reserve', primaryPosition: 'RB' }] })
+  expect(await importFantraxLeague(args)).toMatchObject({ ok: true })
+  expect(h.updateMany.mock.calls[0][0].data.roster[1]).toMatchObject({ fantraxId: 'unknown-reserve', name: 'Archived Reserve', primaryPosition: 'RB', status: 'RESERVE', team: '' })
+})

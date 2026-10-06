@@ -10,6 +10,7 @@
  */
 
 import 'server-only'
+import { preserveSnapshotNames } from './preserveSnapshotNames'
 
 import { getFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxApi'
 import { mapFantraxDraftResults } from '@/lib/league-import/fantrax/fantraxDraft'
@@ -122,7 +123,7 @@ export async function importFantraxLeague(args: {
   const refreshTarget = args.refreshSnapshotId
     ? await prisma.fantraxLeague.findUnique({
         where: { id: args.refreshSnapshotId },
-        select: { id: true, appUserId: true, sourceLeagueId: true, season: true },
+        select: { id: true, appUserId: true, sourceLeagueId: true, season: true, sport: true, roster: true },
       })
     : null
   if (args.refreshSnapshotId && (
@@ -183,7 +184,7 @@ export async function importFantraxLeague(args: {
    * league look empty, which is why the tile could only ever claim college.
    */
   const candidates = [
-    cfb.ok ? { sport: 'cfb' as const, isDevy: true, resolved: resolveRosters(rosters.data, cfb.data) } : null,
+    cfb.ok ? { sport: 'cfb' as const, isDevy: true, resolved: resolveRosters(rosters.data, refreshTarget?.sport === 'cfb' ? preserveSnapshotNames(cfb.data, refreshTarget.roster) : cfb.data) } : null,
     nfl.ok ? { sport: 'nfl' as const, isDevy: false, resolved: resolveRosters(rosters.data, nfl.data) } : null,
     mlb.ok ? { sport: 'mlb' as const, isDevy: false, resolved: resolveRosters(rosters.data, mlb.data) } : null,
   ].filter((c): c is NonNullable<typeof c> => c !== null)
