@@ -145,6 +145,9 @@ export const UI_SCORING_STORES: Readonly<Record<string, Store>> = {
       receiving_yards: 'rec_yds',
       receiving_td: 'rec_td',
       receiving_2pt: 'two_pt',
+      te_premium: 'te_premium',
+      return_td: 'kr_td', // One panel bucket supplies both distinct athlete return categories.
+      off_fumble_recovery_td: 'fumble_td',
       idp_solo_tackle: 'idp_solo',
       idp_tackle: 'idp_tackle',
       idp_sack: 'idp_sack',
@@ -228,6 +231,7 @@ export function bridgeUiRulesForSport(sport: string, rules: Record<string, unkno
     const value = Number(rules[uiKey])
     if (rules[uiKey] != null && Number.isFinite(value)) out[engineKey] = value
   }
+  if (sport === 'NCAAF' && out.kr_td !== undefined) out.pr_td = out.kr_td
   return out
 }
 

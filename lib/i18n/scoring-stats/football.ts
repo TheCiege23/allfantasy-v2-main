@@ -55,6 +55,8 @@ export const FOOTBALL_STATS_ES: StatTable = {
 
   // ── Receiving ──
   'Reception': 'Recepción',
+  'TE Reception Bonus': 'Bono por recepción para TE',
+  'Added to the regular reception value for tight ends only.': 'Se suma al valor habitual de recepción solo para los alas cerradas.',
   'Receiving Yards': 'Yardas por recepción',
   'Receiving TD': 'TD por recepción',
   'Receiving 1st Down': 'Primer down por recepción',

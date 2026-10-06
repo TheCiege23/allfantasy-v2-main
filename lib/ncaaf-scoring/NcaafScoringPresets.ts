@@ -31,7 +31,7 @@ export const NCAAF_RUSHING_KEYS = [
 ] as const
 
 export const NCAAF_RECEIVING_KEYS = [
-  'reception', 'receiving_yards', 'receiving_td', 'receiving_first_down', 'receiving_2pt', 'target',
+  'reception', 'te_premium', 'receiving_yards', 'receiving_td', 'receiving_first_down', 'receiving_2pt', 'target',
   'forty_yd_reception_bonus', 'forty_yd_rec_td_bonus',
   'one_hundred_yd_rec_bonus', 'two_hundred_yd_rec_bonus',
 ] as const

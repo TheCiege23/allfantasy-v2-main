@@ -26,6 +26,11 @@ export const NCAAF_CONFIG: SportConfigFull = {
     { key: 'idp_td', label: 'Defensive TD', defaultPoints: 6, isToggleable: true, group: 'idp', sport: 'NCAAF', requiresToggle: 'IDP' },
     { key: 'idp_int', label: 'Interception', defaultPoints: 4, isToggleable: true, group: 'idp', sport: 'NCAAF', requiresToggle: 'IDP' },
     { key: 'idp_int_return_yards', label: 'Interception Return Yards', defaultPoints: 0, isToggleable: true, group: 'idp', sport: 'NCAAF', requiresToggle: 'IDP' },
+    // Opt-in athlete return categories: importing a league supplies its actual weights.
+    { key: 'kr_td', label: 'Kick Return TD', defaultPoints: 0, isToggleable: true, group: 'special', sport: 'NCAAF' },
+    { key: 'pr_td', label: 'Punt Return TD', defaultPoints: 0, isToggleable: true, group: 'special', sport: 'NCAAF' },
+    { key: 'fumble_td', label: 'Offensive Fumble Recovery TD', defaultPoints: 0, isToggleable: true, group: 'special', sport: 'NCAAF' },
+    { key: 'te_premium', label: 'TE Reception Bonus', defaultPoints: 0, isToggleable: true, group: 'receiving', sport: 'NCAAF', requiresToggle: 'TE_PREMIUM' },
     { key: 'two_pt', label: '2-Point Conversion', defaultPoints: 2, isToggleable: true, group: 'special', sport: 'NCAAF' },
     { key: 'fg_made', label: 'Field Goal Made', defaultPoints: 3, isToggleable: true, group: 'kicking', sport: 'NCAAF' },
     { key: 'fg_miss', label: 'Field Goal Missed', defaultPoints: 0, isToggleable: true, group: 'kicking', sport: 'NCAAF' },

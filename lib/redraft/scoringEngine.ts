@@ -20,7 +20,8 @@ import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { computeOptimalLineup, type LineupSlotSpec, type OptimalSlotAssignment } from '@/lib/lineup-optimizer/optimalLineup'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { allowedPositionsForSlot, normalizeToken } from '@/lib/redraft/lineupValidation'
-import { bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
+import { importedNcaafScoring } from './importedNcaafScoring'
+import { storeSavedByPerson, bridgeSportUiScoringStore } from '@/lib/redraft/uiScoringStoreBridge'
 import { loadWeekLineups, weekSlotType } from './weekLineupSlots'
 
 export function calculateFantasyPoints(
@@ -233,11 +234,23 @@ export async function calculateScoreFromSportConfig(
       ? (sc.categoryPoints as Record<string, number>)
       : {}
   if (Object.keys(overrides).length === 0) {
-    // The sport's own panel store (NHL / NBA / NCAAB / NCAAF / soccer), else the existing NFL fallback.
-    overrides = bridgeSportUiScoringStore(cfg.sport, league.settings) ?? bridgeLegacyNflScoringConfig(league)
+    const settings = league.settings as Record<string, unknown> | null
+    const savedPanel = storeSavedByPerson(settings?.ncaaf_scoring_config)
+    const imported = savedPanel ? null : importedNcaafScoring(cfg.sport, settings, cfg.scoringCategories)
+    // Explicit commissioner edits retain precedence. Untouched seeded panel defaults cannot
+    // override the actual source weights or reintroduce penalties the source never awards.
+    if (imported) {
+      categories = imported.categories
+      overrides = imported.overrides
+    } else {
+      overrides = bridgeSportUiScoringStore(cfg.sport, league.settings) ?? bridgeLegacyNflScoringConfig(league)
+    }
   }
   categories = applyScoringPresetToRecPoints(categories, preset, overrides)
 
+  if (cfg.sport === 'NCAAF' && overrides.te_premium !== undefined && !categories.some(c => c.key === 'te_premium')) {
+    categories = [...categories, cfg.scoringCategories.find(c => c.key === 'te_premium')!]
+  }
   const effectiveStats = applyTePremiumStat(categories, rawStats, position)
   return scoreStatsWithCategories(categories, effectiveStats, overrides)
 }
