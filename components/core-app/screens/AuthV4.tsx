@@ -528,7 +528,8 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           <span>
             I am <strong>18 or older</strong> and understand AllFantasy is{' '}
             <strong>season-long fantasy sports only</strong> — no gambling, no daily fantasy. Not
-            available in WA.
+            available in WA. See the{' '}
+            <Link href="/disclaimer?from=signup">Fantasy Sports &amp; State Notice</Link>.
           </span>
         </label>
 

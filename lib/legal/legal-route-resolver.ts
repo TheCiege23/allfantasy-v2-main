@@ -47,3 +47,26 @@ export function getNoGamblingPolicyUrl(fromSignup?: boolean, next?: string | nul
   const q = params.toString()
   return q ? `/no-gambling-policy?${q}` : "/no-gambling-policy"
 }
+
+export type LegalPageSearchParams = { from?: string; next?: string }
+
+/**
+ * The back link every legal page shows: to sign-up (keeping `next`) when the reader
+ * arrived from the sign-up form's links, otherwise home.
+ */
+export async function resolveLegalBackLink(
+  searchParams?: Promise<LegalPageSearchParams> | LegalPageSearchParams,
+): Promise<{ href: string; label: string; fromSignup: boolean }> {
+  const params = (await searchParams) ?? {}
+  if (params.from !== "signup") return { href: "/", label: "Back to home", fromSignup: false }
+  const next = typeof params.next === "string" ? params.next : undefined
+  return { href: getSignupReturnUrl(next), label: "Back to sign up", fromSignup: true }
+}
+
+export function getSmsTermsUrl(): string {
+  return "/sms-terms"
+}
+
+export function getCopyrightPolicyUrl(): string {
+  return "/copyright"
+}
