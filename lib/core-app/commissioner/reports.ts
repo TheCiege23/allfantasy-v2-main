@@ -78,7 +78,12 @@ export type ActivityCharts = SectionState<{
   newest: string | null
 }>
 
-export async function loadActivityCharts(grant: CommissionerGrant, now = new Date()): Promise<ActivityCharts> {
+export async function loadActivityCharts(
+  grant: CommissionerGrant,
+  now = new Date(),
+  /** The reader's language for the charts and the failure reason; default English. */
+  language = 'en',
+): Promise<ActivityCharts> {
   try {
     const since = new Date(Math.min(seasonStart(grant.season, now).getTime(), now.getTime() - 8 * 7 * 86_400_000))
     const raw = await prisma.decisionOsImportedActivity.findMany({
@@ -98,14 +103,17 @@ export async function loadActivityCharts(grant: CommissionerGrant, now = new Dat
     return {
       available: true,
       data: {
-        activity: activityChart(rows, now),
-        trades: tradesChart(rows, now),
-        waivers: managers.length > 0 ? waiverParticipationChart(thisSeason, managers) : null,
+        activity: activityChart(rows, now, language),
+        trades: tradesChart(rows, now, language),
+        waivers: managers.length > 0 ? waiverParticipationChart(thisSeason, managers, language) : null,
         newest: rows[0]?.occurredAt.toISOString() ?? null,
       },
     }
   } catch {
-    return { available: false, reason: 'League activity couldn’t be read just now.' }
+    return {
+      available: false,
+      reason: language === 'es' ? 'No se pudo leer la actividad de la liga en este momento.' : 'League activity couldn’t be read just now.',
+    }
   }
 }
 

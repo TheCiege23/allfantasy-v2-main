@@ -227,6 +227,55 @@ const ES: Record<string, string> = {
   // ── Waivers ───────────────────────────────────────────────────────────
   'Waiver rules →': 'Reglas de agentes libres →',
 
+  /*
+   * ── The audit log (`commissioner/timeline.ts`) ──
+   * Translated HERE, at render, and not at the source like the hub's other builders: the timeline
+   * reads its own English back (`collapseQuietSyncs` parses "N records updated"), so its data stays
+   * English and the screen words it. Free text inside an entry — an announcement, a feed summary, a
+   * job's result message — passes through as written, and so does "Updated <setting keys>.", whose
+   * keys are raw setting names.
+   */
+  Import: 'Importación',
+  Sync: 'Sincronización',
+  'Rule change': 'Cambio de regla',
+  Announcement: 'Anuncio',
+  Automation: 'Automatización',
+  System: 'Sistema',
+  // An audit entry with no wording of its own shows its entity type, humanized.
+  Trade: 'Intercambio',
+  Roster: 'Plantilla',
+  Team: 'Equipo',
+  Player: 'Jugador',
+  Matchup: 'Enfrentamiento',
+  'Waiver claim': 'Solicitud de agentes libres',
+  'Changed league settings': 'Cambió la configuración de la liga',
+  'Undid a draft pick': 'Deshizo una selección del draft',
+  'Ran waivers by hand': 'Procesó los agentes libres a mano',
+  'Ran a league automation': 'Ejecutó una automatización de la liga',
+  'Edited the standings': 'Editó la clasificación',
+  'Adjusted a team’s FAAB': 'Ajustó el FAAB de un equipo',
+  'Changed the waiver order': 'Cambió el orden de agentes libres',
+  'Recalculated the standings': 'Recalculó la clasificación',
+  'Locked or unlocked the league': 'Bloqueó o desbloqueó la liga',
+  'Paused or resumed the league': 'Pausó o reanudó la liga',
+  'Moved the league to a new season stage': 'Pasó la liga a una nueva etapa de la temporada',
+  'Reversed a trade': 'Revirtió un intercambio',
+  'Posted a recap': 'Publicó un resumen',
+  'Saved a season snapshot': 'Guardó una instantánea de la temporada',
+  'Sent an @everyone announcement': 'Envió un anuncio a @everyone',
+  'Checked the league for commissioner tasks': 'Revisó la liga en busca de tareas del comisionado',
+  'Processed waiver claims': 'Procesó las solicitudes de agentes libres',
+  'Built the scheduled commissioner report': 'Generó el informe programado del comisionado',
+  'Ran automation recipes': 'Ejecutó las automatizaciones',
+  'The import stopped before finishing. Re-run it from the league’s sync page.':
+    'La importación se detuvo antes de terminar. Vuelve a ejecutarla desde la página de sincronización de la liga.',
+  'AllFantasy could not read the league on this pass; it retries automatically.':
+    'AllFantasy no pudo leer la liga en este intento; lo vuelve a intentar automáticamente.',
+  'Nothing had changed.': 'No había cambios.',
+  'Nothing needed attention.': 'Nada necesitaba atención.',
+  'Skipped — nothing was due.': 'Omitido: no había nada pendiente.',
+  'The league’s history couldn’t be read just now.': 'No se pudo leer el historial de la liga en este momento.',
+
   // ── Trade and draft statuses, as their tables store them (shown raw in the history section) ──
   pending: 'pendiente',
   accepted: 'aceptado',
@@ -326,6 +375,26 @@ const PATTERNS: Pattern[] = [
   ],
   [/^Not run: (.+)\.$/s, (why) => `No se procesó: ${why}.`],
   [/^Processed (\d+) claims\.$/, (n) => `Se procesaron ${n} solicitudes.`],
+  // The audit log's templates (see the note on its vocabulary above).
+  [/^Import of the (\d{4}) season failed$/, (s) => `Falló la importación de la temporada ${s}`],
+  [/^Imported the (\d{4}) season from (.+)$/s, (s, p) => `Se importó la temporada ${s} desde ${p}`],
+  [/^Import of the (\d{4}) season: ([a-z_]+)$/, (s, status) => `Importación de la temporada ${s}: ${es(status)}`],
+  [/^Sync from (.+) failed$/s, (p) => `Falló la sincronización desde ${p}`],
+  [/^Synced from (.+)$/s, (p) => `Sincronizado desde ${p}`],
+  [/^([\d,]+) records? updated\.$/, (n) => (n === '1' ? '1 registro actualizado.' : `${n} registros actualizados.`)],
+  [/^(\d+) syncs · ([\d,]+) records updated in all\.$/, (n, r) => `${n} sincronizaciones · ${r} registros actualizados en total.`],
+  [/^Nothing had changed · (\d+) checks\.$/, (n) => `No había cambios · ${n} comprobaciones.`],
+  [
+    // Both halves are optional, so the lookahead demands a number first — a bare "." is not a summary.
+    /^(?=\d)(?:(\d+) new tasks?)?(?:, )?(?:(\d+) resolved on (?:its|their) own)?\.$/,
+    (opened, resolved) => {
+      const parts: string[] = []
+      if (opened) parts.push(opened === '1' ? '1 tarea nueva' : `${opened} tareas nuevas`)
+      if (resolved) parts.push(resolved === '1' ? '1 se resolvió sola' : `${resolved} se resolvieron solas`)
+      return `${parts.join(', ')}.`
+    },
+  ],
+  [/^No change — (\d+) still open\.$/, (n) => `Sin cambios: ${n} siguen abiertas.`],
   // Shared modules the hub shows without owning: platform hand-off buttons (`platformLinks`) and the
   // action-authority reason (`commissioner-os/authority`). Both are one fixed shape around a name.
   [/^Open in ([A-Za-z0-9 ]{2,24})$/, (p) => `Abrir en ${p}`],
