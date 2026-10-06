@@ -10,20 +10,16 @@ export type WeeklyBlueprint = {
   actions: WeeklyAction[]; actionCount: number; attentionLeagueIds: string[]; lineupReadFailed: boolean
   coverage: Array<{ leagueId: string; leagueName: string; af: boolean; provider: boolean; partial: boolean }>
   matchup?: { opponent: string; period: number; leagueName: string; leagueId?: string; season?: number }
-  playoff?: { probability: number; leagueName: string; leagueId?: string; season?: number }
+  playoff?: { probability: number; leagueName: string; leagueId?: string; season?: number; period?: number }
   rivalry?: { opponent: string; wins: number; losses: number; ties: number; winningStreak: number; losingStreak: number; final: boolean }
   commissionerLeagueIds?: string[]
 }
 /**
  * The game a forward-looking plan is about.
  *
- * 🛑 THE BOARD AND THE SEASON MODEL DISAGREE ABOUT "THIS WEEK" ON PURPOSE. The board keeps the week
- * the platform's marker is on, and on the Tuesday after a Sleeper week that is the week just
- * FINISHED, shown as a result (see leagueWeekProgress). The season model has already moved to the
- * first unplayed game. Pairing the two put "Period 4: facing Paid" (a game already won 135.5–129.9)
- * beside the Period 5 scenarios against Rittnasty in HailShiva, in the brief, every caption, the
- * PNG card and the workbook (production 2026-10-06). Once the board's game is final and the same
- * league's model names a later game in the same season, the plan describes that game.
+ * The NFL board advances a finished marker when the next schedule is stored. For any remaining
+ * finished board card, keep the same-league model's later game as a forward-looking fallback.
+ * Its odds still require independent matching period provenance below.
  */
 export function upcomingGame(card: WeekMatchup | undefined, outlook: SeasonOutlook | null): SwingMatchup | null {
   if (!card?.live?.final) return null
@@ -78,9 +74,9 @@ export function buildWeeklyBlueprint(input: {
   })
   const featured = cards.find(m => m.leagueId === attentionLeagueIds[0]) ?? cards[0]
   const upcoming = upcomingGame(featured, input.outlook)
-  // The matchup and odds describe one league and season, including in portfolio view.
+  // The matchup and odds describe one league, season and period, including in portfolio view.
   // With no matching model, omit odds rather than borrow another league's probability.
-  const outlook = input.outlook?.leagues.find(l => allowed.has(l.leagueId) && l.leagueId === (featured?.leagueId ?? focus) && l.you?.modelled && (!featured || l.season === featured.season))
+  const outlook = input.outlook?.leagues.find(l => allowed.has(l.leagueId) && l.leagueId === (featured?.leagueId ?? focus) && l.you?.modelled && (!featured || (l.season === featured.season && l.period === (upcoming?.week ?? featured.week))))
   const probability = outlook?.you?.playoffPct
   return { name: input.name?.trim() || null, teamName: input.board.leagueBoard?.yourTeamName ?? null, leagueCount: leagues.length,
     sports: [...new Set(leagues.map(l => l.sport?.trim()).filter((s): s is string => Boolean(s)))], focusLeagueId: focus,
@@ -94,7 +90,7 @@ export function buildWeeklyBlueprint(input: {
     } } : {}),
     ...(upcoming ? { matchup: { opponent: upcoming.opponentName!, period: upcoming.week, leagueName: featured!.leagueName, leagueId: featured!.leagueId, season: featured!.season } }
       : featured?.opponent.name ? { matchup: { opponent: featured.opponent.name, period: featured.week, leagueName: featured.leagueName, leagueId: featured.leagueId, season: featured.season } } : {}),
-    ...(outlook && probability != null && Number.isFinite(probability) && probability >= 0 && probability <= 100 ? { playoff: { probability, leagueName: outlook.leagueName, leagueId: outlook.leagueId, season: outlook.season } } : {}) }
+    ...(outlook && probability != null && Number.isFinite(probability) && probability >= 0 && probability <= 100 ? { playoff: { probability, leagueName: outlook.leagueName, leagueId: outlook.leagueId, season: outlook.season, period: outlook.period } } : {}) }
 }
 export function weeklyActionText(action: WeeklyAction, es = false): string {
   if (es) return ({ lineup: `Revisa ${action.count} problema${action.count === 1 ? '' : 's'} en tu alineación`, monitor: `Vigila ${action.count} titular${action.count === 1 ? '' : 'es'} con dudas`, sync: 'Actualiza los datos de tu equipo', playoff: `Explora los escenarios del período ${action.count}`, review: 'Revisa tu equipo y sus reglas' })[action.kind]

@@ -16,7 +16,7 @@ export function buildWeeklyWorkbook(data: WeeklyBlueprint, path?: WeeklyPlayoffP
   append('Brief', [['AllFantasy · Your Week'],[es ? 'Resumen' : 'Brief',weeklyBrief(data,es)],['Rivalry',rivalryNarrative(data,es)],['Scope',data.focusLeagueId ? 'League' : 'Portfolio'],['Sports',data.sports.join(', ')],['Disclosure','Estimates are not guarantees. Only imported history and available forecasts are exported.'],['History',path?.historyUnavailable ? 'Snapshot storage unavailable' : 'Saved observed periods; missing periods are not interpolated.']])
   append('Actions', [['League','Priority','Next game (not confirmed lock)','Source'],...data.actions.map(a=>[a.leagueName,weeklyActionText(a,es),a.gameAt ?? '',a.source])])
   const you = path?.league?.you
-  const valid = !!you?.modelled && path?.league?.season === path?.season && Number.isFinite(you.playoffPct) && you.playoffPct >= 0 && you.playoffPct <= 100
+  const valid = !!you?.modelled && path?.league?.season === path?.season && path?.league?.period === path?.period && Number.isFinite(you.playoffPct) && you.playoffPct >= 0 && you.playoffPct <= 100
   const points = valid ? (path?.points ?? []).filter(p=>Number.isInteger(p.period) && p.period > 0 && Number.isFinite(p.probability) && p.probability >= 0 && p.probability <= 100).sort((a,b)=>a.period-b.period) : []
   const trend = append('Trend',[['Period','Estimated playoff probability (%)','Calculated at (UTC)'],...points.map(p=>[p.period,p.probability,p.sampledAt])])
   for (let row=2;row<=points.length+1;row++) trend[`B${row}`].z = '0.0"%"'

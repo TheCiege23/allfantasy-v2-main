@@ -11,8 +11,9 @@ export function validPlayoffPoint(value: unknown): value is PlayoffPoint {
 }
 /** Independent per-period snapshots avoid concurrent visits overwriting other weeks. */
 export async function readWeeklyPlayoffPath(userId: string, league: OutlookLeague | null, swing: SwingMatchup | null, season: number, period: number, now = new Date()): Promise<WeeklyPlayoffPath> {
-  const result: WeeklyPlayoffPath = { league, swing, points: [], historyUnavailable: false, season, period }
-  if (!league?.you?.modelled || league.season !== season || period < 1) return result
+  const matches = league?.season === season && league.period === period && period > 0
+  const result: WeeklyPlayoffPath = { league: matches ? league : null, swing: matches && swing?.leagueId === league?.leagueId && swing.week >= period ? swing : null, points: [], historyUnavailable: false, season, period }
+  if (!matches || !league?.you?.modelled) return result
   const probability = league.you.playoffPct
   const point = { period, probability, sampledAt: league.assumptions.computedAt }
   if (!validPlayoffPoint(point)) return result

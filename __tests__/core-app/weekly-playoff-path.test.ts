@@ -4,10 +4,15 @@ const h=vi.hoisted(()=>({read:vi.fn(),write:vi.fn()}))
 vi.mock('@/lib/prisma',()=>({prisma:{sportsDataCache:{findMany:h.read,upsert:h.write}}}))
 import { readWeeklyPlayoffPath, validPlayoffPoint } from '@/lib/core-app/weeklyPlayoffPath'
 import type { OutlookLeague } from '@/lib/core-app/seasonOutlook'
-const league={leagueId:'A',season:2026,you:{modelled:true,rosterId:'r1',playoffPct:3.5},assumptions:{computedAt:'2026-10-04T12:00:00Z'}} as OutlookLeague
+const league={leagueId:'A',season:2026,period:4,you:{modelled:true,rosterId:'r1',playoffPct:3.5},assumptions:{computedAt:'2026-10-04T12:00:00Z'}} as OutlookLeague
 const point=(period:number,probability:number)=>({period,probability,sampledAt:'2026-10-03T12:00:00Z'})
 beforeEach(()=>{vi.resetAllMocks();h.read.mockResolvedValue([]);h.write.mockResolvedValue({})})
 describe('weekly playoff snapshots',()=>{
+  it('withholds a mismatched period from the path and snapshot store',async()=>{
+    const out=await readWeeklyPlayoffPath('u',league,null,2026,5)
+    expect(out).toMatchObject({league:null,swing:null,points:[]})
+    expect(h.read).not.toHaveBeenCalled();expect(h.write).not.toHaveBeenCalled()
+  })
   it.each([point(0,50),point(1,101),point(1,NaN),{...point(1,50),sampledAt:'bad'}])('rejects invalid snapshots %j', p=>expect(validPlayoffPoint(p)).toBe(false))
   it('keeps past snapshots and writes just the current period',async()=>{
     h.read.mockResolvedValue([{data:point(5,80)},{data:point(2,10)},{data:point(3,5)},{data:point(0,90)}])

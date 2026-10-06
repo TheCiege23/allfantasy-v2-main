@@ -9,9 +9,19 @@ import type { WeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
 import type { WeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 const data: WeeklyBlueprint = {name:'Alex',teamName:'Ice Bears',leagueCount:1,sports:['NHL'],focusLeagueId:'private-id',actions:[],actionCount:0,attentionLeagueIds:[],lineupReadFailed:false,coverage:[],rivalry:{opponent:'Rivals',wins:6,losses:2,ties:1,winningStreak:4,losingStreak:0,final:false},commissionerLeagueIds:['private-id']}
-const path = {season:2026,period:4,historyUnavailable:false,points:[{period:2,probability:25,sampledAt:'2026-09-20'},{period:4,probability:52,sampledAt:'2026-10-04'}],swing:{week:4,ifWin:70,ifLose:30},league:{season:2026,you:{modelled:true,playoffPct:52},assumptions:{iterations:10000,computedAt:'2026-10-04',missing:['No division model']}}} as WeeklyPlayoffPath
+const path = {season:2026,period:4,historyUnavailable:false,points:[{period:2,probability:25,sampledAt:'2026-09-20'},{period:4,probability:52,sampledAt:'2026-10-04'}],swing:{week:4,ifWin:70,ifLose:30},league:{season:2026,period:4,you:{modelled:true,playoffPct:52},assumptions:{iterations:10000,computedAt:'2026-10-04',missing:['No division model']}}} as WeeklyPlayoffPath
 afterEach(()=>{cleanup();vi.restoreAllMocks()})
 describe('weekly sharing and Excel',()=>{
+  it('omits charts and scenario numbers when the model belongs to another period',()=>{
+    const stale={...path,league:{...path.league!,period:5}}
+    const bytes=buildWeeklyWorkbook(data,stale)
+    const wb=XLSX.read(bytes,{type:'array'})
+    expect(XLSX.CFB.find(XLSX.CFB.read(bytes,{type:'array'}),'xl/charts/chart3.xml')).toBeNull()
+    expect(wb.Sheets.Model.B1.v).toBe(false)
+    expect(XLSX.utils.sheet_to_json(wb.Sheets.Scenarios,{header:1})).toHaveLength(2)
+    render(<WeeklySharing data={data} path={stale}/> )
+    expect(screen.getByRole('button',{name:'Download Excel',exact:true})).toBeTruthy()
+  })
   it('uses proven streaks and withholds future motivation for final games',()=>{
     expect(rivalryNarrative(data)).toContain('Let’s make it 5!')
     expect(rivalryNarrative({...data,rivalry:{...data.rivalry!,final:true}})).not.toContain('Let’s make')

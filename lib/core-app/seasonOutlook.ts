@@ -165,6 +165,8 @@ export type OutlookAssumptions = {
 }
 
 export type OutlookLeague = {
+  /** Current scoring period of this model, distinct from a later pending scenario week. */
+  period?: number
   leagueId: string
   leagueName: string
   platform: string
@@ -437,6 +439,7 @@ function describeWhatDecidesIt(
 export { describeTeamOutlook } from './outlookCopy'
 
 export type Prepared = {
+  period?: number
   statusCanBeCertified: boolean
   league: LeagueInput
   pid: string
@@ -679,6 +682,7 @@ export async function loadOutlookInputs(userId: string, leagues: LeagueInput[], 
     missing.push('Weekly scores are independent draws: bye weeks, injuries and trades only enter through the scenario tools.')
 
     prepared.push({
+      period: history.periodsByLeague.get(pid)?.week,
       statusCanBeCertified: Boolean(completeQualificationSchedule) && canCertifyWeeklyPlayoffStatus(effectiveLeague.settings, format.playoffTeamsSource),
       league: effectiveLeague,
       pid,
@@ -838,6 +842,7 @@ export async function getSeasonOutlook(
       leagueName: p.leagueName,
       platform: String(p.league.platform ?? 'manual').toLowerCase(),
       season: p.season,
+      period: p.period,
       weeksRemaining: p.weeksRemaining,
       playoffTeams: p.sim.playoffTeams,
       byeTeams: p.sim.byeTeams,

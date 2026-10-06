@@ -11,10 +11,12 @@ const h = vi.hoisted(() => ({
   upsert: vi.fn(),
   focus: vi.fn(),
   leagueMetadata: {} as Record<string, unknown>,
+  finishedWeeks: new Set<string>(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $queryRaw: vi.fn(async () => h.leagueMetadata.season != null ? [{ id: 'L1', platformLeagueId: 'sl-1', sport: 'NFL', ...h.leagueMetadata }] : []),
     weeklyMatchup: { findMany: vi.fn(async () => h.matchups) },
     matchupFact: { findMany: vi.fn(async () => h.facts) },
     leagueTeam: {
@@ -34,6 +36,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 vi.mock('@/lib/core-app/seasonPhase', () => ({ getFirstStatedKickoff: async () => null }))
+vi.mock('@/lib/core-app/finishedNflWeeks', () => ({ loadFinishedNflWeeks: async () => h.finishedWeeks }))
 vi.mock('@/lib/core-app/seasonOutlookFocus', () => ({
   BRANCH_ITERATIONS: 400,
   loadScenarioModel: h.focus,
@@ -99,6 +102,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.cache.clear()
   h.leagueMetadata = {}
+  h.finishedWeeks.clear()
   h.upsert.mockImplementation(async (args: { create: { cacheKey: string; data: unknown } }) => {
     h.cache.set(args.create.cacheKey, args.create.data)
     return {}
@@ -108,6 +112,14 @@ beforeEach(() => {
 })
 
 describe('getSeasonOutlook', () => {
+  it('tags the model with Week 5 when the delayed Week 4 marker is final and Week 5 is scheduled', async () => {
+    h.leagueMetadata = { season: 2026, status: 'in_season', settings: { leg: 4 } }
+    for (const r of h.matchups) if (r.week === 4) { r.pointsFor = 100 + Number(r.rosterId); r.pointsAgainst = 90; r.win = 1 }
+    h.finishedWeeks.add('2026:4')
+    const out = await getSeasonOutlook('me', [LEAGUE], 'L1')
+    expect(out.leagues[0]).toMatchObject({ season: 2026, period: 5, weeksRemaining: 2 })
+    expect(out.swingByLeague['L1']?.week).toBe(5)
+  })
   it('withholds exact status when any regular-season period is missing',async()=>{
     const fullField={...LEAGUE,settings:{...LEAGUE.settings,playoff_teams:8}}
     expect((await getSeasonOutlook('me',[fullField])).leagues[0].you?.status).toBe('clinched')
@@ -150,6 +162,7 @@ describe('getSeasonOutlook', () => {
     }
     const out = await getSeasonOutlook('me', [LEAGUE], 'L1')
     expect(out.swingByLeague['L1']?.week).toBe(5)
+    expect(out.leagues[0].period).toBe(4)
   })
   it('still swings the current week before anybody has scored in it', async () => {
     const out = await getSeasonOutlook('me', [LEAGUE], 'L1')
