@@ -186,6 +186,32 @@ describe('assertImportCommissioner', () => {
   })
 
   /*
+   * Saved cookies that match no team are a wrong-account problem, not a missing connection. Telling
+   * a connected user to "connect your ESPN account" contradicts the "ESPN connected" badge.
+   */
+  it('tells a connected user that their ESPN account has no team in this league', async () => {
+    espnFetchMock.mockResolvedValue({
+      viewerTeamId: null,
+      viewerEspnConnected: true,
+      commissionerTeamIds: [],
+      teams: [{ teamId: '3', managerId: 'espn-member-3' }],
+    })
+
+    const { assertImportCommissioner } = await import('@/lib/league-import/commissionerGate')
+    const result = await assertImportCommissioner({
+      appUserId: 'u1',
+      provider: 'espn',
+      sourceLeagueId: '12345',
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.leagueReadable).toBe(true)
+    expect(result.reason).toMatch(/no team in this league/i)
+    expect(result.reason).toMatch(/desktop/i)
+    expect(result.reason).not.toMatch(/needs your ESPN account connected/i)
+  })
+
+  /*
    * Owner decision "A1", 2026-09-12. `leagueReadable` lets the unified preview route SHOW a public
    * ESPN league to someone who has not connected ESPN. That is safe only while the flag never rides
    * beside `ok: true` — so these pin it through the commissioner and attestation branches too, which

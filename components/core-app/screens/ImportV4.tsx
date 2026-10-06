@@ -34,6 +34,7 @@ import { ImportProgress, type ImportStep } from '@/components/core-app/import/Im
 import { ImportDone, type ImportDoneStat } from '@/components/core-app/import/ImportDone'
 import LeagueTypeConfirm from '@/components/league/LeagueTypeConfirm'
 import { markOnce, track, type Sport } from '@/lib/analytics/dataLayer'
+import posthog from 'posthog-js'
 import { readBackfillOutcome } from '@/lib/league-import/backfillOutcome'
 import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver'
 import {
@@ -800,6 +801,27 @@ function trackLeagueConnected(args: {
   })
 }
 
+/**
+ * One event per gate answer on this screen, so a refused import can be counted. Before this,
+ * an ESPN gate failure left no trace at all. posthog-js adds `$device_type` by itself, which is
+ * what splits phone failures from desktop ones. Never send the league id or the error text.
+ */
+function trackImportGateResult(args: {
+  provider: ImportProvider
+  stage: 'preview' | 'commit'
+  passed: boolean
+  reasonCode: string | null
+  espnConnected: boolean | null
+}): void {
+  posthog.capture('import_gate_result', {
+    provider: args.provider,
+    stage: args.stage,
+    passed: args.passed,
+    reason_code: args.reasonCode,
+    espn_connected: args.provider === 'espn' ? args.espnConnected : null,
+  })
+}
+
 export type ImportV4Props = {
   state?: ImportPreviewState
   defaultProvider?: ImportProvider
@@ -1068,6 +1090,13 @@ export function ImportV4({
         { allowPreviewOnly: true },
       )
       if (!res.ok) {
+        trackImportGateResult({
+          provider,
+          stage: 'preview',
+          passed: false,
+          reasonCode: res.code ?? null,
+          espnConnected,
+        })
         if (res.requiresAttestation) {
           setPhase({
             k: 'attest',
@@ -1089,6 +1118,13 @@ export function ImportV4({
         importBlockedReason?: unknown
         managers?: unknown
       }
+      trackImportGateResult({
+        provider,
+        stage: 'preview',
+        passed: payload?.importable !== false,
+        reasonCode: payload?.importable === false ? 'PREVIEW_ONLY' : null,
+        espnConnected,
+      })
       const teams = PICKS_TEAM_ON_PREVIEW.includes(provider) ? readPreviewTeams(payload?.managers) : []
       setPhase({
         k: 'preview',
@@ -1113,7 +1149,7 @@ export function ImportV4({
         coverage: readPreviewCoverage(payload?.dataQuality?.coverageNarrative),
       })
     },
-    [provider]
+    [provider, espnConnected]
   )
 
   useEffect(() => {
@@ -1146,6 +1182,13 @@ export function ImportV4({
             }
           : undefined
       )
+      trackImportGateResult({
+        provider,
+        stage: 'commit',
+        passed: res.ok,
+        reasonCode: res.ok ? null : (res.code ?? null),
+        espnConnected,
+      })
       if (!res.ok) {
         /**
          * ⚠ COMMIT CAN DEMAND AN ATTESTATION THAT PREVIEW DID NOT. The commit route
@@ -1234,7 +1277,7 @@ export function ImportV4({
     // `leagues` joins the deps for the sport lookup above. Safe: runCommit is
     // referenced only from onClick handlers, never from an effect's dep array,
     // so a new identity per discovery re-runs nothing.
-    [provider, leagues]
+    [provider, leagues, espnConnected]
   )
 
   /**
@@ -2361,9 +2404,22 @@ export function ImportV4({
                       (It pointed at /leagues before that, which was worse again —
                       League Sync has no ESPN control on it at all, so a solvable
                       setup step read as "import is broken".)
+
+                      ⚠ NAME A LABEL THE PANEL ACTUALLY SHOWS. It said "Use 'Connect
+                      ESPN' above", and EspnConnectPanel has no control with that
+                      label. While the extension is unpublished the only way in is
+                      "Save ESPN cookies" inside the collapsed "Manual fallback";
+                      once connected, the panel shows "Update cookies" instead.
                     */
                     <span className="af-im-error-link af-im-error-here">
-                      Use &ldquo;Connect ESPN&rdquo; above to fix this.
+                      {espnConnected === true ? (
+                        <>Use &ldquo;Update cookies&rdquo; above, on a desktop browser.</>
+                      ) : (
+                        <>
+                          Open &ldquo;Manual fallback&rdquo; above and press &ldquo;Save ESPN
+                          cookies&rdquo;, on a desktop browser.
+                        </>
+                      )}
                     </span>
                   ) : provider === 'sleeper' ? (
                     /* The gate's sentence already says where: the username box on this screen.
