@@ -89,7 +89,7 @@ export async function captureImportedResults(leagueId: string, key: string, appl
     }
   }
   if(weekEvidence.reduce((sum,e)=>sum+e.players.length,0)>MAX_WEEKLY_ROSTER_PLAYERS)throw new Error('Weekly roster evidence bound exceeded');
-  if (rows.length>10000) throw new Error('Result evidence bound exceeded');
+  if (rows.length>18000) throw new Error('Result evidence bound exceeded');
   let stableWeeks:number[]=[];
   const now=new Date();
   // Only the verified historical source is complete by construction; contemporary sources stay conservative.

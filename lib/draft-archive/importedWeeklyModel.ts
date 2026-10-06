@@ -14,7 +14,7 @@ const identity = (p:{playerId:string|null;rosterId:string|null}) => JSON.stringi
 /** Recompute observations from bounded evidence, tied to the currently selected archive. */
 export function importedWeeklyReport(raw:unknown,picks:AnalysisSelection[],teams:Array<{rosterId:string;name:string}>) {
   const v=obj(raw);
-  if (!Array.isArray(v.selections)||!Array.isArray(v.expectedWeeks)||!Array.isArray(v.rows)||typeof v.completeDraft!=='boolean'||picks.length>1000||v.selections.length!==picks.length||v.expectedWeeks.length>18||v.rows.length>10000||teams.length<2||teams.length>32) return null;
+  if (!Array.isArray(v.selections)||!Array.isArray(v.expectedWeeks)||!Array.isArray(v.rows)||typeof v.completeDraft!=='boolean'||picks.length>1000||v.selections.length!==picks.length||v.expectedWeeks.length>18||v.rows.length>18000||teams.length<2||teams.length>32) return null;
   const selections=v.selections.map(obj),ids=new Set(picks.map(identity));
   if (!picks.length||ids.size!==picks.length||selections.length!==picks.length||new Set(teams.map(t=>t.rosterId)).size!==teams.length||picks.some(p=>!p.playerId||!p.rosterId||!teams.some(t=>t.rosterId===p.rosterId))||selections.some(p=>typeof p.playerId!=='string'||typeof p.rosterId!=='string'||!ids.has(identity(p as {playerId:string;rosterId:string})))||new Set(selections.map(p=>identity(p as {playerId:string;rosterId:string}))).size!==picks.length) return null;
   const weeks=v.expectedWeeks;
