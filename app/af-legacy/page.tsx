@@ -850,7 +850,6 @@ function AFLegacyContent() {
   const [fantraxLoading, setFantraxLoading] = useState(false)
   const [showSleeperHelp, setShowSleeperHelp] = useState(false)
   const [showYahooHelp, setShowYahooHelp] = useState(false)
-  const [showMflHelp, setShowMflHelp] = useState(false)
   const [username, setUsernameState] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -888,18 +887,6 @@ function AFLegacyContent() {
   const [newPlatformLeagueCount, setNewPlatformLeagueCount] = useState('')
   const [newPlatformNotes, setNewPlatformNotes] = useState('')
 
-  // MFL state
-  const [mflConnected, setMflConnected] = useState(false)
-  const [mflUsername, setMflUsername] = useState('')
-  const [mflPassword, setMflPassword] = useState('')
-  const [mflLeagues, setMflLeagues] = useState<any[]>([])
-  const [mflLoading, setMflLoading] = useState(false)
-  const [mflError, setMflError] = useState('')
-  const [mflStartYear, setMflStartYear] = useState(new Date().getFullYear() - 5)
-  const [mflEndYear, setMflEndYear] = useState(new Date().getFullYear())
-  const [mflImporting, setMflImporting] = useState(false)
-  const [mflImportResult, setMflImportResult] = useState<any>(null)
-  const mflHistoricalImportAvailable = false
 
   const [error, setError] = useState('')
   const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'complete'>('idle')
@@ -1636,64 +1623,6 @@ function AFLegacyContent() {
   const connectYahoo = () => {
     window.location.href = '/api/auth/yahoo'
   }
-
-  const connectMfl = async () => {
-    if (!mflUsername.trim() || !mflPassword.trim()) {
-      setMflError('Username and password are required')
-      return
-    }
-    setMflLoading(true)
-    setMflError('')
-    try {
-      const res = await fetch('/api/auth/mfl', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: mflUsername, password: mflPassword })
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setMflError(data.error || 'Login failed')
-        return
-      }
-      setMflConnected(true)
-      setMflPassword('')
-      fetchMflLeagues()
-    } catch {
-      setMflError('Network error')
-    } finally {
-      setMflLoading(false)
-    }
-  }
-
-  const fetchMflLeagues = async () => {
-    gtagEvent('league_import_started', { platform: 'mfl' })
-    setMflLoading(true)
-    try {
-      const res = await fetch('/api/mfl/leagues')
-      const data = await res.json()
-      if (data.connected) {
-        setMflConnected(true)
-        setMflUsername(data.username || '')
-        setMflLeagues(data.leagues || [])
-      }
-    } catch {}
-    finally {
-      setMflLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetch('/api/mfl/leagues')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data?.connected) {
-          setMflConnected(true)
-          setMflUsername(data.username || '')
-          setMflLeagues(data.leagues || [])
-        }
-      })
-      .catch(() => {})
-  }, [])
 
   const generateTradeIdeas = async () => {
     if (!tradeSelectedLeague) {
@@ -3789,7 +3718,6 @@ function AFLegacyContent() {
           sleeperUsername: username || undefined,
           yahooUserId: yahooUserId || undefined,
           fantraxUsername: fantraxUsername || undefined,
-          mflUsername: mflUsername || undefined,
           leagueId: chatLeagueId || undefined,
           privateMode: true,
           targetUsername: username || undefined,
@@ -4782,229 +4710,25 @@ function AFLegacyContent() {
                     )}
 
                     {platform === 'mfl' && (
+                      /*
+                       * 🛑 THE MFL USERNAME-AND-PASSWORD LOGIN THAT LIVED HERE IS RETIRED (2026-10, owner's
+                       * call). It posted the user's MFL password to /api/auth/mfl and kept MFL's session
+                       * cookie in plaintext, and its listing never led to an import ("not live yet"). The
+                       * 2026-10 Terms and Privacy Policy say AllFantasy never asks for a platform password;
+                       * MFL now imports with an API key through /import?provider=mfl.
+                       */
                       <div className="space-y-4">
-                        {showMflHelp && (
-                          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setShowMflHelp(false)}>
-                            <div className="relative w-full max-w-lg rounded-3xl bg-gradient-to-br from-slate-900 to-slate-950 border border-amber-500/30 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                              <div className="h-1.5 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400" />
-                              <div className="p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                  <h3 className="text-xl font-bold text-white">Connecting Your MFL Account</h3>
-                                  <button onClick={() => setShowMflHelp(false)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition">
-                                    <X className="w-4 h-4" />
-                                  </button>
-                                </div>
-
-                                <ul className="space-y-3 text-sm text-white/80 mb-5">
-                                  <li className="flex gap-3">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center text-xs font-bold">1</span>
-                                    <span>Enter your <strong className="text-amber-300">MFL username and password</strong> — the same credentials you use to log in at <a href="https://www.myfantasyleague.com" target="_blank" rel="noopener noreferrer" className="text-amber-400 underline underline-offset-2 hover:text-amber-300">myfantasyleague.com</a></span>
-                                  </li>
-                                  <li className="flex gap-3">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center text-xs font-bold">2</span>
-                                    <span>We authenticate directly via <strong className="text-amber-300">MFL's official API</strong> to find your leagues. Your credentials are never stored.</span>
-                                  </li>
-                                  <li className="flex gap-3">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center text-xs font-bold">3</span>
-                                    <span>Once connected, select a <strong className="text-amber-300">year range</strong> to review what MFL exposes. Full multi-year historical import is still in progress.</span>
-                                  </li>
-                                  <li className="flex gap-3">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center text-xs font-bold">4</span>
-                                    <span>MFL is important for dynasty players, but full records, trades, and transaction import is <strong className="text-amber-300">not live yet</strong>.</span>
-                                  </li>
-                                </ul>
-
-                                <div className="rounded-xl bg-black/30 border border-white/10 p-3 mb-4">
-                                  <p className="text-xs text-white/50 mb-1 uppercase tracking-wide font-medium">Security note</p>
-                                  <p className="text-sm text-white/70">Your MFL credentials are used only during authentication and are never stored. We only read league data — nothing is ever modified.</p>
-                                </div>
-
-                                <div className="flex justify-end">
-                                  <button onClick={() => setShowMflHelp(false)} className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium text-sm hover:from-amber-400 hover:to-orange-400 transition">
-                                    Got it
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {mflConnected ? (
-                          <>
-                            <div className="p-4 rounded-xl bg-green-500/10 border border-green-400/30">
-                              <div className="flex items-center gap-3">
-                                <span className="text-2xl">✅</span>
-                                <div>
-                                  <div className="text-white font-semibold">MFL Connected</div>
-                                  <div className="text-sm text-gray-400">Logged in as {mflUsername}</div>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Year Range Selection */}
-                            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-400/20">
-                              <label className="text-[11px] uppercase tracking-wide text-white/50 block mb-3">
-                                Import Year Range
-                              </label>
-                              <div className="flex items-center gap-3">
-                                <select
-                                  value={mflStartYear}
-                                  onChange={(e) => setMflStartYear(parseInt(e.target.value))}
-                                  className="flex-1 px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-white text-sm focus:outline-none focus:border-amber-400/50"
-                                >
-                                  {Array.from({ length: 15 }, (_, i) => new Date().getFullYear() - 14 + i).map(year => (
-                                    <option key={year} value={year}>{year}</option>
-                                  ))}
-                                </select>
-                                <span className="text-white/40">to</span>
-                                <select
-                                  value={mflEndYear}
-                                  onChange={(e) => setMflEndYear(parseInt(e.target.value))}
-                                  className="flex-1 px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-white text-sm focus:outline-none focus:border-amber-400/50"
-                                >
-                                  {Array.from({ length: 15 }, (_, i) => new Date().getFullYear() - 14 + i).map(year => (
-                                    <option key={year} value={year}>{year}</option>
-                                  ))}
-                                </select>
-                              </div>
-                              <p className="text-[11px] text-white/40 mt-2">
-                                Historical MFL import is not live yet. Right now this connection supports account auth and league listing only.
-                              </p>
-                            </div>
-                            
-                            {/* Import Result */}
-                            {mflImportResult && (
-                              <div className="p-4 rounded-xl bg-green-500/10 border border-green-400/30 space-y-2">
-                                <div className="text-sm font-semibold text-green-300">Import Complete!</div>
-                                <div className="grid grid-cols-2 gap-2 text-xs">
-                                  <div className="text-white/60">Years: <span className="text-white">{mflImportResult.yearsImported?.join(', ')}</span></div>
-                                  <div className="text-white/60">Leagues: <span className="text-white">{mflImportResult.leaguesFound}</span></div>
-                                  <div className="text-white/60">Trades: <span className="text-white">{mflImportResult.tradesImported}</span></div>
-                                  <div className="text-white/60">Record: <span className="text-white">{mflImportResult.record?.wins}-{mflImportResult.record?.losses}-{mflImportResult.record?.ties}</span></div>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {mflLeagues.length > 0 && (
-                              <div className="space-y-2">
-                                <label className="text-[11px] uppercase tracking-wide text-white/50">
-                                  Your MFL Leagues ({mflLeagues.length})
-                                </label>
-                                <div className="max-h-48 overflow-y-auto space-y-2">
-                                  {mflLeagues.map((league: any) => (
-                                    <div
-                                      key={league.leagueId}
-                                      className="p-3 rounded-xl bg-black/30 border border-white/10 flex items-center justify-between"
-                                    >
-                                      <div>
-                                        <div className="text-white font-medium text-sm">{league.name}</div>
-                                        <div className="text-xs text-gray-400">
-                                          {league.franchiseName && `Playing as ${league.franchiseName}`}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            
-                            <div className="flex gap-2">
-                              <button
-                                onClick={fetchMflLeagues}
-                                disabled={mflLoading || mflImporting}
-                                className="flex-1 py-3 rounded-2xl font-bold text-white transition disabled:opacity-50
-                                  bg-white/10 border border-white/20 hover:bg-white/15"
-                              >
-                                {mflLoading ? 'Loading...' : 'Refresh'}
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  setMflImporting(true)
-                                  setMflImportResult(null)
-                                  try {
-                                    const res = await fetch('/api/mfl/import', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ startYear: mflStartYear, endYear: mflEndYear })
-                                    })
-                                    const data = await res.json()
-                                    if (res.ok) {
-                                      setMflImportResult(data)
-                                      if (data.leagues) setMflLeagues(data.leagues)
-                                    } else {
-                                      setMflError(data.error || 'Import failed')
-                                    }
-                                  } catch (e: any) {
-                                    setMflError(e.message)
-                                  } finally {
-                                    setMflImporting(false)
-                                  }
-                                }}
-                                disabled={!mflHistoricalImportAvailable || mflLoading || mflImporting}
-                                className="flex-[2] py-3 rounded-2xl font-bold text-white transition disabled:opacity-50
-                                  bg-gradient-to-r from-amber-500/80 to-orange-500/80 hover:from-amber-400/90 hover:to-orange-400/90
-                                  shadow-[0_12px_35px_rgba(0,0,0,0.35)]"
-                              >
-                                {mflHistoricalImportAvailable
-                                  ? (mflImporting ? 'Importing All Years...' : `Import ${mflStartYear}-${mflEndYear}`)
-                                  : 'Historical MFL Import Not Live'}
-                              </button>
-                            </div>
-                            
-                            {mflError && (
-                              <p className="text-sm text-red-400">{mflError}</p>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-400/30">
-                              <p className="text-sm text-white/80">
-                                Connect your MyFantasyLeague account to import your dynasty leagues. We use secure authentication via MFL's official API.
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => setShowMflHelp(true)}
-                                className="flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 transition mt-2"
-                              >
-                                <HelpCircle className="w-3 h-3" />
-                                How does this work?
-                              </button>
-                            </div>
-                            
-                            <div className="space-y-3">
-                              <div>
-                                <label className="text-[11px] uppercase tracking-wide text-white/50">MFL Username</label>
-                                <input
-                                  type="text"
-                                  value={mflUsername}
-                                  onChange={(e) => setMflUsername(e.target.value)}
-                                  placeholder="Your MFL username"
-                                  className="w-full mt-1 px-4 py-3 rounded-2xl bg-black/30 border border-white/10 text-white placeholder-white/25 focus:outline-none focus:border-amber-400/60 focus:ring-2 focus:ring-amber-400/20 transition"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[11px] uppercase tracking-wide text-white/50">MFL Password</label>
-                                <input
-                                  type="password"
-                                  value={mflPassword}
-                                  onChange={(e) => setMflPassword(e.target.value)}
-                                  placeholder="Your MFL password"
-                                  className="w-full mt-1 px-4 py-3 rounded-2xl bg-black/30 border border-white/10 text-white placeholder-white/25 focus:outline-none focus:border-amber-400/60 focus:ring-2 focus:ring-amber-400/20 transition"
-                                />
-                              </div>
-                            </div>
-                            
-                            <button
-                              onClick={connectMfl}
-                              disabled={mflLoading || !mflUsername.trim() || !mflPassword.trim()}
-                              className="w-full py-3 rounded-2xl font-bold text-white transition disabled:opacity-50
-                                bg-gradient-to-r from-amber-500/80 to-orange-500/80 hover:from-amber-400/90 hover:to-orange-400/90
-                                shadow-[0_12px_35px_rgba(0,0,0,0.35)]"
-                            >
-                              {mflLoading ? 'Connecting...' : 'Connect MFL Account'}
-                            </button>
-                          </>
-                        )}
+                        <div className="p-4 bg-amber-500/10 rounded-xl border border-amber-500/30">
+                          <p className="text-sm text-amber-200 leading-relaxed">
+                            MFL leagues import with your MFL API key — we never ask for your MFL password.
+                          </p>
+                        </div>
+                        <a
+                          href="/import?provider=mfl"
+                          className="block w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold text-center hover:from-amber-400 hover:to-orange-400 transition"
+                        >
+                          Import MFL leagues
+                        </a>
                       </div>
                     )}
 
@@ -5594,7 +5318,6 @@ function AFLegacyContent() {
                       </div>
                     )}
                     {yahooError && platform === 'yahoo' && <p className="mt-4 text-red-400 text-center text-sm">{yahooError}</p>}
-                    {mflError && platform === 'mfl' && <p className="mt-4 text-red-400 text-center text-sm">{mflError}</p>}
                     {fantraxError && platform === 'fantrax' && <p className="mt-4 text-red-400 text-center text-sm">{fantraxError}</p>}
 
                     {/* What happens next - 3 step row */}
@@ -6444,20 +6167,6 @@ function AFLegacyContent() {
                     <span>Yahoo</span>
                     {yahooConnected && yahooLeagues.length > 0 && (
                       <span className="px-1.5 py-0.5 rounded-full bg-purple-500/30 text-[11px]">{yahooLeagues.length}</span>
-                    )}
-                  </div>
-                  
-                  {/* MFL Chip */}
-                  <div className={cx(
-                    'flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all',
-                    mflConnected
-                      ? 'bg-amber-500/15 border border-amber-400/40 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.15)]'
-                      : 'bg-black/20 border border-white/5 text-white/30'
-                  )}>
-                    <span className="text-sm">🏆</span>
-                    <span>MFL</span>
-                    {mflConnected && mflLeagues.length > 0 && (
-                      <span className="px-1.5 py-0.5 rounded-full bg-amber-500/30 text-[11px]">{mflLeagues.length}</span>
                     )}
                   </div>
                   
