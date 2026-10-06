@@ -1,0 +1,10 @@
+import {describe,it,expect} from 'vitest';
+import {maintenanceQueue,maintenanceFailure,type MaintenanceSource} from '@/lib/draft-archive/maintenancePolicy';
+const now=Date.parse('2026-10-06T18:00:00Z');
+const source=(id:string):MaintenanceSource=>({leagueId:id,sourceId:id,season:2025,observedAt:null,provisional:true,state:null,attemptedAt:null,retryAt:null});
+describe('historical draft maintenance rotation',()=>{
+ it('waits for independent observations and skips reconciled past seasons',()=>{const fresh={...source('fresh'),observedAt:new Date(now-11*3600000).toISOString()};const final={...source('final'),state:'ready',provisional:false,observedAt:new Date(now-48*3600000).toISOString()};const due={...source('due'),observedAt:new Date(now-12*3600000).toISOString()};expect(maintenanceQueue([fresh,final,due],now,2026).map(s=>s.leagueId)).toEqual(['due']);});
+ it('rotates failures behind never-attempted sources and respects retry backoff',()=>{const failed={...source('failed'),attemptedAt:new Date(now-1).toISOString(),retryAt:new Date(now+1).toISOString()};expect(maintenanceQueue([failed,source('new')],now,2026).map(s=>s.leagueId)).toEqual(['new']);failed.retryAt=null;expect(maintenanceQueue([failed,source('new')],now,2026).map(s=>s.leagueId)).toEqual(['new','failed']);});
+ it('bounds work, ignores invalid/future timestamps and refreshes current-year final observations',()=>{const sources=Array.from({length:12},(_,i)=>source(String(i)));expect(maintenanceQueue(sources,now,2026,100)).toHaveLength(8);expect(maintenanceQueue([{...source('bad'),observedAt:'invalid'},{...source('future'),attemptedAt:new Date(now+1).toISOString()}],now,2026)).toEqual([]);expect(maintenanceQueue([{...source('current'),season:2026,state:'ready',provisional:false,observedAt:new Date(now-24*3600000).toISOString()}],now,2026)).toHaveLength(1);});
+ it('keeps missing evidence on a longer cooldown than transient failures',()=>{expect(maintenanceFailure(new Error('Recorded selection ownership differs from provider')).delayMs).toBe(7*86400000);expect(maintenanceFailure(new Error('Historical results unavailable')).delayMs).toBe(6*3600000);});
+});

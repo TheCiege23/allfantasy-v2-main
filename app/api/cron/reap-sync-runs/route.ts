@@ -1,3 +1,4 @@
+import {maintainDraftResults} from '@/lib/draft-archive/ingestion/maintenance'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
@@ -223,6 +224,26 @@ export async function GET(request: NextRequest) {
           reason: error instanceof Error ? error.message.slice(0, 160) : 'the pass failed',
         }))
 
+  // Draft archive refresh rides the existing hourly pass after all earlier work.
+  // Reserve response/telemetry time and do not start a source with insufficient headroom.
+  const draftStartedAt = Date.now()
+  const draftBudgetMs = ROUTE_BUDGET_MS - (draftStartedAt - startedAt)
+  const draftMaintenance = draftBudgetMs < 140_000
+    ? { ran: false as const, reason: 'insufficient remaining maintenance budget' }
+    : await maintainDraftResults(Math.min(180_000, draftBudgetMs - 30_000)).catch(() => ({
+        ran: false as const, reason: 'draft maintenance failed',
+      }))
+  try {
+    await recordSyncJobRun({jobName:'draft-analysis-maintenance',sport:'NFL',provider:'sleeper',trigger:'cron'}, {
+      rowsRead:'inventory' in draftMaintenance ? draftMaintenance.inventory : 0,
+      rowsWritten:'ready' in draftMaintenance ? draftMaintenance.ready + draftMaintenance.partial : 0,
+      warnings:'failed' in draftMaintenance && draftMaintenance.failed ? ['Some draft sources need evidence or retry'] : 'ran' in draftMaintenance && !draftMaintenance.ran ? [draftMaintenance.reason] : [],
+      metadata:{...draftMaintenance},
+    },Date.now()-draftStartedAt)
+  } catch {
+    // Draft telemetry cannot fail the completed reap.
+  }
+
   return NextResponse.json({
     ok: true,
     reaped,
@@ -233,5 +254,6 @@ export async function GET(request: NextRequest) {
     tradeLearning,
     tradeCalibration,
     relationshipRefresh,
+    draftMaintenance,
   })
 }

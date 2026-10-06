@@ -38,6 +38,7 @@ const LEARNING_IDLE = {
 
 const calibrationPass = vi.fn()
 const relationshipPass = vi.fn()
+const draftMaintenancePass = vi.fn()
 const CALIBRATION_RAN = {
   ran: true, season: 2026, feedbackAdjusted: false, driftSeverity: 'ok', outcomesLogged: 0, errors: [],
 }
@@ -142,6 +143,38 @@ describe('GET /api/cron/reap-sync-runs', () => {
     // The rivalry + drama writer rides last (2026-10-01); mocked so nothing reads matchup facts.
     vi.doMock('@/lib/relationship-insights/relationshipRefreshPass', () => ({ runRelationshipRefreshPass: relationshipPass }))
     relationshipPass.mockReset().mockResolvedValue({ ran: false, reason: 'outside the nightly window' })
+    vi.doMock('@/lib/draft-archive/ingestion/maintenance',()=>({maintainDraftResults:draftMaintenancePass}))
+    draftMaintenancePass.mockReset().mockResolvedValue({inventory:0,selected:0,examined:0,ready:0,partial:0,unavailable:0,failed:0,elapsedMs:0})
+  })
+
+  it('runs bounded draft maintenance after the earlier passes and returns aggregate coverage', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({available:true,reaped:0,cutoff:'2026-09-05T11:30:00.000Z'})
+    const order:string[]=[]
+    relationshipPass.mockImplementationOnce(async()=>{order.push('relationships');return {ran:false,reason:'outside the nightly window'}})
+    draftMaintenancePass.mockImplementationOnce(async()=>{order.push('drafts');return {inventory:1538,selected:2,examined:2,ready:1,partial:0,unavailable:0,failed:1,elapsedMs:50}})
+    const {GET}=await import('@/app/api/cron/reap-sync-runs/route')
+    const response=await GET(request(CRON_SECRET))
+    expect(order).toEqual(['relationships','drafts'])
+    expect(draftMaintenancePass.mock.calls[0][0]).toBeLessThanOrEqual(180000)
+    expect(await response.json()).toMatchObject({ok:true,draftMaintenance:{examined:2,failed:1}})
+  })
+
+  it('does not start draft provider reads before cron authorization', async () => {
+    const {GET}=await import('@/app/api/cron/reap-sync-runs/route')
+    const response=await GET(request())
+    expect(response.status).toBe(401)
+    expect(draftMaintenancePass).not.toHaveBeenCalled()
+  })
+
+  it('isolates a failed draft pass and hides private source details', async () => {
+    mocks.reapAllAbandonedRuns.mockResolvedValueOnce({available:true,reaped:0,cutoff:'2026-09-05T11:30:00.000Z'})
+    draftMaintenancePass.mockRejectedValueOnce(new Error('private-user-id'))
+    const {GET}=await import('@/app/api/cron/reap-sync-runs/route')
+    const response=await GET(request(CRON_SECRET))
+    expect(response.status).toBe(200)
+    const result=await response.json()
+    expect(result).toMatchObject({ok:true,draftMaintenance:{ran:false,reason:'draft maintenance failed'}})
+    expect(JSON.stringify(result)).not.toContain('private-user-id')
   })
 
   it('runs the rivalry + drama refresh LAST, on only the budget everything before it left', async () => {
@@ -328,8 +361,8 @@ describe('GET /api/cron/reap-sync-runs', () => {
     // job_name, so a sweep that reaps correctly and records nothing reads as a dead scheduler.
     // Asserted rather than stubbed on purpose -- the missing export made this the one test that
     // reached the call, and a bare vi.fn() would have silenced the error without guarding it.
-    // Twice since 2026-09-30: the reap's own heartbeat, then the trade-learning pass's row.
-    expect(mocks.recordSyncJobRun).toHaveBeenCalledTimes(2)
+    // Reap heartbeat, trade-learning row and terminal draft-maintenance telemetry.
+    expect(mocks.recordSyncJobRun).toHaveBeenCalledTimes(3)
     expect(mocks.recordSyncJobRun.mock.calls[0]![0]).toMatchObject({ jobName: 'cron-reap-sync-runs' })
   })
 
