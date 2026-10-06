@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { ActionLink } from '@/components/core-app/player-finder/ActionLink'
 import { leagueViewActions } from '@/lib/core-app/leagueViewActions'
+import { viewActionsText } from '@/lib/core-app/finderSearchCopy'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { PlayerLeagueView } from '@/lib/core-app/playerLeagueView'
 
 /**
@@ -15,12 +17,18 @@ import type { PlayerLeagueView } from '@/lib/core-app/playerLeagueView'
  * missing the bar simply stays — a duplicate is better than a lost action.
  *
  * Phones only (≤720px, CSS): on a wider screen the card sits beside the content and needs no bar.
+ *
+ * Spanish (2026-10-05): the context line and the button go through `viewActionsText`
+ * (finderSearchCopy.ts) in the language `useOptionalLanguage` gives; the action itself is unchanged.
+ * Not the lineup optimizer's bar — that is components/lineup-optimizer/StickyActionBar.tsx, a different
+ * component with the same name.
  */
 
 export const WATCHED_ACTIONS_ID = 'af-pf-lv-actions'
 
 export function StickyActionBar({ view, playerName }: { view: PlayerLeagueView | null; playerName: string }) {
-  const actions = view ? leagueViewActions(view, playerName) : null
+  const { language } = useOptionalLanguage()
+  const actions = view ? viewActionsText(view, leagueViewActions(view, playerName), playerName, language) : null
   const [cardActionsVisible, setCardActionsVisible] = useState(false)
 
   useEffect(() => {
