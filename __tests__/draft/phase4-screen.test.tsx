@@ -60,3 +60,11 @@ it('does not show missing finalization as zero replacement value in Spanish',()=
  language.language='es';render(<DraftPhase4 detail={{...detail,weeklyOutcomes:{finalizedWeeks:[],replacements:[]}}}/>);fireEvent.click(screen.getByRole('button',{name:'Contribución semanal'}))
  expect(screen.getByText('Todavía no hay comparaciones verificadas de reemplazo finalizado.')).toBeInTheDocument();expect(screen.getByRole('button',{name:'Evidencia de reemplazo'})).toBeInTheDocument()
 })
+
+it('shows negative historical cap space and explains mismatched coverage',()=>{
+ const cap={...detail,specialtyEvidence:{capturedAt:'2026-08-01',collegeMode:null,collegeRounds:[],collegePlayers:0,salaryTeams:1,salaryContracts:0,dispersal:false,salaryHistory:{state:'partial',teams:[{rosterId:'a',capYear:2026,capSpace:-5,totalCapHit:15,deadMoneyHit:2,contracts:0,expiring:0,recordedSalary:0,matchesLedger:false}]}}} as ArchiveDetail;
+ render(<DraftPhase4 detail={cap}/>);
+ expect(screen.getByRole('region',{name:'Historical cap ledgers'})).toHaveTextContent('-5');
+ expect(screen.getByText('Incomplete contract coverage')).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'Historical cap and contract coverage'})).toBeInTheDocument();
+});

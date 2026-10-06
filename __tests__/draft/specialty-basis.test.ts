@@ -14,6 +14,6 @@ describe('specialist draft-start capture',()=>{
  it('bounds contract and college sources and scopes ledgers to the exact year and league',async()=>{
   const ledger=vi.fn().mockResolvedValue([]),contracts=vi.fn().mockResolvedValue([]),college=vi.fn().mockResolvedValue(Array(5001).fill({}))
   const value=await captureSpecialtyBasis({salaryCapTeamLedger:{findMany:ledger},playerContract:{findMany:contracts},devyPlayer:{findMany:college}} as never,{season:2026,leagueVariant:'salary_cap'},{leagueId:'l',devyConfig:{enabled:true,devyRounds:[1]}},new Date('2026-08-01'))
-  expect(value.college).toEqual({state:'unavailable'});expect(ledger.mock.calls[0][0].where).toEqual({leagueId:'l',capYear:2026});expect(contracts.mock.calls[0][0].where).toEqual({leagueId:'l',status:'active'})
+  expect(value.college).toEqual({state:'unavailable'});expect(ledger.mock.calls[0][0].where).toEqual({leagueId:'l',capYear:2026});expect(contracts.mock.calls[0][0].where).toEqual({leagueId:'l',status:{in:['active','tagged','option_exercised']}})
  })
 })
