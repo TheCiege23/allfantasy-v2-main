@@ -1,4 +1,6 @@
 import 'server-only'
+import { liveWorkspace } from './liveWorkspace'
+import { canonicalPlayGames } from './canonicalPlayGames'
 
 import { prisma } from '@/lib/prisma'
 import {
@@ -1122,7 +1124,7 @@ export async function getLivePageData(opts: {
     scope,
     counts,
     games: visible,
-    impact: await buildImpact(visible, players, sport),
+    impact: await buildImpact(visible, sport),
     lockAlerts: buildLockAlerts(visible, Date.now()),
     // Never invented — see the field's note. Null means "we cannot date this".
     fetchedAt: active?.fetchedAt ?? null,
@@ -1135,38 +1137,12 @@ export async function getLivePageData(opts: {
 /** Right-hand panel: your totals, the last notable play, and what is still to come. */
 async function buildImpact(
   games: readonly LiveGameCard[],
-  players: Map<string, RosteredPlayer>,
   sport: string,
 ): Promise<LiveImpact> {
-  /*
-   * ⚠ SCOPED BY SPORT, NOT BY GAME ID — AND THAT IS NOT THE OBVIOUS CHOICE.
-   * The tempting scoping is "keep the plays whose `gameId` is on this slate".
-   * It yields NOTHING, always, because the two ids come from different
-   * providers: the feed is built from `SportsGame.externalId` rows where
-   * `source: 'rolling_insights'`, while the active slate is fetched from ESPN
-   * and carries `event.id`. They are different id spaces that happen to share a
-   * field name. The feed's own cache key is `pbp:feed:NFL`, so the sport is the
-   * scope that is both honest and non-empty.
-   *
-   * Skipping the read outright off-NFL also spares every other tab a cache
-   * lookup that could only ever return plays it must not display.
-   */
-  const feed = sport === 'NFL' ? await getPlayFeed().catch(() => [] as PlayFeedItem[]) : []
-  /*
-   * ⚠ THE PLAYS ARE PLACED IN SLATE GAMES BY TEAM, BECAUSE OF THE NOTE ABOVE.
-   * "Biggest mover" used to require `liveGameIds.has(p.gameId)` — a Rolling
-   * Insights id tested against a set of ESPN ids, the exact join that note says
-   * yields nothing. `attachSlateGames` places each play by its team instead; a
-   * rostered player's team backs up a feed row that arrived without one.
-   *
-   * Names are compared normalised, never with `===`: the two vendors disagree on
-   * 748 of 9,412 NFL names — see `rosterPlayMatch.ts`.
-   */
-  const rosterTeamByName = new Map<string, string>()
-  for (const p of players.values()) {
-    const key = normalizeMatchName(p.name)
-    if (key && p.team) rosterTeamByName.set(key, p.team)
-  }
-  const plays = attachSlateGames(feed, games, sport, rosterTeamByName)
-  return deriveImpact(games, plays, { onlyTheseGamesPlays: false })
+  const plays = sport === 'NFL' ? await getPlayFeed().catch(() => [] as PlayFeedItem[]) : []
+  const fixtures = plays.length ? await prisma.sportsGame.findMany({
+    where: { sport: 'NFL', source: 'rolling_insights', externalId: { in: [...new Set(plays.map(play => play.gameId))] } },
+    select: { externalId: true, homeTeam: true, awayTeam: true, startTime: true },
+  }).catch(() => []) : []
+  return liveWorkspace([...games], canonicalPlayGames(plays, games, fixtures), null).impact
 }

@@ -1,3 +1,4 @@
+vi.mock('next/navigation', () => ({ usePathname: () => '/core/live', useSearchParams: () => new URLSearchParams(), useRouter: () => ({ refresh() {}, push() {}, replace() {}, prefetch() {} }) }))
 /**
  * MLB game card: diamond with runners, balls/strikes/outs, pitcher and batter,
  * and an R-H-E box score. Fixture values from the live MLB scoreboard,

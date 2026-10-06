@@ -5,6 +5,9 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { LiveMatchupStrip } from '@/components/core-app/screens/LiveMatchupStrip'
 import type { MatchupStrip } from '@/lib/live/matchupStrip'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import LocalDateTime from '@/components/core-app/LocalDateTime'
+import { liveWorkspace, playBelongsToGame } from '@/lib/live/liveWorkspace'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
 import PlayerName from '@/components/core-app/player-card/PlayerName'
 import { gameDetailHref } from '@/lib/live/gameDetailLink'
@@ -124,6 +127,9 @@ export function scopeLiveGamesToLeague(
 }
 
 export function LiveScores({ data: initial, selectedLeagueId = null, matchupStrip = null }: LiveScoresProps) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const params = useSearchParams()
   const [data, setData] = useState<LivePageData>(initial)
   const [scope, setScope] = useState<'my' | 'all'>(initial.scope)
   const [sport, setSport] = useState(initial.sport)
@@ -171,6 +177,12 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
    * reads.
    */
   const etagRef = useRef<string | null>(null)
+  useEffect(() => {
+    seqRef.current++
+    etagRef.current = null
+    setData(initial); setSport(initial.sport); setScope(initial.scope)
+    setRefreshing(false)
+  }, [initial])
 
   const load = useCallback(async (nextSport: string, nextScope: 'my' | 'all') => {
     const seq = ++seqRef.current
@@ -184,6 +196,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
           headers: etagRef.current ? { 'If-None-Match': etagRef.current } : undefined,
         },
       )
+      if (seq !== seqRef.current) return
       /*
        * ⚠  NOTHING CHANGED, SO NOTHING IS TOUCHED -- INCLUDING THE AGE LABEL.
        * A 304 means the payload is identical down to its `fetchedAt`, so the feed
@@ -246,7 +259,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
        * older and you can see it — where a silent retry would let them rot
        * behind a "just now". The badge now names it as well as showing it.
        */
-      setConsecutiveFailures((n) => n + 1)
+      if (seq === seqRef.current) setConsecutiveFailures((n) => n + 1)
     } finally {
       if (seq === seqRef.current) setRefreshing(false)
     }
@@ -269,6 +282,8 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
     () => scopeLiveGamesToLeague(data.games, leagueFilterId),
     [data.games, leagueFilterId],
   )
+  const workspace = useMemo(() => liveWorkspace(data.games, data.impact.plays, leagueFilterId), [data.games, data.impact.plays, leagueFilterId])
+  const impact = workspace.impact
   const anyLive = scopedGames.some((g) => g.isLive)
   /*
    * ⚠ THE CADENCE IS THE LARGEST SAVING HERE AND THE ONLY ONE THAT COMPOUNDS.
@@ -340,8 +355,11 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
   )
 
   useEffect(() => {
-    const id = window.setInterval(() => void load(sport, scope), pollIntervalMs)
-    return () => window.clearInterval(id)
+    const refresh = () => { if (!document.hidden && navigator.onLine !== false) void load(sport, scope) }
+    const id = window.setInterval(refresh, pollIntervalMs)
+    document.addEventListener('visibilitychange', refresh)
+    window.addEventListener('online', refresh)
+    return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('online', refresh) }
     /*
      * ⚠ `pollIntervalMs` REPLACES `anyLive` IN THE DEPS, AND IT HAS TO. It is
      * derived from `anyLive`, so nothing is lost -- but it also moves when
@@ -357,6 +375,12 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
     return () => window.clearInterval(id)
   }, [])
 
+  const updateUrl = (key: string, value: string) => {
+    const next = new URLSearchParams(params?.toString() ?? '')
+    next.set(key, value)
+    router.replace(`${pathname ?? '/core/live'}?${next}`, { scroll: false })
+    etagRef.current = null
+  }
   const pickSport = (next: string) => {
     setSport(next)
     syncViewToUrl(next, scope)
@@ -423,11 +447,12 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
   const latestPlayByGame = useMemo(() => {
     const byGame = new Map<string, LivePageData['impact']['plays'][number]>()
     for (const p of data.impact.plays) {
-      if (!p.slateGameId || byGame.has(p.slateGameId)) continue
-      byGame.set(p.slateGameId, p)
+      for (const game of scopedGames) {
+        if (!byGame.has(game.gameId) && playBelongsToGame(p, game)) byGame.set(game.gameId, p)
+      }
     }
     return byGame
-  }, [data.impact.plays])
+  }, [data.impact.plays, scopedGames])
 
   /*
    * 🛑 WITH A LEAGUE HELD, THE SIDE PANEL DESCRIBES THAT LEAGUE TOO. The server
@@ -436,13 +461,6 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
    * counted the rest — two halves of one screen answering different questions.
    * Rebuilt here from `scopedGames` with the same pure rule the server uses.
    */
-  const impact = useMemo(
-    () =>
-      leagueFilterId
-        ? deriveImpact(scopedGames, data.impact.plays, { onlyTheseGamesPlays: true })
-        : data.impact,
-    [leagueFilterId, scopedGames, data.impact],
-  )
 
   return (
     <LowDataProvider decision={lowData}>
@@ -467,9 +485,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
               same defect as the hidden toggle, wearing different clothes. */}
           {leagueFilterId
             ? 'Only games affecting starters in this league, scored with this league’s rules.'
-            : /* `counts` is every sport the screen HAS A TAB for, not the sports you play — "your 9
-                 sports" to a manager in NFL leagues only. */
-              'Every live matchup across your leagues, scored against your rosters in real time.'}
+            : scope === 'my' ? 'Games affecting your starters across all leagues. Points follow each league’s scoring.' : 'All games, with your roster contributions highlighted where available.'}
         </p>
       </header>
 
@@ -533,14 +549,14 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
             className="af-live-freshness"
             data-live={connection === 'live'}
             data-state={connection}
-            aria-live={isConnectionFault(connection) ? 'assertive' : 'polite'}
             title={connectionDetail(connection) ?? undefined}
           >
             {connection === 'live' ? <span className="af-live-pulse" aria-hidden /> : null}
-            {connectionLabel(connection)}
+            <span role="status">{connectionLabel(connection)}</span>
             {ageSeconds != null ? <span> · updated {formatAge(ageSeconds)} ago</span> : null}
             {refreshing ? <span className="af-live-refreshing" aria-hidden> ·</span> : null}
           </span>
+          <button type="button" className="af-btn af-live-refresh" aria-label={refreshing ? 'Refreshing scores' : 'Refresh scores'} disabled={refreshing} onClick={() => void load(sport, scope)}><span className="af-live-refresh-icon" aria-hidden>↻</span><span className="af-live-refresh-label">{refreshing ? 'Refreshing…' : 'Refresh scores'}</span></button>
         </div>
 
         {/*
@@ -573,6 +589,15 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                  filter is worse than one. */
               tabIndex={c.sport === sport ? 0 : -1}
               onClick={() => pickSport(c.sport)}
+              onKeyDown={(event) => {
+                const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End']
+                if (!keys.includes(event.key)) return
+                event.preventDefault()
+                const index = data.counts.findIndex(item => item.sport === c.sport)
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? data.counts.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + data.counts.length) % data.counts.length
+                pickSport(data.counts[next].sport)
+                document.getElementById(`af-live-tab-${data.counts[next].sport}`)?.focus()
+              }}
             >
               {c.label}
               {/* Today's slate for this sport, not games in progress — a live
@@ -644,6 +669,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
         </section>
 
         <aside className="af-live-side" aria-label="Your live impact">
+
           <div className="af-live-impact">
             <h2 className="af-label">
               Your live impact <TopicTip topic="liveImpactTotal" />
@@ -700,6 +726,17 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
               </>
             )}
           </div>
+
+          <details className="af-live-card af-live-contributions" open={!!leagueFilterId}>
+            <summary>Contributions by league</summary>
+            <p>Actual points from games on this slate. Remaining is a player count, not a projection. Different league scoring totals are not comparable.</p>
+            {workspace.leagues.map(league => <div key={league.id} className="af-live-league-contribution">
+              <Link href={`/core/matchup?league=${encodeURIComponent(league.id)}`}>{league.name}</Link>
+              <dl><div><dt>Live</dt><dd>{league.live.toFixed(1)}</dd></div><div><dt>Completed</dt><dd>{league.completed.toFixed(1)}</dd></div><div><dt>Remaining</dt><dd>{league.remaining}</dd></div></dl>
+              {league.missing > 0 && <small>{league.missing} player scores unavailable; totals are partial.</small>}
+            </div>)}
+            {!workspace.leagues.length && <p>No roster contributions available for this view.</p>}
+          </details>
 
           {impact.biggestMover ? (
             <div className="af-live-card">
@@ -807,7 +844,7 @@ export function LiveScores({ data: initial, selectedLeagueId = null, matchupStri
                     <span className="af-live-next-label">
                       {u.playerName} · {u.matchup}
                     </span>
-                    <span className="af-live-next-time af-num">{upNextTime(u.startTime)}</span>
+                    <span className="af-live-next-time af-num"><LocalDateTime value={u.startTime} /></span>
                   </li>
                 ))}
               </ul>

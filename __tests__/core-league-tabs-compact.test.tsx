@@ -14,13 +14,13 @@ describe('league-first compact league tabs', () => {
       <LeagueTabs leagueId="L 1" leagueName="Sunday Sweat" activeKey="matchup" hasScoredWeek tradeSupported draftSupported compact />,
     )
     const primary = Array.from(container.querySelectorAll('.af-lt-compact-row a')).map((a) => a.textContent)
-    expect(primary).toEqual(['Match', 'Team', 'Players', 'Trades', 'League'])
-    for (const label of ['Waivers', 'War Room', 'Draft HQ', 'Your week', 'Live', 'Standings', 'Outlook']) {
+    expect(primary).toEqual(['Overview', 'My Team', 'Matchup', 'Players', 'Moves'])
+    for (const label of ['Waivers', 'War Room', 'Draft HQ', 'Your week', 'Schedule', 'Standings', 'Outlook']) {
       expect(container.querySelector('.af-lt-more-list')!.textContent).toContain(label)
     }
-    expect(screen.getByRole('link', { name: 'Match' }).getAttribute('href')).toBe('/core/matchup?league=L%201')
-    expect(screen.getByRole('link', { name: 'League' }).getAttribute('href')).toBe('/core?league=L%201')
-    expect(screen.getByRole('link', { name: 'Match' }).getAttribute('aria-current')).toBe('page')
+    expect(screen.getByRole('link', { name: 'Matchup' }).getAttribute('href')).toBe('/core/matchup?league=L%201')
+    expect(screen.getByRole('link', { name: 'Overview' }).getAttribute('href')).toBe('/core?league=L%201')
+    expect(screen.getByRole('link', { name: 'Matchup' }).getAttribute('aria-current')).toBe('page')
   })
 
   it('names the active secondary view while keeping the phone menu compact', () => {
@@ -74,14 +74,14 @@ describe('league-first compact league tabs', () => {
       <LeagueTabs leagueId="L1" leagueName="Pre-draft" activeKey="home" hasScoredWeek={false} tradeSupported={false} draftSupported compact />,
     )
     const primary = Array.from(container.querySelectorAll('.af-lt-compact-row a')).map((a) => a.textContent)
-    expect(primary).toEqual(['Team', 'Players', 'League'])
+    expect(primary).toEqual(['Overview', 'My Team', 'Players', 'Moves'])
   })
 
-  it('leaves the full strip alone when compact is off', () => {
+  it('keeps the primary workflow consistent when compact is off', () => {
     const { container } = render(
       <LeagueTabs leagueId="L1" leagueName="Sunday Sweat" activeKey="matchup" hasScoredWeek tradeSupported draftSupported />,
     )
-    expect(container.querySelector('.af-lt-compact')).toBeNull()
+    expect(container.querySelector('.af-lt-compact')).not.toBeNull()
     expect(screen.getByRole('link', { name: 'Matchup' })).toBeTruthy()
   })
 })

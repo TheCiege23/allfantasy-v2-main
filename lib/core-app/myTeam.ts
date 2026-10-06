@@ -1,4 +1,8 @@
 import 'server-only'
+import { automaticLineup, autoSubsSetting } from './teamWorkspace'
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
+import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
+import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import type { LineupVerification } from './lineupVerification'
 import { connectedRosterPlayers } from './connectedRoster'
 import { currentSleeperRoster } from './currentSleeperRoster'
@@ -231,12 +235,16 @@ export type MyTeamData = {
   preDraft?: boolean
   eliminated?: boolean
   completed?: boolean
+  rosterRules?: { irStatuses: string[]; taxiSlots: number | null }
+  nativeLineup?: { rosterId: string; week: number | null; starterIds: string[]; benchIds: Record<string,string> } | null
+  autoSubs?: { enabled: boolean | null }
   league: {
     id: string
     name: string
     platform: string
     format: string | null
     bestBall?: boolean
+    lineupMode?: 'manual' | 'automatic'
     /**
      * Where to go to actually CHANGE the lineup.
      *
@@ -974,6 +982,7 @@ export async function getMyTeamData(
       platform: String(league.platform ?? 'manual').toLowerCase(),
       format: league.leagueType ?? null,
       bestBall: isBestBallSettings(league.settings),
+      lineupMode: league.bestBallMode || automaticLineup(league.leagueType, league.settings) ? 'automatic' as const : 'manual' as const,
       sourceLink: resolveSourceLink({
         platform: league.platform,
         sourceLeagueId: league.platformLeagueId,
@@ -1090,7 +1099,7 @@ export async function getMyTeamData(
     : candidates.length > 0
       ? await prisma.roster.findFirst({
           where: { leagueId, platformUserId: { in: candidates } },
-          select: { playerData: true },
+          select: { id: true, platformUserId: true, playerData: true },
         })
       : null
 
@@ -1367,6 +1376,8 @@ export async function getMyTeamData(
   const projectedIds = starterIds.filter((id) => id !== '0')
 
   const scoringNotes = describeScoringDifferences(scoringSettings)
+  const nativeSections=getNormalizedLineupSections(pd)
+  const nativeIdsAligned=JSON.stringify(nativeSections.starters.map(p=>String(p.id)))===JSON.stringify(starterIds)
 
   /*
    * Null when the question cannot be answered — no recorded taxi-years limit,
@@ -1663,6 +1674,9 @@ export async function getMyTeamData(
     teamActivity: await teamActivityRead,
     bestBall: base.league.bestBall === true,
     lineupVerification: liveRoster?.verification ?? null,
+    nativeLineup: isNativePlatform(league.platform) && nativeIdsAligned && 'id' in roster && typeof roster.id === 'string' && 'platformUserId' in roster && roster.platformUserId===userId ? { rosterId: roster.id, week: weekFromLeagueSettingsForLineup(league.settings), starterIds, benchIds: Object.fromEntries(benchIds.flatMap(id=>{const p=resolved.get(id);return p && nativeSections.bench.some(b=>b.id===id) ? [[p.sleeperId,id]] : []})) } : null,
+    autoSubs: { enabled: autoSubsSetting(league.settings) },
+    rosterRules: isNativePlatform(league.platform) ? { irStatuses: ['IR','PUP','OUT_IR','RESERVE', ...(league.irAllowOut ? ['OUT'] : []), ...(league.irAllowCovid ? ['COVID','COVID-19'] : []), ...(league.irAllowSuspended ? ['SUSP','SUSPENDED'] : []), ...(league.irAllowNA ? ['N/A'] : []), ...(league.irAllowDNR ? ['DNR','DID_NOT_REPORT'] : []), ...(league.irAllowDoubtful ? ['Q','QUESTIONABLE','DOUBTFUL','D'] : [])], taxiSlots: league.taxiSlots } : undefined,
     projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },
     upcomingByes,
     rosterGrade: grade
