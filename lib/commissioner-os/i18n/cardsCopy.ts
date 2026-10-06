@@ -9,7 +9,7 @@
  * - `cosLoaderText` — sentences a LOADER wrote in English on the server: the live Decision OS clients
  *   in `lib/commissioner-ui/{recommendations,league-health,managers}/decision-os-client/live.ts`,
  *   the behavioural pipeline they relay (`lib/decision-os/behavioral/league-intelligence.ts`), the
- *   demo and stub fixtures, `allClearCopy` and the chart-series labels in
+ *   demo and stub fixtures, and the chart-series labels in
  *   `lib/commissioner-ui/charts/deriveChartSeries.ts`. Those loaders are shared with other screens,
  *   so they are NOT edited: their output is translated here at render, as whole sentences, keeping
  *   the names and numbers they carry. Anything unknown falls through to `commissionerOsText`
@@ -95,7 +95,6 @@ const UI_ES: Record<string, string> = {
   Category: 'Categoría',
   Severity: 'Gravedad',
   Age: 'Antigüedad',
-  Recommendations: 'Recomendaciones',
   'Manager participation': 'Participación de los mánagers',
   'Data quality': 'Calidad de los datos',
   'Inputs available': 'Datos disponibles',
@@ -233,18 +232,7 @@ const LOADER_ES: Record<string, string> = {
   Positive: 'Positivo',
   'Active in window': 'Activos en la ventana',
   'Quiet in window': 'Inactivos en la ventana',
-  // allClear.ts — the sentences it builds around a caller's own title. ⚠ DUPLICATE OF C1's
-  // `allClearText` (lib/commissioner-os/i18n/shellCopy.ts, fix/cos-shell-spanish, not on main when this
-  // was written) — the Spanish is kept identical to it on purpose; switch to that export once it lands.
-  'That isn’t the same as having none. Try again shortly.': 'Eso no significa que no haya nada. Vuelve a intentarlo en un momento.',
-  'League health isn’t available yet, so this isn’t a verdict on the league.':
-    'La salud de la liga aún no está disponible, así que esto no es un veredicto sobre la liga.',
-  'League health is critical, so an empty list isn’t the whole picture.':
-    'La salud de la liga está en nivel crítico, así que una lista vacía no lo cuenta todo.',
-  'League health is elevated, so an empty list isn’t the whole picture.':
-    'La salud de la liga está en nivel elevado, así que una lista vacía no lo cuenta todo.',
-  'Couldn’t load risks.': 'No se pudieron cargar los riesgos.',
-  'Couldn’t load recommendations.': 'No se pudieron cargar las recomendaciones.',
+  // allClear.ts's sentences are NOT here: shellCopy's `allClearText` holds them (one translator per string).
 
   // Demo fixtures ("Iron Horse Dynasty") — the app's own words; the demo names stay
   'Manager engagement declining': 'La participación de un mánager está bajando',

@@ -13,6 +13,7 @@ import { ShieldCheck } from 'lucide-react'
 import { allClearCopy } from '@/lib/commissioner-ui/allClear'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cardsCopy, cosLoaderText, severityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
+import { allClearText, commissionerSectionName } from '@/lib/commissioner-os/i18n/shellCopy'
 import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 
 export interface LeagueHealthViewProps {
@@ -36,10 +37,11 @@ export interface LeagueHealthViewProps {
  * renders it, it never computes it. Every value arrives already computed
  * as props from the League Health Decision OS client.
  *
- * Spanish: the screen's own words through `cardsCopy`. Risks, evidence, the participation legend and
- * the all-clear sentences are loader output (`league-health/decision-os-client`, `allClear.ts`,
- * `deriveChartSeries.ts` — each shared with another screen), so they are built in English exactly as
- * before and translated at render, whole, through `cosLoaderText`.
+ * Spanish: the screen's own words through `cardsCopy`. Risks, evidence and the participation legend are
+ * loader output (`league-health/decision-os-client`, `deriveChartSeries.ts` — each shared with another
+ * screen), so they are built in English exactly as before and translated at render, whole, through
+ * `cosLoaderText`. The all-clear sentences are `allClear.ts`'s, translated by shellCopy's `allClearText`
+ * (shared with Mission Control); the section heading is shellCopy's `commissionerSectionName`.
  */
 export function LeagueHealthView({ detail, risks, evidence, recommendations, dataMode, detailAvailable = true, risksRead = true, recommendationsRead = true }: LeagueHealthViewProps) {
   const scoreStyle = getSeverityStyle(detail.tier)
@@ -47,10 +49,13 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
   const ui = (english: string) => cardsCopy(english, language)
   const loader = (text: string) => cosLoaderText(text, language)
   const severity = (tier: SeverityTier) => severityLabelText(tier, SEVERITY_LABELS[tier], language)
-  /** An all-clear line is either the title/description this view handed in, or a sentence allClear.ts built. */
+  /** allClear.ts's sentences through shellCopy's `allClearText`; this view's own title and reassurance pass in as `own`. */
+  const ownAllClear = Object.fromEntries(
+    ['No active risks.', 'No open recommendations.', 'The league is in good shape.'].map((english) => [english, ui(english)]),
+  )
   const allClear = (copy: { title: string; description: string }) => ({
-    title: ui(copy.title) === copy.title ? loader(copy.title) : ui(copy.title),
-    description: ui(copy.description) === copy.description ? loader(copy.description) : ui(copy.description),
+    title: allClearText(copy.title, language, ownAllClear),
+    description: allClearText(copy.description, language, ownAllClear),
   })
   const healthTier = detailAvailable ? detail.tier : null
   const noRisks = allClear(allClearCopy({ emptyTitle: 'No active risks.', healthyDescription: 'The league is in good shape.', listName: 'risks', listRead: risksRead, healthTier }))
@@ -171,7 +176,7 @@ export function LeagueHealthView({ detail, risks, evidence, recommendations, dat
           {/* Recommendations */}
           <div>
             <h2 className="mb-2 text-sm font-semibold" style={{ color: 'var(--text)' }}>
-              {ui('Recommendations')}
+              {commissionerSectionName('Recommendations', language)}
             </h2>
             {recommendations.length === 0 ? (
               <EmptyState title={noRecommendations.title} description={noRecommendations.description} />
