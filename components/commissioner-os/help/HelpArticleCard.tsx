@@ -7,6 +7,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { HELP_CATEGORY_LABELS, HELP_CATEGORY_ICONS } from './helpLabels'
 import type { CommissionerHelpArticleContract } from '@/lib/commissioner-ui/contracts'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { helpText, relatedLinkText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
 export interface HelpArticleCardProps {
   article: CommissionerHelpArticleContract
@@ -22,21 +24,23 @@ export interface HelpArticleCardProps {
 export function HelpArticleCard({ article }: HelpArticleCardProps) {
   const [expanded, setExpanded] = useState(false)
   const CategoryIcon = HELP_CATEGORY_ICONS[article.category]
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => toolsText(english, language)
 
   return (
     <Card id={article.slug}>
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
-          <CardTitle>{article.title}</CardTitle>
+          <CardTitle>{helpText(article.title, language)}</CardTitle>
           <Badge variant="outline" className="flex shrink-0 items-center gap-1">
             <CategoryIcon size={12} aria-hidden />
-            {HELP_CATEGORY_LABELS[article.category]}
+            {t(HELP_CATEGORY_LABELS[article.category])}
           </Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-sm" style={{ color: 'var(--muted)' }}>
-          {article.summary}
+          {helpText(article.summary, language)}
         </p>
         <button
           type="button"
@@ -46,24 +50,24 @@ export function HelpArticleCard({ article }: HelpArticleCardProps) {
         >
           {expanded ? (
             <>
-              Show less <ChevronUp size={14} aria-hidden />
+              {t('Show less')} <ChevronUp size={14} aria-hidden />
             </>
           ) : (
             <>
-              Read more <ChevronDown size={14} aria-hidden />
+              {t('Read more')} <ChevronDown size={14} aria-hidden />
             </>
           )}
         </button>
         {expanded && (
           <div className="space-y-2 pt-1">
             <p className="text-sm" style={{ color: 'var(--text)' }}>
-              {article.body}
+              {helpText(article.body, language)}
             </p>
             {article.relatedLinks && article.relatedLinks.length > 0 && (
               <div className="flex flex-wrap gap-3 pt-1">
                 {article.relatedLinks.map((link) => (
                   <NextLink key={link.href} href={link.href} className="focus-ring link-themed text-xs">
-                    {link.label}
+                    {relatedLinkText(link.label, language)}
                   </NextLink>
                 ))}
               </div>

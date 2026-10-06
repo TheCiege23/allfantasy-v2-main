@@ -9,6 +9,8 @@ import { getModuleLabel } from './activityLabels'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { CommissionerActivityEventContract } from '@/lib/commissioner-ui/contracts'
 import type { CommissionerModuleId } from '@/lib/commissioner-ui/navigation/moduleNav'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { sectionNameText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
 export interface ActivityStreamViewProps {
   events: CommissionerActivityEventContract[]
@@ -29,6 +31,8 @@ type SourceFilter = CommissionerModuleId | typeof ALL_SOURCES
  */
 export function ActivityStreamView({ events, dataMode, errorMessage }: ActivityStreamViewProps) {
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>(ALL_SOURCES)
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => toolsText(english, language)
 
   const sources = useMemo(() => {
     const ids = new Set<CommissionerModuleId>(events.map((event) => event.sourceModuleId))
@@ -45,10 +49,10 @@ export function ActivityStreamView({ events, dataMode, errorMessage }: ActivityS
       <PreviewDataBanner mode={dataMode} />
 
       {errorMessage ? (
-        <ErrorState message={errorMessage} />
+        <ErrorState message={t(errorMessage)} />
       ) : (
         <div className="space-y-4">
-          <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Activity source">
+          <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label={t('Activity source')}>
             <button
               type="button"
               role="tab"
@@ -61,7 +65,7 @@ export function ActivityStreamView({ events, dataMode, errorMessage }: ActivityS
                 border: '1px solid var(--border)',
               }}
             >
-              All <span style={{ color: 'var(--muted2)' }}>({events.length})</span>
+              {t('All')} <span style={{ color: 'var(--muted2)' }}>({events.length})</span>
             </button>
             {sources.map((moduleId) => {
               const count = events.filter((event) => event.sourceModuleId === moduleId).length
@@ -80,7 +84,7 @@ export function ActivityStreamView({ events, dataMode, errorMessage }: ActivityS
                     border: '1px solid var(--border)',
                   }}
                 >
-                  {getModuleLabel(moduleId)} <span style={{ color: 'var(--muted2)' }}>({count})</span>
+                  {sectionNameText(moduleId, getModuleLabel(moduleId), language)} <span style={{ color: 'var(--muted2)' }}>({count})</span>
                 </button>
               )
             })}
@@ -89,8 +93,8 @@ export function ActivityStreamView({ events, dataMode, errorMessage }: ActivityS
           {visible.length === 0 ? (
             <EmptyState
               icon={Activity}
-              title="No activity yet."
-              description="Meaningful events from across Commissioner OS will show up here."
+              title={t('No activity yet.')}
+              description={t('Meaningful events from across Commissioner OS will show up here.')}
             />
           ) : (
             <ol className="ml-1">

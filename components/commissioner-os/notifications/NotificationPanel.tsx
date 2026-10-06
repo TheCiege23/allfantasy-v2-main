@@ -12,6 +12,8 @@ import { NotificationRow } from './NotificationRow'
 import { getModuleLabel, NOTIFICATION_SOURCE_ICONS } from './notificationLabels'
 import type { CommissionerNotificationPayload } from '@/lib/commissioner-ui/contracts'
 import type { CommissionerModuleId } from '@/lib/commissioner-ui/navigation/moduleNav'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { sectionNameText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
 export interface NotificationPanelProps {
   notifications: CommissionerNotificationPayload[]
@@ -44,6 +46,9 @@ export function NotificationPanel({ notifications, errorMessage }: NotificationP
   const [filter, setFilter] = useState<FilterMode>('all')
   const [showPreferences, setShowPreferences] = useState(false)
   const open = openServiceId === 'notifications'
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => toolsText(english, language)
+  const moduleLabel = (moduleId: CommissionerModuleId) => sectionNameText(moduleId, getModuleLabel(moduleId), language)
 
   const sourceModuleIds = useMemo(() => {
     const ids = new Set<CommissionerModuleId>(notifications.map((n) => n.sourceModuleId))
@@ -76,27 +81,27 @@ export function NotificationPanel({ notifications, errorMessage }: NotificationP
       }}
     >
       <DialogContent className="max-w-lg gap-0 p-0" style={{ background: 'var(--panel)', borderColor: 'var(--border)' }}>
-        <DialogTitle className="sr-only">Notifications</DialogTitle>
+        <DialogTitle className="sr-only">{t('Notifications')}</DialogTitle>
         <DialogDescription className="sr-only">
-          Notifications from League Health, Recommendations, Automations, Reports, and other Commissioner OS modules.
+          {t('Notifications from League Health, Recommendations, Automations, Reports, and other Commissioner OS modules.')}
         </DialogDescription>
 
         <div className="flex items-center justify-between border-b p-3" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-2">
             <Button size="sm" variant={filter === 'all' ? 'secondary' : 'ghost'} onClick={() => setFilter('all')}>
-              All
+              {t('All')}
             </Button>
             <Button size="sm" variant={filter === 'unread' ? 'secondary' : 'ghost'} onClick={() => setFilter('unread')}>
-              Unread
+              {t('Unread')}
             </Button>
           </div>
           <div className="flex items-center gap-1">
             <Button size="sm" variant="ghost" onClick={() => markAllRead(unreadIds)} disabled={unreadIds.length === 0}>
-              Mark all as read
+              {t('Mark all as read')}
             </Button>
             <button
               type="button"
-              aria-label="Notification preferences"
+              aria-label={t('Notification preferences')}
               aria-pressed={showPreferences}
               onClick={() => setShowPreferences((prev) => !prev)}
               className="focus-ring rounded-[var(--radius-standard)] p-2"
@@ -109,12 +114,12 @@ export function NotificationPanel({ notifications, errorMessage }: NotificationP
 
         {errorMessage ? (
           <div className="p-4">
-            <ErrorState message={errorMessage} />
+            <ErrorState message={t(errorMessage)} />
           </div>
         ) : showPreferences ? (
           <div className="max-h-[400px] overflow-y-auto p-3">
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted2)' }}>
-              Muted sources
+              {t('Muted sources')}
             </h3>
             <ul className="space-y-1">
               {sourceModuleIds.map((moduleId) => {
@@ -123,10 +128,10 @@ export function NotificationPanel({ notifications, errorMessage }: NotificationP
                   <li key={moduleId} className="flex items-center justify-between rounded-[var(--radius-standard)] px-2 py-1.5 text-sm" style={{ color: 'var(--text)' }}>
                     <span className="flex items-center gap-2">
                       <Icon size={14} aria-hidden />
-                      {getModuleLabel(moduleId)}
+                      {moduleLabel(moduleId)}
                     </span>
                     <Button size="sm" variant="outline" onClick={() => toggleMuted(moduleId)}>
-                      {isMuted(moduleId) ? 'Unmute' : 'Mute'}
+                      {t(isMuted(moduleId) ? 'Unmute' : 'Mute')}
                     </Button>
                   </li>
                 )
@@ -136,8 +141,8 @@ export function NotificationPanel({ notifications, errorMessage }: NotificationP
         ) : visible.length === 0 ? (
           <EmptyState
             icon={Bell}
-            title={filter === 'unread' ? 'You’re all caught up.' : 'No notifications yet.'}
-            description={filter === 'unread' ? 'No unread notifications right now.' : 'Notifications from across Commissioner OS will show up here.'}
+            title={t(filter === 'unread' ? 'You’re all caught up.' : 'No notifications yet.')}
+            description={t(filter === 'unread' ? 'No unread notifications right now.' : 'Notifications from across Commissioner OS will show up here.')}
           />
         ) : (
           <div className="max-h-[400px] overflow-y-auto p-3">
@@ -145,7 +150,7 @@ export function NotificationPanel({ notifications, errorMessage }: NotificationP
               {Array.from(grouped.entries()).map(([moduleId, moduleNotifications]) => (
                 <li key={moduleId}>
                   <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted2)' }}>
-                    {getModuleLabel(moduleId)}
+                    {moduleLabel(moduleId)}
                   </h3>
                   <ul className="space-y-2">
                     {moduleNotifications.map((notification) => (
