@@ -17,6 +17,7 @@ import {
   BEST_BALL_PLAYOFF_FORMATS,
 } from '@/lib/bestball/rules'
 import type { BestBallCreateSettings, BestBallModeId } from '@/lib/bestball/rules'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 interface Props {
   leagueId: string
@@ -147,6 +148,7 @@ function IntField({
 }
 
 export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: Props) {
+  const { t } = useOptionalLanguage()
   const profile = getBestBallSportProfile(sport)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -179,7 +181,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
           cache: 'no-store',
         })
         const json = (await res.json()) as { league?: { settings?: Record<string, unknown> }; error?: string }
-        if (!res.ok) throw new Error(json.error ?? 'Failed to load Best Ball settings')
+        if (!res.ok) throw new Error(json.error ?? t('lsRules.bb.loadFailed'))
         if (!cancelled && json.league?.settings) {
           const raw = json.league.settings as Record<string, unknown>
           setSettings((prev) => ({
@@ -217,7 +219,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
         }
       } catch (err) {
         if (!cancelled)
-          setFetchError(err instanceof Error ? err.message : 'Failed to load Best Ball settings')
+          setFetchError(err instanceof Error ? err.message : t('lsRules.bb.loadFailed'))
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -256,17 +258,17 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
       })
       const json = (await res.json()) as ApiResponse | { error?: string }
       if (!res.ok) {
-        const msg = (json as { error?: string }).error ?? 'Failed to save Best Ball settings'
+        const msg = (json as { error?: string }).error ?? t('lsRules.bb.saveFailed')
         toast.error(msg)
       } else {
-        toast.success('Best Ball settings saved')
+        toast.success(t('lsRules.bb.saved'))
       }
     } catch {
-      toast.error('Failed to save Best Ball settings')
+      toast.error(t('lsRules.bb.saveFailed'))
     } finally {
       setSaving(false)
     }
-  }, [canEdit, leagueId, saving, settings])
+  }, [canEdit, leagueId, saving, settings, t])
 
   const patch = useCallback((p: Partial<LoadedSettings>) => setSettings((s) => ({ ...s, ...p })), [])
 
@@ -277,7 +279,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
   if (loading) {
     return (
       <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/60 p-4 text-[12px] text-white/50">
-        Loading Best Ball settings…
+        {t('lsRules.bb.loading')}
       </div>
     )
   }
@@ -294,13 +296,13 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
     <div className="space-y-6">
       {/* Mode */}
       <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/80 p-4">
-        <h4 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-cyan-200/80">Operating Mode</h4>
-        <Row label="Mode">
+        <h4 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-cyan-200/80">{t('lsRules.bb.operatingMode')}</h4>
+        <Row label={t('lsRules.bb.mode')}>
           <SelectField
             value={settings.mode}
             options={[
-              { value: 'standard', label: 'Standard' },
-              { value: 'underdog', label: 'Underdog-style' },
+              { value: 'standard', label: t('lsRules.bb.standard') },
+              { value: 'underdog', label: t('lsRules.bb.underdog') },
             ]}
             onChange={(v) =>
               patch({
@@ -315,68 +317,68 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
         </Row>
         {isUnderdog ? (
           <p className="mt-2 text-[11px] text-amber-300/80">
-            Underdog-style forces waivers, trades, and manual substitutions off.
+            {t('lsRules.bb.underdogForces')}
           </p>
         ) : null}
       </div>
 
       {/* Contest & Scoring */}
       <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/80 p-4">
-        <h4 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-cyan-200/80">Contest &amp; Scoring</h4>
+        <h4 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-cyan-200/80">{t('lsRules.bb.contestScoring')}</h4>
         <div className="space-y-4">
-          <Row label="Contest structure">
+          <Row label={t('lsRules.bb.contestStructure')}>
             <SelectField
               value={settings.contestStructure}
               options={[
-                { value: 'season_long', label: 'Season-long' },
-                { value: 'sit_and_go', label: 'Sit-and-go / pod' },
-                { value: 'tournament', label: 'Tournament / advancement' },
+                { value: 'season_long', label: t('lsRules.bb.seasonLong') },
+                { value: 'sit_and_go', label: t('lsRules.bb.sitAndGo') },
+                { value: 'tournament', label: t('lsRules.bb.tournament') },
               ]}
               onChange={(v) => patch({ contestStructure: v as LoadedSettings['contestStructure'] })}
               disabled={!canEdit}
             />
           </Row>
-          <Row label="Scoring model">
+          <Row label={t('lsRules.bb.scoringModel')}>
             <SelectField
               value={settings.matchupFormat}
               options={[
-                { value: 'cumulative', label: 'Cumulative points' },
-                { value: 'h2h', label: 'Head-to-head' },
+                { value: 'cumulative', label: t('lsRules.bb.cumulative') },
+                { value: 'h2h', label: t('lsRules.bb.h2h') },
               ]}
               onChange={(v) => patch({ matchupFormat: v as LoadedSettings['matchupFormat'] })}
               disabled={!canEdit}
             />
           </Row>
-          <Row label="Playoff format">
+          <Row label={t('lsRules.bb.playoffFormat')}>
             <SelectField
               value={settings.playoffFormat}
               options={[
-                { value: 'bracket', label: 'Bracket' },
-                { value: 'advancement', label: 'Advancement' },
-                { value: 'none', label: 'No playoffs' },
+                { value: 'bracket', label: t('lsRules.bb.bracket') },
+                { value: 'advancement', label: t('lsRules.bb.advancement') },
+                { value: 'none', label: t('lsRules.bb.noPlayoffs') },
               ]}
               onChange={(v) => patch({ playoffFormat: v as LoadedSettings['playoffFormat'] })}
               disabled={!canEdit}
             />
           </Row>
-          <Row label="Scoring period">
+          <Row label={t('lsRules.bb.scoringPeriod')}>
             <SelectField
               value={settings.scoringPeriod}
               options={[
-                { value: 'weekly', label: 'Weekly' },
-                { value: 'daily', label: 'Daily' },
+                { value: 'weekly', label: t('lsRules.bb.weekly') },
+                { value: 'daily', label: t('lsRules.bb.daily') },
               ]}
               onChange={(v) => patch({ scoringPeriod: v as LoadedSettings['scoringPeriod'] })}
               disabled={!canEdit}
             />
           </Row>
-          <Row label="Tiebreaker">
+          <Row label={t('lsRules.bb.tiebreaker')}>
             <SelectField
               value={settings.tieRule}
               options={[
-                { value: 'points_for', label: 'Total points scored' },
-                { value: 'max_week', label: 'Best single-week score' },
-                { value: 'advance_all', label: 'Advance all tied teams' },
+                { value: 'points_for', label: t('lsRules.bb.tiePoints') },
+                { value: 'max_week', label: t('lsRules.bb.tieWeek') },
+                { value: 'advance_all', label: t('lsRules.bb.tieAll') },
               ]}
               onChange={(v) => patch({ tieRule: v as LoadedSettings['tieRule'] })}
               disabled={!canEdit}
@@ -387,9 +389,9 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
 
       {/* Season structure */}
       <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/80 p-4">
-        <h4 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-cyan-200/80">Season Structure</h4>
+        <h4 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-cyan-200/80">{t('lsRules.bb.seasonStructure')}</h4>
         <div className="space-y-4">
-          <Row label="Regular season length">
+          <Row label={t('lsRules.bb.regularSeasonLength')}>
             <IntField
               value={settings.regularSeasonLength}
               onChange={(v) => patch({ regularSeasonLength: v })}
@@ -398,7 +400,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
               disabled={!canEdit}
             />
           </Row>
-          <Row label="Playoff teams">
+          <Row label={t('lsRules.bb.playoffTeams')}>
             <IntField
               value={settings.playoffTeams}
               onChange={(v) => patch({ playoffTeams: v })}
@@ -408,7 +410,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
             />
           </Row>
           {isTournament ? (
-            <Row label="Advancement rounds">
+            <Row label={t('lsRules.bb.advancementRounds')}>
               <IntField
                 value={settings.tournamentAdvancementRounds}
                 onChange={(v) => patch({ tournamentAdvancementRounds: v })}
@@ -419,7 +421,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
             </Row>
           ) : null}
           {isSitAndGo ? (
-            <Row label="Pod size">
+            <Row label={t('lsRules.bb.podSize')}>
               <IntField
                 value={settings.podSize}
                 onChange={(v) => patch({ podSize: v })}
@@ -434,36 +436,36 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
 
       {/* In-season restrictions */}
       <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/80 p-4">
-        <h4 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-cyan-200/80">In-Season Restrictions</h4>
+        <h4 className="mb-4 text-[11px] font-bold uppercase tracking-wide text-cyan-200/80">{t('lsRules.bb.restrictions')}</h4>
         <div className="space-y-4">
-          <Row label="Waivers">
+          <Row label={t('lsRules.bb.waivers')}>
             <Toggle
               checked={settings.waiversEnabled}
               onChange={(v) => patch({ waiversEnabled: isUnderdog ? false : v })}
-              label="Waivers"
+              label={t('lsRules.bb.waivers')}
               disabled={!canEdit || isUnderdog}
             />
           </Row>
-          <Row label="Trades">
+          <Row label={t('lsRules.bb.trades')}>
             <Toggle
               checked={settings.tradesEnabled}
               onChange={(v) => patch({ tradesEnabled: isUnderdog ? false : v })}
-              label="Trades"
+              label={t('lsRules.bb.trades')}
               disabled={!canEdit || isUnderdog}
             />
           </Row>
-          <Row label="Manual substitutions">
+          <Row label={t('lsRules.bb.subs')}>
             <Toggle
               checked={settings.substitutionsEnabled}
               onChange={(v) => patch({ substitutionsEnabled: isUnderdog ? false : v })}
-              label="Manual substitutions"
+              label={t('lsRules.bb.subs')}
               disabled={!canEdit || isUnderdog}
             />
           </Row>
         </div>
         {isUnderdog ? (
           <p className="mt-3 text-[11px] text-white/40">
-            Underdog-style locks waivers, trades, and manual subs off. Switch to Standard to enable them.
+            {t('lsRules.bb.underdogLocks')}
           </p>
         ) : null}
       </div>
@@ -471,11 +473,13 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
       {/* Sport profile summary */}
       <div className="rounded-2xl border border-white/[0.06] bg-[#0a1228]/40 p-4">
         <h4 className="mb-2 text-[11px] font-bold uppercase tracking-wide text-white/40">
-          {profile.label} Sport Profile
+          {t('lsRules.bb.sportProfile').replace('{{sport}}', profile.label)}
         </h4>
         <p className="text-[12px] text-white/60">
-          {profile.lineupSlots.reduce((sum, s) => sum + s.count, 0)} starter slots ·{' '}
-          {profile.recommendedRosterSize} recommended roster spots · {profile.scoringPeriod} scoring
+          {t('lsRules.bb.profileLine')
+            .replace('{{starters}}', String(profile.lineupSlots.reduce((sum, s) => sum + s.count, 0)))
+            .replace('{{roster}}', String(profile.recommendedRosterSize))
+            .replace('{{period}}', profile.scoringPeriod === 'daily' ? t('lsRules.bb.periodDaily') : profile.scoringPeriod === 'weekly' ? t('lsRules.bb.periodWeekly') : String(profile.scoringPeriod))}
         </p>
         <ul className="mt-2 space-y-1 text-[11px] text-white/40">
           {profile.notes.map((note) => (
@@ -492,7 +496,7 @@ export function BestBallSettingsCommissionerPanel({ leagueId, sport, canEdit }: 
             disabled={saving}
             className="rounded-xl bg-cyan-500 px-5 py-2 text-[13px] font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            {saving ? 'Saving…' : 'Save Best Ball settings'}
+            {saving ? t('lsRules.bb.saving') : t('lsRules.bb.save')}
           </button>
         </div>
       ) : null}

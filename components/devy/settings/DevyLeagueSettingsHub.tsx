@@ -29,6 +29,7 @@ import {
   type DevyLeagueSetupState,
 } from '@/lib/devy/devy-league-config'
 import { DevyLeagueSetupSection } from '@/components/league-creation-wizard/DevyLeagueSetupSection'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 type TabId =
   | 'league'
@@ -43,18 +44,19 @@ type TabId =
   | 'tools'
   | 'danger'
 
-const TABS: { id: TabId; label: string; icon: typeof Settings }[] = [
-  { id: 'league', label: 'League', icon: Settings },
-  { id: 'rosters', label: 'Rosters & slots', icon: Users },
-  { id: 'pool', label: 'Devy pool', icon: LayoutGrid },
-  { id: 'drafts', label: 'Drafts & picks', icon: ClipboardList },
-  { id: 'promotions', label: 'Promotions', icon: ArrowDownToLine },
-  { id: 'trading', label: 'Trading', icon: Scale },
-  { id: 'scoring', label: 'Scoring', icon: Trophy },
-  { id: 'assets', label: 'Future assets', icon: Coins },
-  { id: 'chimmy', label: 'AI / Chimmy', icon: Bot },
-  { id: 'tools', label: 'Commissioner', icon: Shield },
-  { id: 'danger', label: 'Danger zone', icon: AlertTriangle },
+/** Labels are dictionary keys (`lsRules.dv.tab.<id>`), resolved at render. */
+const TABS: { id: TabId; icon: typeof Settings }[] = [
+  { id: 'league', icon: Settings },
+  { id: 'rosters', icon: Users },
+  { id: 'pool', icon: LayoutGrid },
+  { id: 'drafts', icon: ClipboardList },
+  { id: 'promotions', icon: ArrowDownToLine },
+  { id: 'trading', icon: Scale },
+  { id: 'scoring', icon: Trophy },
+  { id: 'assets', icon: Coins },
+  { id: 'chimmy', icon: Bot },
+  { id: 'tools', icon: Shield },
+  { id: 'danger', icon: AlertTriangle },
 ]
 
 function GlassCard({ children, className = '' }: { children: ReactNode; className?: string }) {
@@ -68,6 +70,7 @@ function GlassCard({ children, className = '' }: { children: ReactNode; classNam
 }
 
 export function DevyLeagueSettingsHub({ ctx }: { ctx: SubPanelContext }) {
+  const { t } = useOptionalLanguage()
   const sport = ctx.league.sport
   const initial = useMemo(() => {
     const raw = ctx.league.settings && typeof ctx.league.settings === 'object' && !Array.isArray(ctx.league.settings)
@@ -95,15 +98,15 @@ export function DevyLeagueSettingsHub({ ctx }: { ctx: SubPanelContext }) {
       })
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(j.error ?? 'Save failed')
+        throw new Error(j.error ?? t('lsRules.dv.saveFailed'))
       }
-      toast.success('Devy settings saved')
+      toast.success(t('lsRules.dv.saved'))
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Save failed')
+      toast.error(e instanceof Error ? e.message : t('lsRules.dv.saveFailed'))
     } finally {
       setSaving(false)
     }
-  }, [ctx.league.id, config])
+  }, [ctx.league.id, config, t])
 
   return (
     <div className="space-y-4 pb-8">
@@ -114,12 +117,10 @@ export function DevyLeagueSettingsHub({ ctx }: { ctx: SubPanelContext }) {
         />
         <div className="relative flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/80">Devy command center</p>
-            <h3 className="mt-1 text-lg font-bold text-white">Multi-year prospect development</h3>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-200/80">{t('lsRules.dv.eyebrow')}</p>
+            <h3 className="mt-1 text-lg font-bold text-white">{t('lsRules.dv.title')}</h3>
             <p className="mt-1 max-w-xl text-[12px] leading-relaxed text-white/55">
-              This league is built for long-term pipelines: active pros, taxi stashes, devy prospects, and tradable
-              future capital. MLB and NHL Devy formats are not supported — your sport uses a football or basketball
-              prospect path.
+              {t('lsRules.dv.intro')}
             </p>
           </div>
           <button
@@ -128,26 +129,26 @@ export function DevyLeagueSettingsHub({ ctx }: { ctx: SubPanelContext }) {
             disabled={saving || !ctx.isCommissioner}
             className="shrink-0 rounded-xl border border-cyan-400/35 bg-cyan-500/15 px-4 py-2 text-[12px] font-bold text-cyan-50 hover:bg-cyan-500/25 disabled:opacity-40"
           >
-            {saving ? 'Saving…' : 'Save changes'}
+            {saving ? t('lsRules.dv.saving') : t('lsRules.dv.save')}
           </button>
         </div>
       </div>
 
       <div className="scrollbar-none flex gap-1 overflow-x-auto rounded-xl border border-white/[0.06] bg-black/20 p-1">
-        {TABS.map((t) => {
-          const Icon = t.icon
-          const active = tab === t.id
+        {TABS.map((tb) => {
+          const Icon = tb.icon
+          const active = tab === tb.id
           return (
             <button
-              key={t.id}
+              key={tb.id}
               type="button"
-              onClick={() => setTab(t.id)}
+              onClick={() => setTab(tb.id)}
               className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-[11px] font-semibold transition ${
                 active ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/45 hover:bg-white/[0.05] hover:text-white/75'
               }`}
             >
               <Icon className="h-3.5 w-3.5 opacity-80" aria-hidden />
-              {t.label}
+              {t(`lsRules.dv.tab.${tb.id}`)}
             </button>
           )
         })}
@@ -159,52 +160,48 @@ export function DevyLeagueSettingsHub({ ctx }: { ctx: SubPanelContext }) {
 
       {tab === 'rosters' ? (
         <GlassCard>
-          <h4 className="text-sm font-bold text-white">Rosters & slots</h4>
+          <h4 className="text-sm font-bold text-white">{t('lsRules.dv.rosters.title')}</h4>
           <p className="mt-1 text-[12px] text-white/55">
-            Taxi and Devy are separate: taxi holds eligible young pros; devy holds pre-pro developmental players.
-            Defaults include both — tune slot counts without removing the pipelines.
+            {t('lsRules.dv.rosters.body')}
           </p>
           <ul className="mt-3 space-y-2 text-[12px] text-white/70">
-            <li>• Enforce separate devy roster section in lineup UIs</li>
-            <li>• Block devy players from active starting slots (non-scoring for weekly lineups)</li>
-            <li>• Roster preview: active / bench / IR / taxi / devy / future picks (wiring to league roster views)</li>
+            <li>{t('lsRules.dv.rosters.b1')}</li>
+            <li>{t('lsRules.dv.rosters.b2')}</li>
+            <li>{t('lsRules.dv.rosters.b3')}</li>
           </ul>
         </GlassCard>
       ) : null}
 
       {tab === 'pool' ? (
         <GlassCard>
-          <h4 className="text-sm font-bold text-white">Devy player pool</h4>
+          <h4 className="text-sm font-bold text-white">{t('lsRules.dv.pool.title')}</h4>
           <p className="mt-2 text-[12px] text-white/55">
-            This controls which future or developmental players can be drafted and stored in devy slots.
+            {t('lsRules.dv.pool.body')}
           </p>
           <p className="mt-2 text-[11px] text-white/45">
-            Filters: class year, position, school, ranking feed, declaration status — connected to scouting imports and
-            commissioner curation.
+            {t('lsRules.dv.pool.filters')}
           </p>
         </GlassCard>
       ) : null}
 
       {tab === 'drafts' ? (
         <GlassCard>
-          <h4 className="text-sm font-bold text-white">Drafts & picks</h4>
+          <h4 className="text-sm font-bold text-white">{t('lsRules.dv.drafts.title')}</h4>
           <p className="mt-1 text-[12px] text-white/55">
-            Annual rookie and devy drafts support linear, snake, auction, and weighted lottery. Weighted lottery is
-            only for annual drafts — never for startup drafts.
+            {t('lsRules.dv.drafts.body')}
           </p>
           <ul className="mt-3 space-y-1.5 text-[12px] text-white/65">
-            <li>• Future pick trading, max years, ownership validation</li>
-            <li>• Draft calendar, open trading during draft, clock pauses, queue autopick</li>
+            <li>{t('lsRules.dv.drafts.b1')}</li>
+            <li>{t('lsRules.dv.drafts.b2')}</li>
           </ul>
         </GlassCard>
       ) : null}
 
       {tab === 'promotions' ? (
         <GlassCard>
-          <h4 className="text-sm font-bold text-white">Promotion rules</h4>
+          <h4 className="text-sm font-bold text-white">{t('lsRules.dv.promotions.title')}</h4>
           <p className="mt-2 text-[12px] text-amber-100/90">
-            Promotion rules determine when a devy player must move out of developmental inventory and onto an active
-            roster, taxi, or waivers, depending on league rules.
+            {t('lsRules.dv.promotions.body')}
           </p>
         </GlassCard>
       ) : null}
@@ -212,10 +209,9 @@ export function DevyLeagueSettingsHub({ ctx }: { ctx: SubPanelContext }) {
       {tab === 'trading' ? (
         <div className="space-y-4">
           <GlassCard>
-            <h4 className="text-sm font-bold text-white">Trading rules</h4>
+            <h4 className="text-sm font-bold text-white">{t('lsRules.dv.trading.title')}</h4>
             <p className="mt-1 text-[12px] text-white/55">
-              Supports players, devy assets, rookie picks, future picks, taxi players, and multi-team deals. Trade review,
-              veto thresholds, deadlines, and pick labeling (year/round/original owner) surface in trade UIs.
+              {t('lsRules.dv.trading.body')}
             </p>
           </GlassCard>
           <DevyExchangeRateCard
@@ -228,21 +224,19 @@ export function DevyLeagueSettingsHub({ ctx }: { ctx: SubPanelContext }) {
 
       {tab === 'scoring' ? (
         <GlassCard>
-          <h4 className="text-sm font-bold text-white">Scoring</h4>
+          <h4 className="text-sm font-bold text-white">{t('lsRules.dv.scoring.title')}</h4>
           <p className="mt-1 text-[12px] text-white/55">
-            Uses your sport scoring template. Devy/taxi non-scoring enforcement keeps devy prospects off weekly scores
-            unless you run a special event format.
+            {t('lsRules.dv.scoring.body')}
           </p>
-          <p className="mt-2 text-[11px] text-white/45">NFL and NBA devy templates — no MLB/NHL devy scoring paths.</p>
+          <p className="mt-2 text-[11px] text-white/45">{t('lsRules.dv.scoring.note')}</p>
         </GlassCard>
       ) : null}
 
       {tab === 'assets' ? (
         <GlassCard>
-          <h4 className="text-sm font-bold text-white">Future assets</h4>
+          <h4 className="text-sm font-bold text-white">{t('lsRules.dv.assets.title')}</h4>
           <p className="mt-1 text-[12px] text-white/55">
-            Future rookie and devy picks, traded pick history, original-owner labels, protected/conditional picks
-            (when enabled), pick ledger export, and commissioner repair tools.
+            {t('lsRules.dv.assets.body')}
           </p>
         </GlassCard>
       ) : null}
@@ -251,35 +245,32 @@ export function DevyLeagueSettingsHub({ ctx }: { ctx: SubPanelContext }) {
         <GlassCard>
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-violet-300" />
-            <h4 className="text-sm font-bold text-white">Chimmy + Devy</h4>
+            <h4 className="text-sm font-bold text-white">{t('lsRules.dv.chimmy.title')}</h4>
           </div>
           <p className="mt-2 text-[12px] text-white/55">
-            Ask about devy eligibility, promotions, pick value, trades, and long-term outlook. Chimmy should read this
-            league&apos;s devy config, rosters, taxi/devy buckets, and owned picks when context is available.
+            {t('lsRules.dv.chimmy.body')}
           </p>
           <ul className="mt-3 space-y-1 text-[11px] text-white/50">
-            <li>• “Should I draft this prospect?” · “Compare these two devy players”</li>
-            <li>• “What future picks do I own?” · “Evaluate this devy trade”</li>
+            <li>{t('lsRules.dv.chimmy.q1')}</li>
+            <li>{t('lsRules.dv.chimmy.q2')}</li>
           </ul>
         </GlassCard>
       ) : null}
 
       {tab === 'tools' ? (
         <GlassCard>
-          <h4 className="text-sm font-bold text-white">Commissioner tools</h4>
+          <h4 className="text-sm font-bold text-white">{t('lsRules.dv.tools.title')}</h4>
           <p className="mt-1 text-[12px] text-white/55">
-            Overrides (eligibility, promotions, pick assignment, pool refresh, audit logs) should confirm destructive
-            actions and write commissioner audit entries when wired to the backend.
+            {t('lsRules.dv.tools.body')}
           </p>
         </GlassCard>
       ) : null}
 
       {tab === 'danger' ? (
         <GlassCard className="border-amber-500/25 bg-amber-500/[0.06]">
-          <h4 className="text-sm font-bold text-amber-100">Advanced / danger zone</h4>
+          <h4 className="text-sm font-bold text-amber-100">{t('lsRules.dv.danger.title')}</h4>
           <p className="mt-2 text-[12px] text-amber-100/80">
-            Disabling devy, converting formats, resetting picks, or mass promotions can destroy league history. These
-            flows require typed confirmation and audit trails in production.
+            {t('lsRules.dv.danger.body')}
           </p>
         </GlassCard>
       ) : null}
@@ -313,6 +304,7 @@ function DevyExchangeRateCard({
   disabled: boolean
   onChange: (v: number | null) => void
 }) {
+  const { t } = useOptionalLanguage()
   const [text, setText] = useState(value == null ? '' : String(value))
 
   useEffect(() => {
@@ -326,17 +318,14 @@ function DevyExchangeRateCard({
 
   return (
     <GlassCard>
-      <h4 className="text-sm font-bold text-white">Devy ↔ NFL exchange rate</h4>
+      <h4 className="text-sm font-bold text-white">{t('lsRules.xr.title')}</h4>
       <p className="mt-1 text-[12px] leading-relaxed text-white/55">
-        Leave this empty and a trade mixing college prospects with NFL players is reported as
-        ungradeable — which is the honest answer, because nothing prices college players and no
-        such exchange rate has ever been measured. Set it and those trades get graded at your
-        number, labelled as a house rule.
+        {t('lsRules.xr.body')}
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <label className="text-[11px] font-semibold uppercase tracking-wide text-white/60">
-          Market units per devy point
+          {t('lsRules.xr.label')}
         </label>
         <input
           value={text}
@@ -350,8 +339,8 @@ function DevyExchangeRateCard({
           }}
           disabled={disabled}
           inputMode="decimal"
-          placeholder="not set"
-          aria-label="Market units per devy point"
+          placeholder={t('lsRules.xr.placeholder')}
+          aria-label={t('lsRules.xr.label')}
           className="w-28 rounded-lg border border-white/[0.12] bg-black/30 px-3 py-1.5 text-[13px] text-white outline-none placeholder:text-white/30 focus:border-cyan-400/50 disabled:opacity-40"
         />
         {text.trim() !== '' ? (
@@ -364,7 +353,7 @@ function DevyExchangeRateCard({
             disabled={disabled}
             className="rounded-lg border border-white/[0.12] px-2.5 py-1.5 text-[11px] font-semibold text-white/60 hover:text-white/90 disabled:opacity-40"
           >
-            Clear
+            {t('lsRules.xr.clear')}
           </button>
         ) : null}
       </div>
@@ -372,29 +361,26 @@ function DevyExchangeRateCard({
       {/* The consequence, which is the part a commissioner can actually judge. */}
       {preview != null ? (
         <p className="mt-2 text-[12px] text-cyan-100/80">
-          At this rate the top prospect on your devy board is worth about{' '}
-          <span className="font-bold">{preview.toLocaleString()}</span> — compare that with an NFL
-          player you already know the price of.
+          {t('lsRules.xr.previewBefore')}{' '}
+          <span className="font-bold">{preview.toLocaleString()}</span> {t('lsRules.xr.previewAfter')}
         </p>
       ) : null}
 
       {text.trim() !== '' && !isNumber ? (
         <p className="mt-2 text-[12px] text-amber-200/85">
-          That is not a number, so it will be ignored and mixed trades stay ungradeable.
+          {t('lsRules.xr.notNumber')}
         </p>
       ) : null}
 
       {isNumber && !inRange ? (
         <p className="mt-2 text-[12px] text-amber-200/85">
-          Outside the accepted range of {DEVY_BRIDGE_MIN}–{DEVY_BRIDGE_MAX}, so it will be ignored.
-          At {DEVY_BRIDGE_MAX} your top prospect would price level with the most valuable NFL asset
-          in existence; at {DEVY_BRIDGE_MIN} the whole devy board rounds to nothing.
+          {t('lsRules.xr.outOfRange').split('{{min}}').join(String(DEVY_BRIDGE_MIN)).split('{{max}}').join(String(DEVY_BRIDGE_MAX))}
         </p>
       ) : null}
 
       {value == null ? (
         <p className="mt-2 text-[11px] text-white/40">
-          Not set — mixed devy/NFL trades are reported as ungradeable.
+          {t('lsRules.xr.notSet')}
         </p>
       ) : null}
 
