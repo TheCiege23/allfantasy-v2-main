@@ -14,6 +14,10 @@ const {
   teamUpdateMany,
   pushDeleteMany,
   comparisonDeleteMany,
+  leagueAuthDeleteMany,
+  yahooDeleteMany,
+  sessionDeleteMany,
+  mflDeleteMany,
   cancelSubsMock,
 } = vi.hoisted(() => ({
   getServerSessionMock: vi.fn(),
@@ -26,6 +30,10 @@ const {
   teamUpdateMany: vi.fn(),
   pushDeleteMany: vi.fn(),
   comparisonDeleteMany: vi.fn(),
+  leagueAuthDeleteMany: vi.fn(),
+  yahooDeleteMany: vi.fn(),
+  sessionDeleteMany: vi.fn(),
+  mflDeleteMany: vi.fn(),
   cancelSubsMock: vi.fn(),
 }))
 
@@ -46,16 +54,20 @@ vi.mock("@/lib/prisma", () => ({
         leagueTeam: { updateMany: teamUpdateMany },
         webPushSubscription: { deleteMany: pushDeleteMany },
         genericTradeComparison: { deleteMany: comparisonDeleteMany },
+        leagueAuth: { deleteMany: leagueAuthDeleteMany },
+        yahooConnection: { deleteMany: yahooDeleteMany },
+        authSession: { deleteMany: sessionDeleteMany },
+        mFLConnection: { deleteMany: mflDeleteMany },
       }),
   },
 }))
 
 import { POST } from "@/app/api/user/delete/route"
 
-function req(body?: unknown) {
+function req(body?: unknown, cookie?: string) {
   return new Request("http://localhost/api/user/delete", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 }
@@ -72,6 +84,10 @@ describe("POST /api/user/delete", () => {
     teamUpdateMany.mockResolvedValue({ count: 3 })
     pushDeleteMany.mockResolvedValue({ count: 2 })
     comparisonDeleteMany.mockResolvedValue({ count: 1 })
+    leagueAuthDeleteMany.mockResolvedValue({ count: 3 })
+    yahooDeleteMany.mockResolvedValue({ count: 1 })
+    sessionDeleteMany.mockResolvedValue({ count: 0 })
+    mflDeleteMany.mockResolvedValue({ count: 1 })
     cancelSubsMock.mockResolvedValue({ cancelled: [], hasAppleSubscription: false })
   })
 
@@ -130,6 +146,36 @@ describe("POST /api/user/delete", () => {
     // The anonymising update stays first; the Legacy release follows it.
     expect(appUserUpdate.mock.calls[0][0].data.passwordHash).toBeNull()
     expect(appUserUpdate).toHaveBeenCalledWith({ where: { id: "u1" }, data: { legacyUserId: null } })
+  })
+
+  /*
+   * The 2026-10 Privacy Policy (§8.4) promises Connected Platform tokens are deleted. They
+   * outlived every deletion before this: the FK cascades only fire on a hard delete.
+   */
+  it("deletes stored platform credentials: league_auths, the Yahoo connection and sessions", async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: "u1" } })
+    expect((await POST(req({ confirm: true }))).status).toBe(200)
+    expect(leagueAuthDeleteMany).toHaveBeenCalledWith({ where: { userId: "u1" } })
+    expect(yahooDeleteMany).toHaveBeenCalledWith({ where: { userId: "u1" } })
+    expect(sessionDeleteMany).toHaveBeenCalledWith({ where: { userId: "u1" } })
+    // No legacy MFL cookie on this browser: nothing to find the MFL row by, so nothing is touched.
+    expect(mflDeleteMany).not.toHaveBeenCalled()
+  })
+
+  it("deletes the legacy MFL session this browser holds, and expires its cookie", async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: "u1" } })
+    const res = await POST(req({ confirm: true }, "theme=dark; mfl_session=sess-123; other=1"))
+    expect(res.status).toBe(200)
+    expect(mflDeleteMany).toHaveBeenCalledWith({ where: { sessionId: "sess-123" } })
+    expect(res.headers.get("set-cookie")).toMatch(/mfl_session=;.*Max-Age=0/i)
+  })
+
+  it("does not delete credentials when the subscription could not be cancelled", async () => {
+    getServerSessionMock.mockResolvedValue({ user: { id: "u1" } })
+    cancelSubsMock.mockRejectedValue(new Error("stripe down"))
+    expect((await POST(req({ confirm: true }))).status).toBe(502)
+    expect(leagueAuthDeleteMany).not.toHaveBeenCalled()
+    expect(yahooDeleteMany).not.toHaveBeenCalled()
   })
 
   it("401 when unauthenticated", async () => {
