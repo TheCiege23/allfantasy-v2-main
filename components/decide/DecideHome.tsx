@@ -46,6 +46,7 @@ import {
   type DecisionRecommendationsViewModel,
 } from '@/lib/decision-os/recommendations'
 import type { ManagerIntelligencePayload } from '@/lib/decision-os/dashboard-intelligence'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import './broadcast-deck.css'
 
 // ── Local wire types (structural match for /api/league/trades-panel JSON) ────
@@ -101,7 +102,8 @@ function SevChip({ sev, children }: { sev: Sev; children: React.ReactNode }) {
   )
 }
 
-function ordinal(n: number): string {
+function ordinal(n: number, language: string = 'en'): string {
+  if (language === 'es') return `${n}.º`
   const rem10 = n % 10
   const rem100 = n % 100
   if (rem10 === 1 && rem100 !== 11) return `${n}st`
@@ -138,6 +140,7 @@ export function DecideHome({
   isCommissioner = false,
   onOpenTab,
 }: DecideHomeProps) {
+  const { t, language } = useOptionalLanguage()
   const [trades, setTrades] = useState<PanelTrade[] | null>(null)
   const [verdictContext, setVerdictContext] = useState<VerdictContext | null>(null)
   const [tradesLoading, setTradesLoading] = useState(true)
@@ -245,11 +248,11 @@ export function DecideHome({
       : -1
   const rankValue =
     projected && projectedMe >= 0
-      ? ordinal(projectedMe + 1)
+      ? ordinal(projectedMe + 1, language)
       : myTeam?.currentRank != null
-        ? ordinal(myTeam.currentRank)
+        ? ordinal(myTeam.currentRank, language)
         : myRankIndex >= 0
-          ? ordinal(myRankIndex + 1)
+          ? ordinal(myRankIndex + 1, language)
           : '—'
   const pointsFor =
     projected && projectedMe >= 0
@@ -274,37 +277,37 @@ export function DecideHome({
       <div className="bdx-kpis">
         <div className="bdx-kpi">
           <div className="v">{record}</div>
-          <div className="l">Record</div>
-          <div className="d">{myTeam ? myTeam.teamName || 'Your team' : 'No claimed team'}</div>
+          <div className="l">{t('decide.record')}</div>
+          <div className="d">{myTeam ? myTeam.teamName || t('decide.yourTeam') : t('decide.kpi.noClaimedTeam')}</div>
         </div>
         <div className="bdx-kpi">
           <div className="v">{rankValue}</div>
-          <div className="l">Standing</div>
+          <div className="l">{t('decide.kpi.standing')}</div>
           <div className="d">
             {projected && projectedMe >= 0
-              ? `projected · wk ${projected.week}`
-              : `of ${teams.length || league.teamCount || '—'} teams`}
+              ? t('decide.kpi.projectedWk').replace('{{week}}', String(projected.week))
+              : t('decide.kpi.ofTeams').replace('{{count}}', String(teams.length || league.teamCount || '—'))}
           </div>
         </div>
         <div className="bdx-kpi">
           <div className="v">{pointsFor}</div>
-          <div className="l">{projected && projectedMe >= 0 ? 'Proj. points' : 'Points for'}</div>
+          <div className="l">{projected && projectedMe >= 0 ? t('decide.kpi.projPoints') : t('decide.pointsFor')}</div>
           <div className="d">
-            {projected && projectedMe >= 0 ? `week ${projected.week} starters` : 'season total'}
+            {projected && projectedMe >= 0 ? t('decide.kpi.weekStarters').replace('{{week}}', String(projected.week)) : t('decide.kpi.seasonTotal')}
           </div>
         </div>
         <div className="bdx-kpi">
           <div className="v">{faab}</div>
-          <div className="l">FAAB left</div>
-          <div className="d">{myTeam?.waiverPriority != null ? `waiver priority ${myTeam.waiverPriority}` : 'waivers'}</div>
+          <div className="l">{t('decide.faabLeft')}</div>
+          <div className="d">{myTeam?.waiverPriority != null ? t('decide.kpi.waiverPriority').replace('{{n}}', String(myTeam.waiverPriority)) : t('decide.kpi.waivers')}</div>
         </div>
       </div>
 
       {/* ── Attention queue ── */}
       <div className="bdx-kick">
-        <h2 className="bdx-disp">Needs your call</h2>
+        <h2 className="bdx-disp">{t('decide.needs.title')}</h2>
         <span className="bdx-sub">
-          {isLoading ? 'reading your league…' : `${needsCallCount} item${needsCallCount === 1 ? '' : 's'} · every verdict shows its work`}
+          {isLoading ? t('decide.needs.reading') : t(needsCallCount === 1 ? 'decide.needs.countOne' : 'decide.needs.countMany').replace('{{count}}', String(needsCallCount))}
         </span>
       </div>
 
@@ -324,9 +327,9 @@ export function DecideHome({
             {/* League Pulse — the Decision OS verdict for this league */}
             <div className={`bdx-card c-${pulseSev(pulse.status)}`}>
               <div className="bdx-head">
-                <span className="bdx-kind">{pulse.eyebrow || 'League pulse'}</span>
+                <span className="bdx-kind">{pulse.eyebrow || t('decide.pulse.fallbackEyebrow')}</span>
                 <SevChip sev={pulseSev(pulse.status)}>{pulse.statusLabel}</SevChip>
-                <span className="bdx-when">updated {new Date(pulse.lastUpdatedIso).toLocaleString()}</span>
+                <span className="bdx-when">{t('decide.pulse.updated').replace('{{when}}', new Date(pulse.lastUpdatedIso).toLocaleString(language === 'es' ? 'es' : undefined))}</span>
               </div>
               {pulse.insufficientData ? (
                 <div className="bdx-empty" style={{ border: 'none', padding: '4px 0 0' }}>
@@ -373,7 +376,7 @@ export function DecideHome({
                       </a>
                     ) : (
                       <span className="bdx-note" style={{ marginLeft: 0 }}>
-                        Next: {pulse.nextAction.label} — {pulse.nextAction.detail}
+                        {t('decide.pulse.next').replace('{{label}}', pulse.nextAction.label).replace('{{detail}}', pulse.nextAction.detail)}
                       </span>
                     )}
                   </div>
@@ -386,10 +389,10 @@ export function DecideHome({
               recs.recommendations.map((r) => (
                 <div className={`bdx-card c-${recSev(r.priority)}`} key={r.title}>
                   <div className="bdx-head">
-                    <span className="bdx-kind">Recommended move</span>
+                    <span className="bdx-kind">{t('decide.rec.kind')}</span>
                     <SevChip sev={recSev(r.priority)}>{r.priority}</SevChip>
                     <span className="bdx-when">
-                      impact: {r.expectedImpact} · {r.difficulty}
+                      {t('decide.rec.impact').replace('{{impact}}', String(r.expectedImpact)).replace('{{difficulty}}', String(r.difficulty))}
                     </span>
                   </div>
                   <div className="bdx-line">
@@ -404,17 +407,16 @@ export function DecideHome({
                   ) : null}
                   <div className="bdx-acts">
                     <span className="bdx-note" style={{ marginLeft: 0 }}>
-                      Suggested: {r.suggestedAction} · confidence {r.confidence}
+                      {t('decide.rec.suggested').replace('{{action}}', String(r.suggestedAction)).replace('{{confidence}}', String(r.confidence))}
                     </span>
                   </div>
                 </div>
               ))
             ) : (
               <div className="bdx-empty">
-                <div className="t">{recs.insufficientData?.title ?? 'No grounded recommendations yet'}</div>
+                <div className="t">{recs.insufficientData?.title ?? t('decide.rec.emptyTitle')}</div>
                 <div className="m">
-                  {recs.insufficientData?.message ??
-                    'Recommendations appear once enough league activity is available.'}
+                  {recs.insufficientData?.message ?? t('decide.rec.emptyMessage')}
                 </div>
                 {recs.insufficientData?.missing?.length ? (
                   <div className="missing">
@@ -437,17 +439,17 @@ export function DecideHome({
       {/* ── Support band ── */}
       <div className="bdx-support">
         <div className="bdx-panelbox">
-          <h3>Standings</h3>
+          <h3>{t('decide.standings')}</h3>
           {standings.length > 0 ? (
             <table className="bdx-stand">
               <tbody>
-                {standings.slice(0, 6).map((t, i) => (
-                  <tr key={t.id} className={myTeam && t.id === myTeam.id ? 'me' : undefined}>
+                {standings.slice(0, 6).map((tm, i) => (
+                  <tr key={tm.id} className={myTeam && tm.id === myTeam.id ? 'me' : undefined}>
                     <td className="rk">{i + 1}</td>
-                    <td>{t.teamName || t.ownerName || 'Team'}</td>
+                    <td>{tm.teamName || tm.ownerName || t('decide.team')}</td>
                     <td className="rec">
-                      {t.wins}–{t.losses}
-                      {t.ties > 0 ? `–${t.ties}` : ''}
+                      {tm.wins}–{tm.losses}
+                      {tm.ties > 0 ? `–${tm.ties}` : ''}
                     </td>
                   </tr>
                 ))}
@@ -455,41 +457,41 @@ export function DecideHome({
             </table>
           ) : (
             <div className="bdx-empty" style={{ border: 'none', padding: 0 }}>
-              <div className="m">No team records synced yet.</div>
+              <div className="m">{t('decide.noRecordsYet')}</div>
             </div>
           )}
         </div>
 
         <div className="bdx-panelbox">
-          <h3>Your team</h3>
+          <h3>{t('decide.yourTeam')}</h3>
           {myTeam ? (
             <div className="bdx-rows">
-              <div className="bdx-row"><span className="k">Team</span><span className="x">{myTeam.teamName || '—'}</span></div>
-              <div className="bdx-row"><span className="k">Record</span><span className="x">{record}</span></div>
-              <div className="bdx-row"><span className="k">Points for</span><span className="x">{myTeam.pointsFor.toFixed(1)}</span></div>
-              <div className="bdx-row"><span className="k">Points against</span><span className="x">{myTeam.pointsAgainst.toFixed(1)}</span></div>
-              <div className="bdx-row"><span className="k">FAAB left</span><span className="x">{faab}</span></div>
+              <div className="bdx-row"><span className="k">{t('decide.team')}</span><span className="x">{myTeam.teamName || '—'}</span></div>
+              <div className="bdx-row"><span className="k">{t('decide.record')}</span><span className="x">{record}</span></div>
+              <div className="bdx-row"><span className="k">{t('decide.pointsFor')}</span><span className="x">{myTeam.pointsFor.toFixed(1)}</span></div>
+              <div className="bdx-row"><span className="k">{t('decide.pointsAgainst')}</span><span className="x">{myTeam.pointsAgainst.toFixed(1)}</span></div>
+              <div className="bdx-row"><span className="k">{t('decide.faabLeft')}</span><span className="x">{faab}</span></div>
             </div>
           ) : (
             <div className="bdx-empty" style={{ border: 'none', padding: 0 }}>
-              <div className="m">No claimed team in this league yet.</div>
+              <div className="m">{t('decide.noClaimedTeamYet')}</div>
             </div>
           )}
         </div>
 
         <div className="bdx-panelbox">
-          <h3>League vitals</h3>
+          <h3>{t('decide.vitals.title')}</h3>
           <div className="bdx-rows">
-            <div className="bdx-row"><span className="k">Format</span><span className="x">{league.format || '—'}</span></div>
-            <div className="bdx-row"><span className="k">Scoring</span><span className="x">{league.scoring || '—'}</span></div>
-            <div className="bdx-row"><span className="k">Teams</span><span className="x">{league.teamCount || teams.length || '—'}</span></div>
+            <div className="bdx-row"><span className="k">{t('decide.vitals.format')}</span><span className="x">{league.format || '—'}</span></div>
+            <div className="bdx-row"><span className="k">{t('decide.scoring')}</span><span className="x">{league.scoring || '—'}</span></div>
+            <div className="bdx-row"><span className="k">{t('decide.vitals.teams')}</span><span className="x">{league.teamCount || teams.length || '—'}</span></div>
             <div className="bdx-row">
-              <span className="k">Trade deadline</span>
-              <span className="x">{league.tradeDeadlineWeek ? `Week ${league.tradeDeadlineWeek}` : 'None set'}</span>
+              <span className="k">{t('decide.tradeDeadline')}</span>
+              <span className="x">{league.tradeDeadlineWeek ? t('decide.vitals.week').replace('{{week}}', String(league.tradeDeadlineWeek)) : t('decide.vitals.noneSet')}</span>
             </div>
             <div className="bdx-row">
-              <span className="k">Playoffs</span>
-              <span className="x">{league.playoffStartWeek ? `Week ${league.playoffStartWeek}` : '—'}</span>
+              <span className="k">{t('decide.playoffs')}</span>
+              <span className="x">{league.playoffStartWeek ? t('decide.vitals.week').replace('{{week}}', String(league.playoffStartWeek)) : '—'}</span>
             </div>
           </div>
         </div>
@@ -508,10 +510,7 @@ export function DecideHome({
       {isCommissioner ? <CommissionerPulse leagueId={league.id} /> : null}
 
       <div className="bdx-foot">
-        Every number above comes from this league&apos;s synced data or the Decision OS engine — when
-        something isn&apos;t known yet, it says so instead of guessing. Pending offers made on the
-        external platform aren&apos;t visible to a read-only import: recreate them in the Trade Center
-        to analyze them here.
+        {t('decide.foot')}
       </div>
     </div>
   )
@@ -530,24 +529,27 @@ function TradeCard({
   onOpenTab: (tabId: string) => void
   context?: VerdictContext | null
 }) {
+  const { t, language } = useOptionalLanguage()
   const isYourCall = trade.status === 'pending' && trade.viewerIsReceiver
   const when = new Date(trade.timestamp)
+  const statusKey = `decide.trade.status.${trade.status}`
+  const statusText = t(statusKey) === statusKey ? trade.status.replace(/_/g, ' ') : t(statusKey)
   return (
     <div className={`bdx-card c-${sev}`}>
       <div className="bdx-head">
         <span className="bdx-kind">
           <ArrowLeftRight size={12} style={{ verticalAlign: '-2px', marginRight: 5 }} aria-hidden />
-          Trade {trade.direction === 'incoming' ? 'offer' : trade.direction === 'outgoing' ? 'proposal' : ''}
+          {t(trade.direction === 'incoming' ? 'decide.trade.offer' : trade.direction === 'outgoing' ? 'decide.trade.proposal' : 'decide.trade.plain')}
         </span>
-        <SevChip sev={sev}>{isYourCall ? 'Your call' : trade.status.replace(/_/g, ' ')}</SevChip>
+        <SevChip sev={sev}>{isYourCall ? t('decide.trade.yourCall') : statusText}</SevChip>
         <span className="bdx-when">
-          {trade.direction === 'incoming' ? 'from' : 'with'} {trade.partnerName} ·{' '}
-          {Number.isFinite(when.getTime()) ? when.toLocaleDateString() : ''}
+          {t(trade.direction === 'incoming' ? 'decide.trade.from' : 'decide.trade.with').replace('{{name}}', trade.partnerName)} ·{' '}
+          {Number.isFinite(when.getTime()) ? when.toLocaleDateString(language === 'es' ? 'es' : undefined) : ''}
         </span>
       </div>
       <div className="bdx-trade">
         <div className="bdx-side">
-          <div className="dir">You send</div>
+          <div className="dir">{t('decide.youSend')}</div>
           {trade.sent.length > 0 ? (
             trade.sent.map((a) => (
               <div className="bdx-asset" key={a.id}>
@@ -556,12 +558,12 @@ function TradeCard({
               </div>
             ))
           ) : (
-            <div className="bdx-asset" style={{ opacity: 0.6 }}>Nothing</div>
+            <div className="bdx-asset" style={{ opacity: 0.6 }}>{t('decide.trade.nothing')}</div>
           )}
         </div>
         <div className="bdx-swap">⇄</div>
         <div className="bdx-side">
-          <div className="dir">You receive</div>
+          <div className="dir">{t('decide.trade.youReceive')}</div>
           {trade.received.length > 0 ? (
             trade.received.map((a) => (
               <div className="bdx-asset" key={a.id}>
@@ -570,7 +572,7 @@ function TradeCard({
               </div>
             ))
           ) : (
-            <div className="bdx-asset" style={{ opacity: 0.6 }}>Nothing</div>
+            <div className="bdx-asset" style={{ opacity: 0.6 }}>{t('decide.trade.nothing')}</div>
           )}
         </div>
       </div>
@@ -579,28 +581,28 @@ function TradeCard({
           {context.idp ? (
             <span
               className="bdx-sev info"
-              title={`Player value here reads through ${context.adpKeyLabel} and your league's real (IDP) scoring settings.`}
+              title={t('decide.trade.idpTitle').replace('{{adp}}', context.adpKeyLabel)}
             >
-              ◆ IDP scoring{context.idpEmphasis ? ` · ${context.idpEmphasis}` : ''}
+              {t('decide.trade.idpScoring')}{context.idpEmphasis ? ` · ${t(`decide.trade.idp.${context.idpEmphasis}`)}` : ''}
             </span>
           ) : null}
           {context.pirate?.active ? (
             <span className="bdx-sev crit" title={context.pirate.lines.join(' ')}>
-              ☠ pirate rules — weekly floor &gt; ceiling
+              {t('decide.trade.pirateActive')}
             </span>
           ) : context.pirate ? (
             <span
               className="bdx-sev warn"
-              title="Name suggests a pirate league — confirm it in Live Intel and every verdict adjusts."
+              title={t('decide.trade.pirateMaybeTitle')}
             >
-              ☠ pirate? unconfirmed
+              {t('decide.trade.pirateMaybe')}
             </span>
           ) : null}
         </div>
       ) : null}
       <div className="bdx-acts">
         <button type="button" className="bdx-btn pri" onClick={() => onOpenTab('trades')}>
-          {isYourCall ? 'Review in Trade Center' : 'Open Trade Center'}
+          {isYourCall ? t('decide.trade.review') : t('decide.trade.open')}
         </button>
       </div>
     </div>

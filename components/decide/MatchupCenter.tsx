@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react'
 import type { MatchupCenterPayload, MatchupSide } from '@/lib/matchup-intel/matchupCenterService'
 import { sleeperAvatarThumb } from '@/lib/sports-data/headshots'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import './broadcast-deck.css'
 
 type ApiResponse =
@@ -16,6 +17,7 @@ type ApiResponse =
   | { supported: true; viewerSleeperUserId: string | null; center: MatchupCenterPayload | null; error?: string }
 
 function Side({ s, right = false }: { s: MatchupSide; right?: boolean }) {
+  const { t } = useOptionalLanguage()
   const av = sleeperAvatarThumb(s.avatar)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: right ? 'row-reverse' : 'row', flex: 1, minWidth: 0 }}>
@@ -33,9 +35,9 @@ function Side({ s, right = false }: { s: MatchupSide; right?: boolean }) {
           {s.teamName || s.name}
         </div>
         <div style={{ fontSize: 11, color: 'var(--bdx-ink-faint)', fontVariantNumeric: 'tabular-nums' }}>
-          {s.actualPoints > 0 ? `${s.actualPoints.toFixed(1)} pts · ` : ''}
-          proj {s.projectedPoints != null ? s.projectedPoints.toFixed(1) : '—'}
-          {s.unprojectedStarters > 0 ? ` (${s.unprojectedStarters} unprojected)` : ''}
+          {s.actualPoints > 0 ? t('decide.mc.pts').replace('{{pts}}', s.actualPoints.toFixed(1)) : ''}
+          {t('decide.mc.proj').replace('{{pts}}', s.projectedPoints != null ? s.projectedPoints.toFixed(1) : '—')}
+          {s.unprojectedStarters > 0 ? t('decide.mc.unprojected').replace('{{n}}', String(s.unprojectedStarters)) : ''}
         </div>
       </div>
     </div>
@@ -43,6 +45,7 @@ function Side({ s, right = false }: { s: MatchupSide; right?: boolean }) {
 }
 
 export function MatchupCenter({ leagueId }: { leagueId: string }) {
+  const { t } = useOptionalLanguage()
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -76,9 +79,9 @@ export function MatchupCenter({ leagueId }: { leagueId: string }) {
   return (
     <div data-testid="matchup-center" style={{ marginTop: 18 }}>
       <div className="bdx-kick">
-        <h2 className="bdx-disp">Matchup center</h2>
+        <h2 className="bdx-disp">{t('decide.mc.title')}</h2>
         <span className="bdx-sub">
-          {center ? `week ${center.week}${center.anyPointsScored ? ' · live scores' : ' · pre-kickoff'}` : ''}
+          {center ? t(center.anyPointsScored ? 'decide.mc.weekLive' : 'decide.mc.weekPre').replace('{{week}}', String(center.week)) : ''}
         </span>
       </div>
       {loading || !center ? (
@@ -121,7 +124,7 @@ export function MatchupCenter({ leagueId }: { leagueId: string }) {
                       />
                     </div>
                   ) : null}
-                  {mine ? <div className="bdx-sub" style={{ marginTop: 6 }}>your matchup</div> : null}
+                  {mine ? <div className="bdx-sub" style={{ marginTop: 6 }}>{t('decide.mc.yours')}</div> : null}
                 </div>
               )
             })}
