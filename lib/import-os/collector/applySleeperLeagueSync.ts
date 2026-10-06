@@ -20,6 +20,7 @@
 import type { Prisma } from '@prisma/client'
 import { resolveSeasonPlacement, seasonPlacementTeamIds } from '@/lib/league-import/seasonPlacement'
 import { prisma } from '@/lib/prisma'
+import { syncFantraxRedraftLineups } from './syncFantraxRedraftLineups'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import {
   bootstrapLeagueFromNormalizedImport,
@@ -326,6 +327,10 @@ async function applyTeamsRosters(
   // REUSE the canonical, claim-preserving upsert (LeagueTeam by [leagueId,externalId] never nulls a
   // claim; Roster keyed by platformUserId with rebuilt lineup_sections; TeamPerformance by [teamId,season,week]).
   await bootstrapLeagueFromNormalizedImport(leagueId, normalized)
+  if (normalized.source?.source_provider === 'fantrax') {
+    const updated = await syncFantraxRedraftLineups(leagueId)
+    out.notes.push(`teams_rosters: synchronized ${updated} Fantrax scoring lineup slot(s)`)
+  }
 
   /*
    * ⚠ WRITE THE RESULTS BACK ONTO LeagueTeam. Nothing did, so LeagueTeam carried
