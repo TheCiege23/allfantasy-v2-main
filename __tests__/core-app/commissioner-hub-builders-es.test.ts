@@ -205,6 +205,7 @@ describe('commissioner hub builders', () => {
       'abandonedTeamsFlag', 'missingLineupsFlag', 'unequalSchedulesFlag', 'unpaidDuesFlag', 'unresolvedVotesFlag',
       'buildTaskCards', 'resolveHubHealthScore', 'memberActivityFromReads', 'staleActivityReason',
       'unownedTeamNames', 'buildCommissionerAccessRows', 'describeSyncAge', 'describeTradeDeadline', 'describePlayoffs',
+      'buildLeagueAreas', 'buildWorkflows', 'buildCommunities', 'commissionerFormatCards', 'loadCommissionerHistory',
     ])
     const calls: Array<{ name: string; passes: boolean }> = []
     const visit = (n: ts.Node) => {

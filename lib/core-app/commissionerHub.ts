@@ -673,7 +673,7 @@ export async function getCommissionerHub(input: {
       where: { leagueId, network: { ownerUserId: userId } },
       select: { role: true, network: { select: { id: true, name: true } } },
     })).catch(() => null),
-    loadCommissionerHistory(leagueId, native, { platform, sport }).catch((): CommissionerHistory => ({ tradeAvailable: false, draftAvailable: false, trades: [], drafts: [], tradeNote: es ? 'No se pudo leer el historial de intercambios.' : 'Trade history could not be read.', draftNote: es ? 'No se pudo leer el historial de drafts.' : 'Draft history could not be read.' })),
+    loadCommissionerHistory(leagueId, native, { platform, sport }, language).catch((): CommissionerHistory => ({ tradeAvailable: false, draftAvailable: false, trades: [], drafts: [], tradeNote: es ? 'No se pudo leer el historial de intercambios.' : 'Trade history could not be read.', draftNote: es ? 'No se pudo leer el historial de drafts.' : 'Draft history could not be read.' })),
   ])
 
   const profile = resolveCommissionerLeagueProfile({
@@ -1100,7 +1100,7 @@ export async function getCommissionerHub(input: {
 
   return {
     allowed: true,
-    formatCards: commissionerFormatCards(profile, league.leagueType),
+    formatCards: commissionerFormatCards(profile, league.leagueType, language),
     formatTemplate: {
       applied: profile.template
         ? {
@@ -1141,9 +1141,10 @@ export async function getCommissionerHub(input: {
     health: { score: healthScore, flags },
     members: activityStale ? { available: false, reason: stale?.reason ?? '' } : memberActivity,
     calendar: { ...calendar, ics },
-    areas: buildLeagueAreas(hubLeague),
-    workflows: buildWorkflows(hubLeague),
+    areas: buildLeagueAreas(hubLeague, language),
+    workflows: buildWorkflows(hubLeague, language),
     communities: buildCommunities({
+      language,
       league: hubLeague,
       viewerIsOwner,
       viewerCanBroadcast,

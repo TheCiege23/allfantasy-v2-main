@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { readRecentImportedTrades } from '@/lib/league-history/leagueWarehouseReads'
 import { describeImportedActivityRows, type LeagueActivityItem } from '@/lib/core-app/leagueActivity'
+import { pickLanguage } from './pickLanguage'
 
 export type CommissionerHistory = {
   tradeAvailable: boolean
@@ -30,12 +31,17 @@ const MAX_TRADE_ASSETS = 6
  * Assets are listed without direction: Sleeper's `adds` names everything that moved but a reader
  * that guessed which side got what would be inventing it.
  */
-export function importedTradeLabel(item: Pick<LeagueActivityItem, 'involvedTeams' | 'managerName' | 'adds' | 'picks'>): string {
-  const sides = item.involvedTeams.length ? item.involvedTeams.join(' ↔ ') : item.managerName ?? 'Unattributed trade'
+export function importedTradeLabel(
+  item: Pick<LeagueActivityItem, 'involvedTeams' | 'managerName' | 'adds' | 'picks'>,
+  language = 'en',
+): string {
+  const L = pickLanguage(language)
+  const sides = item.involvedTeams.length ? item.involvedTeams.join(' ↔ ') : item.managerName ?? L('Unattributed trade', 'Intercambio sin atribuir')
   const assets = [...item.adds.map((player) => player.name ?? player.label), ...item.picks]
   if (!assets.length) return sides
   const shown = assets.slice(0, MAX_TRADE_ASSETS).join(', ')
-  return `${sides}: ${shown}${assets.length > MAX_TRADE_ASSETS ? ` +${assets.length - MAX_TRADE_ASSETS} more` : ''}`
+  const more = assets.length - MAX_TRADE_ASSETS
+  return `${sides}: ${shown}${more > 0 ? L(` +${more} more`, ` y ${more} más`) : ''}`
 }
 
 export async function loadCommissionerHistory(
@@ -43,7 +49,10 @@ export async function loadCommissionerHistory(
   native: boolean,
   /** The league's provider and sport, so an ESPN or Yahoo player id is named in its own id space. */
   provider: { platform?: string | null; sport?: string | null } = {},
+  /** The reader's language for the labels and notes written here; default English. */
+  language = 'en',
 ): Promise<CommissionerHistory> {
+  const L = pickLanguage(language)
   const [nativeTrades, importedTrades, sessions, redraftDrafts, corrections] = await Promise.all([
     native ? prisma.redraftLeagueTrade.findMany({
       where: { leagueId }, orderBy: { createdAt: 'desc' }, take: 10,
@@ -76,14 +85,14 @@ export async function loadCommissionerHistory(
   }
   const drafts: CommissionerHistory['drafts'] = [
     ...(redraftDrafts ?? []).map((draft) => ({
-      id: draft.id, season: draft.season, seasonBasis: 'recorded' as const, status: draft.status, source: 'AllFantasy redraft',
-      picks: draft.picks.map((pick) => ({ overall: pick.pickNumber, round: pick.round, owner: pick.roster?.redraftRoster?.teamName ?? pick.roster?.redraftRoster?.ownerName ?? pick.rosterId ?? 'Unassigned', player: pick.selectedPlayerName ?? 'Not selected', corrections: [] })),
+      id: draft.id, season: draft.season, seasonBasis: 'recorded' as const, status: draft.status, source: L('AllFantasy redraft', 'Redraft de AllFantasy'),
+      picks: draft.picks.map((pick) => ({ overall: pick.pickNumber, round: pick.round, owner: pick.roster?.redraftRoster?.teamName ?? pick.roster?.redraftRoster?.ownerName ?? pick.rosterId ?? L('Unassigned', 'Sin asignar'), player: pick.selectedPlayerName ?? L('Not selected', 'Sin seleccionar'), corrections: [] })),
     })),
     ...(sessions ?? []).map((session) => {
       const date = session.startedAt ?? session.completedAt
       return {
         id: session.id, season: date?.getUTCFullYear() ?? null, seasonBasis: date ? 'date_inferred' as const : 'unknown' as const,
-        status: session.status, source: 'Live draft session',
+        status: session.status, source: L('Live draft session', 'Sesión de draft en vivo'),
         picks: session.picks.map((pick) => ({ overall: pick.overall, round: pick.round, owner: pick.displayName ?? pick.rosterId, player: pick.playerName, corrections: correctionsByPick.get(`${session.id}:${pick.overall}`) ?? [] })),
       }
     }),
@@ -93,9 +102,9 @@ export async function loadCommissionerHistory(
     draftAvailable: sessions !== null && redraftDrafts !== null && corrections !== null,
     trades: native
       ? (nativeTrades ?? []).map((trade) => ({ id: trade.id, at: trade.createdAt.toISOString(), label: `${trade.proposerRoster.teamName ?? trade.proposerRoster.ownerName} ↔ ${trade.receiverRoster.teamName ?? trade.receiverRoster.ownerName}`, status: trade.status, source: 'AllFantasy' }))
-      : (importedTrades ?? []).map((trade, i) => ({ id: trade.id, at: trade.occurredAt.toISOString(), label: namedTrades?.[i] ? importedTradeLabel(namedTrades[i]) : 'Trade (details unavailable)', status: 'recorded', source: trade.provider })),
+      : (importedTrades ?? []).map((trade, i) => ({ id: trade.id, at: trade.occurredAt.toISOString(), label: namedTrades?.[i] ? importedTradeLabel(namedTrades[i], language) : L('Trade (details unavailable)', 'Intercambio (detalles no disponibles)'), status: 'recorded', source: trade.provider })),
     drafts,
-    tradeNote: nativeTrades === null || importedTrades === null ? 'Trade history could not be read.' : native ? 'Native trade records on file. This list is limited to the ten newest.' : 'Imported trades recorded in the league warehouse. Provider history may be incomplete.',
-    draftNote: sessions === null || redraftDrafts === null || corrections === null ? 'Some draft records or corrections could not be read.' : 'Only connected live draft sessions and native redraft drafts on file are shown. A session year is inferred from its date; missing provider seasons are not reconstructed.',
+    tradeNote: nativeTrades === null || importedTrades === null ? L('Trade history could not be read.', 'No se pudo leer el historial de intercambios.') : native ? L('Native trade records on file. This list is limited to the ten newest.', 'Intercambios registrados en AllFantasy. La lista se limita a los diez más recientes.') : L('Imported trades recorded in the league warehouse. Provider history may be incomplete.', 'Intercambios importados registrados en el almacén de la liga. El historial del proveedor puede estar incompleto.'),
+    draftNote: sessions === null || redraftDrafts === null || corrections === null ? L('Some draft records or corrections could not be read.', 'No se pudieron leer algunos registros o correcciones del draft.') : L('Only connected live draft sessions and native redraft drafts on file are shown. A session year is inferred from its date; missing provider seasons are not reconstructed.', 'Solo se muestran las sesiones de draft en vivo conectadas y los drafts de redraft de AllFantasy registrados. El año de una sesión se deduce de su fecha; las temporadas que faltan del proveedor no se reconstruyen.'),
   }
 }

@@ -226,6 +226,23 @@ const ES: Record<string, string> = {
 
   // ── Waivers ───────────────────────────────────────────────────────────
   'Waiver rules →': 'Reglas de agentes libres →',
+
+  // ── Trade and draft statuses, as their tables store them (shown raw in the history section) ──
+  pending: 'pendiente',
+  accepted: 'aceptado',
+  rejected: 'rechazado',
+  vetoed: 'vetado',
+  countered: 'contraoferta',
+  expired: 'vencido',
+  cancelled: 'cancelado',
+  recorded: 'registrado',
+  scheduled: 'programado',
+  pre_draft: 'antes del draft',
+  in_progress: 'en curso',
+  paused: 'en pausa',
+  complete: 'completado',
+  completed: 'completado',
+
   'Last run': 'Último proceso',
   'Run by a commissioner': 'Lo procesó un comisionado',
   Scheduled: 'Programado',
@@ -309,6 +326,16 @@ const PATTERNS: Pattern[] = [
   ],
   [/^Not run: (.+)\.$/s, (why) => `No se procesó: ${why}.`],
   [/^Processed (\d+) claims\.$/, (n) => `Se procesaron ${n} solicitudes.`],
+  // Shared modules the hub shows without owning: platform hand-off buttons (`platformLinks`) and the
+  // action-authority reason (`commissioner-os/authority`). Both are one fixed shape around a name.
+  [/^Open in ([A-Za-z0-9 ]{2,24})$/, (p) => `Abrir en ${p}`],
+  [
+    /^AllFantasy cannot write to (.+); (.+) remains this league's system of record\.$/s,
+    (target, subject) =>
+      target === 'the host platform'
+        ? 'AllFantasy no puede escribir en la plataforma de origen; esa plataforma sigue siendo el sistema de referencia de esta liga.'
+        : `AllFantasy no puede escribir en ${target}; ${subject} sigue siendo el sistema de referencia de esta liga.`,
+  ],
 ]
 
 /*

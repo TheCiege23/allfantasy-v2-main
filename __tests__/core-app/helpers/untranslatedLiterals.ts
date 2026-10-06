@@ -4,7 +4,8 @@
  * A builder that takes the reader's language writes each sentence as `es ? '…' : '…'`. This finds the
  * English literals that are NOT under such a choice — the sentence someone added without its Spanish.
  * A literal counts as covered when an ancestor is a conditional on the language (`es ? …`,
- * `isEs(…) ? …`, `language === 'es' ? …`), or when it is a value in a label map that has an `_ES` twin.
+ * `isEs(…) ? …`, `language === 'es' ? …`), an `L(english, spanish)` call from `pickLanguage`, or a
+ * value in a label map that has an `_ES` twin.
  */
 import ts from 'typescript'
 import { readFileSync } from 'node:fs'
@@ -33,6 +34,8 @@ export function untranslatedLiterals(file: string, opts: { ignore?: RegExp[] } =
   const covered = (node: ts.Node): boolean => {
     for (let p: ts.Node | undefined = node.parent; p; p = p.parent) {
       if (ts.isConditionalExpression(p) && LANG_CONDITION.test(p.condition.getText(sf).trim())) return true
+      // `L(english, spanish)` from `pickLanguage` — covered only with BOTH arguments present.
+      if (ts.isCallExpression(p) && ts.isIdentifier(p.expression) && p.expression.text === 'L' && p.arguments.length === 2) return true
       if (ts.isVariableDeclaration(p) && ts.isIdentifier(p.name) && maps.has(`${p.name.text}_ES`)) return true
       if (ts.isVariableDeclaration(p) && ts.isIdentifier(p.name) && /_ES$/.test(p.name.text)) return true
     }
