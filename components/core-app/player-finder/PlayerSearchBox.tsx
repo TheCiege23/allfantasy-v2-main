@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import Link from 'next/link'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { normalizePosition } from '@/lib/core-app/positionNormalization'
-import { suggestionChip } from '@/lib/core-app/suggestionChip'
+import { suggestionChip, suggestionFact, suggestionTone } from '@/lib/core-app/suggestionChip'
+import { searchBoxCopy, suggestionChipText } from '@/lib/core-app/finderSearchCopy'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { SuggestionPresence } from '@/lib/core-app/playerSuggest'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 
@@ -31,6 +33,9 @@ import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/Play
  * that row's own link rather than reaching for the app router: the same
  * client-side transition, and no router context needed, which also keeps this
  * renderable on the public /players page and in a plain test render.
+ *
+ * Spanish (2026-10-05): the labels, the note and the chips are built at render from
+ * `useOptionalLanguage` (finderSearchCopy.ts), which starts at English on server and client alike.
  */
 
 export type SearchHit = {
@@ -107,6 +112,8 @@ export function PlayerSearchBox({
   compareWith?: string | null
 }) {
   const compare = variant === 'compare' && Boolean(compareWith)
+  const { language } = useOptionalLanguage()
+  const t = searchBoxCopy(language)
   const [value, setValue] = useState(compare ? '' : query)
   /*
    * ⚠ THE PAGE ARRIVES WITH ITS OWN QUERY IN THE BOX, AND THAT IS NOT A REQUEST
@@ -194,7 +201,7 @@ export function PlayerSearchBox({
     }
   }
 
-  const label = compare ? 'Compare with another player' : 'Search any player'
+  const label = compare ? t.compareLabel : t.searchLabel
 
   return (
     <form
@@ -232,12 +239,12 @@ export function PlayerSearchBox({
           />
           {compare ? null : (
             <button type="submit" className="af-btn af-pf-search-btn">
-              Search
+              {t.searchButton}
             </button>
           )}
         </label>
         {open && hits.length > 0 ? (
-          <ul className="af-pf-suggest" id={listId} role="listbox" aria-label={compare ? 'Players to compare' : 'Suggestions'}>
+          <ul className="af-pf-suggest" id={listId} role="listbox" aria-label={compare ? t.playersToCompare : t.suggestions}>
             {hits.map((h, i) => (
               <li key={`${h.sport}-${h.externalId ?? h.sleeperId ?? h.name}-${i}`} id={`${listId}-${i}`} role="option" aria-selected={i === active}>
                 <Link
@@ -253,12 +260,13 @@ export function PlayerSearchBox({
                     <span className="af-pf-match-meta">
                       {h.position ? `${h.position} · ` : ''}
                       <TeamLogo sport={h.sport} team={h.team} />
-                      {h.team ?? 'no team on file'}
+                      {h.team ?? t.noTeam}
                       {h.sport && h.sport !== 'NFL' ? ` · ${h.sport}` : ''}
                     </span>
                     {/* Where he is in your leagues — its own line, so a long name never has to make room for it. */}
                     {(() => {
-                      const chip = suggestionChip(h.presence)
+                      const fact = language === 'es' ? suggestionFact(h.presence) : null
+                      const chip = fact ? { text: suggestionChipText(fact), tone: suggestionTone(fact) } : suggestionChip(h.presence)
                       return chip ? (
                         <span className="af-chip af-pf-suggest-chip" data-tone={chip.tone}>
                           {chip.text}
@@ -274,9 +282,7 @@ export function PlayerSearchBox({
       </div>
       {compare ? null : (
         <p className="af-pf-search-note">
-          {signedIn
-            ? 'Searches every platform you have connected at once — Sleeper, ESPN and Yahoo.'
-            : 'One search covers Sleeper, ESPN and Yahoo at once. Connect a league to see your own slots and matchups.'}
+          {signedIn ? t.noteSignedIn : t.noteSignedOut}
         </p>
       )}
     </form>
