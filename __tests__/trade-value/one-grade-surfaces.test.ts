@@ -236,11 +236,11 @@ describe('Trade OS — no screen keeps a private letter', () => {
     expect(PRIVATE_LETTERS[2]!.shape.test(code('components/core-app/screens/TradeCenter.tsx'))).toBe(false)
   })
 
-  it('the AI Tools trade modal prints the one grade, not the canonical memo second opinion', () => {
-    const src = code('components/ai-tools/modals/TradeValueModal.tsx')
-    expect(src).not.toMatch(/describeTradeCanonicalOpinion\(/)
-    expect(src).not.toMatch(/\bdecisionOs\b/)
-    expect(src).toMatch(/proposalGrade\.letter/)
+  it('the old AI Tools trade modal is gone for good', () => {
+    // Unmounted since 2026-07-06 and deleted 2026-10-06. A revival must come back through this list,
+    // not as a second grading surface nobody can see.
+    const f = 'components/ai-tools/modals/TradeValueModal.tsx'
+    expect(existsSync(resolve(process.cwd(), f)), f).toBe(false)
   })
 
   // `\??` on every hop: an optional-chained read (`valueSnapshot?.grade`) is the same letter.

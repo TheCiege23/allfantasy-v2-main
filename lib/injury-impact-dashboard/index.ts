@@ -13,4 +13,3 @@ export type {
   InjuryViewTabId,
 } from './types'
 export { runInjuryImpactDashboard } from './runInjuryImpactDashboard'
-export { formatInjuryAvailabilitySummary } from './formatAvailabilitySummary'
