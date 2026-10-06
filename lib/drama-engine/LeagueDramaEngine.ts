@@ -26,6 +26,16 @@ function normalizeIdArray(input: string[] | null | undefined): string[] {
   return [...new Set((input ?? []).map((v) => String(v).trim()).filter(Boolean))]
 }
 
+/** A stored `relatedManagerIds` JSON value as ids; anything that is not an array of ids is none. */
+function jsonIdArray(value: unknown): string[] {
+  return Array.isArray(value) ? normalizeIdArray(value.map((v) => String(v))) : []
+}
+
+/** Two managers as one order-free key; null unless there are exactly two. */
+export function pairIdentity(managerIds: string[]): string | null {
+  return managerIds.length === 2 ? [...managerIds].sort().join('|') : null
+}
+
 async function ensureDramaEvent(input: {
   leagueId: string
   sport: string
@@ -40,6 +50,42 @@ async function ensureDramaEvent(input: {
 }): Promise<{ id: string; created: boolean }> {
   const relatedManagers = normalizeIdArray(input.relatedManagerIds)
   const relatedTeams = normalizeIdArray(input.relatedTeamIds)
+
+  const pair = input.dramaType === 'RIVALRY_CLASH' ? pairIdentity(relatedManagers) : null
+  if (pair) {
+    /*
+     * 🛑 A RIVALRY STORYLINE IS ABOUT A PAIR, NOT A SENTENCE. Matched by headline, every change to
+     * the headline — the tier moving from Emerging to Heated, or the 2026-10-05 fix that put team
+     * names where roster numbers were — wrote a SECOND row for the same two managers, and nothing
+     * removed the first: the scheduled refresh (`relationshipRefreshPass`) never runs with
+     * `replace`. So the pair is the identity: the newest row for it is rewritten in place, and any
+     * older row for the same pair is a superseded version of this one storyline and is removed.
+     */
+    const rows = await prisma.dramaEvent.findMany({
+      where: { leagueId: input.leagueId, sport: input.sport, season: input.season, dramaType: input.dramaType },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, relatedManagerIds: true },
+    })
+    const same = rows.filter((row) => pairIdentity(jsonIdArray(row.relatedManagerIds)) === pair)
+    if (same.length > 0) {
+      const [keep, ...superseded] = same
+      const updated = await prisma.dramaEvent.update({
+        where: { id: keep.id },
+        data: {
+          headline: input.headline.slice(0, 256),
+          summary: input.summary.slice(0, 2000),
+          relatedManagerIds: relatedManagers,
+          relatedTeamIds: relatedTeams,
+          dramaScore: input.dramaScore,
+        },
+      })
+      if (superseded.length > 0) {
+        await prisma.dramaEvent.deleteMany({ where: { id: { in: superseded.map((row) => row.id) } } })
+      }
+      return { id: updated.id, created: false }
+    }
+  }
+
   const existing = await prisma.dramaEvent.findFirst({
     where: {
       leagueId: input.leagueId,
