@@ -1,5 +1,6 @@
 import { weeklyActionText, type WeeklyBlueprint } from './weeklyBlueprint'
 import type { WeeklyPlayoffPath } from './weeklyPlayoffPath'
+import { formatPct1 } from './weeklyPercent'
 
 export const WEEK_SOCIALS = ['X', 'Facebook', 'Instagram', 'TikTok', 'Threads', 'LinkedIn', 'YouTube'] as const
 export type WeekSocial = typeof WEEK_SOCIALS[number]
@@ -31,7 +32,7 @@ export function weeklySocialPost(data: WeeklyBlueprint, platform: WeekSocial, es
   const next = data.actions[0]
   const action = next ? `${es ? 'Mi prioridad' : 'My priority'}: ${weeklyActionText(next, es)} (${next.leagueName}).` : ''
   const matchup = data.matchup ? `${es ? 'Período' : 'Period'} ${data.matchup.period}: vs ${data.matchup.opponent} (${data.matchup.leagueName}).` : ''
-  const odds = data.playoff ? `${es ? 'Playoffs estimados' : 'Estimated playoff odds'} (${data.playoff.leagueName}): ${data.playoff.probability.toFixed(1)}%.` : ''
+  const odds = data.playoff ? `${es ? 'Playoffs estimados' : 'Estimated playoff odds'} (${data.playoff.leagueName}): ${formatPct1(data.playoff.probability)}%.` : ''
   if (platform === 'X') return `${shortText([`${team}:`,matchup,odds,story || action].filter(Boolean).join(' '), 210)}\n#AllFantasy ${WEEK_PUBLIC_URL}`
   const hook = platform === 'TikTok' || platform === 'YouTube' ? es ? 'Mi plan de fantasy para esta semana 👇' : 'My fantasy blueprint for this week 👇' : `${team} · AllFantasy`
   return [hook,matchup,odds,action,story,data.playoff ? es ? 'Las probabilidades son estimaciones.' : 'Odds are estimates.' : '',es ? '¿Cuál es tu decisión más difícil esta semana?' : 'What’s your toughest decision this week?', '#AllFantasy #FantasySports', WEEK_PUBLIC_URL].filter(Boolean).join('\n\n')
@@ -85,7 +86,7 @@ export function drawWeeklyShareCard(canvas: HTMLCanvasElement, data: WeeklyBluep
   panel(520,265); y = 565
   wrap(es ? 'MI CAMINO A LOS PLAYOFFS' : 'MY PLAYOFF PATH','bold 26px sans-serif','#aabbd3',34,1,92,880)
   y = 652
-  wrap(data.playoff ? `${data.playoff.probability.toFixed(1)}%` : es ? 'Sin estimación' : 'Estimate unavailable','bold 76px sans-serif','#66e5c1',80,1,92,880)
+  wrap(data.playoff ? `${formatPct1(data.playoff.probability)}%` : es ? 'Sin estimación' : 'Estimate unavailable','bold 76px sans-serif','#66e5c1',80,1,92,880)
   ctx.fillStyle = '#30475c'; ctx.fillRect(92,685,896,12)
   if (data.playoff) { ctx.fillStyle = '#66e5c1'; ctx.fillRect(92,685,896 * Math.max(0,Math.min(100,data.playoff.probability))/100,12) }
   y = 736
