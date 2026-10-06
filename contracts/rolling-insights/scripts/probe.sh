@@ -16,8 +16,9 @@
 #   ./probe.sh injuries     NFL
 #   ./probe.sh schedule     NCAAFB  ""  2026-09-05
 #
-# Requires: RSC_TOKEN in env, curl, jq
+# Requires: RSC_TOKEN in env, curl, python3
 # =============================================================================
+set +x
 set -euo pipefail
 
 BASE_URL="${ROLLING_INSIGHTS_BASE_URL:-https://rest.datafeeds.rolling-insights.com/api/v1}"
@@ -104,7 +105,7 @@ do_fetch() {
     -H 'Accept: application/json' \
     -H 'Cache-Control: no-cache, no-store' \
     -H 'Pragma: no-cache' \
-    "$1"
+    "$1" 2>/dev/null
 }
 CODE="$(do_fetch "$URL" || true)"
 
@@ -115,20 +116,20 @@ if [[ "$CODE" == "304" ]]; then
 fi
 
 if [[ "$CODE" != "200" ]]; then
-  echo "HTTP ${CODE}. Body:" >&2; head -c 500 "$TMP" >&2; echo >&2
+  echo "HTTP ${CODE}; capture refused. Provider body withheld to protect credentials." >&2
   exit 1
 fi
 
-jq -e . "$TMP" >/dev/null 2>&1 || { echo "ERROR: response is not valid JSON" >&2; exit 1; }
+python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' "$TMP" >/dev/null 2>&1 || { echo "ERROR: response is not valid JSON" >&2; exit 1; }
 
 # --- report what we learned --------------------------------------------------
 KEY="${SPORT}"; [[ -n "$LEAGUE" ]] && KEY="$LEAGUE"   # soccer keys by league
-COUNT="$(jq -r --arg k "$KEY" '(.data[$k] // []) | length' "$TMP")"
+COUNT="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1], encoding="utf-8")).get("data",{}).get(sys.argv[2],[])))' "$TMP" "$KEY")"
 
 echo "--- envelope ---" >&2
 echo "expected key: data.${KEY}" >&2
 echo "row count:    ${COUNT}" >&2
-echo "top-level keys present: $(jq -r '.data | keys | join(", ")' "$TMP" 2>/dev/null || echo '?')" >&2
+echo "top-level keys present: $(python3 -c 'import json,sys; print(", ".join(json.load(open(sys.argv[1], encoding="utf-8")).get("data",{})))' "$TMP" 2>/dev/null || echo '?')" >&2
 
 if [[ "$COUNT" == "0" ]]; then
   echo >&2
@@ -137,14 +138,29 @@ if [[ "$COUNT" == "0" ]]; then
   echo "    Recording the empty result anyway so it is not rediscovered." >&2
 else
   echo "--- discovered fields (first row) ---" >&2
-  jq -r --arg k "$KEY" '.data[$k][0] | paths(scalars) | join(".")' "$TMP" 2>/dev/null | sort -u >&2 || true
+  python3 - "$TMP" "$KEY" <<'PYFIELDS' >&2
+import json, sys
+def paths(value, prefix=""):
+    if isinstance(value, dict):
+        for key, child in value.items(): yield from paths(child, f"{prefix}.{key}" if prefix else key)
+    elif isinstance(value, list):
+        for i, child in enumerate(value): yield from paths(child, f"{prefix}.{i}")
+    elif value is not None: yield prefix
+rows = json.load(open(sys.argv[1], encoding="utf-8")).get("data", {}).get(sys.argv[2], [])
+print("\n".join(sorted(set(paths(rows[0])))))
+PYFIELDS
 fi
 
 # --- write fixture -----------------------------------------------------------
 mkdir -p "$FIXTURE_DIR"
 NAME="${ENDPOINT}.${SPORT}"; [[ -n "$LEAGUE" ]] && NAME="${NAME}.${LEAGUE}"
 OUT="${FIXTURE_DIR}/${NAME}.json"
-jq '.' "$TMP" > "$OUT"
+python3 - "$TMP" "$OUT" <<'PYWRITE'
+import json, sys
+with open(sys.argv[2], "x", encoding="utf-8") as out:
+    json.dump(json.load(open(sys.argv[1], encoding="utf-8")), out, indent=2)
+    out.write("\n")
+PYWRITE
 
 echo >&2
 echo "✅ fixture written: ${OUT}" >&2

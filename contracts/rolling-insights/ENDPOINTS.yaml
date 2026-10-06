@@ -520,7 +520,20 @@ fields:
       stats:    [assists, blocks, hits, saves, shots_on_goal, penalty_minutes,
                  faceoffs_won, faceoffs_lost, power_plays, power_plays_converted,
                  short_handed_goals_scored, short_handed_goals_allowed]
-  NCAAFB: { confidence: none, live: unknown }   # see GAPS.md
+  NCAAFB:
+    confidence: medium
+    source: probe.sh live NCAAF "" 2026-10-03, captured 2026-10-05
+    fixture: fixtures/live.NCAAFB.json
+    live_envelope: [game_ID, sport, season, season_type, week, status, game_status, game_time, full_box, player_box]
+    live_player_shape: player_box.<side>.<RI_player_id>
+    live_player_identity: [player, position, position_category, status]
+    live_player_stats: [passing_yards, passing_touchdowns, passing_interceptions, passing_attempts, completions,
+      rushing_yards, rushing_touchdowns, rushing_attempts, receiving_yards, receiving_touchdowns, receptions,
+      fumbles_lost, tackles, sacks, interceptions, fumbles_recoveries,
+      field_goals_made, field_goals_attempted, field_goal_distances, extra_points_made, extra_points_attempted]
+    live_team_stats: [defense_interceptions, defense_fumble_recoveries, defense_touchdowns, sacks,
+      safeties, points_against_defense_special_teams, two_point_conversion_succeeded]
+    limits: no_verified_player_two_point_or_forced_fumble_fields; not_full_scoring_certification
   NCAABB:
     source: probe.sh live NCAAB "" 2026-04-06 (RSC_TOKEN2), captured 2026-09-24
     confidence: medium      # was `none / live: unknown`. ONE game (the 2026 national final), so
