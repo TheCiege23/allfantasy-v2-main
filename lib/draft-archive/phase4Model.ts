@@ -66,7 +66,7 @@ export function frozenExistingRoster(snapshot: unknown, context: PreparationCont
 export function buildReplay(basis: unknown, context: PreparationContext | null, start: string | null, picks: DecisionPick[], existing: AnalysisSelection[] | null): ReplayData {
   const base: ReplayData = { version: PHASE4_VERSION, state: 'unavailable', reason: 'Verified draft-time projections, complete pick order, frozen pool eligibility and (for auctions) recorded award budgets are required.', players: [], picks: [], existing: [], slots: [] };
   if (!context || !['snake', 'linear', 'auction'].includes(context.draftType) || !['all','rookies_only','veterans_only'].includes(context.playerPool) || !['standard', 'startup','rookie'].includes(context.purpose) || (context.purpose==='rookie'&&!['redraft','dynasty','keeper'].includes(context.leagueType)) || existing === null || !picks.length || picks.length > 1000) return base;
-  if((context.draftType==='auction'||context.playerPool!=='all')&&!['redraft','dynasty','keeper'].includes(context.leagueType))return base;
+  if(!['redraft','dynasty','keeper'].includes(context.leagueType))return base;
   const eligiblePlayerIds = frozenPoolEligibility(basis,context,start);
   if(context.playerPool!=='all'&&!eligiblePlayerIds)return base;
   const players = frozenUniverse(basis, context, start), byAlias = new Map(players.flatMap(p => p.aliases.map(a => [a,p] as const)));
