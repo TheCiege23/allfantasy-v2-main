@@ -3,10 +3,19 @@ import { describe, expect, it } from 'vitest'
 import { buildWeeklyBlueprint, matchupCloseness, weeklyBrief } from '@/lib/core-app/weeklyBlueprint'
 import type { MyTeamPulse, MyTeamRow } from '@/lib/core-app/myTeamPulse'
 import type { WeekBoard } from '@/lib/core-app/weekBoard'
+import type { SeasonOutlook } from '@/lib/core-app/seasonOutlook'
 const board = { coinFlips: [], leaning: [], unprojected: [] } as unknown as WeekBoard
 const row = (id: string, more: Partial<MyTeamRow> = {}) => ({ leagueId:id, leagueName:id, season:2026, week:4, severity:1, questionable:0, unresolved:0, lockAt:null, ...more }) as MyTeamRow
 const build = (rows: MyTeamRow[], focusLeagueId?: string) => buildWeeklyBlueprint({ name:'Alex', leagues:rows.map(r => ({id:r.leagueId,name:r.leagueName,sport:'NBA'})), board, pulse:{needs:rows,set:[]} as unknown as MyTeamPulse, outlook:null, focusLeagueId, now:new Date('2026-10-04T12:00:00Z') })
 describe('verified weekly priorities', () => {
+  it('pairs featured matchup odds by league identity and season, regardless of model order', () => {
+    const cards = [{leagueId:'A',leagueName:'Same name',season:2026,week:5,opponent:{name:'Bulldogs'}},{leagueId:'B',leagueName:'Same name',season:2026,week:4,opponent:{name:'Paid'}}]
+    const outlook = {leagues:[{leagueId:'B',leagueName:'Same name',season:2026,you:{modelled:true,playoffPct:99.7}},{leagueId:'A',leagueName:'Same name',season:2026,you:{modelled:true,playoffPct:43}}],swingByLeague:{}} as unknown as SeasonOutlook
+    const input = {leagues:[{id:'A'},{id:'B'}],board:{...board,coinFlips:cards} as unknown as WeekBoard,pulse:null,outlook,now:new Date('2026-10-05')}
+    expect(buildWeeklyBlueprint(input)).toMatchObject({matchup:{leagueId:'A',opponent:'Bulldogs'},playoff:{leagueId:'A',probability:43}})
+    expect(buildWeeklyBlueprint({...input,outlook:{...outlook,leagues:outlook.leagues.filter(l=>l.leagueId==='B')}}).playoff).toBeUndefined()
+    expect(buildWeeklyBlueprint({...input,outlook:{...outlook,leagues:[{...outlook.leagues[1],season:2025}]}}).playoff).toBeUndefined()
+  })
   it('excludes locked and automatic lineup actions and keeps at most three priorities', () => {
     const out=build([row('locked',{locked:true}),row('auto',{bestBall:true}),row('A'),row('B'),row('C'),row('D')])
     expect(out.actions.map(a=>a.leagueId)).toEqual(['A','B','C'])

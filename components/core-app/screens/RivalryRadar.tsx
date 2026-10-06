@@ -114,6 +114,8 @@ function Card({ card, tone }: { card: RivalryCard; tone: 'bad' | 'good' | 'neutr
       <footer className="af-rr-today">
         {thisWeek == null ? (
           <span className="af-rr-today-none">{copy('Not on your schedule this week.')}</span>
+        ) : thisWeek.status === 'live' || thisWeek.status === 'final' ? (
+          <span className="af-rr-today-label">{es ? thisWeek.status === 'final' ? 'Esta semana · finalizado' : 'Esta semana · en juego' : thisWeek.status === 'final' ? 'This week · final' : 'This week · live'}</span>
         ) : thisWeek.winProbability == null ? (
           <span className="af-rr-today-none">
             {copy('Playing this week — not enough completed weeks on either side to project it.')}

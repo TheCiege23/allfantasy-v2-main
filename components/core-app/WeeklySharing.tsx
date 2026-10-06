@@ -55,7 +55,10 @@ export function WeeklySharing({ data, path }: { data: WeeklyBlueprint; path?: We
     } catch { setStatus(es ? 'No se pudo exportar. Inténtalo de nuevo.' : 'Export failed. Please try again.') }
     finally { setBusy(false) }
   }
-  const askCommissioner = () => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT,{detail:{tab:'chimmy',leagueId:commId,prefill:`${commissionerWeekDraft(data,es)}\n${es ? 'Ayúdame a preparar un anuncio. Comprueba las reglas y los plazos; no inventes información privada de otros equipos.' : 'Help me prepare an announcement. Check rules and deadlines; do not invent private information about other teams.'}`}}))
+  const announcement = commissionerWeekDraft(data,es,path)
+  const probability = path?.league?.you?.playoffPct
+  const hasCharts = !!path?.league?.you?.modelled && path.league.season === path.season && probability != null && Number.isFinite(probability) && probability >= 0 && probability <= 100 && (path.points.some(p=>Number.isInteger(p.period) && p.period > 0 && Number.isFinite(p.probability) && p.probability >= 0 && p.probability <= 100) || !!(path.swing && path.swing.week >= path.period && [path.swing.ifWin,path.swing.ifLose].every(p=>Number.isFinite(p) && p >= 0 && p <= 100)))
+  const askCommissioner = () => window.dispatchEvent(new CustomEvent(COMMS_OPEN_EVENT,{detail:{tab:'chimmy',leagueId:commId,prefill:`${announcement}\n${es ? 'Ayúdame a preparar un anuncio. Comprueba las reglas y los plazos; no inventes información privada de otros equipos.' : 'Help me prepare an announcement. Check rules and deadlines; do not invent private information about other teams.'}`}}))
   return <section className="af-wbp-share">
     {story ? <div><h3>{es ? 'Tu historia esta semana' : 'Your story this week'}</h3><p>{story}</p><button type="button" onClick={()=>copy(story)}>{es ? 'Copiar motivación' : 'Copy motivation'}</button><p><small>{es ? 'Basado en encuentros importados; el historial puede estar incompleto.' : 'Based on imported meetings; history may be incomplete.'}</small></p></div> : null}
     <details><summary>{es ? 'Compartir y exportar mi semana' : 'Share and export my week'}</summary>
@@ -68,13 +71,14 @@ export function WeeklySharing({ data, path }: { data: WeeklyBlueprint; path?: We
         {platform === 'Facebook' ? <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(WEEK_PUBLIC_URL)}`} target="_blank" rel="noopener noreferrer">{es ? 'Abrir Facebook' : 'Open Facebook'}</a> : null}
         <button type="button" disabled={busy} onClick={createImage}>{es ? 'Descargar tarjeta PNG' : 'Download PNG card'}</button>
         {image ? <button type="button" onClick={shareImage}>{es ? 'Compartir tarjeta' : 'Share card'}</button> : null}
-        <button type="button" disabled={busy} onClick={exportExcel}>{es ? 'Descargar Excel y gráficos' : 'Download Excel and charts'}</button>
+        <button type="button" disabled={busy} onClick={exportExcel}>{hasCharts ? es ? 'Descargar Excel y gráficos' : 'Download Excel and charts' : es ? 'Descargar Excel' : 'Download Excel'}</button>
       </div><p><small>{es ? 'Instagram, TikTok y YouTube: pega el texto y adjunta la tarjeta descargada. Las aplicaciones disponibles dependen de tu dispositivo.' : 'Instagram, TikTok and YouTube: paste the caption and attach the downloaded card. Available share apps depend on your device.'}</small></p>
+      {!hasCharts ? <p><small>{es ? 'Abre una liga con un modelo de playoffs disponible para exportar sus gráficos.' : 'Open a league with an available playoff model to export its charts.'}</small></p> : null}
     </details>
     {commId ? <details><summary>{es ? 'Plan del comisionado' : 'Commissioner weekly plan'}</summary>
       <p>{es ? 'Comprueba plazos, puntuación pendiente y reglas de playoffs antes de publicar un resumen.' : 'Check deadlines, pending scoring and playoff rules before publishing a briefing.'}</p>
-      <textarea aria-label={es ? 'Borrador del anuncio' : 'Announcement draft'} readOnly value={commissionerWeekDraft(data,es)} onFocus={e=>e.target.select()} rows={6}/>
-      <div className="af-wbp-buttons"><button type="button" onClick={()=>copy(commissionerWeekDraft(data,es))}>{es ? 'Copiar anuncio' : 'Copy announcement'}</button><button type="button" onClick={askCommissioner}>{es ? 'Preparar con Chimmy' : 'Prepare with Chimmy'}</button><Link href={`/core/commissioner?league=${encodeURIComponent(commId)}`}>{es ? 'Abrir Centro del comisionado' : 'Open Commissioner Hub'}</Link><Link href={`/core/standings?league=${encodeURIComponent(commId)}`}>{es ? 'Revisar clasificación' : 'Review standings'}</Link></div>
+      <textarea aria-label={es ? 'Borrador del anuncio' : 'Announcement draft'} readOnly value={announcement} onFocus={e=>e.target.select()} rows={6}/>
+      <div className="af-wbp-buttons"><button type="button" onClick={()=>copy(announcement)}>{es ? 'Copiar anuncio' : 'Copy announcement'}</button><button type="button" onClick={askCommissioner}>{es ? 'Preparar con Chimmy' : 'Prepare with Chimmy'}</button><Link href={`/core/commissioner?league=${encodeURIComponent(commId)}`}>{es ? 'Abrir Centro del comisionado' : 'Open Commissioner Hub'}</Link><Link href={`/core/standings?league=${encodeURIComponent(commId)}`}>{es ? 'Revisar clasificación' : 'Review standings'}</Link></div>
     </details> : data.commissionerLeagueIds?.length ? <Link href="/core/commissioner">{es ? 'Preparar las ligas que administras' : 'Prepare the leagues you manage'} →</Link> : null}
     <p role="status">{status}</p>
   </section>

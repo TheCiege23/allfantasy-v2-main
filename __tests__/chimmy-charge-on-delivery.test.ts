@@ -15,6 +15,10 @@ const FALLBACK =
   'Deterministic guidance from NFL context: week: 7. AI explanation is temporarily unavailable.'
 
 describe('judgeChimmyDelivery', () => {
+  it('releases an answer rejected by the guard even when a model returned text', () => {
+    expect(judgeChimmyDelivery({modelOutputs:[answered],answer:'Please ask again.',rejected:true})).toEqual({delivered:false,reason:'rejected_answer'})
+    expect(judgeChimmyDelivery({modelOutputs:[answered],answer:'Start Drake London.',rejected:false})).toEqual({delivered:true})
+  })
   it('charges when any model returned an answer', () => {
     expect(judgeChimmyDelivery({ modelOutputs: [billingFailed, answered], answer: 'Start Drake London.' })).toEqual({
       delivered: true,

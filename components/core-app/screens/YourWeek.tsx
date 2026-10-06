@@ -294,7 +294,7 @@ export function YourWeek({ data, rivalriesHref, lineups }: YourWeekProps) {
                     className="af-wk-lean-prob af-wk-lean-prob--form"
                     data-tone={m.form.margin >= 0 ? 'up' : 'down'}
                   >
-                    {m.form.margin >= 0 ? '+' : '−'}
+                    {Math.abs(m.form.margin).toFixed(1) === '0.0' ? '' : m.form.margin >= 0 ? '+' : '−'}
                     {Math.abs(m.form.margin).toFixed(1)}
                     <span className="af-wk-lean-prob-sub">{copy('so far')}</span>
                   </span>
