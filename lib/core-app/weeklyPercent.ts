@@ -15,3 +15,18 @@ export function pct1(value: number): number {
 export function formatPct1(value: number): string {
   return pct1(value).toFixed(1)
 }
+
+/**
+ * A signed one-decimal figure, such as a points margin: "+1.2", "-1.2", and plain "0.0" when it rounds
+ * to nothing. Rivalry Radar printed "-0.0" as a series' average margin (a 3–1 series, production
+ * 2026-10-06), coloured as a loss.
+ */
+export function signOf1(value: number): 'pos' | 'neg' | 'zero' {
+  const r = pct1(value)
+  return r > 0 ? 'pos' : r < 0 ? 'neg' : 'zero'
+}
+
+export function formatSigned1(value: number): string {
+  const r = pct1(value)
+  return `${r > 0 ? '+' : ''}${r.toFixed(1)}`
+}
