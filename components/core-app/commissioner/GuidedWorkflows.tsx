@@ -3,6 +3,8 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import type { HubLink, Workflow } from '@/lib/core-app/commissioner/areas'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { hubCopy } from '@/lib/core-app/commissionerHubCopy'
 
 /**
  * Step-by-step guides (brief item 4): replace a manager, change a rule,
@@ -14,29 +16,32 @@ import type { HubLink, Workflow } from '@/lib/core-app/commissioner/areas'
  * decides what a commissioner may do.
  */
 
-function StepLink({ link }: { link: HubLink }) {
+function StepLink({ link, language }: { link: HubLink; language: string }) {
+  const label = hubCopy(link.label, language)
   if (link.external) {
     return (
       <a className="af-btn af-ch-step-link" href={link.href} target="_blank" rel="noopener noreferrer">
-        {link.label} ↗
+        {label} ↗
       </a>
     )
   }
   if (link.href.startsWith('#')) {
     return (
       <a className="af-btn af-ch-step-link" href={link.href}>
-        {link.label}
+        {label}
       </a>
     )
   }
   return (
     <Link className="af-btn af-ch-step-link" href={link.href}>
-      {link.label}
+      {label}
     </Link>
   )
 }
 
 export function GuidedWorkflows({ workflows }: { workflows: Workflow[] }) {
+  const { language } = useOptionalLanguage()
+  const t = (english: string | null | undefined) => hubCopy(english, language)
   const [openKey, setOpenKey] = useState<Workflow['key']>(workflows[0]?.key ?? 'replace-manager')
   const [stepByKey, setStepByKey] = useState<Record<string, number>>({})
 
@@ -64,7 +69,7 @@ export function GuidedWorkflows({ workflows }: { workflows: Workflow[] }) {
 
   return (
     <div className="af-ch-guides">
-      <div className="af-ch-guide-tabs" role="tablist" aria-label="Guides">
+      <div className="af-ch-guide-tabs" role="tablist" aria-label={t('Guides')}>
         {workflows.map((w) => (
           <button
             key={w.key}
@@ -76,16 +81,16 @@ export function GuidedWorkflows({ workflows }: { workflows: Workflow[] }) {
             className="af-ch-guide-tab"
             onClick={() => setOpenKey(w.key)}
           >
-            {w.title}
+            {t(w.title)}
           </button>
         ))}
       </div>
 
       <div id="ch-guide-panel" role="tabpanel" aria-labelledby={`workflow-${wf.key}`} className="af-ch-guide">
-        <p className="af-ch-guide-summary">{wf.summary}</p>
-        {wf.authorityNote ? <p className="af-ch-guide-authority">{wf.authorityNote}</p> : null}
+        <p className="af-ch-guide-summary">{t(wf.summary)}</p>
+        {wf.authorityNote ? <p className="af-ch-guide-authority">{t(wf.authorityNote)}</p> : null}
 
-        <ol className="af-ch-guide-steps" aria-label={`${wf.title} steps`}>
+        <ol className="af-ch-guide-steps" aria-label={`${t(wf.title)} · ${t('steps')}`}>
           {wf.steps.map((s, i) => (
             <li key={s.title} data-state={i < step ? 'done' : i === step ? 'current' : 'todo'}>
               <button
@@ -97,7 +102,7 @@ export function GuidedWorkflows({ workflows }: { workflows: Workflow[] }) {
                 <span className="af-ch-guide-num af-num" aria-hidden>
                   {i < step ? '✓' : i + 1}
                 </span>
-                <span>{s.title}</span>
+                <span>{t(s.title)}</span>
               </button>
             </li>
           ))}
@@ -105,23 +110,23 @@ export function GuidedWorkflows({ workflows }: { workflows: Workflow[] }) {
 
         <div className="af-ch-guide-detail" aria-live="polite">
           <p className="af-label">
-            Step {step + 1} of {wf.steps.length}
+            {t(`Step ${step + 1} of ${wf.steps.length}`)}
           </p>
-          <p className="af-ch-guide-title">{current.title}</p>
-          <p className="af-ch-guide-body">{current.body}</p>
+          <p className="af-ch-guide-title">{t(current.title)}</p>
+          <p className="af-ch-guide-body">{t(current.body)}</p>
           <div className="af-ch-guide-actions">
-            {current.link ? <StepLink link={current.link} /> : null}
+            {current.link ? <StepLink link={current.link} language={language} /> : null}
             <span className="af-ch-guide-spacer" />
             <button type="button" className="af-btn af-ch-guide-nav" disabled={step === 0} onClick={() => setStep(step - 1)}>
-              Back
+              {t('Back')}
             </button>
             {step < wf.steps.length - 1 ? (
               <button type="button" className="af-btn af-ch-guide-nav" data-primary="true" onClick={() => setStep(step + 1)}>
-                Next step
+                {t('Next step')}
               </button>
             ) : (
               <button type="button" className="af-btn af-ch-guide-nav" onClick={() => setStep(0)}>
-                Start over
+                {t('Start over')}
               </button>
             )}
           </div>

@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import { readableApiError } from '@/lib/http/readableApiError'
 import type { WaiverOversight as WaiverOversightData } from '@/lib/core-app/commissionerWaivers'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { hubCopy, hubDateLocale } from '@/lib/core-app/commissionerHubCopy'
 import '@/components/core-app/af-commish-waivers.css'
 
 /**
@@ -17,6 +19,8 @@ import '@/components/core-app/af-commish-waivers.css'
  */
 export function WaiverOversight({ data }: { data: WaiverOversightData }) {
   const router = useRouter()
+  const { language } = useOptionalLanguage()
+  const t = (english: string | null | undefined) => hubCopy(english, language)
   const [running, setRunning] = useState(false)
   const [note, setNote] = useState<{ tone: 'good' | 'bad'; text: string } | null>(null)
 
@@ -25,14 +29,14 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
       <section id="ch-waivers" className="af-card af-ch-section" aria-labelledby="af-chw-title">
         <header className="af-ch-section-head">
           <h2 id="af-chw-title" className="af-label">
-            Waiver oversight
+            {t('Waiver oversight')}
           </h2>
         </header>
         <div className="af-ch-empty">
           <span className="af-ch-empty-mark af-num" aria-hidden>
             —
           </span>
-          <p>{data.reason}</p>
+          <p>{t(data.reason)}</p>
         </div>
       </section>
     )
@@ -57,7 +61,7 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
       const n = body?.processed ?? 0
       setNote({
         tone: 'good',
-        text: n === 0 ? 'Nothing processed — waivers are locked or no claims were waiting.' : `Processed ${n} ${n === 1 ? 'claim' : 'claims'}.`,
+        text: n === 0 ? 'Nothing processed — waivers are locked or no claims were waiting.' : n === 1 ? 'Processed 1 claim.' : `Processed ${n} claims.`,
       })
       router.refresh()
     } catch {
@@ -69,18 +73,18 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
 
   const run = data.lastRun
   const runWhen = run
-    ? new Intl.DateTimeFormat('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).format(new Date(run.at))
+    ? new Intl.DateTimeFormat(hubDateLocale(language), { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }).format(new Date(run.at))
     : null
 
   return (
     <section id="ch-waivers" className="af-chw" aria-labelledby="af-chw-title">
       <div className="af-chw-rule">
         <h2 id="af-chw-title" className="af-label">
-          Waiver oversight
+          {t('Waiver oversight')}
         </h2>
         <span className="af-chw-line" aria-hidden />
         <Link className="af-chw-link" href={`/core/waivers?league=${encodeURIComponent(data.leagueId)}`}>
-          Waiver rules →
+          {t('Waiver rules →')}
         </Link>
       </div>
 
@@ -88,7 +92,7 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
         <div className="af-card af-ch-section">
           <header className="af-ch-section-head">
             <h3 className="af-label">
-              {data.faabBudget != null ? `FAAB budgets · $${data.faabBudget.toLocaleString('en-US')} season` : data.waiverTypeLabel}
+              {data.faabBudget != null ? t(`FAAB budgets · $${data.faabBudget.toLocaleString('en-US')} season`) : t(data.waiverTypeLabel)}
               {/* One key for the bars below, only when there are bars to read. */}
               {data.faabBudget != null && data.budgets.length > 0 ? (
                 <>
@@ -97,7 +101,7 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
                 </>
               ) : null}
             </h3>
-            {data.nextRun ? <span className="af-ch-section-note af-num">Runs {data.nextRun}</span> : null}
+            {data.nextRun ? <span className="af-ch-section-note af-num">{t('Runs')} {t(data.nextRun)}</span> : null}
           </header>
           {data.budgets.length > 0 ? (
             <ul className="af-chw-list">
@@ -108,12 +112,12 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
                   </span>
                   <span className="af-chw-main">
                     <span className="af-chw-name">
-                      {b.handle} <span className="af-chw-sub">${b.spent.toLocaleString('en-US')} spent</span>
+                      {b.handle} <span className="af-chw-sub">{t(`$${b.spent.toLocaleString('en-US')} spent`)}</span>
                     </span>
                     <span
                       className="af-chw-bar"
                       role="meter"
-                      aria-label={`${b.handle} FAAB remaining`}
+                      aria-label={t(`${b.handle} FAAB remaining`)}
                       aria-valuemin={0}
                       aria-valuemax={100}
                       aria-valuenow={b.pct}
@@ -128,19 +132,19 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
               ))}
             </ul>
           ) : (
-            <p className="af-chw-why">{data.budgetsReason}</p>
+            <p className="af-chw-why">{t(data.budgetsReason)}</p>
           )}
         </div>
 
         <div className="af-card af-ch-section">
           <header className="af-ch-section-head">
-            <h3 className="af-label">{run ? `Last run · ${runWhen} ET` : 'Last run'}</h3>
-            {run ? <span className="af-ch-section-note">{run.runType === 'manual' ? 'Run by a commissioner' : 'Scheduled'}</span> : null}
+            <h3 className="af-label">{run ? t(`Last run · ${runWhen} ET`) : t('Last run')}</h3>
+            {run ? <span className="af-ch-section-note">{run.runType === 'manual' ? t('Run by a commissioner') : t('Scheduled')}</span> : null}
           </header>
 
           {run?.stuck ? (
             <p className="af-chw-stuck" role="status">
-              This run started and never finished, so some claims were not processed.
+              {t('This run started and never finished, so some claims were not processed.')}
             </p>
           ) : null}
 
@@ -152,33 +156,36 @@ export function WaiverOversight({ data }: { data: WaiverOversightData }) {
                     <span className="af-chw-name">{r.player}</span>
                     <span className="af-chw-sub">
                       {r.manager}
-                      {r.bid != null ? ` · $${r.bid} bid` : ''}
+                      {r.bid != null ? ` · ${t(`$${r.bid} bid`)}` : ''}
                     </span>
                   </span>
                   <span className="af-chw-chip" data-result={r.result}>
-                    {r.label}
+                    {t(r.label)}
                   </span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="af-chw-why">{run ? 'The last run processed no claims.' : 'No waiver run has processed in this league yet.'}</p>
+            <p className="af-chw-why">{run ? t('The last run processed no claims.') : t('No waiver run has processed in this league yet.')}</p>
           )}
 
           {data.pendingCount > 0 ? (
             data.canRunNow ? (
               <div className="af-chw-run">
                 <button type="button" className="af-btn af-chw-btn" onClick={() => void runNow()} disabled={running}>
-                  {running ? 'Running…' : `Run waivers now · ${data.pendingCount} waiting`}
+                  {running ? t('Running…') : t(`Run waivers now · ${data.pendingCount} waiting`)}
                 </button>
                 <p className="af-chw-sub" aria-live="polite" data-tone={note?.tone}>
-                  {note?.text ?? 'Processes the claims waiting now, by this league’s rules. Settled claims are not re-run.'}
+                  {t(note?.text ?? 'Processes the claims waiting now, by this league’s rules. Settled claims are not re-run.')}
                 </p>
               </div>
             ) : (
               <p className="af-chw-why">
-                {data.pendingCount} {data.pendingCount === 1 ? 'claim is' : 'claims are'} waiting. Only the primary
-                commissioner can run waivers manually.
+                {t(
+                  data.pendingCount === 1
+                    ? '1 claim is waiting. Only the primary commissioner can run waivers manually.'
+                    : `${data.pendingCount} claims are waiting. Only the primary commissioner can run waivers manually.`,
+                )}
               </p>
             )
           ) : null}
