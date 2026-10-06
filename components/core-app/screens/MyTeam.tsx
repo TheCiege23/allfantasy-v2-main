@@ -1756,8 +1756,8 @@ export function MyTeam({ data }: MyTeamProps) {
                   standing. Shown only once the record is.
                 */}
                 {data.team.data.rank != null && data.team.data.recordKnown
-                  ? ` · ${data.team.data.rank} of ${data.team.data.teamCount}`
-                  : ` · ${data.team.data.teamCount} teams`}
+                  ? ` · ${data.team.data.rank} ${es ? 'de' : 'of'} ${data.team.data.teamCount}`
+                  : ` · ${data.team.data.teamCount} ${es ? 'equipos' : 'teams'}`}
               </div>
             </div>
 

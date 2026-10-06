@@ -282,12 +282,19 @@ function SosCell({ team, odds }: { team: BoardTeam; odds: StandingsOdds }) {
 }
 
 function NextCell({ team, seedOf }: { team: BoardTeam; seedOf: Map<string, number> }) {
+  const language = useOptionalLanguage().language
   const n = team.next
   if (!n) return <span className="af-stb-muted">—</span>
   const seed = seedOf.get(n.opponentId)
   return (
     <span className="af-stb-next">
-      {n.inProgress ? <span className="af-stb-live">Live</span> : <span className="af-stb-muted af-num">Wk {n.week}</span>}
+      {n.inProgress ? (
+        <span className="af-stb-live">{coreUiCopy('Live', language)}</span>
+      ) : (
+        <span className="af-stb-muted af-num">
+          {language === 'es' ? 'Sem' : 'Wk'} {n.week}
+        </span>
+      )}
       <span className="af-stb-nextname" title={n.opponentName}>
         {seed != null ? <span className="af-stb-muted af-num">#{seed} </span> : null}
         {n.opponentName}

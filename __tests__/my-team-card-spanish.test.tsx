@@ -114,6 +114,32 @@ const unpriced = page({
 })
 const noMatchup = page({ available: false, reason: 'no week 4 matchup recorded for your team yet' })
 
+describe('the header line', () => {
+  const team = (over: Record<string, unknown> = {}) => ({
+    available: true,
+    data: {
+      teamName: 'Mine', ownerName: 'TheCiege24', managerAvatarUrl: null, record: '3-1', recordKnown: true, rank: 2,
+      pointsFor: 400, pointsAgainst: 380, teamCount: 12, ...over,
+    },
+  })
+  const meta = (language: 'en' | 'es', over: Record<string, unknown> = {}) => {
+    lang.language = language
+    const { container, unmount } = render(<MyTeam data={{ ...page({ available: false, reason: 'n/a' }), team: team(over) } as unknown as MyTeamData} />)
+    const text = container.querySelector('.af-mt-head-meta')?.textContent ?? null
+    unmount()
+    lang.language = 'en'
+    return text
+  }
+  it('says the rank in Spanish — "2 de 12", and "12 equipos" before a result', () => {
+    expect(meta('es')).toBe('TheCiege24 · KBFL · 2 de 12')
+    expect(meta('es', { recordKnown: false })).toBe('TheCiege24 · KBFL · 12 equipos')
+  })
+  it('CONTROL — English unchanged', () => {
+    expect(meta('en')).toBe('TheCiege24 · KBFL · 2 of 12')
+    expect(meta('en', { recordKnown: false })).toBe('TheCiege24 · KBFL · 12 teams')
+  })
+})
+
 describe('the card, rendered', () => {
   it('says all three lines in Spanish', () => {
     lang.language = 'es'
