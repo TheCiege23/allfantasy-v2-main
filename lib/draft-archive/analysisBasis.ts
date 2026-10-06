@@ -4,13 +4,17 @@ import type { Prisma } from '@prisma/client';
 export async function captureDraftAnalysisBasis(tx: Prisma.TransactionClient, league: {
     sport: unknown;
     season: number | null;
-} | null, at: Date, playerPool='all') {
+} | null, at: Date, playerPool='all', sourcePlayerIds?:string[]) {
     const sport=String(league?.sport).toUpperCase();
     const base = { version: 'draft-analysis-basis-v2', capturedAt: at.toISOString(), sport, identitySpace: 'canonical_with_verified_aliases', scoringBasis: 'league_rescored_stat_rates_per_game' };
     if (!DRAFT_POINTS_SPORTS.some(s=>s===sport) || !league?.season)
         return { ...base, state: 'unsupported', reason: 'A compatible season projection source is unavailable.', entries: [] };
+    // C2C uses a verified college identity pool; unrelated college rows must not exhaust its bound.
+    if(sourcePlayerIds!==undefined&&(sport!=='NCAAF'||!Array.isArray(sourcePlayerIds)||sourcePlayerIds.length>5000||new Set(sourcePlayerIds).size!==sourcePlayerIds.length||sourcePlayerIds.some(id=>typeof id!=='string'||!id||id.length>64)))
+        return {...base,state:'unsupported',reason:'Verified college projection identities are required.',entries:[]};
+    if(sourcePlayerIds?.length===0)return {...base,state:'empty',reason:'No verified college projection IDs are available.',entries:[]};
     const rows = await tx.aFProjectionSnapshot.findMany({
-        where: { sport, season: league.season, week: null, eventId: null, computedAt: { lte: at } },
+        where: { sport, ...(sourcePlayerIds?{playerId:{in:sourcePlayerIds}}:{}), season: league.season, week: null, eventId: null, computedAt: { lte: at } },
         orderBy: [{ computedAt: 'desc' }, { id: 'desc' }], take: 5001,
         select: { id: true, playerId: true, playerName: true, position: true, rosProjection: true, rosWeeksRemaining: true, afProjection: true, adjustmentFactors: true, computedAt: true, confidenceLevel: true },
     });
