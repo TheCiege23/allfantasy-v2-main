@@ -1,17 +1,9 @@
 // @vitest-environment node
 /**
- * 🛑 THE BENCH CHECK SEES BYES.
- *
- * `getMyTeamData` ran the bench check before the bye pass, so every player still read
- * `onBye: false` when it was asked who should start. Two failures, both of which are the exact
- * mistake the check exists to catch:
- *   · a bench player on bye was recommended over a starter who is playing;
- *   · a starter on bye kept his feed projection, so a playing bench player who projects lower than
- *     that stale number was never suggested — the manager was left starting a guaranteed zero.
- *
- * Drives the REAL `getMyTeamData` (resolver, bye pass, bench check) over a prisma double with one
- * club off this week and an otherwise complete slate, which is what `getByeWeeks` requires before
- * it will call anything a bye.
+ * Compare the real Team loader and its alert evaluation path over the same saved
+ * roster and schedule fixture. Relevant player/bye/kickoff evidence must match;
+ * unrelated enrichment reads must disappear. Counts are controlled mock reads,
+ * not production latency measurements.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
