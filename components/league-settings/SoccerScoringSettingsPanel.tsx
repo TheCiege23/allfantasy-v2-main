@@ -14,6 +14,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Info, Lock, RotateCcw } from 'lucide-react'
 import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { translateStat } from '@/lib/i18n/scoring-stats'
+import { SOCCER_STATS_ES } from '@/lib/i18n/scoring-stats/soccer'
 import {
   SOCCER_SCORING_CATEGORIES,
   buildSoccerDefaultRulesFromCategories,
@@ -56,18 +59,19 @@ const TAB_COLORS: Record<string, string> = {
   advanced:    'border-cyan-500/40 bg-cyan-500/15 text-cyan-200',
 }
 
-const GROUP_DIVIDERS: { label: string; ids: string[] }[] = [
-  { label: 'Outfield / GK',      ids: ['outfield', 'goalkeeping'] },
-  { label: 'Match Day',          ids: ['discipline', 'bonuses', 'misc'] },
-  { label: 'Advanced Analytics', ids: ['advanced'] },
+const GROUP_DIVIDERS: { label: string; labelKey: string; ids: string[] }[] = [
+  { label: 'Outfield / GK',      labelKey: 'lsScore.group.outfieldGk',        ids: ['outfield', 'goalkeeping'] },
+  { label: 'Match Day',          labelKey: 'lsScore.group.matchDay',          ids: ['discipline', 'bonuses', 'misc'] },
+  { label: 'Advanced Analytics', labelKey: 'lsScore.group.advancedAnalytics', ids: ['advanced'] },
 ]
 
-const PRESET_LABELS: Record<string, string> = {
-  af_default:      'AllFantasy',
-  fpl_compatible:  'FPL',
-  espn_compatible: 'ESPN',
-  yahoo_compatible: 'Yahoo',
-  custom:          'Custom',
+/** Preset chip labels, as dictionary keys resolved at render. */
+const PRESET_LABEL_KEYS: Record<string, string> = {
+  af_default:      'lsScore.preset.allFantasy',
+  fpl_compatible:  'lsScore.preset.fpl',
+  espn_compatible: 'lsScore.preset.espn',
+  yahoo_compatible: 'lsScore.preset.yahoo',
+  custom:          'lsScore.preset.custom',
 }
 
 // ---------------------------------------------------------------------------
@@ -84,6 +88,8 @@ export function SoccerScoringSettingsPanel({
   leagueId,
   isCommissioner = false,
 }: Props) {
+  const { t, language } = useOptionalLanguage()
+  const st = (s: string) => translateStat(s, language, SOCCER_STATS_ES)
   // ----- state -----
   const [presets, setPresets] = useState<SoccerPreset[]>([])
   const [config, setConfig] = useState<SoccerScoringConfig | null>(null)
@@ -119,7 +125,7 @@ export function SoccerScoringSettingsPanel({
         setEditedRules({ ...defaults, ...(data.config?.rules ?? {}) })
       })
       .catch(() => {
-        if (active) setError('Failed to load soccer scoring settings')
+        if (active) setError(t('lsScore.err.loadSoccer'))
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -205,14 +211,14 @@ export function SoccerScoringSettingsPanel({
         return
       }
       if (!res.ok) {
-        setError(data.error ?? 'Save failed')
+        setError(data.error ?? t('lsScore.err.save'))
         return
       }
       setConfig(data.config)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch {
-      setError('Request failed')
+      setError(t('lsScore.err.request'))
     } finally {
       setSaving(false)
     }
@@ -230,7 +236,7 @@ export function SoccerScoringSettingsPanel({
   if (loading) {
     return (
       <div className="py-10 text-center text-sm text-white/50">
-        Loading soccer scoring settings…
+        {t('lsScore.loadingEllipsis').replace('{{sport}}', t('lsScore.sport.soccerLower'))}
       </div>
     )
   }
@@ -241,27 +247,27 @@ export function SoccerScoringSettingsPanel({
       {/* Header */}
       <div>
         <h3 className="text-base font-semibold text-white">
-          Soccer Scoring Settings
+          {t('lsScore.title').replace('{{sport}}', t('lsScore.sport.soccer'))}
         </h3>
         <p className="mt-0.5 text-xs text-white/50">
           {isCommissioner
-            ? 'Customize scoring values for your league. Changes apply league-wide.'
-            : 'Scoring values for this league (read-only).'}
+            ? t('lsScore.subtitle.commish')
+            : t('lsScore.subtitle.readOnly')}
         </p>
       </div>
 
       {/* League-wide rule notice */}
       <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px] text-white/40">
-        This scoring configuration applies to{' '}
-        <span className="font-medium text-white/60">all players</span> and{' '}
-        <span className="font-medium text-white/60">all roster positions</span>{' '}
-        in this league.
+        {t('lsScore.notice.appliesTo')}{' '}
+        <span className="font-medium text-white/60">{t('lsScore.notice.allPlayers')}</span> {t('lsScore.notice.and')}{' '}
+        <span className="font-medium text-white/60">{t('lsScore.notice.allRosterPositions')}</span>{' '}
+        {t('lsScore.notice.inThisLeague')}
       </div>
 
       {/* Preset selector */}
       <div className="space-y-2">
         <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
-          Scoring Preset
+          {t('lsScore.presetHeading')}
         </label>
         <div className="flex flex-wrap gap-2">
           {(
@@ -290,7 +296,7 @@ export function SoccerScoringSettingsPanel({
                       : 'border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-50'
                 }`}
               >
-                {PRESET_LABELS[key] ?? key}
+                {PRESET_LABEL_KEYS[key] ? t(PRESET_LABEL_KEYS[key]) : key}
                 {isCustomLocked && (
                   <Lock className="ml-1 inline h-3 w-3 text-white/30" />
                 )}
@@ -305,9 +311,9 @@ export function SoccerScoringSettingsPanel({
         <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-950/15 px-3 py-2.5">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
           <div className="text-[11px] text-amber-200/80">
-            <p>{currentPreset.warning}</p>
+            <p>{st(currentPreset.warning)}</p>
             <p className="mt-1 text-amber-200/60">
-              AllFantasy specialty leagues are optimized for AF scoring templates.
+              {t('lsScore.specialtyNote')}
             </p>
           </div>
         </div>
@@ -316,13 +322,13 @@ export function SoccerScoringSettingsPanel({
       {/* Non-commissioner read-only banner */}
       {!isCommissioner && (
         <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-white/40">
-          Only the commissioner can edit scoring settings.
+          {t('lsScore.commishOnly')}
         </div>
       )}
 
       {/* ===== Category tab pills with group dividers ===== */}
       <div className="space-y-1.5">
-        {GROUP_DIVIDERS.map(({ label: groupLabel, ids }) => {
+        {GROUP_DIVIDERS.map(({ label: groupLabel, labelKey, ids }) => {
           const cats = SOCCER_SCORING_CATEGORIES.filter((c) =>
             ids.includes(c.id),
           )
@@ -331,7 +337,7 @@ export function SoccerScoringSettingsPanel({
           return (
             <div key={groupLabel}>
               <p className="mb-1 text-[11px] font-bold uppercase tracking-widest text-white/20">
-                {groupLabel}
+                {t(labelKey)}
               </p>
               <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-0.5">
                 {cats.map((cat: SoccerScoringCategory) => {
@@ -347,7 +353,7 @@ export function SoccerScoringSettingsPanel({
                       onClick={() => setActiveTab(cat.id)}
                       className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${colorClass}`}
                     >
-                      {cat.label}
+                      {st(cat.label)}
                       {isPremiumGroup && !isPremium && (
                         <Lock className="h-3 w-3 opacity-60" />
                       )}
@@ -368,18 +374,16 @@ export function SoccerScoringSettingsPanel({
             <div className="mb-3 flex items-start gap-2 rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-3 py-2.5">
               <Lock className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" />
               <div className="text-[11px] text-cyan-200/80">
-                <p className="font-medium">Premium Feature</p>
+                <p className="font-medium">{t('lsScore.premiumFeature')}</p>
                 <p className="mt-0.5 text-cyan-200/60">
-                  Advanced soccer analytics (xG, xA, xGI, progressive
-                  passes/carries, PSxG, etc.) require an AF Commissioner
-                  Subscription.
+                  {t('lsScore.premium.soccerAnalytics')}
                 </p>
                 <button
                   type="button"
                   onClick={() => setGateOpen(true)}
                   className="mt-1.5 rounded-md bg-cyan-600/60 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-cyan-600/80"
                 >
-                  Upgrade
+                  {t('lsScore.upgrade')}
                 </button>
               </div>
             </div>
@@ -388,11 +392,11 @@ export function SoccerScoringSettingsPanel({
           {/* Category stat count */}
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-white/30">
-              {activeCategory.label} ({activeCategory.rows.length} stats)
+              {t('lsScore.statCount').replace('{{label}}', st(activeCategory.label)).replace('{{count}}', String(activeCategory.rows.length))}
             </span>
             {isCommissioner && activeCategory.id !== 'advanced' && (
               <span className="text-[11px] text-white/25">
-                Click value to edit
+                {t('lsScore.clickToEdit')}
               </span>
             )}
           </div>
@@ -414,7 +418,7 @@ export function SoccerScoringSettingsPanel({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="text-[12px] text-white/80">
-                      {row.label}
+                      {st(row.label)}
                     </span>
                     {row.premium && (
                       <Lock className="h-3 w-3 text-cyan-400/60" />
@@ -422,7 +426,7 @@ export function SoccerScoringSettingsPanel({
                   </div>
                   {row.helper && (
                     <p className="mt-0.5 text-[11px] text-white/30">
-                      {row.helper}
+                      {st(row.helper)}
                     </p>
                   )}
                 </div>
@@ -434,7 +438,7 @@ export function SoccerScoringSettingsPanel({
                       type="number"
                       step="any"
                       value={value}
-                      aria-label={row.label}
+                      aria-label={st(row.label)}
                       onChange={(e) =>
                         handleRuleChange(row.key, e.target.value)
                       }
@@ -465,7 +469,7 @@ export function SoccerScoringSettingsPanel({
         <div className="flex items-start gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/30" />
           <p className="text-[11px] text-white/40">
-            {currentPreset.description}
+            {st(currentPreset.description)}
           </p>
         </div>
       )}
@@ -480,7 +484,7 @@ export function SoccerScoringSettingsPanel({
           )}
           {success && (
             <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">
-              Soccer scoring settings saved successfully.
+              {t('lsScore.savedSport').replace('{{sport}}', t('lsScore.sport.soccer'))}
             </div>
           )}
           <div className="flex gap-2">
@@ -490,13 +494,13 @@ export function SoccerScoringSettingsPanel({
               onClick={save}
               className="flex-1 rounded-lg bg-green-600/80 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-green-600 disabled:opacity-50"
             >
-              {saving ? 'Saving…' : 'Save Scoring'}
+              {saving ? t('lsScore.savingEllipsis') : t('lsScore.save')}
             </button>
             <button
               type="button"
               disabled={saving || !hasChanges}
               onClick={resetToSaved}
-              title="Reset to saved"
+              title={t('lsScore.resetToSaved')}
               className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-white/50 transition hover:bg-white/[0.06] disabled:opacity-40"
             >
               <RotateCcw className="h-4 w-4" />
