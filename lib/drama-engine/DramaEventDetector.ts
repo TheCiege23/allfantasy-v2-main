@@ -27,11 +27,37 @@ export interface DetectDramaInput {
   season?: number | null
 }
 
-type TeamRef = {
+export type TeamRef = {
   id: string
   externalId: string
   teamName: string
   ownerName: string
+}
+
+/**
+ * The name a rivalry side is printed under, from the league's teams. 🛑 Never the raw id: the headline
+ * was built from `managerAId`/`managerBId` directly, so measured 2026-10-05 across 40 commissioner
+ * leagues, 146 of 587 Commissioner OS cards read like "13 vs 9: Emerging rivalry" — roster numbers
+ * where every other storyline here names the team. The rivalry engine keys a pair by the team's
+ * externalId, or by its owner name when it is not run with `useTeamIds` (HeadToHeadAggregator), so a
+ * side resolves through either. Shared with `LeagueDramaEngine`, which renames rows this run did not
+ * reach — the two must never disagree about a name.
+ */
+export function rivalSideNamer(teams: ReadonlyArray<TeamRef>): (id: string) => { name: string; resolved: boolean } {
+  const byAnyId = new Map<string, TeamRef>()
+  const byOwner = new Map<string, TeamRef>()
+  for (const t of teams) {
+    byAnyId.set(t.id, t)
+    byAnyId.set(t.externalId, t)
+    if (t.ownerName?.trim()) byOwner.set(t.ownerName.trim(), t)
+  }
+  return (id: string) => {
+    const team = byAnyId.get(id) ?? byOwner.get(id.trim())
+    const name = team?.teamName?.trim() || team?.ownerName?.trim()
+    if (name) return { name, resolved: true }
+    // An unresolved bare number is a roster slot, not a name; anything else already is a name.
+    return /^\d+$/.test(id.trim()) ? { name: `Team ${id.trim()}`, resolved: false } : { name: id, resolved: true }
+  }
 }
 
 function canonicalPair(a: string, b: string): string {
@@ -99,24 +125,8 @@ export async function detectDramaEvents(input: DetectDramaInput): Promise<DramaC
     teamByAnyId.set(t.id, t)
     teamByAnyId.set(t.externalId, t)
   }
-  // The rivalry engine keys a pair by the team's externalId, or by its owner name when it is not
-  // run with `useTeamIds` (HeadToHeadAggregator) — so a rivalry side resolves through either.
-  const teamByOwnerName = new Map<string, TeamRef>()
-  for (const t of teams) if (t.ownerName?.trim()) teamByOwnerName.set(t.ownerName.trim(), t)
-
-  /**
-   * The name a rivalry side is printed under. 🛑 Never the raw id: the headline was built from
-   * `managerAId`/`managerBId` directly, so measured 2026-10-05 across 40 commissioner leagues, 146
-   * of 587 Commissioner OS cards read like "13 vs 9: Emerging rivalry" — roster numbers where every
-   * other storyline in this file names the team.
-   */
-  const rivalSideName = (id: string): string => {
-    const team = teamByAnyId.get(id) ?? teamByOwnerName.get(id.trim())
-    const name = team?.teamName?.trim() || team?.ownerName?.trim()
-    if (name) return name
-    // An unresolved bare number is a roster slot, not a name; anything else already is a name.
-    return /^\d+$/.test(id.trim()) ? `Team ${id.trim()}` : id
-  }
+  const nameSide = rivalSideNamer(teams)
+  const rivalSideName = (id: string): string => nameSide(id).name
 
   const [platformLeagueIds, prevSeasonChampions] = await Promise.all([
     getPlatformLeagueIds(leagueId),
