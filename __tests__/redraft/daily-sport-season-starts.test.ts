@@ -19,6 +19,7 @@ import { weekWindowFromSeasonStart } from '@/lib/scoring-runtime/dailySportStatN
 describe('recorded regular-season openers', () => {
   it.each([
     ['NHL', 2026, '2026-09-29T00:00:00.000Z'],
+    ['NCAAB', 2026, '2026-11-01T00:00:00.000Z'],
     ['NBA', 2026, '2026-10-20T00:00:00.000Z'],
     ['MLB', 2026, '2026-03-25T00:00:00.000Z'],
     ['MLB', 2027, '2027-03-24T00:00:00.000Z'],
@@ -105,5 +106,17 @@ describe('the anchor excludes preseason as a property of the window', () => {
     expect(w1.start.toISOString()).toBe('2026-03-25T00:00:00.000Z')
     expect(w1.end.toISOString()).toBe('2026-04-01T00:00:00.000Z')
     expect(new Date('2026-03-31T00:00:00.000Z') < w1.end).toBe(true)
+  })
+})
+
+// The Rome exception precedes the domestic Monday opener; both belong to week 1.
+describe('NCAAB Rome opening game', () => {
+  it('includes November 1 and keeps adjacent weeks disjoint', () => {
+    const anchor=resolveDailySportSeasonStart('NCAAB',2026)
+    const first=weekWindowFromSeasonStart(anchor,1)!, second=weekWindowFromSeasonStart(anchor,2)!
+    expect(new Date('2026-11-01T16:30:00Z') >= first.start).toBe(true)
+    expect(new Date('2026-11-02T13:00:00Z') < first.end).toBe(true)
+    expect(first.end.getTime()).toBe(second.start.getTime())
+    expect(new Date('2026-11-08T12:00:00Z') >= second.start).toBe(true)
   })
 })

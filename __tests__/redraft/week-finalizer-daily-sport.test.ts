@@ -84,7 +84,7 @@ beforeEach(() => vi.clearAllMocks())
  * schedules are incomplete (thesportsdb stops at a 3,000-game cap).
  */
 const NCAAB_SEASON = { id: 'season-cbb', leagueId: 'league-cbb', sport: 'NCAAB', season: 2026 }
-/** Week 1 runs Monday 2026-11-02 -> 2026-11-09 (Eastern days). */
+/** Week 1 runs Sunday 2026-11-01 -> 2026-11-08 (Eastern days). */
 const CBB_AFTER_GRACE = new Date('2026-11-09T14:00:00.000Z')
 
 function makeNcaabPrisma(schedule: Record<string, unknown> | null, scored: string[] = ['p1', 'p2']) {
@@ -137,10 +137,10 @@ describe('finalizeRedraftWeek — NCAAB reads the Rolling Insights schedule', ()
     const { prisma } = makeNcaabPrisma({
       'NCAAB:rischedule:2026:meta': { games: 3 },
       'NCAAB:rischedule:2026:2026-11-02': { games: [cbbGame('20261102-1-2', '2026-11-02', 'final', '2026-11-02T23:00:00.000Z')] },
-      'NCAAB:rischedule:2026:2026-11-08': {
+      'NCAAB:rischedule:2026:2026-11-07': {
         games: [
-          cbbGame('20261108-3-4', '2026-11-08', 'completed', '2026-11-08T23:00:00.000Z'),
-          cbbGame('20261108-5-6', '2026-11-08', 'replaced', '2026-11-08T20:00:00.000Z'),
+          cbbGame('20261107-3-4', '2026-11-07', 'completed', '2026-11-07T23:00:00.000Z'),
+          cbbGame('20261107-5-6', '2026-11-07', 'replaced', '2026-11-07T20:00:00.000Z'),
         ],
       },
     })
@@ -152,10 +152,21 @@ describe('finalizeRedraftWeek — NCAAB reads the Rolling Insights schedule', ()
     expect(['games_not_final', 'no_games_on_slate', 'season_start_unknown']).not.toContain(result.refusal)
   })
 
+  it('includes the Rome opener: an unfinished November 1 game prevents sealing week 1', async () => {
+    const { prisma } = makeNcaabPrisma({
+      'NCAAB:rischedule:2026:meta': { games: 2 },
+      'NCAAB:rischedule:2026:2026-11-01': { games: [cbbGame('20261101-44-76', '2026-11-01', 'scheduled', '2026-11-01T16:30:00.000Z')] },
+      'NCAAB:rischedule:2026:2026-11-02': { games: [cbbGame('20261102-1-2', '2026-11-02', 'final', '2026-11-02T23:00:00.000Z')] },
+    })
+    const result = await finalizeRedraftWeek({ seasonId: 'season-cbb', week: 1, dryRun: true }, { prisma, now: () => CBB_AFTER_GRACE })
+    expect(result.refusal).toBe('games_not_final')
+    expect(result.slate).toMatchObject({games: 2, unfinished: 1})
+  })
+
   it('holds the week open for a game still scheduled', async () => {
     const { prisma } = makeNcaabPrisma({
       'NCAAB:rischedule:2026:meta': { games: 1 },
-      'NCAAB:rischedule:2026:2026-11-08': { games: [cbbGame('20261108-3-4', '2026-11-08', 'scheduled', '2026-11-08T23:00:00.000Z')] },
+      'NCAAB:rischedule:2026:2026-11-07': { games: [cbbGame('20261107-3-4', '2026-11-07', 'scheduled', '2026-11-07T23:00:00.000Z')] },
     })
     const result = await finalizeRedraftWeek(
       { seasonId: 'season-cbb', week: 1, dryRun: true },
