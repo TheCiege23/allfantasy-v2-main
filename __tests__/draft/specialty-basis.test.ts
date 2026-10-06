@@ -16,16 +16,16 @@ describe('specialist draft-start capture',()=>{
   const value=await captureSpecialtyBasis({salaryCapTeamLedger:{findMany:ledger},salaryCapLeagueConfig:{findUnique:vi.fn().mockResolvedValue(null)},playerContract:{findMany:contracts},devyPlayer:{findMany:college}} as never,{season:2026,leagueVariant:'salary_cap'},{leagueId:'l',devyConfig:{enabled:true,devyRounds:[1]}},new Date('2026-08-01'))
   expect(value.college).toEqual({state:'unavailable'});expect(ledger.mock.calls[0][0].where).toEqual({leagueId:'l',capYear:2026});expect(contracts.mock.calls[0][0].where).toEqual({leagueId:'l',status:{in:['active','tagged','option_exercised']}})
  })
- it('freezes contemporary college estimates and rejects prospect data updated after draft start',async()=>{
+ it('freezes contemporary college estimates and excludes in-season production and prospect data updated after draft start',async()=>{
   const at=new Date('2026-08-01T00:00:00Z');vi.useFakeTimers();vi.setSystemTime(at);
   try{
-   const players=vi.fn().mockResolvedValue([{id:'a',cfbdId:'cf-a',sleeperId:null,position:'WR',name:'Prospect',graduatedToNFL:false,recruitingStars:4,recruitingComposite:0.95,ppaSeasonTotal:999,statSeason:2027,draftEligibleYear:2027,updatedAt:new Date('2026-07-31')},{id:'b',cfbdId:'cf-b',sleeperId:null,position:'WR',name:'Future data',graduatedToNFL:false,recruitingStars:4,recruitingComposite:0.95,ppaSeasonTotal:999,statSeason:2026,draftEligibleYear:2027,updatedAt:new Date('2026-08-02')}]);
+   const players=vi.fn().mockResolvedValue([{id:'a',cfbdId:'cf-a',sleeperId:null,position:'WR',name:'Prospect',graduatedToNFL:false,recruitingStars:4,recruitingComposite:0.95,ppaSeasonTotal:999,statSeason:2026,draftEligibleYear:2027,updatedAt:new Date('2026-07-31')},{id:'b',cfbdId:'cf-b',sleeperId:null,position:'WR',name:'Future data',graduatedToNFL:false,recruitingStars:4,recruitingComposite:0.95,ppaSeasonTotal:999,statSeason:2026,draftEligibleYear:2027,updatedAt:new Date('2026-08-02')}]);
    const projections=vi.fn().mockResolvedValue([]);
    const value=await captureSpecialtyBasis({devyPlayer:{findMany:players},aFProjectionSnapshot:{findMany:projections}} as never,{season:2026,settings:{collegeScoringSettings:{rules:{ppr:0.5}}}},{leagueId:'l',c2cConfig:{enabled:true,collegeRounds:[1]}},at);
    const college=value.college as {valuations:Array<{computedAt:string|null;option:{scale:string;pSource:string}|null}>;collegeScoring:unknown};
    expect(college.valuations[0].option?.scale).toBe('fantasycalc-dynasty-superflex-12');expect(college.valuations[0].option?.pSource).not.toBe('production');
    expect(college.valuations[1]).toMatchObject({computedAt:null,option:null});expect(college.collegeScoring).toEqual({rules:{ppr:0.5}});
-   expect(projections.mock.calls[0][0].where).toMatchObject({sport:'NCAAF',season:2026,computedAt:{lte:at}});
+   expect(projections.mock.calls[0][0].where).toMatchObject({sport:'NCAAF',season:2026,computedAt:{lte:at},playerId:{in:['cf-a','cf-b']}});
   }finally{vi.useRealTimers();}
  })
 
