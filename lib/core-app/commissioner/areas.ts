@@ -22,6 +22,7 @@
 
 import { resolveActionAuthority } from '@/lib/commissioner-os/authority'
 import { verifiedHandoff, platformLabel, type LinkLeague, type PlatformLink } from '@/lib/core-app/platformLinks'
+import { pickLanguage } from './pickLanguage'
 
 export type HubLink = { label: string; href: string; external: boolean }
 
@@ -69,92 +70,98 @@ export type LeagueArea = {
   note: string | null
 }
 
-export function buildLeagueAreas(league: HubLeague): LeagueArea[] {
+export function buildLeagueAreas(league: HubLeague, language = 'en'): LeagueArea[] {
+  const L = pickLanguage(language)
   const pl = platformLabel(league.platform)
   const onPlatform = league.native ? null : toHubLink(verifiedHandoff(league, 'league'))
-  const readNote = league.native ? null : `Read from ${pl}. Changes are made there.`
+  const readNote = league.native ? null : L(`Read from ${pl}. Changes are made there.`, `Datos leídos de ${pl}. Los cambios se hacen allí.`)
   const core = (screen: string) => `/core/${screen}${q(league.id)}`
 
   return [
     {
       key: 'overview',
-      label: 'Overview',
-      description: 'Standings snapshot, this week, and what changed.',
-      link: { label: 'Open overview', href: `/core${q(league.id)}`, external: false },
+      label: L('Overview', 'Resumen'),
+      description: L('Standings snapshot, this week, and what changed.', 'La clasificación de un vistazo, esta semana y lo que cambió.'),
+      link: { label: L('Open overview', 'Abrir el resumen'), href: `/core${q(league.id)}`, external: false },
       changeOn: null,
       note: null,
     },
     {
       key: 'settings',
-      label: 'Settings',
-      description: 'Scoring, rosters, waivers, trades, draft and playoffs.',
-      link: { label: 'Open settings', href: leaguePage(league.id, 'settings'), external: false },
-      changeOn: onPlatform,
-      note: league.native ? null : `A read-only summary here. Rules are changed on ${pl}.`,
-    },
-    {
-      key: 'members',
-      label: 'Members',
-      description: 'Who manages each team, invites, and co-commissioners.',
-      link: { label: 'Manage members', href: leaguePage(league.id, 'settings'), external: false },
+      label: L('Settings', 'Configuración'),
+      description: L('Scoring, rosters, waivers, trades, draft and playoffs.', 'Puntuación, plantillas, agentes libres, intercambios, draft y playoffs.'),
+      link: { label: L('Open settings', 'Abrir la configuración'), href: leaguePage(league.id, 'settings'), external: false },
       changeOn: onPlatform,
       note: league.native
         ? null
-        : `Team ownership is set on ${pl}. AllFantasy handles invites to claim a team here.`,
+        : L(`A read-only summary here. Rules are changed on ${pl}.`, `Aquí es un resumen de solo lectura. Las reglas se cambian en ${pl}.`),
+    },
+    {
+      key: 'members',
+      label: L('Members', 'Miembros'),
+      description: L('Who manages each team, invites, and co-commissioners.', 'Quién dirige cada equipo, invitaciones y cocomisionados.'),
+      link: { label: L('Manage members', 'Gestionar miembros'), href: leaguePage(league.id, 'settings'), external: false },
+      changeOn: onPlatform,
+      note: league.native
+        ? null
+        : L(
+            `Team ownership is set on ${pl}. AllFantasy handles invites to claim a team here.`,
+            `La propiedad de los equipos se fija en ${pl}. AllFantasy gestiona aquí las invitaciones para reclamar un equipo.`,
+          ),
     },
     {
       key: 'standings',
-      label: 'Standings',
-      description: 'Records, points and playoff picture.',
-      link: { label: 'Open standings', href: core('standings'), external: false },
+      label: L('Standings', 'Clasificación'),
+      description: L('Records, points and playoff picture.', 'Récords, puntos y panorama de playoffs.'),
+      link: { label: L('Open standings', 'Abrir la clasificación'), href: core('standings'), external: false },
       changeOn: null,
       note: readNote,
     },
     {
       key: 'schedule',
-      label: 'Schedule',
-      description: 'Every week’s matchups.',
-      link: { label: 'Open schedule', href: leaguePage(league.id, 'schedule'), external: false },
+      label: L('Schedule', 'Calendario de partidos'),
+      description: L('Every week’s matchups.', 'Los enfrentamientos de cada semana.'),
+      link: { label: L('Open schedule', 'Abrir el calendario de partidos'), href: leaguePage(league.id, 'schedule'), external: false },
       changeOn: onPlatform,
       note: readNote,
     },
     {
       key: 'drafts',
-      label: 'Drafts',
-      description: 'Draft board, order and results.',
-      link: { label: 'Open Draft HQ', href: core('draft-hq'), external: false },
+      label: L('Drafts', 'Drafts'),
+      description: L('Draft board, order and results.', 'Tablero, orden y resultados del draft.'),
+      link: { label: L('Open Draft HQ', 'Abrir Draft HQ'), href: core('draft-hq'), external: false },
       changeOn: onPlatform,
-      note: league.native ? null : `The draft itself runs on ${pl}; Draft HQ follows it.`,
+      note: league.native ? null : L(`The draft itself runs on ${pl}; Draft HQ follows it.`, `El draft en sí se hace en ${pl}; Draft HQ lo sigue.`),
     },
     {
       key: 'trades',
-      label: 'Trades',
-      description: 'Offers, completed deals and review.',
-      link: { label: 'Open trades', href: core('trades'), external: false },
+      label: L('Trades', 'Intercambios'),
+      description: L('Offers, completed deals and review.', 'Ofertas, intercambios cerrados y revisión.'),
+      link: { label: L('Open trades', 'Abrir intercambios'), href: core('trades'), external: false },
       changeOn: league.native ? null : toHubLink(verifiedHandoff(league, 'trade')),
-      note: league.native ? null : `Trades are accepted and vetoed on ${pl}.`,
+      note: league.native ? null : L(`Trades are accepted and vetoed on ${pl}.`, `Los intercambios se aceptan y se vetan en ${pl}.`),
     },
     {
       key: 'waivers',
-      label: 'Waivers',
-      description: 'Claims, FAAB and the last run.',
-      link: { label: 'Open waivers', href: core('waivers'), external: false },
+      label: L('Waivers', 'Agentes libres'),
+      description: L('Claims, FAAB and the last run.', 'Solicitudes, FAAB y el último proceso.'),
+      link: { label: L('Open waivers', 'Abrir agentes libres'), href: core('waivers'), external: false },
       changeOn: league.native ? null : toHubLink(verifiedHandoff(league, 'waivers')),
-      note: league.native ? null : `Claims are processed on ${pl}.`,
+      note: league.native ? null : L(`Claims are processed on ${pl}.`, `Las solicitudes se procesan en ${pl}.`),
     },
     {
       key: 'history',
-      label: 'History',
-      description: 'Past seasons, champions and all-time records.',
-      link: { label: 'Open history', href: core('career'), external: false },
+      label: L('History', 'Historial'),
+      description: L('Past seasons, champions and all-time records.', 'Temporadas pasadas, campeones y récords históricos.'),
+      link: { label: L('Open history', 'Abrir el historial'), href: core('career'), external: false },
       changeOn: null,
       note: null,
     },
     {
       key: 'announcements',
-      label: 'Announcements',
-      description: 'League chat — where rulings and reminders are posted.',
-      link: { label: 'Open league chat', href: leaguePage(league.id, 'league_chat'), external: false },
+      label: L('Announcements', 'Anuncios'),
+      description: L('League chat — where rulings and reminders are posted.', 'El chat de la liga, donde se publican decisiones y recordatorios.'),
+      link: { label: L('Open league chat', 'Abrir el chat de la liga'), href: leaguePage(league.id, 'league_chat'), external: false },
       changeOn: null,
       note: null,
     },
@@ -162,10 +169,10 @@ export function buildLeagueAreas(league: HubLeague): LeagueArea[] {
       // The league Overview's commissioner card used to open this page; it now opens this hub,
       // so the hub has to keep a way there.
       key: 'intelligence',
-      label: 'Commissioner intelligence',
-      description: 'League and manager health, rivalries, the audit log and the intelligence modules.',
+      label: L('Commissioner intelligence', 'Inteligencia del comisionado'),
+      description: L('League and manager health, rivalries, the audit log and the intelligence modules.', 'Salud de la liga y de los mánagers, rivalidades, el registro de cambios y los módulos de inteligencia.'),
       link: {
-        label: 'Open intelligence',
+        label: L('Open intelligence', 'Abrir inteligencia'),
         href: `/league/${encodeURIComponent(league.id)}/intelligence`,
         external: false,
       },
@@ -192,7 +199,8 @@ export type Workflow = {
   steps: WorkflowStep[]
 }
 
-export function buildWorkflows(league: HubLeague): Workflow[] {
+export function buildWorkflows(league: HubLeague, language = 'en'): Workflow[] {
+  const L = pickLanguage(language)
   const pl = platformLabel(league.platform)
   /*
    * Team ownership, rules and trade rulings are all EXTERNAL state on an imported
@@ -202,107 +210,112 @@ export function buildWorkflows(league: HubLeague): Workflow[] {
   const authority = resolveActionAuthority({ platform: league.platform, scope: 'external', verifiableFromImport: true })
   const onPlatform = toHubLink(verifiedHandoff(league, 'league'))
   const onPlatformTrade = toHubLink(verifiedHandoff(league, 'trade')) ?? onPlatform
-  const chat: HubLink = { label: 'Open league chat', href: leaguePage(league.id, 'league_chat'), external: false }
-  const settings: HubLink = { label: 'Open league settings', href: leaguePage(league.id, 'settings'), external: false }
-  const resync: HubLink = { label: 'Re-sync this league', href: `/core/sync${q(league.id)}`, external: false }
+  const chat: HubLink = { label: L('Open league chat', 'Abrir el chat de la liga'), href: leaguePage(league.id, 'league_chat'), external: false }
+  const settings: HubLink = { label: L('Open league settings', 'Abrir la configuración de la liga'), href: leaguePage(league.id, 'settings'), external: false }
+  const resync: HubLink = { label: L('Re-sync this league', 'Volver a sincronizar esta liga'), href: `/core/sync${q(league.id)}`, external: false }
   const platformStep = (what: string, link: HubLink | null): WorkflowStep => ({
-    title: `Make the change on ${pl}`,
-    body: `${pl} is this league’s system of record, so ${what} happens there. ${
-      link ? '' : `Open the league in ${pl} and use its commissioner tools.`
-    }`.trim(),
+    title: L(`Make the change on ${pl}`, `Haz el cambio en ${pl}`),
+    body: L(
+      `${pl} is this league’s system of record, so ${what} happens there. ${
+        link ? '' : `Open the league in ${pl} and use its commissioner tools.`
+      }`,
+      `${pl} es el sistema de referencia de esta liga, así que ${what} se hace allí. ${
+        link ? '' : `Abre la liga en ${pl} y usa sus herramientas de comisionado.`
+      }`,
+    ).trim(),
     link,
   })
 
   const replace: Workflow = {
     key: 'replace-manager',
-    title: 'Replace a manager',
-    summary: 'Find the team nobody is running, hand it to someone new, and tell the league.',
+    title: L('Replace a manager', 'Reemplazar a un mánager'),
+    summary: L('Find the team nobody is running, hand it to someone new, and tell the league.', 'Encuentra el equipo que nadie dirige, entrégaselo a alguien nuevo y avisa a la liga.'),
     authorityNote: authority.canExecute ? null : authority.blockedReason,
     steps: authority.canExecute
       ? [
           {
-            title: 'Confirm who has gone quiet',
-            body: 'Member activity below lists every manager with no owner or no move in 14 days.',
-            link: { label: 'See member activity', href: '#ch-members', external: false },
+            title: L('Confirm who has gone quiet', 'Confirma quién se ha quedado sin actividad'),
+            body: L('Member activity below lists every manager with no owner or no move in 14 days.', 'La actividad de los miembros, más abajo, lista a cada mánager sin dueño o sin movimientos en 14 días.'),
+            link: { label: L('See member activity', 'Ver la actividad de los miembros'), href: '#ch-members', external: false },
           },
           {
-            title: 'Open the team up',
-            body: 'Orphan teams lists ownerless teams and lets you advertise one or hand it to an AI manager for now.',
-            link: { label: 'Open orphan teams', href: `/league/${encodeURIComponent(league.id)}/orphan-teams`, external: false },
+            title: L('Open the team up', 'Deja el equipo disponible'),
+            body: L('Orphan teams lists ownerless teams and lets you advertise one or hand it to an AI manager for now.', 'Equipos huérfanos lista los equipos sin dueño y te permite anunciar uno o dejárselo por ahora a un mánager de IA.'),
+            link: { label: L('Open orphan teams', 'Abrir equipos huérfanos'), href: `/league/${encodeURIComponent(league.id)}/orphan-teams`, external: false },
           },
           {
-            title: 'Invite the replacement',
-            body: 'Send your league’s invite link. The new manager joins and takes over the open team.',
+            title: L('Invite the replacement', 'Invita al reemplazo'),
+            body: L('Send your league’s invite link. The new manager joins and takes over the open team.', 'Envía el enlace de invitación de tu liga. El nuevo mánager se une y se hace cargo del equipo disponible.'),
             link: settings,
           },
           {
-            title: 'Tell the league',
-            body: 'Post who is taking over, so nobody is surprised by a new name in the standings.',
+            title: L('Tell the league', 'Avisa a la liga'),
+            body: L('Post who is taking over, so nobody is surprised by a new name in the standings.', 'Publica quién se hace cargo, para que a nadie le sorprenda un nombre nuevo en la clasificación.'),
             link: chat,
           },
         ]
       : [
           {
-            title: 'Confirm who has gone quiet',
-            body: 'Member activity below lists every manager with no owner or no move in 14 days.',
-            link: { label: 'See member activity', href: '#ch-members', external: false },
+            title: L('Confirm who has gone quiet', 'Confirma quién se ha quedado sin actividad'),
+            body: L('Member activity below lists every manager with no owner or no move in 14 days.', 'La actividad de los miembros, más abajo, lista a cada mánager sin dueño o sin movimientos en 14 días.'),
+            link: { label: L('See member activity', 'Ver la actividad de los miembros'), href: '#ch-members', external: false },
           },
-          platformStep('changing a team’s owner', onPlatform),
+          platformStep(L('changing a team’s owner', 'cambiar el dueño de un equipo'), onPlatform),
           {
-            title: 'Re-sync so AllFantasy sees the new owner',
-            body: 'Until the next sync, AllFantasy still shows the old manager on that team.',
+            title: L('Re-sync so AllFantasy sees the new owner', 'Vuelve a sincronizar para que AllFantasy vea al nuevo dueño'),
+            body: L('Until the next sync, AllFantasy still shows the old manager on that team.', 'Hasta la próxima sincronización, AllFantasy sigue mostrando al mánager anterior en ese equipo.'),
             link: resync,
           },
           {
-            title: 'Invite them to claim the team here',
-            body: 'Your league’s invite link lets the new manager connect the team to their AllFantasy account.',
+            title: L('Invite them to claim the team here', 'Invítalo a reclamar el equipo aquí'),
+            body: L('Your league’s invite link lets the new manager connect the team to their AllFantasy account.', 'El enlace de invitación de tu liga permite al nuevo mánager conectar el equipo a su cuenta de AllFantasy.'),
             link: settings,
           },
           {
-            title: 'Tell the league',
-            body: 'Post who is taking over, so nobody is surprised by a new name in the standings.',
+            title: L('Tell the league', 'Avisa a la liga'),
+            body: L('Post who is taking over, so nobody is surprised by a new name in the standings.', 'Publica quién se hace cargo, para que a nadie le sorprenda un nombre nuevo en la clasificación.'),
             link: chat,
           },
         ],
   }
 
   const pollStep: WorkflowStep = {
-    title: 'Put it to a vote',
-    body: 'Post a poll in league chat and give it a deadline — open votes show on this page and in the calendar until they close.',
+    title: L('Put it to a vote', 'Sométela a votación'),
+    body: L('Post a poll in league chat and give it a deadline — open votes show on this page and in the calendar until they close.', 'Publica una encuesta en el chat de la liga y ponle una fecha límite: las votaciones abiertas aparecen en esta página y en el calendario hasta que cierran.'),
     link: chat,
   }
 
   const changeRule: Workflow = {
     key: 'change-rule',
-    title: 'Change a rule',
-    summary: 'Check what the league runs on today, get the league’s agreement, apply it, and record it.',
+    title: L('Change a rule', 'Cambiar una regla'),
+    summary: L('Check what the league runs on today, get the league’s agreement, apply it, and record it.', 'Comprueba cómo funciona hoy la liga, consigue el acuerdo de la liga, aplícalo y déjalo registrado.'),
     authorityNote: authority.canExecute ? null : authority.blockedReason,
     steps: [
       {
-        title: 'Check the current rule',
-        body: '“How this league runs” below shows the trade deadline, playoffs and waivers as they stand.',
-        link: { label: 'See current rules', href: '#ch-rules', external: false },
+        title: L('Check the current rule', 'Revisa la regla actual'),
+        body: L('“How this league runs” below shows the trade deadline, playoffs and waivers as they stand.', '«Cómo funciona esta liga», más abajo, muestra la fecha límite de intercambios, los playoffs y los agentes libres tal como están.'),
+        link: { label: L('See current rules', 'Ver las reglas actuales'), href: '#ch-rules', external: false },
       },
       pollStep,
       ...(authority.canExecute
         ? [
             {
-              title: 'Apply it in settings',
-              body: 'Every saved change is written to the league’s audit log and appears in the timeline on this page.',
+              title: L('Apply it in settings', 'Aplícalo en la configuración'),
+              body: L('Every saved change is written to the league’s audit log and appears in the timeline on this page.', 'Cada cambio guardado se escribe en el registro de cambios de la liga y aparece en la línea de tiempo de esta página.'),
               link: settings,
             },
           ]
         : [
-            platformStep('changing a rule', onPlatform),
+            platformStep(L('changing a rule', 'cambiar una regla'), onPlatform),
             {
-              title: 'Re-sync so the change shows here',
-              body: 'AllFantasy reads the new rule on the next sync.',
+              title: L('Re-sync so the change shows here', 'Vuelve a sincronizar para que el cambio aparezca aquí'),
+              body: L('AllFantasy reads the new rule on the next sync.', 'AllFantasy lee la nueva regla en la próxima sincronización.'),
               link: resync,
             },
           ]),
       {
-        title: 'Announce the change',
-        body: 'Say what changed and from which week, in league chat, so the ruling is on the record.',
+        title: L('Announce the change', 'Anuncia el cambio'),
+        body: L('Say what changed and from which week, in league chat, so the ruling is on the record.', 'Di en el chat de la liga qué cambió y desde qué semana, para que la decisión quede registrada.'),
         link: chat,
       },
     ],
@@ -310,38 +323,40 @@ export function buildWorkflows(league: HubLeague): Workflow[] {
 
   const scheduleDraft: Workflow = {
     key: 'schedule-draft',
-    title: 'Schedule a draft',
-    summary: 'Pick a time that works, set it, and make sure every manager has it.',
-    authorityNote: league.native ? null : `${pl} runs this league’s draft, so the date is set there.`,
+    title: L('Schedule a draft', 'Programar un draft'),
+    summary: L('Pick a time that works, set it, and make sure every manager has it.', 'Elige una hora que funcione, fíjala y asegúrate de que todos los mánagers la tengan.'),
+    authorityNote: league.native
+      ? null
+      : L(`${pl} runs this league’s draft, so the date is set there.`, `${pl} lleva el draft de esta liga, así que la fecha se fija allí.`),
     steps: [
       {
-        title: 'Find a time that works',
-        body: 'Post a poll with two or three options and a deadline a few days out.',
+        title: L('Find a time that works', 'Encuentra una hora que funcione'),
+        body: L('Post a poll with two or three options and a deadline a few days out.', 'Publica una encuesta con dos o tres opciones y una fecha límite a unos días vista.'),
         link: chat,
       },
       league.native
         ? {
-            title: 'Set the draft date',
-            body: 'Draft settings hold the date, draft type, pick timer and order. Once saved, it appears in this page’s calendar and calendar export.',
+            title: L('Set the draft date', 'Fija la fecha del draft'),
+            body: L('Draft settings hold the date, draft type, pick timer and order. Once saved, it appears in this page’s calendar and calendar export.', 'La configuración del draft guarda la fecha, el tipo de draft, el tiempo por selección y el orden. Una vez guardada, aparece en el calendario de esta página y en su exportación.'),
             link: settings,
           }
-        : platformStep('setting the draft date', onPlatform),
+        : platformStep(L('setting the draft date', 'fijar la fecha del draft'), onPlatform),
       league.native
         ? {
-            title: 'Lock in the draft order',
-            body: 'Randomize or set the order in draft settings before draft day.',
+            title: L('Lock in the draft order', 'Cierra el orden del draft'),
+            body: L('Randomize or set the order in draft settings before draft day.', 'Sortea o fija el orden en la configuración del draft antes del día del draft.'),
             link: settings,
           }
         : {
-            title: 'Follow it from Draft HQ',
-            body: 'Draft HQ picks the draft up from the platform once it starts.',
-            link: { label: 'Open Draft HQ', href: `/core/draft-hq${q(league.id)}`, external: false },
+            title: L('Follow it from Draft HQ', 'Síguelo desde Draft HQ'),
+            body: L('Draft HQ picks the draft up from the platform once it starts.', 'Draft HQ recoge el draft de la plataforma en cuanto empieza.'),
+            link: { label: L('Open Draft HQ', 'Abrir Draft HQ'), href: `/core/draft-hq${q(league.id)}`, external: false },
           },
       {
-        title: 'Announce the date',
+        title: L('Announce the date', 'Anuncia la fecha'),
         body: league.native
-          ? 'Post it in league chat. Managers can also add it to their calendars from the export on this page.'
-          : 'Post the date and time in league chat, with the time zone.',
+          ? L('Post it in league chat. Managers can also add it to their calendars from the export on this page.', 'Publícala en el chat de la liga. Los mánagers también pueden añadirla a sus calendarios desde la exportación de esta página.')
+          : L('Post the date and time in league chat, with the time zone.', 'Publica la fecha y la hora en el chat de la liga, con la zona horaria.'),
         link: chat,
       },
     ],
@@ -349,35 +364,35 @@ export function buildWorkflows(league: HubLeague): Workflow[] {
 
   const resolveDispute: Workflow = {
     key: 'resolve-dispute',
-    title: 'Resolve a dispute',
-    summary: 'Get the facts, check the rule, rule on it, and put the ruling on the record.',
+    title: L('Resolve a dispute', 'Resolver una disputa'),
+    summary: L('Get the facts, check the rule, rule on it, and put the ruling on the record.', 'Reúne los hechos, revisa la regla, decide y deja la decisión registrada.'),
     authorityNote: authority.canExecute ? null : authority.blockedReason,
     steps: [
       {
-        title: 'Get the facts',
-        body: 'The trade or move in question, its date and who was involved — the Trades screen and the timeline on this page have both.',
-        link: { label: 'Open trades', href: `/core/trades${q(league.id)}`, external: false },
+        title: L('Get the facts', 'Reúne los hechos'),
+        body: L('The trade or move in question, its date and who was involved — the Trades screen and the timeline on this page have both.', 'El intercambio o movimiento en cuestión, su fecha y quiénes participaron: la pantalla de Intercambios y la línea de tiempo de esta página tienen ambos datos.'),
+        link: { label: L('Open trades', 'Abrir intercambios'), href: `/core/trades${q(league.id)}`, external: false },
       },
       {
-        title: 'Check the rule',
-        body: 'Read what the league actually runs on before ruling, so the decision rests on the rule and not on memory.',
-        link: { label: 'See current rules', href: '#ch-rules', external: false },
+        title: L('Check the rule', 'Revisa la regla'),
+        body: L('Read what the league actually runs on before ruling, so the decision rests on the rule and not on memory.', 'Lee cómo funciona realmente la liga antes de decidir, para que la decisión se base en la regla y no en la memoria.'),
+        link: { label: L('See current rules', 'Ver las reglas actuales'), href: '#ch-rules', external: false },
       },
       authority.canExecute
         ? {
-            title: 'Review it in the league',
-            body: 'Pending trades can be approved or vetoed from the league’s Trades tab.',
-            link: { label: 'Open trade review', href: leaguePage(league.id, 'trades'), external: false },
+            title: L('Review it in the league', 'Revísalo en la liga'),
+            body: L('Pending trades can be approved or vetoed from the league’s Trades tab.', 'Los intercambios pendientes se pueden aprobar o vetar desde la pestaña Intercambios de la liga.'),
+            link: { label: L('Open trade review', 'Abrir la revisión de intercambios'), href: leaguePage(league.id, 'trades'), external: false },
           }
-        : platformStep('vetoing or reversing a move', onPlatformTrade),
+        : platformStep(L('vetoing or reversing a move', 'vetar o revertir un movimiento'), onPlatformTrade),
       {
-        title: 'If it’s a judgment call, let the league decide',
-        body: 'A poll with a deadline keeps the ruling from being yours alone.',
+        title: L('If it’s a judgment call, let the league decide', 'Si es una cuestión de criterio, deja que decida la liga'),
+        body: L('A poll with a deadline keeps the ruling from being yours alone.', 'Una encuesta con fecha límite evita que la decisión sea solo tuya.'),
         link: chat,
       },
       {
-        title: 'Post the ruling',
-        body: 'State the decision and the rule behind it in league chat — that post is the league’s record of it.',
+        title: L('Post the ruling', 'Publica la decisión'),
+        body: L('State the decision and the rule behind it in league chat — that post is the league’s record of it.', 'Explica la decisión y la regla en la que se basa en el chat de la liga: esa publicación es el registro de la liga.'),
         link: chat,
       },
     ],
@@ -407,10 +422,13 @@ export type CommunitiesInput = {
   payment: { link: string | null; provider: string | null; tracked: boolean }
   claimedTeams: number
   totalTeams: number
+  /** The reader's language; default English. */
+  language?: string
 }
 
 export function buildCommunities(input: CommunitiesInput): CommunityChannel[] {
   const { league } = input
+  const L = pickLanguage(input.language)
   const pl = platformLabel(league.platform)
   const out: CommunityChannel[] = []
 
@@ -420,11 +438,16 @@ export function buildCommunities(input: CommunitiesInput): CommunityChannel[] {
           key: 'discord',
           label: 'Discord',
           status: 'connected',
-          detail: `League chat relays to ${input.discord.channelName ? `#${input.discord.channelName}` : 'a channel'}${
-            input.discord.guildName ? ` in ${input.discord.guildName}` : ''
-          }.`,
+          detail: L(
+            `League chat relays to ${input.discord.channelName ? `#${input.discord.channelName}` : 'a channel'}${
+              input.discord.guildName ? ` in ${input.discord.guildName}` : ''
+            }.`,
+            `El chat de la liga se conecta con ${input.discord.channelName ? `#${input.discord.channelName}` : 'un canal'}${
+              input.discord.guildName ? ` en ${input.discord.guildName}` : ''
+            }.`,
+          ),
           link: input.viewerIsOwner
-            ? { label: 'Manage the bridge', href: `/core/discord${q(league.id)}`, external: false }
+            ? { label: L('Manage the bridge', 'Gestionar la conexión'), href: `/core/discord${q(league.id)}`, external: false }
             : null,
         }
       : {
@@ -432,35 +455,42 @@ export function buildCommunities(input: CommunitiesInput): CommunityChannel[] {
           label: 'Discord',
           status: input.viewerIsOwner ? 'available' : 'unavailable',
           detail: input.viewerIsOwner
-            ? 'Relay league chat to your Discord server, both ways.'
-            : 'Not connected. Only the league owner can connect Discord.',
+            ? L('Relay league chat to your Discord server, both ways.', 'Conecta el chat de la liga con tu servidor de Discord, en ambos sentidos.')
+            : L('Not connected. Only the league owner can connect Discord.', 'Sin conectar. Solo el dueño de la liga puede conectar Discord.'),
           link: input.viewerIsOwner
-            ? { label: 'Connect Discord', href: `/core/discord${q(league.id)}`, external: false }
+            ? { label: L('Connect Discord', 'Conectar Discord'), href: `/core/discord${q(league.id)}`, external: false }
             : null,
         },
   )
 
   out.push({
     key: 'announcements',
-    label: 'Email & announcements',
+    label: L('Email & announcements', 'Correo y anuncios'),
     status: input.claimedTeams > 0 ? 'available' : 'unavailable',
     detail:
       input.claimedTeams > 0
-        ? `A league-chat post reaches the ${input.claimedTeams} of ${input.totalTeams} managers with AllFantasy accounts, by in-app, email or text as each has chosen.${
-            input.viewerCanBroadcast ? ' An @everyone announcement notifies all of them at once.' : ''
-          }`
-        : 'No manager has connected an AllFantasy account yet, so there is nobody to email. Invite managers to claim their teams.',
-    link: { label: 'Open league chat', href: leaguePage(league.id, 'league_chat'), external: false },
+        ? L(
+            `A league-chat post reaches the ${input.claimedTeams} of ${input.totalTeams} managers with AllFantasy accounts, by in-app, email or text as each has chosen.`,
+            `Una publicación en el chat de la liga llega a los ${input.claimedTeams} de ${input.totalTeams} mánagers con cuenta de AllFantasy, por la app, correo o mensaje de texto, según haya elegido cada uno.`,
+          ) +
+          (input.viewerCanBroadcast
+            ? L(' An @everyone announcement notifies all of them at once.', ' Un anuncio a @everyone los avisa a todos a la vez.')
+            : '')
+        : L('No manager has connected an AllFantasy account yet, so there is nobody to email. Invite managers to claim their teams.', 'Ningún mánager ha conectado todavía una cuenta de AllFantasy, así que no hay a quién escribir. Invita a los mánagers a reclamar sus equipos.'),
+    link: { label: L('Open league chat', 'Abrir el chat de la liga'), href: leaguePage(league.id, 'league_chat'), external: false },
   })
 
   out.push({
     key: 'calendar',
-    label: 'Calendar',
+    label: L('Calendar', 'Calendario'),
     status: input.datedEventCount > 0 ? 'available' : 'unavailable',
     detail:
       input.datedEventCount > 0
-        ? `Download the league’s ${input.datedEventCount} dated ${input.datedEventCount === 1 ? 'event' : 'events'} as a calendar file for Google, Apple or Outlook.`
-        : 'Nothing on this league’s calendar has a date yet, so there is nothing to export.',
+        ? L(
+            `Download the league’s ${input.datedEventCount} dated ${input.datedEventCount === 1 ? 'event' : 'events'} as a calendar file for Google, Apple or Outlook.`,
+            `Descarga ${input.datedEventCount === 1 ? 'el evento con fecha' : `los ${input.datedEventCount} eventos con fecha`} de la liga como archivo de calendario para Google, Apple u Outlook.`,
+          )
+        : L('Nothing on this league’s calendar has a date yet, so there is nothing to export.', 'Nada en el calendario de esta liga tiene fecha todavía, así que no hay nada que exportar.'),
     link: null,
   })
 
@@ -468,28 +498,35 @@ export function buildCommunities(input: CommunitiesInput): CommunityChannel[] {
     input.payment.link
       ? {
           key: 'payments',
-          label: 'Payment link',
+          label: L('Payment link', 'Enlace de pago'),
           status: 'connected',
-          detail: `Dues are collected through ${providerName(input.payment.provider)}.`,
-          link: { label: `Open ${providerName(input.payment.provider)}`, href: input.payment.link, external: true },
+          detail: L(
+            `Dues are collected through ${providerName(input.payment.provider)}.`,
+            `Las cuotas se cobran a través de ${providerName(input.payment.provider, 'es')}.`,
+          ),
+          link: {
+            label: L(`Open ${providerName(input.payment.provider)}`, `Abrir ${providerName(input.payment.provider, 'es')}`),
+            href: input.payment.link,
+            external: true,
+          },
         }
       : {
           key: 'payments',
-          label: 'Payment link',
+          label: L('Payment link', 'Enlace de pago'),
           status: 'available',
           detail: input.payment.tracked
-            ? 'Dues are tracked, but no payment link is set. Add a LeagueSafe or FanCred link in the dues tracker.'
-            : 'Track dues and add a LeagueSafe or FanCred link in the league’s dues tracker.',
-          link: { label: 'Open dues tracker', href: leaguePage(league.id, 'settings'), external: false },
+            ? L('Dues are tracked, but no payment link is set. Add a LeagueSafe or FanCred link in the dues tracker.', 'Las cuotas se registran, pero no hay enlace de pago. Añade un enlace de LeagueSafe o FanCred en el control de cuotas.')
+            : L('Track dues and add a LeagueSafe or FanCred link in the league’s dues tracker.', 'Registra las cuotas y añade un enlace de LeagueSafe o FanCred en el control de cuotas de la liga.'),
+          link: { label: L('Open dues tracker', 'Abrir el control de cuotas'), href: leaguePage(league.id, 'settings'), external: false },
         },
   )
 
   if (league.native) {
     out.push({
       key: 'platform',
-      label: 'Source platform',
+      label: L('Source platform', 'Plataforma de origen'),
       status: 'connected',
-      detail: 'This league runs on AllFantasy — there is no other platform to keep in step.',
+      detail: L('This league runs on AllFantasy — there is no other platform to keep in step.', 'Esta liga funciona en AllFantasy: no hay otra plataforma con la que sincronizarse.'),
       link: null,
     })
   } else {
@@ -499,8 +536,14 @@ export function buildCommunities(input: CommunitiesInput): CommunityChannel[] {
       label: pl,
       status: link ? 'connected' : 'available',
       detail: link
-        ? `Rules, rosters and rulings are applied on ${pl}. AllFantasy re-reads the league on every sync.`
-        : `Rules, rosters and rulings are applied on ${pl}. A direct link to this league on ${pl} isn’t verified yet.`,
+        ? L(
+            `Rules, rosters and rulings are applied on ${pl}. AllFantasy re-reads the league on every sync.`,
+            `Las reglas, las plantillas y las decisiones se aplican en ${pl}. AllFantasy vuelve a leer la liga en cada sincronización.`,
+          )
+        : L(
+            `Rules, rosters and rulings are applied on ${pl}. A direct link to this league on ${pl} isn’t verified yet.`,
+            `Las reglas, las plantillas y las decisiones se aplican en ${pl}. Aún no está verificado un enlace directo a esta liga en ${pl}.`,
+          ),
       link,
     })
   }
@@ -508,9 +551,10 @@ export function buildCommunities(input: CommunitiesInput): CommunityChannel[] {
   return out
 }
 
-function providerName(provider: string | null): string {
+function providerName(provider: string | null, language = 'en'): string {
+  const L = pickLanguage(language)
   const p = (provider ?? '').toLowerCase()
   if (p === 'leaguesafe') return 'LeagueSafe'
   if (p === 'fancred') return 'FanCred'
-  return 'the league’s payment link'
+  return L('the league’s payment link', 'el enlace de pago de la liga')
 }
