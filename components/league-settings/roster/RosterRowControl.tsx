@@ -1,4 +1,5 @@
 import { Minus, Plus } from 'lucide-react'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { SlotDef } from './types'
 
 const CATEGORY_DOT_CLASS: Record<string, string> = {
@@ -39,12 +40,15 @@ export function RosterRowControl({
   disabled?: boolean
   onAdjust: (key: string, delta: number) => void
 }) {
+  const { t } = useLanguage()
+  const decrease = t('lsEd.ro.decrease').replace('{{label}}', def.label)
+  const increase = t('lsEd.ro.increase').replace('{{label}}', def.label)
   return (
     <div className="flex items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-white/[0.03]">
       <button
         type="button"
-        title={`Decrease ${def.label}`}
-        aria-label={`Decrease ${def.label}`}
+        title={decrease}
+        aria-label={decrease}
         disabled={disabled || count <= def.minCount}
         onClick={() => onAdjust(def.key, -1)}
         className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 transition hover:bg-white/10 disabled:cursor-default disabled:opacity-30"
@@ -56,8 +60,8 @@ export function RosterRowControl({
 
       <button
         type="button"
-        title={`Increase ${def.label}`}
-        aria-label={`Increase ${def.label}`}
+        title={increase}
+        aria-label={increase}
         disabled={disabled || count >= def.maxCount}
         onClick={() => onAdjust(def.key, 1)}
         className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white/60 transition hover:bg-white/10 disabled:cursor-default disabled:opacity-30"

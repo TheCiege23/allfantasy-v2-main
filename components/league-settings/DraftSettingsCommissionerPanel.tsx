@@ -60,30 +60,10 @@ interface DraftSettingsResponse {
 // Timer presets
 // ---------------------------------------------------------------------------
 
-const TIMER_OPTIONS = [
-  { value: 30, label: '30 Seconds' },
-  { value: 60, label: '1 Minute' },
-  { value: 90, label: '90 Seconds' },
-  { value: 120, label: '2 Minutes' },
-  { value: 300, label: '5 Minutes' },
-  { value: 600, label: '10 Minutes' },
-  { value: 3600, label: '1 Hour' },
-  { value: 14400, label: '4 Hours' },
-  { value: 28800, label: '8 Hours' },
-  { value: 43200, label: '12 Hours' },
-  { value: 86400, label: '24 Hours' },
-]
+/** Labels are dictionary keys (`lsEd.dr.timer.s<seconds>`), resolved at render. */
+const TIMER_OPTIONS = [30, 60, 90, 120, 300, 600, 3600, 14400, 28800, 43200, 86400].map((value) => ({ value, labelKey: `lsEd.dr.timer.s${value}` }))
 
 const ROUND_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 18, 20, 25, 30]
-
-function timerLabel(seconds: number | null | undefined): string {
-  if (!seconds) return 'None'
-  const opt = TIMER_OPTIONS.find((o) => o.value === seconds)
-  if (opt) return opt.label
-  if (seconds < 60) return `${seconds} Seconds`
-  if (seconds < 3600) return `${Math.round(seconds / 60)} Minutes`
-  return `${Math.round(seconds / 3600)} Hours`
-}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -157,7 +137,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
         setTeams(data.teams ?? [])
         setDraftStatus(data.draftStatus ?? 'pre_draft')
       })
-      .catch(() => { if (active) setError('Failed to load draft settings') })
+      .catch(() => { if (active) setError(t('lsEd.dr.loadFailed')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [leagueId])
@@ -199,11 +179,11 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
         }
       )
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Save failed'); return }
+      if (!res.ok) { setError(data.error ?? t('lsEd.saveFailed')); return }
       setSuccess(true); setTimeout(() => setSuccess(false), 2000)
       // Reload with new mode
       await loadRookieOrder(rookieMode)
-    } catch { setError('Request failed') }
+    } catch { setError(t('lsEd.requestFailed')) }
     finally { setRookieSaving(false) }
   }, [leagueId, rookieMode, rookieEnabled, loadRookieOrder])
 
@@ -218,9 +198,9 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ draftDate: dateTime.toISOString() }),
       })
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error ?? 'Failed to save'); return }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error ?? t('lsEd.failedToSave')); return }
       setSuccess(true); setTimeout(() => setSuccess(false), 2000)
-    } catch { setError('Request failed') }
+    } catch { setError(t('lsEd.requestFailed')) }
     finally { setSaving(false) }
   }, [leagueId, draftDate, draftTime])
 
@@ -245,9 +225,9 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error ?? 'Failed to save'); return }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.error ?? t('lsEd.failedToSave')); return }
       setSuccess(true); setTimeout(() => setSuccess(false), 2000)
-    } catch { setError('Request failed') }
+    } catch { setError(t('lsEd.requestFailed')) }
     finally { setSaving(false) }
   }, [leagueId, draftType, rounds, timerSeconds, cpuAutoPickEnabled, autostartEnabled, slowDraftPauseEnabled, slowDraftPauseFrom, slowDraftPauseTo])
 
@@ -263,7 +243,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
       })
       const d = await res.json()
       if (!res.ok) {
-        setError(d.error ?? 'Failed to randomize draft order')
+        setError(d.error ?? t('lsEd.dr.randomizeFailed'))
         return
       }
       if (d.teams) {
@@ -271,10 +251,10 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
         setSuccess(true)
         setTimeout(() => setSuccess(false), 2000)
       } else {
-        setError('No teams found to randomize')
+        setError(t('lsEd.dr.noTeamsRandomize'))
       }
     } catch (e) {
-      setError('Request failed')
+      setError(t('lsEd.requestFailed'))
     }
     finally { setSaving(false) }
   }, [leagueId])
@@ -290,7 +270,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
       })
       const d = await res.json()
       if (!res.ok) {
-        setError(d.error ?? 'Failed to fill empty slots')
+        setError(d.error ?? t('lsEd.dr.fillFailed'))
         return
       }
       if (d.ok) {
@@ -305,15 +285,15 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
         setSuccess(true)
         setTimeout(() => setSuccess(false), 2000)
       } else {
-        setError(d.message ?? 'No action taken')
+        setError(d.message ?? t('lsEd.dr.noAction'))
       }
     } catch (e) {
-      setError('Request failed')
+      setError(t('lsEd.requestFailed'))
     }
     finally { setSaving(false) }
   }, [leagueId])
 
-  if (loading) return <div className="py-8 text-center text-sm text-white/50">Loading draft settings...</div>
+  if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('lsEd.dr.loading')}</div>
 
   return (
     <div className="space-y-6">
@@ -321,7 +301,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
       <div>
         <h3 className="text-base font-semibold text-white">{t('draft.title')}</h3>
         <p className="mt-0.5 text-xs text-white/50">
-          Set draft time, time per pick, draft order, and set keepers/dynasty
+          {t('lsEd.dr.subtitle')}
         </p>
       </div>
 
@@ -354,7 +334,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
             </button>
           )}
         </div>
-        <p className="text-[11px] text-white/30">This is relative to your local timezone</p>
+        <p className="text-[11px] text-white/30">{t('lsEd.dr.localTz')}</p>
       </div>
 
       {/* ===== AUTOSTART DRAFT ===== */}
@@ -372,9 +352,9 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
         <SelectRow
           value={draftType === 'snake' ? 'snake' : draftType === 'auction' ? 'auction' : 'linear'}
           options={[
-            { value: 'snake', label: 'Snake' },
-            { value: 'linear', label: 'Linear' },
-            { value: 'auction', label: 'Auction' },
+            { value: 'snake', label: t('lsEd.dr.snake') },
+            { value: 'linear', label: t('lsEd.dr.linear') },
+            { value: 'auction', label: t('lsEd.dr.auction') },
           ]}
           onChange={setDraftType}
           disabled={!isCommissioner}
@@ -386,7 +366,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
         <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">{t('draft.timePerPick')}</p>
         <SelectRow
           value={String(timerSeconds)}
-          options={TIMER_OPTIONS.map((o) => ({ value: String(o.value), label: o.label }))}
+          options={TIMER_OPTIONS.map((o) => ({ value: String(o.value), label: t(o.labelKey) }))}
           onChange={(v) => setTimerSeconds(parseInt(v, 10))}
           disabled={!isCommissioner}
         />
@@ -403,14 +383,14 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
         />
         {slowDraftPauseEnabled && (
           <div className="ml-0 space-y-1">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Pause From</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">{t('lsEd.dr.pauseFrom')}</p>
             <div className="flex items-center gap-2">
               <input type="time" value={slowDraftPauseFrom}
                 onChange={(e) => setSlowDraftPauseFrom(e.target.value)}
                 disabled={!isCommissioner}
                 className="rounded-lg border border-white/15 bg-[#0d1526] px-3 py-2 text-sm text-white disabled:opacity-50"
               />
-              <span className="text-xs text-white/40">to</span>
+              <span className="text-xs text-white/40">{t('lsEd.dr.to')}</span>
               <input type="time" value={slowDraftPauseTo}
                 onChange={(e) => setSlowDraftPauseTo(e.target.value)}
                 disabled={!isCommissioner}
@@ -435,7 +415,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
         <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">{t('draft.numRounds')}</p>
         <SelectRow
           value={String(rounds)}
-          options={ROUND_OPTIONS.map((r) => ({ value: String(r), label: `${r} Rounds` }))}
+          options={ROUND_OPTIONS.map((r) => ({ value: String(r), label: t('lsEd.dr.roundsN').replace('{{n}}', String(r)) }))}
           onChange={(v) => setRounds(parseInt(v, 10))}
           disabled={!isCommissioner}
         />
@@ -449,9 +429,9 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
             <div className="flex items-center gap-2">
               <button type="button" onClick={fillEmptySlotsWithAI} disabled={saving}
                 className="flex items-center gap-1.5 rounded-lg bg-purple-600/80 px-4 py-2 text-xs font-semibold text-white hover:bg-purple-600 disabled:opacity-50 transition"
-                title="Fill all empty draft slots with AI opponents">
+                title={t('lsEd.dr.fillAiTitle')}>
                 <Cpu className="h-3.5 w-3.5" />
-                Fill with AI
+                {t('lsEd.dr.fillAi')}
               </button>
               <button type="button" onClick={randomizeOrder} disabled={saving}
                 className="flex items-center gap-1.5 rounded-lg bg-cyan-600/80 px-4 py-2 text-xs font-semibold text-white hover:bg-cyan-600 disabled:opacity-50 transition">
@@ -477,7 +457,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
                 )}
                 <div className="flex-1 min-w-0">
                   {slot.isEmpty ? (
-                    <span className="text-[13px] text-white/30">Empty</span>
+                    <span className="text-[13px] text-white/30">{t('lsEd.dr.empty')}</span>
                   ) : (
                     <span className="text-[13px] font-medium text-white">
                       {slot.teamName}
@@ -486,13 +466,13 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
                   )}
                 </div>
                 {isCommissioner && !slot.isEmpty && (
-                  <span className="text-[11px] text-white/30 hover:text-cyan-400 cursor-pointer">(Click to re-assign)</span>
+                  <span className="text-[11px] text-white/30 hover:text-cyan-400 cursor-pointer">{t('lsEd.dr.reassign')}</span>
                 )}
               </div>
             ))
           ) : (
             <div className="py-4 text-center text-[12px] text-white/30">
-              No teams in draft order yet. Teams will appear once they join the league.
+              {t('lsEd.dr.noTeams')}
             </div>
           )}
         </div>
@@ -500,14 +480,14 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
 
       {/* ===== SET KEEPERS / DYNASTY ===== */}
       <div className="space-y-2 border-t border-white/10 pt-4">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">Set Keepers/Dynasty Players</p>
+        <p className="text-[11px] font-bold uppercase tracking-wider text-white/50">{t('lsEd.dr.keepers')}</p>
         <p className="text-xs text-white/40">
-          Click below to go to draft lobby and simply click on the draftboard to set players
+          {t('lsEd.dr.keepersHint')}
         </p>
         {isCommissioner && (
           <button type="button"
             className="rounded-lg bg-cyan-600/80 px-4 py-2.5 text-sm font-semibold text-white hover:bg-cyan-600 transition">
-            Set Players
+            {t('lsEd.dr.setPlayers')}
           </button>
         )}
       </div>
@@ -521,14 +501,14 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
                 {t('draft.rookieDraftOrder')}
               </p>
               <p className="text-[11px] text-white/30">
-                Auto-calculated for {rookieNextSeason || 'next'} season
+                {t('lsEd.dr.autoCalc').replace('{{season}}', rookieNextSeason ? String(rookieNextSeason) : t('lsEd.dr.next'))}
               </p>
             </div>
           </div>
 
           {/* Mode selector */}
           <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Draft Order Mode</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">{t('lsEd.dr.orderMode')}</p>
 
             {/* Option 1: Worst to First */}
             <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
@@ -551,8 +531,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
                   <span className="text-[13px] font-semibold text-white/80">{t('draft.worstToFirst')}</span>
                 </div>
                 <p className="mt-1 text-[11px] leading-relaxed text-white/40">
-                  Non-playoff teams ordered by worst record (fewest wins). Playoff teams by seeding.
-                  Champion picks last, runner-up picks 2nd to last.
+                  {t('lsEd.dr.w2fDesc')}
                 </p>
               </div>
             </label>
@@ -578,8 +557,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
                   <span className="text-[13px] font-semibold text-white/80">{t('draft.reverseMaxPF')}</span>
                 </div>
                 <p className="mt-1 text-[11px] leading-relaxed text-white/40">
-                  Non-playoff teams ordered by lowest Max Points For (last week of regular season).
-                  Playoff teams by seeding. Champion picks last, runner-up picks 2nd to last.
+                  {t('lsEd.dr.rmpfDesc')}
                 </p>
               </div>
             </label>
@@ -609,7 +587,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-white/30">
-                  {rookieNextSeason} Rookie Draft Order Preview
+                  {t('lsEd.dr.preview').replace('{{season}}', String(rookieNextSeason))}
                 </p>
                 <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] font-bold uppercase text-white/30">
                   {rookieMode === 'worst_to_first' ? 'W2F' : 'RMPF'}
@@ -618,7 +596,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-2">
                 {/* Non-playoff header */}
                 {rookieSlots.some(s => !s.isPlayoffTeam) && (
-                  <p className="px-2 py-1 text-[11px] font-bold uppercase tracking-widest text-white/20">Non-Playoff</p>
+                  <p className="px-2 py-1 text-[11px] font-bold uppercase tracking-widest text-white/20">{t('lsEd.dr.nonPlayoff')}</p>
                 )}
                 {rookieSlots.filter(s => !s.isPlayoffTeam).map((slot) => (
                   <div key={slot.slot} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/[0.03]">
@@ -636,7 +614,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
                 ))}
                 {/* Playoff header */}
                 {rookieSlots.some(s => s.isPlayoffTeam) && (
-                  <p className="mt-1 px-2 py-1 text-[11px] font-bold uppercase tracking-widest text-amber-400/40">Playoff Teams</p>
+                  <p className="mt-1 px-2 py-1 text-[11px] font-bold uppercase tracking-widest text-amber-400/40">{t('lsEd.dr.playoffTeams')}</p>
                 )}
                 {rookieSlots.filter(s => s.isPlayoffTeam).map((slot) => (
                   <div key={slot.slot} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-white/[0.03] ${
@@ -655,7 +633,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
                       slot.playoffFinish === 'Champion' ? 'bg-amber-500/20 text-amber-300'
                         : slot.playoffFinish === 'Runner-Up' ? 'bg-slate-500/20 text-slate-300'
                         : 'bg-white/5 text-white/30'
-                    }`}>{slot.playoffFinish ?? slot.orderLabel}</span>
+                    }`}>{slot.playoffFinish === 'Champion' ? t('lsEd.dr.champion') : slot.playoffFinish === 'Runner-Up' ? t('lsEd.dr.runnerUp') : (slot.playoffFinish ?? slot.orderLabel)}</span>
                   </div>
                 ))}
               </div>
@@ -679,7 +657,7 @@ export function DraftSettingsCommissionerPanel({ leagueId }: Props) {
       {isCommissioner && (
         <div className="space-y-2 border-t border-white/10 pt-3">
           {error && <div className="rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 text-xs text-red-300">{error}</div>}
-          {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">Draft settings saved.</div>}
+          {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">{t('lsEd.dr.saved')}</div>}
           <button type="button" disabled={saving} onClick={saveSettings}
             className="w-full rounded-lg bg-cyan-600/80 px-4 py-2.5 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-50 transition">
             {saving ? t('scoring.saving') : t('draft.saveDraftSettings')}

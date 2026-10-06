@@ -1,18 +1,11 @@
 import { ReadOnlyRosterRow } from './ReadOnlyRosterRow'
 import { RosterRowControl } from './RosterRowControl'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { SlotDef } from './types'
 
 const CATEGORY_ORDER = ['offense', 'flex', 'kicker', 'dst', 'idp', 'bench', 'reserve', 'college']
-const CATEGORY_LABELS: Record<string, string> = {
-  offense: 'Offense',
-  flex: 'Flex',
-  kicker: 'Kicker',
-  dst: 'Defense / Special Teams',
-  idp: 'IDP',
-  bench: 'Bench',
-  reserve: 'Reserve',
-  college: 'College (C2C)',
-}
+/** Category headings are dictionary keys (`lsEd.ro.cat.<category>`); unknown categories print raw. */
+const CATEGORY_KEYS = new Set(CATEGORY_ORDER)
 
 export function RosterSectionRenderer({
   title,
@@ -29,6 +22,7 @@ export function RosterSectionRenderer({
   slotKeyFilter?: Set<string>
   onAdjust: (key: string, delta: number) => void
 }) {
+  const { t } = useLanguage()
   const grouped = new Map<string, SlotDef[]>()
   for (const def of slotDefs) {
     if (slotKeyFilter && !slotKeyFilter.has(def.key)) continue
@@ -45,7 +39,7 @@ export function RosterSectionRenderer({
     return (
       <div key={cat}>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-white/30">
-          {CATEGORY_LABELS[cat] ?? cat}
+          {CATEGORY_KEYS.has(cat) ? t(`lsEd.ro.cat.${cat}`) : cat}
         </p>
         <div className="space-y-1">
           {slots.map((def) => {
