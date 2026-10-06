@@ -130,7 +130,11 @@ Each needs a *production* read, and the two kinds differ:
   (`RECIPES_SEND_TOGGLE`, `lib/core-app/commissioner/recipes.ts:50`), so its production value is a
   database read. Default off; commissioners can save recipes and nothing sends.
 
-- [ ] **Founding coupon.**
+- [x] **Founding coupon.** ✅ **Done 2026-10-04.** `FOUNDING_MEMBER_2026` in LIVE Stripe (`acct_1ReIO1Ht5tjM1ovR`,
+  the same account production's key uses): **20% off, repeating 12 months**, no redemption cap, no expiry.
+  `STRIPE_FOUNDING_COUPON_ID=FOUNDING_MEMBER_2026` and `FOUNDING_OFFER_LABEL="20% off your first year"`
+  set on `allfantasy-v2-main`; `/pricing` signed in shows "Founding member: 20% off your first year,
+  applied automatically at checkout." Because it is not `forever`, the email drops "doesn't expire".
   - Create it in the LIVE Stripe account.
   - Set `STRIPE_FOUNDING_COUPON_ID` on `allfantasy-v2-main`, plus `FOUNDING_OFFER_LABEL` if you want
     the discount named in copy.
@@ -138,7 +142,11 @@ Each needs a *production* read, and the two kinds differ:
     (`foundingMember.ts:15-17,27-30`). This is a Railway variable write, so it redeploys.
   - **Read 2026-10-04 (presence only, no value printed): NOT SET**, and no `FOUNDING_OFFER_LABEL`. Still the
     blocker for the email below.
-- [ ] **Tell existing users.** Decided 2026-09-24: an offer by **Oct 8**.
+- [x] **Tell existing users.** Decided 2026-09-24: an offer by **Oct 8**. ✅ **SENT 2026-10-06 04:07 UTC:
+  83 founding members** (82 en, 1 es) via `scripts/send-founding-offer.ts` — a test to the owner on
+  2026-10-04 first (landed in the Inbox), then 82 with 0 failures; Resend reported delivered, no
+  bounces. The claim ledger records all 83, so a re-run sends nothing. Skipped at send time: 45
+  unverified, 5 undeliverable domains, 5 opted out.
   - **Sender built 2026-10-04: `scripts/send-founding-offer.ts`.** Dry run by default; `--apply` refuses
     unless the key is LIVE, the coupon is set and valid in live Stripe, the paywall has not started and
     links point at production (`foundingSendBlockers`, unit-tested). Once per address (claim ledger),
