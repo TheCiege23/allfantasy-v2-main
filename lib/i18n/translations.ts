@@ -652,6 +652,11 @@ export const translations: Record<string, Record<string, string>> = {
     "lsScore.err.save": "Save failed",
     "lsScore.err.request": "Request failed",
     "lsScore.gateLabel": "Advanced {{sport}} Scoring Customization",
+    // Scoring editors: basketball.
+    "lsScore.subtitle.nba": "Set custom scoring values for your NBA league. Changes apply league-wide across all matchups, standings, and projections.",
+    "lsScore.subtitle.ncaab": "Set custom scoring values for your college basketball league. Changes apply league-wide across all matchups, standings, and projections.",
+    "lsScore.premium.advancedMetrics": "Advanced scoring metrics require a premium subscription.",
+    "lsScore.savedLeagueWide": "{{sport}} scoring settings saved successfully. Changes apply league-wide.",
     "lsModal.status.preDraft": "pre draft",
     "lsModal.status.drafting": "drafting",
     "lsModal.status.inSeason": "in season",
