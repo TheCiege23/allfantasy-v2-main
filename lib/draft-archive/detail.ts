@@ -12,7 +12,7 @@ import { draftDayReport, resultsReport, type DraftAnalysisReport, type ResultsRe
 import { draftReferences } from './references';
 import type { DraftReference } from './referenceModel';
 import { readImportedResults } from './importedResults';
-import { buildReplay, frozenExistingRoster, decisionComponents, type ReplayData, type DecisionComponents } from './phase4Model';
+import { buildReplay, frozenExistingRoster, decisionComponents, auctionAwardBudget, type ReplayData, type DecisionComponents } from './phase4Model';
 import { calibratedScores, type CalibrationModel } from './calibrationModel';
 import { readCalibration, loadAssetLineage, dynastyMarks, type LineageReport, type DynastyMark } from './phase4Loader';
 import { playerContributions, type PlayerContribution } from './resultsDecisionModel';
@@ -161,7 +161,8 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     for (const pick of picks) {
         const row = rowsById.get(pick.id);
         const timing = object(object(object(row?.pickMetadata).archive).timing);
-        pick.auctionEvidence = object(object(row?.pickMetadata).archive).auctionEvidence ?? null;
+        const budget = auctionAwardBudget({...pick,auctionEvidence:object(object(row?.pickMetadata).archive).auctionEvidence});
+        pick.auctionEvidence = budget ? {version:'auction-award-v1',rosterId:pick.rosterId,...budget} : null;
         pick.elapsedMs = number(timing.elapsedMs);
         pick.pausedMs = number(timing.pausedMs);
         pick.onClockAt = iso(timing.openedAt);
