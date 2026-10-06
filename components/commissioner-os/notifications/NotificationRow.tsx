@@ -8,9 +8,9 @@ import {
   eventSeverityText,
   relatedLinkText,
   relativeTimeText,
-  sectionNameText,
   toolsText,
 } from '@/lib/commissioner-os/i18n/toolsCopy'
+import { moduleLabelText } from '@/lib/commissioner-os/i18n/shellCopy'
 
 export interface NotificationRowProps {
   notification: CommissionerNotificationPayload
@@ -47,7 +47,7 @@ export function NotificationRow({ notification, read, onMarkRead, onNavigate }: 
           </span>
           <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--muted2)' }}>
             <Icon size={12} aria-hidden />
-            {sectionNameText(notification.sourceModuleId, getModuleLabel(notification.sourceModuleId), language)}
+            {moduleLabelText(notification.sourceModuleId, getModuleLabel(notification.sourceModuleId), language)}
           </span>
           <span className="text-xs" style={{ color: 'var(--muted2)' }}>
             {relativeTimeText(formatRelativeTime(notification.createdAt), language)}

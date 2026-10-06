@@ -382,6 +382,8 @@ describe('server-built sentences are held to their loaders', () => {
     expect(src('lib/commissioner-ui/notifications/decision-os-client/live.ts')).toContain(
       "unreadCount === 0 ? 'No unread notifications' : `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`",
     )
+    // Without the catalogs' name translators a name stays as written; MissionControlView passes them
+    // (__tests__/cos-spanish-closing.test.tsx renders that).
     expect(summaryHeadlineText('Waiver batch processing needs attention', 'es')).toBe('Waiver batch processing: necesita atención')
     expect(summaryHeadlineText('Waiver batch processing and 2 others need attention', 'es')).toBe(
       'Waiver batch processing y 2 más necesitan atención',

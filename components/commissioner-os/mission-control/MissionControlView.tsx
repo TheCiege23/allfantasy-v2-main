@@ -20,7 +20,6 @@ import type { NotificationsSummary } from '@/lib/commissioner-ui/notifications/d
 import { allClearCopy } from '@/lib/commissioner-ui/allClear'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { ageText } from '@/lib/core-app/shellCopy'
-import { commissionerOsText } from '@/lib/core-app/commissionerOsText'
 import {
   activityChartText,
   allClearText,
@@ -32,7 +31,10 @@ import {
   missionControlText,
   shellText,
   summaryHeadlineText,
+  type HeadlineNames,
 } from '@/lib/commissioner-os/i18n/shellCopy'
+import { automationText, composedEventText } from '@/lib/commissioner-os/i18n/toolsCopy'
+import { reportTemplateText } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
 export interface MissionControlViewProps {
   leagueHealth: LeagueHealthSummary
@@ -82,6 +84,9 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
   const { language } = useOptionalLanguage()
   const t = (english: string) => missionControlText(english, language)
   const section = (english: string) => commissionerSectionName(english, language)
+  // Our automation and report-template names inside the module headlines, through the catalogs' own translators.
+  const names: HeadlineNames = { automation: (name) => automationText(name, language), report: (name) => reportTemplateText(name, language) }
+  const headline = (english: string) => summaryHeadlineText(english, language, names)
   const trendPoints = activityTrend?.points ?? []
   const lookbackDays = activityTrend?.lookbackDays ?? 90
   const allClearEnglish = allClearCopy({
@@ -210,8 +215,9 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
                 {recommendations.map((rec) => (
                   <RecommendationCard
                     key={rec.id}
-                    title={commissionerOsText(rec.title, language)}
-                    rationale={commissionerOsText(rec.rationale, language)}
+                    // English as the loader wrote it — the card translates its own fields (cosLoaderText).
+                    title={rec.title}
+                    rationale={rec.rationale}
                     severity={rec.severity}
                     confidence={rec.confidence}
                     expectedImpact={rec.expectedImpact}
@@ -224,8 +230,13 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
 
           <TimelineCard
             title={t('Recent Activity')}
-            // The summary is the activity stream's own; the age is page.tsx's `formatRelativeTime`.
-            entries={recentActivity.map((entry) => ({ ...entry, timestamp: ageText(entry.timestamp, language) }))}
+            // The summary is the activity stream's own sentence, through the Activity page's own translator;
+            // the age is page.tsx's `formatRelativeTime`.
+            entries={recentActivity.map((entry) => ({
+              ...entry,
+              label: composedEventText(entry.label, language),
+              timestamp: ageText(entry.timestamp, language),
+            }))}
             emptyText={t('No recent activity to show.')}
           />
         </div>
@@ -252,18 +263,18 @@ export function MissionControlView({ leagueHealth, recommendations, managerHighl
           )}
 
           <SummaryCard title={section('Workspace')} status="standard" summary={t('No open tasks in this preview.')} icon={Briefcase} />
-          <StatusCard label={t('Automation Status')} statusText={summaryHeadlineText(automationSummary.headline, language)} icon={Zap} />
+          <StatusCard label={t('Automation Status')} statusText={headline(automationSummary.headline)} icon={Zap} />
           <SummaryCard
             title={section('League Analytics')}
             status="standard"
-            summary={summaryHeadlineText(analyticsSummary.headline, language)}
+            summary={headline(analyticsSummary.headline)}
             icon={BarChart3}
           />
-          <SummaryCard title={section('Reports')} status="standard" summary={summaryHeadlineText(reportsSummary.headline, language)} icon={FileText} />
+          <SummaryCard title={section('Reports')} status="standard" summary={headline(reportsSummary.headline)} icon={FileText} />
           <SummaryCard
             title={shellText('Notifications', language)}
             status={notificationsSummary.criticalCount > 0 ? 'critical' : 'standard'}
-            summary={summaryHeadlineText(notificationsSummary.headline, language)}
+            summary={headline(notificationsSummary.headline)}
             icon={Bell}
           />
           <StatusCard label={t('System Status')} statusText={t('Preview mode — not connected to live data')} />

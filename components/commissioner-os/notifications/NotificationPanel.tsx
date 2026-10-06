@@ -13,7 +13,8 @@ import { getModuleLabel, NOTIFICATION_SOURCE_ICONS } from './notificationLabels'
 import type { CommissionerNotificationPayload } from '@/lib/commissioner-ui/contracts'
 import type { CommissionerModuleId } from '@/lib/commissioner-ui/navigation/moduleNav'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { sectionNameText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
+import { toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
+import { moduleLabelText } from '@/lib/commissioner-os/i18n/shellCopy'
 
 export interface NotificationPanelProps {
   notifications: CommissionerNotificationPayload[]
@@ -48,7 +49,7 @@ export function NotificationPanel({ notifications, errorMessage }: NotificationP
   const open = openServiceId === 'notifications'
   const { language } = useOptionalLanguage()
   const t = (english: string) => toolsText(english, language)
-  const moduleLabel = (moduleId: CommissionerModuleId) => sectionNameText(moduleId, getModuleLabel(moduleId), language)
+  const moduleLabel = (moduleId: CommissionerModuleId) => moduleLabelText(moduleId, getModuleLabel(moduleId), language)
 
   const sourceModuleIds = useMemo(() => {
     const ids = new Set<CommissionerModuleId>(notifications.map((n) => n.sourceModuleId))

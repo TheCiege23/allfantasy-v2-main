@@ -17,8 +17,9 @@ import { commissionerOsText } from '@/lib/core-app/commissionerOsText'
  * previews (automations, analytics, reports, notifications) write English, and their English stays
  * byte for byte. Each pattern below is held to its loader's source by
  * __tests__/cos-shell-spanish.test.tsx, so a reworded sentence fails there instead of quietly going
- * English. Anything not recognised passes through unchanged — names (leagues, managers, automations,
- * report templates) are never touched, and neither is demo-fixture prose.
+ * English. Anything not recognised passes through unchanged — league and manager names are never
+ * touched, and neither is demo-fixture prose. Our own automation and report-template names are
+ * catalog copy, and go through the catalogs' translators (see `HeadlineNames`).
  *
  * PURE and client-safe.
  */
@@ -230,12 +231,23 @@ export function highlightsThisWeekText(count: number, language: string | null | 
  * has to agree with it.
  */
 const DEADLINE_WHAT_ES: Record<string, string> = {
-  'Trade deadline': 'Fecha límite de intercambios',
+  'Trade deadline': coreUiCopy('Trade deadline', 'es'),
   'Playoffs start': 'Inicio de los playoffs',
   Draft: 'Draft',
   'Next waiver processing': 'Próximo procesamiento de agentes libres',
 }
 const WHAT = '(Trade deadline|Playoffs start|Draft|Next waiver processing)'
+
+/**
+ * A league-calendar event's name on its own ("Playoffs start") — the settings page labels the same
+ * events. ⚠ analyticsCopy's `DEADLINE_LABEL_ES` names these events too and reads "Next waiver
+ * processing" as "…de reclamos" where this reads "…de agentes libres"; left as shipped, pending a
+ * decision on which waiver word Commissioner OS uses.
+ */
+export function leagueEventNameText(english: string, language: string | null | undefined): string {
+  if (!isEs(language)) return english
+  return DEADLINE_WHAT_ES[english] ?? english
+}
 
 const DEADLINE_RULES: [RegExp, (what: string, value: string) => string][] = [
   [new RegExp(`^${WHAT} is this week$`), (w) => `${w}: esta semana`],
@@ -288,43 +300,58 @@ export function calloutText(callout: string, language: string | null | undefined
  * The module summaries Mission Control previews, each written by that module's own loader
  * (lib/commissioner-ui/{automations,analytics,reports,notifications}/decision-os-client). Those
  * loaders are shared with the module pages, so they are not edited here; their sentences are
- * translated whole at render. Automation and report-template names inside them stay as written.
+ * translated whole at render.
+ *
+ * The automation and report-template names inside them are translated by the modules that own those
+ * catalogs — `automationText` (toolsCopy) and `reportTemplateText` (analyticsCopy) — passed in as
+ * `HeadlineNames` by the caller (MissionControlView). They are passed rather than imported because
+ * both modules import THIS one for the section names: importing them back would make a cycle, and
+ * analyticsCopy calls `commissionerSectionName` while it loads, so whichever side loaded first would
+ * read a table that does not exist yet. Without them a name stays as written.
  */
-const HEADLINE_RULES: [RegExp, (...g: string[]) => string][] = [
+export interface HeadlineNames {
+  automation?: (name: string) => string
+  report?: (name: string) => string
+}
+
+const asWritten = (name: string) => name
+
+const HEADLINE_RULES: [RegExp, (names: Required<HeadlineNames>, ...g: string[]) => string][] = [
   // analytics (live) — the caveat is the same one the health driver carries
   [
     /^League engagement score (\d+) — (\d+) of (\d+) managers active(?: \(no league activity recorded in (\d+) days\))?$/,
-    (score, active, total, days) =>
+    (_, score, active, total, days) =>
       `Puntuación de participación de la liga ${score}: ${active} de ${n(total, 'mánager activo', 'mánagers activos')}` +
       (days ? ` (sin actividad registrada en la liga en ${n(days, 'día', 'días')})` : ''),
   ],
   // analytics (stub)
-  [/^(\d+) KPIs? tracked$/, (k) => `${n(k, 'KPI monitorizado', 'KPI monitorizados')}`],
+  [/^(\d+) KPIs? tracked$/, (_, k) => `${n(k, 'KPI monitorizado', 'KPI monitorizados')}`],
   // automations (live)
-  [/^(\d+) automations? running normally$/, (k) => `${n(k, 'automatización funciona', 'automatizaciones funcionan')} con normalidad`],
-  [/^(.+) and (\d+) others? need attention$/s, (name, k) => `${name} y ${k} más necesitan atención`],
-  [/^(.+) needs attention$/s, (name) => `${name}: necesita atención`],
+  [/^(\d+) automations? running normally$/, (_, k) => `${n(k, 'automatización funciona', 'automatizaciones funcionan')} con normalidad`],
+  [/^(.+) and (\d+) others? need attention$/s, (names, name, k) => `${names.automation(name)} y ${k} más necesitan atención`],
+  [/^(.+) needs attention$/s, (names, name) => `${names.automation(name)}: necesita atención`],
   // automations (stub, demo)
   [
     /^(\d+) of (\d+) automations active(?: — (\d+) needs? attention)?$/,
-    (a, t, k) => `${a} de ${t} automatizaciones activas${k ? ` · ${k} ${k === '1' ? 'necesita' : 'necesitan'} atención` : ''}`,
+    (_, a, t, k) => `${a} de ${t} automatizaciones activas${k ? ` · ${k} ${k === '1' ? 'necesita' : 'necesitan'} atención` : ''}`,
   ],
   // reports (live)
-  [/^(\d+) scheduled reports?, none generated yet$/, (k) => `${n(k, 'informe programado', 'informes programados')}; aún no se ha generado ninguno`],
-  [/^Newest: (.+) — (\d+) reports? ready$/s, (name, k) => `Más reciente: ${name} · ${n(k, 'informe listo', 'informes listos')}`],
+  [/^(\d+) scheduled reports?, none generated yet$/, (_, k) => `${n(k, 'informe programado', 'informes programados')}; aún no se ha generado ninguno`],
+  [/^Newest: (.+) — (\d+) reports? ready$/s, (names, name, k) => `Más reciente: ${names.report(name)} · ${n(k, 'informe listo', 'informes listos')}`],
   // reports (stub, demo)
-  [/^(\d+) reports? ready(?: — (\d+) scheduled)?$/, (k, s) => `${n(k, 'informe listo', 'informes listos')}${s ? ` · ${n(s, 'programado', 'programados')}` : ''}`],
+  [/^(\d+) reports? ready(?: — (\d+) scheduled)?$/, (_, k, s) => `${n(k, 'informe listo', 'informes listos')}${s ? ` · ${n(s, 'programado', 'programados')}` : ''}`],
   // notifications
-  [/^(\d+) unread notifications?$/, (k) => `${n(k, 'notificación sin leer', 'notificaciones sin leer')}`],
+  [/^(\d+) unread notifications?$/, (_, k) => `${n(k, 'notificación sin leer', 'notificaciones sin leer')}`],
 ]
 
-export function summaryHeadlineText(headline: string, language: string | null | undefined): string {
+export function summaryHeadlineText(headline: string, language: string | null | undefined, names: HeadlineNames = {}): string {
   if (!isEs(language)) return headline
   if (headline === 'Unavailable') return MISSION_CONTROL_ES.Unavailable
   if (headline === 'No unread notifications') return 'No hay notificaciones sin leer'
+  const resolved: Required<HeadlineNames> = { automation: names.automation ?? asWritten, report: names.report ?? asWritten }
   for (const [pattern, build] of HEADLINE_RULES) {
     const m = pattern.exec(headline)
-    if (m) return build(...m.slice(1))
+    if (m) return build(resolved, ...m.slice(1))
   }
   return headline
 }

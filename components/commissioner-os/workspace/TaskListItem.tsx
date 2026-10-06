@@ -8,6 +8,7 @@ import type { CommissionerTask } from '@/lib/commissioner-ui/workspace/decision-
 import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { taskText, workspaceCopy } from '@/lib/commissioner-os/i18n/analyticsCopy'
+import { taskPriorityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 export interface TaskListItemProps {
   task: CommissionerTask
@@ -34,7 +35,7 @@ export function TaskListItem({ task, onOpen }: TaskListItemProps) {
             >
               {es ? es.status[task.status] : TASK_STATUS_LABELS[task.status]}
             </span>
-            <Badge style={{ background: style.bg, color: style.text, borderColor: style.border }}>{es ? es.severity[task.priority] : SEVERITY_LABELS[task.priority]}</Badge>
+            <Badge style={{ background: style.bg, color: style.text, borderColor: style.border }}>{taskPriorityLabelText(task.priority, SEVERITY_LABELS[task.priority], language)}</Badge>
           </div>
         </div>
       </CardHeader>

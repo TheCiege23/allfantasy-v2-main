@@ -10,7 +10,8 @@ import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/const
 import type { CommissionerActivityEventContract } from '@/lib/commissioner-ui/contracts'
 import type { CommissionerModuleId } from '@/lib/commissioner-ui/navigation/moduleNav'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
-import { sectionNameText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
+import { toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
+import { moduleLabelText } from '@/lib/commissioner-os/i18n/shellCopy'
 
 export interface ActivityStreamViewProps {
   events: CommissionerActivityEventContract[]
@@ -84,7 +85,7 @@ export function ActivityStreamView({ events, dataMode, errorMessage }: ActivityS
                     border: '1px solid var(--border)',
                   }}
                 >
-                  {sectionNameText(moduleId, getModuleLabel(moduleId), language)} <span style={{ color: 'var(--muted2)' }}>({count})</span>
+                  {moduleLabelText(moduleId, getModuleLabel(moduleId), language)} <span style={{ color: 'var(--muted2)' }}>({count})</span>
                 </button>
               )
             })}
