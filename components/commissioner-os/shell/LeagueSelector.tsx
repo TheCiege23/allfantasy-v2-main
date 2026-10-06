@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { ACTIVE_LEAGUE_COOKIE_KEY } from '@/lib/commissioner-ui/activeLeague/constants'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { shellText } from '@/lib/commissioner-os/i18n/shellCopy'
 
 export interface LeagueSelectorOption {
   id: string
@@ -26,6 +28,7 @@ export interface LeagueSelectorProps {
 export function LeagueSelector({ leagues, activeLeagueId }: LeagueSelectorProps) {
   const [open, setOpen] = useState(false)
   const active = leagues.find((l) => l.id === activeLeagueId)
+  const { language } = useOptionalLanguage()
 
   if (leagues.length === 0) {
     return (
@@ -33,7 +36,7 @@ export function LeagueSelector({ leagues, activeLeagueId }: LeagueSelectorProps)
         className="flex items-center gap-1 rounded-[var(--radius-standard)] px-3 py-1.5 text-sm font-medium"
         style={{ color: 'var(--muted)' }}
       >
-        No leagues
+        {shellText('No leagues', language)}
       </span>
     )
   }
@@ -67,7 +70,7 @@ export function LeagueSelector({ leagues, activeLeagueId }: LeagueSelectorProps)
           could not wrap. Measured 206px wide on iPhone 12, contributing to a
           481px header in a 390px viewport.
         */}
-        <span className="max-w-[110px] truncate sm:max-w-[180px]">{active?.name ?? 'Select league'}</span>
+        <span className="max-w-[110px] truncate sm:max-w-[180px]">{active?.name ?? shellText('Select league', language)}</span>
         <ChevronDown size={16} aria-hidden />
       </button>
       {open && (
@@ -76,7 +79,7 @@ export function LeagueSelector({ leagues, activeLeagueId }: LeagueSelectorProps)
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} aria-hidden />
           <ul
             role="listbox"
-            aria-label="Select league"
+            aria-label={shellText('Select league', language)}
             className="absolute left-0 top-full z-40 mt-1 max-h-80 w-64 overflow-y-auto rounded-[var(--radius-standard)] py-1 text-sm shadow-lg"
             style={{ background: 'var(--panel)', border: '1px solid var(--border)' }}
           >

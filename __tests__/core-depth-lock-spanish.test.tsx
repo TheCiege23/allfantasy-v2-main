@@ -194,11 +194,16 @@ function walk(dir: string, out: string[] = []): string[] {
  * of its own yet, so a Spanish lock there would be the only Spanish on the screen.
  */
 const ENGLISH_ON_PURPOSE: Record<string, string> = {
-  'components/commissioner-os/shell/CommissionerDepthLocked.tsx': 'Commissioner OS pages (/commissioner-os) have no Spanish yet; the subject comes from those server pages',
   'components/core-app/screens/WaiverCompetitiveEdge.tsx': 'the Waivers Competitive Edge card is English throughout',
   'components/core-app/player-card/PlayerCardSheet.tsx': 'the player card sheet is English throughout',
   'components/ai-tools/modals/TradeValueModal.tsx': 'the legacy AI-tools trade modal, outside /core, is English throughout',
 }
+/*
+ * The Commissioner OS pages are server components and cannot read the reader's language. The lock
+ * itself is drawn by CommissionerDepthLocked, a client component that passes `lang` (2026-10-06);
+ * a page's own FreeUntilNote moves to CommissionerFreeUntilNote as each page's group translates it —
+ * Mission Control's already has.
+ */
 const SERVER_PAGES_ENGLISH = /^app\/commissioner-os\//
 
 describe('every caller passes the reader’s language and a translated subject', () => {
@@ -216,7 +221,8 @@ describe('every caller passes the reader’s language and a translated subject',
       'components/core-app/screens/PlayerFinder.tsx',
       'components/core-app/player-card/PlayerCardSheet.tsx', // a RELATIVE import ('../CoreDepthLock')
       'components/core-app/screens/CommissionerHub.tsx',
-      'app/commissioner-os/page.tsx',
+      'components/commissioner-os/shell/CommissionerDepthLocked.tsx',
+      'components/commissioner-os/shell/CommissionerFreeUntilNote.tsx',
     ]) {
       expect(callers, known).toContain(known)
     }
