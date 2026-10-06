@@ -294,7 +294,7 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     const canReconcile = choice.source === 'legacy' && await isElevatedCommissioner(leagueId, userId);
     let resultsObservedAt: string | null = null;
     if (choice.source === 'imported' && choice.sport === 'NFL') {
-        try { const observation = await readImportedResults(leagueId,key); if (observation) { results = observation.report; resultsObservedAt = observation.observedAt; } }
+        try { const observation = await readImportedResults(leagueId,key,picks); if (observation) { results = observation.report; resultsObservedAt = observation.observedAt; contributions=observation.contributions??[]; } }
         catch { coverage.push('Historical result observations are temporarily unavailable.'); }
     }
     const canRefreshResults = choice.source === 'imported' && choice.sport === 'NFL' && platform.toLowerCase() === 'sleeper' && await isElevatedCommissioner(leagueId,userId);
