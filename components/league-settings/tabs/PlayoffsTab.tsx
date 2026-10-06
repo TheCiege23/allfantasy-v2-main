@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import { PlayoffSettingsEditor } from '@/components/league-settings/PlayoffSettingsEditor'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
 export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
+  const { t } = useLanguage()
   const leagueId = ctx.league.id
   const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'playoffs', { enabled: canEdit })
 
@@ -22,12 +24,12 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
   return (
     <div className="space-y-8">
       <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/90 p-4">
-        <h4 className="mb-3 text-[12px] font-bold uppercase tracking-wide text-white/55">Quick schedule</h4>
-        {saving ? <p className="mb-2 text-[11px] text-cyan-300/80">Saving…</p> : null}
+        <h4 className="mb-3 text-[12px] font-bold uppercase tracking-wide text-white/55">{t('lsHub.po.quick')}</h4>
+        {saving ? <p className="mb-2 text-[11px] text-cyan-300/80">{t('lsHub.saving')}</p> : null}
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
-              Playoff teams
+              {t('lsHub.po.teams')}
             </span>
             <input
               type="number"
@@ -45,7 +47,7 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           </label>
           <label className="block">
             <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
-              Playoffs start (week)
+              {t('lsHub.po.start')}
             </span>
             <input
               type="number"
@@ -65,7 +67,7 @@ export function PlayoffsTab({ ctx, canEdit }: LeagueSettingsTabProps) {
       </div>
 
       <div>
-        <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-white/55">Stages & brackets</h4>
+        <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-white/55">{t('lsHub.po.stages')}</h4>
         <PlayoffSettingsEditor leagueId={leagueId} />
       </div>
     </div>

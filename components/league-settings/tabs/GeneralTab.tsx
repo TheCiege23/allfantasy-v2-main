@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { HelpCircle } from 'lucide-react'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { LeagueRulesSummarySection } from '@/app/league/[leagueId]/components/LeagueRulesSummarySection'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
@@ -16,6 +17,7 @@ const TZ_PRESETS = [
 ]
 
 export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
+  const { t } = useLanguage()
   const leagueId = ctx.league.id
   const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'general', {
     enabled: canEdit,
@@ -39,21 +41,21 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
     <div className="space-y-8">
       <div className="rounded-2xl border border-white/[0.08] bg-[#0a1228]/90 p-4 shadow-[0_0_0_1px_rgba(34,211,238,0.06)]">
         <div className="mb-3 flex items-center gap-2">
-          <h3 className="text-[13px] font-bold uppercase tracking-wide text-cyan-200/90">Basics</h3>
+          <h3 className="text-[13px] font-bold uppercase tracking-wide text-cyan-200/90">{t('lsHub.gen.basics')}</h3>
           <span
             className="inline-flex items-center gap-1 text-[11px] text-white/35"
-            title="Changes save automatically"
+            title={t('lsHub.gen.autosaveHint')}
           >
             <HelpCircle className="h-3 w-3" aria-hidden />
-            Auto-save
+            {t('lsHub.gen.autosave')}
           </span>
           {saving ? (
-            <span className="ml-auto text-[11px] font-semibold text-cyan-300/80">Saving…</span>
+            <span className="ml-auto text-[11px] font-semibold text-cyan-300/80">{t('lsHub.saving')}</span>
           ) : null}
         </div>
         <label className="mb-3 block">
           <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
-            League name
+            {t('lsHub.gen.leagueName')}
           </span>
           <input
             type="text"
@@ -71,7 +73,7 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
         </label>
         <label className="mb-3 block">
           <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
-            Timezone
+            {t('lsHub.gen.timezone')}
           </span>
           <select
             value={timezone}
@@ -92,7 +94,7 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
         </label>
         <label className="block">
           <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
-            Logo URL
+            {t('lsHub.gen.logoUrl')}
           </span>
           <input
             type="url"
@@ -108,7 +110,7 @@ export function GeneralTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           />
         </label>
         {!canEdit ? (
-          <p className="mt-3 text-[11px] text-amber-200/70">Only the commissioner can edit league basics.</p>
+          <p className="mt-3 text-[11px] text-amber-200/70">{t('lsHub.gen.commishOnly')}</p>
         ) : null}
       </div>
 

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * Removes the league row from the signed-in user's AllFantasy account (DELETE /api/league/[leagueId]).
@@ -19,6 +20,7 @@ export function DeleteLeagueFromAfPanel({
   leagueOwnerUserId: string
 }) {
   const router = useRouter()
+  const { t } = useLanguage()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const canRemove = currentUserId === leagueOwnerUserId
@@ -33,14 +35,14 @@ export function DeleteLeagueFromAfPanel({
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string }
       if (!res.ok) {
-        toast.error(data.error ?? 'Could not remove league')
+        toast.error(data.error ?? t('lsHub.del.failed'))
         return
       }
-      toast.success('League removed from AllFantasy')
+      toast.success(t('lsHub.del.removed'))
       router.push('/core')
       router.refresh()
     } catch {
-      toast.error('Network error')
+      toast.error(t('lsHub.del.network'))
     } finally {
       setLoading(false)
       setConfirmOpen(false)
@@ -50,15 +52,13 @@ export function DeleteLeagueFromAfPanel({
   return (
     <div className="space-y-4" data-testid="delete-league-af-panel">
       <p className="text-[13px] leading-relaxed text-white/70">
-        <strong className="text-white/90">Remove from AllFantasy</strong> deletes this league from your dashboard and
-        AllFantasy data tied to this import. It does <strong className="text-amber-200/90">not</strong> delete or archive
-        the league on Sleeper, Yahoo, ESPN, or other platforms.
+        <strong className="text-white/90">{t('lsHub.removeTitle')}</strong> {t('lsHub.del.body1')}{' '}
+        <strong className="text-amber-200/90">{t('lsHub.del.not')}</strong> {t('lsHub.del.body2')}
       </p>
 
       {!canRemove ? (
         <div className="rounded-xl border border-amber-500/25 bg-amber-950/30 px-3 py-2 text-[12px] text-amber-100/90">
-          Only the AllFantasy account that imported this league can remove it here. Use your host app to leave or ask the
-          commissioner to remove your team.
+          {t('lsHub.del.ownerOnly')}
         </div>
       ) : (
         <>
@@ -68,7 +68,7 @@ export function DeleteLeagueFromAfPanel({
             className="w-full rounded-xl border border-rose-500/35 bg-rose-950/35 py-2.5 text-[13px] font-semibold text-rose-100 hover:bg-rose-950/50"
             data-testid="delete-league-af-open"
           >
-            Remove league from AllFantasy…
+            {t('lsHub.del.open')}
           </button>
         </>
       )}
@@ -83,15 +83,15 @@ export function DeleteLeagueFromAfPanel({
           <button
             type="button"
             className="absolute inset-0 bg-black/80"
-            aria-label="Close"
+            aria-label={t('lsHub.del.close')}
             onClick={() => !loading && setConfirmOpen(false)}
           />
           <div className="relative z-10 w-full max-w-sm rounded-2xl border border-white/[0.1] bg-[#0a1228] p-5 shadow-2xl">
             <h3 id="delete-league-af-title" className="text-lg font-bold text-white">
-              Remove from AllFantasy?
+              {t('lsHub.del.confirmTitle')}
             </h3>
             <p className="mt-2 text-[13px] text-white/65">
-              This cannot be undone from the app. Your host league (e.g. Sleeper) is unchanged.
+              {t('lsHub.del.confirmBody')}
             </p>
             <div className="mt-4 flex gap-2">
               <button
@@ -100,7 +100,7 @@ export function DeleteLeagueFromAfPanel({
                 onClick={() => setConfirmOpen(false)}
                 className="flex-1 rounded-xl border border-white/[0.12] py-2.5 text-[13px] font-semibold text-white/85 hover:bg-white/[0.06]"
               >
-                Cancel
+                {t('lsHub.del.cancel')}
               </button>
               <button
                 type="button"
@@ -109,7 +109,7 @@ export function DeleteLeagueFromAfPanel({
                 className="flex-1 rounded-xl border border-rose-500/40 bg-rose-600/30 py-2.5 text-[13px] font-semibold text-rose-50 hover:bg-rose-600/45 disabled:opacity-50"
                 data-testid="delete-league-af-confirm"
               >
-                {loading ? 'Removing…' : 'Remove'}
+                {loading ? t('lsHub.del.removing') : t('lsHub.del.remove')}
               </button>
             </div>
           </div>
