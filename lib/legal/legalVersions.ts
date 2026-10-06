@@ -16,10 +16,21 @@
  * Lives here (pure, no CSS) rather than in LegalPageShell so server code — the sign-up route —
  * can read it without importing a component and its stylesheet.
  */
+/**
+ * 2026-10: the owner's rewritten document set — Terms of Service, Privacy Policy, the
+ * Fantasy Sports & State Notice (served at /disclaimer), and two new documents, the
+ * SMS Terms and the Copyright Policy. All five share one effective date and print it
+ * as "Effective: …" rather than "Last updated: …", because the drafts state an
+ * effective date and the Terms' arbitration opt-out window runs from it.
+ */
+const DOCUMENT_SET_2026_10_EFFECTIVE = "October 6, 2026"
+
 export const LEGAL_LAST_UPDATED_BY_PAGE = {
-  privacy: "September 2026",
-  terms: "September 2026",
-  disclaimer: "March 2026",
+  privacy: DOCUMENT_SET_2026_10_EFFECTIVE,
+  terms: DOCUMENT_SET_2026_10_EFFECTIVE,
+  disclaimer: DOCUMENT_SET_2026_10_EFFECTIVE,
+  smsTerms: DOCUMENT_SET_2026_10_EFFECTIVE,
+  copyright: DOCUMENT_SET_2026_10_EFFECTIVE,
   dataDeletion: "September 2026",
   aiTransparency: "March 2026",
   contact: "March 2026",

@@ -56,12 +56,16 @@ export default function LegalPageShell({
           ⚠ THE FOOTER NAV IS PART OF THE SHELL AND MUST STAY COMPLETE. Several of
           these routes are reachable from an app-store listing or a Stripe receipt
           rather than from inside the product, so this row is the only navigation
-          a reader has. 17a names all five destinations.
+          a reader has. 17a named five destinations; the 2026-10 document set adds the
+          SMS Terms and the Copyright Policy, and renames the Disclaimer to the
+          Fantasy Sports & State Notice it now holds.
         */}
         <nav className="af-legal-foot" aria-label="Legal">
-          <Link href="/disclaimer">Disclaimer</Link>
           <Link href="/terms">Terms of Service</Link>
           <Link href="/privacy">Privacy Policy</Link>
+          <Link href="/disclaimer">Fantasy Sports &amp; State Notice</Link>
+          <Link href="/sms-terms">SMS Terms</Link>
+          <Link href="/copyright">Copyright Policy</Link>
           <Link href="/data-deletion">Data Deletion</Link>
           <Link href="/" data-home="true">
             Home

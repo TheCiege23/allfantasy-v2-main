@@ -57,8 +57,11 @@ export function LegalSettingsSection({ profile }: { profile: SettingsProfile }) 
       agreed: legalState?.disclaimerAccepted,
     },
     { key: "privacy", href: "/privacy", label: t("settings.legal.linkPrivacy") },
+    { key: "sms-terms", href: "/sms-terms", label: t("settings.legal.linkSmsTerms") },
+    { key: "copyright", href: "/copyright", label: t("settings.legal.linkCopyright") },
     { key: "no-gambling", href: "/no-gambling-policy", label: t("settings.legal.linkNoGambling") },
-    { key: "cookies", href: "/privacy", label: t("settings.legal.linkCookies") },
+    // Privacy Policy Section 5 — cookies, pixels, analytics and advertising measurement.
+    { key: "cookies", href: "/privacy#section-5", label: t("settings.legal.linkCookies") },
     { key: "deletion", href: "/data-deletion", label: t("settings.legal.linkDataDeletion") },
   ]
 
