@@ -1,15 +1,15 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getMyTeamData } from './myTeam'
-import { buildTeamAlerts } from './teamAlerts'
+import { buildTeamAlerts,freshTeamAlertRoster } from './teamAlerts'
 import { findSportsPlayersForLeague } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 import { definiteInactive,freshAutoSubsEvidence } from './nativeAutoSubsPolicy'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { createHash } from 'node:crypto'
 export async function readTeamAlerts(leagueId:string,userId:string){
-  const [data,league]=await Promise.all([getMyTeamData(leagueId,userId),prisma.league.findUnique({where:{id:leagueId},select:{settings:true,lastSyncedAt:true}})])
+  const [data,league]=await Promise.all([getMyTeamData(leagueId,userId,null,{savedRosterOnly:true}),prisma.league.findUnique({where:{id:leagueId},select:{settings:true,lastSyncedAt:true}})])
   if(!data||!league)return {available:false,alerts:[]}
-  if(!data.starters.available)return {available:false,alerts:[]}
+  if(!data.starters.available||!freshTeamAlertRoster(data.league.platform,league.lastSyncedAt,Date.now()))return {available:false,alerts:[]}
   const alerts=buildTeamAlerts(data,league.settings,Date.now()),ids=data.starters.data.flatMap(s=>s.player?[s.player.sleeperId]:[])
   const evidence=await findSportsPlayersForLeague(data.league.sport??data.starters.data.find(s=>s.player?.sport)?.player?.sport??'',data.league.platform,ids,{translated:true})
   for(const a of alerts){

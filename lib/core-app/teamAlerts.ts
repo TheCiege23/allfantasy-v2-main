@@ -1,3 +1,4 @@
+import { isNativePlatform } from '@/lib/league/isNativeLeague'
 import type { MyTeamData } from './myTeam'
 import { eligibleComparisons } from './teamWorkspace'
 import { leagueCalendar } from './leagueCalendar'
@@ -17,4 +18,9 @@ export function buildTeamAlerts(data:MyTeamData,settings:unknown,now:number):Tea
     alerts.push({key:`deadline:${event.key}:${event.at}`,kind:'deadline',leagueId:league.id,leagueName:league.name,playerId:null,playerName:null,status:null,deadline:event.at,source:'League settings',observedAt:null,alternative:null,href:`/core/schedule?league=${encodeURIComponent(league.id)}`,fresh:true,label:event.label})
   }
   return alerts.sort((a,b)=>a.deadline.localeCompare(b.deadline))
+}
+
+/** Imported roster membership must be recently synced before alerts can clear or notify. */
+export function freshTeamAlertRoster(platform:string,lastSyncedAt:Date|null,now:number){
+  return isNativePlatform(platform)||!!lastSyncedAt&&lastSyncedAt.getTime()<=now&&now-lastSyncedAt.getTime()<=30*60_000
 }

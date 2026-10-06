@@ -960,6 +960,7 @@ export async function getMyTeamData(
   userId: string,
   /** The render's shared league context — see `leagueContext.ts`. */
   ctx?: LeagueContext | null,
+  options?: { savedRosterOnly?: boolean },
 ): Promise<MyTeamData | null> {
   const lc = leagueContextFor(leagueId, userId, ctx)
   /*
@@ -1071,7 +1072,7 @@ export async function getMyTeamData(
    */
   const candidates = myRosterCandidates(myTeamRow, userId)
   const isSleeper = String(league.platform).toLowerCase() === 'sleeper'
-  const liveRoster = isSleeper && league.platformLeagueId
+  const liveRoster = isSleeper && !options?.savedRosterOnly && league.platformLeagueId
     ? await currentSleeperRoster(league.platformLeagueId, myTeamRow)
     : null
   if (liveRoster && typeof liveRoster.bestBall === 'boolean') base.league.bestBall = liveRoster.bestBall
@@ -1097,7 +1098,7 @@ export async function getMyTeamData(
     platform: league.platform, sourceLeagueId: league.platformLeagueId,
     leagueName: leagueDisplayName(league.name), season: league.season, action: 'league',
   })
-  const roster = isSleeper
+  const roster = isSleeper && !options?.savedRosterOnly
     ? (liveRoster ? { playerData: liveRoster } : null)
     : candidates.length > 0
       ? await prisma.roster.findFirst({

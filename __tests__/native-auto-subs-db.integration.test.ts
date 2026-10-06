@@ -1,6 +1,9 @@
 // @vitest-environment node
 import {beforeAll,afterAll,describe,it,expect,vi} from 'vitest'
 vi.mock('@/lib/notifications/NotificationDispatcher',()=>({dispatchNotification:vi.fn(async()=>{})}))
+vi.mock('@/lib/core-app/currentSleeperRoster',()=>({currentSleeperRoster:vi.fn(async()=>null)}))
+import {currentSleeperRoster} from '@/lib/core-app/currentSleeperRoster'
+import {getMyTeamData} from '@/lib/core-app/myTeam'
 import {prisma} from '@/lib/prisma'
 import {runNativeAutoSubsForLeague} from '@/lib/core-app/nativeAutoSubs'
 import {nativeAutoSubsKey} from '@/lib/core-app/nativeAutoSubsPolicy'
@@ -22,7 +25,7 @@ describe.skipIf(!safe)('native AutoSubs real local transaction',()=>{
  })
  afterAll(async()=>{
   await prisma.automationAuditLog.deleteMany({where:{leagueId}})
-  await prisma.league.deleteMany({where:{id:leagueId}})
+  await prisma.league.deleteMany({where:{id:{in:[leagueId,leagueId+'-imported']}}})
   await prisma.userProfile.deleteMany({where:{userId:user}})
   await prisma.appUser.deleteMany({where:{id:user}})
   await prisma.sportsPlayer.deleteMany({where:{sport:'NFL',sleeperId:{in:ids}}})
@@ -49,6 +52,21 @@ describe.skipIf(!safe)('native AutoSubs real local transaction',()=>{
   expect(await readTeamPreference(user,key)).toEqual(assignment)
   expect((await prisma.roster.findUniqueOrThrow({where:{id:rosterId}})).playerData).toEqual(roster.playerData)
   expect(await prisma.automationAuditLog.findUnique({where:{id:`rollback-${suffix}`}})).toBeNull()
+ })
+
+ it('reads a saved imported roster without invoking the live provider verification path',async()=>{
+  const importedId=leagueId+'-imported'
+  await prisma.league.create({data:{id:importedId,userId:user,platform:'sleeper',platformLeagueId:importedId,sport:'NFL',season:2026,status:'in_season',lifecycleState:'in_season',starters:['RB'],settings:{leg:5},lastSyncedAt:new Date()}})
+  await prisma.leagueTeam.create({data:{leagueId:importedId,externalId:'1',platformUserId:user,claimedByUserId:user,ownerName:'Local QA',teamName:'Saved imported team'}})
+  await prisma.roster.create({data:{leagueId:importedId,platformUserId:user,playerData:{starters:[ids[0]],players:ids}}})
+  vi.mocked(currentSleeperRoster).mockClear()
+  const saved=await getMyTeamData(importedId,user,null,{savedRosterOnly:true})
+  expect(saved?.workspaceScope?.season).toBe(2026)
+  expect(saved?.starters.available).toBe(true)
+  expect(currentSleeperRoster).not.toHaveBeenCalled()
+  const live=await getMyTeamData(importedId,user)
+  expect(currentSleeperRoster).toHaveBeenCalledTimes(1)
+  expect(live?.starters.available).toBe(false)
  })
 
 })

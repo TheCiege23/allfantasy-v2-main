@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest'
 import {parseWeekPlan,planScopeKey} from '@/lib/core-app/teamPlan'
 import {freshAutoSubsEvidence,definiteInactive,nativeAutoSubsKey} from '@/lib/core-app/nativeAutoSubsPolicy'
-import {buildTeamAlerts} from '@/lib/core-app/teamAlerts'
+import {buildTeamAlerts,freshTeamAlertRoster} from '@/lib/core-app/teamAlerts'
 import {detectOperationalConditions} from '@/lib/commissioner-workspace/operationalTasks'
 const now=Date.UTC(2026,9,6,12)
 const p={sleeperId:'name:canonical-id',name:'Starter',position:'RB',ruledOut:true,onBye:false,kickoff:new Date(now+3600_000)}
@@ -16,4 +16,5 @@ describe('five-feature evidence policy',()=>{
  it('never guesses deadlines from a week number and ignores passed deadlines',()=>{expect(buildTeamAlerts({...data,starters:{available:false}} as never,{trade_deadline:7,tradeDeadlineAt:new Date(now-1).toISOString()},now)).toEqual([]);expect(buildTeamAlerts({...data,starters:{available:false}} as never,{tradeDeadlineAt:new Date(now+1000).toISOString()},now)).toMatchObject([{kind:'deadline',deadline:new Date(now+1000).toISOString()}])})
  it('records empty-slot work only for readable active manual lineups',()=>{expect(detectOperationalConditions(operational,new Date(now))).toMatchObject([{sourceKey:'operational:lineup:R:v1'}]);expect(detectOperationalConditions({...operational,manual:false},new Date(now))).toEqual([]);expect(detectOperationalConditions({...operational,rostersReadable:false},new Date(now))).toMatchObject([{sourceKey:'operational:coverage:v1'}])})
  it('only the latest recorded scoring attempt controls a failure finding',()=>{const scoring=[{id:'success',action:'scoring.recalc.resolved',period:'2026:5'},{id:'old',action:'scoring.recalc.failed',period:'2026:5'}];expect(detectOperationalConditions({...operational,rosters:[],scoring},new Date(now))).toEqual([]);expect(detectOperationalConditions({...operational,rosters:[],scoring:scoring.slice(1)},new Date(now))).toMatchObject([{sourceKey:'operational:scoring:old:v1'}])})
+ it('holds stale, absent and future imported roster syncs while native ownership reads stay current',()=>{expect(freshTeamAlertRoster('native',null,now)).toBe(true);expect(freshTeamAlertRoster('sleeper',new Date(now-1000),now)).toBe(true);for(const date of [null,new Date(now-31*60000),new Date(now+1)])expect(freshTeamAlertRoster('sleeper',date,now)).toBe(false)})
 })

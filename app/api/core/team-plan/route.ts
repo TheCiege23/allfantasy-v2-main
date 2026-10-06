@@ -15,7 +15,7 @@ async function handle(req:Request) {
   if(!leagueId || !Number.isInteger(week) || week<1 || week>30) return NextResponse.json({error:'Invalid league or week'},{status:400})
   const access=await resolveLeagueMembership(leagueId,userId)
   if(!access.ok) return NextResponse.json({error:'Forbidden'},{status:access.status})
-  const data=await getMyTeamData(leagueId,userId)
+  const data=await getMyTeamData(leagueId,userId,null,{savedRosterOnly:true})
   if(!data?.workspaceScope) return NextResponse.json({error:'Your roster and season could not be verified.'},{status:409})
   const {rosterKey,season}=data.workspaceScope,key=planScopeKey(leagueId,rosterKey,season,week)
   const current=await readTeamPreference<WeekPlan>(userId,key)
