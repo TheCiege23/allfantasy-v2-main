@@ -50,3 +50,13 @@ describe('draft analysis controls',()=>{
     expect(screen.getByText(/Fuera de la plantilla original/)).toBeInTheDocument();
   });
 });
+
+it('explains finalized bench comparisons and preserves negative differences',()=>{
+ const observed={...detail,weeklyOutcomes:{finalizedWeeks:[1],replacements:[{playerId:'p',rosterId:'a',week:1,state:'ready',replacementPlayerId:'bench',replacementPoints:20,difference:-10}]}} as ArchiveDetail
+ render(<DraftPhase4 detail={observed}/>);fireEvent.click(screen.getByRole('button',{name:'Weekly contribution'}))
+ expect(screen.getByText('Finalized bench replacement')).toBeInTheDocument();expect(screen.getByText(/Starter minus bench alternative.*-10.0/)).toBeInTheDocument();expect(screen.getByRole('button',{name:'Replacement evidence'})).toBeInTheDocument()
+})
+it('does not show missing finalization as zero replacement value in Spanish',()=>{
+ language.language='es';render(<DraftPhase4 detail={{...detail,weeklyOutcomes:{finalizedWeeks:[],replacements:[]}}}/>);fireEvent.click(screen.getByRole('button',{name:'Contribución semanal'}))
+ expect(screen.getByText('Todavía no hay comparaciones verificadas de reemplazo finalizado.')).toBeInTheDocument();expect(screen.getByRole('button',{name:'Evidencia de reemplazo'})).toBeInTheDocument()
+})

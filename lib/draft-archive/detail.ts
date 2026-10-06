@@ -1,4 +1,5 @@
 import 'server-only';
+import type {weeklyOutcomes} from './weeklyOutcomeModel';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { resolvePlayerNames } from '@/lib/core-app/draftHq';
@@ -51,6 +52,8 @@ export type ArchivePick = {
 };
 export type ArchiveDetail = {
     phase4?: { components:DecisionComponents[]; replay:ReplayData; calibration:CalibrationModel|null; scores:ReturnType<typeof calibratedScores>; lineage:LineageReport; dynasty:DynastyMark[]; contributions?:PlayerContribution[] };
+    weeklyOutcomes?:ReturnType<typeof weeklyOutcomes>;
+    specialtyEvidence?:{capturedAt:string;collegeMode:string|null;collegeRounds:number[];collegePlayers:number;salaryTeams:number;salaryContracts:number;dispersal:boolean};
     canReconcile?: boolean;
     canRefreshResults?: boolean;
     resultsObservedAt?: string | null;
@@ -293,13 +296,14 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
     }
     const canReconcile = choice.source === 'legacy' && await isElevatedCommissioner(leagueId, userId);
     let resultsObservedAt: string | null = null;
+    let weeklyOutcomes:ReturnType<typeof import('./weeklyOutcomeModel').weeklyOutcomes>|undefined;
     if (choice.source === 'imported' && choice.sport === 'NFL') {
-        try { const observation = await readImportedResults(leagueId,key,picks); if (observation) { results = observation.report; resultsObservedAt = observation.observedAt; contributions=observation.contributions??[]; } }
+        try { const observation = await readImportedResults(leagueId,key,picks); if (observation) { results = observation.report; resultsObservedAt = observation.observedAt; contributions=observation.contributions??[];weeklyOutcomes=observation.outcomes; } }
         catch { coverage.push('Historical result observations are temporarily unavailable.'); }
     }
     const canRefreshResults = choice.source === 'imported' && choice.sport === 'NFL' && platform.toLowerCase() === 'sleeper' && await isElevatedCommissioner(leagueId,userId);
     const archivedSession=object(nativeSnap.session);
-    const specializedPool=object(archivedSession.devyConfig).enabled===true||object(archivedSession.c2cConfig).enabled===true||Object.keys(object(archivedSession.dispersalPoolConfig)).length>0;
+    const specializedPool=object(archivedSession.devyConfig).enabled===true||object(archivedSession.c2cConfig).enabled===true;
     const replay = buildReplay(nativeSnap.analysisBasis,context,startedAt,picks,specializedPool?null:existingRoster);
     const components = decisionComponents(analysisReport,replay);
     let calibration:CalibrationModel|null=null;
@@ -311,6 +315,8 @@ export async function draftArchiveDetail(leagueId: string, userId: string, key: 
       lineage=await loadAssetLineage(leagueId,choice.source,choice.sourceId,sessionId,choice.season,choice.sport,picks,inventory.choices.length===1,nativeSnap.analysisBasis,context,startedAt,boundary);
     } catch { coverage.push('Recorded trade lineage is temporarily unavailable.'); }
     try { dynasty=await dynastyMarks(referenceContext,picks,nativeSnap.analysisBasis,startedAt,references); } catch { coverage.push('Current dynasty market references are temporarily unavailable.'); }
+    const specialty=object(object(nativeSnap.analysisBasis).specialty),college=object(specialty.college),salary=object(specialty.salary);
+    const specialtyEvidence=specialty.version==='draft-specialty-v1'&&typeof specialty.capturedAt==='string'&&startedAt&&Date.parse(specialty.capturedAt)<=Date.parse(startedAt)?{capturedAt:specialty.capturedAt,collegeMode:college.state==='captured'?string(college.mode):null,collegeRounds:Array.isArray(college.rounds)?college.rounds.filter((r):r is number=>typeof r==='number'&&Number.isInteger(r)):[],collegePlayers:Array.isArray(college.players)?college.players.length:0,salaryTeams:Array.isArray(salary.ledgers)?salary.ledgers.length:0,salaryContracts:Array.isArray(salary.contracts)?salary.contracts.length:0,dispersal:Object.keys(object(specialty.dispersal)).length>0}:undefined;
     const phase4={contributions,components,replay,calibration,scores:calibratedScores(components,calibration,choice.season,startedAt),lineage,dynasty};
-    return JSON.parse(JSON.stringify({ phase4, canReconcile, canRefreshResults, resultsObservedAt, references, analysisReport, resultsReport: results, analysis, choice: publicChoice, picks, snapshot: publicSnapshot, startedAt, endedAt, endMeaning: native ? 'Completed at' : 'Provider last selection time', elapsedMs: duration(startedAt, endedAt), activeMs: native && clock.complete === true ? number(clock.totalActiveMs) : null, events: publicEvents, eventsMore: events.length > 100, corrections: corrections.slice(0, 100), correctionsMore: corrections.length > 100, trades: publicTrades, tradesMore: trades.length > 100, playerTrades, playerTradesMore: (playerTradeRows?.length ?? 0) > 100, coverage, sessionId })) as ArchiveDetail;
+    return JSON.parse(JSON.stringify({ phase4, weeklyOutcomes,specialtyEvidence, canReconcile, canRefreshResults, resultsObservedAt, references, analysisReport, resultsReport: results, analysis, choice: publicChoice, picks, snapshot: publicSnapshot, startedAt, endedAt, endMeaning: native ? 'Completed at' : 'Provider last selection time', elapsedMs: duration(startedAt, endedAt), activeMs: native && clock.complete === true ? number(clock.totalActiveMs) : null, events: publicEvents, eventsMore: events.length > 100, corrections: corrections.slice(0, 100), correctionsMore: corrections.length > 100, trades: publicTrades, tradesMore: trades.length > 100, playerTrades, playerTradesMore: (playerTradeRows?.length ?? 0) > 100, coverage, sessionId })) as ArchiveDetail;
 }

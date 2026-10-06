@@ -111,3 +111,13 @@ it('does not offer ordinary-pool replay for development or salary-contract forma
   expect(buildReplay(basis,{...context,leagueType:'devy'},start,picks,[]).state).toBe('unavailable');
   expect(buildReplay(basis,{...context,leagueType:'salary_cap'},start,picks,[]).state).toBe('unavailable');
 });
+
+it('replays a player-only dispersal under explicit frozen participants and protected IDs',()=>{
+ const c={...context,leagueType:'dynasty',purpose:'dispersal'}
+ const specialty={version:'draft-specialty-v1',capturedAt:start,dispersal:{eligibleRosterIds:['a','b'],protectedPlayerIds:['s-r'],allowedAssetTypes:['player']}}
+ const data=buildReplay({...basis,specialty},c,start,picks,[])
+ expect(data.state).toBe('ready');expect(replayAt(data,1)?.candidates.some(p=>p.playerId==='r')).toBe(false)
+ expect(buildReplay(basis,c,start,picks,[]).state).toBe('unavailable')
+ expect(buildReplay({...basis,specialty:{...specialty,dispersal:{...specialty.dispersal,eligibleRosterIds:['a']}}},c,start,picks,[]).state).toBe('unavailable')
+ expect(buildReplay({...basis,specialty:{...specialty,dispersal:{...specialty.dispersal,allowedAssetTypes:['player','rookie_pick']}}},c,start,picks,[]).state).toBe('unavailable')
+})

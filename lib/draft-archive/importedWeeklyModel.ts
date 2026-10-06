@@ -1,3 +1,4 @@
+import {weeklyOutcomes,validatedWeeklyRosterEvidence,type WeeklyRosterEvidence} from './weeklyOutcomeModel';
 import { resultsReport, type AnalysisSelection } from './analysisModel';
 import { playerContributions, type WeeklyContribution } from './resultsDecisionModel';
 
@@ -6,6 +7,7 @@ export type ImportedWeeklyEvidence = {
   expectedWeeks: number[];
   rows: Array<WeeklyContribution & {held:boolean}>;
   completeDraft: boolean;
+  weekEvidence?:WeeklyRosterEvidence[];
 };
 const obj = (v:unknown):Record<string,unknown> => v && typeof v==='object' && !Array.isArray(v) ? v as Record<string,unknown> : {};
 const identity = (p:{playerId:string|null;rosterId:string|null}) => JSON.stringify([p.playerId,p.rosterId]);
@@ -30,5 +32,18 @@ export function importedWeeklyReport(raw:unknown,picks:AnalysisSelection[],teams
   report.provisional=true;
   report.coverage='Provider-reported scored weeks at the displayed observation time. Original-team usage only; complete weekly rosters establish zero contribution after departure. Provisional observations are not final NFL totals, weekly replacement value or draft-decision grades.';
   if (!v.completeDraft) {report.state=report.teams.some(t=>t.coveredPicks)?'partial':'unavailable';for(const t of report.teams)t.rank=null;}
-  return {report,contributions:playerContributions(picks,rows,weeks as number[])};
+  const proof=v.weekEvidence===undefined?null:validatedWeeklyRosterEvidence(v.weekEvidence);
+  if(v.weekEvidence!==undefined&&!proof)return null;
+  const outcomes=proof?weeklyOutcomes(picks,weeks as number[],teams.map(t=>t.rosterId),proof):null;
+  if(proof){
+    for(const r of rows){
+      const roster=proof.find(e=>e.week===r.week&&e.rosterId===r.rosterId),player=roster?.players.find(p=>p.playerId===r.playerId);
+      if(!roster||(r.held?(!player||player.points!==r.points||player.starter!==r.isStarter):!!player))return null;
+    }
+    if(outcomes!.finalizedWeeks.length===weeks.length&&weeks.length>0&&report.state==='ready'){
+      report.provisional=false;
+      report.coverage='Recorded selecting-team contribution in reconciled, finalized weeks. Replacement comparisons use only recorded eligible bench players under the slot rules observed at refresh; they are hindsight comparisons, not waiver availability or causal draft grades.';
+    }
+  }
+  return {report,...(outcomes?{outcomes}:{}),contributions:playerContributions(picks,rows,weeks as number[])};
 }
