@@ -10,8 +10,9 @@
  * payload arrives unchanged. That is the input this module expects.
  *
  * ⚠ ONLY WHAT THE CONFIG SCORES IS MAPPED, AND EVERYTHING ELSE IS NAMED. CFBD reports a great deal
- * that NCAAF fantasy scoring does not use (QBR, averages, longs, tackles, punting, returns). Those are
- * listed in `NON_SCORING_KEYS` so they are neither scored nor reported; a key in NEITHER list is
+ * that NCAAF fantasy scoring does not use (QBR, averages, longs, punting). Return touchdowns
+ * are mapped separately from offensive and defensive touchdowns so a league can score them once.
+ * Known informational fields are listed in `NON_SCORING_KEYS`; a key in NEITHER list is
  * reported as unmapped, which is how a vendor rename shows up as a warning instead of as a week in
  * which every quarterback quietly threw for zero yards.
  *
@@ -38,6 +39,8 @@ export const NCAAF_STAT_ALIASES: Readonly<Record<string, string>> = {
   'receiving.YDS': 'rec_yds',
   'receiving.TD': 'rec_td',
   'fumbles.LOST': 'fum_lost',
+  'kickReturns.TD': 'kr_td',
+  'puntReturns.TD': 'pr_td',
   'kicking.XPM': 'xp_made',
   'kicking.FGM': 'fg_made',
   'defensive.SOLO': 'idp_solo',
@@ -51,10 +54,12 @@ export const NCAAF_STAT_ALIASES: Readonly<Record<string, string>> = {
 }
 
 /** Categories CFBD reports that NCAAF fantasy scoring does not read, wholesale. */
-const NON_SCORING_CATEGORIES = new Set(['defensive', 'interceptions', 'punting', 'kickReturns', 'puntReturns'])
+const NON_SCORING_CATEGORIES = new Set(['defensive', 'interceptions', 'punting'])
 
 /** Individual keys in scored categories that carry no fantasy points. */
 const NON_SCORING_KEYS = new Set([
+  'kickReturns.NO', 'kickReturns.YDS', 'kickReturns.AVG', 'kickReturns.LONG',
+  'puntReturns.NO', 'puntReturns.YDS', 'puntReturns.AVG', 'puntReturns.LONG',
   'passing.COMPLETIONS',
   'passing.ATT',
   'passing.C/ATT',
