@@ -14,7 +14,7 @@ export async function captureSpecialtyBasis(tx:Prisma.TransactionClient,league:{
  if(league?.leagueVariant==='salary_cap'&&league.season){
   const [ledgers,contracts]=await Promise.all([
    tx.salaryCapTeamLedger.findMany({where:{leagueId:session.leagueId,capYear:league.season},take:33,select:{rosterId:true,capSpace:true,totalCapHit:true,deadMoneyHit:true,capYear:true}}),
-   tx.playerContract.findMany({where:{leagueId:session.leagueId,status:'active'},take:1001,select:{rosterId:true,playerId:true,salary:true,yearsTotal:true,contractYear:true,yearSigned:true}}),
+   tx.playerContract.findMany({where:{leagueId:session.leagueId,status:{in:['active','tagged','option_exercised']}},take:1001,select:{rosterId:true,playerId:true,salary:true,yearsTotal:true,contractYear:true,yearSigned:true}}),
   ])
   salary=ledgers.length<=32&&contracts.length<=1000?{state:'captured',ledgers,contracts}:{state:'unavailable'}
  }
