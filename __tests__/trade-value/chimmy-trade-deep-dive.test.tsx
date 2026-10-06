@@ -2,14 +2,15 @@
  * The Chimmy trade analyzer — the Trade Value tool's "Ask Chimmy" deep dive — shows THE grade
  * (2026-09-27). It used to `alert()` the raw model JSON, led by a verdict and a 0-100 confidence Chimmy
  * made up, beside a payload that already carried the one grade nobody told the model to use.
+ *
+ * 2026-10-06: the panel and the Trade Value modal that rendered it were deleted as unreachable
+ * (nothing had mounted the AI tools grid since 2026-07-06), and their tests with them. What stays
+ * here guards the route and the parser, which are still live.
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import React from 'react'
 import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
 import { chimmyTradeDeepDiveFrom } from '@/lib/trade-value-console/chimmyDeepDive'
-import { ChimmyTradeDeepDivePanel } from '@/components/ai-tools/modals/ChimmyTradeDeepDivePanel'
 import { CHIMMY_TRADE_SYSTEM_PROMPT } from '@/lib/trade-value-console/chimmy-prompt'
 
 const code = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), 'utf8')
@@ -44,29 +45,6 @@ describe('chimmyTradeDeepDiveFrom', () => {
   })
 })
 
-describe('ChimmyTradeDeepDivePanel', () => {
-  const deepDive = chimmyTradeDeepDiveFrom({ explanation: 'Why the letter.', worstCase: 'He gets hurt.' })!
-
-  it('leads with the one grade — both letters, the label and the league values — then Chimmy', () => {
-    render(
-      <ChimmyTradeDeepDivePanel
-        grade={{ graded: true, letter: 'D', partnerLetter: 'B', label: 'Slightly favors opponent', giveValue: 6000, getValue: 5400 }}
-        deepDive={deepDive}
-      />,
-    )
-    expect(screen.getByTestId('chimmy-deep-dive-grade').textContent).toBe(
-      'Your grade D · Their grade B — Slightly favors opponentYou get 5,400 for 6,000 in league value',
-    )
-    expect(screen.getByTestId('chimmy-trade-deep-dive').textContent).toContain('Why the letter.')
-  })
-
-  it('a withheld grade says so and why, with no letter', () => {
-    render(<ChimmyTradeDeepDivePanel grade={{ graded: false, reason: '1 asset has no value here.' }} deepDive={deepDive} />)
-    expect(screen.getByTestId('chimmy-deep-dive-withheld').textContent).toBe('Not graded: 1 asset has no value here.')
-    expect(screen.queryByTestId('chimmy-deep-dive-grade')).toBeNull()
-  })
-})
-
 describe('wiring', () => {
   it('the prompt makes the payload grade the verdict and asks for no verdict or confidence of its own', () => {
     expect(CHIMMY_TRADE_SYSTEM_PROMPT).toMatch(/"grade" is THE AllFantasy grade/)
@@ -78,11 +56,5 @@ describe('wiring', () => {
     const route = code('app/api/trade-value/chimmy/route.ts')
     expect(route).toMatch(/chimmyTradeDeepDiveFrom\(parseJsonContentFromChatCompletion\(result\.json\)\)/)
     expect(route).not.toMatch(/raw: result\.json/)
-  })
-
-  it('🛑 the modal renders the panel with the analysis grade, and no longer alerts raw JSON', () => {
-    const modal = code('components/ai-tools/modals/TradeValueModal.tsx')
-    expect(modal).not.toMatch(/alert\(JSON\.stringify\(j\.chimmy/)
-    expect(modal).toMatch(/<ChimmyTradeDeepDivePanel grade=\{proposalGrade\} deepDive=\{deepDive\} \/>/)
   })
 })

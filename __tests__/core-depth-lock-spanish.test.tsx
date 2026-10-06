@@ -197,7 +197,6 @@ const ENGLISH_ON_PURPOSE: Record<string, string> = {
   'components/commissioner-os/shell/CommissionerDepthLocked.tsx': 'Commissioner OS pages (/commissioner-os) have no Spanish yet; the subject comes from those server pages',
   'components/core-app/screens/WaiverCompetitiveEdge.tsx': 'the Waivers Competitive Edge card is English throughout',
   'components/core-app/player-card/PlayerCardSheet.tsx': 'the player card sheet is English throughout',
-  'components/ai-tools/modals/TradeValueModal.tsx': 'the legacy AI-tools trade modal, outside /core, is English throughout',
 }
 const SERVER_PAGES_ENGLISH = /^app\/commissioner-os\//
 
