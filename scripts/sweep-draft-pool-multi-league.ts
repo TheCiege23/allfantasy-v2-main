@@ -22,12 +22,15 @@ import { canonicalName, canonicalPosition, canonicalTeam } from '../lib/draft-ro
 
 const prisma = new PrismaClient()
 
-type Args = { json: boolean; verbose: boolean }
+type Args = { json: boolean; verbose: boolean; days: number }
 
 function parseArgs(argv: string[]): Args {
+  const daysArg = argv.find((a) => a.startsWith('--days='))
+  const days = daysArg ? Number(daysArg.slice('--days='.length)) : 14
   return {
     json: argv.includes('--json'),
     verbose: argv.includes('--verbose'),
+    days: Number.isFinite(days) && days > 0 ? days : 14,
   }
 }
 
@@ -255,11 +258,12 @@ async function evaluateLeague(
     })
   }
 
-  // De'Von Achane sleeperId pin
+  // De'Von Achane sleeperId pin. 9226, NOT 7373: PlayerIdentityMap has 7373 as Gus Cumberlander
+  // (DL, NO). The old 7373 pin failed this check in nearly every league.
   const achane = matchRows(rows, "De'Von Achane")
-  if (achane.length !== 1 || (achane[0]?.sleeperId ?? null) !== '7373') {
+  if (achane.length !== 1 || (achane[0]?.sleeperId ?? null) !== '9226') {
     failures.push({
-      check: 'devon_achane_sleeper_id_7373',
+      check: 'devon_achane_sleeper_id_9226',
       severity: 'error',
       classification: 'backfill_resolvable',
       detail: `rows=${achane.length} sleeperId=${achane[0]?.sleeperId ?? 'null'}`,
@@ -411,7 +415,7 @@ async function main(): Promise<void> {
   // 2. Latest cache per league
   const allCacheRows = await prisma.draftPoolCache.findMany({
     where: { cacheKey: { contains: 'draft_pool:' } },
-    select: { leagueId: true, cacheKey: true, syncedAt: true, entryCount: true, payload: true },
+    select: { leagueId: true, cacheKey: true, sport: true, syncedAt: true, entryCount: true, payload: true },
     orderBy: { syncedAt: 'desc' },
     take: 500,
   })
@@ -421,7 +425,25 @@ async function main(): Promise<void> {
     if (!latestCacheByLeague.has(row.leagueId)) latestCacheByLeague.set(row.leagueId, row)
   }
 
-  const cachedLeagueIds = [...latestCacheByLeague.keys()]
+  // Only judge pools someone is likely to see again. Every check below is NFL-specific (the
+  // Russell Wilson / Achane / Marvin Harrison pins, the projection fields), so an NBA or NCAAF
+  // pool failed all of them by construction. And the cache TTL is minutes — a pool synced months
+  // ago is rebuilt on its next read, so its old contents say nothing about what a draft room
+  // would show today. Both kinds are counted and reported as skipped, never silently dropped.
+  const cutoff = new Date(Date.now() - args.days * 24 * 60 * 60 * 1000)
+  const skipped = { notNfl: 0, olderThanWindow: 0 }
+  const cachedLeagueIds = [...latestCacheByLeague.keys()].filter((leagueId) => {
+    const cache = latestCacheByLeague.get(leagueId)!
+    if (String(cache.sport ?? '').toUpperCase() !== 'NFL') {
+      skipped.notNfl++
+      return false
+    }
+    if (cache.syncedAt < cutoff) {
+      skipped.olderThanWindow++
+      return false
+    }
+    return true
+  })
   const uncachedLeagues = allLeagues.filter((l) => !latestCacheByLeague.has(l.id))
 
   type LeagueResult = {
@@ -464,7 +486,10 @@ async function main(): Promise<void> {
     sweepDate: new Date().toISOString(),
     prismaValidate: 'PASS',
     totalLeagues: allLeagues.length,
-    totalCachedLeagues: cachedLeagueIds.length,
+    totalCachedLeagues: latestCacheByLeague.size,
+    sweptLeagues: cachedLeagueIds.length,
+    windowDays: args.days,
+    skipped,
     totalUncachedLeagues: uncachedLeagues.length,
     passCount,
     failCount,
@@ -516,6 +541,8 @@ function printReport(report: ReturnType<typeof buildFixOrder> extends string[] ?
 
   console.log(`  Total leagues in DB : ${r.totalLeagues}`)
   console.log(`  Leagues with cache  : ${r.totalCachedLeagues}`)
+  console.log(`  Swept (NFL, synced in last ${r.windowDays} days): ${r.sweptLeagues}`)
+  console.log(`  Skipped             : ${r.skipped.notNfl} not NFL, ${r.skipped.olderThanWindow} synced before the window`)
   console.log(`  Leagues without cache: ${r.totalUncachedLeagues}`)
   console.log(`  Prisma validate     : ${r.prismaValidate}`)
   console.log()
@@ -540,8 +567,8 @@ function printReport(report: ReturnType<typeof buildFixOrder> extends string[] ?
   }
 
   if (r.uncachedLeagues.length > 0) {
-    console.log('  Leagues without cache (not yet swept):')
-    for (const u of r.uncachedLeagues) {
+    console.log(`  Leagues without cache (not yet swept): ${r.uncachedLeagues.length}${verbose ? '' : ' — first 10 (--verbose for all)'}`)
+    for (const u of verbose ? r.uncachedLeagues : r.uncachedLeagues.slice(0, 10)) {
       console.log(`    - ${u.leagueName} (${u.leagueId})`)
       console.log(`      → ${u.recommendation}`)
     }
