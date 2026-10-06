@@ -53,6 +53,8 @@ describe('FAAB league', () => {
       key: 'waiver.outbid_by',
       text: '1 of the 3 other managers has more FAAB left than your $40.',
       bearsOnDeal: true,
+      // The numbers the sentence was written from, for the Spanish (lib/core-app/playerCardCopy.ts).
+      parts: { kind: 'outbid_by', more: 1, withBudget: 3, viewer: 40 },
     })
     expect(edge.rivals.map((r) => r.manager.name)).toEqual(['Tasha', 'Dee', 'Mike'])
     expect(texts(edge, '2')[0]).toBe('Tasha has $72 of FAAB left — more than your $40.')
