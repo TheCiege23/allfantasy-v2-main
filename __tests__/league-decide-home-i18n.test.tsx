@@ -147,7 +147,7 @@ describe('🛑 the Decide home reads Spanish in Spanish', () => {
     await r.findByText('Pulso del comisionado')
     await waitFor(() => expect(r.container.textContent).toContain('Requiere tu decisión'))
     const text = r.container.textContent ?? ''
-    for (const s of ['Récord', 'Posición', '2.º', 'de 2 equipos', 'Puntos a favor', 'total de la temporada', 'FAAB restante', 'prioridad de waivers 3',
+    for (const s of ['Récord', 'Posición', '2.º', 'de 2 equipos', 'Puntos a favor', 'total de la temporada', 'FAAB restante', 'prioridad de reclamo 3',
       'cada veredicto muestra su razonamiento', 'Pulso de la liga', 'actualizado', 'Siguiente: L — D', 'Movimiento recomendado', 'impacto: I · D2',
       'Sugerido: A · confianza C', 'Oferta de trade', 'Tu decisión', 'de P1', 'Propuesta de trade', 'esperando al comisionado', 'con P2', 'Envías',
       'Recibes', 'Nada', '◆ puntuación IDP · muchas tacleadas', '☠ ¿pirata? sin confirmar', 'Revisar en el Trade Center', 'Abrir el Trade Center',

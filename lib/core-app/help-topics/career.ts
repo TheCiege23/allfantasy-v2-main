@@ -205,7 +205,7 @@ export const CAREER_TOPICS = {
     },
     es: {
       title: 'Competitive Edge',
-      body: 'La tarjeta de cada rival cuenta sus traspasos completados y las reclamaciones de waivers que ganó esta temporada, más el FAAB que le queda si la liga lo usa. Son recuentos que puedes comprobar —sin etiquetas ni predicciones— y solo se leen en ligas de Sleeper. Tu propia tarjeta no los muestra.',
+      body: 'La tarjeta de cada rival cuenta sus traspasos completados y los reclamos que ganó esta temporada, más el FAAB que le queda si la liga lo usa. Son recuentos que puedes comprobar —sin etiquetas ni predicciones— y solo se leen en ligas de Sleeper. Tu propia tarjeta no los muestra.',
     },
   },
   scoutEliminationStanding: {

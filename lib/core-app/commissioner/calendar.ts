@@ -200,7 +200,7 @@ export function buildLeagueCalendar(input: CalendarInput): LeagueCalendar {
         week: null,
         whenLabel: formatWhen(next, false, language),
         status: statusFor(next, now),
-        detail: L('Every week at this time. Claims submitted before then are processed together.', 'Cada semana a esta hora. Las solicitudes enviadas antes se procesan juntas.'),
+        detail: L('Every week at this time. Claims submitted before then are processed together.', 'Cada semana a esta hora. Los reclamos enviados antes se procesan juntos.'),
         source: 'allfantasy',
       })
     }

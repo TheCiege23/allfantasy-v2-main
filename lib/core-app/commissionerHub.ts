@@ -404,10 +404,10 @@ const WAIVER_TYPE_LABEL: Record<string, string> = {
 }
 const WAIVER_TYPE_LABEL_ES: Record<string, string> = {
   faab: 'Pujas FAAB a ciegas',
-  rolling: 'Prioridad de agentes libres rotativa',
+  rolling: 'Prioridad de reclamo rotativa',
   reverse_standings: 'Prioridad por clasificación inversa',
   fcfs: 'Por orden de llegada',
-  standard: 'Prioridad de agentes libres estándar',
+  standard: 'Prioridad de reclamo estándar',
   off: 'Sin agentes libres en espera: los fichajes son inmediatos',
 }
 

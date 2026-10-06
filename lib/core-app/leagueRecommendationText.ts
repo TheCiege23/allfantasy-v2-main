@@ -23,7 +23,7 @@ const ES: Record<string, string> = {
   'Check lineup 48 hours before game day': 'Revisa tu alineación 48 horas antes del día de partido',
   'Allows time for injury adjustment before lock': 'Te da tiempo para ajustar por lesiones antes del cierre',
   'Review waiver wire every Tuesday morning': 'Revisa los agentes libres cada martes por la mañana',
-  'Waiver claims typically process overnight': 'Las solicitudes de agentes libres suelen procesarse durante la noche',
+  'Waiver claims typically process overnight': 'Los reclamos suelen procesarse durante la noche',
 
   // buildLineupDiscipline
   'Fewer last-minute changes, reduced bench regret, more consistent start/sit decisions':
@@ -52,9 +52,9 @@ const ES: Record<string, string> = {
     'Más profundidad y flexibilidad en la plantilla con un uso dirigido de los agentes libres',
   'Review available players and your league’s pickup rules': 'Revisa los jugadores disponibles y las reglas de fichajes de tu liga',
   'Check when claims process or whether free agents can be added immediately':
-    'Comprueba cuándo se procesan las solicitudes o si los agentes libres se pueden añadir al instante',
+    'Comprueba cuándo se procesan los reclamos o si los agentes libres se pueden añadir al instante',
   'Set pickup targets before your league’s next deadline': 'Define tus objetivos de fichaje antes del próximo plazo de tu liga',
-  'Use your league’s actual claim schedule when planning moves': 'Planifica tus movimientos con el calendario real de solicitudes de tu liga',
+  'Use your league’s actual claim schedule when planning moves': 'Planifica tus movimientos con el calendario real de reclamos de tu liga',
   'Monitor injury reports for pickup opportunities': 'Sigue los reportes de lesiones para encontrar oportunidades de fichaje',
   'Streamlining transactions improves roster ceiling': 'Agilizar los movimientos eleva el techo de tu plantilla',
 

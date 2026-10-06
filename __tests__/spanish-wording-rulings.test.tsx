@@ -10,6 +10,9 @@
  * 5. "<template> generated successfully." keeps two shapes on purpose (a list line and prose).
  * 6. "This league could not be read." reads /core's translation; "Average margin" keeps two, because
  *    the two screens mean different numbers.
+ * 7. A waiver CLAIM is «reclamo» (masculine), the waiver ORDER is «prioridad de reclamo» and a waiver
+ *    DEADLINE is «plazo de reclamos». A second sweep forbids the old renderings, and every singular
+ *    «red de comisionado» is the plural «red de comisionados».
  *
  * Every changed string is pinned in Spanish AND asserted unchanged in English.
  */
@@ -31,7 +34,7 @@ const lang = vi.hoisted(() => ({ language: 'en' as 'en' | 'es' }))
 vi.mock('@/components/i18n/LanguageProviderClient', () => ({ useOptionalLanguage: () => ({ language: lang.language }) }))
 
 import { CommissionerNetworks } from '@/components/commissioner-os/networks/CommissionerNetworks'
-import { cardsCopy, taskPriorityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
+import { cardsCopy, cosLoaderText, taskPriorityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
 import { NETWORKS_LINK_ES, deadlineLabelText, leagueEventNameText, shellText } from '@/lib/commissioner-os/i18n/shellCopy'
 import { analyticsDataText, cosErrorText, reportText, taskText } from '@/lib/commissioner-os/i18n/analyticsCopy'
 import { automationText, composedEventText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
@@ -41,6 +44,23 @@ import { alertGroupText } from '@/lib/core-app/homeBandsCopy'
 import { buildLeagueCalendar, type CalendarInput } from '@/lib/core-app/commissioner/calendar'
 import { NO_REVIEW_SIGNALS, reviewSignalCards } from '@/lib/core-app/commissioner/signals'
 import { translations } from '@/lib/i18n/translations'
+import { activityChart, waiverParticipationChart } from '@/lib/core-app/commissioner/charts'
+import { abandonedTeamsFlag } from '@/lib/core-app/commissioner/health'
+import { resolveMemberActivity } from '@/lib/core-app/commissioner/activity'
+import { buildLeagueAreas, type HubLeague } from '@/lib/core-app/commissioner/areas'
+import { commissionerFormatCards } from '@/lib/core-app/commissioner/formatCards'
+import { RECIPES, recipeCatalogEntry } from '@/lib/core-app/commissioner/recipes'
+import { coverageText } from '@/lib/core-app/homeBandsCopy'
+import { leagueRecommendationText } from '@/lib/core-app/leagueRecommendationText'
+import { pitchLineText } from '@/lib/core-app/finderTradeValueCopy'
+import { WAIVER_EDGE_ES } from '@/lib/core-app/playerCardCopy'
+import { pitchLine } from '@/lib/core-app/tradePitch'
+import { HOME_TOPICS } from '@/lib/core-app/help-topics/home'
+import { CAREER_TOPICS } from '@/lib/core-app/help-topics/career'
+import UserOsCard from '@/components/decision-os/UserOsCard'
+import type { CommissionerLeagueProfile } from '@/lib/commissioner-os/profile/types'
+import type { ManagerPresence, PresenceManager } from '@/lib/core-app/managerPresence'
+import type { UserOsSnapshot } from '@/lib/decision-os/userOs'
 
 afterEach(() => {
   cleanup()
@@ -60,10 +80,10 @@ const RUN = 'Próximo procesamiento de reclamos'
 const FORBIDDEN: RegExp[] = [
   /procesamiento de (los )?agentes libres/i,
   /ejecuci[oó]n de (los )?agentes libres/i,
-  /proceso de (los )?agentes libres/i,
+  /procesos? de (los )?agentes libres/i,
   /ronda de (los )?agentes libres/i,
   /proces(a|ar|ó|aron|an) (los |las solicitudes de )?agentes libres/i,
-  /agentes libres se procesan/i,
+  /agentes libres (de esta liga )?se procesan/i,
   /(procesamiento|proceso|ejecuci[oó]n) de (los )?waivers?\b/i,
   /se procesan los waivers/i,
 ]
@@ -183,7 +203,7 @@ describe('waiver run / processing is «procesamiento de reclamos», app-wide', (
     const signals = { ...NO_REVIEW_SIGNALS, overdueWaiverClaims: 2 }
     const es = reviewSignalCards('lg1', signals, 'es').find((c) => c.id === 'review:waivers')
     const en = reviewSignalCards('lg1', signals, 'en').find((c) => c.id === 'review:waivers')
-    expect(es?.detail).toBe('Un procesamiento de reclamos ya debería haber resuelto estas solicitudes. Procesa los reclamos para resolverlas.')
+    expect(es?.detail).toBe('Estos reclamos ya deberían haberse resuelto en un procesamiento de reclamos. Procésalos para resolverlos.')
     expect(en?.detail).toBe('These claims should have been decided by a waiver run by now. Run waivers to process them.')
     // «Abrir agentes libres» is the WAIVERS SCREEN (where the players are) — not a run, kept.
     expect(es?.action?.label).toBe('Abrir agentes libres')
@@ -197,14 +217,14 @@ describe('waiver run / processing is «procesamiento de reclamos», app-wide', (
       ['No waiver run has processed in this league yet.', 'Aún no ha habido ningún procesamiento de reclamos en esta liga.'],
       [
         '1 claim is waiting. Only the primary commissioner can run waivers manually.',
-        '1 solicitud está esperando. Solo el comisionado principal puede procesar los reclamos manualmente.',
+        '1 reclamo está esperando. Solo el comisionado principal puede procesar los reclamos manualmente.',
       ],
       [
         '3 claims are waiting. Only the primary commissioner can run waivers manually.',
-        '3 solicitudes están esperando. Solo el comisionado principal puede procesar los reclamos manualmente.',
+        '3 reclamos están esperando. Solo el comisionado principal puede procesar los reclamos manualmente.',
       ],
       ['Run waivers now · 3 waiting', 'Procesar reclamos ahora · 3 en espera'],
-      ['Nothing processed — waivers are locked or no claims were waiting.', 'No se procesó nada: los reclamos están bloqueados o no había solicitudes esperando.'],
+      ['Nothing processed — waivers are locked or no claims were waiting.', 'No se procesó nada: los reclamos están bloqueados o no había ninguno esperando.'],
     ]
     for (const [english, spanish] of cases) {
       expect(hubCopy(english, 'es'), english).toBe(spanish)
@@ -324,5 +344,347 @@ describe("strings Commissioner OS shares with /core's coreUiCopy", () => {
     expect(analyticsDataText('Average margin', 'es')).toBe('Margen promedio')
     expect(coreUiCopy('Average margin', 'es')).toBe('Diferencia media')
     expect(analyticsDataText('Average margin', 'en')).toBe('Average margin')
+  })
+})
+
+/* ── 7. A waiver CLAIM is «reclamo» ──────────────────────────────────────────── */
+
+/**
+ * The owner's ruling (2026-10-06): one manager's waiver claim is «reclamo» (masculine), the waiver
+ * order is «prioridad de reclamo», a waiver deadline is «plazo de reclamos». «Agentes libres» stays
+ * for the players themselves and for the Waivers screen. Plus the networks errors' singular
+ * «red de comisionado», which #2113 found beside the plural heading.
+ */
+const FORBIDDEN_CLAIM: RegExp[] = [
+  /reclamaci[oó]n(es)? de (los )?agentes libres/i,
+  /solicitud(es)? de (los )?agentes libres/i,
+  /orden de (los )?agentes libres/i,
+  /plazos? de (los )?agentes libres/i,
+  /(reclamos?|reclamaci[oó]n(es)?) de (los )?waivers?\b/i,
+  /prioridad de (los )?waivers?\b/i,
+  /red de comisionado(?!s)/i,
+  // A claim is «reclamo» on its own, and the waiver order is «prioridad de reclamo»: neither takes
+  // «de agentes libres», which is the players.
+  /reclamos? de (los )?agentes libres/i,
+  /prioridad de (los )?agentes libres/i,
+]
+
+describe('a waiver CLAIM is «reclamo», app-wide', () => {
+  it('no source file renders a claim, the waiver order or a waiver deadline the old ways', () => {
+    const files = ['lib', 'components', 'app'].flatMap((d) => sourceFiles(join(ROOT, d)))
+    const rel = files.map((f) => relative(ROOT, f).replace(/\\/g, '/'))
+    // Positive controls: the scan reached the modules the old renderings lived in, and every pattern
+    // matches the rendering it was written for.
+    for (const must of [
+      'lib/commissioner-os/i18n/cardsCopy.ts',
+      'lib/core-app/commissionerHubCopy.ts',
+      'lib/core-app/homeBandsCopy.ts',
+      'lib/core-app/coreUiCopy.ts',
+      'lib/core-app/help-topics/home.ts',
+      'lib/i18n/translations-es-parity.ts',
+      'components/decision-os/UserOsCard.tsx',
+    ])
+      expect(rel, must).toContain(must)
+    const samples = [
+      'reclamaciones de agentes libres',
+      'una solicitud de agentes libres',
+      'Cambió el orden de agentes libres',
+      'No hay plazos de agentes libres pendientes',
+      'un reclamo de waivers',
+      'la prioridad de waivers de cada equipo',
+      'a una red de comisionado',
+      'Resuelve los reclamos de agentes libres pendientes',
+      'Prioridad de agentes libres rotativa',
+    ]
+    FORBIDDEN_CLAIM.forEach((re, i) => expect(re.test(samples[i]), String(re)).toBe(true))
+    expect(FORBIDDEN_CLAIM.some((re) => re.test('Redes de comisionados')), 'the plural is allowed').toBe(false)
+    expect(FORBIDDEN_CLAIM.some((re) => re.test('Abrir agentes libres')), 'the screen name is allowed').toBe(false)
+
+    const hits: string[] = []
+    files.forEach((file, i) => {
+      const src = readFileSync(file, 'utf8')
+      if (!FORBIDDEN_CLAIM.some((re) => re.test(src))) return
+      src.split('\n').forEach((line, n) => {
+        if (FORBIDDEN_CLAIM.some((re) => re.test(line))) hits.push(`${rel[i]}:${n + 1}: ${line.trim().slice(0, 140)}`)
+      })
+    })
+    expect(hits).toEqual([])
+  }, 180_000)
+
+  it('Commissioner OS: the networks errors and the waiver-activity recommendation and pattern', () => {
+    // The networks page's API errors are the cards' own strings; the rest is live loader text.
+    const translate = (english: string, language: string) =>
+      /commissioner network/.test(english) ? cardsCopy(english, language) : cosLoaderText(english, language)
+    const cases: Array<[string, string]> = [
+      ['A league already belongs to a commissioner network', 'Una de las ligas ya pertenece a una red de comisionados'],
+      ['A league already belongs to another commissioner network', 'Una de las ligas ya pertenece a otra red de comisionados'],
+      [
+        'No waiver claims have been made. Post a waiver wire recap to show managers what is available.',
+        // «agentes libres» here is the wire — the players on it — and stays.
+        'No se ha hecho ningún reclamo. Publica un resumen de agentes libres para mostrar a los mánagers lo que hay disponible.',
+      ],
+      [
+        'The same low-stakes waiver claim pattern has repeated for 3 consecutive weeks.',
+        'El mismo patrón de reclamos de poca importancia se ha repetido 3 semanas seguidas.',
+      ],
+      ['Routine waiver approvals recurring weekly', 'Aprobaciones rutinarias de reclamos cada semana'],
+    ]
+    for (const [english, spanish] of cases) {
+      expect(translate(english, 'es'), english).toBe(spanish)
+      expect(translate(english, 'en'), english).toBe(english)
+    }
+    const desc =
+      'Settles pending waiver claims for leagues that run batched waivers, in FAAB or rolling-priority order. Only applies to leagues whose waivers are run by AllFantasy — an imported league settles its waivers on its own platform, so this never has work to do for one.'
+    expect(automationText(desc, 'es')).toMatch(/^Resuelve los reclamos pendientes en las ligas que los procesan por lotes, /)
+  })
+
+  it("the Commissioner Hub's waiver type, and the Waivers screen's Competitive Edge label", () => {
+    // `WAIVER_TYPE_LABEL_ES` is module-private in a server module; read it where /core's own words are.
+    const hub = readFileSync(join(ROOT, 'lib', 'core-app', 'commissionerHub.ts'), 'utf8')
+    expect(hub).toContain(`rolling: '${coreUiCopy('Rolling waiver priority', 'es')}',`)
+    expect(hub).toContain(`standard: '${coreUiCopy('Standard waiver priority', 'es')}',`)
+    expect(coreUiCopy('Rolling waiver priority', 'es')).toBe('Prioridad de reclamo rotativa')
+    expect(hub).toContain("rolling: 'Rolling waiver priority',")
+    expect(WAIVER_EDGE_ES.aria).toBe('Ventaja competitiva · reclamos')
+  })
+
+  it("the Commissioner Hub's audit log, waiver panel and claim counts", () => {
+    const cases: Array<[string, string]> = [
+      ['Waiver claim', 'Reclamo'],
+      ['Changed the waiver order', 'Cambió la prioridad de reclamo'],
+      ['This run started and never finished, so some claims were not processed.', 'Este proceso empezó y nunca terminó, así que algunos reclamos no se procesaron.'],
+      ['The last run processed no claims.', 'El último proceso no procesó ningún reclamo.'],
+      [
+        'Processes the claims waiting now, by this league’s rules. Settled claims are not re-run.',
+        'Procesa los reclamos que esperan ahora, según las reglas de esta liga. Los reclamos ya resueltos no se vuelven a procesar.',
+      ],
+      ['Processed 1 claim.', 'Se procesó 1 reclamo.'],
+      ['Processed 4 claims.', 'Se procesaron 4 reclamos.'],
+    ]
+    for (const [english, spanish] of cases) {
+      expect(hubCopy(english, 'es'), english).toBe(spanish)
+      expect(hubCopy(english, 'en'), english).toBe(english)
+    }
+  })
+
+  it('the overdue-claims review card names its claims «reclamos»', () => {
+    const one = reviewSignalCards('lg1', { ...NO_REVIEW_SIGNALS, overdueWaiverClaims: 1 }, 'es').find((c) => c.id === 'review:waivers')
+    const two = reviewSignalCards('lg1', { ...NO_REVIEW_SIGNALS, overdueWaiverClaims: 2 }, 'es').find((c) => c.id === 'review:waivers')
+    expect(one?.title).toBe('1 reclamo lleva más de una semana esperando')
+    expect(two?.title).toBe('2 reclamos llevan más de una semana esperando')
+    const en = reviewSignalCards('lg1', { ...NO_REVIEW_SIGNALS, overdueWaiverClaims: 2 }, 'en').find((c) => c.id === 'review:waivers')
+    expect(en?.title).toBe('2 waiver claims waiting over a week')
+  })
+
+  it("the Commissioner Hub's charts, health flag, member activity, areas, calendar, format card and automation", () => {
+    const now = new Date('2026-10-06T12:00:00Z')
+    expect(activityChart([], now, 'es').subtitle).toBe('Intercambios, reclamos y cambios de plantilla por semana · últimas 8 semanas')
+    expect(activityChart([], now, 'en').subtitle).toBe('Trades, waiver claims and roster moves per week · last 8 weeks')
+
+    const rows = [
+      { activityType: 'waiver', occurredAt: now, managerKeys: ['sleeper:1'] },
+      { activityType: 'waiver', occurredAt: now, managerKeys: ['sleeper:1'] },
+    ]
+    const managers = [
+      { key: '1', name: 'Xolo' },
+      { key: '2', name: 'Zibba' },
+    ]
+    const wEs = waiverParticipationChart(rows, managers, 'es')
+    const wEn = waiverParticipationChart(rows, managers, 'en')
+    expect(wEs.subtitle).toBe('Reclamos por mánager · esta temporada')
+    expect(wEs.takeaway).toBe('1 de 2 mánagers han hecho un reclamo · 2 reclamos en total.')
+    expect(wEn.subtitle).toBe('Waiver claims by manager · this season')
+    expect(wEn.takeaway).toBe('1 of 2 managers have made a claim · 2 claims in all.')
+
+    type AbandonedInput = Parameters<typeof abandonedTeamsFlag>[0]
+    const flag = (statuses: Array<'active' | 'inactive'>, language: string) =>
+      abandonedTeamsFlag({
+        managers: statuses.map((status, i) => ({ name: ['Xolo', 'Zibba'][i], status })),
+        orphanTeams: [],
+        totalTeams: statuses.length,
+        action: { label: 'x', href: '/x', external: false },
+        language,
+      } as AbandonedInput)
+    const qEs = flag(['inactive', 'inactive'], 'es')
+    const qEn = flag(['inactive', 'inactive'], 'en')
+    expect(qEs.measured && qEs.detail).toBe(
+      'Ninguno de los 2 mánagers ha hecho un intercambio, un reclamo ni un cambio de plantilla en dos semanas. Es la liga la que está tranquila, no un equipo abandonado.',
+    )
+    expect(qEn.measured && qEn.detail).toBe(
+      'None of the 2 managers has made a trade, waiver claim or roster move in two weeks. That is the league being quiet, not one team being abandoned.',
+    )
+    expect(JSON.stringify(flag(['inactive', 'active'], 'es'))).toContain('Sin intercambios, reclamos ni cambios de plantilla en 14 días: Xolo.')
+    expect(JSON.stringify(flag(['inactive', 'active'], 'en'))).toContain('No trade, waiver claim or roster move in 14 days: Xolo.')
+
+    const activity = (language: string) =>
+      JSON.stringify(
+        resolveMemberActivity(
+          { kind: 'imported', managers: [{ managerName: 'Xolo', currentCount: 1, priorCount: 0, lastActionAt: now }], lastActivityAt: now, eventCount: 1 },
+          now,
+          14,
+          language,
+        ),
+      )
+    expect(activity('es')).toContain('los intercambios, reclamos y cambios de plantilla de los últimos 14 días')
+    expect(activity('en')).toContain('trades, waiver claims and roster moves in the last 14 days')
+
+    const imported: HubLeague = { id: 'L2', name: 'Zibba League', platform: 'sleeper', platformLeagueId: '987654321', season: 2026, native: false }
+    const waiversArea = (language: string) => buildLeagueAreas(imported, language).find((a) => a.key === 'waivers')
+    expect(waiversArea('es')?.description).toBe('Reclamos, FAAB y el último proceso.')
+    expect(waiversArea('es')?.note).toBe('Los reclamos se procesan en Sleeper.')
+    expect(waiversArea('en')?.description).toBe('Claims, FAAB and the last run.')
+    expect(waiversArea('en')?.note).toBe('Claims are processed on Sleeper.')
+
+    const calendar = (language: 'es' | 'en') =>
+      buildLeagueCalendar({
+        now,
+        leagueId: 'lg1',
+        platformLabel: 'Sleeper',
+        native: true,
+        status: 'in_season',
+        season: 2026,
+        draftAt: null,
+        waivers: { type: 'faab', dayOfWeek: 3, timeUtc: '09:00' },
+        tradeDeadlineWeek: null,
+        noTradeDeadline: false,
+        playoffStartWeek: null,
+        currentWeek: 5,
+        weekStarts: new Map(),
+        dues: null,
+        polls: [],
+        language,
+      }).events.find((e) => e.kind === 'waivers')
+    expect(calendar('es')?.detail).toBe('Cada semana a esta hora. Los reclamos enviados antes se procesan juntos.')
+    expect(calendar('en')?.detail).toBe('Every week at this time. Claims submitted before then are processed together.')
+
+    const profile = { leagueId: 'L1', capabilityIds: ['elimination.guillotine'], aliasTags: [], conceptId: null, canonicalFormatId: null } as unknown as CommissionerLeagueProfile
+    const guillotine = (language: string) => commissionerFormatCards(profile, null, language).find((c) => c.key === 'guillotine')
+    expect(guillotine('es')?.detail).toBe('Revisa los cortes, las plantillas liberadas y los plazos de reclamos.')
+    expect(guillotine('en')?.detail).toBe('Review cuts, released rosters and waiver timing.')
+
+    const recipe = RECIPES.find((r) => r.key === 'inactivityWarning')!
+    expect(recipeCatalogEntry(recipe, { platform: 'manual', sport: 'NFL' }, 'es').description).toBe(
+      'Un aviso semanal amistoso que nombra a los mánagers sin intercambios, reclamos ni cambios de plantilla en 14 días.',
+    )
+    expect(recipeCatalogEntry(recipe, { platform: 'manual', sport: 'NFL' }, 'en').description).toBe(
+      'A friendly weekly check-in naming managers with no trade, waiver claim or roster move in 14 days.',
+    )
+  })
+
+  it('/core: "No waiver deadline is pending…", the home coverage and alert group, the league recommendation', () => {
+    expect(coreUiCopy('No waiver deadline is pending across your leagues.', 'es')).toBe('No hay plazos de reclamos pendientes en tus ligas.')
+    expect(coreUiCopy('No waiver deadline is pending across your leagues.', 'en')).toBe('No waiver deadline is pending across your leagues.')
+
+    expect(coverageText({ label: 'Pending trade offers and waiver claims', reason: 'only completed transactions are read' })?.label).toBe(
+      'Ofertas de intercambio y reclamos pendientes',
+    )
+    expect(alertGroupText('waiver_claim', 'waiver claims', 'es')).toBe('reclamos')
+    expect(alertGroupText('waiver_claim', 'waiver claims', 'en')).toBe('waiver claims')
+
+    const rec: Array<[string, string]> = [
+      ['Waiver claims typically process overnight', 'Los reclamos suelen procesarse durante la noche'],
+      [
+        'Check when claims process or whether free agents can be added immediately',
+        // «agentes libres» here ARE the players, and stay.
+        'Comprueba cuándo se procesan los reclamos o si los agentes libres se pueden añadir al instante',
+      ],
+      ['Use your league’s actual claim schedule when planning moves', 'Planifica tus movimientos con el calendario real de reclamos de tu liga'],
+    ]
+    for (const [english, spanish] of rec) {
+      expect(leagueRecommendationText(english, 'es'), english).toBe(spanish)
+      expect(leagueRecommendationText(english, 'en'), english).toBe(english)
+    }
+  })
+
+  it("the Player Finder's last move, and the User OS card's activity chip", () => {
+    const now = new Date('2026-10-25T14:30:00.000Z')
+    const manager: PresenceManager = {
+      role: 'owner',
+      teamName: 'Titanes',
+      ownerName: 'tashaR',
+      avatarUrl: null,
+      externalId: '1',
+      record: '4-2',
+      rank: 3,
+      need: null,
+      startsHim: true,
+      window: null,
+      lastMove: { at: '2026-10-25T13:00:00.000Z', kind: 'waiver' },
+      moves: 13,
+    }
+    const presence: ManagerPresence = {
+      leagueId: 'L-gang',
+      leagueName: 'Gridiron Gang',
+      platform: 'sleeper',
+      platformLeagueId: '123456',
+      season: 2026,
+      timeZone: 'America/New_York',
+      zone: 'ET',
+      player: { sleeperId: '10236', position: 'TE' },
+      holder: 'other',
+      managers: [manager],
+      activityIngested: true,
+      newestMove: '2026-10-25T13:00:00.000Z',
+      unattributed: 0,
+    }
+    const args = { presence, manager, playerName: 'Dalton Kincaid', now, pkg: { give: ['Tony Pollard'], fairness: 'balanced' } }
+    expect(pitchLineText(args, 'es').body).toContain('Último reclamo ganado: ')
+    expect(pitchLineText(args, 'en')).toEqual(pitchLine(args))
+
+    const snapshot = {
+      leagueId: 'L1',
+      managerId: 'm1',
+      generatedAt: now.toISOString(),
+      available: true,
+      teamHealth: { participationTier: 'active', overallEngagementScore: 62, retentionRisk: 'low', retentionRiskReasons: [], isInactive: false, daysSinceLastActivity: 2 },
+      activitySummary: { tradeEventCount: 2, waiverEventCount: 5, lineupEventCount: 8, draftEventCount: 0 },
+      leagueTrend: { available: false, reason: 'no_snapshots' },
+      managerDna: null,
+      recommendations: null,
+    } as unknown as UserOsSnapshot
+    const { container, unmount } = render(<UserOsCard snapshot={snapshot} language="es" />)
+    expect(container.textContent).toContain('Reclamos')
+    expect(container.textContent).not.toContain('Reclamaciones')
+    unmount()
+    const { container: enContainer } = render(<UserOsCard snapshot={snapshot} language="en" />)
+    expect(enContainer.textContent).toContain('Waiver claims')
+  })
+
+  it('the help topics name a claim «reclamo», without the anglicism', () => {
+    expect(HOME_TOPICS.participationTier.es.body).toContain('2+ propuestas de cambio o reclamos, Activo')
+    expect(HOME_TOPICS.commissionerTiles.es.body).toContain('hicieron un cambio, un reclamo o un movimiento de plantilla')
+    expect(HOME_TOPICS.commissionerOverviewStats.es.body).toContain('ningún cambio, reclamo ni movimiento de plantilla')
+    expect(HOME_TOPICS.activeManagers.es.body).toContain('hicieron un cambio, un reclamo o un movimiento de plantilla')
+    expect(HOME_TOPICS.outstandingIssues.es.body).toContain('Aquí no se revisan reclamos, ofertas de intercambio ni votaciones.')
+    expect(CAREER_TOPICS.competitiveEdge.es.body).toContain('sus traspasos completados y los reclamos que ganó esta temporada')
+    // English untouched.
+    expect(HOME_TOPICS.activeManagers.en.body).toContain('made a trade, waiver claim or roster move')
+    expect(CAREER_TOPICS.competitiveEdge.en.body).toContain('the waiver claims they won this season')
+  })
+
+  it('the legacy i18n table: claims and the waiver priority', () => {
+    const es = translations.es as Record<string, string>
+    const en = translations.en as Record<string, string>
+    const cases: Array<[string, string, string]> = [
+      ['dashboard.warroom.commissionerHQ.action.pendingWaivers', '{{n}} reclamo(s) esperando tu revisión', '{{n}} waiver claim(s) awaiting your review'],
+      [
+        'dashboard.warroom.commissionerHQ.health.engagementWhy',
+        'Actividad — proporción de alineaciones enviadas, cambios y reclamos activos en tu liga. Toca para ver el detalle completo.',
+        'Activity — share of active lineup submissions, trades, and waiver claims across your league. Tap for the full breakdown.',
+      ],
+      ['decide.kpi.waiverPriority', 'prioridad de reclamo {{n}}', 'waiver priority {{n}}'],
+      ['lsPanel.tools.editWaiverDesc', 'Cambia el presupuesto FAAB y la prioridad de reclamo de cada equipo.', 'Override FAAB budget and waiver priority per team.'],
+      [
+        'lsPanel.tools.hint.editWaiver',
+        'Usa la app anfitriona para editar el FAAB y la prioridad de reclamo de cada equipo.',
+        'Use the host to edit FAAB and waiver priority per team after you jump in.',
+      ],
+    ]
+    for (const [key, spanish, english] of cases) {
+      expect(es[key], key).toBe(spanish)
+      expect(en[key], key).toBe(english)
+    }
+    expect(es['coowner.info']).toContain('hacer reclamos, proponer trades')
+    expect(en['coowner.info']).toContain('make waiver claims, propose trades')
   })
 })

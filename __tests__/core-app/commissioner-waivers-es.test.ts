@@ -84,8 +84,10 @@ describe('commissioner waiver panel', () => {
     m.waiverClaim.count.mockResolvedValue(0)
     const native = await load('es')
     const imported = await load('es', 'sleeper')
-    expect(!native.available && native.reason).toBe('Aún no hay configuración ni procesos de agentes libres. Cuando se procese el primero, aquí aparecerán los presupuestos y los resultados.')
-    expect(!imported.available && imported.reason).toMatch(/^Los agentes libres de esta liga se procesan en Sleeper\./)
+    expect(!native.available && native.reason).toBe('Aún no hay configuración ni procesamientos de reclamos. Cuando se procese el primero, aquí aparecerán los presupuestos y los resultados.')
+    expect(!imported.available && imported.reason).toBe(
+      'Los reclamos de esta liga se procesan en Sleeper. Las ofertas y los resultados de los reclamos no se comparten con AllFantasy, así que aquí no hay nada que supervisar: gestiónalos en la plataforma.',
+    )
   })
 
   it('budget reasons read Spanish', async () => {

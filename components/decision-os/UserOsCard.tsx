@@ -40,7 +40,7 @@ const PARTICIPATION_TIER_LABEL_ES: Record<string, string> = {
 
 const STAT_LABEL_ES: Record<string, string> = {
   Trades: 'Intercambios',
-  'Waiver claims': 'Reclamaciones de agentes libres',
+  'Waiver claims': 'Reclamos',
   'Lineup activity': 'Actividad de alineación',
   'Draft picks': 'Selecciones del draft',
 }

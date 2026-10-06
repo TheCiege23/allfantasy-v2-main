@@ -242,7 +242,7 @@ const AUTOMATION_ES: Record<string, string> = {
   // is only ever the players.
   'Waiver batch processing': 'Procesamiento de reclamos por lotes',
   'Settles pending waiver claims for leagues that run batched waivers, in FAAB or rolling-priority order. Only applies to leagues whose waivers are run by AllFantasy — an imported league settles its waivers on its own platform, so this never has work to do for one.':
-    'Resuelve los reclamos de agentes libres pendientes en las ligas que los procesan por lotes, por orden de FAAB o de prioridad rotativa. Solo se aplica a las ligas cuyos reclamos procesa AllFantasy: una liga importada los resuelve en su propia plataforma, así que aquí nunca tiene trabajo para ella.',
+    'Resuelve los reclamos pendientes en las ligas que los procesan por lotes, por orden de FAAB o de prioridad rotativa. Solo se aplica a las ligas cuyos reclamos procesa AllFantasy: una liga importada los resuelve en su propia plataforma, así que aquí nunca tiene trabajo para ella.',
   'Every 5 minutes, for leagues with pending claims': 'Cada 5 minutos, para las ligas con reclamos pendientes',
   'Scheduled report generation': 'Generación de informes programados',
   'Generates the reports each league has on a schedule — the weekly commissioner digest and the rest of the catalog — and files them in Reports ready to read or share. One report per league per ISO week, so a daily run never produces the same digest twice.':

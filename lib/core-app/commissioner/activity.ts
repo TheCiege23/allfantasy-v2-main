@@ -151,7 +151,7 @@ export function resolveMemberActivity(
             : 'no qualifying move on file',
       })),
       es
-        ? `los intercambios, solicitudes de agentes libres y cambios de plantilla de los últimos ${windowDays} días`
+        ? `los intercambios, reclamos y cambios de plantilla de los últimos ${windowDays} días`
         : `trades, waiver claims and roster moves in the last ${windowDays} days`,
     )
   }
