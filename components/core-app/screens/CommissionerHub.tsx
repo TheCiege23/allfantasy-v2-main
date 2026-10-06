@@ -1,3 +1,5 @@
+import CommissionerActionQueue from '@/components/core-app/CommissionerActionQueue'
+import { NativeAutoSubsCommissioner } from '@/components/core-app/NativeAutoSubsControls'
 import Link from 'next/link'
 import { Suspense, type ReactNode } from 'react'
 import '@/components/core-app/af-commish-hub.css'
@@ -242,6 +244,8 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />
+      {data.role === 'commissioner' && <CommissionerActionQueue leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <NativeAutoSubsCommissioner leagueId={league.id} />}
 
       <HubSection id="ch-intelligence" title={t('Commissioner intelligence')}>
         <CommissionerOsActionsSummary leagueId={league.id} sport={league.sport} />

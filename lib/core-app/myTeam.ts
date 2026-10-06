@@ -236,12 +236,14 @@ export type MyTeamData = {
   eliminated?: boolean
   completed?: boolean
   rosterRules?: { irStatuses: string[]; taxiSlots: number | null }
+  workspaceScope?: { rosterKey: string; season: number } | null
   nativeLineup?: { rosterId: string; week: number | null; starterIds: string[]; benchIds: Record<string,string> } | null
   autoSubs?: { enabled: boolean | null }
   league: {
     id: string
     name: string
     platform: string
+    sport?: string
     format: string | null
     bestBall?: boolean
     lineupMode?: 'manual' | 'automatic'
@@ -979,6 +981,7 @@ export async function getMyTeamData(
     league: {
       id: league.id,
       name: leagueDisplayName(league.name),
+      sport,
       platform: String(league.platform ?? 'manual').toLowerCase(),
       format: league.leagueType ?? null,
       bestBall: isBestBallSettings(league.settings),
@@ -1675,6 +1678,7 @@ export async function getMyTeamData(
     bestBall: base.league.bestBall === true,
     lineupVerification: liveRoster?.verification ?? null,
     nativeLineup: isNativePlatform(league.platform) && nativeIdsAligned && 'id' in roster && typeof roster.id === 'string' && 'platformUserId' in roster && roster.platformUserId===userId ? { rosterId: roster.id, week: weekFromLeagueSettingsForLineup(league.settings), starterIds, benchIds: Object.fromEntries(benchIds.flatMap(id=>{const p=resolved.get(id);return p && nativeSections.bench.some(b=>b.id===id) ? [[p.sleeperId,id]] : []})) } : null,
+    workspaceScope: Number.isInteger(league.season) && league.season ? { rosterKey: `team:${myTeamRow.id}`, season: league.season } : null,
     autoSubs: { enabled: autoSubsSetting(league.settings) },
     rosterRules: isNativePlatform(league.platform) ? { irStatuses: ['IR','PUP','OUT_IR','RESERVE', ...(league.irAllowOut ? ['OUT'] : []), ...(league.irAllowCovid ? ['COVID','COVID-19'] : []), ...(league.irAllowSuspended ? ['SUSP','SUSPENDED'] : []), ...(league.irAllowNA ? ['N/A'] : []), ...(league.irAllowDNR ? ['DNR','DID_NOT_REPORT'] : []), ...(league.irAllowDoubtful ? ['Q','QUESTIONABLE','DOUBTFUL','D'] : [])], taxiSlots: league.taxiSlots } : undefined,
     projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },

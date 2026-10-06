@@ -38,6 +38,7 @@ export async function getPlayerGameLockStateForAutoCoach(args: {
   teamAbbr: string | null | undefined
   leagueSeason: number
   leagueSettings: unknown
+  db?: Pick<Prisma.TransactionClient, 'sportsGame'>
   nowUtc?: Date
 }): Promise<PlayerGameLockResult> {
   const now = args.nowUtc ?? getServerNowUTC()
@@ -71,12 +72,12 @@ export async function getPlayerGameLockStateForAutoCoach(args: {
     : null
 
   const recent = weeklyWhere
-    ? await prisma.sportsGame.findFirst({
+    ? await (args.db ?? prisma).sportsGame.findFirst({
         where: weeklyWhere,
         orderBy: { startTime: 'desc' },
         select: { startTime: true },
       })
-    : await prisma.sportsGame.findFirst({
+    : await (args.db ?? prisma).sportsGame.findFirst({
         where: {
           sport: sk,
           OR: teamOr,
@@ -109,7 +110,7 @@ export async function getPlayerGameLockStateForAutoCoach(args: {
         startTime: { gt: now },
       }
 
-  const next = await prisma.sportsGame.findFirst({
+  const next = await (args.db ?? prisma).sportsGame.findFirst({
     where: nextWhere,
     orderBy: { startTime: 'asc' },
     select: { startTime: true },
@@ -126,7 +127,7 @@ export async function getPlayerGameLockStateForAutoCoach(args: {
 
   // Daily sports: broaden search if week/season filter yielded nothing
   if (!isWeeklyFootball) {
-    const nextBroad = await prisma.sportsGame.findFirst({
+    const nextBroad = await (args.db ?? prisma).sportsGame.findFirst({
       where: {
         sport: sk,
         OR: teamOr,
@@ -135,7 +136,7 @@ export async function getPlayerGameLockStateForAutoCoach(args: {
       orderBy: { startTime: 'asc' },
       select: { startTime: true },
     })
-    const pastBroad = await prisma.sportsGame.findFirst({
+    const pastBroad = await (args.db ?? prisma).sportsGame.findFirst({
       where: {
         sport: sk,
         OR: teamOr,
