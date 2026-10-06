@@ -1,6 +1,6 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { CommissionerDepthLocked } from '@/components/commissioner-os/shell/CommissionerDepthLocked'
-import { FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { CommissionerFreeUntilNote } from '@/components/commissioner-os/shell/CommissionerFreeUntilNote'
 import { resolveCommissionerOsDepth } from '@/lib/commissioner-ui/commissionerOsDepth'
 import { ManagerIntelligenceView } from '@/components/commissioner-os/managers/ManagerIntelligenceView'
 import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
@@ -14,7 +14,7 @@ export default async function ManagerIntelligencePage() {
 
   return (
     <CommissionerPageContainer>
-      <FreeUntilNote access={depth} />
+      <CommissionerFreeUntilNote access={depth} />
       <ManagerIntelligenceView managers={response.data ?? []} dataMode={adapter.mode} />
     </CommissionerPageContainer>
   )

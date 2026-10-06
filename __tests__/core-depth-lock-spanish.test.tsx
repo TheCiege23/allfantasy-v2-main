@@ -228,7 +228,8 @@ describe('every caller passes the reader’s language and a translated subject',
     /*
      * A floor, not a count. Commissioner OS pages stop importing CoreDepthLock as they move to the
      * shell's language-following CommissionerFreeUntilNote (#2099): 20 direct callers before, 18 once
-     * analytics and reports moved, and ~12 when the other COS pages follow. 10 still catches a census
+     * analytics and reports moved, 15 once League Health, Managers and Recommendations moved too, and
+     * ~12 when the rest follow. 10 still catches a census
      * that finds nothing.
      */
     expect(callers.length).toBeGreaterThanOrEqual(10)

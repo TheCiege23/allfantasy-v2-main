@@ -1,6 +1,6 @@
 import { CommissionerPageContainer } from '@/components/commissioner-os/shell/CommissionerPageContainer'
 import { CommissionerDepthLocked } from '@/components/commissioner-os/shell/CommissionerDepthLocked'
-import { FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { CommissionerFreeUntilNote } from '@/components/commissioner-os/shell/CommissionerFreeUntilNote'
 import { resolveCommissionerOsDepth } from '@/lib/commissioner-ui/commissionerOsDepth'
 import { RecommendationsView } from '@/components/commissioner-os/recommendations/RecommendationsView'
 import { getDecisionOSAdapter } from '@/lib/commissioner-ui/adapter'
@@ -17,7 +17,7 @@ export default async function RecommendationsPage() {
 
   return (
     <CommissionerPageContainer>
-      <FreeUntilNote access={depth} />
+      <CommissionerFreeUntilNote access={depth} />
       <RecommendationsView recommendations={response.data ?? []} dataMode={adapter.mode} />
       {leagueId && <CommissionerChimmy leagueId={leagueId} />}
     </CommissionerPageContainer>

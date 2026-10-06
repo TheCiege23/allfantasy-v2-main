@@ -598,6 +598,19 @@ describe('the cards’ own words in Spanish', () => {
   })
 })
 
+describe('the pages', () => {
+  /*
+   * The pages are server components and cannot read the language, so the "Free until …" note goes
+   * through C1's client wrapper rather than FreeUntilNote with no `lang` (which reads English). The
+   * lock subject is CommissionerDepthLocked's job, and core-depth-lock-spanish censuses that.
+   */
+  it.each(['league-health', 'managers', 'recommendations'])('%s draws the note through CommissionerFreeUntilNote', (page) => {
+    const src = source('app', 'commissioner-os', page, 'page.tsx')
+    expect(src).toContain('<CommissionerFreeUntilNote access={depth} />')
+    expect(src).not.toMatch(/<FreeUntilNote\b/)
+  })
+})
+
 /* ── English is unchanged ────────────────────────────────────────────────────── */
 
 describe('English mode is unchanged', () => {
