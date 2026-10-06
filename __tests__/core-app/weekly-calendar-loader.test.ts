@@ -22,7 +22,7 @@ describe('calendar source scopes',()=>{
  it('uses a real native run and does not fabricate imported waiver times',async()=>{
  h.state.mockResolvedValue([{leagueId:'N',nextRunAt:new Date('2026-10-07T08:00:00Z')}])
  const c=await getWeeklyCalendar(leagues,null,now,null,[])
- expect(c.events[0]).toMatchObject({leagueId:'N',kind:'waivers',source:'waiver-engine'})
+ expect(c.events[0]).toMatchObject({leagueId:'N',kind:'waivers',source:'waiver-engine',href:'/core/waivers?league=N'})
  expect(c.gaps.some(g=>g.leagueId==='N'&&g.kind==='waivers')).toBe(false)
  expect(c.gaps.some(g=>g.leagueId==='S'&&g.kind==='waivers')).toBe(true)
  })

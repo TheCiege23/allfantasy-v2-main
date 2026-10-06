@@ -17,7 +17,7 @@ export async function getWeeklyCalendar(leagues:Array<WeeklyCalendarLeague&{plat
     commIds.length?prisma.commissionerWorkspaceTask.findMany({where:{leagueId:{in:commIds},status:{in:['open','acknowledged','in_progress']},dueAt:{gte:now,lt:through}},select:{id:true,leagueId:true,title:true,dueAt:true},orderBy:{dueAt:'asc'},take:200}):Promise.resolve([])
   ])
   const extra:WeeklyCalendarEvent[]=[]
-  const add=(id:string,leagueId:string,kind:WeeklyCalendarEvent['kind'],raw:unknown,source:WeeklyCalendarEvent['source'],title='')=>{const at=absoluteCalendarTime(raw);if(at)extra.push({id,leagueId,leagueName:'',kind,at,source,title,href:kind==='poll'?'/league/'+encodeURIComponent(leagueId)+'?view=league_chat':'/core/'+(kind==='waivers'?'waiver-wire':'commissioner')+'?league='+encodeURIComponent(leagueId)})}
+  const add=(id:string,leagueId:string,kind:WeeklyCalendarEvent['kind'],raw:unknown,source:WeeklyCalendarEvent['source'],title='')=>{const at=absoluteCalendarTime(raw);if(at)extra.push({id,leagueId,leagueName:'',kind,at,source,title,href:kind==='poll'?'/league/'+encodeURIComponent(leagueId)+'?view=league_chat':'/core/'+(kind==='waivers'?'waivers':'commissioner')+'?league='+encodeURIComponent(leagueId)})}
   if(reads[0].status==='fulfilled')for(const r of reads[0].value)add(r.leagueId+':waivers',r.leagueId,'waivers',r.nextRunAt,'waiver-engine')
   if(reads[1].status==='fulfilled')for(const r of reads[1].value)add(r.leagueId+':draft',r.leagueId,'draft',r.draftDateUtc,'league-settings')
   if(reads[2].status==='fulfilled')for(const r of reads[2].value){const poll=readViewerPoll(r.metadata,null);if(poll&&!poll.closedByHand)add(r.id,r.leagueId,'poll',poll.closesAt,'league-chat',poll.question)}
