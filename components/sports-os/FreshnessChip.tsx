@@ -31,6 +31,8 @@
 
 import { useEffect, useState } from 'react'
 import { freshnessLabel, shouldWarnAboutFreshness, type FreshnessMeta } from '@/lib/sports-os/freshness'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { ageText } from '@/lib/core-app/shellCopy'
 import './af-freshness.css'
 
 export type FreshnessChipProps = {
@@ -55,6 +57,12 @@ export function FreshnessChip({ meta, initialLabel, initialWarn, prefix = 'Updat
    * client render identical to the server's. Do NOT seed this with `Date.now()`.
    */
   const [nowMs, setNowMs] = useState<number | null>(null)
+  /*
+   * The reader's language (2026-10-05). The label is `freshnessLabel`'s English ("just now", "4m ago"),
+   * translated by the shell's `ageText`; the server's first paint is English like the rest of SSR here,
+   * and the provider re-renders it once mounted.
+   */
+  const es = useOptionalLanguage().language === 'es'
 
   useEffect(() => {
     const tick = () => setNowMs(Date.now())
@@ -66,7 +74,8 @@ export function FreshnessChip({ meta, initialLabel, initialWarn, prefix = 'Updat
   // Nothing was ever fetched. A chip reading "never" over a board is noise, not information.
   if (meta.source === 'none') return null
 
-  const label = nowMs === null ? initialLabel : freshnessLabel(meta, nowMs)
+  const english = nowMs === null ? initialLabel : freshnessLabel(meta, nowMs)
+  const label = es ? (english === 'never' ? 'nunca' : ageText(english, 'es')) : english
   const warn = nowMs === null ? initialWarn : shouldWarnAboutFreshness(meta, nowMs)
   const lastKnown = meta.source === 'last-known'
 
@@ -77,7 +86,7 @@ export function FreshnessChip({ meta, initialLabel, initialWarn, prefix = 'Updat
     <span className="af-fresh" data-state={state}>
       <span className="af-fresh-dot" aria-hidden />
       <span className="af-fresh-text">
-        {lastKnown ? 'Last known' : prefix}{' '}
+        {lastKnown ? (es ? 'Último dato' : 'Last known') : es && prefix === 'Updated' ? 'Actualizado' : prefix}{' '}
         {/*
           The machine-readable absolute instant rides along in `dateTime`, so the exact moment is
           available to a screen reader and a hover without printing a locale-formatted string that
@@ -85,7 +94,7 @@ export function FreshnessChip({ meta, initialLabel, initialWarn, prefix = 'Updat
         */}
         <time dateTime={iso}>{label}</time>
       </span>
-      {lastKnown ? <span className="af-fresh-note">refresh failed</span> : null}
+      {lastKnown ? <span className="af-fresh-note">{es ? 'falló la actualización' : 'refresh failed'}</span> : null}
     </span>
   )
 }

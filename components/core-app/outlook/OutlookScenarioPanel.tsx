@@ -12,6 +12,8 @@ import {
   type ScenarioPlayer,
 } from '@/lib/core-app/outlookScenario'
 import { pct, signedPts } from '@/lib/core-app/outlookCopy'
+import { outlookText } from '@/lib/core-app/outlookSpanish'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 /**
  * Season Outlook — what-if controls, simulated in the browser.
@@ -42,10 +44,15 @@ function runOdds(model: ScenarioModel, scenario: Scenario): { odds: Odds | null;
   }
 }
 
-const label = (p: ScenarioPlayer) =>
-  `${p.name}${p.position ? ` · ${p.position}` : ''}${p.points != null ? ` · ${p.points.toFixed(1)}` : ' · no projection'}`
+const playerLabel = (p: ScenarioPlayer, es: boolean) =>
+  `${p.name}${p.position ? ` · ${p.position}` : ''}${p.points != null ? ` · ${p.points.toFixed(1)}` : es ? ' · sin proyección' : ' · no projection'}`
 
 export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
+  /* The reader's language (2026-10-05). The engine's result lines are English; `outlookText` translates them. */
+  const { language } = useOptionalLanguage()
+  const es = language === 'es'
+  const say = (english: string) => outlookText(english, language)
+  const label = (p: ScenarioPlayer) => playerLabel(p, es)
   const [scenario, setScenario] = useState<Scenario>(EMPTY_SCENARIO)
   const [result, setResult] = useState<ReturnType<typeof runOdds> | null>(null)
   const [running, setRunning] = useState(false)
@@ -68,8 +75,8 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
 
   const teams = model.teams
   const you = teams.find((t) => t.isYou) ?? null
-  const teamName = (rosterId: string) => teams.find((t) => t.rosterId === rosterId)?.name ?? `Team ${rosterId}`
-  const nameOf = (rosterId: string) => (rosterId === model.youRosterId ? 'You' : teamName(rosterId))
+  const teamName = (rosterId: string) => teams.find((t) => t.rosterId === rosterId)?.name ?? `${es ? 'Equipo' : 'Team'} ${rosterId}`
+  const nameOf = (rosterId: string) => (rosterId === model.youRosterId ? (es ? 'Tú' : 'You') : teamName(rosterId))
   const priced = !model.refusal && you != null
   const mine = useMemo(
     () => [...(you?.players ?? [])].sort((a, b) => (b.points ?? -1) - (a.points ?? -1)),
@@ -119,27 +126,35 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
     ...scenario.results.map((r, index) => ({
       kind: 'results' as const,
       index,
-      text: `Wk ${r.week}: ${nameOf(r.winner)} ${r.winner === model.youRosterId ? 'beat' : 'beats'} ${nameOf(r.winner === r.a ? r.b : r.a)}`,
+      text: es
+        ? `Sem ${r.week}: ${nameOf(r.winner)} ${r.winner === model.youRosterId ? 'vences a' : 'vence a'} ${nameOf(r.winner === r.a ? r.b : r.a)}`
+        : `Wk ${r.week}: ${nameOf(r.winner)} ${r.winner === model.youRosterId ? 'beat' : 'beats'} ${nameOf(r.winner === r.a ? r.b : r.a)}`,
     })),
     ...scenario.injuries.map((i, index) => ({
       kind: 'injuries' as const,
       index,
-      text: `${mine.find((p) => p.id === i.playerId)?.name ?? 'Player'} out ${i.weeks == null ? 'for the season' : `${i.weeks} wk`}`,
+      text: es
+        ? `${mine.find((p) => p.id === i.playerId)?.name ?? 'Jugador'} fuera ${i.weeks == null ? 'toda la temporada' : `${i.weeks} sem`}`
+        : `${mine.find((p) => p.id === i.playerId)?.name ?? 'Player'} out ${i.weeks == null ? 'for the season' : `${i.weeks} wk`}`,
     })),
     ...scenario.lineup.map((l, index) => ({
       kind: 'lineup' as const,
       index,
-      text: `Wk ${l.week}: start ${mine.find((p) => p.id === l.startId)?.name ?? '?'} over ${mine.find((p) => p.id === l.sitId)?.name ?? '?'}`,
+      text: es
+        ? `Sem ${l.week}: alinea a ${mine.find((p) => p.id === l.startId)?.name ?? '?'} en lugar de ${mine.find((p) => p.id === l.sitId)?.name ?? '?'}`
+        : `Wk ${l.week}: start ${mine.find((p) => p.id === l.startId)?.name ?? '?'} over ${mine.find((p) => p.id === l.sitId)?.name ?? '?'}`,
     })),
     ...scenario.trades.map((t, index) => ({
       kind: 'trades' as const,
       index,
-      text: `Trade with ${nameOf(t.partnerRosterId)}`,
+      text: es ? `Intercambio con ${nameOf(t.partnerRosterId)}` : `Trade with ${nameOf(t.partnerRosterId)}`,
     })),
     ...scenario.waivers.map((w, index) => ({
       kind: 'waivers' as const,
       index,
-      text: `Add ${model.freeAgents.find((p) => p.id === w.addId)?.name ?? '?'}${w.dropId ? `, drop ${mine.find((p) => p.id === w.dropId)?.name ?? '?'}` : ''}`,
+      text: es
+        ? `Añade a ${model.freeAgents.find((p) => p.id === w.addId)?.name ?? '?'}${w.dropId ? ` y suelta a ${mine.find((p) => p.id === w.dropId)?.name ?? '?'}` : ''}`
+        : `Add ${model.freeAgents.find((p) => p.id === w.addId)?.name ?? '?'}${w.dropId ? `, drop ${mine.find((p) => p.id === w.dropId)?.name ?? '?'}` : ''}`,
     })),
   ]
 
@@ -148,15 +163,29 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
   return (
     <div className="af-olk-scn">
       <p className="af-olk-note">
-        Build a what-if and the season is re-simulated here, {CLIENT_ITERATIONS.toLocaleString('en-US')} times, against a
-        baseline run the same way.
-        {model.basisWeek
-          ? ` Player changes are priced from week ${model.basisWeek.week} projections under this league's scoring, applied to every week they cover.`
-          : ''}
+        {es
+          ? `Arma un escenario y la temporada se vuelve a simular aquí, ${CLIENT_ITERATIONS.toLocaleString('es-ES')} veces, frente a una base calculada igual.${
+              model.basisWeek
+                ? ` Los cambios de jugadores se valoran con las proyecciones de la semana ${model.basisWeek.week} según la puntuación de esta liga, aplicadas a cada semana que cubren.`
+                : ''
+            }`
+          : `Build a what-if and the season is re-simulated here, ${CLIENT_ITERATIONS.toLocaleString('en-US')} times, against a baseline run the same way.${
+              model.basisWeek
+                ? ` Player changes are priced from week ${model.basisWeek.week} projections under this league's scoring, applied to every week they cover.`
+                : ''
+            }`}
       </p>
-      {model.refusal ? <p className="af-olk-warn">{model.refusal} Schedule results still work.</p> : null}
+      {model.refusal ? (
+        <p className="af-olk-warn">
+          {say(model.refusal)} {es ? 'Los resultados del calendario siguen funcionando.' : 'Schedule results still work.'}
+        </p>
+      ) : null}
       {!model.youRosterId ? (
-        <p className="af-olk-warn">Your team is not identified in this league, so there is nothing to compare.</p>
+        <p className="af-olk-warn">
+          {es
+            ? 'Tu equipo no está identificado en esta liga, así que no hay nada que comparar.'
+            : 'Your team is not identified in this league, so there is nothing to compare.'}
+        </p>
       ) : null}
 
       <div className="af-olk-scn-result" aria-live="polite">
@@ -169,7 +198,9 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
                 const delta = after == null ? null : after - baseline[k]
                 return (
                   <div key={k} className="af-olk-scn-odds">
-                    <span className="af-label">{k === 'playoff' ? 'Playoffs' : k === 'bye' ? 'Bye' : 'Title'}</span>
+                    <span className="af-label">
+                      {k === 'playoff' ? 'Playoffs' : k === 'bye' ? (es ? 'Descanso' : 'Bye') : es ? 'Título' : 'Title'}
+                    </span>
                     <span className="af-olk-scn-v af-num">
                       {pct(baseline[k])}%
                       {after != null ? (
@@ -184,29 +215,31 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
                         {signedPts(delta)} pts
                       </span>
                     ) : (
-                      <span className="af-olk-g">baseline</span>
+                      <span className="af-olk-g">{es ? 'base' : 'baseline'}</span>
                     )}
                   </div>
                 )
               })}
-            <span className="af-olk-g">{running ? 'Running…' : scenarioIsEmpty(scenario) ? 'Add a change below.' : ''}</span>
+            <span className="af-olk-g">
+              {running ? (es ? 'Calculando…' : 'Running…') : scenarioIsEmpty(scenario) ? (es ? 'Añade un cambio abajo.' : 'Add a change below.') : ''}
+            </span>
           </>
         ) : null}
       </div>
 
       {active.length > 0 ? (
-        <ul className="af-olk-chips" aria-label="Changes in this what-if">
+        <ul className="af-olk-chips" aria-label={es ? 'Cambios de este escenario' : 'Changes in this what-if'}>
           {active.map((a) => (
             <li key={`${a.kind}-${a.index}`} className="af-olk-chip">
               <span>{a.text}</span>
-              <button type="button" className="af-olk-chip-x" onClick={() => remove(a.kind, a.index)} aria-label={`Remove: ${a.text}`}>
+              <button type="button" className="af-olk-chip-x" onClick={() => remove(a.kind, a.index)} aria-label={`${es ? 'Quitar' : 'Remove'}: ${a.text}`}>
                 ×
               </button>
             </li>
           ))}
           <li>
             <button type="button" className="af-olk-link" onClick={() => setScenario(EMPTY_SCENARIO)}>
-              Clear all
+              {es ? 'Borrar todo' : 'Clear all'}
             </button>
           </li>
         </ul>
@@ -214,11 +247,11 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
       {result && (result.lines.length > 0 || result.problems.length > 0) ? (
         <ul className="af-olk-mini-list">
           {result.lines.map((l) => (
-            <li key={l}>{l}</li>
+            <li key={l}>{say(l)}</li>
           ))}
           {result.problems.map((p) => (
             <li key={p} className="af-olk-warn">
-              {p}
+              {say(p)}
             </li>
           ))}
         </ul>
@@ -226,24 +259,24 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
 
       <div className="af-olk-scn-grid">
         <fieldset className="af-olk-ctl">
-          <legend className="af-label">Game results</legend>
+          <legend className="af-label">{es ? 'Resultados de partidos' : 'Game results'}</legend>
           <label className="af-olk-field">
-            <span>Game</span>
+            <span>{es ? 'Partido' : 'Game'}</span>
             <select value={gamePick} onChange={(e) => setGamePick(e.target.value)}>
-              <option value="">Pick a game</option>
+              <option value="">{es ? 'Elige un partido' : 'Pick a game'}</option>
               {yourGames.length > 0 ? (
-                <optgroup label="Your games">
+                <optgroup label={es ? 'Tus partidos' : 'Your games'}>
                   {yourGames.map((g) => (
                     <option key={gameKey(g)} value={gameKey(g)}>
-                      Wk {g.week}: vs {nameOf(g.a === model.youRosterId ? g.b : g.a)}
+                      {es ? 'Sem' : 'Wk'} {g.week}: vs {nameOf(g.a === model.youRosterId ? g.b : g.a)}
                     </option>
                   ))}
                 </optgroup>
               ) : null}
-              <optgroup label="Other games">
+              <optgroup label={es ? 'Otros partidos' : 'Other games'}>
                 {otherGames.map((g) => (
                   <option key={gameKey(g)} value={gameKey(g)}>
-                    Wk {g.week}: {nameOf(g.a)} vs {nameOf(g.b)}
+                    {es ? 'Sem' : 'Wk'} {g.week}: {nameOf(g.a)} vs {nameOf(g.b)}
                   </option>
                 ))}
               </optgroup>
@@ -256,7 +289,7 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
                 const id = side === 'a' ? g.a : g.b
                 return (
                   <button key={side} type="button" className="af-olk-btn" onClick={() => addResult(side)}>
-                    {id === model.youRosterId ? 'You win' : `${nameOf(id)} wins`}
+                    {id === model.youRosterId ? (es ? 'Ganas tú' : 'You win') : es ? `Gana ${nameOf(id)}` : `${nameOf(id)} wins`}
                   </button>
                 )
               })}
@@ -265,11 +298,11 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
         </fieldset>
 
         <fieldset className="af-olk-ctl" disabled={!priced}>
-          <legend className="af-label">Injury</legend>
+          <legend className="af-label">{es ? 'Lesión' : 'Injury'}</legend>
           <label className="af-olk-field">
-            <span>Player</span>
+            <span>{es ? 'Jugador' : 'Player'}</span>
             <select value={injPick} onChange={(e) => setInjPick(e.target.value)}>
-              <option value="">Pick one of yours</option>
+              <option value="">{es ? 'Elige uno de los tuyos' : 'Pick one of yours'}</option>
               {mine.map((p) => (
                 <option key={p.id} value={p.id}>
                   {label(p)}
@@ -278,14 +311,14 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
             </select>
           </label>
           <label className="af-olk-field">
-            <span>Out for</span>
+            <span>{es ? 'Fuera durante' : 'Out for'}</span>
             <select value={injWeeks} onChange={(e) => setInjWeeks(e.target.value)}>
               {['1', '2', '3', '4', '6'].map((w) => (
                 <option key={w} value={w}>
-                  {w} week{w === '1' ? '' : 's'}
+                  {w} {es ? (w === '1' ? 'semana' : 'semanas') : `week${w === '1' ? '' : 's'}`}
                 </option>
               ))}
-              <option value="season">the rest of the season</option>
+              <option value="season">{es ? 'el resto de la temporada' : 'the rest of the season'}</option>
             </select>
           </label>
           <button
@@ -297,26 +330,26 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
               setInjPick('')
             }}
           >
-            Add injury
+            {es ? 'Añadir lesión' : 'Add injury'}
           </button>
         </fieldset>
 
         <fieldset className="af-olk-ctl" disabled={!priced}>
-          <legend className="af-label">Lineup call</legend>
+          <legend className="af-label">{es ? 'Decisión de alineación' : 'Lineup call'}</legend>
           <label className="af-olk-field">
-            <span>Week</span>
+            <span>{es ? 'Semana' : 'Week'}</span>
             <select value={luWeek} onChange={(e) => setLuWeek(e.target.value)}>
               {model.weeks.map((w) => (
                 <option key={w} value={w}>
-                  Week {w}
+                  {es ? 'Semana' : 'Week'} {w}
                 </option>
               ))}
             </select>
           </label>
           <label className="af-olk-field">
-            <span>Start</span>
+            <span>{es ? 'Alinear' : 'Start'}</span>
             <select value={luStart} onChange={(e) => setLuStart(e.target.value)}>
-              <option value="">Bench player</option>
+              <option value="">{es ? 'Jugador del banco' : 'Bench player'}</option>
               {bench.map((p) => (
                 <option key={p.id} value={p.id}>
                   {label(p)}
@@ -325,9 +358,9 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
             </select>
           </label>
           <label className="af-olk-field">
-            <span>Instead of</span>
+            <span>{es ? 'En lugar de' : 'Instead of'}</span>
             <select value={luSit} onChange={(e) => setLuSit(e.target.value)}>
-              <option value="">Current starter</option>
+              <option value="">{es ? 'Titular actual' : 'Current starter'}</option>
               {starters.map((p) => (
                 <option key={p.id} value={p.id}>
                   {label(p)}
@@ -345,14 +378,14 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
               setLuSit('')
             }}
           >
-            Add lineup call
+            {es ? 'Añadir decisión' : 'Add lineup call'}
           </button>
         </fieldset>
 
         <fieldset className="af-olk-ctl" disabled={!priced}>
-          <legend className="af-label">Trade</legend>
+          <legend className="af-label">{es ? 'Intercambio' : 'Trade'}</legend>
           <label className="af-olk-field">
-            <span>With</span>
+            <span>{es ? 'Con' : 'With'}</span>
             <select
               value={partner}
               onChange={(e) => {
@@ -360,7 +393,7 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
                 setReceive(['', ''])
               }}
             >
-              <option value="">Pick a team</option>
+              <option value="">{es ? 'Elige un equipo' : 'Pick a team'}</option>
               {teams
                 .filter((t) => !t.isYou)
                 .map((t) => (
@@ -372,9 +405,9 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
           </label>
           {[0, 1].map((i) => (
             <label key={`s${i}`} className="af-olk-field">
-              <span>{i === 0 ? 'You send' : 'And'}</span>
+              <span>{i === 0 ? (es ? 'Envías' : 'You send') : es ? 'Y' : 'And'}</span>
               <select value={send[i]} onChange={(e) => setSend((v) => v.map((x, j) => (j === i ? e.target.value : x)))}>
-                <option value="">{i === 0 ? 'Pick a player' : 'Nobody else'}</option>
+                <option value="">{i === 0 ? (es ? 'Elige un jugador' : 'Pick a player') : es ? 'Nadie más' : 'Nobody else'}</option>
                 {mine.map((p) => (
                   <option key={p.id} value={p.id}>
                     {label(p)}
@@ -385,13 +418,13 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
           ))}
           {[0, 1].map((i) => (
             <label key={`r${i}`} className="af-olk-field">
-              <span>{i === 0 ? 'You get' : 'And'}</span>
+              <span>{i === 0 ? (es ? 'Recibes' : 'You get') : es ? 'Y' : 'And'}</span>
               <select
                 value={receive[i]}
                 disabled={!partnerTeam}
                 onChange={(e) => setReceive((v) => v.map((x, j) => (j === i ? e.target.value : x)))}
               >
-                <option value="">{i === 0 ? 'Pick a player' : 'Nobody else'}</option>
+                <option value="">{i === 0 ? (es ? 'Elige un jugador' : 'Pick a player') : es ? 'Nadie más' : 'Nobody else'}</option>
                 {[...(partnerTeam?.players ?? [])]
                   .sort((a, b) => (b.points ?? -1) - (a.points ?? -1))
                   .map((p) => (
@@ -420,16 +453,18 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
               setReceive(['', ''])
             }}
           >
-            Add trade
+            {es ? 'Añadir intercambio' : 'Add trade'}
           </button>
         </fieldset>
 
         <fieldset className="af-olk-ctl" disabled={!priced}>
-          <legend className="af-label">Waiver claim</legend>
+          <legend className="af-label">{es ? 'Reclamo de agente libre' : 'Waiver claim'}</legend>
           <label className="af-olk-field">
-            <span>Add</span>
+            <span>{es ? 'Añadir' : 'Add'}</span>
             <select value={faPick} onChange={(e) => setFaPick(e.target.value)}>
-              <option value="">{model.freeAgents.length ? 'Pick a free agent' : 'No priced free agents'}</option>
+              <option value="">
+                {model.freeAgents.length ? (es ? 'Elige un agente libre' : 'Pick a free agent') : es ? 'No hay agentes libres valorados' : 'No priced free agents'}
+              </option>
               {model.freeAgents.map((p) => (
                 <option key={p.id} value={p.id}>
                   {label(p)}
@@ -438,9 +473,9 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
             </select>
           </label>
           <label className="af-olk-field">
-            <span>Drop</span>
+            <span>{es ? 'Soltar' : 'Drop'}</span>
             <select value={dropPick} onChange={(e) => setDropPick(e.target.value)}>
-              <option value="">Nobody (open spot)</option>
+              <option value="">{es ? 'Nadie (puesto libre)' : 'Nobody (open spot)'}</option>
               {mine.map((p) => (
                 <option key={p.id} value={p.id}>
                   {label(p)}
@@ -458,10 +493,12 @@ export function OutlookScenarioPanel({ model }: { model: ScenarioModel }) {
               setDropPick('')
             }}
           >
-            Add claim
+            {es ? 'Añadir reclamo' : 'Add claim'}
           </button>
           <p className="af-olk-note">
-            Free agents are the best projected players on no roster in this league&apos;s last sync, five per position.
+            {es
+              ? 'Los agentes libres son los jugadores mejor proyectados sin equipo en la última sincronización de esta liga, cinco por posición.'
+              : "Free agents are the best projected players on no roster in this league's last sync, five per position."}
           </p>
         </fieldset>
       </div>
