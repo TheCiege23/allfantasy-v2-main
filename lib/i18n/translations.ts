@@ -815,6 +815,12 @@ export const translations: Record<string, Record<string, string>> = {
     "decide.mc.proj": "proj {{pts}}",
     "decide.mc.unprojected": " ({{n}} unprojected)",
     "decide.mc.yours": "your matchup",
+    // League Pulse card (components/decision-os/LeaguePulseCard).
+    "pulseCard.trustNote": "This pulse is evidence-backed and deterministic. Limited league data lowers confidence instead of producing unsupported claims.",
+    "pulseCard.basedOn": "Based on",
+    "pulseCard.decisionPath": "Decision path",
+    "pulseCard.nextAction": "Next action",
+    "pulseCard.continue": "Continue",
     "decide.shadow.fallbackSource": "your host platform",
     "decide.shadow.body": "Imported from {{source}}. Edit lineups, trades and waivers freely — changes stay inside AllFantasy and never reach {{source}}, which remains your league's system of record.",
     "lsScore.gateLabel": "Advanced {{sport}} Scoring Customization",
