@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { calibrateDraftModel, type CalibrationCohort } from '../calibrationModel';
+import {preSeasonCalibration} from '../calibrationChronology';
 import { calibrationKey } from '../phase4Loader';
 import type { PreparationContext } from '@/lib/core-app/draftPreparationModel';
 const obj=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
@@ -43,6 +44,8 @@ export async function recomputeDraftCalibration(apply=false,limit=100,filters:Ca
       const detail=await detailReader!(source.leagueId,source.userId,'native:'+source.id),context=obj(detail?.snapshot).context as PreparationContext|undefined;
       const phase=detail?.phase4,results=detail?.resultsReport;
       if(!detail||!context||!phase||detail.analysisReport?.state!=='ready'||phase.replay.state!=='ready'||results?.state!=='ready'||results.provisional||!detail.startedAt||!detail.choice.season)continue;
+      const opening=await prisma.sportsGame.findFirst({where:{sport:'NFL',season:detail.choice.season,seasonType:'regular',week:1,startTime:{not:null}},orderBy:{startTime:'asc'},select:{startTime:true}});
+      if(!preSeasonCalibration(detail.startedAt,opening?.startTime??null,detail.choice.season))continue;
       const weeks=results.teams[0]?.weeks??[],last=Math.max(...weeks);
       if(last<14||last>18||Array.from({length:last},(_,i)=>i+1).some(w=>results.teams.some(t=>!t.weeks.includes(w))))continue;
       const teams=phase.components.flatMap(c=>{
