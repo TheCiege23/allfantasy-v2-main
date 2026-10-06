@@ -19,6 +19,7 @@ describe('weekly playoff snapshots',()=>{
     const out=await readWeeklyPlayoffPath('u',league,null,2026,4)
     expect(out.points.map(p=>[p.period,p.probability])).toEqual([[2,10],[3,5],[4,3.5]])
     expect(h.write.mock.calls[0][0].where.cacheKey).toMatch(/:4$/)
+    expect(h.read.mock.calls[0][0].where.cacheKey.startsWith).toMatch(/^core-week-path:v2:/)
   })
   it('isolates snapshots by user, team, league and season',async()=>{
     await readWeeklyPlayoffPath('u',league,null,2026,4)

@@ -18,7 +18,9 @@ export async function readWeeklyPlayoffPath(userId: string, league: OutlookLeagu
   const point = { period, probability, sampledAt: league.assumptions.computedAt }
   if (!validPlayoffPoint(point)) return result
   const scope = createHash('sha256').update(JSON.stringify([userId, league.leagueId, season, league.you.rosterId])).digest('hex')
-  const prefix = `core-week-path:v1:${scope}:`
+  // Older snapshots did not validate the model period and may carry a delayed provider marker.
+  // Preserve those cache entries, but start the displayed history with verified period identity.
+  const prefix = `core-week-path:v2:${scope}:`
   try {
     const rows = await prisma.sportsDataCache.findMany({ where: { cacheKey: { startsWith: prefix }, expiresAt: { gt: now } }, select: { data: true }, orderBy: { createdAt: 'desc' }, take: 40 })
     result.points = rows.map(r => r.data).filter(validPlayoffPoint).filter(p => p.period < period).sort((a,b) => a.period - b.period).slice(-15)
