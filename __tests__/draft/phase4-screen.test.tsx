@@ -11,6 +11,12 @@ describe('draft analysis controls',()=>{
   it('preserves strict UTF-8 source for the Next.js compiler',()=>{
     expect(()=>new TextDecoder('utf-8',{fatal:true}).decode(readFileSync(resolve(process.cwd(),'components/core-app/screens/DraftPhase4.tsx')))).not.toThrow();
   });
+  it('opens scoped Chimmy with an archive key without sending a message',()=>{
+    const listener=vi.fn();window.addEventListener('af-comms-open',listener);
+    render(<DraftPhase4 detail={detail}/>);fireEvent.click(screen.getByRole('button',{name:'Ask Chimmy about this draft'}));
+    expect(listener.mock.calls[0][0].detail).toEqual({tab:'chimmy',leagueId:'l',prefill:'Explain the verified draft analysis for archive key native:d.'});
+    window.removeEventListener('af-comms-open',listener);
+  });
   it('replays actual recorded picks even with gaps in overall numbers',()=>{
     render(<DraftPhase4 detail={detail}/>);fireEvent.click(screen.getByRole('button',{name:'Replay a pick'}));expect(screen.getByLabelText('Overall pick')).toHaveValue(2);fireEvent.click(screen.getByRole('button',{name:'Next pick'}));expect(screen.getByLabelText('Overall pick')).toHaveValue(7);expect(screen.getByRole('button',{name:'Next pick'})).toBeDisabled();
   });

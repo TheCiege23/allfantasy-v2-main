@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {buildReplay,replayAt,frozenExistingRoster,decisionComponents,frozenIdentities} from '@/lib/draft-archive/phase4Model';
+import {buildReplay,replayAt,frozenExistingRoster,decisionComponents,frozenIdentities,auctionAwardBudget,auctionAlternative} from '@/lib/draft-archive/phase4Model';
 import {draftDayReport} from '@/lib/draft-archive/analysisModel';
 import {fillLineup} from '@/lib/decision-os/trade/rosterImpact';
 import type {PreparationContext} from '@/lib/core-app/draftPreparationModel';
@@ -72,5 +72,37 @@ describe('frozen dynasty roster evidence',()=>{
     expect(frozenExistingRoster({...snapshot,rosters:[...snapshot.rosters,snapshot.rosters[0]]},dynasty,teams)).toBeNull();
     expect(frozenExistingRoster({...snapshot,rosters:[{...snapshot.rosters[0],playerData:{players:[{name:'unknown'}]}},snapshot.rosters[1]]},dynasty,teams)).toBeNull();
     expect(draftDayReport(basis,dynasty,picks,teams,start).state).toBe('partial');
+  });
+});
+
+describe('price-conditioned auction replay',()=>{
+  const auctionPicks=picks.map(p=>({...p,selectedAt:start,amount:5,auctionEvidence:{version:'auction-award-v1',capturedAt:start,rosterId:p.rosterId,budgetBefore:20,slotsRemaining:3,minimumBid:1}}));
+  it('requires recorded purchasing power and reserves minimum bids',()=>{
+    expect(buildReplay(basis,{...context,draftType:'auction'},start,picks,[]).state).toBe('unavailable');
+    const data=buildReplay(basis,{...context,draftType:'auction'},start,auctionPicks,[]);
+    expect(data.state).toBe('ready');expect(replayAt(data,1)?.opportunityGap).toBeNull();
+    expect(auctionAwardBudget(auctionPicks[0])?.maxBid).toBe(18);
+    expect(auctionAlternative(data,1,'r',19)).toBeNull();expect(auctionAlternative(data,1,'r',NaN)).toBeNull();
+    expect(auctionAlternative(data,1,'r',18)?.remainingBudget).toBe(2);
+  });
+  it('rejects wrong-owner and overspent award evidence',()=>{
+    expect(auctionAwardBudget({...auctionPicks[0],auctionEvidence:{...auctionPicks[0].auctionEvidence,rosterId:'other'}})).toBeNull();
+    expect(auctionAwardBudget({...auctionPicks[0],amount:19})).toBeNull();
+  });
+});
+
+describe('frozen restricted membership',()=>{
+  const rookie={...context,purpose:'rookie',playerPool:'rookies_only',leagueType:'dynasty'};
+  const eligible={...basis,eligibility:{version:'draft-pool-eligibility-v1',pool:'rookies_only',season:2026,capturedAt:start,observedAt:'2026-08-31T20:00:00Z',source:'Sleeper years_exp by verified ID',playerIds:['w','t','r2','w2']}};
+  it('excludes non-eligible projected stars without changing existing roster baselines',()=>{
+    const data=buildReplay(eligible,rookie,start,picks,[]);
+    expect(data.state).toBe('ready');expect(replayAt(data,1)?.candidates.map(p=>p.playerId)).toEqual(expect.arrayContaining(['w','t']));
+    expect(replayAt(data,1)?.candidates.map(p=>p.playerId)).not.toContain('r');
+  });
+  it('blocks missing, future-dated, wrong-season and mismatched selection evidence',()=>{
+    expect(buildReplay(basis,rookie,start,picks,[]).state).toBe('unavailable');
+    expect(buildReplay({...eligible,eligibility:{...eligible.eligibility,observedAt:'2027-01-01'}},rookie,start,picks,[]).state).toBe('unavailable');
+    expect(buildReplay({...eligible,eligibility:{...eligible.eligibility,season:2025}},rookie,start,picks,[]).state).toBe('unavailable');
+    expect(buildReplay({...eligible,eligibility:{...eligible.eligibility,playerIds:['w']}},rookie,start,picks,[]).state).toBe('unavailable');
   });
 });

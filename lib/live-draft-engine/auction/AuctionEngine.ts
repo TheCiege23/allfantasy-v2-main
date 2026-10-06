@@ -380,7 +380,7 @@ async function _resolveAuctionWinCore(
           source: 'user',
           amount,
           pickedAt: now,
-          pickMetadata: json({ archive: { eventId: archived.eventId, context: archived.context, timing: archived.selected, clockAllowanceSeconds: session.timerSeconds, selectionRosterId: winnerRosterId, auctionBudgetPerTeam: session.auctionBudgetPerTeam ?? DEFAULT_BUDGET } }),
+          pickMetadata: json({ archive: { eventId: archived.eventId, context: archived.context, timing: archived.selected, clockAllowanceSeconds: session.timerSeconds, selectionRosterId: winnerRosterId, auctionBudgetPerTeam: session.auctionBudgetPerTeam ?? DEFAULT_BUDGET, auctionEvidence: { version: 'auction-award-v1', capturedAt: now.toISOString(), rosterId: winnerRosterId, budgetBefore: budgets[winnerRosterId], slotsRemaining: getTeamRosterSlotsRemaining(session.picks.filter(p => p.rosterId === winnerRosterId).length, session.rounds), minimumBid: config.minBid } } }),
         },
       })
 

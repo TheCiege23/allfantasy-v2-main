@@ -7,7 +7,17 @@ import { calibrationKey } from '../phase4Loader';
 import type { PreparationContext } from '@/lib/core-app/draftPreparationModel';
 const obj=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{};
 /** Offline, DB-only model ingestion. It never runs in a page render. */
-export async function recomputeDraftCalibration(apply=false,limit=100){
+export type CalibrationFilters={fromSeason?:number;throughSeason?:number;leagueType?:string;purpose?:string;teamCount?:number};
+export function validateCalibrationFilters(f:CalibrationFilters){
+  for(const year of [f.fromSeason,f.throughSeason])if(year!==undefined&&(!Number.isInteger(year)||year<1900||year>2100))throw new Error('Invalid calibration season');
+  if(f.fromSeason!==undefined&&f.throughSeason!==undefined&&f.fromSeason>f.throughSeason)throw new Error('Invalid calibration season range');
+  if(f.leagueType!==undefined&&!['redraft','dynasty','keeper'].includes(f.leagueType))throw new Error('Invalid calibration league type');
+  if(f.purpose!==undefined&&!['standard','startup'].includes(f.purpose))throw new Error('Invalid calibration purpose');
+  if(f.teamCount!==undefined&&(!Number.isInteger(f.teamCount)||f.teamCount<2||f.teamCount>32))throw new Error('Invalid calibration team count');
+  return f;
+}
+export async function recomputeDraftCalibration(apply=false,limit=100,filters:CalibrationFilters={}){
+  const f=validateCalibrationFilters(filters);
   const bound=Math.max(45,Math.min(200,Math.floor(limit)||100));
   // A draft-start v2 projection snapshot AND completed season coverage are prerequisites.
   const sources=await prisma.$queryRaw<Array<{id:string;leagueId:string;userId:string}>>(Prisma.sql`
@@ -17,9 +27,14 @@ export async function recomputeDraftCalibration(apply=false,limit=100){
       AND a."afterState"->>'event'='start' AND a."afterState"->'snapshot'->'analysisBasis'->>'version'='draft-analysis-basis-v2'
       AND EXISTS(SELECT 1 FROM team_week_results w WHERE w."leagueId"=d."leagueId"
         AND w.season=CASE WHEN a."afterState"->'snapshot'->'context'->>'season' ~ '^[0-9]{4}$' THEN (a."afterState"->'snapshot'->'context'->>'season')::integer ELSE NULL END
-        AND w.status='final' AND w.week>=14))
+        AND w.status='final' AND w.week>=14)
+      AND (${f.fromSeason??null}::integer IS NULL OR CASE WHEN a."afterState"->'snapshot'->'context'->>'season' ~ '^[0-9]{4}$' THEN (a."afterState"->'snapshot'->'context'->>'season')::integer ELSE NULL END >= ${f.fromSeason??null})
+      AND (${f.throughSeason??null}::integer IS NULL OR CASE WHEN a."afterState"->'snapshot'->'context'->>'season' ~ '^[0-9]{4}$' THEN (a."afterState"->'snapshot'->'context'->>'season')::integer ELSE NULL END <= ${f.throughSeason??null})
+      AND (${f.leagueType??null}::text IS NULL OR a."afterState"->'snapshot'->'context'->>'leagueType'=${f.leagueType??null})
+      AND (${f.purpose??null}::text IS NULL OR a."afterState"->'snapshot'->'context'->>'purpose'=${f.purpose??null})
+      AND (${f.teamCount??null}::integer IS NULL OR a."afterState"->'snapshot'->'context'->>'teamCount'=${f.teamCount===undefined?null:String(f.teamCount)}))
     ORDER BY d."startedAt" DESC,d.id LIMIT ${bound+1}`);
-  if(sources.length>bound)return {examined:0,eligible:0,models:0,validated:0,reason:'Cohort bound exceeded; narrow the input before publishing weights.'};
+  if(sources.length>bound)return {examined:0,eligible:0,models:0,validated:0,reason:'Cohort bound exceeded; narrow the input using season, league-type, purpose or team-count filters before publishing weights.'};
   const groups=new Map<string,{context:PreparationContext;cohorts:CalibrationCohort[]}>();let eligible=0,failed=0;
   // Import only when there is a candidate; no page/provider reads are used to create candidates.
   const detailReader=sources.length?(await import('../detail')).draftArchiveDetail:null;

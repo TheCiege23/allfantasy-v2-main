@@ -38,6 +38,7 @@ export async function recordArchiveEvent(tx: Prisma.TransactionClient, session: 
     tradedPicks?: unknown;
     nextOverallPick?: number;
     timerSeconds?: number | null;
+    playerPool?: string;
     thirdRoundReversal?: boolean;
     overnightFrozenPickSeconds?: number | null;
 }, event: ClockEvent, details: Record<string, unknown> = {}, at = new Date()) {
@@ -67,7 +68,7 @@ export async function recordArchiveEvent(tx: Prisma.TransactionClient, session: 
     let snapshot: unknown = undefined;
     if (event === 'start') {
         const [league, teams, rosters] = await Promise.all([tx.league.findUnique({ where: { id: session.leagueId }, select: { sport: true, season: true, scoring: true, isDynasty: true, leagueVariant: true, settings: true } }), tx.leagueTeam.findMany({ where: { leagueId: session.leagueId }, select: { externalId: true, teamName: true, ownerName: true, platformUserId: true, claimedByUserId: true } }), tx.roster.findMany({ where: { leagueId: session.leagueId }, select: { id: true, platformUserId: true, playerData: true } })]);
-        const analysisBasis = await captureDraftAnalysisBasis(tx, league, at);
+        const analysisBasis = await captureDraftAnalysisBasis(tx, league, at, session.playerPool);
         snapshot = { session, league, teams, rosters, analysisBasis, context: league ? preparationContext(league, session) : null, capturedAt: at.toISOString() };
     }
     const context = event === 'start' ? object(snapshot).context ?? null : object(latest?.afterState).context ?? null;

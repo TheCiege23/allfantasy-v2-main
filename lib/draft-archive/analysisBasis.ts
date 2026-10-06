@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client';
 export async function captureDraftAnalysisBasis(tx: Prisma.TransactionClient, league: {
     sport: unknown;
     season: number | null;
-} | null, at: Date) {
+} | null, at: Date, playerPool='all') {
     const base = { version: 'draft-analysis-basis-v2', capturedAt: at.toISOString(), identitySpace: 'canonical_with_verified_aliases', scoringBasis: 'league_rescored_stat_rates_per_game' };
     if (String(league?.sport).toUpperCase() !== 'NFL' || !league?.season)
         return { ...base, state: 'unsupported', reason: 'A compatible season projection source is unavailable.', entries: [] };
@@ -21,8 +21,16 @@ export async function captureDraftAnalysisBasis(tx: Prisma.TransactionClient, le
     const mappings = players.size ? await tx.playerIdentityMap.findMany({ where: { sport: 'NFL', id: { in: [...players.keys()] } }, select: { id: true, sleeperId: true } }) : [];
     const aliases = new Map(mappings.map(m => [m.id, m.sleeperId]));
     const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
+    let eligibility: unknown = null;
+    if (players.size && ['rookies_only','veterans_only'].includes(playerPool)) {
+        const cached = await tx.sportsDataCache.findUnique({where:{cacheKey:'sleeper:nfl:yearsexp:compact:v1'},select:{data:true,expiresAt:true}});
+        const data=object(cached?.data),years=object(data.bySleeperId),observed=typeof data.observedAt==='string'?Date.parse(data.observedAt):NaN;
+        const classified=[...players.keys()].map(playerId=>({playerId,years:years[aliases.get(playerId)??'']}));
+        if(data.v===1&&data.season===league.season&&Number.isFinite(observed)&&observed<=at.getTime()&&at.getTime()-observed<=86400000&&cached!.expiresAt>at&&classified.every(p=>typeof p.years==='number'&&Number.isInteger(p.years)&&p.years>=0))
+            eligibility={version:'draft-pool-eligibility-v1',pool:playerPool,season:league.season,capturedAt:at.toISOString(),observedAt:data.observedAt,source:'Sleeper years_exp by verified ID',playerIds:classified.filter(p=>playerPool==='rookies_only'?p.years===0:Number(p.years)>0).map(p=>p.playerId)};
+    }
     return {
-        ...base, state: players.size ? 'captured' : 'empty', season: league.season,
+        eligibility, ...base, state: players.size ? 'captured' : 'empty', season: league.season,
         reason: 'Stat-rate baselines and verified aliases are frozen before selections. League rescoring is a per-game baseline, not a calibrated season forecast or win probability.',
         entries: [...players.values()].map(row => ({ playerId: row.playerId, sleeperId: aliases.get(row.playerId) ?? null, playerName: row.playerName, position: row.position, computedAt: row.computedAt.toISOString(), confidenceLevel: row.confidenceLevel,
             perGameRates: Object.fromEntries(Object.entries(object(object(row.adjustmentFactors).perGameRates)).filter(([,value]) => typeof value === 'number' && Number.isFinite(value))),
