@@ -188,7 +188,8 @@ Each needs a *production* read, and the two kinds differ:
     amount and "bills every month, catalog says every year", exit 1.
 - [x] **Stripe webhook events.** Fixed by the owner 2026-09-24 and verified read-only the same day: 26
   events, including the 7 the handler needs. Only re-check if the endpoint has been edited since.
-- [ ] **`commissioner_recipes_send_enabled`** (platform toggle, default off).
+- [x] **`commissioner_recipes_send_enabled`** (platform toggle, default off). ✅ **Confirmed ON for launch by
+  the owner, 2026-10-06** — the `true` read below is intended.
   - Commissioners can save automation recipes; nothing sends until this is on
     (`runCommissionerRecipesJob.ts:332`), and the hub says so (`AutomationRecipes.tsx:78-82`).
   - Decide whether it is on for launch. **Production value read 2026-10-04: `true` — it is ON.**
