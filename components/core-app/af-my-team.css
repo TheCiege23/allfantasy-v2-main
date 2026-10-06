@@ -2562,3 +2562,8 @@ li[data-kind='questionable'] .af-mt-check-tag {
 .af-core .af-mt-source .truncate,.af-core .af-mt-decision-actions .truncate { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .af-core .af-btn.af-mt-fix,.af-core .af-btn.af-mt-source,.af-core .af-btn.af-mt-ask { min-height:48px; min-width:48px; }
 .af-core .af-mt-decision-actions .af-btn { flex:1 1 160px; min-width:0; width:auto; min-height:48px; white-space:normal; }
+
+/* Keep team context first while retaining the phone countdown above verification. */
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt > .af-mt-head { order: -2; }
+}
