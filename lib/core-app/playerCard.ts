@@ -211,7 +211,32 @@ export type PlayerCardInsight = {
   headline: string
   detail: string
   basis: string
+  /**
+   * The numbers the three sentences were written from, so the sheet can say them in the reader's
+   * language (lib/core-app/playerCardCopy.ts `insightText`). The English above is unchanged; a payload
+   * without `parts` renders it whole.
+   */
+  parts?: PlayerCardInsightParts
 }
+
+export type PlayerCardInsightParts =
+  | {
+      kind: 'price'
+      last: string
+      up: boolean
+      /** Absolute change. */
+      change: number
+      days: number
+      value: number
+      /** Percent, unrounded — the English prints it to one decimal. */
+      pct: number
+      format: string
+      qbFormat: string
+      source: string
+    }
+  | { kind: 'hedge'; own: number; start: number; rosteredIn: number; startedIn: number; leaguesCounted: number }
+  | { kind: 'bye'; week: number; season: number }
+  | { kind: 'comps'; names: string[] }
 
 /**
  * His latest injury designation, when there is a RECENT one.
@@ -1204,6 +1229,18 @@ export function deriveInsight(args: {
           ? `He now prices at ${market.data.value.toLocaleString()}, a ${pct.toFixed(1)}% rise. If you are buying, the window that existed ${d.days} days ago has already closed.`
           : `He now prices at ${market.data.value.toLocaleString()}, a ${pct.toFixed(1)}% fall. A dip this size is a buy window if you believe the role is intact.`,
         basis: `${market.data.format.toLowerCase()} · ${market.data.qbFormat === 'SUPERFLEX' ? 'superflex' : '1QB'} · ${market.data.source.toLowerCase()} snapshots ${d.days} days apart`,
+        parts: {
+          kind: 'price',
+          last,
+          up,
+          change: Math.abs(d.change),
+          days: d.days,
+          value: market.data.value,
+          pct,
+          format: market.data.format,
+          qbFormat: market.data.qbFormat,
+          source: market.data.source,
+        },
       }
     }
   }
@@ -1220,6 +1257,14 @@ export function deriveInsight(args: {
         headline: `Rostered in ${own}% of our leagues but started in only ${start}% of them.`,
         detail: `${ownership.data.rosteredIn} of ${ownership.data.leaguesCounted} leagues hold him and ${ownership.data.startedIn} start him. Managers are hedging — which is what a buy-low looks like before the price moves.`,
         basis: `own% and start% across ${ownership.data.leaguesCounted} AllFantasy leagues`,
+        parts: {
+          kind: 'hedge',
+          own,
+          start,
+          rosteredIn: ownership.data.rosteredIn,
+          startedIn: ownership.data.startedIn,
+          leaguesCounted: ownership.data.leaguesCounted,
+        },
       }
     }
   }
@@ -1229,6 +1274,7 @@ export function deriveInsight(args: {
       headline: `Bye in week ${byeWeek} — check it against your own before you trade for him.`,
       detail: `He does not play in week ${byeWeek}. A bye that collides with the rest of your starters at this position is the cost that never shows up in a trade grade.`,
       basis: `2026 schedule, club absent from week ${byeWeek} fixtures`,
+      parts: { kind: 'bye', week: byeWeek, season: 2026 },
     }
   }
 
@@ -1238,6 +1284,7 @@ export function deriveInsight(args: {
       headline: `Priced alongside ${names}.`,
       detail: `Those are the closest prices in the same capture. If you would not make the swap straight across, the market disagrees with you about one of them.`,
       basis: 'nearest values in the same market snapshot',
+      parts: { kind: 'comps', names: comps.data.map((c) => c.name) },
     }
   }
 

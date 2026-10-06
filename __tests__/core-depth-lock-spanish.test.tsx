@@ -194,8 +194,6 @@ function walk(dir: string, out: string[] = []): string[] {
  * of its own yet, so a Spanish lock there would be the only Spanish on the screen.
  */
 const ENGLISH_ON_PURPOSE: Record<string, string> = {
-  'components/core-app/screens/WaiverCompetitiveEdge.tsx': 'the Waivers Competitive Edge card is English throughout',
-  'components/core-app/player-card/PlayerCardSheet.tsx': 'the player card sheet is English throughout',
 }
 /*
  * The Commissioner OS pages are server components and cannot read the reader's language. The lock

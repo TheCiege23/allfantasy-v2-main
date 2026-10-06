@@ -91,6 +91,9 @@ const SUBJECT_ES: Record<string, string> = {
   'The verdict, bench swaps and trade windows': 'Veredicto, cambios de banca y ventanas de intercambio',
   'Suggested FAAB bids': 'Pujas FAAB sugeridas',
   'Buy-low and sell-high calls': 'Avisos de comprar barato y vender alto',
+  // The player card (components/core-app/player-card/PlayerCardSheet.tsx)
+  'Trades in this league': 'Intercambios en esta liga',
+  'Trade history and similar players': 'Historial de intercambios y jugadores similares',
   // Trade Center (components/core-app/screens/TradeCenter.tsx)
   'Who to trade with': 'Con quién intercambiar',
   'The full trade breakdown': 'Desglose completo de cambios',
