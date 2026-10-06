@@ -3,10 +3,12 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { HelpDot } from '@/components/core-app/player-finder/HelpDot'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { ManagerPresence } from '@/lib/core-app/managerPresence'
 import { platformLabel } from '@/lib/core-app/platformLinks'
-import { pitchText, type PitchPackage } from '@/lib/core-app/tradePitch'
+import { type PitchPackage } from '@/lib/core-app/tradePitch'
 import { anyMovedToday, rankTradeWindows } from '@/lib/core-app/tradeWindows'
+import { pitchLineText, pitchMessageText, tradeValueCopy } from '@/lib/core-app/finderTradeValueCopy'
 
 /**
  * "TRADE WINDOWS · WHO'S REACHABLE" — the core view's card: every league
@@ -20,6 +22,9 @@ import { anyMovedToday, rankTradeWindows } from '@/lib/core-app/tradeWindows'
  *
  * Every row shows on a phone: the single card keeps one line there because
  * it is one league; here the list IS the answer.
+ *
+ * Spanish (2026-10-05): the order is `rankTradeWindows`' in both languages; only the words change,
+ * through finderTradeValueCopy.ts.
  */
 
 export function TradeWindows({
@@ -36,9 +41,14 @@ export function TradeWindows({
   nowIso: string
   unread?: number
 }) {
+  const { language } = useOptionalLanguage()
+  const t = tradeValueCopy(language)
   const [copied, setCopied] = useState<'idle' | 'done' | 'failed'>('idle')
   const now = new Date(nowIso)
-  const rows = rankTradeWindows({ presences, playerName, now, pkg })
+  const rows = rankTradeWindows({ presences, playerName, now, pkg }).map((r) => ({
+    ...r,
+    line: pitchLineText({ presence: r.presence, manager: r.manager, playerName, now, pkg }, language),
+  }))
   const first = rows[0] ?? null
   const live = anyMovedToday(rows, now)
   const reachableNow = rows.filter((r) => r.line.timing === 'now').length
@@ -46,7 +56,7 @@ export function TradeWindows({
   async function copy() {
     if (!first) return
     try {
-      await navigator.clipboard.writeText(pitchText({ manager: first.manager, playerName, pkg }))
+      await navigator.clipboard.writeText(pitchMessageText({ manager: first.manager, playerName, pkg }, language))
       setCopied('done')
     } catch {
       setCopied('failed')
@@ -58,21 +68,14 @@ export function TradeWindows({
   return (
     <section className="af-card af-pf-tw af-pf-tw--multi" aria-labelledby="af-pf-tws-h" data-live={live ? 'true' : 'false'}>
       <header className="af-pf-tw-head">
-        <span className="af-pf-tw-dot" aria-hidden title={live ? 'A listed manager moved in the last day' : undefined} />
+        <span className="af-pf-tw-dot" aria-hidden title={live ? t.movedTodayTitle : undefined} />
         <h3 className="af-label af-pf-tw-title" id="af-pf-tws-h">
-          Trade windows · who’s reachable
+          {t.windowsTitle}
         </h3>
-        <HelpDot
-          title="Trade windows"
-          body="Every league where another manager has him, ordered by when they usually move — read from each league’s own transaction history, in that league’s zone. AllFantasy cannot see who is online; a window is when they have acted before."
-        />
+        <HelpDot title={t.windowsHelpTitle} body={t.windowsHelpBody} />
       </header>
 
-      <p className="af-pf-tw-sum">
-        {reachableNow > 0
-          ? `${reachableNow} of ${rows.length} ${rows.length === 1 ? 'owner is' : 'owners are'} in their window right now.`
-          : `${rows.length} ${rows.length === 1 ? 'owner' : 'owners'} across your leagues, soonest window first.`}
-      </p>
+      <p className="af-pf-tw-sum">{reachableNow > 0 ? t.inWindowNow(reachableNow, rows.length) : t.soonestFirst(rows.length)}</p>
 
       <ul className="af-pf-tw-rows">
         {rows.map((r) => (
@@ -83,21 +86,17 @@ export function TradeWindows({
             <b className="af-pf-tw-lead">{r.line.lead}</b>
             <span className="af-pf-tw-body">{r.line.body}</span>
             <Link className="af-pf-tw-go" href={`/core/trades?league=${encodeURIComponent(r.leagueId)}`}>
-              Grade it in {r.leagueName} →
+              {t.gradeItIn(r.leagueName)}
             </Link>
           </li>
         ))}
       </ul>
 
-      {unread > 0 ? (
-        <p className="af-pf-tw-note">
-          {unread} more {unread === 1 ? 'league' : 'leagues'} where someone else has him could not be read for a window.
-        </p>
-      ) : null}
+      {unread > 0 ? <p className="af-pf-tw-note">{t.unreadLeagues(unread)}</p> : null}
 
       <div className="af-pf-tw-actions">
         <button type="button" className="af-btn af-pf-tw-btn" onClick={copy} disabled={!first}>
-          {copied === 'done' ? 'Copied' : copied === 'failed' ? 'Couldn’t copy' : first ? `Copy the pitch to @${first.manager.ownerName}` : 'Copy the pitch'}
+          {copied === 'done' ? t.copied : copied === 'failed' ? t.couldNotCopy : first ? t.copyPitchTo(first.manager.ownerName) : t.copyPitch}
         </button>
       </div>
     </section>

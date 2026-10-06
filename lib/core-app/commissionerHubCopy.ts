@@ -226,6 +226,23 @@ const ES: Record<string, string> = {
 
   // ── Waivers ───────────────────────────────────────────────────────────
   'Waiver rules →': 'Reglas de agentes libres →',
+
+  // ── Trade and draft statuses, as their tables store them (shown raw in the history section) ──
+  pending: 'pendiente',
+  accepted: 'aceptado',
+  rejected: 'rechazado',
+  vetoed: 'vetado',
+  countered: 'contraoferta',
+  expired: 'vencido',
+  cancelled: 'cancelado',
+  recorded: 'registrado',
+  scheduled: 'programado',
+  pre_draft: 'antes del draft',
+  in_progress: 'en curso',
+  paused: 'en pausa',
+  complete: 'completado',
+  completed: 'completado',
+
   'Last run': 'Último proceso',
   'Run by a commissioner': 'Lo procesó un comisionado',
   Scheduled: 'Programado',
@@ -309,7 +326,67 @@ const PATTERNS: Pattern[] = [
   ],
   [/^Not run: (.+)\.$/s, (why) => `No se procesó: ${why}.`],
   [/^Processed (\d+) claims\.$/, (n) => `Se procesaron ${n} solicitudes.`],
+  // Shared modules the hub shows without owning: platform hand-off buttons (`platformLinks`) and the
+  // action-authority reason (`commissioner-os/authority`). Both are one fixed shape around a name.
+  [/^Open in ([A-Za-z0-9 ]{2,24})$/, (p) => `Abrir en ${p}`],
+  [
+    /^AllFantasy cannot write to (.+); (.+) remains this league's system of record\.$/s,
+    (target, subject) =>
+      target === 'the host platform'
+        ? 'AllFantasy no puede escribir en la plataforma de origen; esa plataforma sigue siendo el sistema de referencia de esta liga.'
+        : `AllFantasy no puede escribir en ${target}; ${subject} sigue siendo el sistema de referencia de esta liga.`,
+  ],
 ]
+
+/*
+ * The league health engine's one-line summary (`monitorLeagueHealth`), shown as the hub's health
+ * status: "League health: 62/100 (healthy). <a strength> Problem: <a problem>". The engine composes
+ * it from a closed vocabulary, so it is rebuilt here from its pieces — and if ANY piece is not in the
+ * vocabulary the whole sentence stays English, never half of one.
+ */
+const HEALTH_STATUS_ES: Record<string, string> = {
+  excellent: 'excelente',
+  healthy: 'saludable',
+  watch: 'en observación',
+  at_risk: 'en riesgo',
+  critical: 'crítica',
+}
+const HEALTH_STRENGTH_ES: Record<string, string> = {
+  'Strong engagement — active trading and waiver use': 'Mucha participación: intercambios y agentes libres activos.',
+  'Fair structure — good settings and low disputes': 'Estructura justa: buena configuración y pocas disputas.',
+  'Sustainable — all managers active, no abandonment': 'Sostenible: todos los mánagers activos y sin abandonos.',
+  'Near-perfect lineup submission rate': 'Casi todas las alineaciones enviadas.',
+  'Active league chat — strong community': 'Chat de la liga activo: una comunidad fuerte.',
+  'No major strengths.': 'Sin fortalezas destacadas.',
+}
+const HEALTH_PROBLEM_ES: Array<[RegExp, (n: string) => string]> = [
+  [/^(\d+) inactive managers — engagement at risk$/, (n) => `${n} mánagers inactivos: la participación está en riesgo.`],
+  [/^(\d+) abandoned teams — immediate action needed$/, (n) => `${n} equipos abandonados: hace falta actuar de inmediato.`],
+  [/^(\d+) unresolved disputes eroding trust$/, (n) => `${n} disputas sin resolver están minando la confianza.`],
+  [/^Low engagement — league activity is below healthy levels$/, () => 'Participación baja: la actividad de la liga está por debajo de lo saludable.'],
+  [/^Poor lineup submission rate — managers are checked out$/, () => 'Pocas alineaciones enviadas: los mánagers se han desconectado.'],
+]
+
+function healthSummaryEs(english: string): string | null {
+  const m = /^League health: (\d+)\/100 \(([a-z_]+)\)\. (.+?) (?:Problem: (.+)|No major problems\.)$/s.exec(english)
+  if (!m) return null
+  const [, score, status, strength, problem] = m
+  const statusEs = HEALTH_STATUS_ES[status!]
+  const strengthEs = HEALTH_STRENGTH_ES[strength!]
+  if (!statusEs || !strengthEs) return null
+  let problemEs = 'Sin problemas destacados.'
+  if (problem != null) {
+    for (const [re, build] of HEALTH_PROBLEM_ES) {
+      const pm = re.exec(problem)
+      if (pm) {
+        problemEs = `Problema: ${build(pm[1] ?? '')}`
+        return `Salud de la liga: ${score}/100 (${statusEs}). ${strengthEs} ${problemEs}`
+      }
+    }
+    return null
+  }
+  return `Salud de la liga: ${score}/100 (${statusEs}). ${strengthEs} ${problemEs}`
+}
 
 /** The hub's own words in the reader's language; unknown text passes through unchanged. */
 export function hubCopy(english: string | null | undefined, language: string): string {
@@ -317,6 +394,8 @@ export function hubCopy(english: string | null | undefined, language: string): s
   if (language !== 'es') return english
   const exact = ES[english]
   if (exact != null) return exact
+  const summary = healthSummaryEs(english)
+  if (summary != null) return summary
   for (const [pattern, build] of PATTERNS) {
     const m = pattern.exec(english)
     if (m) return build(...m.slice(1))

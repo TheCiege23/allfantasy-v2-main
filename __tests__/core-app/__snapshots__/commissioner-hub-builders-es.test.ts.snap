@@ -1,0 +1,254 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`commissioner hub builders > 🛑 the English is byte-identical to what the builders wrote before they took a language 1`] = `
+{
+  "abandoned/all-quiet": [
+    "Abandoned teams",
+    "No manager has made a move in 14 days",
+    "None of the 2 managers has made a trade, waiver claim or roster move in two weeks. That is the league being quiet, not one team being abandoned.",
+  ],
+  "abandoned/clean": [
+    "Abandoned teams",
+    "Every team has an owner and a recent move",
+    "Every team has an owner, and every manager has made a move in the last 14 days.",
+  ],
+  "abandoned/clean-no-managers": [
+    "Abandoned teams",
+    "Every team has an owner and a recent move",
+    "Every team has an owner.",
+  ],
+  "abandoned/many": [
+    "Abandoned teams",
+    "5 teams with no owner · 5 managers with no moves in 14 days",
+    "No owner: Xolo, Zibba, Quorra, Vexa and 1 more. No trade, waiver claim or roster move in 14 days: Xolo, Zibba, Quorra, Vexa and 1 more. Quiet isn’t the same as gone — check in before replacing anyone.",
+    "ACT-LABEL",
+  ],
+  "abandoned/no-teams": [
+    "Abandoned teams",
+    "No teams have been imported for this league yet.",
+  ],
+  "abandoned/one-each": [
+    "Abandoned teams",
+    "1 team with no owner · 1 manager with no moves in 14 days",
+    "No owner: Quorra. No trade, waiver claim or roster move in 14 days: Xolo. Quiet isn’t the same as gone — check in before replacing anyone.",
+    "ACT-LABEL",
+  ],
+  "abandoned/stale": [
+    "Abandoned teams",
+    "STALE-REASON",
+    "STALE-ACT",
+  ],
+  "abandoned/unread": [
+    "Abandoned teams",
+    "Manager activity could not be read just now, so no team can be called abandoned or active.",
+    "ACT-LABEL",
+  ],
+  "activity/imported-none": [
+    "No moves have been imported for this league yet, so nobody can be called active or inactive.",
+  ],
+  "activity/imported-old": [
+    "The newest imported move is 20 days old, so every manager would look idle. Re-sync the league to check who is really active.",
+  ],
+  "activity/imported-old-one-day": [
+    "The newest imported move is 1 day old, so every manager would look idle. Re-sync the league to check who is really active.",
+  ],
+  "activity/imported-rows": [
+    "no qualifying move on file",
+    "no qualifying move on file",
+    "last move 2 days ago",
+    "last move 1 day ago",
+    "trades, waiver claims and roster moves in the last 14 days",
+  ],
+  "activity/imported-unmatched": [
+    "This league’s moves couldn’t be matched to its managers, so activity isn’t judged here.",
+  ],
+  "activity/imported-unread": [
+    "{"available":false,"reason":"League activity couldn’t be read just now."}",
+  ],
+  "activity/native-empty": [
+    "No rosters have been set up for this league yet.",
+  ],
+  "activity/native-rows": [
+    "last move 6 days ago",
+    "no activity on file",
+    "last move yesterday",
+    "active today",
+    "the last lineup or roster change",
+  ],
+  "activity/native-unread": [
+    "Manager activity couldn’t be read just now.",
+  ],
+  "activity/stale": [
+    "AllFantasy last read this league 5 days ago, so every manager would look idle. Re-sync it to see who is really active.",
+  ],
+  "dues/all-paid": [
+    "Unpaid dues",
+    "Everyone has paid",
+    "All 5 teams are marked paid in the dues tracker.",
+  ],
+  "dues/many-owe-no-amount": [
+    "Unpaid dues",
+    "5 teams still owe dues",
+    "Xolo, Zibba, Quorra, Vexa and 1 more. Marked by hand in the dues tracker — AllFantasy does not see the payment itself.",
+    "ACT-LABEL",
+  ],
+  "dues/no-teams": [
+    "Unpaid dues",
+    "No teams have been imported yet.",
+  ],
+  "dues/one-owes": [
+    "Unpaid dues",
+    "1 team still owes dues of $50",
+    "Xolo. Marked by hand in the dues tracker — AllFantasy does not see the payment itself.",
+    "ACT-LABEL",
+  ],
+  "dues/untracked": [
+    "Unpaid dues",
+    "Dues aren’t tracked in AllFantasy for this league, so nobody can be called paid or unpaid.",
+    "Set up dues tracking",
+  ],
+  "lineups/fantrax": [
+    "Missing lineups",
+    "Fantrax imports don't say whether a blank lineup is empty or just not reported, so lineups aren't checked here.",
+    "ACT-LABEL",
+  ],
+  "lineups/full": [
+    "Missing lineups",
+    "Every lineup is full",
+    "All 2 readable lineups have every starting slot filled.",
+  ],
+  "lineups/many-holes": [
+    "Missing lineups",
+    "6 teams starting with an empty slot",
+    "Kplex (2 empty slots), Quorra (2 empty slots), Vexa (2 empty slots), Wuzzo (2 empty slots) and 2 more. 2 rosters could not be read and are not counted.",
+    "ACT-LABEL",
+  ],
+  "lineups/mfl": [
+    "Missing lineups",
+    "MFL imports don't say whether a blank lineup is empty or just not reported, so lineups aren't checked here.",
+    "ACT-LABEL",
+  ],
+  "lineups/offseason": [
+    "Missing lineups",
+    "Lineups are only checked while the season is being played.",
+  ],
+  "lineups/one-hole": [
+    "Missing lineups",
+    "1 team starting with an empty slot",
+    "Zibba (1 empty slot). 1 roster could not be read and is not counted.",
+    "ACT-LABEL",
+  ],
+  "lineups/stale": [
+    "Missing lineups",
+    "STALE-REASON",
+    "STALE-ACT",
+  ],
+  "lineups/unreadable": [
+    "Missing lineups",
+    "No roster in this league has a readable starting lineup yet.",
+    "ACT-LABEL",
+  ],
+  "schedule/behind-many": [
+    "Unequal schedules",
+    "6 teams behind on games",
+    "Most teams have 4 games through week 4; T2 has 1, T3 has 1, T7 has 1, T4 has 2 and 2 more.",
+    "ACT-LABEL",
+  ],
+  "schedule/behind-one": [
+    "Unequal schedules",
+    "1 team behind on games",
+    "Most teams have 3 games through week 3; T2 has 2.",
+    "ACT-LABEL",
+  ],
+  "schedule/elimination": [
+    "Unequal schedules",
+    "This is an elimination format, where eliminated teams stop playing — unequal game counts are the rules working.",
+  ],
+  "schedule/equal": [
+    "Unequal schedules",
+    "Everyone has played 3 games",
+    "Every team has a matchup in each of weeks 1–3.",
+  ],
+  "schedule/equal-one": [
+    "Unequal schedules",
+    "Everyone has played 1 game",
+    "Every team has a matchup in each of weeks 1–1.",
+  ],
+  "schedule/no-teams": [
+    "Unequal schedules",
+    "No teams to compare.",
+  ],
+  "schedule/none-played": [
+    "Unequal schedules",
+    "No played weeks have been imported for this season yet.",
+  ],
+  "score/stale": [
+    "Not scored: AllFantasy last read this league 6 days ago, and a score built on that data would call every quiet manager inactive. Re-sync it to score the league.",
+  ],
+  "score/thin": [
+    "There isn’t enough roster and activity data to score this league yet.",
+  ],
+  "score/unread": [
+    "This league has never synced, so there is nothing to score yet.",
+  ],
+  "signals/many": [
+    "3 open integrity alerts",
+    "Flagged from trade values and lineup cards. They need a person to look before anything is decided.",
+    "Review alerts",
+    "2 trades awaiting your review",
+    "Both managers agreed. The trade does not go through until a commissioner approves or vetoes it.",
+    "Review trades",
+    "4 waiver claims waiting over a week",
+    "These claims should have been decided by a waiver run by now. Run waivers to process them.",
+    "Open waivers",
+  ],
+  "signals/one": [
+    "1 open integrity alert",
+    "Flagged from trade values and lineup cards. They need a person to look before anything is decided.",
+    "Review alerts",
+    "1 trade awaiting your review",
+    "Both managers agreed. The trade does not go through until a commissioner approves or vetoes it.",
+    "Review trades",
+    "1 waiver claim waiting over a week",
+    "These claims should have been decided by a waiver run by now. Run waivers to process them.",
+    "Open waivers",
+    "No draft date set",
+    "Managers can’t plan around a draft that isn’t scheduled. Add the date in draft settings.",
+    "Set the date",
+  ],
+  "tasks": [
+    "This league’s data is 9 days old",
+    "AllFantasy hasn’t read it from Sleeper since then, so activity, lineups and inactive managers can’t be checked.",
+    "Re-sync",
+    "DRAFT-TITLE",
+    "DETAIL",
+    "WHEN",
+    "See calendar",
+    "WS-TITLE",
+    "WS-DESC",
+    "Open",
+  ],
+  "votes/many": [
+    "Unresolved votes",
+    "4 league votes still open",
+    "“Xqz?” closes Mon, 05 Oct 2026; “Pqr?” closes Mon, 05 Oct 2026; “Wvb?” has no deadline; and 1 more.",
+    "ACT-LABEL",
+  ],
+  "votes/none": [
+    "Unresolved votes",
+    "No open votes",
+    "Every league-chat poll has closed. Votes held on the platform itself are not imported.",
+  ],
+  "votes/one": [
+    "Unresolved votes",
+    "1 league vote still open",
+    "“Xqz?” closes Mon, 05 Oct 2026.",
+    "ACT-LABEL",
+  ],
+  "votes/unread": [
+    "Unresolved votes",
+    "League chat polls could not be read just now.",
+    "ACT-LABEL",
+  ],
+}
+`;

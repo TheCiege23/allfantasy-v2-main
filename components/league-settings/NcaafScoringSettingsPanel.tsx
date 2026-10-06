@@ -27,6 +27,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Info, Lock, RotateCcw } from 'lucide-react'
 import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { translateStat } from '@/lib/i18n/scoring-stats'
+import { FOOTBALL_STATS_ES } from '@/lib/i18n/scoring-stats/football'
 import {
   NCAAF_SCORING_CATEGORIES,
   NCAAF_PREMIUM_SCORING,
@@ -74,12 +77,13 @@ const TAB_COLORS: Record<string, string> = {
   advanced:      'border-cyan-500/40 bg-cyan-500/15 text-cyan-200',
 }
 
-const PRESET_LABELS: Record<string, string> = {
-  af_default:         'AllFantasy',
-  sleeper_compatible: 'Sleeper',
-  espn_compatible:    'ESPN',
-  yahoo_compatible:   'Yahoo',
-  custom:             'Custom',
+/** Preset chip labels, as dictionary keys resolved at render. */
+const PRESET_LABEL_KEYS: Record<string, string> = {
+  af_default:         'lsScore.preset.allFantasy',
+  sleeper_compatible: 'lsScore.preset.sleeper',
+  espn_compatible:    'lsScore.preset.espn',
+  yahoo_compatible:   'lsScore.preset.yahoo',
+  custom:             'lsScore.preset.custom',
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +97,8 @@ interface Props {
 }
 
 export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: Props) {
+  const { t, language } = useOptionalLanguage()
+  const st = (s: string) => translateStat(s, language, FOOTBALL_STATS_ES)
   // ----- state -----
   const [presets, setPresets] = useState<NcaafScoringPreset[]>([])
   const [config, setConfig] = useState<NcaafScoringConfig | null>(null)
@@ -128,7 +134,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
         const defaults = buildNcaafScoringDefaults()
         setEditedRules({ ...defaults, ...(data.config?.rules ?? {}) })
       })
-      .catch(() => { if (active) setError('Failed to load scoring settings') })
+      .catch(() => { if (active) setError(t('lsScore.err.load')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [leagueId])
@@ -201,12 +207,12 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
       )
       const data = await res.json()
       if (data.error === 'premiumRequired') { setGateOpen(true); return }
-      if (!res.ok) { setError(data.error ?? 'Save failed'); return }
+      if (!res.ok) { setError(data.error ?? t('lsScore.err.save')); return }
       setConfig(data.config)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
     } catch {
-      setError('Request failed')
+      setError(t('lsScore.err.request'))
     } finally {
       setSaving(false)
     }
@@ -224,7 +230,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
   if (loading) {
     return (
       <div className="py-10 text-center text-sm text-white/50">
-        Loading NCAAF scoring settings...
+        {t('lsScore.loading').replace('{{sport}}', 'NCAAF')}
       </div>
     )
   }
@@ -234,27 +240,26 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h3 className="text-base font-semibold text-white">NCAAF Scoring Settings</h3>
+        <h3 className="text-base font-semibold text-white">{t('lsScore.title').replace('{{sport}}', 'NCAAF')}</h3>
         <p className="mt-0.5 text-xs text-white/50">
           {isCommissioner
-            ? 'Customize scoring values for your league. Changes apply league-wide to all players and all formats.'
-            : 'Scoring values for this league (read-only).'}
+            ? t('lsScore.subtitle.commishAllFormats')
+            : t('lsScore.subtitle.readOnly')}
         </p>
       </div>
 
       {/* League-wide notice */}
       <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-[11px] text-white/40">
-        This scoring configuration applies to{' '}
-        <span className="font-medium text-white/60">all players</span> and{' '}
-        <span className="font-medium text-white/60">all NCAAF league types</span> in this
-        league — including Redraft, Dynasty, Keeper, Best Ball, Guillotine, Survivor,
-        Zombie, Tournament, Devy, C2C, IDP, Superflex, and TE Premium.
+        {t('lsScore.notice.appliesTo')}{' '}
+        <span className="font-medium text-white/60">{t('lsScore.notice.allPlayers')}</span> {t('lsScore.notice.and')}{' '}
+        <span className="font-medium text-white/60">{t('lsScore.notice.allTypes').replace('{{sport}}', 'NCAAF')}</span>{' '}
+        {t('lsScore.notice.ncaafTypes')}
       </div>
 
       {/* Preset selector */}
       <div className="space-y-2">
         <label className="text-[11px] font-semibold uppercase tracking-wider text-white/40">
-          Scoring Preset
+          {t('lsScore.presetHeading')}
         </label>
         <div className="flex flex-wrap gap-2">
           {(
@@ -276,7 +281,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
                       : 'border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.06] disabled:cursor-default disabled:opacity-50'
                 }`}
               >
-                {PRESET_LABELS[key] ?? key}
+                {PRESET_LABEL_KEYS[key] ? t(PRESET_LABEL_KEYS[key]) : key}
                 {isCustomLocked && <Lock className="ml-1 inline h-3 w-3 text-white/30" />}
               </button>
             )
@@ -289,9 +294,9 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
         <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-950/15 px-3 py-2.5">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
           <div className="text-[11px] text-amber-200/80">
-            <p>{currentPreset.warning}</p>
+            <p>{st(currentPreset.warning)}</p>
             <p className="mt-1 text-amber-200/60">
-              AllFantasy specialty leagues are optimized for AF scoring templates.
+              {t('lsScore.specialtyNote')}
             </p>
           </div>
         </div>
@@ -300,7 +305,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
       {/* Non-commissioner read-only banner */}
       {!isCommissioner && (
         <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-white/40">
-          Only the commissioner can edit scoring settings.
+          {t('lsScore.commishOnly')}
         </div>
       )}
 
@@ -320,7 +325,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
               onClick={() => setActiveTab(cat.id)}
               className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide transition ${colorClass}`}
             >
-              {cat.label}
+              {st(cat.label)}
               {isPremiumTab && !isPremium && <Lock className="h-3 w-3 opacity-60" />}
             </button>
           )
@@ -335,17 +340,16 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
             <div className="mb-3 flex items-start gap-2 rounded-lg border border-cyan-500/20 bg-cyan-950/20 px-3 py-2.5">
               <Lock className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400" />
               <div className="text-[11px] text-cyan-200/80">
-                <p className="font-medium">Premium Feature</p>
+                <p className="font-medium">{t('lsScore.premiumFeature')}</p>
                 <p className="mt-0.5 text-cyan-200/60">
-                  Advanced college football scoring (Air Yards, Explosive Plays, Yards After
-                  Contact, Broken Tackles, etc.) requires an AF Commissioner Subscription.
+                  {t('lsScore.premium.ncaafAdvanced')}
                 </p>
                 <button
                   type="button"
                   onClick={() => setGateOpen(true)}
                   className="mt-1.5 rounded-md bg-cyan-600/60 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-cyan-600/80"
                 >
-                  Upgrade
+                  {t('lsScore.upgrade')}
                 </button>
               </div>
             </div>
@@ -354,10 +358,10 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
           {/* Category stat count */}
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-semibold uppercase tracking-wider text-white/30">
-              {activeCategory.label} ({activeCategory.rows.length} stats)
+              {t('lsScore.statCount').replace('{{label}}', st(activeCategory.label)).replace('{{count}}', String(activeCategory.rows.length))}
             </span>
             {isCommissioner && activeCategory.id !== 'advanced' && (
-              <span className="text-[11px] text-white/25">Click value to edit</span>
+              <span className="text-[11px] text-white/25">{t('lsScore.clickToEdit')}</span>
             )}
           </div>
 
@@ -376,11 +380,11 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
                 {/* Label + helper */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[12px] text-white/80">{row.label}</span>
+                    <span className="text-[12px] text-white/80">{st(row.label)}</span>
                     {row.premium && <Lock className="h-3 w-3 text-cyan-400/60" />}
                   </div>
                   {row.helper && (
-                    <p className="mt-0.5 text-[11px] text-white/30">{row.helper}</p>
+                    <p className="mt-0.5 text-[11px] text-white/30">{st(row.helper)}</p>
                   )}
                 </div>
 
@@ -391,7 +395,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
                       type="number"
                       step="any"
                       value={value}
-                      aria-label={row.label}
+                      aria-label={st(row.label)}
                       onChange={(e) =>
                         handleRuleChange(row.key, parseFloat(e.target.value) || 0)
                       }
@@ -421,7 +425,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
       {currentPreset?.description && (
         <div className="flex items-start gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/30" />
-          <p className="text-[11px] text-white/40">{currentPreset.description}</p>
+          <p className="text-[11px] text-white/40">{st(currentPreset.description)}</p>
         </div>
       )}
 
@@ -435,7 +439,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
           )}
           {success && (
             <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">
-              Scoring settings saved successfully.
+              {t('lsScore.saved')}
             </div>
           )}
           <div className="flex gap-2">
@@ -445,7 +449,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
               onClick={save}
               className="flex-1 rounded-lg bg-cyan-600/80 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-cyan-600 disabled:opacity-50"
             >
-              {saving ? 'Saving...' : 'Save Scoring'}
+              {saving ? t('lsScore.saving') : t('lsScore.save')}
             </button>
             {hasChanges && (
               <button
@@ -454,7 +458,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
                 className="flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/60 transition hover:bg-white/10"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                Reset
+                {t('lsScore.reset')}
               </button>
             )}
           </div>
@@ -465,7 +469,7 @@ export function NcaafScoringSettingsPanel({ leagueId, isCommissioner = false }: 
         isOpen={gateOpen}
         onClose={() => setGateOpen(false)}
         featureId="advanced_scoring"
-        featureLabel="Advanced NCAAF Scoring Customization"
+        featureLabel={t('lsScore.gateLabel').replace('{{sport}}', 'NCAAF')}
       />
     </div>
   )

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/lib/commissioner-workspace/operationalTasks',()=>({readOperationalTasks:vi.fn(async()=>[])}))
 
 /**
  * Commissioner Workspace's task store: what gets detected, and what the reconciler does with it.

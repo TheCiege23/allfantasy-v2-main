@@ -3,6 +3,7 @@ import { useTradeVisualCopy } from "./useTradeVisualCopy"
 import { TradeTranslationStatus } from './TradeTranslationStatus'
 
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { TradeEdge } from '@/lib/competitive-edge/tradeEdge'
 
@@ -40,7 +41,7 @@ export function TradeCompetitiveEdge({
 }) {
   const {copy,locale,language,translationState,retryTranslation}=useTradeVisualCopy({edge,partnerName})
 
-  if (access && !access.unlocked) return <CoreDepthLock access={access} what="Competitive Edge" />
+  if (access && !access.unlocked) return <CoreDepthLock access={access} what={lockSubjectText('Competitive Edge', language)} lang={language} />
   if (!edge) return null
 
   if (!edge.available) {
@@ -62,7 +63,7 @@ export function TradeCompetitiveEdge({
     <section className="af-tc-dos" data-testid="trade-competitive-edge" aria-label={copy(`Competitive Edge · ${manager.name}`)}>
       <TradeTranslationStatus state={translationState} language={language} retry={retryTranslation} />
       <div className="af-label">{copy("Competitive Edge · ")}{manager.name}</div>
-      {access ? <FreeUntilNote access={access} /> : null}
+      {access ? <FreeUntilNote access={access} lang={language} /> : null}
 
       {onDeal.length > 0 ? (
         <>

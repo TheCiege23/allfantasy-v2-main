@@ -31,6 +31,7 @@ vi.mock('@/lib/prisma', () => ({
     league: {
       findUnique: vi.fn(async () => ({
         id: 'L1',
+        platform: 'sleeper',
         name: 'Test League',
         sport: 'NFL',
         season: 2026,

@@ -1,6 +1,7 @@
 'use client'
 
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import type { FreeAgentBids as FreeAgentBidsData } from '@/lib/core-app/freeAgentBids'
 import { TopicTip } from '@/components/core-app/TopicTip'
@@ -17,7 +18,7 @@ import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
  *
  * Spanish (2026-10-05): built at render from `useOptionalLanguage` (finderSearchCopy.ts); the loader's
  * notes go through `faNoteText` whole or not at all. The AF Pro lock and its "Free until" note are
- * CoreDepthLock's, shared by every gated surface, and stay as that component writes them.
+ * CoreDepthLock's, shared by every gated surface, and follow the reader's language there.
  */
 export function FreeAgentBids({
   data,
@@ -42,7 +43,7 @@ export function FreeAgentBids({
         </h3>
         {!data.bidsLocked ? <TopicTip topic="faabBid" /> : null}
       </div>
-      {!data.bidsLocked && access ? <FreeUntilNote access={access} /> : null}
+      {!data.bidsLocked && access ? <FreeUntilNote access={access} lang={language} /> : null}
       <ul className="af-pf-fa-list">
         {data.rows.map((r) => (
           <li key={r.leagueId} className="af-pf-fa-row">
@@ -77,7 +78,7 @@ export function FreeAgentBids({
           </li>
         ))}
       </ul>
-      {data.bidsLocked && access ? <CoreDepthLock access={access} what="Suggested FAAB bids" /> : null}
+      {data.bidsLocked && access ? <CoreDepthLock access={access} what={lockSubjectText('Suggested FAAB bids', language)} lang={language} /> : null}
       {!data.bidsLocked ? (
         <p className="af-pf-fa-foot">{t.foot}</p>
       ) : null}

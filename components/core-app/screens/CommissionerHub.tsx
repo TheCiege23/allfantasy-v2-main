@@ -1,3 +1,5 @@
+import CommissionerActionQueue from '@/components/core-app/CommissionerActionQueue'
+import { NativeAutoSubsCommissioner } from '@/components/core-app/NativeAutoSubsControls'
 import Link from 'next/link'
 import { Suspense, type ReactNode } from 'react'
 import '@/components/core-app/af-commish-hub.css'
@@ -242,6 +244,8 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
 
       {/* ── 1 · Urgent work (items 1, 10) ──────────────────────────────── */}
       <TaskCards data={data} language={language} />
+      {data.role === 'commissioner' && <CommissionerActionQueue leagueId={league.id} />}
+      {league.native && data.role === 'commissioner' && <NativeAutoSubsCommissioner leagueId={league.id} />}
 
       <HubSection id="ch-intelligence" title={t('Commissioner intelligence')}>
         <CommissionerOsActionsSummary leagueId={league.id} sport={league.sport} />
@@ -328,7 +332,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
         <Suspense fallback={<RecentChangesFallback language={language} />}>
           <RecentChanges timeline={timeline} language={language} />
         </Suspense>
-        <HubDepthGate depth={depth} id="ch-members" what={t('Member activity')}>
+        <HubDepthGate depth={depth} id="ch-members" what={t('Member activity')} language={language}>
           <MemberActivity data={data} language={language} />
         </HubDepthGate>
       </div>
@@ -360,7 +364,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       ) : null}
 
       {/* ── Waiver oversight (handoff 2026-09-13) ─────────────────────── */}
-      <HubDepthGate depth={depth} id="ch-waivers" what={t('Waiver oversight')}>
+      <HubDepthGate depth={depth} id="ch-waivers" what={t('Waiver oversight')} language={language}>
         {data.waivers ? <WaiverOversight data={data.waivers} /> : null}
       </HubDepthGate>
 
@@ -472,7 +476,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       </div>
 
       {/* ── 7 · Charts (item 5) — large, so below the working sections ─── */}
-      <HubDepthGate depth={depth} id="ch-reports" what={t('League charts')}>
+      <HubDepthGate depth={depth} id="ch-reports" what={t('League charts')} language={language}>
         {activity ? (
           <Suspense fallback={<ChartsFallback language={language} />}>
             <OperationalCharts data={data} activity={activity} language={language} />
@@ -481,7 +485,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       </HubDepthGate>
 
       {/* ── 8 · Automations (item 8) ──────────────────────────────────── */}
-      <HubDepthGate depth={depth} id="ch-recipes" what={t('Automations')}>
+      <HubDepthGate depth={depth} id="ch-recipes" what={t('Automations')} language={language}>
         <HubSection id="ch-recipes" title={t('Automations')}>
           <AutomationRecipes leagueId={league.id} recipes={data.recipes} />
         </HubSection>
@@ -535,7 +539,7 @@ export function CommissionerHub({ data, lineups = null, language = 'en' }: Commi
       </section>
 
       {/* ── 10 · Audit log (item 6) — the longest table, so last ────────── */}
-      <HubDepthGate depth={depth} id="ch-timeline" what={t('The full audit log')}>
+      <HubDepthGate depth={depth} id="ch-timeline" what={t('The full audit log')} language={language}>
         <Suspense fallback={<AuditTimelineFallback language={language} />}>
           <AuditTimeline timeline={timeline} language={language} />
         </Suspense>
@@ -596,18 +600,21 @@ function HubDepthGate({
   depth,
   id,
   what,
+  language,
   children,
 }: {
   depth: CoreDepthAccess | null
   id: string
+  /** Already in the reader's language (`hubCopy`), like the lock's own words. */
   what: string
+  language: string
   children: ReactNode
 }) {
   if (!depth) return <>{children}</>
   if (!depth.unlocked) {
     return (
       <div id={id} className="af-ch-depth-lock">
-        <CoreDepthLock access={depth} what={what} />
+        <CoreDepthLock access={depth} what={what} lang={language} />
       </div>
     )
   }
@@ -615,7 +622,7 @@ function HubDepthGate({
   // One wrapper, so the note and its section stay ONE item in the hub's grids and splits.
   return (
     <div className="af-ch-depth-open">
-      <FreeUntilNote access={depth} />
+      <FreeUntilNote access={depth} lang={language} />
       {children}
     </div>
   )

@@ -162,7 +162,7 @@ function EdgeBasis({ edge, access }: { edge: SectionState<ScoutEdge>; access: Co
           ? `reclamos ganados en ${w.data.season}${w.data.stale ? ' (puede estar desactualizado)' : ''}: Sleeper solo registra los reclamos ganados`
           : `waiver claims won in ${w.data.season}${w.data.stale ? ' (may be out of date)' : ''} — Sleeper records only winning claims`
         : `${es ? 'agentes libres' : 'waivers'}: ${copy(w.reason)}`}
-      .{access ? <> <FreeUntilNote access={access} /></> : null}
+      .{access ? <> <FreeUntilNote access={access} lang={es ? 'es' : 'en'} /></> : null}
     </p>
   )
 }
@@ -628,6 +628,7 @@ export function Scout({
           <CoreDepthLock
             access={edgeAccess}
             what={es ? 'El historial de intercambios y reclamos de cada mánager' : 'Every manager’s trade and waiver record'}
+            lang={es ? 'es' : 'en'}
           />
         ) : edge ? (
           <EdgeBasis edge={edge} access={edgeAccess} />

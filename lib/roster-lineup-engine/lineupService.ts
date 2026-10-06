@@ -35,6 +35,9 @@ export type PersistRosterLineupInput = {
   week: number
   source: 'user_save' | 'commissioner_override' | 'import' | 'system'
   skipLockCheck?: boolean
+  transactionCheck?: (tx: Prisma.TransactionClient) => Promise<void>
+  automationAudit?: { id: string; action: string; message: string; metadata: Record<string,unknown> }
+  expectedOwnerUserId?: string
   expectedStarters?: string[]
 }
 
@@ -62,7 +65,7 @@ export async function persistRosterLineupWithEngine(
     if (!Array.isArray(current) || JSON.stringify(current.map(String))!==JSON.stringify(input.expectedStarters)) return {ok:false,error:'Your lineup changed. Refresh and compare again.',status:409}
   }
 
-  if (input.source === 'user_save' && await isCommissionerRosterLocked(input.leagueId, input.rosterId)) {
+  if ((input.source === 'user_save' || input.source === 'system') && await isCommissionerRosterLocked(input.leagueId, input.rosterId)) {
     return { ok: false, error: 'This roster is locked by the commissioner.', status: 403 }
   }
 
@@ -148,13 +151,15 @@ export async function persistRosterLineupWithEngine(
     resolveWriteAuthority(league.platform) === 'NATIVE' ? (roster.redraftRosterId ?? null) : null
 
   try { await prisma.$transaction(async (tx) => {
+    await input.transactionCheck?.(tx)
     if (input.expectedStarters) {
-      const result=await tx.roster.updateMany({ where:{id:input.rosterId,playerData:{equals:before}},data:{playerData:input.nextPlayerData as Prisma.InputJsonValue} })
+      const result=await tx.roster.updateMany({ where:{id:input.rosterId,...(input.expectedOwnerUserId?{platformUserId:input.expectedOwnerUserId}:{}),playerData:{equals:before}},data:{playerData:input.nextPlayerData as Prisma.InputJsonValue} })
       if(result.count!==1) throw new Error('STALE_TEAM_LINEUP')
     } else await tx.roster.update({
       where: { id: input.rosterId },
       data: { playerData: input.nextPlayerData as Prisma.InputJsonValue },
     })
+    if(input.automationAudit) await tx.automationAuditLog.create({data:{...input.automationAudit, leagueId:input.leagueId,userId:input.actorUserId,entityType:"roster",entityId:input.rosterId,metadata:input.automationAudit.metadata as Prisma.InputJsonValue}})
     await syncAfRosterLineupAssignments(
       {
         leagueId: input.leagueId,

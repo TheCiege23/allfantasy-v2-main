@@ -446,6 +446,8 @@ async function handle(req: NextRequest) {
       .count({ where: { id: { in: subscribers.map((s) => s.userId) }, email: { not: '' } } })
       .catch(() => null)
 
+    const teamWorkspace = dryRun ? { dryRun: true } : await (await import('@/lib/core-app/teamWorkspaceSweep')).runTeamWorkspaceSweep(subscribers.map(s => s.userId), Math.min(Date.now() + 30_000, startedAt + SWEEP_CEILING_MS)).catch(() => ({ errors: 1 }))
+
     const results: SweepUserResult[] = []
     let totalPushed = 0
     let totalAlerts = 0
@@ -681,6 +683,7 @@ async function handle(req: NextRequest) {
       ok: true as const,
       dryRun,
       pushConfigured,
+      teamWorkspace,
       usersScanned: results.length,
       /** Audience members with a non-empty email on file; null only if the count itself failed. */
       usersWithEmail,
