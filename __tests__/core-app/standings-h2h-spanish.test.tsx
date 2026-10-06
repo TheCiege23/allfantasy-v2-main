@@ -139,7 +139,7 @@ function screenText(language: 'en' | 'es', layout: 'table' | 'cards' = 'table'):
 
 // Shell words only English uses. Fixture names ("Club N", "Liga Prueba") are none of these.
 const ENGLISH =
-  /\b(the|your|you|with|this|that|from|for|of|is|are|and|wins?|lost|points|week|games?|played|last|next|streak|strk|record|team|schedule|hardest|odds|share|root|lose|stake|against|across|projects?|range|head to head|view|standings|sort|ascending|descending|unknown|over|magic|efficiency|median)\b/i
+  /\b(the|your|you|with|this|that|from|for|of|is|are|and|wins?|lost|points|week|games?|played|last|next|streak|strk|record|team|schedule|hardest|odds|share|root|lose|stake|against|across|projects?|range|head to head|view|standings|sort|ascending|descending|unknown|over|magic|efficiency|median|wk|live)\b/i
 
 describe('Standings (head-to-head) in Spanish', () => {
   it('reads Spanish across the stakes, the grid, the tooltips and the controls', () => {
@@ -189,7 +189,7 @@ describe('Standings (head-to-head) in Spanish', () => {
    */
   it('the card layout (phones) reads Spanish too', () => {
     const t = screenText('es', 'cards')
-    for (const es of ['Racha', 'Número mágico', 'Probabilidad de playoffs', 'Calendario restante', 'más difícil de 4']) {
+    for (const es of ['Racha', 'Número mágico', 'Probabilidad de playoffs', 'Calendario restante', 'más difícil de 4', 'Sem 5']) {
       expect(t, es).toContain(es)
     }
     const leftover = t.replace(/Club \d|Liga Prueba|Sleeper|AllFantasy|AF Power|Season Outlook/g, '').match(ENGLISH)
