@@ -14,7 +14,7 @@ import React from 'react'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render } from '@testing-library/react'
+import { fireEvent, render, waitFor } from '@testing-library/react'
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
@@ -184,9 +184,10 @@ describe('My Team, rendered in Spanish, in every state that prints these', () =>
     })
   }
 
-  it('the new comparison, Chimmy question and saved personal plan stay Spanish', () => {
+  it('the new comparison, Chimmy question and saved personal plan stay Spanish', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string, opts?: { method?: string }) => ({ ok:true, status:200, json:async()=>url.includes('team-alerts')?{available:true,alerts:[]}:{plan:opts?.method==='PUT'?{version:1,slots:{},note:'',deleted:false}:null} })))
     lang.language = 'es'
-    const r = render(<MyTeam data={base()} />)
+    const r = render(<MyTeam data={base({workspaceScope:{rosterKey:'R',season:2026}})} />)
     fireEvent.change(r.getByLabelText('Suplente elegible'), { target: { value: 'b1' } })
     expect(r.container.textContent).toContain('Proyección:')
     expect(englishIn(r.container)).toEqual([])
@@ -198,12 +199,14 @@ describe('My Team, rendered in Spanish, in every state that prints these', () =>
     expect(questions[0]).toContain('compara Bo Nix con Jo Reyes')
     expect(questions[0]).not.toMatch(ENGLISH)
     fireEvent.change(r.getByLabelText('Semana prevista'), { target: { value: '7' } })
+    await waitFor(() => expect(r.getByRole('button', { name: 'Guardar plan personal' })).not.toBeDisabled())
     fireEvent.click(r.getByRole('button', { name: 'Guardar plan personal' }))
-    expect(r.container.textContent).toContain('Plan guardado en este dispositivo.')
+    await waitFor(() => expect(r.container.textContent).toContain('Guardado en tu cuenta.'))
     expect(englishIn(r.container)).toEqual([])
     lang.language = 'en'
-    r.rerender(<MyTeam data={base()} />)
-    expect(r.container.textContent).toContain('Plan saved on this device.')
+    r.rerender(<MyTeam data={base({workspaceScope:{rosterKey:'R',season:2026}})} />)
+    expect(r.container.textContent).toContain('Saved to your account.')
+    vi.unstubAllGlobals()
     localStorage.clear()
   })
 

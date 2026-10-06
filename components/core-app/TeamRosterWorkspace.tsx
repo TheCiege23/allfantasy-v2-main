@@ -1,4 +1,6 @@
 'use client'
+import TeamAlerts from './TeamAlerts'
+import { NativeAutoSubsControls } from './NativeAutoSubsControls'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { teamWorkspaceCopy } from '@/lib/core-app/teamWorkspaceCopy'
@@ -61,6 +63,8 @@ export default function TeamRosterWorkspace({ data }: { data: MyTeamData }) {
     <details className="af-tw-panel"><summary>{copy("Scoring and lineup rules")}</summary><p>{data.projectionBasis.scoringKnown ? copy("League rules are applied to the projected numbers shown here.") : copy("Scoring rules are unavailable; comparisons may be incomplete.")}</p><ul>{data.projectionBasis.notes.map(note => <li key={note}>{scoringNoteText(note, language)}</li>)}</ul><p>AutoSubs: {data.autoSubs?.enabled === true ? copy("Enabled by this league. Review assigned substitutes and provider lock rules.") : data.autoSubs?.enabled === false ? copy("Disabled by this league.") : copy("The provider has not supplied a verified AutoSubs setting.")}</p>{data.league.sourceLink && <a href={data.league.sourceLink.href} target="_blank" rel="noopener noreferrer">{es ? 'Revisar plantilla y sustitutos en ' : 'Review roster and substitutes in '}{platformLabel(data.league.platform)} ↗</a>}</details>
     <details className="af-tw-panel"><summary>{copy("Future weeks and pending moves")}</summary>{data.upcomingByes.length ? <ul>{data.upcomingByes.map(bye => <li key={bye.week}>{es ? 'Semana' : 'Week'} {bye.week}: {bye.names.join(', ')}</li>)}</ul> : <p>{copy("No upcoming bye evidence available for this roster.")}</p>}<nav className="af-tw-links" aria-label={copy("Roster planning")}><Link href={`/core/schedule?league=${encodeURIComponent(data.league.id)}`}>{copy("Schedule and deadlines")}</Link><Link href={`/core/waivers?league=${encodeURIComponent(data.league.id)}`}>{copy("Waiver claims and roster impact")}</Link><Link href={`/core/trades?league=${encodeURIComponent(data.league.id)}`}>{copy("Pending trades")}</Link></nav><p>{copy("Future planning does not change your current lineup.")}</p></details>
     {!automatic && <details className="af-tw-panel"><summary>{copy("Injury contingency preview")}</summary><p>{copy("This preview does not configure or execute AutoSubs. Confirm assigned substitutes in your provider; availability and locks can change.")}</p><ul>{comparisons.filter(c=>c.slot.player?.ruledOut || c.slot.player?.onBye).map(c=><li key={c.index}><strong>{c.slot.slotLabel} · {c.slot.player?.name}</strong><p>{c.candidates.filter(p=>!p.started && !p.player.ruledOut && !p.player.onBye).slice(0,3).map(p=>p.player.name).join(', ') || copy("No readable, available bench alternatives before kickoff.")}</p></li>)}</ul></details>}
+    {!automatic && data.nativeLineup && <NativeAutoSubsControls data={data} />}
+    <TeamAlerts leagueId={data.league.id} />
     <TeamWeekPlanner data={data} automatic={automatic} />
   </section>
 }

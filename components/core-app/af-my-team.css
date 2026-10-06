@@ -2567,3 +2567,15 @@ li[data-kind='questionable'] .af-mt-check-tag {
 @container af-mt (max-width: 500px) {
   .af-core .af-mt > .af-mt-head { order: -2; }
 }
+
+/* Keep the decision explanation readable alongside a bounded action column. */
+.af-core .af-mt-decision > :first-child { flex: 1; min-width: 0; }
+.af-core .af-mt-decision-actions { display: flex; flex-direction: column; flex: 0 1 280px; min-width: 0; }
+.af-core .af-mt-decision-actions .af-btn { flex: 0 0 auto; width: 100%; }
+@container af-mt (max-width: 500px) {
+  .af-core .af-mt-head { gap: 10px; padding: 12px; }
+  .af-core .af-mt-team-name { font-size: 18px; overflow-wrap: anywhere; }
+  .af-core .af-mt-tiles { width: 100%; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); margin-left: 0; }
+  .af-core .af-mt-tile { min-width: 0; padding: 7px; }
+  .af-core .af-mt-tile-value { font-size: 19px; }
+}

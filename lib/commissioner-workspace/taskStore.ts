@@ -148,6 +148,7 @@ export async function reconcileLeagueTasks(leagueId: string, now = new Date()): 
           title: candidate.title,
           description: candidate.description,
           priority: candidate.priority,
+          dueAt: candidate.dueAt ?? null,
           automationCandidate: candidate.automationCandidate,
           relatedLinks: candidate.relatedLinks,
           status: 'open',
@@ -173,7 +174,8 @@ export async function reconcileLeagueTasks(leagueId: string, now = new Date()): 
     const visiblyChanged =
       row.title !== candidate.title ||
       row.description !== candidate.description ||
-      row.priority !== candidate.priority
+      row.priority !== candidate.priority ||
+      row.dueAt?.toISOString() !== candidate.dueAt?.toISOString()
 
     await prisma.commissionerWorkspaceTask.update({
       where: { id: row.id },
@@ -182,6 +184,7 @@ export async function reconcileLeagueTasks(leagueId: string, now = new Date()): 
             title: candidate.title,
             description: candidate.description,
             priority: candidate.priority,
+          dueAt: candidate.dueAt ?? null,
             automationCandidate: candidate.automationCandidate,
             relatedLinks: candidate.relatedLinks,
             lastSeenAt: now,
@@ -197,6 +200,7 @@ export async function reconcileLeagueTasks(leagueId: string, now = new Date()): 
   const detectedKeys = new Set(candidates.map((c) => c.sourceKey))
   for (const row of existing) {
     if (detectedKeys.has(row.sourceKey)) continue
+    if (detectedKeys.has('operational:coverage:v1') && row.sourceKey.startsWith('operational:lineup:')) continue
     if (SETTLED.has(row.status)) continue
 
     await prisma.commissionerWorkspaceTask.update({

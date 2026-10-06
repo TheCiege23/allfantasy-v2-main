@@ -7,6 +7,7 @@ import 'server-only'
 import type { LeagueSport, Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
+import { resolveWriteAuthority } from '@/lib/league/write-authority'
 import { getStarterSlotLabels } from '@/lib/league/rosterSlots'
 import {
   buildPlayerDataFromSections,
@@ -275,11 +276,18 @@ export async function runAutoCoachForLeague(leagueId: string): Promise<AutoCoach
       leagueVariant: true,
       bestBallMode: true,
       autoCoachEnabled: true,
+      platform: true,
       starters: true,
     },
   })
 
   if (!league) return []
+
+  // Native automation uses explicit owner backups and the transactional lineup engine.
+  if (resolveWriteAuthority(league.platform) === 'NATIVE') {
+    await (await import('@/lib/core-app/nativeAutoSubs')).runNativeAutoSubsForLeague(leagueId)
+    return []
+  }
 
   if (isBestBallLeague(league.leagueVariant, league.bestBallMode)) {
     return []

@@ -45,3 +45,6 @@
  .af-tw-compare { grid-template-columns:1fr; }
  .af-tw-links > .af-btn { flex:1 1 160px; }
 }
+
+.af-tw .af-tw-optin { display:flex; align-items:center; gap:12px; min-height:48px; }
+.af-tw .af-tw-optin input[type="checkbox"] { width:28px; min-height:28px; margin:8px; padding:0; flex:0 0 28px; }
