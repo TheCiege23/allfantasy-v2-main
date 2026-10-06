@@ -136,8 +136,8 @@ export default function PrivacyPolicyBody() {
         <ul>
           <li>Browser settings: most browsers let you block or delete cookies. Blocking strictly necessary cookies will prevent parts of the Services from working.</li>
           <li>Ad platform settings: you can limit ad personalization in your Meta, Google, TikTok, and Reddit account settings.</li>
-          <li>Global Privacy Control: our website does not yet respond automatically to the Global Privacy Control signal. Until it does, you can opt out of &quot;sharing&quot; and targeted advertising by email, as described below.</li>
-          <li>Opt-out requests: email <a href="mailto:support@allfantasy.ai">support@allfantasy.ai</a> with &quot;Do Not Sell or Share&quot; in the subject line, and we will honor your request as required by applicable law.</li>
+          <li>Global Privacy Control: if your browser sends a Global Privacy Control signal, we treat it as a request to opt out of &quot;sharing&quot; and targeted advertising for that browser, and, if you are signed in, for your Account, as required by applicable law.</li>
+          <li>Opt-out link: the <Link href="/privacy/choices">&quot;Your Privacy Choices&quot; page</Link> (linked as &quot;Do Not Sell or Share My Personal Information&quot; at the foot of our legal pages and in Settings → Legal) lets you opt out on your browser and, if you are signed in, on your Account. You can also email <a href="mailto:support@allfantasy.ai">support@allfantasy.ai</a> with &quot;Do Not Sell or Share&quot; in the subject line.</li>
           <li>Do Not Track: because there is no common standard for &quot;Do Not Track&quot; signals, we do not respond to them other than as described above.</li>
           <li>Industry opt-outs: you can opt out of interest-based advertising from participating companies at <a href="https://optout.aboutads.info" target="_blank" rel="noopener noreferrer">optout.aboutads.info</a> and <a href="https://optout.networkadvertising.org" target="_blank" rel="noopener noreferrer">optout.networkadvertising.org</a>.</li>
         </ul>

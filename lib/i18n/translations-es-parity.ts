@@ -1030,6 +1030,7 @@ export const translationsEsParity: Record<string, string> = {
   "settings.legal.linkDisclaimer": "Aviso sobre deportes de fantasía y estados",
   "settings.legal.linkSmsTerms": "Términos de SMS",
   "settings.legal.linkCopyright": "Política de derechos de autor",
+  "settings.legal.linkPrivacyChoices": "No vender ni compartir mi información personal",
   "settings.legal.linkNoGambling": "Política de no apuestas",
   "settings.legal.linkPrivacy": "Política de privacidad",
   "settings.legal.linkTerms": "Términos del servicio",
