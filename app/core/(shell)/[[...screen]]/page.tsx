@@ -1,3 +1,5 @@
+import LeagueSchedule from '@/components/core-app/screens/LeagueSchedule'
+import LeagueMoves from '@/components/core-app/screens/LeagueMoves'
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -309,6 +311,8 @@ const HOME_RECENT_TRADES_LIMIT = 20
  */
 
 const SCREEN_KEYS: Record<string, CoreNavKey> = {
+  schedule: 'home',
+  moves: 'home',
   '': 'home',
   players: 'players',
   'my-team': 'my-team',
@@ -403,6 +407,8 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
  * more than two tabs are open, which is the normal state for this product.
  */
 const TAB_META: Record<string, { title: string; description: string }> = {
+  schedule: { title: 'Schedule', description: 'League fixtures, provider deadlines, and future planning.' },
+  moves: { title: 'Moves', description: 'Review waivers, trades, and their roster impact.' },
   '': { title: 'Your leagues', description: 'Every league you play, ordered by what needs you first.' },
   players: { title: 'Player Finder', description: 'Search any player and see what they are worth in your leagues.' },
   /*
@@ -1604,6 +1610,7 @@ export default async function AfCorePage({
 
   return (
     <AfCoreShell
+      nativeLeague={!!selectedLeagueId && !!selectedLeaguePlatform && !isImportedPlatform(selectedLeaguePlatform)}
       active={activeKey}
       leagueFirst={leagueFirst}
       leagueChatPreview={leagueChatPreview}
@@ -1697,9 +1704,10 @@ export default async function AfCorePage({
       {selectedRailLeague?.hub && selectedLeagueId ? <ConnectedLeagueContext hub={selectedRailLeague.hub} selectedLeagueId={selectedLeagueId} /> : null}
       {selectedLeagueId && selectedLeagueName ? (
         <LeagueTabs
+          commissionerHref={playedLeagues.some(l => l.id === selectedLeagueId && l.isCommissioner) ? `/core/commissioner?league=${encodeURIComponent(selectedLeagueId!)}` : null}
           leagueId={selectedLeagueId}
           leagueName={selectedLeagueName}
-          activeKey={activeKey}
+          activeKey={segment === 'schedule' || segment === 'moves' ? segment : activeKey}
           hasScoredWeek={leagueHasScoredWeek}
           tradeSupported={importCoverageSummary.capabilities.trades !== false}
           draftSupported={importCoverageSummary.capabilities.draft !== false}
@@ -4361,7 +4369,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
       ) : leagueHome ? (
         <>
         {chimmyMovesCard}
-        <LeagueHome
+        {segment === 'schedule' ? <LeagueSchedule data={leagueHome} /> : segment === 'moves' ? <LeagueMoves data={leagueHome} /> :         <LeagueHome
           data={leagueHome}
           identityInShell={leagueHeaderShown}
           lineups={homeLineups}
@@ -4390,7 +4398,7 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
           // deadline inside deriveOutstandingIssues, so the head of this list is
           // the row the screen shows.
           issues={issues.filter((i) => i.leagueId === leagueHome.league.id)}
-        />
+        />}
         </>
       ) : segment === 'model-admin' ? (
         /*

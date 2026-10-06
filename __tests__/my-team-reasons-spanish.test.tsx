@@ -184,6 +184,29 @@ describe('My Team, rendered in Spanish, in every state that prints these', () =>
     })
   }
 
+  it('the new comparison, Chimmy question and saved personal plan stay Spanish', () => {
+    lang.language = 'es'
+    const r = render(<MyTeam data={base()} />)
+    fireEvent.change(r.getByLabelText('Suplente elegible'), { target: { value: 'b1' } })
+    expect(r.container.textContent).toContain('Proyección:')
+    expect(englishIn(r.container)).toEqual([])
+    const questions: string[] = []
+    const on = (e: Event) => questions.push((e as CustomEvent).detail.prefill)
+    window.addEventListener('af-comms-open', on)
+    fireEvent.click(r.getByRole('button', { name: 'Pedir una explicación a Chimmy' }))
+    window.removeEventListener('af-comms-open', on)
+    expect(questions[0]).toContain('compara Bo Nix con Jo Reyes')
+    expect(questions[0]).not.toMatch(ENGLISH)
+    fireEvent.change(r.getByLabelText('Semana prevista'), { target: { value: '7' } })
+    fireEvent.click(r.getByRole('button', { name: 'Guardar plan personal' }))
+    expect(r.container.textContent).toContain('Plan guardado en este dispositivo.')
+    expect(englishIn(r.container)).toEqual([])
+    lang.language = 'en'
+    r.rerender(<MyTeam data={base()} />)
+    expect(r.container.textContent).toContain('Plan saved on this device.')
+    localStorage.clear()
+  })
+
   it('the swap question Chimmy receives is Spanish too', () => {
     lang.language = 'es'
     const seen: string[] = []

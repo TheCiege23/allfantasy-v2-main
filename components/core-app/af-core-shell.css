@@ -3454,3 +3454,18 @@ html[data-mode='light'] .af-core {
     margin-left: 0;
   }
 }
+
+/* Tablet split views reserve space for the roster rather than a full text nav. */
+@media(max-width:720px) {
+ .af-core.af-shell .af-nav { display:none; }
+ .af-core.af-shell { grid-template-rows:minmax(0,1fr); }
+ .af-core .af-tabbar { grid-template-columns:repeat(6,minmax(0,1fr)); }
+ .af-core .af-tabbar-item { min-width:0; min-height:48px; }
+}
+@media(min-width:721px) and (max-width:1080px) {
+ .af-core.af-shell:not([data-rail-open='true']) { grid-template-columns:68px 104px minmax(0,1fr); }
+ .af-core.af-shell:not([data-rail-open='true']) .af-nav { width:104px; min-width:0; overflow-x:hidden; }
+ .af-core.af-shell:not([data-rail-open='true']) .af-nav a { flex-wrap:wrap; justify-content:center; text-align:center; font-size:11px; min-height:48px; padding-inline:4px; }
+ .af-core.af-shell:not([data-rail-open='true']) .af-nav-label { flex-basis:100%; font-size:12px; line-height:1.25; overflow-wrap:anywhere; }
+ .af-core.af-shell:not([data-rail-open='true']) .af-nav-heading,.af-core.af-shell:not([data-rail-open='true']) .af-nav-foot .af-import-cta { display:none; }
+}

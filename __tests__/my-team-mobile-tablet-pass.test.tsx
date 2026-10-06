@@ -130,13 +130,14 @@ describe('phone: the countdown above the Sleeper check strip', () => {
     expect(inQuery(MT_CSS, '.af-core .af-mt > .af-mt-lock', '').order).toBeUndefined()
   })
 
-  it('is a swap because the strip is the first child and the banner the second, both direct', () => {
-    /* `order: -1` lifts the banner above EVERY order-0 child; it reads as a swap only while the
-       strip leads. If anything is ever rendered ahead of the strip, this test says so. */
+  it('keeps team context first and the countdown above verification on phones', () => {
+    /* Context stays first; the narrow CSS then puts the countdown ahead of verification. */
     const { container } = render(<MyTeam data={page()} />)
     const kids = [...container.querySelector('.af-mt')!.children].map((c) => c.classList)
-    expect(kids[0].contains('af-lv')).toBe(true)
-    expect(kids[1].contains('af-mt-lock')).toBe(true)
+    expect(kids[0].contains('af-mt-head')).toBe(true)
+    expect(inQuery(MT_CSS, '.af-core .af-mt > .af-mt-head', NARROW_PAGE).order).toBe('-2')
+    expect(kids[1].contains('af-lv')).toBe(true)
+    expect(kids[2].contains('af-mt-lock')).toBe(true)
   })
 })
 

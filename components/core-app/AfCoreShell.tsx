@@ -263,6 +263,7 @@ function urgencyBadge(count: number | null | undefined): NavItem['badge'] {
 type NavSection = { id: string; heading: string | null; items: NavItem[] }
 
 export type AfCoreShellProps = {
+  nativeLeague?: boolean
   active: CoreNavKey
   /**
    * League-first phone shell (lib/core-app/leagueFirst.ts): the bottom bar becomes
@@ -2273,14 +2274,10 @@ export function AfCoreShell(incoming: AfCoreShellProps) {
               </Link>
             ) : null}
             <span className="af-readonly">
-              {language === 'es' ? 'Solo lectura' : 'Read-only'}
+              {props.nativeLeague ? (language === 'es' ? 'Liga nativa' : 'Native league') : (language === 'es' ? 'Solo lectura' : 'Provider read-only')}
               <HelpDot
-                title={language === 'es' ? 'Solo lectura, por diseño' : 'Read-only by design'}
-                body={
-                  language === 'es'
-                    ? `AllFantasy nunca cambia nada en ${platformsPhraseText(availableImportPlatformsPhrase(), 'es')}. Leemos tus ligas y te llevamos a la liga y la pantalla exactas donde haces el cambio.`
-                    : `AllFantasy never changes anything on ${availableImportPlatformsPhrase()}. We read your leagues and point you to the exact league and screen where you make the change.`
-                }
+                title={props.nativeLeague ? 'AllFantasy is the league record' : 'Provider read-only'}
+                body={props.nativeLeague ? 'Validated roster changes are saved to this native AllFantasy league. Roster rules and game locks apply.' : 'AllFantasy reads imported leagues and points you to the provider where you make lineup changes. Provider writes are not supported.'}
               />
             </span>
 
