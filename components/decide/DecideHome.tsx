@@ -42,6 +42,7 @@ import {
   type LeaguePulseViewModel,
 } from '@/lib/decision-os/league-pulse'
 import { localizeLeaguePulse, translatePulseText } from '@/lib/i18n/decision-os/leaguePulse'
+import { localizeRecommendations, translateRecText } from '@/lib/i18n/decision-os/recommendations'
 import {
   buildDecisionRecommendationsViewModel,
   type DecisionRecommendationsViewModel,
@@ -220,8 +221,8 @@ export function DecideHome({
   )
 
   const recs: DecisionRecommendationsViewModel = useMemo(
-    () => buildDecisionRecommendationsViewModel({ source: intel?.recommendations ?? null }),
-    [intel],
+    () => localizeRecommendations(buildDecisionRecommendationsViewModel({ source: intel?.recommendations ?? null }), language),
+    [intel, language],
   )
 
   // ── KPI row: viewer's real slot, or honest dashes ──────────────────────────
@@ -391,7 +392,7 @@ export function DecideHome({
                 <div className={`bdx-card c-${recSev(r.priority)}`} key={r.title}>
                   <div className="bdx-head">
                     <span className="bdx-kind">{t('decide.rec.kind')}</span>
-                    <SevChip sev={recSev(r.priority)}>{r.priority}</SevChip>
+                    <SevChip sev={recSev(r.priority)}>{language === 'es' ? translateRecText(r.priority) : r.priority}</SevChip>
                     <span className="bdx-when">
                       {t('decide.rec.impact').replace('{{impact}}', String(r.expectedImpact)).replace('{{difficulty}}', String(r.difficulty))}
                     </span>
