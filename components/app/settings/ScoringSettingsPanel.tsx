@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { useLeagueSectionData } from '@/hooks/useLeagueSectionData'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 
 type ScoringRuleConfig = {
   statKey: string
@@ -47,6 +48,7 @@ function formatStatLabel(statKey: string): string {
 
 export default function ScoringSettingsPanel({ leagueId }: { leagueId: string }) {
   const router = useRouter()
+  const { t } = useOptionalLanguage()
   const { data: config, loading, error, reload } = useLeagueSectionData<ScoringConfig>(
     leagueId,
     'scoring/config'
@@ -117,10 +119,10 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
       )
       const json = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error(json?.error ?? 'Failed to save scoring overrides')
+        toast.error(json?.error ?? t('scorePanel.toast.saveFailed'))
         return
       }
-      toast.success('Scoring overrides saved')
+      toast.success(t('scorePanel.toast.saved'))
       setEditing(false)
       await reload()
       router.refresh()
@@ -132,9 +134,9 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
   if (!leagueId) {
     return (
       <section className="rounded-xl border border-white/10 bg-black/20 p-4">
-        <h3 className="text-sm font-semibold text-white">Scoring Settings</h3>
+        <h3 className="text-sm font-semibold text-white">{t('scorePanel.title')}</h3>
         <p className="mt-2 text-xs text-white/65">
-          Select a league to view scoring settings.
+          {t('scorePanel.selectLeague')}
         </p>
       </section>
     )
@@ -143,8 +145,8 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
   if (loading) {
     return (
       <section className="rounded-xl border border-white/10 bg-black/20 p-4">
-        <h3 className="text-sm font-semibold text-white">Scoring Settings</h3>
-        <p className="mt-2 text-xs text-white/65">Loading…</p>
+        <h3 className="text-sm font-semibold text-white">{t('scorePanel.title')}</h3>
+        <p className="mt-2 text-xs text-white/65">{t('scorePanel.loading')}</p>
       </section>
     )
   }
@@ -152,9 +154,9 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
   if (error || !config) {
     return (
       <section className="rounded-xl border border-white/10 bg-black/20 p-4">
-        <h3 className="text-sm font-semibold text-white">Scoring Settings</h3>
+        <h3 className="text-sm font-semibold text-white">{t('scorePanel.title')}</h3>
         <p className="mt-2 text-xs text-red-400/90">
-          {error ?? 'Failed to load scoring config.'}
+          {error ?? t('scorePanel.loadFailed')}
         </p>
       </section>
     )
@@ -163,7 +165,7 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
   return (
     <section className="rounded-xl border border-white/10 bg-black/20 p-4">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-white">Scoring Settings</h3>
+        <h3 className="text-sm font-semibold text-white">{t('scorePanel.title')}</h3>
         {canEdit && !config.categoryScoring && (
           <button
             type="button"
@@ -179,40 +181,40 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
             }}
             className="rounded border border-white/20 px-2.5 py-1 text-xs text-white/80 hover:bg-white/10 disabled:opacity-50"
           >
-            {editing ? 'Cancel' : 'Edit scoring'}
+            {editing ? t('scorePanel.cancel') : t('scorePanel.edit')}
           </button>
         )}
       </div>
 
       <p className="mt-1 text-xs text-white/65">
         {config.sport}
-        {config.leagueVariant ? ` · ${config.leagueVariant}` : ''} · format{' '}
+        {config.leagueVariant ? ` · ${config.leagueVariant}` : ''} · {t('scorePanel.format')}{' '}
         {config.formatType}
       </p>
       {checkingEditPermission && (
-        <p className="mt-1 text-[11px] text-white/45">Checking commissioner access…</p>
+        <p className="mt-1 text-[11px] text-white/45">{t('scorePanel.checkingAccess')}</p>
       )}
 
       {config.categoryScoring && (
         <div data-testid="category-scoring-settings" className="mt-3 rounded border border-white/15 p-3 text-sm">
-          <p>{config.categoryScoring.recordMode === 'each' ? 'Each category counts toward the record.' : config.categoryScoring.recordMode === 'roto' ? 'Season totals determine category standings.' : 'The team winning the most categories wins the matchup.'}</p>
-          <ul className="mt-2 flex flex-wrap gap-3">{config.categoryScoring.categories.map(category => <li key={category.id}>{category.label} ({category.direction === 'lower' ? 'lower wins' : 'higher wins'})</li>)}</ul>
-          <p className="mt-2 text-xs text-white/65">Percentage categories use total makes divided by total attempts. Point weights do not apply.</p>
+          <p>{config.categoryScoring.recordMode === 'each' ? t('scorePanel.record.each') : config.categoryScoring.recordMode === 'roto' ? t('scorePanel.record.roto') : t('scorePanel.record.most')}</p>
+          <ul className="mt-2 flex flex-wrap gap-3">{config.categoryScoring.categories.map(category => <li key={category.id}>{category.label} ({category.direction === 'lower' ? t('scorePanel.lowerWins') : t('scorePanel.higherWins')})</li>)}</ul>
+          <p className="mt-2 text-xs text-white/65">{t('scorePanel.pctNote')}</p>
         </div>
       )}
       <div className="mt-3 grid gap-2 text-[11px] sm:grid-cols-3">
         <div className="rounded border border-white/10 bg-black/35 px-2.5 py-2">
-          <p className="text-white/50">Template</p>
+          <p className="text-white/50">{t('scorePanel.template')}</p>
           <p className="font-medium text-white/85">{config.templateId}</p>
         </div>
         <div className="rounded border border-white/10 bg-black/35 px-2.5 py-2">
-          <p className="text-white/50">Enabled categories</p>
+          <p className="text-white/50">{t('scorePanel.enabledCategories')}</p>
           <p className="font-medium text-white/85">
             {config.categoryScoring ? config.categoryScoring.categories.length : rules.filter((r) => r.enabled).length} / {config.categoryScoring ? config.categoryScoring.categories.length : rules.length}
           </p>
         </div>
         <div className="rounded border border-white/10 bg-black/35 px-2.5 py-2">
-          <p className="text-white/50">Overrides</p>
+          <p className="text-white/50">{t('scorePanel.overrides')}</p>
           <p
             data-testid="scoring-settings-override-count"
             className="font-medium text-white/85"
@@ -226,11 +228,11 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
         <table className="min-w-full text-left text-xs">
           <thead className="bg-black/40 text-white/60">
             <tr>
-              <th className="px-2.5 py-2 font-medium">Category</th>
-              <th className="px-2.5 py-2 font-medium">Enabled</th>
-              <th className="px-2.5 py-2 font-medium">Points</th>
-              <th className="px-2.5 py-2 font-medium">Multiplier</th>
-              <th className="px-2.5 py-2 font-medium">Default</th>
+              <th className="px-2.5 py-2 font-medium">{t('scorePanel.col.category')}</th>
+              <th className="px-2.5 py-2 font-medium">{t('scorePanel.col.enabled')}</th>
+              <th className="px-2.5 py-2 font-medium">{t('scorePanel.col.points')}</th>
+              <th className="px-2.5 py-2 font-medium">{t('scorePanel.col.multiplier')}</th>
+              <th className="px-2.5 py-2 font-medium">{t('scorePanel.col.default')}</th>
             </tr>
           </thead>
           <tbody>
@@ -250,7 +252,7 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
                   </td>
                   <td className="px-2.5 py-2">
                     <input
-                      aria-label={`${row.statKey} enabled`}
+                      aria-label={t('scorePanel.aria.enabled').replace('{{stat}}', row.statKey)}
                       type="checkbox"
                       checked={row.enabled}
                       disabled={!editing}
@@ -268,7 +270,7 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
                   </td>
                   <td className="px-2.5 py-2">
                     <input
-                      aria-label={`${row.statKey} points`}
+                      aria-label={t('scorePanel.aria.points').replace('{{stat}}', row.statKey)}
                       type="number"
                       step="0.1"
                       value={row.pointsValue}
@@ -287,10 +289,10 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
                   </td>
                   <td className="px-2.5 py-2 text-white/70">{multiplier}</td>
                   <td className="px-2.5 py-2 text-white/55">
-                    {defaultEnabled ? 'On' : 'Off'} · {defaultPoints}
+                    {defaultEnabled ? t('scorePanel.on') : t('scorePanel.off')} · {defaultPoints}
                     {isChanged ? (
                       <span className="ml-2 rounded bg-cyan-500/20 px-1.5 py-0.5 text-[11px] text-cyan-200">
-                        Changed
+                        {t('scorePanel.changed')}
                       </span>
                     ) : null}
                   </td>
@@ -317,7 +319,7 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
             }}
             className="rounded border border-white/20 px-3 py-1.5 text-xs text-white/80 hover:bg-white/10"
           >
-            Reset to defaults
+            {t('scorePanel.resetDefaults')}
           </button>
           <button
             type="button"
@@ -326,7 +328,7 @@ export default function ScoringSettingsPanel({ leagueId }: { leagueId: string })
             onClick={() => void saveOverrides()}
             className="rounded bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-500 disabled:opacity-60"
           >
-            {saving ? 'Saving…' : 'Save scoring'}
+            {saving ? t('scorePanel.saving') : t('scorePanel.save')}
           </button>
         </div>
       )}
