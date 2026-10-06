@@ -56,12 +56,12 @@ const REC_ES: Readonly<Record<string, string>> = {
   'Boost Engagement': 'Impulsar la participación',
   'Lineup Discipline': 'Disciplina con la alineación',
   'Trade Strategy': 'Estrategia de trades',
-  'Waiver Wire Opportunity': 'Oportunidad en waivers',
+  'Waiver Wire Opportunity': 'Oportunidad en agentes libres',
   'Increase League Participation': 'Aumentar la participación en la liga',
   'Draft Preparation': 'Preparación del draft',
   'Retention Intervention': 'Intervención de retención',
   'Activate Trade Market': 'Activar el mercado de trades',
-  'Activate Waiver Wire': 'Activar los waivers',
+  'Activate Waiver Wire': 'Activar los agentes libres',
   'Host a League Event': 'Organizar un evento de liga',
   'Post a Weekly Recap': 'Publicar un resumen semanal',
   'Amplify Rivalries': 'Avivar las rivalidades',
@@ -72,13 +72,13 @@ const REC_ES: Readonly<Record<string, string>> = {
 
   // ── Expected impact ──
   'Improved lineup setting, waiver participation, and seasonal roster performance':
-    'Mejores alineaciones, más participación en waivers y mejor rendimiento de la plantilla en la temporada',
+    'Mejores alineaciones, más participación en reclamos y mejor rendimiento de la plantilla en la temporada',
   'Fewer last-minute changes, reduced bench regret, more consistent start/sit decisions':
     'Menos cambios de último minuto, menos arrepentimiento con la banca y decisiones de titular/banca más constantes',
   'Higher trade acceptance rate, more balanced proposals, improved roster construction via trades':
     'Más trades aceptados, propuestas más equilibradas y una plantilla mejor armada a través de trades',
   'Improved roster depth and flexibility through targeted waiver wire use':
-    'Más profundidad y flexibilidad en la plantilla con un uso dirigido de los waivers',
+    'Más profundidad y flexibilidad en la plantilla con un uso dirigido de los agentes libres',
   'Improved league culture, higher commish satisfaction, better seasonal experience':
     'Mejor ambiente en la liga, comisionado más satisfecho y mejor experiencia de temporada',
   'Better draft positioning, stronger initial roster quality, reduced in-season adjustment burden':
@@ -107,7 +107,7 @@ const REC_ES: Readonly<Record<string, string>> = {
   // ── Suggested actions ──
   'Enable weekly lineup reminder notifications': 'Activa los avisos semanales para la alineación',
   'Check lineup 48 hours before game day': 'Revisa la alineación 48 horas antes del día de partido',
-  'Review waiver wire every Tuesday morning': 'Revisa los waivers cada martes por la mañana',
+  'Review waiver wire every Tuesday morning': 'Revisa los agentes libres cada martes por la mañana',
   'Lock lineup decisions 24 hours before kickoff': 'Cierra las decisiones de alineación 24 horas antes del inicio',
   'Build a pre-week start/sit shortlist on Tuesdays': 'Arma los martes una lista corta de titulares y banca para la semana',
   'Commit to bench decisions by Thursday night': 'Define la banca a más tardar el jueves por la noche',
@@ -129,8 +129,8 @@ const REC_ES: Readonly<Record<string, string>> = {
   'Post a trade block/offers thread in league chat': 'Abre un hilo de mercado y ofertas en el chat de la liga',
   'Run a power rankings poll to surface trade motivation': 'Haz una encuesta de power rankings para despertar ganas de hacer trades',
   'Create a trade deadline event with announcement': 'Crea un evento con anuncio para la fecha límite de trades',
-  'Feature waiver wire pickups in your weekly recap': 'Destaca las altas de waivers en tu resumen semanal',
-  'Post top 5 waiver wire targets every Tuesday': 'Publica cada martes los 5 mejores objetivos de waivers',
+  'Feature waiver wire pickups in your weekly recap': 'Destaca las altas de agentes libres en tu resumen semanal',
+  'Post top 5 waiver wire targets every Tuesday': 'Publica cada martes los 5 mejores objetivos entre los agentes libres',
   'Highlight streaming options at thin positions': 'Destaca opciones de streaming en las posiciones con poca profundidad',
   'Run a power rankings poll mid-week': 'Haz una encuesta de power rankings a mitad de semana',
   'Post a weekly matchup preview or trash talk prompt': 'Publica una previa semanal de los enfrentamientos o un tema para picarse',
@@ -172,8 +172,8 @@ const PATTERNS: ReadonlyArray<[RegExp, (m: RegExpMatchArray) => string]> = [
   [/^(\d+)% of managers inactive$/, (m) => `${m[1]}% de los mánagers inactivos`],
   [/^Trade activity at (\d+)th percentile platform-wide$/, (m) => `Actividad de trades en el percentil ${m[1]} de la plataforma`],
   [/^Trade tier: (.+)$/, (m) => `Nivel de trades: ${word(m[1]!)}`],
-  [/^Waiver activity at (\d+)th percentile platform-wide$/, (m) => `Actividad de waivers en el percentil ${m[1]} de la plataforma`],
-  [/^Waiver tier: (.+)$/, (m) => `Nivel de waivers: ${word(m[1]!)}`],
+  [/^Waiver activity at (\d+)th percentile platform-wide$/, (m) => `Actividad de reclamos en el percentil ${m[1]} de la plataforma`],
+  [/^Waiver tier: (.+)$/, (m) => `Nivel de reclamos: ${word(m[1]!)}`],
   [/^Engagement at (\d+)th percentile platform-wide$/, (m) => `Participación en el percentil ${m[1]} de la plataforma`],
   [/^Engagement tier: (.+)$/, (m) => `Nivel de participación: ${word(m[1]!)}`],
   [/^(\d+) window\(s\) of league activity below 40% of baseline$/, (m) => `${m[1]} periodo(s) con la actividad de la liga por debajo del 40% de lo habitual`],
