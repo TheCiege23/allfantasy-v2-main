@@ -3115,6 +3115,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.legal.linkDisclaimer": "Fantasy Sports & State Notice",
     "settings.legal.linkSmsTerms": "SMS Terms",
     "settings.legal.linkCopyright": "Copyright Policy",
+    "settings.legal.linkPrivacyChoices": "Do Not Sell or Share My Personal Information",
     "settings.legal.linkTerms": "Terms of Service",
     "settings.legal.linkPrivacy": "Privacy Policy",
     "settings.legal.linkCookies": "Cookies and tracking",

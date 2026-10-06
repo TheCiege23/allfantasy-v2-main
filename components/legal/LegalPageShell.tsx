@@ -67,6 +67,7 @@ export default function LegalPageShell({
           <Link href="/sms-terms">SMS Terms</Link>
           <Link href="/copyright">Copyright Policy</Link>
           <Link href="/data-deletion">Data Deletion</Link>
+          <Link href="/privacy/choices">Do Not Sell or Share My Personal Information</Link>
           <Link href="/" data-home="true">
             Home
           </Link>
