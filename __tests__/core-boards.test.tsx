@@ -396,6 +396,13 @@ function weekData(over: Partial<WeekBoardData> = {}): WeekBoardData {
 }
 
 describe('WeekBoard', () => {
+  it('does not render a negative zero when a small deficit rounds to zero', () => {
+    const m=weekMatchup({leagueId:'tiny',leagueName:'Tiny deficit',projection:{you:100,them:100.01,margin:-.01,winProbability:.49}})
+    const {container}=render(<WeekBoard board={weekData({coinFlips:[m]})} outlook={null} rivalriesHref="/core/week?view=rivalries" allHref="/core/week?view=all" totalLeagues={1}/>)
+    expect(container.textContent).toContain('Tiny deficit')
+    expect(container.textContent).not.toContain('−0.0')
+    expect(container.querySelector('.af-bd-val')?.getAttribute('aria-label')).not.toContain('−0.0')
+  })
   /*
    * Production 2026-09-28, Monday of week 3: Cream Bowl read "+29.6 · 78% to win" off prior-week
    * means while /core/matchup had its week-3 score at +68.0. Once a week has points, rank on them.

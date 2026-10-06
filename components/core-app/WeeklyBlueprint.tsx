@@ -47,6 +47,14 @@ function LocalGameTime({ iso, language }: { iso: string; language: string }) {
   useEffect(() => { setText(new Intl.DateTimeFormat(language === 'es' ? 'es' : 'en', { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(iso))) }, [iso, language])
   return <time dateTime={iso}>{text ?? iso}</time>
 }
+function LocalCalculatedTime({ iso, language }: { iso: string; language: string }) {
+  const [text,setText] = useState<string | null>(null)
+  useEffect(() => {
+    const date = new Date(iso)
+    if (Number.isFinite(date.getTime())) setText(new Intl.DateTimeFormat(language === 'es' ? 'es' : 'en', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(date))
+  },[iso,language])
+  return <time dateTime={iso}>{text ?? (language === 'es' ? 'Cargando hora local…' : 'Loading local time…')}</time>
+}
 export function PlayoffPath({ path }: { path: WeeklyPlayoffPath }) {
   const { language } = useOptionalLanguage(); const es = language === 'es'
   const league = path.league, you = league?.you
@@ -61,7 +69,7 @@ export function PlayoffPath({ path }: { path: WeeklyPlayoffPath }) {
       {delta != null ? <p>{delta >= 0 ? '+' : ''}{delta.toFixed(1)} {es ? `puntos porcentuales frente al período ${previous!.period}` : `percentage points versus period ${previous!.period}`}.</p> : <p>{es ? 'La tendencia comienza con tu primer resumen guardado.' : 'Your trend starts with the first saved snapshot.'}</p>}
       {path.points.length > 1 ? <><svg viewBox="0 0 300 100" role="img" aria-label={es ? 'Tendencia de probabilidades; valores en la tabla' : 'Playoff probability trend; values in the table'}><polyline fill="none" stroke="currentColor" strokeWidth="3" points={path.points.map((p,i) => `${10 + i * 280 / (path.points.length - 1)},${90 - p.probability * .8}`).join(' ')} /></svg><details><summary>{es ? 'Datos de la tendencia' : 'Trend data'}</summary><table><thead><tr><th>{es ? 'Período' : 'Period'}</th><th>%</th></tr></thead><tbody>{path.points.map(p => <tr key={p.period}><td>{p.period}</td><td>{p.probability.toFixed(1)}%</td></tr>)}</tbody></table></details></> : null}
       {swing && swing.week >= path.period ? <div className="af-wbp-branches"><h4>{es ? `Escenarios del período ${swing.week}` : `Period ${swing.week} scenarios`}</h4>{[{ title: es ? 'Si ganas' : 'If you win', value: swing.ifWin }, { title: es ? 'Si pierdes' : 'If you lose', value: swing.ifLose }].map(b => <div key={b.title}><span>{b.title}: {b.value.toFixed(1)}%</span><span className="af-wbp-bar" aria-hidden><i style={{ width: `${Math.max(0, Math.min(100,b.value))}%` }} /></span></div>)}</div> : <p>{es ? 'No hay un escenario pendiente de victoria/derrota para este período.' : 'No pending win/loss scenario is available for this period.'}</p>}
-      <details><summary>{es ? 'Cómo se calcula' : 'How this is calculated'}</summary><p>{es ? 'Simulación del calendario restante con el historial de puntuación. No es una garantía.' : 'Remaining-schedule simulation using scoring history. This is not a guarantee.'}</p><p>{league!.assumptions.iterations.toLocaleString()} {es ? 'simulaciones' : 'simulations'} · {es ? 'Último cálculo' : 'Last calculated'}: {league!.assumptions.computedAt}</p><ul>{league!.assumptions.missing.map(m => <li key={m}>{coreUiCopy(m, language)}</li>)}</ul></details>
+      <details><summary>{es ? 'Cómo se calcula' : 'How this is calculated'}</summary><p>{es ? 'Simulación del calendario restante con el historial de puntuación. No es una garantía.' : 'Remaining-schedule simulation using scoring history. This is not a guarantee.'}</p><p>{league!.assumptions.iterations.toLocaleString()} {es ? 'simulaciones' : 'simulations'} · {es ? 'Último cálculo' : 'Last calculated'}: <LocalCalculatedTime iso={league!.assumptions.computedAt} language={language}/></p><ul>{league!.assumptions.missing.map(m => <li key={m}>{coreUiCopy(m, language)}</li>)}</ul></details>
     </> : <p>{es ? 'El modelo de playoffs no está disponible para este formato o estos datos. Revisa la clasificación y las reglas de tu liga.' : 'Playoff modeling is unavailable for this format or data. Review your league standings and rules.'}</p>}
     {path.historyUnavailable ? <p role="status">{es ? 'El historial de probabilidades no está disponible; el cálculo actual sigue visible.' : 'Probability history is unavailable; the current calculation remains visible.'}</p> : null}
     <Link href={`/core/season-outlook?league=${encodeURIComponent(path.leagueId ?? league?.leagueId ?? '')}`}>{es ? 'Ver los escenarios completos' : 'View full scenarios'} →</Link>

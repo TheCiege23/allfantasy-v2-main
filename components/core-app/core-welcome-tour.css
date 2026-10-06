@@ -1,15 +1,14 @@
 /*
  * 🛑 THE CARD SAT ON TOP OF THE CHAT BUBBLE. Both were anchored to the bottom-right corner — the
  * card at 24px, the bubble at `--af-fab-bottom` — so during the tour a tap on the bubble
- * hit the card. Desktop uses slot 1 of the corner geometry; phones place the guide
- * inline in the content, where it cannot cover the screen it introduces.
+ * hit the card. Keep the guide in document flow at every width so it cannot cover
+ * the weekly playoff path or sharing controls on tablets and desktops either.
  */
 .af-welcome {
-  position: fixed;
+  position: relative;
   z-index: 170;
-  right: var(--af-fab-inset, 18px);
-  bottom: var(--af-fab-slot-1, 86px);
-  width: min(390px, calc(100vw - 32px));
+  width: 100%;
+  margin-bottom: 18px;
   padding: 20px;
   border: 1px solid var(--accent-line);
   border-radius: 18px;

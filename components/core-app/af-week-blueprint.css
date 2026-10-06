@@ -7,5 +7,7 @@
 .af-core .af-wbp-share select { min-height: 44px; max-width: 100%; font-size: 16px; background: var(--surface2); color: var(--text); border: 1px solid var(--line2); border-radius: 8px; padding: 8px; }
 .af-core .af-wbp-share .af-wbp-buttons a { display: inline-flex; align-items: center; min-height: 44px; padding: 10px 14px; border: 1px solid var(--line2); border-radius: 10px; }
 .af-core .af-wbp-check { display: flex; align-items: center; min-height: 44px; gap: 8px; }
+.af-core .af-wbp-check input[type='checkbox'] { appearance: auto; -webkit-appearance: checkbox; width: 20px; height: 20px; flex: none; accent-color: var(--accent,#64e4d0); }
+.af-core .af-wbp-grid > section > a { display: inline-flex; align-items: center; min-height: 44px; }
 .af-core .af-wbp-share textarea { width: 100%; margin: 12px 0; }
 @media(max-width:700px){.af-core .af-wbp-buttons :is(button,a){flex:1 1 180px;min-width:0}.af-core .af-wbp-buttons a{justify-content:center}}
