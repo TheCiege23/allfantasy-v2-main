@@ -82,6 +82,7 @@ const RECEIVING: NcaafScoringCategory = {
   id: 'receiving',
   label: 'Receiving',
   rows: [
+    { key: 'te_premium', label: 'TE Reception Bonus', helper: 'Added to the regular reception value for tight ends only.', defaultValue: 0 },
     { key: 'reception',                   label: 'Reception',                                                          defaultValue: 0.5 },
     { key: 'receiving_yards',             label: 'Receiving Yards',         helper: '0.10 pts/yd (1 pt per 10 yds)',  defaultValue: 0.1 },
     { key: 'receiving_td',                label: 'Receiving TD',                                                       defaultValue: 6 },

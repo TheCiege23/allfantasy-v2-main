@@ -293,10 +293,13 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => {
 
 /*
  * ⚠ THE SPANISH IS WRITTEN, NOT TRANSLATED WORD-FOR-WORD. Fantasy vocabulary in
- * US Spanish keeps the English terms in daily use — "waivers", "draft", "roster",
- * "lineup" — and calquing them ("renuncias", "alineación") reads as machine output
- * to exactly the audience this page is for. Product nouns (AllFantasy, Decision
- * OS, Chimmy, Sleeper/ESPN/Yahoo) are names and stay.
+ * US Spanish keeps the English terms in daily use — "draft", "roster", "lineup" —
+ * and calquing them ("alineación") reads as machine output to exactly the audience
+ * this page is for. The one exception is the waiver vocabulary, by the owner's
+ * ruling (2026-10-06): a claim is «reclamo», a run «procesamiento de reclamos» and
+ * the wire / the players «agentes libres», as everywhere else in the app.
+ * Product nouns (AllFantasy, Decision OS, Chimmy, Sleeper/ESPN/Yahoo) are names
+ * and stay.
  *
  * ⚠ THE COMPLIANCE LINE IS A LEGAL STATEMENT, NOT MARKETING. It carries the same
  * restriction in both languages — the state list and the "no gambling, no DFS"
@@ -310,7 +313,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
     ogLocale: 'es_US',
     meta: {
       title: 'AllFantasy.ai — Ligas, herramientas y ayuda de IA en un solo lugar',
-      description: `Crea una liga de fantasy o conecta ${platforms}. Maneja tus equipos, drafts, cambios y waivers en un solo lugar, con ayuda de Chimmy cuando la necesites.`,
+      description: `Crea una liga de fantasy o conecta ${platforms}. Maneja tus equipos, drafts, cambios y agentes libres en un solo lugar, con ayuda de Chimmy cuando la necesites.`,
       ogTitle: 'AllFantasy.ai — Juega fantasy en un solo lugar',
       ogDescription: 'Crea o conecta ligas de fantasy, maneja tus equipos y recibe ayuda de IA para tu siguiente jugada.',
     },
@@ -328,7 +331,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
       eyebrow: 'Tu hogar para fantasy',
       h1a: 'Juega fantasy.',
       h1b: 'Todo en un lugar.',
-      sub: 'Crea una liga o conecta las que ya juegas. Maneja equipos, drafts, cambios y waivers en un solo lugar, con ayuda de Chimmy.',
+      sub: 'Crea una liga o conecta las que ya juegas. Maneja equipos, drafts, cambios y agentes libres en un solo lugar, con ayuda de Chimmy.',
       ctaPrimary: 'Crea tu cuenta gratis',
       ctaSecondary: 'Mira cómo funciona',
       reassure: 'Gratis para todas tus ligas · Solo lectura: nunca cambiamos tu liga · En Sleeper basta con tu usuario',
@@ -361,7 +364,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
         {
           n: '03',
           title: 'Mira qué te necesita',
-          body: 'Todas tus ligas en un solo tablero, lo más urgente primero: lugares vacíos en el lineup, titulares lesionados, waivers que corren y cambios contra reloj.',
+          body: 'Todas tus ligas en un solo tablero, lo más urgente primero: lugares vacíos en el lineup, titulares lesionados, procesamientos de reclamos y cambios contra reloj.',
         },
       ],
     },
@@ -386,20 +389,20 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => {
         {
           n: '02',
           title: ['Un jugador,', 'todas tus ligas.'],
-          body: 'Busca un nombre y mira en qué equipos lo tienes, su estado de lesión, y el cambio o el waiver que corresponde en cada liga.',
+          body: 'Busca un nombre y mira en qué equipos lo tienes, su estado de lesión, y el cambio o el reclamo que corresponde en cada liga.',
         },
         {
           n: '03',
           title: ['Sabe qué', 'te necesita.'],
-          body: 'Lineups sin poner, waivers que corren, cambios contra reloj — cada uno marcado con su liga y su fecha límite.',
+          body: 'Lineups sin poner, procesamientos de reclamos, cambios contra reloj — cada uno marcado con su liga y su fecha límite.',
         },
       ],
     },
     pricing: {
       h2: 'Todas las ligas son gratis. Mejora tu plan para tener ventaja.',
       body: prices
-        ? `Crea, importa y dirige todas las ligas que quieras — drafts, cambios, waivers y marcadores en vivo incluidos, gratis. Los planes de pago desde ${prices.min}/mes agregan a Chimmy, análisis más profundo de cambios y jugadores, y automatización de comisionado.`
-        : 'Crea, importa y dirige todas las ligas que quieras — drafts, cambios, waivers y marcadores en vivo incluidos, gratis. Los planes de pago agregan a Chimmy, análisis más profundo de cambios y jugadores, y automatización de comisionado.',
+        ? `Crea, importa y dirige todas las ligas que quieras — drafts, cambios, agentes libres y marcadores en vivo incluidos, gratis. Los planes de pago desde ${prices.min}/mes agregan a Chimmy, análisis más profundo de cambios y jugadores, y automatización de comisionado.`
+        : 'Crea, importa y dirige todas las ligas que quieras — drafts, cambios, agentes libres y marcadores en vivo incluidos, gratis. Los planes de pago agregan a Chimmy, análisis más profundo de cambios y jugadores, y automatización de comisionado.',
       ctaPrimary: 'Empieza gratis',
       ctaSecondary: 'Comparar planes',
     },

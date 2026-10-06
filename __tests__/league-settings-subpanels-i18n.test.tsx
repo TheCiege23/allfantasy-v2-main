@@ -159,7 +159,7 @@ describe('🛑 the panels read Spanish in Spanish', () => {
   }
 
   it.each([
-    ['general-info', 'Resumen de la liga', ['Nombre de la liga', 'Deporte', 'Waivers rotativos', 'Presupuesto FAAB', 'Semana límite de trades', 'Abrir todos los ajustes en Sleeper →']],
+    ['general-info', 'Resumen de la liga', ['Nombre de la liga', 'Deporte', 'Prioridad de reclamo rotativa', 'Presupuesto FAAB', 'Semana límite de trades', 'Abrir todos los ajustes en Sleeper →']],
     ['roster', 'Puestos de plantilla', ['Mariscal de campo (QB)', 'Corredor (RB)', 'Puestos de plantilla IDP', 'Linieros defensivos (DL)', 'Banca (BN)', 'Puestos de IR', 'Puestos de taxi']],
     ['playoffs', 'Semana de inicio de playoffs', ['Semana 15', 'Final de dos semanas', 'Resembrar en cada ronda', 'Bracket de consolación', 'Activado']],
     ['draft', 'Ver tablero del draft', ['ID del draft', 'Estado', 'Programado', 'Mock draft']],
@@ -199,8 +199,8 @@ describe('🛑 the panels read Spanish in Spanish', () => {
       <LeagueRulesSummarySection league={c.league} displayLeague={c.displayLeague} sleeperSettingsHref="https://sleeper.com/x" showEditLink />
       <ScoringSettingsFullSection league={c.league} sleeperSettingsHref="https://sleeper.com/x" showEditLink />
     </>)
-    for (const s of ['Reglas de la liga', 'Vista de solo lectura', 'Composición de la plantilla', '6 equipos, empieza la semana 15', 'Waivers diarios',
-      'Waivers y presupuesto', 'Waivers rotativos', 'Reserva de lesionados', 'Semana 11', 'Ajustes de puntuación', 'Tipo detectado:', 'Todas las reglas de puntuación',
+    for (const s of ['Reglas de la liga', 'Vista de solo lectura', 'Composición de la plantilla', '6 equipos, empieza la semana 15', 'Reclamos diarios',
+      'Agentes libres y presupuesto', 'Prioridad de reclamo rotativa', 'Reserva de lesionados', 'Semana 11', 'Ajustes de puntuación', 'Tipo detectado:', 'Todas las reglas de puntuación',
       'Ajustes predefinidos populares', 'Aplica la puntuación estilo ESPN', 'Restablecer']) {
       expect(r.container.textContent, s).toContain(s)
     }

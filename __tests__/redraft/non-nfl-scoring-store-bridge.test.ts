@@ -44,7 +44,7 @@ describe('the key maps are real on both sides', () => {
   for (const [sport, store] of Object.entries(UI_SCORING_STORES)) {
     it(`${sport}: every panel key exists in the panel's own config, every engine key is an engine category`, () => {
       const uiKeys = new Set(Object.keys(UI_DEFAULTS[sport]!))
-      const engineKeys = new Set(getScoringCategories(sport, ['IDP']).map((c) => c.key))
+      const engineKeys = new Set(getScoringCategories(sport, ['IDP', 'TE_PREMIUM']).map((c) => c.key))
       const badUi = Object.keys(store.keyMap).filter((k) => !uiKeys.has(k))
       const badEngine = Object.values(store.keyMap).filter((k) => !engineKeys.has(k))
       expect({ badUi, badEngine }).toEqual({ badUi: [], badEngine: [] })

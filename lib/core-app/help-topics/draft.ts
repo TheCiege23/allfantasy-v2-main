@@ -194,7 +194,7 @@ export const DRAFT_TOPICS = {
     },
     es: {
       title: 'Franquicia conectada',
-      body: 'Une ligas que juegas como un solo equipo, por ejemplo una liga profesional y una universitaria, para ver sus plantillas y drafts en una sola pantalla. «Refresh recommended» significa que una liga no se ha sincronizado en las últimas 24 horas o no tiene hora de sincronización registrada. Una liga de Fantrax es una copia guardada: vuelve a importarla para actualizarla. «Recent league moves» cuenta los intercambios, waivers y altas de todos los mánagers a partir de las transacciones más recientes de cada liga, una por intercambio; no es el total de la temporada, y un «+» indica que hay movimientos anteriores sin contar.',
+      body: 'Une ligas que juegas como un solo equipo, por ejemplo una liga profesional y una universitaria, para ver sus plantillas y drafts en una sola pantalla. «Refresh recommended» significa que una liga no se ha sincronizado en las últimas 24 horas o no tiene hora de sincronización registrada. Una liga de Fantrax es una copia guardada: vuelve a importarla para actualizarla. «Recent league moves» cuenta los intercambios, reclamos y altas de todos los mánagers a partir de las transacciones más recientes de cada liga, una por intercambio; no es el total de la temporada, y un «+» indica que hay movimientos anteriores sin contar.',
     },
   },
   needsYouFirst: {

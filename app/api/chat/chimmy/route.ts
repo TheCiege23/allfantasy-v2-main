@@ -3175,8 +3175,44 @@ async function handleChimmyPost(req: NextRequest, question: ChimmyQuestionTeleme
       })
       if (held.outcome !== 'clean') {
         const base = held.outcome === 'retried' && retry.result ? retry.result : loop
-        loop = { ...base, text: held.text, toolsUsed: [...loop.toolsUsed, ...(retry.result?.toolsUsed ?? [])] }
+        loop = { ...base, text: held.text, toolsUsed: [...loop.toolsUsed, ...(retry.result?.toolsUsed ?? [])],
+          evidence: [loop.evidence, retry.result?.evidence].filter(Boolean).join('\n\n') }
         console.warn('[chimmy] trade letter not given by the engine', { outcome: held.outcome, stated: held.stated })
+      }
+    }
+    /*
+     * 🛑 THE GUARD, OBSERVE-ONLY, ON THE PATH THAT ANSWERS MOST MESSAGES. It used to run only on the
+     * PECR fallback below, so a tool-loop answer was never checked (HailShiva, 2026-10-06: "Your
+     * card's 51.9% does not match this"). Grounded on what the loop read plus the current question,
+     * never earlier turns — see `lib/chimmy/toolLoopGuardObservation.ts`, which also says why this
+     * records rather than replaces. The answer below is returned exactly as it was; a failed
+     * observation is swallowed and costs the user nothing.
+     */
+    if (loop?.text) {
+      try {
+        const { observeToolLoopAnswer } = await import('@/lib/chimmy/toolLoopGuardObservation')
+        const observed = observeToolLoopAnswer({
+          answer: loop.text,
+          evidence: loop.evidence ?? '',
+          promptLines: [loopArgs.clockLine, loopArgs.groundingLine, loopArgs.styleLine],
+          question: message,
+          hasLeagueContext: Boolean(toolContext.leagueId),
+        })
+        if (observed.wouldAction !== 'pass') {
+          persistChimmyAIAnalyticsEvent({
+            event_name: 'guard_observed',
+            user_id: userId ?? 'anonymous',
+            league_id: toolContext.leagueId ?? null,
+            surface: 'chimmy_chat',
+            mode: selectedAssistantMode,
+            topic: null,
+            action: `would_${observed.wouldAction}`,
+            timestamp: new Date().toISOString(),
+            metadata: { path: 'chimmy_tool_loop', provider: loop.provider ?? null, toolsUsed: loop.toolsUsed, ...observed },
+          }).catch(() => {})
+        }
+      } catch (err) {
+        console.warn('[chimmy] tool-loop guard observation failed', err instanceof Error ? err.message : err)
       }
     }
     question.tools = loop?.toolsUsed ?? []

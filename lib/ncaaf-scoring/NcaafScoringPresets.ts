@@ -31,7 +31,7 @@ export const NCAAF_RUSHING_KEYS = [
 ] as const
 
 export const NCAAF_RECEIVING_KEYS = [
-  'reception', 'receiving_yards', 'receiving_td', 'receiving_first_down', 'receiving_2pt', 'target',
+  'reception', 'te_premium', 'receiving_yards', 'receiving_td', 'receiving_first_down', 'receiving_2pt', 'target',
   'forty_yd_reception_bonus', 'forty_yd_rec_td_bonus',
   'one_hundred_yd_rec_bonus', 'two_hundred_yd_rec_bonus',
 ] as const
@@ -69,7 +69,7 @@ export const NCAAF_STAT_LABELS: Record<string, string> = {
   rushing_2pt: 'Rushing 2PT', rush_attempt: 'Rush Attempt',
   forty_yd_rush_bonus: '40+ Yd Rush', forty_yd_rush_td_bonus: '40+ Yd Rush TD',
   one_hundred_yd_rush_bonus: '100+ Rush Yards', two_hundred_yd_rush_bonus: '200+ Rush Yards',
-  reception: 'Reception', receiving_yards: 'Receiving Yards', receiving_td: 'Receiving TD',
+  reception: 'Reception', te_premium: 'TE Reception Bonus', receiving_yards: 'Receiving Yards', receiving_td: 'Receiving TD',
   receiving_first_down: 'Receiving 1st Down', receiving_2pt: 'Receiving 2PT', target: 'Target',
   forty_yd_reception_bonus: '40+ Yd Reception', forty_yd_rec_td_bonus: '40+ Yd Rec TD',
   one_hundred_yd_rec_bonus: '100+ Rec Yards', two_hundred_yd_rec_bonus: '200+ Rec Yards',

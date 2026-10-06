@@ -107,7 +107,7 @@ describe('🛑 the frame reads Spanish in Spanish', () => {
     const r = renderModal('sleeper')
     await r.findByText('Cómo funciona esta liga')
     for (const s of ['Ajustes de la liga', 'USUARIO', 'GENERAL', 'IA ✨', 'Plataforma', 'Temporada', 'Equipos', 'Formato', 'Puntuación', 'Estado',
-      'en temporada', 'Waivers', 'Prioridad rotativa', 'Equipos en playoffs', 'Composición de la plantilla', 'Editar en Sleeper →']) {
+      'en temporada', 'Reclamos', 'Prioridad rotativa', 'Equipos en playoffs', 'Composición de la plantilla', 'Editar en Sleeper →']) {
       expect(r.container.ownerDocument.body.textContent, s).toContain(s)
     }
     expect(r.container.ownerDocument.body.textContent).toContain('Esta liga está importada de Sleeper, así que sus reglas son un reflejo de solo lectura')
