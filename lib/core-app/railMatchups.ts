@@ -5,6 +5,7 @@ import { resolveCurrentWeekFrom, type WeekScoreRow } from './currentWeek'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
 import { leagueWeekFromSettings } from './seasonTimeline'
 import { managerArtUrl } from './leagueArt'
+import { realManagerName, rosterLabel } from './managerName'
 import { afEngineForLeague, latestProjectionWeek, lookupAfEngineProjections, lookupProjections } from './playerProjections'
 import { computeLeagueProjectedPoints, extractScoringSettings, hasScoringRules } from '@/lib/projections/leagueScoring'
 import { eliminationFormat, resolveRailMatchupMode } from './railMatchupMode'
@@ -589,8 +590,12 @@ export async function getRailMatchups(
        * ⚠ THE TEAM NAME, THEN THE OWNER'S — never the league's own name as a
        * stand-in. A roster the platform never named stays unnamed; borrowing the
        * league name would put "Dynasty Dragons vs Dynasty Dragons" in the rail.
+       *
+       * ⚠ AND THE IMPORTER'S "Unknown" IS NOT A NAME (managerName.ts). Every unowned Sleeper roster is
+       * stored as teamName "Unknown" / ownerName "Unknown", and the rail printed it verbatim — in both
+       * languages (live sweep, 2026-10-05). A placeholder falls through like a missing name.
        */
-      name: t.teamName?.trim() || t.ownerName?.trim() || null,
+      name: realManagerName(t.teamName) || realManagerName(t.ownerName) || null,
       avatarUrl: managerArtUrl({ avatarUrl: t.avatarUrl, platform: t.league?.platform ?? null }),
       isYours: t.claimedByUserId === userId,
     }
@@ -715,7 +720,8 @@ export async function getRailMatchups(
       yourAvatarUrl: you.avatarUrl,
       yourScore: row.pointsFor,
       yourProjection: priced?.sides.get(you.externalId) ?? null,
-      opponentTeam: opponent?.name ?? null,
+      /* The platform's own "Team N" for an unnamed roster, as Matchup and the home already print (rosterLabel). */
+      opponentTeam: opponent ? rosterLabel([opponent.name], opponent.externalId) : null,
       opponentAvatarUrl: opponent?.avatarUrl ?? null,
       opponentScore: row.pointsAgainst,
       opponentProjection: opponent ? (priced?.sides.get(opponent.externalId) ?? null) : null,

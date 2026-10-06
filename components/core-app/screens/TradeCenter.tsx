@@ -2098,7 +2098,7 @@ export function TradeCenter(props: {
                 <details className="af-tc-roster" open>
                   <summary className="af-tc-roster-head">
                     <span className="af-label">
-                      {r.ownerName ? `${r.ownerName}'s roster` : 'On this roster'}{copy(" · ")}{players.length}
+                      {copy(r.ownerName ? `${r.ownerName}'s roster` : 'On this roster')}{copy(" · ")}{players.length}
                     </span>
                     <span className="af-tc-row-sub">{copy("Tap a player to add them")}</span>
                   </summary>
