@@ -54,7 +54,8 @@ export function TimelineList({ entries }: { entries: TimelineEntry[] }) {
               <time dateTime={e.at} className="af-num">
                 {when(e.at, language)}
               </time>
-              {e.actor ? <span>{e.actor}</span> : null}
+              {/* The system actors ("Automation", "System") are worded; a person's name passes through. */}
+              {e.actor ? <span>{t(e.actor)}</span> : null}
             </div>
           </li>
         ))}
