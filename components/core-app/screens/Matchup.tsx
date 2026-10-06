@@ -509,7 +509,7 @@ function PlayerHalf({
                 : copy('Unavailable this week. In Best Ball, another eligible roster player can replace this player automatically.')
             }
           >
-            {cell.unavailable === 'bye' ? 'BYE' : 'OUT'}
+            {copy(cell.unavailable === 'bye' ? 'BYE' : 'OUT')}
           </span>
         ) : null}
         {value == null ? '—' : value.toFixed(1)}

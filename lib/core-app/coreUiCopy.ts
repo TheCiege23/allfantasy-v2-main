@@ -425,6 +425,7 @@ const spanish: Record<string, string> = {
   'No opponent — lowest score is out': 'Sin rival: sale quien menos puntúa',
   'Guillotine and survivor leagues eliminate the week’s lowest score instead of pairing teams off, so these show your points clear of the cut line rather than a win probability. The field is the rosters that have scored this week.': 'Las ligas Guillotine y Survivor eliminan la puntuación más baja de la semana en vez de enfrentar equipos. Aquí se muestra tu ventaja sobre el corte, no una probabilidad de victoria. Solo cuentan los equipos que ya puntuaron.',
   OUT: 'FUERA',
+  BYE: 'DESCANSO',
   SAFE: 'A SALVO',
   'Every league at once': 'Todas las ligas a la vez',
   'Your team': 'Tu equipo',
@@ -1143,6 +1144,48 @@ const spanish: Record<string, string> = {
   'Refreshing your lineups…': 'Actualizando tus alineaciones…',
   'Could not refresh right now. Your platforms are still the source of truth.':
     'No se pudo actualizar ahora. Tus plataformas siguen siendo la fuente de verdad.',
+  // Standings in a head-to-head league (StandingsBoardView) — column labels, tooltips, controls. 2026-10-05.
+  'Winning percentage': 'Porcentaje de victorias',
+  'Playoff odds': 'Probabilidad de playoffs',
+  Streak: 'Racha',
+  'Schedule left': 'Calendario restante',
+  'Projected position': 'Posición proyectada',
+  'Head-to-head games only': 'Solo partidos cara a cara',
+  'Median games only: a win for finishing in the top half of the week':
+    'Solo partidos contra la mediana: una victoria por terminar en la mitad superior de la semana',
+  'The current run of identical results': 'La serie actual de resultados iguales',
+  "Chance of making the playoffs, from Season Outlook's simulation of the rest of the season":
+    'Probabilidad de llegar a playoffs, según la simulación del resto de la temporada de Proyección de temporada',
+  'Strength of the schedule still to play: 1st is the hardest in the league, judged by each opponent\'s average weekly score':
+    'Dificultad del calendario por jugar: el 1.º es el más difícil de la liga, según la puntuación semanal media de cada rival',
+  'C: more wins that guarantee a playoff spot. E: more losses that end the chase. Both hold whatever every other game does.':
+    'C: victorias que faltan para asegurar plaza de playoffs. E: derrotas que acaban con las opciones. Ambas valen pase lo que pase en los demás partidos.',
+  "Not settled by this team's own results yet — it depends on games elsewhere":
+    'Aún no depende solo de los resultados de este equipo: depende de otros partidos',
+  'Too few completed weeks to model this team — read the record, not the number':
+    'Muy pocas semanas completas para modelar este equipo: mira el récord, no el número',
+  'Points scored as a share of the best lineup the team could have set from its own roster':
+    'Puntos anotados como porcentaje de la mejor alineación que el equipo pudo poner con su plantilla',
+  'Points left on the bench per week — the best lineup minus the one that was set':
+    'Puntos que se quedaron en el banco por semana: la mejor alineación menos la que se puso',
+  'Scroll sideways for every column — rank and team stay in place. Tap a column heading to sort.':
+    'Desplázate hacia los lados para ver cada columna; la posición y el equipo se quedan fijos. Toca un encabezado para ordenar.',
+  'Head-to-head records': 'Récords cara a cara',
+  'Which results': 'Qué resultados',
+  'Final results': 'Resultados finales',
+  'If scores held': 'Si se mantuvieran los marcadores',
+  'Magic #': 'Nº mágico',
+  'SOS left': 'Dif. restante',
+  Strk: 'Racha',
+  Div: 'Div',
+  Next: 'Siguiente',
+  'Share standings': 'Compartir clasificación',
+  'Wins to clinch:': 'Victorias para clasificar:',
+  'Losses to elimination:': 'Derrotas para quedar eliminado:',
+  'Winning out guarantees a playoff spot, whatever else happens': 'Ganarlo todo asegura plaza de playoffs, pase lo que pase',
+  Median: 'Mediana',
+  'Lineup %': '% alineación',
+  'Bench/wk': 'Banco/sem',
   // Standings in an elimination league — no playoffs, so Safe / On the bubble / Eliminated
   // (components/core-app/standings/StandingsBoardView.tsx, screens/Standings.tsx).
   Safe: 'A salvo',
@@ -1289,6 +1332,21 @@ const spanishPatterns: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   [
     /^Competitive Edge reads Sleeper waiver history today\. (.+) leagues aren't connected yet\.$/,
     (m) => `Competitive Edge lee hoy el historial de agentes libres de Sleeper. Las ligas de ${m[1]} todavía no están conectadas.`,
+  ],
+  // Standings (head-to-head): streak tooltip, magic-number titles, the projection's basis.
+  [/^(Won|Lost|Tied) the last (\d+)$/, (m) => `${m[1] === 'Won' ? 'Ganó' : m[1] === 'Lost' ? 'Perdió' : 'Empató'} los últimos ${m[2]}`],
+  [
+    /^(\d+) more wins? of (\d+) guarantee a playoff spot, whatever else happens$/,
+    (m) => `${m[1]} ${m[1] === '1' ? 'victoria más' : 'victorias más'} de ${m[2]} aseguran plaza de playoffs, pase lo que pase`,
+  ],
+  [
+    /^(\d+) more loss(?:es)? of (\d+) eliminate this team, whatever else happens$/,
+    (m) => `${m[1]} ${m[1] === '1' ? 'derrota más' : 'derrotas más'} de ${m[2]} eliminan a este equipo, pase lo que pase`,
+  ],
+  [
+    /^Projects your ([\d.]+) per week across the (\d+) games? left\. The range is one standard deviation of your own weekly scoring over (\d+) scored weeks?\.$/,
+    (m) =>
+      `Proyecta tus ${m[1]} por semana en ${m[2] === '1' ? 'el partido que queda' : `los ${m[2]} partidos que quedan`}. El rango es una desviación estándar de tu propia puntuación semanal en ${m[3]} ${m[3] === '1' ? 'semana anotada' : 'semanas anotadas'}.`,
   ],
   // Lineup lock labels (lib/core-app/lineupLock.ts `lockState`) — Game Plan, Player Finder. The weekday
   // and date inside go through `kickoffText`, the shared kickoff translator. "locks in" before "locks".

@@ -152,10 +152,34 @@ export const tradeVisualSpanish: Record<string,string> = {
   'Sign in required':'Debes iniciar sesión','Too many reviews; try again shortly.':'Demasiadas revisiones; vuelve a intentarlo en unos momentos.','Invalid trade reference':'Referencia de intercambio no válida','Claim your team in this imported league before reviewing its trades.':'Reclama tu equipo en esta liga importada antes de revisar sus intercambios.','This completed trade was not found in your archived league history.':'No se encontró este intercambio completado en el historial de tu liga.','Impact now is for your completed trades only.':'Impacto actual solo está disponible para tus intercambios completados.','Current impact is temporarily unavailable. Your original evaluation is unchanged.':'El impacto actual no está disponible temporalmente. Tu evaluación original se conserva.',
   'Asset evidence was not recorded for this evaluation.':'No se registraron datos de activos para esta evaluación.','Evaluation time was not recorded; freshness cannot be checked.':'No se registró la hora de evaluación; no se puede comprobar la vigencia.',
   'One side of this trade has no assets recorded.':'Un lado del intercambio no tiene activos registrados.','One or more asset values are invalid. Refresh the values before grading this deal.':'Uno o más valores no son válidos. Actualiza los precios antes de calificar.','The priced assets carry no usable value.':'Los activos valorados no tienen un valor utilizable.','The value gap could not be measured.':'No se pudo medir la diferencia de valor.',
+  // Roster rows: the 30-day value mark and an unpriced asset's reason (lib/trade-value/unpricedReason.ts). 2026-10-05.
+  '30-day value up':'Valor a 30 días: sube','30-day value down':'Valor a 30 días: baja','30-day value: no real change':'Valor a 30 días: sin cambios reales',
+  'No value':'Sin valor',
+  'Defensive history could not be loaded — try again shortly':'No se pudo cargar el historial defensivo; inténtalo de nuevo en un momento',
+  'No defensive game history on file for this player':'No hay historial de partidos defensivos de este jugador',
+  'Too few recorded games to estimate a reliable defensive value':'Muy pocos partidos registrados para estimar un valor defensivo fiable',
+  'Recorded games contain no defensive production to project':'Los partidos registrados no tienen producción defensiva que proyectar',
+  'Player records do not resolve to a defensive position':'Los registros del jugador no corresponden a una posición defensiva',
+  'League starting slots or projected defender coverage cannot establish replacement value':'Los puestos titulares de la liga o la cobertura proyectada de defensores no permiten fijar un valor de reemplazo',
+  "Our value feed doesn't price defenders":'Nuestra fuente de valores no valora a los defensores',
+  "Our value feed doesn't price kickers":'Nuestra fuente de valores no valora a los pateadores',
+  "Our value feed doesn't price team defenses":'Nuestra fuente de valores no valora a las defensas de equipo',
+  "We couldn't match this player to our player records":'No pudimos emparejar a este jugador con nuestros registros',
+  'No league-derived defensive value available for this player':'No hay valor defensivo derivado de la liga para este jugador',
+  'Not among the ~400 players our value feed prices':'No está entre los ~400 jugadores que valora nuestra fuente',
+  "Values couldn't be loaded — try again shortly":'No se pudieron cargar los valores; inténtalo de nuevo en un momento',
+  'No feed, historical or draft value on file':'No hay valor de fuente, histórico ni de draft registrado',
+  'No round on file, so the pick curve cannot place it':'No hay ronda registrada, así que la curva de selecciones no puede ubicarla',
+  'Priced when you analyze the trade':'Se valora al analizar el intercambio',
+  "Not on today's market board — the only value on file is an old snapshot, which is not today's market":'No está en el mercado de hoy: el único valor registrado es una instantánea antigua, que no es el mercado actual',
 }
 
 /** Templates use {n} slots. Captured player/team names are preserved, never machine-translated. */
 const templates: Array<[string,string]> = [
+  // First, before the generic '{0} round {1}' below: that one also matches "No value: … round …" whole
+  // and would translate a pick's unpriced reason by halves.
+  ['No value: {0}','Sin valor: {0}'],
+  ['No market value for a {0} round {1} pick in this league\'s format','No hay valor de mercado para una selección de {0}, ronda {1}, en el formato de esta liga'],
   ['Week of {0}','Semana del {0}'],['They receive about {0} more in current league value.','Reciben aproximadamente {0} más en valor actual de liga.'],['They receive {0} asset, which may fit a different timeline or positional need.','Reciben {0} activo que puede encajar en otro horizonte o necesidad de posición.'],['They receive {0} assets, which may fit a different timeline or positional need.','Reciben {0} activos que pueden encajar en otro horizonte o necesidad de posición.'],['The displayed league value favors you by {0}, so they may ask for another asset.','El valor de liga mostrado te favorece por {0}; el rival puede pedir otro activo.'],['{0}% apart','{0}% de diferencia'],
   ['{0} hasn\'t taken on a {1} in any of their {2} trades.','{0} no adquirió un {1} en ninguno de sus {2} intercambios.'],['{0} took on a {1} in {2} of their {3} trades ({4} in all).','{0} adquirió un {1} en {2} de sus {3} intercambios ({4} en total).'],['{0} hasn\'t sent away a {1} in any of their {2} trades.','{0} no cedió un {1} en ninguno de sus {2} intercambios.'],['{0} sent away a {1} in {2} of their {3} trades.','{0} cedió un {1} en {2} de sus {3} intercambios.'],
   ['This offer gives {0} fewer pieces than they send. They took back fewer pieces than they gave in {1} of their {2} trades.','Esta oferta entrega a {0} menos activos de los que envía. Recibió menos activos de los que cedió en {1} de sus {2} intercambios.'],['This offer gives {0} more pieces than they send. They took back more pieces than they gave in {1} of their {2} trades.','Esta oferta entrega a {0} más activos de los que envía. Recibió más activos de los que cedió en {1} de sus {2} intercambios.'],['{0} has no completed trades in this league\'s history on file.','{0} no tiene intercambios completados registrados en esta liga.'],['{0} has made {1} trades in this league since {2}; the last was {3}.','{0} realizó {1} intercambios en esta liga desde {2}; el último fue el {3}.'],['{0} has made {1} trade in this league since {2}; the last was {3}.','{0} realizó {1} intercambio en esta liga desde {2}; el último fue el {3}.'],
@@ -199,6 +223,11 @@ const templates: Array<[string,string]> = [
   ['Ledger gap: {0}. Aggregate totals withheld.','Vacío en el registro: {0}. No se muestran los totales.'],['dropped in {0}, week {1}','dado de baja en {0}, semana {1}'],['traded in {0}, week {1}','intercambiado en {0}, semana {1}'],
   ['{0} traded player(s) have no projection under this league\'s scoring, so the lineup effect cannot be computed','{0} jugadores del intercambio no tienen proyección con esta puntuación; no se puede calcular el efecto en la alineación'],['{0} outgoing player(s) are not on this roster, so the two sides disagree about what is being traded','{0} jugadores enviados no están en esta plantilla; los lados no coinciden con el intercambio'],['the lineup contains slot(s) this model does not know how to fill: {0}','la alineación contiene puestos que este modelo no sabe completar: {0}'],['the after-trade lineup cannot fill {0} with projected eligible players; replacement production is unknown','la alineación posterior no puede completar {0} con jugadores elegibles proyectados; se desconoce la producción de reemplazo'],['the before-trade lineup cannot fill {0} with projected eligible players; replacement production is unknown','la alineación anterior no puede completar {0} con jugadores elegibles proyectados; se desconoce la producción de reemplazo'],
   ['{0} asset has no value on this league\'s chart, and a missing asset is not graded as worthless.','{0} activo no tiene valor en esta tabla; un activo desconocido no se considera sin valor.'],['{0} assets have no value on this league\'s chart, and a missing asset is not graded as worthless.','{0} activos no tienen valor en esta tabla; un activo desconocido no se considera sin valor.'],
+  // Roster rows (2026-10-05). "No value: {0}" translates its reason through the entries above.
+  ['30-day value up {0}','Valor a 30 días: sube {0}'],['30-day value down {0}','Valor a 30 días: baja {0}'],
+  ['No values on file for {0} players','No hay valores registrados de jugadores de {0}'],
+  ['Not on today\'s market board — the only value on file is from a {0} snapshot, which is not today\'s market','No está en el mercado de hoy: el único valor registrado es de una instantánea del {0}, que no es el mercado actual'],
+  ['{0}\'s roster','Plantilla de {0}'],
 ]
 const escape = (text:string)=>text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')
 const compiled=templates.map(([en,es])=>({regex:new RegExp('^'+en.split(/\{\d+\}/).map(escape).join('([\\s\\S]*?)')+'$'),es,slots:[...en.matchAll(/\{(\d+)\}/g)].map(m=>Number(m[1]))}))
