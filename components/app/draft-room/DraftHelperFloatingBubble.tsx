@@ -8,8 +8,11 @@ interface DraftHelperFloatingBubbleProps {
   onClick: () => void
   hasContent: boolean
   className?: string
-  /** Keep the helper reachable without covering the right-hand queue rail on premium layouts. */
-  anchor?: 'bottom-right' | 'bottom-left'
+  /**
+   * Keep the helper reachable without covering the right-hand queue rail on premium layouts.
+   * `mobile-dock` drops the fixed corner so the shell can pin the bubble above the mobile tab bars.
+   */
+  anchor?: 'bottom-right' | 'bottom-left' | 'mobile-dock'
 }
 
 export function DraftHelperFloatingBubble({
@@ -22,7 +25,11 @@ export function DraftHelperFloatingBubble({
   if (!hasContent) return null
 
   const corner =
-    anchor === 'bottom-left' ? 'fixed bottom-6 left-6 z-20' : 'fixed bottom-6 right-6 z-20'
+    anchor === 'mobile-dock'
+      ? 'relative'
+      : anchor === 'bottom-left'
+        ? 'fixed bottom-6 left-6 z-20'
+        : 'fixed bottom-6 right-6 z-20'
 
   return (
     <button
