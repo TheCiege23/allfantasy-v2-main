@@ -223,7 +223,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         } else {
           const smsText = params.smsBody ?? (body ? `${title}\n${body}` : title)
           let smsSent=false,smsProviderId:string|undefined
-          try { smsSent=await sendSms(profile.phone, smsText.slice(0, 320), params.onDeliveryReceipt ? id=>{smsProviderId=id} : undefined) } catch { /* Receipt records failure; other channels still run. */ }
+          try { smsSent=params.onDeliveryReceipt?await sendSms(profile.phone,smsText.slice(0,320),id=>{smsProviderId=id}):await sendSms(profile.phone,smsText.slice(0,320)) } catch { /* Receipt records failure; other channels still run. */ }
           set('sms',{status:smsSent?'accepted':'failed',reason:smsSent?'provider_accepted':'provider_failed',attempts:1,...(smsProviderId?{providerId:smsProviderId}:{})})
           if (!smsSent) {
             console.error("[NotificationDispatcher] SMS send returned false", {
@@ -247,7 +247,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         fallbackTimezone: profile.timezone,
       })
       if (push.allowed && !skipChannels?.push) {
-        const sending = sendPushToUser(userId, {
+        const payload = {
           title,
           body: body ?? undefined,
           href: actionHref,
@@ -260,7 +260,8 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
           imageUrl: typeof meta?.imageUrl === "string" ? meta.imageUrl : null,
           // A producer with a face for it (a DM's sender) names it in meta.iconUrl.
           iconUrl: typeof meta?.iconUrl === "string" ? meta.iconUrl : null,
-        }, params.onDeliveryReceipt ? {strictSubscriptionRead:true} : undefined)
+        }
+        const sending=params.onDeliveryReceipt?sendPushToUser(userId,payload,{strictSubscriptionRead:true}):sendPushToUser(userId,payload)
         if (params.onDeliveryReceipt) {
           try {
             const results=await sending, accepted=results.filter(r=>r.ok).length

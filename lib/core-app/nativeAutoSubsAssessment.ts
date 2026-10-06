@@ -7,7 +7,9 @@ import { getPlayerGameLockStateForAutoCoach } from '@/lib/autocoach/playerGameLo
 import { nativeAutoSubsSlotHold,type NativeAutoSubsAssessment,type AutoSubsHoldReason } from './nativeAutoSubsAssessmentPolicy'
 import type { NativeAutoSubsAssignment } from './nativeAutoSubsPolicy'
 export async function assessNativeAutoSubs(league:{id:string;sport:string;platform:string;starters:unknown;settings:unknown;season:number|null;lockAllMoves:boolean|null},roster:{id:string;playerData:unknown},assignment:NativeAutoSubsAssignment|null):Promise<NativeAutoSubsAssessment>{
-  const now=Date.now(),base={checkedAt:new Date(now).toISOString(),slots:[]} as NativeAutoSubsAssessment
+  const now=Date.now(),base:NativeAutoSubsAssessment={checkedAt:new Date(now).toISOString(),slots:[],state:'waiting',reason:null}
+  const season=league.season
+  if(season==null)return {...base,state:'paused',reason:'period_unavailable'}
   const settings=league.settings as Record<string,unknown>|null
   const held=(state:NativeAutoSubsAssessment['state'],reason:AutoSubsHoldReason):NativeAutoSubsAssessment=>({...base,state,reason})
   if(settings?.nativeAutoSubsEnabled!==true)return held('paused','commissioner_disabled')
@@ -24,7 +26,7 @@ export async function assessNativeAutoSubs(league:{id:string;sport:string;platfo
     const input={out,into,onBench:sections.bench.some(p=>String(p.id)===backup),slotLabel:labels[index],now}
     let reason=nativeAutoSubsSlotHold(input),locks:Awaited<ReturnType<typeof getPlayerGameLockStateForAutoCoach>>[]=[]
     if(!reason&&out&&into){
-      const args={sport:league.sport,leagueSeason:league.season,leagueSettings:league.settings}
+      const args={sport:league.sport,leagueSeason:season,leagueSettings:league.settings}
       locks=await Promise.all([getPlayerGameLockStateForAutoCoach({...args,teamAbbr:out.team}),getPlayerGameLockStateForAutoCoach({...args,teamAbbr:into.team})])
       reason=nativeAutoSubsSlotHold({...input,locks,now:Date.now()})
     }

@@ -1,6 +1,6 @@
 import { definiteInactive,freshAutoSubsEvidence } from './nativeAutoSubsPolicy'
 import { isEligibleForSlot } from './rosterSlots'
-export type AutoSubsHoldReason = 'commissioner_disabled'|'owner_disabled'|'lineup_changed'|'roster_eliminated'|'league_locked'|'backup_unavailable'|'status_evidence_unavailable_or_stale'|'inactive_not_confirmed'|'backup_not_active'|'game_lock_or_schedule_unavailable'
+export type AutoSubsHoldReason = 'period_unavailable'|'commissioner_disabled'|'owner_disabled'|'lineup_changed'|'roster_eliminated'|'league_locked'|'backup_unavailable'|'status_evidence_unavailable_or_stale'|'inactive_not_confirmed'|'backup_not_active'|'game_lock_or_schedule_unavailable'
 type PlayerEvidence={status:string|null;position:string|null;source:string;fetchedAt:Date;expiresAt:Date}
 type GameLock={scheduleKnown:boolean;lockedBecauseGameStarted:boolean;nextKickoffUtc:Date|null}
 /** Shared by preview and execution; null means eligible on the evidence supplied. */

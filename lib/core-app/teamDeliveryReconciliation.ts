@@ -1,4 +1,5 @@
 import 'server-only'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import type { DeliveryChannelOutcome,NotificationDeliveryReceipt } from '@/lib/notifications/deliveryReceipt'
 export function providerDeliveryOutcome(channel:'email'|'sms',event:string):Pick<DeliveryChannelOutcome,'status'|'reason'|'verification'> {
@@ -42,7 +43,7 @@ export async function reconcileTeamDeliveryReceipts(deadline:number){
       if(!outcome?.providerId||!['accepted','delayed'].includes(outcome.status)||Date.now()-new Date(outcome.providerCheckedAt??0).getTime()<15*60_000)continue
       const stamp=new Date().toISOString(),next={...outcome,providerCheckedAt:stamp}
       const currentMetadata={...metadata,deliveryReceipt:{...receipt,channels:{...receipt.channels,[channel]:next}}}
-      const claim=await prisma.automationAuditLog.updateMany({where:{id:row.id,userId:row.userId,metadata:{equals:row.metadata}},data:{metadata:currentMetadata as never}})
+      const claim=await prisma.automationAuditLog.updateMany({where:{id:row.id,userId:row.userId,metadata:{equals:row.metadata as Prisma.InputJsonValue}},data:{metadata:currentMetadata as never}})
       if(!claim.count)break
       checked++
       const update=await checkProvider(channel,outcome.providerId,Math.min(1500,Math.max(1,deadline-Date.now())))
