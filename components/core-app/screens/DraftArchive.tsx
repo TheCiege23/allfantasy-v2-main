@@ -71,7 +71,7 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
   {detail && <>
    <h3>{detail.choice.season ?? t('Unknown season', 'Temporada desconocida')} · {detail.choice.sport} · {detail.choice.format} · {detail.choice.status}</h3>
    <p>{t('Source draft', 'Draft de origen')}: {detail.choice.sourceId}</p>
-   {detail.canReconcile && <DraftHistoryReview key={detail.choice.key} leagueId={detail.choice.leagueId} archiveKey={detail.choice.key}/>}
+   {detail.canReconcile && <DraftHistoryReview key={'review:' + detail.choice.key} leagueId={detail.choice.leagueId} archiveKey={detail.choice.key}/>}
    <div className="af-archive-summary"><p>{t('Started', 'Inicio')}: {time(detail.startedAt)}</p><p>{t(detail.endMeaning, detail.endMeaning === 'Completed at' ? 'Completado' : 'Última selección del proveedor')}: {time(detail.endedAt)}</p><p>{t('Elapsed duration', 'Duración total')}: {duration(detail.elapsedMs)} {help(t('Duration', 'Duración'), 'Elapsed time includes pauses. Active time counts recorded running-clock segments. Provider last-picked time is not a verified completion timestamp.', 'El tiempo total incluye pausas. El tiempo activo cuenta segmentos registrados del reloj. La última selección del proveedor no es una finalización verificada.')}</p><p>{t('Active duration', 'Duración activa')}: {duration(detail.activeMs)}</p></div>
    {detail.coverage.map((c, i) => <p key={i} className="af-archive-coverage">{t(c, coverageSpanish[c] ?? c)}</p>)}
    {!detail.picks.length&&<p>{t('No selections are recorded for this draft yet.','Aún no hay selecciones registradas para este draft.')}</p>}
@@ -82,8 +82,11 @@ export function DraftArchive({ choices, detail, leagueId, page, more, total, err
    <nav><button disabled={pickPage === 0} onClick={() => setPickPage(v => v - 1)}>{t('Previous picks', 'Selecciones anteriores')}</button><span>{picks.length} {t('picks', 'selecciones')}</span><button disabled={(pickPage + 1) * 25 >= picks.length} onClick={() => setPickPage(v => v + 1)}>{t('Next picks', 'Siguientes selecciones')}</button></nav>
    <DraftReferences references={detail.references}/>
    <DraftAnalysis report={detail.analysisReport} results={detail.resultsReport}/>
-   <DraftPhase4 key={detail.choice.key} detail={detail}/>
-   {detail.canRefreshResults && <DraftResultsRefresh key={detail.choice.key} leagueId={detail.choice.leagueId} archiveKey={detail.choice.key} observedAt={detail.resultsObservedAt}/>}
+   {/* 🛑 Each sibling keys on the draft with its OWN prefix. All three used to share `detail.choice.key`;
+       duplicate sibling keys made React append a fresh DraftPhase4 on every server refresh instead of
+       reconciling — one language switch left five on Draft HQ, only the last one live (2026-10-06). */}
+   <DraftPhase4 key={'phase4:' + detail.choice.key} detail={detail}/>
+   {detail.canRefreshResults && <DraftResultsRefresh key={'results:' + detail.choice.key} leagueId={detail.choice.leagueId} archiveKey={detail.choice.key} observedAt={detail.resultsObservedAt}/>}
    {!detail.analysisReport && detail.analysis && <section aria-label={t('Draft analysis coverage', 'Cobertura del análisis')}>
     <h3>{t('Draft analysis', 'Análisis del draft')} {help(t('Analysis basis', 'Base del análisis'), 'Draft-day analysis requires projections preserved before the draft, matching scoring, verified player identities and replacement levels. Results analysis requires separate weekly production and contribution data. Missing inputs do not receive an average letter grade.', 'El análisis del día del draft requiere proyecciones previas, puntuación compatible, identidades verificadas y niveles de reemplazo. Los resultados requieren datos semanales de producción y contribución. La falta de datos no recibe una calificación promedio.')}</h3>
     <div className="af-archive-summary">
