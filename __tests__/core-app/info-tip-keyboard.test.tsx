@@ -50,6 +50,7 @@ describe('help keyboard dismissal', () => {
     // A reopened tip closes when its anchor scrolls away from the original position.
     fireEvent.click(trigger)
     expect(opened.has(popover)).toBe(true)
+    act(() => close.focus())
     vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({top: 100, left: 0} as DOMRect)
     fireEvent.scroll(window)
     expect(opened.has(popover)).toBe(false)
