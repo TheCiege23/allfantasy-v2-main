@@ -1,5 +1,6 @@
 import 'server-only'
 import { isRosterChopped } from '@/lib/guillotine/guillotineGuard'
+import {rotateSweepTargets} from './teamSweepPolicy'
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { resolveWriteAuthority } from '@/lib/league/write-authority'
@@ -22,9 +23,9 @@ export async function runNativeAutoSubsForLeague(leagueId:string,deadline=Date.n
   if(!league || resolveWriteAuthority(league.platform)!=='NATIVE' || settingsObject(league.settings).nativeAutoSubsEnabled!==true || league.bestBallMode || automaticLineup(league.leagueType,league.settings) || !['active','in_season'].includes(String(league.status ?? league.lifecycleState).toLowerCase())) return []
   const week=leagueWeekFromSettings(league.settings),season=league.season
   if(!season || week==null || !Number.isInteger(week)) return []
-  const rosters=await prisma.roster.findMany({where:{leagueId},take:64})
+  const rosters=await prisma.roster.findMany({where:{leagueId},orderBy:{id:'asc'},take:64})
   const results:Array<{rosterId:string;applied:boolean;reason:string}>=[]
-  for(const roster of rosters) {
+  for(const roster of rotateSweepTargets(rosters,Date.now())) {
     if(Date.now()>=deadline) break
     if(await isRosterChopped(leagueId,roster.id)) continue
     const owner=roster.platformUserId,key=nativeAutoSubsKey(leagueId,roster.id,season,week)
