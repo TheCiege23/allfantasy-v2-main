@@ -124,7 +124,7 @@ export const CHIMMY_TOOL_SPECS = [
     type: 'function' as const,
     function: {
       name: 'get_draft_analysis',
-      description: 'Explain a selected Draft HQ historical draft: recorded picks, ADP differences, clock coverage, original-team draft and result rankings, validated grades and asset transfers. Use the exact archive key supplied by the user or Draft HQ. Never guess a source. League access comes from the authenticated selected league. Missing historical evidence remains unavailable.',
+      description: 'Explain a selected Draft HQ historical draft: recorded picks, ADP differences, clock coverage, original-team draft and result rankings, validated grades, asset transfers and selecting-team weekly points, starter/roster status, coverage and observation dates. Distinguish provisional provider scores from finalized results. Use the exact archive key supplied by the user or Draft HQ. Never guess a source. League access comes from the authenticated selected league. Missing historical evidence remains unavailable.',
       parameters: { type: 'object', properties: {
         archiveKey: { type: 'string', description: 'Exact selected archive key from Draft HQ, e.g. native:source.' },
         fromOverall: { type: 'integer', minimum: 1, maximum: 10000, description: 'First overall pick to read; returns up to 40 picks and nextOverall.' },
