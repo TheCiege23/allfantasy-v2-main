@@ -6,6 +6,7 @@ import type { WeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
 import type { WeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { commissionerWeekDraft, drawWeeklyShareCard, rivalryNarrative, weeklySocialPost, weeklyCardScenarios, WEEK_PUBLIC_URL, WEEK_SOCIALS, type WeekSocial } from '@/lib/core-app/weeklyShare'
 import { COMMS_OPEN_EVENT } from './comms/commsEvents'
+import { formatPct1 } from '@/lib/core-app/weeklyPercent'
 
 function download(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob); const link = document.createElement('a')
@@ -85,7 +86,7 @@ export function WeeklySharing({ data, path }: { data: WeeklyBlueprint; path?: We
         <button type="button" disabled={busy} onClick={createImage}>{es ? 'Descargar tarjeta PNG' : 'Download PNG card'}</button>
         {image ? <button type="button" onClick={shareImage}>{es ? 'Compartir tarjeta' : 'Share card'}</button> : null}
         <button type="button" disabled={busy} onClick={exportExcel}>{hasCharts ? es ? 'Descargar Excel y gráficos' : 'Download Excel and charts' : es ? 'Descargar Excel' : 'Download Excel'}</button>
-      </div></div>{previewOpen ? <figure className="af-wbp-card-preview"><canvas ref={canvasRef} role="img" aria-label={es ? 'Vista previa de tu tarjeta semanal' : 'Preview of your weekly share card'}/><figcaption>{es ? 'Tarjeta 1080 × 1350. ' : '1080 × 1350 card. '}{scenario ? es ? `Período ${scenario.period}: si ganas ${scenario.ifWin.toFixed(1)}%; si pierdes ${scenario.ifLose.toFixed(1)}%.` : `Period ${scenario.period}: if you win ${scenario.ifWin.toFixed(1)}%; if you lose ${scenario.ifLose.toFixed(1)}%.` : es ? 'Sin escenarios verificados para este enfrentamiento.' : 'No verified scenarios for this matchup.'}</figcaption></figure> : null}</div><p><small>{es ? 'Instagram, TikTok y YouTube: pega el texto y adjunta la tarjeta descargada. Las aplicaciones disponibles dependen de tu dispositivo.' : 'Instagram, TikTok and YouTube: paste the caption and attach the downloaded card. Available share apps depend on your device.'}</small></p>
+      </div></div>{previewOpen ? <figure className="af-wbp-card-preview"><canvas ref={canvasRef} role="img" aria-label={es ? 'Vista previa de tu tarjeta semanal' : 'Preview of your weekly share card'}/><figcaption>{es ? 'Tarjeta 1080 × 1350. ' : '1080 × 1350 card. '}{scenario ? es ? `Período ${scenario.period}: si ganas ${formatPct1(scenario.ifWin)}%; si pierdes ${formatPct1(scenario.ifLose)}%.` : `Period ${scenario.period}: if you win ${formatPct1(scenario.ifWin)}%; if you lose ${formatPct1(scenario.ifLose)}%.` : es ? 'Sin escenarios verificados para este enfrentamiento.' : 'No verified scenarios for this matchup.'}</figcaption></figure> : null}</div><p><small>{es ? 'Instagram, TikTok y YouTube: pega el texto y adjunta la tarjeta descargada. Las aplicaciones disponibles dependen de tu dispositivo.' : 'Instagram, TikTok and YouTube: paste the caption and attach the downloaded card. Available share apps depend on your device.'}</small></p>
       {!hasCharts ? <p><small>{es ? 'Abre una liga con un modelo de playoffs disponible para exportar sus gráficos.' : 'Open a league with an available playoff model to export its charts.'}</small></p> : null}
     </details>
     {commId ? <details><summary>{es ? 'Plan del comisionado' : 'Commissioner weekly plan'}</summary>

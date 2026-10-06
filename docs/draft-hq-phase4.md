@@ -73,3 +73,11 @@ Operations: rehearse `scripts/backfill-draft-schedules.ts --from-season=2019 --t
 The applied schedule backfill added 1,871 verified game-date records across 2019–2025. Deep-roster proof is bounded by 32 teams × 100 players × 18 weeks (57,600 records), with per-roster and 1,000 selected-pick bounds preserved (at most 18,000 selected-player weeks). After a full pass, `--missing-weekly --all-batches` retries only sources without a v3 observation; failure counts distinguish roster, selected-row, score-cache and timeout limits. This flag checks observation existence, not successful finalization.
 
 For archives above the old v2 reader’s 10,000 selected-row limit, the refresh writes full v3 evidence plus the v1 aggregate fallback and leaves any older valid v2 observation intact. It never writes an oversized v2 observation that a rollback reader would reject.
+
+### Historical salary-cap followthrough (2026-10-06)
+
+- Draft-start contract capture now includes active, tagged and exercised-option contracts, matching the cap engine's statuses.
+- Frozen ledger summaries expose cap year, cap space (including negative values), cap hit, dead money, same-year contract count, calendar-term expirations and annual recorded salary. Ledger mismatches remain explicit; duplicate owners/players, invalid terms, wrong years and post-start captures block the summary.
+- Bilingual circle-question help explains salary units, coverage and the snapshot boundary. Tables scroll inside their region on small screens. No additional contract data enters Chimmy's outbound allowlist.
+- This is historical cap visibility, not salary-cap valuation: draft-award duration/cap rules and compatible college/pro forecasts remain required for specialist comparisons. Earlier archives cannot be populated using today's contracts.
+- Primary product reference: [League Tycoon contract bidding](https://leaguetycoon.com/features/contract-bidding/) describes salary plus duration as separate bidding terms.

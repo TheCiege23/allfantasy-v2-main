@@ -1,5 +1,6 @@
 import { weeklyActionText, type WeeklyBlueprint } from './weeklyBlueprint'
 import type { WeeklyPlayoffPath } from './weeklyPlayoffPath'
+import { formatPct1 } from './weeklyPercent'
 
 export const WEEK_SOCIALS = ['X', 'Facebook', 'Instagram', 'TikTok', 'Threads', 'LinkedIn', 'YouTube'] as const
 export type WeekSocial = typeof WEEK_SOCIALS[number]
@@ -31,7 +32,7 @@ export function weeklySocialPost(data: WeeklyBlueprint, platform: WeekSocial, es
   const next = data.actions[0]
   const action = next ? `${es ? 'Mi prioridad' : 'My priority'}: ${weeklyActionText(next, es)} (${next.leagueName}).` : ''
   const matchup = data.matchup ? `${es ? 'Período' : 'Period'} ${data.matchup.period}: vs ${data.matchup.opponent} (${data.matchup.leagueName}).` : ''
-  const odds = data.playoff ? `${es ? 'Playoffs estimados' : 'Estimated playoff odds'} (${data.playoff.leagueName}): ${data.playoff.probability.toFixed(1)}%.` : ''
+  const odds = data.playoff ? `${es ? 'Playoffs estimados' : 'Estimated playoff odds'} (${data.playoff.leagueName}): ${formatPct1(data.playoff.probability)}%.` : ''
   if (platform === 'X') return `${shortText([`${team}:`,matchup,odds,story || action].filter(Boolean).join(' '), 210)}\n#AllFantasy ${WEEK_PUBLIC_URL}`
   const hook = platform === 'TikTok' || platform === 'YouTube' ? es ? 'Mi plan de fantasy para esta semana 👇' : 'My fantasy blueprint for this week 👇' : `${team} · AllFantasy`
   return [hook,matchup,odds,action,story,data.playoff ? es ? 'Las probabilidades son estimaciones.' : 'Odds are estimates.' : '',es ? '¿Cuál es tu decisión más difícil esta semana?' : 'What’s your toughest decision this week?', '#AllFantasy #FantasySports', WEEK_PUBLIC_URL].filter(Boolean).join('\n\n')
@@ -103,7 +104,7 @@ export function drawWeeklyShareCard(canvas: HTMLCanvasElement, data: WeeklyBluep
   ctx.lineWidth = 16; ctx.strokeStyle = '#30475c'; ctx.beginPath(); ctx.arc(192,672,70,0,Math.PI*2); ctx.stroke()
   if (valid && probability > 0) { ctx.strokeStyle = '#66e5c1'; ctx.beginPath(); ctx.arc(192,672,70,-Math.PI/2,-Math.PI/2+Math.PI*2*probability/100); ctx.stroke() }
   y = 678
-  wrap(valid ? `${probability.toFixed(1)}%` : es ? 'Sin estimación' : 'Estimate unavailable','bold 62px sans-serif','#66e5c1',70,1,300,680)
+  wrap(valid ? `${formatPct1(probability)}%` : es ? 'Sin estimación' : 'Estimate unavailable','bold 62px sans-serif','#66e5c1',70,1,300,680)
   y = 727
   wrap(valid ? `${es ? 'Estimación' : 'Estimate'} · ${data.playoff!.leagueName}` : es ? 'Revisa la clasificación y las reglas.' : 'Review standings and rules.','26px sans-serif','#d8e2f1',32,1,300,680)
   const scenario = weeklyCardScenarios(data,path)
@@ -111,8 +112,8 @@ export function drawWeeklyShareCard(canvas: HTMLCanvasElement, data: WeeklyBluep
   y = 852
   wrap(scenario ? `${es ? 'PLAYOFFS SEGÚN EL RESULTADO · PERÍODO' : 'PLAYOFF ODDS BY RESULT · PERIOD'} ${scenario.period}` : es ? 'PREPARA TU PRÓXIMA DECISIÓN' : 'PREPARE YOUR NEXT DECISION','bold 24px sans-serif','#aabbd3',30,1,92,880)
   if (scenario) {
-    y = 908; wrap(`${es ? 'Si gano' : 'If I win'}: ${scenario.ifWin.toFixed(1)}%`,'bold 34px sans-serif','#66e5c1',42,1,92,420)
-    y = 908; wrap(`${es ? 'Si pierdo' : 'If I lose'}: ${scenario.ifLose.toFixed(1)}%`,'bold 34px sans-serif','#f6bf87',42,1,552,420)
+    y = 908; wrap(`${es ? 'Si gano' : 'If I win'}: ${formatPct1(scenario.ifWin)}%`,'bold 34px sans-serif','#66e5c1',42,1,92,420)
+    y = 908; wrap(`${es ? 'Si pierdo' : 'If I lose'}: ${formatPct1(scenario.ifLose)}%`,'bold 34px sans-serif','#f6bf87',42,1,552,420)
   } else {
     y = 900; wrap(es ? 'Compara tus opciones y comprueba los plazos de tu liga.' : 'Compare your options and check your league’s deadlines.','30px sans-serif','#d8e2f1',38,2,92,880)
   }
