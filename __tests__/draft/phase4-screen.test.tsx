@@ -1,9 +1,11 @@
-import {describe,it,expect,vi} from 'vitest';
+import {describe,it,expect,vi,beforeEach} from 'vitest';
 import {render,screen,fireEvent} from '@testing-library/react';
 import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {TextDecoder} from 'node:util';
-vi.mock('@/components/i18n/LanguageProviderClient',()=>({useOptionalLanguage:()=>({language:'en'})}));
+const language=vi.hoisted(()=>({language:'en'}));
+vi.mock('@/components/i18n/LanguageProviderClient',()=>({useOptionalLanguage:()=>language}));
+beforeEach(()=>{language.language='en';});
 import {DraftPhase4} from '@/components/core-app/screens/DraftPhase4';
 import type {ArchiveDetail} from '@/lib/draft-archive/detail';
 const detail={choice:{key:'native:d',leagueId:'l'},picks:[{id:'a',overall:2,playerName:'First recorded player'},{id:'b',overall:7,playerName:'Later recorded player'}],coverage:[],phase4:{components:[],scores:[],calibration:null,dynasty:[],replay:{state:'unavailable',players:[],picks:[]},lineage:{state:'partial',lineages:[],pending:Array.from({length:21},(_,i)=>({season:2027,round:i+1,originalRosterId:'owner',from:'a',to:'b'}))},contributions:[{playerId:'p',name:'Observed player',rosterId:'a',state:'partial',weeks:[{week:1,points:10,starter:true}],expectedWeeks:2,totalPoints:10,starterPoints:10,starts:1,usage:null,earlyStarterPoints:null,lateStarterPoints:null}]}} as unknown as ArchiveDetail;
@@ -22,5 +24,29 @@ describe('draft analysis controls',()=>{
   });
   it('makes every pending asset reachable and renders missing weekly usage honestly',()=>{
     render(<DraftPhase4 detail={detail}/>);fireEvent.click(screen.getByRole('button',{name:'Asset history'}));fireEvent.click(screen.getByText(/Unresolved pick assets/));fireEvent.click(screen.getByRole('button',{name:'More assets'}));expect(screen.getByText(/Round 21/)).toBeInTheDocument();fireEvent.click(screen.getByRole('button',{name:'Weekly contribution'}));expect(screen.getByText('Observed player')).toBeInTheDocument();expect(screen.getByText(/1\/2 final weeks covered/)).toBeInTheDocument();expect(screen.getByRole('button',{name:'Usage and sustained contribution'})).toBeInTheDocument();
+  });
+  it('labels provisional observations and departures without calling them bench appearances',()=>{
+    const observed={...detail,resultsReport:{provisional:true,state:'partial',teams:[],coverage:'Provider-reported usage'},resultsObservedAt:'2026-10-06T04:00:00Z',phase4:{...detail.phase4!,contributions:[{...detail.phase4!.contributions![0],weeks:[{week:1,points:0,starter:false,held:false}]}]}} as ArchiveDetail;
+    render(<DraftPhase4 detail={observed}/>);fireEvent.click(screen.getByRole('button',{name:'Weekly contribution'}));
+    expect(screen.getByText(/Provisional provider-reported weekly usage/)).toBeInTheDocument();
+    expect(screen.getByText(/scored weeks covered/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Show weekly rows'));
+    expect(screen.getByText(/Not on original roster/)).toBeInTheDocument();
+    expect(screen.queryByText(/Week 1: 0.0 · Bench/)).not.toBeInTheDocument();
+  });
+  it('does not render absent player-week points or starts as zero',()=>{
+    render(<DraftPhase4 detail={{...detail,phase4:{...detail.phase4!,contributions:[{...detail.phase4!.contributions![0],weeks:[],totalPoints:0,starterPoints:0,starts:0}]}}}/>);
+    fireEvent.click(screen.getByRole('button',{name:'Weekly contribution'}));
+    expect(screen.getByText('Starter contribution / all recorded points: — / —')).toBeInTheDocument();
+    expect(screen.getByText(/0\/2 final weeks covered · — starts/)).toBeInTheDocument();
+  });
+  it('explains provisional usage and original-roster departures in Spanish',()=>{
+    language.language='es';
+    render(<DraftPhase4 detail={{...detail,resultsReport:{provisional:true,state:'partial',teams:[],coverage:'Provider'},phase4:{...detail.phase4!,contributions:[{...detail.phase4!.contributions![0],weeks:[{week:1,points:0,starter:false,held:false}]}]}}}/>);
+    fireEvent.click(screen.getByRole('button',{name:'Contribución semanal'}));
+    expect(screen.getByText(/Uso semanal provisional informado por el proveedor/)).toBeInTheDocument();
+    expect(screen.getByText(/semanas puntuadas cubiertas/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Mostrar filas semanales'));
+    expect(screen.getByText(/Fuera de la plantilla original/)).toBeInTheDocument();
   });
 });

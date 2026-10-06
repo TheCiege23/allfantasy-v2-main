@@ -69,15 +69,24 @@ export function draftDayReport(basis: unknown, context: PreparationContext | nul
 }
 export type ResultsReport = { provisional?: boolean; state: 'ready' | 'partial' | 'unavailable'; teams: Array<{ rosterId: string; name: string; rank: number | null; points: number; starterPoints: number; starts: number; weeks: number[]; coveredPicks: number }>; coverage: string };
 export function resultsReport(picks: AnalysisSelection[], teams: Array<{ rosterId: string; name: string }>, rows: Array<{ rosterId: string; playerId: string; points: number; isStarter: boolean; week: number }>, finalWeeks: number[]): ResultsReport {
-  const finals = new Set(finalWeeks), totals = teams.map(t => ({ ...t, rank: null as number | null, points: 0, starterPoints: 0, starts: 0, weeks: [] as number[], coveredPicks: 0 }));
+  const finals = new Set(finalWeeks.filter(w => Number.isInteger(w) && w >= 1 && w <= 18)), totals = teams.map(t => ({ ...t, rank: null as number | null, points: 0, starterPoints: 0, starts: 0, weeks: [] as number[], coveredPicks: 0 }));
+  let invalid = finals.size !== finalWeeks.length || new Set(teams.map(t => t.rosterId)).size !== teams.length || picks.some(p => !p.playerId || !p.rosterId || !teams.some(t => t.rosterId === p.rosterId));
   const seen = new Set<string>(), covered = new Map<string, Set<string>>();
+  const duplicates = new Set<string>(), occurrences = new Set<string>();
   for (const r of rows) {
     const key = `${r.week}:${r.rosterId}:${r.playerId}`;
-    if (seen.has(key) || !finals.has(r.week) || !Number.isFinite(r.points)) continue;
-    seen.add(key);
+    if (!finals.has(r.week) || !picks.some(p => p.playerId === r.playerId && p.rosterId === r.rosterId)) continue;
+    if (occurrences.has(key)) duplicates.add(key);
+    occurrences.add(key);
+  }
+  if (duplicates.size) invalid = true;
+  for (const r of rows) {
+    const key = `${r.week}:${r.rosterId}:${r.playerId}`;
     // Attribute to the original drafting team only while the player remains on that team.
     const pick = picks.find(p => p.playerId === r.playerId && p.rosterId === r.rosterId), team = totals.find(t => t.rosterId === r.rosterId);
-    if (!pick || !team) continue;
+    if (!pick || !team || !finals.has(r.week)) continue;
+    if (duplicates.has(key) || !Number.isFinite(r.points) || typeof r.isStarter !== 'boolean') { invalid = true; continue; }
+    seen.add(key);
     team.points += r.points;
     if (r.isStarter) { team.starterPoints += r.points; team.starts++; }
     if (!team.weeks.includes(r.week)) team.weeks.push(r.week);
@@ -85,7 +94,7 @@ export function resultsReport(picks: AnalysisSelection[], teams: Array<{ rosterI
   }
   for (const team of totals) { team.coveredPicks = covered.get(team.rosterId)?.size ?? 0; team.weeks.sort((a,b) => a-b); }
   // Sparse weekly scores do not prove inactivity. Never rank teams with differing/missing coverage.
-  const complete = totals.length > 1 && finals.size > 0 && new Set(picks.map(p => p.playerId)).size === picks.length && totals.every(t => t.coveredPicks > 0 && picks.filter(p => p.rosterId === t.rosterId).every(p => p.playerId && [...finals].every(week => seen.has(`${week}:${t.rosterId}:${p.playerId}`))));
+  const complete = !invalid && totals.length > 1 && finals.size > 0 && new Set(picks.map(p => p.playerId)).size === picks.length && totals.every(t => t.coveredPicks > 0 && picks.filter(p => p.rosterId === t.rosterId).every(p => p.playerId && [...finals].every(week => seen.has(`${week}:${t.rosterId}:${p.playerId}`))));
   if (complete) for (const t of totals) t.rank = 1 + totals.filter(o => o.starterPoints > t.starterPoints + 0.000001).length;
   return { state: complete ? 'ready' : totals.some(t => t.coveredPicks) ? 'partial' : 'unavailable', teams: totals, coverage: 'Recorded final-week scores only. Starter contribution follows actual lineup usage on the original drafting team. Missing rows are unavailable, not zero. Traded-away production, roster moves and draft cost are not an overall decision-quality grade.' };
 }

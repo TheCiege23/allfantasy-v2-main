@@ -33,4 +33,11 @@ describe('authorized Chimmy draft evidence',()=>{
     expect(data.calibration).toBeNull()
     expect(result).toContain('Missing values are unknown')
   })
+  it('does not send newly preserved player-week evidence to the chat provider',async()=>{
+    h.read.mockResolvedValue({choice:{key:'imported:222',season:2026,sport:'NFL',format:'snake'},coverage:[],picks:[],phase4:{components:[],scores:[],replay:{state:'unavailable'},lineage:{lineages:[]},contributions:[{playerId:'WEEKLY_PRIVATE',rosterId:'a',name:'WEEKLY_PRIVATE',weeks:[{week:1,points:9876,starter:true,held:true}]}]}})
+    const result=await buildDraftAnalysisContext(ctx,{archiveKey:'imported:222'})
+    expect(result).not.toContain('WEEKLY_PRIVATE')
+    expect(result).not.toContain('9876')
+    expect(JSON.parse(result.split('\n')[1])).not.toHaveProperty('contributions')
+  })
 })
