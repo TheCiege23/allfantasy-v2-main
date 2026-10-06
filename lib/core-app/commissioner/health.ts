@@ -21,6 +21,7 @@
  */
 
 import { isPollClosed, type ViewerPoll } from '@/lib/chat-core/messagePolls'
+import { unnamedTeamLabel } from './activity'
 
 export type HealthFlagKey = 'abandoned' | 'lineups' | 'schedule' | 'dues' | 'votes'
 
@@ -86,11 +87,29 @@ function plural(n: number, one: string, many = `${one}s`): string {
  */
 const isEs = (language: string | undefined) => language === 'es'
 
+/**
+ * A name list for a sentence. Repeated placeholders are COUNTED, not repeated: "No owner: Unnamed
+ * team, Unnamed team, Unnamed team" says nothing three times. A single placeholder stays as it is,
+ * and every other list reads exactly as before. The overflow still counts TEAMS, not list items,
+ * so "and 2 more" never hides that the counted phrase stood for several.
+ */
 function namesPreview(names: string[], max = 4, language?: string): string {
   if (names.length === 0) return ''
-  const shown = names.slice(0, max).join(', ')
-  if (names.length <= max) return shown
-  return isEs(language) ? `${shown} y ${names.length - max} más` : `${shown} and ${names.length - max} more`
+  const es = isEs(language)
+  const blank = unnamedTeamLabel(language)
+  const blanks = names.filter((n) => n === blank).length
+  const items: Array<{ text: string; teams: number }> =
+    blanks > 1
+      ? [
+          ...names.filter((n) => n !== blank).map((text) => ({ text, teams: 1 })),
+          { text: es ? `${blanks} equipos sin nombre` : `${blanks} unnamed teams`, teams: blanks },
+        ]
+      : names.map((text) => ({ text, teams: 1 }))
+  const shownItems = items.slice(0, max)
+  const shown = shownItems.map((i) => i.text).join(', ')
+  if (items.length <= max) return shown
+  const rest = names.length - shownItems.reduce((n, i) => n + i.teams, 0)
+  return es ? `${shown} y ${rest} más` : `${shown} and ${rest} more`
 }
 
 // ── Abandoned teams ─────────────────────────────────────────────────────────

@@ -281,15 +281,33 @@ export type TeamIdentityRow = {
   platformUserId?: string | null
   claimedByUserId?: string | null
   isOrphan?: boolean | null
+  /** The platform's roster id. On Sleeper it is the roster slot, 1..N. */
+  externalId?: string | null
 }
 
-/** The name a team is shown by. Importers write the literal "Unknown" for a missing name; that is no name. */
+/** The last-resort name, exported so a list of names can count these instead of repeating them. */
+export function unnamedTeamLabel(language = 'en'): string {
+  return language === 'es' ? 'Equipo sin nombre' : 'Unnamed team'
+}
+
+/**
+ * The name a team is shown by. Importers write the literal "Unknown" for a missing name; that is no name.
+ *
+ * ⚠ ON PRODUCTION EVERY "Unknown" TEAM IS AN OPEN SLOT, AND ITS OWNER NAME IS "Unknown" TOO
+ * (measured 2026-10-06: 379 rows in 49 leagues, all orphaned, none with a platform user). So the
+ * owner fallback never rescues them, and a league with four open slots used to list one name four
+ * times. Each still has its roster slot, so it is named by that — "Team 3", the same words the
+ * schedule check already uses for a team it cannot find. Only a short number is a slot; a long
+ * platform id (Yahoo's "414.l.123.t.4") would read as noise, so that falls through to the label.
+ */
 export function teamDisplayName(t: TeamIdentityRow, language = 'en'): string {
   const clean = (v: string | null | undefined) => {
     const s = v?.trim()
     return s && s.toLowerCase() !== 'unknown' ? s : null
   }
-  return clean(t.teamName) ?? clean(t.ownerName) ?? (language === 'es' ? 'Equipo sin nombre' : 'Unnamed team')
+  const slot = t.externalId?.trim()
+  const bySlot = slot && /^\d{1,3}$/.test(slot) ? (language === 'es' ? `Equipo ${slot}` : `Team ${slot}`) : null
+  return clean(t.teamName) ?? clean(t.ownerName) ?? bySlot ?? unnamedTeamLabel(language)
 }
 
 /**

@@ -48,6 +48,7 @@ import {
   memberActivityFromReads,
   quietManagerNames,
   staleActivityReason,
+  teamDisplayName,
   unownedTeamNames,
   type LeagueMemberActivity,
 } from './commissioner/activity'
@@ -430,8 +431,15 @@ function starterSlots(playerData: unknown): unknown[] | null {
   return null
 }
 
-function teamLabel(t: { teamName?: string | null; ownerName?: string | null }, language = 'en'): string {
-  return t.teamName?.trim() || t.ownerName?.trim() || (language === 'es' ? 'Equipo sin nombre' : 'Unnamed team')
+/**
+ * One naming rule for the whole hub, shared with the abandoned-teams list: the balance chart used
+ * to print an importer's literal "Unknown" three times over for three open slots.
+ */
+function teamLabel(
+  t: { teamName?: string | null; ownerName?: string | null; externalId?: string | null },
+  language = 'en',
+): string {
+  return teamDisplayName(t, language)
 }
 
 /** First regular-season NFL kickoff per week. SportsGame holds up to 4 rows a fixture; min() is safe. */
