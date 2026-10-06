@@ -2,12 +2,16 @@ import React from 'react'
 import { afterEach,describe,it,expect,vi } from 'vitest'
 import { cleanup,fireEvent,render,screen } from '@testing-library/react'
 vi.mock('next/link',()=>({default:({children,href}:any)=><a href={href}>{children}</a>}))
-vi.mock('@/components/i18n/LanguageProviderClient',()=>({useOptionalLanguage:()=>({language:'en'})}))
+const lang=vi.hoisted(()=>({language:'en'}))
+vi.mock('@/components/i18n/LanguageProviderClient',()=>({useOptionalLanguage:()=>({language:lang.language})}))
 import { WeeklyCalendar } from '@/components/core-app/WeeklyCalendar'
 import { buildWeeklyCalendar } from '@/lib/core-app/weeklyCalendar'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
-afterEach(cleanup)
+afterEach(()=>{cleanup();lang.language='en'})
 describe('weekly calendar controls',()=>{
+ it('names processing as reclamos in Spanish and keeps the missing date explicit',()=>{
+ lang.language='es';const now=new Date('2026-10-06T12:00:00Z');const data=buildWeeklyCalendar([{id:'A',name:'Liga',settings:{nextWaiverRunAt:'2026-10-07T12:00:00Z'}},{id:'B',name:'Otra liga'}],now);render(<WeeklyCalendar data={data}/>);expect(screen.getByText('Procesamiento de reclamos')).toBeTruthy();expect(screen.getByText(/próximo procesamiento de reclamos no disponible/)).toBeTruthy()
+ })
  it('shows timezone and confirmed dates, with reminders off until chosen',()=>{
  const data=buildWeeklyCalendar([{id:'A',name:'My league',settings:{lineupLockAt:'2026-10-08T20:00:00-04:00'}}],new Date('2026-10-06T12:00:00Z'))
  render(<WeeklyCalendar data={data}/>);expect(screen.getByText('Lineup lock')).toBeTruthy();expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false)
