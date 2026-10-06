@@ -18,6 +18,7 @@ vi.mock('@/components/i18n/LanguageProviderClient', () => ({
 import { Standings } from '@/components/core-app/screens/Standings'
 import type { LeagueStandingsResult } from '@/lib/core-app/leagueStandings'
 import type { StandingsOdds } from '@/lib/core-app/standingsOdds'
+import { DEFAULT_STANDINGS_VIEW } from '@/lib/core-app/standingsView'
 import {
   advanceWeek,
   buildStandingsBoard,
@@ -129,16 +130,16 @@ afterEach(() => {
   h.language = 'en'
 })
 
-function screenText(language: 'en' | 'es'): string {
+function screenText(language: 'en' | 'es', layout: 'table' | 'cards' = 'table'): string {
   h.language = language
-  const { container } = render(<Standings data={data()} odds={ODDS} />)
+  const { container } = render(<Standings data={data()} odds={ODDS} view={{ ...DEFAULT_STANDINGS_VIEW, layout }} />)
   const attrs = [...container.querySelectorAll('[aria-label],[title]')].map((e) => `${e.getAttribute('aria-label') ?? ''} | ${e.getAttribute('title') ?? ''}`)
   return `${container.textContent ?? ''}\n${attrs.join('\n')}`
 }
 
 // Shell words only English uses. Fixture names ("Club N", "Liga Prueba") are none of these.
 const ENGLISH =
-  /\b(the|your|you|with|this|that|from|for|of|is|are|and|wins?|lost|points|week|games?|played|last|next|streak|strk|record|team|schedule|hardest|odds|share|root|lose|stake|against|across|projects?|range|head to head|view|standings|sort|ascending|descending|unknown|over)\b/i
+  /\b(the|your|you|with|this|that|from|for|of|is|are|and|wins?|lost|points|week|games?|played|last|next|streak|strk|record|team|schedule|hardest|odds|share|root|lose|stake|against|across|projects?|range|head to head|view|standings|sort|ascending|descending|unknown|over|magic|efficiency|median)\b/i
 
 describe('Standings (head-to-head) in Spanish', () => {
   it('reads Spanish across the stakes, the grid, the tooltips and the controls', () => {
@@ -179,5 +180,33 @@ describe('Standings (head-to-head) in Spanish', () => {
       expect(t, en).toContain(en)
     }
     expect(t).not.toMatch(/Qué está en juego|Apoya a|Cara a cara/)
+  })
+
+  /*
+   * The phone card layout labels each figure itself, separately from the table's column heads. The
+   * 2026-10-06 live check found five of them English after the table was fixed — this test rendered
+   * only the table, so it could not see them.
+   */
+  it('the card layout (phones) reads Spanish too', () => {
+    const t = screenText('es', 'cards')
+    for (const es of ['Racha', 'Número mágico', 'Probabilidad de playoffs', 'Calendario restante', 'más difícil de 4']) {
+      expect(t, es).toContain(es)
+    }
+    const leftover = t.replace(/Club \d|Liga Prueba|Sleeper|AllFantasy|AF Power|Season Outlook/g, '').match(ENGLISH)
+    expect(
+      leftover?.[0] ?? null,
+      `English left in cards: "${leftover?.input?.slice(Math.max(0, (leftover.index ?? 0) - 70), (leftover.index ?? 0) + 70).replace(/\n/g, ' ⏎ ')}"`,
+    ).toBeNull()
+  })
+
+  it('CONTROL — the card layout in English, read from the card labels themselves', () => {
+    // The labels, not the page: "Playoff odds" also appears elsewhere on the screen, so a page-wide
+    // contains() would pass with Spanish leaked into these labels.
+    h.language = 'en'
+    const { container } = render(<Standings data={data()} odds={ODDS} view={{ ...DEFAULT_STANDINGS_VIEW, layout: 'cards' }} />)
+    const labels = new Set([...container.querySelectorAll('dt')].map((d) => d.textContent?.trim()))
+    for (const en of ['Streak', 'Magic number', 'Playoff odds', 'Schedule left']) expect(labels.has(en), en).toBe(true)
+    expect([...labels].filter((l) => /Racha|Número mágico|Probabilidad de playoffs|Calendario restante/.test(l ?? ''))).toEqual([])
+    expect(container.textContent).toContain('hardest of 4')
   })
 })

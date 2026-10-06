@@ -1184,6 +1184,11 @@ const spanish: Record<string, string> = {
   'Losses to elimination:': 'Derrotas para quedar eliminado:',
   'Winning out guarantees a playoff spot, whatever else happens': 'Ganarlo todo asegura plaza de playoffs, pase lo que pase',
   Median: 'Mediana',
+  // The phone card layout's labels (StandingsBoardView `Cards`) and LeagueTabs' "Schedule" — live sweep, 2026-10-06.
+  'Head-to-head · median': 'Cara a cara · mediana',
+  'Lineup efficiency': 'Eficiencia de alineación',
+  'Magic number': 'Número mágico',
+  Schedule: 'Calendario',
   'Lineup %': '% alineación',
   'Bench/wk': 'Banco/sem',
   // Standings in an elimination league — no playoffs, so Safe / On the bubble / Eliminated
