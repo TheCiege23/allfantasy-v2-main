@@ -48,3 +48,5 @@
 
 .af-tw .af-tw-optin { display:flex; align-items:center; gap:12px; min-height:48px; }
 .af-tw .af-tw-optin input[type="checkbox"] { width:28px; min-height:28px; margin:8px; padding:0; flex:0 0 28px; }
+
+#af-team-alert-decision:focus, #af-team-deadline-alert:focus { outline: 2px solid var(--af-accent, #20d4e8); outline-offset: 3px; scroll-margin-block: 6rem; }
