@@ -199,6 +199,28 @@ describe('badges — LIVE and the rankings level', () => {
     expect(badges(c)).toEqual(expect.arrayContaining(['LIVE', 'LVL 12', '3']))
   })
 
+  // The phone's More sheet renders the same badges through its own `<b>`, a separate site from the
+  // desktop nav — so it is opened and read here rather than assumed to follow.
+  const sheetBadges = (language: 'en' | 'es') => {
+    const c = withLive(language)
+    const more = [...c.querySelectorAll('button[aria-controls="af-mobile-more"]')].at(-1) as HTMLButtonElement
+    fireEvent.click(more)
+    const sheet = c.querySelector('#af-mobile-more')
+    expect(sheet).not.toBeNull()
+    return [...sheet!.querySelectorAll('a b')].map((b) => b.textContent)
+  }
+
+  it('the phone’s More sheet reads Spanish too', () => {
+    const b = sheetBadges('es')
+    expect(b).toEqual(expect.arrayContaining(['EN VIVO', 'NIV 12', '3']))
+    expect(b).not.toContain('LIVE')
+    expect(b).not.toContain('LVL 12')
+  })
+
+  it('CONTROL — the More sheet in English', () => {
+    expect(sheetBadges('en')).toEqual(expect.arrayContaining(['LIVE', 'LVL 12', '3']))
+  })
+
   it('badgeText: words translate, counts pass through', () => {
     expect(badgeText('LIVE', 'es')).toBe('EN VIVO')
     expect(badgeText('LVL 7', 'es')).toBe('NIV 7')
