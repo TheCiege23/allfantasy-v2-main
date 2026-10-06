@@ -44,28 +44,63 @@ function parsed(value: string | number | Date | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
-/** "Sep 10" */
-export function shortDate(value: string | number | Date | null | undefined): string {
-  const d = parsed(value)
-  return d ? SHORT_DATE.format(d) : '—'
+/*
+ * Spanish (2026-10-06). Built from the SAME pinned en-US formatters' parts rather than from an es
+ * locale: the zone stays pinned, and the month names come from the table below rather than from the
+ * runtime's ICU data, which spells some of them differently between versions ("sep" / "sept") — the
+ * exact server-versus-browser disagreement this file exists to prevent. The short months match
+ * lib/core-app/kickoffText.ts, so a Commissioner OS date and a /core date read the same.
+ */
+const MONTH_SHORT_ES: Record<string, string> = {
+  Jan: 'ene', Feb: 'feb', Mar: 'mar', Apr: 'abr', May: 'may', Jun: 'jun',
+  Jul: 'jul', Aug: 'ago', Sep: 'sep', Oct: 'oct', Nov: 'nov', Dec: 'dic',
+}
+const MONTH_LONG_ES: Record<string, string> = {
+  January: 'enero', February: 'febrero', March: 'marzo', April: 'abril', May: 'mayo', June: 'junio',
+  July: 'julio', August: 'agosto', September: 'septiembre', October: 'octubre', November: 'noviembre', December: 'diciembre',
 }
 
-/** "Sep 10, 2026" */
-export function mediumDate(value: string | number | Date | null | undefined): string {
-  const d = parsed(value)
-  return d ? MEDIUM_DATE.format(d) : '—'
+function partsOf(format: Intl.DateTimeFormat, d: Date): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const part of format.formatToParts(d)) out[part.type] = part.value
+  return out
 }
 
-/** "September 10, 2026" */
-export function longDate(value: string | number | Date | null | undefined): string {
+/** "Sep 10" — or "10 sep" when `language` is 'es'. */
+export function shortDate(value: string | number | Date | null | undefined, language?: string | null): string {
   const d = parsed(value)
-  return d ? LONG_DATE.format(d) : '—'
+  if (!d) return '—'
+  if (language !== 'es') return SHORT_DATE.format(d)
+  const p = partsOf(SHORT_DATE, d)
+  return `${p.day} ${MONTH_SHORT_ES[p.month] ?? p.month}`
 }
 
-/** "Sep 10, 2026, 3:05 PM EDT" */
-export function dateTime(value: string | number | Date | null | undefined): string {
+/** "Sep 10, 2026" — or "10 sep 2026". */
+export function mediumDate(value: string | number | Date | null | undefined, language?: string | null): string {
   const d = parsed(value)
-  return d ? DATE_TIME.format(d) : '—'
+  if (!d) return '—'
+  if (language !== 'es') return MEDIUM_DATE.format(d)
+  const p = partsOf(MEDIUM_DATE, d)
+  return `${p.day} ${MONTH_SHORT_ES[p.month] ?? p.month} ${p.year}`
+}
+
+/** "September 10, 2026" — or "10 de septiembre de 2026". */
+export function longDate(value: string | number | Date | null | undefined, language?: string | null): string {
+  const d = parsed(value)
+  if (!d) return '—'
+  if (language !== 'es') return LONG_DATE.format(d)
+  const p = partsOf(LONG_DATE, d)
+  return `${p.day} de ${MONTH_LONG_ES[p.month] ?? p.month} de ${p.year}`
+}
+
+/** "Sep 10, 2026, 3:05 PM EDT" — or "10 sep 2026, 3:05 p. m. EDT". The zone label stays. */
+export function dateTime(value: string | number | Date | null | undefined, language?: string | null): string {
+  const d = parsed(value)
+  if (!d) return '—'
+  if (language !== 'es') return DATE_TIME.format(d)
+  const p = partsOf(DATE_TIME, d)
+  const period = p.dayPeriod === 'AM' ? 'a. m.' : p.dayPeriod === 'PM' ? 'p. m.' : p.dayPeriod ?? ''
+  return `${p.day} ${MONTH_SHORT_ES[p.month] ?? p.month} ${p.year}, ${p.hour}:${p.minute} ${period} ${p.timeZoneName}`.replace(/\s+/g, ' ').trim()
 }
 
 /** "1,234" */

@@ -7,6 +7,8 @@ import { useCommissionerPlatform } from '@/components/commissioner-os/providers/
 import { DataModeIndicator } from '@/components/commissioner-os/demo-mode/DataModeIndicator'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import { LeagueSelector, type LeagueSelectorOption } from '@/components/commissioner-os/shell/LeagueSelector'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { commissionerSectionName, notificationsAriaText, shellText } from '@/lib/commissioner-os/i18n/shellCopy'
 
 export interface CommissionerHeaderProps {
   /** Fetched once by the layout via adapter.notifications.getSummary() — the header never counts unread notifications itself. */
@@ -35,6 +37,7 @@ export function CommissionerHeader({
 }: CommissionerHeaderProps) {
   const { toggleSidebar, sidebarCollapsed, toggleMobileSidebar } = useCommissionerLayout()
   const { openService } = useCommissionerPlatform()
+  const { language } = useOptionalLanguage()
 
   return (
     <header
@@ -50,7 +53,7 @@ export function CommissionerHeader({
     >
       <button
         type="button"
-        aria-label="Open navigation"
+        aria-label={shellText('Open navigation', language)}
         onClick={toggleMobileSidebar}
         className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center sm:min-h-0 sm:min-w-0 rounded-[var(--radius-standard)] p-2 md:hidden"
         style={{ color: 'var(--muted)' }}
@@ -59,7 +62,7 @@ export function CommissionerHeader({
       </button>
       <button
         type="button"
-        aria-label={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+        aria-label={shellText(sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation', language)}
         onClick={toggleSidebar}
         className="focus-ring hidden rounded-[var(--radius-standard)] p-2 md:inline-flex"
         style={{ color: 'var(--muted)' }}
@@ -76,12 +79,12 @@ export function CommissionerHeader({
       <button
         type="button"
         onClick={() => openService('search')}
-        aria-label="Search Commissioner OS"
+        aria-label={shellText('Search Commissioner OS', language)}
         className="focus-ring flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-[var(--radius-standard)] px-3 py-1.5 text-sm sm:min-h-0 sm:min-w-0"
         style={{ background: 'var(--panel2)', color: 'var(--muted)', border: '1px solid var(--border)' }}
       >
         <Search size={16} aria-hidden />
-        <span className="hidden sm:inline">Search</span>
+        <span className="hidden sm:inline">{shellText('Search', language)}</span>
         <kbd
           className="ml-1 hidden rounded px-1.5 py-0.5 text-[11px] font-medium sm:inline"
           style={{ background: 'var(--panel)', color: 'var(--muted2)', border: '1px solid var(--border)' }}
@@ -93,7 +96,7 @@ export function CommissionerHeader({
       <button
         type="button"
         onClick={() => openService('notifications')}
-        aria-label={unreadNotificationCount > 0 ? `Notifications, ${unreadNotificationCount} unread` : 'Notifications'}
+        aria-label={notificationsAriaText(unreadNotificationCount, language)}
         className="focus-ring relative inline-flex min-h-11 min-w-11 items-center justify-center sm:min-h-0 sm:min-w-0 rounded-[var(--radius-standard)] p-2"
         style={{ color: 'var(--muted)' }}
       >
@@ -111,7 +114,7 @@ export function CommissionerHeader({
 
       <Link
         href="/commissioner-os/help"
-        aria-label="Help & Knowledge Center"
+        aria-label={commissionerSectionName('Help & Knowledge Center', language)}
         className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center sm:min-h-0 sm:min-w-0 rounded-[var(--radius-standard)] p-2"
         style={{ color: 'var(--muted)' }}
       >
@@ -120,7 +123,7 @@ export function CommissionerHeader({
 
       <button
         type="button"
-        aria-label="Profile menu"
+        aria-label={shellText('Profile menu', language)}
         className="focus-ring inline-flex min-h-11 min-w-11 items-center justify-center rounded-full p-1 sm:min-h-0 sm:min-w-0"
         style={{ color: 'var(--muted)' }}
       >
