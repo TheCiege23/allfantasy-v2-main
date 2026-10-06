@@ -4,6 +4,7 @@ import type { SeasonOutlook, SwingMatchup } from './seasonOutlook'
 import { lineupProjectionFor } from './weekLineups'
 import type { WeekLineups } from './weekLineups'
 import { formatPct1 } from './weeklyPercent'
+import type { WeeklyCalendar } from './weeklyCalendar'
 
 export type WeeklyAction = { id: string; leagueId: string; leagueName: string; kind: 'lineup' | 'monitor' | 'sync' | 'playoff' | 'review'; count: number; href: string; gameAt: string | null; source: 'stored-lineup' | 'season-outlook' | 'league-context'; season?: number | null; period?: number | null }
 export type WeeklyBlueprint = {
@@ -13,6 +14,7 @@ export type WeeklyBlueprint = {
   matchup?: { opponent: string; period: number; leagueName: string; leagueId?: string; season?: number }
   playoff?: { probability: number; leagueName: string; leagueId?: string; season?: number; period?: number }
   rivalry?: { opponent: string; wins: number; losses: number; ties: number; winningStreak: number; losingStreak: number; final: boolean }
+  calendar?: WeeklyCalendar
   commissionerLeagueIds?: string[]
 }
 /**
@@ -32,6 +34,7 @@ export function upcomingGame(card: WeekMatchup | undefined, outlook: SeasonOutlo
 export function buildWeeklyBlueprint(input: {
   name?: string | null; leagues: Array<{ id: string; name?: string | null; sport?: string | null }>
   board: WeekBoard; pulse: MyTeamPulse | null; outlook: SeasonOutlook | null; lineups?: WeekLineups | null
+  calendar?: WeeklyCalendar
   favoriteIds?: ReadonlySet<string>; focusLeagueId?: string | null; now: Date
   commissionerLeagueIds?: string[]
 }): WeeklyBlueprint {
@@ -87,13 +90,16 @@ export function buildWeeklyBlueprint(input: {
   // The matchup and odds describe one league, season and period, including in portfolio view.
   // With no matching model, omit odds rather than borrow another league's probability.
   const outlook = input.outlook?.leagues.find(l => allowed.has(l.leagueId) && l.leagueId === (featured?.leagueId ?? focus) && l.you?.modelled && (!featured || (l.season === featured.season && l.period === (upcoming?.week ?? featured.week))))
+  const candidates = (input.board.rivalryPlans ?? []).filter(r=>featured != null && r.leagueId===featured.leagueId && r.season===featured.season && r.period===(upcoming?.week ?? featured.week) && (upcoming ? r.opponent===upcoming.opponentName : r.opponentRosterId===featured.opponent.rosterId))
+  const rivalry = candidates.length===1 ? candidates[0] : null
   const probability = outlook?.you?.playoffPct
   return { name: input.name?.trim() || null, teamName: input.board.leagueBoard?.yourTeamName ?? null, leagueCount: leagues.length,
     sports: [...new Set(leagues.map(l => l.sport?.trim()).filter((s): s is string => Boolean(s)))], focusLeagueId: focus,
     actions: actions.slice(0, 3), actionCount: actions.length, attentionLeagueIds, lineupReadFailed: input.pulse == null || (leagues.length > 0 && rows.length === 0), coverage,
+    calendar: input.calendar,
     commissionerLeagueIds: input.commissionerLeagueIds?.filter(id => allowed.has(id)) ?? [],
-    // The board's rivalry is against the FINISHED game's opponent; a plan about the next game omits it.
-    ...(focus && !upcoming && input.board.leagueBoard?.rivalry && input.board.leagueBoard.yours?.opponent.name ? { rivalry: {
+    // Prior meetings must belong to the exact displayed opponent and period.
+    ...(rivalry ? {rivalry:{...rivalry,final:!upcoming && featured?.live?.final===true}} : focus && !upcoming && input.board.leagueBoard?.rivalry && input.board.leagueBoard.yours?.opponent.name ? { rivalry: {
       opponent: input.board.leagueBoard.yours.opponent.name, ...input.board.leagueBoard.rivalry,
       winningStreak: input.board.leagueBoard.rivalry.winningStreak ?? 0,
       losingStreak: input.board.leagueBoard.rivalry.losingStreak ?? 0, final: input.board.leagueBoard.yours.live?.final ?? false,

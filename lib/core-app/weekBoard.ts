@@ -1,4 +1,5 @@
 import 'server-only'
+import { weeklyRivalryPlans, type WeeklyRivalryPlan } from './weeklyRivalry'
 
 import { prisma } from '@/lib/prisma'
 import { historicalScoringSpread } from './historicalScoringSpread'
@@ -224,6 +225,7 @@ export type LeagueWeekBoard = {
 }
 
 export type WeekBoard = {
+  rivalryPlans?: WeeklyRivalryPlan[]
   /** Format-aware goals without an invented opponent or cut line. */
   formatWeeks?: Array<{ leagueId: string; leagueName: string; season: number; week: number; format: WeeklyFormat; href: string }>
   /** Optional reads failed; current data may still be usable. */
@@ -1439,6 +1441,7 @@ export async function getWeekBoard(
     season: latest?.season ?? null,
     week: latest?.week ?? null,
     historyIncomplete: history.historyIncomplete,
+    rivalryPlans: weeklyRivalryPlans(pairRows(history.rows), myRosters, rosterNames, leagueByPlatformId, periodsByLeague),
     leagueBoard,
     coinFlips,
     leaning,
