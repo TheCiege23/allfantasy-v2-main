@@ -9,8 +9,10 @@ import { NhlScoringSettingsPanel } from '@/components/league-settings/NhlScoring
 import { NcaafScoringSettingsPanel } from '@/components/league-settings/NcaafScoringSettingsPanel'
 import { SoccerScoringSettingsPanel } from '@/components/league-settings/SoccerScoringSettingsPanel'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 
 function SportScoringPanel({ sport, leagueId, isCommissioner }: { sport: string; leagueId: string; isCommissioner: boolean }) {
+  const { t } = useLanguage()
   const props = { leagueId, isCommissioner }
   switch (sport) {
     case 'NFL':
@@ -28,7 +30,7 @@ function SportScoringPanel({ sport, leagueId, isCommissioner }: { sport: string;
     case 'SOCCER':
       return <SoccerScoringSettingsPanel {...props} />
     default:
-      return <p className="text-[13px] text-white/45">Scoring editor is not available for this sport yet.</p>
+      return <p className="text-[13px] text-white/45">{t('lsHub.sc.unavailable')}</p>
   }
 }
 

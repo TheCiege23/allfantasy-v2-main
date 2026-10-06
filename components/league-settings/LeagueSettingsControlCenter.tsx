@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { SubPanelContext } from '@/app/league/[leagueId]/components/LeagueSettingsSubPanels'
 import { GeneralTab } from './tabs/GeneralTab'
 import { ScoringTab } from './tabs/ScoringTab'
@@ -29,21 +30,14 @@ export type LeagueSettingsHubTabId =
   | 'conceptRules'
   | 'ai'
 
-const TABS: { id: LeagueSettingsHubTabId; label: string; short: string }[] = [
-  { id: 'general', label: 'General', short: 'General' },
-  { id: 'draft', label: 'Draft', short: 'Draft' },
-  { id: 'roster', label: 'Roster', short: 'Roster' },
-  { id: 'scoring', label: 'Scoring', short: 'Scoring' },
-  { id: 'waivers', label: 'Waivers', short: 'Waivers' },
-  { id: 'trades', label: 'Trades', short: 'Trades' },
-  { id: 'playoffs', label: 'Playoffs', short: 'Playoffs' },
-  { id: 'members', label: 'Members', short: 'Members' },
-  { id: 'notifications', label: 'Notifications', short: 'Alerts' },
-  { id: 'permissions', label: 'Permissions', short: 'Perms' },
-  { id: 'commissioner', label: 'Commissioner Intelligence', short: 'Commish' },
-  { id: 'conceptRules', label: 'Advanced Rule Support', short: 'Rules' },
-  { id: 'ai', label: 'League Helper', short: 'Helper' },
-]
+/**
+ * Tab labels are dictionary keys (`lsHub.tab.<id>` for the desktop sidebar, `…Short` for the mobile
+ * chip), resolved with t() at render. The English values — "Commissioner Intelligence", "League
+ * Helper"… — are the customer-safe names; __tests__/g32-league-home-contract pins them there.
+ */
+const TABS: { id: LeagueSettingsHubTabId; labelKey: string; shortKey: string }[] = (
+  ['general', 'draft', 'roster', 'scoring', 'waivers', 'trades', 'playoffs', 'members', 'notifications', 'permissions', 'commissioner', 'conceptRules', 'ai'] as const
+).map((id) => ({ id, labelKey: `lsHub.tab.${id}`, shortKey: `lsHub.tab.${id}Short` }))
 
 function resolveInitialTab(panel: string | null | undefined): LeagueSettingsHubTabId {
   if (!panel) return 'general'
@@ -73,6 +67,7 @@ export function LeagueSettingsControlCenter({
   ctx: SubPanelContext
   initialPanelId?: string | null
 }) {
+  const { t } = useLanguage()
   const [tab, setTab] = useState<LeagueSettingsHubTabId>(() => resolveInitialTab(initialPanelId))
 
   const canEdit = ctx.isCommissioner
@@ -108,8 +103,8 @@ export function LeagueSettingsControlCenter({
       case 'notifications':
         return (
           <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 text-[13px] leading-relaxed text-white/65">
-            <p className="mb-2 text-[14px] font-semibold text-white/85">Notifications</p>
-            <p>Basic league notifications are available in account settings. Weekly League Report controls live under League Helper for AF Commissioner.</p>
+            <p className="mb-2 text-[14px] font-semibold text-white/85">{t('lsHub.notif.title')}</p>
+            <p>{t('lsHub.notif.body')}</p>
           </div>
         )
       case 'permissions':
@@ -123,23 +118,23 @@ export function LeagueSettingsControlCenter({
       default:
         return null
     }
-  }, [tab, tabProps])
+  }, [tab, tabProps, t])
 
   return (
     <div className="flex min-h-[380px] flex-1 flex-col gap-0 md:min-h-[520px] md:flex-row">
       {/* Mobile tabs */}
       <div className="scrollbar-none flex gap-1 overflow-x-auto border-b border-white/[0.06] pb-2 md:hidden">
-        {TABS.map((t) => (
+        {TABS.map((tb) => (
           <button
-            key={t.id}
+            key={tb.id}
             type="button"
-            onClick={() => setTab(t.id)}
-            data-testid={`league-settings-hub-tab-${t.id}`}
+            onClick={() => setTab(tb.id)}
+            data-testid={`league-settings-hub-tab-${tb.id}`}
             className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition ${
-              tab === t.id ? 'bg-cyan-500/15 text-cyan-200' : 'text-white/45 hover:text-white/75'
+              tab === tb.id ? 'bg-cyan-500/15 text-cyan-200' : 'text-white/45 hover:text-white/75'
             }`}
           >
-            {t.short}
+            {t(tb.shortKey)}
           </button>
         ))}
       </div>
@@ -147,21 +142,21 @@ export function LeagueSettingsControlCenter({
       {/* Desktop sidebar */}
       <nav
         className="hidden w-[200px] shrink-0 flex-col gap-0.5 border-r border-white/[0.06] pr-3 pt-1 md:flex"
-        aria-label="League settings sections"
+        aria-label={t('lsHub.sections')}
       >
-        {TABS.map((t) => {
-          const active = tab === t.id
+        {TABS.map((tb) => {
+          const active = tab === tb.id
           return (
             <button
-              key={t.id}
+              key={tb.id}
               type="button"
-              onClick={() => setTab(t.id)}
-              data-testid={`league-settings-hub-tab-${t.id}`}
+              onClick={() => setTab(tb.id)}
+              data-testid={`league-settings-hub-tab-${tb.id}`}
               className={`rounded-lg px-2 py-2 text-left text-[12px] font-medium transition ${
                 active ? 'bg-white/[0.08] text-cyan-200 shadow-[0_0_0_1px_rgba(34,211,238,0.12)]' : 'text-white/60 hover:bg-white/[0.04] hover:text-white'
               }`}
             >
-              {t.label}
+              {t(tb.labelKey)}
             </button>
           )
         })}

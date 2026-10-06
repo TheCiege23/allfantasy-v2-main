@@ -2,16 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import { HelpCircle } from 'lucide-react'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useLeagueSettingsSectionAutosave } from '@/hooks/useLeagueSettingsSectionAutosave'
 import type { LeagueSettingsTabProps } from '../league-settings-tabs-types'
 
+/** Option labels are dictionary keys, resolved at render. */
 const WAIVER_TYPES = [
-  { value: 'faab', label: 'FAAB (budget)' },
-  { value: 'rolling', label: 'Rolling waivers' },
-  { value: 'reverse_standings', label: 'Reverse standings' },
+  { value: 'faab', labelKey: 'lsHub.wv.faab' },
+  { value: 'rolling', labelKey: 'lsHub.wv.rolling' },
+  { value: 'reverse_standings', labelKey: 'lsHub.wv.reverse' },
 ]
 
 export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
+  const { t } = useLanguage()
   const leagueId = ctx.league.id
   const { queuePatch, saving } = useLeagueSettingsSectionAutosave(leagueId, 'waivers', { enabled: canEdit })
 
@@ -31,12 +34,12 @@ export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
     <div className="space-y-5">
       <div className="flex items-center gap-2 text-[11px] text-white/40">
         <HelpCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-        <span>Changes apply to the canonical league record and save automatically.</span>
-        {saving ? <span className="ml-auto text-cyan-300/80">Saving…</span> : null}
+        <span>{t('lsHub.wv.note')}</span>
+        {saving ? <span className="ml-auto text-cyan-300/80">{t('lsHub.saving')}</span> : null}
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">Waiver type</span>
+        <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">{t('lsHub.wv.type')}</span>
         <select
           value={waiverType}
           disabled={!canEdit}
@@ -49,7 +52,7 @@ export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
         >
           {WAIVER_TYPES.map((o) => (
             <option key={o.value} value={o.value} className="bg-[#0d1117]">
-              {o.label}
+              {t(o.labelKey)}
             </option>
           ))}
         </select>
@@ -57,7 +60,7 @@ export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="block">
-          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">FAAB budget</span>
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">{t('lsHub.wv.budget')}</span>
           <input
             type="number"
             min={0}
@@ -73,7 +76,7 @@ export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">Min bid</span>
+          <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">{t('lsHub.wv.minBid')}</span>
           <input
             type="number"
             min={0}
@@ -89,7 +92,7 @@ export function WaiversTab({ ctx, canEdit }: LeagueSettingsTabProps) {
         </label>
         <label className="block">
           <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/40">
-            Waiver period (hrs)
+            {t('lsHub.wv.period')}
           </span>
           <input
             type="number"
