@@ -16,7 +16,8 @@ export function teamAlertDecision(data:MyTeamData,target:TeamAlertTarget,now:num
   const slot=data.starters.data[target.slotIndex],player=slot?.player
   if(!player || player.sleeperId!==target.playerId)return {state:'lineup_changed' as const,slotIndex:null,player:null}
   if(Date.parse(target.deadline)<=now)return {state:'expired' as const,slotIndex:null,player}
-  if(!player.kickoff || Date.parse(player.kickoff)!==Date.parse(target.deadline))return {state:'schedule_changed' as const,slotIndex:null,player}
+  const kickoffAt=player.kickoff instanceof Date ? player.kickoff.getTime() : Date.parse(String(player.kickoff))
+  if(!player.kickoff || kickoffAt!==Date.parse(target.deadline))return {state:'schedule_changed' as const,slotIndex:null,player}
   if(!player.ruledOut)return {state:'status_changed' as const,slotIndex:null,player}
   return {state:'current' as const,slotIndex:target.slotIndex,player}
 }

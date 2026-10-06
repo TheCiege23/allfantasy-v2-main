@@ -12,10 +12,12 @@ Opening either link is read-only. Existing membership checks, private no-store A
 
 - Controlled saved-roster test fixture: full loader **15 mocked database reads**, alert evaluation **11** (4 fewer, about 27%). This measures only that fixture's query count, not production response time or browser loading speed. Evidence fields and bench players compare equal.
 - Independent-read concurrency and no live-roster request verified.
-- Focused final suite: **22 tests passed** across targeting, English/Spanish panels, loader budget, affected-only evidence reads and private route access.
+- Focused final suite: **24 tests passed** across targeting, English/Spanish panels, loader budget, affected-only evidence reads and private route access.
 - Existing Team desktop/mobile/tablet regression suite: **74 tests passed** before the final focus/copy refinements; the focused suite covers those refinements.
 - Authenticated local Chromium/WebKit browser acceptance for PC, iPhone, Android and tablet: in progress at PR creation.
-- Required remote CI and production release verification: pending at PR creation.
+- Existing exact-navigation policy assertions and Spanish source-coverage checks: **31 tests passed** (includes targeting tests).
+- Browser acceptance caught millisecond loss when comparing hydrated Date values; the fix uses exact epoch timestamps and has a fractional-second regression test.
+- Required remote CI and production release verification: pending. Initial CI identified the same Date typing issue, a generic-link assertion needing the new destination, and Spanish coverage for the alert-only reason. These were fixed without changing CI baselines.
 - Physical-device and signed-in production acceptance remains pending user-guided checks; local emulation is not a physical-device result.
 
 ## Follow-up measurement
