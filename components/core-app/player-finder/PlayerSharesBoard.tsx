@@ -1,4 +1,7 @@
+'use client'
+
 import Link from 'next/link'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { PlayerAvatar, TeamLogo } from '@/components/core-app/player-finder/PlayerMarks'
 import type { SectionState } from '@/lib/core-app/leagueHome'
 import type { PlayerShares } from '@/lib/core-app/playerShares'
@@ -7,6 +10,8 @@ import { shareOf } from '@/lib/core-app/playerSharesRank'
 import { playerRef } from '@/lib/core-app/playerRef'
 import { TeamSplit } from '@/components/core-app/player-finder/TeamSplit'
 import { TopicTip } from '@/components/core-app/TopicTip'
+import { designationText, finderCopy, reasonText } from '@/lib/core-app/playerFinderCopy'
+import { tradeValueCopy, tradeValueReasonText, type TradeValueCopy } from '@/lib/core-app/finderTradeValueCopy'
 
 /**
  * "YOUR SHARES" — the Player Finder home's board of the players you roster most (Phase 2).
@@ -16,18 +21,21 @@ import { TopicTip } from '@/components/core-app/TopicTip'
  *
  * League mode (?league=X): the same players, and for each: who has him in THIS league, what this
  * league's format makes him worth (AF Pro), and his season points under this league's scoring.
+ *
+ * Spanish (2026-10-05): finderTradeValueCopy.ts; the injury chip through `designationText`, the
+ * value's scoring note through `reasonText`, "value N" through playerFinderCopy's `valueInline`.
  */
 
-function holderLabel(h: LeagueHolder): { text: string; tone: 'you' | 'other' | 'free' | 'unknown' } {
+function holderLabel(h: LeagueHolder, t: TradeValueCopy): { text: string; tone: 'you' | 'other' | 'free' | 'unknown' } {
   switch (h.kind) {
     case 'you':
-      return { text: h.slot === 'STARTER' ? 'You · starting' : h.slot === 'IR' ? 'You · IR' : h.slot === 'TAXI' ? 'You · taxi' : 'You · bench', tone: 'you' }
+      return { text: t.holderYou(h.slot), tone: 'you' }
     case 'other':
-      return { text: h.ownerName ? `@${h.ownerName}` : h.teamName ?? 'Another manager', tone: 'other' }
+      return { text: h.ownerName ? `@${h.ownerName}` : h.teamName ?? t.anotherManager, tone: 'other' }
     case 'free':
-      return { text: 'Free agent', tone: 'free' }
+      return { text: t.freeAgent, tone: 'free' }
     default:
-      return { text: 'Not readable', tone: 'unknown' }
+      return { text: t.notReadable, tone: 'unknown' }
   }
 }
 
@@ -42,13 +50,15 @@ export function PlayerSharesBoard({
   /** True for a viewer without AF Pro: the value column says so instead of showing numbers. */
   valuesLocked?: boolean
 }) {
+  const { language } = useOptionalLanguage()
+  const t = tradeValueCopy(language)
   if (!state.available) {
     return (
       <section className="af-card af-pf-shares af-pf-shares--empty" aria-labelledby="af-pf-shares-h">
         <h3 className="af-label" id="af-pf-shares-h">
-          Your shares
+          {t.sharesTitle}
         </h3>
-        <p className="af-pf-unavailable">{state.reason}.</p>
+        <p className="af-pf-unavailable">{tradeValueReasonText(state.reason, language)}.</p>
       </section>
     )
   }
@@ -61,23 +71,23 @@ export function PlayerSharesBoard({
         {/* Grouped so the head's space-between keeps the "?" beside the h3 (not in it: aria-labelledby). */}
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <h3 className="af-label" id="af-pf-shares-h">
-            {league ? `Your shares · in ${league.leagueName}` : 'Your shares'}
+            {league ? t.sharesTitleIn(league.leagueName) : t.sharesTitle}
           </h3>
           <TopicTip topic="playerShares" />
         </div>
         <span className="af-pf-shares-sub af-num">
-          {playersHeld} players across {leaguesRead} {leaguesRead === 1 ? 'roster' : 'rosters'}
-          {unsupportedLeagues > 0 ? ` · ${unsupportedLeagues} on a platform we can't read yet` : ''}
+          {t.sharesSub(playersHeld, leaguesRead)}
+          {unsupportedLeagues > 0 ? t.sharesUnsupported(unsupportedLeagues) : ''}
         </span>
       </header>
 
       {rows.length === 0 ? (
-        <p className="af-pf-unavailable">No rostered players found in the leagues read.</p>
+        <p className="af-pf-unavailable">{t.sharesNone}</p>
       ) : (
         <ol className="af-pf-shares-list">
           {rows.map((r, i) => {
             const cell = league?.cells[r.player.sleeperId] ?? null
-            const holder = cell ? holderLabel(cell.holder) : null
+            const holder = cell ? holderLabel(cell.holder, t) : null
             const href = `/core/players?q=${encodeURIComponent(r.player.name)}&player=${encodeURIComponent(playerRef(r.player.sport, r.player.externalId))}${leagueParam}`
             const pct = Math.round(shareOf(r.leagues, leaguesRead) * 100)
             return (
@@ -92,7 +102,7 @@ export function PlayerSharesBoard({
                       {r.player.name}
                       {r.status ? (
                         <span className="af-chip af-num af-pf-ready af-pf-share-status" data-tone={r.status.tone}>
-                          {r.status.label}
+                          {designationText(r.status.label, language)}
                         </span>
                       ) : null}
                     </span>
@@ -110,13 +120,14 @@ export function PlayerSharesBoard({
 
                   <span className="af-pf-share-count">
                     <span className="af-num af-pf-share-of">
-                      <strong>{r.leagues}</strong> of {leaguesRead}
+                      <strong>{r.leagues}</strong> {t.sharesOf} {leaguesRead}
                     </span>
                     <span className="af-pf-share-bar" aria-hidden>
                       <span style={{ width: `${pct}%` }} />
                     </span>
                     <span className="af-pf-share-starts af-num">
-                      {r.starts} starting{r.ir > 0 ? ` · ${r.ir} IR` : ''}
+                      {t.sharesStarting(r.starts)}
+                      {r.ir > 0 ? ` · ${r.ir} IR` : ''}
                     </span>
                   </span>
 
@@ -127,21 +138,21 @@ export function PlayerSharesBoard({
                       </span>
                       <span className="af-pf-share-league-nums af-num">
                         {valuesLocked ? (
-                          <span className="af-pf-share-locked">value · AF Pro</span>
+                          <span className="af-pf-share-locked">{t.valueLocked}</span>
                         ) : cell?.value ? (
-                          <span title={cell.value.fitNote ?? undefined}>
-                            value {cell.value.value.toLocaleString('en-US')}
+                          <span title={cell.value.fitNote ? reasonText(cell.value.fitNote, language) : undefined}>
+                            {finderCopy(language).valueInline(cell.value.value.toLocaleString('en-US'))}
                             {cell.value.value !== cell.value.base ? '*' : ''}
                           </span>
                         ) : (
-                          <span>value —</span>
+                          <span>{t.valueDash}</span>
                         )}
                         <span>
                           {cell?.season
-                            ? `${cell.season.points.toFixed(1)} pts · ${cell.season.games} ${cell.season.games === 1 ? 'game' : 'games'}`
+                            ? t.seasonLine(cell.season.points.toFixed(1), cell.season.games)
                             : league.scoringKnown
-                              ? 'no stats yet'
-                              : 'scoring unknown'}
+                              ? t.noStatsYet
+                              : t.scoringUnknown}
                         </span>
                       </span>
                     </span>
@@ -155,9 +166,7 @@ export function PlayerSharesBoard({
       {/* All leagues only: the split is across every roster, which a one-league view would misstate. */}
       {!league ? <TeamSplit data={state.data.teamSplit} /> : null}
       <p className="af-pf-shares-foot">
-        {league
-          ? `Ranked by how many of your rosters hold him. "Value" is ${league.leagueName}'s format and scoring (* when its scoring moves the market number); points are this season under ${league.leagueName}'s own scoring, from his game stat lines.`
-          : 'Ranked by how many of your rosters hold him. Pick a league at the top to see who has each of them there, what they are worth in it, and what they have scored under its scoring.'}
+        {league ? t.sharesFootLeague(league.leagueName) : t.sharesFootAll}
       </p>
     </section>
   )

@@ -266,7 +266,7 @@ export const CAREER_TOPICS = {
     },
     es: {
       title: 'Tus acciones',
-      body: 'Los jugadores que están en más de tus plantillas, de más a menos. “N de M” cuenta las plantillas que pudimos leer, y “starting” es en cuántas de ellas está en la alineación. Las ligas de una plataforma cuyos ids de jugador aún no podemos emparejar se cuentan como ilegibles, nunca se adivinan.',
+      body: 'Los jugadores que están en más de tus plantillas, de más a menos. “N de M” cuenta las plantillas que pudimos leer, y “titulares” es en cuántas de ellas está en la alineación. Las ligas de una plataforma cuyos ids de jugador aún no podemos emparejar se cuentan como ilegibles, nunca se adivinan.',
     },
   },
 } satisfies Record<string, HelpTopic>

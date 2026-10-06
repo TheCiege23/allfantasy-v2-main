@@ -226,7 +226,29 @@ export type PlayerBidInstead = {
   ceilingAtRemaining: number | null
   /** What that manager has left, in dollars. Null when the roster row does not carry it. */
   budgetRemaining: number | null
+  /** The English sentence. Chimmy's trade-target verdict reads it as written. */
   reason: string
+  /**
+   * The values `reason` was built from, so the card can say it in the reader's language
+   * (finderTradeValueCopy.ts `bidReasonText`). Optional: a payload built before it existed renders
+   * its English.
+   */
+  parts?: PlayerBidReasonParts
+}
+
+export type PlayerBidReasonParts = {
+  /** Which of faabBid.ts's three bid sentences `reason` carries. */
+  bid: 'unpriced' | 'no-upgrade' | 'upgrade'
+  /** His share of the upgrade value, whole percent, as the sentence prints it. */
+  sharePct: number
+  weekBudget: number
+  /** True when a published elimination schedule paced the budget. */
+  paced: boolean
+  /** The budget the allocation was run against (`faabRemaining`, or 0 when unknown). */
+  budgetRemaining: number
+  weeksAssumed: number
+  /** False when we do not hold this manager's remaining FAAB — the sentence then says so. */
+  faabKnown: boolean
 }
 
 const GRADE_BUDGET_MS = 6000
@@ -604,6 +626,11 @@ function bidFor(args: {
   })
   const mine = alloc?.bids.find((b) => b.id === args.targetSleeperId)
   if (!alloc || !mine) return null
+  // The same test faabBid.ts makes before it picks a sentence: no usable margin is "not priced".
+  const candidate = pool.find((c) => c.id === args.targetSleeperId)
+  const priced =
+    candidate != null && Number.isFinite(candidate.playerValue) && Number.isFinite(candidate.replacedValue)
+  const margin = priced ? candidate.playerValue - candidate.replacedValue : null
 
   return {
     concept: args.concept,
@@ -620,6 +647,15 @@ function bidFor(args: {
           (args.faabRemaining == null
             ? ' We do not hold your remaining FAAB for this league, so that share cannot be turned into dollars.'
             : ''),
+    parts: {
+      bid: margin == null ? 'unpriced' : margin <= 0 ? 'no-upgrade' : 'upgrade',
+      sharePct: Math.round(mine.shareOfSupply * 100),
+      weekBudget: alloc.weekBudget,
+      paced: alloc.paced,
+      budgetRemaining: args.faabRemaining ?? 0,
+      weeksAssumed: alloc.weeksAssumed,
+      faabKnown: args.faabRemaining != null,
+    },
   }
 }
 
