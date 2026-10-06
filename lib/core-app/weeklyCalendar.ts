@@ -22,7 +22,9 @@ export function buildWeeklyCalendar(leagues:WeeklyCalendarLeague[], now:Date, ex
     const obj=(v:unknown):Record<string,unknown>=>v&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,unknown>:{}
     const outer=obj(l.settings), s={...obj(outer.settings),...outer}, name=l.name?.trim()||'League'
     for(const [kind,keys] of [['lineup',['lineupLockAt','lineup_lock_at']],['waivers',['waiver_next_run','nextWaiverRunAt','waiverProcessAt']],['trade',['tradeDeadlineAt','trade_deadline_at']],['keeper',['keeperDeadlineAt','keeper_deadline_at']],['draft',['draft_start','draftStartTime','draft_date']]] as const){
-      const at=keys.map(k=>absoluteCalendarTime(s[k])).find(Boolean)
+      // Native scheduler/draft records override an older mirrored settings timestamp.
+      const authoritative=extra.some(e=>e.leagueId===l.id && e.kind===kind && (e.source==='waiver-engine'||kind==='draft'&&e.source==='league-settings') && absoluteCalendarTime(e.at))
+      const at=authoritative?null:keys.map(k=>absoluteCalendarTime(s[k])).find(Boolean)
       if(at)add({id:l.id+':'+kind,leagueId:l.id,leagueName:name,kind,title:'',at,source:'league-settings',href:'/core/'+(kind==='lineup'?'my-team':kind==='waivers'?'waivers':'commissioner')+'?league='+encodeURIComponent(l.id)})
       if((kind==='waivers'||kind==='lineup'&&!l.lineupAutomatic)&&(!at || Date.parse(at)<now.getTime())&&!extra.some(e=>e.leagueId===l.id&&e.kind===kind&&absoluteCalendarTime(e.at)&&Date.parse(e.at)>=now.getTime()))gaps.push({leagueId:l.id,leagueName:name,kind})
     }

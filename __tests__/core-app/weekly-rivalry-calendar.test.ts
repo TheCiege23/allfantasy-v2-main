@@ -39,6 +39,7 @@ describe('seven-day calendar',()=>{
  const c=buildWeeklyCalendar(leagues,now,extra,[],'B')
  expect(c.events).toHaveLength(1);expect(c.events[0]).toMatchObject({leagueId:'B',leagueName:'Same name',at:now.toISOString()})
  })
+ it('prefers a native scheduler timestamp over a conflicting mirror, without duplicate reminders',()=>{const extra=[{id:'A:waivers',leagueId:'A',leagueName:'',kind:'waivers',at:'2026-10-07T10:00:00Z',title:'',source:'waiver-engine',href:'/core/waivers?league=A'} as WeeklyCalendarEvent];const c=buildWeeklyCalendar(leagues,now,extra);expect(c.events.filter(e=>e.kind==='waivers')).toHaveLength(1);expect(c.events.find(e=>e.kind==='waivers')?.at).toBe('2026-10-07T10:00:00.000Z');expect(weeklyCalendarIcs(c)!.match(/SUMMARY:Same name: Waiver processing/g)).toHaveLength(1)})
  it('does not warn automatic lineups about a missing manual lock',()=>{const c=buildWeeklyCalendar([{id:'B',lineupAutomatic:true}],now);expect(c.gaps.some(g=>g.kind==='lineup')).toBe(false)})
  it('never converts a next game into a confirmed lineup lock',()=>{const c=buildWeeklyCalendar([{id:'B'}],now,[],[{leagueId:'B',at:'2026-10-09T00:00:00Z'}])
  expect(c.events[0].kind).toBe('game');expect(c.gaps.map(g=>g.kind)).toContain('lineup')})
