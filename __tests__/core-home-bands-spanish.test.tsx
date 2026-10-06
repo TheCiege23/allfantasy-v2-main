@@ -669,7 +669,7 @@ describe('Since your last visit (DashSinceLastVisit)', () => {
     expect(out).toContain('quedó 1–0–1, ahora 3–1–1, sube al #3 (antes #5)')
     expect(out).toContain('quedó 0–1, ahora 1–3, baja al #9 (antes #7)')
     expect(out).toContain('14 alertas sin leer')
-    expect(out).toContain('9 alertas de Chimmy, 3 novedades de lesiones, 1 ofertas de intercambio, 1 resultados de agentes libres')
+    expect(out).toContain('9 alertas de Chimmy, 3 novedades de lesiones, 1 ofertas de intercambio, 1 resultados de reclamos')
     expect(out).toContain('Abrir alertas')
     expect(out).toContain('Los cambios de lesiones y clasificaciones aparecen desde tu próxima visita')
   })

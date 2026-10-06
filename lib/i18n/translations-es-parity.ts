@@ -1154,7 +1154,7 @@ export const translationsEsParity: Record<string, string> = {
   "settings.notifications.category.system_account": "Alertas del sistema y de la cuenta",
   "settings.notifications.category.trade_accept_reject": "Intercambio aceptado / rechazado / contraoferta",
   "settings.notifications.category.trade_proposals": "Propuestas de intercambio",
-  "settings.notifications.category.waiver_processing": "Procesamiento de waivers",
+  "settings.notifications.category.waiver_processing": "Procesamiento de reclamos",
   "settings.notifications.categoryEnabledAria": "{{label}} activada",
   "settings.notifications.delivery.email": "Correo",
   "settings.notifications.delivery.inApp": "En la app",

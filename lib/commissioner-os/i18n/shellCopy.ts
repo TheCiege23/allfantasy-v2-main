@@ -234,15 +234,16 @@ const DEADLINE_WHAT_ES: Record<string, string> = {
   'Trade deadline': coreUiCopy('Trade deadline', 'es'),
   'Playoffs start': 'Inicio de los playoffs',
   Draft: 'Draft',
-  'Next waiver processing': 'Próximo procesamiento de agentes libres',
+  // The owner's ruling (2026-10-06), app-wide: a waiver RUN is «procesamiento de reclamos»;
+  // «agentes libres» is only ever the players themselves.
+  'Next waiver processing': 'Próximo procesamiento de reclamos',
 }
 const WHAT = '(Trade deadline|Playoffs start|Draft|Next waiver processing)'
 
 /**
  * A league-calendar event's name on its own ("Playoffs start") — the settings page labels the same
- * events. ⚠ analyticsCopy's `DEADLINE_LABEL_ES` names these events too and reads "Next waiver
- * processing" as "…de reclamos" where this reads "…de agentes libres"; left as shipped, pending a
- * decision on which waiver word Commissioner OS uses.
+ * events, and analyticsCopy's workspace deadline task reads its event names from here too. THE
+ * translator for these event names; do not add a second table.
  */
 export function leagueEventNameText(english: string, language: string | null | undefined): string {
   if (!isEs(language)) return english

@@ -609,7 +609,7 @@ const spanish: Record<string, string> = {
   'No waivers — free agents are instant': 'Sin reclamos: agentes libres inmediatos',
   'Highest FAAB bid': 'Oferta FAAB más alta',
   'Highest bid wins': 'Gana la oferta más alta',
-  'Next waiver run': 'Próxima ejecución de reclamos',
+  'Next waiver run': 'Próximo procesamiento de reclamos',
   'How this league runs': 'Cómo funciona esta liga',
   'equal bids go to waiver priority': 'las ofertas iguales se deciden por prioridad de reclamo',
   'highest bid wins — how two equal bids are split was not published':

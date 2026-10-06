@@ -279,7 +279,7 @@ describe('Mission Control’s Recent Activity summaries go through the activity 
     )
     const text = container.textContent ?? ''
     for (const s of [
-      'Procesamiento de agentes libres por lotes: falló en su última ejecución.',
+      'Procesamiento de reclamos por lotes: falló en su última ejecución.',
       'Resumen de temporada: se generó correctamente.',
       'Informe de participación de mánagers: no se pudo generar.',
       'Mánagers en riesgo de irse',

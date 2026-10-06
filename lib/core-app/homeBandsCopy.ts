@@ -217,7 +217,7 @@ const ALERT_LABEL_ES: Record<string, string> = {
   trade_accepted: 'intercambios aceptados',
   trade_rejected: 'intercambios rechazados',
   trade_countered: 'contraofertas',
-  waiver_processed: 'resultados de agentes libres',
+  waiver_processed: 'resultados de reclamos',
   waiver_claim: 'reclamaciones de agentes libres',
   draft_pick: 'selecciones del draft',
   draft_starting: 'drafts que empiezan',
