@@ -1,6 +1,6 @@
 import type { MyTeamPulse } from './myTeamPulse'
-import type { WeekBoard } from './weekBoard'
-import type { SeasonOutlook } from './seasonOutlook'
+import type { WeekBoard, WeekMatchup } from './weekBoard'
+import type { SeasonOutlook, SwingMatchup } from './seasonOutlook'
 import { lineupProjectionFor } from './weekLineups'
 import type { WeekLineups } from './weekLineups'
 
@@ -14,6 +14,24 @@ export type WeeklyBlueprint = {
   rivalry?: { opponent: string; wins: number; losses: number; ties: number; winningStreak: number; losingStreak: number; final: boolean }
   commissionerLeagueIds?: string[]
 }
+/**
+ * The game a forward-looking plan is about.
+ *
+ * 🛑 THE BOARD AND THE SEASON MODEL DISAGREE ABOUT "THIS WEEK" ON PURPOSE. The board keeps the week
+ * the platform's marker is on, and on the Tuesday after a Sleeper week that is the week just
+ * FINISHED, shown as a result (see leagueWeekProgress). The season model has already moved to the
+ * first unplayed game. Pairing the two put "Period 4: facing Paid" (a game already won 135.5–129.9)
+ * beside the Period 5 scenarios against Rittnasty in HailShiva, in the brief, every caption, the
+ * PNG card and the workbook (production 2026-10-06). Once the board's game is final and the same
+ * league's model names a later game in the same season, the plan describes that game.
+ */
+export function upcomingGame(card: WeekMatchup | undefined, outlook: SeasonOutlook | null): SwingMatchup | null {
+  if (!card?.live?.final) return null
+  const swing = outlook?.swingByLeague?.[card.leagueId]
+  const season = outlook?.leagues.find(l => l.leagueId === card.leagueId)?.season
+  return swing?.opponentName && season === card.season && swing.week > card.week ? swing : null
+}
+
 export function buildWeeklyBlueprint(input: {
   name?: string | null; leagues: Array<{ id: string; name?: string | null; sport?: string | null }>
   board: WeekBoard; pulse: MyTeamPulse | null; outlook: SeasonOutlook | null; lineups?: WeekLineups | null
@@ -31,7 +49,9 @@ export function buildWeeklyBlueprint(input: {
     if (row.bestBall) continue
     const game = row.lockAt ? Date.parse(row.lockAt) : NaN
     const card = cards.find(m => m.leagueId === row.leagueId)
-    const periodMismatch = card && (row.season !== card.season || row.week !== card.week)
+    // My Team already reading the week after a FINISHED board week is the Tuesday gap above, not stale data.
+    const nextWeek = card?.live?.final === true && row.season === card.season && row.week === card.week + 1
+    const periodMismatch = card && !nextWeek && (row.season !== card.season || row.week !== card.week)
     const unreadable = row.syncFailed || row.unresolved > 0 || periodMismatch
     const count = row.actionableSeverity ?? (row.locked ? 0 : row.severity)
     const kind = unreadable ? 'sync' : !row.locked && count > 0 ? 'lineup' : !row.locked && row.questionable > 0 ? 'monitor' : null
@@ -57,6 +77,7 @@ export function buildWeeklyBlueprint(input: {
     return { leagueId: m.leagueId, leagueName: m.leagueName, af: p?.af?.you != null, provider: p?.api?.you != null, partial: p?.partial ?? false }
   })
   const featured = cards.find(m => m.leagueId === attentionLeagueIds[0]) ?? cards[0]
+  const upcoming = upcomingGame(featured, input.outlook)
   // The matchup and odds describe one league and season, including in portfolio view.
   // With no matching model, omit odds rather than borrow another league's probability.
   const outlook = input.outlook?.leagues.find(l => allowed.has(l.leagueId) && l.leagueId === (featured?.leagueId ?? focus) && l.you?.modelled && (!featured || l.season === featured.season))
@@ -65,12 +86,14 @@ export function buildWeeklyBlueprint(input: {
     sports: [...new Set(leagues.map(l => l.sport?.trim()).filter((s): s is string => Boolean(s)))], focusLeagueId: focus,
     actions: actions.slice(0, 3), actionCount: actions.length, attentionLeagueIds, lineupReadFailed: input.pulse == null || (leagues.length > 0 && rows.length === 0), coverage,
     commissionerLeagueIds: input.commissionerLeagueIds?.filter(id => allowed.has(id)) ?? [],
-    ...(focus && input.board.leagueBoard?.rivalry && input.board.leagueBoard.yours?.opponent.name ? { rivalry: {
+    // The board's rivalry is against the FINISHED game's opponent; a plan about the next game omits it.
+    ...(focus && !upcoming && input.board.leagueBoard?.rivalry && input.board.leagueBoard.yours?.opponent.name ? { rivalry: {
       opponent: input.board.leagueBoard.yours.opponent.name, ...input.board.leagueBoard.rivalry,
       winningStreak: input.board.leagueBoard.rivalry.winningStreak ?? 0,
       losingStreak: input.board.leagueBoard.rivalry.losingStreak ?? 0, final: input.board.leagueBoard.yours.live?.final ?? false,
     } } : {}),
-    ...(featured?.opponent.name ? { matchup: { opponent: featured.opponent.name, period: featured.week, leagueName: featured.leagueName, leagueId: featured.leagueId, season: featured.season } } : {}),
+    ...(upcoming ? { matchup: { opponent: upcoming.opponentName!, period: upcoming.week, leagueName: featured!.leagueName, leagueId: featured!.leagueId, season: featured!.season } }
+      : featured?.opponent.name ? { matchup: { opponent: featured.opponent.name, period: featured.week, leagueName: featured.leagueName, leagueId: featured.leagueId, season: featured.season } } : {}),
     ...(outlook && probability != null && Number.isFinite(probability) && probability >= 0 && probability <= 100 ? { playoff: { probability, leagueName: outlook.leagueName, leagueId: outlook.leagueId, season: outlook.season } } : {}) }
 }
 export function weeklyActionText(action: WeeklyAction, es = false): string {

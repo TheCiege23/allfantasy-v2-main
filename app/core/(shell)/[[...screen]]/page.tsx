@@ -3339,9 +3339,13 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
     lineups: ctx.weekLineups, favoriteIds: ctx.favoriteIds, focusLeagueId: selectedLeagueId, now: ctx.now,
     commissionerLeagueIds: playedLeagues.filter(l => l.isCommissioner).map(l => l.id),
   }) : null
-  const weeklyPath = weeklyBlueprint && selectedLeagueId && weekBoard?.leagueBoard
+  // Snapshots are keyed by period, so they follow the plan's period: keyed on the board's FINISHED
+  // week, the Tuesday estimate overwrote the one saved before that week was played.
+  const weeklyPathPeriod = weeklyBlueprint?.matchup?.leagueId === selectedLeagueId && weeklyBlueprint?.matchup?.season === weekBoard?.leagueBoard?.season
+    ? weeklyBlueprint!.matchup!.period : weekBoard?.leagueBoard?.week
+  const weeklyPath = weeklyBlueprint && selectedLeagueId && weekBoard?.leagueBoard && weeklyPathPeriod != null
     ? { ...await readWeeklyPlayoffPath(userId, weeklyOutlook?.leagues.find(l => l.leagueId === selectedLeagueId) ?? null,
-        weeklyOutlook?.swingByLeague[selectedLeagueId] ?? null, weekBoard.leagueBoard.season, weekBoard.leagueBoard.week, ctx.now), leagueId: selectedLeagueId }
+        weeklyOutlook?.swingByLeague[selectedLeagueId] ?? null, weekBoard.leagueBoard.season, weeklyPathPeriod, ctx.now), leagueId: selectedLeagueId }
     : null
 
   /*

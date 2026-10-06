@@ -39,6 +39,34 @@ describe('verified weekly priorities', () => {
     expect(weeklyBrief(build([row('A')]))).not.toContain('playoff probability')
   })
 })
+describe('the Tuesday after a Sleeper week', () => {
+  // Production 2026-10-06, HailShiva: the board was still on week 4 (won 135.5–129.9), the season model on week 5.
+  const paid = (final: boolean) => ({leagueId:'H',leagueName:'HailShiva',season:2026,week:4,opponent:{name:'Paid'},live:{you:135.5,them:129.9,margin:5.6,final}})
+  const model = (season = 2026, week = 5) => ({leagues:[{leagueId:'H',leagueName:'HailShiva',season,you:{modelled:true,playoffPct:65.12}}],
+    swingByLeague:{H:{leagueId:'H',leagueName:'HailShiva',week,opponentName:'Rittnasty',ifWin:76.4,ifLose:55.55,swing:20.85,clinchOnWin:false}}}) as unknown as SeasonOutlook
+  const plan = (card: ReturnType<typeof paid>, outlook: SeasonOutlook, pulseWeek = 5) => buildWeeklyBlueprint({ leagues:[{id:'H',name:'HailShiva',sport:'NFL'}],
+    board:{...board,leaning:[card],leagueBoard:{yours:card,rivalry:{wins:2,losses:6,ties:0,winningStreak:1,losingStreak:0}}} as unknown as WeekBoard,
+    pulse:{needs:[row('H',{leagueName:'HailShiva',week:pulseWeek,severity:0,questionable:0})],set:[]} as unknown as MyTeamPulse,
+    outlook, focusLeagueId:'H', now:new Date('2026-10-06T12:00:00Z') })
+  it('describes the next game once the board week is final, not the game already played', () => {
+    const out = plan(paid(true), model())
+    expect(out.matchup).toMatchObject({opponent:'Rittnasty',period:5,leagueId:'H',season:2026})
+    expect(out.playoff).toMatchObject({leagueId:'H',probability:65.12})
+    expect(weeklyBrief(out)).toContain('Period 5: facing Rittnasty in HailShiva')
+    expect(out.rivalry).toBeUndefined()
+  })
+  it('does not ask for a resync when My Team is already on the week after a final board week', () => {
+    expect(plan(paid(true), model()).actions.map(a => a.kind)).not.toContain('sync')
+    expect(plan(paid(true), model(), 6).actions.map(a => a.kind)).toContain('sync')
+  })
+  it('keeps the board game while it is still being played, or when the model is not ahead of it', () => {
+    expect(plan(paid(false), model(), 4).matchup).toMatchObject({opponent:'Paid',period:4})
+    expect(plan(paid(false), model(), 5).actions.map(a => a.kind)).toContain('sync')
+    expect(plan(paid(true), model(2025)).matchup).toMatchObject({opponent:'Paid',period:4})
+    expect(plan(paid(true), model(2026, 4)).matchup).toMatchObject({opponent:'Paid',period:4})
+    expect(plan(paid(false), model(), 4).rivalry).toMatchObject({opponent:'Paid',wins:2,losses:6})
+  })
+})
 describe('cross-sport closeness', () => {
   it('is invariant to scoring units even below one point', () => {
     const small=matchupCloseness({live:{you:.02,them:.03,margin:-.01}})
