@@ -1,3 +1,4 @@
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { SlotDef } from './types'
 
 const CATEGORY_DOT_CLASS: Record<string, string> = {
@@ -34,9 +35,10 @@ export function ReadOnlyRosterRow({
   def: SlotDef
   count: number
 }) {
+  const { t } = useLanguage()
   return (
     <div className="flex items-center gap-3 rounded-lg px-2 py-1.5">
-      <span className="w-[76px] text-left text-xs text-white/35">Read only</span>
+      <span className="w-[76px] text-left text-xs text-white/35">{t('lsEd.ro.readOnly')}</span>
       <span className="w-6 text-center font-mono text-sm text-white">{count}</span>
       <div className="flex items-center gap-2">
         <div className={`h-3 w-3 rounded-full ${SLOT_DOT_CLASS[def.key] ?? CATEGORY_DOT_CLASS[def.category] ?? 'bg-white/60'}`} />

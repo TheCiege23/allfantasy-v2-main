@@ -14,6 +14,7 @@ import { RosterSettingsModalShell } from './roster/RosterSettingsModalShell'
 import { RosterValidationBanner } from './roster/RosterValidationBanner'
 import type { RosterConfig, SlotDef, UnifiedRosterSection } from './roster/types'
 import { emitLeagueDraftRoomRevalidate } from '@/lib/draft-room/emitLeagueDraftRoomRevalidate'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 
 interface RosterTemplateOption {
   key: string
@@ -81,7 +82,7 @@ function normalizeFootballSlots(slots: Record<string, number>, sport: unknown): 
   return next
 }
 
-function buildSectionsFromSlots(slots: Record<string, number>): UnifiedRosterSection[] {
+function buildSectionsFromSlots(slots: Record<string, number>, tr: (key: string) => string): UnifiedRosterSection[] {
   const hasC2C = Object.keys(slots).some((k) => k.startsWith('C2C_'))
   if (!hasC2C) {
     const ordered: Record<string, number> = {}
@@ -91,7 +92,7 @@ function buildSectionsFromSlots(slots: Record<string, number>): UnifiedRosterSec
     for (const [key, value] of Object.entries(slots)) {
       if (!Object.prototype.hasOwnProperty.call(ordered, key)) ordered[key] = value
     }
-    return [{ key: 'primary', label: 'Primary', slots: ordered }]
+    return [{ key: 'primary', label: tr('lsEd.ro.primary'), slots: ordered }]
   }
 
   const primary: Record<string, number> = {}
@@ -101,12 +102,13 @@ function buildSectionsFromSlots(slots: Record<string, number>): UnifiedRosterSec
     else primary[key] = value
   }
   return [
-    { key: 'primary', label: 'Primary', slots: primary },
-    { key: 'c2c', label: 'C2C / Dual Track', slots: c2c },
+    { key: 'primary', label: tr('lsEd.ro.primary'), slots: primary },
+    { key: 'c2c', label: tr('lsEd.ro.c2c'), slots: c2c },
   ]
 }
 
 export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
+  const { t } = useLanguage()
   const [slotDefs, setSlotDefs] = useState<SlotDef[]>([])
   const [config, setConfig] = useState<RosterConfig | null>(null)
   const [templates, setTemplates] = useState<RosterTemplateOption[]>([])
@@ -155,7 +157,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
           data.sport,
         ))
       })
-      .catch(() => { if (active) setError('Failed to load') })
+      .catch(() => { if (active) setError(t('lsEd.loadFailed')) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [leagueId])
@@ -179,14 +181,14 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
         body: JSON.stringify({ slots: pendingSlots, templateKey: selectedTemplateKey }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Save failed'); return }
+      if (!res.ok) { setError(data.error ?? t('lsEd.saveFailed')); return }
       setConfig(data.config)
       setSelectedTemplateKey(data.config?.templateKey ?? selectedTemplateKey)
       setWarnings(data.unifiedConfig?.rosterWarnings ?? [])
       setMatchesTemplate(data.unifiedConfig?.rosterMatchesTemplate ?? true)
       setSuccess(true)
       emitLeagueDraftRoomRevalidate(leagueId)
-    } catch { setError('Request failed') }
+    } catch { setError(t('lsEd.requestFailed')) }
     finally { setSaving(false) }
   }, [leagueId, pendingSlots, selectedTemplateKey])
 
@@ -209,7 +211,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
     try {
       const parsed = JSON.parse(importPayloadText) as Record<string, unknown>
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        setError('Import payload must be a JSON object')
+        setError(t('lsEd.ro.importNotObject'))
         return null
       }
 
@@ -217,7 +219,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
       for (const [key, value] of Object.entries(parsed)) {
         const numeric = Number(value)
         if (!Number.isFinite(numeric)) {
-          setError(`Import slot ${key} must be numeric`)
+          setError(t('lsEd.ro.importNotNumeric').replace('{{key}}', key))
           return null
         }
         config[key] = numeric
@@ -225,7 +227,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
 
       return config
     } catch {
-      setError('Invalid JSON import payload')
+      setError(t('lsEd.ro.invalidJson'))
       return null
     }
   }, [importPayloadText])
@@ -250,7 +252,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error ?? 'Import preview failed')
+        setError(data.error ?? t('lsEd.ro.previewFailed'))
         return
       }
 
@@ -260,7 +262,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
         validation: data.validation ?? { valid: true, warnings: [], errors: [] },
       })
     } catch {
-      setError('Import preview request failed')
+      setError(t('lsEd.ro.previewRequestFailed'))
     } finally {
       setImporting(false)
     }
@@ -286,7 +288,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error ?? 'Import apply failed')
+        setError(data.error ?? t('lsEd.ro.applyFailed'))
         return
       }
 
@@ -302,7 +304,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
       setSuccess(true)
       emitLeagueDraftRoomRevalidate(leagueId)
     } catch {
-      setError('Import apply request failed')
+      setError(t('lsEd.ro.applyRequestFailed'))
     } finally {
       setImporting(false)
     }
@@ -318,7 +320,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
         method: 'POST',
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error ?? 'Reset failed'); return }
+      if (!res.ok) { setError(data.error ?? t('lsEd.ro.resetFailed')); return }
       setConfig(data.config)
       setSelectedTemplateKey(data.config?.templateKey ?? defaultTemplateKey ?? 'custom')
       setWarnings(data.unifiedConfig?.rosterWarnings ?? [])
@@ -332,7 +334,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
       setSuccess(true)
       emitLeagueDraftRoomRevalidate(leagueId)
     } catch {
-      setError('Reset request failed')
+      setError(t('lsEd.ro.resetRequestFailed'))
     } finally {
       setSaving(false)
     }
@@ -350,37 +352,37 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
     return { starters, bench, total: starters + bench }
   }, [pendingSlots, slotDefs])
 
-  const activeSections = useMemo(() => buildSectionsFromSlots(pendingSlots), [pendingSlots])
+  const activeSections = useMemo(() => buildSectionsFromSlots(pendingSlots, t), [pendingSlots, t])
 
-  if (loading) return <div className="py-8 text-center text-sm text-white/50">Loading roster settings...</div>
+  if (loading) return <div className="py-8 text-center text-sm text-white/50">{t('lsEd.ro.loading')}</div>
 
   const hasChanges = config && JSON.stringify(pendingSlots) !== JSON.stringify(config.slots)
 
   return (
-    <RosterSettingsModalShell title="Roster Settings" subtitle="Set lineup slots and reserve structure">
+    <RosterSettingsModalShell title={t('lsEd.ro.title')} subtitle={t('lsEd.ro.subtitle')}>
       <RosterValidationBanner warnings={warnings} errors={error ? [error] : []} />
 
       <div className="flex gap-4 text-[11px] text-white/50">
-        <span>Starters: <span className="font-mono text-white/80">{rosterTotals.starters}</span></span>
-        <span>Bench/Reserve: <span className="font-mono text-white/80">{rosterTotals.bench}</span></span>
-        <span>Total: <span className="font-mono text-white/80">{rosterTotals.total}</span></span>
+        <span>{t('lsEd.ro.starters')} <span className="font-mono text-white/80">{rosterTotals.starters}</span></span>
+        <span>{t('lsEd.ro.benchReserve')} <span className="font-mono text-white/80">{rosterTotals.bench}</span></span>
+        <span>{t('lsEd.ro.total')} <span className="font-mono text-white/80">{rosterTotals.total}</span></span>
       </div>
 
       {!matchesTemplate && (
         <div className="rounded-lg border border-amber-500/25 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
-          Current roster no longer matches the league default template.
+          {t('lsEd.ro.noMatch')}
         </div>
       )}
 
       {isCommissioner && templates.length > 0 && (
         <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Template</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">{t('lsEd.ro.template')}</p>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <select
               value={selectedTemplateKey}
               onChange={(event) => setSelectedTemplateKey(event.target.value)}
-              aria-label="Roster template"
-              title="Roster template"
+              aria-label={t('lsEd.ro.templateAria')}
+              title={t('lsEd.ro.templateAria')}
               className="min-w-0 flex-1 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-cyan-500/50"
             >
               {templates.map((template) => (
@@ -388,7 +390,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
                   {template.label}
                 </option>
               ))}
-              <option value="custom">Custom</option>
+              <option value="custom">{t('lsEd.ro.custom')}</option>
             </select>
             <button
               type="button"
@@ -396,7 +398,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
               disabled={selectedTemplateKey === 'custom' || saving}
               className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/70 transition hover:bg-white/10 disabled:cursor-default disabled:opacity-40"
             >
-              Apply Template
+              {t('lsEd.ro.applyTemplate')}
             </button>
           </div>
         </div>
@@ -404,16 +406,16 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
 
       {isCommissioner && (
         <div className="space-y-2 rounded-lg border border-white/10 bg-white/[0.02] p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">Import Mapping</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-white/40">{t('lsEd.ro.importMapping')}</p>
           <div className="flex flex-col gap-2">
-            <label className="text-[11px] text-white/50" htmlFor="roster-import-source">Source platform</label>
+            <label className="text-[11px] text-white/50" htmlFor="roster-import-source">{t('lsEd.ro.sourcePlatform')}</label>
             <select
               id="roster-import-source"
               value={importSourcePlatform}
               onChange={(event) => setImportSourcePlatform(event.target.value)}
               className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white outline-none focus:border-cyan-500/50"
-              aria-label="Import source platform"
-              title="Import source platform"
+              aria-label={t('lsEd.ro.sourceAria')}
+              title={t('lsEd.ro.sourceAria')}
             >
               <option value="yahoo">Yahoo</option>
               <option value="fpl">FPL</option>
@@ -421,7 +423,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
               <option value="sleeper">Sleeper</option>
             </select>
 
-            <label className="text-[11px] text-white/50" htmlFor="roster-import-json">Imported slot JSON</label>
+            <label className="text-[11px] text-white/50" htmlFor="roster-import-json">{t('lsEd.ro.importedJson')}</label>
             <textarea
               id="roster-import-json"
               value={importPayloadText}
@@ -437,7 +439,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
                 disabled={importing || saving}
                 className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/70 transition hover:bg-white/10 disabled:cursor-default disabled:opacity-40"
               >
-                Preview Import
+                {t('lsEd.ro.previewImport')}
               </button>
               <button
                 type="button"
@@ -445,20 +447,20 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
                 disabled={importing || saving}
                 className="rounded-lg border border-cyan-500/30 bg-cyan-950/20 px-3 py-2 text-xs text-cyan-200 transition hover:bg-cyan-900/25 disabled:cursor-default disabled:opacity-40"
               >
-                Apply Import
+                {t('lsEd.ro.applyImport')}
               </button>
             </div>
           </div>
 
           {importPreview && (
             <div className="space-y-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white/70">
-              <p>Mapped slots: {Object.keys(importPreview.mappedSlots).length}</p>
-              <p>Unmapped slots: {importPreview.unmappedSlots.join(', ') || 'None'}</p>
+              <p>{t('lsEd.ro.mapped').replace('{{n}}', String(Object.keys(importPreview.mappedSlots).length))}</p>
+              <p>{t('lsEd.ro.unmapped').replace('{{list}}', importPreview.unmappedSlots.join(', ') || t('lsEd.ro.none'))}</p>
               {!importPreview.validation.valid && (
-                <p className="text-red-300">Validation errors: {importPreview.validation.errors.join('; ')}</p>
+                <p className="text-red-300">{t('lsEd.ro.valErrors').replace('{{list}}', importPreview.validation.errors.join('; '))}</p>
               )}
               {importPreview.validation.warnings.length > 0 && (
-                <p className="text-amber-200">Validation warnings: {importPreview.validation.warnings.join('; ')}</p>
+                <p className="text-amber-200">{t('lsEd.ro.valWarnings').replace('{{list}}', importPreview.validation.warnings.join('; '))}</p>
               )}
             </div>
           )}
@@ -467,7 +469,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
 
       {(readOnlyMode || !isCommissioner) && (
         <div className="rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-white/40">
-          Only commissioners can edit roster settings.
+          {t('lsEd.ro.commishOnly')}
         </div>
       )}
 
@@ -484,11 +486,11 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
 
       {isCommissioner && (
         <div className="space-y-2 border-t border-white/10 pt-3">
-          {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">Roster settings saved.</div>}
+          {success && <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">{t('lsEd.ro.saved')}</div>}
           <div className="flex gap-2">
             <button type="button" disabled={saving || !hasChanges} onClick={save}
               className="flex-1 rounded-lg bg-cyan-600/80 px-4 py-2.5 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-50">
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? t('lsEd.saving') : t('lsEd.save')}
             </button>
             <button
               type="button"
@@ -496,7 +498,7 @@ export function RosterSettingsEditor({ leagueId }: { leagueId: string }) {
               disabled={saving || (matchesTemplate && selectedTemplateKey === (defaultTemplateKey ?? selectedTemplateKey))}
               className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-xs text-amber-200 transition hover:bg-amber-900/25 disabled:cursor-default disabled:opacity-40"
             >
-              Reset to League Default
+              {t('lsEd.ro.resetLeague')}
             </button>
             {hasChanges && (
               <ResetToDefaultButton onClick={resetToDefault} disabled={saving} />
