@@ -4,10 +4,10 @@ const money=(v:unknown):v is number=>typeof v==='number'&&Number.isSafeInteger(v
 export type SalaryHistoryTeam={rosterId:string;capYear:number;capSpace:number;totalCapHit:number;deadMoneyHit:number;contracts:number;expiring:number;recordedSalary:number;matchesLedger:boolean};
 export type SalaryHistory={state:'ready'|'partial'|'unavailable';teams:SalaryHistoryTeam[]};
 /** Read only frozen terms. Never infer historical contracts from current records or pick prices. */
-export function salaryHistory(specialty:unknown,start:string|null,season:number):SalaryHistory{
+export function salaryHistory(specialty:unknown,start:string|null,season:number|null):SalaryHistory{
  const b=object(specialty),s=object(b.salary),unavailable:SalaryHistory={state:'unavailable',teams:[]};
  const at=typeof b.capturedAt==='string'?Date.parse(b.capturedAt):NaN,started=start?Date.parse(start):NaN;
- if(b.version!=='draft-specialty-v1'||s.state!=='captured'||!Number.isFinite(at)||!Number.isFinite(started)||at>started||(!Number.isInteger(season)||season<1900||season>2200)||!Array.isArray(s.ledgers)||!s.ledgers.length||s.ledgers.length>32||!Array.isArray(s.contracts)||s.contracts.length>1000)return unavailable;
+ if(typeof season!=='number'||b.version!=='draft-specialty-v1'||s.state!=='captured'||!Number.isFinite(at)||!Number.isFinite(started)||at>started||(!Number.isInteger(season)||season<1900||season>2200)||!Array.isArray(s.ledgers)||!s.ledgers.length||s.ledgers.length>32||!Array.isArray(s.contracts)||s.contracts.length>1000)return unavailable;
  const teams:SalaryHistoryTeam[]=[],seen=new Set<string>(),players=new Set<string>();
  for(const raw of s.ledgers){const l=object(raw);
   if(!id(l.rosterId)||seen.has(l.rosterId)||l.capYear!==season||typeof l.capSpace!=='number'||!Number.isSafeInteger(l.capSpace)||!money(l.totalCapHit)||!money(l.deadMoneyHit))return unavailable;
