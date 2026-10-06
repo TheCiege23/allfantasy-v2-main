@@ -56,11 +56,20 @@ export function buildWeeklyBlueprint(input: {
       count: kind === 'lineup' ? count : kind === 'monitor' ? row.questionable : row.unresolved,
       href: `/core/${kind === 'sync' ? 'league-sync' : 'my-team'}?league=${encodeURIComponent(row.leagueId)}`,
       gameAt: !unreadable && game > now ? new Date(game).toISOString() : null, source: 'stored-lineup', season: row.season, period: row.week })
+    // A lineup repair and an injury watch are distinct decisions in a focused league.
+    if (kind === 'lineup' && row.questionable > 0) actions.push({...actions[actions.length-1],id:`${row.leagueId}:monitor`,kind:'monitor',count:row.questionable})
   }
   const priority = { lineup: 0, monitor: 1, sync: 2, playoff: 3, review: 4 }
   actions.sort((a, b) => priority[a.kind] - priority[b.kind] || (a.gameAt ? Date.parse(a.gameAt) : Infinity) - (b.gameAt ? Date.parse(b.gameAt) : Infinity) || b.count - a.count || a.leagueName.localeCompare(b.leagueName))
-  const swings = Object.values(input.outlook?.swingByLeague ?? {}).filter(s => allowed.has(s.leagueId)).sort((a,b) => b.swing - a.swing)
-  for (const swing of swings) if (!actions.some(a => a.leagueId === swing.leagueId)) actions.push({ id: `${swing.leagueId}:playoff`, leagueId: swing.leagueId, leagueName: swing.leagueName, kind: 'playoff', count: swing.week,
+  const swings = Object.values(input.outlook?.swingByLeague ?? {}).filter(s => {
+    const model = input.outlook?.leagues.find(l=>l.leagueId === s.leagueId)
+    const card = cards.find(m=>m.leagueId === s.leagueId)
+    const next = upcomingGame(card,input.outlook)
+    return allowed.has(s.leagueId) && model?.you?.modelled && model.period != null && s.week >= model.period &&
+      [s.ifWin,s.ifLose].every(p=>Number.isFinite(p) && p >= 0 && p <= 100) &&
+      (!card || (model.season === card.season && model.period === (next?.week ?? card.week)))
+  }).sort((a,b) => b.swing - a.swing)
+  for (const swing of swings) if (!actions.some(a => a.leagueId === swing.leagueId && (a.kind === 'sync' || a.kind === 'playoff'))) actions.push({ id: `${swing.leagueId}:playoff`, leagueId: swing.leagueId, leagueName: swing.leagueName, kind: 'playoff', count: swing.week,
     href: `/core/season-outlook?league=${encodeURIComponent(swing.leagueId)}`, gameAt: null, source: 'season-outlook', period: swing.week, season: input.outlook?.leagues.find(l=>l.leagueId === swing.leagueId)?.season })
   if (!actions.length && leagues.length) {
     const l = leagues.find(l => input.favoriteIds?.has(l.id)) ?? leagues[0]
