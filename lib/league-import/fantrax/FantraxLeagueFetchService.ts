@@ -592,6 +592,32 @@ export async function fetchFantraxLeagueForImport(
     )
   }
 
+  // A stored UUID is a lookup handle, not a fresh provider read. Collector
+  // refreshes and native carryover both enter here using that UUID.
+  if (!lookup.nativeLeague && leagueRecord.sourceLeagueId) {
+    const { importFantraxLeague } = await import('./importFantraxLeague')
+    const outcome = await importFantraxLeague({
+      leagueId: leagueRecord.sourceLeagueId,
+      teamName: leagueRecord.userTeam?.trim() || leagueRecord.user.fantraxUsername,
+      appUserId: userId,
+      refreshSnapshotId: leagueRecord.id,
+    })
+    if (!outcome.ok) {
+      // A failed refresh must not republish the old snapshot as current.
+      throw new FantraxImportUnavailableError(outcome.error)
+    }
+    leagueRecord = await prisma.fantraxLeague.findUnique({
+      where: { id: outcome.fantraxLeagueId }, include: includeConfig,
+    }) as any
+    if (!leagueRecord || leagueRecord.appUserId !== userId) {
+      throw new FantraxImportLeagueNotFoundError('Fantrax league snapshot not found')
+    }
+    liveScoringRules = outcome.scoringRules
+    liveScoringGaps = outcome.scoringGaps
+    sourceSettings = outcome.sourceSettings
+    sourceSeasonState = outcome.seasonState
+  }
+
   const username = leagueRecord.user?.fantraxUsername ?? lookup.username ?? 'fantrax-user'
   const season = leagueRecord.season ?? new Date().getFullYear()
   const standings = parseStandings(leagueRecord.standings)

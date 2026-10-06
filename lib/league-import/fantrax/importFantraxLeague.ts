@@ -116,9 +116,28 @@ export async function importFantraxLeague(args: {
    * input. See the ownership gate below for what it unlocks and why.
    */
   ownershipVerified?: boolean
+  /** Refresh an owned snapshot in place, retaining its downstream league identity. */
+  refreshSnapshotId?: string
 }): Promise<FantraxImportOutcome> {
+  const refreshTarget = args.refreshSnapshotId
+    ? await prisma.fantraxLeague.findUnique({
+        where: { id: args.refreshSnapshotId },
+        select: { id: true, appUserId: true, sourceLeagueId: true, season: true },
+      })
+    : null
+  if (args.refreshSnapshotId && (
+    !refreshTarget || refreshTarget.appUserId !== args.appUserId ||
+    refreshTarget.sourceLeagueId !== args.leagueId
+  )) {
+    return { ok: false, error: 'Fantrax league snapshot not found' }
+  }
   const info = await getFantraxLeagueInfo(args.leagueId)
   if (!info.ok) return { ok: false, error: info.failure.message, kind: info.failure.kind }
+  // The live endpoint can roll into another season. Never overwrite an archive
+  // or stamp its old roster as freshly fetched when that happens.
+  if (refreshTarget && Number(info.data.seasonYear) !== refreshTarget.season) {
+    return { ok: false, error: 'Fantrax source season differs from the stored snapshot', kind: 'unavailable' }
+  }
 
   /*
    * ⚠ THE SCHEDULE READ IS NOW TWO ENDPOINTS, NOT ONE. `getLeagueInfo` carries
@@ -208,17 +227,17 @@ export async function importFantraxLeague(args: {
   const season = Number(info.data.seasonYear) || new Date().getFullYear()
   const scoring = fantraxScoringRules(info.data)
 
-  const fantraxUser = await prisma.fantraxUser.upsert({
+  const fantraxUser = refreshTarget ? null : await prisma.fantraxUser.upsert({
     where: { fantraxUsername: mine.teamName },
     create: { fantraxUsername: mine.teamName, displayName: mine.teamName },
     update: {},
     select: { id: true },
   })
 
-  const existing = await prisma.fantraxLeague.findUnique({
+  const existing = refreshTarget ? null : await prisma.fantraxLeague.findUnique({
     where: {
       userId_leagueName_season: {
-        userId: fantraxUser.id,
+        userId: fantraxUser!.id,
         leagueName: info.data.leagueName,
         season,
       },
@@ -302,18 +321,30 @@ export async function importFantraxLeague(args: {
     matchups: schedule.rows as unknown as object,
   }
 
-  const row = await prisma.fantraxLeague.upsert({
-    where: {
-      userId_leagueName_season: {
-        userId: fantraxUser.id,
-        leagueName: info.data.leagueName,
-        season,
+  let row: { id: string }
+  if (refreshTarget) {
+    // Recheck ownership at write time; names can change without changing this UUID.
+    const updated = await prisma.fantraxLeague.updateMany({
+      where: { id: refreshTarget.id, appUserId: args.appUserId, sourceLeagueId: args.leagueId, season },
+      data: { ...payload, leagueName: info.data.leagueName },
+    })
+    if (updated.count !== 1) return { ok: false, error: 'Fantrax league snapshot ownership changed', kind: 'unavailable' }
+    row = { id: refreshTarget.id }
+  } else {
+    row = await prisma.fantraxLeague.upsert({
+      where: {
+        userId_leagueName_season: {
+          userId: fantraxUser!.id,
+          leagueName: info.data.leagueName,
+          season,
+        },
       },
-    },
-    create: { userId: fantraxUser.id, leagueName: info.data.leagueName, season, ...payload },
-    update: payload,
-    select: { id: true },
-  })
+      create: { userId: fantraxUser!.id, leagueName: info.data.leagueName, season, ...payload },
+      update: payload,
+      select: { id: true },
+    })
+
+  }
 
   return {
     ok: true,
