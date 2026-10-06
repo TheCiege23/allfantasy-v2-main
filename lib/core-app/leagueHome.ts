@@ -28,7 +28,7 @@ import { getRecentTrades, gradeProviderRecentTrade, liveCompletedTrade, type Rec
 import { recordPendingOffers } from './urgencyBadges'
 import { scanPendingSleeperTrades } from '@/lib/provider-trades/scanPendingSleeperTrades'
 import { getMatchupData } from '@/lib/core-app/matchup'
-import { getRivalRecords } from '@/lib/core-app/dash3aPanels'
+import { getRivalRecords, type RivalRow } from '@/lib/core-app/dash3aPanels'
 import { getDraftHqAll } from './draftHqAll'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/leagueStage'
@@ -312,6 +312,8 @@ export type LeagueHomeData = {
       ties: number
       meetings: number
       lastResult: string | null
+      /** The last meeting as parts, so the screen can say it in the reader's language (dashboard3aCopy `rivalLastText`). */
+      lastParts?: RivalRow['lastParts']
     }>
   >
   syncAge: { label: string; stale: boolean }
@@ -375,6 +377,24 @@ function settingWeek(settings: unknown, ...keys: string[]): number | null {
  * Replaced by `buildSeasonTimeline` in ./seasonTimeline, which reads the
  * league's own settings and omits any phase whose setting is absent.
  */
+
+/**
+ * The rival rows League Home ships to the screen, built field by field from `getRivalRecords`. A field
+ * left out here never reaches the screen and nothing complains — `lastParts` was, so the last meeting's
+ * margin stayed English in Spanish ("beat you by 10.0"). Exported so a test pins every field through.
+ */
+export function leagueRivalRows(rows: RivalRow[]): Extract<LeagueHomeData['rivalry'], { available: true }>['data'] {
+  return rows.map((r) => ({
+    key: r.key,
+    name: r.name,
+    wins: r.wins,
+    losses: r.losses,
+    ties: r.ties,
+    meetings: r.meetings,
+    lastResult: r.lastResult,
+    lastParts: r.lastParts ?? null,
+  }))
+}
 
 export async function getLeagueHomeData(
   leagueId: string,
@@ -921,15 +941,7 @@ export async function getLeagueHomeData(
     : rivalData?.available
       ? {
           available: true,
-          data: rivalData.data.rows.map((r) => ({
-            key: r.key,
-            name: r.name,
-            wins: r.wins,
-            losses: r.losses,
-            ties: r.ties,
-            meetings: r.meetings,
-            lastResult: r.lastResult,
-          })),
+          data: leagueRivalRows(rivalData.data.rows),
         }
       : {
           available: false,

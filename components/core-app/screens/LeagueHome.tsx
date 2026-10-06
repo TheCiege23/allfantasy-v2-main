@@ -22,6 +22,7 @@ import { ConnectedRoster } from './ConnectedRoster'
 import { rosterLabel } from '@/lib/core-app/managerName'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
+import { rivalLastText } from '@/lib/core-app/dashboard3aCopy'
 import { rosterIdsMatch } from '@/lib/core-app/rosterIdMatch'
 import { PROJECTION_PROVIDER_LABEL } from '@/lib/core-app/projectionProvider'
 import type { StandingsLineups } from '@/lib/core-app/standingsLineups'
@@ -1084,8 +1085,10 @@ export function LeagueHome({
                       <b>{r.name}</b>
                       <em>
                         {r.meetings} {copy(r.meetings === 1 ? 'meeting' : 'meetings')}
-                        {/* `copy` turns a tied last meeting's 'a tie' into 'empate'; margins pass through as before. */}
-                        {r.lastResult ? ` · ${copy('last:')} ${copy(r.lastResult)}` : ''}
+                        {/* The last meeting rebuilt from its parts — the dashboard's own `rivalLastText` — so the
+                            margin reads «te ganó por 10.0» in Spanish. A row with no parts falls back to `copy`,
+                            which still turns a tied 'a tie' into 'empate'. */}
+                        {r.lastResult ? ` · ${copy('last:')} ${copy(rivalLastText(r, language) ?? r.lastResult)}` : ''}
                       </em>
                     </span>
                     <b className={r.wins >= r.losses ? 'af-lh-good' : 'af-lh-bad'}>
