@@ -87,6 +87,10 @@ function spendGuardExceptions(): string[] {
  * A host matching one of these is examined and dismissed, not ignored.
  */
 const CATEGORIES: Array<{ name: string; why: string; test: RegExp }> = [
+  // Reviewed college/NFL biographies in verifiedNcaafReserves.ts are attribution
+  // links returned with season-readiness evidence, never live provider reads.
+  // The NEVER_FETCHED assertion below must continue to fail if a caller fetches them.
+  { name: 'share-link', why: 'official athlete biography/season evidence links, never fetched at runtime', test: /^(broncosports\.com|byucougars\.com|gseagles\.com|hawaiiathletics\.com|hokiesports\.com|miamiredhawks\.com|msuspartans\.com|southernmiss\.com|txst\.com|utahstateaggies\.com|www\.bengals\.com|www\.chiefs\.com|www\.raiders\.com|www\.vikings\.com)$/i },
   { name: 'namespace', why: 'OOXML chart, drawing and relationship identifiers in locally generated Excel files; never fetched', test: /^schemas\.openxmlformats\.org$/i },
   { name: 'share-link', why: 'Stats Guy public attribution website; the separate API host is monitored', test: /^statsguyfantasy\.com$/i },
   { name: 'first-party', why: 'our own origins', test: /(^|\.)allfantasy\.(ai|app|com|io|local)$/i },

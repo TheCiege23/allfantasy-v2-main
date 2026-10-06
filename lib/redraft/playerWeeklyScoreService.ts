@@ -31,6 +31,7 @@ import { resolveStoredSeasonType } from '@/lib/sports-data/riSeasonType'
 import { bridgeRosterIdsToGameLogIds } from '@/lib/redraft/rosterGameLogIdBridge'
 import { bridgeNcaafRosterIdsToCfbdIds } from '@/lib/redraft/ncaafGameLogIdBridge'
 import { loadNcaafWeekParticipation, NCAAF_ZERO_VERDICTS, type NcaafNoRowVerdict } from '@/lib/redraft/ncaafWeekParticipation'
+import { ncaafReserveAvailability, type NcaafReserveAvailability } from '@/lib/player-identity/verifiedNcaafReserves'
 import { aggregateNcaafWeek, isNcaafSport } from '@/lib/scoring-runtime/ncaafStatNormalization'
 
 export type WeeklyScoreSyncSummary = {
@@ -53,7 +54,8 @@ export type WeeklyScoreSyncSummary = {
    * they recorded nothing (see ncaafWeekParticipation.ts) — and why the rest with no row stayed missing.
    */
   ncaafZeroScored?: Array<{ playerId: string; reason: 'bye' | 'no_stat' }>
-  ncaafMissingByReason?: Partial<Record<'pending' | 'not_ingested' | 'unmatched' | 'no_team', number>>
+  ncaafMissingByReason?: Partial<Record<'pending' | 'not_ingested' | 'unmatched' | 'no_team' | NcaafReserveAvailability, number>>
+  ncaafSeasonAvailability?: Array<{ playerId: string; status: NcaafReserveAvailability; reason: string; evidenceUrl: string }>
   scoresUpserted: number
   missingCachePlayerIds: string[]
   missingWeekPlayerIds: string[]
@@ -358,10 +360,12 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
    */
   const ncaafRowsByPlayer = new Map<string, unknown[]>()
   const ncaafResolvedRosterIds = new Set<string>()
+  let ncaafImported = false
   let ncaafVerdictFor: ((team: string | null | undefined) => NcaafNoRowVerdict) | null = null
   if (isNcaaf) {
     const sourceLeague = await prisma.league.findUnique({ where: { id: season.leagueId }, select: { platform: true } })
-    const namespace = String(sourceLeague?.platform ?? '').toLowerCase() === 'fantrax' ? 'fantrax' : 'pool'
+    ncaafImported = String(sourceLeague?.platform ?? '').toLowerCase() === 'fantrax'
+    const namespace = ncaafImported ? 'fantrax' : 'pool'
     const bridge = await bridgeNcaafRosterIdsToCfbdIds(prisma as never, playerIds, namespace)
     summary.cfbdIdsResolved = bridge.cfbdIds.length
     summary.unresolvedCfbdPlayerIds = bridge.unresolved
@@ -515,6 +519,16 @@ export async function syncPlayerWeeklyScoresForRedraftSeason(params: {
      */
     if (isNcaaf) {
       const rows = ncaafRowsByPlayer.get(playerId) ?? []
+      const reserve = ncaafImported ? ncaafReserveAvailability(playerId, seasonYear) : undefined
+      if (reserve && (rows.length === 0 || reserve.availability !== 'needs_verification')) {
+        // Current-season primary evidence takes priority over an old school/provider roster.
+        const byReason = (summary.ncaafMissingByReason ??= {})
+        byReason[reserve.availability] = (byReason[reserve.availability] ?? 0) + 1
+        ;(summary.ncaafSeasonAvailability ??= []).push({ playerId, status: reserve.availability, reason: reserve.reason, evidenceUrl: reserve.evidenceUrl })
+        if (rows.length) summary.warnings.push(`NCAAF season evidence conflicts with game rows for ${playerId}; scoring withheld pending review.`)
+        summary.missingCachePlayerIds.push(playerId)
+        continue
+      }
       if (rows.length === 0) {
         /*
          * No CFBD row is not "no data": CFBD lists only players who recorded a stat. A resolved player
