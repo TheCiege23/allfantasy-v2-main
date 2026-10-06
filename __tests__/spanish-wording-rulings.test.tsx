@@ -13,6 +13,10 @@
  * 7. A waiver CLAIM is «reclamo» (masculine), the waiver ORDER is «prioridad de reclamo» and a waiver
  *    DEADLINE is «plazo de reclamos». A second sweep forbids the old renderings, and every singular
  *    «red de comisionado» is the plural «red de comisionados».
+ * 8. "Fix all": no Spanish value says «waiver(s)» at all. The wire, the players and the Waivers
+ *    screen (and a settings tab titled "Waivers") are «agentes libres»; the waiver system / type is
+ *    «reclamos»; a run is «procesamiento de reclamos»; a waiver period is «período de reclamos».
+ *    The only survivor is "Waiver Warriors", a made-up team NAME on the landing page.
  *
  * Every changed string is pinned in Spanish AND asserted unchanged in English.
  */
@@ -61,6 +65,15 @@ import UserOsCard from '@/components/decision-os/UserOsCard'
 import type { CommissionerLeagueProfile } from '@/lib/commissioner-os/profile/types'
 import type { ManagerPresence, PresenceManager } from '@/lib/core-app/managerPresence'
 import type { UserOsSnapshot } from '@/lib/decision-os/userOs'
+import { getLandingCopy } from '@/lib/i18n/landing-copy'
+import { getNocturneCopy } from '@/components/landing/nocturne/copy.i18n'
+import { LANDING_COPY as JOURNEY_COPY } from '@/components/landing/journey/copy'
+import { DRAFT_TOPICS } from '@/lib/core-app/help-topics/draft'
+import { OUTLOOK_TOPICS } from '@/lib/core-app/help-topics/outlook'
+import { RANKINGS_TOPICS } from '@/lib/core-app/help-topics/rankings'
+import { TRADES_TOPICS } from '@/lib/core-app/help-topics/trades'
+import { WAIVERS_TOPICS } from '@/lib/core-app/help-topics/waivers'
+import { teamWorkspaceCopy } from '@/lib/core-app/teamWorkspaceCopy'
 
 afterEach(() => {
   cleanup()
@@ -686,5 +699,210 @@ describe('a waiver CLAIM is «reclamo», app-wide', () => {
     }
     expect(es['coowner.info']).toContain('hacer reclamos, proponer trades')
     expect(en['coowner.info']).toContain('make waiver claims, propose trades')
+  })
+})
+
+/* ── 8. No Spanish value says «waiver» ───────────────────────────────────────── */
+
+/** The word itself — not `waiverPriority`, `waiver_claim`, `/core/waivers` or `{{waiverDay}}`. */
+const WAIVER_WORD = /(?<![\w/#.\-{])waivers?(?![\w\-/}])/i
+/** A made-up team NAME on the landing page's demo board — a name, not vocabulary. */
+const PROPER_NAMES = /Waiver Warriors/g
+const saysWaiver = (s: string) => WAIVER_WORD.test(s.replace(PROPER_NAMES, ''))
+
+/** Every string leaf of a copy object. */
+function leaves(value: unknown, path = '', out: Array<[string, string]> = []): Array<[string, string]> {
+  if (typeof value === 'string') out.push([path, value])
+  else if (typeof value === 'function') leaves((value as (p: null) => unknown)(null), `${path}()`, out)
+  else if (value && typeof value === 'object')
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) leaves(v, path ? `${path}.${k}` : k, out)
+  return out
+}
+
+/*
+ * The source sweep. A string literal is Spanish when it sits in the es table of the legacy i18n
+ * file or in its es-parity file, follows `es ?`, is keyed `es:` / `labelEs:` (any `…Es:`), is the
+ * second argument of a two-language call (`L('Open waivers', '…')`), or reads as Spanish — the last
+ * one a word-list heuristic that skips the landing page's other languages.
+ */
+const LITERAL = /'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g
+const SPANISH_MARKS = /[áéíóúñ¿¡«»]/g
+const SPANISH_WORDS =
+  /\b(el|los|las|la|de|del|que|una|un|para|tus?|con|se|y|en|esta|este|por|al|reclamos?|agentes|ligas?|semana|equipos?|tiene|cuando|hoy|cambios|herramientas|diarios|rotativos|lista)\b/gi
+const ENGLISH_WORDS = /\b(the|and|your|you|is|are|of|to|for|with|this|that|on|in|it|be|or|from|by|an)\b/gi
+const OTHER_LANGUAGE =
+  /[đăơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ一-鿿]|\b(ang|ng|mga|sa|kay|ay|và|của|lahat|naghihintay)\b/i
+/** More Spanish than English, by marks and short function words. A capital "Y" is a variable name. */
+function readsSpanish(text: string): boolean {
+  if (OTHER_LANGUAGE.test(text)) return false
+  const es = (text.match(SPANISH_MARKS)?.length ?? 0) + (text.match(SPANISH_WORDS)?.filter((w) => w !== 'Y').length ?? 0)
+  return es > (text.match(ENGLISH_WORDS)?.length ?? 0)
+}
+
+function spanishWaiverLiterals(rel: string, rawSrc: string): string[] {
+  // Blank out comments (keeping offsets and line numbers), so prose about the rule is not a hit.
+  const src = rawSrc
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    .replace(/^\s*\/\/.*$/gm, (m) => m.replace(/[^\n]/g, ' '))
+  let esFrom = -1
+  let esTo = -1
+  if (rel === 'lib/i18n/translations.ts') {
+    esFrom = src.indexOf('\n  es: {')
+    esTo = esFrom + 5 + src.slice(esFrom + 5).search(/\n {2}[a-z]{2}: \{/)
+  }
+  const hits: string[] = []
+  let prev: { start: number; end: number; text: string } | null = null
+  for (const m of src.matchAll(LITERAL)) {
+    const start = m.index ?? 0
+    const end = start + m[0].length
+    // Counted only for a hit: counting every literal's line is quadratic in a 8,000-line file.
+    const lineOf = () => src.slice(0, start).split('\n').length
+    let text = m[1] ?? m[2] ?? m[3] ?? ''
+    if (m[3] !== undefined && text.includes('${')) {
+      // A template's `${…}` holes are code: sweep them as code, and judge the template on its own words.
+      for (const hole of text.matchAll(/\$\{([^{}]*)\}/g))
+        if (WAIVER_WORD.test(hole[1]))
+          hits.push(...spanishWaiverLiterals(rel, hole[1]).map((h) => h.replace(/:\d+:/, `:${lineOf()}:`)))
+      text = text.replace(/\$\{[^{}]*\}/g, ' ')
+    }
+    const last = prev
+    prev = { start, end, text }
+    if (!saysWaiver(text)) continue
+    const before = src.slice(Math.max(0, start - 60), start)
+    // An object key — but not the first branch of a ternary (`es ? 'Waivers' : 'Waivers'`).
+    if (/^\s*:/.test(src.slice(end, end + 3)) && !/\?\s*$/.test(before)) continue
+    const spanish =
+      (esFrom >= 0 && start > esFrom && start < esTo) ||
+      rel === 'lib/i18n/translations-es-parity.ts' ||
+      /\b(es|isEs|isSpanish|spanish)\s*\?\s*$/.test(before) ||
+      /===?\s*'es'\s*\?\s*$/.test(before) ||
+      /(\b\w*Es|\bes)\s*:\s*$/.test(before) ||
+      (last !== null &&
+        /^\s*,\s*$/.test(src.slice(last.end, start)) &&
+        // Only the two-language helpers (`L(en, es)`, `t(en, es)`): `series('waivers', 'Waivers', …)` is not one.
+        /(?<![\w.])(L|t|tr|tx|bi)\(\s*$/.test(src.slice(Math.max(0, last.start - 12), last.start)) &&
+        saysWaiver(last.text)) ||
+      readsSpanish(text)
+    if (spanish && !OTHER_LANGUAGE.test(text)) hits.push(`${rel}:${lineOf()}: ${text.replace(/\s+/g, ' ').slice(0, 140)}`)
+  }
+  return hits
+}
+
+describe('no Spanish value says «waiver» (the owner: "fix all")', () => {
+  it('the sweep and its word test catch what they exist for, and nothing else', () => {
+    // Positive controls — each shape the old code used, as the sweep sees it.
+    const control = (rel: string, src: string) => spanishWaiverLiterals(rel, src).length
+    expect(control('x.tsx', "const a = es ? 'Waivers' : 'Waivers'"), 'after es ?').toBe(1)
+    expect(control('x.ts', "add('k', L('Open waivers', 'Abrir waivers'))"), 'second argument').toBe(1)
+    expect(control('x.ts', "const t = { labelEs: 'Waivers' }"), '…Es: key').toBe(1)
+    expect(control('lib/i18n/translations-es-parity.ts', '  "lsHub.tab.waivers": "Waivers",'), 'es-parity value').toBe(1)
+    expect(control('x.ts', "body: 'Una semana de fantasy: resultados el martes, waivers el miércoles.'"), 'reads Spanish').toBe(1)
+    expect(control('lib/i18n/translations.ts', '  en: {\n    "k": "Waivers"\n  },\n  es: {\n    "k": "Waivers"\n  },\n  vi: {\n  }'), 'translations.es only').toBe(1)
+    // …and the shapes it must leave alone.
+    expect(control('x.ts', "L('Open waivers', 'Abrir agentes libres')"), 'translated').toBe(0)
+    expect(control('x.ts', "const href = '/core/waivers'; const k = 'waiverPriority'"), 'paths and ids').toBe(0)
+    expect(control('x.ts', "const e = 'Waivers processed. 2 claims awarded.'"), 'English').toBe(0)
+    expect(control('x.ts', "const v = 'Trên mọi giải cùng lúc: waiver hôm nay'"), 'another language').toBe(0)
+    expect(control('x.ts', "tag: 'Tu WR en Waiver Warriors está Questionable'"), 'a team name').toBe(0)
+    expect(control('x.ts', '/* the Waivers screens\' words, for el equipo */ const a = 1'), 'a comment').toBe(0)
+    expect(control('x.ts', "d: \"Prices a waiver pickup: 'add X and drop Y'.\""), 'English with a capital Y').toBe(0)
+    expect(control('x.tsx', "const s = `${es ? 'agentes libres' : 'waivers'}: ${why}`"), 'a template hole, translated').toBe(0)
+    expect(control('x.tsx', "const s = `${es ? 'Waivers' : 'Waivers'}: ${why}`"), 'a template hole, not translated').toBe(1)
+    expect(saysWaiver('{{weeks}} semanas · Waivers {{waiverDay}}')).toBe(true)
+    expect(saysWaiver('Reclamos {{waiverDay}}')).toBe(false)
+  })
+
+  it('no source file has a Spanish string that says «waiver»', () => {
+    const files = ['lib', 'components', 'app'].flatMap((d) => sourceFiles(join(ROOT, d)))
+    const rel = files.map((f) => relative(ROOT, f).replace(/\\/g, '/'))
+    for (const must of [
+      'lib/i18n/translations.ts',
+      'lib/i18n/translations-es-parity.ts',
+      'lib/i18n/landing-copy.ts',
+      'lib/core-app/help-topics/home.ts',
+      'lib/core-app/teamWorkspaceCopy.ts',
+      'components/landing/nocturne/copy.i18n.ts',
+      'components/core-app/screens/DraftPhase4.tsx',
+    ])
+      expect(rel, must).toContain(must)
+    const hits: string[] = []
+    files.forEach((file, i) => {
+      const src = readFileSync(file, 'utf8')
+      if (!/waiver/i.test(src)) return
+      hits.push(...spanishWaiverLiterals(rel[i], src.replace(/\r\n/g, '\n')))
+    })
+    expect(hits).toEqual([])
+  }, 180_000)
+
+  it('no Spanish copy object says «waiver»: the i18n table, the landing pages and every help topic', () => {
+    const es = translations.es as Record<string, string>
+    expect(Object.keys(es).length, 'the es table loaded').toBeGreaterThan(1000)
+    const prices = { min: '$4.99', max: '$9.99' }
+    const sources: Array<[string, unknown]> = [
+      ['translations.es', es],
+      ['landing (prices)', getLandingCopy('es', prices)],
+      ['landing (no prices)', getLandingCopy('es', null)],
+      ['nocturne', getNocturneCopy('es')],
+      ['journey', JOURNEY_COPY.es],
+      ...Object.entries({ HOME_TOPICS, CAREER_TOPICS, DRAFT_TOPICS, OUTLOOK_TOPICS, RANKINGS_TOPICS, TRADES_TOPICS, WAIVERS_TOPICS }).map(
+        ([name, topics]): [string, unknown] => [name, Object.fromEntries(Object.entries(topics).map(([k, t]) => [k, (t as { es: unknown }).es]))],
+      ),
+    ]
+    const hits: string[] = []
+    for (const [name, obj] of sources) {
+      const strings = leaves(obj)
+      expect(strings.length, name).toBeGreaterThan(0)
+      for (const [path, text] of strings) if (saysWaiver(text)) hits.push(`${name} ${path}: ${text.slice(0, 120)}`)
+    }
+    // The English beside them still says "waiver" — the walk reads real copy, not an empty shell.
+    expect(leaves(getLandingCopy('en', null)).some(([, t]) => saysWaiver(t)), 'English landing control').toBe(true)
+    expect(leaves(translations.en).some(([, t]) => saysWaiver(t)), 'English table control').toBe(true)
+    expect(hits).toEqual([])
+  })
+
+  it('a sample, pinned in Spanish with its English unchanged', () => {
+    const es = translations.es as Record<string, string>
+    const en = translations.en as Record<string, string>
+    const cases: Array<[string, string, string]> = [
+      ['lsPanel.waiverType', 'Tipo de reclamos', 'Waiver type'],
+      ['lsHub.wv.type', 'Tipo de reclamos', 'Waiver type'],
+      ['lsPanel.waiver.rolling', 'Prioridad de reclamo rotativa', 'Rolling waivers'],
+      ['lsHub.wv.rolling', 'Prioridad de reclamo rotativa', 'Rolling waivers'],
+      ['lsHub.wv.reverse', 'Prioridad de reclamo por clasificación inversa', 'Reverse standings'],
+      ['lsPanel.waiver.faab', 'FAAB (presupuesto)', 'FAAB (waiver budget)'],
+      ['lsPanel.rules.budget', 'Presupuesto FAAB', 'Waiver / FAAB budget'],
+      ['lsHub.wv.period', 'Período de reclamos (h)', 'Waiver period (hrs)'],
+      ['lsPanel.rules.waiverTime', 'Período de reclamos', 'Waiver time'],
+      ['lsHub.tab.waivers', 'Agentes libres', 'Waivers'],
+      ['league.appSettings.subtab.waiverSettings', 'Agentes libres', 'Waiver Settings'],
+      ['lsPanel.rules.waiversBudget', 'Agentes libres y presupuesto', 'Waivers & budget'],
+      ['dashboard.warroom.waiverWire.title', 'Agentes libres', 'Waiver Wire'],
+      ['dashboard.warroom.actionCenter.waiverDetail', 'Revisa los agentes libres', 'Check the waiver wire'],
+      ['landing.previews.leagueDashboard.snippet', 'Semana 6 · Power rankings · Vistas previas de matchups · Prioridad de reclamo', 'Week 6 · Power rankings · Matchup previews · Waiver order'],
+      ['createLeague.team.guillotineDaily', ' · período de reclamos de 2 días por defecto', ' · 2-day waiver freeze default'],
+      ['decide.shadow.body', 'Importada de {{source}}. Edita alineaciones, trades y reclamos con libertad: los cambios se quedan en AllFantasy y nunca llegan a {{source}}, que sigue siendo el registro oficial de tu liga.', "Imported from {{source}}. Edit lineups, trades and waivers freely — changes stay inside AllFantasy and never reach {{source}}, which remains your league's system of record."],
+      ['home.tools.waiver.cta', 'Abrir Asesor de agentes libres', 'Open Waiver Advisor'],
+    ]
+    for (const [key, spanish, english] of cases) {
+      expect(es[key], key).toBe(spanish)
+      expect(en[key], key).toBe(english)
+    }
+
+    // The help tip #2117 flagged: «waivers el miércoles» was the waiver RUN.
+    expect(HOME_TOPICS.yourWeekRoutine.es.body).toContain(
+      'resultados el martes, procesamiento de reclamos el miércoles, alineaciones de jueves a sábado',
+    )
+    // …and the second «waivers» there is the routine's step, which /core names «Agentes libres».
+    expect(HOME_TOPICS.yourWeekRoutine.es.body).toContain('agentes libres cuando hiciste una incorporación esta semana')
+    expect(HOME_TOPICS.yourWeekRoutine.en.body).toContain('results Tuesday, waivers Wednesday, lineups Thursday to Saturday')
+
+    expect(teamWorkspaceCopy('Waiver claims and roster impact', 'es')).toBe('Reclamos y efecto en la plantilla')
+    expect(teamWorkspaceCopy('Waiver deadlines', 'es')).toBe('Plazos de reclamos')
+    expect(teamWorkspaceCopy('Waiver deadlines', 'en')).toBe('Waiver deadlines')
+
+    expect(JSON.stringify(getNocturneCopy('es'))).toContain('Reclamos hoy')
+    expect(JSON.stringify(getNocturneCopy('en'))).toContain('Waiver today')
+    expect(JOURNEY_COPY.es.journey.waiverWednesday.eyebrow).toBe('Miércoles de reclamos')
+    expect(JOURNEY_COPY.en.journey.waiverWednesday.eyebrow).toBe('Waiver Wednesday')
   })
 })
