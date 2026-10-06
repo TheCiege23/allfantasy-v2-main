@@ -1,6 +1,8 @@
 'use client'
 
 import { PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip } from 'recharts'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { cardsCopy } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 export interface ManagerFingerprint {
   managerName: string
@@ -58,12 +60,27 @@ const AXES: { key: keyof Omit<ManagerFingerprint, 'managerName' | 'labels'>; lab
   { key: 'riskTolerance', label: 'Risk' },
 ]
 
+/**
+ * ⚠ SPANISH NEEDS WIDER SIDE MARGINS, BECAUSE "Actividad" IS THE RIGHT-HAND LABEL. Measured
+ * 2026-10-06 in Inter 11px in a browser: "Activity" 38.98px, "Actividad" 48.64px (1.25×), "Riesgo"
+ * 35.31px on the left. The space a horizontal label gets is `0.14·width + 0.72·margin − 8` while the
+ * ring is width-bound (see the sweep below), so at the grid's 170px floor margin 30 leaves ~37.4px —
+ * "Actividad" would clip by ~11px, silently. 46 leaves ~48.9px, enough for the larger of the two
+ * measurements of "Activity" scaled by 1.25. The cost is a smaller ring on a narrow card only: past
+ * ~230px the ring is height-bound and both languages draw it the same size. English keeps 30 byte
+ * for byte. The vertical labels ("Agresividad", "Intercambios") are centred on the axis with the
+ * whole half-width to spare and do not compete for this space.
+ */
+const SIDE_MARGIN = { en: 30, es: 46 } as const
+
 function Fingerprint({ manager, axisMax }: { manager: ManagerFingerprint; axisMax: FingerprintAxisMax }) {
+  const { language } = useOptionalLanguage()
+  const side = language === 'es' ? SIDE_MARGIN.es : SIDE_MARGIN.en
   const data = AXES.map((axis) => {
     const raw = manager[axis.key]
     const max = axisMax[axis.key]
     return {
-      axis: axis.label,
+      axis: cardsCopy(axis.label, language),
       // Plotted normalised; `raw` and `max` ride along so the tooltip can show the real score.
       value: Math.round((raw / max) * 100),
       raw,
@@ -125,7 +142,7 @@ function Fingerprint({ manager, axisMax }: { manager: ManagerFingerprint; axisMa
            * see __tests__/core-app/type-floor.test.ts.
            */}
         <ResponsiveContainer width="100%" height="100%">
-          <RadarChart data={data} margin={{ top: 8, right: 30, bottom: 4, left: 30 }} outerRadius="72%">
+          <RadarChart data={data} margin={{ top: 8, right: side, bottom: 4, left: side }} outerRadius="72%">
             <PolarGrid stroke="var(--border)" />
             <PolarAngleAxis dataKey="axis" tick={{ fill: 'var(--muted2)', fontSize: 11 }} />
             {/* Ticks hidden but the domain pinned: the ring IS 100, stated once in the panel note. */}
@@ -133,7 +150,7 @@ function Fingerprint({ manager, axisMax }: { manager: ManagerFingerprint; axisMa
             <Tooltip
               contentStyle={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--text)' }}
               formatter={(_value, _name, item) => [
-                `${item?.payload?.raw ?? 0} of ${item?.payload?.max ?? 0}`,
+                cardsCopy(`${item?.payload?.raw ?? 0} of ${item?.payload?.max ?? 0}`, language),
                 String(item?.payload?.axis ?? ''),
               ]}
             />
