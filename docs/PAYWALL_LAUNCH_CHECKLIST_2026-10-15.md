@@ -43,8 +43,9 @@ catalog. See §8.
 ### 3a. /core depths (`lib/core-app/coreDepthAccess.ts:41-72`)
 
 - **Before launch:** every depth is open to everyone, marked "Free until Oct 15 — then {plan}"
-  (`components/core-app/CoreDepthLock.tsx:69-77`).
-- **After launch:** a viewer without the plan sees the lock card with "See {plan}" (`:62-64`).
+  (`components/core-app/CoreDepthLock.tsx:73-82`). Spanish readers get «Gratis hasta el 15 de octubre —
+  luego, {plan}»; the words live in `lib/core-app/coreDepthLockCopy.ts`, the gate does not read the language.
+- **After launch:** a viewer without the plan sees the lock card with "See {plan}" / «Ver {plan}» (`:66-68`).
 - **If the plan lookup fails after launch, the depth stays LOCKED** (`lib/core-app/corePaywall.ts:30`).
 
 | Depth | Plan | Where |
