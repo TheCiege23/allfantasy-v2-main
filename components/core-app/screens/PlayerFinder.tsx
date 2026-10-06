@@ -28,6 +28,7 @@ import { reportedLabel } from '@/lib/core-app/injuryReport'
 import { pregameInactive } from '@/lib/core-app/pregameInactive'
 import { byeChip, byeStatus } from '@/lib/core-app/byeStatus'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { lockSubjectText, tradingForSubject } from '@/lib/core-app/coreDepthLockCopy'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
@@ -772,20 +773,20 @@ export function PlayerFinder({
         {detail && leagueView ? <StickyActionBar view={leagueView} playerName={detail.player.name} /> : null}
         {/* The trade visual, under the ownership card, when someone else has him here. */}
         {detail && leagueView?.ownership.kind === 'other' && depthAccess && depthLocked ? (
-          <CoreDepthLock access={depthAccess} what={`Trading for ${detail.player.name}`} />
+          <CoreDepthLock access={depthAccess} what={tradingForSubject(detail.player.name, language)} lang={language} />
         ) : detail && leagueView?.ownership.kind === 'other' && tradeVisual ? (
-          <CoreDepthGate access={depthAccess}>
+          <CoreDepthGate access={depthAccess} lang={language}>
             <TradeVisual state={tradeVisual} playerName={detail.player.name} />
           </CoreDepthGate>
         ) : null}
 
         {detail && compareRequested && depthAccess && depthLocked ? (
-          <CoreDepthLock access={depthAccess} what="Side-by-side compare" />
+          <CoreDepthLock access={depthAccess} what={lockSubjectText('Side-by-side compare', language)} lang={language} />
         ) : null}
 
         {/* ── Detail ────────────────────────────────────────────────── */}
         {detail && compare ? (
-          <CoreDepthGate access={depthAccess}>
+          <CoreDepthGate access={depthAccess} lang={language}>
             <PlayerCompare
               a={detail}
               b={compare}
@@ -1264,7 +1265,7 @@ export function PlayerFinder({
             {/* ── Recommended moves ─────────────────────────────────── */}
             {signedIn ? (
               <div className="af-pf-d-only">
-                <CoreDepthGate access={depthAccess} what="Recommended moves">
+                <CoreDepthGate access={depthAccess} what={lockSubjectText('Recommended moves', language)} lang={language}>
                   <RecommendedMoves
                     moves={moves}
                     emptyReason={
@@ -1320,11 +1321,11 @@ export function PlayerFinder({
       */}
       {detail && depthAccess && depthLocked && signedIn ? (
         <aside className="af-pf-side" aria-label={t.sideLabel}>
-          <CoreDepthLock access={depthAccess} what="The verdict, bench swaps and trade windows" />
+          <CoreDepthLock access={depthAccess} what={lockSubjectText('The verdict, bench swaps and trade windows', language)} lang={language} />
         </aside>
       ) : detail && (impactRows.length > 0 || presence || (windows && windows.length > 0)) ? (
         <aside className="af-pf-side" aria-label={t.sideLabel}>
-          {depthAccess ? <FreeUntilNote access={depthAccess} /> : null}
+          {depthAccess ? <FreeUntilNote access={depthAccess} lang={language} /> : null}
           {impactRows.length > 0 ? (
             <PlayerVerdict
               playerName={detail.player.name}

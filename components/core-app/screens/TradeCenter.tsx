@@ -46,6 +46,7 @@ import {
 } from '@/components/core-app/screens/TradePartnerSuggestions'
 import type { PartnerRecommendation } from '@/lib/trade-intel/partnerRanking'
 import { CoreDepthGate, CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { lockSubjectText } from '@/lib/core-app/coreDepthLockCopy'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { TradeCompetitiveEdge, type TradeEdgeState } from '@/components/core-app/screens/TradeCompetitiveEdge'
 import { LeagueTypeGradeNote } from '@/components/league/LeagueTypeGradeNote'
@@ -1853,7 +1854,7 @@ export function TradeCenter(props: {
         <div className="af-tc-partner" data-mstep="get">
           {/* Item #8: who is worth trading with, and a deal to start from. */}
           {depthAccess && depthLocked ? (
-            <CoreDepthLock access={depthAccess} what="Who to trade with" />
+            <CoreDepthLock access={depthAccess} what={lockSubjectText('Who to trade with', language)} lang={language} />
           ) : (
             <TradePartnerSuggestions
               ranking={partnerRanking}
@@ -2590,7 +2591,7 @@ export function TradeCenter(props: {
 
       {result && depthAccess && depthLocked ? (
         <div className="af-tc-mstep-wrap" data-mstep="review">
-          <CoreDepthLock access={depthAccess} what="The full trade breakdown" />
+          <CoreDepthLock access={depthAccess} what={lockSubjectText('The full trade breakdown', language)} lang={language} />
         </div>
       ) : intel ? (
         <details className="af-tc-analysis-fold" data-mstep="review">
@@ -2598,7 +2599,7 @@ export function TradeCenter(props: {
         <section className="af-tc-dos" data-mstep="review">
           {/* Was "Decision OS · this deal" — internal name; the section reads this deal. */}
           <div className="af-label">{copy('This deal')}</div>
-          {depthAccess ? <FreeUntilNote access={depthAccess} /> : null}
+          {depthAccess ? <FreeUntilNote access={depthAccess} lang={language} /> : null}
           {noSignal ? <p className="af-tc-why">{copy('Proposal grade unavailable. Priced assets and roster context alone do not establish that the complete trade is fair.')}</p> : intel.why ? <p className="af-tc-why">{copy(intel.why)}</p> : null}
 
           <div className="af-tc-pairs">
@@ -2718,7 +2719,7 @@ export function TradeCenter(props: {
         exactly why steps are keyed on `data-mstep` and never on a class name.
       */}
       <div className="af-tc-mstep-wrap" data-mstep="get">
-        <CoreDepthGate access={depthAccess} what="The trade finder" showFreeUntil={false}>
+        <CoreDepthGate access={depthAccess} what={lockSubjectText('The trade finder', language)} lang={language} showFreeUntil={false}>
           <TradeFinderPanel leagueId={props.league?.id ?? null} />
         </CoreDepthGate>
       </div>

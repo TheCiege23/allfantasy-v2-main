@@ -1,6 +1,7 @@
 import { coreUiCopy } from './coreUiCopy'
 import { kickoffText } from './kickoffText'
-import { designationText, reasonText } from './playerFinderCopy'
+import { designationText, finderCopy, reasonText } from './playerFinderCopy'
+import { claimText, takenText } from './finderSearchCopy'
 import { ageText } from './shellCopy'
 import { slotLabel } from './depthChart'
 import { projectionHeadline, type SeasonSummary } from './playerSeason'
@@ -15,7 +16,8 @@ import { projectionHeadline, type SeasonSummary } from './playerSeason'
  * each component's English byte for byte — the player-finder-* suites pin it — so English mode is
  * unchanged.
  *
- * Shared translators are reused, never copied: designations through `designationText` (singular — a
+ * Shared translators are reused, never copied: "Claim X in Y" and "Taken" are finderSearchCopy's
+ * (`claimText`, `takenText`), the PROJ column is playerFinderCopy's, designations through `designationText` (singular — a
  * player is «Inactivo», not the column heading «Inactivos»), month-day dates and the news weekday
  * through `kickoffText`, relative ages through shellCopy's `ageText`, "Live" / "Final" / "Week" /
  * "Trade Center" through `coreUiCopy`, and an unknown reason through playerFinderCopy's `reasonText`.
@@ -67,7 +69,7 @@ export type PlayerInfoCopy = {
   dcAsOf: (date: string) => string
   // ── WhoStartsHim ──────────────────────────────────────────────────────────
   wsHeading: (last: string) => string
-  /** The CoreDepthLock subject. CoreDepthLock itself is English-only, so this stays English. */
+  /** The CoreDepthLock subject, in the same language as the lock (coreDepthLockCopy.ts). */
   wsLockWhat: (last: string) => string
   wsNoTeam: string
   wsWouldStart: (n: number, of: number) => string
@@ -123,11 +125,11 @@ const EN: PlayerInfoCopy = {
   dcSlot: slotLabel,
   dcYours: 'Yours',
   dcFree: 'Free',
-  dcTaken: 'Taken',
+  dcTaken: takenText('en'),
   dcTakenIn: (n) => ` in ${n} ${n === 1 ? 'league' : 'leagues'}:`,
   dcCantRead: "Can't read",
   dcDetail: (d) => d,
-  dcClaim: (last, platform) => `Claim ${last} in ${platform}`,
+  dcClaim: (last, platform) => claimText(last, platform, 'en'),
   dcDepthAria: (d) => `Depth ${d}`,
   dcThisPlayer: 'this player',
   dcWhoPlays: (him) => `Who plays if ${him} misses time, in order. `,
@@ -160,7 +162,7 @@ const EN: PlayerInfoCopy = {
   headline: projectionHeadline,
   colWeek: 'Wk',
   colOpp: 'Opp',
-  colProj: 'Proj',
+  colProj: finderCopy('en').colProj,
   colScored: 'Scored',
   noStats: 'no stats',
   news: 'News',
@@ -192,18 +194,18 @@ const ES: PlayerInfoCopy = {
   },
   dcYours: 'Tuyo',
   dcFree: 'Libre',
-  dcTaken: 'Ocupado',
+  dcTaken: takenText('es'),
   dcTakenIn: (n) => ` en ${n} ${n === 1 ? 'liga' : 'ligas'}:`,
   dcCantRead: 'No se puede leer',
   dcDetail: (d) => DETAIL_ES[d] ?? d,
-  dcClaim: (last, platform) => `Reclamar a ${last} en ${platform}`,
+  dcClaim: (last, platform) => claimText(last, platform, 'es'),
   dcDepthAria: (d) => `Número ${d} en la rotación`,
   dcThisPlayer: 'este jugador',
   dcWhoPlays: (him) => `Quién juega si ${him} se pierde partidos, en orden. `,
   dcHisNumber: (him, d) => `${him} es el número ${d} aquí. `,
   dcAsOf: (date) => `Rotación al ${date}; el estado de lesión está en la ficha de arriba, no sale de esta tabla.`,
   wsHeading: (last) => `Quién pondría de titular a ${last}`,
-  wsLockWhat: EN.wsLockWhat,
+  wsLockWhat: (last) => `Qué equipos pondrían de titular a ${last}`,
   wsNoTeam: 'ningún equipo lo pondría de titular por delante de lo que tiene',
   wsWouldStart: (n, of) => `sería titular en ${n} de ${of} ${of === 1 ? 'equipo' : 'equipos'}`,
   wsOver: (slot, name) => `en ${slot}, en lugar de ${name}`,
@@ -227,16 +229,16 @@ const ES: PlayerInfoCopy = {
   chartWeek: (w, actual, projected) =>
     `semana ${w}: ${actual != null ? `anotó ${actual}` : 'nada registrado'}${projected != null ? `, proyectado ${projected}` : ''}`,
   scored: 'anotado',
-  projected: 'proyectado',
+  projected: coreUiCopy('projected', 'es'),
   headline: (s) => {
     if (s.compared === 0) return null
     const weeks = s.compared === 1 ? 'semana' : 'semanas'
     const miss = s.meanMiss != null ? ` · con un desvío medio de ${s.meanMiss.toFixed(1)} por semana` : ''
     return `Igualó o superó su proyección en ${s.beat} de ${s.compared} ${weeks}${miss}`
   },
-  colWeek: 'Sem.',
+  colWeek: coreUiCopy('Wk', 'es'),
   colOpp: 'Rival',
-  colProj: 'Proy.',
+  colProj: finderCopy('es').colProj,
   colScored: 'Anotó',
   noStats: 'sin estadísticas',
   news: 'Noticias',

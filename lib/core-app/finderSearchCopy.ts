@@ -32,6 +32,27 @@ import type { SuggestionFact } from './suggestionChip'
 
 const ligas = (n: number) => (n === 1 ? 'liga' : 'ligas')
 
+/* ── Labels more than one Player Finder card prints — ONE translator each (2026-10-06) ─────────── */
+
+/**
+ * "Claim Kincaid in Sleeper" / «Reclamar a Kincaid en Sleeper» — the FA bids row, the depth chart's
+ * free backup (finderPlayerInfoCopy.ts `dcClaim`) and, in Spanish, the league card and sticky bar's
+ * claim button (`viewActionsText`, whose English is leagueViewActions.ts's own "Claim X — on Y").
+ */
+export function claimText(last: string, platform: string, language: string): string {
+  return language === 'es' ? `Reclamar a ${last} en ${platform}` : `Claim ${last} in ${platform}`
+}
+
+/** "Taken" — the league strip's badge and the depth chart's chip for a player another team holds. */
+export function takenText(language: string): string {
+  return language === 'es' ? 'Ocupado' : 'Taken'
+}
+
+/** "Free agent" — the sticky bar's status and the shares board's holder (finderTradeValueCopy.ts). */
+export function freeAgentText(language: string): string {
+  return language === 'es' ? 'Agente libre' : 'Free agent'
+}
+
 /* ── The search box ───────────────────────────────────────────────────────────────────────────── */
 
 export type SearchBoxCopy = {
@@ -259,7 +280,7 @@ export function pickerCopy(language: string): PickerCopy {
  * The strip's badges in Spanish. TITULAR and BANCA are the slot words the league table (`slotText`)
  * and the swap list (SwapCandidates) already use on this screen; IR and TAXI stay, as they do there.
  */
-const BADGE_ES: Record<string, string> = { START: 'TITULAR', BENCH: 'BANCA', IR: 'IR', TAXI: 'TAXI', FA: 'LIBRE', Taken: 'Ocupado' }
+const BADGE_ES: Record<string, string> = { START: 'TITULAR', BENCH: 'BANCA', IR: 'IR', TAXI: 'TAXI', FA: 'LIBRE', Taken: takenText('es') }
 
 /** A chip's badge and sentence: English as leagueStrip.ts wrote them, or Spanish from the chip's parts. */
 export function stripChipText(c: StripChip, language: string): { badge: string; sentence: string } {
@@ -335,9 +356,9 @@ export function viewActionsText(view: PlayerLeagueView, actions: LeagueViewActio
       ...actions,
       primary: relabel(actions.primary, (english) => {
         const m = /^Claim (.+) — on (.+)$/.exec(english)
-        return m && m[1] === last ? `Reclamar a ${last} en ${m[2]}` : english
+        return m && m[1] === last ? claimText(last, m[2]!, 'es') : english
       }),
-      status: 'Agente libre',
+      status: freeAgentText('es'),
     }
   }
   return { ...actions, status: 'No se puede leer aquí' }
@@ -361,7 +382,7 @@ const FA_EN: FaCopy = {
   ofBudget: (budget) => ` of $${budget}`,
   left: (remaining) => ` · $${remaining} left`,
   room: (median, p75, claims) => `This league's winning bids: median $${median} · p75 $${p75} (${claims} ${claims === 1 ? 'claim' : 'claims'})`,
-  claim: (last, platform) => `Claim ${last} in ${platform}`,
+  claim: (last, platform) => claimText(last, platform, 'en'),
   foot:
     "The bid is his market value in each league's format against its budget, capped at 60% of it — the same number Waiver Intel uses. The league's winning bids sit beside it to calibrate against the room; they are not part of it.",
 }
@@ -372,7 +393,7 @@ const FA_ES: FaCopy = {
   ofBudget: (budget) => ` de $${budget}`,
   left: (remaining) => ` · quedan $${remaining}`,
   room: (median, p75, claims) => `Pujas ganadoras de esta liga: mediana $${median} · p75 $${p75} (${claims} ${claims === 1 ? 'reclamo' : 'reclamos'})`,
-  claim: (last, platform) => `Reclamar a ${last} en ${platform}`,
+  claim: (last, platform) => claimText(last, platform, 'es'),
   foot:
     'La puja es su valor de mercado en el formato de cada liga frente a su presupuesto, con un tope del 60% del presupuesto: el mismo número que usa Waiver Intel. Las pujas ganadoras de la liga aparecen al lado para comparar con lo que paga el resto; no entran en la puja.',
 }

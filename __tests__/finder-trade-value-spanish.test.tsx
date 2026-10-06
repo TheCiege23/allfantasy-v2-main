@@ -13,7 +13,7 @@
  * reworded reason fails here rather than silently going English.
  *
  * The scan reads visible text plus every title, aria-label and placeholder, with every "?" tip open.
- * The AF Pro lock (CoreDepthLock) is shared and stays English until one follow-up translates it.
+ * The AF Pro lock (CoreDepthLock) is shared, and reads Spanish too since 2026-10-06; nothing is cut.
  */
 import React from 'react'
 import { readFileSync } from 'node:fs'
@@ -68,10 +68,9 @@ const OWN_EN =
 
 const SCAN_ATTRS = ['title', 'aria-label', 'placeholder']
 
-/** Visible text plus every title, aria-label and placeholder; the shared AF Pro lock is cut out. */
+/** Visible text plus every title, aria-label and placeholder. */
 function ownText(container: HTMLElement): string {
   const root = container.cloneNode(true) as HTMLElement
-  root.querySelectorAll('.af-core-lock').forEach((n) => n.remove())
   const attrs = [...root.querySelectorAll(SCAN_ATTRS.map((a) => `[${a}]`).join(','))].flatMap((n) => SCAN_ATTRS.map((a) => n.getAttribute(a) ?? ''))
   return [root.textContent ?? '', ...attrs].join(' | ')
 }

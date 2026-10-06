@@ -1,6 +1,8 @@
 import { coreUiCopy } from './coreUiCopy'
 import { tradeVisualCopy } from './tradeVisualCopy'
 import { finderCopy, reasonText } from './playerFinderCopy'
+import { finderPlayerInfoCopy } from './finderPlayerInfoCopy'
+import { freeAgentText } from './finderSearchCopy'
 import { slotText } from './playerMovesCopy'
 import { kickoffText, weekdayEs } from './kickoffText'
 import { ageText, leagueConceptText } from './shellCopy'
@@ -168,7 +170,7 @@ const EN: TradeValueCopy = {
   bidUpTo: (d) => `Up to $${d}`,
   bidShareOfBudget: (pct) => `${pct}% of your budget`,
   bidShareTail: (pct) => ` — ${pct}% of the upgrade value on his roster.`,
-  openTradeCenter: 'Open Trade Center',
+  openTradeCenter: finderPlayerInfoCopy('en').wsOpenTradeCenter,
   noTradesHeading: 'This league does not allow trades',
   noTradesFallback: 'This league’s format has no trades, so there is no package to build for him.',
   whatItTakes: (last, team) => `What it takes to get ${last} from ${team}`,
@@ -234,7 +236,7 @@ const EN: TradeValueCopy = {
   sharesStarting: (n) => `${n} starting`,
   holderYou: (slot) => (slot === 'STARTER' ? 'You · starting' : slot === 'IR' ? 'You · IR' : slot === 'TAXI' ? 'You · taxi' : 'You · bench'),
   anotherManager: 'Another manager',
-  freeAgent: 'Free agent',
+  freeAgent: freeAgentText('en'),
   notReadable: 'Not readable',
   valueLocked: 'value · AF Pro',
   valueDash: 'value —',
@@ -281,7 +283,7 @@ const ES: TradeValueCopy = {
   bidUpTo: (d) => `Hasta $${d}`,
   bidShareOfBudget: (pct) => `El ${pct}% de tu presupuesto`,
   bidShareTail: (pct) => `: el ${pct}% del valor de mejora de su plantilla.`,
-  openTradeCenter: `Abrir ${coreUiCopy('Trade Center', 'es')}`, // as WhoStartsHim (#2069) says it
+  openTradeCenter: finderPlayerInfoCopy('es').wsOpenTradeCenter, // WhoStartsHim's (#2069): one translator
   noTradesHeading: 'Esta liga no permite intercambios',
   noTradesFallback: 'El formato de esta liga no tiene intercambios, así que no hay paquete que armar por él.',
   whatItTakes: (last, team) => `Qué hace falta para conseguir a ${last} de ${team}`,
@@ -292,7 +294,7 @@ const ES: TradeValueCopy = {
   deepAt: (list) => ` · le sobra en ${list}`,
   youGive: tradeVisualCopy('You give', 'es'),
   youGet: tradeVisualCopy('You get', 'es'),
-  nothing: 'Nada',
+  nothing: coreUiCopy('Nothing', 'es'),
   marketValueTitle: 'Valor de mercado de AllFantasy',
   gradePrefix: (reason) => `Calificación: ${reason}`,
   deltaToYou: (v) => `${v} de valor de mercado para ti`,
@@ -356,8 +358,8 @@ const ES: TradeValueCopy = {
   sharesOf: 'de',
   sharesStarting: (n) => `${n} ${plural(n, 'titular', 'titulares')}`,
   holderYou: (slot) => `Tú · ${HOLDER_SLOT_ES[slot]}`,
-  anotherManager: 'Otro mánager',
-  freeAgent: 'Agente libre',
+  anotherManager: coreUiCopy('Another manager', 'es'),
+  freeAgent: freeAgentText('es'),
   notReadable: 'No legible',
   valueLocked: 'valor · AF Pro',
   valueDash: 'valor —',
