@@ -2,6 +2,7 @@
 
 import { ArrowRight, ListChecks } from 'lucide-react'
 import type { DecisionRecommendationsViewModel } from '@/lib/decision-os/recommendations'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import {
   DecisionOsBadge,
   DecisionOsConfidenceBadge,
@@ -54,6 +55,7 @@ export default function DecisionRecommendationsCard({
   variant = 'dashboard',
   compact = false,
 }: DecisionRecommendationsCardProps) {
+  const { language } = useOptionalLanguage()
   const isInsufficient = model.status === 'insufficient-data'
   const recommendations = model.recommendations.slice(0, compact ? 2 : 3)
 
@@ -66,8 +68,8 @@ export default function DecisionRecommendationsCard({
       <div className="border-b border-subtle bg-surface-muted/60 px-5 py-4">
         <div className="flex flex-wrap items-center gap-2">
           <DecisionOsBadge icon={ListChecks}>Recommended Moves</DecisionOsBadge>
-          <DecisionOsConfidenceBadge label={model.confidenceLabel} />
-          <DecisionOsUpdatedStamp value={model.lastUpdatedIso} />
+          <DecisionOsConfidenceBadge label={model.confidenceLabel} language={language} />
+          <DecisionOsUpdatedStamp value={model.lastUpdatedIso} language={language} />
         </div>
         <h2 className="mt-4 text-2xl font-black tracking-tight text-primary md:text-3xl">{model.title}</h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary">
@@ -80,7 +82,7 @@ export default function DecisionRecommendationsCard({
 
       <div className="grid gap-4 p-5 xl:grid-cols-[0.9fr_1.1fr]">
         <aside className="space-y-4">
-          <DecisionOsWhyPanel>{whyCopy(model, isInsufficient)}</DecisionOsWhyPanel>
+          <DecisionOsWhyPanel language={language}>{whyCopy(model, isInsufficient)}</DecisionOsWhyPanel>
 
           <DecisionOsEvidenceGrid
             title="Evidence checked"
@@ -94,6 +96,7 @@ export default function DecisionRecommendationsCard({
               title={model.insufficientData.title}
               message={model.insufficientData.message}
               missing={model.insufficientData.missing}
+              language={language}
             />
           ) : null}
         </aside>

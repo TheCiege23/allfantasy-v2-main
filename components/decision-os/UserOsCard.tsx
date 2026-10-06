@@ -113,8 +113,8 @@ export default function UserOsCard({ snapshot, variant = 'league', language }: U
       <section data-testid={`user-os-card-${variant}`} className={decisionOsCardClassName}>
         <div className="p-5">
           <DecisionOsEmptyState
-            title="Your team intelligence is loading"
-            description="Real activity, engagement, and league context will appear here once loaded."
+            title={es ? 'Cargando la información de tu equipo' : 'Your team intelligence is loading'}
+            description={es ? 'La actividad real, la participación y el contexto de la liga aparecerán aquí al cargar.' : 'Real activity, engagement, and league context will appear here once loaded.'}
           />
         </div>
       </section>
@@ -123,16 +123,17 @@ export default function UserOsCard({ snapshot, variant = 'league', language }: U
 
   if (!snapshot.available) {
     return (
-      <section data-testid={`user-os-card-${variant}`} className={decisionOsCardClassName} aria-label="Your Team">
+      <section data-testid={`user-os-card-${variant}`} className={decisionOsCardClassName} aria-label={yourTeam}>
         <div className="border-b border-subtle bg-surface-muted/60 px-5 py-4">
-          <DecisionOsBadge>Your Team</DecisionOsBadge>
+          <DecisionOsBadge>{yourTeam}</DecisionOsBadge>
         </div>
         <div className="p-5">
           <div data-testid="user-os-unavailable">
             <DecisionOsInsufficientDataCallout
-              title="Your team intelligence is unavailable"
-              message="This league's data couldn't be loaded right now."
-              missing={['manager activity']}
+              title={es ? 'La información de tu equipo no está disponible' : 'Your team intelligence is unavailable'}
+              message={es ? 'Ahora mismo no se pudieron cargar los datos de esta liga.' : "This league's data couldn't be loaded right now."}
+              missing={[es ? 'actividad del mánager' : 'manager activity']}
+              language={language}
             />
           </div>
         </div>
