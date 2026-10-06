@@ -195,6 +195,8 @@ describe('runChimmyToolLoop on Claude', () => {
     const out = await runChimmyToolLoop(base)
 
     expect(out).toMatchObject({ text: 'You are 2nd in KBFL.', toolsUsed: ['find_league_by_name', 'get_league_standings'], turns: 2 })
+    // What the answer was written from, for the route's observe-only guard: every result, in order.
+    expect(out?.evidence).toBe('Leaders: 1. Josh Allen — 2\n\nLeaders: 1. Josh Allen — 2')
     // In order: the league lookup rebinds the context the standings call reads.
     expect(h.execute.mock.calls.map((c) => c[0])).toEqual(['find_league_by_name', 'get_league_standings'])
     expect(h.execute).toHaveBeenCalledWith('find_league_by_name', { name: 'KBFL' }, CTX)
