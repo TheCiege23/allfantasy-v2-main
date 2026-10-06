@@ -39,7 +39,10 @@ const tied: RivalRow = {
   meetings: 3,
   sharedLeagues: 1,
   lastResult: 'a tie',
+  lastParts: { kind: 'tie', margin: 0 },
 }
+// `lastParts` is what getRivalRecords writes beside the English (dash3aPanels.ts) — the screen builds
+// the Spanish from it.
 const untied: RivalRow = {
   key: 'beater',
   name: 'Beater',
@@ -49,6 +52,7 @@ const untied: RivalRow = {
   meetings: 1,
   sharedLeagues: 1,
   lastResult: 'beat you by 10.0',
+  lastParts: { kind: 'lost', margin: 10 },
 }
 
 const text = (el: Element | null | undefined) => (el?.textContent ?? '').replace(/\s+/g, ' ')
@@ -132,5 +136,31 @@ describe('League Home rivalry radar', () => {
     expect(text(mixed)).toContain('3 encuentros')
     expect(text(mixed)).toContain('último: empate')
     expect(text(beater.querySelector(':scope > b'))).toBe('0–1')
+  })
+
+  it('the last meeting’s margin reads Spanish too — «te ganó por 10.0», never «beat you by»', () => {
+    lang.language = 'es'
+    const [, beater] = rivals()
+    expect(text(beater)).toContain('último: te ganó por 10.0')
+    expect(text(beater)).not.toMatch(/beat you by|you won by/)
+    lang.language = 'en'
+    const [, beaterEn] = rivals()
+    expect(text(beaterEn)).toContain('last: beat you by 10.0')
+  })
+})
+
+/*
+ * The loader rebuilds each rival row field by field before it reaches the screen. A field left out
+ * there vanishes with no error — `lastParts` was, so the margin above could never be translated.
+ */
+describe('League Home loader — leagueRivalRows', () => {
+  it('carries every field the screen reads, lastParts included', async () => {
+    const { leagueRivalRows } = await import('@/lib/core-app/leagueHome')
+    const out = leagueRivalRows([tied, untied])
+    expect(out[1]).toEqual({
+      key: 'beater', name: 'Beater', wins: 0, losses: 1, ties: 0, meetings: 1,
+      lastResult: 'beat you by 10.0', lastParts: { kind: 'lost', margin: 10 },
+    })
+    expect(out[0]!.lastParts).toEqual({ kind: 'tie', margin: 0 })
   })
 })
