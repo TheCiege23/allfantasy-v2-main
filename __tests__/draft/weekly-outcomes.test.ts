@@ -1,3 +1,4 @@
+import {importedWeeklyReport} from '@/lib/draft-archive/importedWeeklyModel'
 import {describe,it,expect} from 'vitest'
 import {weeklyOutcomes,validatedWeeklyRosterEvidence,type WeeklyRosterEvidence} from '@/lib/draft-archive/weeklyOutcomeModel'
 const picks=[{playerId:'p',rosterId:'a',playerName:'P',position:'WR',keeper:false}]
@@ -28,6 +29,17 @@ describe('finalized weekly substitution evidence',()=>{
   expect(validatedWeeklyRosterEvidence(proof)).toHaveLength(576)
   expect(weeklyOutcomes([],weeks,teams,proof).finalizedWeeks).toEqual(weeks)
   expect(validatedWeeklyRosterEvidence([{...proof[0],players:[...proof[0].players,player('extra',0)]}])).toBeNull()
+ })
+
+ it('reads up to 1,000 selected players across 18 weeks and refuses rows beyond that bound',()=>{
+  const selected=Array.from({length:1000},(_,i)=>({playerId:'p'+i,rosterId:String(Math.floor(i/100)),playerName:'P'+i,position:'WR',keeper:false}))
+  const teams=Array.from({length:10},(_,i)=>({rosterId:String(i),name:'Team '+i})),expectedWeeks=Array.from({length:18},(_,i)=>i+1)
+  const rows=selected.flatMap(p=>expectedWeeks.map(week=>({playerId:p.playerId,rosterId:p.rosterId,week,points:0,isStarter:false,held:true})))
+  const proof={selections:selected.map(p=>({playerId:p.playerId,rosterId:p.rosterId})),expectedWeeks,rows,completeDraft:true}
+  const result=importedWeeklyReport(proof,selected,teams)
+  expect(result?.contributions).toHaveLength(1000)
+  expect(result?.contributions.every(p=>p.weeks.length===18)).toBe(true)
+  expect(importedWeeklyReport({...proof,rows:[...rows,rows[0]]},selected,teams)).toBeNull()
  })
 
 })
