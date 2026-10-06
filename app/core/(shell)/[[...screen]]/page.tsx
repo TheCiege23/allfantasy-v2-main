@@ -196,6 +196,7 @@ import YourWeekLeague from '@/components/core-app/screens/YourWeekLeague'
 import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import { buildWeeklyBlueprint } from '@/lib/core-app/weeklyBlueprint'
+import { getWeeklyCalendar } from '@/lib/core-app/weeklyCalendarLoader'
 import { readWeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { WeeklyBlueprint } from '@/components/core-app/WeeklyBlueprint'
 import { toStandingsOdds } from '@/lib/core-app/standingsOdds'
@@ -3334,8 +3335,10 @@ async function CoreScreenBody({ ctx }: { ctx: CoreScreenContext }) {
         console.error('[core/week] playoff outlook failed', error)
         return null
       }) : outlook
+  const weeklyCalendar = activeKey === 'week' && !rivalriesView
+    ? await getWeeklyCalendar(weekLeagues,myTeamPulse,ctx.now,selectedLeagueId,playedLeagues.filter(l=>l.isCommissioner).map(l=>l.id)).catch(()=>null) : null
   const weeklyBlueprint = activeKey === 'week' && !rivalriesView && weekBoard ? buildWeeklyBlueprint({
-    name: ctx.viewerName, leagues: weekLeagues, board: weekBoard, pulse: myTeamPulse, outlook: weeklyOutlook,
+    name: ctx.viewerName, leagues: weekLeagues, board: weekBoard, pulse: myTeamPulse, outlook: weeklyOutlook, calendar: weeklyCalendar ?? undefined,
     lineups: ctx.weekLineups, favoriteIds: ctx.favoriteIds, focusLeagueId: selectedLeagueId, now: ctx.now,
     commissionerLeagueIds: playedLeagues.filter(l => l.isCommissioner).map(l => l.id),
   }) : null

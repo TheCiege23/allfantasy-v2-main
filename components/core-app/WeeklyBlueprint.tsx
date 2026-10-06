@@ -9,6 +9,7 @@ import type { WeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 import { formatPct1, pct1 } from '@/lib/core-app/weeklyPercent'
 import '@/components/core-app/af-week-blueprint.css'
 import { WeeklySharing } from './WeeklySharing'
+import { WeeklyCalendar } from './WeeklyCalendar'
 
 export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: WeeklyPlayoffPath | null }) {
   const { language } = useOptionalLanguage(); const es = language === 'es'
@@ -44,6 +45,7 @@ export function WeeklyBlueprint({ data, path }: { data: Blueprint; path?: Weekly
       <p>{es ? 'Las estimaciones históricas se muestran aparte de los pronósticos de tu alineación actual.' : 'Historical scoring estimates are shown separately from current lineup forecasts.'}</p>
       <ul>{data.coverage.slice(0, 5).map(c => <li key={c.leagueId}><Link href={`/core/my-team?league=${encodeURIComponent(c.leagueId)}`}>{c.leagueName}</Link>: {c.af ? 'AF' : ''}{c.af && c.provider ? ' + ' : ''}{c.provider ? es ? 'proveedor' : 'provider' : ''}{!c.af && !c.provider ? es ? 'pronóstico actual no disponible' : 'current forecast unavailable' : ''}{c.partial ? es ? ' · parcial' : ' · partial' : ''}</li>)}</ul>
     </section>}</div>
+    <WeeklyCalendar data={data.calendar} />
     <WeeklySharing data={data} path={path} />
   </section>
 }
