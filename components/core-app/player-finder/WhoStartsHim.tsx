@@ -1,4 +1,8 @@
+'use client'
+
 import { CoreDepthLock, FreeUntilNote } from '@/components/core-app/CoreDepthLock'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { finderPlayerInfoCopy, infoReasonText, type PlayerInfoCopy } from '@/lib/core-app/finderPlayerInfoCopy'
 import type { CoreDepthAccess } from '@/lib/core-app/coreDepthAccess'
 import { SELL_TEAMS_SHOWN, slotName, type SellTeam, type WhoStartsHim as WhoStartsHimData } from '@/lib/core-app/whoStartsHim'
 
@@ -6,10 +10,14 @@ import { SELL_TEAMS_SHOWN, slotName, type SellTeam, type WhoStartsHim as WhoStar
  * "Who'd start him" — for each league where he is yours, the other teams he would crack the best
  * lineup of, best fit first (lib/core-app/whoStartsHim.ts). AF Pro (`player_depth`): a trade move,
  * decided server-side — a locked viewer's payload carries nothing but the lock.
+ *
+ * Spanish (2026-10-05): the words come from finderPlayerInfoCopy.ts at render, the loader's notes
+ * through `infoReasonText` (whole, or English as written). The lock and the "free until" note are the
+ * shared CoreDepthLock's, which is English-only, so its subject stays English too.
  */
 
-function teamLine(t: SellTeam): string {
-  return t.bumps ? `at ${slotName(t.slot)}, over ${t.bumps.name}` : `at ${slotName(t.slot)} — a slot they can’t fill`
+function teamLine(t: SellTeam, c: PlayerInfoCopy): string {
+  return t.bumps ? c.wsOver(slotName(t.slot), t.bumps.name) : c.wsEmptySlot(slotName(t.slot))
 }
 
 export function WhoStartsHim({
@@ -21,15 +29,17 @@ export function WhoStartsHim({
   playerName: string
   access: CoreDepthAccess | null
 }) {
+  const { language } = useOptionalLanguage()
   if (!data) return null
+  const c = finderPlayerInfoCopy(language)
   const last = playerName.trim().split(/\s+/).slice(-1)[0] || playerName
   return (
     <section className="af-card af-pf-ws" aria-labelledby="af-pf-ws-h">
       <h3 className="af-label" id="af-pf-ws-h">
-        Who&apos;d start {last}
+        {c.wsHeading(last)}
       </h3>
       {data.locked ? (
-        access ? <CoreDepthLock access={access} what={`Which teams would start ${last}`} /> : null
+        access ? <CoreDepthLock access={access} what={c.wsLockWhat(last)} /> : null
       ) : (
         <>
           {access ? <FreeUntilNote access={access} /> : null}
@@ -40,38 +50,33 @@ export function WhoStartsHim({
                   <span className="af-pf-ws-league">{l.leagueName}</span>
                   {l.state === 'ranked' ? (
                     <span className={`af-pf-ws-count${l.teams.length === 0 ? ' is-none' : ''}`}>
-                      {l.teams.length === 0
-                        ? `no team would start him over what they have`
-                        : `would start for ${l.teams.length} of ${l.otherTeams} ${l.otherTeams === 1 ? 'team' : 'teams'}`}
+                      {l.teams.length === 0 ? c.wsNoTeam : c.wsWouldStart(l.teams.length, l.otherTeams)}
                     </span>
                   ) : (
-                    <span className="af-pf-ws-note">{l.note}</span>
+                    <span className="af-pf-ws-note">{l.note != null ? infoReasonText(l.note, language) : null}</span>
                   )}
                 </div>
                 {l.teams.length > 0 ? (
                   <ol className="af-pf-ws-teams">
                     {l.teams.slice(0, SELL_TEAMS_SHOWN).map((t) => (
                       <li key={t.key}>
-                        <span className="af-pf-ws-team">{t.teamName}</span> <span className="af-pf-ws-why">{teamLine(t)}</span>
+                        <span className="af-pf-ws-team">{c.wsTeamName(t.teamName)}</span> <span className="af-pf-ws-why">{teamLine(t, c)}</span>
                       </li>
                     ))}
                     {l.teams.length > SELL_TEAMS_SHOWN ? (
-                      <li className="af-pf-ws-more">+{l.teams.length - SELL_TEAMS_SHOWN} more</li>
+                      <li className="af-pf-ws-more">{c.wsMore(l.teams.length - SELL_TEAMS_SHOWN)}</li>
                     ) : null}
                   </ol>
                 ) : null}
                 {l.teams.length > 0 ? (
                   <a className="af-pf-ws-go" href={`/core/trades?league=${encodeURIComponent(l.leagueId)}`}>
-                    Open Trade Center
+                    {c.wsOpenTradeCenter}
                   </a>
                 ) : null}
               </li>
             ))}
           </ul>
-          <p className="af-pf-ws-foot">
-            Ranked by how much he&apos;d add to each team&apos;s best lineup, using market value in that league&apos;s format as the
-            measure. It&apos;s who has room for him — not who will say yes.
-          </p>
+          <p className="af-pf-ws-foot">{c.wsFoot}</p>
         </>
       )}
     </section>
