@@ -8,7 +8,7 @@ import {
 } from './playerIdentityCompose'
 import { displayPosition, inferSlotLabel } from './positionLabels'
 import { resolveCurrentWeekForLeague } from './currentWeek'
-import { leagueWeekProgress } from './leagueWeekProgress'
+import { currentScheduledLeagueWeek, leagueWeekProgress } from './leagueWeekProgress'
 import { loadFinishedNflWeeks } from './finishedNflWeeks'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { forecastSidesFor, projectedFinalFor, winProbabilityFor, type Unavailable } from './matchupProjections'
@@ -487,24 +487,16 @@ export async function getMatchupData(
    * lib/core-app/currentWeek.ts.
    */
   const progress = leagueWeekProgress(league)
-  const latest = await resolveCurrentWeekForLeague(platformLeagueId, weekParam ?? progress.currentWeek)
+  const resolved = await resolveCurrentWeekForLeague(platformLeagueId, weekParam ?? progress.currentWeek)
 
-  if (!latest) {
+  if (!resolved) {
     const noWeek = {
       available: false as const,
       reason: 'no weekly results stored for this league',
     }
     return { ...base, week: noWeek, sides: noWeek }
   }
-
-  const rows = await prisma.weeklyMatchup.findMany({
-    where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear, week: latest.week },
-    select: { rosterId: true, matchupId: true, pointsFor: true, pointsAgainst: true, win: true },
-  })
-
-  // A week where every row is 0-0 has been created but never scored. Showing it
-  // as a 0-0 head-to-head presents an unplayed week as a result.
-  const anyPoints = rows.some((r) => r.pointsFor > 0 || r.pointsAgainst > 0)
+  let latest = resolved
 
   /*
    * 🛑 FINAL ON TUESDAY, NOT WEDNESDAY. Without the finished-week read, `leagueWeekProgress` waits for
@@ -518,6 +510,22 @@ export async function getMatchupData(
       : undefined
   const finalProgress = finishedNfl ? leagueWeekProgress(league, finishedNfl) : progress
 
+  const storedWeeks = await prisma.weeklyMatchup
+    .groupBy({ by: ['week'], where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear } })
+    .then((g) => g.map((r) => r.week).sort((a, b) => a - b))
+    .catch(() => [] as number[])
+  // Explicit historical selections remain on that week, including a finished Tuesday slate.
+  if (weekParam == null && latest.week === progress.currentWeek) {
+    const week = currentScheduledLeagueWeek(league, latest.seasonYear, storedWeeks, finishedNfl)
+    if (week != null) latest = { ...latest, week }
+  }
+  const rows = await prisma.weeklyMatchup.findMany({
+    where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear, week: latest.week },
+    select: { rosterId: true, matchupId: true, pointsFor: true, pointsAgainst: true, win: true },
+  })
+  // All-zero rows are a scheduled matchup, not a scored result.
+  const anyPoints = rows.some((r) => r.pointsFor > 0 || r.pointsAgainst > 0)
+
   const week: MatchupData['week'] = {
     available: true,
     data: { week: latest.week, season: latest.seasonYear, isFinal: finalProgress.isFinal(latest.seasonYear, latest.week) },
@@ -527,10 +535,6 @@ export async function getMatchupData(
    * The weeks either side that this league actually has results stored for — the picker never
    * links to a week that would only render "no weekly results stored".
    */
-  const storedWeeks = await prisma.weeklyMatchup
-    .groupBy({ by: ['week'], where: { leagueId: platformLeagueId, seasonYear: latest.seasonYear } })
-    .then((g) => g.map((r) => r.week).sort((a, b) => a - b))
-    .catch(() => [] as number[])
   const weekNav = {
     prev: [...storedWeeks].reverse().find((w) => w < latest.week) ?? null,
     next: storedWeeks.find((w) => w > latest.week) ?? null,

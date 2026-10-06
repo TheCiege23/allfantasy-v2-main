@@ -10,11 +10,15 @@ const build = (rows: MyTeamRow[], focusLeagueId?: string) => buildWeeklyBlueprin
 describe('verified weekly priorities', () => {
   it('pairs featured matchup odds by league identity and season, regardless of model order', () => {
     const cards = [{leagueId:'A',leagueName:'Same name',season:2026,week:5,opponent:{name:'Bulldogs'}},{leagueId:'B',leagueName:'Same name',season:2026,week:4,opponent:{name:'Paid'}}]
-    const outlook = {leagues:[{leagueId:'B',leagueName:'Same name',season:2026,you:{modelled:true,playoffPct:99.7}},{leagueId:'A',leagueName:'Same name',season:2026,you:{modelled:true,playoffPct:43}}],swingByLeague:{}} as unknown as SeasonOutlook
+    const outlook = {leagues:[{leagueId:'B',leagueName:'Same name',season:2026,period:4,you:{modelled:true,playoffPct:99.7}},{leagueId:'A',leagueName:'Same name',season:2026,period:5,you:{modelled:true,playoffPct:43}}],swingByLeague:{}} as unknown as SeasonOutlook
     const input = {leagues:[{id:'A'},{id:'B'}],board:{...board,coinFlips:cards} as unknown as WeekBoard,pulse:null,outlook,now:new Date('2026-10-05')}
     expect(buildWeeklyBlueprint(input)).toMatchObject({matchup:{leagueId:'A',opponent:'Bulldogs'},playoff:{leagueId:'A',probability:43}})
     expect(buildWeeklyBlueprint({...input,outlook:{...outlook,leagues:outlook.leagues.filter(l=>l.leagueId==='B')}}).playoff).toBeUndefined()
     expect(buildWeeklyBlueprint({...input,outlook:{...outlook,leagues:[{...outlook.leagues[1],season:2025}]}}).playoff).toBeUndefined()
+    expect(buildWeeklyBlueprint({...input,outlook:{...outlook,leagues:[{...outlook.leagues[1],period:4}]}}).playoff).toBeUndefined()
+    expect(buildWeeklyBlueprint({...input,outlook:{...outlook,leagues:[{...outlook.leagues[1],period:undefined}]}}).playoff).toBeUndefined()
+    const aligned = buildWeeklyBlueprint({...input,leagues:[{id:'A'}],pulse:{needs:[],set:[row('A',{week:5,severity:0})]} as unknown as MyTeamPulse})
+    expect(aligned.actions.some(a => a.kind === 'sync')).toBe(false)
   })
   it('excludes locked and automatic lineup actions and keeps at most three priorities', () => {
     const out=build([row('locked',{locked:true}),row('auto',{bestBall:true}),row('A'),row('B'),row('C'),row('D')])
@@ -42,7 +46,7 @@ describe('verified weekly priorities', () => {
 describe('the Tuesday after a Sleeper week', () => {
   // Production 2026-10-06, HailShiva: the board was still on week 4 (won 135.5–129.9), the season model on week 5.
   const paid = (final: boolean) => ({leagueId:'H',leagueName:'HailShiva',season:2026,week:4,opponent:{name:'Paid'},live:{you:135.5,them:129.9,margin:5.6,final}})
-  const model = (season = 2026, week = 5) => ({leagues:[{leagueId:'H',leagueName:'HailShiva',season,you:{modelled:true,playoffPct:65.12}}],
+  const model = (season = 2026, week = 5) => ({leagues:[{leagueId:'H',leagueName:'HailShiva',season,period:week,you:{modelled:true,playoffPct:65.12}}],
     swingByLeague:{H:{leagueId:'H',leagueName:'HailShiva',week,opponentName:'Rittnasty',ifWin:76.4,ifLose:55.55,swing:20.85,clinchOnWin:false}}}) as unknown as SeasonOutlook
   const plan = (card: ReturnType<typeof paid>, outlook: SeasonOutlook, pulseWeek = 5) => buildWeeklyBlueprint({ leagues:[{id:'H',name:'HailShiva',sport:'NFL'}],
     board:{...board,leaning:[card],leagueBoard:{yours:card,rivalry:{wins:2,losses:6,ties:0,winningStreak:1,losingStreak:0}}} as unknown as WeekBoard,
@@ -54,6 +58,13 @@ describe('the Tuesday after a Sleeper week', () => {
     expect(out.playoff).toMatchObject({leagueId:'H',probability:65.12})
     expect(weeklyBrief(out)).toContain('Period 5: facing Rittnasty in HailShiva')
     expect(out.rivalry).toBeUndefined()
+  })
+  it('withholds odds when a forward-looking fallback game differs from the model period', () => {
+    const stale = model()
+    stale.leagues[0].period = 4
+    const out = plan(paid(true), stale)
+    expect(out.matchup?.period).toBe(5)
+    expect(out.playoff).toBeUndefined()
   })
   it('does not ask for a resync when My Team is already on the week after a final board week', () => {
     expect(plan(paid(true), model()).actions.map(a => a.kind)).not.toContain('sync')

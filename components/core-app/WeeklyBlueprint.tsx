@@ -58,7 +58,7 @@ function LocalCalculatedTime({ iso, language }: { iso: string; language: string 
 export function PlayoffPath({ path }: { path: WeeklyPlayoffPath }) {
   const { language } = useOptionalLanguage(); const es = language === 'es'
   const league = path.league, you = league?.you
-  const valid = you?.modelled && league?.season === path.season && Number.isFinite(you.playoffPct) && you.playoffPct >= 0 && you.playoffPct <= 100
+  const valid = you?.modelled && league?.season === path.season && league?.period === path.period && Number.isFinite(you.playoffPct) && you.playoffPct >= 0 && you.playoffPct <= 100
   const previous = path.points.filter(p => p.period < path.period).at(-1)
   const delta = valid && previous ? you!.playoffPct - previous.probability : null
   const swing = path.swing

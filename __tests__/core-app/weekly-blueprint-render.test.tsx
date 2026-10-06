@@ -8,9 +8,15 @@ import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import type { WeeklyBlueprint as Blueprint } from '@/lib/core-app/weeklyBlueprint'
 import type { WeeklyPlayoffPath } from '@/lib/core-app/weeklyPlayoffPath'
 const data: Blueprint={name:'Alex',teamName:'Ice Bears',leagueCount:1,sports:['NHL'],focusLeagueId:'A',actions:[{id:'A:lineup',leagueId:'A',leagueName:'Ice League',kind:'lineup',count:2,href:'/core/my-team?league=A',gameAt:'2026-10-05T12:00:00Z',source:'stored-lineup'}],actionCount:1,attentionLeagueIds:['A'],lineupReadFailed:false,coverage:[]}
-const path=(probability:number,status:null|'clinched'|'eliminated'=null)=>({leagueId:'A',season:2026,period:4,points:[{period:3,probability:5,sampledAt:'2026-10-01'},{period:4,probability,sampledAt:'2026-10-04'}],historyUnavailable:false,swing:{week:4,ifWin:12,ifLose:1},league:{leagueId:'A',season:2026,you:{modelled:true,playoffPct:probability,status},assumptions:{iterations:10000,computedAt:'2026-10-04',missing:[]}}}) as WeeklyPlayoffPath
+const path=(probability:number,status:null|'clinched'|'eliminated'=null)=>({leagueId:'A',season:2026,period:4,points:[{period:3,probability:5,sampledAt:'2026-10-01'},{period:4,probability,sampledAt:'2026-10-04'}],historyUnavailable:false,swing:{week:4,ifWin:12,ifLose:1},league:{leagueId:'A',season:2026,period:4,you:{modelled:true,playoffPct:probability,status},assumptions:{iterations:10000,computedAt:'2026-10-04',missing:[]}}}) as WeeklyPlayoffPath
 afterEach(()=>{cleanup();h.language='en';vi.restoreAllMocks()})
 describe('weekly blueprint UI',()=>{
+  it('withholds a stale period even when its league and season match',()=>{
+    const stale=path(52)
+    render(<PlayoffPath path={{...stale,league:{...stale.league!,period:5}}}/> )
+    expect(screen.queryByRole('img',{name:/probability trend/})).toBeNull()
+    expect(screen.queryByText('If you win: 12.0%')).toBeNull()
+  })
   it('opens Chimmy with league context and an unsent brief',()=>{
     const listener=vi.fn();window.addEventListener(COMMS_OPEN_EVENT,listener)
     render(<WeeklyBlueprint data={data}/>)
