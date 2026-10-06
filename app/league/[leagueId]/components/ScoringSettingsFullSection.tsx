@@ -2,6 +2,7 @@
 
 import { CircleHelp, RefreshCw } from 'lucide-react'
 import { useMemo } from 'react'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import {
   detectScoringFlavor,
   getScoringSettings,
@@ -11,6 +12,7 @@ import {
 import type { LeagueSettingsModalLeague } from './LeagueSettingsSubPanels'
 
 function SleeperEditLink({ href }: { href: string }) {
+  const { t } = useLanguage()
   return (
     <a
       href={href}
@@ -19,7 +21,7 @@ function SleeperEditLink({ href }: { href: string }) {
       className="text-[13px] font-semibold text-[#ff3d81] hover:text-[#ff9ec0]"
       data-testid="scoring-settings-edit-sleeper"
     >
-      Edit
+      {t('lsPanel.edit')}
     </a>
   )
 }
@@ -34,6 +36,7 @@ export function ScoringSettingsFullSection({
   showEditLink: boolean
   sleeperSettingsHref: string | null
 }) {
+  const { t } = useLanguage()
   const bundle = useMemo(() => getSleeperLikeBundle(league.settings), [league.settings])
   const scoring = useMemo(() => getScoringSettings(league.settings), [league.settings])
   const flavor = useMemo(() => detectScoringFlavor(scoring), [scoring])
@@ -49,7 +52,7 @@ export function ScoringSettingsFullSection({
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3 border-b border-white/[0.06] pb-2">
         <div className="flex items-center gap-2">
-          <span className="text-[15px] font-bold text-white">Scoring Settings</span>
+          <span className="text-[15px] font-bold text-white">{t('lsPanel.sf.title')}</span>
           <span className="rounded border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white/45">
             {sport}
           </span>
@@ -58,14 +61,14 @@ export function ScoringSettingsFullSection({
       </div>
 
       <div className="rounded-lg border border-[#ff3d81]/20 bg-[#ff3d81]/[0.07] px-3 py-2 text-[11px] text-[#ffd7e5]/85">
-        Values are synced from your host league. Use Edit to change scoring in Sleeper (or your platform).
-        Flavor hint: <span className="font-semibold text-[#ffe9f1]">{flavor}</span>.
+        {t('lsPanel.sf.note')}
+        {' '}{t('lsPanel.sf.flavorHint')} <span className="font-semibold text-[#ffe9f1]">{flavor}</span>.
       </div>
 
-      <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">All scoring rules</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-white/38">{t('lsPanel.sf.allRules')}</p>
 
       {rows.length === 0 ? (
-        <p className="text-[13px] text-white/45">No scoring_settings in synced league JSON yet.</p>
+        <p className="text-[13px] text-white/45">{t('lsPanel.sf.noRules')}</p>
       ) : (
         <ul className="divide-y divide-white/[0.06] rounded-xl border border-white/[0.06] bg-[#0a1228]/90">
           {rows.map(({ key, value, label }) => {
@@ -81,7 +84,7 @@ export function ScoringSettingsFullSection({
                   <span className="truncate text-[13px] text-white/90">{label}</span>
                   <span
                     className="inline-flex shrink-0 text-white/35"
-                    title={`${label} (scoring key: ${key})`}
+                    title={t('lsPanel.sf.keyTitle').replace('{{label}}', label).replace('{{key}}', key)}
                     aria-hidden
                   >
                     <CircleHelp className="h-3.5 w-3.5" />
@@ -102,7 +105,7 @@ export function ScoringSettingsFullSection({
 
       {sleeperSettingsHref ? (
         <div className="space-y-2 pt-1">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">Popular presets</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/35">{t('lsPanel.sf.presets')}</p>
           <div className="grid grid-cols-2 gap-2">
             <a
               href={sleeperSettingsHref}
@@ -112,7 +115,7 @@ export function ScoringSettingsFullSection({
               className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-left transition hover:border-[#ff3d81]/25 hover:bg-white/[0.06]"
             >
               <p className="text-[13px] font-bold text-white">ESPN</p>
-              <p className="mt-1 text-[11px] leading-snug text-white/45">Apply ESPN-style scoring in commissioner tools.</p>
+              <p className="mt-1 text-[11px] leading-snug text-white/45">{t('lsPanel.sf.presetDesc').replace('{{host}}', 'ESPN')}</p>
             </a>
             <a
               href={sleeperSettingsHref}
@@ -122,7 +125,7 @@ export function ScoringSettingsFullSection({
               className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-left transition hover:border-[#ff3d81]/25 hover:bg-white/[0.06]"
             >
               <p className="text-[13px] font-bold text-white">Yahoo</p>
-              <p className="mt-1 text-[11px] leading-snug text-white/45">Apply Yahoo-style scoring in commissioner tools.</p>
+              <p className="mt-1 text-[11px] leading-snug text-white/45">{t('lsPanel.sf.presetDesc').replace('{{host}}', 'Yahoo')}</p>
             </a>
           </div>
         </div>
@@ -137,8 +140,8 @@ export function ScoringSettingsFullSection({
           data-testid="scoring-reset-sleeper"
         >
           <div>
-            <p className="text-[13px] font-semibold text-amber-200/95">Reset</p>
-            <p className="text-[11px] text-white/45">Reset to default scoring in Sleeper commissioner tools.</p>
+            <p className="text-[13px] font-semibold text-amber-200/95">{t('lsPanel.reset')}</p>
+            <p className="text-[11px] text-white/45">{t('lsPanel.sf.resetDesc')}</p>
           </div>
           <RefreshCw className="h-4 w-4 shrink-0 text-amber-300/80" aria-hidden />
         </a>
@@ -151,10 +154,10 @@ export function ScoringSettingsFullSection({
           rel="noopener noreferrer"
           className="inline-block text-[12px] font-medium text-[#ff3d81]/90 hover:underline"
         >
-          Open full scoring editor on host →
+          {t('lsPanel.sf.openOnHost')}
         </a>
       ) : (
-        <p className="text-[11px] text-white/38">Connect a Sleeper league to deep-link scoring edits.</p>
+        <p className="text-[11px] text-white/38">{t('lsPanel.sf.connect')}</p>
       )}
     </div>
   )
