@@ -93,7 +93,7 @@ describe('weekly sharing and Excel',()=>{
   it('keeps exports literal and creates real chart relationships with no interpolated periods',()=>{
     const bytes=buildWeeklyWorkbook({...data,teamName:'=HYPERLINK("https://invalid")'},path)
     const wb=XLSX.read(bytes,{type:'array'})
-    expect(wb.SheetNames).toEqual(['Brief','Actions','Trend','Scenarios','Coverage','Model'])
+    expect(wb.SheetNames).toEqual(['Brief','Actions','Trend','Scenarios','Calendar','Calendar gaps','Coverage','Model'])
     expect(XLSX.utils.sheet_to_json(wb.Sheets.Trend,{header:1})).toHaveLength(3)
     expect(wb.Sheets.Brief.B2.f).toBeUndefined()
     const zip=XLSX.CFB.read(bytes,{type:'array'})
