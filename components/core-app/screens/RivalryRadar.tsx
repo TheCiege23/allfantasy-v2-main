@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import type { RivalryCard, RivalryRadar as RivalryRadarData } from '@/lib/core-app/weekBoard'
 import { rosterLabel } from '@/lib/core-app/managerName'
+import { formatSigned1, signOf1 } from '@/lib/core-app/weeklyPercent'
 import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import { kickoffText } from '@/lib/core-app/kickoffText'
 import '@/components/core-app/af-week.css'
@@ -83,9 +84,8 @@ function Card({ card, tone }: { card: RivalryCard; tone: 'bad' | 'good' | 'neutr
         <dl className="af-rr-stats">
           <div>
             <dt>{copy('Average margin')}</dt>
-            <dd className="af-num" data-sign={card.averageMargin >= 0 ? 'pos' : 'neg'}>
-              {card.averageMargin >= 0 ? '+' : ''}
-              {card.averageMargin.toFixed(1)}
+            <dd className="af-num" data-sign={signOf1(card.averageMargin)}>
+              {formatSigned1(card.averageMargin)}
             </dd>
           </div>
           <div>
@@ -131,7 +131,7 @@ function Card({ card, tone }: { card: RivalryCard; tone: 'bad' | 'good' | 'neutr
             </span>
             <span className="af-rr-today-gap af-num">
               {thisWeek.projectedMargin != null
-                ? `${thisWeek.projectedMargin >= 0 ? '+' : ''}${thisWeek.projectedMargin.toFixed(1)} ${es ? 'proyectados' : 'projected'}`
+                ? `${formatSigned1(thisWeek.projectedMargin)} ${es ? 'proyectados' : 'projected'}`
                 : ''}
             </span>
           </>
