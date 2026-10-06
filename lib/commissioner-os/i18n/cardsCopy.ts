@@ -24,13 +24,18 @@
  * ventana"; no sentence here names a number of days the English does not.
  */
 import { commissionerOsText } from '@/lib/core-app/commissionerOsText'
+import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
 import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 
 const plural = (n: string, one: string, many: string) => (n === '1' ? `1 ${one}` : `${n} ${many}`)
 
 /* ── The cards' own vocabularies ─────────────────────────────────────────────── */
 
-/** `SEVERITY_LABELS` (severityStyles.ts) — a level, so masculine: "nivel crítico". */
+/**
+ * `SEVERITY_LABELS` (severityStyles.ts) — a level, so masculine: "nivel crítico". THE severity
+ * vocabulary: the cards' badges, an automation's health badge (toolsCopy), the event scale's
+ * "Crítico" (toolsCopy) and the chart legend below all read it from here.
+ */
 const SEVERITY_ES: Record<SeverityTier, string> = {
   critical: 'Crítico',
   elevated: 'Elevado',
@@ -40,8 +45,29 @@ const SEVERITY_ES: Record<SeverityTier, string> = {
 }
 
 /** The card badge for a severity tier, in the reader's language. English is `SEVERITY_LABELS`, unchanged. */
-export function severityLabelText(tier: SeverityTier, english: string, language: string): string {
+export function severityLabelText(tier: SeverityTier, english: string, language: string | null | undefined): string {
   return language === 'es' ? (SEVERITY_ES[tier] ?? english) : english
+}
+
+/**
+ * The SAME five tiers as a workspace TASK's priority badge — feminine, because it agrees with
+ * "prioridad" (and "tarea"): "prioridad crítica", never "prioridad crítico". This is not a duplicate
+ * of `SEVERITY_ES` to be folded into it; forcing one table would put an agreement error on one of
+ * the two screens. `advisory` reads "Informativa" here because "Aviso" is a noun and cannot agree.
+ * (Moved here from analyticsCopy's `workspaceCopy().severity`, 2026-10-06, so both agreements sit
+ * side by side.)
+ */
+const TASK_PRIORITY_ES: Record<SeverityTier, string> = {
+  critical: 'Crítica',
+  elevated: 'Elevada',
+  standard: 'Estándar',
+  advisory: 'Informativa',
+  positive: 'Saludable',
+}
+
+/** A workspace task's priority badge, in the reader's language. English is `SEVERITY_LABELS`, unchanged. */
+export function taskPriorityLabelText(tier: SeverityTier, english: string, language: string | null | undefined): string {
+  return language === 'es' ? (TASK_PRIORITY_ES[tier] ?? english) : english
 }
 
 /* ── The screens' own words ──────────────────────────────────────────────────── */
@@ -133,7 +159,7 @@ const UI_ES: Record<string, string> = {
   'Recent history': 'Historial reciente',
   'No projected audit history on file.': 'No hay historial de auditoría registrado.',
   'Delete this network? Its leagues and league data remain.': '¿Eliminar esta red? Sus ligas y los datos de las ligas se conservan.',
-  League: 'Liga',
+  League: coreUiCopy('League', 'es'),
   host: 'anfitriona',
   member: 'miembro',
   // the network form's own fallbacks …
@@ -151,7 +177,10 @@ const UI_ES: Record<string, string> = {
   'Invalid network update': 'Actualización de la red no válida',
   'Network not found': 'No se encontró la red',
   'Missing networkId': 'Falta el identificador de la red',
-  // a workspace task's priority, shown lower-case in parentheses
+  // A workspace task's priority, shown lower-case in parentheses. Feminine like `TASK_PRIORITY_ES`
+  // above, but ⚠ it DISAGREES with it on two tiers (advisory "aviso" vs "Informativa", positive
+  // "positiva" vs "Saludable"). Left as shipped on 2026-10-06 — the closing pass changed no output —
+  // pending a decision on which reading both screens should share.
   critical: 'crítica',
   elevated: 'elevada',
   standard: 'estándar',
@@ -224,11 +253,12 @@ const LOADER_ES: Record<string, string> = {
     'Inactividad importante detectada: podría venirle bien un contacto personal',
   'Engagement declining over recent periods — may benefit from a personal check-in':
     'Su participación baja en los últimos periodos: podría venirle bien un contacto personal',
-  // deriveChartSeries.ts — recommendationsBySeverity and participationSlices labels
-  Critical: 'Crítico',
-  Elevated: 'Elevado',
-  Advisory: 'Aviso',
-  Standard: 'Estándar',
+  // deriveChartSeries.ts — recommendationsBySeverity and participationSlices labels. The tiers are the
+  // badge vocabulary; "Positive" is the chart's own word (the badge says "Healthy").
+  Critical: SEVERITY_ES.critical,
+  Elevated: SEVERITY_ES.elevated,
+  Advisory: SEVERITY_ES.advisory,
+  Standard: SEVERITY_ES.standard,
   Positive: 'Positivo',
   'Active in window': 'Activos en la ventana',
   'Quiet in window': 'Inactivos en la ventana',

@@ -13,10 +13,10 @@ import {
   automationText,
   lastRanText,
   relatedLinkText,
-  severityTierText,
   toggleAriaText,
   toolsText,
 } from '@/lib/commissioner-os/i18n/toolsCopy'
+import { severityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 export interface AutomationCatalogCardProps {
   automation: AutomationCatalogEntry
@@ -62,7 +62,7 @@ export function AutomationCatalogCard({ automation, enabled, onToggle, onViewHis
             >
               {toolsText(AUTOMATION_STATUS_LABELS[enabled ? 'enabled' : 'disabled'], language)}
             </span>
-            <Badge style={{ background: style.bg, color: style.text, borderColor: style.border }}>{severityTierText(automation.health, SEVERITY_LABELS[automation.health], language)}</Badge>
+            <Badge style={{ background: style.bg, color: style.text, borderColor: style.border }}>{severityLabelText(automation.health, SEVERITY_LABELS[automation.health], language)}</Badge>
           </div>
         </div>
       </CardHeader>

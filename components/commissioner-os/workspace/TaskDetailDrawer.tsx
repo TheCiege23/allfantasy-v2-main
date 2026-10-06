@@ -11,6 +11,7 @@ import type { CommissionerTask } from '@/lib/commissioner-ui/workspace/decision-
 import { longDate } from '@/components/commissioner-os/primitives/pinnedTime'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { cosLinkText, taskText, workspaceCopy } from '@/lib/commissioner-os/i18n/analyticsCopy'
+import { taskPriorityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 export interface TaskDetailDrawerProps {
   task: CommissionerTask | null
@@ -49,7 +50,7 @@ export function TaskDetailDrawer({ task, onOpenChange }: TaskDetailDrawerProps) 
                   {es ? es.status[displayedTask.status] : TASK_STATUS_LABELS[displayedTask.status]}
                 </span>
                 <Badge style={{ background: style.bg, color: style.text, borderColor: style.border }}>
-                  {es ? es.severity[displayedTask.priority] : SEVERITY_LABELS[displayedTask.priority]}
+                  {taskPriorityLabelText(displayedTask.priority, SEVERITY_LABELS[displayedTask.priority], language)}
                 </Badge>
               </div>
               <DialogTitle>{taskText(displayedTask.title, language)}</DialogTitle>

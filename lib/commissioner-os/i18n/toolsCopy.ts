@@ -1,11 +1,11 @@
-import type { CommissionerModuleId } from '@/lib/commissioner-ui/navigation/moduleNav'
-import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
 import type { CommissionerNotificationSeverity } from '@/lib/commissioner-ui/contracts/notifications'
 import type { CommissionerSearchResultContract } from '@/lib/commissioner-ui/contracts/searchResults'
 import { coreUiCopy } from '@/lib/core-app/coreUiCopy'
-import { commissionerOsText } from '@/lib/core-app/commissionerOsText'
 import { kickoffText } from '@/lib/core-app/kickoffText'
 import { ageText } from '@/lib/core-app/shellCopy'
+import { commissionerSectionName, leagueEventNameText, shellText } from '@/lib/commissioner-os/i18n/shellCopy'
+import { cosLoaderText, severityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
+import { cosErrorText, reportTemplateText, taskText } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
 /**
  * Commissioner OS's tools in the reader's language (2026-10-06): Automations, Notifications, the
@@ -24,10 +24,15 @@ import { ageText } from '@/lib/core-app/shellCopy'
  *   activity and automations feed Mission Control's summaries too — so none is edited; each fixed
  *   English string is a key here, held to its source by `__tests__/cos-tools-spanish.test.tsx`, so a
  *   reworded sentence fails there instead of quietly going English.
- * - Names are not translated: league, manager and team names, report-template names, a run's own
- *   ledger message, a league's titleised platform values ("Dynasty Superflex", "Nfl"). The
- *   AUTOMATION names are the exception: they are our own catalog's product copy
- *   (`CATALOG_METADATA` in the live client), not data.
+ * - Names are not translated: league, manager and team names, a run's own ledger message, a
+ *   league's titleised platform values ("Dynasty Superflex", "Nfl"). AUTOMATION and REPORT-TEMPLATE
+ *   names are the exception: they are our own catalogs' product copy (`CATALOG_METADATA` in the live
+ *   automations client, `reportCatalog.ts`), not data — automations here, templates through
+ *   analyticsCopy's `reportTemplateText`.
+ *
+ * ONE TRANSLATOR PER STRING (2026-10-06): section names are the shell's (`moduleLabelText` /
+ * `commissionerSectionName`, shellCopy), severity badges the cards' (`severityLabelText`, cardsCopy),
+ * report-template names and task titles analyticsCopy's. This module imports them; it keeps no copy.
  *
  * ⚠ DEMO-FIXTURE PROSE IS NOT TRANSLATED. The demo clients' seeded descriptions, run summaries and
  * names ("Trade-deadline reminder broadcast", "Reminder sent to all 12 managers") are a scenario, like
@@ -42,82 +47,22 @@ const isEs = (language: string | null | undefined) => language === 'es'
 /** "1 ejecución" / "3 ejecuciones". */
 const count = (n: number | string, one: string, many: string) => `${n} ${String(n) === '1' ? one : many}`
 
-// ── Section names ─────────────────────────────────────────────────────────────────────────────────
-
-/**
- * Every Commissioner OS section by module id. ⚠ THE SAME SPANISH AS THE SHELL'S
- * `COMMISSIONER_SECTION_NAMES_ES` (lib/commissioner-os/i18n/shellCopy.ts, PR fix/cos-shell-spanish),
- * which had not landed when this was written. Once it has, import `moduleLabelText` from there and
- * delete this table — the sidebar and every page must read one word per section.
- */
-const SECTION_ES: Record<CommissionerModuleId, string> = {
-  'mission-control': 'Centro de control',
-  'league-health': 'Salud de la liga',
-  recommendations: 'Recomendaciones',
-  managers: 'Información de mánagers',
-  workspace: 'Espacio de trabajo',
-  automations: 'Automatizaciones',
-  analytics: 'Analítica de la liga',
-  reports: 'Informes',
-  settings: 'Configuración',
-  activity: 'Flujo de actividad',
-  help: 'Ayuda y centro de conocimiento',
-}
-
-const SECTION_BY_ENGLISH: Record<string, CommissionerModuleId> = {
-  'Mission Control': 'mission-control',
-  'League Health': 'league-health',
-  Recommendations: 'recommendations',
-  'Manager Intelligence': 'managers',
-  Workspace: 'workspace',
-  Automations: 'automations',
-  'League Analytics': 'analytics',
-  Reports: 'reports',
-  Settings: 'settings',
-  'Activity Stream': 'activity',
-  'Help & Knowledge Center': 'help',
-}
-
-/** A module's label (`getModuleLabel`) in the reader's language — source chips, tabs, "View in …". */
-export function sectionNameText(id: CommissionerModuleId, english: string, language: string | null | undefined): string {
-  return isEs(language) ? (SECTION_ES[id] ?? english) : english
-}
-
-/** A section by its English sidebar label ("League Health"), for page titles in the search index. */
-function sectionByEnglish(english: string): string | null {
-  const id = SECTION_BY_ENGLISH[english]
-  return id ? SECTION_ES[id] : null
-}
-
 // ── Severity vocabularies ─────────────────────────────────────────────────────────────────────────
+//
+// The five-tier CONDITION scale (`SEVERITY_LABELS` — an automation's health badge here) is the
+// cards' `severityLabelText` (cardsCopy), imported where it is drawn; this module keeps no copy.
 
 /**
- * `SEVERITY_LABELS` (components/commissioner-os/cards/severityStyles.ts), the five-tier CONDITION
- * scale — an automation's health badge here. ⚠ The same Spanish as the cards' `severityLabelText`
- * (lib/commissioner-os/i18n/cardsCopy.ts, PR fix/cos-cards-spanish), not landed when this was written.
- */
-const SEVERITY_TIER_ES: Record<SeverityTier, string> = {
-  critical: 'Crítico',
-  elevated: 'Elevado',
-  standard: 'Estándar',
-  advisory: 'Aviso',
-  positive: 'Saludable',
-}
-
-export function severityTierText(tier: SeverityTier, english: string, language: string | null | undefined): string {
-  return isEs(language) ? (SEVERITY_TIER_ES[tier] ?? english) : english
-}
-
-/**
- * `EVENT_SEVERITY_LABELS` (same file) — the separate EVENT scale Notifications and the Activity Stream
- * badge with. "Advertencia", not "Aviso": "Aviso" is already the condition scale's `advisory`, and the
- * glossary insists the two scales are different things.
+ * `EVENT_SEVERITY_LABELS` (components/commissioner-os/cards/severityStyles.ts) — the separate EVENT
+ * scale Notifications and the Activity Stream badge with. "Advertencia", not "Aviso": "Aviso" is
+ * already the condition scale's `advisory`, and the glossary insists the two scales are different
+ * things. "Crítico" IS the same word on both scales, so it is read from the condition scale's table.
  */
 const EVENT_SEVERITY_ES: Record<CommissionerNotificationSeverity, string> = {
   informational: 'Información',
   success: 'Éxito',
   warning: 'Advertencia',
-  critical: 'Crítico',
+  critical: severityLabelText('critical', 'Critical', 'es'),
 }
 
 export function eventSeverityText(severity: CommissionerNotificationSeverity, english: string, language: string | null | undefined): string {
@@ -190,23 +135,24 @@ const UI_ES: Record<string, string> = {
   Human: 'Persona',
   System: 'Sistema',
 
-  // search/page.tsx and CommissionerSearchPalette
-  Search: 'Buscar',
+  // search/page.tsx and CommissionerSearchPalette — the header's search words are the shell's
+  Search: shellText('Search', 'es'),
   'Global Search & Command Palette is a platform service, not a module — find anything across recommendations, managers, tasks, reports, and automations from the header search button or ⌘K/Ctrl+K, anywhere in Commissioner OS.':
     'La búsqueda global y paleta de comandos es un servicio de la plataforma, no un módulo: encuentra lo que sea entre recomendaciones, mánagers, tareas, informes y automatizaciones con el botón de búsqueda de la cabecera o con ⌘K/Ctrl+K, en cualquier parte de Commissioner OS.',
   'Open Search': 'Abrir búsqueda',
-  'Search Commissioner OS': 'Buscar en Commissioner OS',
+  'Search Commissioner OS': shellText('Search Commissioner OS', 'es'),
   'Search Commissioner OS...': 'Buscar en Commissioner OS...',
   'Search recommendations, managers, tasks, reports, automations, settings, help articles, and pages.':
     'Busca recomendaciones, mánagers, tareas, informes, automatizaciones, ajustes, artículos de ayuda y páginas.',
   'No results found.': 'No se encontraron resultados.',
   Recent: 'Recientes',
   '↑↓ to navigate · Enter to select · Esc to close': '↑↓ para moverte · Intro para elegir · Esc para cerrar',
-  // searchLabels.ts — the result groups ("Managers" and "Settings" are coreUiCopy's)
-  Recommendations: 'Recomendaciones',
+  // searchLabels.ts — the result groups ("Managers" and "Settings" are coreUiCopy's; the three that
+  // are a section's own name read as that section)
+  Recommendations: commissionerSectionName('Recommendations', 'es'),
   Tasks: 'Tareas',
-  Reports: 'Informes',
-  Automations: 'Automatizaciones',
+  Reports: commissionerSectionName('Reports', 'es'),
+  Automations: commissionerSectionName('Automations', 'es'),
   Pages: 'Páginas',
   'Help Articles': 'Artículos de ayuda',
 
@@ -240,10 +186,11 @@ const UI_ES: Record<string, string> = {
     'Cada valor de aquí se capturó de esta liga, no se supuso. Lo marcado como «no capturado» no venía en lo que devolvió la importación: no es un valor predeterminado y ninguna página de Commissioner OS lo trata como tal.',
 
   // Errors the loaders hand these screens (every live client's not-integrated message, and the
-  // settings client's two)
+  // settings client's two). ⚠ analyticsCopy's `cosErrorText` translates the not-integrated message
+  // too, as "todavía no" where this says "aún no"; both left as shipped, pending a decision on one.
   'The live Decision OS backend is not yet integrated in this environment.':
     'El backend en vivo de Decision OS aún no está integrado en este entorno.',
-  'No active league could be resolved for this session.': 'No se pudo determinar una liga activa para esta sesión.',
+  'No active league could be resolved for this session.': cosErrorText('No active league could be resolved for this session.', 'es'),
   'This league could not be read.': 'No se pudo leer esta liga.',
 }
 
@@ -373,7 +320,7 @@ export const LINK_COPY_KEYS: readonly string[] = Object.keys(LINK_ES)
  */
 export function relatedLinkText(label: string, language: string | null | undefined): string {
   if (!isEs(language)) return label
-  return LINK_ES[label] ?? sectionByEnglish(label) ?? label
+  return LINK_ES[label] ?? commissionerSectionName(label, language)
 }
 
 /** "View in League Health" — `sectionLabel` is already in the reader's language. */
@@ -384,9 +331,15 @@ export function viewInText(sectionLabel: string, language: string | null | undef
 /**
  * The sentences the notification and activity composers build around another module's item —
  * lib/commissioner-ui/{notifications,activity}/decision-os-client/{live,demo}.ts. The name inside
- * is translated if it is one of our automations; a report-template name stays as written.
+ * is translated by the catalog that owns it: an automation's here, a report template's by
+ * analyticsCopy's `reportTemplateText`. A name neither catalog knows stays as written.
+ *
+ * ⚠ analyticsCopy's `reportText` also translates "<template> generated successfully." (the Reports
+ * page's preview simulation) and writes it without the colon this one uses. Two shapes of one
+ * English sentence, left as shipped pending a decision on one.
  */
 const REPORT_DEFAULT_REASON = 'no partial file was produced.'
+const report = (tpl: string) => reportTemplateText(tpl, 'es')
 const COMPOSED_RULES: [RegExp, (...g: string[]) => string][] = [
   [/^(.+) needs attention — its last run failed\.$/s, (name) => `${automationText(name, 'es')}: necesita atención; su última ejecución falló.`],
   [
@@ -395,19 +348,30 @@ const COMPOSED_RULES: [RegExp, (...g: string[]) => string][] = [
   ],
   [
     /^(.+?) failed to generate — (.+)$/s,
-    (tpl, reason) => `${tpl}: no se pudo generar. ${reason === REPORT_DEFAULT_REASON ? 'No se produjo ningún archivo parcial.' : commissionerOsText(reason, 'es')}`,
+    (tpl, reason) => `${report(tpl)}: no se pudo generar. ${reason === REPORT_DEFAULT_REASON ? 'No se produjo ningún archivo parcial.' : otherModuleText(reason)}`,
   ],
   [/^(.+) failed on its last run\.$/s, (name) => `${automationText(name, 'es')}: falló en su última ejecución.`],
   [/^(.+) ran successfully\.$/s, (name) => `${automationText(name, 'es')}: se ejecutó correctamente.`],
-  [/^(.+) failed to generate\.$/s, (tpl) => `${tpl}: no se pudo generar.`],
-  [/^(.+) generated successfully\.$/s, (tpl) => `${tpl}: se generó correctamente.`],
+  [/^(.+) failed to generate\.$/s, (tpl) => `${report(tpl)}: no se pudo generar.`],
+  [/^(.+) generated successfully\.$/s, (tpl) => `${report(tpl)}: se generó correctamente.`],
 ]
 
 /**
- * A notification's `message` or an activity event's `summary`. The composer's own sentences are
- * translated whole; anything else is another module's text (a risk description, a recommendation or
- * task title) and goes through `commissionerOsText`, the health-engine / recommendation translator,
- * which passes what it does not know through unchanged.
+ * Another module's sentence quoted whole — a risk description, a recommendation title, a workspace
+ * task title, a health-engine alert — through the translator that module's own screen uses:
+ * `cosLoaderText` (cardsCopy: recommendations, League Health, managers, and from there
+ * `commissionerOsText` for the health engine), then `taskText` (analyticsCopy: workspace tasks).
+ * Unknown text passes through unchanged.
+ */
+function otherModuleText(text: string): string {
+  const loader = cosLoaderText(text, 'es')
+  return loader !== text ? loader : taskText(text, 'es')
+}
+
+/**
+ * A notification's `message` or an activity event's `summary` — on the Notifications and Activity
+ * pages and in Mission Control's Recent Activity. The composer's own sentences are translated whole;
+ * anything else is another module's text and goes through `otherModuleText`.
  */
 export function composedEventText(text: string, language: string | null | undefined): string {
   if (!isEs(language)) return text
@@ -415,7 +379,7 @@ export function composedEventText(text: string, language: string | null | undefi
     const m = pattern.exec(text)
     if (m) return build(...m.slice(1))
   }
-  return commissionerOsText(text, 'es')
+  return otherModuleText(text)
 }
 
 // ── Help ──────────────────────────────────────────────────────────────────────────────────────────
@@ -423,7 +387,7 @@ export function composedEventText(text: string, language: string | null | undefi
 /**
  * The Help & Knowledge Center catalog — lib/commissioner-ui/help/helpCatalog.ts, product prose shared
  * by every data mode. Every title, summary, body, term and definition there is a key here; the test
- * fails on one that is missing. The section names inside follow `SECTION_ES`.
+ * fails on one that is missing. The section names inside follow the shell's `COMMISSIONER_SECTION_NAMES_ES`.
  */
 const HELP_ES: Record<string, string> = {
   // help-welcome
@@ -574,24 +538,26 @@ const SETTINGS_RESULT_ES: Record<string, string> = {
 export const SETTINGS_RESULT_KEYS: readonly string[] = Object.keys(SETTINGS_RESULT_ES)
 
 /**
- * A search result's title. Pages read as their section; our own catalogs (automations, settings, help)
- * translate; a recommendation or task title goes through `commissionerOsText`; a manager's name and a
- * report-template name stay as written.
+ * A search result's title. Pages read as their section; our own catalogs (automations, report
+ * templates, settings, help) translate; a recommendation or task title goes through the translator
+ * its own screen uses (`otherModuleText`); a manager's name stays as written.
  */
 export function searchResultTitleText(result: Pick<CommissionerSearchResultContract, 'category' | 'title'>, language: string | null | undefined): string {
   if (!isEs(language)) return result.title
   switch (result.category) {
     case 'page':
-      return sectionByEnglish(result.title) ?? result.title
+      return commissionerSectionName(result.title, language)
     case 'automation':
       return automationText(result.title, language)
+    case 'report':
+      return reportTemplateText(result.title, language)
     case 'setting':
       return SETTINGS_RESULT_ES[result.title] ?? result.title
     case 'help':
       return helpText(result.title, language)
     case 'recommendation':
     case 'task':
-      return commissionerOsText(result.title, 'es')
+      return otherModuleText(result.title)
     default:
       return result.title
   }
@@ -627,7 +593,7 @@ const SETTINGS_ES: Record<string, string> = {
   'Total roster spots': 'Puestos totales de plantilla',
   'FAAB budget': 'Presupuesto FAAB',
   'Playoff teams': 'Equipos en playoffs',
-  'Playoffs start': 'Inicio de los playoffs',
+  'Playoffs start': leagueEventNameText('Playoffs start', 'es'),
   'Draft type': 'Tipo de draft',
   // values
   Yes: 'Sí',

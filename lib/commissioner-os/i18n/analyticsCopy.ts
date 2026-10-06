@@ -578,7 +578,7 @@ const REPORT_EXACT_ES: Record<string, string> = {
   // generatedByLabel — reportStore.ts's default, the fixture's, and the local simulation's
   Scheduled: 'Programado',
   'Automated schedule': 'Programación automática',
-  You: 'Tú',
+  You: coreUiCopy('You', 'es'),
 }
 
 const plural = (n: string, one: string, many: string) => (n === '1' ? one : many)
@@ -610,8 +610,9 @@ const REPORT_PATTERNS_ES: Array<[RegExp, (...m: string[]) => string]> = [
 
 /**
  * A report template's name in the reader's language — THE report-name translator. Mission Control's
- * "Newest: <report>" and the notification/search text name the same templates and should call this
- * rather than keep their own table. An unknown name passes through.
+ * "Newest: <report>" (shellCopy's `summaryHeadlineText`, via MissionControlView) and the notification,
+ * activity and search text (toolsCopy) call this rather than keep their own table. An unknown name
+ * passes through.
  *
  * `caseless` matches the lowercased name the preview simulation writes ("Generating weekly
  * commissioner digest…") and returns it lowercased too.
@@ -646,8 +647,8 @@ type TaskStatus = 'open' | 'in_progress' | 'waiting_on_manager' | 'waiting_on_le
 export interface WorkspaceCopy {
   status: Record<TaskStatus, string>
   nextAction: Record<TaskStatus, string>
-  /** Severity badge words. ⚠ The English lives in C2's cards/severityStyles.ts; see the note below. */
-  severity: Record<'critical' | 'elevated' | 'standard' | 'advisory' | 'positive', string>
+  // A task's priority badge is `taskPriorityLabelText` in cardsCopy, beside the masculine severity
+  // badge it shares a scale with (2026-10-06) — not a field here.
   workQueues: string
   queue: Record<string, { label: string; emptyTitle: string; emptyDescription: string }>
   openByAge: string
@@ -659,7 +660,7 @@ export interface WorkspaceCopy {
 }
 
 const AGE_BAND_ES: Record<string, string> = {
-  Today: 'Hoy',
+  Today: coreUiCopy('Today', 'es'),
   '1–6 days': '1–6 días',
   '1–4 weeks': '1–4 semanas',
   'Over a month': 'Más de un mes',
@@ -682,12 +683,6 @@ const WORKSPACE_ES: WorkspaceCopy = {
     completed: 'Reabrir',
     archived: 'Reabrir',
   },
-  /*
-   * ⚠ SEVERITY_LABELS is C2's (components/commissioner-os/cards/severityStyles.ts), and C2's cardsCopy
-   * had not landed when this was written. The Spanish is here so the task badges are not English; it
-   * should move to (or import from) C2's module once that exists — one translator per string.
-   */
-  severity: { critical: 'Crítica', elevated: 'Elevada', standard: 'Estándar', advisory: 'Informativa', positive: 'Saludable' },
   workQueues: 'Colas de trabajo',
   queue: {
     all: { label: 'Todas', emptyTitle: 'Aún no hay tareas.', emptyDescription: 'El trabajo operativo aparecerá aquí a medida que surja.' },

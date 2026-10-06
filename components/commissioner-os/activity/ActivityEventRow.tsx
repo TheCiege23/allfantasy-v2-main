@@ -8,10 +8,10 @@ import {
   composedEventText,
   eventSeverityText,
   relativeTimeText,
-  sectionNameText,
   toolsText,
   viewInText,
 } from '@/lib/commissioner-os/i18n/toolsCopy'
+import { moduleLabelText } from '@/lib/commissioner-os/i18n/shellCopy'
 
 export interface ActivityEventRowProps {
   event: CommissionerActivityEventContract
@@ -31,7 +31,7 @@ export function ActivityEventRow({ event, isLast }: ActivityEventRowProps) {
   const severityStyle = getActivitySeverityStyle(event.severity)
   const { language } = useOptionalLanguage()
   const t = (english: string) => toolsText(english, language)
-  const sourceLabel = sectionNameText(event.sourceModuleId, getModuleLabel(event.sourceModuleId), language)
+  const sourceLabel = moduleLabelText(event.sourceModuleId, getModuleLabel(event.sourceModuleId), language)
 
   return (
     <li className="relative flex gap-3 pb-6">
