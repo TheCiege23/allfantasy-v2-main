@@ -304,3 +304,56 @@ describe('syncPlayerWeeklyScoresForRedraftSeason — NCAAF starters with no CFBD
     expect(call.where.gameId.in).not.toContain('cfbd:0901')
   })
 })
+
+
+describe('imported historical reserves are separate from 2026 scoring eligibility', () => {
+ beforeEach(() => {
+  vi.resetAllMocks()
+  prismaMock.adminAuditLog.create.mockResolvedValue({})
+  prismaMock.playerWeeklyScore.upsert.mockResolvedValue({})
+  prismaMock.playerGameLogCache.findMany.mockResolvedValue([])
+  prismaMock.league.findFirst.mockResolvedValue({ sport: 'NCAAF', settings: {} })
+  prismaMock.league.findUnique.mockResolvedValue({ sport: 'NCAAF', platform: 'fantrax', settings: {} })
+  prismaMock.redraftSeason.findFirst.mockResolvedValue({ id: 's1', leagueId: 'L1', sport: 'NCAAFB', season: 2026, currentWeek: 3 })
+  prismaMock.redraftRoster.findMany.mockResolvedValue([{ id: 'r1' }])
+  prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([
+   { playerId: '05ny7', sport: 'NCAAFB', position: 'QB', team: 'Utah State' },
+   { playerId: '05lol', sport: 'NCAAFB', position: 'RB', team: 'Boise State' },
+   { playerId: '077wg', sport: 'NCAAFB', position: 'QB', team: 'BYU' },
+  ])
+  prismaMock.sportsPlayer.findMany.mockResolvedValue([])
+  prismaMock.playerIdentityMap.findMany.mockImplementation(async ({ where }: { where: Record<string, any> }) => where.fantraxId ? [
+   { id: 'barnes', fantraxId: '05ny7', cfbdId: '4695600', rollingInsightsId: null },
+   { id: 'sherrod', fantraxId: '05lol', cfbdId: '4607267', rollingInsightsId: null },
+  ] : [])
+  // All three old schools appear to have a bye. That cannot prove these players' eligibility.
+  prismaMock.sportsGame.findMany.mockResolvedValue([
+   { homeTeam: 'Utah State', awayTeam: 'Boise State', week: 2, externalId: 'past', status: 'completed' },
+   { homeTeam: 'BYU', awayTeam: 'Utah', week: 2, externalId: 'past2', status: 'completed' },
+  ])
+  prismaMock.playerGameStat.findMany.mockResolvedValue([])
+ })
+ const run = async () => (await import('@/lib/redraft/playerWeeklyScoreService')).syncPlayerWeeklyScoresForRedraftSeason({ seasonId: 's1', week: 3, actorId: 'system:test' })
+ it('does not manufacture bye zeros for inactive, unverified or prospect records', async () => {
+  const r = await run()
+  expect(prismaMock.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+  expect(r.ncaafMissingByReason).toEqual({ college_inactive: 1, needs_verification: 1, prospect: 1 })
+  expect(r.ncaafSeasonAvailability).toHaveLength(3)
+  expect(r.unresolvedCfbdPlayerIds).toEqual(['077wg'])
+ })
+ it('refuses conflicting provider game rows for a verified former college player', async () => {
+  prismaMock.playerGameStat.findMany.mockResolvedValue([{ playerId: '4695600', normalizedStatMap: { 'passing.YDS': 200 } }])
+  const r = await run()
+  expect(prismaMock.playerWeeklyScore.upsert).not.toHaveBeenCalled()
+  expect(r.warnings.join(' ')).toContain('season evidence conflicts')
+ })
+ it('allows actual season game evidence to resolve a player needing verification', async () => {
+  prismaMock.playerGameStat.findMany.mockResolvedValue([{ playerId: '4607267', normalizedStatMap: { 'rushing.YDS': 50 } }])
+  await run()
+  expect(prismaMock.playerWeeklyScore.upsert.mock.calls.map(c => c[0].create.playerId)).toEqual(['05lol'])
+ })
+ it('does not apply Fantrax exceptions to a native roster namespace', async () => {
+  prismaMock.league.findUnique.mockResolvedValue({ sport: 'NCAAF', platform: 'allfantasy', settings: {} })
+  expect((await run()).ncaafSeasonAvailability).toBeUndefined()
+ })
+})
