@@ -42,7 +42,7 @@ import {
   type Workflow,
 } from './commissioner/areas'
 import { balanceChart, engagementChart, scoringChart, type HubChart } from './commissioner/charts'
-import { RECIPES, RECIPES_SEND_TOGGLE, readRecipeSettings, type RecipeKey } from './commissioner/recipes'
+import { RECIPES, RECIPES_SEND_TOGGLE, readRecipeSettings, recipeCatalogEntry, type RecipeKey } from './commissioner/recipes'
 import { readChimmySpeaksUp } from '@/lib/league-chat/chimmyIdentity'
 import {
   memberActivityFromReads,
@@ -404,10 +404,10 @@ const WAIVER_TYPE_LABEL: Record<string, string> = {
 }
 const WAIVER_TYPE_LABEL_ES: Record<string, string> = {
   faab: 'Pujas FAAB a ciegas',
-  rolling: 'Prioridad de agentes libres rotativa',
+  rolling: 'Prioridad de reclamo rotativa',
   reverse_standings: 'Prioridad por clasificación inversa',
   fcfs: 'Por orden de llegada',
-  standard: 'Prioridad de agentes libres estándar',
+  standard: 'Prioridad de reclamo estándar',
   off: 'Sin agentes libres en espera: los fichajes son inmediatos',
 }
 
@@ -612,7 +612,7 @@ export async function getCommissionerHub(input: {
       .catch(() => []),
     // Seven queries (commissionerWaivers.ts), for a panel a locked viewer is not shown.
     depthOpen
-      ? getCommissionerWaiverOversight({ leagueId, platform, role, now }).catch(
+      ? getCommissionerWaiverOversight({ leagueId, platform, role, now, language }).catch(
           (): WaiverOversight => ({
             available: false,
             reason: es
@@ -872,6 +872,7 @@ export async function getCommissionerHub(input: {
         }
       : null,
     polls: open.map((p) => ({ id: p.id, question: p.question, closesAt: p.closesAt })),
+    language,
   })
   // The calendar is free to read; exporting it to a calendar app is AF Commissioner. Null hides both export buttons.
   const ics = depthOpen
@@ -880,6 +881,7 @@ export async function getCommissionerHub(input: {
         leagueName,
         events: calendar.events,
         now,
+        language,
         appUrl: `${getBaseUrl()}/core/commissioner?league=${encodeURIComponent(leagueId)}`,
       })
     : null
@@ -1163,21 +1165,16 @@ export async function getCommissionerHub(input: {
     recipes: {
       ...recipeSettings,
       sendEnabled,
-      catalog: RECIPES.map((r) => ({
-        key: r.key,
-        label: r.label,
-        description: r.description,
-        cadence: r.cadence,
-        unavailable: r.unavailableReason({ platform, sport }),
-      })),
+      catalog: RECIPES.map((r) => recipeCatalogEntry(r, { platform, sport }, language)),
       chimmySpeaksUp: readChimmySpeaksUp(settingsJson),
     },
     charts: {
-      scoring: matchups ? scoringChart(matchups, { currentWeek: statedWeek, complete: seasonComplete }) : null,
+      scoring: matchups ? scoringChart(matchups, { currentWeek: statedWeek, complete: seasonComplete }, language) : null,
       balance: balanceChart(
         teams.map((t) => ({ name: teamLabel(t, language), wins: t.wins, losses: t.losses, ties: t.ties, pointsFor: t.pointsFor })),
+        language,
       ),
-      engagement: memberRows && !activityStale ? engagementChart(memberRows) : null,
+      engagement: memberRows && !activityStale ? engagementChart(memberRows, language) : null,
     },
     settings,
     access,

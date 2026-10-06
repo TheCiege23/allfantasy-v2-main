@@ -190,6 +190,8 @@ export async function ingestSleeperPlayerScoresForWeek(
           },
         },
         update: {
+          // A fresh provider ingest is provisional until a reconciliation pass seals it again.
+          isFinalized: false,
           points,
           isStarter: starterIds.has(playerId),
           rosterId: Number.isFinite(Number(m.roster_id)) ? Number(m.roster_id) : null,

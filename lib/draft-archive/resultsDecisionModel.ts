@@ -3,7 +3,7 @@ export type WeeklyContribution={rosterId:string;playerId:string;points:number;is
 export type PlayerContribution={playerId:string;name:string;rosterId:string;state:'complete'|'partial';weeks:Array<{week:number;points:number;starter:boolean;held?:boolean}>;expectedWeeks:number;totalPoints:number;starterPoints:number;starts:number;usage:number|null;earlyStarterPoints:number|null;lateStarterPoints:number|null};
 /** Observed original-team usage, never hypothetical replacement production or missing-week zeroes. */
 export function playerContributions(picks:AnalysisSelection[],rows:WeeklyContribution[],finalWeeks:number[]):PlayerContribution[]{
-  if(rows.length>10000||picks.length>1000)return [];
+  if(rows.length>18000||picks.length>1000)return [];
   const weeks=[...new Set(finalWeeks)].filter(w=>Number.isInteger(w)&&w>=1&&w<=18).sort((a,b)=>a-b);
   if(!weeks.length)return [];
   return picks.flatMap(p=>{

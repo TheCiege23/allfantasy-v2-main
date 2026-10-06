@@ -34,6 +34,9 @@ const evidenceColumnClass: Record<1 | 2 | 3, string> = {
   3: 'sm:grid-cols-3',
 }
 
+/** Spanish for the primitives' own words (2026-10-06). Callers pass `language`; English is the default. */
+const CONFIDENCE_ES: Record<DecisionOsConfidenceLabel, string> = { High: 'alta', Medium: 'media', Low: 'baja' }
+
 export const decisionOsCardClassName =
   'card-premium overflow-hidden p-0 transition duration-200 hover:border-brand-primary/25 hover:shadow-popover motion-reduce:transition-none'
 
@@ -88,19 +91,23 @@ function confidenceClasses(label: DecisionOsConfidenceLabel) {
   return 'border-status-info/25 bg-status-info/10 text-status-info'
 }
 
-export function DecisionOsConfidenceBadge({ label }: { label: DecisionOsConfidenceLabel }) {
+/** `language: 'es'` says it in Spanish; the tone and icon still key off the English `label`. */
+export function DecisionOsConfidenceBadge({ label, language }: { label: DecisionOsConfidenceLabel; language?: string }) {
   const Icon = label === 'Low' ? Info : CheckCircle2
+  const es = language === 'es'
   return (
     <span
       className={cn(
         'inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold',
         confidenceClasses(label),
       )}
-      title="Confidence reflects available evidence coverage, not a guaranteed outcome."
-      aria-label={`${label} confidence. Based on available evidence, not a guaranteed outcome.`}
+      title={es ? 'La confianza refleja la cobertura de la evidencia disponible, no un resultado garantizado.' : 'Confidence reflects available evidence coverage, not a guaranteed outcome.'}
+      aria-label={es
+        ? `Confianza ${CONFIDENCE_ES[label]}. Basada en la evidencia disponible, no en un resultado garantizado.`
+        : `${label} confidence. Based on available evidence, not a guaranteed outcome.`}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      {label} confidence
+      {es ? `Confianza ${CONFIDENCE_ES[label]}` : `${label} confidence`}
     </span>
   )
 }
@@ -148,9 +155,9 @@ export function DecisionOsPanel({
   )
 }
 
-export function DecisionOsWhyPanel({ children }: { children: ReactNode }) {
+export function DecisionOsWhyPanel({ children, language }: { children: ReactNode; language?: string }) {
   return (
-    <DecisionOsPanel title="Why am I seeing this?" className="bg-surface-muted">
+    <DecisionOsPanel title={language === 'es' ? '¿Por qué veo esto?' : 'Why am I seeing this?'} className="bg-surface-muted">
       <p className="mt-2 text-sm leading-6 text-primary">{children}</p>
     </DecisionOsPanel>
   )
@@ -160,11 +167,15 @@ export function DecisionOsEvidenceGrid({
   title,
   items,
   columns = 2,
-  emptyMessage = 'Evidence will appear here once enough supported data is available.',
+  language,
+  emptyMessage = language === 'es'
+    ? 'La evidencia aparecerá aquí cuando haya suficientes datos que la respalden.'
+    : 'Evidence will appear here once enough supported data is available.',
 }: {
   title: string
   items: EvidenceItem[]
   columns?: 1 | 2 | 3
+  language?: string
   emptyMessage?: string
 }) {
   return (
@@ -195,10 +206,12 @@ export function DecisionOsInsufficientDataCallout({
   title,
   message,
   missing,
+  language,
 }: {
   title: string
   message: string
   missing: string[]
+  language?: string
 }) {
   return (
     <div className="rounded-xl border border-status-warning/30 bg-status-warning/10 p-4">
@@ -209,7 +222,7 @@ export function DecisionOsInsufficientDataCallout({
           <p className="mt-1 text-sm leading-6 text-secondary">{message}</p>
           {missing.length > 0 ? (
             <p className="mt-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted">
-              Waiting for: {missing.join(', ')}
+              {language === 'es' ? 'Esperando: ' : 'Waiting for: '}{missing.join(', ')}
             </p>
           ) : null}
         </div>
@@ -287,9 +300,9 @@ export function DecisionOsStatChip({
 /** A section-level "still loading" skeleton, distinct from `DecisionOsEmptyState` (a real, resolved
  * "there is genuinely nothing here" state) and from silently rendering zero-value fallbacks — see
  * `docs/os/VISUAL_OS_V1_AUDIT.md` Finding 8. `rows` controls how many placeholder lines to render. */
-export function DecisionOsLoadingSkeleton({ rows = 3 }: { rows?: number }) {
+export function DecisionOsLoadingSkeleton({ rows = 3, language }: { rows?: number; language?: string }) {
   return (
-    <div className="animate-pulse space-y-2" role="status" aria-label="Loading">
+    <div className="animate-pulse space-y-2" role="status" aria-label={language === 'es' ? 'Cargando' : 'Loading'}>
       {Array.from({ length: rows }).map((_, index) => (
         <div key={index} className="h-14 rounded-xl border border-subtle bg-surface-muted" />
       ))}

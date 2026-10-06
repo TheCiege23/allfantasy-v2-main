@@ -6,6 +6,7 @@ import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import type { SlotOrderEntry, TradedPickRecord } from '@/lib/live-draft-engine/types';
 import { advanceArchiveClock, type ArchiveClock, type ClockEvent } from './clock';
 import { resolveNextOpenPickOverall } from '@/lib/live-draft-engine/draftPickEmpty';
+import {captureSpecialtyBasis} from './specialtyBasis';
 import { captureDraftAnalysisBasis } from './analysisBasis';
 import { archiveLedger, archiveSequence } from './ledger';
 export const ARCHIVE_EVENT = 'draft_archive_event';
@@ -39,6 +40,7 @@ export async function recordArchiveEvent(tx: Prisma.TransactionClient, session: 
     nextOverallPick?: number;
     timerSeconds?: number | null;
     playerPool?: string;
+    devyConfig?:unknown; c2cConfig?:unknown; dispersalPoolConfig?:unknown; draftModeLabel?:string|null;
     thirdRoundReversal?: boolean;
     overnightFrozenPickSeconds?: number | null;
 }, event: ClockEvent, details: Record<string, unknown> = {}, at = new Date()) {
@@ -68,7 +70,7 @@ export async function recordArchiveEvent(tx: Prisma.TransactionClient, session: 
     let snapshot: unknown = undefined;
     if (event === 'start') {
         const [league, teams, rosters] = await Promise.all([tx.league.findUnique({ where: { id: session.leagueId }, select: { sport: true, season: true, scoring: true, isDynasty: true, leagueVariant: true, settings: true } }), tx.leagueTeam.findMany({ where: { leagueId: session.leagueId }, select: { externalId: true, teamName: true, ownerName: true, platformUserId: true, claimedByUserId: true } }), tx.roster.findMany({ where: { leagueId: session.leagueId }, select: { id: true, platformUserId: true, playerData: true } })]);
-        const analysisBasis = await captureDraftAnalysisBasis(tx, league, at, session.playerPool);
+        const analysisBasis = {...await captureDraftAnalysisBasis(tx, league, at, session.playerPool),specialty:await captureSpecialtyBasis(tx,league,session,at)};
         snapshot = { session, league, teams, rosters, analysisBasis, context: league ? preparationContext(league, session) : null, capturedAt: at.toISOString() };
     }
     const context = event === 'start' ? object(snapshot).context ?? null : object(latest?.afterState).context ?? null;

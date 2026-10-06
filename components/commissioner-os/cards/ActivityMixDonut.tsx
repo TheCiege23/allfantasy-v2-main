@@ -1,6 +1,8 @@
 'use client'
 
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { cardsCopy } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 export interface ActivityMixSlice {
   label: string
@@ -37,12 +39,14 @@ const SLICE_COLORS = [
 const MAX_SLICES = SLICE_COLORS.length
 
 export function ActivityMixDonut({ slices, height = 260, ariaLabel }: ActivityMixDonutProps) {
+  // The fold's own word follows the language; slice labels and `ariaLabel` are the caller's.
+  const { language } = useOptionalLanguage()
   const ordered = [...slices].sort((a, b) => b.value - a.value)
   const shown = ordered.slice(0, MAX_SLICES - 1)
   const rest = ordered.slice(MAX_SLICES - 1)
   const data =
     rest.length > 1
-      ? [...shown, { label: 'Other', value: rest.reduce((sum, s) => sum + s.value, 0) }]
+      ? [...shown, { label: cardsCopy('Other', language), value: rest.reduce((sum, s) => sum + s.value, 0) }]
       : ordered
 
   const total = data.reduce((sum, s) => sum + s.value, 0)

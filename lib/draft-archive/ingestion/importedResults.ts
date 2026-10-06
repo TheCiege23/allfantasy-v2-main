@@ -1,4 +1,6 @@
 import 'server-only';
+import {stableFinalWeeks} from '../reconciliationModel';
+import {MAX_WEEKLY_ROSTER_PLAYERS,weeklyOutcomes,type WeeklyRosterEvidence} from '../weeklyOutcomeModel';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -44,10 +46,14 @@ export async function captureImportedResults(leagueId: string, key: string, appl
   if (new Set(selections.map(p=>p.playerId)).size!==selections.length||selections.some(p=>!p.playerId||!p.rosterId||!rosterIds.includes(p.rosterId))) throw new Error('Unambiguous recorded player and team identities required');
   const scored = Number(object(provider.settings).last_scored_leg);
   if (!Number.isInteger(scored) || scored < 1 || scored > 18) throw new Error('Provider has not confirmed scored weeks');
-  const games = await prisma.sportsGame.findMany({where:{sport:'NFL',season:choice.season,seasonType:'regular',week:{gte:1,lte:scored}},take:1001,select:{week:true,startTime:true}});
+  const games = await prisma.sportsGame.findMany({where:{sport:'NFL',season:choice.season,seasonType:'regular',week:{gte:1,lte:scored}},take:1001,select:{week:true,startTime:true,status:true,source:true}});
   if (games.length > 1000 || typeof draft.start_time !== 'number' || !Number.isFinite(draft.start_time)) throw new Error('Verified draft and schedule dates required');
   const startTime = draft.start_time;
   const weeks = Array.from({length:scored},(_,i)=>i+1).filter(week=>games.some(g=>g.week===week) && games.filter(g=>g.week===week).every(g=>g.startTime && g.startTime.getTime() > startTime));
+  const reconciled=await prisma.leaguePlayerWeeklyScore.findMany({where:{leagueId:sourceLeagueId,seasonYear:choice.season,source:'sleeper',week:{in:weeks}},take:MAX_WEEKLY_ROSTER_PLAYERS+1,select:{week:true,playerId:true,rosterId:true,points:true,isStarter:true,isFinalized:true}});
+  if(reconciled.length>MAX_WEEKLY_ROSTER_PLAYERS)throw new Error('Final score evidence bound exceeded');
+  const weekEvidence:WeeklyRosterEvidence[]=[];
+  const declaredSlots=Array.isArray(provider.roster_positions)?provider.roster_positions.filter((s):s is string=>typeof s==='string'&&!['BN','BE','BENCH','IR','TAXI'].includes(s.toUpperCase())):[];
   const rows: ImportedWeeklyEvidence['rows'] = [], coveredWeeks: number[] = [];
   const deadline = Date.now()+45000;
   for (let offset=0;offset<weeks.length;offset+=3) {
@@ -70,22 +76,59 @@ export async function captureImportedResults(leagueId: string, key: string, appl
           weekRows.push({rosterId:team.rosterId,playerId:pick.playerId,week,points:owned ? value as number : 0,isStarter:owned&&(m.starters as string[]).includes(pick.playerId),held:owned});
         }
       }
+      for(const team of teams){
+        const m=matchups.find(m=>id(m.roster_id)===team.rosterId)!;
+        const starters=m.starters as string[];
+        weekEvidence.push({week,rosterId:team.rosterId,players:(m.players as string[]).map(playerId=>{
+          const value=object(m.players_points)[playerId],points=typeof value==='number'&&Number.isFinite(value)?value:null,starter=starters.includes(playerId);
+          const recorded=reconciled.filter(r=>r.week===week&&r.playerId===playerId);
+          return{playerId,points,starter,position:selections.find(p=>p.playerId===playerId)?.position??null,finalized:recorded.length===1&&recorded[0].isFinalized&&String(recorded[0].rosterId)===team.rosterId&&recorded[0].points===points&&recorded[0].isStarter===starter};
+        }),slots:starters.length===declaredSlots.length?declaredSlots.map((slot,i)=>({slot,playerId:starters[i]==='0'?null:starters[i]})):[]});
+      }
       rows.push(...weekRows); if (complete) coveredWeeks.push(week);
     }
   }
-  if (rows.length>10000) throw new Error('Result evidence bound exceeded');
+  if(weekEvidence.reduce((sum,e)=>sum+e.players.length,0)>MAX_WEEKLY_ROSTER_PLAYERS)throw new Error('Weekly roster evidence bound exceeded');
+  if (rows.length>18000) throw new Error('Result evidence bound exceeded');
+  let stableWeeks:number[]=[];
+  const now=new Date();
+  // Only the verified historical source is complete by construction; contemporary sources stay conservative.
+  const historicalGames=games.filter(g=>g.source==='espn_draft_history_v1');
+  const finalGames=historicalGames.length?historicalGames:games;
+  if(apply&&rows.length&&finalGames.some(g=>g.status?.toLowerCase()==='final'&&g.startTime&&g.startTime.getTime()<now.getTime()-36*3600000)){
+    const priorRow=await prisma.aiAdpSnapshotHistory.findFirst({where:{sport:'NFL',leagueType:'draft_results',formatKey:storageKey(leagueId,key+':weekly-v3'),computedAt:{lte:new Date(now.getTime()-12*3600000)}},orderBy:[{computedAt:'desc'},{id:'desc'}],select:{snapshotData:true}});
+    const prior=object(priorRow?.snapshotData);
+    if(prior.version==='draft-results-v3'&&prior.leagueId===leagueId&&prior.key===key&&prior.sourceLeagueId===sourceLeagueId&&prior.sourceDraftId===choice.sourceId&&typeof prior.observedAt==='string')stableWeeks=stableFinalWeeks(weekEvidence,object(prior.weekly).weekEvidence,now.toISOString(),prior.observedAt,rosterIds,weeks,finalGames,now);
+    for(const proof of weekEvidence)if(stableWeeks.includes(proof.week))for(const player of proof.players)player.finalized=true;
+  }
   const report=resultsReport(selections,teams,rows,weeks);
   report.provisional=true;
   report.coverage='Provider-reported scored weeks, retrieved at the displayed observation time. Production is counted only while a drafted player is held by the original team; exhaustive weekly rosters establish zero original-team contribution after departure. These are provisional usage ranks, not NFL production totals or draft-decision grades.';
   if (!completeDraft || coveredWeeks.length !== weeks.length) {report.state=report.teams.some(t=>t.coveredPicks)?'partial':'unavailable';for(const team of report.teams)team.rank=null;}
-  const observation: ImportedResultsObservation={version:'draft-results-v2',leagueId,key,observedAt:new Date().toISOString(),sourceLeagueId,sourceDraftId:choice.sourceId,report,weekly:{selections:selections.map(p=>({playerId:p.playerId!,rosterId:p.rosterId!})),expectedWeeks:weeks,rows,completeDraft}};
+  const outcomes=weeklyOutcomes(selections,weeks,rosterIds,weekEvidence);
+  const provisionalReport={...report,teams:report.teams.map(t=>({...t})),provisional:true};
+  if(outcomes.finalizedWeeks.length===weeks.length&&weeks.length>0&&report.state==='ready'){report.provisional=false;report.coverage='Reconciled finalized original-team weekly contribution. Bench substitution comparisons are retrospective and use the slot rules observed at refresh, not waiver availability or causal draft grades.';}
+  const observation: ImportedResultsObservation={version:'draft-results-v3',leagueId,key,observedAt:new Date().toISOString(),sourceLeagueId,sourceDraftId:choice.sourceId,report,weekly:{selections:selections.map(p=>({playerId:p.playerId!,rosterId:p.rosterId!})),expectedWeeks:weeks,rows,completeDraft,weekEvidence}};
   const fingerprint=createHash('sha256').update(JSON.stringify(observation)).digest('hex');
-  if (apply) {
-    const aggregate:ImportedResultsObservation={version:'draft-results-v1',leagueId,key,observedAt:observation.observedAt,sourceLeagueId,sourceDraftId:choice.sourceId,report};
-    await prisma.$transaction([
-      prisma.aiAdpSnapshotHistory.create({data:{id:'hqr2-'+fingerprint.slice(0,40),sport:'NFL',leagueType:'draft_results',formatKey:storageKey(leagueId,key+':weekly-v2'),computedAt:new Date(observation.observedAt),snapshotData:observation as unknown as Prisma.InputJsonValue,totalDrafts:1,totalPicks:selections.length}}),
-      prisma.aiAdpSnapshotHistory.create({data:{id:'hqr1-'+fingerprint.slice(0,40),sport:'NFL',leagueType:'draft_results',formatKey:storageKey(leagueId,key),computedAt:new Date(observation.observedAt),snapshotData:aggregate as unknown as Prisma.InputJsonValue,totalDrafts:1,totalPicks:selections.length}}),
-    ]);
+  if (apply && rows.length) {
+    const aggregate:ImportedResultsObservation={version:'draft-results-v1',leagueId,key,observedAt:observation.observedAt,sourceLeagueId,sourceDraftId:choice.sourceId,report:provisionalReport};
+    const compatible:ImportedResultsObservation={...observation,version:'draft-results-v2',report:provisionalReport,weekly:{...observation.weekly!,weekEvidence:undefined}};
+    const persist=(db:Pick<typeof prisma,'aiAdpSnapshotHistory'>)=>[
+
+      db.aiAdpSnapshotHistory.create({data:{id:'hqr3-'+fingerprint.slice(0,40),sport:'NFL',leagueType:'draft_results',formatKey:storageKey(leagueId,key+':weekly-v3'),computedAt:new Date(observation.observedAt),snapshotData:observation as unknown as Prisma.InputJsonValue,totalDrafts:1,totalPicks:selections.length}}),
+      // Prior v2 readers cap selected-player rows at 10,000; retain v1 fallback for larger archives.
+      ...(rows.length<=10000?[db.aiAdpSnapshotHistory.create({data:{id:'hqr2-'+fingerprint.slice(0,40),sport:'NFL',leagueType:'draft_results',formatKey:storageKey(leagueId,key+':weekly-v2'),computedAt:new Date(observation.observedAt),snapshotData:JSON.parse(JSON.stringify(compatible)) as unknown as Prisma.InputJsonValue,totalDrafts:1,totalPicks:selections.length}})]:[]),
+      db.aiAdpSnapshotHistory.create({data:{id:'hqr1-'+fingerprint.slice(0,40),sport:'NFL',leagueType:'draft_results',formatKey:storageKey(leagueId,key),computedAt:new Date(observation.observedAt),snapshotData:aggregate as unknown as Prisma.InputJsonValue,totalDrafts:1,totalPicks:selections.length}}),
+    ];
+    if(stableWeeks.length){
+      const sealed=weekEvidence.filter(e=>stableWeeks.includes(e.week)).flatMap(e=>e.players.map(p=>({id:'dfr-'+createHash('sha256').update(JSON.stringify([sourceLeagueId,choice.season,e.week,p.playerId])).digest('hex').slice(0,40),week:e.week,playerId:p.playerId,rosterId:Number(e.rosterId),points:p.points,isStarter:p.starter})));
+      if(sealed.some(p=>!Number.isSafeInteger(p.rosterId)||p.rosterId<1||p.points===null))throw new Error('Invalid finalization source identity');
+      await prisma.$transaction(async tx=>{
+        const count=await tx.$executeRaw(Prisma.sql`INSERT INTO league_player_weekly_scores (id,"leagueId","seasonYear",week,"playerId","rosterId",points,"isStarter","isFinalized",source,"createdAt","updatedAt") SELECT r.id,${sourceLeagueId},${choice.season},r.week,r."playerId",r."rosterId",r.points,r."isStarter",true,'sleeper',now(),now() FROM jsonb_to_recordset(${JSON.stringify(sealed)}::jsonb) AS r(id text,week integer,"playerId" text,"rosterId" integer,points double precision,"isStarter" boolean) ON CONFLICT ("leagueId","seasonYear",week,"playerId") DO UPDATE SET "isFinalized"=true,"updatedAt"=now() WHERE league_player_weekly_scores.source='sleeper' AND league_player_weekly_scores.points=EXCLUDED.points AND league_player_weekly_scores."rosterId"=EXCLUDED."rosterId" AND league_player_weekly_scores."isStarter"=EXCLUDED."isStarter"`);
+        if(count!==sealed.length)throw new Error('Score changed during finalization; no observation published');
+        await Promise.all(persist(tx));
+      },{timeout:15000});
+    }else await prisma.$transaction(persist(prisma));
   }
   return {weeks:coveredWeeks.length,state:report.state};
 }

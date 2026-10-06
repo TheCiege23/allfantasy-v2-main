@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ rows: vi.fn(), teams: vi.fn(), facts: vi.fn(), metadata: vi.fn() }))
+const mocks = vi.hoisted(() => ({ rows: vi.fn(), teams: vi.fn(), facts: vi.fn(), metadata: vi.fn(), finished: vi.fn() }))
+vi.mock('@/lib/core-app/finishedNflWeeks', () => ({ loadFinishedNflWeeks: mocks.finished }))
 vi.mock('@/lib/prisma', () => ({ prisma: {
   weeklyMatchup: { findMany: mocks.rows }, leagueTeam: { findMany: mocks.teams },
   matchupFact: { findMany: mocks.facts }, sportsGame: { findMany: vi.fn(async () => []) },
@@ -27,12 +28,34 @@ beforeEach(() => {
   mocks.rows.mockResolvedValue([])
   mocks.facts.mockResolvedValue([])
   mocks.metadata.mockResolvedValue([])
+  mocks.finished.mockResolvedValue(new Set())
   mocks.teams.mockImplementation(async (args: { where: { claimedByUserId?: string } }) => leagues.flatMap((l) =>
     (args.where.claimedByUserId ? ['1'] : ['1', '2']).map((externalId) => ({ externalId, teamName: 'Manager ' + externalId, avatarUrl: null,
       league: { platformLeagueId: l.platformLeagueId, platform: l.platform } }))))
 })
 
 describe('Your Week uses each league scoring calendar', () => {
+  it('moves HailShiva from the final Week 4 slate to its scheduled Week 5 before the marker advances', async () => {
+    mocks.metadata.mockResolvedValue([metadata('NFL', 2026, 4)])
+    mocks.finished.mockResolvedValue(new Set(['2026:4']))
+    mocks.rows.mockResolvedValue([...meeting('NFL', 2026, 4, 110, 90), ...meeting('NFL', 2026, 5).map(r => ({ ...r, rosterId: r.rosterId === '2' ? '3' : r.rosterId }))])
+    mocks.teams.mockImplementation(async (args: { where: { claimedByUserId?: string } }) =>
+      (args.where.claimedByUserId ? ['1'] : ['1', '2', '3']).map(externalId => ({ externalId, teamName: externalId === '2' ? 'Paid' : externalId === '3' ? 'Rittnasty' : 'Tenzy SF', avatarUrl: null, league: { platformLeagueId: 'PNFL', platform: 'sleeper' } })))
+    const board = await getWeekBoard('u1', [leagues[0]], 'NFL')
+    expect(cards(board).map(c => [c.season, c.week])).toEqual([[2026, 5]])
+    expect(cards(board)[0].opponent.name).toBe('Rittnasty')
+    expect(board.leagueBoard).toMatchObject({ season: 2026, week: 5, yours: { week: 5 }, records: { '1': { wins: 1, losses: 0 } } })
+  })
+
+  it('retains the marked week without a next-week schedule or a finished NFL calendar', async () => {
+    mocks.metadata.mockResolvedValue([metadata('NFL', 2026, 4)])
+    mocks.finished.mockResolvedValue(new Set(['2026:4']))
+    mocks.rows.mockResolvedValue([...meeting('NFL', 2026, 4, 110, 90), ...meeting('NFL', 2026, 6)])
+    expect((await getWeekBoard('u1', [leagues[0]], 'NFL')).leagueBoard?.week).toBe(4)
+    mocks.finished.mockResolvedValue(new Set())
+    mocks.rows.mockResolvedValue([...meeting('NFL', 2026, 4, 110, 90), ...meeting('NFL', 2026, 5)])
+    expect((await getWeekBoard('u1', [leagues[0]], 'NFL')).leagueBoard?.week).toBe(4)
+  })
   it('keeps all seven sports in a portfolio across different periods and seasons', async () => {
     const periods = [4, 20, 27, 12, 11, 6, 9]
     mocks.metadata.mockResolvedValue(sports.map((sport, i) => metadata(sport, sport === 'SOCCER' ? 2027 : 2026, periods[i])))

@@ -36,12 +36,29 @@ export type EdgeWaiverManager = {
   faabRemaining: number | null
 }
 
+/**
+ * The numbers each fact's English sentence was written from, so a screen can say the same fact in
+ * another language without parsing the English (lib/core-app/playerCardCopy.ts `waiverFactText`).
+ * The `text` stays the English, byte for byte.
+ */
+export type WaiverFactParts =
+  | { kind: 'faab_left'; name: string; left: number; viewer: number | null }
+  | { kind: 'no_claims'; name: string }
+  | { kind: 'claims'; name: string; claims: number; spent: number | null }
+  | { kind: 'biggest_bid'; bid: number; position: string | null }
+  | { kind: 'zero_bids'; zero: number; claims: number }
+  | { kind: 'position'; position: string; count: number; claims: number }
+  | { kind: 'outbid_by'; more: number; withBudget: number; viewer: number }
+  | { kind: 'league_claims'; claims: number }
+
+export type WaiverEdgeFact = EdgeFact & { parts?: WaiverFactParts }
+
 export type WaiverEdgeRival = {
   manager: { name: string; teamExternalId: string }
   faabRemaining: number | null
   claims: number
   sufficient: boolean
-  facts: EdgeFact[]
+  facts: WaiverEdgeFact[]
 }
 
 export type WaiverEdge = {
@@ -49,7 +66,7 @@ export type WaiverEdge = {
   usesFaab: boolean
   viewer: { teamExternalId: string | null; faabRemaining: number | null }
   /** Lines about the whole league, against you — `bearsOnDeal` when they bear on your bid. */
-  leagueFacts: EdgeFact[]
+  leagueFacts: WaiverEdgeFact[]
   /** Every other manager: most FAAB left first in a FAAB league, else most claims first. */
   rivals: WaiverEdgeRival[]
   coverage: {
@@ -87,8 +104,8 @@ function rivalFacts(
   usesFaab: boolean,
   faabRemaining: number | null,
   viewerFaab: number | null,
-): EdgeFact[] {
-  const facts: EdgeFact[] = []
+): WaiverEdgeFact[] {
+  const facts: WaiverEdgeFact[] = []
   const n = mine.length
 
   if (usesFaab && faabRemaining != null) {
@@ -100,11 +117,21 @@ function rivalFacts(
           : faabRemaining < viewerFaab
             ? ` — less than your ${money(viewerFaab)}`
             : ' — the same as yours'
-    facts.push({ key: 'waiver.faab_left', text: `${name} has ${money(faabRemaining)} of FAAB left${vs}.`, bearsOnDeal: true })
+    facts.push({
+      key: 'waiver.faab_left',
+      text: `${name} has ${money(faabRemaining)} of FAAB left${vs}.`,
+      bearsOnDeal: true,
+      parts: { kind: 'faab_left', name, left: faabRemaining, viewer: viewerFaab },
+    })
   }
 
   if (n === 0) {
-    facts.push({ key: 'waiver.claims', text: `${name} hasn't won a waiver claim this season.`, bearsOnDeal: false })
+    facts.push({
+      key: 'waiver.claims',
+      text: `${name} hasn't won a waiver claim this season.`,
+      bearsOnDeal: false,
+      parts: { kind: 'no_claims', name },
+    })
     return facts
   }
 
@@ -116,6 +143,7 @@ function rivalFacts(
       ? `${name} has won ${plural(n, 'waiver claim')} this season, spending ${money(spent)} in all.`
       : `${name} has won ${plural(n, 'waiver claim')} this season.`,
     bearsOnDeal: false,
+    parts: { kind: 'claims', name, claims: n, spent: usesFaab ? spent : null },
   })
 
   if (n < WAIVER_FLOOR) return facts
@@ -128,6 +156,7 @@ function rivalFacts(
         key: 'waiver.biggest_bid',
         text: `Their biggest winning bid was ${money(top.bid!)}${p ? ` (${p})` : ''}.`,
         bearsOnDeal: false,
+        parts: { kind: 'biggest_bid', bid: top.bid!, position: p },
       })
     }
     const zero = mine.filter((c) => (c.bid ?? 0) === 0).length
@@ -136,6 +165,7 @@ function rivalFacts(
         key: 'waiver.zero_bids',
         text: `${zero} of their ${n} claims ${zero === 1 ? 'was a $0 bid' : 'were $0 bids'}.`,
         bearsOnDeal: false,
+        parts: { kind: 'zero_bids', zero, claims: n },
       })
     }
   }
@@ -151,6 +181,7 @@ function rivalFacts(
       key: `waiver.position.${topPos}`,
       text: `${topCount} of their ${n} claims were ${positionPlural(topPos)}.`,
       bearsOnDeal: false,
+      parts: { kind: 'position', position: topPos, count: topCount, claims: n },
     })
   }
   return facts
@@ -196,7 +227,7 @@ export function buildWaiverEdge(input: {
         : b.claims - a.claims || a.manager.name.localeCompare(b.manager.name),
     )
 
-  const leagueFacts: EdgeFact[] = []
+  const leagueFacts: WaiverEdgeFact[] = []
   if (input.usesFaab && viewerFaab != null) {
     const withBudget = rivals.filter((r) => r.faabRemaining != null)
     const more = withBudget.filter((r) => (r.faabRemaining ?? 0) > viewerFaab).length
@@ -207,6 +238,7 @@ export function buildWaiverEdge(input: {
           ? `No other manager has more FAAB left than your ${money(viewerFaab)}.`
           : `${more} of the ${withBudget.length} other managers ${more === 1 ? 'has' : 'have'} more FAAB left than your ${money(viewerFaab)}.`,
       bearsOnDeal: true,
+      parts: { kind: 'outbid_by', more, withBudget: withBudget.length, viewer: viewerFaab },
     })
   }
   leagueFacts.push({
@@ -216,6 +248,7 @@ export function buildWaiverEdge(input: {
         ? 'No winning waiver claims are on file for this league this season yet.'
         : `This league has made ${plural(input.claims.length, 'winning waiver claim')} this season.`,
     bearsOnDeal: false,
+    parts: { kind: 'league_claims', claims: input.claims.length },
   })
 
   return {

@@ -8,6 +8,8 @@ import { getMyTeamData } from '@/lib/core-app/myTeam'
 import { readTeamPreference,saveTeamPreference } from '@/lib/core-app/teamPreferenceStore'
 import { leagueWeekFromSettings } from '@/lib/core-app/seasonTimeline'
 import { nativeAutoSubsKey,type NativeAutoSubsAssignment } from '@/lib/core-app/nativeAutoSubsPolicy'
+import { assessNativeAutoSubs } from '@/lib/core-app/nativeAutoSubsAssessment'
+import { publicDeliveryReceipt } from '@/lib/core-app/teamDeliveryReceipts'
 export const dynamic='force-dynamic'
 async function handle(req:Request){
   const session=await getServerSession(authOptions as never) as {user?:{id?:string}}|null,userId=session?.user?.id
@@ -24,7 +26,8 @@ async function handle(req:Request){
   const assignment=await readTeamPreference<NativeAutoSubsAssignment>(userId,key)
   if(req.method==='GET'){
     const audit=await prisma.automationAuditLog.findMany({where:{leagueId,userId,entityId:roster.id,action:'native_autosub.applied'},orderBy:{createdAt:'desc'},take:5,select:{id:true,message:true,createdAt:true,metadata:true}})
-    return NextResponse.json({commissionerEnabled:enabled,assignment,audit,week:native.week},{headers:{'Cache-Control':'private, no-store'}})
+    const assessment=await assessNativeAutoSubs(league,roster,assignment)
+    return NextResponse.json({commissionerEnabled:enabled,assignment,assessment,audit:audit.map(a=>({...a,metadata:undefined,delivery:publicDeliveryReceipt((a.metadata as Record<string,unknown>|null)?.deliveryReceipt)})),week:native.week},{headers:{'Cache-Control':'private, no-store'}})
   }
   let body:Record<string,unknown>
   try{body=await req.json()}catch{return NextResponse.json({error:'Invalid JSON'},{status:400})}
@@ -40,6 +43,7 @@ async function handle(req:Request){
   }
   if(new Set(Object.values(backups)).size!==Object.values(backups).length || (body.enabled && !Object.keys(backups).length))return NextResponse.json({error:'Choose distinct backups for the selected slots.'},{status:400})
   if(!await saveTeamPreference(userId,key,Number(body.expectedVersion),{enabled:body.enabled,backups,starters:native.starterIds}))return NextResponse.json({error:'Your backup settings changed. Reload before saving.'},{status:409})
-  return NextResponse.json({assignment:await readTeamPreference(userId,key),commissionerEnabled:enabled})
+  const saved=await readTeamPreference<NativeAutoSubsAssignment>(userId,key)
+  return NextResponse.json({assignment:saved,commissionerEnabled:enabled,assessment:await assessNativeAutoSubs(league,roster,saved).catch(()=>undefined)},{headers:{'Cache-Control':'private, no-store'}})
 }
 export const GET=handle,PUT=handle

@@ -11,10 +11,12 @@ import { reportOutcomesByTemplate, REPORT_OUTCOME_SERIES } from '@/lib/commissio
 import { PreviewDataBanner } from '@/components/commissioner-os/PreviewDataBanner'
 import { ReportTemplateCard } from './ReportTemplateCard'
 import { ReportDetailDialog } from './ReportDetailDialog'
-import { REPORT_STATUS_LABELS, REPORT_FORMAT_LABELS } from './reportsLabels'
+import { REPORT_FORMAT_LABELS } from './reportsLabels'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { GeneratedReport, ReportTemplate } from '@/lib/commissioner-ui/reports/decision-os-client'
 import { shortDate } from '@/components/commissioner-os/primitives/pinnedTime'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { cosErrorText, reportsCopy, reportText } from '@/lib/commissioner-os/i18n/analyticsCopy'
 
 export interface ReportsViewProps {
   templates: ReportTemplate[]
@@ -44,6 +46,8 @@ export interface ReportsViewProps {
  * a button that invents entries is worse than the honest error this module used to return.
  */
 export function ReportsView({ templates, history: initialHistory, dataMode, errorMessage }: ReportsViewProps) {
+  const { language } = useOptionalLanguage()
+  const c = reportsCopy(language)
   const [history, setHistory] = useState(initialHistory)
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
 
@@ -66,19 +70,19 @@ export function ReportsView({ templates, history: initialHistory, dataMode, erro
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        setGenerateError(body?.error ?? `Generation failed (${res.status}).`)
+        setGenerateError(body?.error ?? c.generationFailedStatus(res.status))
         return
       }
       const body = await res.json()
       if (body?.status === 'failed') {
         // The run happened and was recorded; the history row carries the reason. Say so rather
         // than reporting success over a report that does not exist.
-        setGenerateError(body?.failureReason ?? 'The report could not be generated.')
+        setGenerateError(body?.failureReason ?? c.couldNotGenerate)
       }
       // The server owns the history, so re-read it rather than guessing what it now contains.
       startGenerating(() => router.refresh())
     } catch {
-      setGenerateError('Generation failed — the request did not complete.')
+      setGenerateError(c.requestDidNotComplete)
     }
   }
 
@@ -140,16 +144,16 @@ export function ReportsView({ templates, history: initialHistory, dataMode, erro
         */}
       {outcomeRows.length > 0 ? (
         <div className="mb-6">
-          <InfoCard title="Report runs by template">
+          <InfoCard title={c.runsByTemplate}>
             <StackedBarChart
-              rows={outcomeRows}
+              rows={outcomeRows.map((row) => ({ ...row, label: reportText(row.label, language) }))}
               layout="horizontal"
               height={Math.max(160, outcomeRows.length * 44 + 60)}
-              ariaLabel="Report generation runs per template, split into ready, generating and failed"
+              ariaLabel={c.runsAria}
               series={[
-                { id: 'ready', label: 'Ready', color: 'var(--accent-emerald-strong)' },
-                { id: 'generating', label: 'Generating', color: 'var(--accent-cyan-strong)' },
-                { id: 'failed', label: 'Failed', color: 'var(--accent-red-strong)' },
+                { id: 'ready', label: c.seriesReady, color: 'var(--accent-emerald-strong)' },
+                { id: 'generating', label: c.seriesGenerating, color: 'var(--accent-cyan-strong)' },
+                { id: 'failed', label: c.seriesFailed, color: 'var(--accent-red-strong)' },
               ]}
             />
           </InfoCard>
@@ -157,12 +161,12 @@ export function ReportsView({ templates, history: initialHistory, dataMode, erro
       ) : null}
 
       {errorMessage ? (
-        <ErrorState message={errorMessage} />
+        <ErrorState message={cosErrorText(errorMessage, language)} />
       ) : (
         <div className="space-y-6">
           <section aria-labelledby="reports-templates-heading">
             <h2 id="reports-templates-heading" className="mb-2 text-sm font-semibold" style={{ color: 'var(--text)' }}>
-              Report Templates
+              {c.templatesHeading}
             </h2>
             {generateError ? (
               <p className="mb-2 text-sm" role="alert" style={{ color: 'var(--accent-red-strong)' }}>
@@ -186,31 +190,31 @@ export function ReportsView({ templates, history: initialHistory, dataMode, erro
 
           <section aria-labelledby="reports-history-heading">
             <h2 id="reports-history-heading" className="mb-2 text-sm font-semibold" style={{ color: 'var(--text)' }}>
-              Report History
+              {c.historyHeading}
             </h2>
             {history.length === 0 ? (
-              <EmptyState icon={FileText} title="No reports yet." description="Generate a report above to see it here." />
+              <EmptyState icon={FileText} title={c.emptyTitle} description={c.emptyDescription} />
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Report</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Format</TableHead>
-                    <TableHead>Generated</TableHead>
+                    <TableHead>{c.colReport}</TableHead>
+                    <TableHead>{c.colStatus}</TableHead>
+                    <TableHead>{c.colFormat}</TableHead>
+                    <TableHead>{c.colGenerated}</TableHead>
                     <TableHead />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {history.map((report) => (
                     <TableRow key={report.id}>
-                      <TableCell>{report.templateName}</TableCell>
-                      <TableCell>{REPORT_STATUS_LABELS[report.status]}</TableCell>
+                      <TableCell>{reportText(report.templateName, language)}</TableCell>
+                      <TableCell>{c.status[report.status]}</TableCell>
                       <TableCell>{REPORT_FORMAT_LABELS[report.format]}</TableCell>
-                      <TableCell>{shortDate(report.generatedAt)}</TableCell>
+                      <TableCell>{shortDate(report.generatedAt, language)}</TableCell>
                       <TableCell>
                         <Button size="sm" variant="outline" onClick={() => setSelectedReportId(report.id)}>
-                          View
+                          {c.view}
                         </Button>
                       </TableCell>
                     </TableRow>

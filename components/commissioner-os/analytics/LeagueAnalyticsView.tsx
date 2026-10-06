@@ -28,7 +28,16 @@ import type {
   TransactionWeek,
 } from '@/lib/commissioner-ui/analytics/decision-os-client/types'
 import './analytics-sheet.css'
-import { mediumDate, count } from '@/components/commissioner-os/primitives/pinnedTime'
+import { mediumDate, count, dateTime } from '@/components/commissioner-os/primitives/pinnedTime'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import {
+  analyticsCopy,
+  analyticsDataText,
+  cosErrorText,
+  describeRangeText,
+  weekLabelText,
+  type AnalyticsCopy,
+} from '@/lib/commissioner-os/i18n/analyticsCopy'
 
 /**
  * 30a — Commissioner OS analytics, as spreadsheet charts.
@@ -120,24 +129,16 @@ function Panel({
  * otherwise assume were bugs — and "we could draw this and it would mislead you" is a materially
  * different statement from "we have no data".
  */
-function NotWired({ what, because }: { what: string; because?: string }) {
+function NotWired({ c, what, because }: { c: AnalyticsCopy; what: string; because?: string }) {
   return (
     <p className="cos-sheet-empty">
-      No {what} for this league yet. This section reads from the live platform and is left blank
-      rather than filled with an example — an empty chart here would read as “no activity”, which is
-      a different thing.
+      {c.notWired(what)}
       {because ? <> {because}</> : null}
     </p>
   )
 }
 
 /* ── Data freshness ──────────────────────────────────────────────────────── */
-
-function daysLabel(days: number): string {
-  if (days === 0) return 'today'
-  if (days === 1) return 'yesterday'
-  return `${days} days ago`
-}
 
 /**
  * Says how old the numbers above it are, and only when that changes how they should be read.
@@ -155,46 +156,52 @@ function daysLabel(days: number): string {
  *   - current   — a quiet, factual line. Deliberately not a green success badge: freshness is
  *                 the expected state, and celebrating it trains people to ignore the banner.
  */
-function FreshnessNote({ window: w }: { window: AnalyticsDataWindow | null }) {
+function FreshnessNote({ c, language, window: w }: { c: AnalyticsCopy; language: string; window: AnalyticsDataWindow | null }) {
   if (!w) return null
 
   if (w.lastActivityAt === null) {
+    const none = c.freshNone(w.lookbackDays)
     return (
       <p className="cos-sheet-freshness" data-state="none">
-        <strong>No activity recorded for this league.</strong> Every number below is measured over
-        the last {w.lookbackDays} days of league activity, and we hold none — so they describe our
-        data, not your league.
+        <strong>{none.strong}</strong> {none.rest}
       </p>
     )
   }
 
   const stale = w.daysSinceLastActivity !== null && w.daysSinceLastActivity > w.inactiveAfterDays
-  const asOf = mediumDate(w.lastActivityAt)
+  // pinnedTime's own Spanish: the same pinned zone, never a second locale.
+  const asOf = mediumDate(w.lastActivityAt, language)
+  const ago = c.daysAgo(w.daysSinceLastActivity as number)
 
   if (stale) {
+    const s = c.freshStale(asOf, ago, w.inactiveAfterDays, count(w.allTime.eventCount))
     return (
       <p className="cos-sheet-freshness" data-state="stale">
-        <strong>
-          Newest league activity is from {asOf} ({daysLabel(w.daysSinceLastActivity as number)}).
-        </strong>{' '}
-        Managers count as inactive after {w.inactiveAfterDays} days without an action, so the
-        participation and activity numbers below reflect how old this data is, not how quiet the
-        league is. We hold {count(w.allTime.eventCount)} events for it all-time.
+        <strong>{s.strong}</strong> {s.rest}
       </p>
     )
   }
 
   return (
     <p className="cos-sheet-freshness" data-state="current">
-      Measured over the last {w.lookbackDays} days. Newest activity {asOf} (
-      {daysLabel(w.daysSinceLastActivity as number)}).
+      {c.freshCurrent(w.lookbackDays, asOf, ago)}
     </p>
   )
 }
 
 /* ── League health by week ───────────────────────────────────────────────── */
 
-function HealthChart({ weeks, target }: { weeks: LeagueHealthWeek[]; target: number | null }) {
+function HealthChart({
+  c,
+  language,
+  weeks,
+  target,
+}: {
+  c: AnalyticsCopy
+  language: string
+  weeks: LeagueHealthWeek[]
+  target: number | null
+}) {
   const x = (i: number) => PAD.left + (weeks.length === 1 ? PW / 2 : (i / (weeks.length - 1)) * PW)
   const y = (v: number) => PAD.top + PH - (v / 100) * PH
 
@@ -211,18 +218,16 @@ function HealthChart({ weeks, target }: { weeks: LeagueHealthWeek[]; target: num
   return (
     <>
       <div className="cos-sheet-legend">
-        <span className="cos-key cos-key--a">This season</span>
-        {hasLast ? <span className="cos-key cos-key--b">Last season</span> : null}
-        {target !== null ? <span className="cos-key cos-key--target">Target {target}</span> : null}
+        <span className="cos-key cos-key--a">{c.thisSeason}</span>
+        {hasLast ? <span className="cos-key cos-key--b">{c.lastSeason}</span> : null}
+        {target !== null ? <span className="cos-key cos-key--target">{c.target(target)}</span> : null}
       </div>
       <div className="cos-sheet-plot">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="cos-sheet-svg"
           role="img"
-          aria-label={`League health by week. This season runs ${weeks[0]?.thisSeason} to ${
-            weeks[weeks.length - 1]?.thisSeason
-          }${target !== null ? `, against a target of ${target}` : ''}.`}
+          aria-label={c.healthAria(weeks[0]?.thisSeason, weeks[weeks.length - 1]?.thisSeason, target)}
         >
           {[0, 25, 50, 75, 100].map((v) => (
             <g key={v}>
@@ -234,7 +239,7 @@ function HealthChart({ weeks, target }: { weeks: LeagueHealthWeek[]; target: num
           ))}
           {weeks.map((w, i) => (
             <text key={w.weekLabel} x={x(i)} y={H - 14} className="cos-axis" textAnchor="middle">
-              {w.weekLabel}
+              {weekLabelText(w.weekLabel, language)}
             </text>
           ))}
 
@@ -244,7 +249,7 @@ function HealthChart({ weeks, target }: { weeks: LeagueHealthWeek[]; target: num
               <line x1={PAD.left} x2={PAD.left + PW} y1={y(target)} y2={y(target)} className="cos-target" />
               <rect x={PAD.left + PW - 74} y={y(target) - 17} width={74} height={15} className="cos-target-chip" />
               <text x={PAD.left + PW - 70} y={y(target) - 6} className="cos-target-label">
-                TARGET {target}
+                {c.targetChip(target)}
               </text>
             </g>
           ) : null}
@@ -266,7 +271,7 @@ function HealthChart({ weeks, target }: { weeks: LeagueHealthWeek[]; target: num
 
 /* ── Transactions, grouped columns ───────────────────────────────────────── */
 
-function TransactionsChart({ weeks }: { weeks: TransactionWeek[] }) {
+function TransactionsChart({ c, language, weeks }: { c: AnalyticsCopy; language: string; weeks: TransactionWeek[] }) {
   const max = Math.max(4, ...weeks.flatMap((w) => [w.tradeCount, w.waiverClaimCount]))
   const baseY = H - 44
   const group = PW / weeks.length
@@ -277,17 +282,17 @@ function TransactionsChart({ weeks }: { weeks: TransactionWeek[] }) {
   return (
     <>
       <div className="cos-sheet-legend">
-        <span className="cos-key cos-key--a">Waiver claims</span>
-        <span className="cos-key cos-key--c">Trades</span>
+        <span className="cos-key cos-key--a">{c.waiverClaims}</span>
+        <span className="cos-key cos-key--c">{c.trades}</span>
       </div>
       <div className="cos-sheet-plot">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="cos-sheet-svg"
           role="img"
-          aria-label={`Weekly transactions: ${weeks
-            .map((w) => `${w.weekLabel}, ${w.waiverClaimCount} waiver claims and ${w.tradeCount} trades`)
-            .join('; ')}.`}
+          aria-label={c.transactionsAria(
+            weeks.map((w) => ({ week: weekLabelText(w.weekLabel, language), waivers: w.waiverClaimCount, trades: w.tradeCount })),
+          )}
         >
           {[0, 0.25, 0.5, 0.75, 1].map((f) => {
             const v = Math.round(max * f)
@@ -325,7 +330,7 @@ function TransactionsChart({ weeks }: { weeks: TransactionWeek[] }) {
                   {w.tradeCount}
                 </text>
                 <text x={cx} y={H - 14} className="cos-axis" textAnchor="middle">
-                  {w.weekLabel}
+                  {weekLabelText(w.weekLabel, language)}
                 </text>
               </g>
             )
@@ -338,12 +343,10 @@ function TransactionsChart({ weeks }: { weeks: TransactionWeek[] }) {
 
 /* ── Manager activity leaderboard ────────────────────────────────────────── */
 
-/** "A", "A and B", "A, B and C" — a naive join produced "A and B and C" on real data. */
-function nameList(names: string[]): string {
-  if (names.length <= 1) return names[0] ?? ''
-  if (names.length === 2) return `${names[0]} and ${names[1]}`
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
-}
+/*
+ * The name list ("A", "A and B", "A, B and C" — a naive join produced "A and B and C" on real data)
+ * is `c.nameList`, so the joiner is the reader's word.
+ */
 
 /**
  * The comparative call-out under the activity bars.
@@ -359,7 +362,7 @@ function nameList(names: string[]): string {
  * below 5 actions a week" every offseason day would train the reader to ignore this line, so the
  * call-out only speaks when someone has genuinely fallen off against their OWN prior rate.
  */
-function buildActivityCallout(rows: ManagerActivityEntry[]): string | null {
+function buildActivityCallout(rows: ManagerActivityEntry[], c: AnalyticsCopy): string | null {
   const low = rows.filter((r) => r.actionsPerWeek < LOW_ACTIVITY_THRESHOLD)
   if (!low.length) return null
   // Comparative, or not shown at all — a bare count is already in the bars.
@@ -374,19 +377,17 @@ function buildActivityCallout(rows: ManagerActivityEntry[]): string | null {
   if (wereHigher.length > 3) {
     const topPrior = round1(Math.max(...rows.map((r) => r.priorActionsPerWeek)))
     const topNow = round1(Math.max(...rows.map((r) => r.actionsPerWeek)))
-    return `${wereHigher.length} of ${rows.length} managers are doing less than they were. The most active manager is down from ${topPrior} to ${topNow} actions a week.`
+    return c.calloutLeagueWide(wereHigher.length, rows.length, topPrior, topNow)
   }
 
   const floor = round1(Math.min(...wereHigher.map((r) => r.priorActionsPerWeek)))
-  const noun = low.length === 1 ? 'manager is' : 'managers are'
-  const named = nameList(wereHigher.map((r) => r.managerName))
+  const named = c.nameList(wereHigher.map((r) => r.managerName))
   /*
    * The subject of the second clause is the managers who actually declined, which is not always
    * the same set as those below the threshold — saying "They" after a count of 10 while naming 8
-   * asserts something false about the other two.
+   * asserts something false about the other two. `calloutNamed` picks it from the two counts.
    */
-  const subject = wereHigher.length === low.length ? (wereHigher.length === 1 ? 'They were' : 'They were each') : `${wereHigher.length} of them were`
-  return `${low.length} ${noun} below ${LOW_ACTIVITY_THRESHOLD} actions a week. ${subject} above ${floor} earlier — ${named}.`
+  return c.calloutNamed(low.length, LOW_ACTIVITY_THRESHOLD, wereHigher.length, floor, named)
 }
 
 function roundTo(value: number, dp: number): number {
@@ -399,9 +400,9 @@ function round1(value: number): number {
   return roundTo(value, 1)
 }
 
-function ManagerActivity({ rows }: { rows: ManagerActivityEntry[] }) {
+function ManagerActivity({ c, rows }: { c: AnalyticsCopy; rows: ManagerActivityEntry[] }) {
   const max = Math.max(...rows.map((r) => r.actionsPerWeek), 1)
-  const callout = buildActivityCallout(rows)
+  const callout = buildActivityCallout(rows, c)
 
   return (
     <>
@@ -445,17 +446,14 @@ function ManagerActivity({ rows }: { rows: ManagerActivityEntry[] }) {
           )
         })}
       </ol>
-      <p className="cos-sheet-foot">
-        Actions a week: lineup changes, waiver claims, trade offers and messages. The arrow compares
-        against the same manager earlier this season, not against the league.
-      </p>
+      <p className="cos-sheet-foot">{c.activityFoot}</p>
     </>
   )
 }
 
 /* ── Points for / against ────────────────────────────────────────────────── */
 
-function PointsChart({ teams }: { teams: TeamPointsEntry[] }) {
+function PointsChart({ c, teams }: { c: AnalyticsCopy; teams: TeamPointsEntry[] }) {
   const max = Math.max(...teams.flatMap((t) => [t.pointsFor, t.pointsAgainst]), 1)
   const ceil = Math.ceil(max / 200) * 200
   const baseY = H - 52
@@ -466,17 +464,15 @@ function PointsChart({ teams }: { teams: TeamPointsEntry[] }) {
   return (
     <>
       <div className="cos-sheet-legend">
-        <span className="cos-key cos-key--a">Points for</span>
-        <span className="cos-key cos-key--d">Points against</span>
+        <span className="cos-key cos-key--a">{c.pointsFor}</span>
+        <span className="cos-key cos-key--d">{c.pointsAgainst}</span>
       </div>
       <div className="cos-sheet-plot">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="cos-sheet-svg cos-sheet-svg--wide"
           role="img"
-          aria-label={`Points for and against per team: ${teams
-            .map((t) => `${t.teamName}, ${t.pointsFor} for and ${t.pointsAgainst} against`)
-            .join('; ')}.`}
+          aria-label={c.pointsAria(teams.map((t) => ({ team: t.teamName, pf: t.pointsFor, pa: t.pointsAgainst })))}
         >
           {[0, 0.25, 0.5, 0.75, 1].map((f) => {
             const v = Math.round(ceil * f)
@@ -509,10 +505,7 @@ function PointsChart({ teams }: { teams: TeamPointsEntry[] }) {
           })}
         </svg>
       </div>
-      <p className="cos-sheet-foot">
-        Season totals. A team high on both bars is playing a hard schedule, not a bad one — read the
-        pair, not either bar alone.
-      </p>
+      <p className="cos-sheet-foot">{c.pointsFoot}</p>
     </>
   )
 }
@@ -521,6 +514,10 @@ function PointsChart({ teams }: { teams: TeamPointsEntry[] }) {
 
 export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: LeagueAnalyticsViewProps) {
   const [range, setRange] = useState<AnalyticsTimeRange>('season')
+  // English on the server and on the first client paint alike; Spanish only after mount. Hydration-safe.
+  const { language } = useOptionalLanguage()
+  const c = analyticsCopy(language)
+  const d = (text: string | null | undefined) => analyticsDataText(text, language)
 
   /*
    * ONE filtered object. It is what renders and what exports — see
@@ -538,7 +535,7 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
     return (
       <div>
         <PreviewDataBanner mode={dataMode} />
-        <ErrorState message={errorMessage ?? "Couldn't load league analytics right now."} />
+        <ErrorState message={errorMessage ? cosErrorText(errorMessage, language) : c.loadFailed} />
       </div>
     )
   }
@@ -549,75 +546,72 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
 
       {view.degradedReason ? (
         <p className="cos-sheet-degraded" role="status">
-          {view.degradedReason}
+          {d(view.degradedReason)}
         </p>
       ) : null}
 
       <div className="cos-sheet-bar">
-        <div className="cos-sheet-ranges" role="group" aria-label="Time range">
+        <div className="cos-sheet-ranges" role="group" aria-label={c.timeRange}>
           {TIME_RANGES.map((r) => (
             <button
               key={r.id}
               type="button"
               className="cos-sheet-range"
               aria-pressed={range === r.id}
-              title={r.hint}
+              title={c.range[r.id].hint}
               onClick={() => setRange(r.id)}
             >
-              {r.label}
+              {c.range[r.id].label}
             </button>
           ))}
         </div>
         <div className="cos-sheet-bar-right">
-          <span className="cos-sheet-scope">{describeRange(range, view)}</span>
+          <span className="cos-sheet-scope">{describeRangeText(describeRange(range, view), language)}</span>
           <Button size="sm" variant="outline" onClick={() => downloadAnalyticsCsv(view, `league-analytics-${range}.csv`)}>
-            <Download size={14} aria-hidden /> Export CSV
+            <Download size={14} aria-hidden /> {c.exportCsv}
           </Button>
         </div>
       </div>
 
       {/* Sits above the stat row, not below it: it changes how those numbers should be read. */}
-      <FreshnessNote window={view.dataWindow} />
+      <FreshnessNote c={c} language={language} window={view.dataWindow} />
 
       {/* Stat row */}
-      <section aria-label="Headline numbers" className="cos-sheet-stats">
+      <section aria-label={c.headlineNumbers} className="cos-sheet-stats">
         {view.kpis.map((kpi) => (
           <div key={kpi.id} className="cos-stat">
-            <span className="cos-stat-label">{kpi.label}</span>
-            <span className="cos-stat-value">{kpi.value}</span>
+            <span className="cos-stat-label">{d(kpi.label)}</span>
+            <span className="cos-stat-value">{d(kpi.value)}</span>
             {kpi.trend ? (
               <span className="cos-stat-trend" data-dir={kpi.trend.direction}>
-                {kpi.trend.direction === 'up' ? '▲' : kpi.trend.direction === 'down' ? '▼' : '—'} {kpi.trend.label}
+                {kpi.trend.direction === 'up' ? '▲' : kpi.trend.direction === 'down' ? '▼' : '—'} {d(kpi.trend.label)}
               </span>
             ) : null}
           </div>
         ))}
       </section>
 
-      <Panel title="League health by week" note="This season against last, with the target this league set.">
+      <Panel title={c.healthTitle} note={c.healthNote}>
         {view.healthByWeek.length ? (
-          <HealthChart weeks={view.healthByWeek} target={view.healthTarget} />
+          <HealthChart c={c} language={language} weeks={view.healthByWeek} target={view.healthTarget} />
         ) : (
-          <NotWired
-            what="weekly health history"
-            because="A weekly engagement line is computable from league activity, but a dynasty league's activity is mostly offseason — it would draw a near-zero line for most of the year and read as a collapsing league rather than a normal August."
-          />
+          <NotWired c={c} what={c.whatWeeklyHealth} because={c.healthBecause} />
         )}
       </Panel>
 
-      <Panel title="Transactions by week" note="Waiver claims and trades, counted separately. Calendar weeks — most dynasty movement happens outside the NFL season.">
+      <Panel title={c.transactionsTitle} note={c.transactionsNote}>
         {view.transactionsByWeek.length ? (
-          <TransactionsChart weeks={view.transactionsByWeek} />
+          <TransactionsChart c={c} language={language} weeks={view.transactionsByWeek} />
         ) : (
-          <NotWired what="transaction history" />
+          <NotWired c={c} what={c.whatTransactions} />
         )}
       </Panel>
 
-      <Panel title="Manager activity" note="Ranked by actions a week, against each manager's own rate over the previous window.">
+      <Panel title={c.activityTitle} note={c.activityNote}>
         {view.managerActivity.length ? (
-          <ManagerActivity rows={view.managerActivity} />
+          <ManagerActivity c={c} rows={view.managerActivity} />
         ) : (
-          <NotWired what="per-manager activity" />
+          <NotWired c={c} what={c.whatManagerActivity} />
         )}
       </Panel>
 
@@ -626,20 +620,17 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
         in preseason is last year — twelve bars at zero under "this season" would read as a league
         that scored nothing.
       */}
-      <Panel
-        title="Points for and against"
-        note={view.seasonLabel ? `Season totals per team — ${view.seasonLabel}.` : 'Season totals per team.'}
-      >
-        {view.pointsForAgainst.length ? <PointsChart teams={view.pointsForAgainst} /> : <NotWired what="scoring totals" />}
+      <Panel title={c.pointsTitle} note={c.pointsNote(view.seasonLabel)}>
+        {view.pointsForAgainst.length ? <PointsChart c={c} teams={view.pointsForAgainst} /> : <NotWired c={c} what={c.whatScoring} />}
       </Panel>
 
       {view.competitiveBalance.length ? (
-        <Panel title="Competitive balance">
+        <Panel title={c.balanceTitle}>
           <div className="cos-sheet-cards">
             {view.competitiveBalance.map((m) => (
-              <InfoCard key={m.label} title={m.label}>
-                <strong className="cos-sheet-cardval">{m.value}</strong>
-                {m.interpretation}
+              <InfoCard key={m.label} title={d(m.label)}>
+                <strong className="cos-sheet-cardval">{d(m.value)}</strong>
+                {d(m.interpretation)}
               </InfoCard>
             ))}
           </div>
@@ -653,49 +644,37 @@ export function LeagueAnalyticsView({ snapshot, dataMode, errorMessage }: League
         is the failure the freshness banner at the top exists to stop.
       */}
       {view.activityMix.length ? (
-        <Panel
-          title="What this league does"
-          note="Every recorded action since the import began, by kind."
-        >
+        <Panel title={c.mixTitle} note={c.mixNote}>
           <ActivityMixDonut
-            slices={view.activityMix.map((a) => ({ label: a.label, value: a.count }))}
-            ariaLabel={`Share of league actions by type: ${view.activityMix
-              .map((a) => `${a.label}, ${a.count}`)
-              .join('; ')}.`}
+            slices={view.activityMix.map((a) => ({ label: d(a.label), value: a.count }))}
+            ariaLabel={c.mixAria(view.activityMix.map((a) => ({ label: d(a.label), count: a.count })))}
           />
         </Panel>
       ) : null}
 
       {view.allTimeRecords.length ? (
-        <Panel
-          title="All-time records"
-          note="Wins and losses across every season on record. ★ marks a championship."
-        >
+        <Panel title={c.recordsTitle} note={c.recordsNote}>
           <AllTimeRecordChart
             records={view.allTimeRecords}
-            ariaLabel={`All-time records: ${view.allTimeRecords
-              .map((r) => `${r.teamName}, ${r.wins} wins and ${r.losses} losses over ${r.seasons} seasons, ${r.titles} titles`)
-              .join('; ')}.`}
+            ariaLabel={c.recordsAria(
+              view.allTimeRecords.map((r) => ({ team: r.teamName, wins: r.wins, losses: r.losses, seasons: r.seasons, titles: r.titles })),
+            )}
           />
         </Panel>
       ) : null}
 
       {view.managerFingerprints.length && view.fingerprintAxisMax ? (
-        <Panel
-          title="Manager fingerprints"
-          note="Four behavioural measures per manager. Each spoke is scaled to the highest score that measure has ever reached across every league, so a full spoke means “as high as this gets”. Hover for the raw score."
-        >
+        <Panel title={c.fingerprintsTitle} note={c.fingerprintsNote}>
           <ManagerFingerprintRadar
             managers={view.managerFingerprints}
             axisMax={view.fingerprintAxisMax}
-            ariaLabel={`Behavioural fingerprints for ${view.managerFingerprints.length} managers across aggression, activity, trading and risk.`}
+            ariaLabel={c.fingerprintsAria(view.managerFingerprints.length)}
           />
         </Panel>
       ) : null}
 
       <p className="cos-sheet-generated">
-        Snapshot generated {SNAPSHOT_TIME_FORMAT.format(new Date(view.generatedAt))}. The export carries exactly
-        the range shown above.
+        {c.generated(language === 'es' ? dateTime(view.generatedAt, language) : SNAPSHOT_TIME_FORMAT.format(new Date(view.generatedAt)))}
       </p>
     </div>
   )

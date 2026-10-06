@@ -1,7 +1,10 @@
 import type { LeagueToolAccessErrorCode } from '@/lib/ai-tools/league-tool-context-types'
 import type { LineupActionSummaryPayload } from '@/lib/lineup-actions/types'
 
-/** Matches `AIToolGridId` for deep links — keep in sync manually to avoid server→components imports. */
+/**
+ * Tool ids for War Room deep links. These once mirrored `AIToolGridId` in
+ * components/ai-tools/ai-tool-ids.ts; that grid was deleted 2026-10-06 (unmounted since 2026-07-06).
+ */
 export type WarRoomLinkToolId =
   | 'startSit'
   | 'trade'

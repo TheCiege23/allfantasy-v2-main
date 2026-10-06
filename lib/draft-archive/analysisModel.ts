@@ -1,4 +1,4 @@
-import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring';
+import {scoreDraftRates,draftSlotEligibility} from './sportEvidence';
 import { fillLineup, type ImpactPlayer } from '@/lib/decision-os/trade/rosterImpact';
 import type { PreparationContext } from '@/lib/core-app/draftPreparationModel';
 const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {};
@@ -13,7 +13,8 @@ export type DraftAnalysisReport = {
 export function draftDayReport(basis: unknown, context: PreparationContext | null, selections: AnalysisSelection[], teams: Array<{ rosterId: string; name: string }>, start: string | null, existing: AnalysisSelection[] | null = null): DraftAnalysisReport {
   const base: DraftAnalysisReport = { version: 'draft-report-v2', state: 'unavailable', reason: 'Verified draft-time component baselines, identities and rules are required.', teams: [], players: [], replacementBasis: 'League-wide starting-slot demand proxy; not a waiver availability claim.', computedBefore: start };
   const raw = object(basis);
-  if (!context || context.sport !== 'NFL' || !start || raw.version !== 'draft-analysis-basis-v2' || raw.state !== 'captured' || !Array.isArray(raw.entries) || raw.entries.length > 5000 || !Number.isFinite(Date.parse(start)) || !Number.isFinite(Date.parse(String(raw.capturedAt))) || Date.parse(String(raw.capturedAt)) > Date.parse(start)) return base;
+  if (!context || !draftSlotEligibility(context.sport) || (raw.sport!==undefined?raw.sport!==context.sport:context.sport!=='NFL') || !start || raw.version !== 'draft-analysis-basis-v2' || raw.state !== 'captured' || !Array.isArray(raw.entries) || raw.entries.length > 5000 || !Number.isFinite(Date.parse(start)) || !Number.isFinite(Date.parse(String(raw.capturedAt))) || Date.parse(String(raw.capturedAt)) > Date.parse(start)) return base;
+  const eligibility=draftSlotEligibility(context.sport,raw.entries.flatMap(e=>typeof object(e).position==='string'?[object(e).position as string]:[]))!;
   const rules = object(context.scoringRules);
   if (!Object.values(rules).some(v => typeof v === 'number' && Number.isFinite(v) && v !== 0)) return base;
   const pool: ImpactPlayer[] = [], byAlias = new Map<string, ImpactPlayer>(), gaps = new Map<string, string[]>();
@@ -22,7 +23,7 @@ export function draftDayReport(basis: unknown, context: PreparationContext | nul
     const e = object(value);
     if (typeof e.playerId !== 'string' || seen.has(e.playerId) || typeof e.position !== 'string' || !Number.isFinite(Date.parse(String(e.computedAt))) || Date.parse(String(e.computedAt)) > Date.parse(start)) return base;
     seen.add(e.playerId);
-    const result = computeLeagueProjectedPoints(object(e.perGameRates), rules);
+    const result = scoreDraftRates(object(e.perGameRates), rules,context.sport);
     if (!result || !Number.isFinite(result.points)) continue;
     const player = { playerId: e.playerId, position: e.position.toUpperCase(), projectedPoints: result.points };
     pool.push(player); gaps.set(player.playerId, result.coverage.unmatched);
@@ -34,7 +35,7 @@ export function draftDayReport(basis: unknown, context: PreparationContext | nul
   for (const alias of ambiguous) byAlias.delete(alias);
   const slots = context.rosterSlots.filter(s => !['BN','BE','BENCH','IR','TAXI'].includes(s));
   if (!slots.length || context.teamCount < 2 || context.teamCount > 32 || slots.length * context.teamCount > 320 || selections.length > 10000 || teams.length > 32) return base;
-  const demand = fillLineup(pool, Array.from({ length: context.teamCount }, () => slots).flat());
+  const demand = fillLineup(pool, Array.from({ length: context.teamCount }, () => slots).flat(),eligibility);
   if (demand.unknownSlots.length || demand.unfilledSlots.length) return { ...base, reason: 'The projection pool cannot cover all recorded starting slots.' };
   const leagueStarters = new Set(demand.starterIds), replacement = new Map<string, number>();
   for (const p of pool) if (!leagueStarters.has(p.playerId)) replacement.set(p.position, Math.max(replacement.get(p.position) ?? -Infinity, p.projectedPoints!));
@@ -49,7 +50,7 @@ export function draftDayReport(basis: unknown, context: PreparationContext | nul
   const reports = teams.map(team => {
     const picks = selections.filter(p => p.rosterId === team.rosterId), rosterPicks = allRosterSelections.filter(p => p.rosterId === team.rosterId), mapped = rosterPicks.flatMap(p => p.playerId && byAlias.has(p.playerId) ? [byAlias.get(p.playerId)!] : []);
     const unique = [...new Map(mapped.map(p => [p.playerId, p])).values()];
-    const lineup = fillLineup(unique, slots), starters = new Set(lineup.starterIds);
+    const lineup = fillLineup(unique, slots,eligibility), starters = new Set(lineup.starterIds);
     let benchValue = 0;
     for (const p of unique) {
       const pick = rosterPicks.find(k => k.playerId && byAlias.get(k.playerId)?.playerId === p.playerId)!;
@@ -59,7 +60,7 @@ export function draftDayReport(basis: unknown, context: PreparationContext | nul
     }
     const covered = picks.filter(p => p.playerId && byAlias.has(p.playerId)).length, completeRoster = rosterPicks.every(p => p.playerId && byAlias.has(p.playerId));
     const beforePlayers = (existing ?? []).filter(p => p.rosterId === team.rosterId).flatMap(p => p.playerId && byAlias.has(p.playerId) ? [byAlias.get(p.playerId)!] : []);
-    return { rosterId: team.rosterId, name: team.name, covered, selections: picks.length, rosterPlayers:unique.length, existingCovered:beforePlayers.length, starterGain: verifiedExisting && completeRoster ? lineup.points-fillLineup(beforePlayers,slots).points : null, starterPoints: completeRoster ? lineup.points : null, benchValue: completeRoster ? benchValue : null, rank: null as number | null, missingSlots: [...lineup.unknownSlots, ...lineup.unfilledSlots] };
+    return { rosterId: team.rosterId, name: team.name, covered, selections: picks.length, rosterPlayers:unique.length, existingCovered:beforePlayers.length, starterGain: verifiedExisting && completeRoster ? lineup.points-fillLineup(beforePlayers,slots,eligibility).points : null, starterPoints: completeRoster ? lineup.points : null, benchValue: completeRoster ? benchValue : null, rank: null as number | null, missingSlots: [...lineup.unknownSlots, ...lineup.unfilledSlots] };
   });
   // Rookie/keeper/dynasty drafts require the pre-existing roster; drafted players alone are incomplete.
   const canonicalSelections = selections.map(p => p.playerId ? byAlias.get(p.playerId)?.playerId : undefined);

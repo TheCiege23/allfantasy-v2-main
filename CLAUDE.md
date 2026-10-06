@@ -2532,6 +2532,21 @@ exceeded 15 s, then count what else was running at each of those instants. Check
 `status` column while you are there: every one of the 48 was `success` and untouched by
 the reaper, which is what separates this from the deploy-swap failures above.
 
+### Batched deploys — a merge to `main` does not deploy immediately (2026-10-06)
+
+Owner's decision, after measuring 30 deploys in 4 hours on ONE Railway builder: overlapping builds
+share its CPU, so a ~15-minute deploy became 20-35. Once switched on, `allfantasy-v2-main` is
+deployed ONLY by `.github/workflows/railway-deploy.yml` (Railway's own deploy-on-push is off): one
+build at a time, always the newest `main`, after a 3-minute quiet window and after any build already
+in flight. A burst of merges becomes at most two builds.
+
+- **Expect ~18-35 min from merge to live**, and a merge during a build waits for it. That is the
+  design, not a stuck pipeline. A red "Railway deploy (batched)" run IS a failed deploy.
+- **To deploy now:** Actions → "Railway deploy (batched)" → Run workflow (quiet window 0).
+- **Docs- and test-only merges do not deploy** (`paths-ignore`); the next real merge carries them.
+- 🛑 **Never re-enable Railway autodeploy without setting the repo variable
+  `RAILWAY_BATCHED_DEPLOY` off** — with both on, every merge builds twice.
+
 ### What is enforced for you, and what is not
 
 - **`vercel.json` gates builds to `main` only.** `ignoreCommand` skips every

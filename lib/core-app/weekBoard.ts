@@ -7,7 +7,7 @@ import { readNativeWeeklyHistory } from './nativeWeeklyHistory'
 import { getFirstStatedKickoff } from './seasonPhase'
 import { isScored, resolveCurrentWeekFrom } from './currentWeek'
 import { realManagerName } from './managerName'
-import { leagueWeekProgress } from './leagueWeekProgress'
+import { currentScheduledLeagueWeek, leagueWeekProgress } from './leagueWeekProgress'
 import { leagueWeekFromSettings } from './seasonTimeline'
 import { loadFinishedNflWeeks } from './finishedNflWeeks'
 import { readLeagueWeekMetadata } from './leagueWeekMetadata'
@@ -638,8 +638,10 @@ export async function readWeeklyHistory(userId: string, leagues: LeagueInput[], 
     const metadata = metadataByLeague.get(pid)
     const currentWeek = progressByLeague.get(pid)?.currentWeek
     if (metadata?.season != null && currentWeek != null) {
-      // A stated period remains authoritative even when its schedule has not synced yet.
-      periodsByLeague.set(pid, { season: metadata.season, week: currentWeek })
+      // NFL's finished slate can precede the provider marker; require the next stored schedule.
+      const scheduledWeeks = rows.filter(r => r.leagueId === pid && r.seasonYear === metadata.season && r.matchupId != null).map(r => r.week)
+      const week = currentScheduledLeagueWeek(metadata, metadata.season, scheduledWeeks, finishedNfl) ?? currentWeek
+      periodsByLeague.set(pid, { season: metadata.season, week })
       continue
     }
     const inLeagueSeason = (r: MatchupRow) =>

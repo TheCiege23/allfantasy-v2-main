@@ -11,3 +11,13 @@
 .af-core .af-wbp-grid > section > a { display: inline-flex; align-items: center; min-height: 44px; }
 .af-core .af-wbp-share textarea { width: 100%; margin: 12px 0; }
 @media(max-width:700px){.af-core .af-wbp-buttons :is(button,a){flex:1 1 180px;min-width:0}.af-core .af-wbp-buttons a{justify-content:center}}
+.af-core .af-wbp-actions{list-style:none;padding:0;display:grid;gap:12px;counter-reset:weekly-action}
+.af-core .af-wbp-actions li{counter-increment:weekly-action;min-width:0;padding:16px;border:1px solid var(--line2,#344454);border-radius:14px;background:var(--surface2,#1c3341)}
+.af-core .af-wbp-actions li::before{content:counter(weekly-action,decimal-leading-zero);float:right;font-weight:700;color:var(--accent,#64e4d0)}
+.af-core .af-wbp-actions .af-wbp-action-tag{display:inline-block;color:var(--accent,#64e4d0);font-size:.8rem;font-weight:700;margin-bottom:8px}
+.af-core .af-wbp-actions p{margin:8px 0;font-size:.9rem}.af-core .af-wbp-actions button{margin-top:12px}
+.af-core .af-wbp-share-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,340px);gap:24px;align-items:start}
+.af-core .af-wbp-share-workspace>div{min-width:0}.af-core .af-wbp-card-preview{margin:12px 0;min-width:0}
+.af-core .af-wbp-card-preview canvas{display:block;width:100%;height:auto;aspect-ratio:4/5;border:1px solid var(--line2,#344454);border-radius:14px;background:#0b1423}
+.af-core .af-wbp-card-preview figcaption{font-size:.875rem;line-height:1.5;margin-top:8px}
+@media(max-width:1000px){.af-core .af-wbp-share-workspace{grid-template-columns:minmax(0,1fr)}.af-core .af-wbp-card-preview{width:100%;max-width:380px;justify-self:center}}

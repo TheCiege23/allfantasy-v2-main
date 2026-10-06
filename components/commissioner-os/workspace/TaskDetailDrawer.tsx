@@ -9,6 +9,9 @@ import { getSeverityStyle, SEVERITY_LABELS } from '@/components/commissioner-os/
 import { TASK_STATUS_LABELS, TASK_NEXT_ACTION_LABEL } from './taskStatusLabels'
 import type { CommissionerTask } from '@/lib/commissioner-ui/workspace/decision-os-client'
 import { longDate } from '@/components/commissioner-os/primitives/pinnedTime'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { cosLinkText, taskText, workspaceCopy } from '@/lib/commissioner-os/i18n/analyticsCopy'
+import { taskPriorityLabelText } from '@/lib/commissioner-os/i18n/cardsCopy'
 
 export interface TaskDetailDrawerProps {
   task: CommissionerTask | null
@@ -30,6 +33,8 @@ export function TaskDetailDrawer({ task, onOpenChange }: TaskDetailDrawerProps) 
   }, [task])
 
   const style = displayedTask ? getSeverityStyle(displayedTask.priority) : null
+  const { language } = useOptionalLanguage()
+  const es = workspaceCopy(language)
 
   return (
     <Dialog open={task !== null} onOpenChange={onOpenChange}>
@@ -42,32 +47,32 @@ export function TaskDetailDrawer({ task, onOpenChange }: TaskDetailDrawerProps) 
                   className="rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
                   style={{ background: 'var(--panel2)', color: 'var(--muted)', border: '1px solid var(--border)' }}
                 >
-                  {TASK_STATUS_LABELS[displayedTask.status]}
+                  {es ? es.status[displayedTask.status] : TASK_STATUS_LABELS[displayedTask.status]}
                 </span>
                 <Badge style={{ background: style.bg, color: style.text, borderColor: style.border }}>
-                  {SEVERITY_LABELS[displayedTask.priority]}
+                  {taskPriorityLabelText(displayedTask.priority, SEVERITY_LABELS[displayedTask.priority], language)}
                 </Badge>
               </div>
-              <DialogTitle>{displayedTask.title}</DialogTitle>
-              <DialogDescription>{displayedTask.description}</DialogDescription>
+              <DialogTitle>{taskText(displayedTask.title, language)}</DialogTitle>
+              <DialogDescription>{taskText(displayedTask.description, language)}</DialogDescription>
             </DialogHeader>
 
             {displayedTask.dueAt && (
               <p className="text-sm" style={{ color: 'var(--text)' }}>
-                Due {longDate(displayedTask.dueAt)}
+                {es ? es.due(longDate(displayedTask.dueAt, language)) : `Due ${longDate(displayedTask.dueAt)}`}
               </p>
             )}
 
             {displayedTask.relatedLinks.length > 0 && (
               <div>
                 <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted2)' }}>
-                  Related evidence
+                  {es ? es.relatedEvidence : 'Related evidence'}
                 </h3>
                 <ul className="space-y-1">
                   {displayedTask.relatedLinks.map((link) => (
                     <li key={link.href + link.label}>
                       <Link href={link.href} className="focus-ring link-themed text-sm">
-                        {link.label}
+                        {cosLinkText(link.label, language)}
                       </Link>
                     </li>
                   ))}
@@ -76,7 +81,7 @@ export function TaskDetailDrawer({ task, onOpenChange }: TaskDetailDrawerProps) 
             )}
 
             <DialogFooter>
-              <Button size="sm">{TASK_NEXT_ACTION_LABEL[displayedTask.status]}</Button>
+              <Button size="sm">{es ? es.nextAction[displayedTask.status] : TASK_NEXT_ACTION_LABEL[displayedTask.status]}</Button>
             </DialogFooter>
           </>
         )}

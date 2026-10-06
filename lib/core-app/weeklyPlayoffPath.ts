@@ -11,13 +11,16 @@ export function validPlayoffPoint(value: unknown): value is PlayoffPoint {
 }
 /** Independent per-period snapshots avoid concurrent visits overwriting other weeks. */
 export async function readWeeklyPlayoffPath(userId: string, league: OutlookLeague | null, swing: SwingMatchup | null, season: number, period: number, now = new Date()): Promise<WeeklyPlayoffPath> {
-  const result: WeeklyPlayoffPath = { league, swing, points: [], historyUnavailable: false, season, period }
-  if (!league?.you?.modelled || league.season !== season || period < 1) return result
+  const matches = league?.season === season && league.period === period && period > 0
+  const result: WeeklyPlayoffPath = { league: matches ? league : null, swing: matches && swing?.leagueId === league?.leagueId && swing.week >= period ? swing : null, points: [], historyUnavailable: false, season, period }
+  if (!matches || !league?.you?.modelled) return result
   const probability = league.you.playoffPct
   const point = { period, probability, sampledAt: league.assumptions.computedAt }
   if (!validPlayoffPoint(point)) return result
   const scope = createHash('sha256').update(JSON.stringify([userId, league.leagueId, season, league.you.rosterId])).digest('hex')
-  const prefix = `core-week-path:v1:${scope}:`
+  // Older snapshots did not validate the model period and may carry a delayed provider marker.
+  // Preserve those cache entries, but start the displayed history with verified period identity.
+  const prefix = `core-week-path:v2:${scope}:`
   try {
     const rows = await prisma.sportsDataCache.findMany({ where: { cacheKey: { startsWith: prefix }, expiresAt: { gt: now } }, select: { data: true }, orderBy: { createdAt: 'desc' }, take: 40 })
     result.points = rows.map(r => r.data).filter(validPlayoffPoint).filter(p => p.period < period).sort((a,b) => a.period - b.period).slice(-15)

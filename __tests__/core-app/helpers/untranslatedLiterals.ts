@@ -11,7 +11,7 @@ import ts from 'typescript'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const LANG_CONDITION = /^(es|isEs\([^)]*\)|(input\.|league\.)?language === 'es')$/
+const LANG_CONDITION = /^(es|isEs\([^)]*\)|([A-Za-z_$][\w$]*\.)?language === 'es')$/
 
 function text(node: ts.Node, sf: ts.SourceFile): string | null {
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text

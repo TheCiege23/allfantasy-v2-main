@@ -1,5 +1,5 @@
-import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring';
-import { fillLineup, type ImpactPlayer } from '@/lib/decision-os/trade/rosterImpact';
+import {scoreDraftRates,draftSlotEligibility} from './sportEvidence';
+import { fillLineup, type ImpactPlayer, type SlotEligibility } from '@/lib/decision-os/trade/rosterImpact';
 import type { PreparationContext } from '@/lib/core-app/draftPreparationModel';
 import type { AnalysisSelection, DraftAnalysisReport } from './analysisModel';
 
@@ -22,18 +22,18 @@ export function frozenIdentities(basis:unknown,start:string|null):Array<{playerI
 }
 export type ReplayData = {
   version: typeof PHASE4_VERSION; state: 'ready' | 'unavailable'; reason: string;
-  players: FrozenPlayer[]; picks: DecisionPick[]; existing: AnalysisSelection[]; slots: string[]; auction?: boolean; eligiblePlayerIds?: string[];
+  players: FrozenPlayer[]; picks: DecisionPick[]; existing: AnalysisSelection[]; slots: string[]; slotEligibility?:SlotEligibility; auction?: boolean; eligiblePlayerIds?: string[];
 };
 /** No mutable identity or projection lookup is permitted here. */
 export function frozenUniverse(basis: unknown, context: PreparationContext | null, start: string | null): FrozenPlayer[] {
   const b = obj(basis);
-  if (!context || context.sport !== 'NFL' || !start || !Number.isFinite(Date.parse(start)) || b.version !== 'draft-analysis-basis-v2' || b.state !== 'captured' || typeof b.capturedAt !== 'string' || !Number.isFinite(Date.parse(b.capturedAt)) || Date.parse(b.capturedAt) > Date.parse(start) || !Array.isArray(b.entries) || b.entries.length > 5000) return [];
+  if (!context || !draftSlotEligibility(context.sport) || (b.sport!==undefined?b.sport!==context.sport:context.sport!=='NFL') || !start || !Number.isFinite(Date.parse(start)) || b.version !== 'draft-analysis-basis-v2' || b.state !== 'captured' || typeof b.capturedAt !== 'string' || !Number.isFinite(Date.parse(b.capturedAt)) || Date.parse(b.capturedAt) > Date.parse(start) || !Array.isArray(b.entries) || b.entries.length > 5000) return [];
   const rules = obj(context.scoringRules), result: FrozenPlayer[] = [], ids = new Set<string>(), aliases = new Set<string>();
   for (const raw of b.entries) {
     const e = obj(raw), playerId = id(e.playerId), at = typeof e.computedAt === 'string' ? Date.parse(e.computedAt) : NaN;
     if (!playerId || ids.has(playerId) || !Number.isFinite(at) || at > Date.parse(start) || typeof e.position !== 'string') return [];
     ids.add(playerId);
-    const scored = computeLeagueProjectedPoints(obj(e.perGameRates), rules);
+    const scored = scoreDraftRates(obj(e.perGameRates), rules,context.sport);
     if (!scored || !Number.isFinite(scored.points)) continue;
     if (scored.coverage.unmatched.length) return [];
     const names = [...new Set([playerId, id(e.sleeperId)].filter((x): x is string => !!x))];
@@ -65,8 +65,10 @@ export function frozenExistingRoster(snapshot: unknown, context: PreparationCont
 
 export function buildReplay(basis: unknown, context: PreparationContext | null, start: string | null, picks: DecisionPick[], existing: AnalysisSelection[] | null): ReplayData {
   const base: ReplayData = { version: PHASE4_VERSION, state: 'unavailable', reason: 'Verified draft-time projections, complete pick order, frozen pool eligibility and (for auctions) recorded award budgets are required.', players: [], picks: [], existing: [], slots: [] };
-  if (!context || !['snake', 'linear', 'auction'].includes(context.draftType) || !['all','rookies_only','veterans_only'].includes(context.playerPool) || !['standard', 'startup','rookie'].includes(context.purpose) || (context.purpose==='rookie'&&!['redraft','dynasty','keeper'].includes(context.leagueType)) || existing === null || !picks.length || picks.length > 1000) return base;
+  if (!context || !['snake', 'linear', 'auction'].includes(context.draftType) || !['all','rookies_only','veterans_only'].includes(context.playerPool) || !['standard', 'startup','rookie','dispersal'].includes(context.purpose) || (context.purpose==='rookie'&&!['redraft','dynasty','keeper'].includes(context.leagueType)) || existing === null || !picks.length || picks.length > 1000) return base;
   if(!['redraft','dynasty','keeper'].includes(context.leagueType))return base;
+  const dispersal=context.purpose==='dispersal'?frozenDispersalRules(basis,start):null;
+  if(context.purpose==='dispersal'&&!dispersal)return base;
   const eligiblePlayerIds = frozenPoolEligibility(basis,context,start);
   if(context.playerPool!=='all'&&!eligiblePlayerIds)return base;
   const players = frozenUniverse(basis, context, start), byAlias = new Map(players.flatMap(p => p.aliases.map(a => [a,p] as const)));
@@ -74,6 +76,7 @@ export function buildReplay(basis: unknown, context: PreparationContext | null, 
   if (!players.length || ordered.some((p,i) => p.overall !== i + 1 || !p.rosterId || !p.playerId || !byAlias.has(p.playerId))) return base;
   for (const p of ordered) { const canonical = byAlias.get(p.playerId!)!.playerId; if (taken.has(canonical)) return base; taken.add(canonical); }
   if (context.draftType === 'auction' && ordered.some(p => !p.keeper && (!auctionAwardBudget(p)||Date.parse(p.selectedAt!)<Date.parse(start!)))) return base;
+  if(dispersal&&ordered.some(p=>!dispersal.rosters.includes(p.rosterId!)||byAlias.get(p.playerId!)!.aliases.some(a=>dispersal.protected.includes(a))))return base;
   if (eligiblePlayerIds && ordered.some(p=>!p.keeper&&!eligiblePlayerIds.includes(byAlias.get(p.playerId!)!.playerId)))return base;
   const owned = new Map<string,string>();
   for (const p of existing) {
@@ -82,9 +85,11 @@ export function buildReplay(basis: unknown, context: PreparationContext | null, 
     owned.set(canonical,p.rosterId);
   }
   if (ordered.some(p => owned.has(byAlias.get(p.playerId!)!.playerId) && (!p.keeper || owned.get(byAlias.get(p.playerId!)!.playerId) !== p.rosterId))) return base;
+  const slotEligibility=draftSlotEligibility(context.sport,players.map(p=>p.position));
+  if(!slotEligibility)return base;
   const slots = context.rosterSlots.filter(s => !['BN','BE','BENCH','IR','TAXI'].includes(s));
-  if (!slots.length || slots.length > 32 || fillLineup(players,slots).unknownSlots.length) return base;
-  return { ...base, state:'ready', auction:context.draftType==='auction', eligiblePlayerIds:eligiblePlayerIds??undefined, reason:'Replays the recorded order within the preserved projection universe. Existing players and all reserved keepers are excluded. Counterfactuals compare the lineup at that pick only; later opponents, trades and outcomes are not simulated.', players, picks:ordered, existing, slots };
+  if (!slots.length || slots.length > 32 || fillLineup(players,slots,slotEligibility).unknownSlots.length) return base;
+  return { ...base, state:'ready', auction:context.draftType==='auction', slotEligibility, eligiblePlayerIds:dispersal?players.filter(p=>!p.aliases.some(a=>dispersal.protected.includes(a))&&(!eligiblePlayerIds||eligiblePlayerIds.includes(p.playerId))).map(p=>p.playerId):eligiblePlayerIds??undefined, reason:'Replays the recorded order within the preserved projection universe. Existing players and all reserved keepers are excluded. Counterfactuals compare the lineup at that pick only; later opponents, trades and outcomes are not simulated.', players, picks:ordered, existing, slots };
 }
 
 export function replayAt(data: ReplayData, overall: number, includeCandidates=true) {
@@ -93,15 +98,15 @@ export function replayAt(data: ReplayData, overall: number, includeCandidates=tr
   const canonical = (p: AnalysisSelection) => p.playerId ? aliases.get(p.playerId) : undefined;
   const unavailable = new Set([...data.existing, ...data.picks.filter(p => p.keeper || p.overall < overall)].flatMap(p => canonical(p) ? [canonical(p)!.playerId] : []));
   const roster = [...new Map([...data.existing.filter(p => p.rosterId === pick.rosterId), ...data.picks.filter(p => p.overall < overall && p.rosterId === pick.rosterId)].flatMap(p => canonical(p) ? [[canonical(p)!.playerId,canonical(p)!] as const] : [])).values()];
-  const before = fillLineup(roster,data.slots), actual = canonical(pick)!;
+  const before = fillLineup(roster,data.slots,data.slotEligibility), actual = canonical(pick)!;
   const available = data.players.filter(p => !unavailable.has(p.playerId)&&(!data.eligiblePlayerIds||data.eligiblePlayerIds.includes(p.playerId)));
   // One matching per eligibility-equivalent position. For any lower-scoring
   // player with the same edges, the matching gain is max(0, points - threshold).
   const bestByPosition = new Map<string,FrozenPlayer>();
   for (const p of available) if (!bestByPosition.has(p.position) || p.projectedPoints! > bestByPosition.get(p.position)!.projectedPoints!) bestByPosition.set(p.position,p);
-  const thresholds = new Map([...bestByPosition].map(([position,p])=>{const after=fillLineup([...roster,p],data.slots),gain=after.points-before.points;return [position,{threshold:p.projectedPoints!-gain,fillsVacancy:after.starterIds.length>before.starterIds.length}] as const;}));
+  const thresholds = new Map([...bestByPosition].map(([position,p])=>{const after=fillLineup([...roster,p],data.slots,data.slotEligibility),gain=after.points-before.points;return [position,{threshold:p.projectedPoints!-gain,fillsVacancy:after.starterIds.length>before.starterIds.length}] as const;}));
   const candidates = (includeCandidates ? available : [...bestByPosition.values()]).map(p => {const bound=thresholds.get(p.position)!,gain=p.projectedPoints!-bound.threshold;return {...p,gain:bound.fillsVacancy?gain:Math.max(0,gain)};}).sort((a,b) => b.gain-a.gain || b.projectedPoints!-a.projectedPoints! || a.playerId.localeCompare(b.playerId));
-  const actualGain = roster.some(p=>p.playerId===actual.playerId) ? 0 : fillLineup([...roster,actual],data.slots).points-before.points;
+  const actualGain = roster.some(p=>p.playerId===actual.playerId) ? 0 : fillLineup([...roster,actual],data.slots,data.slotEligibility).points-before.points;
   return { pick, before:before.points, actual:{...actual,gain:actualGain}, candidates, auctionBudget: data.auction ? auctionAwardBudget(pick) : null, opportunityGap: data.auction || pick.keeper || !candidates.length ? null : actualGain-candidates[0].gain };
 }
 
@@ -144,4 +149,12 @@ export function frozenPoolEligibility(basis:unknown,context:PreparationContext,s
   if(!start||e.version!=='draft-pool-eligibility-v1'||e.pool!==context.playerPool||e.season!==context.season||e.source!=='Sleeper years_exp by verified ID'||!Number.isFinite(observed)||!Number.isFinite(captured)||observed>captured||captured>Date.parse(start)||captured-observed>86400000||!Array.isArray(e.playerIds)||!e.playerIds.length||e.playerIds.length>5000||e.playerIds.some(p=>!id(p))||new Set(e.playerIds).size!==e.playerIds.length)return null;
   const identities=frozenIdentities(basis,start),known=new Set(identities.map(p=>p.playerId));
   return e.playerIds.every(p=>known.has(p))?e.playerIds as string[]:null;
+}
+
+/** Player-only dispersal comparisons require explicit saved participating rosters and protected IDs. */
+function frozenDispersalRules(basis:unknown,start:string|null){
+ const s=obj(obj(basis).specialty),d=obj(s.dispersal),at=typeof s.capturedAt==='string'?Date.parse(s.capturedAt):NaN
+ const strings=(v:unknown,max:number)=>Array.isArray(v)&&v.length<=max&&v.every(x=>typeof x==='string'&&!!x)&&new Set(v).size===v.length
+ if(!start||s.version!=='draft-specialty-v1'||!Number.isFinite(at)||at>Date.parse(start)||!strings(d.eligibleRosterIds,32)||!(d.eligibleRosterIds as string[]).length||!strings(d.protectedPlayerIds,5000)||!Array.isArray(d.allowedAssetTypes)||d.allowedAssetTypes.length!==1||d.allowedAssetTypes[0]!=='player')return null
+ return{rosters:d.eligibleRosterIds as string[],protected:d.protectedPlayerIds as string[]}
 }

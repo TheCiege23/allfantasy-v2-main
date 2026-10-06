@@ -28,6 +28,8 @@
  * Client-safe: no Prisma.
  */
 
+import { pickLanguage } from './pickLanguage'
+
 export type CalendarKind = 'draft' | 'waivers' | 'trade_deadline' | 'playoffs' | 'dues' | 'vote' | 'renewal'
 
 export type CalendarEvent = {
@@ -76,6 +78,8 @@ export type CalendarInput = {
   weekStarts: Map<number, Date>
   dues: { enabled: boolean; amountLabel: string | null; unpaid: number } | null
   polls: Array<{ id: string; question: string; closesAt: string | null }>
+  /** The reader's language for titles, details, dates and gaps; default English. */
+  language?: string
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -93,15 +97,16 @@ function weekStatus(week: number, currentWeek: number | null): CalendarEvent['st
   return week - currentWeek <= 1 ? 'soon' : 'upcoming'
 }
 
-export function formatWhen(at: Date, allDay: boolean): string {
-  const date = at.toLocaleDateString('en-US', {
+export function formatWhen(at: Date, allDay: boolean, language = 'en'): string {
+  const locale = language === 'es' ? 'es-US' : 'en-US'
+  const date = at.toLocaleDateString(locale, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     timeZone: 'America/New_York',
   })
   if (allDay) return date
-  const time = at.toLocaleTimeString('en-US', {
+  const time = at.toLocaleTimeString(locale, {
     hour: 'numeric',
     minute: '2-digit',
     timeZone: 'America/New_York',
@@ -130,6 +135,9 @@ const NO_WAIVER_RUN = new Set(['fcfs', 'off', 'none', 'free_agency'])
 
 export function buildLeagueCalendar(input: CalendarInput): LeagueCalendar {
   const { now } = input
+  const language = input.language ?? 'en'
+  const L = pickLanguage(language)
+  const weekLabel = (week: number) => L(`Week ${week}`, `Semana ${week}`)
   const events: CalendarEvent[] = []
   const gaps: string[] = []
   const status = (input.status ?? '').toLowerCase()
@@ -140,28 +148,31 @@ export function buildLeagueCalendar(input: CalendarInput): LeagueCalendar {
     events.push({
       id: 'draft',
       kind: 'draft',
-      title: 'Draft',
+      title: L('Draft', 'Draft'),
       at: input.draftAt.toISOString(),
       allDay: false,
       week: null,
-      whenLabel: formatWhen(input.draftAt, false),
+      whenLabel: formatWhen(input.draftAt, false, language),
       status: statusFor(input.draftAt, now),
-      detail: 'Set in this league’s draft settings.',
+      detail: L('Set in this league’s draft settings.', 'Fijado en la configuración del draft de esta liga.'),
       source: 'allfantasy',
     })
   } else if (status === 'pre_draft' || status === 'drafting') {
     events.push({
       id: 'draft',
       kind: 'draft',
-      title: status === 'drafting' ? 'Draft — in progress' : 'Draft',
+      title: status === 'drafting' ? L('Draft — in progress', 'Draft en curso') : L('Draft', 'Draft'),
       at: null,
       allDay: false,
       week: null,
-      whenLabel: status === 'drafting' ? 'Now' : 'No date on file',
+      whenLabel: status === 'drafting' ? L('Now', 'Ahora') : L('No date on file', 'Sin fecha registrada'),
       status: status === 'drafting' ? 'soon' : 'unscheduled',
       detail: input.native
-        ? 'No draft date is set. Add one in draft settings so it shows here and in managers’ calendars.'
-        : `${input.platformLabel} holds this draft’s date, and imports don’t carry it yet.`,
+        ? L('No draft date is set. Add one in draft settings so it shows here and in managers’ calendars.', 'No hay fecha de draft. Añade una en la configuración del draft para que aparezca aquí y en los calendarios de los mánagers.')
+        : L(
+            `${input.platformLabel} holds this draft’s date, and imports don’t carry it yet.`,
+            `${input.platformLabel} guarda la fecha de este draft, y las importaciones aún no la traen.`,
+          ),
       source: src,
     })
   }
@@ -169,51 +180,63 @@ export function buildLeagueCalendar(input: CalendarInput): LeagueCalendar {
   // ── Waivers ──────────────────────────────────────────────────────────
   const waiverType = (input.waivers?.type ?? '').toLowerCase()
   if (!input.native) {
-    gaps.push(`Waivers process on ${input.platformLabel}, and its processing schedule isn’t imported.`)
+    gaps.push(
+      L(
+        `Waivers process on ${input.platformLabel}, and its processing schedule isn’t imported.`,
+        `Los reclamos se procesan en ${input.platformLabel}, y su horario de procesamiento no se importa.`,
+      ),
+    )
   } else if (NO_WAIVER_RUN.has(waiverType)) {
-    gaps.push('This league has no waiver run — free agents are first come, first served.')
+    gaps.push(L('This league has no waiver run — free agents are first come, first served.', 'Esta liga no tiene procesamiento de reclamos: los fichajes son por orden de llegada.'))
   } else if (input.waivers?.dayOfWeek != null && input.waivers.timeUtc) {
     const next = nextWeeklyRun(now, input.waivers.dayOfWeek, input.waivers.timeUtc)
     if (next) {
       events.push({
         id: 'waivers',
         kind: 'waivers',
-        title: 'Waivers process',
+        title: L('Waivers process', 'Procesamiento de reclamos'),
         at: next.toISOString(),
         allDay: false,
         week: null,
-        whenLabel: formatWhen(next, false),
+        whenLabel: formatWhen(next, false, language),
         status: statusFor(next, now),
-        detail: 'Every week at this time. Claims submitted before then are processed together.',
+        detail: L('Every week at this time. Claims submitted before then are processed together.', 'Cada semana a esta hora. Los reclamos enviados antes se procesan juntos.'),
         source: 'allfantasy',
       })
     }
   } else {
-    gaps.push('This league’s waiver processing time isn’t set.')
+    gaps.push(L('This league’s waiver processing time isn’t set.', 'No está fijada la hora del procesamiento de reclamos de esta liga.'))
   }
 
   // ── Trade deadline ───────────────────────────────────────────────────
   if (input.noTradeDeadline) {
-    gaps.push('No trade deadline — trades stay open all season.')
+    gaps.push(L('No trade deadline — trades stay open all season.', 'Sin fecha límite de intercambios: siguen abiertos toda la temporada.'))
   } else if (input.tradeDeadlineWeek != null) {
     const week = input.tradeDeadlineWeek
     const start = input.weekStarts.get(week) ?? null
     events.push({
       id: 'trade-deadline',
       kind: 'trade_deadline',
-      title: 'Trade deadline',
+      title: L('Trade deadline', 'Fecha límite de intercambios'),
       at: start ? start.toISOString() : null,
       allDay: true,
       week,
-      whenLabel: start ? `Week ${week} · ${formatWhen(start, true)}` : `Week ${week}`,
+      whenLabel: start ? `${weekLabel(week)} · ${formatWhen(start, true, language)}` : weekLabel(week),
       status: start ? statusFor(start, now) : weekStatus(week, input.currentWeek),
       detail: start
-        ? `Trades close in week ${week}, which kicks off on this date.`
-        : `Trades close in week ${week}.`,
+        ? L(`Trades close in week ${week}, which kicks off on this date.`, `Los intercambios cierran en la semana ${week}, que empieza en esta fecha.`)
+        : L(`Trades close in week ${week}.`, `Los intercambios cierran en la semana ${week}.`),
       source: src,
     })
   } else {
-    gaps.push(`No trade deadline is published in this league’s ${input.native ? '' : `${input.platformLabel} `}settings.`)
+    gaps.push(
+      L(
+        `No trade deadline is published in this league’s ${input.native ? '' : `${input.platformLabel} `}settings.`,
+        input.native
+          ? 'La configuración de esta liga no fija una fecha límite de intercambios.'
+          : `La configuración de ${input.platformLabel} de esta liga no fija una fecha límite de intercambios.`,
+      ),
+    )
   }
 
   // ── Playoffs ─────────────────────────────────────────────────────────
@@ -223,17 +246,17 @@ export function buildLeagueCalendar(input: CalendarInput): LeagueCalendar {
     events.push({
       id: 'playoffs',
       kind: 'playoffs',
-      title: 'Playoffs begin',
+      title: L('Playoffs begin', 'Empiezan los playoffs'),
       at: start ? start.toISOString() : null,
       allDay: true,
       week,
-      whenLabel: start ? `Week ${week} · ${formatWhen(start, true)}` : `Week ${week}`,
+      whenLabel: start ? `${weekLabel(week)} · ${formatWhen(start, true, language)}` : weekLabel(week),
       status: start ? statusFor(start, now) : weekStatus(week, input.currentWeek),
-      detail: 'The regular season ends the week before.',
+      detail: L('The regular season ends the week before.', 'La temporada regular termina la semana anterior.'),
       source: src,
     })
   } else {
-    gaps.push('No playoff start week is published for this league.')
+    gaps.push(L('No playoff start week is published for this league.', 'No figura la semana de inicio de los playoffs de esta liga.'))
   }
 
   // ── Dues ─────────────────────────────────────────────────────────────
@@ -241,17 +264,23 @@ export function buildLeagueCalendar(input: CalendarInput): LeagueCalendar {
     events.push({
       id: 'dues',
       kind: 'dues',
-      title: input.dues.unpaid > 0 ? `Dues — ${input.dues.unpaid} unpaid` : 'Dues — all paid',
+      title:
+        input.dues.unpaid > 0
+          ? L(`Dues — ${input.dues.unpaid} unpaid`, `Cuotas: ${input.dues.unpaid} sin pagar`)
+          : L('Dues — all paid', 'Cuotas: todas pagadas'),
       at: null,
       allDay: false,
       week: null,
-      whenLabel: 'No due date',
+      whenLabel: L('No due date', 'Sin fecha de pago'),
       status: input.dues.unpaid > 0 ? 'soon' : 'past',
-      detail: `${input.dues.amountLabel ? `${input.dues.amountLabel} per team. ` : ''}The dues tracker has no due date field, so this can’t be put on a calendar.`,
+      detail: L(
+        `${input.dues.amountLabel ? `${input.dues.amountLabel} per team. ` : ''}The dues tracker has no due date field, so this can’t be put on a calendar.`,
+        `${input.dues.amountLabel ? `${input.dues.amountLabel} por equipo. ` : ''}El control de cuotas no tiene campo de fecha de pago, así que no se puede poner en un calendario.`,
+      ),
       source: 'allfantasy',
     })
   } else {
-    gaps.push('Dues aren’t tracked in AllFantasy for this league.')
+    gaps.push(L('Dues aren’t tracked in AllFantasy for this league.', 'Las cuotas de esta liga no se registran en AllFantasy.'))
   }
 
   // ── Votes ────────────────────────────────────────────────────────────
@@ -260,13 +289,13 @@ export function buildLeagueCalendar(input: CalendarInput): LeagueCalendar {
     events.push({
       id: `vote:${poll.id}`,
       kind: 'vote',
-      title: `Vote closes: ${poll.question}`,
+      title: L(`Vote closes: ${poll.question}`, `Cierra la votación: ${poll.question}`),
       at: at ? at.toISOString() : null,
       allDay: false,
       week: null,
-      whenLabel: at ? formatWhen(at, false) : 'No deadline',
+      whenLabel: at ? formatWhen(at, false, language) : L('No deadline', 'Sin fecha límite'),
       status: at ? statusFor(at, now) : 'unscheduled',
-      detail: at ? 'League-chat poll.' : 'League-chat poll with no deadline — it stays open until someone closes it.',
+      detail: at ? L('League-chat poll.', 'Encuesta del chat de la liga.') : L('League-chat poll with no deadline — it stays open until someone closes it.', 'Encuesta del chat de la liga sin fecha límite: sigue abierta hasta que alguien la cierre.'),
       source: 'allfantasy',
     })
   }
@@ -276,15 +305,18 @@ export function buildLeagueCalendar(input: CalendarInput): LeagueCalendar {
     events.push({
       id: 'renewal',
       kind: 'renewal',
-      title: 'Renew for next season',
+      title: L('Renew for next season', 'Renovar para la próxima temporada'),
       at: null,
       allDay: false,
       week: null,
-      whenLabel: 'Now',
+      whenLabel: L('Now', 'Ahora'),
       status: 'soon',
       detail: input.native
-        ? 'This season is finished. Renew the league to carry rosters and managers forward.'
-        : `This season is finished. Renew it on ${input.platformLabel}, then re-import so AllFantasy follows the new season.`,
+        ? L('This season is finished. Renew the league to carry rosters and managers forward.', 'Esta temporada terminó. Renueva la liga para conservar las plantillas y los mánagers.')
+        : L(
+            `This season is finished. Renew it on ${input.platformLabel}, then re-import so AllFantasy follows the new season.`,
+            `Esta temporada terminó. Renuévala en ${input.platformLabel} y vuelve a importarla para que AllFantasy siga la nueva temporada.`,
+          ),
       source: src,
     })
   }
@@ -368,6 +400,8 @@ export function buildIcs(args: {
   events: CalendarEvent[]
   now: Date
   appUrl?: string
+  /** The calendar's name follows the reader's language; event titles arrive already worded. */
+  language?: string
 }): string | null {
   const dated = args.events.filter((e) => e.at && e.status !== 'past')
   if (dated.length === 0) return null
@@ -376,7 +410,7 @@ export function buildIcs(args: {
     'VERSION:2.0',
     'PRODID:-//AllFantasy//Commissioner Hub//EN',
     'CALSCALE:GREGORIAN',
-    `X-WR-CALNAME:${icsText(`${args.leagueName} — league calendar`)}`,
+    `X-WR-CALNAME:${icsText(args.language === 'es' ? `${args.leagueName}: calendario de la liga` : `${args.leagueName} — league calendar`)}`,
   ]
   for (const e of dated) {
     const at = new Date(e.at as string)

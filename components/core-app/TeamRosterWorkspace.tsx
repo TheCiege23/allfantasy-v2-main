@@ -1,10 +1,11 @@
 'use client'
 import TeamAlerts from './TeamAlerts'
+import TeamAlertTarget from './TeamAlertTarget'
 import { NativeAutoSubsControls } from './NativeAutoSubsControls'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { platformLabel } from '@/lib/core-app/platformLinks'
 import { teamWorkspaceCopy } from '@/lib/core-app/teamWorkspaceCopy'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { MyTeamData } from '@/lib/core-app/myTeam'
@@ -33,6 +34,7 @@ export default function TeamRosterWorkspace({ data }: { data: MyTeamData }) {
   useEffect(()=>{if(pendingVerification && data.starters.available && data.starters.data[pendingVerification.index]?.player?.sleeperId===pendingVerification.id){setMessage("Verified: the refreshed roster contains your saved change.");setPendingVerification(null);setCandidateId('')}},[data,pendingVerification])
   const checks = teamHealth(data, language)
   const comparisons = useMemo(() => eligibleComparisons(data, now), [data, now])
+  const reviewAlert = useCallback((index:number)=>{setSlotIndex(index);setCandidateId('');setMessage('')},[])
   const comparison = comparisons[slotIndex]
   const selected = comparison?.candidates.find(c => c.player.sleeperId === candidateId)
   const unavailable = selected?.player.ruledOut || selected?.player.onBye
@@ -55,6 +57,7 @@ export default function TeamRosterWorkspace({ data }: { data: MyTeamData }) {
   }
   return <section className="af-tw" aria-labelledby="af-roster-workspace-title">
     <header className="af-tw-heading"><div><h2 id="af-roster-workspace-title">{automatic ? copy("Availability and depth") : copy("Roster decisions")}</h2><p>{automatic ? copy("Best Ball scoring selects your scoring lineup automatically.") : copy("Compare eligible players before taking action.")}</p></div><Link href={`/core/sync?league=${encodeURIComponent(data.league.id)}`}>{copy("Verify provider lineup")}</Link></header>
+    <TeamAlertTarget key={data.league.id} data={data} onReview={reviewAlert} />
     <details className="af-tw-panel" open={checks.some(c => c.tone === 'bad')}><summary>{es ? `Estado de plantilla · ${checks.length} revisiones pendientes` : `Roster health · ${checks.length} checks to review`}</summary><ul>{checks.map(check => <li key={check.id} data-tone={check.tone}><strong>{check.label}</strong><p>{check.detail}</p></li>)}</ul>{!checks.length && <p>{copy("No issues found in readable roster evidence. Provider eligibility and positional limits still apply.")}</p>}</details>
     {!automatic && comparisons.length > 0 && <details className="af-tw-panel" open><summary>{copy("Start/sit comparison")}</summary><div className="af-tw-filters"><label>{copy("Starting slot")}<select value={slotIndex} onChange={e => { setSlotIndex(Number(e.target.value)); setCandidateId(''); setMessage('') }}>{comparisons.map(c => <option key={c.index} value={c.index}>{c.slot.slotLabel} · {c.slot.player?.name ?? copy("Empty")}</option>)}</select></label><label>{copy("Eligible bench player")}<select value={candidateId} onChange={e => setCandidateId(e.target.value)}><option value="">{copy("Choose a player")}</option>{comparison?.candidates.map(c => <option key={c.player.sleeperId} value={c.player.sleeperId}>{c.player.name}{c.started ? copy(" · game started") : ''}{c.player.ruledOut ? copy(" · unavailable") : ''}</option>)}</select></label></div>
       {selected && <><div className="af-tw-compare"><div><h3>{comparison.slot.player?.name ?? copy("Empty slot")}</h3><p>{es ? 'Proyección: ' : 'Projected: '}{comparison.slot.player?.afProjectedPoints?.toFixed(1) ?? copy("Unavailable")}</p><LocalDateTime value={comparison.slot.player?.kickoff ?? null} /></div><div><h3>{selected.player.name}</h3><p>{es ? 'Proyección: ' : 'Projected: '}{selected.player.afProjectedPoints?.toFixed(1) ?? copy("Unavailable")}</p><LocalDateTime value={selected.player.kickoff} /><p>{selected.player.injuryStatus ? coreUiCopy(selected.player.injuryStatus, language) : copy("No injury designation on file")}</p></div></div><p>{selected.delta == null ? copy("League-scored difference unavailable.") : `${selected.delta > 0 ? '+' : ''}${selected.delta.toFixed(1)} ${es ? 'puntos proyectados según la puntuación de esta liga.' : 'projected points under this league’s scoring.'}`} {es ? 'Las proyecciones son estimaciones.' : 'Projections are estimates.'}</p><p>{started ? copy("A game has started. Check provider locks; this is a review, not an actionable swap.") : unavailable ? copy("This bench player is unavailable or on bye.") : copy("Position eligibility matches. Provider rules, roster limits, and locks must also permit the move.")}</p><div className="af-tw-links"><button type="button" className="af-btn" onClick={ask}>{copy("Ask Chimmy to explain")}</button>{data.nativeLineup && <button type="button" className="af-btn" disabled={!now || saving || !!started || !!unavailable} onClick={save}>{saving ? copy("Saving…") : es ? `Guardar a ${selected.player.name} en ${comparison.slot.slotLabel}` : `Save ${selected.player.name} in ${comparison.slot.slotLabel}`}</button>}</div></>}

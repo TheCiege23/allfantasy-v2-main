@@ -4,14 +4,14 @@ import { getMyTeamData } from './myTeam'
 import { buildTeamAlerts,freshTeamAlertRoster } from './teamAlerts'
 import { findSportsPlayersForLeague } from '@/lib/player-identity/findSportsPlayerByLeagueId'
 import { definiteInactive,freshAutoSubsEvidence } from './nativeAutoSubsPolicy'
-import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
+import { dispatchTeamNotification } from './teamDeliveryReceipts'
 import { createHash } from 'node:crypto'
 export async function readTeamAlerts(leagueId:string,userId:string){
-  const [data,league]=await Promise.all([getMyTeamData(leagueId,userId,null,{savedRosterOnly:true}),prisma.league.findUnique({where:{id:leagueId},select:{settings:true,lastSyncedAt:true}})])
+  const [data,league]=await Promise.all([getMyTeamData(leagueId,userId,null,{savedRosterOnly:true,alertPreviewOnly:true}),prisma.league.findUnique({where:{id:leagueId},select:{settings:true,lastSyncedAt:true}})])
   if(!data||!league)return {available:false,alerts:[]}
   if(!data.starters.available||!freshTeamAlertRoster(data.league.platform,league.lastSyncedAt,Date.now()))return {available:false,alerts:[]}
-  const alerts=buildTeamAlerts(data,league.settings,Date.now()),ids=data.starters.data.flatMap(s=>s.player?[s.player.sleeperId]:[])
-  const evidence=await findSportsPlayersForLeague(data.league.sport??data.starters.data.find(s=>s.player?.sport)?.player?.sport??'',data.league.platform,ids,{translated:true})
+  const alerts=buildTeamAlerts(data,league.settings,Date.now()),ids=[...new Set(alerts.flatMap(a=>a.playerId?[a.playerId]:[]))]
+  const evidence=ids.length ? await findSportsPlayersForLeague(data.league.sport??data.starters.data.find(s=>s.player?.sport)?.player?.sport??'',data.league.platform,ids,{translated:true}) : new Map()
   for(const a of alerts){
     if(a.kind==='deadline'){a.observedAt=league.lastSyncedAt?.toISOString()??null;continue}
     const p=a.playerId?evidence.get(a.playerId):null
@@ -35,7 +35,7 @@ export async function reconcileTeamAlertNotifications(leagueId:string,userId:str
     const deadline=new Intl.DateTimeFormat(es?'es':'en',{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'}).format(new Date(a.deadline))+' UTC'
     const title=a.kind==='injury'?`${a.playerName} · ${a.leagueName}`:`${a.label} · ${a.leagueName}`
     const body=a.kind==='injury'?(es?`Baja registrada (${a.status}). Plazo: ${deadline}. Reserva elegible: ${a.alternative??'ninguna verificada'}.`:`Recorded inactive (${a.status}). Deadline: ${deadline}. Eligible backup: ${a.alternative??'none verified'}.`):(es?`Plazo registrado: ${deadline}. Revisa las reglas de esta liga.`:`Recorded deadline: ${deadline}. Review this league's rules.`)
-    await dispatchNotification({userIds:[userId],leagueId,category:a.kind==='injury'?'injury_alerts':'lineup_reminders',type:'team_workspace_alert',title,body,actionHref:a.href,actionLabel:es?'Revisar liga':'Review league',dedupePrefix:`${prefix}${digest}`,severity:'medium',meta:{kind:a.kind,deadline:a.deadline,evidenceSource:a.source,evidenceAt:a.observedAt,alternative:a.alternative}})
+    await dispatchTeamNotification({userIds:[userId],leagueId,category:a.kind==='injury'?'injury_alerts':'lineup_reminders',type:'team_workspace_alert',title,body,actionHref:a.href,actionLabel:a.kind==='injury'?(es?'Revisar titular y reservas':'Review starter and backups'):(es?'Revisar plazo':'Review deadline'),dedupePrefix:`${prefix}${digest}`,severity:'medium',meta:{kind:a.kind,deadline:a.deadline,evidenceSource:a.source,evidenceAt:a.observedAt,alternative:a.alternative}},claim)
     evaluated++
   }
   const previous=await prisma.platformNotification.findMany({where:{userId,leagueId,type:'team_workspace_alert',readAt:null},select:{id:true,sourceKey:true,meta:true}})

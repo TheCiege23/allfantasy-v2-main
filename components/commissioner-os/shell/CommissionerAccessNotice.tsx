@@ -1,4 +1,8 @@
+'use client'
+
 import Link from 'next/link'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { shellText } from '@/lib/commissioner-os/i18n/shellCopy'
 
 /**
  * What a signed-in non-commissioner sees instead of Commissioner OS.
@@ -16,8 +20,12 @@ import Link from 'next/link'
  *
  * Renders no shell chrome on purpose: the sidebar and header are part of the tool, and framing a
  * refusal inside the product's own navigation invites the reader to go looking for a way in.
+ *
+ * A client component only to read the reader's language (2026-10-06); it takes no data.
  */
 export function CommissionerAccessNotice() {
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => shellText(english, language)
   return (
     <main
       className="flex min-h-screen items-center justify-center px-6"
@@ -28,16 +36,15 @@ export function CommissionerAccessNotice() {
         style={{ background: 'var(--panel)', border: '1px solid var(--border)' }}
       >
         <h1 className="text-lg font-semibold" style={{ color: 'var(--text)' }}>
-          Commissioner OS is for league commissioners
+          {t('Commissioner OS is for league commissioners')}
         </h1>
         <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-          This workspace manages a league you run — its health, its managers, and the decisions that
-          keep it going. Your account does not currently commission a league, so there is nothing
-          here for it to manage.
+          {t(
+            'This workspace manages a league you run — its health, its managers, and the decisions that keep it going. Your account does not currently commission a league, so there is nothing here for it to manage.',
+          )}
         </p>
         <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-          If you have just imported or created a league and expected to see it, it may still be
-          syncing.
+          {t('If you have just imported or created a league and expected to see it, it may still be syncing.')}
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
           <Link
@@ -45,14 +52,14 @@ export function CommissionerAccessNotice() {
             className="focus-ring rounded-[var(--radius-standard)] px-3 py-1.5 text-sm font-medium"
             style={{ background: 'var(--panel2)', color: 'var(--text)', border: '1px solid var(--border)' }}
           >
-            Back to my leagues
+            {t('Back to my leagues')}
           </Link>
           <Link
             href="/import"
             className="focus-ring rounded-[var(--radius-standard)] px-3 py-1.5 text-sm font-medium"
             style={{ color: 'var(--muted)', border: '1px solid var(--border)' }}
           >
-            Import a league
+            {t('Import a league')}
           </Link>
         </div>
       </div>

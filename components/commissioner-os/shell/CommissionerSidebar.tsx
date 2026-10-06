@@ -25,6 +25,8 @@ import {
 import { useCommissionerNavigation } from '@/components/commissioner-os/providers/CommissionerNavigationProvider'
 import { useCommissionerLayout } from '@/components/commissioner-os/providers/CommissionerLayoutProvider'
 import { useCommissionerFeatureFlags } from '@/components/commissioner-os/providers/CommissionerFeatureFlagProvider'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { moduleLabelText, shellText } from '@/lib/commissioner-os/i18n/shellCopy'
 
 /**
  * One icon library, used exhaustively (Design Language & Experience System
@@ -52,13 +54,15 @@ export function CommissionerSidebar({ activeLeagueId = null }: { activeLeagueId?
   const { activeModuleId } = useCommissionerNavigation()
   const { sidebarCollapsed, mobileSidebarOpen, closeMobileSidebar } = useCommissionerLayout()
   const { isModuleEnabled } = useCommissionerFeatureFlags()
+  const { language } = useOptionalLanguage()
+  const hub = shellText('Commissioner Hub', language)
 
   return (
     <>
       {mobileSidebarOpen && (
         <button
           type="button"
-          aria-label="Close navigation"
+          aria-label={shellText('Close navigation', language)}
           onClick={closeMobileSidebar}
           className="fixed inset-0 z-20 md:hidden"
           style={{ background: 'var(--overlay)' }}
@@ -99,10 +103,10 @@ export function CommissionerSidebar({ activeLeagueId = null }: { activeLeagueId?
               style={{ color: 'var(--accent)', borderLeft: '2px solid transparent' }}
             >
               <Flag size={20} aria-hidden />
-              {!sidebarCollapsed ? <span>Commissioner Hub</span> : <span className="sr-only">Commissioner Hub</span>}
+              {!sidebarCollapsed ? <span>{hub}</span> : <span className="sr-only">{hub}</span>}
             </Link>
           </div>
-          <div className="px-5 py-2 text-sm"><Link href="/commissioner-os/networks" onClick={closeMobileSidebar}>Commissioner networks</Link></div>
+          <div className="px-5 py-2 text-sm"><Link href="/commissioner-os/networks" onClick={closeMobileSidebar}>{shellText('Commissioner networks', language)}</Link></div>
           <SidebarList
             items={COMMISSIONER_SECONDARY_NAV_ITEMS}
             activeModuleId={activeModuleId}
@@ -129,6 +133,7 @@ function SidebarList({
   isModuleEnabled: (id: CommissionerModuleId) => boolean
   onNavigate: () => void
 }) {
+  const { language } = useOptionalLanguage()
   return (
     <ul className="flex flex-col gap-1 p-2">
       {items.map((item) => {
@@ -154,13 +159,13 @@ function SidebarList({
               }}
             >
               <Icon size={20} aria-hidden />
-              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && <span>{moduleLabelText(item.id, item.label, language)}</span>}
               {!enabled && !collapsed && (
                 <span
                   className="ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
                   style={{ background: 'var(--status-disabled-bg)', color: 'var(--status-disabled-text)' }}
                 >
-                  Off
+                  {shellText('Off', language)}
                 </span>
               )}
             </Link>

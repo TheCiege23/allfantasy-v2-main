@@ -282,12 +282,19 @@ function SosCell({ team, odds }: { team: BoardTeam; odds: StandingsOdds }) {
 }
 
 function NextCell({ team, seedOf }: { team: BoardTeam; seedOf: Map<string, number> }) {
+  const language = useOptionalLanguage().language
   const n = team.next
   if (!n) return <span className="af-stb-muted">—</span>
   const seed = seedOf.get(n.opponentId)
   return (
     <span className="af-stb-next">
-      {n.inProgress ? <span className="af-stb-live">Live</span> : <span className="af-stb-muted af-num">Wk {n.week}</span>}
+      {n.inProgress ? (
+        <span className="af-stb-live">{coreUiCopy('Live', language)}</span>
+      ) : (
+        <span className="af-stb-muted af-num">
+          {language === 'es' ? 'Sem' : 'Wk'} {n.week}
+        </span>
+      )}
       <span className="af-stb-nextname" title={n.opponentName}>
         {seed != null ? <span className="af-stb-muted af-num">#{seed} </span> : null}
         {n.opponentName}
@@ -960,7 +967,7 @@ function Cards({
                       ) : null}
                       {h2h && t.split ? (
                         <div>
-                          <dt>Head-to-head · median</dt>
+                          <dt>{copy('Head-to-head · median')}</dt>
                           <dd className="af-num">
                             {formatRecord(t.split.headToHead)} · {formatRecord(t.split.median)}
                           </dd>
@@ -968,7 +975,7 @@ function Cards({
                       ) : null}
                       {h2h && t.streak ? (
                         <div>
-                          <dt>Streak</dt>
+                          <dt>{copy('Streak')}</dt>
                           <dd>
                             <StreakCell team={t} />
                           </dd>
@@ -1014,7 +1021,7 @@ function Cards({
                           ) : null}
                           {efficiency?.byRoster[t.rosterId] ? (
                             <div>
-                              <dt>Lineup efficiency</dt>
+                              <dt>{copy('Lineup efficiency')}</dt>
                               <dd>
                                 <EfficiencyCell team={t} efficiency={efficiency} />{' '}
                                 <span className="af-stb-muted">
@@ -1038,7 +1045,7 @@ function Cards({
                           ) : null}
                           {hasPath ? (
                             <div>
-                              <dt>Magic number</dt>
+                              <dt>{copy('Magic number')}</dt>
                               <dd>
                                 <PathCell team={t} />
                               </dd>
@@ -1046,7 +1053,7 @@ function Cards({
                           ) : null}
                           {odds ? (
                             <div>
-                              <dt>Playoff odds</dt>
+                              <dt>{copy('Playoff odds')}</dt>
                               <dd>
                                 <OddsCell team={t} odds={odds} />
                               </dd>
@@ -1062,9 +1069,12 @@ function Cards({
                           ) : null}
                           {odds && odds.byRoster[t.rosterId]?.sosRank != null ? (
                             <div>
-                              <dt>Schedule left</dt>
+                              <dt>{copy('Schedule left')}</dt>
                               <dd>
-                                <SosCell team={t} odds={odds} /> <span className="af-stb-muted">hardest of {odds.sosRanked}</span>
+                                <SosCell team={t} odds={odds} />{' '}
+                                <span className="af-stb-muted">
+                                  {language === 'es' ? `más difícil de ${odds.sosRanked}` : `hardest of ${odds.sosRanked}`}
+                                </span>
                               </dd>
                             </div>
                           ) : null}

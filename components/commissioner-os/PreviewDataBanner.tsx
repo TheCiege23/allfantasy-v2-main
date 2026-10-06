@@ -1,4 +1,8 @@
+'use client'
+
 import { Info } from 'lucide-react'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { previewBannerText, shellText } from '@/lib/commissioner-os/i18n/shellCopy'
 import { DATA_MODE_LABELS, type CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 
 /**
@@ -9,8 +13,11 @@ import { DATA_MODE_LABELS, type CommissionerDataMode } from '@/lib/commissioner-
  * data, never a real, computed fact about any real league; this banner
  * exists so that's never mistaken for real intelligence, in a screenshot,
  * a demo, or by a real user.
+ *
+ * Spanish (2026-10-06): the sentence comes from `previewBannerText`; the English is unchanged.
  */
 export function PreviewDataBanner({ mode }: { mode: CommissionerDataMode }) {
+  const { language } = useOptionalLanguage()
   if (mode === 'live') return null
 
   return (
@@ -24,10 +31,7 @@ export function PreviewDataBanner({ mode }: { mode: CommissionerDataMode }) {
       role="status"
     >
       <Info size={16} aria-hidden />
-      <span>
-        Preview data — this dashboard is not yet connected to live league intelligence. Every value here is{' '}
-        {DATA_MODE_LABELS[mode].toLowerCase()}.
-      </span>
+      <span>{previewBannerText(shellText(DATA_MODE_LABELS[mode], language), language)}</span>
     </div>
   )
 }

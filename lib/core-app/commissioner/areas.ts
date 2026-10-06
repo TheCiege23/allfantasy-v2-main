@@ -144,10 +144,10 @@ export function buildLeagueAreas(league: HubLeague, language = 'en'): LeagueArea
     {
       key: 'waivers',
       label: L('Waivers', 'Agentes libres'),
-      description: L('Claims, FAAB and the last run.', 'Solicitudes, FAAB y el último proceso.'),
+      description: L('Claims, FAAB and the last run.', 'Reclamos, FAAB y el último proceso.'),
       link: { label: L('Open waivers', 'Abrir agentes libres'), href: core('waivers'), external: false },
       changeOn: league.native ? null : toHubLink(verifiedHandoff(league, 'waivers')),
-      note: league.native ? null : L(`Claims are processed on ${pl}.`, `Las solicitudes se procesan en ${pl}.`),
+      note: league.native ? null : L(`Claims are processed on ${pl}.`, `Los reclamos se procesan en ${pl}.`),
     },
     {
       key: 'history',

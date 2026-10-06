@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import { weeklyActionText, weeklyBrief, type WeeklyBlueprint } from './weeklyBlueprint'
 import { rivalryNarrative } from './weeklyShare'
 import type { WeeklyPlayoffPath } from './weeklyPlayoffPath'
+import { pct1 } from './weeklyPercent'
 
 const xml = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;')
 /** Real editable Excel data and embedded OOXML charts; no invented earlier odds. */
@@ -16,13 +17,13 @@ export function buildWeeklyWorkbook(data: WeeklyBlueprint, path?: WeeklyPlayoffP
   append('Brief', [['AllFantasy · Your Week'],[es ? 'Resumen' : 'Brief',weeklyBrief(data,es)],['Rivalry',rivalryNarrative(data,es)],['Scope',data.focusLeagueId ? 'League' : 'Portfolio'],['Sports',data.sports.join(', ')],['Disclosure','Estimates are not guarantees. Only imported history and available forecasts are exported.'],['History',path?.historyUnavailable ? 'Snapshot storage unavailable' : 'Saved observed periods; missing periods are not interpolated.']])
   append('Actions', [['League','Priority','Next game (not confirmed lock)','Source'],...data.actions.map(a=>[a.leagueName,weeklyActionText(a,es),a.gameAt ?? '',a.source])])
   const you = path?.league?.you
-  const valid = !!you?.modelled && path?.league?.season === path?.season && Number.isFinite(you.playoffPct) && you.playoffPct >= 0 && you.playoffPct <= 100
+  const valid = !!you?.modelled && path?.league?.season === path?.season && path?.league?.period === path?.period && Number.isFinite(you.playoffPct) && you.playoffPct >= 0 && you.playoffPct <= 100
   const points = valid ? (path?.points ?? []).filter(p=>Number.isInteger(p.period) && p.period > 0 && Number.isFinite(p.probability) && p.probability >= 0 && p.probability <= 100).sort((a,b)=>a.period-b.period) : []
-  const trend = append('Trend',[['Period','Estimated playoff probability (%)','Calculated at (UTC)'],...points.map(p=>[p.period,p.probability,p.sampledAt])])
+  const trend = append('Trend',[['Period','Estimated playoff probability (%)','Calculated at (UTC)'],...points.map(p=>[p.period,pct1(p.probability),p.sampledAt])])
   for (let row=2;row<=points.length+1;row++) trend[`B${row}`].z = '0.0"%"'
   if (!points.length) { trend.A2 = {t:'s',v:'Select a league with an available playoff model to export its saved probability history.'}; trend['!ref']='A1:C2' }
   const swing = valid && path?.swing && path.swing.week >= path.period ? path.swing : null
-  const scenarios = swing && [swing.ifWin,swing.ifLose].every(p=>Number.isFinite(p)&&p>=0&&p<=100) ? [['If you win',swing.ifWin],['If you lose',swing.ifLose]] : []
+  const scenarios = swing && [swing.ifWin,swing.ifLose].every(p=>Number.isFinite(p)&&p>=0&&p<=100) ? [['If you win',pct1(swing.ifWin)],['If you lose',pct1(swing.ifLose)]] : []
   const scenarioSheet = append('Scenarios',[['Outcome','Estimated playoff probability (%)'],...scenarios])
   for (let row=2;row<=scenarios.length+1;row++) scenarioSheet[`B${row}`].z = '0.0"%"'
   if (!scenarios.length) { scenarioSheet.A2 = {t:'s',v:'No pending win/loss scenario is available in this export. Open a league to review its playoff path.'}; scenarioSheet['!ref']='A1:B2' }
@@ -59,7 +60,7 @@ export function buildWeeklyWorkbook(data: WeeklyBlueprint, path?: WeeklyPlayoffP
     put(`xl/worksheets/sheet${sheetIndex}.xml`,get(`xl/worksheets/sheet${sheetIndex}.xml`).replace('</worksheet>','<drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1"/></worksheet>'))
     types = types.replace('</Types>',`<Override PartName="/xl/charts/chart${id}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/><Override PartName="/xl/drawings/drawing${id}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`)
   }
-  if (points.length) addChart(3,'Trend',points.map(p=>[p.period,p.probability]),'line',points.length === 1 ? 'First saved playoff estimate (no trend yet)' : 'Saved playoff probability by period')
+  if (points.length) addChart(3,'Trend',points.map(p=>[p.period,pct1(p.probability)]),'line',points.length === 1 ? 'First saved playoff estimate (no trend yet)' : 'Saved playoff probability by period')
   if (scenarios.length) addChart(4,'Scenarios',scenarios,'bar','Win / loss scenarios (%)')
   put('[Content_Types].xml',types)
   return new Uint8Array(XLSX.CFB.write(zip,{type:'buffer',fileType:'zip'}) as Uint8Array)

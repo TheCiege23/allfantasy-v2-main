@@ -206,6 +206,8 @@ describe('commissioner hub builders', () => {
       'buildTaskCards', 'resolveHubHealthScore', 'memberActivityFromReads', 'staleActivityReason',
       'unownedTeamNames', 'buildCommissionerAccessRows', 'describeSyncAge', 'describeTradeDeadline', 'describePlayoffs',
       'buildLeagueAreas', 'buildWorkflows', 'buildCommunities', 'commissionerFormatCards', 'loadCommissionerHistory',
+      'buildLeagueCalendar', 'buildIcs', 'scoringChart', 'balanceChart', 'engagementChart', 'recipeCatalogEntry',
+      'getCommissionerWaiverOversight',
     ])
     const calls: Array<{ name: string; passes: boolean }> = []
     const visit = (n: ts.Node) => {

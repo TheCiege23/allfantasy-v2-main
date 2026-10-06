@@ -47,5 +47,13 @@ describe('help keyboard dismissal', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     expect(document.activeElement).toBe(trigger)
     expect(opened.has(popover)).toBe(false)
+    // A reopened tip closes when its anchor scrolls away from the original position.
+    fireEvent.click(trigger)
+    expect(opened.has(popover)).toBe(true)
+    act(() => close.focus())
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({top: 100, left: 0} as DOMRect)
+    fireEvent.scroll(window)
+    expect(opened.has(popover)).toBe(false)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
   })
 })

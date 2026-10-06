@@ -9,6 +9,8 @@ import { HelpArticleCard } from './HelpArticleCard'
 import { HELP_CATEGORY_LABELS, HELP_CATEGORY_ORDER } from './helpLabels'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { CommissionerHelpArticleContract, CommissionerGlossaryTermContract, CommissionerHelpCategory } from '@/lib/commissioner-ui/contracts'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { helpText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
 export interface HelpCenterViewProps {
   articles: CommissionerHelpArticleContract[]
@@ -38,6 +40,8 @@ function matches(haystacks: string[], needle: string): boolean {
 export function HelpCenterView({ articles, glossary, dataMode, errorMessage }: HelpCenterViewProps) {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>(ALL_CATEGORIES)
   const [searchText, setSearchText] = useState('')
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => toolsText(english, language)
 
   const presentCategories = useMemo(() => {
     const present = new Set<CommissionerHelpCategory>(articles.map((article) => article.category))
@@ -47,20 +51,23 @@ export function HelpCenterView({ articles, glossary, dataMode, errorMessage }: H
   const visibleArticles = useMemo(() => {
     return articles.filter((article) => {
       if (categoryFilter !== ALL_CATEGORIES && article.category !== categoryFilter) return false
-      return matches([article.title, article.summary], searchText)
+      // What the reader sees, plus the English — a search in either language finds the article.
+      return matches([article.title, article.summary, helpText(article.title, language), helpText(article.summary, language)], searchText)
     })
-  }, [articles, categoryFilter, searchText])
+  }, [articles, categoryFilter, searchText, language])
 
   const visibleGlossary = useMemo(() => {
-    return glossary.filter((term) => matches([term.term, term.definition], searchText))
-  }, [glossary, searchText])
+    return glossary.filter((term) =>
+      matches([term.term, term.definition, helpText(term.term, language), helpText(term.definition, language)], searchText)
+    )
+  }, [glossary, searchText, language])
 
   return (
     <div>
       <PreviewDataBanner mode={dataMode} />
 
       {errorMessage ? (
-        <ErrorState message={errorMessage} />
+        <ErrorState message={t(errorMessage)} />
       ) : (
         <div className="space-y-6">
           <div className="relative max-w-sm">
@@ -69,14 +76,14 @@ export function HelpCenterView({ articles, glossary, dataMode, errorMessage }: H
               type="search"
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
-              placeholder="Search help articles and glossary…"
-              aria-label="Search help articles and glossary"
+              placeholder={t('Search help articles and glossary…')}
+              aria-label={t('Search help articles and glossary')}
               className="pl-9"
             />
           </div>
 
           <div className="space-y-4">
-            <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="Help category">
+            <div className="flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label={t('Help category')}>
               <button
                 type="button"
                 role="tab"
@@ -89,7 +96,7 @@ export function HelpCenterView({ articles, glossary, dataMode, errorMessage }: H
                   border: '1px solid var(--border)',
                 }}
               >
-                All <span style={{ color: 'var(--muted2)' }}>({articles.length})</span>
+                {t('All')} <span style={{ color: 'var(--muted2)' }}>({articles.length})</span>
               </button>
               {presentCategories.map((category) => {
                 const count = articles.filter((article) => article.category === category).length
@@ -108,7 +115,7 @@ export function HelpCenterView({ articles, glossary, dataMode, errorMessage }: H
                       border: '1px solid var(--border)',
                     }}
                   >
-                    {HELP_CATEGORY_LABELS[category]} <span style={{ color: 'var(--muted2)' }}>({count})</span>
+                    {t(HELP_CATEGORY_LABELS[category])} <span style={{ color: 'var(--muted2)' }}>({count})</span>
                   </button>
                 )
               })}
@@ -117,8 +124,8 @@ export function HelpCenterView({ articles, glossary, dataMode, errorMessage }: H
             {visibleArticles.length === 0 ? (
               <EmptyState
                 icon={HelpCircle}
-                title="No articles match."
-                description="Try a different search term or category."
+                title={t('No articles match.')}
+                description={t('Try a different search term or category.')}
               />
             ) : (
               <div className="grid gap-3 sm:grid-cols-2">
@@ -131,19 +138,19 @@ export function HelpCenterView({ articles, glossary, dataMode, errorMessage }: H
 
           <div className="space-y-3 border-t pt-6" style={{ borderColor: 'var(--border)' }}>
             <h2 className="text-sm font-bold" style={{ color: 'var(--text)' }}>
-              Glossary
+              {t('Glossary')}
             </h2>
             {visibleGlossary.length === 0 ? (
-              <EmptyState title="No glossary terms match." description="Try a different search term." />
+              <EmptyState title={t('No glossary terms match.')} description={t('Try a different search term.')} />
             ) : (
               <dl className="grid gap-3 sm:grid-cols-2">
                 {visibleGlossary.map((term) => (
                   <div key={term.id} className="rounded-2xl p-4" style={{ background: 'var(--panel)', border: '1px solid var(--border)' }}>
                     <dt className="text-sm font-bold" style={{ color: 'var(--text)' }}>
-                      {term.term}
+                      {helpText(term.term, language)}
                     </dt>
                     <dd className="mt-1 text-sm" style={{ color: 'var(--muted)' }}>
-                      {term.definition}
+                      {helpText(term.definition, language)}
                     </dd>
                   </div>
                 ))}

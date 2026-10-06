@@ -15,6 +15,8 @@ import { AutomationHistoryDialog } from './AutomationHistoryDialog'
 import type { CommissionerDataMode } from '@/lib/commissioner-ui/demo-mode/constants'
 import type { AutomationCatalogEntry, AutomationExecutionEntry } from '@/lib/commissioner-ui/automations/decision-os-client'
 import type { SeverityTier } from '@/lib/commissioner-ui/tokens/colors'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { automationChartLabelText, outcomeSeriesText, toolsText } from '@/lib/commissioner-os/i18n/toolsCopy'
 
 export interface AutomationCenterViewProps {
   catalog: AutomationCatalogEntry[]
@@ -41,9 +43,19 @@ export function AutomationCenterView({ catalog, historyByAutomationId, dataMode,
     Object.fromEntries(catalog.map((automation) => [automation.id, automation.status === 'enabled']))
   )
   const [historyAutomationId, setHistoryAutomationId] = useState<string | null>(null)
+  const { language } = useOptionalLanguage()
+  const t = (english: string) => toolsText(english, language)
 
-  const outcomeRows = useMemo(() => automationRunOutcomes(catalog), [catalog])
-  const staleness = useMemo(() => automationStaleness(catalog), [catalog])
+  // The chart rows are labelled with the automation's name; translated after the series is derived,
+  // so the derivation (and its sort) is the same in every language.
+  const outcomeRows = useMemo(
+    () => automationRunOutcomes(catalog).map((row) => ({ ...row, label: automationChartLabelText(row.label, language) })),
+    [catalog, language]
+  )
+  const staleness = useMemo(
+    () => automationStaleness(catalog).map((point) => ({ ...point, label: automationChartLabelText(point.label, language) })),
+    [catalog, language]
+  )
 
   const sortedCatalog = useMemo(
     () => catalog.slice().sort((a, b) => HEALTH_RANK[a.health] - HEALTH_RANK[b.health]),
@@ -64,40 +76,39 @@ export function AutomationCenterView({ catalog, historyByAutomationId, dataMode,
       {(outcomeRows.length > 0 || staleness.length > 0) ? (
         <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
           {outcomeRows.length > 0 ? (
-            <InfoCard title="Run outcomes">
+            <InfoCard title={t('Run outcomes')}>
               <StackedBarChart
                 rows={outcomeRows}
                 layout="horizontal"
                 height={Math.max(160, outcomeRows.length * 44 + 60)}
-                ariaLabel="Automation runs per job, split into succeeded, skipped and failed"
+                ariaLabel={t('Automation runs per job, split into succeeded, skipped and failed')}
                 series={[
-                  { id: 'succeeded', label: 'Succeeded', color: 'var(--accent-emerald-strong)' },
-                  { id: 'skipped', label: 'Skipped', color: 'var(--accent-amber-strong)' },
-                  { id: 'failed', label: 'Failed', color: 'var(--accent-red-strong)' },
+                  { id: 'succeeded', label: outcomeSeriesText('Succeeded', language), color: 'var(--accent-emerald-strong)' },
+                  { id: 'skipped', label: outcomeSeriesText('Skipped', language), color: 'var(--accent-amber-strong)' },
+                  { id: 'failed', label: outcomeSeriesText('Failed', language), color: 'var(--accent-red-strong)' },
                 ]}
               />
               {/*
                 * The legend cannot carry this and the distinction decides how the whole chart reads.
                 */}
               <p className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
-                A skip is the idempotency guard finding the window&apos;s work already done — not a
-                failure. It is shown separately because a job that skips constantly is telling you
-                something different from one that fails.
+                {t(
+                  "A skip is the idempotency guard finding the window's work already done — not a failure. It is shown separately because a job that skips constantly is telling you something different from one that fails."
+                )}
               </p>
             </InfoCard>
           ) : null}
 
           {staleness.length > 0 ? (
-            <InfoCard title="Days since last run">
+            <InfoCard title={t('Days since last run')}>
               <DistributionBarChart
                 data={staleness}
                 height={Math.max(160, staleness.length * 44 + 60)}
-                valueLabel="Days"
-                ariaLabel="Days since each automation last ran, most stale first"
+                valueLabel={t('Days')}
+                ariaLabel={t('Days since each automation last ran, most stale first')}
               />
               <p className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
-                Judged on success rate alone a job that never runs looks perfect. This is the axis that
-                shows it.
+                {t('Judged on success rate alone a job that never runs looks perfect. This is the axis that shows it.')}
               </p>
             </InfoCard>
           ) : null}
@@ -105,9 +116,9 @@ export function AutomationCenterView({ catalog, historyByAutomationId, dataMode,
       ) : null}
 
       {errorMessage ? (
-        <ErrorState message={errorMessage} />
+        <ErrorState message={t(errorMessage)} />
       ) : catalog.length === 0 ? (
-        <EmptyState icon={Zap} title="No automations yet." description="Automations you create will appear here." />
+        <EmptyState icon={Zap} title={t('No automations yet.')} description={t('Automations you create will appear here.')} />
       ) : (
         <div className="space-y-3">
           {sortedCatalog.map((automation) => (

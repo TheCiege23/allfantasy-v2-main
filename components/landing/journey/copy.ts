@@ -323,7 +323,7 @@ export const LANDING_COPY = {
         eyebrow: 'Miércoles de Waiver',
         title: 'El mejor equipo\nnunca está terminado.',
         subtitle: 'Reinicios de prioridad, presupuestos FAAB y un waiver wire que premia a los managers que prestan atención.',
-        priorityLabel: 'Prioridad de waiver',
+        priorityLabel: 'Prioridad de reclamo',
         faabLabel: 'Presupuesto FAAB restante',
         mockClaims: [
           { player: 'R. Odunze', bid: '$18' },
